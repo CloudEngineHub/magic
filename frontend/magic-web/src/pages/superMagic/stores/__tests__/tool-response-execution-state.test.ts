@@ -966,6 +966,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		store.initializeMessages(TOPIC_ID, [historicalAssistant], {
 			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
 			toolProjectionPolicy: "historical_terminal",
 		})
 
@@ -2502,7 +2503,10 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 					toolCalls: [createToolCall({ id: "still-running-tool", status: "running" })],
 				}),
 			],
-			{ toolProjectionPolicy: "preserve_live" },
+			{
+				assistantSnapshotPolicy: "progress_snapshot",
+				toolProjectionPolicy: "preserve_live",
+			},
 		)
 		expect(
 			store.completeTopicSync(TOPIC_ID, generation, {

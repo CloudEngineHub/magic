@@ -1886,7 +1886,7 @@ corepack pnpm exec vitest run \
 | HTTP-D3（已废止） | 历史规则曾把同一 `app_message_id`、不同 `correlation_id` 视为非法 identity 冲突。当前不得据此拒绝消息；同一逻辑消息由 `super_message_id` 判断，并按 SMID-D02 的 `seq_id` 规则裁决。                      | 历史用例 11     |
 | HTTP-D4           | `taskStatus="finished"` 是独立 terminal barrier；即使 HTTP 失败也停止原 stream/loading，保留 draft，retry 走独立生命周期。                                                                               | 22              |
 | HTTP-D5           | `toolResponseMap` 是工具执行态 canonical；UI Map-first、assistant embedded fallback，embedded 可滞后且不要求回写；只有未来协议明确要求回写时，才另立 normalization 断言。                                | 10、13          |
-| HTTP-D6（已修订） | `super_magic_message` 本身就是 canonical Final，不能再由内层 Topic status 切分 terminal/nonterminal 分支。Final `tool_calls` 字段存在时使用权威数组；字段 absent 保留，显式 `null`/`[]` 清空。 | 14、15          |
+| HTTP-D6（已修订） | `super_magic_message` 本身就是 canonical Final，不能再由内层 Topic status 切分 terminal/nonterminal 分支。Final `tool_calls` 字段存在时使用权威数组；字段 absent 保留，显式 `null`/`[]` 清空。           | 14、15          |
 | HTTP-D7           | HTTP、IM、chunk 无来源优先级；同一逻辑 identity 统一 higher-seq-wins，低 seq 不得回退 canonical。                                                                                                        | 3、7、17、25    |
 | HTTP-D8           | outer topic 是 transport scope，inner node topic 是 Agent 业务域；验证映射关系，不要求字面相等。                                                                                                         | 4、12           |
 | HTTP-D9           | `initializeMessages()` 自己负责版本裁决；stale HTTP 仍进入该方法但不能回退 canonical/messages/latest seq；generation 只管 complete/cancel/lifecycle。                                                    | 3、17           |
@@ -2360,15 +2360,15 @@ corepack pnpm exec vitest run \
 
 本节是当前撤回、恢复、执行状态和事件编排的最高优先级决策，取代此前把外层 IM `status` 与内层 SuperMessage `status` 合并为单一 canonical 状态的实现假设。
 
-| 决策    | 当前有效规则                                                                                                                                            |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| N-ST-01 | IM 状态与 SuperMessage 状态互不覆盖，只在 UI 投影层组合。Canonical `MessageItem` 必须保留 `imStatus` 与 `superStatus`；旧 `status` 仅兼容表示 IM 状态。 |
-| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态描述 Agent Topic 执行状态，不描述该条消息自身是否仍在流式生成。                                   |
-| N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。                                                      |
-| N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。                                                                      |
-| N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。                       |
-| N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。                                                                  |
-| N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。                      |
+| 决策    | 当前有效规则                                                                                                                                                                      |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| N-ST-01 | IM 状态与 SuperMessage 状态互不覆盖，只在 UI 投影层组合。Canonical `MessageItem` 必须保留 `imStatus` 与 `superStatus`；旧 `status` 仅兼容表示 IM 状态。                           |
+| N-ST-02 | IM 状态负责撤回、可见性和旧流屏障；SuperMessage 状态描述 Agent Topic 执行状态，不描述该条消息自身是否仍在流式生成。                                                               |
+| N-ST-03 | IM 状态归属于具体外层 `topic/conversation + app_message_id`；`super_message_id` 只负责逻辑卡归并。                                                                                |
+| N-ST-04 | 客户端最后写入胜出；不引入独立状态版本协议，仅针对后续发现的冲突场景增加定向保护。                                                                                                |
+| N-ST-05 | `revoked -> read/seen` 只能由明确的取消撤回/恢复操作授权；普通 HTTP 完整或增量快照不得自动恢复。授权为 topic-scoped、一次性消费。                                                 |
+| N-ST-06 | HTTP 完整查询、HTTP 增量、IM/WS、回放和分享入口都必须经过相同的双状态归一化/协调流程。                                                                                            |
+| N-ST-07 | `imStatus`、`superStatus` 属于 Canonical；`visibilityState`、`executionState` 只能由 selector 或领域事件派生，不成为独立可写字段。                                                |
 | N-ST-08 | Assistant 的 Topic loading 可读取节点 Topic 状态；单条消息的 reasoning/content loading 只读取 `StreamState`。Tool 使用 `toolResponseMap` 的 effective 状态；User 只使用 IM 状态。 |
 
 实施约束：
@@ -2382,23 +2382,23 @@ corepack pnpm exec vitest run \
 
 本节覆盖本文更早出现的“`superStatus=running` 代表该条消息未完成”“running HTTP snapshot 属于 nonterminal merge”以及“Topic 状态决定是否发布 `message.completed`”等旧判断。那些记录只保留为历史审计背景，状态统一标记为 `STALE`。
 
-| 决策 | 当前有效规则 |
-| ---- | ------------ |
-| LF-01 | `finish_reason` 是流式过程结束屏障：结束当前 stream generation，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=true`；它不能证明 canonical Final 已到达，也不能写入 message-finalized 封口状态。 |
-| LF-02 | canonical Final Message 是消息权威纠正与最终封口屏障：必须清理对应 `StreamState`、阻断同 revision 晚到 chunk，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=false`。Final 到达可证明 stream 已结束；stream 已结束不能反向证明 Final 已到达。 |
-| LF-03 | Assistant Final 携带的 `super_magic_message.status` 描述 Topic 状态，而不是该条消息自身状态。`running`、`waiting`、`waiting_for_user` 和未知状态均只完成当前消息 Final/stream 封口，不发布 Topic 终态事件。 |
-| LF-04 | `finished`、`error`、`suspended` 表示 Topic 停止。对应 Final 除完成消息封口外，还发布 `topic.execution.ended`；HTTP Topic status 对账也可独立确认该事件。 |
-| LF-05 | `topic.execution.ended` 的 exactly-once 作用域是 `topic + execution generation`：连续重复终态和同终态 higher-seq revision 不重复发布；观察到任一非终态后开启下一代，下一次终态可再次发布。冷历史 hydration 只 seed ledger，不重放历史事件。 |
-| LF-06 | `task.completed` 只由专用 `finish_task` 结果产生，与 `topic.execution.ended` 并列；两者不互相合成、替代或去重。 |
-| LF-07 | `waiting_for_user` 表示 Topic 已把控制权交还用户：全局 Topic conversation loading 必须为 false，MessageList 底部 Loading 必须隐藏。`running`/`waiting` 仍可维持 Topic loading；未知状态不视为 Topic 终态，也不能单独推断出终态 UI。 |
-| LF-08 | `isTopicStreaming()` 与 MessageNode 的 reasoning/content loading 只观察消息级 `StreamState`；`useTopicConversationLoading` 可继续用节点 `running/waiting` 表达 Topic 仍工作，但不能据此重建已由 Final 清理的 StreamState。 |
-| LF-09 | 可见 Topic 切换会取消旧 Topic 的 render timer；取消后必须重新唤醒旧 Topic buffer，使已排队 Final 在后台完成消息封口和 Topic 事件发布，不能因 UI 可见性丢失生命周期事件。 |
-| LF-10 | `Super_Magic_New_Message_V2` 是同步通知，不是 canonical 内容；只使用 topic/conversation 路由与最高 `requiredSeqId` 水位，不能直接写 Store、合并正文或发布领域事件。 |
-| LF-11 | IM Final 与 HTTP authoritative Final 的前置校验不同，但都必须进入唯一的 `settleCanonicalAssistantFinal()` 内核；HTTP 保留 authoritative-tail、replace_tail、anchor、membership、分页和水位语义，不能重新调用 `enqueueMessage()` 进入 IM Buffer。 |
+| 决策  | 当前有效规则                                                                                                                                                                                                                                                                                                   |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LF-01 | `finish_reason` 是流式过程结束屏障：结束当前 stream generation，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=true`；它不能证明 canonical Final 已到达，也不能写入 message-finalized 封口状态。                                                                                                |
+| LF-02 | canonical Final Message 是消息权威纠正与最终封口屏障：必须清理对应 `StreamState`、阻断同 revision 晚到 chunk，并发布 `message.stream.ended`，其中 `awaitingCanonicalMessage=false`。Final 到达可证明 stream 已结束；stream 已结束不能反向证明 Final 已到达。                                                   |
+| LF-03 | Assistant Final 携带的 `super_magic_message.status` 描述 Topic 状态，而不是该条消息自身状态。`running`、`waiting`、`waiting_for_user` 和未知状态均只完成当前消息 Final/stream 封口，不发布 Topic 终态事件。                                                                                                    |
+| LF-04 | `finished`、`error`、`suspended` 表示 Topic 停止。对应 Final 除完成消息封口外，还发布 `topic.execution.ended`；HTTP Topic status 对账也可独立确认该事件。                                                                                                                                                      |
+| LF-05 | `topic.execution.ended` 的 exactly-once 作用域是 `topic + execution generation`：连续重复终态和同终态 higher-seq revision 不重复发布；观察到任一非终态后开启下一代，下一次终态可再次发布。冷历史 hydration 只 seed ledger，不重放历史事件。                                                                    |
+| LF-06 | `task.completed` 只由专用 `finish_task` 结果产生，与 `topic.execution.ended` 并列；两者不互相合成、替代或去重。                                                                                                                                                                                                |
+| LF-07 | `waiting_for_user` 表示 Topic 已把控制权交还用户：全局 Topic conversation loading 必须为 false，MessageList 底部 Loading 必须隐藏。`running`/`waiting` 仍可维持 Topic loading；未知状态不视为 Topic 终态，也不能单独推断出终态 UI。                                                                            |
+| LF-08 | `isTopicStreaming()` 与 MessageNode 的 reasoning/content loading 只观察消息级 `StreamState`；`useTopicConversationLoading` 可继续用节点 `running/waiting` 表达 Topic 仍工作，但不能据此重建已由 Final 清理的 StreamState。                                                                                     |
+| LF-09 | 可见 Topic 切换会取消旧 Topic 的 render timer；取消后必须重新唤醒旧 Topic buffer，使已排队 Final 在后台完成消息封口和 Topic 事件发布，不能因 UI 可见性丢失生命周期事件。                                                                                                                                       |
+| LF-10 | `Super_Magic_New_Message_V2` 是同步通知，不是 canonical 内容；只使用 topic/conversation 路由与最高 `requiredSeqId` 水位，不能直接写 Store、合并正文或发布领域事件。                                                                                                                                            |
+| LF-11 | IM Final 与 HTTP authoritative Final 的前置校验不同，但都必须进入唯一的 `settleCanonicalAssistantFinal()` 内核；HTTP 保留 authoritative-tail、replace_tail、anchor、membership、分页和水位语义，不能重新调用 `enqueueMessage()` 进入 IM Buffer。                                                               |
 | LF-12 | Final 结算顺序固定为：identity/revision 裁决 → canonical merge/store commit → 精确清理 StreamState/recovery/ledger/alias → revision barrier → `message.stream.ended(awaitingCanonicalMessage=false)` 与 `message.committed` → Topic 终态 exactly-once；任何事件不得先于 canonical commit 或 StreamState 清理。 |
-| LF-13 | `finish_reason` 记录独立 transport generation barrier，拒绝同 correlation 的迟到 Chunk；它不是 canonical Final。canonical Final 后，Chunk 不得仅凭新 correlation + `i=0` 重新打开逻辑消息；真正 higher revision 必须由带更高 `seq_id` 的 IM/HTTP canonical Final 进入。 |
-| LF-14 | Final 后继续显示前缀补齐只能使用 render-only `FinalRenderState`/snapshot；它不参与 `getStreamState()`、`isTopicStreaming()`、reasoning loading 或任何生命周期事件。render-only 状态采用可观察的 shallow Map replacement，并保留安全追平预算，timer 完成只删除该状态。 |
-| LF-15 | WS watermark 是 pending obligation。首轮 HTTP 未达到 `requiredSeqId`、分页/anchor 不成立或请求失败时不得提交、伪造 Final 或清空水位；必须以 single-flight + 有界退避自动重试，即使没有第二条 WS 也继续收敛，只有 authoritative-tail 成功提交后才清空水位。 |
+| LF-13 | `finish_reason` 记录独立 transport generation barrier，拒绝同 correlation 的迟到 Chunk；它不是 canonical Final。canonical Final 后，Chunk 不得仅凭新 correlation + `i=0` 重新打开逻辑消息；真正 higher revision 必须由带更高 `seq_id` 的 IM/HTTP canonical Final 进入。                                        |
+| LF-14 | Final 后继续显示前缀补齐只能使用 render-only `FinalRenderState`/snapshot；它不参与 `getStreamState()`、`isTopicStreaming()`、reasoning loading 或任何生命周期事件。render-only 状态采用可观察的 shallow Map replacement，并保留安全追平预算，timer 完成只删除该状态。                                          |
+| LF-15 | WS watermark 是 pending obligation。首轮 HTTP 未达到 `requiredSeqId`、分页/anchor 不成立或请求失败时不得提交、伪造 Final 或清空水位；必须以 single-flight + 有界退避自动重试，即使没有第二条 WS 也继续收敛，只有 authoritative-tail 成功提交后才清空水位。                                                     |
 
 事件编排固定为：
 
@@ -2409,14 +2409,14 @@ corepack pnpm exec vitest run \
 
 状态矩阵：
 
-| 输入/状态 | 结束 StreamState | message-finalized | `topic.execution.ended` | Topic conversation loading | MessageList 底部 Loading |
-| --------- | --------------- | ----------------- | ------------------------- | -------------------------- | ------------------------- |
-| `finish_reason`，Final 未到 | 是 | 否 | 否 | 由 Topic 状态决定 | 由 Topic 状态与可见投影决定 |
-| Final + `running` | 是 | 是 | 否 | 是 | 可按可见投影显示 |
-| Final + `waiting` | 是 | 是 | 否 | 是 | 可按可见投影显示 |
-| Final + `waiting_for_user` | 是 | 是 | 否 | 否 | 否 |
-| Final + 未知状态 | 是 | 是 | 否 | 由既有 loading 事实决定，不推断为终态 | 由既有可见投影决定，不因未知状态单独显示 |
-| Final/HTTP Topic status + `finished/error/suspended` | 是；若没有对应活动流则幂等 no-op | 是 | 是，按 generation exactly-once | 否 | 否 |
+| 输入/状态                                            | 结束 StreamState                 | message-finalized | `topic.execution.ended`        | Topic conversation loading            | MessageList 底部 Loading                 |
+| ---------------------------------------------------- | -------------------------------- | ----------------- | ------------------------------ | ------------------------------------- | ---------------------------------------- |
+| `finish_reason`，Final 未到                          | 是                               | 否                | 否                             | 由 Topic 状态决定                     | 由 Topic 状态与可见投影决定              |
+| Final + `running`                                    | 是                               | 是                | 否                             | 是                                    | 可按可见投影显示                         |
+| Final + `waiting`                                    | 是                               | 是                | 否                             | 是                                    | 可按可见投影显示                         |
+| Final + `waiting_for_user`                           | 是                               | 是                | 否                             | 否                                    | 否                                       |
+| Final + 未知状态                                     | 是                               | 是                | 否                             | 由既有 loading 事实决定，不推断为终态 | 由既有可见投影决定，不因未知状态单独显示 |
+| Final/HTTP Topic status + `finished/error/suspended` | 是；若没有对应活动流则幂等 no-op | 是                | 是，按 generation exactly-once | 否                                    | 否                                       |
 
 #### 当前实施验证（2026-08-03）
 
@@ -2441,19 +2441,19 @@ corepack pnpm exec vitest run \
 
 本节补充工具调用响应的最终边界。此前“工具 loading 等待 Assistant 动画结束后再入账”只保留为历史背景，状态标记为 `STALE`。
 
-| 决策 | 当前有效规则 |
-| ---- | ------------ |
-| TR-01 | Assistant Final 的 `tool_calls` 只声明工具调用，不代表工具结果已经完成；真实结果只来自后续 `role=tool` canonical 消息。 |
-| TR-02 | Tool canonical、Tool recovery sidecar、Tool render gate 三层独立：canonical 入账不得等待 Buffer、动画或 UI；recovery sidecar 不伪造 `role=tool`；render gate 只决定何时向用户投影真实结果。 |
-| TR-03 | 普通 Tool 的恢复 identity 为 `topicId + ownerSuperMessageId + toolId`；`toolResponseMap` 仍以 `topicId + toolId` 为 canonical 索引。`tool_call_id` 只能观察和告警，不能作为 canonical key。 |
-| TR-04 | Final 注册缺少真实 Tool Response 的合法普通 Tool；`ask_user`、Final 权威删除的 Tool、非法 ID、owner 冲突和 orphan 普通 Tool 不进入普通恢复任务。 |
+| 决策  | 当前有效规则                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TR-01 | Assistant Final 的 `tool_calls` 只声明工具调用，不代表工具结果已经完成；真实结果只来自后续 `role=tool` canonical 消息。                                                                                                                                                                                                                                               |
+| TR-02 | Tool canonical、Tool recovery sidecar、Tool render gate 三层独立：canonical 入账不得等待 Buffer、动画或 UI；recovery sidecar 不伪造 `role=tool`；render gate 只决定何时向用户投影真实结果。                                                                                                                                                                           |
+| TR-03 | 普通 Tool 的恢复 identity 为 `topicId + ownerSuperMessageId + toolId`；`toolResponseMap` 仍以 `topicId + toolId` 为 canonical 索引。`tool_call_id` 只能观察和告警，不能作为 canonical key。                                                                                                                                                                           |
+| TR-04 | Final 注册缺少真实 Tool Response 的合法普通 Tool；`ask_user`、Final 权威删除的 Tool、非法 ID、owner 冲突和 orphan 普通 Tool 不进入普通恢复任务。                                                                                                                                                                                                                      |
 | TR-05 | 同 Topic 新 Assistant 的首个有效 Chunk（正文、推理或 ToolCall）是上一 Assistant 普通 Tool 的 execution-settled barrier。它只能把 sidecar 置为 `execution_settled_pending_response` 并允许生成弱 `response_missing`，不能推导 `finished/error/suspended`。Heartbeat、metadata、usage、`before_llm_request`、重复 Chunk、同消息 higher revision 和 Final 不触发该屏障。 |
-| TR-06 | `response_missing` 是可被真实 `role=tool` 覆盖的弱终态；真实 `finished/error/suspended` 清理对应 recovery sidecar，并发布 `toolCall.settled`。强终态不能被弱终态回退。 |
-| TR-07 | 所有恢复来源统一进入 Topic 级 `StreamRecoveryCoordinator`，同 Topic single-flight、debounce/coalescing、in-flight `rerunNeeded`、请求前二次校验和有界退避；不得由 Tool UI 的 `isToolLoading` 决定是否请求 HTTP。 |
-| TR-08 | HTTP authoritative-tail 以待恢复 Tool 所属 Assistant 的最早 `anchorSeqId` 拉取，保留 required watermark、anchor、分页、membership、replace_tail 语义；同批先建立 Assistant owner，再登记 `role=tool`，真实结果优先，不先生成 `response_missing`。HTTP 不重新进入 IM Buffer。 |
-| TR-09 | canonical Tool Response 即时写入 `toolResponseMap`，但所属 Assistant 的 `StreamState` 或 `FinalRenderState` 尚未完成时，ToolCall 仍显示调用声明中的 running/waiting，不提前展示真实 status/detail/attachments/remark。RenderSession 完成后原子开放 canonical 投影；刷新或无可续播前缀时直接展示 canonical。 |
-| TR-10 | 恢复 sidecar phase 仅表示调度生命周期：`awaiting_response → scheduled → in_flight → awaiting_response/dormant`。它不改变 Tool execution state，也不参与 Message reasoning loading、Topic loading 或生命周期事件。 |
-| TR-11 | 所有 Tool 已强/弱收敛或 Topic dispose/authoritative removal 后清理 recovery timer、pending、in-flight 标记和 Message 级索引；切换 Topic 不删除 canonical，但可停止非活跃调度。 |
+| TR-06 | `response_missing` 是可被真实 `role=tool` 覆盖的弱终态；真实 `finished/error/suspended` 清理对应 recovery sidecar，并发布 `toolCall.settled`。强终态不能被弱终态回退。                                                                                                                                                                                                |
+| TR-07 | 所有恢复来源统一进入 Topic 级 `StreamRecoveryCoordinator`，同 Topic single-flight、debounce/coalescing、in-flight `rerunNeeded`、请求前二次校验和有界退避；不得由 Tool UI 的 `isToolLoading` 决定是否请求 HTTP。                                                                                                                                                      |
+| TR-08 | HTTP authoritative-tail 以待恢复 Tool 所属 Assistant 的最早 `anchorSeqId` 拉取，保留 required watermark、anchor、分页、membership、replace_tail 语义；同批先建立 Assistant owner，再登记 `role=tool`，真实结果优先，不先生成 `response_missing`。HTTP 不重新进入 IM Buffer。                                                                                          |
+| TR-09 | canonical Tool Response 即时写入 `toolResponseMap`，但所属 Assistant 的 `StreamState` 或 `FinalRenderState` 尚未完成时，ToolCall 仍显示调用声明中的 running/waiting，不提前展示真实 status/detail/attachments/remark。RenderSession 完成后原子开放 canonical 投影；刷新或无可续播前缀时直接展示 canonical。                                                           |
+| TR-10 | 恢复 sidecar phase 仅表示调度生命周期：`awaiting_response → scheduled → in_flight → awaiting_response/dormant`。它不改变 Tool execution state，也不参与 Message reasoning loading、Topic loading 或生命周期事件。                                                                                                                                                     |
+| TR-11 | 所有 Tool 已强/弱收敛或 Topic dispose/authoritative removal 后清理 recovery timer、pending、in-flight 标记和 Message 级索引；切换 Topic 不删除 canonical，但可停止非活跃调度。                                                                                                                                                                                        |
 
 ### Tool 事件顺序
 
@@ -2468,3 +2468,46 @@ corepack pnpm exec vitest run \
 - “收到 Assistant Final 即可把普通 Tool 推导为 finished”：`STALE`。
 - “每个 Tool 独立轮询或由每个 Chunk 扫描全量消息”：`STALE`。
 - “为了动画保留 StreamState 或让 Tool Response 入账等待动画”：`STALE`。
+
+## 浏览器前台 HTTP 恢复与 Final 归一化契约（2026-08-06，RATIFIED）
+
+本节覆盖此前“visible 时固定拉两段窗口后完整 replace”以及“HTTP 返回任意 Assistant 即视为 Final”的旧实现。`LF-03` 中 `status=running` 仍可出现在 canonical Final；HTTP 调用方必须通过显式快照策略声明本次响应属于 `progress_snapshot` 还是 `canonical_final`，Store 不再通过 Topic status 猜测消息级 Final。
+
+| 决策  | 当前有效规则                                                                                                                                                                                                                                                                                                      |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FG-01 | Tab 进入 hidden 时记录最新 durable committed anchor，身份固定为 `app_message_id + super_message_id + seq_id`；活动 `StreamState` 和 optimistic 消息不得成为分页停止锚点。                                                                                                                                         |
+| FG-02 | visible 恢复固定每页 100 条，按服务端 `page_token` 向更早历史逐页查找 anchor；命中立即停止，不按离开时长估算页数，也不预设“固定拉 2 页/100 页”。                                                                                                                                                                  |
+| FG-03 | 有 durable anchor 的前台恢复上限为 50 页/5000 条；没有 anchor 时最多拉最近 3 页并使用 `merge`。完整 recovery 上限为 500 页/50000 条，只保留给 checkpoint 等显式完整恢复。重复 token、空 token、无效 `items`、请求失败、超预算或 generation 失效都必须整轮失败，禁止提交 partial snapshot。                        |
+| FG-04 | 命中 anchor 时使用 `replace_tail`，保留本地 anchor 及其之前的前缀，只权威替换 anchor 之后的 membership；HTTP membership 只提交“最新消息至 anchor”区间，不把 anchor 之后的更老响应重复写入。                                                                                                                       |
+| FG-05 | 没有 anchor 的普通 visible 恢复只能提交有限 authoritative tail，并且必须使用 `merge`；不得扫描完整历史，也不得 `replace`。只有 checkpoint 等显式完整 recovery 在聚合到 `has_more=false && snapshot_complete=true` 后才能完整 `replace`。                                                                          |
+| FG-06 | HTTP Assistant 必须显式选择 `assistantSnapshotPolicy`：`canonical_final` 表示 transport/完整恢复已确认消息级 Final，任何 Topic status 都进入 `settleCanonicalAssistantFinal()`；`progress_snapshot` 下只有 `finished/error/suspended/revoked` 或外层 IM `revoked` 自动取得 Final 资格。                           |
+| FG-07 | `progress_snapshot` 的非终态 Assistant 只做单调补齐：服务端 content/reasoning 必须以本地值为前缀才能推进；本地更长或内容分叉时保留本地值。Tool 仅在服务端调用数量增加时推进，不清理 `StreamState`、不建立 revision Final barrier，也不发布 canonical `message.stream.ended`。                                     |
+| FG-08 | HTTP 请求开始时存在的活动流作为 local overlay 保留；请求期间新产生的更高 revision/更高 seq 持久消息继续由 Store revision 与 snapshot watermark 保护，不能被稍早的 HTTP 响应删除。                                                                                                                                 |
+| FG-09 | `beginTopicSync()` 至 `completeTopicSync()` 是一次 generation-scoped 原子恢复：分页期间可以暂停渲染，但保留 StreamState/buffer；只有当前 generation 能提交 membership 和完成同步。                                                                                                                                |
+| FG-10 | MessageList 在权威对账导致 item 数量减少时必须清除历史分页意图和待恢复 anchor；浏览器因 canvas 变矮而被动修正 `scrollTop` 不得触发 `onPullMore`，也不得把非跟随状态强制跳到底部。                                                                                                                                 |
+| FG-11 | 热路径不得打印或深拷贝整批 HTTP messages、buffer、流式正文或 Tool arguments；诊断只允许有限元数据，避免 DevTools 保留大对象和 `JSON.stringify` 阻塞主线程。                                                                                                                                                       |
+| FG-12 | 策略归属固定：初始历史、历史分页、完整 recovery、撤回刷新和 WS `persistent_message` 确认使用 `canonical_final`；普通 visible 恢复、轮询和 Tool recovery authoritative-tail 使用 `progress_snapshot`。`eventPolicy=live_arrival` 只控制事件可见性，不拥有 Final 资格。                                             |
+| FG-13 | 同一 Topic 的 initial、visible、watchdog、WS recovery 和 polling 必须共享请求协调边界；完全相同的 conversation/topic/order/limit/page_token 请求只发送一次 HTTP。请求 Promise 可以共享，但每个来源仍按自身 `assistantSnapshotPolicy`、watermark 和事件策略对账，禁止因去重丢失 WS/IM Final 语义。                 |
+| FG-14 | hidden 期间只记录/推进 durable anchor 和处理已到达的 WS/IM canonical 事实，不启动新的 watchdog HTTP recovery。visible 时已有 in-flight recovery 则复用；pending checkpoint 优先恢复完整快照；普通 pending obligation 先由 foreground anchor 对账，完成后由 Store resolver 二次确认，仍有缺口才继续 bounded tail。 |
+
+### 更新后的业务流程
+
+1. `hidden`：读取当前 Topic 的 canonical 列表，排除 active StreamState 与 optimistic message，记录 durable anchor；不发请求、不改 membership、不结束流。
+2. hidden 期间：WS/IM 继续按原协议进入 Store；若有新的 durable committed message，则推进 `latestCommittedAnchor`，未持久化流式卡仍不参与锚点；watchdog 只保持 waiting，不发送 HTTP。
+3. `visible`：先检查 Topic recovery coordinator。已有 in-flight recovery 时复用；pending checkpoint 直接恢复完整快照；其余 pending obligation 由本轮 foreground anchor 对账接管。
+4. 若 Topic 已稳定完成，则只做小窗口 authoritative-tail 对账；若仍 running/buffered/streaming，则创建唯一 sync generation 并开始每页 100 条分页。相同页请求通过 Topic 级 single-flight 共享 HTTP Promise。
+5. 每页响应：校验 `items` 数组、page token、generation 和总预算；聚合 status observation 与 renderable membership，但不立即写 Store。
+6. 找到 durable anchor：截断到 anchor，使用 `replace_tail` 一次提交；未找到且服务端仍有下一页则继续。
+7. 没有 durable anchor：最多聚合最近 3 页并 `merge`，禁止扫描完整 Topic。显式 checkpoint recovery 才允许扫到末页，并且必须取得 `snapshot_complete=true` 后 full replace。
+8. Assistant 对账：调用方先声明 `progress_snapshot` 或 `canonical_final`；progress 中的 running 执行单调补齐并保留 StreamState，canonical Final 与明确 HTTP 终态进入和 IM/WS 相同的 settlement。
+9. Store 提交后：当前 generation 执行 `completeTopicSync(..., foreground-instant)`；running StreamState 恢复 live 渲染，已 Final 的 StreamState 保持关闭；随后重新解析 pending obligation，已满足则清理，未满足才继续 bounded tail。
+10. UI 投影：MessageList 使用稳定 `super_message_id` key；membership 缩减只更新虚拟列表并清除历史分页意图，不把布局滚动当成人工上滑。
+
+### 验收边界
+
+- message2 离开、message500 返回：客户端逐页查找 message2；命中页即停止，只替换 message2 之后的权威尾部。
+- 本地没有 durable anchor：只允许最近 3 页 `merge`，即使服务端仍返回 `has_more=true` 也不得继续扫描完整历史。
+- visible 与 watchdog 同时恢复：相同首屏/分页参数只产生一条 HTTP 请求；已有 Topic sync 时不得建立第二条 generation 分页链路。
+- HTTP `progress_snapshot` + running：本地流式正文不消失，StreamState 仍存在，后续 Chunk 可继续推进，且不发布 canonical stream-ended 事件。
+- HTTP `canonical_final` + running：完成当前消息封口但不结束 Topic；canonical 内容、Tool、revision barrier 和生命周期事件通过同一 Final settlement 收敛。
+- 任何未证明完整的 HTTP 结果都不能缩短 canonical 历史；任何列表缩短都不能自行触发下一页请求。

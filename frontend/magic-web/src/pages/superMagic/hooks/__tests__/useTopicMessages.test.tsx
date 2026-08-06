@@ -8,6 +8,12 @@ const mockState = vi.hoisted(() => ({
 	getMessagesByConversationIdMock: vi.fn(),
 	registerStreamRecoveryOwnerMock: vi.fn(),
 	requestTopicRecoveryMock: vi.fn(),
+	getTopicRecoveryStatusMock: vi.fn(() => ({
+		hasScheduled: false,
+		hasInFlight: false,
+		reason: undefined,
+	})),
+	resumeTopicRecoveryMock: vi.fn(),
 	recoveryOwner: undefined as
 		| {
 				conversationId: string
@@ -103,8 +109,10 @@ vi.mock("@/pages/superMagic/stores/optimisticMessageStore", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services/streamRecoveryCoordinator", () => ({
+	getTopicRecoveryStatus: mockState.getTopicRecoveryStatusMock,
 	registerStreamRecoveryOwner: mockState.registerStreamRecoveryOwnerMock,
 	requestTopicRecovery: mockState.requestTopicRecoveryMock,
+	resumeTopicRecovery: mockState.resumeTopicRecoveryMock,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -131,6 +139,13 @@ describe("useTopicMessages", () => {
 		mockState.getMessagesByConversationIdMock.mockReset()
 		mockState.registerStreamRecoveryOwnerMock.mockReset()
 		mockState.requestTopicRecoveryMock.mockReset()
+		mockState.getTopicRecoveryStatusMock.mockReset()
+		mockState.getTopicRecoveryStatusMock.mockReturnValue({
+			hasScheduled: false,
+			hasInFlight: false,
+			reason: undefined,
+		})
+		mockState.resumeTopicRecoveryMock.mockReset()
 		mockState.nextSyncGeneration = 1
 		mockState.superMagicStoreMock.beginTopicSync.mockImplementation(
 			() => mockState.nextSyncGeneration++,
@@ -233,6 +248,35 @@ describe("useTopicMessages", () => {
 		)
 	})
 
+	it("shares the same in-flight first page across multiple topic owners", async () => {
+		let resolveRequest!: (value: {
+			items: unknown[]
+			has_more: boolean
+			page_token: string
+		}) => void
+		const pendingRequest = new Promise<{
+			items: unknown[]
+			has_more: boolean
+			page_token: string
+		}>((resolve) => {
+			resolveRequest = resolve
+		})
+		mockState.getMessagesByConversationIdMock.mockReturnValue(pendingRequest)
+
+		const first = renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+		const second = renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		await act(async () => {
+			resolveRequest({ items: [], has_more: false, page_token: "" })
+			await pendingRequest
+			await Promise.resolve()
+		})
+
+		first.unmount()
+		second.unmount()
+	})
+
 	it("uses one recent page as the finished resident-poll barrier without replacing history", async () => {
 		vi.useFakeTimers()
 		const initialResponse = { items: [], has_more: false, page_token: "" }
@@ -315,6 +359,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			pollingResponse.items,
 			{
+				assistantSnapshotPolicy: "progress_snapshot",
 				canonicalCommitContext: {
 					lifecycleEventPolicy: "silent",
 					source: "http",
@@ -434,6 +479,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[...firstPageItems, secondPageItems[0], secondPageItems[1]],
 			{
+				assistantSnapshotPolicy: "progress_snapshot",
 				mode: "replace_tail",
 				anchorSuperMessageId: "local-anchor",
 				canonicalCommitContext: {
@@ -808,6 +854,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			olderItems,
 			{
+				assistantSnapshotPolicy: "canonical_final",
 				mode: "merge",
 				syncGeneration: undefined,
 				toolProjectionPolicy: "historical_terminal",
@@ -921,6 +968,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[newerEnvelope, olderEnvelope],
 			{
+				assistantSnapshotPolicy: "canonical_final",
 				canonicalCommitContext: {
 					lifecycleEventPolicy: "live",
 					source: "http",
@@ -1016,6 +1064,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[restoredMessage],
 			{
+				assistantSnapshotPolicy: "canonical_final",
 				mode: "replace",
 				syncGeneration: expect.any(Number),
 				toolProjectionPolicy: "historical_terminal",
@@ -1387,6 +1436,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			revokedBatch,
 			{
+				assistantSnapshotPolicy: "canonical_final",
 				mode: "replace",
 				syncGeneration: undefined,
 				toolProjectionPolicy: "historical_terminal",
@@ -1504,6 +1554,154 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.beginTopicSync).not.toHaveBeenCalled()
 	})
 
+	it("resumes a scheduled checkpoint recovery instead of starting foreground pagination", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({ selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }) }),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+		mockState.getMessagesByConversationIdMock.mockClear()
+		mockState.getTopicRecoveryStatusMock.mockReturnValue({
+			hasScheduled: true,
+			hasInFlight: false,
+			reason: "checkpoint_rollback",
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		expect(mockState.resumeTopicRecoveryMock).toHaveBeenCalledWith("chat-topic-1")
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+	})
+
+	it("rechecks ordinary pending recovery after foreground anchor reconciliation", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({ selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }) }),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		mockState.superMagicStoreMock.messages.set("chat-topic-1", [
+			{
+				app_message_id: "foreground-anchor",
+				super_message_id: "foreground-anchor",
+				seq_id: "1",
+			},
+		])
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createMessageEnvelope("foreground-anchor", "1")],
+			has_more: true,
+			page_token: "older",
+		})
+		mockState.getTopicRecoveryStatusMock.mockReturnValue({
+			hasScheduled: true,
+			hasInFlight: false,
+			reason: "persistent_message",
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		expect(mockState.resumeTopicRecoveryMock).toHaveBeenCalledWith("chat-topic-1")
+	})
+
+	it("keeps ordinary watchdog recovery on a bounded progress tail instead of full recovery", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		const registration = mockState.registerStreamRecoveryOwnerMock.mock.calls[0]?.[0] as {
+			recover: (context: Record<string, unknown>) => Promise<{ didPullSucceed: boolean }>
+		}
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createMessageEnvelope("watchdog-progress", "2")],
+			has_more: false,
+			page_token: "",
+			snapshot_complete: true,
+		})
+		mockState.superMagicStoreMock.reconcileAuthoritativeMessages.mockClear()
+
+		let recoveryResult: { didPullSucceed: boolean } | undefined
+		await act(async () => {
+			recoveryResult = await registration.recover({
+				topicId: "chat-topic-1",
+				conversationId: "conversation-1",
+				correlationId: "watchdog-1",
+				syncGeneration: 22,
+				reason: "stream_watchdog",
+			})
+		})
+
+		expect(recoveryResult).toEqual(expect.objectContaining({ didPullSucceed: true }))
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(1)
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				limit: 20,
+				page_token: "",
+			}),
+		)
+		expect(mockState.superMagicStoreMock.reconcileAuthoritativeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			expect.objectContaining({
+				writeOptions: expect.objectContaining({
+					assistantSnapshotPolicy: "progress_snapshot",
+					mode: "merge",
+					syncGeneration: 22,
+				}),
+			}),
+		)
+	})
+
 	it("registers the active topic as the recovery owner and forwards its generation to replace", async () => {
 		const emptySnapshot = { items: [], has_more: false, page_token: "" }
 		mockState.getMessagesByConversationIdMock.mockResolvedValue(emptySnapshot)
@@ -1557,6 +1755,7 @@ describe("useTopicMessages", () => {
 				conversationId: "conversation-1",
 				correlationId: "correlation-1",
 				syncGeneration: 23,
+				reason: "checkpoint_rollback",
 			})
 		})
 
@@ -1584,6 +1783,7 @@ describe("useTopicMessages", () => {
 			"chat-topic-1",
 			[...firstPageItems, ...secondPageItems],
 			{
+				assistantSnapshotPolicy: "canonical_final",
 				mode: "replace",
 				syncGeneration: 23,
 				toolProjectionPolicy: "historical_terminal",
@@ -1717,6 +1917,7 @@ describe("useTopicMessages", () => {
 				conversationId: "conversation-1",
 				correlationId: "correlation-1",
 				syncGeneration: 24,
+				reason: "checkpoint_rollback",
 			})
 		})
 
@@ -1782,9 +1983,12 @@ describe("useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledTimes(1)
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
-			[...firstPageItems, ...secondPageItems],
+			[...firstPageItems, secondPageItems[0]],
 			{
-				mode: "replace",
+				assistantSnapshotPolicy: "progress_snapshot",
+				mode: "replace_tail",
+				anchorSuperMessageId: "foreground-anchor",
+				preserveStreamSuperMessageIds: [],
 				syncGeneration: generation,
 				toolProjectionPolicy: "historical_terminal",
 			},
@@ -1798,6 +2002,277 @@ describe("useTopicMessages", () => {
 				latestSeqId: "assistant-seq-1",
 				renderStrategy: "foreground-instant",
 			}),
+		)
+	})
+
+	it("pulls fixed 100-message pages until the fifth page reaches the durable anchor", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.superMagicStoreMock.messages.set("chat-topic-1", [
+			{
+				app_message_id: "foreground-anchor",
+				super_message_id: "foreground-anchor",
+				seq_id: "2",
+			},
+		])
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		const pageItems = [
+			[createMessageEnvelope("message-500", "500")],
+			[createMessageEnvelope("message-400", "400")],
+			[createMessageEnvelope("message-300", "300")],
+			[createMessageEnvelope("message-200", "200")],
+			[
+				createMessageEnvelope("message-100", "100"),
+				createMessageEnvelope("foreground-anchor", "2"),
+				createMessageEnvelope("older-than-anchor", "1"),
+			],
+		]
+		mockState.getMessagesByConversationIdMock.mockReset()
+		pageItems.forEach((items, index) => {
+			mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+				items,
+				has_more: true,
+				page_token: `page-${index + 2}`,
+			})
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(5)
+		for (let index = 0; index < 5; index += 1) {
+			expect(mockState.getMessagesByConversationIdMock).toHaveBeenNthCalledWith(
+				index + 1,
+				expect.objectContaining({
+					limit: 100,
+					page_token: index === 0 ? "" : `page-${index + 1}`,
+				}),
+			)
+		}
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			[
+				...pageItems[0],
+				...pageItems[1],
+				...pageItems[2],
+				...pageItems[3],
+				pageItems[4][0],
+				pageItems[4][1],
+			],
+			expect.objectContaining({
+				assistantSnapshotPolicy: "progress_snapshot",
+				mode: "replace_tail",
+				anchorSuperMessageId: "foreground-anchor",
+			}),
+		)
+	})
+
+	it.each([
+		{
+			label: "merges an incomplete terminal page",
+			snapshotComplete: false,
+			expectedMode: "merge",
+			expectedToolProjectionPolicy: "preserve_live",
+		},
+		{
+			label: "still merges a server-confirmed complete page",
+			snapshotComplete: true,
+			expectedMode: "merge",
+			expectedToolProjectionPolicy: "preserve_live",
+		},
+	] as const)(
+		"$label when foreground recovery has no durable anchor",
+		async ({ snapshotComplete, expectedMode, expectedToolProjectionPolicy }) => {
+			mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+				items: [],
+				has_more: false,
+				page_token: "",
+			})
+			renderHook(() =>
+				useTopicMessages({
+					selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+				}),
+			)
+			await act(async () => {
+				await Promise.resolve()
+				await Promise.resolve()
+			})
+
+			Object.defineProperty(document, "visibilityState", {
+				configurable: true,
+				value: "hidden",
+			})
+			document.dispatchEvent(new Event("visibilitychange"))
+
+			const foregroundItems = [createMessageEnvelope("foreground-only", "10")]
+			mockState.getMessagesByConversationIdMock.mockReset()
+			mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+				items: foregroundItems,
+				has_more: false,
+				page_token: "",
+				snapshot_complete: snapshotComplete,
+			})
+			mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+			Object.defineProperty(document, "visibilityState", {
+				configurable: true,
+				value: "visible",
+			})
+			await act(async () => {
+				document.dispatchEvent(new Event("visibilitychange"))
+				await Promise.resolve()
+				await Promise.resolve()
+			})
+
+			expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+				"chat-topic-1",
+				foregroundItems,
+				expect.objectContaining({
+					assistantSnapshotPolicy: "progress_snapshot",
+					mode: expectedMode,
+					toolProjectionPolicy: expectedToolProjectionPolicy,
+				}),
+			)
+		},
+	)
+
+	it("bounds foreground recovery to three tail pages when no durable anchor exists", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({ selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }) }),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		const pages = [
+			[createMessageEnvelope("tail-3", "300")],
+			[createMessageEnvelope("tail-2", "200")],
+			[createMessageEnvelope("tail-1", "100")],
+		]
+		mockState.getMessagesByConversationIdMock.mockReset()
+		pages.forEach((items, index) => {
+			mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+				items,
+				has_more: true,
+				page_token: `tail-page-${index + 2}`,
+			})
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			for (let index = 0; index < 8; index += 1) await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(3)
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			pages.flat(),
+			expect.objectContaining({ mode: "merge" }),
+		)
+	})
+
+	it("does not commit a foreground snapshot after the 50-page recovery budget is exhausted", async () => {
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [],
+			has_more: false,
+			page_token: "",
+		})
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({ task_status: TaskStatus.RUNNING }),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		mockState.superMagicStoreMock.messages.set("chat-topic-1", [
+			{
+				app_message_id: "unreached-anchor",
+				super_message_id: "unreached-anchor",
+				seq_id: "1",
+			},
+		])
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		document.dispatchEvent(new Event("visibilitychange"))
+
+		mockState.getMessagesByConversationIdMock.mockReset()
+		for (let index = 0; index < 50; index += 1) {
+			mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+				items: [createMessageEnvelope(`page-message-${index}`, String(10_000 - index))],
+				has_more: true,
+				page_token: `page-${index + 2}`,
+			})
+		}
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+		mockState.superMagicStoreMock.completeTopicSync.mockClear()
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+		await act(async () => {
+			document.dispatchEvent(new Event("visibilitychange"))
+			for (let index = 0; index < 55; index += 1) await Promise.resolve()
+		})
+
+		const generation = mockState.superMagicStoreMock.beginTopicSync.mock.results.at(-1)?.value
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledTimes(50)
+		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+			"chat-topic-1",
+			generation,
+			expect.objectContaining({ succeeded: false }),
 		)
 	})
 
@@ -1888,6 +2363,21 @@ describe("useTopicMessages", () => {
 					items: [createMessageEnvelope("partial-1", "2")],
 					has_more: true,
 					page_token: "page-3",
+				},
+			],
+		},
+		{
+			label: "the continuation token repeats before the anchor is reached",
+			responses: [
+				{
+					items: [createMessageEnvelope("partial-2", "3")],
+					has_more: true,
+					page_token: "page-2",
+				},
+				{
+					items: [createMessageEnvelope("partial-1", "2")],
+					has_more: true,
+					page_token: "page-2",
 				},
 			],
 		},
@@ -2021,6 +2511,7 @@ function createMessageEnvelope(appMessageId: string, seqId: string, status = "re
 					role: "assistant",
 					topic_id: "chat-topic-1",
 					message_id: `node-${appMessageId}`,
+					super_message_id: appMessageId,
 					correlation_id: correlationId,
 					content: appMessageId,
 					reasoning_content: null,
