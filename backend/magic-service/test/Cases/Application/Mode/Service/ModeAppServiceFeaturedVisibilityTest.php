@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Mode\Service;
 
 use App\Application\Mode\Service\ModeAppService;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;

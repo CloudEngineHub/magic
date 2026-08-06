@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Speech\DTO\Response;
 
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 
 /**
  * ASR 文件数据传输对象

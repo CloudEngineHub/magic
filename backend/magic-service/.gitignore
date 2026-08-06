@@ -34,6 +34,13 @@ storage/files/test001
 .cursor/
 .github
 docs/
+!docs/
+docs/*
+!docs/super-magic-module-migration-plan.md
+!docs/migration/
+docs/migration/*
+!docs/migration/super-magic/
+!docs/migration/super-magic/**
 !go-engine/docs/
 !go-engine/docs/**
 
