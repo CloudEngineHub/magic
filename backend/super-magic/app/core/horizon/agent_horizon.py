@@ -409,15 +409,47 @@ class AgentHorizon:
         if self._loaded:
             return
         loaded = await self._store.load()
-        if loaded is not None:
-            self._state = loaded
-            # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
-            # baseline 已经在 state.* 里；current 由本轮运行时重新采集，不应从旧进程内存恢复。
-            self._is_first_injection = not loaded.initial_context_injected
-            # 恢复 LLM 模型 baseline，避免重启后误判为"模型变更"
-            self._last_llm_model_id = loaded.llm_model_id
-            self._last_llm_model_name = loaded.llm_model_name
+        self._apply_loaded_state(loaded)
+
+    async def reload_from_store(self) -> None:
+        """持久目录准备或被外部替换后，重新建立内存中的 Horizon baseline。
+
+        ZIP 解压、未来 MagicFS 挂载和 checkpoint 回滚都可能发生在 Horizon
+        对象创建之后。此时不能只修改 `_loaded`，必须同时丢弃旧的运行时 staging，
+        避免恢复前的半成品状态覆盖刚准备好的持久文件。
+        """
+        loaded = await self._store.load()
+        self._apply_loaded_state(loaded)
+        logger.info(
+            "[AgentHorizon] 已从持久存储重新加载: "
+            f"agent_id={self._state.agent_id} "
+            f"restored={loaded is not None} "
+            f"file_records={len(self._state.file_records)}"
+        )
+
+    def _apply_loaded_state(self, loaded: Optional[HorizonState]) -> None:
+        """应用持久 baseline，并清空不属于该 baseline 的运行时状态。"""
+        self._state = loaded if loaded is not None else HorizonState(agent_id=self._store.agent_id)
         self._loaded = True
+
+        # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
+        # baseline 已经在 state.* 里；current 由本轮运行时重新采集，不应从旧进程内存恢复。
+        self._is_first_injection = not self._state.initial_context_injected
+        self._last_llm_model_id = self._state.llm_model_id
+        self._last_llm_model_name = self._state.llm_model_name
+        self._last_llm_model_description = ""
+        self._llm_model_changed = False
+        self._image_model_changed = False
+        self._video_model_changed = False
+        self._context_used = 0
+        self._context_total = 0
+
+        self._workspace_files_current = None
+        self._workspace_entries_current = None
+        self._memory_current = None
+        self._client_context_current = None
+        self._cli_status_current = None
+        self._language_current = None
 
     async def _save(self) -> None:
         await self._store.save(self._state)

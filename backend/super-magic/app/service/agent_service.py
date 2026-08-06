@@ -30,6 +30,7 @@ from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
+from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
@@ -486,6 +487,11 @@ class AgentService(Base):
             await self.download_and_extract_workspace(agent_context)
         else:
             logger.info("fetch_history disabled, skip downloading remote chat history and checkpoints")
+
+        # Horizon 对象早于持久目录创建。必须在 ZIP 解压或挂载目录准备完成后重载，
+        # 再启动会写入 Horizon 的 CLI 探测，避免把“文件暂时不存在”固定成空 baseline。
+        await agent_context.horizon.reload_from_store()
+        CliManagerService.schedule_initial_status_detection(agent_context)
 
         # 触发初始化后事件
         after_init_data = AfterInitEventData(tool_context=tool_context, agent_context=agent_context, success=True)
