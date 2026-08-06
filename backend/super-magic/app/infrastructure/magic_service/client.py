@@ -226,6 +226,41 @@ class MagicServiceClient:
             operation_name="设计视频生成",
         )
 
+    async def estimate_design_video_points(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Estimate points for a design video generation task."""
+        return await self._request_json(
+            "POST",
+            "/api/v1/design/estimate-video-points",
+            payload,
+            operation_name="设计视频积分预估",
+        )
+
+    async def ensure_project_directories(
+        self,
+        project_id: str,
+        directory_parts: List[str],
+    ) -> str:
+        """Ensure a project directory hierarchy exists in the Magic Service file tree."""
+        parent_id = ""
+        for directory_name in directory_parts:
+            result = await self._request_json(
+                "POST",
+                "/api/v1/super-agent/file",
+                {
+                    "project_id": project_id,
+                    "parent_id": parent_id,
+                    "file_name": directory_name,
+                    "is_directory": True,
+                    "ignore_duplicate": True,
+                    "pre_file_id": -1,
+                },
+                operation_name="创建项目目录",
+            )
+            parent_id = str(result.get("file_id") or "")
+            if not parent_id:
+                raise ApiError(f"创建项目目录失败: {directory_name}")
+        return parent_id
+
     async def get_slides_template_file_url(
         self,
         code: str,

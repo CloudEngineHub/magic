@@ -7,6 +7,10 @@ description: Core canvas design skill covering project management, multimedia pr
 
 Covers all canvas design fundamentals: project management, multimedia principles, AI image generation, web image search, and design marker processing. Video generation on canvas is supported via dedicated reference docs.
 
+## Video Request Guidance
+
+For video requests, use `reference/video/generation.md` as the business guidance. When the user needs to provide details or choose among options, reuse `ask_user` as appropriate. Estimate points, seek confirmation, and generate according to those principles when appropriate, while adapting the interaction to the conversation.
+
 ---
 
 ## Execution
@@ -50,7 +54,7 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 **Correct approach:**
 - Image content changes → `generate_canvas_images` (creates new element; keep original)
 - Web image search for canvas → read [reference/image/image-search.md](reference/image/image-search.md) first, then `search_canvas_images`
-- Video generation → `generate_canvas_videos` (see Video Generation section below)
+- Video generation → use `generate_canvas_videos` with `action="estimate_points"` when a pre-generation estimate is useful; after a suitable confirmation, it can be called with `action="generate"` (see Video Generation section below)
 - Recover missing canvas layers from local project media files → only use `restore_canvas_media` when the user explicitly asks to restore/rebuild canvas layers or `magic.project.js` from existing `images/` / `videos/` files
 - Original elements and media files must remain unchanged
 
@@ -603,7 +607,7 @@ Generate AI images?
 └─ No → continue
 
 Generate video?
-├─ Yes → read reference/video/generation.md first, then generate_canvas_videos
+├─ Yes → use reference/video/generation.md and the video generation tool
 │   └─ Follow up? → do not call another video tool; video status is tracked by the frontend using video_id
 └─ No → continue
 
@@ -613,7 +617,7 @@ Search web images?
 
 User explicitly asks for prompt inspiration or says they have no idea what to generate?
 ├─ Yes → search_image_prompts → present 3–5 adapted options for user to choose
-└─ No → proceed with generation
+└─ No → continue
 ```
 
 ---

@@ -1,12 +1,11 @@
 # Initial Canvas Video Generation
 
-Use `generate_canvas_videos` to handle both placeholder creation and job creation.
+## Video Request Guidance
 
-## Confirm Before Generating
-
-- If the user is only asking about capability ("can you?", "is it possible?"), confirm and ask for content details first; do not start generating
-- If the user says "I want to generate a video" without describing the content, ask for details before calling any tool
-- Only call generation tools when the user has expressed clear content intent and willingness to proceed
+- Turn a vague video request into a clear, executable prompt. When important details or choices are missing, reuse the existing `ask_user` as appropriate.
+- For copyright or IP, real-person, sexual, political, violent, or similar risk, explain the concern and offer at least two choices/options. The choices should, when relevant, include (1) keeping the user's original request and attempting it as written, and (2) a risk-reduced adjustment; add other reasonable directions when useful. Do not force the user to accept a rewrite. Reuse the existing `ask_user` or another suitable interaction when useful; use your judgment about when to ask and how to proceed.
+- When the request calls for a pre-generation review, use `generate_canvas_videos` with `action="estimate_points"`, present the final prompt, main generation parameters, and estimated points, and seek the user's confirmation. If estimation fails, explain it and let the user choose whether to continue or revise.
+- When the user has confirmed a direction, use `action="generate"` for that request when appropriate. If generation fails, briefly explain the reason and a useful modification, offer choices such as continuing to revise or ending, note that failure does not deduct points, and avoid automatic retries.
 
 ## Timeout
 
@@ -52,13 +51,18 @@ Use these tokens next to the subject, action, or source media they control. Do n
 - camera language
 - lighting, style, pacing
 
-## Example
+## Parameter Examples
+
+The examples below illustrate estimation calls. You may show the result and seek confirmation before repeating a suitable call with `action="generate"`, according to the conversation.
+
+### Standard Mode Example
 ```python
 from sdk.tool import tool
 
 result = tool.call('generate_canvas_videos', {
     "project_path": "my-design",
     "model_id": "model-from-media-model-info",
+    "action": "estimate_points",
     "tasks": [{
         "name": "launch_video",
         "prompt": "A phone slowly rotates on a minimal stage, push-in camera, soft rim light, commercial ad look",
@@ -77,6 +81,7 @@ from sdk.tool import tool
 result = tool.call('generate_canvas_videos', {
     "project_path": "my-design",
     "model_id": "model-from-media-model-info",
+    "action": "estimate_points",
     "tasks": [{
         "name": "edited_video",
         "prompt": "Turn the reference video [video1] into a watercolor animation while keeping the original motion",
@@ -98,6 +103,7 @@ from sdk.tool import tool
 result = tool.call('generate_canvas_videos', {
     "project_path": "my-design",
     "model_id": "model-from-media-model-info",
+    "action": "estimate_points",
     "tasks": [{
         "name": "launch_video",
         "prompt": "A phone [image1] slowly rotates on a minimal stage, push-in camera, soft rim light, commercial ad look",
