@@ -160,6 +160,7 @@ describe("MainHeader project topic title", () => {
 	it("shows topic name as title and project name as subtitle on project topic page", () => {
 		renderProjectHeader()
 
+		expect(screen.getByTestId("project-detail-header-root")).toHaveClass("z-50")
 		expect(screen.getByTestId("project-detail-header-title")).toHaveTextContent(
 			"Kickoff Discussion",
 		)

@@ -30,10 +30,8 @@ export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 
 export function getUserMessageStickyTopClass(
 	isMobile: boolean,
-): "top-[10px] [--sticky-message-top:10px]" | "top-[40px] [--sticky-message-top:40px]" {
-	return isMobile
-		? "top-[10px] [--sticky-message-top:10px]"
-		: "top-[40px] [--sticky-message-top:40px]"
+): "top-0 [--sticky-message-top:0px]" | "top-[40px] [--sticky-message-top:40px]" {
+	return isMobile ? "top-0 [--sticky-message-top:0px]" : "top-[40px] [--sticky-message-top:40px]"
 }
 
 /** Extra classes applied to the row wrapper when the message is from the user */
@@ -249,7 +247,7 @@ function MessageTurnGroupListInner({
 								isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								userMessageStickyTopClass,
 								stickyMessageClassName,
-								"mb-2",
+								isMobile ? "z-40 bg-mobile-background pb-2" : "mb-2",
 							)}
 						>
 							{row(stickyItem.node, stickyItem.index)}
