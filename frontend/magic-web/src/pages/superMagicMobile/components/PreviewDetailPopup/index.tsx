@@ -1,5 +1,5 @@
 import Render from "@/pages/superMagic/components/Detail/Render"
-import { DetailType, type DetailData } from "@/pages/superMagic/components/Detail/types"
+import { DetailType } from "@/pages/superMagic/components/Detail/types"
 import { correctDetailType } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 import { Toast } from "antd-mobile"
 import type { Ref } from "react"
@@ -19,48 +19,30 @@ import { useLocation } from "react-router"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useMemoizedFn } from "ahooks"
-import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { Flex } from "antd"
-import ToolIcon from "@/pages/superMagic/components/MessageList/components/Tool/components/ToolIcon"
-import { getAttachmentExtension } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
-import { BookOpen, X } from "lucide-react"
-import IconTerminal from "@/pages/superMagic/assets/svg/terminal.svg"
-import PDFIcon from "@/pages/superMagic/assets/file_icon/pdf.svg"
-import CommonFileIcon from "@/pages/superMagic/assets/svg/file.svg"
+import { X } from "lucide-react"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import type { Topic, ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { cn } from "@/lib/utils"
+import { getPreviewDetailDisplayName } from "./headerMeta"
+import {
+	MOBILE_PREVIEW_BODY_CLASSNAME,
+	MOBILE_PREVIEW_SHEET_CLASSNAME,
+	PREVIEW_MOBILE_BOTTOM_GAP_CLASSNAME,
+	PREVIEW_MOBILE_FULLSCREEN_CLASSNAME,
+	PREVIEW_MODAL_BODY_CLASSNAME,
+	PREVIEW_MODAL_BODY_FULLSCREEN_CLASSNAME,
+	PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME,
+	PREVIEW_MODAL_CLASSNAME,
+	PREVIEW_MODAL_CONTENT_FULLSCREEN_CLASSNAME,
+	PREVIEW_MODAL_FULLSCREEN_CLASSNAME,
+	PREVIEW_SHARE_CONTAINER_CLASSNAME,
+	PREVIEW_SHARE_IMMERSIVE_CLASSNAME,
+} from "./layoutClassNames"
+import type { PreviewDetail, PreviewDetailPopupProps, PreviewDetailPopupRef } from "./types"
 
-/** Keep the preview at a stable viewport height while overriding MagicPopup's auto sizing. */
-const MOBILE_PREVIEW_SHEET_CLASSNAME = cn(
-	"flex flex-col overflow-hidden rounded-t-[14px] border-0 bg-background p-0",
-	"!h-[98dvh] !max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)]",
-	"data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]",
-)
-
-/** Body must stay flex + hidden overflow so Render fills the sheet below actionHeader. */
-const MOBILE_PREVIEW_BODY_CLASSNAME =
-	"flex min-h-0 flex-1 flex-col !max-h-none overflow-hidden !overflow-hidden bg-background p-0"
-const PREVIEW_MOBILE_FULLSCREEN_CLASSNAME =
-	"!h-[100dvh] !max-h-none !rounded-none data-[vaul-drawer-direction=bottom]:!mt-0"
-
-const PREVIEW_SHARE_CONTAINER_CLASSNAME = "w-full overflow-hidden"
-const PREVIEW_SHARE_IMMERSIVE_CLASSNAME =
-	"fixed inset-0 z-[1101] !mt-0 h-[100dvh] w-screen overflow-hidden bg-transparent"
-const PREVIEW_MODAL_CLASSNAME = "!w-[80vw]"
-const PREVIEW_MODAL_FULLSCREEN_CLASSNAME =
-	"!top-0 !left-0 !right-0 !m-0 !h-[100dvh] !max-h-[100dvh] !w-screen !max-w-none !pb-0"
-const PREVIEW_MODAL_CONTENT_FULLSCREEN_CLASSNAME =
-	"!flex !h-[100dvh] !max-h-[100dvh] flex-col overflow-hidden !rounded-none"
-const PREVIEW_MODAL_BODY_CLASSNAME = "!h-[80vh] !w-[80vw] !p-0 overflow-hidden rounded-b-xl"
-const PREVIEW_MODAL_BODY_FULLSCREEN_CLASSNAME = "!h-full !w-full !max-h-none !rounded-none"
-const PREVIEW_MODAL_BODY_WRAPPER_CLASSNAME =
-	"flex h-full flex-auto flex-col overflow-x-hidden overflow-y-auto"
-const PREVIEW_MOBILE_BOTTOM_GAP_CLASSNAME = "!pb-[calc(56px+var(--safe-area-inset-bottom))]"
-import { getPreviewDetailDisplayName, isKnowledgeSearchPreviewDetail } from "./headerMeta"
+export type { PreviewDetail, PreviewDetailPopupRef } from "./types"
 
 const OFFICE_DETAIL_TYPES: DetailType[] = [
 	DetailType.Docx,
@@ -68,50 +50,6 @@ const OFFICE_DETAIL_TYPES: DetailType[] = [
 	DetailType.Excel,
 	DetailType.PowerPoint,
 ]
-
-export interface PreviewDetail<T extends keyof DetailData = keyof DetailData> {
-	type: T
-	data: DetailData[T]
-	currentFileId: string
-	isFromNode?: boolean
-	// 后面需要跟着项目走
-	topicId?: string
-	name?: string
-}
-
-export interface PreviewDetailPopupRef {
-	open: (
-		options: PreviewDetail,
-		attachmentTree: AttachmentItem[],
-		attachmentList: AttachmentItem[],
-	) => void
-}
-
-interface PreviewDetailPopupProps {
-	setUserSelectDetail: (detail: PreviewDetail | null) => void
-	onClose?: () => void
-	selectedTopic?: Topic | null
-	isFileShare?: boolean
-	enableImmersiveShareChrome?: boolean
-	isImmersiveFullscreen?: boolean
-	selectedProject?: ProjectListItem | null
-	onOpenNewPopup?: (
-		detail: PreviewDetail,
-		attachmentTree: AttachmentItem[],
-		attachmentList: AttachmentItem[],
-	) => void
-	projectId?: string
-	// 是否允许下载（用于分享页面权限控制）
-	allowDownload?: boolean
-	hideHeader?: boolean
-	showFileHeader?: boolean
-	forceFullscreenMode?: boolean
-	/** Allows pure-share preview content to expand into the browser page. */
-	documentFlowFullscreen?: boolean
-	allowEdit?: boolean
-	onPreviewFileChange?: (fileId: string | null) => void
-	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
-}
 
 function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDetailPopupRef>) {
 	const {
@@ -511,7 +449,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			destroyOnClose={isOfficePreview}
 			closable={!effectiveIsFullscreen}
 			footer={null}
-			title={effectiveIsFullscreen ? undefined : "文件预览"}
+			title={effectiveIsFullscreen ? undefined : t("microAppPage.previewDialog.title")}
 			classNames={{
 				header: effectiveIsFullscreen ? "hidden" : undefined,
 				content: effectiveIsFullscreen

@@ -342,15 +342,18 @@ vi.mock("@/pages/superMagic/components/ShareManagement/ShareManagementPanel", ()
 vi.mock("@/pages/superMagic/components/LongTremMemory/components/MemorySider", () => ({
 	LongTremMemorySider: ({
 		projectId,
+		activeFileId,
 		onFileClick,
 	}: {
 		projectId?: string
+		activeFileId?: string | null
 		onFileClick?: (file: AttachmentItem) => void
 	}) => (
 		<button
 			type="button"
 			data-testid="desktop-long-memory-panel"
 			data-project-id={projectId}
+			data-active-file-id={activeFileId || undefined}
 			onClick={() =>
 				onFileClick?.({
 					file_id: "memory-1",

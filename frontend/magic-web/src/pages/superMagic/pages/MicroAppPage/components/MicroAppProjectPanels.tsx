@@ -28,6 +28,7 @@ interface MicroAppProjectPanelsProps {
 	workspaceName?: string
 	projectName?: string
 	topicId?: string
+	activeLongMemoryFileId?: string | null
 	onLongMemoryFileClick?: (fileItem: AttachmentItem) => void
 }
 
@@ -82,6 +83,7 @@ export default function MicroAppProjectPanels({
 	workspaceName,
 	projectName,
 	topicId,
+	activeLongMemoryFileId,
 	onLongMemoryFileClick,
 }: MicroAppProjectPanelsProps) {
 	const isProjectPanelActive = PROJECT_PANEL_VIEWS.includes(activeView)
@@ -131,6 +133,7 @@ export default function MicroAppProjectPanels({
 							<LongTremMemorySider
 								className={PROJECT_PANEL_CLASS_NAME}
 								projectId={projectId}
+								activeFileId={activeLongMemoryFileId}
 								onFileClick={onLongMemoryFileClick}
 							/>
 						) : null}

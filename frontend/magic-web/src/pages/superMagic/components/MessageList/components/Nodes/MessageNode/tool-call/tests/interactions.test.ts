@@ -43,6 +43,27 @@ describe("handleToolCallInteraction", () => {
 		expect(getToolDetailSelectionTarget(selectedDetail)).toBe("file")
 	})
 
+	it.each([
+		["target_file_id", { target_file_id: "file-target" }, "file-target"],
+		["file_id", { file_id: "file-direct" }, "file-direct"],
+	])("supports legacy %s file navigation", (_field, data, fileId) => {
+		const onSelectDetail = vi.fn()
+
+		handleToolCallInteraction({
+			toolData: {
+				id: "tool-file-legacy",
+				name: "write_file",
+				action: "write file",
+				attachments: [],
+				detail: { type: "code", data },
+			},
+			onSelectDetail,
+		})
+
+		expect(publishSpy).toHaveBeenCalledWith(PubSubEvents.Open_File_Tab, { fileId })
+		expect(getToolDetailSelectionTarget(onSelectDetail.mock.calls[0][0])).toBe("file")
+	})
+
 	it("marks ordinary tool interactions as detail previews", () => {
 		const onSelectDetail = vi.fn()
 

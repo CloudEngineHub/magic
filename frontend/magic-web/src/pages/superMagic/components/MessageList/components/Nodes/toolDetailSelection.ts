@@ -17,6 +17,14 @@ interface SelectSourceFileOptions extends SelectToolDetailOptions {
 	fileId: string
 }
 
+export function resolveToolFileId(data: unknown): string | undefined {
+	if (!data || typeof data !== "object" || Array.isArray(data)) return undefined
+
+	const detailData = data as Record<string, unknown>
+	const candidate = detailData.source_file_id ?? detailData.target_file_id ?? detailData.file_id
+	return typeof candidate === "string" && candidate ? candidate : undefined
+}
+
 function markSelectionTarget(
 	detail: Record<string, unknown>,
 	target: ToolDetailSelectionTarget,

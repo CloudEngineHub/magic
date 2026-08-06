@@ -328,6 +328,10 @@ export function registerMicroAppDesktopWorkspaceCases({
 			"aria-current",
 			"page",
 		)
+		expect(screen.getByTestId("desktop-long-memory-panel")).toHaveAttribute(
+			"data-active-file-id",
+			"memory-1",
+		)
 	})
 
 	it("opens a message file reference in the files workspace", async () => {

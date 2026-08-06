@@ -123,11 +123,24 @@ vi.mock("@/models/user", () => ({
 	},
 }))
 
+vi.mock("@/services/chat/dots/OrganizationDotsDbService", () => ({
+	default: {
+		getPersistenceData: vi.fn(() => ({})),
+		getDotSeqIdData: vi.fn(() => ({})),
+		setPersistenceData: vi.fn(),
+		setDotSeqIdData: vi.fn(),
+	},
+}))
+
 vi.mock("@/routes/history", () => ({
 	history: {
 		push: vi.fn(),
 		replace: mocks.historyReplace,
 	},
+}))
+
+vi.mock("@/routes/routes", () => ({
+	registerRoutes: () => [],
 }))
 
 vi.mock("@/pages/superMagic/utils/api", () => ({

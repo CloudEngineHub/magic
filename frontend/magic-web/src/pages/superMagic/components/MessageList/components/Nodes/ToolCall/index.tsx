@@ -9,7 +9,11 @@ import DefaultTool from "./tools/DefaultTool"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
-import { selectSourceFileFromTool, selectToolDetail } from "../toolDetailSelection"
+import {
+	resolveToolFileId,
+	selectSourceFileFromTool,
+	selectToolDetail,
+} from "../toolDetailSelection"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -34,7 +38,7 @@ function ToolCall(props: NodeProps) {
 
 	// 调用onSelectDetail时检查是否为选中节点并添加isFromNode标记
 	const handleSelectDetail = (detail: {
-		data?: { source_file_id?: string }
+		data?: Record<string, unknown>
 		[key: string]: unknown
 	}) => {
 		switch (tool?.name) {
@@ -81,12 +85,13 @@ function ToolCall(props: NodeProps) {
 			default:
 				break
 		}
-		// 如果有 source_file_id，说明这是一个会涉及变更项目文件区域的工具调用
+		// 兼容不同版本工具返回的文件 ID 字段，统一进入文件导航。
 		// 直接打开文件 tab 并定位到文件树
-		if (detail?.data?.source_file_id) {
+		const fileId = resolveToolFileId(detail?.data)
+		if (fileId) {
 			selectSourceFileFromTool({
 				detail,
-				fileId: detail.data.source_file_id,
+				fileId,
 				onSelectDetail,
 			})
 			return
