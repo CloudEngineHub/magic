@@ -25,16 +25,18 @@ REASONING_FIELD_ALIASES: tuple[str, ...] = (
 
 
 def _extract_reasoning_text(delta_or_dict) -> Optional[str]:
-    """从 delta 对象或 dict 中按别名顺序提取 reasoning 文本，找不到返回 None"""
+    """从 delta 对象或 dict 中按别名顺序提取非空 reasoning 文本。"""
     if isinstance(delta_or_dict, dict):
         for name in REASONING_FIELD_ALIASES:
             value = delta_or_dict.get(name)
-            if value is not None:
+            # 上游在 content 阶段可能显式发送 reasoning_content=""，不能遮蔽 content。
+            if value is not None and value != "":
                 return value
         return None
     for name in REASONING_FIELD_ALIASES:
         value = getattr(delta_or_dict, name, None)
-        if value is not None:
+        # 上游在 content 阶段可能显式发送 reasoning_content=""，不能遮蔽 content。
+        if value is not None and value != "":
             return value
     return None
 
