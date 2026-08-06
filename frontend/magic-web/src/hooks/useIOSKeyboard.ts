@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react"
-import type { IOSKeyboardState } from "./useIOSKeyboard.types"
+import { useEffect, useRef, useState, type MutableRefObject } from "react"
+import type { IOSKeyboardState, UseIOSKeyboardOptions } from "./useIOSKeyboard.types"
+
+const DEFAULT_FOCUS_IN_DELAY = 100
+const DEFAULT_FOCUS_OUT_DELAY = 300
 
 // Use useLayoutEffect in browser, useEffect in SSR
 
@@ -9,7 +12,8 @@ import type { IOSKeyboardState } from "./useIOSKeyboard.types"
 const isIOSDevice = (): boolean => {
 	if (typeof window === "undefined") return false
 
-	return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+	const legacyWindow = window as Window & { MSStream?: unknown }
+	return /iPad|iPhone|iPod/.test(navigator.userAgent) && !legacyWindow.MSStream
 }
 
 /**
@@ -57,10 +61,28 @@ const isKeyboardInput = (element: HTMLElement): boolean => {
 	return false
 }
 
+/** Check whether focus is moving directly to another software-keyboard input. */
+const isMovingToKeyboardInput = (event: FocusEvent): boolean => {
+	const relatedTarget = event.relatedTarget
+	if (relatedTarget instanceof HTMLElement && isKeyboardInput(relatedTarget)) {
+		return true
+	}
+
+	const activeElement = document.activeElement
+	return (
+		activeElement instanceof HTMLElement &&
+		activeElement !== event.target &&
+		isKeyboardInput(activeElement)
+	)
+}
+
 /**
- * Hook to detect mobile keyboard state (iOS and Android Chrome)
+ * Detect mobile keyboard state while allowing callers to align focus updates with their layout.
  */
-export function useIOSKeyboard() {
+export function useIOSKeyboard({
+	focusInDelay = DEFAULT_FOCUS_IN_DELAY,
+	focusOutDelay = DEFAULT_FOCUS_OUT_DELAY,
+}: UseIOSKeyboardOptions = {}) {
 	const [keyboardState, setKeyboardState] = useState<IOSKeyboardState>({
 		isUp: false,
 		offset: 0,
@@ -68,6 +90,8 @@ export function useIOSKeyboard() {
 	})
 
 	const [initialViewportHeight, setInitialViewportHeight] = useState<number>(0)
+	const focusInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// Initialize viewport height for Android Chrome
 	useEffect(() => {
@@ -119,35 +143,73 @@ export function useIOSKeyboard() {
 	useEffect(() => {
 		if (!needsKeyboardHandling()) return
 
+		/** Cancel a pending focus state update so stale events cannot overwrite newer state. */
+		const clearFocusTimer = (
+			timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>,
+		) => {
+			if (timerRef.current !== null) {
+				clearTimeout(timerRef.current)
+				timerRef.current = null
+			}
+		}
+
+		/** Run a focus state update immediately when its configured delay is zero. */
+		const scheduleFocusUpdate = (
+			callback: () => void,
+			delay: number,
+			timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>,
+		) => {
+			if (delay <= 0) {
+				callback()
+				return
+			}
+
+			timerRef.current = setTimeout(() => {
+				timerRef.current = null
+				callback()
+			}, delay)
+		}
+
 		const handleFocusIn = (event: FocusEvent) => {
 			const target = event.target as HTMLElement
 			if (target && isKeyboardInput(target)) {
+				clearFocusTimer(focusInTimerRef)
+				clearFocusTimer(focusOutTimerRef)
+
 				if (isIOSDevice()) {
 					// iOS specific handling
 					const rect = target.getBoundingClientRect()
 					const origin = rect.top
-					// Small delay to let the keyboard animation start
-					setTimeout(() => {
-						const rect = target.getBoundingClientRect()
-						const newOffset = origin - rect.top
-						setKeyboardState({
-							isUp: true,
-							offset: newOffset,
-							isVisible: true,
-						})
-					}, 100)
-				} else if (isAndroidDevice() && !window.visualViewport) {
-					// Fallback for Android without Visual Viewport API
-					setTimeout(() => {
-						const heightDifference = initialViewportHeight - window.innerHeight
-						if (heightDifference > 100) {
+					// Wait for the keyboard animation unless the caller needs an immediate layout update.
+					scheduleFocusUpdate(
+						() => {
+							const rect = target.getBoundingClientRect()
+							const newOffset = origin - rect.top
 							setKeyboardState({
 								isUp: true,
-								offset: heightDifference,
+								offset: newOffset,
 								isVisible: true,
 							})
-						}
-					}, 200)
+						},
+						focusInDelay,
+						focusInTimerRef,
+					)
+				} else if (isAndroidDevice() && !window.visualViewport) {
+					// Fallback for Android without Visual Viewport API
+					scheduleFocusUpdate(
+						() => {
+							const heightDifference = initialViewportHeight - window.innerHeight
+							if (heightDifference > 100) {
+								setKeyboardState({
+									isUp: true,
+									offset: heightDifference,
+									isVisible: true,
+								})
+							}
+						},
+						200,
+						focusInTimerRef,
+					)
 				}
 			}
 		}
@@ -155,29 +217,42 @@ export function useIOSKeyboard() {
 		const handleFocusOut = (event: FocusEvent) => {
 			const target = event.target as HTMLElement
 			if (target && isKeyboardInput(target)) {
+				clearFocusTimer(focusInTimerRef)
+				clearFocusTimer(focusOutTimerRef)
+
 				if (isIOSDevice()) {
 					// iOS specific handling
 					const rect = target.getBoundingClientRect()
 					const origin = rect.top
-					// Delay to let the keyboard animation complete
-					setTimeout(() => {
-						const rect = target.getBoundingClientRect()
-						const newOffset = origin - rect.top
-						setKeyboardState({
-							isUp: false,
-							offset: newOffset,
-							isVisible: false,
-						})
-					}, 300)
+					// Keep the keyboard open when focus moves directly to another editable element.
+					scheduleFocusUpdate(
+						() => {
+							if (isMovingToKeyboardInput(event)) return
+
+							const rect = target.getBoundingClientRect()
+							const newOffset = origin - rect.top
+							setKeyboardState({
+								isUp: false,
+								offset: newOffset,
+								isVisible: false,
+							})
+						},
+						focusOutDelay,
+						focusOutTimerRef,
+					)
 				} else if (isAndroidDevice() && !window.visualViewport) {
 					// Fallback for Android without Visual Viewport API
-					setTimeout(() => {
-						setKeyboardState({
-							isUp: false,
-							offset: 0,
-							isVisible: false,
-						})
-					}, 200)
+					scheduleFocusUpdate(
+						() => {
+							setKeyboardState({
+								isUp: false,
+								offset: 0,
+								isVisible: false,
+							})
+						},
+						200,
+						focusOutTimerRef,
+					)
 				}
 			}
 		}
@@ -186,10 +261,12 @@ export function useIOSKeyboard() {
 		document.addEventListener("focusout", handleFocusOut)
 
 		return () => {
+			clearFocusTimer(focusInTimerRef)
+			clearFocusTimer(focusOutTimerRef)
 			document.removeEventListener("focusin", handleFocusIn)
 			document.removeEventListener("focusout", handleFocusOut)
 		}
-	}, [initialViewportHeight])
+	}, [focusInDelay, focusOutDelay, initialViewportHeight])
 
 	return {
 		...keyboardState,
