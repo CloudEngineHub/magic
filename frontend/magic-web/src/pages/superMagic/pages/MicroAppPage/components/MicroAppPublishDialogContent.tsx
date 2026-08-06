@@ -25,6 +25,7 @@ import MicroAppPublishedSection from "./MicroAppPublishedSection"
 
 interface MicroAppPublishDialogContentProps {
 	mobile: boolean
+	isPersonalOrganization: boolean
 	appId?: string
 	formState: MicroAppPublishFormState
 	publishedItem: PublishedMicroAppProjectItem | null
@@ -64,6 +65,7 @@ const MICRO_APP_PUBLISH_TYPES = [
 /** 发布表单展示层，桌面弹窗和移动端底部弹窗共用同一份字段与操作。 */
 export default function MicroAppPublishDialogContent({
 	mobile,
+	isPersonalOrganization,
 	appId,
 	formState,
 	publishedItem,
@@ -228,7 +230,8 @@ export default function MicroAppPublishDialogContent({
 								availableTypes={MICRO_APP_PUBLISH_TYPES}
 							/>
 
-							{formState.shareType === ShareType.Organization ? (
+							{!isPersonalOrganization &&
+							formState.shareType === ShareType.Organization ? (
 								<ShareRangeField
 									value={formState.shareRange}
 									onChange={onShareRangeChange}

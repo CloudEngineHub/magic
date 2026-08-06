@@ -19,12 +19,17 @@ export interface MicroAppPublishFormState {
 }
 
 export type MicroAppPublishValidationError =
-	"projectNameRequired" | "projectNameTooLong" | "passwordInvalid"
+	| "projectNameRequired"
+	| "projectNameTooLong"
+	| "passwordInvalid"
 
-export function createDefaultMicroAppPublishFormState(appName = ""): MicroAppPublishFormState {
+export function createDefaultMicroAppPublishFormState(
+	appName = "",
+	isPersonalOrganization = false,
+): MicroAppPublishFormState {
 	return {
 		appName,
-		shareType: ShareType.Organization,
+		shareType: isPersonalOrganization ? ShareType.Public : ShareType.Organization,
 		shareRange: "all",
 		targets: [],
 		password: generateSharePassword(),
@@ -87,10 +92,13 @@ export function getPublishedItemFromResponse(
 export function createFormStateFromPublishedItem(
 	item: PublishedMicroAppProjectItem | null,
 	appName?: string,
+	isPersonalOrganization = false,
 ): MicroAppPublishFormState {
 	return {
 		appName: item?.app_name || appName || "",
-		shareType: item?.share_type || ShareType.Organization,
+		shareType:
+			item?.share_type ||
+			(isPersonalOrganization ? ShareType.Public : ShareType.Organization),
 		shareRange: item?.share_range || "all",
 		targets: item?.target_ids || [],
 		// 已发布配置缺少明文密码时不能生成一个看似有效的新密码，否则会误导用户并可能在保存时覆盖原密码。

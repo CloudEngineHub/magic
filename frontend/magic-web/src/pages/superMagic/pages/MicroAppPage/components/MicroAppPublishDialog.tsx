@@ -11,6 +11,7 @@ import MagicModal from "@/components/base/MagicModal"
 import magicToast from "@/components/base/MagicToaster/utils"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { useUpload } from "@/hooks/useUploadFiles"
+import { userStore } from "@/models/user"
 import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
@@ -61,10 +62,11 @@ export default function MicroAppPublishDialog({
 	onOpenChange,
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
+	const isPersonalOrganization = userStore.user.isPersonalOrganization
 	const coverInputRef = useRef<HTMLInputElement>(null)
 	const coverObjectUrlRef = useRef<string | null>(null)
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
-		createDefaultFormState(),
+		createDefaultFormState("", isPersonalOrganization),
 	)
 	const [publishedItem, setPublishedItem] = useState<PublishedMicroAppProjectItem | null>(null)
 	const [publishedFormState, setPublishedFormState] = useState<MicroAppPublishFormState | null>(
@@ -131,6 +133,7 @@ export default function MicroAppPublishDialog({
 				const nextFormState = createFormStateFromPublishedItem(
 					nextItem,
 					detail.project?.project_name || projectName,
+					isPersonalOrganization,
 				)
 
 				if (nextItem?.cover_file_key && !nextFormState.coverUrl) {
@@ -151,7 +154,7 @@ export default function MicroAppPublishDialog({
 				if (ignore) return
 				console.error("Failed to load micro app publish info:", error)
 				setPublishedItem(null)
-				setFormState(createDefaultFormState(projectName))
+				setFormState(createDefaultFormState(projectName, isPersonalOrganization))
 				setPublishedFormState(null)
 				magicToast.error(t("microAppPage.publish.loadFailed"))
 			} finally {
@@ -164,7 +167,7 @@ export default function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [appId, open, projectName, t])
+	}, [appId, isPersonalOrganization, open, projectName, t])
 
 	useEffect(() => {
 		if (open) return
@@ -395,7 +398,7 @@ export default function MicroAppPublishDialog({
 					setPublishedItem(null)
 					setPublishedFormState(null)
 					setFormState((prev) => ({
-						...createDefaultFormState(prev.appName),
+						...createDefaultFormState(prev.appName, isPersonalOrganization),
 						coverFileKey: prev.coverFileKey,
 						coverUrl: prev.coverUrl,
 					}))
@@ -409,13 +412,14 @@ export default function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [appId, onPublishStatusChange, t, unpublishing])
+	}, [appId, isPersonalOrganization, onPublishStatusChange, t, unpublishing])
 
 	const closeDialog = () => onOpenChange(false)
 	const isBusy = saving || unpublishing || coverUploading
 	const content = (
 		<MicroAppPublishDialogContent
 			mobile={mobile}
+			isPersonalOrganization={isPersonalOrganization}
 			appId={appId}
 			formState={formState}
 			publishedItem={publishedItem}

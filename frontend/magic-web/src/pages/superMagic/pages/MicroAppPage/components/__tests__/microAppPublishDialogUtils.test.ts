@@ -5,12 +5,23 @@ import {
 	buildMicroAppCopyUrl,
 	buildMicroAppPublishPayload,
 	buildMicroAppShareText,
+	createDefaultMicroAppPublishFormState,
 	createFormStateFromPublishedItem,
 	getMicroAppPublishValidationError,
 	hasMicroAppPublishFormChanged,
 } from "../microAppPublishDialogUtils"
 
 describe("microAppPublishDialogUtils", () => {
+	it("uses public access as the personal organization default", () => {
+		expect(createDefaultMicroAppPublishFormState("Demo App", true)).toMatchObject({
+			appName: "Demo App",
+			shareType: ShareType.Public,
+		})
+		expect(createDefaultMicroAppPublishFormState("Demo App", false)).toMatchObject({
+			shareType: ShareType.Organization,
+		})
+	})
+
 	it("builds the new app_name publish payload and optional cover", () => {
 		expect(
 			buildMicroAppPublishPayload({

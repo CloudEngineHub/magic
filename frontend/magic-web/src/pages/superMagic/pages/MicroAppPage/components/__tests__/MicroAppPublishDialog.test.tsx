@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { userStore } from "@/models/user"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import MicroAppPublishDialog from "../MicroAppPublishDialog"
 
@@ -108,10 +109,16 @@ vi.mock("@/components/base-mobile/MagicPopup", () => ({
 vi.mock("@/pages/superMagic/components/Share/ShareFields", async () => {
 	const React = await import("react")
 	return {
-		ShareTypeField: ({ onChange }: { onChange: (type: ShareType) => void }) =>
+		ShareTypeField: ({
+			value,
+			onChange,
+		}: {
+			value: ShareType
+			onChange: (type: ShareType) => void
+		}) =>
 			React.createElement(
 				"div",
-				{ "data-testid": "share-type-field" },
+				{ "data-testid": "share-type-field", "data-value": value },
 				React.createElement(
 					"button",
 					{
@@ -159,6 +166,7 @@ function createPasswordProtectedDetail() {
 describe("MicroAppPublishDialog", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		userStore.user.setIsPersonalOrganization(false)
 		mocks.useUploadOptions = undefined
 		mocks.getMicroAppProject.mockResolvedValue({
 			app_id: "app-1",
@@ -410,6 +418,25 @@ describe("MicroAppPublishDialog", () => {
 				share_type: ShareType.Public,
 			})
 			expect(onPublishStatusChange).toHaveBeenCalledWith(true)
+		})
+	})
+
+	it("defaults personal organizations to public access and hides the share range", async () => {
+		userStore.user.setIsPersonalOrganization(true)
+
+		renderDialog()
+
+		const shareTypeField = await screen.findByTestId("share-type-field")
+		expect(shareTypeField).toHaveAttribute("data-value", String(ShareType.Public))
+		expect(screen.queryByTestId("share-range-field")).toBeNull()
+
+		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
+
+		await waitFor(() => {
+			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
+				app_name: "Demo App",
+				share_type: ShareType.Public,
+			})
 		})
 	})
 
