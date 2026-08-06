@@ -268,20 +268,25 @@ export default function HtmlPermissionManagerDialog({
 								{snapshot.diagnostics.length > 0 ? (
 									<Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
 										<AlertCircle />
-										<AlertTitle>
-											{t("htmlEditor.permissionManager.diagnosticsTitle")}
-										</AlertTitle>
-										<AlertDescription>
-											<ul className="list-disc space-y-1 pl-4">
-												{snapshot.diagnostics.map((diagnostic, index) => (
-													<li
-														key={`${diagnostic.code}-${diagnostic.scope || index}`}
-													>
-														{getDiagnosticText(diagnostic)}
-													</li>
-												))}
-											</ul>
-										</AlertDescription>
+										{/* 标题和说明必须作为同一个网格项，避免被 Alert 分配到不同位置。 */}
+										<div className="min-w-0 space-y-1">
+											<AlertTitle>
+												{t("htmlEditor.permissionManager.diagnosticsTitle")}
+											</AlertTitle>
+											<AlertDescription className="text-amber-800 dark:text-amber-200">
+												<ul className="list-disc space-y-1 pl-4">
+													{snapshot.diagnostics.map(
+														(diagnostic, index) => (
+															<li
+																key={`${diagnostic.code}-${diagnostic.scope || index}`}
+															>
+																{getDiagnosticText(diagnostic)}
+															</li>
+														),
+													)}
+												</ul>
+											</AlertDescription>
+										</div>
 									</Alert>
 								) : null}
 
@@ -331,22 +336,26 @@ export default function HtmlPermissionManagerDialog({
 				</ScrollArea>
 
 				<DialogFooter
-					className="z-10 shrink-0 border-t bg-background px-6 py-4 sm:justify-between"
+					className={`z-10 shrink-0 border-t bg-background px-6 py-4 ${
+						snapshot?.activeGrantCount ? "sm:justify-between" : "sm:justify-end"
+					}`}
 					data-testid="html-permission-manager-footer"
 				>
-					<Button
-						variant="destructive"
-						className="gap-1.5"
-						disabled={!snapshot?.activeGrantCount || permissionMutationInProgress}
-						onClick={() => void handleRevokeAll()}
-					>
-						{revokingAll ? (
-							<Loader2 size={14} className="animate-spin" />
-						) : (
-							<Trash2 size={14} />
-						)}
-						{t("htmlEditor.permissionManager.revokeAll")}
-					</Button>
+					{snapshot?.activeGrantCount ? (
+						<Button
+							variant="destructive"
+							className="gap-1.5"
+							disabled={permissionMutationInProgress}
+							onClick={() => void handleRevokeAll()}
+						>
+							{revokingAll ? (
+								<Loader2 size={14} className="animate-spin" />
+							) : (
+								<Trash2 size={14} />
+							)}
+							{t("htmlEditor.permissionManager.revokeAll")}
+						</Button>
+					) : null}
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						{t("common.close")}
 					</Button>

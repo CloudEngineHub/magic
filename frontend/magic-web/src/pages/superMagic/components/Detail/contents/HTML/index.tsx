@@ -79,7 +79,10 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
+import {
+	shouldShowHtmlPermissionManager,
+	useHtmlAppPermissions,
+} from "./hooks/useHtmlAppPermissions"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
 import {
 	type HtmlPermissionManagerHandle,
@@ -407,7 +410,7 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 	const {
 		hasHtmlPermissionDeclarations,
-		isLegacyHtmlPermissionMode,
+		activeHtmlPermissionGrantCount,
 		getPermissionSnapshot,
 		preauthorizeHtmlPermission,
 		revokeHtmlPermission,
@@ -418,7 +421,10 @@ export default memo(function HTML(props: HTMLProps) {
 	const canManageHtmlPermissions = Boolean(
 		!isDataAnalysis &&
 		!htmlIsDeleted &&
-		(hasHtmlPermissionDeclarations || isLegacyHtmlPermissionMode),
+		shouldShowHtmlPermissionManager(
+			hasHtmlPermissionDeclarations,
+			activeHtmlPermissionGrantCount,
+		),
 	)
 	const {
 		open: permissionManagerOpen,

@@ -166,6 +166,37 @@ describe("HtmlPermissionManagerDialog", () => {
 		expect(screen.queryByText("project.message.write")).not.toBeInTheDocument()
 	})
 
+	it("hides revoke-all action and keeps diagnostics in one content column without grants", async () => {
+		const snapshot = createSnapshot(false)
+		snapshot.configStatus = "absent"
+		snapshot.mode = "legacy"
+		snapshot.permissions = []
+		snapshot.diagnostics = [{ code: "manifestAbsent" }]
+
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={vi.fn().mockResolvedValue(snapshot)}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
+				onRevoke={vi.fn().mockResolvedValue(snapshot)}
+				onUpdateTtl={vi.fn().mockResolvedValue(snapshot)}
+				onRevokeAll={vi.fn().mockResolvedValue(snapshot)}
+			/>,
+		)
+
+		expect(
+			await screen.findByText("htmlEditor.permissionManager.diagnostics.manifestAbsent"),
+		).toBeInTheDocument()
+		expect(
+			screen.queryByRole("button", { name: "htmlEditor.permissionManager.revokeAll" }),
+		).not.toBeInTheDocument()
+
+		const diagnosticsTitle = screen.getByText("htmlEditor.permissionManager.diagnosticsTitle")
+		expect(diagnosticsTitle.parentElement).not.toBe(screen.getByRole("alert"))
+	})
+
 	it("authorizes a declared permission before the app uses it", async () => {
 		const onAuthorize = vi.fn().mockResolvedValue(true)
 		const getPermissionSnapshot = vi

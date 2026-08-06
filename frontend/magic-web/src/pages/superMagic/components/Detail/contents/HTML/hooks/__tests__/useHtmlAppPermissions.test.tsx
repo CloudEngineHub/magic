@@ -1,10 +1,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { HTML_PERMISSION_GRANTS_CHANGED_EVENT } from "../../iframe-api/services/HtmlPermissionGrantStore"
-import { useHtmlAppPermissions } from "../useHtmlAppPermissions"
+import {
+	IframePermissionService,
+	type HtmlPermissionSnapshot,
+} from "../../iframe-api/services/IframePermissionService"
+import { shouldShowHtmlPermissionManager, useHtmlAppPermissions } from "../useHtmlAppPermissions"
 
 const mocks = vi.hoisted(() => ({
 	getIframeDownloadUrl: vi.fn(),
+	grantStore: {
+		getAppGrants: vi.fn(),
+		prune: vi.fn(),
+	},
 }))
 
 vi.mock("react-i18next", () => ({
@@ -36,6 +44,10 @@ vi.mock("../../iframe-api/iframeApi", () => ({
 	getIframeDownloadUrl: mocks.getIframeDownloadUrl,
 }))
 
+vi.mock("../../iframe-api/services/IndexedDbHtmlPermissionGrantStore", () => ({
+	getHtmlPermissionGrantStore: () => mocks.grantStore,
+}))
+
 describe("useHtmlAppPermissions", () => {
 	let originalFetch: typeof globalThis.fetch
 
@@ -47,6 +59,10 @@ describe("useHtmlAppPermissions", () => {
 		mocks.getIframeDownloadUrl.mockResolvedValue([
 			{ url: "https://files.example.com/app.json" },
 		])
+		mocks.grantStore.getAppGrants.mockReset()
+		mocks.grantStore.getAppGrants.mockResolvedValue([])
+		mocks.grantStore.prune.mockReset()
+		mocks.grantStore.prune.mockResolvedValue(undefined)
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: () => Promise.resolve({ type: "micro-app", name: "Test App" }),
@@ -55,6 +71,13 @@ describe("useHtmlAppPermissions", () => {
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch
+		vi.restoreAllMocks()
+	})
+
+	it("shows permission management only for declared permissions or active grants", () => {
+		expect(shouldShowHtmlPermissionManager(false, 0)).toBe(false)
+		expect(shouldShowHtmlPermissionManager(true, 0)).toBe(true)
+		expect(shouldShowHtmlPermissionManager(false, 1)).toBe(true)
 	})
 
 	it("keeps loaded app config when an unrelated file changes", async () => {
@@ -100,7 +123,7 @@ describe("useHtmlAppPermissions", () => {
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
-	it("marks apps without app.json as legacy permission mode", () => {
+	it("does not expose manageable grants for legacy apps without saved authorization", async () => {
 		const { result } = renderHook(() =>
 			useHtmlAppPermissions({
 				content: "<html></html>",
@@ -111,6 +134,69 @@ describe("useHtmlAppPermissions", () => {
 		)
 
 		expect(result.current.isLegacyHtmlPermissionMode).toBe(true)
+		await waitFor(() => {
+			expect(result.current.activeHtmlPermissionGrantCount).toBe(0)
+		})
+	})
+
+	it("refreshes active grants and does not reuse the previous app count", async () => {
+		const createSnapshot = (activeGrantCount: number): HtmlPermissionSnapshot => ({
+			configStatus: "absent",
+			mode: "legacy",
+			app: {
+				name: "",
+				version: "",
+				entry: "",
+				appRootDir: "app/",
+				reason: "",
+			},
+			permissions: [],
+			diagnostics: [],
+			activeGrantCount,
+		})
+		let resolveNextAppSnapshot: ((snapshot: HtmlPermissionSnapshot) => void) | undefined
+		const getPermissionSnapshot = vi
+			.spyOn(IframePermissionService.prototype, "getPermissionSnapshot")
+			.mockResolvedValueOnce(createSnapshot(1))
+			.mockResolvedValueOnce(createSnapshot(0))
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolveNextAppSnapshot = resolve
+					}),
+			)
+		const fileList: [] = []
+
+		const { result, rerender } = renderHook(
+			({ relativeFilePath }) =>
+				useHtmlAppPermissions({
+					content: "<html></html>",
+					relativeFilePath,
+					projectId: "project-1",
+					fileList,
+				}),
+			{ initialProps: { relativeFilePath: "app/index.html" } },
+		)
+
+		await waitFor(() => {
+			expect(result.current.activeHtmlPermissionGrantCount).toBe(1)
+		})
+
+		act(() => {
+			window.dispatchEvent(new Event(HTML_PERMISSION_GRANTS_CHANGED_EVENT))
+		})
+		await waitFor(() => {
+			expect(result.current.activeHtmlPermissionGrantCount).toBe(0)
+		})
+
+		rerender({ relativeFilePath: "other/index.html" })
+		expect(result.current.activeHtmlPermissionGrantCount).toBe(0)
+
+		resolveNextAppSnapshot?.(createSnapshot(1))
+		await waitFor(() => {
+			expect(result.current.activeHtmlPermissionGrantCount).toBe(1)
+		})
+		expect(getPermissionSnapshot).toHaveBeenCalledTimes(3)
 	})
 
 	it("reloads app config when app.json changes", async () => {

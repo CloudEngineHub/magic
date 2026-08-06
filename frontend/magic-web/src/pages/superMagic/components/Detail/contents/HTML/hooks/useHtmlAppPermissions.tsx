@@ -46,6 +46,13 @@ interface UseHtmlAppPermissionsOptions {
 	enabled?: boolean
 }
 
+export function shouldShowHtmlPermissionManager(
+	hasPermissionDeclarations: boolean,
+	activeGrantCount: number,
+) {
+	return hasPermissionDeclarations || activeGrantCount > 0
+}
+
 export function useHtmlAppPermissions({
 	content,
 	rawSourceCode,
@@ -57,6 +64,14 @@ export function useHtmlAppPermissions({
 	const { t } = useTranslation("super")
 	const { getScopeLabel, getTtlLabel, getUserInfoFieldLabel } = useHtmlPermissionI18n()
 	const [grantRevision, setGrantRevision] = useState(0)
+	// 服务实例包含当前 HTML 的运行指纹，避免切换文件时短暂复用上一应用的授权数量。
+	const [activeGrantState, setActiveGrantState] = useState<{
+		service: IframePermissionService | null
+		count: number
+	}>({
+		service: null,
+		count: 0,
+	})
 	const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
 	const lastSlash = cleanedEntryPath.lastIndexOf("/")
 	const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
@@ -339,6 +354,36 @@ export function useHtmlAppPermissions({
 
 	useEffect(() => {
 		let cancelled = false
+
+		if (!enabled || htmlAppConfigState.status === "loading") {
+			setActiveGrantState({ service: htmlPermissionService, count: 0 })
+			return
+		}
+
+		void htmlPermissionService
+			.getPermissionSnapshot()
+			.then((snapshot) => {
+				if (cancelled) return
+				setActiveGrantState({
+					service: htmlPermissionService,
+					count: snapshot.activeGrantCount,
+				})
+			})
+			.catch((error) => {
+				if (cancelled) return
+				setActiveGrantState({ service: htmlPermissionService, count: 0 })
+				htmlMicroAppPreviewLogger.warn("Failed to read active permission grants", {
+					error,
+				})
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [enabled, grantRevision, htmlAppConfigState.status, htmlPermissionService])
+
+	useEffect(() => {
+		let cancelled = false
 		setHtmlAppConfigStateWithKey({
 			instanceKey: htmlAppInstanceKey,
 			configState: { status: "loading" },
@@ -403,6 +448,8 @@ export function useHtmlAppPermissions({
 		isLegacyHtmlPermissionMode:
 			htmlAppConfigState.status === "absent" || htmlAppConfigState.status === "error",
 		hasHtmlPermissionDeclarations,
+		activeHtmlPermissionGrantCount:
+			activeGrantState.service === htmlPermissionService ? activeGrantState.count : 0,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
 		preauthorizeHtmlPermission,
