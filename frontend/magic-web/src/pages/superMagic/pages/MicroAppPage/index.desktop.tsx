@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
+import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
@@ -177,6 +178,10 @@ function MicroAppPageInner({
 	const setPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
 		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
+	})
+	// 文件工具已通过 Open_File_Tab 切换到附件预览区，这里只处理工具详情。
+	const handleConversationSelectDetail = useMemoizedFn((detail: unknown) => {
+		if (getToolDetailSelectionTarget(detail) !== "file") setPreviewDetail(detail)
 	})
 	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
@@ -443,7 +448,7 @@ function MicroAppPageInner({
 						onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
 						onToggleHistoryPanel={toggleTopicHistoryPanel}
 						onCloseHistoryPanel={closeTopicHistoryPanel}
-						onSelectDetail={setPreviewDetail}
+						onSelectDetail={handleConversationSelectDetail}
 						onExpandCollapsedPanel={toggleMessagePanelCollapse}
 						showConversationLabel={t("microAppPage.header.showConversation")}
 					/>

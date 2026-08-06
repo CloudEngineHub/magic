@@ -69,6 +69,7 @@ vi.mock("react-router", () => ({
 }))
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 	useTranslation: () => ({ t: (key: string) => key }),
 }))
 
@@ -78,6 +79,30 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
 	FileActionVisibilityProvider: ({ children }: { children: ReactNode }) => children,
+}))
+
+vi.mock("@/pages/superMagic/stores", () => ({
+	superMagicStore: {
+		toolResponseMap: new Map(),
+		getToolResponseForRendering: vi.fn(),
+		getStreamState: vi.fn(),
+		getMessageNode: vi.fn(),
+	},
+}))
+
+vi.mock(
+	"@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/ToolCallRenderer",
+	() => ({
+		ToolCallRenderer: ({ onClick }: { onClick: () => void }) => (
+			<button type="button" data-testid="write-file" onClick={onClick}>
+				file tool
+			</button>
+		),
+	}),
+)
+
+vi.mock("@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo", () => ({
+	getToolDesignProjectInfo: vi.fn(),
 }))
 
 vi.mock("@/components/shadcn-ui/select", () => ({
@@ -256,26 +281,16 @@ vi.mock("../components/MicroAppEntryPreview", () => ({
 	},
 }))
 
-vi.mock("../components/AppConversationPanel", () => ({
-	default: (props: Record<string, unknown>) => {
-		conversationPanelMocks.render(props)
-		return (
-			<button
-				type="button"
-				data-testid="desktop-conversation-panel"
-				onClick={() =>
-					(props.onSelectDetail as ((detail: unknown) => void) | undefined)?.({
-						type: "shell",
-						currentFileId: "tool-1",
-						data: { command: "pwd" },
-					})
-				}
-			>
-				conversation
-			</button>
-		)
-	},
-}))
+vi.mock("../components/AppConversationPanel", async () => {
+	const { default: MicroAppConversationPanelMock } =
+		await import("./MicroAppConversationPanelMock")
+	return {
+		default: (props: Record<string, unknown>) => {
+			conversationPanelMocks.render(props)
+			return <MicroAppConversationPanelMock {...props} />
+		},
+	}
+})
 
 vi.mock("../components/MicroAppPageOverlays", () => ({
 	default: (props: Record<string, unknown>) => {

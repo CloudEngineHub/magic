@@ -2,6 +2,7 @@ import { isEmpty, pick } from "lodash-es"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { selectSourceFileFromTool, selectToolDetail } from "../../toolDetailSelection"
 import type { ToolCallViewModel } from "./types"
 
 const DESIGN_TOOL_NAMES = new Set([
@@ -67,11 +68,13 @@ export function handleToolCallInteraction({
 
 	const detailData = newDetail as { data?: { source_file_id?: string } }
 	if (detailData.data?.source_file_id) {
-		pubsub.publish(PubSubEvents.Open_File_Tab, { fileId: detailData.data.source_file_id })
-		pubsub.publish(PubSubEvents.Locate_File_In_Tree, detailData.data.source_file_id)
-	} else {
-		pubsub.publish(PubSubEvents.Open_Playback_Tab, detailData)
+		selectSourceFileFromTool({
+			detail: newDetail,
+			fileId: detailData.data.source_file_id,
+			onSelectDetail,
+		})
+		return
 	}
 
-	onSelectDetail?.({ ...newDetail, isFromNode: true })
+	selectToolDetail({ detail: newDetail, onSelectDetail })
 }

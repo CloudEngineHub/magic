@@ -2,13 +2,14 @@ import type { NodeProps } from "../types"
 // import { useTranslation } from "react-i18next"
 import { ToolsMap } from "./tools"
 import { isEmpty, pick } from "lodash-es"
-import { memo, Suspense } from "react"
+import { Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import DefaultTool from "./tools/DefaultTool"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { filterClickableMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { selectSourceFileFromTool, selectToolDetail } from "../toolDetailSelection"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -83,20 +84,15 @@ function ToolCall(props: NodeProps) {
 		// 如果有 source_file_id，说明这是一个会涉及变更项目文件区域的工具调用
 		// 直接打开文件 tab 并定位到文件树
 		if (detail?.data?.source_file_id) {
-			pubsub.publish(PubSubEvents.Open_File_Tab, { fileId: detail.data.source_file_id })
-			pubsub.publish(PubSubEvents.Locate_File_In_Tree, detail.data.source_file_id)
-		} else {
-			// 否则走原有逻辑：点击工具调用时，打开playback tab
-			pubsub.publish(PubSubEvents.Open_Playback_Tab, detail)
+			selectSourceFileFromTool({
+				detail,
+				fileId: detail.data.source_file_id,
+				onSelectDetail,
+			})
+			return
 		}
 
-		// 确保onSelectDetail存在，且节点被选中或选中状态未定义
-		if (onSelectDetail) {
-			onSelectDetail({
-				...detail,
-				isFromNode: true,
-			})
-		}
+		selectToolDetail({ detail, onSelectDetail })
 	}
 
 	const onProxyClick = () => {

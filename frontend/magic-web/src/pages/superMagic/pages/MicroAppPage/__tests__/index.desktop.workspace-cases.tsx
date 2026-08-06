@@ -352,4 +352,14 @@ export function registerMicroAppDesktopWorkspaceCases({
 			expect(detailMocks.openFileTab).toHaveBeenCalledWith(file)
 		})
 	})
+
+	it("opens file tools in the files workspace without a preview modal", async () => {
+		render(renderPage())
+		await screen.findByTestId("desktop-entry-preview")
+		fireEvent.click(screen.getByTestId("write-file"))
+
+		expect(screen.getByTestId("micro-app-nav-files")).toHaveAttribute("aria-current", "page")
+		expect(await screen.findByTestId("desktop-files-viewer")).toBeInTheDocument()
+		expect(previewPopupMocks.open).not.toHaveBeenCalled()
+	})
 }
