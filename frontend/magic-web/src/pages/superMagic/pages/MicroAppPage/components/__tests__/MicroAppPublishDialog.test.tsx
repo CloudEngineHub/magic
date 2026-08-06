@@ -434,6 +434,26 @@ describe("MicroAppPublishDialog", () => {
 		})
 	})
 
+	it("reports cover upload failures and keeps publishing disabled", async () => {
+		mocks.uploadAndGetFileUrl.mockRejectedValueOnce(new Error("upload failed"))
+
+		renderDialog()
+		await screen.findByTestId("share-type-field")
+
+		const file = new File(["cover"], "cover.png", { type: "image/png" })
+		fireEvent.change(screen.getByTestId("micro-app-cover-input"), {
+			target: { files: [file] },
+		})
+
+		await waitFor(() => {
+			expect(mocks.errorToast).toHaveBeenCalledWith("microAppPage.publish.coverUploadFailed")
+		})
+		expect(screen.getByTestId("micro-app-publish-save")).toBeDisabled()
+
+		fireEvent.click(screen.getByTestId("micro-app-publish-save"))
+		expect(mocks.publishMicroAppProject).not.toHaveBeenCalled()
+	})
+
 	it("keeps normal text paste behavior in publish fields", async () => {
 		renderDialog()
 		await screen.findByTestId("share-type-field")

@@ -43,23 +43,29 @@ export default function useMicroAppPublishCover(
 
 	const uploadCoverFile = useCallback(
 		async (file: File) => {
-			const { fullfilled } = await uploadAndGetFileUrl([
-				{ name: file.name, file, status: "init" },
-			])
-			const uploadedFile = fullfilled[0]?.value
-			if (!uploadedFile?.path) {
+			try {
+				const { fullfilled } = await uploadAndGetFileUrl([
+					{ name: file.name, file, status: "init" },
+				])
+				const uploadedFile = fullfilled[0]?.value
+				if (!uploadedFile?.path) {
+					setCoverUploadError(true)
+					magicToast.error(t("microAppPage.publish.coverUploadFailed"))
+					return
+				}
+
+				setCoverUploadError(false)
+				setFormState((prev) => ({
+					...prev,
+					coverFileKey: uploadedFile.path,
+					coverUrl: uploadedFile.url || prev.coverUrl,
+				}))
+				if (uploadedFile.url) revokeCoverObjectUrl()
+			} catch (error) {
 				setCoverUploadError(true)
 				magicToast.error(t("microAppPage.publish.coverUploadFailed"))
-				return
+				console.error("Failed to upload micro app cover:", error)
 			}
-
-			setCoverUploadError(false)
-			setFormState((prev) => ({
-				...prev,
-				coverFileKey: uploadedFile.path,
-				coverUrl: uploadedFile.url || prev.coverUrl,
-			}))
-			if (uploadedFile.url) revokeCoverObjectUrl()
 		},
 		[revokeCoverObjectUrl, setFormState, t, uploadAndGetFileUrl],
 	)
