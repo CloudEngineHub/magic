@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useHtmlAppPermissions } from "../useHtmlAppPermissions"
 
@@ -40,6 +40,8 @@ describe("useHtmlAppPermissions", () => {
 
 	beforeEach(() => {
 		originalFetch = globalThis.fetch
+		localStorage.clear()
+		sessionStorage.clear()
 		mocks.getIframeDownloadUrl.mockReset()
 		mocks.getIframeDownloadUrl.mockResolvedValue([
 			{ url: "https://files.example.com/app.json" },
@@ -144,5 +146,30 @@ describe("useHtmlAppPermissions", () => {
 			expect(result.current.htmlAppConfig?.name).toBe("Updated App")
 		})
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(2)
+	})
+
+	it("refreshes the permission revision when another tab changes local grants", async () => {
+		const { result } = renderHook(() =>
+			useHtmlAppPermissions({
+				content: "<html></html>",
+				relativeFilePath: "app/index.html",
+				projectId: "project-1",
+				fileList: [],
+			}),
+		)
+		const initialRevision = result.current.permissionRevision
+
+		act(() => {
+			window.dispatchEvent(
+				new StorageEvent("storage", {
+					key: "magic:html-app-permissions:v2",
+					newValue: "[]",
+				}),
+			)
+		})
+
+		await waitFor(() => {
+			expect(result.current.permissionRevision).not.toBe(initialRevision)
+		})
 	})
 })

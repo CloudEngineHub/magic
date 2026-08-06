@@ -408,6 +408,7 @@ export default memo(function HTML(props: HTMLProps) {
 	const {
 		hasHtmlPermissionDeclarations,
 		getPermissionSnapshot,
+		preauthorizeHtmlPermission,
 		revokeHtmlPermission,
 		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
@@ -1620,6 +1621,7 @@ export default memo(function HTML(props: HTMLProps) {
 						onOpenChange={setPermissionManagerOpen}
 						permissionRevision={permissionRevision}
 						getPermissionSnapshot={getPermissionSnapshot}
+						onAuthorize={preauthorizeHtmlPermission}
 						onRevoke={revokeHtmlPermission}
 						onUpdateTtl={updateHtmlPermissionTtl}
 						onRevokeAll={revokeAllHtmlPermissions}

@@ -1,6 +1,10 @@
 import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../types"
-import type { HtmlPermissionGrant, HtmlPermissionGrantStore } from "./HtmlPermissionGrantStore"
+import {
+	type HtmlPermissionGrant,
+	type HtmlPermissionGrantIdentity,
+	type HtmlPermissionGrantStore,
+} from "./HtmlPermissionGrantStore"
 import {
 	analyzeHtmlPermissionDeclarations,
 	createEmptyHtmlPermissionDeclaration,
@@ -12,16 +16,16 @@ import {
 	getSharedHtmlPermissionTtlOptions,
 	SUPPORTED_HTML_PERMISSION_SCOPES,
 	type HtmlPermissionMode,
+	type HtmlPermissionTtl,
 	type HtmlPermissionTtlOption,
 } from "./htmlPermissionPolicy"
-
-type HtmlPermissionGrantIdentity = Omit<HtmlPermissionGrant, "scope" | "grantedAt" | "expiresAt">
 
 export type { HtmlPermissionDiagnostic, HtmlPermissionTtlOption }
 
 export interface HtmlPermissionAuthorizeOptions {
 	reason?: string
 	presentation?: "capability" | "userInfo"
+	allowOnce?: boolean
 }
 
 export interface HtmlPermissionConfirmRequest {
@@ -33,12 +37,12 @@ export interface HtmlPermissionConfirmRequest {
 	reason: string
 	presentation: "capability" | "userInfo"
 	ttlOptions: HtmlPermissionTtlOption[]
-	defaultTtlMs: number
+	defaultTtlMs: HtmlPermissionTtl
 }
 
 export interface HtmlPermissionConfirmResult {
 	allowed: boolean
-	ttlMs: number
+	ttlMs: HtmlPermissionTtl
 }
 
 export interface HtmlPermissionMissingDeclarationRequest {
@@ -48,7 +52,7 @@ export interface HtmlPermissionMissingDeclarationRequest {
 }
 
 export interface IframePermissionAppInstance {
-	userKey: string
+	userId: string
 	projectId: string
 	appRootDir: string
 	entryPath: string
@@ -103,8 +107,11 @@ export class IframePermissionService {
 		this.cfg = cfg
 	}
 
-	async authorize(scope: HtmlPermissionScope): Promise<boolean> {
-		return this.authorizeMany([scope])
+	async authorize(
+		scope: HtmlPermissionScope,
+		options: HtmlPermissionAuthorizeOptions = {},
+	): Promise<boolean> {
+		return this.authorizeMany([scope], options)
 	}
 
 	async authorizeMany(
@@ -115,7 +122,6 @@ export class IframePermissionService {
 		if (requestedScopes.length === 0) return true
 
 		const now = this.getNow()
-		this.cfg.grantStore.prune(now)
 
 		const context = await this.resolveContext()
 		if (!context) return false
@@ -141,21 +147,16 @@ export class IframePermissionService {
 		}
 
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		if (options.allowOnce === false && !this.canPersistGrant(identity)) return false
 		const existingScopes = new Set(
-			this.cfg.grantStore
-				.list()
-				.filter(
-					(grant) =>
-						identity.appFingerprint &&
-						this.matchesGrantIdentity(grant, identity) &&
-						grant.expiresAt > now,
-				)
-				.map((grant) => grant.scope),
+			this.cfg.grantStore.getAppGrants(identity).map((grant) => grant.scope),
 		)
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
 		if (missingScopes.length === 0) return true
 
-		const ttlOptions = getSharedHtmlPermissionTtlOptions(missingScopes, mode)
+		const ttlOptions = getSharedHtmlPermissionTtlOptions(missingScopes, mode).filter(
+			(option) => options.allowOnce !== false || option.ttlMs !== 0,
+		)
 		const result = await this.cfg.confirmPermission({
 			appName: appConfig?.name || "",
 			mode,
@@ -171,17 +172,24 @@ export class IframePermissionService {
 				"",
 			presentation: options.presentation || "capability",
 			ttlOptions,
-			defaultTtlMs: getDefaultHtmlPermissionTtl(missingScopes[0], ttlOptions),
+			defaultTtlMs: getDefaultHtmlPermissionTtl(missingScopes, mode, ttlOptions),
 		})
 
 		if (!result.allowed) return false
-		if (result.ttlMs > 0 && this.canPersistGrant(identity)) {
+		if (!ttlOptions.some((option) => option.ttlMs === result.ttlMs)) {
+			htmlMicroAppPreviewLogger.warn("Permission denied: selected duration is not allowed", {
+				scopes: missingScopes,
+				ttlMs: result.ttlMs,
+			})
+			return false
+		}
+		if (result.ttlMs !== 0 && this.canPersistGrant(identity)) {
 			for (const scope of missingScopes) {
 				this.cfg.grantStore.save({
 					...identity,
 					scope,
 					grantedAt: now,
-					expiresAt: now + result.ttlMs,
+					expiresAt: result.ttlMs === null ? null : now + result.ttlMs,
 				})
 			}
 			this.cfg.onGrantsChanged?.()
@@ -190,9 +198,6 @@ export class IframePermissionService {
 	}
 
 	async getPermissionSnapshot(): Promise<HtmlPermissionSnapshot> {
-		const now = this.getNow()
-		this.cfg.grantStore.prune(now)
-
 		const configState = this.cfg.appConfigState
 		if (configState.status === "loading") {
 			return this.createSnapshot(null, null, createEmptyHtmlPermissionDeclaration(), [])
@@ -203,14 +208,7 @@ export class IframePermissionService {
 		const declaration = analyzeHtmlPermissionDeclarations(appConfig)
 		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const grants = this.cfg.grantStore
-			.list()
-			.filter(
-				(grant) =>
-					identity.appFingerprint &&
-					this.matchesGrantIdentity(grant, identity) &&
-					grant.expiresAt > now,
-			)
+		const grants = this.cfg.grantStore.getAppGrants(identity)
 
 		return this.createSnapshot(mode, appConfig, declaration, grants)
 	}
@@ -218,10 +216,10 @@ export class IframePermissionService {
 	async revoke(scope: HtmlPermissionScope): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
-			this.cfg.grantStore.remove({
-				...this.buildGrantIdentity(context.mode, context.appFingerprint),
+			this.cfg.grantStore.remove(
+				this.buildGrantIdentity(context.mode, context.appFingerprint),
 				scope,
-			})
+			)
 			this.cfg.onGrantsChanged?.()
 		}
 		return this.getPermissionSnapshot()
@@ -229,10 +227,9 @@ export class IframePermissionService {
 
 	async updateGrantTtl(
 		scope: HtmlPermissionScope,
-		ttlMs: number,
+		ttlMs: HtmlPermissionTtl,
 	): Promise<HtmlPermissionSnapshot> {
 		const now = this.getNow()
-		this.cfg.grantStore.prune(now)
 
 		const context = await this.resolveContext()
 		if (!context) throw new Error("Permission context is not ready")
@@ -243,28 +240,24 @@ export class IframePermissionService {
 		}
 
 		const ttlOptions = getSharedHtmlPermissionTtlOptions([scope], mode).filter(
-			(option) => option.ttlMs > 0,
+			(option) => option.ttlMs !== 0,
 		)
-		if (!Number.isFinite(ttlMs) || !ttlOptions.some((option) => option.ttlMs === ttlMs)) {
+		if (
+			(ttlMs !== null && !Number.isFinite(ttlMs)) ||
+			!ttlOptions.some((option) => option.ttlMs === ttlMs)
+		) {
 			throw new Error("Permission duration is not allowed")
 		}
 
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const existingGrant = this.cfg.grantStore
-			.list()
-			.find(
-				(grant) =>
-					grant.scope === scope &&
-					this.matchesGrantIdentity(grant, identity) &&
-					grant.expiresAt > now,
-			)
+		const existingGrant = this.cfg.grantStore.getGrant(identity, scope)
 		if (!existingGrant) throw new Error("Active permission grant was not found")
 
 		this.cfg.grantStore.save({
 			...identity,
 			scope,
 			grantedAt: now,
-			expiresAt: now + ttlMs,
+			expiresAt: ttlMs === null ? null : now + ttlMs,
 		})
 		this.cfg.onGrantsChanged?.()
 		return this.getPermissionSnapshot()
@@ -322,7 +315,7 @@ export class IframePermissionService {
 					grant: grantsByScope.get(scope),
 					ttlOptions: mode
 						? getSharedHtmlPermissionTtlOptions([scope], mode).filter(
-								(option) => option.ttlMs > 0,
+								(option) => option.ttlMs !== 0,
 							)
 						: [],
 				})),
@@ -391,7 +384,7 @@ export class IframePermissionService {
 	): HtmlPermissionGrantIdentity {
 		return {
 			mode,
-			userKey: this.cfg.appInstance.userKey,
+			userId: this.cfg.appInstance.userId,
 			projectId: this.cfg.appInstance.projectId,
 			appRootDir: this.cfg.appInstance.appRootDir,
 			entryPath: this.cfg.appInstance.entryPath,
@@ -399,23 +392,9 @@ export class IframePermissionService {
 		}
 	}
 
-	private matchesGrantIdentity(
-		grant: HtmlPermissionGrant,
-		identity: HtmlPermissionGrantIdentity,
-	): boolean {
-		return (
-			grant.mode === identity.mode &&
-			grant.userKey === identity.userKey &&
-			grant.projectId === identity.projectId &&
-			grant.appRootDir === identity.appRootDir &&
-			grant.entryPath === identity.entryPath &&
-			grant.appFingerprint === identity.appFingerprint
-		)
-	}
-
 	private canPersistGrant(identity: HtmlPermissionGrantIdentity): boolean {
 		return Boolean(
-			identity.userKey && identity.projectId && identity.entryPath && identity.appFingerprint,
+			identity.userId && identity.projectId && identity.entryPath && identity.appFingerprint,
 		)
 	}
 

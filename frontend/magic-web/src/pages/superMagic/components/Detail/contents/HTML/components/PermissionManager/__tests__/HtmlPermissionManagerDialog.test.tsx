@@ -4,6 +4,7 @@ import type { HtmlPermissionSnapshot } from "../../../iframe-api/services/Iframe
 import HtmlPermissionManagerDialog, {
 	createHtmlPermissionDateFormatter,
 } from "../HtmlPermissionManagerDialog"
+import { formatRemaining } from "../HtmlPermissionItem"
 
 vi.mock("react-i18next", () => {
 	const t = (key: string) => key
@@ -22,14 +23,14 @@ Object.defineProperty(Element.prototype, "scrollIntoView", {
 
 const activeGrant = {
 	mode: "manifest" as const,
-	userKey: "user-1",
+	userId: "user-1",
 	projectId: "project-1",
 	appRootDir: "apps/demo/",
 	entryPath: "apps/demo/index.html",
 	appFingerprint: "fingerprint",
 	scope: "llm.use" as const,
 	grantedAt: Date.now() - 60_000,
-	expiresAt: Date.now() + 15 * 60_000,
+	expiresAt: Date.now() - 60_000 + 60 * 60 * 1000,
 }
 
 function createSnapshot(active = true): HtmlPermissionSnapshot {
@@ -50,9 +51,9 @@ function createSnapshot(active = true): HtmlPermissionSnapshot {
 				declarationStatus: "declared",
 				grant: active ? activeGrant : undefined,
 				ttlOptions: [
-					{ labelKey: "ttl.5m", ttlMs: 5 * 60 * 1000 },
-					{ labelKey: "ttl.15m", ttlMs: 15 * 60 * 1000 },
-					{ labelKey: "ttl.30m", ttlMs: 30 * 60 * 1000 },
+					{ labelKey: "ttl.1h", ttlMs: 60 * 60 * 1000 },
+					{ labelKey: "ttl.1d", ttlMs: 24 * 60 * 60 * 1000 },
+					{ labelKey: "ttl.7d", ttlMs: 7 * 24 * 60 * 60 * 1000 },
 				],
 			},
 			{
@@ -81,6 +82,12 @@ describe("HtmlPermissionManagerDialog", () => {
 		expect(formatter.resolvedOptions().second).toBeUndefined()
 	})
 
+	it("formats long remaining durations in days", () => {
+		expect(formatRemaining(7 * 24 * 60 * 60 * 1000, ((key: string) => key) as never)).toBe(
+			"htmlEditor.permissionManager.remainingDays",
+		)
+	})
+
 	it("renders app metadata, declarations, grants, and diagnostics", async () => {
 		render(
 			<HtmlPermissionManagerDialog
@@ -88,6 +95,7 @@ describe("HtmlPermissionManagerDialog", () => {
 				onOpenChange={vi.fn()}
 				permissionRevision={0}
 				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
 				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
 				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
@@ -113,7 +121,41 @@ describe("HtmlPermissionManagerDialog", () => {
 			"scroll-area-thumb",
 		)
 		expect(screen.getByTestId("html-permission-manager-footer").className).toContain("shrink-0")
-		expect(screen.getByTestId("html-permission-manager-revoke-note")).toBeInTheDocument()
+		expect(screen.queryByTestId("html-permission-manager-revoke-note")).not.toBeInTheDocument()
+
+		fireEvent.focus(screen.getByRole("button", { name: "htmlEditor.permissionManager.revoke" }))
+		expect(
+			await screen.findAllByText("htmlEditor.permissionManager.revokeNoteTitle"),
+		).not.toHaveLength(0)
+		expect(screen.getAllByText("htmlEditor.permissionManager.revokeNote")).not.toHaveLength(0)
+		expect(document.querySelector('[data-slot="tooltip-content"]')).toHaveClass("text-wrap")
+	})
+
+	it("authorizes a declared permission before the app uses it", async () => {
+		const onAuthorize = vi.fn().mockResolvedValue(true)
+		const getPermissionSnapshot = vi
+			.fn()
+			.mockResolvedValueOnce(createSnapshot(false))
+			.mockResolvedValue(createSnapshot(true))
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={getPermissionSnapshot}
+				onAuthorize={onAuthorize}
+				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
+				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
+				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
+			/>,
+		)
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "htmlEditor.permissionManager.authorize" }),
+		)
+
+		await waitFor(() => expect(onAuthorize).toHaveBeenCalledWith("llm.use"))
+		expect(await screen.findByText("htmlEditor.permissionManager.granted")).toBeInTheDocument()
 	})
 
 	it("revokes an active grant and refreshes the row immediately", async () => {
@@ -124,6 +166,7 @@ describe("HtmlPermissionManagerDialog", () => {
 				onOpenChange={vi.fn()}
 				permissionRevision={0}
 				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
 				onRevoke={onRevoke}
 				onUpdateTtl={vi.fn().mockResolvedValue(createSnapshot())}
 				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
@@ -146,6 +189,7 @@ describe("HtmlPermissionManagerDialog", () => {
 				onOpenChange={vi.fn()}
 				permissionRevision={0}
 				getPermissionSnapshot={vi.fn().mockResolvedValue(createSnapshot())}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
 				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
 				onUpdateTtl={onUpdateTtl}
 				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
@@ -158,13 +202,67 @@ describe("HtmlPermissionManagerDialog", () => {
 		fireEvent.click(durationSelect)
 		fireEvent.click(
 			await screen.findByRole("option", {
-				name: "htmlEditor.permissionAuthorizationConfirm.ttl.30m",
+				name: "htmlEditor.permissionAuthorizationConfirm.ttl.7d",
 			}),
 		)
 		fireEvent.click(
 			screen.getByRole("button", { name: "htmlEditor.permissionManager.updateDuration" }),
 		)
 
-		await waitFor(() => expect(onUpdateTtl).toHaveBeenCalledWith("llm.use", 30 * 60 * 1000))
+		await waitFor(() =>
+			expect(onUpdateTtl).toHaveBeenCalledWith("llm.use", 7 * 24 * 60 * 60 * 1000),
+		)
+	})
+
+	it("renders and updates an always-valid authorization", async () => {
+		const snapshot = createSnapshot()
+		snapshot.permissions[0] = {
+			scope: "user.profile.name",
+			supported: true,
+			declarationStatus: "declared",
+			grant: {
+				...activeGrant,
+				scope: "user.profile.name",
+				expiresAt: null,
+			},
+			ttlOptions: [
+				{ labelKey: "ttl.1d", ttlMs: 24 * 60 * 60 * 1000 },
+				{ labelKey: "ttl.7d", ttlMs: 7 * 24 * 60 * 60 * 1000 },
+				{ labelKey: "ttl.30d", ttlMs: 30 * 24 * 60 * 60 * 1000 },
+				{ labelKey: "ttl.always", ttlMs: null },
+			],
+		}
+		const onUpdateTtl = vi.fn().mockResolvedValue(snapshot)
+		render(
+			<HtmlPermissionManagerDialog
+				open
+				onOpenChange={vi.fn()}
+				permissionRevision={0}
+				getPermissionSnapshot={vi.fn().mockResolvedValue(snapshot)}
+				onAuthorize={vi.fn().mockResolvedValue(true)}
+				onRevoke={vi.fn().mockResolvedValue(createSnapshot(false))}
+				onUpdateTtl={onUpdateTtl}
+				onRevokeAll={vi.fn().mockResolvedValue(createSnapshot(false))}
+			/>,
+		)
+
+		expect(
+			await screen.findByText("htmlEditor.permissionManager.alwaysValid"),
+		).toBeInTheDocument()
+		fireEvent.click(
+			screen.getByRole("combobox", { name: "htmlEditor.permissionManager.durationSelect" }),
+		)
+		fireEvent.click(
+			await screen.findByRole("option", {
+				name: "htmlEditor.permissionAuthorizationConfirm.ttl.1d",
+			}),
+		)
+		fireEvent.click(
+			screen.getByRole("button", { name: "htmlEditor.permissionManager.updateDuration" }),
+		)
+
+		await waitFor(() =>
+			expect(onUpdateTtl).toHaveBeenCalledWith("user.profile.name", 24 * 60 * 60 * 1000),
+		)
 	})
 })

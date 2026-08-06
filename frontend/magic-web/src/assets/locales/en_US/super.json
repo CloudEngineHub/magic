@@ -2740,12 +2740,12 @@
 		},
 		"permissionAuthorizationConfirm": {
 			"allow": "Allow",
-			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} through the legacy flow. This only applies briefly in the current tab.",
+			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} under the legacy short-term authorization policy.",
 			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
 			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
 			"deny": "Deny",
 			"durationLabel": "Choose how long this authorization remains valid",
-			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}} under the legacy short-term authorization policy.",
 			"missingScope": "\"{{appName}}\" did not declare \"{{scope}}\" ({{rawScope}}) in app.json permissions.scopes. The request was denied.",
 			"scopeSeparator": ", ",
 			"scopes": {
@@ -2764,23 +2764,31 @@
 				"10m": "10 minutes",
 				"12h": "12 hours",
 				"15m": "15 minutes",
+				"1d": "1 day",
 				"2h": "2 hours",
+				"30d": "30 days",
 				"30m": "30 minutes",
 				"4h": "4 hours",
 				"5m": "5 minutes",
 				"60m": "1 hour",
+				"7d": "7 days",
 				"8h": "8 hours",
+				"always": "Always allow",
 				"once": "This operation"
 			}
 		},
 		"permissionManager": {
+			"alwaysValid": "Always valid",
 			"appRoot": "App directory",
-			"askWhenUsed": "The app will request authorization when it uses this capability.",
-			"currentTab": "Current tab only",
+			"askWhenUsed": "Authorize now, or decide when the app uses this capability.",
+			"authorize": "Authorize",
+			"authorizeFailed": "Failed to authorize",
+			"authorizeSuccess": "Authorized",
+			"currentTab": "Saved in this browser",
 			"declared": "Declared",
 			"declaredCount": "{{count}} declared",
 			"defaultAppName": "HTML micro-app",
-			"description": "Review the permissions declared by this HTML app and the authorizations active in the current tab.",
+			"description": "Review the permissions declared by this HTML app and the authorizations saved in this browser.",
 			"diagnostics": {
 				"manifestAbsent": "No app.json was found. This app uses the legacy short-term authorization flow.",
 				"manifestLoadError": "app.json could not be loaded. This app uses the legacy short-term authorization flow: {{error}}",
@@ -2804,6 +2812,7 @@
 			"notGranted": "Not granted",
 			"open": "Authorization",
 			"permissionsTitle": "Permissions",
+			"remainingDays": "{{count}} days remaining",
 			"remainingExpired": "Expired",
 			"remainingHours": "{{count}} hours remaining",
 			"remainingLessThanMinute": "Less than 1 minute remaining",
@@ -2850,7 +2859,7 @@
 				"name": "nickname and real name",
 				"organization": "organization code"
 			},
-			"legacyContent": "This HTML micro-app has no permission declaration and requests access to: {{fields}} through the legacy flow. This only applies briefly in the current tab.",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests access to: {{fields}} under the legacy short-term authorization policy.",
 			"title": "Authorize User Info Access"
 		}
 	},

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertCircle, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
+import { AlertCircle, Loader2, ShieldCheck, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn-ui/alert"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -21,6 +21,7 @@ import type {
 	HtmlPermissionDiagnostic,
 	HtmlPermissionSnapshot,
 } from "../../iframe-api/services/IframePermissionService"
+import type { HtmlPermissionTtl } from "../../iframe-api/services/htmlPermissionPolicy"
 import { HtmlPermissionItem } from "./HtmlPermissionItem"
 
 interface HtmlPermissionManagerDialogProps {
@@ -28,8 +29,12 @@ interface HtmlPermissionManagerDialogProps {
 	onOpenChange: (open: boolean) => void
 	permissionRevision: string | number
 	getPermissionSnapshot: () => Promise<HtmlPermissionSnapshot>
+	onAuthorize: (scope: HtmlPermissionScope) => Promise<boolean>
 	onRevoke: (scope: HtmlPermissionScope) => Promise<HtmlPermissionSnapshot>
-	onUpdateTtl: (scope: HtmlPermissionScope, ttlMs: number) => Promise<HtmlPermissionSnapshot>
+	onUpdateTtl: (
+		scope: HtmlPermissionScope,
+		ttlMs: HtmlPermissionTtl,
+	) => Promise<HtmlPermissionSnapshot>
 	onRevokeAll: () => Promise<HtmlPermissionSnapshot>
 }
 
@@ -38,6 +43,7 @@ export default function HtmlPermissionManagerDialog({
 	onOpenChange,
 	permissionRevision,
 	getPermissionSnapshot,
+	onAuthorize,
 	onRevoke,
 	onUpdateTtl,
 	onRevokeAll,
@@ -45,8 +51,9 @@ export default function HtmlPermissionManagerDialog({
 	const { t, i18n } = useTranslation("super")
 	const [snapshot, setSnapshot] = useState<HtmlPermissionSnapshot | null>(null)
 	const [loading, setLoading] = useState(false)
-	const [revokingScope, setRevokingScope] = useState<string | null>(null)
-	const [updatingScope, setUpdatingScope] = useState<string | null>(null)
+	const [authorizingScope, setAuthorizingScope] = useState<HtmlPermissionScope | null>(null)
+	const [revokingScope, setRevokingScope] = useState<HtmlPermissionScope | null>(null)
+	const [updatingScope, setUpdatingScope] = useState<HtmlPermissionScope | null>(null)
 	const [revokingAll, setRevokingAll] = useState(false)
 	const [now, setNow] = useState(() => Date.now())
 
@@ -79,7 +86,10 @@ export default function HtmlPermissionManagerDialog({
 			setNow(currentTime)
 			if (
 				snapshot.permissions.some(
-					(item) => item.grant && item.grant.expiresAt <= currentTime,
+					(item) =>
+						item.grant?.expiresAt !== null &&
+						item.grant?.expiresAt !== undefined &&
+						item.grant.expiresAt <= currentTime,
 				)
 			) {
 				void refreshSnapshot()
@@ -100,7 +110,21 @@ export default function HtmlPermissionManagerDialog({
 		}
 	}
 
-	const handleUpdateTtl = async (scope: HtmlPermissionScope, ttlMs: number) => {
+	const handleAuthorize = async (scope: HtmlPermissionScope) => {
+		setAuthorizingScope(scope)
+		try {
+			const allowed = await onAuthorize(scope)
+			setSnapshot(await getPermissionSnapshot())
+			setNow(Date.now())
+			if (allowed) magicToast.success(t("htmlEditor.permissionManager.authorizeSuccess"))
+		} catch {
+			magicToast.error(t("htmlEditor.permissionManager.authorizeFailed"))
+		} finally {
+			setAuthorizingScope(null)
+		}
+	}
+
+	const handleUpdateTtl = async (scope: HtmlPermissionScope, ttlMs: HtmlPermissionTtl) => {
 		setUpdatingScope(scope)
 		try {
 			setSnapshot(await onUpdateTtl(scope, ttlMs))
@@ -132,7 +156,9 @@ export default function HtmlPermissionManagerDialog({
 			snapshot?.permissions.filter((item) => item.declarationStatus !== "notDeclared") ?? [],
 		[snapshot],
 	)
-	const permissionMutationInProgress = Boolean(revokingScope || updatingScope || revokingAll)
+	const permissionMutationInProgress = Boolean(
+		authorizingScope || revokingScope || updatingScope || revokingAll,
+	)
 	const getDiagnosticText = useCallback(
 		(diagnostic: HtmlPermissionDiagnostic) => {
 			switch (diagnostic.code) {
@@ -271,7 +297,7 @@ export default function HtmlPermissionManagerDialog({
 										{visiblePermissions.map((item, index) => {
 											return (
 												<div
-													key={`${item.scope}:${item.grant?.grantedAt || 0}:${item.grant?.expiresAt || 0}`}
+													key={`${item.scope}:${item.grant?.grantedAt || 0}:${item.grant?.expiresAt ?? "always"}`}
 												>
 													{index > 0 ? <Separator /> : null}
 													<HtmlPermissionItem
@@ -279,8 +305,12 @@ export default function HtmlPermissionManagerDialog({
 														now={now}
 														dateFormatter={dateFormatter}
 														disabled={permissionMutationInProgress}
+														authorizing={
+															authorizingScope === item.scope
+														}
 														updating={updatingScope === item.scope}
 														revoking={revokingScope === item.scope}
+														onAuthorize={handleAuthorize}
 														onUpdateTtl={handleUpdateTtl}
 														onRevoke={handleRevoke}
 													/>
@@ -289,21 +319,6 @@ export default function HtmlPermissionManagerDialog({
 										})}
 									</div>
 								</section>
-
-								<div
-									className="flex items-start gap-3 rounded-lg border bg-card px-4 py-3 text-sm"
-									data-testid="html-permission-manager-revoke-note"
-								>
-									<ShieldOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-									<div className="min-w-0 space-y-1">
-										<div className="font-medium tracking-tight">
-											{t("htmlEditor.permissionManager.revokeNoteTitle")}
-										</div>
-										<p className="text-sm leading-relaxed text-muted-foreground">
-											{t("htmlEditor.permissionManager.revokeNote")}
-										</p>
-									</div>
-								</div>
 							</>
 						) : null}
 					</div>

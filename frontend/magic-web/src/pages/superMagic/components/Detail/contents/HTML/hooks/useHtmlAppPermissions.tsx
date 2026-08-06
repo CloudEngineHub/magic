@@ -13,7 +13,10 @@ import {
 import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
-import { SessionStorageHtmlPermissionGrantStore } from "../iframe-api/services/HtmlPermissionGrantStore"
+import {
+	LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
+	LocalStorageHtmlPermissionGrantStore,
+} from "../iframe-api/services/HtmlPermissionGrantStore"
 import {
 	IframePermissionService,
 	type HtmlAppConfigState,
@@ -22,6 +25,11 @@ import {
 } from "../iframe-api/services/IframePermissionService"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
 import { hasManageableHtmlPermissionDeclarations } from "../iframe-api/services/htmlPermissionDeclarations"
+import {
+	parseHtmlPermissionTtl,
+	serializeHtmlPermissionTtl,
+	type HtmlPermissionTtl,
+} from "../iframe-api/services/htmlPermissionPolicy"
 import { useHtmlPermissionI18n } from "./useHtmlPermissionI18n"
 
 interface HtmlAppFileItem {
@@ -92,21 +100,18 @@ export function useHtmlAppPermissions({
 	const appConfigFileId = appConfigFile?.file_id || ""
 	const appConfigFileUpdatedAt = appConfigFile?.updated_at || ""
 
-	const info = userStore.user.userInfo
-	const magicId = info?.magic_id?.trim()
-	const userId = info?.user_id?.trim()
-	const userKey = magicId ? `magic_id:${magicId}` : userId ? `user_id:${userId}` : ""
+	const userId = userStore.user.userInfo?.user_id?.trim() || ""
 	const htmlAppInstance = useMemo(() => {
 		return {
-			userKey,
+			userId,
 			projectId: projectId || "",
 			appRootDir,
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
 		}
-	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode, userKey])
+	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode, userId])
 
-	const htmlPermissionGrantStore = useMemo(() => new SessionStorageHtmlPermissionGrantStore(), [])
+	const htmlPermissionGrantStore = useMemo(() => new LocalStorageHtmlPermissionGrantStore(), [])
 
 	const confirmHtmlPermission = useMemoizedFn(
 		({
@@ -119,7 +124,7 @@ export function useHtmlAppPermissions({
 			ttlOptions,
 			defaultTtlMs,
 		}: HtmlPermissionConfirmRequest) =>
-			new Promise<{ allowed: boolean; ttlMs: number }>((resolve) => {
+			new Promise<{ allowed: boolean; ttlMs: HtmlPermissionTtl }>((resolve) => {
 				let selectedTtlMs = defaultTtlMs
 				const displayAppName = appName || t("htmlEditor.permissionManager.defaultAppName")
 				const scopeLabel = scopes
@@ -191,25 +196,23 @@ export function useHtmlAppPermissions({
 								{t("htmlEditor.permissionAuthorizationConfirm.durationLabel")}
 							</p>
 							<Select
-								defaultValue={String(defaultTtlMs)}
+								defaultValue={serializeHtmlPermissionTtl(defaultTtlMs)}
 								onValueChange={(value) => {
-									selectedTtlMs = Number(value)
+									selectedTtlMs = parseHtmlPermissionTtl(value)
 								}}
 							>
 								<SelectTrigger className="mt-3 w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									{ttlOptions.map(
-										(option: { labelKey: string; ttlMs: number }) => (
-											<SelectItem
-												key={option.ttlMs}
-												value={String(option.ttlMs)}
-											>
-												{getTtlLabel(option.ttlMs)}
-											</SelectItem>
-										),
-									)}
+									{ttlOptions.map((option) => (
+										<SelectItem
+											key={serializeHtmlPermissionTtl(option.ttlMs)}
+											value={serializeHtmlPermissionTtl(option.ttlMs)}
+										>
+											{getTtlLabel(option.ttlMs)}
+										</SelectItem>
+									))}
 								</SelectContent>
 							</Select>
 						</div>
@@ -252,6 +255,21 @@ export function useHtmlAppPermissions({
 		setGrantRevision((revision) => revision + 1)
 	})
 
+	useEffect(() => {
+		// 不启动常驻定时器；HTML 应用初始化时清理浏览器关闭期间已经过期的授权。
+		htmlPermissionGrantStore.prune(Date.now())
+	}, [htmlPermissionGrantStore])
+
+	useEffect(() => {
+		// storage 只通知其他标签页；当前标签页的增删改由 onGrantsChanged 同步 revision。
+		const handlePermissionStorageChange = (event: StorageEvent) => {
+			if (event.key !== LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) return
+			notifyGrantsChanged()
+		}
+		window.addEventListener("storage", handlePermissionStorageChange)
+		return () => window.removeEventListener("storage", handlePermissionStorageChange)
+	}, [notifyGrantsChanged])
+
 	const htmlPermissionService = useMemo(
 		() =>
 			new IframePermissionService({
@@ -275,6 +293,9 @@ export function useHtmlAppPermissions({
 	const authorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
 		return htmlPermissionService.authorize(scope)
 	})
+	const preauthorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+		return htmlPermissionService.authorize(scope, { allowOnce: false })
+	})
 
 	const authorizeHtmlPermissions = useMemoizedFn(
 		async (
@@ -292,7 +313,7 @@ export function useHtmlAppPermissions({
 	})
 
 	const updateHtmlPermissionTtl = useMemoizedFn(
-		async (scope: HtmlPermissionScope, ttlMs: number) => {
+		async (scope: HtmlPermissionScope, ttlMs: HtmlPermissionTtl) => {
 			return htmlPermissionService.updateGrantTtl(scope, ttlMs)
 		},
 	)
@@ -367,6 +388,7 @@ export function useHtmlAppPermissions({
 		hasHtmlPermissionDeclarations,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
+		preauthorizeHtmlPermission,
 		authorizeHtmlPermissions,
 		getPermissionSnapshot,
 		revokeHtmlPermission,

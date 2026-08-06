@@ -2741,12 +2741,12 @@
 		},
 		"permissionAuthorizationConfirm": {
 			"allow": "允许",
-			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版方式请求使用：{{scope}}。只在当前标签页短时生效。",
+			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版短期授权规则请求使用：{{scope}}。",
 			"content": "「{{appName}}」请求使用：{{scope}}。用途：{{reason}}",
 			"contentWithoutReason": "「{{appName}}」请求使用：{{scope}}。该应用未提供用途说明。",
 			"deny": "拒绝",
 			"durationLabel": "选择本次授权的有效期",
-			"legacyContent": "该 HTML 微应用未声明权限，正在请求使用：{{scope}}。只在当前标签页短时生效。",
+			"legacyContent": "该 HTML 微应用未声明权限，正在按旧版短期授权规则请求使用：{{scope}}。",
 			"missingScope": "「{{appName}}」未在 app.json 的 permissions.scopes 中声明「{{scope}}」（{{rawScope}}），请求已拒绝。",
 			"scopeSeparator": "、",
 			"scopes": {
@@ -2765,23 +2765,31 @@
 				"10m": "10 分钟",
 				"12h": "半天",
 				"15m": "15 分钟",
+				"1d": "1 天",
 				"2h": "2 小时",
+				"30d": "30 天",
 				"30m": "30 分钟",
 				"4h": "4 小时",
 				"5m": "5 分钟",
 				"60m": "1 小时",
+				"7d": "7 天",
 				"8h": "8 小时",
+				"always": "始终允许",
 				"once": "本次操作"
 			}
 		},
 		"permissionManager": {
+			"alwaysValid": "始终有效",
 			"appRoot": "应用目录",
-			"askWhenUsed": "应用实际使用此能力时会请求授权。",
-			"currentTab": "仅当前标签页生效",
+			"askWhenUsed": "可现在授权，也可以在应用实际使用时再决定。",
+			"authorize": "授权",
+			"authorizeFailed": "授权失败",
+			"authorizeSuccess": "已授权",
+			"currentTab": "保存在当前浏览器",
 			"declared": "已声明",
 			"declaredCount": "已声明 {{count}} 项",
 			"defaultAppName": "HTML 微应用",
-			"description": "查看此 HTML 应用声明的权限，以及当前标签页内的授权状态和有效期。",
+			"description": "查看此 HTML 应用声明的权限，以及当前浏览器内保存的授权状态和有效期。",
 			"diagnostics": {
 				"manifestAbsent": "未找到 app.json，当前应用按旧版方式申请短期授权。",
 				"manifestLoadError": "app.json 读取失败，当前应用按旧版方式申请短期授权：{{error}}",
@@ -2805,6 +2813,7 @@
 			"notGranted": "未授权",
 			"open": "授权管理",
 			"permissionsTitle": "权限列表",
+			"remainingDays": "剩余 {{count}} 天",
 			"remainingExpired": "已过期",
 			"remainingHours": "剩余 {{count}} 小时",
 			"remainingLessThanMinute": "剩余不足 1 分钟",
@@ -2851,7 +2860,7 @@
 				"name": "昵称、真实姓名",
 				"organization": "组织编码"
 			},
-			"legacyContent": "该 HTML 微应用未声明权限，正在按旧版方式请求读取：{{fields}}。只在当前标签页短时生效。",
+			"legacyContent": "该 HTML 微应用未声明权限，正在按旧版短期授权规则请求读取：{{fields}}。",
 			"title": "授权用户信息访问"
 		}
 	},
