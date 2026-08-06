@@ -66,9 +66,9 @@ vi.mock("@/utils/log", () => ({
 }))
 
 vi.mock(
-	"@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/HtmlPermissionGrantStore",
+	"@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore",
 	() => ({
-		LocalStorageHtmlPermissionGrantStore: vi.fn().mockImplementation(() => ({
+		getHtmlPermissionGrantStore: vi.fn(() => ({
 			clear: mocks.clearHtmlPermissionGrants,
 		})),
 	}),

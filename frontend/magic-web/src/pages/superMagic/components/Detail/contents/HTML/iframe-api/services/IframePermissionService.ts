@@ -57,6 +57,10 @@ export interface IframePermissionAppInstance {
 	appRootDir: string
 	entryPath: string
 	content: string
+	/** Stable versions of executable files belonging to this HTML app. */
+	runtimeFingerprint?: string
+	/** Remote executable resources cannot be bound to a local content version. */
+	hasUnversionedExternalRuntimeResources?: boolean
 }
 
 export type HtmlAppConfigState =
@@ -149,7 +153,7 @@ export class IframePermissionService {
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
 		if (options.allowOnce === false && !this.canPersistGrant(identity)) return false
 		const existingScopes = new Set(
-			this.cfg.grantStore.getAppGrants(identity).map((grant) => grant.scope),
+			(await this.cfg.grantStore.getAppGrants(identity)).map((grant) => grant.scope),
 		)
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
 		if (missingScopes.length === 0) return true
@@ -185,7 +189,7 @@ export class IframePermissionService {
 		}
 		if (result.ttlMs !== 0 && this.canPersistGrant(identity)) {
 			for (const scope of missingScopes) {
-				this.cfg.grantStore.save({
+				await this.cfg.grantStore.save({
 					...identity,
 					scope,
 					grantedAt: now,
@@ -208,7 +212,7 @@ export class IframePermissionService {
 		const declaration = analyzeHtmlPermissionDeclarations(appConfig)
 		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const grants = this.cfg.grantStore.getAppGrants(identity)
+		const grants = await this.cfg.grantStore.getAppGrants(identity)
 
 		return this.createSnapshot(mode, appConfig, declaration, grants)
 	}
@@ -216,7 +220,7 @@ export class IframePermissionService {
 	async revoke(scope: HtmlPermissionScope): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
-			this.cfg.grantStore.remove(
+			await this.cfg.grantStore.remove(
 				this.buildGrantIdentity(context.mode, context.appFingerprint),
 				scope,
 			)
@@ -250,10 +254,10 @@ export class IframePermissionService {
 		}
 
 		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const existingGrant = this.cfg.grantStore.getGrant(identity, scope)
+		const existingGrant = await this.cfg.grantStore.getGrant(identity, scope)
 		if (!existingGrant) throw new Error("Active permission grant was not found")
 
-		this.cfg.grantStore.save({
+		await this.cfg.grantStore.save({
 			...identity,
 			scope,
 			grantedAt: now,
@@ -266,7 +270,7 @@ export class IframePermissionService {
 	async revokeAll(): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
-			this.cfg.grantStore.remove(
+			await this.cfg.grantStore.remove(
 				this.buildGrantIdentity(context.mode, context.appFingerprint),
 			)
 			this.cfg.onGrantsChanged?.()
@@ -373,8 +377,13 @@ export class IframePermissionService {
 						version: appConfig?.version || "",
 						entry: appConfig?.entry || "",
 						permissions: appConfig?.permissions || {},
+						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+						entryContent: this.cfg.appInstance.content || "",
 					})
-				: this.cfg.appInstance.content || ""
+				: stableStringify({
+						entryContent: this.cfg.appInstance.content || "",
+						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+					})
 		return shortHash(source)
 	}
 
@@ -393,8 +402,13 @@ export class IframePermissionService {
 	}
 
 	private canPersistGrant(identity: HtmlPermissionGrantIdentity): boolean {
-		return Boolean(
-			identity.userId && identity.projectId && identity.entryPath && identity.appFingerprint,
+		return (
+			Boolean(
+				identity.userId &&
+				identity.projectId &&
+				identity.entryPath &&
+				identity.appFingerprint,
+			) && !this.cfg.appInstance.hasUnversionedExternalRuntimeResources
 		)
 	}
 

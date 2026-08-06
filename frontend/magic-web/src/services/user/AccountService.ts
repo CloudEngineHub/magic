@@ -1,6 +1,6 @@
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { userStore } from "@/models/user"
-import { LocalStorageHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/HtmlPermissionGrantStore"
+import { getHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import type { User } from "@/types/user"
 import { logger as Logger } from "@/utils/log"
 import { BroadcastChannelSender } from "@/broadcastChannel"
@@ -142,7 +142,7 @@ export class AccountService {
 		logger.report("deleteAccount", new Error())
 		// Account removal is a security lifecycle event. Clear the shared consent cache even
 		// when another cached account remains, because stored grants intentionally have no plaintext owner ID.
-		new LocalStorageHtmlPermissionGrantStore().clear()
+		await getHtmlPermissionGrantStore().clear()
 		const allClean = async () => {
 			MessageService.destroy()
 

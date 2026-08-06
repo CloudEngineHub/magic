@@ -13,11 +13,9 @@ import {
 import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
-import {
-	HTML_PERMISSION_GRANTS_CHANGED_EVENT,
-	LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY,
-	LocalStorageHtmlPermissionGrantStore,
-} from "../iframe-api/services/HtmlPermissionGrantStore"
+import { HTML_PERMISSION_GRANTS_CHANGED_EVENT } from "../iframe-api/services/HtmlPermissionGrantStore"
+import { createHtmlPermissionGrantBroadcastChannel } from "../iframe-api/services/HtmlPermissionGrantNotifications"
+import { getHtmlPermissionGrantStore } from "../iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import {
 	IframePermissionService,
 	type HtmlAppConfigState,
@@ -109,10 +107,23 @@ export function useHtmlAppPermissions({
 			appRootDir,
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
+			runtimeFingerprint: JSON.stringify(
+				fileList
+					.filter((file) => isFileInsideHtmlApp(file.relative_file_path, appRootDir))
+					.map((file) => ({
+						fileId: file.file_id,
+						path: file.relative_file_path.replace(/^\/+/, ""),
+						updatedAt: file.updated_at || "",
+					}))
+					.sort((a, b) => a.path.localeCompare(b.path)),
+			),
+			hasUnversionedExternalRuntimeResources: hasUnversionedExternalRuntimeResources(
+				rawSourceCode || content || "",
+			),
 		}
-	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode, userId])
+	}, [appRootDir, cleanedEntryPath, content, fileList, projectId, rawSourceCode, userId])
 
-	const htmlPermissionGrantStore = useMemo(() => new LocalStorageHtmlPermissionGrantStore(), [])
+	const htmlPermissionGrantStore = useMemo(() => getHtmlPermissionGrantStore(), [])
 
 	const confirmHtmlPermission = useMemoizedFn(
 		({
@@ -258,21 +269,19 @@ export function useHtmlAppPermissions({
 
 	useEffect(() => {
 		// 不启动常驻定时器；HTML 应用初始化时清理浏览器关闭期间已经过期的授权。
-		htmlPermissionGrantStore.prune(Date.now())
+		void htmlPermissionGrantStore.prune(Date.now())
 	}, [htmlPermissionGrantStore])
 
 	useEffect(() => {
-		// storage 只通知其他标签页；退出清理由业务服务通过自定义事件通知当前标签页。
-		const handlePermissionStorageChange = (event: StorageEvent) => {
-			if (event.key !== LOCAL_STORAGE_HTML_PERMISSION_GRANT_STORE_KEY) return
-			notifyGrantsChanged()
-		}
+		// 当前标签页用自定义事件，其他标签页用 BroadcastChannel；两者只刷新 UI，不承担互斥。
 		const handlePermissionChange = () => notifyGrantsChanged()
-		window.addEventListener("storage", handlePermissionStorageChange)
 		window.addEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+		const channel = createHtmlPermissionGrantBroadcastChannel()
+		channel?.addEventListener("message", handlePermissionChange)
 		return () => {
-			window.removeEventListener("storage", handlePermissionStorageChange)
 			window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+			channel?.removeEventListener("message", handlePermissionChange)
+			channel?.close()
 		}
 	}, [notifyGrantsChanged])
 
@@ -402,6 +411,21 @@ export function useHtmlAppPermissions({
 		revokeAllHtmlPermissions,
 		permissionRevision: `${htmlAppInstanceKey}:${htmlAppConfigState.status}:${grantRevision}`,
 	}
+}
+
+function isFileInsideHtmlApp(path: string, appRootDir: string): boolean {
+	const normalizedPath = path.replace(/^\/+/, "")
+	return normalizedPath.startsWith(appRootDir)
+}
+
+function hasUnversionedExternalRuntimeResources(content: string): boolean {
+	return (
+		/<script\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\//i.test(content) ||
+		/<link\b(?=[^>]*\b(?:rel\s*=\s*["'][^"']*stylesheet|as\s*=\s*["']script))(?=[^>]*\bhref\s*=\s*["'](?:https?:)?\/\/)[^>]*>/i.test(
+			content,
+		) ||
+		/(?:import\s*\(|new\s+(?:Worker|SharedWorker)\s*\()\s*["'](?:https?:)?\/\//i.test(content)
+	)
 }
 
 export type HtmlAppPermissionController = ReturnType<typeof useHtmlAppPermissions>

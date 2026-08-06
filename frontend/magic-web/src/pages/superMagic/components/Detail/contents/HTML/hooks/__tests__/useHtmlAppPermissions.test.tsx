@@ -149,7 +149,7 @@ describe("useHtmlAppPermissions", () => {
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(2)
 	})
 
-	it("refreshes the permission revision when another tab changes local grants", async () => {
+	it("refreshes the permission revision when the current tab changes local grants", async () => {
 		const { result } = renderHook(() =>
 			useHtmlAppPermissions({
 				content: "<html></html>",
@@ -161,12 +161,7 @@ describe("useHtmlAppPermissions", () => {
 		const initialRevision = result.current.permissionRevision
 
 		act(() => {
-			window.dispatchEvent(
-				new StorageEvent("storage", {
-					key: "magic:html-app-permissions:v2",
-					newValue: "[]",
-				}),
-			)
+			window.dispatchEvent(new Event(HTML_PERMISSION_GRANTS_CHANGED_EVENT))
 		})
 
 		await waitFor(() => {

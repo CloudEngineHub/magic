@@ -16,7 +16,7 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 	constructor(private readonly getNow: () => number = () => 1_000_000) {}
 
 	grants: HtmlPermissionGrant[] = []
-	getGrant = vi.fn((identity: HtmlPermissionGrantIdentity, scope: HtmlPermissionScope) => {
+	getGrant = vi.fn(async (identity: HtmlPermissionGrantIdentity, scope: HtmlPermissionScope) => {
 		this.removeExpired(this.getNow())
 		return this.grants.find(
 			(grant) =>
@@ -25,7 +25,7 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 				isHtmlPermissionGrantActive(grant, this.getNow()),
 		)
 	})
-	getAppGrants = vi.fn((identity: HtmlPermissionGrantIdentity) => {
+	getAppGrants = vi.fn(async (identity: HtmlPermissionGrantIdentity) => {
 		this.removeExpired(this.getNow())
 		return this.grants.filter(
 			(grant) =>
@@ -33,7 +33,7 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 				isHtmlPermissionGrantActive(grant, this.getNow()),
 		)
 	})
-	save = vi.fn((grant: HtmlPermissionGrant) => {
+	save = vi.fn(async (grant: HtmlPermissionGrant) => {
 		this.grants = this.grants.filter(
 			(item) =>
 				!(
@@ -48,16 +48,16 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 		)
 		this.grants.push(grant)
 	})
-	remove = vi.fn((identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope) => {
+	remove = vi.fn(async (identity: HtmlPermissionGrantIdentity, scope?: HtmlPermissionScope) => {
 		this.grants = this.grants.filter(
 			(grant) =>
 				!matchesIdentity(grant, identity) || (scope !== undefined && grant.scope !== scope),
 		)
 	})
-	prune = vi.fn((now: number) => {
+	prune = vi.fn(async (now: number) => {
 		this.removeExpired(now)
 	})
-	clear = vi.fn(() => {
+	clear = vi.fn(async () => {
 		this.grants = []
 	})
 
