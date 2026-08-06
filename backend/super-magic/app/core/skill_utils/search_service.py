@@ -85,6 +85,8 @@ class SearchSelectionMode(StrEnum):
     NOT_REQUIRED = "not_required"
     LLM = "llm"
     LOCAL_FALLBACK = "local_fallback"
+    # 浏览模式：按稳定顺序列出，未经模型挑选
+    BROWSE = "browse"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +105,10 @@ class SearchResult:
     selection_mode: SearchSelectionMode = SearchSelectionMode.NOT_REQUIRED
     fallback_reason: SearchFallbackReason | None = None
     fallback_detail: str | None = None
+    page: int = 1
+    has_more: bool = False
+    # 浏览模式下因不支持无关键词列全量而跳过的来源
+    browse_unsupported: tuple[SkillProviderId, ...] = ()
 
     @property
     def returned_count(self) -> int:
@@ -114,6 +120,12 @@ class _ProviderSearchCall:
     provider: SkillProvider
     keyword: str
     limit: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CallPlan:
+    calls: list[_ProviderSearchCall]
+    browse_unsupported: tuple[SkillProviderId, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,44 +152,67 @@ class SearchAggregator:
         self,
         keywords: list[str],
         *,
-        query: str,
+        query: str | None = None,
         providers: list[str] | None = None,
         limit: int = 5,
+        page: int = 1,
         interruption_event: asyncio.Event | None = None,
     ) -> SearchResult:
-        normalized_query = query.strip()
-        if not normalized_query:
-            raise ValueError("query is required")
+        normalized_keywords = self._normalize_keywords(keywords)
+        # 无关键词即浏览模式：列出全量清单，不需要需求描述，也不做模型挑选
+        is_browse = not normalized_keywords
+        normalized_query = (query or "").strip()
+        if not is_browse and not normalized_query:
+            raise ValueError("query is required when keywords are provided")
         if limit < 1 or limit > MAX_SELECTED_CANDIDATES:
             raise ValueError(
                 f"limit must be between 1 and {MAX_SELECTED_CANDIDATES}"
             )
+        if page < 1:
+            raise ValueError("page must be at least 1")
+        if not is_browse and page > 1:
+            raise ValueError("page is only supported when keywords are empty")
 
-        normalized_keywords = self._normalize_keywords(keywords)
         selection = self._resolve_providers(providers)
-        calls = self._build_calls(selection.providers, normalized_keywords)
-        if not calls:
+        plan = self._build_calls(selection.providers, normalized_keywords)
+        if not plan.calls:
             return SearchResult(
                 candidates=[],
                 found_count=0,
                 candidate_count=0,
                 provider_errors=selection.errors,
+                selection_mode=(
+                    SearchSelectionMode.BROWSE
+                    if is_browse
+                    else SearchSelectionMode.NOT_REQUIRED
+                ),
+                page=page,
+                browse_unsupported=plan.browse_unsupported,
             )
 
         outputs = await await_with_interruption(
             asyncio.gather(
                 *(
                     call.provider.search(call.keyword, limit=call.limit)
-                    for call in calls
+                    for call in plan.calls
                 ),
                 return_exceptions=True,
             ),
             interruption_event,
         )
-        candidates, runtime_errors = self._merge_outputs(calls, list(outputs))
+        candidates, runtime_errors = self._merge_outputs(plan.calls, list(outputs))
+        provider_errors = [*selection.errors, *runtime_errors]
+        if is_browse:
+            return self._browse_result(
+                candidates=candidates,
+                provider_errors=provider_errors,
+                browse_unsupported=plan.browse_unsupported,
+                limit=limit,
+                page=page,
+            )
         return await self._select_candidates(
             candidates=candidates,
-            provider_errors=[*selection.errors, *runtime_errors],
+            provider_errors=provider_errors,
             query=normalized_query,
             keywords=normalized_keywords,
             limit=limit,
@@ -244,7 +279,22 @@ class SearchAggregator:
     def _build_calls(
         providers: list[SkillProvider],
         keywords: list[str],
-    ) -> list[_ProviderSearchCall]:
+    ) -> _CallPlan:
+        if not keywords:
+            # 浏览模式只调用能无关键词列全量的来源，其余来源如实记为需要关键词
+            return _CallPlan(
+                calls=[
+                    _ProviderSearchCall(provider=provider, keyword="", limit=None)
+                    for provider in providers
+                    if provider.supports_browse
+                ],
+                browse_unsupported=tuple(
+                    provider.id
+                    for provider in providers
+                    if not provider.supports_browse
+                ),
+            )
+
         calls: list[_ProviderSearchCall] = []
         for provider in providers:
             if provider.id in _LOCAL_PROVIDERS:
@@ -264,7 +314,7 @@ class SearchAggregator:
                         limit=EXTERNAL_CANDIDATES_PER_KEYWORD,
                     )
                 )
-        return calls
+        return _CallPlan(calls=calls, browse_unsupported=())
 
     @classmethod
     def _merge_outputs(
@@ -429,6 +479,39 @@ class SearchAggregator:
             for candidate in ordered
             if (candidate.provider, candidate.id) in selected_keys
         ]
+
+    @classmethod
+    def _browse_result(
+        cls,
+        *,
+        candidates: list[SkillCandidate],
+        provider_errors: list[ProviderSearchError],
+        browse_unsupported: tuple[SkillProviderId, ...],
+        limit: int,
+        page: int,
+    ) -> SearchResult:
+        """按稳定顺序切出指定页，不裁剪候选集，也不经过模型挑选。
+
+        关键词为空时 _candidate_match_key 退化为「来源优先级 → 名称 → id」，
+        顺序在多次调用间稳定，翻页不会重复或漏项。
+        """
+
+        ordered = sorted(
+            candidates,
+            key=lambda candidate: cls._candidate_match_key(candidate, []),
+        )
+        start = (page - 1) * limit
+        window = ordered[start:start + limit]
+        return SearchResult(
+            candidates=window,
+            found_count=len(ordered),
+            candidate_count=len(ordered),
+            provider_errors=provider_errors,
+            selection_mode=SearchSelectionMode.BROWSE,
+            page=page,
+            has_more=len(ordered) > start + len(window),
+            browse_unsupported=browse_unsupported,
+        )
 
     async def _select_candidates(
         self,

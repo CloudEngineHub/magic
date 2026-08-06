@@ -184,7 +184,7 @@ skills:
 | `thinking` | Extended thinking for complex problems |
 | `summarize` | Summarize long content |
 | `deep_write` | Deep writing with multi-pass refinement |
-| `find_skills` | Search for skills by keyword across all sources |
+| `find_skills` | Search skills by keyword, or browse the available skill list |
 | `read_skills` | Read a skill's SKILL.md content |
 
 ### IM Channel

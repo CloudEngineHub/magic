@@ -39,6 +39,8 @@ class AgentSearchResult:
     returned_count: int
     mode: AgentSearchMode
     truncated: bool
+    page: int = 1
+    has_more: bool = False
     fallback_reason: str | None = None
     fallback_detail: str | None = None
 
@@ -59,36 +61,42 @@ class AgentSearchService:
         keywords: list[str],
         query: str | None,
         limit: int,
+        page: int = 1,
         interruption_event: asyncio.Event | None,
     ) -> AgentSearchResult:
+        # 无关键词即浏览模式：按页顺序列出全量清单，不做模型重排
         if not keywords:
-            page = await self._fetch_candidates(
+            candidate_page = await self._fetch_candidates(
                 sdk=sdk,
                 keywords=[],
+                page=page,
                 page_size=limit,
                 interruption_event=interruption_event,
             )
             return self._build_result(
-                page=page,
-                candidates=page.candidates[:limit],
+                page=candidate_page,
+                candidates=candidate_page.candidates[:limit],
                 mode=AgentSearchMode.LIST_ALL,
+                page_number=page,
+                page_size=limit,
             )
 
-        page = await self._fetch_candidates(
+        keyword_page = await self._fetch_candidates(
             sdk=sdk,
             keywords=keywords,
+            page=1,
             page_size=KEYWORD_CANDIDATE_LIMIT,
             interruption_event=interruption_event,
         )
-        if not page.candidates or page.total_matches <= RERANK_THRESHOLD:
+        if not keyword_page.candidates or keyword_page.total_matches <= RERANK_THRESHOLD:
             return self._build_result(
-                page=page,
-                candidates=page.candidates[:limit],
+                page=keyword_page,
+                candidates=keyword_page.candidates[:limit],
                 mode=AgentSearchMode.DIRECT,
             )
 
         return await self._rank_or_fallback(
-            page=page,
+            page=keyword_page,
             keywords=keywords,
             query=query,
             limit=limit,
@@ -100,16 +108,17 @@ class AgentSearchService:
         *,
         sdk: MagicService,
         keywords: list[str],
+        page: int,
         page_size: int,
         interruption_event: asyncio.Event | None,
     ) -> _AgentCandidatePage:
-        """读取第一页候选，并按 Agent code 保序去重。"""
+        """读取指定页候选，并按 Agent code 保序去重。"""
 
         result = await await_with_interruption(
             sdk.agent.list_available_agents_async(
                 AvailableAgentsParameter(
                     keywords=keywords,
-                    page=1,
+                    page=page,
                     page_size=page_size,
                 )
             ),
@@ -241,17 +250,29 @@ class AgentSearchService:
         page: _AgentCandidatePage,
         candidates: list[AgentSearchCandidate],
         mode: AgentSearchMode,
+        page_number: int = 1,
+        page_size: int = 0,
         fallback_reason: str | None = None,
         fallback_detail: str | None = None,
     ) -> AgentSearchResult:
         returned_count = len(candidates)
+        # 浏览模式按「已翻过的条数」判断是否还有下一页；检索模式不传 page_size，
+        # consumed 退化为本次返回条数，truncated 语义与单页召回一致
+        consumed = (
+            (page_number - 1) * page_size + returned_count
+            if page_size
+            else returned_count
+        )
+        has_more = page.total_matches > consumed
         return AgentSearchResult(
             candidates=candidates,
             total_matches=page.total_matches,
             considered_count=len(page.candidates),
             returned_count=returned_count,
             mode=mode,
-            truncated=page.total_matches > returned_count,
+            truncated=has_more,
+            page=page_number,
+            has_more=has_more,
             fallback_reason=fallback_reason,
             fallback_detail=fallback_detail,
         )

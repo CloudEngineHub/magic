@@ -1399,10 +1399,6 @@
         "zh_CN": "搜索关键词",
         "en_US": "Search keywords"
     },
-    "find_agents.detail_all": {
-        "zh_CN": "全部",
-        "en_US": "All"
-    },
     "find_agents.detail_query": {
         "zh_CN": "完整需求",
         "en_US": "Full request"
@@ -1442,6 +1438,34 @@
     "find_agents.detail_no_results": {
         "zh_CN": "没有找到匹配的数字员工。",
         "en_US": "No matching Crew found."
+    },
+    "find_agents.browsing_page": {
+        "zh_CN": "正在浏览第 {{page}} 页数字员工",
+        "en_US": "Browsing Crew page {{page}}"
+    },
+    "find_agents.done_browse_page": {
+        "zh_CN": "已展示第 {{page}} 页 {{count}} 个数字员工，共 {{total}} 个",
+        "en_US": "Page {{page}}: {{count}} of {{total}} Crew shown"
+    },
+    "find_agents.detail_page": {
+        "zh_CN": "当前页",
+        "en_US": "Page"
+    },
+    "find_agents.detail_more_pages": {
+        "zh_CN": "共 {{total}} 个，还有更多可以继续查看。",
+        "en_US": "{{total}} in total. More results are available."
+    },
+    "find_agents.detail_browse_title": {
+        "zh_CN": "可用数字员工",
+        "en_US": "Available Crew"
+    },
+    "find_agents.detail_available_total": {
+        "zh_CN": "可用总数",
+        "en_US": "Total available"
+    },
+    "find_agents.detail_shown_on_page": {
+        "zh_CN": "本页展示",
+        "en_US": "Shown on this page"
     },
     "wait_for_subagents.error": {
         "zh_CN": "等待智能体失败: {{error}}",
@@ -2048,8 +2072,8 @@
         "en_US": "AI ranking is temporarily unavailable. Skills shown using basic ordering: {{count}}."
     },
     "find_skills.fallback_partial": {
-        "zh_CN": "部分来源和智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
-        "en_US": "Some sources and AI ranking are temporarily unavailable. Skills shown using basic ordering: {{count}}."
+        "zh_CN": "已按基础规则展示 {{count}} 个技能，智能排序和部分来源这次没能用上",
+        "en_US": "Showing {{count}} skills using basic ordering. AI ranking and some sources were not available this time."
     },
     "find_skills.empty": {
         "zh_CN": "没有找到合适的 Skill",
@@ -2060,16 +2084,16 @@
         "en_US": "Unable to search Skills. Please try again later."
     },
     "find_skills.partial": {
-        "zh_CN": "部分来源暂时不可用，已展示 {{count}} 个其他结果",
-        "en_US": "Some sources are temporarily unavailable. Other results shown: {{count}}."
+        "zh_CN": "已找到 {{count}} 个技能，还有部分来源这次没有返回结果",
+        "en_US": "Found {{count}} skills. Some sources did not respond this time."
     },
     "find_skills.partial_empty": {
-        "zh_CN": "部分来源暂时不可用，其他来源也没有找到合适的 Skill",
-        "en_US": "Some sources are temporarily unavailable, and no suitable Skills were found from the other sources."
+        "zh_CN": "没有找到合适的技能，还有部分来源这次没有返回结果",
+        "en_US": "No suitable skills found, and some sources did not respond this time."
     },
     "find_skills.partial_detail": {
-        "zh_CN": "部分来源暂时不可用，以下结果来自其他可用来源。",
-        "en_US": "Some sources are temporarily unavailable. The results below come from other available sources."
+        "zh_CN": "以下是本次可用来源的结果，还有部分来源没有返回。",
+        "en_US": "The results below come from the sources that responded. Some sources did not respond this time."
     },
     "find_skills.detail_fallback_notice": {
         "zh_CN": "智能排序暂时不可用，本次结果按基础规则排列。",
@@ -2126,6 +2150,38 @@
     "find_skills.provider.clawhub": {
         "zh_CN": "ClawHub",
         "en_US": "ClawHub"
+    },
+    "find_skills.browsing_page": {
+        "zh_CN": "正在浏览第 {{page}} 页技能",
+        "en_US": "Browsing skills page {{page}}"
+    },
+    "find_skills.done_browse_page": {
+        "zh_CN": "已展示第 {{page}} 页 {{count}} 个技能",
+        "en_US": "Page {{page}}: {{count}} skills shown"
+    },
+    "find_skills.detail_page": {
+        "zh_CN": "当前页",
+        "en_US": "Page"
+    },
+    "find_skills.detail_more_pages": {
+        "zh_CN": "还有更多技能可以继续查看。",
+        "en_US": "More skills are available."
+    },
+    "find_skills.detail_keyword_only_sources": {
+        "zh_CN": "部分来源需要关键词才能查找，本次浏览未包含。",
+        "en_US": "Some sources require a keyword and were not included in this browse."
+    },
+    "find_skills.detail_browse_title": {
+        "zh_CN": "可用技能",
+        "en_US": "Available skills"
+    },
+    "find_skills.detail_available_total": {
+        "zh_CN": "可用总数",
+        "en_US": "Total available"
+    },
+    "find_skills.detail_shown_on_page": {
+        "zh_CN": "本页展示",
+        "en_US": "Shown on this page"
     },
     "install_skills.installing": {
         "zh_CN": "正在安装：{{ids}}",
@@ -3856,8 +3912,8 @@
         "en_US": "Listing local skills for \"{{keywords}}\""
     },
     "find_skills.searching.online": {
-        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
-        "en_US": "Searching online skills for \"{{keywords}}\""
+        "zh_CN": "正在技能市场中搜索「{{keywords}}」",
+        "en_US": "Searching the skill marketplace for \"{{keywords}}\""
     },
     "find_skills.searching.auto": {
         "zh_CN": "正在检索技能「{{keywords}}」",
@@ -3872,8 +3928,8 @@
         "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
     },
     "find_skills.searched.online": {
-        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+        "zh_CN": "已在技能市场中搜索「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched the skill marketplace for \"{{keywords}}\", found {{total}} candidates"
     },
     "find_skills.searched.auto": {
         "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",

@@ -55,6 +55,9 @@ class SkillProvider(ABC):
 
     id: SkillProviderId
     enabled: bool = True
+    # 该来源能否在不给关键词的情况下列出全量清单（浏览模式的前提）。
+    # CLI 类来源把关键词作为位置参数传给外部命令，空串行为不可控，因此默认 False。
+    supports_browse: bool = False
 
     @abstractmethod
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:

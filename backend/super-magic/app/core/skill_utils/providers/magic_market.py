@@ -21,6 +21,7 @@ class MagicMarketProvider(SkillProvider):
     """Magic 自有技能市场来源（通过 magic_service SDK 访问，原 market）"""
 
     id = SkillProviderId.MAGIC_MARKET
+    supports_browse = True
 
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:
         from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
