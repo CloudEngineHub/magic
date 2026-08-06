@@ -3348,7 +3348,10 @@
 			"uploading": "正在上传"
 		},
 		"errors": {
-			"loadFailed": "微应用加载失败，请稍后重试"
+			"loadDescription": "页面暂时无法打开，请返回微应用列表后重新进入。",
+			"loadFailed": "微应用加载失败，请稍后重试",
+			"permissionDescription": "你可能没有该项目的访问权限，或项目共享范围已发生变化。请返回列表查看可访问的微应用。",
+			"permissionTitle": "无法访问这个微应用"
 		},
 		"header": {
 			"backToApps": "返回微应用列表",

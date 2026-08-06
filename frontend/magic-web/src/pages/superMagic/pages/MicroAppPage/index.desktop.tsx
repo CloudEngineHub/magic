@@ -13,8 +13,6 @@ import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
-import { RouteName } from "@/routes/constants"
-import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/lib/utils"
 import PreviewDetailPopup, {
 	type PreviewDetail,
@@ -25,6 +23,7 @@ import MicroAppDesktopConversationPanels from "./components/MicroAppDesktopConve
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
+import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
 import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
@@ -47,7 +46,6 @@ function MicroAppPageInner({
 	onPublishStatusChange: (published: boolean) => void
 }) {
 	const { t } = useTranslation("super")
-	const navigate = useNavigate()
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
@@ -249,18 +247,7 @@ function MicroAppPageInner({
 	}
 
 	if (store.initError) {
-		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
-				<p className="text-sm text-destructive">{store.initError}</p>
-				<button
-					type="button"
-					className="text-sm text-primary hover:underline"
-					onClick={() => navigate({ name: RouteName.Super })}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
-		)
+		return <MicroAppFallbackState variant="load" onBack={handleBackToMicroApps} />
 	}
 
 	return (

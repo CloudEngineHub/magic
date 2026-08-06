@@ -356,21 +356,6 @@ describe("MicroAppPageDesktop", () => {
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
 	})
 
-	it("shows a readable fallback when project resolution has no display message", () => {
-		resolverMocks.result = {
-			projectId: "",
-			isPublished: false,
-			setIsPublished: vi.fn(),
-			loading: false,
-			error: new Error(),
-		}
-
-		render(<MicroAppPageDesktop />)
-
-		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
-		expect(screen.queryByText("[object ArrayBuffer]")).not.toBeInTheDocument()
-	})
-
 	it("uses the loading illustration while resolving the project", () => {
 		resolverMocks.result = {
 			projectId: "",

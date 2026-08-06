@@ -28,8 +28,11 @@ describe("useMicroAppProjectResolver", () => {
 
 		await waitFor(() => expect(result.current.loading).toBe(false))
 
+		expect(mocks.getMicroAppProject).toHaveBeenCalledWith("app-1", {
+			enableErrorMessagePrompt: false,
+		})
 		expect(result.current.projectId).toBe("")
-		expect(result.current.error).toBeInstanceOf(Error)
+		expect(result.current.error?.kind).toBe("load")
 		expect(result.current.error?.message).toBe("")
 	})
 
@@ -75,6 +78,18 @@ describe("useMicroAppProjectResolver", () => {
 		expect(normalizeMicroAppProjectError({ message: "Micro app was deleted" }).message).toBe(
 			"Micro app was deleted",
 		)
+	})
+
+	it("classifies the stable project access error code as a permission failure", () => {
+		expect(
+			normalizeMicroAppProjectError({
+				code: 51202,
+				message: "Access denied to this project",
+			}),
+		).toEqual({
+			kind: "permission",
+			message: "Access denied to this project",
+		})
 	})
 
 	it("filters technical object stringification", () => {

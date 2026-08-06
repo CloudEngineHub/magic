@@ -3348,7 +3348,10 @@
 			"uploading": "Uploading"
 		},
 		"errors": {
-			"loadFailed": "Unable to load this micro app. Please try again later."
+			"loadDescription": "This page is temporarily unavailable. Return to the micro app list and try opening it again.",
+			"loadFailed": "Unable to load this micro app. Please try again later.",
+			"permissionDescription": "You may not have access to this project, or its sharing settings may have changed. Return to the list to view available micro apps.",
+			"permissionTitle": "You can’t access this micro app"
 		},
 		"header": {
 			"backToApps": "Back to micro apps",
