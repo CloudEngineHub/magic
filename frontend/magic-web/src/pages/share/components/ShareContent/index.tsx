@@ -13,6 +13,7 @@ export default function ShareContent({
 	projectId,
 	shareCode,
 	sharePassword,
+	onCopySharedFilesComplete,
 	topicId,
 	showAllProjectFiles,
 	isProjectShare,
@@ -39,6 +40,11 @@ export default function ShareContent({
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
+	onCopySharedFilesComplete?: (info: {
+		projectId: string
+		workspaceId: string
+		projectName?: string
+	}) => void
 	topicId?: string
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
@@ -69,6 +75,7 @@ export default function ShareContent({
 			projectId={projectId}
 			shareCode={shareCode}
 			sharePassword={sharePassword}
+			onCopySharedFilesComplete={onCopySharedFilesComplete}
 			showAllProjectFiles={showAllProjectFiles}
 			isProjectShare={isProjectShare}
 			viewFileList={viewFileList}

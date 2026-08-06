@@ -235,6 +235,12 @@ function Share() {
 	const [showCopyProgress, setShowCopyProgress] = useState(false)
 	const [copyingProjectId, setCopyingProjectId] = useState("")
 	const [copyingProjectInfo, setCopyingProjectInfo] = useState<any>(null)
+	const [copiedFilesProjectInfo, setCopiedFilesProjectInfo] = useState<{
+		project_id: string
+		project_name: string
+		workspace_id: string
+		workspace_name: string
+	} | null>(null)
 	// const [copyProjectProgress, setCopyProjectProgress] = useState(0)
 	const [copyProjectIsRunning, setCopyProjectIsRunning] = useState(false)
 	// 实际验证成功的密码（可能来自 URL 或用户手动输入）
@@ -798,6 +804,17 @@ function Share() {
 		magicToast.error(`${t("share.copyProjectFailed")}: ${error.message}`)
 	})
 
+	const handleCopySharedFilesComplete = useMemoizedFn(
+		(info: { projectId: string; workspaceId: string; projectName?: string }) => {
+			setCopiedFilesProjectInfo({
+				project_id: info.projectId,
+				project_name: info.projectName || "",
+				workspace_id: info.workspaceId,
+				workspace_name: "",
+			})
+		},
+	)
+
 	useEffect(() => {
 		// 设置元信息，分享文件/项目
 		if (data?.resource_name) {
@@ -855,6 +872,15 @@ function Share() {
 				onProgress={(_progress) => {
 					// setCopyProjectProgress(progress)
 				}}
+				position="top"
+			/>
+			<CopyProjectProgressToast
+				projectId={copiedFilesProjectInfo?.project_id || ""}
+				visible={Boolean(copiedFilesProjectInfo)}
+				completed
+				completedText={t("share.copyFilesCompleted")}
+				projectInfo={copiedFilesProjectInfo || undefined}
+				onComplete={() => setCopiedFilesProjectInfo(null)}
 				position="top"
 			/>
 			{!isImmersiveFullscreen && !shouldHideHeader && (
@@ -1048,6 +1074,7 @@ function Share() {
 							projectId={projectId}
 							shareCode={data?.share_code || data?.data?.share_code || resourceId}
 							sharePassword={verifiedPassword}
+							onCopySharedFilesComplete={handleCopySharedFilesComplete}
 							topicId={resourceId}
 							showAllProjectFiles={showAllProjectFiles || viewFileList}
 							viewFileList={viewFileList}

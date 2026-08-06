@@ -43,7 +43,10 @@ import {
 	useCrossProjectMoveCompensation,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useImportFromOtherProject } from "./hooks/useImportFromOtherProject"
 import CrossProjectFileOperationModal from "../SelectPathModal/components/CrossProjectFileOperationModal"
 import ImportFromOtherProjectModal from "../SelectPathModal/components/ImportFromOtherProjectModal"
@@ -122,6 +125,7 @@ interface TopicFilesCoreProps {
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	fileFilters?: {
 		documents: boolean
 		multimedia: boolean
@@ -191,6 +195,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		projectId,
 		shareCode,
 		sharePassword,
+		onCrossProjectOperationSuccess,
 		fileFilters = {
 			documents: true,
 			multimedia: true,
@@ -733,7 +738,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		selectedWorkspace: selectedWorkspace || null,
 		selectedProject: selectedProject || null,
 		projects,
-		onSuccess: handleCrossProjectOperationSuccess,
+		onSuccess: (result) => {
+			handleCrossProjectOperationSuccess(result)
+			if (result) onCrossProjectOperationSuccess?.(result)
+		},
 	})
 
 	// 导入操作 Hook

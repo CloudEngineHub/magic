@@ -28,7 +28,10 @@ import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesV
 import { SelectDirectoryModal } from "../SelectPathModal"
 import { useBatchDownload } from "./hooks/useBatchDownload"
 import { useProjectDetailFilesController } from "./hooks/useProjectDetailFilesController"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useCrossProjectMoveCompensation } from "./hooks/useCrossProjectMoveCompensation"
 import { useMobileProjectFilesDownload } from "./hooks/useMobileProjectFilesDownload"
 import { getMobileAttachmentKey } from "./utils/get-mobile-attachment-key"
@@ -45,6 +48,7 @@ interface TopicFilesPanelProps {
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -91,6 +95,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			projectId,
 			shareCode,
 			sharePassword,
+			onCrossProjectOperationSuccess,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -229,6 +234,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				setIsSelectMode(false)
 				projectDetailFilesController.resetMobileSelection()
 				handleProjectDetailCrossProjectSuccess(result)
+				if (result) onCrossProjectOperationSuccess?.(result)
 			},
 		})
 
@@ -586,6 +592,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								projectId={projectId}
 								shareCode={shareCode}
 								sharePassword={sharePassword}
+								onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
 								fileFilters={fileFilters}
 								handleDownloadAll={handleDownloadAll}
 								allLoading={allLoading}

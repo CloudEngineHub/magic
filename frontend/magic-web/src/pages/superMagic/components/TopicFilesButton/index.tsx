@@ -6,6 +6,7 @@ import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
+import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -23,6 +24,7 @@ export interface TopicFilesButtonProps {
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -69,6 +71,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			projectId,
 			shareCode,
 			sharePassword,
+			onCrossProjectOperationSuccess,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -127,6 +130,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					projectId={projectId}
 					shareCode={shareCode}
 					sharePassword={sharePassword}
+					onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
 					activeFileId={activeFileId}
 					selectedTopic={selectedTopic}
 					allowEdit={allowEdit}

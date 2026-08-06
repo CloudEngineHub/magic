@@ -49,6 +49,7 @@ import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
+import type { CrossProjectOperationSuccessResult } from "@/pages/superMagic/components/TopicFilesButton/hooks/useCrossProjectFileOperation"
 
 function Topic({
 	data,
@@ -65,6 +66,7 @@ function Topic({
 	projectId,
 	shareCode,
 	sharePassword,
+	onCopySharedFilesComplete,
 	showAllProjectFiles,
 	viewFileList,
 	showCreatedByBadge,
@@ -91,6 +93,11 @@ function Topic({
 	projectId?: string
 	shareCode?: string
 	sharePassword?: string
+	onCopySharedFilesComplete?: (info: {
+		projectId: string
+		workspaceId: string
+		projectName?: string
+	}) => void
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
 	viewFileList?: boolean
@@ -145,6 +152,23 @@ function Topic({
 		allowDownloadProjectFile,
 		allowCopyProjectFile: allowCopySharedFiles,
 	})
+	const handleCrossProjectOperationSuccess = useMemoizedFn(
+		(result: CrossProjectOperationSuccessResult) => {
+			if (
+				result.operationType !== "copy" ||
+				!result.targetProjectId ||
+				!result.targetWorkspaceId
+			) {
+				return
+			}
+
+			onCopySharedFilesComplete?.({
+				projectId: result.targetProjectId,
+				workspaceId: result.targetWorkspaceId,
+				projectName: result.targetProjectName,
+			})
+		},
+	)
 
 	// 判断是否需要调整 BackToLatestButton 的位置
 	// BackToLatestButton 只在话题分享场景显示，当 Badge 也显示时，需要上移按钮避免遮挡
@@ -1005,6 +1029,9 @@ function Topic({
 													projectId={projectId}
 													shareCode={shareCode}
 													sharePassword={sharePassword}
+													onCrossProjectOperationSuccess={
+														handleCrossProjectOperationSuccess
+													}
 													className="left-0"
 													onFileClick={(fileItem: any) => {
 														setUserDetail(null)
@@ -1460,6 +1487,7 @@ function Topic({
 						projectId={projectId}
 						shareCode={shareCode}
 						sharePassword={sharePassword}
+						onCrossProjectOperationSuccess={handleCrossProjectOperationSuccess}
 						handleDownloadAll={handleDownloadAll}
 						allLoading={allLoading}
 						activeFileId={activeFileId}

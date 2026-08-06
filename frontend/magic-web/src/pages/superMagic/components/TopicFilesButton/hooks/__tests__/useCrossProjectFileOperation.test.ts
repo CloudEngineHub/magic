@@ -160,6 +160,44 @@ describe("useCrossProjectFileOperation", () => {
 		)
 	})
 
+	it("reports the target project after a successful copy", async () => {
+		vi.useFakeTimers()
+		const onSuccess = vi.fn()
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+				onSuccess,
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeCopyOperation({
+				fileIds: ["file-1"],
+				targetProjectId: "project-2",
+				targetWorkspaceId: "workspace-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments,
+			})
+		})
+
+		act(() => {
+			vi.advanceTimersByTime(500)
+		})
+
+		expect(onSuccess).toHaveBeenCalledWith({
+			operationType: "copy",
+			fileIds: ["file-1"],
+			targetProjectId: "project-2",
+			targetWorkspaceId: "workspace-2",
+			targetProjectName: undefined,
+		})
+		vi.useRealTimers()
+	})
+
 	it("copies dependency folders when a nested HTML resource needs its directory structure", async () => {
 		vi.mocked(resolveSingleHtmlStaticDependencies).mockResolvedValue({
 			isHtml: true,
