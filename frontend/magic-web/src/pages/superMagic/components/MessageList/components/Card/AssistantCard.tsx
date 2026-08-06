@@ -264,7 +264,12 @@ export function withAssistantCard<
 					messages,
 				})
 			} catch (error) {
-				logger.error("Failed to prepare conversation round report", error)
+				logger.error({
+					eventKey: "prepare_conversation_round_report_failed",
+					errorKind: "unknown",
+					error,
+					message: "Failed to prepare conversation round report",
+				})
 			}
 		})
 

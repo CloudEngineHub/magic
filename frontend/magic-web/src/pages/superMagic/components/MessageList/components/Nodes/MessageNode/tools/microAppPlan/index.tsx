@@ -165,7 +165,12 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.approved)
 			await submitReply(PLAN_STATUS.approved)
 		} catch (error) {
-			logger.error("Failed to approve micro app plan", error)
+			logger.error({
+				eventKey: "approve_micro_app_plan_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to approve micro app plan",
+			})
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}
@@ -177,7 +182,12 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.cancelled)
 			await submitReply(PLAN_STATUS.cancelled)
 		} catch (error) {
-			logger.error("Failed to cancel micro app plan", error)
+			logger.error({
+				eventKey: "cancel_micro_app_plan_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to cancel micro app plan",
+			})
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}
@@ -194,7 +204,12 @@ function MicroAppPlanToolCall(props: DefaultToolProps) {
 			setPendingAction(PLAN_STATUS.revisionRequested)
 			await submitReply(PLAN_STATUS.revisionRequested, comment)
 		} catch (error) {
-			logger.error("Failed to request micro app plan revision", error)
+			logger.error({
+				eventKey: "request_micro_app_plan_revision_failed",
+				errorKind: "unknown",
+				error,
+				message: "Failed to request micro app plan revision",
+			})
 			setPendingAction(null)
 			magicToast.error(t("plan.status.submitFailed"))
 		}

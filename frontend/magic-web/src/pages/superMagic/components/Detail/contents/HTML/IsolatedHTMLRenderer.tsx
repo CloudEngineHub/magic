@@ -752,7 +752,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"*",
 				)
 			} catch (error) {
-				logger.error("获取 HTML context 失败", error)
+				logger.error({
+					eventKey: "get_html_context_failed",
+					errorKind: "unknown",
+					error,
+					message: "获取 HTML context 失败",
+				})
 				iframeRef.current?.contentWindow?.postMessage(
 					{
 						type: "MAGIC_CONTEXT_GET_RESPONSE",

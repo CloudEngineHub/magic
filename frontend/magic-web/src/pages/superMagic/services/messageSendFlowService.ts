@@ -214,7 +214,12 @@ class MessageSendService {
 								context,
 							}),
 						onError: (error) => {
-							this.deps.logger.error("Smart topic rename failed", error)
+							this.deps.logger.error({
+								eventKey: "smart_topic_rename_failed",
+								errorKind: "unknown",
+								error,
+								message: "Smart topic rename failed",
+							})
 						},
 					})
 				: undefined
