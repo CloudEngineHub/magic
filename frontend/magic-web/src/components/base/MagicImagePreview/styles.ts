@@ -14,15 +14,19 @@ const useStyles = createStyles(({ css, prefixCls, token }) => ({
     width: 100%;
 		height: 100%;
 		--${prefixCls}-image-z-index-popup: 1000 !important;
-		transition: transform 0.1s ease-out;
 		cursor: grab;
 		user-select: none;
+		touch-action: none;
 	`,
 	imageWrapper: css`
 		height: 100%;
 		width: 100%;
 		display: flex;
 		justify-content: center;
+		align-items: center;
+		transform-origin: center center;
+		will-change: transform;
+		backface-visibility: hidden;
 	`,
 	toolContainer: css`
 		position: absolute;
@@ -38,11 +42,22 @@ const useStyles = createStyles(({ css, prefixCls, token }) => ({
 			0 0 1px 0 rgba(0, 0, 0, 0.3);
 	`,
 	toolButton: css`
-    padding: 4px;
+		padding: 4px;
+		border-radius: 6px;
 		--${prefixCls}-color-link: ${token.colorWhite} !important;
-		--${prefixCls}-color-link-hover: rgba(255, 255, 255, 0.5);
+		--${prefixCls}-color-link-hover: ${token.magicColorUsages.black};
 		--${prefixCls}-color-text-disabled: rgba(255, 255, 255, 0.3);
-		--${prefixCls}-color-link-active: rgba(255, 255, 255, 0.7);
+		--${prefixCls}-color-link-active: ${token.magicColorUsages.black};
+
+		&:not(:disabled):hover {
+			color: ${token.magicColorUsages.black} !important;
+			background-color: ${token.magicColorScales.grey[1]} !important;
+		}
+
+		&:not(:disabled):active {
+			color: ${token.magicColorUsages.black} !important;
+			background-color: ${token.magicColorScales.grey[2]} !important;
+		}
 	`,
 	divider: css`
 		width: 1px;
@@ -51,7 +66,7 @@ const useStyles = createStyles(({ css, prefixCls, token }) => ({
 		background-color: rgba(255, 255, 255, 0.3);
 	`,
 	slider: css`
-		width: 100px;
+		width: 140px;
 		--${prefixCls}-slider-track-bg: rgba(255, 255, 255, 0.5) !important;
 		--${prefixCls}-slider-track-hover-bg: rgba(255, 255, 255, 0.5) !important;
 		--${prefixCls}-slider-handle-color: ${token.colorWhite} !important;

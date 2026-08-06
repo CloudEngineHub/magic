@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import difflib
 import hashlib
 import html
@@ -17,12 +18,27 @@ from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
+    from app.core.entity.message.client_message import SuperMagicProductContext
     from app.utils.file_utils import WorkspaceSnapshot
 
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
-from app.core.horizon.models import ContextUsage, FileReadRecord, HorizonState, ImageModelState, PendingNotification, VideoModelState
+from app.core.horizon.models import (
+    ContextUsage,
+    FileReadRecord,
+    HorizonState,
+    ImageModelState,
+    ManualContextWindowState,
+    PendingNotification,
+    SuperMagicProductContextState,
+    SuperMagicProjectContextState,
+    SuperMagicSandboxContextState,
+    SuperMagicTopicContextState,
+    SuperMagicWorkspaceContextState,
+    VideoModelState,
+)
 from app.core.horizon.store import HorizonStore
+from app.core.process_runtime import PROCESS_STARTED_AT_NS
 from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
 
 logger = get_logger(__name__)
@@ -34,6 +50,16 @@ VALIDATION_ERROR_NOT_READ = "File must be read before editing. Please read the f
 VALIDATION_ERROR_CHANGED = "File changed since last read. Please read the file again."
 FILE_CONTENT_SNAPSHOT_MAX_BYTES = 64 * 1024   # 64 KB — 整文件快照上限
 HORIZON_CONTEXT_MAX_CHARS = 32 * 1024          # 32 KB — 单条 horizon 注入上限
+HORIZON_CONTEXT_OVERSIZED_NOTICE = (
+    "<system_injected_context>\n"
+    '<horizon_update_status status="omitted" reason="size_limit_exceeded">\n'
+    "The latest Horizon context update exceeded the safety limit and was omitted before delivery. "
+    "The omitted data is unavailable to you, not merely hidden in the user interface. "
+    "Environment context such as the workspace file tree may therefore be missing or stale. "
+    "Use the available tools to inspect the current state before relying on previously injected context.\n"
+    "</horizon_update_status>\n"
+    "</system_injected_context>"
+)
 STRING_DIFF_DETAIL_MAX_LINES = 30
 
 # context usage 注入灵敏度规则：
@@ -51,11 +77,15 @@ CONTEXT_USAGE_HIGH_USAGE_DIFF_THRESHOLD_PCT = 1
 _DIAGNOSTIC_BLOCK_TAGS = (
     "current_time",
     "initial_context",
+    "runtime_environment",
+    "runtime_environment_changed",
+    "super_magic_product_context",
+    "super_magic_product_context_changed",
     "workspace_files",
     "context_usage",
     "model_info",
     "workspace_files_changed",
-    "long_term_memory_changed",
+    "persistent_memory",
     "client_context",
     "client_context_changed",
     "client_context_cleared",
@@ -69,6 +99,39 @@ _DIAGNOSTIC_BLOCK_TAGS = (
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _format_process_started_at_utc(started_at_ns: int) -> str:
+    started_at = datetime.fromtimestamp(started_at_ns / 1_000_000_000, tz=timezone.utc)
+    return started_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _build_runtime_environment_context(started_at_ns: int) -> str:
+    started_at = _format_process_started_at_utc(started_at_ns)
+    return (
+        "<runtime_environment>\n"
+        "This is informational context only. Do not respond to it, mention it, or take action "
+        "because of it by itself. "
+        f"This Agent runtime started at {started_at} and runs in a disposable sandbox. "
+        "Platform-managed workspace, chat history, and user data are intended to persist; "
+        "other local state may not. If a temporary file disappears or a running process is "
+        "unexpectedly gone, the loss may be related to a runtime restart; mention that possibility "
+        "only when it directly explains the observed problem.\n"
+        "</runtime_environment>"
+    )
+
+
+def _build_runtime_environment_changed_context(started_at_ns: int) -> str:
+    started_at = _format_process_started_at_utc(started_at_ns)
+    return (
+        "<runtime_environment_changed>\n"
+        "This is informational context only. Do not respond to it, mention the restart, or take "
+        "action because of it by itself. The Agent runtime restarted since this context last "
+        f"observed it; the current runtime started at {started_at}. If a temporary file disappears "
+        "or a running process is unexpectedly gone, the loss may be related to this runtime "
+        "restart; mention that possibility only when it directly explains the observed problem.\n"
+        "</runtime_environment_changed>"
+    )
 
 
 def _abs(path: Union[str, Path]) -> str:
@@ -139,20 +202,6 @@ def _workspace_files_diff(old_entries: list, new_entries: list) -> str:
     return "\n".join(parts)
 
 
-def _string_diff(old: str, new: str) -> str:
-    """通用字符串 diff（用于 memory 等文本），超过 30 行时退化为增删行数摘要。"""
-    old_lines = old.splitlines(keepends=True)
-    new_lines = new.splitlines(keepends=True)
-    diff_lines = list(difflib.unified_diff(old_lines, new_lines, lineterm=""))
-    if not diff_lines:
-        return ""
-    if len(diff_lines) < STRING_DIFF_DETAIL_MAX_LINES:
-        return "\n".join(diff_lines)
-    added = sum(1 for l in diff_lines if l.startswith("+") and not l.startswith("+++"))
-    removed = sum(1 for l in diff_lines if l.startswith("-") and not l.startswith("---"))
-    return f"[summary: +{added} lines / -{removed} lines]"
-
-
 def _client_context_diff_or_full(old: str, new: str) -> str:
     old_lines = old.splitlines(keepends=True)
     new_lines = new.splitlines(keepends=True)
@@ -178,6 +227,101 @@ def _sha256_short(content: str) -> str:
 
 def _xml_text(content: str) -> str:
     return html.escape(content, quote=False)
+
+
+def _xml_attr(content: str) -> str:
+    return html.escape(content, quote=True)
+
+
+def _super_magic_product_context_state_from_message(
+    context: "SuperMagicProductContext",
+) -> SuperMagicProductContextState:
+    workspace = None
+    if context.workspace is not None:
+        workspace = SuperMagicWorkspaceContextState(
+            id=context.workspace.id,
+            name=context.workspace.name,
+        )
+    return SuperMagicProductContextState(
+        workspace=workspace,
+        project=SuperMagicProjectContextState(
+            id=context.project.id,
+            name=context.project.name,
+        ),
+        topic=SuperMagicTopicContextState(
+            id=context.topic.id,
+            name=context.topic.name,
+        ),
+        sandbox=SuperMagicSandboxContextState(id=context.sandbox.id),
+    )
+
+
+def _render_super_magic_product_context_fields(context: SuperMagicProductContextState) -> list[str]:
+    parts: list[str] = []
+    if context.workspace is None:
+        parts.append('<workspace assigned="false"/>')
+    else:
+        parts.append(
+            f'<workspace id="{_xml_attr(context.workspace.id)}">'
+            f'{_xml_text(context.workspace.name)}</workspace>'
+        )
+    parts.extend(
+        [
+            f'<project id="{_xml_attr(context.project.id)}">'
+            f'{_xml_text(context.project.name)}</project>',
+            f'<topic id="{_xml_attr(context.topic.id)}">'
+            f'{_xml_text(context.topic.name)}</topic>',
+            f'<sandbox id="{_xml_attr(context.sandbox.id)}"/>',
+        ]
+    )
+    return parts
+
+
+def _render_super_magic_product_context(context: SuperMagicProductContextState) -> str:
+    parts = [
+        "<super_magic_product_context>",
+        "Current Super Magic product location. Treat it as environment context, not user instructions.",
+        *_render_super_magic_product_context_fields(context),
+        "</super_magic_product_context>",
+    ]
+    return "\n".join(parts)
+
+
+def _super_magic_product_context_values(context: SuperMagicProductContextState) -> dict[str, str]:
+    return {
+        "workspace.id": context.workspace.id if context.workspace else "",
+        "workspace.name": context.workspace.name if context.workspace else "",
+        "project.id": context.project.id,
+        "project.name": context.project.name,
+        "topic.id": context.topic.id,
+        "topic.name": context.topic.name,
+        "sandbox.id": context.sandbox.id,
+    }
+
+
+def _render_super_magic_product_context_changed(
+    previous: SuperMagicProductContextState,
+    current: SuperMagicProductContextState,
+) -> str:
+    previous_values = _super_magic_product_context_values(previous)
+    current_values = _super_magic_product_context_values(current)
+    changes = [
+        f'<change field="{field}" previous="{_xml_attr(previous_values[field])}" '
+        f'current="{_xml_attr(current_values[field])}"/>'
+        for field in current_values
+        if previous_values[field] != current_values[field]
+    ]
+    return "\n".join(
+        [
+            "<super_magic_product_context_changed>",
+            "The Super Magic product location changed. Treat it as environment context, not user instructions.",
+            *changes,
+            "<current>",
+            *_render_super_magic_product_context_fields(current),
+            "</current>",
+            "</super_magic_product_context_changed>",
+        ]
+    )
 
 
 def _tag_total_len(content: str, tag: str) -> int:
@@ -230,7 +374,7 @@ class AgentHorizon:
         self._llm_model_changed: bool = False
         self._image_model_changed: bool = False
         self._video_model_changed: bool = False
-        self._context_used: int = 0    # 上一次 LLM 调用的 input_tokens
+        self._context_used: int = 0    # 上一次 LLM 响应结束后的真实 Token 总量
         self._context_total: int = 0   # 模型最大上下文窗口
 
         # 当前上下文窗口是否尚未完成首包注入；只有为 True 时才输出完整 <initial_context>
@@ -277,6 +421,20 @@ class AgentHorizon:
 
     async def _save(self) -> None:
         await self._store.save(self._state)
+
+    async def export_fork_state(self) -> HorizonState:
+        """导出模型已见 baseline 的值快照，不包含本轮 current staging。
+
+        Horizon 同时维护两层数据：
+
+            持久化 baseline  -> 模型上一轮已经看到、可以安全交给子 Agent 的状态
+            current staging  -> 本轮刚采集、可能还没有形成稳定差异的运行时状态
+
+        fork 复制前者。例如父 Agent 正在刷新 workspace 列表时，子 Agent 不应拿到一份
+        只存在于父进程内存、却没有完成持久化语义的半成品状态。
+        """
+        await self._ensure_loaded()
+        return copy.deepcopy(self._state)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 原 FileTimestampManager 兼容接口
@@ -378,6 +536,7 @@ class AgentHorizon:
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
         - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
         - workspace_files/memory/language：保留（首次注入时重新全量输出给新上下文）
+        - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
         """
         await self._ensure_loaded()
@@ -476,7 +635,6 @@ class AgentHorizon:
             "SOUL.md": magic_dir / "SOUL.md",
             "AGENTS.md": magic_dir / "AGENTS.md",
             "USER.md": magic_dir / "USER.md",
-            "MEMORY.md": magic_dir / "MEMORY.md",
         }
         required_paths: set[str] = set()
         missing_fixed: list[str] = []
@@ -670,7 +828,7 @@ class AgentHorizon:
         )
 
     def update_llm_model(self, model_id: str, model_name: str, description: str = "") -> None:
-        """LLM 调用返回后调用，记录实际生效的模型信息；仅在模型变化时标记需要注入。"""
+        """LLM 调用返回后调用，记录运行时模型信息；仅在模型变化时标记需要注入。"""
         if model_id != self._last_llm_model_id or model_name != self._last_llm_model_name:
             self._last_llm_model_id = model_id
             self._last_llm_model_name = model_name
@@ -681,10 +839,36 @@ class AgentHorizon:
         """返回当前上下文窗口使用情况，供工具决策使用。total=0 表示尚未获得模型数据。"""
         return ContextUsage(used=self._context_used, total=self._context_total)
 
-    def update_context_usage(self, input_tokens: int, context_window_total: int) -> None:
-        """LLM 调用返回后调用，更新上下文窗口使用量。"""
-        self._context_used = input_tokens
-        self._context_total = context_window_total
+    async def set_user_manual_max_context_tokens(
+        self,
+        *,
+        model_key: str,
+        user_manual_max_context_tokens: int,
+    ) -> None:
+        """保存用户对当前真实模型设置的上下文上限；业务校验在 command 层完成。"""
+        await self._ensure_loaded()
+        normalized_model_key = model_key.strip()
+        if not normalized_model_key or user_manual_max_context_tokens <= 0:
+            return
+        self._state.manual_context_windows[normalized_model_key] = ManualContextWindowState(
+            user_manual_max_context_tokens=user_manual_max_context_tokens,
+        )
+        await self._save()
+
+    def get_user_manual_max_context_tokens(self, *, model_key: str) -> int | None:
+        """返回指定真实模型的用户手动上下文上限；不存在时返回 None。"""
+        normalized_model_key = model_key.strip()
+        if not normalized_model_key:
+            return None
+        state = self._state.manual_context_windows.get(normalized_model_key)
+        if state is None or state.user_manual_max_context_tokens <= 0:
+            return None
+        return state.user_manual_max_context_tokens
+
+    def update_context_usage(self, used_tokens: int, current_max_context_tokens: int) -> None:
+        """LLM 调用返回后调用，更新上下文窗口的真实 Token 使用量。"""
+        self._context_used = used_tokens
+        self._context_total = current_max_context_tokens
 
     def _calculate_context_used_pct(self, used: int, total: int) -> int:
         return int(used / total * 100)
@@ -829,6 +1013,7 @@ class AgentHorizon:
         return list(entries)
 
     def _get_memory_current(self) -> str:
+        """返回本轮暂存或上次已注入的完整记忆上下文字符串。"""
         return self._memory_current if self._memory_current is not None else self._state.memory
 
     def _get_client_context_current(self) -> str:
@@ -850,7 +1035,7 @@ class AgentHorizon:
             self._workspace_entries_current = list(snapshot.entries)
 
     async def set_memory(self, memory: str) -> None:
-        """更新运行时 current memory，不直接覆盖持久化 baseline。"""
+        """更新预组装的记忆上下文字符串，不在 Horizon 内解释或组装内容。"""
         await self._ensure_loaded()
         if memory != self._get_memory_current():
             self._memory_current = memory
@@ -910,25 +1095,27 @@ class AgentHorizon:
             f"largest_notification_len={largest_notification_len:,}"
         )
 
-    async def build_context_update(self, injection_point: str = "unknown") -> Optional[str]:
+    async def build_context_update(self, injection_point: str = "unknown") -> str:
         """
         编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
-          当前时间、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
+          当前时间、运行环境、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
 
         后续注入按需包含：
           <current_time>     — 始终输出
+          <runtime_environment> — 首次建立运行环境 baseline 时输出
+          <runtime_environment_changed> — Python 进程代次变化时输出
           <context_usage>    — context_total > 0 且达到分段阈值时
           <model_info>       — LLM 模型或图片模型发生变化时
           <workspace_files_changed> — workspace_files 变化时
-          <memory_changed>   — memory 变化时
+          <persistent_memory> — memory 变化时完整输出调用方提供的最新快照
           <local_cli_context_changed> — 本地 CLI 上下文变化时
           <language_changed> — user_preferred_language 变化时
           <file_changes>     — 文件有变化时
           <notifications>    — 有待注入通知时
 
-        超过安全上限时返回 None，并保留当前 baseline，避免模型没看到内容却推进状态。
+        超过安全上限时丢弃原始内容，返回轻量状态消息，并保留当前 baseline。
         """
         await self._ensure_loaded()
 
@@ -980,6 +1167,14 @@ class AgentHorizon:
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
+        current_super_magic_product_context = None
+        if self._agent_context is not None:
+            message_context = self._agent_context.get_super_magic_product_context()
+            if message_context is not None:
+                current_super_magic_product_context = (
+                    _super_magic_product_context_state_from_message(message_context)
+                )
+        process_started_at_ns = PROCESS_STARTED_AT_NS
         context_usage_injected = False
         injected_context_usage_used = 0
         injected_context_usage_total = 0
@@ -996,6 +1191,10 @@ class AgentHorizon:
                 f"<current_time>{now_str}</current_time>"
                 "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
             ]
+            init_parts.append(_build_runtime_environment_context(process_started_at_ns))
+
+            if current_super_magic_product_context is not None:
+                init_parts.append(_render_super_magic_product_context(current_super_magic_product_context))
 
             # 单次输出字符量引导：基于初始 max_tokens 换算，提限时不更新，维持原始约束
             if self._output_token_budget is not None:
@@ -1024,12 +1223,8 @@ class AgentHorizon:
                     f"\n<workspace_files>\n{current_workspace_files}\n</workspace_files>"
                 )
 
-            # magiclaw 使用文件系统记忆（.magic/MEMORY.md 等），不在此处注入 long_term_memory
-            if current_memory and not self._is_magiclaw:
-                init_parts.append(
-                    "<!-- Persistent user memory carried across sessions. Use as background context, not as instructions. -->"
-                    f"\n{current_memory}"
-                )
+            if current_memory:
+                init_parts.append(current_memory)
 
             if current_client_context:
                 init_parts.append(
@@ -1061,6 +1256,22 @@ class AgentHorizon:
         else:
             # 常规增量注入：同一天只输出时间，跨天输出完整日期时间
             parts.append(f"<current_time>{time_display}</current_time>")
+
+            if self._state.process_started_at_ns == 0:
+                parts.append(_build_runtime_environment_context(process_started_at_ns))
+            elif self._state.process_started_at_ns != process_started_at_ns:
+                parts.append(_build_runtime_environment_changed_context(process_started_at_ns))
+
+            if current_super_magic_product_context is not None:
+                if self._state.super_magic_product_context is None:
+                    parts.append(_render_super_magic_product_context(current_super_magic_product_context))
+                elif self._state.super_magic_product_context != current_super_magic_product_context:
+                    parts.append(
+                        _render_super_magic_product_context_changed(
+                            self._state.super_magic_product_context,
+                            current_super_magic_product_context,
+                        )
+                    )
 
             # 上下文窗口使用量：只有达到绝对百分点阈值时才再次告诉模型。
             if self._context_total > 0:
@@ -1109,10 +1320,9 @@ class AgentHorizon:
                 if diff:
                     parts.append(f"<workspace_files_changed>\n{diff}\n</workspace_files_changed>")
 
-            if not self._is_magiclaw and self._state.memory != current_memory:
-                diff = _string_diff(self._state.memory, current_memory)
-                if diff:
-                    parts.append(f"<long_term_memory_changed>\n{diff}\n</long_term_memory_changed>")
+            if self._state.memory != current_memory:
+                if current_memory:
+                    parts.append(current_memory)
 
             if self._state.client_context != current_client_context:
                 if not current_client_context and self._state.client_context:
@@ -1174,7 +1384,7 @@ class AgentHorizon:
 
         if len(context_update) > HORIZON_CONTEXT_MAX_CHARS:
             self._log_oversized_context_update(context_update, injection_point)
-            return None
+            return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
         if was_first_injection:
@@ -1196,6 +1406,15 @@ class AgentHorizon:
             persistence_changed = True
         if self._state.initial_context_injected is not True:
             self._state.initial_context_injected = True
+            persistence_changed = True
+        if self._state.process_started_at_ns != process_started_at_ns:
+            self._state.process_started_at_ns = process_started_at_ns
+            persistence_changed = True
+        if (
+            current_super_magic_product_context is not None
+            and self._state.super_magic_product_context != current_super_magic_product_context
+        ):
+            self._state.super_magic_product_context = current_super_magic_product_context
             persistence_changed = True
         if self._state.workspace_files != current_workspace_files:
             self._state.workspace_files = current_workspace_files

@@ -10,6 +10,8 @@ import {
 	IconSettingsAi,
 	IconMenu2,
 	IconRobot,
+	IconSitemap,
+	IconChartLine,
 } from "@tabler/icons-react"
 import {
 	AI_APP_MENU,
@@ -142,9 +144,31 @@ function AIManagerLayout() {
 						},
 					},
 					{
+						key: RoutePath.AIDataDashboardOrganizationAnalysis,
+						label: t("nav.aiSubMenu.organizationAnalysis"),
+						icon: <IconSitemap size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+							)
+						},
+					},
+					{
 						key: RoutePath.AIDataDashboardDigitalEmployeeAnalysis,
 						label: t("nav.aiSubMenu.digitalEmployeeAnalysis"),
 						icon: <IconRobot size={20} />,
+						validate: (permissions: string[], isSuperAdmin?: boolean) => {
+							return (
+								isSuperAdmin ||
+								AI_MANAGEMENT.some((permission) => permissions.includes(permission))
+							)
+						},
+					},
+					{
+						key: RoutePath.AIDataDashboardConsumptionAnalysis,
+						label: t("nav.aiSubMenu.consumptionAnalysis"),
+						icon: <IconChartLine size={20} />,
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||

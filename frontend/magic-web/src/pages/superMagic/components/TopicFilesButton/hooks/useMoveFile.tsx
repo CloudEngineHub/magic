@@ -22,9 +22,9 @@ import {
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
 import {
-	mergeHtmlStaticDependencyFileIds,
-	resolveSingleHtmlStaticDependencies,
-} from "@/pages/superMagic/utils/htmlStaticDependencies"
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
 
 interface UseMoveFileOptions {
 	projectId?: string
@@ -388,19 +388,24 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 
 			let effectiveFileIds = fileIds
 			try {
-				const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
-					fileIds,
-					attachments,
-					attachmentIndex,
-				})
-				effectiveFileIds = mergeHtmlStaticDependencyFileIds(
+				const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies(
+					{
+						fileIds,
+						attachments,
+						attachmentIndex,
+					},
+				)
+				effectiveFileIds = mergeStaticDependencyFileIds(
 					fileIds,
 					dependencyTransferFileIds,
 					true,
 				)
 			} catch (error) {
 				// Keep the legacy move usable if the optional browser-side dependency read fails.
-				console.error("Failed to resolve HTML static dependencies before moving:", error)
+				console.error(
+					"Failed to resolve document static dependencies before moving:",
+					error,
+				)
 			}
 
 			const moveTaskId = beginMoveTask()
@@ -679,14 +684,14 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 				if (!handleMoveFile && projectId) {
 					try {
 						const { dependencyTransferFileIds } =
-							await resolveSingleHtmlStaticDependencies({
+							await resolveSingleDocumentStaticDependencies({
 								fileIds: [currentMoveItem.file_id],
 								attachments,
 								attachmentIndex,
 							})
 						if (dependencyTransferFileIds.length > 0) {
 							await batchMoveFiles({
-								fileIds: mergeHtmlStaticDependencyFileIds(
+								fileIds: mergeStaticDependencyFileIds(
 									[currentMoveItem.file_id],
 									dependencyTransferFileIds,
 									true,
@@ -698,7 +703,7 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						}
 					} catch (error) {
 						console.error(
-							"Failed to resolve HTML static dependencies before moving:",
+							"Failed to resolve document static dependencies before moving:",
 							error,
 						)
 					}

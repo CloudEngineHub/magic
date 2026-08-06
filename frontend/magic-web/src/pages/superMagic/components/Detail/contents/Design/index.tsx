@@ -66,6 +66,7 @@ import type { DesignDraftReason } from "./utils/designDraftStorage"
 import type { DesignSaveMetadata } from "./managers"
 import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
+import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -433,7 +434,10 @@ function DesignViewer(props: DesignViewerProps) {
 				const nextCanvas = newDesignData.canvas
 				if (nextCanvas) {
 					suppressCanvasDesignChangeEvents(() => {
-						canvasDesignRef.current?.updateData(nextCanvas)
+						canvasDesignRef.current?.updateData(nextCanvas, {
+							elementDetailsProvenance:
+								getHydratedElementDetailsProvenance(newDesignData),
+						})
 					})
 				}
 			},
@@ -452,6 +456,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const {
 		designData,
+		elementDetailsProvenance,
+		setElementDetailsProvenance,
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
@@ -1647,6 +1653,9 @@ function DesignViewer(props: DesignViewerProps) {
 									}}
 									data={{
 										defaultData: designData.canvas,
+										elementDetailsProvenance,
+										onElementDetailsProvenanceChange:
+											setElementDetailsProvenance,
 										onCanvasDesignDataChange: handleCanvasDesignDataChange,
 										onCanvasDesignDataPatchChange:
 											handleCanvasDesignDataPatchChange,

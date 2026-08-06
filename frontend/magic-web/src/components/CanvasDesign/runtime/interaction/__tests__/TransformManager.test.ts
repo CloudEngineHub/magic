@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import Konva from "konva"
+import type { Canvas } from "../../core/Canvas"
 import type { LayerElement } from "../../document/types"
 import { TransformManager } from "../transform/TransformManager"
 
@@ -94,6 +95,64 @@ interface TransformManagerPrivate {
 	rebaseActiveDragNodePositions: (elementIds: readonly string[]) => void
 	isTransforming: (elementId: string) => boolean
 	isElementInActiveTransformInteraction: (elementId: string) => boolean
+}
+
+interface TransformManagerModifierClickPrivate {
+	handleMultiSelectionProxyModifierClick: (e: Konva.KonvaEventObject<MouseEvent>) => void
+}
+
+function createModifierClickManager(options?: { canSelect?: boolean; isSelected?: boolean }) {
+	const elementId = "element-under-proxy"
+	const elementNode = {
+		id: () => elementId,
+		getParent: () => null,
+	} as unknown as Konva.Node
+	const hitNode = {
+		id: () => "",
+		getParent: () => elementNode,
+	} as unknown as Konva.Node
+
+	const pointer = { x: 40, y: 60 }
+	const getIntersection = vi.fn(() => hitNode)
+	const toggle = vi.fn()
+	const canSelect = vi.fn(() => options?.canSelect ?? true)
+	const isSelected = vi.fn(() => options?.isSelected ?? false)
+	const canvas = {
+		readonly: false,
+		stage: {
+			getPointerPosition: vi.fn(() => pointer),
+		},
+		contentLayer: {
+			getIntersection,
+		},
+		elementManager: {
+			hasElement: vi.fn((id: string) => id === elementId),
+			getElementData: vi.fn(() => ({ id: elementId, type: "rectangle" })),
+		},
+		selectionManager: {
+			isSelected,
+			toggle,
+		},
+		permissionManager: {
+			canSelect,
+		},
+		eventEmitter: {
+			on: vi.fn(),
+		},
+	} as unknown as Canvas
+	const manager = new TransformManager({
+		canvas,
+	}) as unknown as TransformManagerModifierClickPrivate
+
+	return { canSelect, getIntersection, manager, pointer, toggle }
+}
+
+function createProxyClickEvent(
+	modifiers: MouseEventInit = { shiftKey: true },
+): Konva.KonvaEventObject<MouseEvent> {
+	return {
+		evt: new MouseEvent("click", modifiers),
+	} as Konva.KonvaEventObject<MouseEvent>
 }
 
 function createSingleDragMoveManager() {
@@ -197,6 +256,47 @@ function createProxySyncManager() {
 
 	return { applyTransform, element, emit, manager, node, requestLayerDraw, update }
 }
+
+describe("TransformManager multi-selection proxy modifier click", () => {
+	it("toggles the top content element beneath the proxy", () => {
+		const { getIntersection, manager, pointer, toggle } = createModifierClickManager()
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent())
+
+		expect(getIntersection).toHaveBeenCalledWith(pointer)
+		expect(toggle).toHaveBeenCalledWith("element-under-proxy")
+	})
+
+	it("does not add an unselected element that cannot be selected", () => {
+		const { canSelect, manager, toggle } = createModifierClickManager({ canSelect: false })
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({ ctrlKey: true }))
+
+		expect(canSelect).toHaveBeenCalledTimes(1)
+		expect(toggle).not.toHaveBeenCalled()
+	})
+
+	it("still allows modifier deselection for an already selected element", () => {
+		const { canSelect, manager, toggle } = createModifierClickManager({
+			canSelect: false,
+			isSelected: true,
+		})
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({ metaKey: true }))
+
+		expect(canSelect).not.toHaveBeenCalled()
+		expect(toggle).toHaveBeenCalledWith("element-under-proxy")
+	})
+
+	it("keeps ordinary proxy clicks out of selection toggling", () => {
+		const { getIntersection, manager, toggle } = createModifierClickManager()
+
+		manager.handleMultiSelectionProxyModifierClick(createProxyClickEvent({}))
+
+		expect(getIntersection).not.toHaveBeenCalled()
+		expect(toggle).not.toHaveBeenCalled()
+	})
+})
 
 describe("TransformManager multi-selection proxy sync", () => {
 	it("rebases proxy node coordinates after nodes move to the content layer", () => {

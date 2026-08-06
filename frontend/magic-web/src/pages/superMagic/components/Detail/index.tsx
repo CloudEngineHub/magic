@@ -47,6 +47,8 @@ interface DetailProps {
 	showFallbackWhenEmpty?: boolean
 	/** 当前项目文件 tabs 缓存一轮加载结束 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+	/** File ids whose tabs must remain open in the viewer. */
+	nonClosableFileIds?: string[]
 	/** When false, hides file preview toolbar (CommonHeaderV2) */
 	showFileHeader?: boolean
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
@@ -59,6 +61,8 @@ interface DetailProps {
 	isFullscreen?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
+	/** Class name for the detail container */
+	className?: string
 }
 
 // Forward ref type for Detail component
@@ -105,12 +109,14 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		allowDownload,
 		showFallbackWhenEmpty,
 		onFileTabsCacheLoaded,
+		nonClosableFileIds,
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
 		documentFlowFullscreen,
 		isFullscreen = false,
 		showFileFooter: showFileFooterProp,
+		className,
 	} = props
 
 	const filesViewerRef = useRef<FilesViewerRef>(null)
@@ -182,6 +188,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 					? "relative flex min-h-dvh flex-col overflow-visible"
 					: "relative flex h-full flex-col rounded-lg",
 				isFullscreen || documentFlowFullscreen ? "overflow-visible" : "overflow-hidden",
+				className,
 			)}
 		>
 			<FilesViewer
@@ -218,6 +225,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				allowDownload={effectiveAllowDownload}
 				showFallbackWhenEmpty={showFallbackWhenEmpty}
 				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+				nonClosableFileIds={nonClosableFileIds}
 			/>
 		</div>
 	)

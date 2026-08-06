@@ -36,15 +36,30 @@ export const filterClickableMessage = (node: any) => {
 	)
 }
 
-// 过滤出可以点击的工具卡片消息，且消息未撤回
-export const filterClickableMessageWithoutRevoked = (node: any) => {
-	return filterClickableMessage(node) && node?.status !== MessageStatus.REVOKED
+type ImStatusSource = {
+	imStatus?: unknown
+	status?: unknown
+	[key: string]: unknown
 }
 
-export const filterMessagesWithAttachments = (node: any) => {
+function getImStatus(node: ImStatusSource | undefined, message?: ImStatusSource) {
+	const explicitImStatus = message?.imStatus ?? node?.imStatus
+	if (typeof explicitImStatus === "string") return explicitImStatus
+
+	// Raw SuperMessage nodes predate the split and may still contain a revoked tombstone.
+	// Do not treat ordinary node execution states (running/finished/...) as IM visibility.
+	return node?.status === MessageStatus.REVOKED ? MessageStatus.REVOKED : undefined
+}
+
+// 过滤出可以点击的工具卡片消息，且消息未撤回
+export const filterClickableMessageWithoutRevoked = (node: any, message?: ImStatusSource) => {
+	return filterClickableMessage(node) && getImStatus(node, message) !== MessageStatus.REVOKED
+}
+
+export const filterMessagesWithAttachments = (node: any, message?: ImStatusSource) => {
 	return (
 		!messageFilter(node) &&
 		!DisabledDetailToolTypes.includes(node?.tool?.name) &&
-		node?.status !== MessageStatus.REVOKED
+		getImStatus(node, message) !== MessageStatus.REVOKED
 	)
 }

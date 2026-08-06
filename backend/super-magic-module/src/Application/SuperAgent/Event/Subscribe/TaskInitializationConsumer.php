@@ -11,10 +11,13 @@ use App\Domain\Chat\Entity\MagicConversationEntity;
 use App\Domain\Chat\Entity\ValueObject\ConversationType;
 use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Infrastructure\Core\Exception\BusinessException;
+use App\Infrastructure\Core\Exception\EventException;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\TaskInitializationMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\DTO\UserMessageDTO;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ClientMessageAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\HandleUserMessageAppService;
+use Dtyq\SuperMagic\Infrastructure\Utils\TaskEventUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\TaskTerminationUtil;
 use Hyperf\Amqp\Annotation\Consumer;
 use Hyperf\Amqp\Message\ConsumerMessage;
@@ -106,6 +109,28 @@ class TaskInitializationConsumer extends ConsumerMessage
             ]);
 
             return Result::ACK;
+        } catch (EventException $e) {
+            $this->logger->warning('Task initialization event processing failed', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            if ($messageDTO !== null) {
+                $this->sendReminderNotificationToClient($messageDTO, $e);
+            }
+
+            return Result::ACK;
+        } catch (BusinessException $e) {
+            $this->logger->warning('Task initialization business processing failed', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            if ($messageDTO !== null) {
+                $this->sendErrorNotificationToClient($messageDTO, $e->getMessage());
+            }
+
+            return Result::ACK;
         } catch (Throwable $e) {
             $this->logger->error('Failed to process task initialization message', [
                 'error' => $e->getMessage(),
@@ -128,7 +153,8 @@ class TaskInitializationConsumer extends ConsumerMessage
      * Send error notification to client when initialization fails.
      */
     private function sendErrorNotificationToClient(
-        TaskInitializationMessageDTO $messageDTO
+        TaskInitializationMessageDTO $messageDTO,
+        string $errorMessage = ''
     ): void {
         try {
             // Only send notification if we have chat topic ID and agent user ID
@@ -165,7 +191,8 @@ class TaskInitializationConsumer extends ConsumerMessage
                 taskId: (string) $messageDTO->getTaskId(),
                 chatTopicId: $messageDTO->getChatTopicId(),
                 chatConversationId: $agentConversationId,
-                errorMessage: trans('task.initialize_error') // @phpstan-ignore-line function.notFound
+                errorMessage: trim($errorMessage) !== '' ? $errorMessage : trans('task.initialize_error'), // @phpstan-ignore-line function.notFound
+                dynamicParams: $messageDTO->getUserMessage()['dynamic_params'] ?? null,
             );
 
             $this->logger->info('Error notification sent to client', [
@@ -174,6 +201,54 @@ class TaskInitializationConsumer extends ConsumerMessage
             ]);
         } catch (Throwable $notificationError) {
             $this->logger->error('Failed to send error notification to client', [
+                'task_id' => $messageDTO->getTaskId(),
+                'error' => $notificationError->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send reminder notification to client for event-level failures.
+     */
+    private function sendReminderNotificationToClient(
+        TaskInitializationMessageDTO $messageDTO,
+        EventException $exception
+    ): void {
+        try {
+            if (empty($messageDTO->getChatTopicId()) || empty($messageDTO->getAgentUserId())) {
+                $this->logger->warning('Cannot send reminder notification: missing required IDs', [
+                    'task_id' => $messageDTO->getTaskId(),
+                    'chat_topic_id' => $messageDTO->getChatTopicId(),
+                    'agent_user_id' => $messageDTO->getAgentUserId(),
+                ]);
+                return;
+            }
+
+            $dataIsolation = DataIsolation::create(
+                $messageDTO->getOrganizationCode(),
+                $messageDTO->getUserId()
+            );
+            $agentConversationId = $this->getAgentConversationId(
+                $dataIsolation,
+                $messageDTO->getAgentUserId()
+            );
+            if (empty($agentConversationId)) {
+                $this->logger->warning('Cannot send reminder notification: agent conversation not found', [
+                    'task_id' => $messageDTO->getTaskId(),
+                ]);
+                return;
+            }
+
+            $this->clientMessageAppService->sendReminderMessageToClient(
+                topicId: $messageDTO->getTopicId(),
+                taskId: (string) $messageDTO->getTaskId(),
+                chatTopicId: $messageDTO->getChatTopicId(),
+                chatConversationId: $agentConversationId,
+                remind: $exception->getMessage(),
+                remindEvent: TaskEventUtil::getRemindTaskEventByCode($exception->getCode()),
+            );
+        } catch (Throwable $notificationError) {
+            $this->logger->error('Failed to send reminder notification to client', [
                 'task_id' => $messageDTO->getTaskId(),
                 'error' => $notificationError->getMessage(),
             ]);

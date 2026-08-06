@@ -16,26 +16,16 @@ from app.tools.mcp._base import BaseMcpTool
 class McpListToolsParams(BaseToolParams):
     server_name: Optional[str] = Field(
         None,
-        description="""<!--zh
-        指定服务器时按需连接并返回该服务器的工具清单；
-        不指定时仅返回当前已连接服务器的工具，不会主动建连。
-        -->
-        When provided, ensure that server is connected and return its tool
-        list. When omitted, return tools from currently connected servers
-        only (no implicit connection).""",
+        description=(
+            "MCP server to connect and inspect. Omit to list tools from currently "
+            "connected servers without opening new connections."
+        ),
     )
 
 
 @tool(name="mcp_list_tools")
 class McpListTools(BaseMcpTool[McpListToolsParams]):
-    """<!--zh
-    列出 MCP 工具。指定 server_name 会按需连接对应服务器；不指定则只读地返回所有
-    已连接服务器的工具。
-    -->
-    List MCP tools. Passing server_name connects that server on demand and
-    returns its tools. Without server_name, returns tools across all
-    currently connected servers without triggering any connection.
-    """
+    """List tools from one MCP server or all currently connected servers."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None

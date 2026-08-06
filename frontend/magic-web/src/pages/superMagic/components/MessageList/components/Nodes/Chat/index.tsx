@@ -25,7 +25,7 @@ function Chat(props: NodeProps) {
 
 	const { t } = useTranslation("super")
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const mentions = node?.extra?.super_agent?.mentions || []
 	const mentionItems = getMentionItemsMissingFromRichTextContent(mentions, node?.content)
 

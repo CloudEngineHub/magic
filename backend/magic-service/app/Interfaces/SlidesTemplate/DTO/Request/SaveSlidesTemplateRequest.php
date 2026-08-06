@@ -22,7 +22,7 @@ class SaveSlidesTemplateRequest extends FormRequest
     {
         return [
             'code' => ['nullable', 'string', 'max:64', 'regex:/^(PPT|SLIDE)-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/'],
-            'category_code' => 'nullable|string|max:64|regex:/^(PPT|SLIDE)-CATE-[a-z0-9]+(-[a-z0-9]+)*$/',
+            'category_code' => 'nullable|string|max:64',
             'label' => 'required|array',
             'label.zh_CN' => 'required|string|max:100',
             'label.en_US' => 'required|string|max:100',
@@ -50,7 +50,6 @@ class SaveSlidesTemplateRequest extends FormRequest
             'code.regex' => __('slides_template.code_regex'),
             'category_code.string' => __('slides_template.category_code_string'),
             'category_code.max' => __('slides_template.category_code_max'),
-            'category_code.regex' => __('slides_template.category_code_regex'),
             'label.required' => __('slides_template.label_required'),
             'label.array' => __('slides_template.label_array'),
             'label.zh_CN.required' => __('slides_template.label_zh_cn_required'),

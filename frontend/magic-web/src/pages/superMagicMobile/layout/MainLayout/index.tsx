@@ -1,47 +1,11 @@
 import { useCallback, useMemo } from "react"
-import { Outlet, matchPath, useLocation } from "react-router"
+import { Outlet, useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
 import SuperMagicMobileLayout from "../../components/Layout"
 import MainHeader from "./components/MainHeader"
 import { useNavigate } from "@/routes/hooks/useNavigate"
-import { RoutePath } from "@/constants/routes"
 import { SuperMobileShellRouteLayout } from "@/pages/superMagicMobile/components/MobileShell/SuperMobileShellRouteLayout"
-
-function resolveEmbeddedShellState(pathname: string): {
-	enabled: boolean
-	activeView: string
-	testIdPrefix: string
-} {
-	if (matchPath(`/:clusterCode${RoutePath.SuperChatProjectState}`, pathname)) {
-		return {
-			enabled: true,
-			activeView: "chats",
-			testIdPrefix: "mobile-chat-detail-page",
-		}
-	}
-
-	if (matchPath(`/:clusterCode${RoutePath.SuperWorkspaceProjectState}`, pathname)) {
-		return {
-			enabled: true,
-			activeView: "workspaces",
-			testIdPrefix: "mobile-workspace-detail-page",
-		}
-	}
-
-	if (matchPath(`/:clusterCode${RoutePath.SuperWorkspaceProjectTopicState}`, pathname)) {
-		return {
-			enabled: true,
-			activeView: "workspaces",
-			testIdPrefix: "mobile-workspace-topic-page",
-		}
-	}
-
-	return {
-		enabled: false,
-		activeView: "",
-		testIdPrefix: "mobile-super-main-layout",
-	}
-}
+import { resolveEmbeddedShellState } from "./resolveEmbeddedShellState"
 
 /**
  * Mobile SuperMagic layout: header + child routes.
@@ -59,7 +23,11 @@ export default function SuperMagicMobileMainLayout() {
 
 	const shellState = useMemo(() => resolveEmbeddedShellState(pathname), [pathname])
 	const panel = (
-		<SuperMagicMobileLayout header={<MainHeader onBackClick={onBackClick} />}>
+		<SuperMagicMobileLayout
+			header={
+				shellState.showMainHeader ? <MainHeader onBackClick={onBackClick} /> : undefined
+			}
+		>
 			<Outlet />
 		</SuperMagicMobileLayout>
 	)

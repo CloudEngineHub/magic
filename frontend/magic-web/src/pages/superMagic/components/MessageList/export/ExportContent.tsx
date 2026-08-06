@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { SupportLocales } from "@/constants/locale"
 import { globalConfigStore } from "@/stores/globalConfig"
 import { getAvatarUrl } from "@/utils/avatar"
+import { getLocalePreferredKeys, resolveLocalizedText } from "@/utils/locale"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import MarkdownComponent from "../components/Text/components/Markdown"
 import MessageRenderErrorBoundary from "../components/MessageRenderErrorBoundary"
@@ -202,17 +203,23 @@ function TurnBlock({ turn }: { turn: ExportTurn }) {
 const ExportContentInner = forwardRef<HTMLDivElement, ExportContentProps>(
 	function ExportContentInner({ turns, title, exportedAt }, ref) {
 		const stamp = useMemo(() => formatStamp(exportedAt), [exportedAt])
-		const { i18n, t } = useTranslation()
+		const { i18n, t } = useTranslation("super")
+		const { t: tCommon } = useTranslation("common")
 		const globalConfig = globalConfigStore.globalConfig
-		const lang = i18n.language as SupportLocales
-		const localizedLogo =
-			lang === SupportLocales.enUS && globalConfig?.logo?.[SupportLocales.enUS]
-				? globalConfig.logo[SupportLocales.enUS]
-				: lang === SupportLocales.zhCN && globalConfig?.logo?.[SupportLocales.zhCN]
-					? globalConfig.logo[SupportLocales.zhCN]
-					: undefined
-		const logoSrc = localizedLogo ? getAvatarUrl(localizedLogo, 80) : ""
-		const brandName = globalConfig?.name_i18n?.[lang] || "Super Magic"
+		const localizedLogo = getLocalePreferredKeys(i18n.language)
+			.map((key) => globalConfig?.logo?.[key as SupportLocales]?.trim())
+			.find(Boolean)
+		// Export branding follows platform_settings; prefer the platform icon over a generic
+		// default wordmark when the current locale does not provide a dedicated full logo.
+		const rawLogo =
+			localizedLogo ||
+			globalConfig?.minimal_logo?.trim() ||
+			globalConfig?.logo?.[SupportLocales.fallback]?.trim()
+		const logoSrc = rawLogo ? getAvatarUrl(rawLogo, 80) : ""
+		const brandName =
+			tCommon("platform.name") ||
+			resolveLocalizedText(globalConfig?.name_i18n, i18n.language) ||
+			t("export.platformFallback")
 
 		return (
 			<div
@@ -227,8 +234,7 @@ const ExportContentInner = forwardRef<HTMLDivElement, ExportContentProps>(
 							<img
 								src={logoSrc}
 								alt={brandName}
-								className="h-8 w-auto"
-								crossOrigin="anonymous"
+								className="h-8 max-w-[240px] object-contain object-left"
 							/>
 						) : (
 							<div className="text-base font-semibold">{brandName}</div>
@@ -252,7 +258,7 @@ const ExportContentInner = forwardRef<HTMLDivElement, ExportContentProps>(
 				</div>
 
 				<div className="mt-8 border-t border-border pt-3 text-center text-xs text-muted-foreground">
-					{t("super:export.generatedBy", { defaultValue: "由超级麦吉生成" })}
+					{t("export.generatedBy", { platformName: brandName })}
 				</div>
 			</div>
 		)

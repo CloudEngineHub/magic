@@ -4,6 +4,7 @@ import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucid
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
 import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
@@ -148,6 +149,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</AppsSubMenu>
 						</SidebarMenuItem>
+						<MicroAppsSidebarMenuItem collapsed={collapsed} />
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>
@@ -157,10 +159,10 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 			{collapsed ? (
 				<CollapsedWorkspaceMenu />
 			) : (
-				<div className="flex min-h-40 flex-1 flex-col gap-1 overflow-hidden">
+				<div className="flex min-h-40 flex-1 flex-col gap-1">
 					<WorkspaceList />
 					<SidebarGroup
-						className="w-full flex-1 shrink-0 px-2 py-0"
+						className="w-full shrink-0 px-2 py-0"
 						data-testid="sidebar-content-share-workspace-group"
 					>
 						<SidebarGroupContent>

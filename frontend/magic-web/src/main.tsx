@@ -7,13 +7,10 @@ import { createRoot } from "react-dom/client"
 import App from "./App"
 import "@/utils/polyfill"
 import { appService } from "./services/app/AppService"
-import { getTimezone, getTimezones } from "@dtyq/timezone"
 import { DevStrictMode } from "@/utils/devStrictMode"
 import { registerAppServiceWorker } from "@/workers/service-worker/register"
 
 enableMapSet()
-
-console.log(getTimezones({ locale: "zh_CN" }), getTimezone("Asia/Shanghai"))
 
 async function initMock() {
 	if (!import.meta.env.DEV || import.meta.env.MAGIC_MOCK !== "true") {

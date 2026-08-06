@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 from openai.types.chat import ChatCompletion
 
 from agentlang.logger import get_logger
-from agentlang.utils.security import sanitize_api_key
+from agentlang.utils.security import sanitize_api_key, sanitize_log_value
 
 logger = get_logger(__name__)
 
@@ -21,7 +21,6 @@ logger = get_logger(__name__)
 ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
-
 
 def _sanitize_for_filename(value: str) -> str:
     """将输入字符串转换为可安全用于单个文件名片段的值。"""
@@ -187,7 +186,7 @@ def _build_log_content(
     log_lines.extend([
         "",
         "=== REQUEST PARAMETERS ===",
-        json.dumps(request_params, indent=2, ensure_ascii=False),
+        json.dumps(_sanitize_request_params(request_params), indent=2, ensure_ascii=False),
         ""
     ])
 
@@ -212,11 +211,16 @@ def _build_log_content(
         log_lines.extend([
             "=== EXCEPTION DETAILS ===",
             f"Error Type: {type(exception).__name__}",
-            f"Error Message: {str(exception)}",
-            f"Exception repr: {repr(exception)}",
+            f"Error Message: {exception!s}",
+            f"Exception repr: {exception!r}",
             ""
         ])
 
     log_lines.append("=== END LOG ===")
 
     return '\n'.join(log_lines)
+
+
+def _sanitize_request_params(value: Any) -> Any:
+    """脱敏请求参数，避免失败日志把 header/token 类信息落盘。"""
+    return sanitize_log_value(value)

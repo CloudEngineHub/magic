@@ -44,6 +44,8 @@ export interface ElementOperationOptions {
 	skipGeometryInvalidate?: boolean
 	/** 跳过 zIndex 变更后的全量同级节点重排；调用方需要自行维护 Konva 节点顺序 */
 	skipZIndexReorder?: boolean
+	/** 批量更新成功后是否发送 element:batchupdated；事务调用方可延后到正式提交后发送 */
+	emitBatchUpdated?: boolean
 }
 
 export interface ElementManagerDocumentPatch {
@@ -74,6 +76,32 @@ export interface ReparentElementsOptions {
 	silent?: boolean
 }
 
+export type TemporaryElementKind = "upload" | "generation-result"
+
+export interface TemporaryElementMetadata {
+	kind: TemporaryElementKind
+	historyPolicy: "include" | "exclude"
+	clipboardPolicy: "include" | "exclude"
+}
+
+const TEMPORARY_ELEMENT_METADATA: Record<TemporaryElementKind, TemporaryElementMetadata> = {
+	upload: {
+		kind: "upload",
+		historyPolicy: "include",
+		clipboardPolicy: "include",
+	},
+	"generation-result": {
+		kind: "generation-result",
+		historyPolicy: "exclude",
+		clipboardPolicy: "exclude",
+	},
+}
+
+export interface CommitGenerationTarget {
+	elementId: string
+	persistedPatch: Partial<LayerElement>
+}
+
 /**
  * 元素管理器 - 管理画布上的所有元素实例
  * 职责：
@@ -102,8 +130,8 @@ export class ElementManager {
 	public zIndexManager: ZIndexManager
 	private documentIndex: CanvasDocumentIndex = new CanvasDocumentIndex()
 
-	// 临时元素标记集合
-	private temporaryElements: Set<string> = new Set()
+	// 临时元素按来源分类；不同来源拥有独立的历史和剪贴板策略。
+	private temporaryElements: Map<string, TemporaryElementMetadata> = new Map()
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -136,6 +164,36 @@ export class ElementManager {
 	}
 
 	/**
+	 * 创建仅存在于运行时的临时元素。
+	 * 临时标记必须早于 element:created，保证外部 DSL 导出不会包含该元素。
+	 */
+	public createTemporaryElement(
+		elementData: LayerElement,
+		options?: ElementOperationOptions,
+		temporaryKind: TemporaryElementKind = "generation-result",
+	): string {
+		if (this.elements.has(elementData.id)) {
+			throw new Error(`Element ${elementData.id} already exists`)
+		}
+
+		this.markElementTemporary(elementData.id, temporaryKind)
+		try {
+			this.doCreate(elementData, options || {})
+			if (!this.elements.has(elementData.id)) {
+				throw new Error(`Element ${elementData.id} could not be created`)
+			}
+		} catch (error) {
+			if (this.elements.has(elementData.id)) {
+				this.doDelete(elementData.id, { suppressEvents: true })
+			} else {
+				this.temporaryElements.delete(elementData.id)
+			}
+			throw error
+		}
+		return elementData.id
+	}
+
+	/**
 	 * 创建临时元素（用于上传中的图片）
 	 * 临时元素会被渲染和交互，但不会被导出到 canvasDocument
 	 * @param elementData - 元素数据
@@ -150,14 +208,8 @@ export class ElementManager {
 			onUploadFailed?: (elementId: string, error: Error) => void
 		},
 	): string {
-		if (this.elements.has(elementData.id)) {
-			throw new Error(`Element ${elementData.id} already exists`)
-		}
-
-		this.markElementTemporary(elementData.id)
-
 		// 创建元素实例（与正式元素相同的渲染逻辑）
-		this.doCreate(elementData, { silent: false })
+		this.createTemporaryElement(elementData, { silent: false }, "upload")
 
 		// 获取元素实例
 		const element = this.elements.get(elementData.id)
@@ -199,8 +251,8 @@ export class ElementManager {
 	 * 将已存在或即将创建的元素标记为临时元素。
 	 * 用于容器子元素先渲染上传态、后续上传完成再转正的场景。
 	 */
-	public markElementTemporary(elementId: string): void {
-		this.temporaryElements.add(elementId)
+	public markElementTemporary(elementId: string, kind: TemporaryElementKind = "upload"): void {
+		this.temporaryElements.set(elementId, TEMPORARY_ELEMENT_METADATA[kind])
 	}
 
 	/**
@@ -229,6 +281,68 @@ export class ElementManager {
 			type: "element:temporary:converted",
 			data: { elementId },
 		})
+	}
+
+	/**
+	 * 将一个或多个已被后端确认的生成目标一次性写入正式 DSL。
+	 * 目标会先完整校验，再通过单次 batchUpdate 提交，从而只产生一个历史快照和一个 element:change。
+	 */
+	public commitGenerationTargets(targets: CommitGenerationTarget[]): void {
+		if (targets.length === 0) return
+
+		const elementIds = new Set<string>()
+		const convertedElementIds: string[] = []
+		for (const target of targets) {
+			if (elementIds.has(target.elementId)) {
+				throw new Error(`Duplicate generation target ${target.elementId}`)
+			}
+			elementIds.add(target.elementId)
+
+			if (!this.elements.has(target.elementId)) {
+				throw new Error(`Element ${target.elementId} not found`)
+			}
+
+			const temporary = this.temporaryElements.get(target.elementId)
+			if (temporary?.kind === "upload") {
+				throw new Error(`Element ${target.elementId} is an upload temporary element`)
+			}
+			if (temporary?.kind === "generation-result") {
+				convertedElementIds.push(target.elementId)
+			}
+		}
+
+		this.batchUpdate(
+			targets.map((target) => ({
+				id: target.elementId,
+				data: target.persistedPatch,
+			})),
+			{
+				silent: false,
+				emitBatchUpdated: convertedElementIds.length === 0,
+			},
+		)
+
+		// batchUpdate 成功后才登记 user，避免写 DSL 失败时留下虚假的任务所有权。
+		for (const target of targets) {
+			const request = (target.persistedPatch as Partial<ImageElement>).generateImageRequest
+			if (request?.image_id) {
+				this.canvas.elementDetailsRuntimeManager?.markGenerateImageRequestAsUser(
+					target.elementId,
+					request.image_id,
+				)
+			}
+		}
+
+		convertedElementIds.forEach((elementId) => this.temporaryElements.delete(elementId))
+		convertedElementIds.forEach((elementId) => {
+			this.canvas.eventEmitter.emit({
+				type: "element:temporary:converted",
+				data: { elementId },
+			})
+		})
+		if (convertedElementIds.length > 0) {
+			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+		}
 	}
 
 	/**
@@ -336,17 +450,21 @@ export class ElementManager {
 		options?: ElementOperationOptions,
 	): void {
 		this.batchMode = true
+		let succeeded = false
 		try {
 			updates.forEach(({ id, data }) => {
 				if (this.elements.has(id)) {
 					this.doUpdate(id, data, { ...options, batch: true })
 				}
 			})
+			succeeded = true
 		} finally {
 			this.batchMode = false
 			this.flush()
-			// 触发批量更新完成事件
-			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			if (succeeded && options?.emitBatchUpdated !== false) {
+				// 只有全部更新成功后才触发批量完成，避免失败事务污染历史快照。
+				this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			}
 		}
 	}
 
@@ -355,6 +473,11 @@ export class ElementManager {
 	 * @param elementIds - 要删除的元素 ID 数组
 	 */
 	public batchDelete(elementIds: string[]): void {
+		const documentElementIds = elementIds.filter(
+			(elementId) =>
+				this.elements.has(elementId) &&
+				this.temporaryElements.get(elementId)?.kind !== "generation-result",
+		)
 		// 临时禁用历史记录，避免每次删除都记录
 		const historyManager = this.canvas.historyManager
 		historyManager?.disable()
@@ -374,7 +497,9 @@ export class ElementManager {
 			// 重新启用历史记录并立即记录一次
 			if (historyManager) {
 				historyManager.enable()
-				historyManager.recordHistoryImmediate()
+				if (documentElementIds.length > 0) {
+					historyManager.recordHistoryImmediate()
+				}
 			}
 
 			// 触发批量删除完成事件
@@ -825,11 +950,16 @@ export class ElementManager {
 	 * @param elementId - 元素ID
 	 * @param options - 删除选项
 	 */
-	private doDelete(elementId: string, options?: { skipChildren?: boolean }): void {
+	private doDelete(
+		elementId: string,
+		options?: { skipChildren?: boolean; suppressEvents?: boolean },
+	): void {
 		const element = this.elements.get(elementId)
 		if (!element) return
 
 		const elementData = element.getData()
+		const temporaryMetadata = this.temporaryElements.get(elementId)
+		const isRuntimeOnlyGenerationResult = temporaryMetadata?.kind === "generation-result"
 
 		// 如果是临时元素，清理临时标记
 		if (this.temporaryElements.has(elementId)) {
@@ -840,11 +970,13 @@ export class ElementManager {
 				element.cancelUpload()
 			}
 
-			// 触发临时元素删除事件
-			this.canvas.eventEmitter.emit({
-				type: "element:temporary:deleted",
-				data: { elementId },
-			})
+			if (!options?.suppressEvents) {
+				// 触发临时元素删除事件
+				this.canvas.eventEmitter.emit({
+					type: "element:temporary:deleted",
+					data: { elementId },
+				})
+			}
 		}
 
 		// 如果不跳过子元素删除，则处理子元素
@@ -860,7 +992,9 @@ export class ElementManager {
 				elementData.children.length > 0
 			) {
 				// 递归删除所有子元素
-				elementData.children.forEach((child: LayerElement) => this.doDelete(child.id))
+				elementData.children.forEach((child: LayerElement) =>
+					this.doDelete(child.id, { suppressEvents: options?.suppressEvents }),
+				)
 
 				// 清空 Frame 的 children，避免删除时递归删除子元素
 				this.doUpdate(
@@ -868,7 +1002,7 @@ export class ElementManager {
 					{ children: [] },
 					{
 						batch: this.batchMode || this.isBatchDeleting,
-						silent: this.isBatchDeleting,
+						silent: this.isBatchDeleting || options?.suppressEvents,
 					},
 				)
 			} else {
@@ -878,7 +1012,9 @@ export class ElementManager {
 					elementData.children &&
 					Array.isArray(elementData.children)
 				) {
-					elementData.children.forEach((child: LayerElement) => this.doDelete(child.id))
+					elementData.children.forEach((child: LayerElement) =>
+						this.doDelete(child.id, { suppressEvents: options?.suppressEvents }),
+					)
 				}
 			}
 		} else {
@@ -932,7 +1068,7 @@ export class ElementManager {
 					{ children: updatedChildren },
 					{
 						batch: this.batchMode || this.isBatchDeleting,
-						silent: this.isBatchDeleting,
+						silent: this.isBatchDeleting || options?.suppressEvents,
 					},
 				)
 			}
@@ -945,8 +1081,20 @@ export class ElementManager {
 		this.invalidateGeometryForElement(elementId)
 
 		this.scheduleContentLayerDraw()
-		this.canvas.eventEmitter.emit({ type: "element:deleted", data: { elementId } })
-		this.emitElementChange([elementId])
+		if (!options?.suppressEvents) {
+			this.canvas.eventEmitter.emit({
+				type: "element:deleted",
+				data: {
+					elementId,
+					...(isRuntimeOnlyGenerationResult
+						? { persistence: "runtime-only" as const }
+						: {}),
+				},
+			})
+			if (!isRuntimeOnlyGenerationResult) {
+				this.emitElementChange([elementId])
+			}
+		}
 	}
 
 	/**
@@ -1826,25 +1974,35 @@ export class ElementManager {
 	 * 导出文档数据
 	 * 在导出边界创建深拷贝，确保外部获得的是独立副本，避免 useImmer 等状态管理工具冻结内部数据
 	 * @param options 导出选项
-	 * @param options.includeTemporary 是否包含临时元素（默认 false）
+	 * @param options.includeTemporary 是否包含允许进入历史的临时元素（默认 false）
 	 */
 	public exportDocument(options?: { includeTemporary?: boolean }): CanvasDocument {
 		const allElements = this.getAllElements()
 
-		// 根据选项决定是否过滤临时元素
-		// 默认递归过滤（用于外部保存），但历史记录可以选择包含
-		const elements = options?.includeTemporary
-			? allElements
-			: this.filterTemporaryElements(allElements)
+		// 外部保存排除所有临时元素；历史快照只保留声明为 history include 的上传占位。
+		const elements = this.filterTemporaryElements(
+			allElements,
+			options?.includeTemporary ? "history" : "external",
+		)
 
 		// 在导出边界按声明白名单导出，既隔离内部引用，也避免透出运行时附加字段
 		return exportCanvasDocument(elements)
 	}
 
-	private filterTemporaryElements(elements: LayerElement[]): LayerElement[] {
+	private filterTemporaryElements(
+		elements: LayerElement[],
+		policy: "external" | "history" | "clipboard",
+	): LayerElement[] {
 		const filterElement = (element: LayerElement): LayerElement | null => {
-			if (this.temporaryElements.has(element.id)) {
-				return null
+			const temporary = this.temporaryElements.get(element.id)
+			if (temporary) {
+				const shouldInclude =
+					policy === "history"
+						? temporary.historyPolicy === "include"
+						: policy === "clipboard"
+							? temporary.clipboardPolicy === "include"
+							: false
+				if (!shouldInclude) return null
 			}
 
 			if (!("children" in element) || !Array.isArray(element.children)) {
@@ -1864,23 +2022,32 @@ export class ElementManager {
 			.filter((element): element is LayerElement => element !== null)
 	}
 
+	/** 复制协议只允许上传临时元素，生成结果占位符必须留在当前 Canvas 运行时。 */
+	public filterElementsForClipboard(elements: LayerElement[]): LayerElement[] {
+		return this.filterTemporaryElements(elements, "clipboard")
+	}
+
 	/**
 	 * 清空所有元素
 	 */
 	public clear(): void {
 		// 先收集所有元素 ID，避免在遍历过程中修改 Map
 		const elementIds = Array.from(this.elements.keys())
+		const runtimeOnlyGenerationElementIds = new Set(
+			Array.from(this.temporaryElements.entries())
+				.filter(([, metadata]) => metadata.kind === "generation-result")
+				.map(([elementId]) => elementId),
+		)
 
 		// 销毁所有元素
 		this.elements.forEach((element) => element.destroy())
 		this.elements.clear()
+		this.temporaryElements.clear()
 		this.documentIndex.clear()
 
 		// 销毁所有子节点，但保留背景
 		const background = this.canvas.contentLayer.findOne(".canvas-background") as
-			| Konva.Shape
-			| Konva.Group
-			| null
+			Konva.Shape | Konva.Group | null
 		this.canvas.contentLayer.destroyChildren()
 
 		// 如果背景存在，重新添加到 layer
@@ -1898,12 +2065,26 @@ export class ElementManager {
 
 		// 为每个元素触发删除事件
 		elementIds.forEach((elementId) => {
-			this.canvas.eventEmitter.emit({ type: "element:deleted", data: { elementId } })
+			this.canvas.eventEmitter.emit({
+				type: "element:deleted",
+				data: {
+					elementId,
+					...(runtimeOnlyGenerationElementIds.has(elementId)
+						? { persistence: "runtime-only" as const }
+						: {}),
+				},
+			})
 		})
+		const documentElementIds = elementIds.filter(
+			(elementId) => !runtimeOnlyGenerationElementIds.has(elementId),
+		)
 
 		this.canvas.eventEmitter.emit({
 			type: "element:change",
-			data: elementIds.length > 0 ? { elementIds, phase: "commit" } : undefined,
+			data:
+				documentElementIds.length > 0
+					? { elementIds: documentElementIds, phase: "commit" }
+					: undefined,
 		})
 	}
 
@@ -2256,10 +2437,19 @@ export class ElementManager {
 		return this.temporaryElements.has(elementId)
 	}
 
+	/** 仅正式文档元素可以参与连接等会被单独持久化的关系。 */
+	public canParticipateInDocumentRelations(elementId: string): boolean {
+		return this.elements.has(elementId) && !this.temporaryElements.has(elementId)
+	}
+
+	public getTemporaryElementMetadata(elementId: string): TemporaryElementMetadata | null {
+		return this.temporaryElements.get(elementId) ?? null
+	}
+
 	/**
 	 * 获取所有临时元素 ID
 	 */
 	public getTemporaryElementIds(): string[] {
-		return Array.from(this.temporaryElements)
+		return Array.from(this.temporaryElements.keys())
 	}
 }

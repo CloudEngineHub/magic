@@ -1,5 +1,9 @@
 import { isEqual } from "lodash-es"
 import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	ElementDetailSource,
+	ElementDetailsProvenance,
+} from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
 
 /**
  * element-details 重字段拆分（与后端 element_details_store.py 对齐）。
@@ -124,6 +128,53 @@ function stripEntryMeta(entry: ElementDetailEntry | undefined): ElementHeavyFiel
 	return result
 }
 
+function getImageId(entry: ElementDetailEntry | undefined): string | undefined {
+	const request = entry?.generateImageRequest
+	if (!request || typeof request !== "object") return undefined
+	const imageId = (request as { image_id?: unknown }).image_id
+	return typeof imageId === "string" && imageId.trim() ? imageId : undefined
+}
+
+function getInlineImageId(element: AnyElement): string | undefined {
+	const request = element.generateImageRequest
+	if (!request || typeof request !== "object") return undefined
+	const imageId = (request as { image_id?: unknown }).image_id
+	return typeof imageId === "string" && imageId.trim() ? imageId : undefined
+}
+
+function resolveWinner(
+	userEntry: ElementDetailEntry | undefined,
+	agentEntry: ElementDetailEntry | undefined,
+): { entry: ElementDetailEntry | undefined; source: ElementDetailSource } {
+	if (userEntry && userEntry.source === ELEMENT_DETAIL_SOURCE_USER) {
+		return { entry: userEntry, source: "user" }
+	}
+	if (agentEntry) {
+		return { entry: agentEntry, source: "agent" }
+	}
+	if (userEntry) {
+		// 文件本身由前端维护；source 缺失只影响覆盖优先级，不改变文件所有者。
+		return { entry: userEntry, source: "user" }
+	}
+	return { entry: undefined, source: "unknown" }
+}
+
+function resolveImageIdSource(options: {
+	finalImageId: string
+	agentImageId?: string
+	userImageId?: string
+	inlineImageId?: string
+	winnerSource: ElementDetailSource
+}): ElementDetailSource {
+	const { finalImageId, agentImageId, userImageId, inlineImageId, winnerSource } = options
+
+	// user sidecar 常会复制完整 Agent 请求；相同 image_id 仍是 Agent 文件标识，不能视为前端任务。
+	if (agentImageId === finalImageId) return "agent"
+	if (userImageId === finalImageId) return "user"
+	if (inlineImageId === finalImageId) return "inline"
+	return winnerSource
+}
+
 /**
  * 把 sidecar 中的重字段回填到元素树上（原地修改）。
  * 优先级：用户条目（source=user）> 后端 baseline 条目 > 无源用户条目。
@@ -132,29 +183,42 @@ export function rehydrateHeavyFields(
 	elements: LayerElement[] | undefined,
 	userDoc: ElementDetailsDoc,
 	agentDoc: ElementDetailsDoc,
-): void {
+): ElementDetailsProvenance {
+	const provenance: ElementDetailsProvenance = {}
 	walkElements(elements, (el) => {
 		if (!el.id) return
 		const userEntry = userDoc.elements[el.id]
 		const agentEntry = agentDoc.elements[el.id]
+		const inlineImageId = getInlineImageId(el)
 
-		let winner: ElementDetailEntry | undefined
-		if (userEntry && userEntry.source === ELEMENT_DETAIL_SOURCE_USER) {
-			winner = userEntry
-		} else if (agentEntry) {
-			winner = agentEntry
-		} else {
-			winner = userEntry
-		}
+		const { entry: winner, source: winnerSource } = resolveWinner(userEntry, agentEntry)
 
-		if (!winner) return
-		for (const field of HEAVY_FIELDS) {
-			const value = winner[field]
-			if (value !== undefined && value !== null) {
-				el[field] = value
+		if (winner) {
+			for (const field of HEAVY_FIELDS) {
+				const value = winner[field]
+				if (value !== undefined && value !== null) {
+					el[field] = value
+				}
 			}
 		}
+
+		const finalImageId = getInlineImageId(el)
+		if (!finalImageId) return
+		provenance[el.id] = {
+			generateImageRequest: {
+				valueSource: winner ? winnerSource : "inline",
+				imageId: finalImageId,
+				imageIdSource: resolveImageIdSource({
+					finalImageId,
+					agentImageId: getImageId(agentEntry),
+					userImageId: getImageId(userEntry),
+					inlineImageId,
+					winnerSource: winner ? winnerSource : "inline",
+				}),
+			},
+		}
 	})
+	return provenance
 }
 
 /**

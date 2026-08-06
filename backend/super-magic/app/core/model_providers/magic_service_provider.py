@@ -3,7 +3,7 @@ Magic Service 模型服务商
 
 从 magic service 的 /v1/models 接口加载可用模型列表。
 需要在 init_client_message.json 写入后（客户端 init 完成后）才可调用。
-优先级 priority=3，最高，同 model_id 时覆盖其他服务商的配置。
+优先级 priority=100，最高，同 model_id 时覆盖其他服务商的配置。
 
 所有 magic-service 模型共用 MAGIC_API_BASE_URL + MAGIC_API_KEY 作为调用凭据。
 """
@@ -20,11 +20,16 @@ from agentlang.utils.metadata import MetadataUtil
 logger = get_logger(__name__)
 
 PROVIDER_TYPE = "magic-service"
-PROVIDER_PRIORITY = 3
+PROVIDER_PRIORITY = 100
+MAGIC_SERVICE_SUCCESS_CODE = 1000
 
 # 每 50 次使用或每小时，触发一次后台刷新
 _REFRESH_USE_COUNT = 50
 _REFRESH_INTERVAL_SECONDS = 3600
+
+
+class MagicServiceProviderError(RuntimeError):
+    """magic-service 模型列表加载失败。"""
 
 
 class MagicServiceProvider(ModelProvider):
@@ -49,19 +54,27 @@ class MagicServiceProvider(ModelProvider):
         """调用 magic service /v1/models 获取模型列表并解析为 ModelConfig
 
         Returns:
-            List[ModelConfig]: 解析成功的模型列表，失败时返回空列表
+            List[ModelConfig]: 解析成功的模型列表
+
+        Raises:
+            MagicServiceProviderError: magic-service 未就绪或返回业务错误
         """
         host, authorization = self._get_credentials()
         if not host:
-            logger.warning("MagicServiceProvider: magic_service_host not available, skipping")
-            return []
+            raise MagicServiceProviderError("magic_service_host not available")
 
-        url = f"{host}/v1/models"
+        url = f"{_normalize_magic_service_host(host)}/v1/models"
         params = {"with_info": "1", "with_dynamic_models": "1"}
         headers: Dict[str, str] = {}
-        if authorization:
+        can_send_magic_headers = MetadataUtil.should_send_magic_authorization_headers(host)
+        if authorization and can_send_magic_headers:
             headers["user-authorization"] = authorization
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+        elif not authorization and can_send_magic_headers:
+            api_key = os.environ.get("MAGIC_API_KEY", "")
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+        if can_send_magic_headers:
+            MetadataUtil.add_magic_and_user_authorization_headers(headers)
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -69,20 +82,20 @@ class MagicServiceProvider(ModelProvider):
                 resp.raise_for_status()
                 payload = resp.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"MagicServiceProvider: HTTP error {e.response.status_code} from {url}")
-            return []
+            raise MagicServiceProviderError(f"HTTP error {e.response.status_code} from {url}") from e
         except httpx.RequestError as e:
-            logger.error(f"MagicServiceProvider: request error to {url}: {e}")
-            return []
+            raise MagicServiceProviderError(f"request error to {url}: {e}") from e
+        except ValueError as e:
+            raise MagicServiceProviderError(f"invalid JSON response from {url}") from e
         except Exception as e:
-            logger.error(f"MagicServiceProvider: unexpected error: {e}")
-            return []
+            raise MagicServiceProviderError(f"unexpected error from {url}: {e}") from e
 
         api_key = os.environ.get("MAGIC_API_KEY", "")
         api_base_url = os.environ.get("MAGIC_API_BASE_URL", "")
+        model_items = self._extract_model_items(payload, url)
 
         result: List[ModelConfig] = []
-        for model_data in payload.get("data", []):
+        for model_data in model_items:
             mc = self._parse_model(model_data, api_key=api_key, api_base_url=api_base_url)
             if mc:
                 result.append(mc)
@@ -93,6 +106,25 @@ class MagicServiceProvider(ModelProvider):
     # ------------------------------------------------------------------
     # 内部方法
     # ------------------------------------------------------------------
+
+    def _extract_model_items(self, payload: Any, url: str) -> List[Dict[str, Any]]:
+        """校验 magic-service 业务响应，避免业务失败被误判为空模型列表。"""
+        if not isinstance(payload, dict):
+            raise MagicServiceProviderError(f"invalid response format from {url}")
+
+        code = payload.get("code")
+        if code is not None and code != MAGIC_SERVICE_SUCCESS_CODE:
+            message = payload.get("message") or "unknown error"
+            raise MagicServiceProviderError(f"business error from {url}: code={code}, message={message}")
+
+        if "data" not in payload:
+            raise MagicServiceProviderError(f"missing data field from {url}")
+
+        data = payload["data"]
+        if not isinstance(data, list):
+            raise MagicServiceProviderError(f"invalid data field from {url}: expected list")
+
+        return [item for item in data if isinstance(item, dict)]
 
     def _get_credentials(self):
         """获取 magic service 主机地址和用户授权 token
@@ -112,7 +144,7 @@ class MagicServiceProvider(ModelProvider):
             host = os.environ.get("MAGIC_API_BASE_URL", "").rstrip("/")
             logger.debug("MagicServiceProvider: falling back to MAGIC_API_BASE_URL env var")
 
-        return host, authorization
+        return _normalize_magic_service_host(host), authorization
 
     def _parse_model(
         self,
@@ -146,6 +178,8 @@ class MagicServiceProvider(ModelProvider):
             "api_key": api_key,
             "api_base_url": api_base_url,
             "type": "llm",
+            "provider_id": PROVIDER_TYPE,
+            "priority": PROVIDER_PRIORITY,
         }
 
         # 从 options 提取能力字段
@@ -192,3 +226,11 @@ class MagicServiceProvider(ModelProvider):
         except Exception as e:
             logger.error(f"MagicServiceProvider: failed to parse model '{model_id}': {e}")
             return None
+
+
+def _normalize_magic_service_host(host: str) -> str:
+    """把 OpenAI 兼容调用地址规范化为 magic-service 主机地址，用于拼接 /v1/models。"""
+    normalized = host.strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized[:-3].rstrip("/")
+    return normalized

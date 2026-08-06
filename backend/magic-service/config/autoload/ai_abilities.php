@@ -646,5 +646,24 @@ return [
                 'model_id' => env('AI_ABILITY_FOLLOW_UP_QUESTIONS_MODEL_ID', null), // 对应service_provider_models.model_id
             ],
         ],
+
+        // AI 搜索模型
+        'ai_search_model' => [
+            'code' => 'ai_search_model',
+            'name' => [
+                'zh_CN' => 'AI 搜索模型',
+                'en_US' => 'AI Search Model',
+            ],
+            'description' => [
+                'zh_CN' => '本能力统一管理平台 AI 搜索场景中使用的大语言模型。',
+                'en_US' => 'This capability manages the language model used across AI search scenarios.',
+            ],
+            'icon' => 'ai-search-model-icon',
+            'sort_order' => 26,
+            'status' => env('AI_ABILITY_AI_SEARCH_MODEL_STATUS', true),
+            'config' => [
+                'model_id' => env('AI_ABILITY_AI_SEARCH_MODEL_ID', null),
+            ],
+        ],
     ],
 ];

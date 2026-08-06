@@ -484,10 +484,13 @@ class StreamListenerService:
             event_context = tool_context.get_extension_typed("event_context", EventContext)
             payload = task_message.payload
 
-            # 检查是否应该在UI中显示， 移动到客户端进行判断，暂时注释掉
-            # if hasattr(payload, "show_in_ui") and not payload.show_in_ui:
-            #     logger.info(f"跳过向客户端发送消息，因为 show_in_ui=False, message_id: {payload.message_id}")
-            #     return
+            # TODO: 临时固定出站 show_in_ui 为 True，避免下游过滤权威消息；后续按以下边界完整修复：
+            # 1. 保留 is_visible_in_ui、show_in_ui 字段和数据库列。
+            # 2. direct、queue 和旧处理路径都必须发送完整权威消息。
+            # 3. 权威历史查询不能按 show_in_ui 过滤。
+            # 4. magic-service 需要把 show_in_ui 透传到 SuperMagicMessage。
+            # 5. 前端只根据该字段隐藏工具卡视觉投影。
+            payload.show_in_ui = True
 
             # 检查是否需要推送到客户端
             # if payload.is_empty:

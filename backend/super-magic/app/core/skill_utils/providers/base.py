@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 
 class SkillProviderId(str, Enum):
@@ -33,8 +32,7 @@ class SkillCandidate:
     name: str             # SKILL.md 中的 name（无则取 package_name）
     description: str
     version: str | None   # 来源能拿到的版本号；GitHub 用 commit/tag 前 12 位
-    score: float = 0.0    # 排序分（由 SearchAggregator 填充，provider 内无需设置）
-    extra: dict = field(default_factory=dict)  # 来源特有字段（file_url、stars、author 等）
+    extra: dict[str, object] = field(default_factory=dict)  # 来源特有字段（file_url、stars、author 等）
 
 
 @dataclass
@@ -45,7 +43,7 @@ class FetchedSkill:
     version: str                # 实际版本号（SemVer 或 commit sha 前 12 位）
     source_url: str             # 用于写入 manifest，仅记录非签名 URL
     install_name: str | None = None  # 期望的安装目录名（由 provider 填充，优先级高于 SKILL.md name 字段）
-    extra: dict = field(default_factory=dict)
+    extra: dict[str, object] = field(default_factory=dict)
 
 
 class SkillProvider(ABC):

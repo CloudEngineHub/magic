@@ -1,697 +1,606 @@
-from app.i18n import i18n
-import os
 import asyncio
 import hashlib
+import json
+import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple
 from urllib.parse import urlparse
 
 from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
-from app.core.entity.message.server_message import FileContent, ToolDetail
-from agentlang.tools.tool_result import ToolResult
-from agentlang.event.event import EventType
 from agentlang.logger import get_logger
+from agentlang.tools.tool_result import ToolResult
+from agentlang.utils.file import generate_safe_filename
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
+from app.tools.download_utils import get_download_driver
+from app.tools.download_utils.drivers.base import (
+    DownloadError,
+    DownloadProgress,
+    DownloadRequest,
+    DownloadTimeouts,
+    ProgressCallback,
+)
 from app.tools.workspace_tool import WorkspaceTool
-from agentlang.utils.file import generate_safe_filename
-from app.utils.async_file_utils import async_copy2, async_stat, async_exists
+from app.utils.async_file_utils import (
+    async_close_fd,
+    async_copy2,
+    async_exists,
+    async_mkdir,
+    async_mkstemp,
+    async_replace,
+    async_stat,
+    async_try_read_json,
+    async_unlink,
+    async_write_json,
+)
 
 logger = get_logger(__name__)
 
-# Configuration constants - can be modified for different timeout settings
-# 总超时（含建连 + 读响应体）。视频/大文件需要较长时间，原 15s 对 ~26MB 视频极易超时
-DOWNLOAD_TIMEOUT_SECONDS = 120  # Default timeout for HTTP requests when downloading files
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 30.0
+DEFAULT_READ_IDLE_TIMEOUT_SECONDS = 120.0
 
 
 class DownloadFromUrlParams(BaseToolParams):
     url: str = Field(
         ...,
-        description="""<!--zh: 要下载的文件URL地址，支持HTTP和HTTPS协议-->
-File URL to download, supports HTTP and HTTPS protocols"""
+        description="""<!--zh: 要下载的文件 URL，支持 HTTP 和 HTTPS。-->
+File URL to download. Supports HTTP and HTTPS.""",
     )
     file_path: str = Field(
         ...,
-        description="""<!--zh: 下载文件的保存路径（包含文件名），建议保存到项目工作区内合适的路径下，与项目当前架构情况匹配，并使用用户偏好语言命名。如果指定的目录不存在，会自动创建。-->
-Save path for downloaded file (including filename). Recommend saving to appropriate path within project workspace matching current project structure, using user preferred language for naming. Auto-creates directory if it doesn't exist."""
+        description="""<!--zh: 工作区内的保存路径，包含文件名；目录不存在时自动创建。-->
+Workspace-relative save path including the file name. Missing directories are created automatically.""",
     )
-
-    @classmethod
-    def get_custom_error_message(cls, field_name: str, error_type: str) -> Optional[str]:
-        """获取自定义参数错误信息"""
-        if field_name == "url":
-            return """<!--zh: 缺少必要参数'url'。请提供有效的下载地址。-->
-Missing required parameter 'url'. Please provide valid download address."""
-        elif field_name == "file_path":
-            return "缺少必要参数'file_path'。请提供文件保存路径。"
-        return None
 
 
 class DownloadResult(NamedTuple):
-    """下载结果详情"""
-    file_size: int  # 文件大小（字节）
-    content_type: str  # 内容类型
-    file_exists: bool  # 文件是否已存在
-    file_path: str  # 文件保存路径
-    url: str  # 下载的URL（可能是重定向后的URL）
-    from_cache: bool  # 是否命中缓存
+    """单文件下载结果。"""
+
+    file_size: int
+    content_type: str
+    file_exists: bool
+    file_path: str
+    url: str
+    from_cache: bool
+    resumed: bool
+    retry_count: int
+    request_strategy: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class CacheMetadata:
-    """缓存文件元数据"""
+    """完整缓存文件元数据。"""
+
     content_type: str
     url: str
     file_size: int
-    cached_at: str
 
 
 class DownloadCacheManager:
-    """下载缓存文件管理器"""
+    """管理操作系统临时目录中的完整缓存和续传状态。"""
 
-    def __init__(self):
-        # 获取系统临时目录并创建应用特定的缓存目录
+    def __init__(self) -> None:
         self.cache_dir = Path(tempfile.gettempdir()) / "super-magic-downloads"
 
-    def get_cache_path(self, url: str) -> Path:
-        """根据URL生成缓存文件路径
-
-        Args:
-            url: 要下载的URL
-
-        Returns:
-            Path: 缓存文件路径
-        """
-        # 创建URL哈希作为缓存文件名
-        url_hash = hashlib.sha256(url.encode('utf-8')).hexdigest()
-
-        # 不带扩展名，保持简洁和健壮
-        return self.cache_dir / url_hash
+    def get_cache_path(
+        self,
+        url: str,
+        *,
+        target_identity: str,
+        headers: Mapping[str, str] | None = None,
+    ) -> Path:
+        normalized_headers = sorted(
+            (key.lower(), value) for key, value in (headers or {}).items()
+        )
+        payload = json.dumps(
+            {
+                "url": url,
+                "target": target_identity,
+                "headers": normalized_headers,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        cache_key = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return self.cache_dir / cache_key
 
     async def ensure_cache_dir(self) -> None:
-        """确保缓存目录存在"""
-        if not self.cache_dir.exists():
-            await asyncio.to_thread(self.cache_dir.mkdir, parents=True, exist_ok=True)
-            logger.info(f"创建缓存目录: {self.cache_dir}")
+        await async_mkdir(self.cache_dir, parents=True, exist_ok=True)
 
-    async def save_metadata(self, cache_path: Path, content_type: str, url: str, file_size: int) -> None:
-        """保存缓存文件的元数据
-
-        Args:
-            cache_path: 缓存文件路径
-            content_type: HTTP Content-Type
-            url: 重定向后的最终URL
-            file_size: 文件大小（字节）
-        """
-        import json
-
-        metadata = CacheMetadata(
-            content_type=content_type,
-            url=url,
-            file_size=file_size,
-            cached_at=datetime.now().isoformat()
+    async def save_metadata(
+        self,
+        cache_path: Path,
+        *,
+        content_type: str,
+        url: str,
+        file_size: int,
+    ) -> None:
+        await async_write_json(
+            self._metadata_path(cache_path),
+            {
+                "content_type": content_type,
+                "url": url,
+                "file_size": file_size,
+            },
+            ensure_ascii=False,
         )
 
-        meta_path = cache_path.with_suffix('.meta')
+    async def load_metadata(self, cache_path: Path) -> CacheMetadata | None:
+        data = await async_try_read_json(self._metadata_path(cache_path))
+        if not data:
+            return None
         try:
-            with open(meta_path, 'w', encoding='utf-8') as f:
-                # 将数据类转换为字典以进行JSON序列化
-                json.dump(metadata.__dict__, f)
-            logger.debug(f"保存元数据: {meta_path}")
-        except Exception as e:
-            logger.warning(f"保存缓存元数据失败 {meta_path}: {e}")
-
-    async def load_metadata(self, cache_path: Path) -> Optional[CacheMetadata]:
-        """加载缓存文件的元数据
-
-        Args:
-            cache_path: 缓存文件路径
-
-        Returns:
-            Optional[CacheMetadata]: 元数据对象（如果找到），否则为None
-        """
-        import json
-
-        meta_path = cache_path.with_suffix('.meta')
-        try:
-            if meta_path.exists():
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-
-                # 从加载的数据创建CacheMetadata对象
-                metadata = CacheMetadata(**data)
-                logger.debug(f"加载元数据: {meta_path}")
-                return metadata
-        except Exception as e:
-            logger.warning(f"加载缓存元数据失败 {meta_path}: {e}")
-
-        return None
-
-    async def get_cached_file_info(self, url: str) -> Optional[Tuple[Path, CacheMetadata]]:
-        """获取缓存文件信息（如果存在）
-
-        Args:
-            url: 原始URL
-
-        Returns:
-            Optional[Tuple[Path, CacheMetadata]]: 缓存文件路径和元数据，如果不存在则返回None
-        """
-        cache_path = self.get_cache_path(url)
-
-        if cache_path.exists():
-            metadata = await self.load_metadata(cache_path)
-            if metadata:
-                return cache_path, metadata
-
-        return None
+            return CacheMetadata(
+                content_type=str(data["content_type"]),
+                url=str(data["url"]),
+                file_size=int(data["file_size"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            logger.warning("下载缓存元数据无效: %s", self._metadata_path(cache_path))
+            return None
 
     def is_cache_file(self, file_path: str) -> bool:
-        """检查文件是否是缓存文件
+        path = Path(file_path)
+        return path.parent == self.cache_dir or self.cache_dir in path.parents
 
-        Args:
-            file_path: 文件路径
+    async def try_to_get_metadata_for_file(self, file_path: str) -> CacheMetadata | None:
+        if not self.is_cache_file(file_path):
+            return None
+        return await self.load_metadata(Path(file_path))
 
-        Returns:
-            bool: 如果是缓存文件返回True
-        """
-        try:
-            path = Path(file_path)
-            # 检查文件是否在缓存目录中
-            return self.cache_dir in path.parents or path.parent == self.cache_dir
-        except Exception:
-            return False
-
-    async def try_to_get_metadata_for_file(self, file_path: str) -> Optional[CacheMetadata]:
-        """尝试获取文件的元数据（如果是缓存文件）
-
-        Args:
-            file_path: 文件路径
-
-        Returns:
-            Optional[CacheMetadata]: 元数据对象（如果找到），否则为None
-        """
-        if self.is_cache_file(file_path):
-            return await self.load_metadata(Path(file_path))
-        return None
+    @staticmethod
+    def _metadata_path(cache_path: Path) -> Path:
+        return cache_path.parent / f"{cache_path.name}.meta"
 
 
+# 单文件下载底座与 ReadFile 一样保留为标准 Tool，供批量下载和其它工具内部复用。
+# 不在 Agent 的 tools 中挂载；模型下载统一通过 download Skill 调用 download_from_urls。
 @tool()
 class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[DownloadFromUrlParams]):
     """<!--zh
-    URL文件下载工具
-
-    - 支持自动处理重定向
-    - 如果文件不存在，将自动创建文件和必要的目录
-    - 如果文件已存在，将直接覆盖
-    - 支持各种类型的文件下载，如图片、PDF、压缩包等
+    下载单个 HTTP 或 HTTPS 文件到工作区。
     -->
-    URL file download tool
-
-    - Supports auto-handling redirects
-    - Auto-creates file and necessary directories if file doesn't exist
-    - Directly overwrites if file exists
-    - Supports downloading various file types like images, PDFs, archives, etc.
+    Download one HTTP or HTTPS file into the workspace.
     """
 
-    def __init__(self, **data):
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
-        # 初始化缓存管理器
         self.cache_manager = DownloadCacheManager()
-        # URL锁字典，用于防止同一URL的并发下载
-        self._url_locks: Dict[str, asyncio.Lock] = {}
-        # 提前加载下载驱动
-        from app.tools.download_utils import get_download_driver
+        self._download_locks: dict[str, asyncio.Lock] = {}
         self._driver = get_download_driver()
 
-    async def try_to_get_metadata_for_file(self, file_path: str) -> Optional[CacheMetadata]:
-        """尝试获取文件的缓存元数据
-
-        这是一个公开接口，供其他工具调用
-
-        Args:
-            file_path: 文件路径
-
-        Returns:
-            Optional[CacheMetadata]: 如果是缓存文件且有元数据则返回，否则返回 None
-        """
+    async def try_to_get_metadata_for_file(self, file_path: str) -> CacheMetadata | None:
         return await self.cache_manager.try_to_get_metadata_for_file(file_path)
 
     async def execute(self, tool_context: ToolContext, params: DownloadFromUrlParams) -> ToolResult:
-        """
-        执行文件下载操作
-
-        Args:
-            tool_context: 工具上下文
-            params: 参数对象，包含URL和文件保存路径
-
-        Returns:
-            ToolResult: 包含操作结果
-        """
-        # Call the pure execution method
-        result = await self.execute_purely(params)
-
-        # File events are now handled within execute_purely via _file_versioning_context
-
-        return result
+        return await self.execute_purely(params, tool_context=tool_context)
 
     async def execute_purely(
         self,
         params: DownloadFromUrlParams,
         cache_only: bool = False,
-        tool_context: ToolContext = None,
-        timeout_seconds: Optional[int] = None,
+        tool_context: ToolContext | None = None,
+        timeout_seconds: int | None = None,
+        *,
+        headers: Mapping[str, str] | None = None,
+        overwrite: bool = True,
+        progress_callback: ProgressCallback | None = None,
+        interruption_event: asyncio.Event | None = None,
     ) -> ToolResult:
-        """
-        Pure execution without tool context - allows clean invocation without context
-
-        Args:
-            params: 参数对象，包含URL和文件保存路径
-            cache_only: 如果为True且file_path为空，则只下载到缓存并返回缓存路径
-            tool_context: 可选的工具上下文，用于事件分发
-            timeout_seconds: 内部调用方可选的下载超时时间，不暴露到工具参数
-
-        Returns:
-            ToolResult: 包含操作结果
-        """
         try:
-            resolved_timeout_seconds = self._resolve_timeout_seconds(timeout_seconds)
+            self._validate_url(params.url)
+            resolved_headers = dict(headers or {})
+            resolved_interruption_event = interruption_event or self._interruption_event(tool_context)
 
-            # Check if cache-only mode is requested
             if cache_only and not params.file_path.strip():
-                # Cache-only mode: download to cache and return cache path
-                                # Create a dummy path that won't be used
-                dummy_path = Path("dummy")
                 download_result = await self._download_file(
-                    params.url,
-                    dummy_path,
+                    url=params.url,
+                    file_path=Path(),
                     cache_only=True,
-                    timeout_seconds=resolved_timeout_seconds,
+                    timeout_seconds=timeout_seconds,
+                    headers=resolved_headers,
+                    overwrite=True,
+                    progress_callback=progress_callback,
+                    interruption_event=resolved_interruption_event,
+                )
+                extension = self._determine_extension_from_content_type(
+                    download_result.content_type,
+                    params.url,
+                )
+                return ToolResult(
+                    content=(
+                        f"Downloaded the file to the internal cache: {download_result.file_path}. "
+                        f"Size: {self._format_size(download_result.file_size)}."
+                    ),
+                    extra_info={
+                        "file_path": download_result.file_path,
+                        "file_exists": False,
+                        "file_size": download_result.file_size,
+                        "content_type": download_result.content_type,
+                        "url": download_result.url,
+                        "from_cache": download_result.from_cache,
+                        "file_extension": extension,
+                        "cache_only": True,
+                        "resumed": download_result.resumed,
+                        "retry_count": download_result.retry_count,
+                        "request_strategy": download_result.request_strategy,
+                        "status": "completed",
+                    },
                 )
 
-                if download_result.file_size > 0:
-                    cache_path = self.cache_manager.get_cache_path(params.url)
-                    output = f"文件下载到缓存: {cache_path} | 大小: {self._format_size(download_result.file_size)} | 类型: {download_result.content_type}"
+            file_path = self.resolve_download_path(params.file_path, params.url)
+            await async_mkdir(file_path.parent, parents=True, exist_ok=True)
+            file_exists = await async_exists(file_path)
 
-                    # Determine file extension from content type for caller's reference
-                    detected_extension = self._determine_extension_from_content_type(download_result.content_type, params.url)
+            if file_exists and not overwrite:
+                return ToolResult(
+                    content=f"Skipped the download because the target file already exists: {file_path}",
+                    extra_info={
+                        "file_path": str(file_path),
+                        "file_exists": True,
+                        "file_size": (await async_stat(file_path)).st_size,
+                        "content_type": "application/octet-stream",
+                        "url": params.url,
+                        "from_cache": False,
+                        "resumed": False,
+                        "retry_count": 0,
+                        "request_strategy": "not_requested",
+                        "status": "skipped",
+                    },
+                )
 
-                    return ToolResult(
-                        content=output,
-                        extra_info={
-                            "file_path": str(cache_path),
-                            "file_exists": False,  # This is a cache file, not a user file
-                            "file_size": download_result.file_size,
-                            "content_type": download_result.content_type,
-                            "url": download_result.url,
-                            "from_cache": download_result.from_cache,
-                            "file_extension": detected_extension,  # Detected extension for caller's use
-                            "cache_only": True  # Indicate this is cache-only mode
-                        }
-                    )
-                else:
-                    return ToolResult.error("缓存下载失败")
-
-            # Normal mode: use safe path validation
-            full_path = self.resolve_path(params.file_path)
-            # 从安全路径对象中提取父目录和原始文件名
-            parent_dir = full_path.parent
-            original_name = full_path.name
-
-            # 分离基本名称和扩展名
-            base_name, extension = os.path.splitext(original_name)
-
-            # 对基本名称部分进行安全处理
-            safe_base_name = generate_safe_filename(base_name)
-
-            # 如果基本名称处理后为空，尝试从 URL 获取或使用默认名称
-            if not safe_base_name:
-                try:
-                    parsed_url = urlparse(params.url)
-                    url_filename = os.path.basename(parsed_url.path)
-                    if url_filename: # 确保从URL获取的文件名不为空
-                        url_base_name, url_extension = os.path.splitext(url_filename)
-                        safe_base_name = generate_safe_filename(url_base_name) if url_base_name else "downloaded_file"
-                        # Use the extension from the URL if available and original was missing or different
-                        if url_extension and (not extension or extension.lower() != url_extension.lower()):
-                            extension = url_extension
-                    else:
-                        safe_base_name = "downloaded_file"
-                except Exception:
-                    safe_base_name = "downloaded_file" # Fallback default name
-
-            # 重新组合安全的文件名和原始扩展名
-            # 确保扩展名以点开头（如果存在且不是点）
-            if extension and not extension.startswith('.'):
-                 extension = '.' + extension
-            safe_name = safe_base_name + extension
-
-            # 重构最终的文件路径
-            file_path = parent_dir / safe_name
-
-            # 创建目录（如果需要）
-            await self._create_directories(file_path)
-
-            # 使用 versioning context 下载文件（无需更新时间戳，因为是工具下载的文件）
-            if tool_context:
-                async with self._file_versioning_context(tool_context, file_path, update_timestamp=False):
+            if tool_context is not None:
+                async with self._file_versioning_context(
+                    tool_context,
+                    file_path,
+                    update_timestamp=False,
+                ):
                     download_result = await self._download_file(
-                        params.url,
-                        file_path,
+                        url=params.url,
+                        file_path=file_path,
                         cache_only=False,
-                        timeout_seconds=resolved_timeout_seconds,
+                        timeout_seconds=timeout_seconds,
+                        headers=resolved_headers,
+                        overwrite=overwrite,
+                        progress_callback=progress_callback,
+                        interruption_event=resolved_interruption_event,
                     )
             else:
                 download_result = await self._download_file(
-                    params.url,
-                    file_path,
+                    url=params.url,
+                    file_path=file_path,
                     cache_only=False,
-                    timeout_seconds=resolved_timeout_seconds,
+                    timeout_seconds=timeout_seconds,
+                    headers=resolved_headers,
+                    overwrite=overwrite,
+                    progress_callback=progress_callback,
+                    interruption_event=resolved_interruption_event,
                 )
 
-            # Generate formatted output
-            output = (
-                f"文件下载成功: {file_path} | "
-                f"大小: {self._format_size(download_result.file_size)} | "
-                f"类型: {download_result.content_type}"
-            )
-
-            # Add warning if file was overwritten
-            if download_result.file_exists:
-                output += "\n⚠️ 注意：原文件已被新下载的文件覆盖"
-
-            # 返回操作结果，包含额外信息供事件分发使用
             return ToolResult(
-                content=output,
+                content=(
+                    f"Downloaded the file to {file_path}. "
+                    f"Size: {self._format_size(download_result.file_size)}. "
+                    f"Request strategy: {download_result.request_strategy}."
+                ),
                 extra_info={
                     "file_path": str(file_path),
-                    "file_exists": download_result.file_exists,
+                    "file_exists": file_exists,
                     "file_size": download_result.file_size,
                     "content_type": download_result.content_type,
                     "url": download_result.url,
                     "from_cache": download_result.from_cache,
-                    "file_extension": file_path.suffix.lower()  # Add determined file extension
-                }
+                    "file_extension": file_path.suffix.lower(),
+                    "resumed": download_result.resumed,
+                    "retry_count": download_result.retry_count,
+                    "request_strategy": download_result.request_strategy,
+                    "status": "completed",
+                },
+            )
+        except asyncio.CancelledError:
+            raise
+        except DownloadError as exc:
+            logger.warning("下载失败: %s, 原因: %s", params.url, exc)
+            next_action = "retry_same_request" if exc.resume_available or exc.retryable else "review_request"
+            return ToolResult.error(
+                self._download_error_content(exc, next_action),
+                extra_info={
+                    "status": "failed",
+                    "retryable": exc.retryable,
+                    "resume_available": exc.resume_available,
+                    "downloaded_bytes": exc.downloaded_bytes,
+                    "total_bytes": exc.total_bytes,
+                    "request_strategy": exc.request_strategy,
+                    "next_action": next_action,
+                },
+            )
+        except Exception as exc:
+            error_detail = f"{type(exc).__name__}: {exc!s}".rstrip(": ")
+            logger.error("下载文件失败: %s", error_detail, exc_info=True)
+            return ToolResult.error(
+                f"Failed to download the file: {error_detail}",
+                extra_info={
+                    "status": "failed",
+                    "retryable": False,
+                    "resume_available": False,
+                    "next_action": "review_request",
+                },
             )
 
-        except Exception as e:
-            from app.tools.web_scrape_utils.drivers.web_collector import AccessDeniedException
-            if isinstance(e, AccessDeniedException):
-                logger.warning(f"下载文件被拒绝: {params.url}, 原因: {e}")
-                return ToolResult.error(str(e))
-            # 把根因（异常类型 + 消息）一起带出来，方便上层/日志快速定位（如 TimeoutError 实例 str 为空）
-            error_detail = f"{type(e).__name__}: {e!s}".rstrip(": ")
-            logger.error(f"下载文件失败: {error_detail}", exc_info=True)
-            return ToolResult.error(f"Failed to download file: {error_detail}")
+    def resolve_download_path(self, file_path: str, url: str) -> Path:
+        """解析并清理用户指定的目标路径。"""
+        full_path = self.resolve_path(file_path)
+        base_name, extension = os.path.splitext(full_path.name)
+        safe_base_name = generate_safe_filename(base_name)
 
-    async def _create_directories(self, file_path: Path) -> None:
-        """创建文件所需的目录结构"""
-        directory = file_path.parent
+        if not safe_base_name:
+            url_filename = os.path.basename(urlparse(url).path)
+            url_base_name, url_extension = os.path.splitext(url_filename)
+            safe_base_name = generate_safe_filename(url_base_name) if url_base_name else "downloaded_file"
+            if url_extension and not extension:
+                extension = url_extension
 
-        if not directory.exists():
-            await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
-            logger.info(f"创建目录: {directory}")
+        if extension and not extension.startswith("."):
+            extension = f".{extension}"
+        return full_path.parent / f"{safe_base_name}{extension}"
 
-    def _resolve_timeout_seconds(self, timeout_seconds: Optional[int]) -> int:
-        """解析内部下载超时时间，默认保留全局下载超时。"""
-        if timeout_seconds is None:
-            return DOWNLOAD_TIMEOUT_SECONDS
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be greater than 0")
-        return timeout_seconds
-
-    async def download_file(self, url: str, file_path: Path, cache_only: bool = False) -> DownloadResult:
-        """下载文件到指定路径，支持缓存和并发锁，供外部调用方复用。"""
-        return await self._download_file(url, file_path, cache_only)
+    async def download_file(
+        self,
+        url: str,
+        file_path: Path,
+        cache_only: bool = False,
+    ) -> DownloadResult:
+        return await self._download_file(url=url, file_path=file_path, cache_only=cache_only)
 
     async def _download_file(
         self,
         url: str,
         file_path: Path,
         cache_only: bool = False,
-        timeout_seconds: int = DOWNLOAD_TIMEOUT_SECONDS,
+        timeout_seconds: int | None = None,
+        headers: Mapping[str, str] | None = None,
+        overwrite: bool = True,
+        progress_callback: ProgressCallback | None = None,
+        interruption_event: asyncio.Event | None = None,
     ) -> DownloadResult:
-        """Download file with caching mechanism"""
-        # 获取或创建此 URL 的锁，防止并发下载同一个 URL
-        if url not in self._url_locks:
-            self._url_locks[url] = asyncio.Lock()
-
-        # 使用锁确保同一 URL 只有一个任务在下载
-        async with self._url_locks[url]:
-            return await self._download_file_with_lock(url, file_path, cache_only, timeout_seconds)
+        target_identity = "__cache_only__" if cache_only else str(file_path)
+        cache_path = self.cache_manager.get_cache_path(
+            url,
+            target_identity=target_identity,
+            headers=headers,
+        )
+        lock = self._download_locks.setdefault(str(cache_path), asyncio.Lock())
+        async with lock:
+            return await self._download_file_with_lock(
+                url=url,
+                file_path=file_path,
+                cache_path=cache_path,
+                cache_only=cache_only,
+                timeout_seconds=timeout_seconds,
+                headers=headers,
+                overwrite=overwrite,
+                progress_callback=progress_callback,
+                interruption_event=interruption_event,
+            )
 
     async def _download_file_with_lock(
         self,
+        *,
         url: str,
         file_path: Path,
-        cache_only: bool = False,
-        timeout_seconds: int = DOWNLOAD_TIMEOUT_SECONDS,
+        cache_path: Path,
+        cache_only: bool,
+        timeout_seconds: int | None,
+        headers: Mapping[str, str] | None,
+        overwrite: bool,
+        progress_callback: ProgressCallback | None,
+        interruption_event: asyncio.Event | None,
     ) -> DownloadResult:
-        """Download file with caching mechanism (executed within lock)"""
-        final_url = url
-        content_type = ""
         file_exists = await async_exists(file_path) if not cache_only else False
-        from_cache = False
-
-        # Get cache path for this URL
-        cache_path = self.cache_manager.get_cache_path(url)
-
-                # Check if file exists in cache with retry for concurrent downloads
-        max_retries = 5
-        retry_delay = 0.1  # 100ms
-
-        for attempt in range(max_retries):
-            if cache_path.exists():
-                                                # Cache hit
-                logger.info(f"Cache hit for URL: {url}")
-
-                if cache_only:
-                    # Cache-only mode: just return cache info
-                    file_size = cache_path.stat().st_size
-                    target_path = str(cache_path)
-                else:
-                    # Copy from cache to target path
-                    file_size = await self._copy_file(cache_path, file_path)
-                    target_path = str(file_path)
-
-                # Load metadata from cache if available
-                cached_metadata = await self.cache_manager.load_metadata(cache_path)
-                if cached_metadata:
-                    content_type = cached_metadata.content_type
-                    final_url = cached_metadata.url
-                else:
-                    content_type = "application/octet-stream"
-                    final_url = url
-
-                return DownloadResult(
-                    file_size=file_size,
-                    content_type=content_type,
-                    file_exists=file_exists,
-                    file_path=target_path,
-                    url=final_url,
-                    from_cache=True
-                )
-
-            # Check for concurrent download in progress
-            temp_cache_path = cache_path.with_suffix('.tmp')
-            if temp_cache_path.exists() and attempt < max_retries - 1:
-                # Another process is downloading, wait and retry
-                logger.debug(f"Concurrent download detected for {url}, waiting...")
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-                continue
-
-            # No cache found and no concurrent download, proceed to download
-            break
-
-        # Cache miss - download and cache with atomic operation
-        logger.info(f"Cache miss for URL: {url}, downloading...")
-
-        # Ensure cache directory exists
         await self.cache_manager.ensure_cache_dir()
 
-        try:
-            # 使用驱动下载到缓存路径
-            result = await self._driver.download(url, cache_path, timeout=timeout_seconds)
-
-            file_size = result.file_size
-            content_type = result.content_type
-            final_url = result.final_url
-
-            # Save metadata alongside cache file
-            await self.cache_manager.save_metadata(cache_path, content_type, final_url, file_size)
-
-            logger.info(f"Downloaded to cache: {cache_path}, size: {file_size} bytes")
-
-            # Copy from cache to target location if needed
-            if cache_only:
-                # Cache-only mode: return cache path
-                target_path = str(cache_path)
-            else:
-                await self._copy_file(cache_path, file_path)
+        if await async_exists(cache_path):
+            metadata = await self.cache_manager.load_metadata(cache_path)
+            file_size = (await async_stat(cache_path)).st_size
+            target_path = str(cache_path)
+            if not cache_only:
+                if file_exists and not overwrite:
+                    return DownloadResult(
+                        file_size=(await async_stat(file_path)).st_size,
+                        content_type=metadata.content_type if metadata else "application/octet-stream",
+                        file_exists=True,
+                        file_path=str(file_path),
+                        url=metadata.url if metadata else url,
+                        from_cache=True,
+                        resumed=False,
+                        retry_count=0,
+                        request_strategy="cache_hit",
+                    )
+                await self._copy_cache_to_target(cache_path, file_path)
                 target_path = str(file_path)
 
             return DownloadResult(
                 file_size=file_size,
-                content_type=content_type,
+                content_type=metadata.content_type if metadata else "application/octet-stream",
                 file_exists=file_exists,
                 file_path=target_path,
-                url=final_url,
-                from_cache=from_cache
+                url=metadata.url if metadata else url,
+                from_cache=True,
+                resumed=False,
+                retry_count=0,
+                request_strategy="cache_hit",
             )
 
-        except Exception as e:
-            # Clean up cache file if download failed partially
-            if cache_path.exists():
-                try:
-                    cache_path.unlink()
-                except Exception as cleanup_error:
-                    logger.warning(f"Failed to cleanup cache file {cache_path}: {cleanup_error}")
-            raise e
-
-    def _determine_extension_from_content_type(self, content_type: str, url: str) -> str:
-        """
-        Determine file extension from content type and URL
-
-        Args:
-            content_type: HTTP Content-Type header value
-            url: The original URL
-
-        Returns:
-            str: File extension (with dot), or empty string if cannot determine
-        """
-        if not content_type:
-            content_type = ""
-
-        content_type = content_type.lower()
-
-        # Map content types to extensions
-        content_type_map = {
-            'image/jpeg': '.jpg',
-            'image/jpg': '.jpg',
-            'image/png': '.png',
-            'image/gif': '.gif',
-            'image/webp': '.webp',
-            'image/bmp': '.bmp',
-            'image/tiff': '.tiff',
-            'image/ico': '.ico',
-            'application/pdf': '.pdf',
-            'text/html': '.html',
-            'text/plain': '.txt',
-            'application/json': '.json',
-            'application/xml': '.xml',
-            'text/xml': '.xml',
-            'application/zip': '.zip',
-            'application/x-zip-compressed': '.zip',
-        }
-
-        # First try exact match
-        for ct, ext in content_type_map.items():
-            if ct in content_type:
-                return ext
-
-        # If no content type match, try to extract from URL
-        try:
-            url_path = url.split('?')[0]  # Remove query parameters
-            url_ext = Path(url_path).suffix.lower()
-            if url_ext and len(url_ext) <= 5:  # Reasonable extension length
-                return url_ext
-        except Exception:
-            pass
-
-        return ""  # No extension determined
-
-    async def _copy_file(self, source_path: Path, target_path: Path) -> int:
-        """
-        Copy file from source to target, preserving metadata
-
-        Args:
-            source_path: Source file path
-            target_path: Target file path
-
-        Returns:
-            int: File size in bytes
-        """
-        # Use async_copy2 to preserve metadata
-        await async_copy2(source_path, target_path)
-
-        # Get file size asynchronously using async_stat
-        stat_result = await async_stat(target_path)
-        file_size = stat_result.st_size
-
-        logger.info(f"File copied from cache: {source_path} -> {target_path}, size: {file_size} bytes")
-
-        return file_size
-
-    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None) -> Optional[ToolDetail]:
-        """
-        根据工具执行结果获取对应的ToolDetail
-
-        Args:
-            tool_context: 工具上下文
-            result: 工具执行的结果
-            arguments: 工具执行的参数字典
-
-        Returns:
-            Optional[ToolDetail]: 工具详情对象，可能为None
-        """
-        if not result.ok:
-            return None
-
-        if not arguments or "file_path" not in arguments:
-            logger.warning("没有提供file_path参数")
-            return None
-
-        file_path = arguments["file_path"]
-        file_path_path = self.resolve_path(file_path)
-        if not file_path_path or not file_path_path.exists():
-            return None
-
-        file_name = os.path.basename(file_path)
-
-        # 使用 AbstractFileTool 的方法获取显示类型
-        display_type = self.get_display_type_by_extension(file_path)
-
-        # 对于图片类型，我们可能需要返回文件路径而不是内容
-        # 这里简化处理，只返回文件名
-        return ToolDetail(
-            type=display_type,
-            data=FileContent(
-                file_name=file_name,
-                content="" # 对于大文件或二进制文件，不返回内容
-            )
+        explicit_total_timeout = float(timeout_seconds) if timeout_seconds is not None else None
+        request = DownloadRequest(
+            url=url,
+            destination=cache_path,
+            headers=dict(headers or {}),
+            timeouts=DownloadTimeouts(
+                connect_seconds=(
+                    min(DEFAULT_CONNECT_TIMEOUT_SECONDS, explicit_total_timeout)
+                    if explicit_total_timeout is not None
+                    else DEFAULT_CONNECT_TIMEOUT_SECONDS
+                ),
+                read_idle_seconds=(
+                    explicit_total_timeout
+                    if explicit_total_timeout is not None
+                    else DEFAULT_READ_IDLE_TIMEOUT_SECONDS
+                ),
+                total_seconds=explicit_total_timeout,
+            ),
+        )
+        driver_result = await self._driver.download(
+            request,
+            progress_callback=progress_callback,
+            interruption_event=interruption_event,
+        )
+        await self.cache_manager.save_metadata(
+            cache_path,
+            content_type=driver_result.content_type,
+            url=driver_result.final_url,
+            file_size=driver_result.file_size,
         )
 
-    def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
-        """获取备注内容"""
-        if not arguments:
-            return i18n.translate("read_file.not_found", category="tool.messages")
+        target_path = str(cache_path)
+        if not cache_only:
+            await self._copy_cache_to_target(cache_path, file_path)
+            target_path = str(file_path)
 
-        url = arguments.get("url", "")
-        return url if url else "未知URL"
+        return DownloadResult(
+            file_size=driver_result.file_size,
+            content_type=driver_result.content_type,
+            file_exists=file_exists,
+            file_path=target_path,
+            url=driver_result.final_url,
+            from_cache=False,
+            resumed=driver_result.resumed,
+            retry_count=driver_result.retry_count,
+            request_strategy=driver_result.request_strategy,
+        )
 
-    async def get_after_tool_call_friendly_action_and_remark(self, tool_name: str, tool_context: ToolContext, result: ToolResult, execution_time: float, arguments: Dict[str, Any] = None) -> Dict:
-        """
-        获取工具调用后的友好动作和备注
-        """
+    async def _copy_cache_to_target(self, source_path: Path, target_path: Path) -> None:
+        file_descriptor, temporary_name = await async_mkstemp(
+            prefix=f".{target_path.name}.",
+            suffix=".download",
+            dir=target_path.parent,
+        )
+        temporary_path = Path(temporary_name)
+        await async_close_fd(file_descriptor)
+        try:
+            await async_copy2(source_path, temporary_path)
+            await async_replace(temporary_path, target_path)
+        finally:
+            await async_unlink(temporary_path)
+
+    async def get_tool_detail(
+        self,
+        tool_context: ToolContext,
+        result: ToolResult,
+        arguments: dict[str, Any] | None = None,
+    ) -> ToolDetail | None:
+        if not result.ok:
+            return ToolDetail(
+                type=DisplayType.TEXT,
+                data={"message": self._truncate(result.content, 300)},
+            )
+
+        file_path = str((result.extra_info or {}).get("file_path") or "")
+        if not file_path or not await async_exists(file_path):
+            return None
+
+        return ToolDetail(
+            type=self.get_display_type_by_extension(file_path),
+            data=FileContent(file_name=Path(file_path).name, content=""),
+        )
+
+    async def get_after_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        result: ToolResult,
+        execution_time: float,
+        arguments: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         if not result.ok:
             return {
                 "action": i18n.translate("download_from_url", category="tool.actions"),
-                "remark": i18n.translate("download_from_url.error", category="tool.messages", error=result.content)
+                "remark": i18n.translate(
+                    "download_from_url.error",
+                    category="tool.messages",
+                    error=result.content,
+                ),
             }
-
+        url = str((arguments or {}).get("url") or "")
         return {
             "action": i18n.translate("download_from_url", category="tool.actions"),
-            "remark": self._get_remark_content(result, arguments)
+            "remark": url or i18n.translate("download_from_url.completed", category="tool.messages"),
         }
 
-    def _format_size(self, size_bytes: int) -> str:
-        """格式化文件大小显示"""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_bytes < 1024.0 or unit == 'TB':
-                return f"{size_bytes:.2f} {unit}" if unit != 'B' else f"{size_bytes} {unit}"
-            size_bytes /= 1024.0
+    @staticmethod
+    def _interruption_event(tool_context: ToolContext | None) -> asyncio.Event | None:
+        agent_context = tool_context.get_extension("agent_context") if tool_context else None
+        return agent_context.get_interruption_event() if agent_context else None
+
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("url must be a valid HTTP or HTTPS URL")
+
+    @staticmethod
+    def _download_error_content(error: DownloadError, next_action: str) -> str:
+        parts = [f"Download failed: {error}"]
+        if error.downloaded_bytes > 0:
+            parts.append(f"Preserved bytes: {error.downloaded_bytes}")
+        parts.append(f"Resume available: {'yes' if error.resume_available else 'no'}")
+        parts.append(f"Next action: {next_action}")
+        return ". ".join(parts) + "."
+
+    @staticmethod
+    def _determine_extension_from_content_type(content_type: str, url: str) -> str:
+        content_type_map = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "application/pdf": ".pdf",
+            "application/json": ".json",
+            "application/zip": ".zip",
+        }
+        normalized = content_type.lower()
+        for candidate, extension in content_type_map.items():
+            if candidate in normalized:
+                return extension
+        url_extension = Path(urlparse(url).path).suffix.lower()
+        return url_extension if 1 < len(url_extension) <= 10 else ""
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        size = float(size_bytes)
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if size < 1024 or unit == "TB":
+                return f"{int(size)} {unit}" if unit == "B" else f"{size:.2f} {unit}"
+            size /= 1024
+        return f"{size_bytes} B"
+
+    @staticmethod
+    def _truncate(text: str, max_length: int) -> str:
+        return text if len(text) <= max_length else f"{text[: max_length - 1]}…"
+
+
+__all__ = [
+    "CacheMetadata",
+    "DownloadCacheManager",
+    "DownloadFromUrl",
+    "DownloadFromUrlParams",
+    "DownloadProgress",
+    "DownloadResult",
+]

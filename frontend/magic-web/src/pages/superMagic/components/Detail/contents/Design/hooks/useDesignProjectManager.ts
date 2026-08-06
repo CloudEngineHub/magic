@@ -14,12 +14,15 @@ import {
 } from "../managers"
 import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
 import type { DesignDraftReason } from "../utils/designDraftStorage"
+import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
 export interface UseDesignProjectManagerReturn {
 	magicProjectJsFileId: string | null
 	designData: DesignData
+	elementDetailsProvenance: ElementDetailsProvenance
+	setElementDetailsProvenance: (provenance: ElementDetailsProvenance) => void
 	updateDesignData: (updater: (draft: DesignData) => void) => void
 	updateDesignDataAndScheduleSave: (
 		updater: (draft: DesignData) => void,
@@ -101,6 +104,8 @@ export function useDesignProjectManager(
 
 	const [magicProjectJsFileId, setMagicProjectJsFileId] = useState<string | null>(null)
 	const [designData, updateDesignData] = useImmer<DesignData>(INITIAL_DESIGN_DATA)
+	const [elementDetailsProvenance, setElementDetailsProvenanceState] =
+		useState<ElementDetailsProvenance>({})
 	const [isInitialLoading, setIsInitialLoading] = useState(true)
 	const [isReadOnly, setIsReadOnly] = useState(
 		!options.allowEdit || options.isPlaybackMode || options.isShareRoute || options.isMobile,
@@ -113,6 +118,7 @@ export function useDesignProjectManager(
 	const [conflictState, setConflictState] = useState<DesignConflict | null>(null)
 
 	const designDataRef = useRef(designData)
+	const elementDetailsProvenanceRef = useRef(elementDetailsProvenance)
 	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const isReadOnlyRef = useRef(isReadOnly)
@@ -122,6 +128,7 @@ export function useDesignProjectManager(
 	const fileVersionRef = useRef<number | undefined>(undefined)
 
 	designDataRef.current = designData
+	elementDetailsProvenanceRef.current = elementDetailsProvenance
 	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
 	isReadOnlyRef.current = isReadOnly
@@ -140,6 +147,7 @@ export function useDesignProjectManager(
 	const stateBag: DesignProjectStateBag = useMemo(
 		() => ({
 			getDesignData: () => designDataRef.current,
+			getElementDetailsProvenance: () => elementDetailsProvenanceRef.current,
 			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
 			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
@@ -156,6 +164,10 @@ export function useDesignProjectManager(
 				setDesignData: (data) => {
 					designDataRef.current = data
 					updateDesignData(() => data)
+				},
+				setElementDetailsProvenance: (provenance) => {
+					elementDetailsProvenanceRef.current = provenance
+					setElementDetailsProvenanceState(provenance)
 				},
 				setIsInitialLoading,
 				setIsSaving,
@@ -234,6 +246,11 @@ export function useDesignProjectManager(
 	return {
 		magicProjectJsFileId,
 		designData,
+		elementDetailsProvenance,
+		setElementDetailsProvenance: (provenance) => {
+			elementDetailsProvenanceRef.current = provenance
+			setElementDetailsProvenanceState(provenance)
+		},
 		updateDesignData: updateDesignDataState,
 		updateDesignDataAndScheduleSave,
 

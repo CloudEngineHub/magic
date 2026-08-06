@@ -1,8 +1,11 @@
 import { useMemoizedFn } from "ahooks"
 import type { AttachmentItem } from "./types"
+import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
 	addFileToCurrentChat,
 	addFileToNewChat,
+	addMentionsToCurrentChat,
+	addMentionsToNewChat,
 	addMultipleFilesToCurrentChat,
 	addMultipleFilesToNewChat,
 } from "../../../utils/topics"
@@ -20,6 +23,7 @@ interface UseSelectedFilesManagerOptions {
 	selectedProject?: ProjectListItem | null
 	afterAddFileToCurrentTopic?: () => void
 	afterAddFileToNewTopic?: () => void
+	createAttachmentMention?: (item: AttachmentItem) => TiptapMentionAttributes | null
 }
 
 /**
@@ -74,7 +78,17 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		selectedProject,
 		afterAddFileToCurrentTopic,
 		afterAddFileToNewTopic,
+		createAttachmentMention,
 	} = options
+
+	/** 将文件转换为当前文件空间定义的 mention。 */
+	const createMentionsForChat = useMemoizedFn((files: AttachmentItem[]) => {
+		if (!createAttachmentMention) return []
+
+		return files
+			.map(createAttachmentMention)
+			.filter((item): item is TiptapMentionAttributes => item !== null)
+	})
 
 	// 获取选中的文件列表
 	const getSelectedFiles = useMemoizedFn(() => {
@@ -88,7 +102,14 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			addMultipleFilesToCurrentChat({ fileItems: selectedFiles })
+			if (createAttachmentMention) {
+				addMentionsToCurrentChat({
+					items: createMentionsForChat(selectedFiles),
+					autoFocus: true,
+				})
+			} else {
+				addMultipleFilesToCurrentChat({ fileItems: selectedFiles })
+			}
 			afterAddFileToCurrentTopic?.()
 		}
 	})
@@ -100,12 +121,21 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const selectedFiles = getSelectedFiles()
 
 		if (selectedFiles.length > 0) {
-			addMultipleFilesToNewChat({
-				fileItems: selectedFiles,
-				selectedWorkspace,
-				selectedProject,
-				afterAddFileToNewTopic,
-			})
+			if (createAttachmentMention) {
+				addMentionsToNewChat({
+					items: createMentionsForChat(selectedFiles),
+					selectedProject,
+					afterAddFileToNewTopic,
+					autoFocus: true,
+				})
+			} else {
+				addMultipleFilesToNewChat({
+					fileItems: selectedFiles,
+					selectedWorkspace,
+					selectedProject,
+					afterAddFileToNewTopic,
+				})
+			}
 		}
 	})
 
@@ -128,18 +158,34 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 
 	// 添加单个文件到当前对话
 	const handleAddToCurrentChat = useMemoizedFn((item: AttachmentItem) => {
-		addFileToCurrentChat({ fileItem: item })
+		if (createAttachmentMention) {
+			const mention = createAttachmentMention(item)
+			if (mention) addMentionsToCurrentChat({ items: [mention], autoFocus: true })
+		} else {
+			addFileToCurrentChat({ fileItem: item })
+		}
 		afterAddFileToCurrentTopic?.()
 	})
 
 	// 添加单个文件到新对话
 	const handleAddToNewChat = useMemoizedFn((item: AttachmentItem) => {
-		addFileToNewChat({
-			fileItem: item,
-			selectedWorkspace,
-			selectedProject,
-			afterAddFileToNewTopic,
-		})
+		if (createAttachmentMention) {
+			const mention = createAttachmentMention(item)
+			if (!mention) return
+			addMentionsToNewChat({
+				items: [mention],
+				selectedProject,
+				afterAddFileToNewTopic,
+				autoFocus: true,
+			})
+		} else {
+			addFileToNewChat({
+				fileItem: item,
+				selectedWorkspace,
+				selectedProject,
+				afterAddFileToNewTopic,
+			})
+		}
 	})
 
 	// 处理拖拽开始事件 - 支持多文件拖拽
@@ -147,9 +193,15 @@ export function useSelectedFilesManager(options: UseSelectedFilesManagerOptions)
 		const dragData = getFilesForDrag(item)
 
 		if (dragData.isMultiple) {
-			handleMultipleFilesDragStart(e, dragData.files)
+			handleMultipleFilesDragStart(
+				e,
+				dragData.files,
+				createAttachmentMention
+					? dragData.files.map((file) => createAttachmentMention(file))
+					: undefined,
+			)
 		} else {
-			handleAttachmentDragStart(e, item)
+			handleAttachmentDragStart(e, item, createAttachmentMention?.(item) || undefined)
 		}
 	})
 

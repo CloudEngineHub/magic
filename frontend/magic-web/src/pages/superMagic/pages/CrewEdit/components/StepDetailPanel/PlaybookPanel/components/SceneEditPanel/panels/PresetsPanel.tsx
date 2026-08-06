@@ -72,6 +72,7 @@ const VIEW_TYPE_ICON: Record<string, React.ElementType> = {
 export const PresetsPanel = observer(function PresetsPanel() {
 	const { t, i18n } = useTranslation("crew/create")
 	const store = useSceneEditStore()
+	const readOnly = store.readOnly
 
 	const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 	const [filterValue, setFilterValue] = useState("all")
@@ -134,6 +135,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 	}
 
 	function handleBatchDelete() {
+		if (readOnly) return
 		confirm({
 			title: t("playbook.edit.presets.batchDeleteConfirm.title"),
 			description: t("playbook.edit.presets.batchDeleteConfirm.description", {
@@ -150,6 +152,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 
 	const handleDeleteWithConfirm = useCallback(
 		(dataKey: string) => {
+			if (readOnly) return
 			confirm({
 				title: t("playbook.edit.presets.deleteItemConfirm.title"),
 				description: t("playbook.edit.presets.deleteItemConfirm.description"),
@@ -160,36 +163,41 @@ export const PresetsPanel = observer(function PresetsPanel() {
 				},
 			})
 		},
-		[confirm, store, t],
+		[confirm, readOnly, store, t],
 	)
 
 	const handleToggleEnabled = useCallback(
 		(dataKey: string, enabled: boolean) => {
+			if (readOnly) return
 			store.editPresetItem(dataKey, { enabled })
 			void store.save()
 		},
-		[store],
+		[readOnly, store],
 	)
 
 	function handleOpenEdit(item: FieldItem) {
+		if (readOnly) return
 		setEditingItem(item)
 		setIsCreating(false)
 		setIsDialogOpen(true)
 	}
 
 	function handleOpenCreate() {
+		if (readOnly) return
 		setEditingItem(undefined)
 		setIsCreating(true)
 		setIsDialogOpen(true)
 	}
 
 	function handleDialogConfirm(data: Partial<FieldItem>) {
+		if (readOnly) return
 		if (isCreating) store.createPresetItem(data)
 		else if (editingItem) store.editPresetItem(editingItem.data_key, data)
 		void store.save()
 	}
 
 	function handleConfigConfirm(data: { view_type?: OptionViewType }) {
+		if (readOnly) return
 		store.updatePresetsConfig(data)
 		void store.save()
 	}
@@ -200,11 +208,13 @@ export const PresetsPanel = observer(function PresetsPanel() {
 		default_value?: string
 		preset_content?: LocaleText
 	}) {
+		if (readOnly) return
 		store.updateGalleryPresetItem(data)
 		void store.save()
 	}
 
 	function handleDragEnd(orderedKeys: string[]) {
+		if (readOnly) return
 		store.reorderPresetItems(orderedKeys)
 		void store.save()
 	}
@@ -226,39 +236,43 @@ export const PresetsPanel = observer(function PresetsPanel() {
 						</span>
 					</Badge>
 				</div>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-9 shrink-0"
-					onClick={() => setIsConfigOpen(true)}
-					data-testid="presets-edit-config-button"
-					aria-label={t("playbook.edit.presets.config.title")}
-				>
-					<PencilLine className="h-4 w-4" />
-				</Button>
+				{readOnly ? null : (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-9 shrink-0"
+						onClick={() => setIsConfigOpen(true)}
+						data-testid="presets-edit-config-button"
+						aria-label={t("playbook.edit.presets.config.title")}
+					>
+						<PencilLine className="h-4 w-4" />
+					</Button>
+				)}
 			</div>
 
 			{/* Control bar */}
 			<div className="flex shrink-0 items-center justify-between">
-				<div className="flex items-center gap-2">
-					<Checkbox
-						checked={allSelected}
-						onCheckedChange={handleSelectAll}
-						data-testid="presets-select-all-checkbox"
-					/>
-					<label
-						className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
-						onClick={handleSelectAll}
-						data-testid="handle-select-all"
-					>
-						{t("playbook.edit.filter.selectAll")}
-					</label>
-				</div>
-				{selectedKeys.size > 0 ? (
+				{readOnly ? null : (
+					<div className="flex items-center gap-2">
+						<Checkbox
+							checked={allSelected}
+							onCheckedChange={handleSelectAll}
+							data-testid="presets-select-all-checkbox"
+						/>
+						<label
+							className="cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground"
+							onClick={() => handleSelectAll(!allSelected)}
+							data-testid="handle-select-all"
+						>
+							{t("playbook.edit.filter.selectAll")}
+						</label>
+					</div>
+				)}
+				{!readOnly && selectedKeys.size > 0 ? (
 					<div className="flex items-center gap-2">
 						<Button
 							variant="outline"
-							className="shadow-xs h-9"
+							className="h-9 shadow-xs"
 							onClick={handleCancelSelection}
 							data-testid="presets-cancel-selection-button"
 						>
@@ -266,7 +280,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 						</Button>
 						<Button
 							variant="destructive"
-							className="shadow-xs h-9 gap-2"
+							className="h-9 gap-2 shadow-xs"
 							onClick={handleBatchDelete}
 							data-testid="presets-batch-delete-button"
 						>
@@ -283,27 +297,29 @@ export const PresetsPanel = observer(function PresetsPanel() {
 								value={searchValue}
 								onChange={(e) => setSearchValue(e.target.value)}
 								placeholder={t("playbook.edit.filter.search")}
-								className="shadow-xs h-9 w-[200px] pl-9"
+								className="h-9 w-[200px] pl-9 shadow-xs"
 								data-testid="presets-search-input"
 							/>
 						</div>
 						<Button
 							variant="outline"
-							className="shadow-xs h-9"
+							className="h-9 shadow-xs"
 							onClick={handleReset}
 							data-testid="presets-reset-button"
 						>
 							{t("playbook.edit.filter.reset")}
 						</Button>
-						<Separator orientation="vertical" className="!h-5" />
-						<Button
-							className="shadow-xs h-9"
-							onClick={handleOpenCreate}
-							data-testid="presets-create-button"
-						>
-							<CirclePlus className="h-4 w-4" />
-							{t("playbook.edit.filter.create")}
-						</Button>
+						{readOnly ? null : <Separator orientation="vertical" className="!h-5" />}
+						{readOnly ? null : (
+							<Button
+								className="h-9 shadow-xs"
+								onClick={handleOpenCreate}
+								data-testid="presets-create-button"
+							>
+								<CirclePlus className="h-4 w-4" />
+								{t("playbook.edit.filter.create")}
+							</Button>
+						)}
 					</div>
 				)}
 			</div>
@@ -315,15 +331,17 @@ export const PresetsPanel = observer(function PresetsPanel() {
 					<span className="flex-1 text-sm font-medium text-foreground">
 						{t("playbook.edit.presets.gallery.configured")}
 					</span>
-					<Button
-						variant="ghost"
-						className="h-8 gap-1 rounded-md border border-border px-2 text-sm"
-						onClick={() => setIsGalleryOptionsOpen(true)}
-						data-testid="gallery-options-edit-btn"
-					>
-						{t("playbook.edit.presets.gallery.edit")}
-						<ChevronRight className="h-4 w-4" />
-					</Button>
+					{readOnly ? null : (
+						<Button
+							variant="ghost"
+							className="h-8 gap-1 rounded-md border border-border px-2 text-sm"
+							onClick={() => setIsGalleryOptionsOpen(true)}
+							data-testid="gallery-options-edit-btn"
+						>
+							{t("playbook.edit.presets.gallery.edit")}
+							<ChevronRight className="h-4 w-4" />
+						</Button>
+					)}
 				</div>
 			)}
 
@@ -334,7 +352,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 						title={t("playbook.edit.presets.empty.title")}
 						description={t("playbook.edit.presets.empty.description")}
 						createLabel={t("playbook.edit.presets.empty.create")}
-						onCreate={handleOpenCreate}
+						onCreate={readOnly ? undefined : handleOpenCreate}
 					/>
 				) : (
 					<PresetItemList
@@ -342,6 +360,7 @@ export const PresetsPanel = observer(function PresetsPanel() {
 						selectedKeys={selectedKeys}
 						lang={i18n.language}
 						isDragDisabled={isDragDisabled}
+						readOnly={readOnly}
 						onSelect={handleSelectOne}
 						onToggleEnabled={handleToggleEnabled}
 						onEdit={handleOpenEdit}
@@ -352,28 +371,34 @@ export const PresetsPanel = observer(function PresetsPanel() {
 			</div>
 
 			{/* Create / Edit dialog */}
-			<PresetItemEditDialog
-				item={isCreating ? undefined : editingItem}
-				open={isDialogOpen}
-				onOpenChange={setIsDialogOpen}
-				onConfirm={handleDialogConfirm}
-			/>
+			{readOnly ? null : (
+				<PresetItemEditDialog
+					item={isCreating ? undefined : editingItem}
+					open={isDialogOpen}
+					onOpenChange={setIsDialogOpen}
+					onConfirm={handleDialogConfirm}
+				/>
+			)}
 
 			{/* Config dialog */}
-			<PresetConfigDialog
-				config={presets}
-				open={isConfigOpen}
-				onOpenChange={setIsConfigOpen}
-				onConfirm={handleConfigConfirm}
-			/>
+			{readOnly ? null : (
+				<PresetConfigDialog
+					config={presets}
+					open={isConfigOpen}
+					onOpenChange={setIsConfigOpen}
+					onConfirm={handleConfigConfirm}
+				/>
+			)}
 
 			{/* Gallery Options dialog — only relevant when view_type is "grid" */}
-			<GalleryOptionsDialog
-				galleryItem={store.galleryPresetItem}
-				open={isGalleryOptionsOpen}
-				onOpenChange={setIsGalleryOptionsOpen}
-				onConfirm={handleGalleryOptionsConfirm}
-			/>
+			{readOnly ? null : (
+				<GalleryOptionsDialog
+					galleryItem={store.galleryPresetItem}
+					open={isGalleryOptionsOpen}
+					onOpenChange={setIsGalleryOptionsOpen}
+					onConfirm={handleGalleryOptionsConfirm}
+				/>
+			)}
 
 			{confirmDialog}
 		</div>
@@ -414,6 +439,7 @@ function FilterSelect({ value, onChange }: FilterSelectProps) {
 // ─── PresetItemList ───────────────────────────────────────────────────────────
 
 interface PresetItemListProps {
+	readOnly?: boolean
 	items: FieldItem[]
 	selectedKeys: Set<string>
 	lang: string
@@ -435,6 +461,7 @@ function PresetItemList({
 	onEdit,
 	onDelete,
 	onReorder,
+	readOnly = false,
 }: PresetItemListProps) {
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -465,6 +492,7 @@ function PresetItemList({
 							isSelected={selectedKeys.has(item.data_key)}
 							lang={lang}
 							isDragDisabled={isDragDisabled}
+							readOnly={readOnly}
 							onSelect={onSelect}
 							onToggleEnabled={onToggleEnabled}
 							onEdit={onEdit}
@@ -480,6 +508,7 @@ function PresetItemList({
 // ─── PresetItemRow ────────────────────────────────────────────────────────────
 
 interface PresetItemRowProps {
+	readOnly?: boolean
 	item: FieldItem
 	isSelected: boolean
 	lang: string
@@ -499,6 +528,7 @@ function PresetItemRow({
 	onToggleEnabled,
 	onEdit,
 	onDelete,
+	readOnly = false,
 }: PresetItemRowProps) {
 	const { t } = useTranslation("crew/create")
 	const label = resolveLocalText(item.label, lang)
@@ -533,17 +563,17 @@ function PresetItemRow({
 
 	const updatedAt = item.updated_at
 		? t("playbook.edit.presets.updatedAt", {
-			date: new Date(item.updated_at).toLocaleString(
-				lang === "zh_CN" ? "zh-CN" : "en-US",
-				{
-					month: "short",
-					day: "numeric",
-					year: "numeric",
-					hour: "2-digit",
-					minute: "2-digit",
-				},
-			),
-		})
+				date: new Date(item.updated_at).toLocaleString(
+					lang === "zh_CN" ? "zh-CN" : "en-US",
+					{
+						month: "short",
+						day: "numeric",
+						year: "numeric",
+						hour: "2-digit",
+						minute: "2-digit",
+					},
+				),
+			})
 		: null
 
 	const dropdownItems = useMemo(
@@ -587,34 +617,38 @@ function PresetItemRow({
 		>
 			<div className="flex items-start gap-3">
 				{/* Drag handle */}
-				<button
-					ref={setActivatorNodeRef}
-					type="button"
-					className={cn(
-						"shrink-0 touch-none text-muted-foreground transition-opacity",
-						isDragDisabled
-							? "cursor-default opacity-30"
-							: "cursor-grab active:cursor-grabbing",
-					)}
-					data-testid={`preset-item-drag-${item.data_key}`}
-					{...(isDragDisabled ? {} : listeners)}
-					aria-label="drag"
-				>
-					<GripVertical className="h-4 w-4" />
-				</button>
+				{readOnly ? null : (
+					<button
+						ref={setActivatorNodeRef}
+						type="button"
+						className={cn(
+							"shrink-0 touch-none text-muted-foreground transition-opacity",
+							isDragDisabled
+								? "cursor-default opacity-30"
+								: "cursor-grab active:cursor-grabbing",
+						)}
+						data-testid={`preset-item-drag-${item.data_key}`}
+						{...(isDragDisabled ? {} : listeners)}
+						aria-label="drag"
+					>
+						<GripVertical className="h-4 w-4" />
+					</button>
+				)}
 
 				{/* Checkbox */}
-				<Checkbox
-					checked={isSelected}
-					onCheckedChange={(checked) => onSelect(item.data_key, !!checked)}
-					onClick={(event) => event.stopPropagation()}
-					data-testid={`preset-item-checkbox-${item.data_key}`}
-				/>
+				{readOnly ? null : (
+					<Checkbox
+						checked={isSelected}
+						onCheckedChange={(checked) => onSelect(item.data_key, !!checked)}
+						onClick={(event) => event.stopPropagation()}
+						data-testid={`preset-item-checkbox-${item.data_key}`}
+					/>
+				)}
 
 				<button
 					type="button"
 					className="min-w-0 flex-1 text-left"
-					onClick={handleOpenEdit}
+					onClick={readOnly ? undefined : handleOpenEdit}
 					data-testid={`preset-item-edit-trigger-${item.data_key}`}
 				>
 					<div className="flex min-w-0 items-center gap-3">
@@ -650,26 +684,30 @@ function PresetItemRow({
 				</button>
 
 				{/* Enable switch */}
-				<Switch
-					checked={isEnabled}
-					onCheckedChange={(checked) => onToggleEnabled(item.data_key, checked)}
-					onClick={(event) => event.stopPropagation()}
-					data-testid={`preset-item-switch-${item.data_key}`}
-				/>
+				{readOnly ? null : (
+					<Switch
+						checked={isEnabled}
+						onCheckedChange={(checked) => onToggleEnabled(item.data_key, checked)}
+						onClick={(event) => event.stopPropagation()}
+						data-testid={`preset-item-switch-${item.data_key}`}
+					/>
+				)}
 
 				{/* More menu */}
-				<MagicDropdown placement="bottomRight" menu={{ items: dropdownItems }}>
-					<span onClick={(event) => event.stopPropagation()}>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-5 shrink-0"
-							data-testid={`preset-item-more-${item.data_key}`}
-						>
-							<Ellipsis className="h-4 w-4" />
-						</Button>
-					</span>
-				</MagicDropdown>
+				{readOnly ? null : (
+					<MagicDropdown placement="bottomRight" menu={{ items: dropdownItems }}>
+						<span onClick={(event) => event.stopPropagation()}>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-5 shrink-0"
+								data-testid={`preset-item-more-${item.data_key}`}
+							>
+								<Ellipsis className="h-4 w-4" />
+							</Button>
+						</span>
+					</MagicDropdown>
+				)}
 			</div>
 		</div>
 	)

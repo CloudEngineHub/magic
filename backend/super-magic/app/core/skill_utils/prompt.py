@@ -1,30 +1,25 @@
-"""Skills prompt 生成：将可用 skill 元数据渲染为 agent 系统提示片段"""
+"""Render available skill metadata into the agent system prompt."""
 import asyncio
 import concurrent.futures
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
+from typing import Dict
+
+from agentlang.skills.models import SkillMetadata
+from agentlang.skills.loader import SkillLoader
 from agentlang.agent.define import SkillsConfig
+from agentlang.logger import get_logger
 from agentlang.agent.syntax import SyntaxProcessor
 from agentlang.environment import Environment
-from agentlang.logger import get_logger
-from agentlang.skills.loader import SkillLoader
-from agentlang.skills.models import SkillMetadata
-from app.core.skill_utils.manager import GlobalSkillManager, find_skill, get_global_skill_manager
+from app.utils.async_file_utils import async_exists, async_read_text, async_try_read_text
+from app.core.skill_utils.manager import GlobalSkillManager, get_global_skill_manager, find_skill
 from app.core.skill_utils.skill_directory_scan import (
     discover_skills_in_directory,
     discover_skills_in_personal,
     discover_skills_in_workspace,
 )
-from app.core.skill_utils.skill_sources import (
-    get_agents_dir,
-    get_crew_skills_dir,
-    get_skills_instructions_prompt_file,
-    get_system_skills_dir,
-    get_workspace_skills_dir,
-)
-from app.utils.async_file_utils import async_exists, async_read_text, async_try_read_text
-
+from app.core.skill_utils.skill_sources import get_agents_dir, get_system_skills_dir, get_skills_instructions_prompt_file, get_workspace_skills_dir, get_crew_skills_dir
 logger = get_logger(__name__)
 
 MAX_SKILLS = 150
@@ -35,14 +30,14 @@ def generate_skills_prompt(
     skills_config: SkillsConfig,
     agent_name: str = "",
 ) -> Optional[str]:
-    """生成 skills prompt（包含指导说明和可用技能列表）
+    """Generate the skills prompt with instructions and available skill metadata.
 
     Args:
-        skills_config: 来自 .agent YAML frontmatter 的 skills 完整配置
-        agent_name: 当前 agent 类型名称，用于定位 crew skills 目录
+        skills_config: Complete skills config from the .agent YAML frontmatter.
+        agent_name: Current agent type, used to locate crew skill directories.
 
     Returns:
-        str: 生成的完整 skills prompt，如果失败则返回 None
+        The complete skills prompt, or None when generation fails.
     """
     try:
         def _run_in_thread():
@@ -52,7 +47,7 @@ def generate_skills_prompt(
             return executor.submit(_run_in_thread).result()
 
     except Exception as e:
-        logger.error(f"生成 skills prompt 失败: {e}")
+        logger.error(f"Failed to generate skills prompt: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return None
@@ -62,10 +57,11 @@ async def _do_generate(
     skills_config: SkillsConfig,
     agent_name: str,
 ) -> Optional[str]:
-    """在独立事件循环中完成 skills 加载、XML 构建和 prompt 渲染"""
+    """Load skills, build XML, and render the prompt in an isolated event loop."""
     personal_skills = await discover_skills_in_personal()
 
-    # 个人 Skill 是独立来源；仅在配置为空且个人目录也为空时跳过整个 Skill prompt。
+    # Personal Skills are an independent source. Keep the prompt when they exist even if
+    # the Agent frontmatter does not explicitly configure system, Crew, or workspace Skills.
     if skills_config.is_empty() and not personal_skills:
         return None
 
@@ -76,7 +72,7 @@ async def _do_generate(
     loaded_names: set = set()
     skills_metadata: List[SkillMetadata] = []
 
-    # preload 配置独立于加载方式，从顶层 preload 字段统一收集
+    # Preload config is independent of loading mode and is collected from the top-level preload field.
     preload_map: Dict[str, List[str]] = {
         entry.name: entry.files for entry in skills_config.preload
     }
@@ -89,7 +85,7 @@ async def _do_generate(
             if scanned.name not in loaded_names:
                 skills_metadata.append(scanned)
                 loaded_names.add(scanned.name)
-                logger.info(f"扫描追加 system skill: {scanned.name}")
+                logger.info(f"Scanned and appended system skill: {scanned.name}")
     elif isinstance(skills_config.system_skills, list):
         for entry in skills_config.system_skills:
             if entry.path:
@@ -99,9 +95,9 @@ async def _do_generate(
             if skill:
                 skills_metadata.append(skill)
                 loaded_names.add(skill.name)
-                logger.info(f"加载 system skill: {entry.name}")
+                logger.info(f"Loaded system skill: {entry.name}")
             else:
-                logger.warning(f"System skill 不存在: {entry.name}")
+                logger.warning(f"System skill not found: {entry.name}")
 
     # ── 2. crew_skills ───────────────────────────────────────────────────
     if agent_name:
@@ -111,10 +107,10 @@ async def _do_generate(
                 for crew_skill in await discover_skills_in_directory(crew_skills_dir):
                     if crew_skill.name in loaded_names:
                         skills_metadata = [s for s in skills_metadata if s.name != crew_skill.name]
-                        logger.info(f"Crew skill 覆盖同名 system skill: {crew_skill.name}")
+                        logger.info(f"Crew skill overrides same-named system skill: {crew_skill.name}")
                     skills_metadata.append(crew_skill)
                     loaded_names.add(crew_skill.name)
-                    logger.info(f"加载 crew skill: {crew_skill.name}")
+                    logger.info(f"Loaded crew skill: {crew_skill.name}")
             elif isinstance(skills_config.crew_skills, list):
                 for entry in skills_config.crew_skills:
                     if entry.path:
@@ -126,11 +122,11 @@ async def _do_generate(
                             skills_metadata = [s for s in skills_metadata if s.name != skill.name]
                         skills_metadata.append(skill)
                         loaded_names.add(skill.name)
-                        logger.info(f"加载 crew skill: {entry.name}")
+                        logger.info(f"Loaded crew skill: {entry.name}")
                     else:
-                        logger.warning(f"Crew skill 不存在: {entry.name}")
+                        logger.warning(f"Crew skill not found: {entry.name}")
         except ValueError as e:
-            logger.warning(f"当前 agent 标识非法，跳过 crew skills 加载: {e}")
+            logger.warning(f"Invalid current agent identifier; skipping crew skills: {e}")
 
     # ── 3. workspace_skills ──────────────────────────────────────────────
     if skills_config.workspace_skills == "*":
@@ -138,7 +134,7 @@ async def _do_generate(
             if ws_skill.name not in loaded_names:
                 skills_metadata.append(ws_skill)
                 loaded_names.add(ws_skill.name)
-                logger.info(f"扫描追加 workspace skill: {ws_skill.name}")
+                logger.info(f"Scanned and appended workspace skill: {ws_skill.name}")
     elif isinstance(skills_config.workspace_skills, list):
         ws_skills_dir = get_workspace_skills_dir()
         for entry in skills_config.workspace_skills:
@@ -150,47 +146,48 @@ async def _do_generate(
                 if skill.name not in loaded_names:
                     skills_metadata.append(skill)
                     loaded_names.add(skill.name)
-                logger.info(f"加载 workspace skill: {entry.name}")
+                logger.info(f"Loaded workspace skill: {entry.name}")
             else:
-                logger.warning(f"Workspace skill 不存在: {entry.name}")
+                logger.warning(f"Workspace skill not found: {entry.name}")
 
-    # ── 3a. personal_skills（独立来源，不受 workspace_skills 配置影响）──
+    # ── 3a. personal_skills: independent of workspace_skills config. ───────
     for personal_skill in personal_skills:
         if personal_skill.name not in loaded_names:
             skills_metadata.append(personal_skill)
             loaded_names.add(personal_skill.name)
-            logger.info(f"扫描追加 personal skill: {personal_skill.name}")
+            logger.info(f"Scanned and appended personal skill: {personal_skill.name}")
 
-    # ── 3b. 区域过滤（大陆环境屏蔽国际平台 skill）──
+    # ── 3b. Region filtering: hide international-platform skills in mainland environments. ──
     region_filtered_names: list[str] = []
     if Environment.is_mainland():
         region_filtered_names = [s.name for s in skills_metadata if s.region == "international"]
         if region_filtered_names:
             skills_metadata = [s for s in skills_metadata if s.region != "international"]
-            logger.info(f"大陆环境已屏蔽 {len(region_filtered_names)} 个国际平台 skill: {region_filtered_names}")
+            logger.info(f"Filtered {len(region_filtered_names)} international skills in mainland environment: {region_filtered_names}")
 
-    # ── 3c. 过滤 excluded_skills（仅针对 system 来源，crew/workspace 不受影响）──
+    # ── 3c. Filter excluded_skills after all configured and personal sources are loaded. ──
     excluded_names = set(skills_config.excluded_skills)
     if excluded_names:
         before_names = {s.name for s in skills_metadata}
         skills_metadata = [s for s in skills_metadata if s.name not in excluded_names]
         actually_excluded = excluded_names & before_names
         if actually_excluded:
-            logger.info(f"已排除 {len(actually_excluded)} 个 system skill: {actually_excluded}")
+            logger.info(f"Excluded {len(actually_excluded)} system skills: {actually_excluded}")
 
-    # ── 3d. 永久挂载 compact-chat-history（excluded_skills 之后追加，确保始终可见）──
-    always_mount_skill = "compact-chat-history"
-    if always_mount_skill not in loaded_names:
-        compact_skill = await skill_manager.get_skill(always_mount_skill, search_path=system_skills_dir)
+    # ── 3d. Always mount compact-chat-history after exclusions so it remains visible. ──
+    _ALWAYS_MOUNT_SKILL = "compact-chat-history"
+    visible_names = {skill.name for skill in skills_metadata}
+    if _ALWAYS_MOUNT_SKILL not in visible_names:
+        compact_skill = await skill_manager.get_skill(_ALWAYS_MOUNT_SKILL, search_path=system_skills_dir)
         if compact_skill:
             skills_metadata.append(compact_skill)
-            loaded_names.add(always_mount_skill)
-            logger.info(f"永久挂载 compact skill: {always_mount_skill}")
+            loaded_names.add(_ALWAYS_MOUNT_SKILL)
+            logger.info(f"Always mounted compact skill: {_ALWAYS_MOUNT_SKILL}")
         else:
-            logger.warning(f"永久挂载 skill 未找到，跳过: {always_mount_skill}")
+            logger.warning(f"Always-mounted skill not found; skipping: {_ALWAYS_MOUNT_SKILL}")
 
-    # ── 3e. 补齐 preload 中未被任何来源加载的 skill ──────────────────────
-    # preload 不需要在 system_skills 里重复声明，此处自动兜底加载
+    # ── 3e. Load skills referenced by preload but not loaded from any source. ──────────────────────
+    # Preloaded skills do not need duplicate system_skills declarations; this is the fallback load.
     for skill_name in preload_map:
         if skill_name in loaded_names:
             continue
@@ -198,29 +195,29 @@ async def _do_generate(
         if skill:
             skills_metadata.append(skill)
             loaded_names.add(skill.name)
-            logger.info(f"preload 自动补加载 skill: {skill_name}")
+            logger.info(f"Auto-loaded preloaded skill: {skill_name}")
         else:
-            logger.warning(f"preload skill 未找到，内容将无法展开: {skill_name}")
+            logger.warning(f"Preloaded skill not found; content cannot be expanded: {skill_name}")
 
     if not skills_metadata:
-        logger.warning("未能加载任何 skills")
+        logger.warning("No skills were loaded")
         return None
 
-    # ── 4. 构建 skills XML ──────────────────────────────────────────────
+    # ── 4. Build skills XML ──────────────────────────────────────────────
     if len(skills_metadata) > MAX_SKILLS:
-        logger.warning(f"skills 数量超过限制 ({MAX_SKILLS})，已截断")
+        logger.warning(f"Skill count exceeds limit ({MAX_SKILLS}); truncating")
         skills_metadata = skills_metadata[:MAX_SKILLS]
 
     skills_xml_parts = []
     total_chars = 0
     degraded = False
     for meta in skills_metadata:
-        # 已预加载内容的 skill 不再出现在 available_skills 列表中
+        # Skills whose content is preloaded do not appear in the available_skills list.
         if meta.name in preload_map:
             continue
 
         if not degraded:
-            # 完整模式：包含 name + description + location
+            # Full mode: include name, description, and location.
             parts = [
                 "<skill>\n",
                 f"<name>{meta.name}</name>\n",
@@ -233,15 +230,15 @@ async def _do_generate(
             skill_xml = "".join(parts)
 
             if total_chars + len(skill_xml) > MAX_CHARS:
-                # 切换到降级模式：仅输出 name
+                # Degraded mode: output names only.
                 degraded = True
                 logger.warning(
-                    f"skills_content 达到字符限制 ({MAX_CHARS})，"
-                    f"已输出 {len(skills_xml_parts)} 个完整 skill，后续降级为仅 name"
+                    f"skills_content reached the character limit ({MAX_CHARS}); "
+                    f"emitted {len(skills_xml_parts)} full skills, remaining skills degrade to name only"
                 )
 
         if degraded:
-            # 降级模式：只保留 name，节省 token
+            # Degraded mode keeps only the name to save tokens.
             skill_xml = f"<skill>\n<name>{meta.name}</name>\n</skill>"
 
         skills_xml_parts.append(skill_xml)
@@ -249,13 +246,13 @@ async def _do_generate(
 
     skills_content = "\n\n".join(skills_xml_parts)
 
-    # ── 5. 渲染 prompt 模板 ──────────────────────────────────────────────
+    # ── 5. Render prompt template ──────────────────────────────────────────────
     try:
         prompt_file = get_skills_instructions_prompt_file()
         agents_dir = get_agents_dir()
 
         if not await async_exists(prompt_file):
-            logger.error(f"模板文件不存在: {prompt_file}")
+            logger.error(f"Prompt template file does not exist: {prompt_file}")
             return None
 
         template_content = await async_read_text(prompt_file)
@@ -270,7 +267,7 @@ async def _do_generate(
             try:
                 crew_skills_dir = str(get_crew_skills_dir(agent_name).relative_to(project_root))
             except (ValueError, Exception):
-                logger.warning(f"无法计算 crew skills 目录: agent_name={agent_name}")
+                logger.warning(f"Failed to resolve crew skills directory: agent_name={agent_name}")
         preloaded_skills_content = await _build_preloaded_skills_xml(
             skills_metadata, preload_map
         )
@@ -284,11 +281,11 @@ async def _do_generate(
         })
 
         skills_prompt = syntax_processor.process_dynamic_syntax(template_content)
-        logger.info(f"成功生成 {len(skills_metadata)} 个 skills 的 prompt，总长度: {len(skills_prompt)} 字符")
+        logger.info(f"Generated skills prompt with {len(skills_metadata)} skills; total length: {len(skills_prompt)} characters")
 
-        # ── 6. 大陆 SaaS 环境：注入国际平台引导语 ──
+        # ── 6. Mainland SaaS environment: inject international-platform guidance. ──
         if region_filtered_names:
-            from app.utils.deployment_util import SAAS_INTERNATIONAL_SITE_URL, is_saas_deployment
+            from app.utils.deployment_util import is_saas_deployment, SAAS_INTERNATIONAL_SITE_URL
             if is_saas_deployment():
                 filtered_list = ", ".join(region_filtered_names)
                 notice = (
@@ -299,24 +296,24 @@ async def _do_generate(
                     "</region_notice>"
                 )
                 skills_prompt += notice
-                logger.info(f"已注入 SaaS 国际平台引导语，涉及 skill: {region_filtered_names}")
+                logger.info(f"Injected SaaS international-platform guidance for skills: {region_filtered_names}")
 
         return skills_prompt
 
     except Exception as e:
-        logger.error(f"使用模板生成 skills prompt 失败: {e}")
+        logger.error(f"Failed to generate skills prompt from template: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return None
 
 
 async def _load_skill_from_path(name: str, path: Path) -> Optional[SkillMetadata]:
-    """从自定义目录加载 skill 元数据（path 覆盖默认查找路径）"""
-    skills = await asyncio.to_thread(discover_skills_in_directory, path)
+    """Load skill metadata from a custom directory that overrides default lookup paths."""
+    skills = await discover_skills_in_directory(path)
     for s in skills:
         if s.name == name:
             return s
-    logger.warning(f"在自定义路径 {path} 中未找到 skill: {name}")
+    logger.warning(f"Skill not found in custom path {path}: {name}")
     return None
 
 
@@ -324,10 +321,10 @@ async def _build_preloaded_skills_xml(
     skills_metadata: List[SkillMetadata],
     preload_map: Dict[str, List[str]],
 ) -> str:
-    """构建 <preloaded_skills> XML 块，内容不受 MAX_CHARS 限制。
+    """Build the <preloaded_skills> XML block, not constrained by MAX_CHARS.
 
-    每个 skill 对应一个 <skill> 块，其下每个预加载文件对应一个 <file> 子块。
-    文件不存在时记录 warning 并跳过，不抛异常。
+    Each skill maps to a <skill> block, and each preloaded file becomes one
+    <file> child block. Missing files are logged and skipped instead of raising.
     """
     if not preload_map:
         return ""
@@ -338,7 +335,7 @@ async def _build_preloaded_skills_xml(
     for skill_name, files in preload_map.items():
         meta = meta_by_name.get(skill_name)
         if not meta:
-            logger.warning(f"preload_map 中的 skill 未找到元数据，跳过: {skill_name}")
+            logger.warning(f"Skill metadata missing for preload_map entry; skipping: {skill_name}")
             continue
 
         file_blocks: List[str] = []
@@ -346,7 +343,7 @@ async def _build_preloaded_skills_xml(
             is_skill_md = filename.upper() == "SKILL.MD"
             if is_skill_md:
                 if not meta.skill_dir:
-                    logger.warning(f"skill {skill_name} 无 skill_dir，无法读取 SKILL.md")
+                    logger.warning(f"Skill {skill_name} has no skill_dir; cannot read SKILL.md")
                     continue
                 skill_file_path = meta.skill_file or (meta.skill_dir / "SKILL.md")
                 try:
@@ -354,16 +351,16 @@ async def _build_preloaded_skills_xml(
                     file_content = loaded.content
                     file_path = loaded.skill_file
                 except Exception as e:
-                    logger.warning(f"preload skill {skill_name} SKILL.md 加载失败: {e}")
+                    logger.warning(f"Failed to load preloaded SKILL.md for {skill_name}: {e}")
                     continue
             else:
                 if not meta.skill_dir:
-                    logger.warning(f"skill {skill_name} 无 skill_dir，无法读取 {filename}")
+                    logger.warning(f"Skill {skill_name} has no skill_dir; cannot read {filename}")
                     continue
                 file_path = meta.skill_dir / filename
                 file_content = await async_try_read_text(file_path)
                 if file_content is None:
-                    logger.warning(f"preload 文件不存在，跳过: {file_path}")
+                    logger.warning(f"Preload file does not exist; skipping: {file_path}")
                     continue
 
             file_blocks.append(f'<file location="{file_path}">\n{file_content}\n</file>')
@@ -376,21 +373,13 @@ async def _build_preloaded_skills_xml(
             parts.append(f"<skill_dir>{meta.skill_dir}</skill_dir>")
         parts.append("")
         parts.extend(file_blocks)
-        parts.append("</skill>")
+        parts.append(f"</skill>")
         skill_parts.append("\n".join(parts))
 
     if not skill_parts:
         return ""
 
     header = (
-        "<!--zh\n"
-        "preloaded_skills 说明：此块内包含已预加载的 skill 文件内容，这些内容已在系统提示词中，直接使用，无需再调用任何工具。\n"
-        "每个 <skill> 块对应一个 skill，<skill_dir> 标明其根目录，<file location=\"...\"> 子块标明已加载的文件及其完整路径。\n"
-        "- 某 <skill> 下存在 location 以 /SKILL.md 结尾的 <file>：该 skill 主文档内容已预加载在上方，直接读取即可，无需再调 read_skills（调了也只是重复加载已有内容）\n"
-        "  如需该 skill 的其他 reference 文件，查看 SKILL.md 中给出的相对路径，拼接 skill_dir 得到绝对路径，再调 read_files\n"
-        "- 某 <skill> 下无 /SKILL.md 结尾的 <file>：仅预加载了 reference 文件，主文档不在当前上下文\n"
-        "  需要主文档时，调 read_skills({\"skill_names\": [\"<skill name 属性值>\"]}) 加载\n"
-        "-->\n"
         "IMPORTANT: The `<preloaded_skills>` block contains skill files already injected into this system prompt — use them directly.\n"
         "Each `<skill>` block groups all preloaded files for one skill. `<skill_dir>` is the skill's root directory.\n"
         "Each `<file location=\"...\">` sub-block holds the content of one preloaded file at that absolute path.\n"

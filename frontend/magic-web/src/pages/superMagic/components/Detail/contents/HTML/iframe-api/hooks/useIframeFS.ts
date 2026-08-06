@@ -99,6 +99,8 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 	} = options
 
 	const serviceRef = useRef<IframeFSService | null>(null)
+	// 调用方可能在渲染时创建新的保存函数；稳定代理避免重建 Service 丢失 watch 注册，同时调用最新实现。
+	const stableSaveContentFn = useMemoizedFn(saveContentFn)
 
 	// postToIframe 是稳定引用，内部每次通过 ref 取最新的 iframe window
 	const postToIframe = useMemoizedFn((message: object) => {
@@ -115,7 +117,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 			appConfig,
 			projectId,
 			uploadFn,
-			saveContentFn,
+			saveContentFn: stableSaveContentFn,
 			mkdirFn,
 			deleteFn,
 			deleteFilesFn,
@@ -135,7 +137,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		appConfig,
 		projectId,
 		uploadFn,
-		saveContentFn,
+		stableSaveContentFn,
 		mkdirFn,
 		deleteFn,
 		deleteFilesFn,

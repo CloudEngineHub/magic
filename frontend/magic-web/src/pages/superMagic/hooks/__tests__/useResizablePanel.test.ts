@@ -120,6 +120,26 @@ describe("useResizablePanel", () => {
 		expect(localStorage.getItem(STORAGE_KEY_LEFT)).toBeNull()
 	})
 
+	it("should clamp the current width when the maximum width decreases", () => {
+		let maxWidth = 300
+		const { result, rerender } = renderHook(() =>
+			useResizablePanel({
+				minWidth: 100,
+				maxWidth,
+				defaultWidth: 260,
+				storageKey: STORAGE_KEY_RIGHT,
+				direction: "right",
+			}),
+		)
+
+		expect(result.current.width).toBe(260)
+
+		maxWidth = 200
+		rerender()
+
+		expect(result.current.width).toBe(200)
+	})
+
 	it("should clean active pointer listeners when unmounted during a drag", () => {
 		const removeEventListenerSpy = vi.spyOn(document, "removeEventListener")
 		const { result, rerender, unmount } = renderHook(() =>

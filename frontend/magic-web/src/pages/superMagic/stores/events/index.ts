@@ -5,7 +5,6 @@ export type {
 	SuperMagicToolCallDelta,
 } from "./common"
 export type { MessageCommittedEvent } from "./contracts/message-committed"
-export type { MessageCompletedEvent, MessageCompletedStatus } from "./contracts/message-completed"
 export type { MessageStreamDeltaEvent } from "./contracts/message-stream-delta"
 export type {
 	MessageStreamEndedEvent,
@@ -14,6 +13,10 @@ export type {
 export type { MessageStreamStartedEvent } from "./contracts/message-stream-started"
 export type { ToolCallSettledEvent, ToolCallSettledStatus } from "./contracts/tool-call-settled"
 export type { TaskCompletedEvent } from "./contracts/task-completed"
+export type {
+	TopicExecutionEndedEvent,
+	TopicExecutionEndedStatus,
+} from "./contracts/topic-execution-ended"
 export type { SuperMagicEvent, SuperMagicEventMap, SuperMagicEventType } from "./event-map"
 export type {
 	SuperMagicEventCallback,

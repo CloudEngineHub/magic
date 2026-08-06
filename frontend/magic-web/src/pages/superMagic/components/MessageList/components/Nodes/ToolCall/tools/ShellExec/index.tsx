@@ -14,7 +14,7 @@ import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/compone
 
 function ShellExec(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const { data } = tool?.detail || {}
 
@@ -33,7 +33,12 @@ function ShellExec(props: NodeProps) {
 	}
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			className={styles.node}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
+		>
 			<div className={cx(styles.container, { [styles.containerActive]: open })}>
 				<div className={styles.nodeHeader}>
 					<Flex
@@ -53,7 +58,11 @@ function ShellExec(props: NodeProps) {
 							</span>
 						)}
 					</Flex>
-					<div className={cx(styles.button, "mr-[6px]")} onClick={toggle} data-testid="toggle">
+					<div
+						className={cx(styles.button, "mr-[6px]")}
+						onClick={toggle}
+						data-testid="toggle"
+					>
 						{open ? (
 							<ChevronUp
 								size={16}

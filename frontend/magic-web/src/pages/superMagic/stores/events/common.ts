@@ -32,8 +32,8 @@ export interface SuperMagicEventMeta {
 
 /** 提供给订阅方的紧凑消息引用，避免复制完整 message/debug/attachments。 */
 export interface SuperMagicEventMessageRef {
-	/** Store 内用于归并同一逻辑卡片的稳定 ID。 */
-	/** Assistant 优先映射 correlation_id，其余角色回退到 app_message_id。 */
+	/** Store 内用于归并同一逻辑卡片的稳定 SuperMessage ID。 */
+	/** Assistant 使用 super_message_id；User/Tool 按 app_message_id 归属。 */
 	logicalMessageId: string
 	/** 服务端消息 ID；流占位消息尚未被 Final 替换时可能为空。 */
 	appMessageId?: string
@@ -45,8 +45,11 @@ export interface SuperMagicEventMessageRef {
 	role: "assistant" | "user" | "tool"
 	/** 消息的协议类型，例如 super_magic_message。 */
 	type: string
-	/** 当前 canonical 消息状态，例如 running、finished、error、suspended 或 revoked。 */
-	/** revoked 优先映射外层消息状态，其余状态映射消息节点状态并回退到消息卡状态。 */
+	/** IM envelope 状态；负责撤回与消息可见性。 */
+	imStatus: string
+	/** SuperMessage node 状态；负责 Assistant/Tool 执行与流生命周期。 */
+	superStatus?: string
+	/** @deprecated 兼容字段；等同 imStatus，不能作为执行状态使用。 */
 	status: string
 	/** canonical 消息携带的 send_time 数值。 */
 	/** 该值直接映射消息卡 send_time；协议可能使用秒、毫秒、微秒或纳秒，消费方需按场景归一化。 */

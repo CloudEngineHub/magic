@@ -1026,13 +1026,21 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({})
 		})
 
-		it("should pass topic mode as agent_code", async () => {
+		it("should omit agent_code for non-custom agent topic modes", async () => {
 			mentionPanelStore.setSkillQueryContext("general")
 
 			await getSkillItems()
 
+			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({})
+		})
+
+		it("should pass the selected employee code for custom agent mode", async () => {
+			mentionPanelStore.setSkillQueryContext(TopicMode.CustomAgent, "SMA-agent-1")
+
+			await getSkillItems()
+
 			expect(CrewApi.getMentionSkills).toHaveBeenCalledWith({
-				agent_code: "general",
+				agent_code: "SMA-agent-1",
 			})
 		})
 

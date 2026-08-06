@@ -26,6 +26,7 @@ import { MobileTabParam } from "@/pages/mobileTabs/constants"
 import { baseHistory } from "@/routes/history"
 import { workspaceStore, projectStore, topicStore } from "@/pages/superMagic/stores/core"
 import { clearChatWorkspaceModuleCache } from "@/pages/superMagic/hooks/useChatWorkspace"
+import { resolveRequiredProjectOrganizationCode } from "@/pages/superMagic/services/projectOrganizationAccess"
 
 export class MagicPlatformService implements PlatformServiceInterface {
 	PlatformType: Platform = Platform.Magic
@@ -284,6 +285,15 @@ export class MagicPlatformService implements PlatformServiceInterface {
 		topicId?: string
 	}) => {
 		const u = userStore.user.userInfo
+		const requiredOrganizationCode = await resolveRequiredProjectOrganizationCode({
+			projectId,
+			currentOrganizationCode: u?.organization_code,
+			// This check is part of app initialization itself, so it must not wait for app init.
+			requestOptions: { skipAppInitWait: true },
+		})
+
+		if (requiredOrganizationCode) return
+
 		await userStore.initialization.runInitialization(
 			{
 				magicId: u?.magic_id,

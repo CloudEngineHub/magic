@@ -1,10 +1,10 @@
 """
-skill-creator 下脚本的共享初始化：项目根目录、PathManager、冗余日志抑制。
-在 import app.* 或 SDK 之前执行。
+Shared initialization for skill-creator scripts: project root, PathManager, and
+startup log suppression. Run before importing app.* or SDK modules.
 """
 import sys
 from pathlib import Path
 
-# agents/skills/_shared/ 对所有 skill 脚本均在 parents[2] 下
+# agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import _shared.bootstrap  # noqa: F401 — 触发环境初始化
+import _shared.bootstrap  # noqa: F401 — initialize runtime environment

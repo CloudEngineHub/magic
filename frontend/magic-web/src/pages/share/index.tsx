@@ -1,11 +1,6 @@
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
-import {
-	useMemoizedFn,
-	useResponsive,
-	useDebounceEffect,
-	useDeepCompareEffect,
-	useUpdateEffect,
-} from "ahooks"
+import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -23,7 +18,9 @@ import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import { history } from "@/routes/history"
+import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
+import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import { useTokenRefreshPolling } from "./hooks/useTokenRefreshPolling"
 import WorkspaceButton from "./components/WorkspaceButton"
 import { formatCopyProjectCount } from "@/utils/format"
@@ -189,8 +186,7 @@ function Share() {
 	const [error, setError] = useState<Error | null>(null)
 	const [attachments, setAttachments] = useState({} as any)
 	const [loading, setLoading] = useState(false)
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false // md breakpoint is typically 768px, so anything smaller is mobile
+	const isMobile = useIsMobile()
 	const [isProjectShare, setIsProjectShare] = useState(false)
 	const [fileId, setFileId] = useState("")
 	// Topic sharing: view_file_list state
@@ -551,41 +547,6 @@ function Share() {
 		// setError(err)
 	}
 
-	// 重新加载数据
-	const handleRetry = () => {
-		if (resourceId) {
-			setLoading(true)
-			setError(null)
-
-			SuperMagicApi.checkShareResourcePassword({ resource_id: resourceId })
-				.then((res: any) => {
-					setIsNeedPassword(res?.has_password)
-
-					if (!res?.has_password) {
-						return getShareData({ resource_id: resourceId })
-					}
-
-					if (passwordFromUrl) {
-						return getShareData({
-							resource_id: resourceId,
-							password: passwordFromUrl,
-						})
-					}
-
-					return null
-				})
-				.then((newData: any) => {
-					applyShareData(newData)
-				})
-				.catch(() => {
-					// setError(err)
-				})
-				.finally(() => {
-					setLoading(false)
-				})
-		}
-	}
-
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Playback_End, (taskData) => {
 			const lastTaskStatus = taskData?.process?.[taskData?.process?.length - 1]?.status
@@ -678,6 +639,25 @@ function Share() {
 		window.project_id = ""
 		// @ts-ignore
 		window.topic_id = ""
+	})
+
+	const handleErrorBack = useMemoizedFn(() => {
+		if (!isLogined) {
+			const currentHref = window.location.href
+			clearWindowData()
+			history.replace({
+				name: RouteName.Login,
+				query: convertSearchParams(
+					buildLoginRedirectSearchParams({
+						currentHref,
+						redirectTarget: currentHref,
+					}),
+				),
+			})
+			return
+		}
+
+		window.location.href = window.location.origin
 	})
 
 	const handleWorkspaceButtonClick = useMemoizedFn(async () => {
@@ -1011,7 +991,7 @@ function Share() {
 				{error && !loading && (
 					<ErrorDisplay
 						errorMessage={t("share.noPermissionToView")}
-						onRetry={handleRetry}
+						onBack={handleErrorBack}
 						isFileShare={routeInfo.isFileShare}
 					/>
 				)}

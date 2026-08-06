@@ -7,8 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Chat\Service;
 
-use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
-use App\Application\ModelGateway\Service\ModelConfigAppService;
+use App\Application\ModelGateway\Service\AiAbilityModelAppService;
 use App\Domain\Chat\DTO\AISearch\Request\MagicChatAggregateSearchReqDTO;
 use App\Domain\Chat\DTO\AISearch\Response\MagicAggregateSearchSummaryDTO;
 use App\Domain\Chat\DTO\Message\ChatMessage\AggregateAISearchCardMessage;
@@ -24,7 +23,6 @@ use App\Domain\Chat\Entity\ValueObject\AggregateSearch\AggregateAISearchCardResp
 use App\Domain\Chat\Entity\ValueObject\AggregateSearch\SearchDeepLevel;
 use App\Domain\Chat\Entity\ValueObject\AISearchCommonQueryVo;
 use App\Domain\Chat\Entity\ValueObject\ConversationType;
-use App\Domain\Chat\Entity\ValueObject\LLMModelEnum;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ControlMessageType;
 use App\Domain\Chat\Service\MagicChatDomainService;
@@ -32,7 +30,7 @@ use App\Domain\Chat\Service\MagicConversationDomainService;
 use App\Domain\Chat\Service\MagicLLMDomainService;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\ErrorCode\ChatErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\CoContext;
@@ -66,6 +64,7 @@ class MagicChatAISearchAppService extends AbstractAppService
 
     public function __construct(
         private readonly MagicLLMDomainService $magicLLMDomainService,
+        private readonly AiAbilityModelAppService $aiAbilityModelAppService,
         private readonly IdGeneratorInterface $idGenerator,
         protected readonly MagicConversationDomainService $magicConversationDomainService,
         protected readonly MagicUserDomainService $magicUserDomainService,
@@ -599,12 +598,7 @@ class MagicChatAISearchAppService extends AbstractAppService
             ->setSearchKeywords(array_column($associateQuestions, 'title'))
             ->setUserId($dto->getUserId())
             ->setOrganizationCode($dto->getOrganizationCode());
-        // 深度搜索的总结使用 deepseek-r1 模型
-        if ($dto->getSearchDeepLevel() === SearchDeepLevel::DEEP) {
-            $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId(), LLMModelEnum::DEEPSEEK_R1->value);
-        } else {
-            $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId());
-        }
+        $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId());
         $queryVo->setModel($modelInterface);
         $summarizeCompletionResponse = $this->magicLLMDomainService->summarize($queryVo);
         // 流式响应
@@ -1032,13 +1026,9 @@ class MagicChatAISearchAppService extends AbstractAppService
         return di(MagicChatMessageAppService::class);
     }
 
-    private function getChatModel(string $orgCode, string $userId, string $modelName = LLMModelEnum::DEEPSEEK_V3->value): ModelInterface
+    private function getChatModel(string $orgCode, string $userId): ModelInterface
     {
-        // 通过降级链获取模型名称
-        $modelName = di(ModelConfigAppService::class)->getChatModelTypeByFallbackChain($orgCode, $userId, $modelName);
-        // 获取模型代理
-        $dataIsolation = ModelGatewayDataIsolation::createByOrganizationCodeWithoutSubscription($orgCode, $userId);
-        return di(ModelGatewayMapper::class)->getChatModelProxy($dataIsolation, $modelName);
+        return $this->aiAbilityModelAppService->getChatModel(AiAbilityCode::AiSearchModel, $orgCode, $userId);
     }
 
     /**

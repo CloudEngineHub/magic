@@ -1,0 +1,13 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="20" height="20" rx="4" fill="url(#table_permissions_bg)"/>
+<rect x="4" y="5" width="8.5" height="9" rx="1.25" stroke="white"/>
+<path d="M4 8H12.5M8.25 5V14" stroke="white"/>
+<path d="M13.5 9.75L16 10.7V12.5C16 14.1 15.05 15.45 13.5 16C11.95 15.45 11 14.1 11 12.5V10.7L13.5 9.75Z" fill="#7652D8" stroke="white" stroke-linejoin="round"/>
+<path d="M12.55 12.75L13.2 13.4L14.55 12" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<defs>
+<linearGradient id="table_permissions_bg" x1="1" y1="1" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+<stop stop-color="#B45CFF"/>
+<stop offset="1" stop-color="#5B38BE"/>
+</linearGradient>
+</defs>
+</svg>

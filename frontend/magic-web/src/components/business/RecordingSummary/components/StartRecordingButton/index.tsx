@@ -58,6 +58,10 @@ function StartRecordingButton({
 	})
 
 	const isNewItem = currentItem === "new"
+	const handleClick = useMemoizedFn((mode: "new" | "current") => {
+		if (disabled) return
+		onClick(mode)
+	})
 
 	// Calculate dimensions based on actual layout
 	const calculateDimensions = useCallback(() => {
@@ -214,7 +218,7 @@ function StartRecordingButton({
 					left: bgLeft,
 				}}
 				aria-hidden="true"
-				onClick={() => onClick(currentItem)}
+				onClick={() => handleClick(currentItem)}
 				id={SummaryGuideDOMId.StartRecordingButton}
 			></div>
 			<FlexBox
@@ -242,7 +246,7 @@ function StartRecordingButton({
 				<span
 					ref={newItemRef}
 					onMouseEnter={handleMouseEnterNew}
-					onClick={() => onClick("new")}
+					onClick={() => handleClick("new")}
 					className={cx(
 						isNewItem ? styles.activeText : styles.inactiveText,
 						disabled && "disabled",
@@ -254,7 +258,7 @@ function StartRecordingButton({
 					<span
 						ref={currentItemRef}
 						onMouseEnter={handleMouseEnterCurrent}
-						onClick={() => onClick("current")}
+						onClick={() => handleClick("current")}
 						className={cx(
 							isNewItem ? styles.inactiveText : styles.activeText,
 							disabled && "disabled",

@@ -96,7 +96,7 @@ export function RoleSwitcherOverflowMenu({
 							type="button"
 							variant="outline"
 							size="icon"
-							className="size-9 shrink-0 rounded-full"
+							className="size-10 shrink-0 rounded-full"
 							data-testid="role-switcher-overflow-trigger"
 							aria-expanded={isPopoverOpen}
 						>

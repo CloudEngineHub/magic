@@ -8,6 +8,8 @@ declare(strict_types=1);
 namespace Dtyq\SuperMagic\Application\SuperAgent\Event\Subscribe;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
@@ -26,6 +28,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDisplayConfigDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileBatchOperationStatusManager;
+use Dtyq\SuperMagic\Infrastructure\Utils\FileOperationTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Interfaces\SuperAgent\DTO\Response\TaskFileItemDTO;
 use Hyperf\Amqp\Annotation\Consumer;
@@ -38,6 +41,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
+
+use function Hyperf\Translation\trans;
 
 /**
  * File batch move operation subscriber.
@@ -226,6 +231,7 @@ class FileBatchMoveSubscriber extends ConsumerMessage
             $fileName = $node['file_name'] ?? '';
             $isDirectory = $node['is_directory'] ?? false;
             $children = $node['children'] ?? [];
+            $isSyntheticParent = (bool) ($node['is_synthetic_parent'] ?? false);
 
             if ($fileId <= 0 || empty($fileName)) {
                 $this->logger->warning('Invalid file node data', ['node' => $node]);
@@ -233,6 +239,18 @@ class FileBatchMoveSubscriber extends ConsumerMessage
             }
 
             if ($isDirectory) {
+                if ($isSyntheticParent) {
+                    $newTargetEntity = $this->resolveSyntheticParentDirectory(
+                        $node,
+                        $targetProject,
+                        $targetParentEntity->getFileId()
+                    );
+                    foreach ($children as $child) {
+                        $this->moveFile($dataIsolation, $child, $sourceProject, $targetProject, $newTargetEntity, $keepBothFileIds);
+                    }
+                    return;
+                }
+
                 $directoryResult = $this->handleDirectory(
                     $node,
                     $dataIsolation,
@@ -456,6 +474,7 @@ class FileBatchMoveSubscriber extends ConsumerMessage
         $targetProjectId = $event->getTargetProjectId();
         $targetParentId = $event->getTargetParentId();
         $keepBothFileIds = $event->getKeepBothFileIds();
+        $preserveParentPath = $event->shouldPreserveParentPath() && $sourceProjectId !== $targetProjectId;
 
         // Initialize progress tracking
         $this->currentBatchKey = $batchKey;
@@ -471,6 +490,7 @@ class FileBatchMoveSubscriber extends ConsumerMessage
             'target_project_id' => $targetProjectId,
             'target_parent_id' => $targetParentId,
             'keep_both_file_ids' => $keepBothFileIds,
+            'preserve_parent_path' => $preserveParentPath,
             'file_count' => count($fileIds),
         ]);
 
@@ -496,25 +516,12 @@ class FileBatchMoveSubscriber extends ConsumerMessage
             'is_cross_organization' => $sourceProject->getUserOrganizationCode() !== $targetProject->getUserOrganizationCode(),
         ]);
 
-        // 通过 file_id 的数组，查出所有 file_entity 实体
-        $fileEntities = $this->taskFileDomainService->getProjectFilesByIds($sourceProjectId, $fileIds);
+        $this->fileEntitiesCache = [];
+        $fileTree = $this->prepareMoveTree($fileIds, $sourceProject, $preserveParentPath);
 
-        // 通过 file_entity 的 parent_id 构建层级的结构
-        $projectEntity = $sourceProject;
-        $files = [];
-        $fileDebugArr = [];
-        foreach ($fileEntities as $fileEntity) {
-            // set cache
-            $this->fileEntitiesCache[$fileEntity->getFileId()] = $fileEntity;
-            $files[] = TaskFileItemDTO::fromEntity($fileEntity, $projectEntity->getWorkDir())->toArray();
-            $fileDebugArr[] = [
-                'id' => $fileEntity->getFileId(),
-                'key' => $fileEntity->getFileKey(),
-                'p_id' => $fileEntity->getParentId(),
-            ];
+        if ($preserveParentPath) {
+            $this->preflightSyntheticParentPaths($fileTree, $targetProjectId, $targetParentId);
         }
-        $fileTree = FileTreeUtil::assembleFilesTreeByParentId($files);
-        $this->logger->info(sprintf('recordOldFile, %s', $batchKey), ['data' => $fileDebugArr]);
 
         // Initialize change collector for this batch
         $this->currentChangeSet = new FileMoveChangeSet();
@@ -533,6 +540,7 @@ class FileBatchMoveSubscriber extends ConsumerMessage
             'operation' => 'batch_move',
             'message' => 'Batch file move completed successfully',
             'file_count' => count($fileIds),
+            'preserve_parent_path' => $preserveParentPath,
         ]);
 
         $changeSet = $this->currentChangeSet;
@@ -581,12 +589,155 @@ class FileBatchMoveSubscriber extends ConsumerMessage
         }
 
         foreach ($fileTree as $node) {
-            if (empty($node['file_id']) || $node['parent_id'] === $targetParentId) {
+            if (empty($node['file_id'])
+                || (! (bool) ($node['is_synthetic_parent'] ?? false) && $node['parent_id'] === $targetParentId)
+            ) {
                 continue;
             }
 
             $this->moveFile($dataIsolation, $node, $sourceProject, $targetProject, $targetParentEntity, $keepBothFileIds);
         }
+    }
+
+    /**
+     * @param array<int> $fileIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function prepareMoveTree(
+        array $fileIds,
+        ProjectEntity $sourceProject,
+        bool $preserveParentPath
+    ): array {
+        $sourceProjectId = $sourceProject->getId();
+        $fileEntities = $preserveParentPath
+            ? $this->taskFileDomainService->getFilesWithParentsByIds($fileIds, $sourceProjectId)
+            : $this->taskFileDomainService->getProjectFilesByIds($sourceProjectId, $fileIds);
+
+        $files = [];
+        $fileDebugArr = [];
+        foreach ($fileEntities as $fileEntity) {
+            $this->fileEntitiesCache[$fileEntity->getFileId()] = $fileEntity;
+            $files[] = TaskFileItemDTO::fromEntity($fileEntity, $sourceProject->getWorkDir())->toArray();
+            $fileDebugArr[] = [
+                'id' => $fileEntity->getFileId(),
+                'key' => $fileEntity->getFileKey(),
+                'p_id' => $fileEntity->getParentId(),
+            ];
+        }
+
+        $this->logger->info('Prepared batch move file tree entities', [
+            'source_project_id' => $sourceProjectId,
+            'preserve_parent_path' => $preserveParentPath,
+            'data' => $fileDebugArr,
+        ]);
+
+        if (! $preserveParentPath) {
+            return FileTreeUtil::assembleFilesTreeByParentId($files);
+        }
+
+        $sourceRootFileId = $this->taskFileDomainService->getProjectRootFileId($sourceProjectId);
+        return FileOperationTreeUtil::assemblePreservingParentPath($files, $fileIds, $sourceRootFileId);
+    }
+
+    /** @param array<int, array<string, mixed>> $fileTree */
+    private function preflightSyntheticParentPaths(array $fileTree, int $targetProjectId, int $targetParentId): void
+    {
+        foreach ($fileTree as $node) {
+            $this->preflightSyntheticParentNode($node, $targetProjectId, $targetParentId, '');
+        }
+    }
+
+    /** @param array<string, mixed> $node */
+    private function preflightSyntheticParentNode(
+        array $node,
+        int $targetProjectId,
+        int $targetParentId,
+        string $relativePath
+    ): void {
+        if (! (bool) ($node['is_synthetic_parent'] ?? false)) {
+            return;
+        }
+
+        $fileName = (string) ($node['file_name'] ?? '');
+        if ($fileName === '' || ! (bool) ($node['is_directory'] ?? false)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid synthetic parent directory');
+        }
+
+        $currentPath = $relativePath === '' ? $fileName : $relativePath . '/' . $fileName;
+        $targetEntity = $this->taskFileDomainService->getByProjectParentAndName(
+            $targetProjectId,
+            $targetParentId,
+            $fileName
+        );
+        if ($targetEntity === null) {
+            return;
+        }
+        if (! $targetEntity->getIsDirectory()) {
+            $this->throwSyntheticParentConflict($currentPath);
+        }
+
+        foreach (($node['children'] ?? []) as $child) {
+            if (is_array($child)) {
+                $this->preflightSyntheticParentNode($child, $targetProjectId, $targetEntity->getFileId(), $currentPath);
+            }
+        }
+    }
+
+    /** @param array<string, mixed> $node */
+    private function resolveSyntheticParentDirectory(
+        array $node,
+        ProjectEntity $targetProject,
+        int $targetParentId
+    ): TaskFileEntity {
+        $fileName = (string) ($node['file_name'] ?? '');
+        if ($fileName === '' || ! (bool) ($node['is_directory'] ?? false)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid synthetic parent directory');
+        }
+
+        $targetEntity = $this->taskFileDomainService->getByProjectParentAndName(
+            $targetProject->getId(),
+            $targetParentId,
+            $fileName
+        );
+        if ($targetEntity !== null) {
+            if ($targetEntity->getIsDirectory()) {
+                return $targetEntity;
+            }
+            $this->throwSyntheticParentConflict($fileName);
+        }
+
+        try {
+            return $this->magicFSFileDomainService->createFile(
+                $fileName,
+                (string) $targetParentId,
+                true,
+                null,
+                null,
+                null,
+                TaskFileSource::MOVE
+            );
+        } catch (Throwable $e) {
+            $concurrentEntity = $this->taskFileDomainService->getByProjectParentAndName(
+                $targetProject->getId(),
+                $targetParentId,
+                $fileName
+            );
+            if ($concurrentEntity !== null && $concurrentEntity->getIsDirectory()) {
+                return $concurrentEntity;
+            }
+            if ($concurrentEntity !== null) {
+                $this->throwSyntheticParentConflict($fileName);
+            }
+            throw $e;
+        }
+    }
+
+    private function throwSyntheticParentConflict(string $relativePath): never
+    {
+        ExceptionBuilder::throw(
+            GenericErrorCode::ParameterValidationFailed,
+            trans('file.preserve_parent_path_conflict', ['path' => $relativePath])
+        );
     }
 
     private function handleDirectory(

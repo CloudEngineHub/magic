@@ -28,7 +28,7 @@ function Reminder(props: NodeProps) {
 
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 
 	const onFileClick = useMemoizedFn((_: string, item?: TiptapMentionAttributes) => {
 		const result = handleProjectFileMention(item?.data as ProjectFileMentionData, t)

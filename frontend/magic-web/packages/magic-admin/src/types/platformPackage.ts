@@ -16,6 +16,8 @@ export namespace PlatformPackage {
 	export type Skus = PackageTypes.Skus
 
 	export type ModeListParams = ModeTypes.ModeListParams
+	export type DefaultAgentSetting = ModeTypes.DefaultAgentSetting
+	export type UpdateDefaultAgentSettingParams = ModeTypes.UpdateDefaultAgentSettingParams
 	export import DistributionType = ModeTypes.DistributionType
 	export import IconType = ModeTypes.IconType
 	export type Mode = ModeTypes.Mode

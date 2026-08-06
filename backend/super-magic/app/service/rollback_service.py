@@ -52,31 +52,33 @@ class RollbackService:
         - undo_rollback 的语义本身就是把磁盘恢复成内存当前所在的 latest
           状态，内存与磁盘天然一致，不需要 reload。
 
-        主 Agent 尚未创建（例如回滚发生在会话首次启动前）时，agents 为
-        空，直接跳过即可；reload 过程中任何单个 Agent 失败都不应影响
+        主 Agent 尚未创建（例如回滚发生在会话首次启动前）时，Runtime
+        没有缓存实例，直接跳过即可；reload 失败不应影响
         回滚主流程成功的语义，因此这里只记日志不抛错。
         """
         # 局部 import 避免与 agent_dispatcher 的模块级循环依赖
         from app.service.agent_dispatcher import AgentDispatcher
+        from app.service.agent_runtime import AgentRuntime
 
         dispatcher = AgentDispatcher.get_instance()
-        agents = getattr(dispatcher, "agents", None) or {}
-        if not agents:
+        agent_context = dispatcher.agent_context
+        if agent_context is None:
             logger.debug("主 Agent 尚未创建，跳过聊天历史内存重载")
             return
 
-        for agent_type, agent in agents.items():
-            chat_history = getattr(agent, "chat_history", None)
-            if chat_history is None:
-                continue
-            try:
-                await chat_history.reload_from_disk()
-                logger.info(f"已从磁盘重新加载聊天历史: agent_type={agent_type}")
-            except Exception as e:
-                logger.error(
-                    f"从磁盘重新加载聊天历史失败 (agent_type={agent_type}): {e}",
-                    exc_info=True,
-                )
+        agent = AgentRuntime.get_instance().get_cached_agent(agent_context.context_id)
+        if agent is None:
+            logger.debug("主 Agent 尚未创建，跳过聊天历史内存重载")
+            return
+
+        try:
+            await agent.chat_history.reload_from_disk()
+            logger.info(f"已从磁盘重新加载聊天历史: agent_type={agent.agent_name}")
+        except Exception as e:
+            logger.error(
+                f"从磁盘重新加载聊天历史失败 (agent_type={agent.agent_name}): {e}",
+                exc_info=True,
+            )
 
     async def _get_previous_checkpoint(self, checkpoint_id: str) -> Optional[str]:
         """获取指定checkpoint的前一个checkpoint（支持虚拟checkpoint）
@@ -329,4 +331,3 @@ class RollbackService:
 
         except Exception as e:
             logger.error(f"异步创建文件版本失败: {e}")
-

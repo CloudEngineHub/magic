@@ -24,6 +24,7 @@ import { AddModeModal } from "./components/AddModeModal"
 import { AssignModal } from "./components/AssignModal"
 import ModeIcon from "./components/ModeIcon.tsx"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
+import { buildDefaultAgentOptions, getModeDisplayName } from "./defaultAgent"
 
 const AddModuleBox = lazy(() => import("../components/AddModuleBox"))
 
@@ -39,6 +40,8 @@ const ModeManagementPage = () => {
 	const [allModelList, setAllModelList] = useState<AiManage.ModelInfo[]>([])
 	const [list, setList] = useState<PlatformPackage.Mode[]>([])
 	const [total, setTotal] = useState(0)
+	const [defaultAgentCode, setDefaultAgentCode] = useState<string>()
+	const [enabledModeList, setEnabledModeList] = useState<PlatformPackage.Mode[]>([])
 	const [params, setParams] = useState<PlatformPackage.ModeListParams>({
 		page: 1,
 		page_size: 100,
@@ -46,6 +49,52 @@ const ModeManagementPage = () => {
 
 	const { runAsync: updateStatus } = useRequest(
 		(arg: { id: string; status: boolean }) => PlatformPackageApi.updateModeStatus(arg),
+		{ manual: true },
+	)
+
+	const { run: getDefaultAgentSetting, loading: defaultAgentSettingLoading } = useRequest(
+		PlatformPackageApi.getDefaultAgentSetting,
+		{
+			manual: true,
+			onSuccess: (res) => {
+				setDefaultAgentCode(res.default_agent_code)
+			},
+		},
+	)
+
+	const { run: getEnabledModeList, loading: enabledModeListLoading } = useRequest(
+		async () => {
+			const pageSize = 100
+			const firstPage = await PlatformPackageApi.getModeList({
+				page: 1,
+				page_size: pageSize,
+				status: 1,
+			})
+			const pageCount = Math.ceil(firstPage.total / pageSize)
+			if (pageCount <= 1) return firstPage.list
+
+			const remainingPages = await Promise.all(
+				Array.from({ length: pageCount - 1 }, (_, index) =>
+					PlatformPackageApi.getModeList({
+						page: index + 2,
+						page_size: pageSize,
+						status: 1,
+					}),
+				),
+			)
+
+			return [firstPage, ...remainingPages].flatMap((page) => page.list)
+		},
+		{
+			manual: true,
+			onSuccess: (modeList) => {
+				setEnabledModeList(modeList)
+			},
+		},
+	)
+
+	const { runAsync: updateDefaultAgentSetting, loading: defaultAgentUpdating } = useRequest(
+		PlatformPackageApi.updateDefaultAgentSetting,
 		{ manual: true },
 	)
 
@@ -101,6 +150,8 @@ const ModeManagementPage = () => {
 	useMount(() => {
 		run(params)
 		getAllModelList()
+		getDefaultAgentSetting()
+		getEnabledModeList()
 	})
 
 	const statusOptions = useMemo(
@@ -113,6 +164,48 @@ const ModeManagementPage = () => {
 	)
 
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
+	const defaultAgentOptions = useMemo(
+		() => buildDefaultAgentOptions(enabledModeList, defaultAgentCode),
+		[defaultAgentCode, enabledModeList],
+	)
+	const defaultAgentModeMap = useMemo(
+		() => new Map(enabledModeList.map((mode) => [mode.identifier, mode])),
+		[enabledModeList],
+	)
+	const defaultAgentSelectValue = defaultAgentOptions.some(
+		(option) => option.value === defaultAgentCode,
+	)
+		? defaultAgentCode
+		: undefined
+	const renderDefaultAgentOption = useMemoizedFn(
+		(value: string | number | null | undefined, label: React.ReactNode) => {
+			const mode = typeof value === "string" ? defaultAgentModeMap.get(value) : undefined
+
+			return (
+				<Flex gap={8} align="center">
+					{mode && <ModeIcon item={mode} size={16} className={styles.defaultAgentIcon} />}
+					<span>{label}</span>
+				</Flex>
+			)
+		},
+	)
+
+	const handleDefaultAgentChange = useMemoizedFn(async (nextAgentCode: string) => {
+		if (!nextAgentCode || nextAgentCode === defaultAgentCode) return
+
+		const previousAgentCode = defaultAgentCode
+		setDefaultAgentCode(nextAgentCode)
+		try {
+			const res = await updateDefaultAgentSetting({
+				default_agent_code: nextAgentCode,
+			})
+			setDefaultAgentCode(res.default_agent_code)
+			message.success(t("defaultAgentUpdateSuccess"))
+		} catch {
+			setDefaultAgentCode(previousAgentCode)
+			message.error(t("defaultAgentUpdateFailed"))
+		}
+	})
 
 	const onChange = async (status: boolean, item: PlatformPackage.Mode) => {
 		const { id } = item
@@ -135,6 +228,7 @@ const ModeManagementPage = () => {
 					setList((prevList) =>
 						prevList.map((it) => (it.id === id ? { ...it, status } : it)),
 					)
+					getEnabledModeList()
 				})
 			},
 		})
@@ -173,6 +267,7 @@ const ModeManagementPage = () => {
 		openModal(AddModeModal, {
 			info,
 			onOk: (mode) => {
+				getEnabledModeList()
 				setList((prevList) => {
 					const index = prevList.findIndex((it) => it.id === mode.id)
 					if (index !== -1) {
@@ -223,7 +318,30 @@ const ModeManagementPage = () => {
 
 	return (
 		<Flex gap={10} vertical className={styles.container}>
-			<div className={styles.title}>{t("superMagic")}</div>
+			<div className={styles.defaultAgentSetting}>
+				<div className={styles.defaultAgentInfo}>
+					<div className={styles.defaultAgentLabel}>{t("defaultAgent")}</div>
+					<div className={styles.defaultAgentDescription}>{t("defaultAgentDesc")}</div>
+				</div>
+				<MagicSelect
+					value={defaultAgentSelectValue}
+					options={defaultAgentOptions}
+					placeholder={t("defaultAgentPlaceholder")}
+					loading={defaultAgentSettingLoading || enabledModeListLoading}
+					disabled={
+						!hasEditRight ||
+						defaultAgentSettingLoading ||
+						enabledModeListLoading ||
+						defaultAgentUpdating
+					}
+					showSearch
+					optionFilterProp="label"
+					className={styles.defaultAgentSelect}
+					optionRender={(option) => renderDefaultAgentOption(option.value, option.label)}
+					labelRender={(option) => renderDefaultAgentOption(option.value, option.label)}
+					onChange={handleDefaultAgentChange}
+				/>
+			</div>
 			<Flex align={isMobile ? "stretch" : "center"} gap={10} vertical={isMobile}>
 				<MagicSelect
 					prefix={tCommon("status")}
@@ -256,11 +374,7 @@ const ModeManagementPage = () => {
 					{list?.map((item) => (
 						<MagicCard
 							key={item.id}
-							title={
-								item.name_i18n?.zh_CN ||
-								item.name_i18n?.default ||
-								item.name_i18n?.en_US
-							}
+							title={getModeDisplayName(item)}
 							avatar={
 								<ModeIcon item={item} size={28} className={styles.iconWrapper} />
 							}

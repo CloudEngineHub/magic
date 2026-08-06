@@ -6,6 +6,7 @@ import { cloneDeep } from "lodash-es"
 import { UploadSource } from "../hooks/useFileUpload"
 import { SuperMagicApi } from "@/apis"
 import { logger as Logger } from "@/utils/log"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 const TEMP_UPLOAD_DIR_NAME = ".tmp"
 
@@ -42,24 +43,30 @@ class UploadTokenService {
 		return this.baseUrl + "/api/v1/super-agent/file/project-upload-token"
 	}
 
+	/** 生成包含文件空间的上传凭证缓存键。 */
+	private getUploadTokenCacheKey(projectId: string, fileScope?: FileScope): string {
+		return fileScope ? `${fileScope}:${projectId}` : projectId
+	}
+
 	/**
 	 * 获取上传凭证
 	 * @param projectId
 	 * @param expires
 	 * @returns
 	 */
-	async fetchUploadToken(projectId: string, expires: number = 3600) {
+	async fetchUploadToken(projectId: string, expires: number = 3600, fileScope?: FileScope) {
 		const queryParams = new URLSearchParams({
 			project_id: projectId,
 			expires: expires.toString(),
 		})
+		if (fileScope) queryParams.set("scope", fileScope)
 
 		const url = `${this.getUploadTokenUrl}?${queryParams.toString()}`
 
 		try {
 			const res = await magicClient.get<UploadConfig["customCredentials"]>(url)
 
-			this.uploadTokenMap.set(projectId, {
+			this.uploadTokenMap.set(this.getUploadTokenCacheKey(projectId, fileScope), {
 				customCredentials: res,
 				expireTime: Date.now() + expires * 1000,
 			})
@@ -71,7 +78,7 @@ class UploadTokenService {
 				errorKind: "permission",
 				error: error,
 				message: "fetchUploadToken failed",
-				context: { projectId, url },
+				context: { projectId, url, fileScope },
 			})
 			throw error
 		}
@@ -83,8 +90,12 @@ class UploadTokenService {
 	 * @param bufferTime 提前过期的缓冲时间（毫秒），默认5分钟，不能为负数
 	 * @returns true表示已过期，false表示未过期
 	 */
-	isExpired(projectId: string, bufferTime: number = 5 * 60 * 1000): boolean {
-		const token = this.uploadTokenMap.get(projectId)
+	isExpired(
+		projectId: string,
+		bufferTime: number = 5 * 60 * 1000,
+		fileScope?: FileScope,
+	): boolean {
+		const token = this.uploadTokenMap.get(this.getUploadTokenCacheKey(projectId, fileScope))
 		if (!token) {
 			this.logger.warn("token not found, treated as expired", { projectId })
 			return true
@@ -134,14 +145,19 @@ class UploadTokenService {
 	 * @param _parentId 父目录ID（保留用于向后兼容，未使用）
 	 * @returns
 	 */
-	async getUploadToken(projectId: string, _parentId?: string, force: boolean = false) {
-		const token = this.uploadTokenMap.get(projectId)
-		if (token && !this.isExpired(projectId) && !force) {
+	async getUploadToken(
+		projectId: string,
+		_parentId?: string,
+		force: boolean = false,
+		fileScope?: FileScope,
+	) {
+		const token = this.uploadTokenMap.get(this.getUploadTokenCacheKey(projectId, fileScope))
+		if (token && !this.isExpired(projectId, undefined, fileScope) && !force) {
 			return token.customCredentials
 		}
 
 		try {
-			const newToken = await this.fetchUploadToken(projectId)
+			const newToken = await this.fetchUploadToken(projectId, 3600, fileScope)
 			return newToken
 		} catch (error) {
 			this.logger.error({
@@ -149,7 +165,7 @@ class UploadTokenService {
 				errorKind: "permission",
 				error: error,
 				message: "getUploadToken failed",
-				context: { projectId },
+				context: { projectId, fileScope },
 			})
 			throw error
 		}
@@ -164,10 +180,11 @@ class UploadTokenService {
 	 */
 	async getUploadTokenForCustomKey(
 		projectId: string,
+		fileScope?: FileScope,
 	): Promise<UploadConfig["customCredentials"]> {
 		try {
 			// 直接返回原始凭证，不修改任何字段
-			const originalCredentials = await this.fetchUploadToken(projectId)
+			const originalCredentials = await this.fetchUploadToken(projectId, 3600, fileScope)
 
 			this.logger.log("getUploadTokenForCustomKey success", {
 				projectId,
@@ -181,7 +198,7 @@ class UploadTokenService {
 				errorKind: "permission",
 				error: error,
 				message: "getUploadTokenForCustomKey failed",
-				context: { projectId },
+				context: { projectId, fileScope },
 			})
 			throw error
 		}

@@ -16,7 +16,7 @@ use ReflectionClass;
  */
 class SaveSlidesTemplateRequestTest extends TestCase
 {
-    public function testCategoryCodeReplacesCategoryId(): void
+    public function testCategoryCodeOnlyRequiresNullableStringWithMaxLength(): void
     {
         /** @var SaveSlidesTemplateRequest $request */
         $request = (new ReflectionClass(SaveSlidesTemplateRequest::class))->newInstanceWithoutConstructor();
@@ -24,13 +24,8 @@ class SaveSlidesTemplateRequestTest extends TestCase
 
         $this->assertArrayHasKey('category_code', $rules);
         $this->assertArrayNotHasKey('category_id', $rules);
-
-        preg_match('/regex:(.+)$/', (string) $rules['category_code'], $matches);
-        $regex = $matches[1] ?? '';
-
-        $this->assertSame(1, preg_match($regex, 'PPT-CATE-business'));
-        $this->assertSame(1, preg_match($regex, 'SLIDE-CATE-business'));
-        $this->assertSame(0, preg_match($regex, 'SLD-CATE-business'));
+        $this->assertSame('nullable|string|max:64', $rules['category_code']);
+        $this->assertArrayNotHasKey('category_code.regex', $request->messages());
     }
 
     public function testUsageCountFieldsAreNotAcceptedFromAdminRequest(): void
@@ -50,8 +45,12 @@ class SaveSlidesTemplateRequestTest extends TestCase
         $request = (new ReflectionClass(SaveSlidesTemplateRequest::class))->newInstanceWithoutConstructor();
         $rules = $request->rules();
 
-        preg_match('/regex:(.+)$/', (string) $rules['code'], $matches);
-        $regex = $matches[1] ?? '';
+        $this->assertIsArray($rules['code']);
+        $regexRule = array_values(array_filter(
+            $rules['code'],
+            static fn (mixed $rule): bool => is_string($rule) && str_starts_with($rule, 'regex:')
+        ))[0] ?? '';
+        $regex = substr($regexRule, strlen('regex:'));
 
         $this->assertSame(1, preg_match($regex, 'PPT-business-minimal'));
         $this->assertSame(1, preg_match($regex, 'SLIDE-business-minimal'));

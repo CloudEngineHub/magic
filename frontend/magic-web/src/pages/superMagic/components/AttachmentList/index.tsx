@@ -5,10 +5,10 @@ import topicEmpty from "@/pages/superMagic/assets/svg/topic-empty.svg"
 import type { MouseEvent } from "react"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react"
-import { useResponsive } from "ahooks"
 import { Button, Input, Tooltip, Typography } from "antd"
 import { useMemo, useState } from "react"
 import { useLocation } from "react-router"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -51,8 +51,7 @@ export default function AttachmentList({
 }) {
 	const { styles, cx } = useStyles()
 	const { pathname } = useLocation()
-	const responsive = useResponsive()
-	const isMobile = !responsive.md
+	const isMobile = useIsMobile()
 
 	const [isFileListCollapsed, setIsFileListCollapsed] = useState(false)
 	const [fileSearchText, setFileSearchText] = useState("")
@@ -227,7 +226,13 @@ export default function AttachmentList({
 									/>
 								</div>
 								<div className={styles.iconWrapper} style={{ marginLeft: "2px" }}>
-									<img src={FoldIcon} alt="folder" width={18} height={18}  data-testid="attachment-list-image"/>
+									<img
+										src={FoldIcon}
+										alt="folder"
+										width={18}
+										height={18}
+										data-testid="attachment-list-image"
+									/>
 								</div>
 								<div className={styles.fileNameContainer}>
 									{renderText(item.name, item.name)}
@@ -362,13 +367,23 @@ export default function AttachmentList({
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-2"/>
+							<img
+								src={topicEmpty}
+								alt=""
+								className={styles.emptyTextIcon}
+								data-testid="attachment-list-image-2"
+							/>
 							未找到相关文件
 						</div>
 					)}
 					{attachments?.length === 0 && (
 						<div className={styles.emptyText}>
-							<img src={topicEmpty} alt="" className={styles.emptyTextIcon}  data-testid="attachment-list-image-3"/>
+							<img
+								src={topicEmpty}
+								alt=""
+								className={styles.emptyTextIcon}
+								data-testid="attachment-list-image-3"
+							/>
 							暂无相关文件
 						</div>
 					)}

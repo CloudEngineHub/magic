@@ -17,6 +17,7 @@ from pptx.util import Inches, Pt
 
 from app.core.entity.aigc_metadata import AigcMetadataParams
 from app.service import convert_task_manager
+from app.service.browser.browser_playwright_runtime import SharedBrowserRuntime
 from app.service.file_convert.base_convert_service import BaseConvertService, ViewportSize
 
 
@@ -401,16 +402,14 @@ class PptxConvertService(BaseConvertService):
         completed_screenshots = progress_offset  # 🎯 从偏移量开始，而不是从0开始
 
         # 使用共享浏览器进行转换（支持服务端模式）
-        playwright_instance = None
-        shared_browser = None
-        shared_context = None
+        browser_runtime: SharedBrowserRuntime | None = None
         try:
             logger.info(f"项目 '{project_name}': 准备共享浏览器实例（支持服务端模式）")
 
             # 使用类型安全的视口配置
             viewport = ViewportSize(width=1920, height=1080)
 
-            playwright_instance, shared_browser, shared_context = await self._create_shared_browser_context(
+            browser_runtime = await self._create_shared_browser_context(
                 browser_type="screenshot",
                 viewport=viewport,
                 device_scale_factor=2.0,
@@ -442,7 +441,7 @@ class PptxConvertService(BaseConvertService):
                     if file_suffix not in [".html", ".htm"]:
                         return None, f"跳过非HTML文件: {source_path}"
 
-                    page = await shared_context.new_page()
+                    page = await browser_runtime.context.new_page()
                     page.set_default_timeout(self.PAGE_OPERATION_TIMEOUT)
                     self._bind_page_console_logger(page, debug_info=f"PPTX截图-{source_path.name}")
 
@@ -565,9 +564,7 @@ class PptxConvertService(BaseConvertService):
             )
             return screenshot_files, conversion_errors
         finally:
-            await self._close_shared_browser_context(
-                playwright_instance, shared_browser, shared_context, log_prefix=f"项目 '{project_name}'"
-            )
+            await self._close_shared_browser_context(browser_runtime, log_prefix=f"项目 '{project_name}'")
 
     async def _convert_projects(
         self,

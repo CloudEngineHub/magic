@@ -65,7 +65,10 @@ import type {
 	SuperMagicPlaybackStartArgs,
 } from "@/pages/superMagic/events/playback"
 import type { SeqResponse } from "@/types/request"
-import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
+import type {
+	SuperMagicCheckpointRollbackMessage,
+	SuperMagicFileChangeMessage,
+} from "@/types/chat/intermediate_message"
 
 /**
  * 全局事件名 → 参数类型映射。
@@ -132,6 +135,10 @@ export interface PubSubTypedPayloadMap {
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */
 	[PubSubEvents.Super_Magic_File_Change_Intermediate]: [
 		payload: SeqResponse<SuperMagicFileChangeMessage>,
+	]
+	/** Intermediate 检查点事件：保留完整 seq，外层 seq_id 只作为领域事件 ID。 */
+	[PubSubEvents.Super_Magic_Checkpoint_Rollback]: [
+		payload: SeqResponse<SuperMagicCheckpointRollbackMessage>,
 	]
 	/** 通过外部消息内容直接发送消息：传入发送内容 payload。 */
 	[PubSubEvents.Send_Message_by_Content]: SuperMagicSendMessageByContentArgs

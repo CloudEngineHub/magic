@@ -70,21 +70,21 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const { t } = useTranslation("super")
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
+		await superMagicModeService.fetchModeList({ force: false })
+		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const result = officialGroups.flatMap((groupItem) =>
-			(groupItem.models || []).map(
-				(model): VideoModelItem => ({
-					...model,
-					model_source: "official",
-					model_group: {
-						id: groupItem.group.id,
-						name: normalizeVideoModelGroupLabel(groupItem.group.name),
-						icon: groupItem.group.icon,
-						sort: groupItem.group.sort,
-						source: "official",
-					},
-				}),
-			),
+			(groupItem.models || []).map((model): VideoModelItem => ({
+				...model,
+				model_source: "official",
+				model_group: {
+					id: groupItem.group.id,
+					name: normalizeVideoModelGroupLabel(groupItem.group.name),
+					icon: groupItem.group.icon,
+					sort: groupItem.group.sort,
+					source: "official",
+				},
+			})),
 		)
 		return result
 	}, [])

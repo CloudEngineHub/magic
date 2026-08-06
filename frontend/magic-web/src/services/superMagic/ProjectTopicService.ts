@@ -3,12 +3,14 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { platformKey } from "@/utils/storage"
 import superMagicModeService from "./SuperMagicModeService"
 import DefaultTopicModeStorageService from "./DefaultTopicModeStorageService"
+import { resolveDefaultAgentSelection } from "./DefaultAgentSelectionService"
 
 class ProjectTopicService {
 	projectTopicModeMap: Map<string, TopicMode> = new Map()
+	private projectTopicModeUserKey = ""
 
 	constructor() {
-		this.projectTopicModeMap = new Map(Object.entries(this.getProjectBucket()))
+		this.reloadProjectTopicModeMap()
 	}
 
 	/**
@@ -54,13 +56,21 @@ class ProjectTopicService {
 	 */
 	getGlobalTopicMode(): TopicMode | undefined {
 		const userKey = this.getUserKey()
-		const mode = DefaultTopicModeStorageService.getOrFallback({
+		const storedMode = DefaultTopicModeStorageService.getStoredMode({
 			userKey,
-			fallbackMode: superMagicModeService.firstModeIdentifier,
 		})
+		if (storedMode) return storedMode
 
-		this.setGlobalTopicMode(mode)
-		return mode
+		return resolveDefaultAgentSelection().modeIdentifier as TopicMode
+	}
+
+	/**
+	 * 获取未经可用性校验的全局主题模式，仅用于区分用户选择与系统回退。
+	 */
+	getRawGlobalTopicMode(): TopicMode | undefined {
+		return DefaultTopicModeStorageService.getRawStoredMode({
+			userKey: this.getUserKey(),
+		})
 	}
 
 	/**
@@ -83,6 +93,7 @@ class ProjectTopicService {
 	 * @returns
 	 */
 	getProjectDefaultTopicMode(workspaceId: string, projectId: string) {
+		this.ensureCurrentUserProjectModes()
 		const key = this.genProjectTopicModeCacheKey(workspaceId, projectId)
 		const value = this.projectTopicModeMap.get(key)
 
@@ -90,13 +101,7 @@ class ProjectTopicService {
 			return value
 		}
 
-		const globalValue = this.getGlobalTopicMode()
-
-		if (!globalValue) return undefined
-
-		this.setProjectDefaultTopicMode(workspaceId, projectId, globalValue)
-
-		return globalValue
+		return this.getGlobalTopicMode()
 	}
 
 	/**
@@ -111,6 +116,7 @@ class ProjectTopicService {
 		value: TopicMode | undefined,
 	) {
 		if (value) {
+			this.ensureCurrentUserProjectModes()
 			const key = this.genProjectTopicModeCacheKey(workspaceId, projectId)
 
 			this.projectTopicModeMap.set(key, value)
@@ -123,6 +129,17 @@ class ProjectTopicService {
 
 	private getProjectBucket() {
 		return DefaultTopicModeStorageService.getProjects(this.getUserKey())
+	}
+
+	private reloadProjectTopicModeMap() {
+		this.projectTopicModeUserKey = this.getUserKey()
+		this.projectTopicModeMap = new Map(Object.entries(this.getProjectBucket()))
+	}
+
+	private ensureCurrentUserProjectModes() {
+		if (this.projectTopicModeUserKey !== this.getUserKey()) {
+			this.reloadProjectTopicModeMap()
+		}
 	}
 }
 

@@ -105,16 +105,21 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
             'request_id' => trim((string) ($businessParams['request_id'] ?? '')),
         ]);
 
+        $extras = InvocationDetailInfo::withFailureReason(
+            [
+                'original_model_id' => (string) ($businessParams['original_model_id'] ?? $event->getModelId()),
+            ],
+            (string) ($businessParams['failure_reason'] ?? ''),
+        );
+        $extras = InvocationDetailInfo::withPreviousExceptions(
+            $extras,
+            (array) ($businessParams['previous_exceptions'] ?? []),
+        );
         $detailInfo = InvocationDetailInfo::forModel(
             (string) ($businessParams['app_id'] ?? $event->getAppId()),
             (string) ($businessParams['source_id'] ?? ''),
             (string) ($businessParams['service_provider_model_id'] ?? $event->getServiceProviderModelId()),
-            InvocationDetailInfo::withFailureReason(
-                [
-                    'original_model_id' => (string) ($businessParams['original_model_id'] ?? $event->getModelId()),
-                ],
-                (string) ($businessParams['failure_reason'] ?? ''),
-            ),
+            $extras,
         );
 
         $this->persistAudit(

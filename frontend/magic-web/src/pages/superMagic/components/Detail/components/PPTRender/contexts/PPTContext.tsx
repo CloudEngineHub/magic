@@ -9,6 +9,7 @@ import {
 } from "react"
 import { createPPTEventBus, type PPTEventBus } from "../events/PPTEventBus"
 import { createPPTStore, type PPTStore, type PPTStoreConfig } from "../stores"
+import { usePPTStoreDisposal } from "./usePPTStoreDisposal"
 
 interface PPTContextValue {
 	eventBus: PPTEventBus
@@ -71,6 +72,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		attachmentListSignature: string
 		mainFileId: string | undefined
 		mainFileName: string | undefined
+		initialActiveIndex: number | undefined
 	} | null>(null)
 
 	// Single-channel update: sync config to store as early as possible (useLayoutEffect)
@@ -88,14 +90,23 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 			prev.mainFileId !== storeConfig.mainFileId ||
 			prev.mainFileName !== storeConfig.mainFileName
 		const displayConfigChanged = !prev || prev.displayConfig !== storeConfig.displayConfig
+		const initialActiveIndexChanged =
+			!prev || prev.initialActiveIndex !== storeConfig.initialActiveIndex
 
-		if (slidesChanged || attachmentListChanged || mainFileChanged || displayConfigChanged) {
+		if (
+			slidesChanged ||
+			attachmentListChanged ||
+			mainFileChanged ||
+			displayConfigChanged ||
+			initialActiveIndexChanged
+		) {
 			prevConfigRef.current = {
 				displayConfig: storeConfig.displayConfig,
 				displayConfigSlidesSignature,
 				attachmentListSignature,
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
+				initialActiveIndex: storeConfig.initialActiveIndex,
 			}
 			void store.updateConfig({
 				attachments: storeConfig.attachments,
@@ -103,6 +114,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 				mainFileId: storeConfig.mainFileId,
 				mainFileName: storeConfig.mainFileName,
 				displayConfig: storeConfig.displayConfig,
+				initialActiveIndex: storeConfig.initialActiveIndex,
 			})
 		}
 	}, [
@@ -112,7 +124,11 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		storeConfig.displayConfig,
 		storeConfig.mainFileId,
 		storeConfig.mainFileName,
+		storeConfig.initialActiveIndex,
 	])
+
+	// Abort queued/running slide work after a real unmount (StrictMode replays effects in dev).
+	usePPTStoreDisposal(store)
 
 	// Update cache config when organizationCode or selectedProjectId changes
 	useEffect(() => {

@@ -21,7 +21,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MessageList from "../MessageList"
-import { MessageStatus, TaskStatus, type TaskData } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	MessageStatus,
+	TaskStatus,
+	type ProjectListItem,
+	type TaskData,
+} from "@/pages/superMagic/pages/Workspace/types"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { useDownloadAll } from "@/pages/superMagic/components/TopicFilesButton/useDownloadAll"
 import { getBaseUrl } from "@/pages/superMagicMobile/utils/mobile"
@@ -128,6 +133,17 @@ function Topic({
 	const { handleDownloadAll, allLoading } = useDownloadAll({ projectId })
 
 	const { isShareRoute, isLegacy } = useShareRoute()
+	const shareSelectedProject = useMemo(
+		() =>
+			projectId
+				? ({
+						id: projectId,
+						project_name: resource_name,
+						name: resource_name,
+					} as ProjectListItem)
+				: null,
+		[projectId, resource_name],
+	)
 
 	// 判断是否是新格式文件分享（多个文件，无fileId）
 	const isNewFileShare = isFileShare && !fileId
@@ -1062,6 +1078,7 @@ function Topic({
 									onActiveFileChange={setActiveFileId}
 									topicName={resource_name}
 									projectId={projectId}
+									selectedProject={shareSelectedProject}
 									allowDownload={allowDownloadProjectFile}
 									hideTabBar={shouldRenderFullscreenFileOnly}
 									showFileHeader={
@@ -1123,7 +1140,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
-											topicId={data?.project_id}
+											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
 												setUserDetail(detail)
@@ -1134,8 +1151,9 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="-top-[10px] pt-[10px] [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 											projectFilesStore={projectFilesStore}
+											scrollContainerRef={messageContainerRef}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
@@ -1280,9 +1298,12 @@ function Topic({
 										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
 								)}
 							>
-								<div className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5">
+								<div
+									ref={messageContainerRef}
+									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
+								>
 									<MessageList
-										topicId={data?.project_id}
+										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {
 											setUserDetail(detail)
@@ -1293,8 +1314,9 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="top-0 z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 										projectFilesStore={projectFilesStore}
+										scrollContainerRef={messageContainerRef}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />

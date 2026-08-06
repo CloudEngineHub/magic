@@ -6,6 +6,7 @@ import type {
 	TaskStatus,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { AttachmentSource } from "../../../TopicFilesButton/hooks/types"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 // Base interfaces
 export interface BaseComponentProps {
@@ -17,6 +18,16 @@ export interface BaseComponentProps {
 /** Preview policy declared by the opener and executed by FilesViewer, independent of file source. */
 export interface FilePreviewPolicy {
 	temporary?: boolean
+	/** 允许使用调用方提供的完整文件信息打开，不依赖当前项目附件树。 */
+	standalone?: boolean
+	/** 是否参与文件编辑状态上报和编辑冲突检测。 */
+	editingPresence?: boolean
+	/** 是否允许发起文件分享。 */
+	allowShare?: boolean
+	/** 是否允许查看和切换文件历史版本。 */
+	allowVersionHistory?: boolean
+	/** 文件编辑保存时使用的文件空间。 */
+	fileScope?: FileScope
 	persistTab?: boolean
 	syncWithAttachments?: boolean
 	keepLocalContent?: boolean
@@ -177,6 +188,9 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 	/** 当前项目 tabs 缓存已加载完成时的回调用 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+
+	/** File ids whose tabs cannot be removed by any close action. */
+	nonClosableFileIds?: string[]
 }
 
 // FilesViewer ref interface

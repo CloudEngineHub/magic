@@ -3,10 +3,7 @@ import Conversation from "@/models/chat/conversation"
 import { groupBy, keyBy } from "lodash-es"
 import { makeAutoObservable } from "mobx"
 import { getConversationGroupKey } from "@/services/chat/conversation/utils"
-import {
-	ConversationStatus,
-	type ConversationFromService,
-} from "@/types/chat/conversation"
+import { ConversationStatus, type ConversationFromService } from "@/types/chat/conversation"
 import { logger as Logger } from "@/utils/log"
 import conversationSiderbarStore from "@/stores/chatNew/conversationSidebar"
 import type { UserTask } from "@/types/chat/task"
@@ -22,12 +19,12 @@ class ConversationStore {
 	/**
 	 * 当前会话
 	 */
-	currentConversation: Conversation | undefined
+	currentConversation: Conversation | undefined = undefined
 
 	/**
 	 * 当前助手会话(超级麦吉页面)
 	 */
-	currentAssistantConversation: Conversation | undefined
+	currentAssistantConversation: Conversation | undefined = undefined
 
 	/**
 	 * 会话任务列表
@@ -235,12 +232,12 @@ class ConversationStore {
 		conversationId: string,
 		message:
 			| {
-				time: number
-				seq_id: string
-				text: string
-				topic_id: string
-				type: ConversationMessageType | ControlEventMessageType
-			}
+					time: number
+					seq_id: string
+					text: string
+					topic_id: string
+					type: ConversationMessageType | ControlEventMessageType
+			  }
 			| undefined,
 	) {
 		const conversation = this.conversations[conversationId]

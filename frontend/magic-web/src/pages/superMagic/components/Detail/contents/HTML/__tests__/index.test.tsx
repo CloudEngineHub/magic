@@ -54,6 +54,7 @@ vi.mock("@/pages/superMagic/pages/Workspace/types", () => ({}))
 vi.mock("@dtyq/magic-admin", () => ({
 	RouteName: {
 		Admin: "admin",
+		AdminPlatformAIModel: "admin-platform-ai-model",
 		AdminPlatformPackage: "admin-platform-package",
 	},
 	RoutePath: {
@@ -61,6 +62,10 @@ vi.mock("@dtyq/magic-admin", () => ({
 	},
 	PlatformPackageRoutes: {
 		path: "/admin/platform-package",
+		element: null,
+	},
+	AiManageRoutes: {
+		path: "/admin/ai-manage",
 		element: null,
 	},
 	otherRoutes: [],
@@ -106,8 +111,8 @@ vi.mock("../styles", () => ({
 }))
 
 vi.mock("@/pages/superMagic/hooks/useFileData", () => ({
-	useFileData: () => ({
-		fileData: "<html><body>base</body></html>",
+	useFileData: ({ file_id, content }: { file_id?: string; content?: string }) => ({
+		fileData: file_id ? "<html><body>base</body></html>" : content || "",
 		fileVersion: 1,
 		changeFileVersion: vi.fn(),
 		loading: false,
@@ -532,6 +537,28 @@ describe("HTML", () => {
 		mockGetFileContentById.mockReset()
 		mockProcessHtmlContent.mockClear()
 		mockIsolatedHTMLRendererProps.mockClear()
+	})
+
+	it("should stop preview loading when the html file is empty", async () => {
+		render(
+			<HTML
+				{...baseProps}
+				data={{
+					...baseProps.data,
+					content: "",
+					display_config: {
+						previewPolicy: { keepLocalContent: true },
+					},
+				}}
+				viewMode="desktop"
+				isEditMode={false}
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("magic-spin")).not.toBeInTheDocument()
+		})
+		expect(screen.getByTestId("isolated-html-renderer")).toBeInTheDocument()
 	})
 
 	it("should use bundled dashboard template for dashboard index entry html", async () => {

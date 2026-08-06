@@ -5,7 +5,10 @@ import {
 	messagesConverter,
 } from "@/pages/superMagic/components/MessageList/helpers"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
-import type { MessageCommittedEvent } from "@/pages/superMagic/stores/events"
+import type {
+	MessageCommittedEvent,
+	MessageStreamEndedEvent,
+} from "@/pages/superMagic/stores/events"
 import type {
 	RawSuperMagicMessageEnvelope,
 	StreamRecoveryRequestPayload,
@@ -24,6 +27,7 @@ import {
 
 const TOPIC_ID = "topic-final"
 const CORRELATION_ID = "correlation-final"
+const SUPER_MESSAGE_ID = "super-message-final"
 const RENDER_SETTLE_MS = 2_000
 const NO_WATCHDOG_OBSERVATION_MS = 5_100
 
@@ -48,6 +52,7 @@ interface ProjectedToolCall {
 
 interface ProjectedNode {
 	app_message_id?: string
+	super_message_id?: string
 	role?: string
 	content?: string | null
 	reasoning_content?: string | null
@@ -68,7 +73,9 @@ interface ProjectedNode {
 interface ChunkOptions {
 	i?: number
 	content?: string
+	reasoningContent?: string
 	correlationId?: string
+	superMessageId?: string
 	finishReason?: ChunkChoice["finish_reason"]
 	toolCalls?: ChunkToolCall[]
 	usage?: ChunkUsage | null
@@ -78,6 +85,7 @@ interface ChunkOptions {
 interface FinalEnvelopeOptions {
 	appMessageId?: string
 	correlationId?: string
+	superMessageId?: string
 	seqId?: string
 	content?: string | null
 	includeContent?: boolean
@@ -114,7 +122,9 @@ function createTokenUsage(totalTokens: number): TokenUsage {
 function createChunk({
 	i = 0,
 	content = "",
+	reasoningContent = "",
 	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 	finishReason = null,
 	toolCalls = [],
 	usage = null,
@@ -129,17 +139,20 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-final",
 		super_magic_chunk: {
+			super_message_id: superMessageId,
+			task_id: `task-${correlationId}`,
 			i,
 			usage,
 			correlation_id: correlationId,
 			choices: choices ?? [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
 						role: "assistant",
 						tool_calls: toolCalls,
-						reasoning_content: "",
+						reasoning_content: reasoningContent,
 						index: 0,
 					},
 				},
@@ -184,6 +197,7 @@ function createToolCall({
 function createFinalEnvelope({
 	appMessageId = "final-app-1",
 	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 	seqId = "100",
 	content = "canonical",
 	includeContent = true,
@@ -198,6 +212,7 @@ function createFinalEnvelope({
 		role: "assistant",
 		topic_id: TOPIC_ID,
 		message_id: `node-${appMessageId}`,
+		super_message_id: superMessageId,
 		correlation_id: correlationId,
 		reasoning_content: null,
 		status: nodeStatus,
@@ -301,8 +316,9 @@ function createStore(): SuperMagicStore {
 	return store
 }
 
-function getNode(store: SuperMagicStore, id: string): ProjectedNode | undefined {
-	const node = store.getMessageNode(id)
+function getNode(store: SuperMagicStore, superMessageId: string): ProjectedNode | undefined {
+	const directNode = store.getMessageNode(superMessageId)
+	const node = directNode
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -312,7 +328,8 @@ function getMessageRecords(store: SuperMagicStore): Array<Record<string, unknown
 
 function getAssistantCards(store: SuperMagicStore): ProjectedNode[] {
 	return messagesConverter(getMessageRecords(store)).filter(
-		(message) => message?.role === "assistant" && message?.correlation_id === CORRELATION_ID,
+		(message) =>
+			message?.role === "assistant" && message?.super_message_id === SUPER_MESSAGE_ID,
 	) as ProjectedNode[]
 }
 
@@ -321,28 +338,8 @@ function getCanonicalNodeForCard(
 	card: ProjectedNode | undefined,
 ): ProjectedNode | undefined {
 	// UI cards carry message identity; canonical tool fields remain owned by the public Store API.
-	const identity = card?.app_message_id ?? card?.correlation_id
+	const identity = card?.super_message_id
 	return typeof identity === "string" ? getNode(store, identity) : undefined
-}
-
-// This projection intentionally models UI-equivalent values only. It must not be
-// used to decide whether a canonical field was absent, explicitly null, or empty.
-function projectUiNode(node: ProjectedNode | undefined) {
-	return {
-		role: node?.role,
-		correlation_id: node?.correlation_id,
-		status: node?.status,
-		event: node?.event,
-		content: node?.content ?? "",
-		reasoning_content: node?.reasoning_content ?? "",
-		tool_calls: (node?.tool_calls ?? []).map((tool) => ({
-			id: tool?.id,
-			name: tool?.function?.name,
-			arguments: tool?.function?.arguments,
-			status: tool?.tool?.status,
-		})),
-		token_usage: node?.token_usage ?? null,
-	}
 }
 
 function advanceRendering(milliseconds = RENDER_SETTLE_MS): void {
@@ -386,7 +383,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.receiveChunk(createChunk({ content: "provisional", finishReason: "stop" }))
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("provisional")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("provisional")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 
 		// D1/D2：finish_reason 不是 canonical Final，后续消息获取或轮询负责 HTTP 兜底；
@@ -405,7 +402,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.receiveChunk(createChunk({ i: 1, content: " late", finishReason: "stop" }))
 		advanceRendering(100)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
@@ -418,7 +415,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.receiveChunk(createChunk({ i: 1, finishReason: "stop" }))
 		advanceRendering(100)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
@@ -432,7 +429,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.receiveChunk(createChunk({ i: 1, content: "stale tail" }))
 		advanceRendering(100)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
@@ -446,9 +443,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		advanceRendering()
 
 		expect(arrivals.events).toHaveLength(1)
-		expect(projectUiNode(getNode(store, "final-app-1"))).toEqual(
-			projectUiNode(getNode(store, CORRELATION_ID)),
-		)
+		expect(getNode(store, SUPER_MESSAGE_ID)?.app_message_id).toBe("final-app-1")
 		expect(getAssistantCards(store)).toHaveLength(1)
 		arrivals.unsubscribe()
 	})
@@ -467,13 +462,12 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		const canonical = getNode(store, CORRELATION_ID)
-		expect(canonical?.content).toBe("new")
-		expect(projectUiNode(getNode(store, "final-new"))).toEqual(projectUiNode(canonical))
-		// D7：历史 appMessageId 不永久重定向到最新对象；它可以保留历史 revision，
-		// 也可以不可查询，但不能把旧内容伪装成当前 canonical。
-		const historicalNode = getNode(store, "final-old")
-		if (historicalNode) expect(historicalNode.content).toBe("old")
+		const canonical = getNode(store, SUPER_MESSAGE_ID)
+		expect(canonical).toMatchObject({
+			app_message_id: "final-new",
+			super_message_id: SUPER_MESSAGE_ID,
+			content: "new",
+		})
 		expect(getAssistantCards(store)).toHaveLength(1)
 		expect(arrivals.events).toHaveLength(2)
 		arrivals.unsubscribe()
@@ -486,7 +480,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "" }))
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
@@ -497,13 +491,13 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: null }))
 		advanceRendering()
 
-		const canonical = getNode(store, CORRELATION_ID)
+		const canonical = getNode(store, SUPER_MESSAGE_ID)
 		expect(Object.prototype.hasOwnProperty.call(canonical, "content")).toBe(true)
 		expect([null, ""]).toContain(canonical?.content)
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
-	it("最终 assistant message 只有 metadata。", () => {
+	it("最终 assistant message 只有 metadata 时也能冷启动落地。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -517,26 +511,70 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)).toMatchObject({
+		const metadataNode = getNode(store, SUPER_MESSAGE_ID)
+		expect(metadataNode).toMatchObject({
+			role: "assistant",
+			status: "finished",
+			event: "task_finished",
+		})
+		expect(metadataNode?.content ?? "").toBe("")
+		expect(metadataNode?.reasoning_content ?? "").toBe("")
+		expect(metadataNode?.tool_calls ?? []).toEqual([])
+		expect(metadataNode?.attachments ?? []).toEqual([])
+		expect(getMessageRecords(store)).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				event: "task_finished",
+				correlation_id: CORRELATION_ID,
+				super_message_id: SUPER_MESSAGE_ID,
+			}),
+		])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+	})
+
+	it("最终 assistant message 只有 metadata 时保留已有 streamed draft。", () => {
+		const store = createStore()
+		const streamedDraft = "streamed draft preserved by an absent Final content field"
+
+		store.receiveChunk(createChunk({ content: streamedDraft }))
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			content: streamedDraft,
+			isFinalMessageReceived: false,
+		})
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				includeContent: false,
+				includeToolCalls: false,
+				includeTokenUsage: false,
+				nodeExtra: { event: "task_finished", task_id: "task-1" },
+			}),
+		)
+		advanceRendering()
+
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 			role: "assistant",
 			status: "finished",
 			event: "task_finished",
 		})
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
-		const metadataNode = getNode(store, CORRELATION_ID)
-		// D13：Store 保留 metadata 事实；是否渲染由 UI 根据可见内容判断。
-		expect((metadataNode?.content ?? "").trim()).toBe("")
+		const metadataNode = getNode(store, SUPER_MESSAGE_ID)
+		// Final 自身只有 metadata；缺失的 content 不能覆盖已经接受的 streamed draft。
+		expect(metadataNode?.content).toBe(streamedDraft)
 		expect((metadataNode?.reasoning_content ?? "").trim()).toBe("")
 		expect(metadataNode?.tool_calls ?? []).toHaveLength(0)
 		expect(metadataNode?.attachments ?? []).toHaveLength(0)
-		expect(
-			getMessageRecords(store).some(
-				(message) =>
-					message?.role === "assistant" &&
-					message?.event === "task_finished" &&
-					message?.correlation_id === CORRELATION_ID,
-			),
-		).toBe(true)
+		expect(getMessageRecords(store)).toEqual([
+			expect.objectContaining({
+				role: "assistant",
+				event: "task_finished",
+				correlation_id: CORRELATION_ID,
+				super_message_id: SUPER_MESSAGE_ID,
+				content: streamedDraft,
+			}),
+		])
 	})
 
 	it("最终 assistant message 缺少 tool_calls 时不把 absent 当成显式空数组。", () => {
@@ -546,7 +584,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ includeToolCalls: false }))
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
 			"tool-1",
 		])
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
@@ -568,7 +606,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 	})
@@ -583,7 +621,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ toolCalls }))
 		advanceRendering()
 
-		const canonical = getNode(store, CORRELATION_ID)
+		const canonical = getNode(store, SUPER_MESSAGE_ID)
 		expect(Object.prototype.hasOwnProperty.call(canonical, "tool_calls")).toBe(true)
 		expect(canonical?.tool_calls === null || canonical?.tool_calls?.length === 0).toBe(true)
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
@@ -610,10 +648,10 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
 			"tool-1",
 		])
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			"final authoritative arguments",
 		)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
@@ -639,7 +677,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 
 		const cards = getAssistantCards(store)
 		expect(cards).toHaveLength(1)
-		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+		expect(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
 		const canonical = getCanonicalNodeForCard(store, cards[0])
 		expect(canonical?.tool_calls).toHaveLength(1)
 		expect(canonical?.tool_calls?.[0]?.function?.arguments).toBe(streamedArguments)
@@ -664,7 +702,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		advanceRendering()
 
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 
@@ -677,7 +715,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		const cards = getAssistantCards(store)
 		expect(cards).toHaveLength(1)
 		expect(cards[0]?.app_message_id).toBe("final-app-1")
-		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+		expect(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
 		expect(getCanonicalNodeForCard(store, cards[0])?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
@@ -700,7 +738,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 			createFinalEnvelope({ toolCalls: [finalWithoutArguments], content: "canonical" }),
 		])
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 		expect(
@@ -710,7 +748,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 				latestSeqId: "100",
 			}),
 		).toBe(true)
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 	})
@@ -730,7 +768,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 			}),
 		])
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 		expect(
@@ -740,7 +778,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 				latestSeqId: "100",
 			}),
 		).toBe(true)
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe(
 			streamedArguments,
 		)
 	})
@@ -757,7 +795,8 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 			createFinalEnvelope({ toolCalls: [finalWithoutArguments], content: "canonical" }),
 		])
 
-		const argumentsValue = getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments
+		const argumentsValue = getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function
+			?.arguments
 		expect(argumentsValue ?? "").toBe("")
 		expect(argumentsValue).not.toBe('{"path":"README.md"}')
 	})
@@ -775,7 +814,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.function?.arguments).toBe("")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.function?.arguments).toBe("")
 	})
 
 	it("Final 重复 tool id 时末项胜出、记录日志并只投影一个工具。", () => {
@@ -801,7 +840,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 
 			const cards = getAssistantCards(store)
 			expect.soft(cards).toHaveLength(1)
-			expect.soft(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+			expect.soft(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
 			const canonical = getCanonicalNodeForCard(store, cards[0])
 			expect.soft(canonical?.tool_calls).toEqual([
 				expect.objectContaining({
@@ -846,7 +885,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		advanceRendering()
 
 		// T1：只锁定 Assistant 的可渲染工具投影；role=tool response 可继续保留作审计。
-		expect(getNode(store, CORRELATION_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
+		expect(getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.map((tool) => tool.id)).toEqual([
 			"tool-1",
 		])
 	})
@@ -871,7 +910,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("snapshot")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("snapshot")
 		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("200")
 	})
 
@@ -887,8 +926,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("new IM")
-		expect(getNode(store, "same-final")?.content).toBe("new IM")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("new IM")
 		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("201")
 		expect(
 			getMessageRecords(store).some(
@@ -911,13 +949,14 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
-		expect(getNode(store, CORRELATION_ID)?.status).toBe("running")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.status).toBe("running")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 		// T2：Final transport 到达不是 task terminal，不应伪造 response_missing。
 		const canonicalTool = store.toolResponseMap.get(TOPIC_ID)?.get("tool-1")
-		const effectiveTool = canonicalTool ?? getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.tool
+		const effectiveTool =
+			canonicalTool ?? getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.tool
 		expect(canonicalTool).toBeUndefined()
 		expect(effectiveTool?.status).toBe("running")
 	})
@@ -942,7 +981,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		const embeddedTool = getNode(store, CORRELATION_ID)?.tool_calls?.[0]?.tool
+		const embeddedTool = getNode(store, SUPER_MESSAGE_ID)?.tool_calls?.[0]?.tool
 		const canonicalTool = store.toolResponseMap.get(TOPIC_ID)?.get("tool-1")
 		const effectiveTool = canonicalTool || embeddedTool
 
@@ -977,8 +1016,8 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
-		expect(getNode(store, CORRELATION_ID)?.token_usage).toEqual(initialUsage)
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.token_usage).toEqual(initialUsage)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
@@ -1005,7 +1044,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		const canonical = getNode(store, CORRELATION_ID)
+		const canonical = getNode(store, SUPER_MESSAGE_ID)
 		expect(Object.prototype.hasOwnProperty.call(canonical, "token_usage")).toBe(true)
 		expect(canonical?.token_usage).toBeNull()
 	})
@@ -1023,7 +1062,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ tokenUsage: createTokenUsage(99) }))
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.token_usage).toEqual(createTokenUsage(99))
+		expect(getNode(store, SUPER_MESSAGE_ID)?.token_usage).toEqual(createTokenUsage(99))
 	})
 
 	it("final message 的 seqId 早于已有消息。", () => {
@@ -1033,8 +1072,9 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 			TOPIC_ID,
 			createFinalEnvelope({
 				appMessageId: "newer-message",
+				superMessageId: "newer-super-message",
 				correlationId: "newer-correlation",
-				seqId: "200",
+				seqId: "10",
 				content: "newer",
 			}),
 		)
@@ -1042,23 +1082,38 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 			TOPIC_ID,
 			createFinalEnvelope({
 				appMessageId: "older-final",
+				superMessageId: "older-super-message",
 				correlationId: "older-correlation",
-				seqId: "100",
+				seqId: "2",
 				content: "older but valid",
 			}),
 		)
 		advanceRendering()
 
-		expect(getNode(store, "older-correlation")?.content).toBe("older but valid")
-		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("200")
+		expect(getNode(store, "older-super-message")?.content).toBe("older but valid")
+		const storedOrder = getMessageRecords(store).map((message) => ({
+			appMessageId: message.app_message_id,
+			seqId: message.seq_id,
+		}))
+		expect(storedOrder).toEqual([
+			{ appMessageId: "older-final", seqId: "2" },
+			{ appMessageId: "newer-message", seqId: "10" },
+		])
+		expect(
+			messagesConverter(getMessageRecords(store)).map((message) => ({
+				appMessageId: message.app_message_id,
+				seqId: message.seq_id,
+			})),
+		).toEqual(storedOrder)
+		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("10")
 	})
 
-	it("Final 使用有效 appMessageId 成为持久 canonical，并与流式占位收敛为一张逻辑卡。", () => {
+	it("Final 保留真实 appMessageId，并以 super_message_id 接管流式占位 canonical。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "draft" }))
 		advanceRendering(32)
-		const placeholder = getNode(store, CORRELATION_ID)
+		const placeholder = getNode(store, SUPER_MESSAGE_ID)
 		expect(placeholder).toBeDefined()
 
 		store.enqueueMessage(
@@ -1067,24 +1122,25 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
-		expect(getNode(store, "real-app-id")?.content).toBe("canonical")
-		expect(getNode(store, "real-app-id")?.message_id).toBe("node-real-app-id")
-		expect(projectUiNode(getNode(store, CORRELATION_ID))).toEqual(
-			projectUiNode(getNode(store, "real-app-id")),
-		)
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "real-app-id",
+			super_message_id: SUPER_MESSAGE_ID,
+			message_id: "node-real-app-id",
+			content: "canonical",
+		})
 		const cards = getAssistantCards(store)
 		expect(cards).toHaveLength(1)
 		expect(cards[0]?.app_message_id).toBe("real-app-id")
-		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
-		expect(store.messageMap.get("real-app-id")).toBeDefined()
+		expect(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
+		expect(store.messageMap.get(SUPER_MESSAGE_ID)).toBeDefined()
 		expect(getMessageRecords(store)).toMatchObject([
 			{ app_message_id: "real-app-id", correlation_id: CORRELATION_ID },
 		])
-		// D5：canonical Final 不要求继续复用临时 placeholder 对象引用。
+		// D04/D05：真实 app_message_id 继续作为协议事实保留，但不再承担 Assistant canonical 身份。
 	})
 
-	it("Final 与流式占位在 UI projection 中收敛为一张 correlation 稳定卡片。", () => {
+	it("Final 与流式占位在 UI projection 中收敛为一张 super_message_id 稳定卡片。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "draft" }))
@@ -1098,11 +1154,12 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		const cards = getAssistantCards(store)
 		expect(cards).toHaveLength(1)
 		expect(cards[0]?.correlation_id).toBe(CORRELATION_ID)
-		// D6：逻辑卡片 key 应保持 correlation 身份，不能随 Final appMessageId 改变。
-		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+		expect(cards[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
+		// app、correlation 与 super 三个 ID 刻意不同，避免旧 identity 实现让测试误通过。
+		expect(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
 	})
 
-	it("correlation 查询与当前 appMessageId 暴露相同的 UI 语义。", () => {
+	it("super_message_id 查询暴露 Final canonical，同时保留真实 appMessageId。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -1111,13 +1168,15 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(projectUiNode(getNode(store, CORRELATION_ID))).toEqual(
-			projectUiNode(getNode(store, "real-app-id")),
-		)
-		expect(getNode(store, "real-app-id")?.message_id).toBe("node-real-app-id")
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "real-app-id",
+			super_message_id: SUPER_MESSAGE_ID,
+			message_id: "node-real-app-id",
+			content: "canonical",
+		})
 	})
 
-	it("Final projection 保留真实 appMessageId，同时逻辑卡片 key 使用 correlation。", () => {
+	it("Final projection 保留真实 appMessageId，同时逻辑卡片 key 使用 super_message_id。", () => {
 		const store = createStore()
 
 		store.enqueueMessage(
@@ -1129,7 +1188,8 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		const cards = getAssistantCards(store)
 		expect(cards).toHaveLength(1)
 		expect(cards[0]?.app_message_id).toBe("real-app-id")
-		expect(getMessageNodeKey(cards[0])).toBe(CORRELATION_ID)
+		expect(cards[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
+		expect(getMessageNodeKey(cards[0])).toBe(SUPER_MESSAGE_ID)
 	})
 
 	it("Final 权威结算后公开流式生命周期结束。", () => {
@@ -1144,6 +1204,56 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
+	it("IM Final 在 reasoning timer 活跃时立即提交 canonical 并移除 StreamState。", () => {
+		const store = createStore()
+		const ended: MessageStreamEndedEvent[] = []
+		store.subscribe("message.stream.ended", (event) => ended.push(event))
+		store.receiveChunk(
+			createChunk({
+				reasoningContent: "reasoning draft",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_ID, SUPER_MESSAGE_ID)?.stage).toBe("reasoning_content")
+		expect(store.topicMeta.get(TOPIC_ID)?.timer).not.toBeNull()
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				content: "canonical answer after reasoning",
+				nodeStatus: "running",
+				nodeExtra: { reasoning_content: "canonical reasoning after draft" },
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_ID, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.topicMeta.get(TOPIC_ID)?.timer).toBeNull()
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			content: "canonical answer after reasoning",
+			reasoning_content: "canonical reasoning after draft",
+			status: "running",
+		})
+		expect(store.getRenderedMessageNode(SUPER_MESSAGE_ID, TOPIC_ID)).toBeDefined()
+		expect(ended).toHaveLength(1)
+		expect(ended[0].payload).toMatchObject({
+			reason: "authoritative_final",
+			awaitingCanonicalMessage: false,
+		})
+	})
+
+	it("finish_reason 的 awaiting=true 不会吞掉后续 canonical Final 的 awaiting=false。", () => {
+		const store = createStore()
+		const ended: MessageStreamEndedEvent[] = []
+		store.subscribe("message.stream.ended", (event) => ended.push(event))
+
+		store.receiveChunk(createChunk({ content: "draft", finishReason: "stop" }))
+		advanceRendering()
+		store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "canonical" }))
+
+		expect(ended.map((event) => event.payload.awaitingCanonicalMessage)).toEqual([true, false])
+		expect(ended[1].payload.reason).toBe("authoritative_final")
+	})
+
 	it("Final 后迟到 chunk 不得重新打开流或污染 canonical。", () => {
 		const store = createStore()
 
@@ -1152,7 +1262,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		store.receiveChunk(createChunk({ i: 0, content: "late mutation" }))
 		advanceRendering(100)
 
-		expect(getNode(store, CORRELATION_ID)?.content).toBe("canonical")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical")
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
@@ -1167,17 +1277,18 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		})
 		const duplicateChunk = createChunk({ i: 1, content: " accepted before Final" })
 		const expectDurableCanonical = () => {
-			expect(getNode(store, "durable-app-id")).toMatchObject({
-				content: "durable canonical",
-				status: "finished",
-			})
-			expect(getNode(store, CORRELATION_ID)).toMatchObject({
+			expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+				app_message_id: "durable-app-id",
 				content: "durable canonical",
 				status: "finished",
 			})
 			expect(getAssistantCards(store)).toMatchObject([{ app_message_id: "durable-app-id" }])
 			expect(getMessageRecords(store)).toMatchObject([
-				{ app_message_id: "durable-app-id", correlation_id: CORRELATION_ID, seq_id: "200" },
+				{
+					app_message_id: "durable-app-id",
+					correlation_id: CORRELATION_ID,
+					seq_id: "200",
+				},
 			])
 			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
@@ -1212,7 +1323,34 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		expectDurableCanonical()
 	})
 
-	it("同一 appMessageId 的更高 seq Final 不得被重复判断跳过。", () => {
+	it("更高 revision Final 已接受后立即关闭 StreamState，后续低 seq Final 不得回退。", () => {
+		const store = createStore()
+
+		store.receiveChunk(createChunk({ content: "active draft" }))
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				appMessageId: "higher-final",
+				seqId: "200",
+				content: "higher canonical",
+			}),
+		)
+		store.enqueueMessage(
+			TOPIC_ID,
+			createFinalEnvelope({
+				appMessageId: "stale-final",
+				seqId: "199",
+				content: "stale canonical",
+			}),
+		)
+
+		// Canonical Final 的业务结算不再等待 Buffer/render timer；低版本只需保持幂等拒绝。
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("higher canonical")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+	})
+
+	it("同一 super_message_id 的更高 seq Final 不得被重复判断跳过。", () => {
 		const store = createStore()
 		const arrivals = collectTopicArrivals(store)
 
@@ -1229,7 +1367,7 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		)
 		advanceRendering()
 
-		expect(getNode(store, "same-app")?.content).toBe("new final")
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("new final")
 		expect(store.getLatestMessageSeqId(TOPIC_ID)).toBe("101")
 		expect(arrivals.events).toHaveLength(1)
 		arrivals.unsubscribe()
@@ -1246,9 +1384,10 @@ describe("SuperMagicStore / 最终 Assistant Message", () => {
 		advanceRendering()
 
 		expect(arrivals.events).toHaveLength(1)
-		expect(projectUiNode(getNode(store, "buffer-duplicate"))).toEqual(
-			projectUiNode(getNode(store, CORRELATION_ID)),
-		)
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			app_message_id: "buffer-duplicate",
+			super_message_id: SUPER_MESSAGE_ID,
+		})
 		expect(getAssistantCards(store)).toHaveLength(1)
 		arrivals.unsubscribe()
 	})

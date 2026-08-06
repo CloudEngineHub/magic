@@ -218,7 +218,10 @@ export class PPTPathMappingService {
 	/**
 	 * Fetch temporary URLs for specific file IDs
 	 */
-	async fetchUrlsForFileIds(fileIds: string[]): Promise<Map<string, string>> {
+	async fetchUrlsForFileIds(
+		fileIds: string[],
+		options: { shouldCommit?: () => boolean } = {},
+	): Promise<Map<string, string>> {
 		const urlMap = new Map<string, string>()
 
 		if (fileIds.length === 0) return urlMap
@@ -226,16 +229,19 @@ export class PPTPathMappingService {
 		try {
 			const response = await getTemporaryDownloadUrl({ file_ids: fileIds })
 
+			const shouldCommit = options.shouldCommit?.() !== false
 			response?.forEach((item: any) => {
 				if (item.file_id && item.url) {
 					urlMap.set(item.file_id, item.url)
 
 					// Update internal mappings
-					const path = Array.from(this.pathToFileIdMapping.entries()).find(
-						([, id]) => id === item.file_id,
-					)?.[0]
-					if (path) {
-						this.pathToUrlMapping.set(path, item.url)
+					if (shouldCommit) {
+						const path = Array.from(this.pathToFileIdMapping.entries()).find(
+							([, id]) => id === item.file_id,
+						)?.[0]
+						if (path) {
+							this.pathToUrlMapping.set(path, item.url)
+						}
 					}
 				}
 			})

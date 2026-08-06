@@ -237,11 +237,15 @@ class TopicRepository implements TopicRepositoryInterface
             ->update($entityArray) > 0;
     }
 
-    public function updateTopicByCondition(array $condition, array $data): bool
+    public function updateTopicByCondition(array $condition, array $data, bool $touchUpdatedAt = true): bool
     {
-        return $this->model::query()
-            ->where($condition)
-            ->update($data) > 0;
+        $query = $this->model::query()->where($condition);
+
+        if (! $touchUpdatedAt) {
+            return $query->toBase()->update($data) > 0;
+        }
+
+        return $query->update($data) > 0;
     }
 
     public function updatePinStatus(int $topicId, string $updatedUid, bool $isPinned): bool

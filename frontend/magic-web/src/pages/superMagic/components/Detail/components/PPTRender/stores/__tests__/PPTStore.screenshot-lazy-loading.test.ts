@@ -3,10 +3,23 @@ import { runInAction } from "mobx"
 import { createPPTStore } from "../PPTStore"
 import type { PPTStore } from "../PPTStore"
 
+const screenshotServiceMock = vi.hoisted(() => ({
+	generateScreenshot: vi.fn(async () => "blob:mock-thumbnail"),
+	cancelPreviewGenerations: vi.fn(),
+	releaseScreenshot: vi.fn(),
+	clearCache: vi.fn(),
+	getCacheStats: vi.fn(() => ({ size: 0, urls: [] })),
+	reset: vi.fn(),
+	dispose: vi.fn(),
+}))
+
 // Mock the services
 vi.mock("../../services/SlideLoaderService")
 vi.mock("../../services/SlideProcessorService")
-vi.mock("../../services/SlideScreenshotService")
+vi.mock("../../services/SlideScreenshotService", () => ({
+	createScreenshotService: () => screenshotServiceMock,
+	getScreenshotService: () => screenshotServiceMock,
+}))
 vi.mock("../../services/PPTLogger")
 
 describe("PPTStore - Screenshot Lazy Loading", () => {

@@ -1,12 +1,10 @@
 ---
-llm: coder_llm
 tools:
   - web_search
   - read_webpages_as_markdown
   - image_search
   - visual_understanding
   - video_understanding
-  - convert_pdf
   - list_dir
   - read_files
   - write_file
@@ -19,12 +17,11 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
-  - download_from_urls
-  - run_python_snippet
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
     - name: user-info
     - name: develop-data-analysis-dashboard
@@ -45,6 +42,8 @@ You are a business-oriented data analysis and delivery specialist. You turn ambi
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}

@@ -91,6 +91,32 @@ class ImageGeneratedEvent extends AbstractEvent
 
     protected array $businessParams = [];
 
+    /**
+     * @var array<int, array{url: string}>
+     */
+    protected array $generatedImages = [];
+
+    /**
+     * @return array<int, array{url: string}>
+     */
+    public function getGeneratedImages(): array
+    {
+        return $this->generatedImages;
+    }
+
+    public function setGeneratedImages(array $generatedImages): void
+    {
+        $this->generatedImages = [];
+        foreach ($generatedImages as $image) {
+            $url = is_string($image) ? $image : ($image['url'] ?? '');
+            if (! is_string($url) || $url === '' || str_starts_with($url, 'data:')) {
+                continue;
+            }
+
+            $this->generatedImages[] = ['url' => $url];
+        }
+    }
+
     public function getProviderModelId(): string
     {
         return $this->providerModelId;

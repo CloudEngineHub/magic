@@ -15,6 +15,7 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { GenerationStatus, type VideoGenerationInfo } from "../../../public/magic-types"
+import { useGenerationRuntime } from "../../../app/hooks/canvas"
 
 interface VideoMessageHistoryRenderProps {
 	videoElement: VideoElement
@@ -34,9 +35,10 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	const { setMessageHistoryElementId } = useCanvasPanelUI()
 	const { videoModelList } = useMagic()
 	const { t } = useCanvasDesignI18n()
+	const generationRuntime = useGenerationRuntime(videoElement.id)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
-	const request = videoElement.generateVideoRequest
+	const request = generationRuntime?.generateVideoRequest || videoElement.generateVideoRequest
 	const resultMeta = videoElement.videoGenerationResultMeta
 	const runtime = resultMeta?.runtime
 	const isGenerationRunning = isVideoGenerationRunning({

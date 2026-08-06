@@ -10,12 +10,11 @@ import hashlib
 import aiofiles
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union, Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, Union
 
 from agentlang.logger import get_logger
 
 if TYPE_CHECKING:
-    from app.core.entity.file import File as FileEntity
     from app.core.entity.message.server_message import FileTreeNode
 
 logger = get_logger(__name__)
@@ -142,110 +141,31 @@ def format_file_size(size: int) -> str:
         return f"{size / (1024 * 1024 * 1024):.1f}GB"
 
 
+class WorkspaceEntry(TypedDict):
+    path: str
+    size: int | None
+
+
 @dataclass
 class WorkspaceSnapshot:
     """工作区文件树快照，同时承载展示和 diff 两种用途。"""
     display: str                        # 格式化树形字符串，注入 LLM 展示
-    entries: List[dict] = field(default_factory=list)  # [{"path": str, "size": int|None}]
+    entries: list[WorkspaceEntry] = field(default_factory=list)  # [{"path": str, "size": int|None}]
 
 
-def extract_paths_from_local_tree(nodes: List["FileTreeNode"]) -> List[dict]:
-    """从本地扫描的 FileTreeNode 列表中提取结构化路径条目。
+def extract_workspace_entries(nodes: list["FileTreeNode"]) -> list[WorkspaceEntry]:
+    """从 FileTreeNode 列表中提取结构化工作区条目。
 
     每条条目：{"path": 相对路径, "size": 文件大小字节或 None（目录）}
     目录路径以 "/" 结尾，与文件区分。
     """
-    entries: List[dict] = []
+    entries: list[WorkspaceEntry] = []
     for node in (nodes or []):
         if node.error:
             continue
         if node.is_directory:
             entries.append({"path": node.relative_file_path + "/", "size": None})
-            entries.extend(extract_paths_from_local_tree(node.children or []))
+            entries.extend(extract_workspace_entries(node.children or []))
         else:
             entries.append({"path": node.relative_file_path, "size": node.file_size})
     return entries
-
-
-def extract_paths_from_magic_tree(root: "FileEntity", prefix: str = "") -> List[dict]:
-    """从 Magic Service 返回的 File 树中提取结构化路径条目。
-
-    每条条目：{"path": 相对路径, "size": 文件大小字节或 None（目录）}
-    """
-    entries: List[dict] = []
-    for child in (root.children or []):
-        rel = f"{prefix}{child.name}" if prefix else child.name
-        if child.is_directory:
-            entries.append({"path": rel + "/", "size": None})
-            entries.extend(extract_paths_from_magic_tree(child, prefix=rel + "/"))
-        else:
-            entries.append({"path": rel, "size": child.size})
-    return entries
-
-
-def convert_file_tree_to_string(file_tree_root: Optional['FileEntity'], show_file_size: bool = False) -> str:
-    """
-    将 Magic Service 返回的 File 树结构转换为字符串格式
-
-    Args:
-        file_tree_root: 文件树根节点（FileEntity 类型）
-        show_file_size: 是否显示文件大小，默认为 False
-
-    Returns:
-        str: 格式化的文件树字符串
-    """
-    if not file_tree_root:
-        return "No files found"
-
-    output_lines = []
-
-    # 添加根目录行
-    output_lines.append("[DIR] 根目录/\n")
-
-    # 递归构建文件树
-    if file_tree_root.children:
-        _append_file_nodes_to_string(file_tree_root.children, output_lines, "", True, show_file_size)
-
-    return "".join(output_lines)
-
-
-def _append_file_nodes_to_string(nodes: List['FileEntity'], output_lines: List[str], indent: str, is_root: bool = False, show_file_size: bool = False):
-    """
-    递归将文件节点追加到字符串输出中
-
-    Args:
-        nodes: 文件节点列表（FileEntity 类型）
-        output_lines: 输出行列表
-        indent: 缩进字符串
-        is_root: 是否为根级别
-        show_file_size: 是否显示文件大小
-    """
-    for idx, node in enumerate(nodes):
-        is_last_item = (idx == len(nodes) - 1)
-
-        # 创建前缀
-        if is_root:
-            prefix = "└─" if is_last_item else "├─"
-            next_indent = "   " if is_last_item else "│  "
-        else:
-            prefix = f"{indent}{'└─' if is_last_item else '├─'}"
-            next_indent = f"{indent}{'   ' if is_last_item else '│  '}"
-
-        if node.is_directory:
-            # 目录
-            child_count = len(node.children) if node.children else 0
-            count_str = f"{child_count} items"
-            dir_line = f"{prefix}[DIR] {node.name}/ ({count_str})\n"
-            output_lines.append(dir_line)
-
-            # 递归处理子节点
-            if node.children:
-                _append_file_nodes_to_string(node.children, output_lines, next_indent, False, show_file_size)
-        else:
-            # 文件
-            if show_file_size:
-                size_str = format_file_size(node.size) if node.size is not None else "0B"
-                file_line = f"{prefix}[FILE] {node.name} ({size_str})\n"
-            else:
-                file_line = f"{prefix}[FILE] {node.name}\n"
-            output_lines.append(file_line)

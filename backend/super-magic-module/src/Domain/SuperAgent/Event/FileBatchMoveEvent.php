@@ -38,7 +38,8 @@ class FileBatchMoveEvent
         private readonly int $sourceProjectId,
         private readonly ?int $preFileId,
         private readonly int $targetParentId,
-        private readonly array $keepBothFileIds = []
+        private readonly array $keepBothFileIds = [],
+        private readonly bool $preserveParentPath = false
     ) {
     }
 
@@ -124,6 +125,11 @@ class FileBatchMoveEvent
         return $this->keepBothFileIds;
     }
 
+    public function shouldPreserveParentPath(): bool
+    {
+        return $this->preserveParentPath;
+    }
+
     /**
      * Create event from array data.
      *
@@ -141,7 +147,8 @@ class FileBatchMoveEvent
             $data['source_project_id'] ?? $data['project_id'] ?? 0,  // Support backward compatibility
             $data['pre_file_id'] ?? null,
             $data['target_parent_id'] ?? 0,
-            $data['keep_both_file_ids'] ?? []
+            $data['keep_both_file_ids'] ?? [],
+            (bool) ($data['preserve_parent_path'] ?? false)
         );
     }
 
@@ -160,6 +167,7 @@ class FileBatchMoveEvent
             'pre_file_id' => $this->preFileId,
             'target_parent_id' => $this->targetParentId,
             'keep_both_file_ids' => $this->keepBothFileIds,
+            'preserve_parent_path' => $this->preserveParentPath,
         ];
     }
 
@@ -183,7 +191,8 @@ class FileBatchMoveEvent
         int $sourceProjectId,
         ?int $preFileId,
         int $targetParentId,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): self {
         return new self(
             $batchKey,
@@ -194,7 +203,8 @@ class FileBatchMoveEvent
             $sourceProjectId,
             $preFileId,
             $targetParentId,
-            $keepBothFileIds
+            $keepBothFileIds,
+            $preserveParentPath
         );
     }
 
@@ -220,7 +230,8 @@ class FileBatchMoveEvent
         int $sourceProjectId,
         ?int $preFileId,
         int $targetParentId,
-        array $keepBothFileIds = []
+        array $keepBothFileIds = [],
+        bool $preserveParentPath = false
     ): self {
         return new self(
             $batchKey,
@@ -231,7 +242,8 @@ class FileBatchMoveEvent
             $sourceProjectId,
             $preFileId ?? null,
             $targetParentId,
-            $keepBothFileIds
+            $keepBothFileIds,
+            $preserveParentPath
         );
     }
 }

@@ -25,7 +25,7 @@ export function messagesConverter(
 
 		// 快速跳过：已撤回消息 或 before_llm_request 事件
 		if (
-			(isRevoked && item.status === MessageStatus.REVOKED) ||
+			(isRevoked && (item.imStatus ?? item.status) === MessageStatus.REVOKED) ||
 			item.event === "before_llm_request"
 		) {
 			continue
@@ -102,18 +102,15 @@ export function messagesConverter(
 
 export function getMessageNodeKey(node: any): string {
 	if (node?.askUser)
-		return `ask-user-${getAskUserCorrelationId(node) || node?.app_message_id || ""}`
+		return `ask-user-${node?.super_message_id || getAskUserCorrelationId(node) || ""}`
 	if (node?.type === "tool_call") {
 		return node?.tool?.correlation_id || node?.tool?.id || ""
 	}
 	if (isAskUserMessage(node)) {
-		return getAskUserCorrelationId(node) || node?.app_message_id || ""
+		return node?.super_message_id || getAskUserCorrelationId(node) || ""
 	}
-	if (node?.role === "assistant" && node?.correlation_id) {
-		// Final appMessageId 是持久身份；correlationId 才是同一逻辑卡片的稳定渲染 key。
-		return node.correlation_id
-	}
-	return node?.app_message_id || node?.seq_id || ""
+	// Store/UI 的消息身份统一由 SuperMessage ID 承载；历史数据已在 Store 入口回退补齐。
+	return node?.super_message_id || node?.app_message_id || node?.seq_id || ""
 }
 
 /**

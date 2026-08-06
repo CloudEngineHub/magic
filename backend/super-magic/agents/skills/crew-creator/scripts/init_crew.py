@@ -11,32 +11,31 @@ Usage:
 Config JSON schema:
     # Single-language mode (default) — fields in user's preferred language:
     {
-        "name":            "研究助手",                  # required
-        "role":            "学术研究员",                 # required
-        "description":     "专业的学术研究助手",          # required
-        "role_body":       "你是一名学术研究员...",      # optional (IDENTITY.md body)
-        "personality":     "严谨、简洁...",              # optional → SOUL.md
+        "name":            "Research Assistant",        # required
+        "role":            "Academic Researcher",       # required
+        "description":     "A professional research assistant",  # required
+        "role_body":       "You are an academic researcher...",  # optional (IDENTITY.md body)
+        "personality":     "Rigorous, concise...",      # optional -> SOUL.md
         "personality_en":  "Rigorous, concise...",      # optional English translation
-        "instructions":    "工作流程...",                # optional → AGENTS.md
+        "instructions":    "Workflow...",               # optional -> AGENTS.md
         "instructions_en": "Workflow...",               # optional English translation
     }
 
-    # Multilingual mode — add _cn or _en suffixed fields for translations:
-    #   _cn → Chinese translation (goes in <!--zh --> comments)
-    #   _en → English translation (goes in <!--en --> comments)
-    # Base fields = primary language (active content).
+    # Multilingual mode — add _cn or _en suffixed fields for translations.
+    # Base fields remain the primary language. Suffixed fields are written as
+    # ordinary language-specific sections, not HTML comments.
     {
-        "name":            "研究助手",
+        "name":            "Research Assistant",
         "name_en":         "Research Assistant",
-        "role":            "学术研究员",
+        "role":            "Academic Researcher",
         "role_en":         "Academic Researcher",
-        "description":     "专业的学术研究助手",
+        "description":     "A professional research assistant",
         "description_en":  "A professional research assistant",
-        "role_body":       "你是一名学术研究员...",
+        "role_body":       "You are an academic researcher...",
         "role_body_en":    "You are an academic researcher...",
-        "personality":     "严谨、简洁...",
+        "personality":     "Rigorous, concise...",
         "personality_en":  "Rigorous, concise...",
-        "instructions":    "工作流程...",
+        "instructions":    "Workflow...",
         "instructions_en": "Workflow..."
     }
 
@@ -54,47 +53,41 @@ import json
 import sys
 from pathlib import Path
 
-# agents/skills/_shared/ 对所有 skill 脚本均在 parents[2] 下
+# agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared.bootstrap import get_project_root
 
 
 REQUIRED_FIELDS = ("name", "role", "description")
 
-# Mapping from suffix to HTML comment tag name
-SUFFIX_TAG: dict[str, str] = {
-    "_cn": "zh",
-    "_en": "en",
+# Mapping from suffix to section heading
+SUFFIX_LABEL: dict[str, str] = {
+    "_cn": "Chinese",
+    "_en": "English",
 }
-
-
-def _contains_chinese(text: str) -> bool:
-    """Rough detection: does the text contain CJK characters?"""
-    return any('一' <= c <= '鿿' for c in str(text))
 
 
 def _has_translations(cfg: dict) -> bool:
     """Check if the config has any translation (suffixed) fields."""
-    return any(k.endswith(tuple(SUFFIX_TAG)) for k in cfg)
+    return any(k.endswith(tuple(SUFFIX_LABEL)) for k in cfg)
 
 
 def _wrap_body(body: str, cfg: dict, field: str) -> str:
     """
-    Format body text. In multilingual mode, wraps translations in <!--xx --> blocks
-    with the primary (unsuffixed) content as the active text.
+    Format body text. In multilingual mode, keep the primary content first and
+    append translations as ordinary language-specific sections.
     `field` is the base field name (e.g. "role_body", "instructions", "personality").
     """
     if not _has_translations(cfg):
         return f"{body}\n"
 
-    parts: list[str] = []
-    for suffix, tag in SUFFIX_TAG.items():
+    parts: list[str] = [body]
+    for suffix, label in SUFFIX_LABEL.items():
         translation = cfg.get(f"{field}{suffix}")
         if translation:
-            parts.append(f"<!--{tag}\n{translation}\n-->")
+            parts.append(f"## {label}\n\n{translation}")
 
-    parts.append(body)
-    return "\n".join(parts) + "\n"
+    return "\n\n".join(parts) + "\n"
 
 
 def _build_identity(cfg: dict) -> str:
@@ -106,7 +99,7 @@ def _build_identity(cfg: dict) -> str:
     ]
 
     # Add suffixed header fields for multilingual mode
-    for suffix in SUFFIX_TAG:
+    for suffix in SUFFIX_LABEL:
         for field in ("name", "role", "description"):
             value = cfg.get(f"{field}{suffix}")
             if value:
@@ -120,11 +113,7 @@ def _build_identity(cfg: dict) -> str:
     if not body:
         role = cfg["role"]
         desc = cfg["description"]
-        if _contains_chinese(cfg["name"]):
-            body = f"你是{role}，{desc}。"
-        else:
-            article = "an" if role[0:1].lower() in "aeiou" else "a"
-            body = f"You are {article} {role}. {desc}."
+        body = f"Role: {role}\n\nDescription: {desc}"
 
     return f"{header}\n{_wrap_body(body, cfg, 'role_body')}"
 

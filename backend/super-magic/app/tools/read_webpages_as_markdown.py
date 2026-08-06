@@ -1,7 +1,7 @@
 """Batch webpage content reading tool
 
 This tool reads multiple webpages and aggregates their content into a single markdown document.
-It leverages the browser's goto_and_read_as_markdown operation with summarize mode enabled.
+Its browser driver uses the Browser SDK and Lens to read rendered page content.
 """
 
 from app.i18n import i18n

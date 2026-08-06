@@ -17,7 +17,7 @@ interface MessageNodeSnapshot<TStatus = unknown> {
 
 interface ResolveTopicConversationLoadingStateParams {
 	topicMessages: SuperMagicMessageItem[]
-	getMessageNode: (appMessageId?: string) => unknown
+	getMessageNode: (superMessageId?: string) => unknown
 	getOptimisticStatus: (message?: SuperMagicMessageItem) => unknown
 }
 
@@ -55,7 +55,7 @@ export function resolveTopicConversationLoadingState<TStatus = unknown>({
 	const lastMessage = visibleTopicMessages[visibleTopicMessages.length - 1]
 	const lastMessageWithRole = findLastNonUserMessage(visibleTopicMessages)
 	const lastMessageNode = toMessageNodeSnapshot<TStatus>(
-		getMessageNode(lastMessageWithRole?.app_message_id),
+		getMessageNode(lastMessageWithRole?.super_message_id),
 	)
 
 	// Local optimistic user messages are transport state, not assistant generation.
@@ -77,7 +77,7 @@ export function resolveTopicConversationLoadingState<TStatus = unknown>({
 	}
 
 	// An active revoked tail is an edit state, not an assistant generation state.
-	if (lastMessage?.status === MessageStatus.REVOKED) {
+	if ((lastMessage?.imStatus ?? lastMessage?.status) === MessageStatus.REVOKED) {
 		return {
 			isLoading: false,
 			lastMessage,

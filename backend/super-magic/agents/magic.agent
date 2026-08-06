@@ -1,18 +1,15 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - read_webpages_as_markdown
   - visual_understanding
   - video_understanding
   - image_search
-  - download_from_urls
   - generate_images
   - list_dir
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - shell_await
   - write_file
@@ -22,12 +19,12 @@ tools:
   - multi_edit_file_range
   - delete_files
   - ask_user
-  - agent_list
-  - call_subagent
-  - wait_for_subagents
 skills:
   system_skills:
     - name: subagents
+    - name: browser
+    - name: download
+    - name: share
     - name: skill-vetter
     - name: using-mcp
     - name: env-manager
@@ -38,7 +35,6 @@ skills:
     - name: deep-research
     - name: using-llm
     - name: using-cron
-    - name: search-agents
     - name: user-info
     - name: lark-cli
     - name: dingtalk-cli
@@ -64,6 +60,8 @@ You are a complex general-purpose artificial intelligence. Your goal is to help 
 <base_instructions>
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}
 </base_instructions>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 {{ @include(path="./prompts/working_guidelines.prompt") }}
 

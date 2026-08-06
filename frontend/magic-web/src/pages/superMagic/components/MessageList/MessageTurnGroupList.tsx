@@ -7,21 +7,25 @@ import { isUserRoleMessage, isToolRoleMessage, type MessageTurnGroup } from "./m
 import { superMagicStore } from "@/pages/superMagic/stores"
 import MessageRenderErrorBoundary from "./components/MessageRenderErrorBoundary"
 
-export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
-	"sticky isolate z-20 overflow-visible",
+export const USER_MESSAGE_STICKY_POSITION_CLASS = "sticky z-20"
+
+export const USER_MESSAGE_STICKY_MASK_CLASS = cn(
+	"isolate overflow-visible",
 	"[--sticky-message-mask-bg:rgb(var(--sidebar-rgb))] [--sticky-message-mask-fade-from:rgb(var(--sidebar-rgb))]",
 	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-[var(--sticky-message-mask-bg)] before:content-['']",
 	"after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:z-0 after:h-4 after:bg-gradient-to-b after:from-[var(--sticky-message-mask-fade-from)] after:to-transparent after:content-['']",
 	"[&>*]:relative [&>*]:z-[1]",
 )
 
-/**
- * Desktop-only sticky mask tweaks; mobile renders flat lists (no sticky) so this is unused on mobile.
- */
+export const USER_MESSAGE_STICKY_OVERLAY_CLASS = cn(
+	USER_MESSAGE_STICKY_POSITION_CLASS,
+	USER_MESSAGE_STICKY_MASK_CLASS,
+)
+
+/** Mobile keeps the same sticky User row but uses the mobile page background without a fade tail. */
 export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 	"before:bg-[rgb(var(--mobile-background-rgb))]",
 	"after:bg-none",
-	"!-top-[2px]",
 )
 
 export function getUserMessageStickyTopClass(
@@ -122,9 +126,8 @@ function MessageTurnGroupListInner({
 
 	function row(node: SuperMagicMessageItem, index: number) {
 		const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
-		const card = superMagicStore.getMessageNode(node?.app_message_id) as
-			| { status?: string }
-			| undefined
+		const card = superMagicStore.getMessageNode(node?.super_message_id) as
+			{ status?: string } | undefined
 		if (!statusList.has(card?.status as string) && node?.role === "tool") {
 			return null
 		}

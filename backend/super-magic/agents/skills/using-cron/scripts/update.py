@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-更新定时消息任务（支持部分更新，只传需要修改的字段）
+Update a scheduled message task. Supports partial updates; pass only fields to change.
 
-参数：
-    --id            定时任务 ID（必填）
-    --task-name     任务名称（可选）
-    --message-content   消息内容（可选）
-    --message-content-file 从文件读取消息内容。用于长文本或含特殊字符的内容（可选）
-    --type          调度类型：no_repeat | daily_repeat | weekly_repeat | monthly_repeat（可选，与 --time 一起使用）
-    --time          执行时间，格式 HH:MM（可选，与 --type 一起使用）
-    --day           日期/星期/日号，含义随 --type 不同（可选）
-    --deadline      截止日期，格式 YYYY-MM-DD HH:MM:SS；若只填日期或格式不明确将自动补全（可选）
-    --enabled       启用/禁用任务：1=启用 0=禁用（可选）
+Arguments:
+    --id            Scheduled task ID. Required.
+    --task-name     Task name. Optional.
+    --message-content   Message content. Optional.
+    --message-content-file Read message content from a file. Use for long text or content with special characters. Optional.
+    --type          Schedule type: no_repeat | daily_repeat | weekly_repeat | monthly_repeat. Optional; use with --time.
+    --time          Execution time in HH:MM format. Optional; use with --type.
+    --day           Date, weekday, or day-of-month; meaning depends on --type. Optional.
+    --deadline      End date in YYYY-MM-DD HH:MM:SS format. Date-only or partial time values are normalized. Optional.
+    --enabled       Enable/disable the task: 1=enabled, 0=disabled. Optional.
 
-输出格式：JSON
+Output format: JSON
 """
 import json
 import re
@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import _context  # 初始化项目根路径
+import _context  # initialize project root path
 from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
 from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter import (
     UpdateMessageScheduleParameter,
@@ -31,7 +31,7 @@ from app.infrastructure.sdk.magic_service.parameter.message_schedule_parameter i
 
 
 def text_to_json_content(text: str) -> dict:
-    """将纯文本转换为 Tiptap JSONContent 格式（rich_text）。"""
+    """Convert plain text to Tiptap JSONContent format for rich_text messages."""
     paragraphs = []
     for line in text.split("\n"):
         if line:
@@ -46,10 +46,11 @@ def text_to_json_content(text: str) -> dict:
 
 def parse_message_content(raw: str):
     """
-    解析消息内容：
-    - 如果是合法的 JSONContent dict（含 type 字段），直接使用
-    - 否则视为纯文本，转换为 JSONContent
-    返回 (content, message_type)
+    Parse message content.
+
+    - Use valid JSONContent dicts directly when they contain a type field.
+    - Treat all other input as plain text and convert it to JSONContent.
+    Return (content, message_type).
     """
     try:
         parsed = json.loads(raw)
@@ -59,43 +60,44 @@ def parse_message_content(raw: str):
         pass
     return text_to_json_content(raw), "rich_text"
 
-parser = argparse.ArgumentParser(description="更新定时消息任务")
-parser.add_argument("--id", required=True, help="定时任务 ID")
-parser.add_argument("--task-name", default=None, help="任务名称")
+parser = argparse.ArgumentParser(description="Update a scheduled message task")
+parser.add_argument("--id", required=True, help="Scheduled task ID")
+parser.add_argument("--task-name", default=None, help="Task name")
 message_group = parser.add_mutually_exclusive_group()
 message_group.add_argument(
     "--message-content",
     dest="message_content",
     default=None,
-    help="消息内容（与详情中的 message_content/task_describe 对应）",
+    help="Message content; maps to detail fields message_content/task_describe",
 )
 message_group.add_argument(
     "--message-content-file",
     dest="message_content_file",
     default=None,
-    help="从文件读取消息内容，适合长文本或含特殊字符的内容",
+    help="Read message content from a file; useful for long text or special characters",
 )
 parser.add_argument(
     "--type",
     default=None,
     choices=["no_repeat", "daily_repeat", "weekly_repeat", "monthly_repeat"],
-    help="调度类型",
+    help="Schedule type",
 )
-parser.add_argument("--time", default=None, help="执行时间，格式 HH:MM")
-parser.add_argument("--day", default=None, help="日期/星期/日号，含义随 --type 不同")
+parser.add_argument("--time", default=None, help="Execution time in HH:MM format")
+parser.add_argument("--day", default=None, help="Date, weekday, or day-of-month; meaning depends on --type")
 parser.add_argument(
     "--deadline",
     default=None,
-    help="截止日期，格式 YYYY-MM-DD HH:MM:SS；仅填日期或格式不完整时将自动补全",
+    help="End date in YYYY-MM-DD HH:MM:SS format; date-only or partial time values are normalized",
 )
-parser.add_argument("--enabled", type=int, choices=[0, 1], default=None, help="启用/禁用：1=启用 0=禁用")
+parser.add_argument("--enabled", type=int, choices=[0, 1], default=None, help="Enable or disable: 1=enabled, 0=disabled")
 args = parser.parse_args()
 
 
 def normalize_deadline(value: Optional[str]) -> Optional[str]:
     """
-    将用户传入的 deadline 规范为 YYYY-MM-DD HH:MM:SS。
-    仅日期 -> 补全为 00:00:00；日期+时分 -> 补全秒为 :00；已是完整格式 -> 原样返回。
+    Normalize a user-provided deadline to YYYY-MM-DD HH:MM:SS.
+    Date-only values become 00:00:00; date+minute values get :00 seconds;
+    full datetime values are returned as-is.
     """
     if not value or not value.strip():
         return None
@@ -133,7 +135,7 @@ def resolve_message_content(
 
 
 try:
-    # 只有同时提供了 --type 和 --time 才构造 time_config
+    # Build time_config only when both --type and --time are provided.
     time_config = None
     if args.type and args.time:
         time_config = TimeConfig(
@@ -144,7 +146,7 @@ try:
 
     normalized_deadline = normalize_deadline(args.deadline)
 
-    # 解析 message_content 为 rich_text 格式
+    # Convert message_content to rich_text format when provided.
     message_content = None
     message_type = None
     raw_content = resolve_message_content(args.message_content, args.message_content_file)

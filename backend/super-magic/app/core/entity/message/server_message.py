@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from agentlang.event.event import EventType
 from agentlang.llms.token_usage.models import TokenUsageCollection
 from agentlang.utils.snowflake import Snowflake
-from app.core.entity.attachment import Attachment
+from app.core.entity.attachment import Attachment, AttachmentStorageType, AttachmentTag
 from app.core.entity.message.message import MessageType
 from app.core.entity.project_archive import ProjectArchiveInfo
 
@@ -48,6 +48,14 @@ class DisplayType(str, Enum):
     TODO = "todo"  # 添加TODO枚举值
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
+    PLAN = "plan"  # 开发计划确认展示
+
+
+class BrowserDetailStatus(str, Enum):
+    """Browser 工具面向用户的结果状态。"""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 class TodoOperationType(str, Enum):
@@ -135,6 +143,15 @@ class BrowserContent(BaseModel):
     url: str  # 浏览器URL
     title: str  # 浏览器标题
     file_key: Optional[str] = None  # 浏览器截图
+    file_size: int = Field(default=0, ge=0)  # 截图文件大小
+    file_url: Optional[str] = None  # 仅本地调试即时预览使用
+    storage_type: AttachmentStorageType = AttachmentStorageType.SNAPSHOT  # 截图生命周期归属
+    file_tag: AttachmentTag = AttachmentTag.BROWSER  # 文件业务类型
+    action: Optional[str] = None  # 用户可理解的操作名称
+    summary: Optional[str] = None  # 本次操作结果摘要
+    page_title: Optional[str] = None  # 当前页面标题
+    target: Optional[str] = None  # 本次操作对象
+    status: Optional[BrowserDetailStatus] = None  # 本次操作状态
 
 
 class SearchResultItem(BaseModel):
@@ -256,6 +273,43 @@ class AskUserResultContent(BaseModel):
     answers: Dict[str, Any]
 
 
+class PlanFileContent(BaseModel):
+    """开发计划中的文件项。"""
+
+    path: str
+    purpose: str
+
+
+class PlanDataModelContent(BaseModel):
+    """开发计划中的数据模型项。"""
+
+    table_name: str
+    purpose: str
+    fields: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
+
+
+class PlanToolContent(BaseModel):
+    """开发计划确认卡片内容模型。
+
+    用于 plan 工具在 BEFORE/AFTER_TOOL_CALL 消息中向前端展示方案、
+    用户确认状态和修改意见。
+    """
+
+    plan_id: Optional[str] = None
+    status: str
+    title: str
+    summary: str
+    app_type: str = ""
+    requirements: List[str] = Field(default_factory=list)
+    implementation_steps: List[str] = Field(default_factory=list)
+    files: List[PlanFileContent] = Field(default_factory=list)
+    data_model: List[PlanDataModelContent] = Field(default_factory=list)
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    response: Optional[str] = None
+    expires_at: int = 0
+
+
 class ToolDetail(BaseModel):
     """工具详情模型"""
 
@@ -263,7 +317,7 @@ class ToolDetail(BaseModel):
     data: Union[
         FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
-        AskUserQuestionContent, AskUserResultContent, Dict[str, Any]
+        AskUserQuestionContent, AskUserResultContent, PlanToolContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示
 
     model_config = ConfigDict(use_enum_values=True)

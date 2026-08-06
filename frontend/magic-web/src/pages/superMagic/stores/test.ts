@@ -1,7 +1,7 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { set } from "lodash-es"
-import mock from "./mock_v4.json"
+import mock from "./mock_v2.json"
 
 // @ts-ignore
 window.test = (topicId: string = "837333386617253888") => {
@@ -31,7 +31,6 @@ window.test = (topicId: string = "837333386617253888") => {
 
 	const lastMessageTime: null | number = null
 
-	superMagicStore.setTest(topicId)
 	// 串行推送
 	function run(i: number) {
 		const message = mock[i]
@@ -44,10 +43,10 @@ window.test = (topicId: string = "837333386617253888") => {
 		if (message?.type === "super_magic_chunk") {
 			set(message, ["topic_id"], topicId)
 			console.log("chunk", message?.super_magic_chunk)
-			pubsub.publish(PubSubEvents.Stream_Message, message)
+			pubsub.publish("super_magic_chunk_message", message)
 			setTimeout(() => {
 				run(i + 1)
-			}, 20)
+			}, 0)
 		} else {
 			set(message, ["message", "send_time"], Date.now() / 1000)
 

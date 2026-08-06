@@ -1,9 +1,7 @@
 import MagicAvatar from "@/components/base/MagicAvatar"
-import { Flex } from "antd"
 import MagicButton from "@/components/base/MagicButton"
 import type { HTMLAttributes } from "react"
 import type Conversation from "@/models/chat/conversation"
-import { cx } from "antd-style"
 import conversationStore from "@/stores/chatNew/conversation"
 import MagicIcon from "@/components/base/MagicIcon"
 import useGroupInfo from "@/hooks/chat/useGroupInfo"
@@ -12,16 +10,21 @@ import { useTranslation } from "react-i18next"
 import { IconDots } from "@tabler/icons-react"
 import { useMemoizedFn } from "ahooks"
 import { ExtraSectionKey } from "@/pages/chatNew/types"
-import useStyles from "../styles"
 import CurrentTopic from "../CurrentTopic"
 import { userStore } from "@/models/user"
+import { cn } from "@/lib/utils"
+import {
+	chatHeaderClassName,
+	chatHeaderExtraSectionButtonActiveClassName,
+	chatHeaderTitleClassName,
+	chatHeaderTopicClassName,
+} from "../classNames"
 
 interface HeaderProps extends HTMLAttributes<HTMLDivElement> {
 	conversation: Conversation
 }
 
 const GroupHeader = observer(({ conversation, className }: HeaderProps) => {
-	const { styles } = useStyles()
 	const { t } = useTranslation("interface")
 
 	// const imStyle = useAppearanceStore((state) => state.imStyle)
@@ -37,23 +40,18 @@ const GroupHeader = observer(({ conversation, className }: HeaderProps) => {
 	})
 
 	return (
-		<Flex vertical>
-			<Flex
-				gap={8}
-				align="center"
-				justify="space-between"
-				className={cx(styles.header, className)}
-			>
-				<Flex gap={8} align="center" flex={1}>
+		<div className="flex flex-col">
+			<div className={cn(chatHeaderClassName, className)}>
+				<div className="flex min-w-0 flex-1 items-center gap-2">
 					<MagicAvatar src={groupInfo?.group_avatar}>{groupInfo?.group_name}</MagicAvatar>
-					<Flex vertical flex={1}>
-						<span className={styles.headerTitle}>{groupInfo?.group_name}</span>
-						<span className={styles.headerTopic}>
+					<div className="flex min-w-0 flex-1 flex-col">
+						<span className={chatHeaderTitleClassName}>{groupInfo?.group_name}</span>
+						<span className={chatHeaderTopicClassName}>
 							{organization?.organization_name}
 						</span>
-					</Flex>
-				</Flex>
-				<Flex gap={2}>
+					</div>
+				</div>
+				<div className="flex gap-0.5">
 					{/* <MagicButton
 						key={ExtraSectionKey.Topic}
 						className={cx({
@@ -72,18 +70,16 @@ const GroupHeader = observer(({ conversation, className }: HeaderProps) => {
 					/> */}
 					<MagicButton
 						key={ExtraSectionKey.Setting}
-						className={cx({
-							[styles.extraSectionButtonActive]: settingOpen,
-						})}
+						className={cn(settingOpen && chatHeaderExtraSectionButtonActiveClassName)}
 						tip={t("chat.setting")}
 						type="text"
 						icon={<MagicIcon size={20} color="currentColor" component={IconDots} />}
 						onClick={onSettingClick}
 					/>
-				</Flex>
-			</Flex>
+				</div>
+			</div>
 			<CurrentTopic />
-		</Flex>
+		</div>
 	)
 })
 

@@ -7,8 +7,8 @@ import {
 } from "@tabler/icons-react"
 import type { AgentCommonModalChildrenProps } from "../../AgentCommonModal"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { Tabs } from "antd-mobile"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export const enum PanelType {
 	MCP = "MCP",
@@ -29,8 +29,7 @@ export default function AgentSettings(props: AgentCommonProps) {
 
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("agent")
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
 
 	const [panelType, setPanelType] = useState(defaultPanel || PanelType.MCP)
 

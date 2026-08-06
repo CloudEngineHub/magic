@@ -24,7 +24,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/models/user/hooks", () => ({
 	useUserInfo: () => ({
 		userInfo: {
-			email: "kevent@magicrew.ai",
+			email: "test@example.com",
 		},
 	}),
 }))
@@ -118,7 +118,7 @@ describe("MobileSettingsFeedbackSheet", () => {
 				type: "订单问题",
 				description:
 					"setting.feedbackSheet.titleLabelPlain: 一句话标题\n\n详细问题描述内容补充说明",
-				contactEmail: "kevent@magicrew.ai",
+				contactEmail: "test@example.com",
 				images: [],
 			})
 		})

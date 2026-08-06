@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react"
-import { Avatar, Empty, Input } from "antd"
+import { Empty, Input } from "antd"
 import { IconPlus, IconSearch, IconX } from "@tabler/icons-react"
-import { Folder } from "lucide-react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { MagicIcon, MagicSelect } from "@/components/base"
+import { MagicSelect } from "@/components/base"
 import IconMessageTopic from "@/components/icons/IconMessageTopic"
-import IconWorkspaceCase from "@/components/icons/IconWorkspaceCase"
 import { cn } from "@/lib/utils"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
+import IconProject from "@/pages/superMagic/components/icons/IconProject"
+import IconWorkspace from "@/pages/superMagic/components/icons/IconWorkspace"
 import { useProjects } from "../hooks/useProjects"
 import { useTopics } from "../hooks/useTopics"
 import { useWorkspace } from "../hooks/useWorkspace"
@@ -34,21 +34,21 @@ const TYPE_CONFIG = {
 		searchKey: "accountPanel.timedTasks.searchWorkspace",
 		addKey: "accountPanel.timedTasks.addWorkspace",
 		emptyKey: "super:workspace.unnamedWorkspace",
-		icon: IconWorkspaceCase,
+		renderIcon: () => <IconWorkspace />,
 	},
 	project: {
 		labelKey: "accountPanel.timedTasks.project",
 		searchKey: "accountPanel.timedTasks.searchProject",
 		addKey: "accountPanel.timedTasks.addProject",
 		emptyKey: "super:project.unnamedProject",
-		icon: Folder,
+		renderIcon: () => <IconProject />,
 	},
 	topic: {
 		labelKey: "accountPanel.timedTasks.topic",
 		searchKey: "accountPanel.timedTasks.searchTopic",
 		addKey: "accountPanel.timedTasks.addTopic",
 		emptyKey: "super:topic.unnamedTopic",
-		icon: IconMessageTopic,
+		renderIcon: () => <IconMessageTopic size={16} className="text-muted-foreground" />,
 	},
 } as const
 
@@ -152,11 +152,14 @@ function SelectItem({ type, workspaceId, projectId, value, onChange, onSelect }:
 										)}
 										onClick={() => handleInnerChange(option.value)}
 									>
-										<Avatar
-											className="shrink-0"
-											size={24}
-											src={<MagicIcon size={16} component={config.icon} />}
-										/>
+										<span
+											className="flex size-6 shrink-0 items-center justify-center rounded bg-muted"
+											data-testid={`scheduled-task-option-icon-${type}-${option.value}`}
+											data-icon-kind={type}
+											aria-hidden
+										>
+											{config.renderIcon()}
+										</span>
 										<span className="flex-1 truncate">
 											{option.label || t(config.emptyKey)}
 										</span>

@@ -50,7 +50,7 @@ const getLanguageFromFileName = (fileName?: string, extension?: string): string 
 function EditFile(props: NodeProps) {
 	const { t } = useTranslation("super")
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const fileData = tool?.detail?.data || {}
 
@@ -110,7 +110,11 @@ function EditFile(props: NodeProps) {
 				<>
 					<VerticalLine height={28} className="text-input" />
 					<MagicTooltip title={t("playbackControl.viewDiff")}>
-						<div className={cx(styles.button)} onClick={handleOpenPlaybackTab} data-testid="handle-open-playback-tab">
+						<div
+							className={cx(styles.button)}
+							onClick={handleOpenPlaybackTab}
+							data-testid="handle-open-playback-tab"
+						>
 							<MonitorPlay size={16} className="text-foreground" />
 						</div>
 					</MagicTooltip>
@@ -146,7 +150,12 @@ function EditFile(props: NodeProps) {
 	])
 
 	return (
-		<div className={styles.node} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} data-testid="on-mouse-enter">
+		<div
+			className={styles.node}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+			data-testid="on-mouse-enter"
+		>
 			<div className={cx(styles.container, { [styles.containerActive]: open })}>
 				<div className={styles.nodeHeader}>
 					<Flex

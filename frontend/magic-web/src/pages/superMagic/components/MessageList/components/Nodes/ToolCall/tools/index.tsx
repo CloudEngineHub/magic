@@ -3,7 +3,7 @@ import { ComponentType, lazy } from "react"
 export const ToolsMap: Record<string, ComponentType<any>> = {
 	// web_search: lazy(() => import("./WebSearch")),
 	// shell_exec: lazy(() => import("./ShellExec")),
-	write_file: lazy(() => import("../../MessageNode/tools/WriteFile")),
+	write_file: lazy(() => import("../../MessageNode/tool-call/tools/WriteFile")),
 	// edit_file_range: lazy(() => import("./EditFile")),
 	// multi_edit_file_range: lazy(() => import("./EditFile")),
 	// edit_file: lazy(() => import("./EditFile")),
@@ -17,6 +17,11 @@ export const ToolsMap: Record<string, ComponentType<any>> = {
 		})),
 	),
 	audio_understanding: lazy(() =>
+		import("./ToolProgress").then((module) => ({
+			default: module.ToolProgress,
+		})),
+	),
+	download_from_urls: lazy(() =>
 		import("./ToolProgress").then((module) => ({
 			default: module.ToolProgress,
 		})),
@@ -40,4 +45,5 @@ export const ToolsMap: Record<string, ComponentType<any>> = {
 	todo_write: lazy(() => import("./TodoWrite")),
 	todo_update: lazy(() => import("./TodoWrite")),
 	ask_user: lazy(() => import("../../AskUser")),
+	micro_app_plan: lazy(() => import("../../MessageNode/tools/microAppPlan")),
 }

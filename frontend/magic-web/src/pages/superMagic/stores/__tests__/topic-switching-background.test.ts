@@ -19,6 +19,9 @@ const TOPIC_C = "topic-background-c"
 const CORRELATION_A = "correlation-background-a"
 const CORRELATION_B = "correlation-background-b"
 const CORRELATION_C = "correlation-background-c"
+const SUPER_MESSAGE_A = "super-message-background-a"
+const SUPER_MESSAGE_B = "super-message-background-b"
+const SUPER_MESSAGE_C = "super-message-background-c"
 const RENDER_SETTLE_MS = 2_000
 const LONG_ABSENCE_MS = 30_000
 const RECOVERY_WINDOW_MS = 5_100
@@ -38,6 +41,7 @@ interface ChunkOptions {
 
 interface ProjectedNode {
 	app_message_id?: string
+	super_message_id?: string
 	correlation_id?: string
 	role?: string
 	content?: string | null
@@ -71,11 +75,19 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id:
+				correlationId === CORRELATION_A
+					? SUPER_MESSAGE_A
+					: correlationId === CORRELATION_B
+						? SUPER_MESSAGE_B
+						: SUPER_MESSAGE_C,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content,
@@ -140,6 +152,12 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
+					super_message_id:
+						correlationId === CORRELATION_A
+							? SUPER_MESSAGE_A
+							: correlationId === CORRELATION_B
+								? SUPER_MESSAGE_B
+								: SUPER_MESSAGE_C,
 					correlation_id: correlationId,
 					content,
 					reasoning_content: "",
@@ -218,20 +236,20 @@ function createStore(activeTopicId: string | null = TOPIC_A): SuperMagicStore {
 
 function getProjectedNode(
 	store: SuperMagicStore,
-	messageId = CORRELATION_A,
+	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(messageId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
 function getAssistantCards(
 	store: SuperMagicStore,
 	topicId = TOPIC_A,
-	correlationId = CORRELATION_A,
+	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode[] {
 	const records = Array.from(store.messages.get(topicId) ?? []) as Array<Record<string, unknown>>
 	return messagesConverter(records).filter(
-		(message) => message.role === "assistant" && message.correlation_id === correlationId,
+		(message) => message.role === "assistant" && message.super_message_id === superMessageId,
 	) as ProjectedNode[]
 }
 
@@ -268,9 +286,9 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe("A pending")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B done")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B done")
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeUndefined()
-		expect(getAssistantCards(store, TOPIC_B, CORRELATION_B)).toHaveLength(1)
+		expect(getAssistantCards(store, TOPIC_B, SUPER_MESSAGE_B)).toHaveLength(1)
 	})
 
 	it("topic A 后台继续收到 chunk。", () => {
@@ -384,10 +402,10 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A!")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("A!")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
 		expect(store.isTopicStreaming(TOPIC_B)).toBe(true)
 	})
 
@@ -406,9 +424,9 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
-		expect(getProjectedNode(store, CORRELATION_C)?.content).toBe("C")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("A")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_C)?.content).toBe("C")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
 		expect(store.getStreamState(TOPIC_C, CORRELATION_C)).toBeDefined()
@@ -446,9 +464,9 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
-		expect(getProjectedNode(store, CORRELATION_C)?.content).toBe("C")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("A")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_C)?.content).toBe("C")
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 		expect(store.isTopicStreaming(TOPIC_B)).toBe(false)
 		expect(store.isTopicStreaming(TOPIC_C)).toBe(false)
@@ -488,8 +506,8 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe(contentA)
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe(contentA)
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeUndefined()
 	})
@@ -602,6 +620,36 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 	})
 
+	it("Tab 前台恢复使用一次性 instant，投影当前 draft 后让后续 Chunk 回到 live。", () => {
+		const store = createStore()
+		const hiddenDraft = "hidden draft".repeat(1_024)
+		const nextChunk = "next chunk".repeat(1_024)
+
+		store.receiveChunk(createChunk({ content: hiddenDraft }))
+		const contentBeforeSync = getProjectedNode(store)?.content ?? ""
+		expect(contentBeforeSync.length).toBeLessThan(hiddenDraft.length)
+
+		const generation = store.beginTopicSync(TOPIC_A)
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: false,
+				taskStatus: "running",
+				renderStrategy: "foreground-instant",
+			}),
+		).toBe(true)
+
+		expect(getProjectedNode(store)?.content).toBe(hiddenDraft)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe(hiddenDraft)
+
+		store.receiveChunk(createChunk({ i: 1, content: nextChunk }))
+		const projectedAfterNextChunk = getProjectedNode(store)?.content ?? ""
+		const canonicalAfterNextChunk = store.getStreamState(TOPIC_A, CORRELATION_A)?.content ?? ""
+
+		expect(projectedAfterNextChunk.length).toBeGreaterThan(hiddenDraft.length)
+		expect(projectedAfterNextChunk.length).toBeLessThan(canonicalAfterNextChunk.length)
+		expect(canonicalAfterNextChunk).toBe(hiddenDraft + nextChunk)
+	})
+
 	it("HTTP 权威快照完成后只保留一张最新 Assistant 卡片。", () => {
 		const store = createStore()
 
@@ -626,6 +674,7 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 		expect(cards).toHaveLength(1)
 		expect(cards[0]).toMatchObject({
 			app_message_id: `final-${CORRELATION_A}`,
+			super_message_id: SUPER_MESSAGE_A,
 			correlation_id: CORRELATION_A,
 		})
 	})

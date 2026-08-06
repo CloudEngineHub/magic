@@ -3,6 +3,7 @@ import { projectVisibleMessagesByRevokedTail } from "./project-visible-messages-
 
 interface ShareableMessage {
 	status?: string
+	imStatus?: string
 }
 
 /**
@@ -12,6 +13,6 @@ export function isTopicShareAllowed(messages: ShareableMessage[] | null | undefi
 	if (!messages?.length) return false
 
 	return projectVisibleMessagesByRevokedTail(messages).some(
-		(message) => message.status !== MessageStatus.REVOKED,
+		(message) => (message.imStatus ?? message.status) !== MessageStatus.REVOKED,
 	)
 }

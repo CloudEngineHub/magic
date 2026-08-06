@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from "react"
+import { memo, useLayoutEffect, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Sparkles, ChevronDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -33,6 +33,10 @@ function AIEditButton({
 }: AIEditButtonProps) {
 	const { t } = useTranslation("super")
 	const [dropdownOpen, setDropdownOpen] = useState(false)
+
+	useLayoutEffect(() => {
+		setDropdownOpen(false)
+	}, [fileId])
 
 	// Find current file from attachmentList
 	const currentFile = useMemo(() => {

@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
 """
-将已生成的技能包（.zip，由 package_skill 产出）上传到「我的技能库」（独立脚本，可与打包分步执行）。
+Upload a generated skill package (.zip from package_skill) to My Skill Library.
+This script is independent so packaging and upload can be run separately.
 
-接口文档
---------
-上传端点：POST /api/v1/open-api/sandbox/skills/import-from-agent
-鉴权方式：SandboxUserAuthMiddleware（SDK 自动注入）
+API notes
+---------
+Upload endpoint: POST /api/v1/open-api/sandbox/skills/import-from-agent
+Auth: SandboxUserAuthMiddleware, injected automatically by the SDK.
 
-multipart/form-data 字段：
-  file          : zip 包（扩展名一般为 .zip 或历史 .skill）；SDK 内部可复制为临时 .zip 再请求
-  source        : 字符串枚举，固定为 "AGENT_CREATED"
-  name_i18n     : （可选）JSON 字符串
-  description_i18n: （可选）JSON 字符串
+multipart/form-data fields:
+  file          : zip package, usually .zip or legacy .skill. The SDK may copy it to a temp .zip before request.
+  source        : string enum, fixed to "AGENT_CREATED"
+  name_i18n     : optional JSON string
+  description_i18n: optional JSON string
 
-用法
-----
+Usage
+-----
 python scripts/upload_skill.py <path-to.zip>
-    [--name-zh 中文名称]
+    [--name-zh Chinese Name]
     [--name-en English Name]
     [--max-attempts N]
     [--retry-delay SECONDS]
 
-示例
-----
+Examples
+--------
 python scripts/upload_skill.py /path/to/my-skill-v1.0.0.zip
-python scripts/upload_skill.py ./meeting-minutes-v1.0.0.zip --name-zh "会议纪要" --name-en "Meeting Notes"
+python scripts/upload_skill.py ./meeting-minutes-v1.0.0.zip --name-zh "Meeting Notes" --name-en "Meeting Notes"
 python scripts/upload_skill.py ./x.zip --max-attempts 5 --retry-delay 2
 """
 
@@ -48,7 +49,8 @@ async def _upload_one_attempt(
     description_i18n: Optional[dict],
 ) -> tuple[bool, Optional[str]]:
     """
-    单次上传尝试。成功时打印 ok JSON 并返回 (True, None)；失败返回 (False, error_message)。
+    Run one upload attempt. On success, print ok JSON and return (True, None);
+    on failure, return (False, error_message).
     """
     try:
         from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
@@ -56,7 +58,7 @@ async def _upload_one_attempt(
             ImportSkillFromAgentParameter,
         )
     except ImportError as e:
-        return False, f"无法导入 SDK，请确认在项目环境中运行：{e}"
+        return False, f"Failed to import SDK; make sure this runs in the project environment: {e}"
 
     tmp_zip: Optional[Path] = None
     try:
@@ -100,9 +102,10 @@ async def upload_skill_file(
     retry_base_delay_sec: float = 1.0,
 ) -> bool:
     """
-    将技能 zip 包上传到「我的技能库」，失败时按指数退避重试。
+    Upload a skill zip package to My Skill Library with exponential-backoff retry.
 
-    后端接受 .zip / .skill 等 zip 包；本脚本每次尝试会复制到临时 .zip 再调用 SDK，完成后删除临时文件。
+    The backend accepts zip packages such as .zip or legacy .skill. Each attempt
+    copies the input to a temporary .zip before calling the SDK, then removes it.
     """
     last_error: Optional[str] = None
 
@@ -112,8 +115,8 @@ async def upload_skill_file(
             return True
         last_error = err or "unknown error"
 
-        # ImportError 等环境错误：第一次就失败，不重试
-        if attempt == 1 and err and err.startswith("无法导入 SDK"):
+        # Environment errors such as ImportError fail immediately and are not retried.
+        if attempt == 1 and err and err.startswith("Failed to import SDK"):
             print(json.dumps({"status": "error", "error": last_error}, ensure_ascii=False))
             return False
 
@@ -132,26 +135,26 @@ async def upload_skill_file(
 
 async def _main() -> None:
     parser = argparse.ArgumentParser(
-        description="将技能 zip 包上传到「我的技能库」",
+        description="Upload a skill zip package to My Skill Library",
     )
-    parser.add_argument("skill_file", help="已打包的 .zip 文件路径（或与 zip 内容相同的历史 .skill）")
+    parser.add_argument("skill_file", help="Packaged .zip path, or a legacy .skill with zip-compatible content")
     parser.add_argument("--name-zh", default=None, metavar="NAME",
-                        help="上传时覆盖技能中文名称（可选）")
+                        help="Override the Chinese display name during upload")
     parser.add_argument("--name-en", default=None, metavar="NAME",
-                        help="上传时覆盖技能英文名称（可选）")
+                        help="Override the English display name during upload")
     parser.add_argument(
         "--max-attempts",
         type=int,
         default=3,
         metavar="N",
-        help="最大尝试次数（含首次），默认 3",
+        help="Maximum attempt count, including the first attempt. Default: 3",
     )
     parser.add_argument(
         "--retry-delay",
         type=float,
         default=1.0,
         metavar="SECONDS",
-        help="重试前等待时间的基数（秒），实际为指数退避：基数×2^(k-1)，默认 1.0",
+        help="Base retry delay in seconds; actual delay uses exponential backoff base*2^(k-1). Default: 1.0",
     )
     args = parser.parse_args()
 

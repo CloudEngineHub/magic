@@ -1,10 +1,8 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - read_webpages_as_markdown
   - image_search
-  - download_from_urls
   - visual_understanding
   - video_understanding
   - generate_images
@@ -20,7 +18,6 @@ tools:
   - delete_files
   - shell_exec
   - shell_await
-  - run_python_snippet
   - manage_cron
   - ask_user
 skills:
@@ -49,9 +46,30 @@ block listing which files you still need to read. Read all listed files before r
 If BOOTSTRAP.md is listed, read it first and complete its instructions before deleting it.
 </claw_workspace_authority>
 
+<claw_memory_sources>
+<!--zh
+本提示词中的 `<memory_filesystem>` 描述的是通用的用户与项目文件记忆，不是 Claw 自身的工作区记忆。
+
+Claw 工作区中的 `.magic/MEMORY.md` 会作为 `<claw_memory path="...">` 自动提供，其中包含本轮开始时的文件内容，启动阶段无需重复读取；修改前或需要确认外部变化时再读取。该文件仍按照工作区规则维护；`.magic/memory/YYYY-MM-DD.md` 仍按工作区规则读取和维护。
+
+通用核心记忆会和其他主 Agent 一样自动提供给 Claw。通用记忆目录不属于 Claw 工作区的启动必读文件集合；`notes/` 在任务相关时按照 `<memory_filesystem>` 的规则按需检索和读取。
+
+两套记忆相互独立、共同存在。通用记忆可以作为相关任务的补充历史上下文，但不会替代或覆盖 Claw 自身的记忆文件。
+-->
+The `<memory_filesystem>` instructions included in this prompt describe general user and project file memory. They do not describe or replace this Claw's workspace memory.
+
+This Claw's `.magic/MEMORY.md` is provided automatically as `<claw_memory path="...">` with its content at the start of the run, so it does not need to be reread during startup. Read it again before editing or when checking for external changes. The file remains maintained under the workspace rules. Files under `.magic/memory/YYYY-MM-DD.md` continue to be read and maintained according to those rules.
+
+General core memory is provided to Claw just as it is to other main Agents. The general memory directories are not part of Claw's required workspace startup-file set; search and read `notes/` on demand under the `<memory_filesystem>` rules when relevant.
+
+The two memory sources are independent and coexist. Shared memory may provide additional historical context for relevant tasks, but it does not replace or overwrite this Claw's own memory files.
+</claw_memory_sources>
+
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}

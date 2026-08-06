@@ -1,9 +1,9 @@
 import { lazy, Suspense, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import ProjectCard from "../ProjectCard"
 import type { ProjectCardContainerProps } from "./types"
 import projectFilesStore from "@/stores/projectFiles"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { useShareProject } from "../../layouts/MainLayout/hooks/useShareProject"
 import { ShareMode, ShareType } from "../Share/types"
 import projectStore from "../../stores/core/project"
@@ -40,8 +40,7 @@ function ProjectCardContainer({
 	className,
 }: ProjectCardContainerProps) {
 	const { t } = useTranslation("super")
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 
 	const isReceivedCollaboration = isOtherCollaborationProject(selectedProject)
 	const currentWorkspaceId = selectedProject?.workspace_id || selectedWorkspace?.id || ""

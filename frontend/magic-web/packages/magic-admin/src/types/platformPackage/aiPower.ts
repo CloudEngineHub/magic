@@ -11,6 +11,8 @@ export enum PowerCode {
 	OCR = "ocr",
 	/** 互联网搜索 */
 	WEB_SEARCH = "web_search",
+	/** AI 搜索模型 */
+	AI_SEARCH_MODEL = "ai_search_model",
 	/** 图片搜索 */
 	IMAGE_SEARCH = "image_search",
 	/** 实时语音识别 */

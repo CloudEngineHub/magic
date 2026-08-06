@@ -6,16 +6,29 @@ frontmatter 定义调度参数，正文是任务内容/提示词。
 """
 from __future__ import annotations
 
+import asyncio
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.client_message import AgentMode
+from app.core.models.agent_runtime import AgentProviderType
+from app.core.models.agent_session import AgentSessionRef
 from app.i18n import i18n
 from app.path_manager import PathManager
+from app.service.agent_session_id_service import AgentSessionIdService
+from app.service.cron.models import (
+    CronJob,
+    CronJobPatch,
+    CronPayload,
+    CronSchedule,
+    PayloadKind,
+)
 from app.service.cron.store import build_job_md, patch_job_md
 from app.service.cron.utils import ms_to_iso, name_to_job_id
 from app.tools.core import BaseToolParams, tool
@@ -42,7 +55,7 @@ class ManageCronParams(BaseToolParams):
         description="""<!--zh: 操作类型及各自必填参数：
 - status: 无需额外参数
 - list: 可选 include_disabled
-- add: 必填 name / schedule / message，可选 timeout_seconds / enabled / notify_user
+- add: 必填 name / schedule / message，可选 timeout_seconds / enabled / notify_user / fork / resume / agent_id
 - update: 必填 job_id，其余字段按需传，省略则保持原值
 - remove: 必填 job_id
 - run: 必填 job_id（立即触发，忽略调度时间）
@@ -51,7 +64,7 @@ class ManageCronParams(BaseToolParams):
 Action to perform. Per-action required fields:
 - status: no extra params
 - list: optional include_disabled
-- add: name + schedule + message required; timeout_seconds/enabled/notify_user optional
+- add: name + schedule + message required; timeout_seconds/enabled/notify_user/fork/resume/agent_id optional
 - update: job_id required; any other field optional (omitted fields keep current value)
 - remove: job_id required
 - run: job_id required (triggers immediately, ignores schedule)
@@ -131,6 +144,27 @@ Whether to deliver the task result to the user after completion. Defaults to tru
 Rule: if the user's intent is to be informed (reminders, check-and-report tasks) → true;
 if it's a silent background maintenance task where the user should not be interrupted each run → false."""
     )
+    fork: Optional[bool] = Field(
+        None,
+        description="""<!--zh: 新执行 Agent 是否继承创建任务时所在聊天的最新上下文。依赖聊天内容时设为 true；独立任务保持 false。固定 agent_id 已存在时会继续该 Agent，不会再次 fork 或覆盖。-->
+Whether a newly created execution Agent inherits the latest context from the conversation that created this job. Set true when the task depends on that conversation; keep false for independent tasks. If a fixed agent_id already exists, the job continues it without forking or overwriting it.""",
+    )
+    agent_id: Optional[str] = Field(
+        None,
+        description="""<!--zh: 可选固定执行 Agent ID。新建时提供可读基础名称，工具追加短序号并保存最终 ID；需要继续已有 Agent 时传完整 ID。省略时每次触发创建新 Agent。首次创建是否继承当前聊天由 fork 决定。-->
+Optional fixed execution Agent ID. For a new Agent, provide a readable base ID; the tool appends a short sequence and stores the final ID. To continue an existing Agent, pass its exact final ID. Leave it empty when every trigger should create a new Agent. The fork field controls whether the first creation inherits the current conversation.""",
+    )
+    resume: bool = Field(
+        False,
+        description="""<!--zh: 是否让定时任务绑定一个已有 Agent。默认 false：agent_id 作为基础名称并追加新序号。设为 true：agent_id 必须是已存在的完整 ID，后续触发继续该 Agent。不能与 fork=true 同时使用。-->
+Whether this job should bind to an existing Agent. Default false: agent_id is treated as a base name and receives a new sequence. Set true only when agent_id is the exact ID of an existing Agent that future triggers should continue. Cannot be combined with fork=true.""",
+    )
+
+    @model_validator(mode="after")
+    def validate_agent_lifecycle_intent(self) -> "ManageCronParams":
+        if self.fork and self.resume:
+            raise ValueError("fork and resume cannot both be true")
+        return self
 
     @field_validator("schedule", mode="before")
     @classmethod
@@ -225,7 +259,7 @@ CRITICAL CONSTRAINTS:
             elif params.action == "add":
                 return await self._add(params, tool_context)
             elif params.action == "update":
-                return await self._update(params)
+                return await self._update(params, tool_context)
             elif params.action == "remove":
                 return await self._remove(params)
             elif params.action == "run":
@@ -243,7 +277,7 @@ CRITICAL CONSTRAINTS:
     async def _status(self) -> ToolResult:
         from app.service.cron.store import load_cron_state, scan_jobs
         cron_dir = PathManager.get_cron_dir()
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         state = await load_cron_state()
         lines = [f"Cron dir: {cron_dir}", f"Total jobs: {len(jobs)}"]
         for job in jobs:
@@ -260,7 +294,7 @@ CRITICAL CONSTRAINTS:
 
     async def _list(self, params: ManageCronParams) -> ToolResult:
         from app.service.cron.store import scan_jobs
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         include_disabled = bool(params.include_disabled)
         if not include_disabled:
             jobs = [j for j in jobs if j.enabled]
@@ -300,43 +334,129 @@ CRITICAL CONSTRAINTS:
 
         agent_ctx = tool_context.get_extension("agent_context")
 
+        target = None
+        if agent_ctx and hasattr(agent_ctx, "get_agent_target"):
+            target = agent_ctx.get_agent_target()
+
+        agent_mode: Optional[str] = None
+        agent_name = "magic"
+        if target is not None and target.provider_type == AgentProviderType.CLAW:
+            agent_mode = AgentMode.MAGICLAW.value
+            agent_name = target.agent_name
+        elif agent_ctx and hasattr(agent_ctx, "agent_name") and agent_ctx.agent_name:
+            # 普通任务继承当前 agent 的文件标识符（如 openclaw、magic），不暴露给 LLM 作为参数。
+            # 必须用 agent_ctx.agent_name（文件标识符），不能用 get_agent_name()（返回展示名，如"龙虾"）。
+            agent_name = agent_ctx.agent_name
+
         model_id: Optional[str] = None
         image_model_id: Optional[str] = None
         video_model_id: Optional[str] = None
+        video_generation_config: Optional[Dict[str, Any]] = None
         if agent_ctx and hasattr(agent_ctx, "model_context"):
             model_context = agent_ctx.model_context
             model_id = model_context.current_text_model_id or None
             image_model_id = model_context.image_model_id
             video_model_id = model_context.video_model_id
+            video_generation_config = model_context.video.video_generation_config
+        if not model_id:
+            model_id = "auto"
+            logger.warning("创建 cron 时当前上下文没有运行时模型，已写入 auto")
+
+        if agent_ctx and hasattr(agent_ctx, "get_dynamic_image_model_id"):
+            image_model_id = agent_ctx.get_dynamic_image_model_id() or image_model_id
 
         user_timezone = None
         if agent_ctx and hasattr(agent_ctx, "get_user_timezone"):
             user_timezone = agent_ctx.get_user_timezone() or None
 
-        # 继承当前 agent 的文件标识符（如 openclaw、magic），不暴露给 LLM 作为参数。
-        # 必须用 agent_ctx.agent_name（文件标识符），不能用 get_agent_name()（返回展示名，如"龙虾"）。
-        agent_name = "magic"
-        if agent_ctx and hasattr(agent_ctx, "agent_name") and agent_ctx.agent_name:
-            agent_name = agent_ctx.agent_name
+        # 定时任务的常见生命周期：
+        #
+        #   场景                  agent_id       fork   resume  每次触发的行为
+        #   --------------------  -------------  -----  ------  ----------------------------
+        #   每天收集一份新新闻    不传            false  false   创建空白新 Agent
+        #   每天整理当天聊天      不传            true   false   从来源聊天 fork 新 Agent
+        #   每天持续追踪同一进度  可读基础名称    true   false   首次 fork，之后继续固定 Agent
+        #
+        # 第三种场景创建任务时会先分配最终 ID；后续触发看到该会话已存在，就不会再次
+        # fork 或覆盖，只会继续原会话。resume=true 只用于创建任务时绑定一个已有最终 ID。
+        context_source: Optional[AgentSessionRef] = None
+        if params.fork:
+            if target is None or agent_ctx is None:
+                return ToolResult.error("fork=true requires a live Agent context")
+            source_agent_id = agent_ctx.get_agent_id()
+            chat_history_dir = agent_ctx.get_chat_history_dir()
+            if not source_agent_id or not chat_history_dir:
+                return ToolResult.error("Current Agent session is incomplete and cannot be forked")
+            context_source = AgentSessionRef(
+                target=target,
+                agent_id=source_agent_id,
+                chat_history_dir=Path(chat_history_dir),
+            )
 
-        content = build_job_md(
-            schedule=params.schedule,
-            payload_kind="agent_turn",  # 当前唯一可用值
-            agent_name=agent_name,
-            model_id=model_id,
-            image_model_id=image_model_id,
-            video_model_id=video_model_id,
-            timeout_seconds=params.timeout_seconds,
+        cron_agent_id: Optional[str] = None
+        # 与 call_subagent 相同，不能根据同名会话是否存在猜测意图：
+        # resume=false 始终分配新 ID，resume=true 才允许绑定已有完整 ID。
+        # 例如传 `progress-tracker` 且 resume=false，可能保存为 `progress-tracker-3`；
+        # 只有传完整的 `progress-tracker-3` 且 resume=true，才表示绑定已有会话。
+        if params.resume:
+            if not params.agent_id:
+                return ToolResult.error("agent_id is required when resume=true")
+            requested_agent_id = params.agent_id.strip()
+            if not await AgentSessionIdService.session_exists(agent_name, requested_agent_id):
+                return ToolResult.error(
+                    f"Cannot resume Agent session {agent_name}<{requested_agent_id}> because it does not exist"
+                )
+            cron_agent_id = requested_agent_id
+        elif params.agent_id:
+            cron_agent_id = await AgentSessionIdService.allocate(
+                agent_name,
+                params.agent_id.strip(),
+            )
+
+        job = CronJob(
+            id=job_id,
+            schedule=CronSchedule.from_payload(params.schedule),
+            payload=CronPayload(
+                kind=PayloadKind.AGENT_TURN,
+                agent_mode=agent_mode,
+                agent_name=agent_name,
+                model_id=model_id,
+                image_model_id=image_model_id,
+                video_model_id=video_model_id,
+                video_generation_config=video_generation_config,
+                fork=bool(params.fork),
+                agent_id=cron_agent_id,
+                context_source=context_source,
+                timeout_seconds=params.timeout_seconds,
+                notify_user=True if params.notify_user is None else params.notify_user,
+            ),
+            body=params.message,
             enabled=True if params.enabled is None else params.enabled,
             name=params.name,
-            body=params.message,
             timezone=user_timezone,
-            notify_user=True if params.notify_user is None else params.notify_user,
         )
+        content = build_job_md(job)
         await async_write_text(path, content)
-        return ToolResult(content=f"Created cron job '{job_id}' at {path}")
+        agent_id_text = cron_agent_id or "a new Agent ID on every trigger"
+        lifecycle_text = (
+            "Bound to the requested existing Agent."
+            if params.resume
+            else "Created a new fixed Agent ID." if cron_agent_id else "Each trigger creates a new Agent."
+        )
+        return ToolResult(
+            content=(
+                f"Created cron job '{job_id}' at {path}. "
+                f"Execution agent_id: {agent_id_text}. {lifecycle_text}"
+            ),
+            data={
+                "job_id": job_id,
+                "agent_id": cron_agent_id,
+                "fork": bool(params.fork),
+                "resumed": params.resume,
+            },
+        )
 
-    async def _update(self, params: ManageCronParams) -> ToolResult:
+    async def _update(self, params: ManageCronParams, tool_context: ToolContext) -> ToolResult:
         if not params.job_id:
             return ToolResult.error("job_id is required for action=update")
         path = PathManager.get_cron_dir() / f"{params.job_id}.md"
@@ -344,19 +464,65 @@ CRITICAL CONSTRAINTS:
             return ToolResult.error(f"Job '{params.job_id}' not found")
 
         existing = await async_read_text(path)
-        updated = patch_job_md(
-            existing=existing,
-            schedule=params.schedule,
-            payload_kind=None,
-            agent_name=None,  # agent_name 不允许通过 update 修改，创建时已绑定当前 agent
-            model_id=None,
-            image_model_id=None,
-            video_model_id=None,
+        from app.service.cron.store import scan_jobs
+        jobs, _ = await scan_jobs({})
+        existing_job = next((job for job in jobs if job.id == params.job_id), None)
+        if existing_job is None:
+            return ToolResult.error(f"Job '{params.job_id}' could not be parsed")
+
+        context_source: Optional[AgentSessionRef] = None
+        if params.fork:
+            agent_ctx = tool_context.get_extension("agent_context")
+            target = agent_ctx.get_agent_target() if agent_ctx is not None else None
+            source_agent_id = agent_ctx.get_agent_id() if agent_ctx is not None else None
+            chat_history_dir = agent_ctx.get_chat_history_dir() if agent_ctx is not None else None
+            if target is None or not source_agent_id or not chat_history_dir:
+                return ToolResult.error("fork=true requires a complete live Agent context")
+            context_source = AgentSessionRef(
+                target=target,
+                agent_id=source_agent_id,
+                chat_history_dir=Path(chat_history_dir),
+            )
+
+        # update 也遵守 add 的同一套规则：resume=false 把输入当基础名称并分配新 ID；
+        # resume=true 则要求输入已经是一个确实存在的完整最终 ID。
+        cron_agent_id: Optional[str] = None
+        if params.resume and "agent_id" not in params.model_fields_set:
+            return ToolResult.error("agent_id is required when resume=true")
+        if "agent_id" in params.model_fields_set and params.agent_id:
+            requested_agent_id = params.agent_id.strip()
+            target_agent_name = existing_job.payload.agent_name or "magic"
+            if params.resume:
+                if not await AgentSessionIdService.session_exists(
+                    target_agent_name,
+                    requested_agent_id,
+                ):
+                    return ToolResult.error(
+                        f"Cannot resume Agent session {target_agent_name}<{requested_agent_id}> "
+                        "because it does not exist"
+                    )
+                cron_agent_id = requested_agent_id
+            else:
+                cron_agent_id = await AgentSessionIdService.allocate(
+                    target_agent_name,
+                    requested_agent_id,
+                )
+        patch = CronJobPatch(
+            schedule=(
+                CronSchedule.from_payload(params.schedule)
+                if params.schedule is not None
+                else None
+            ),
             timeout_seconds=params.timeout_seconds,
             enabled=params.enabled,
             body=params.message,
             notify_user=params.notify_user,
+            fork=params.fork,
+            agent_id=cron_agent_id,
+            update_agent_id="agent_id" in params.model_fields_set,
+            context_source=context_source,
         )
+        updated = patch_job_md(existing, patch)
         await async_write_text(path, updated)
         return ToolResult(content=f"Updated cron job '{params.job_id}'")
 
@@ -373,13 +539,13 @@ CRITICAL CONSTRAINTS:
         if not params.job_id:
             return ToolResult.error("job_id is required for action=run")
         from app.service.cron.store import scan_jobs
-        jobs = await scan_jobs({})
+        jobs, _ = await scan_jobs({})
         job = next((j for j in jobs if j.id == params.job_id), None)
         if job is None:
             return ToolResult.error(f"Job '{params.job_id}' not found or has parse errors")
 
-        import asyncio
         from app.service.cron.executor import execute_agent_turn
+
         asyncio.create_task(execute_agent_turn(job), name=f"cron-manual-{job.id}")
         return ToolResult(
             content=f"Triggered job '{params.job_id}' immediately. "

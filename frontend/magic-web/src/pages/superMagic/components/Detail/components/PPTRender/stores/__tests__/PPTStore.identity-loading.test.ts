@@ -17,6 +17,12 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor", () =
 	collectFileIdsFromHtml: vi.fn(() => new Set()),
 }))
 
+vi.mock("../../../../contents/HTML/utils/full-content", () => ({
+	decodeHTMLEntities: (content: string) => content,
+	fallbackImageBase64: "data:image/png;base64,",
+	getFullContent: (content: string) => content,
+}))
+
 vi.mock("@/utils/log", () => ({
 	logger: {
 		createLogger: () => ({

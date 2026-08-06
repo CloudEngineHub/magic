@@ -300,6 +300,8 @@ function AtItem({
 						size={iconSize}
 					/>
 				)
+			case MentionItemType.MEMORY_FILE:
+				return <MagicFileIcon type={icon as string} size={iconSize} />
 			case MentionItemType.TOOL:
 				return icon ? (
 					<img
@@ -376,6 +378,14 @@ function AtItem({
 						alt="file-folder"
 						style={{ width: iconSize, height: iconSize }}
 						data-testid="at-item-image-5"
+					/>
+				)
+			case MentionItemType.MEMORY_DIRECTORY:
+				return (
+					<img
+						src={FoldIcon}
+						alt="memory-folder"
+						style={{ width: iconSize, height: iconSize }}
 					/>
 				)
 			case MentionItemType.CLOUD_FILE:

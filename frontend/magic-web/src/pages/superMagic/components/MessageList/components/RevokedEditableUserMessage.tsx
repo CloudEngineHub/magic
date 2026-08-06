@@ -27,6 +27,7 @@ import { handleProjectFileMention } from "@/pages/superMagic/components/MessageE
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { useTranslation } from "react-i18next"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
 
 interface RevokedEditableUserMessageProps {
 	node: SuperMagicMessageItem
@@ -37,6 +38,7 @@ interface RevokedEditableUserMessageProps {
 	hiddenOptimisticMessageIds?: string[]
 	onFileClick?: (fileItem: unknown) => void
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>
+	editorContext?: RevokedMessageEditorContext
 	fallbackContent: ReactNode
 	onPendingSendChange?: (isPending: boolean) => void
 }
@@ -54,15 +56,23 @@ function RevokedEditableUserMessage({
 	hiddenOptimisticMessageIds = [],
 	onFileClick,
 	topicModelStore,
+	editorContext: editorContextOverride,
 	fallbackContent,
 	onPendingSendChange,
 }: RevokedEditableUserMessageProps) {
 	const { projectFilesStore: messageListProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = messageListProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore =
+		editorContextOverride?.projectFilesStore ??
+		messageListProjectFilesStore ??
+		projectFilesStore
+	const resolvedSelectedProject =
+		editorContextOverride?.selectedProject !== undefined
+			? editorContextOverride.selectedProject
+			: projectStore.selectedProject
 	const [isPendingSend, setIsPendingSend] = useState(false)
 	const [pendingSendSnapshot, setPendingSendSnapshot] = useState<PendingSendSnapshot | null>(null)
 	const { t } = useTranslation("super")
-	const messageNode = superMagicStore.getMessageNode(node?.app_message_id) as
+	const messageNode = superMagicStore.getMessageNode(node?.super_message_id) as
 		| {
 				content?: string
 				rich_text?: {
@@ -174,14 +184,24 @@ function RevokedEditableUserMessage({
 
 	const editorContext = useMemo<SceneEditorContext | null>(() => {
 		if (!selectedTopic || !initialContent) return null
+		const topicMode = editorContextOverride?.topicMode ?? selectedTopic.topic_mode
 
 		return {
-			selectedProject: projectStore.selectedProject,
+			selectedProject: resolvedSelectedProject,
 			selectedTopic,
-			selectedWorkspace: workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace,
-			setSelectedTopic: topicStore.setSelectedTopic,
-			topicMode: selectedTopic.topic_mode,
-			topicModelStore,
+			selectedWorkspace:
+				editorContextOverride?.selectedWorkspace ??
+				workspaceStore.selectedWorkspace ??
+				workspaceStore.firstWorkspace,
+			setSelectedTopic:
+				editorContextOverride?.setSelectedTopic ?? topicStore.setSelectedTopic,
+			setSelectedWorkspace: editorContextOverride?.setSelectedWorkspace,
+			topicMode,
+			modelTopicMode: editorContextOverride?.modelTopicMode,
+			topicStore: editorContextOverride?.topicStore,
+			mentionPanelStore: editorContextOverride?.mentionPanelStore,
+			topicModelStore: editorContextOverride?.topicModelStore ?? topicModelStore,
+			mergeSendParams: editorContextOverride?.mergeSendParams,
 			size: "small",
 			showLoading,
 			messagesLength,
@@ -230,8 +250,8 @@ function RevokedEditableUserMessage({
 				<ModelSwitchContainer
 					size="small"
 					selectedTopic={selectedTopic}
-					selectedProject={projectStore.selectedProject}
-					topicMode={selectedTopic.topic_mode}
+					selectedProject={resolvedSelectedProject}
+					topicMode={editorContextOverride?.modelTopicMode ?? topicMode}
 					showName
 					showLabel={false}
 					showBorder={false}
@@ -258,12 +278,14 @@ function RevokedEditableUserMessage({
 		}
 	}, [
 		initialContent,
+		editorContextOverride,
 		hiddenOptimisticMessageIds,
 		isAllowedMention,
 		messagesLength,
 		onFileClick,
 		onPendingSendChange,
 		resolvedProjectFilesStore,
+		resolvedSelectedProject,
 		selectedTopic,
 		showLoading,
 		topicModelStore,

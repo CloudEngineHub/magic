@@ -34,8 +34,10 @@ import {
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
 
-interface EditToolbarProps {
+export interface EditToolbarProps {
 	style?: React.CSSProperties
+	/** 禁用工具栏交互及其全局快捷键，但保持组件实例和内部状态常驻 */
+	interactionDisabled?: boolean
 	/** 主文件ID */
 	mainFileId?: string
 	/** 是否显示AI编辑按钮 */
@@ -120,6 +122,7 @@ interface EditToolbarProps {
 }
 
 function EditToolbar({
+	interactionDisabled = false,
 	showAIOptimization = false,
 	showFileEdit = false,
 	isEditMode = false,
@@ -502,6 +505,7 @@ function EditToolbar({
 		showSimilarSharesDialog,
 		similarShares,
 		isCheckingShare,
+		shareTarget,
 		handleShare,
 		handleSelectSimilarShare,
 		handleCreateNewShare,
@@ -598,6 +602,7 @@ function EditToolbar({
 					{/* 在线编辑按钮 */}
 					{showFileEditButtons && (
 						<FileEditButtons
+							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
 							showButtonText={shouldShowButtonText}
@@ -749,12 +754,7 @@ function EditToolbar({
 							onExportSpecificPages={(
 								filePaths: string[],
 								format:
-									| "source"
-									| "pdf"
-									| "ppt"
-									| "pptx"
-									| "image_png"
-									| "image_jpeg",
+									"source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg",
 							) => {
 								if (!filePaths.length) return
 
@@ -825,7 +825,7 @@ function EditToolbar({
 							}}
 							showSuccessModal={showSuccessModal}
 							existingShareInfo={existingShareInfo}
-							currentFile={currentFile}
+							currentFile={shareTarget ?? currentFile}
 							shareFileId={shareFileId}
 							attachments={attachments}
 							onCancelShare={handleCancelShare}

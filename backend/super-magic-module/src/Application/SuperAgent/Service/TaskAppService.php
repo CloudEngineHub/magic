@@ -851,6 +851,11 @@ class TaskAppService extends AbstractAppService
 
         // 3. 处理工具附件（如果有）
         try {
+            $this->fileProcessAppService->processToolDetailFileReference(
+                $tool,
+                $taskContext->getTask(),
+                $taskContext->getDataIsolation()
+            );
             if (! empty($tool['attachments'])) {
                 $this->processToolAttachments($tool, $taskContext);
                 // 使用工具处理器处理文件ID匹配

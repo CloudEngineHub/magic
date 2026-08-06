@@ -18,8 +18,12 @@ const routes = [
 	["/share/files/:resourceId", seoRoutes.shareResource],
 	["/share/:topicId", seoRoutes.shareTopic],
 	["/share/:topicId/file/:fileId", seoRoutes.shareTopic],
+	// 微应用分享页
+	["/micro-app/:appId", seoRoutes.microApp],
 	// 登录
 	["/login", seoRoutes.login],
+	// 微应用编辑页；必须位于 /:clusterCode/super/:projectId/:topicId 之前，避免被通用项目路由匹配。
+	["/:clusterCode/super/micro-app/:appId", seoRoutes.microApp],
 	/**
 	 * 协作项目 - 话题
 	 * 该路由已废弃，请使用 /:clusterCode/super/:projectId/:topicId 代替，保留用于兼容旧路由

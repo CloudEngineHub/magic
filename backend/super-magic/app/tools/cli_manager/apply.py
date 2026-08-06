@@ -34,47 +34,46 @@ class CliManagerApplyParams(BaseToolParams):
 
     name: Optional[str] = Field(
         None,
-        description="""<!--zh: CLI 的持久化名称，通常与主命令同名。-->
-CLI 的持久化名称，通常与主命令同名。""",
+        description="Persistent CLI name, usually the same as its primary command.",
     )
     mode: Literal["install", "adopt"] = Field(
         "install",
-        description="""<!--zh: install 表示执行安装命令并写入持久目录；adopt 表示接管当前 PATH 中已安装的命令。-->
-install 表示执行安装命令并写入持久目录；adopt 表示接管当前 PATH 中已安装的命令。""",
+        description=(
+            "Use install to run an installation command and persist its files. "
+            "Use adopt to manage a command already available on PATH."
+        ),
     )
     install_command: Optional[str] = Field(
         None,
-        description="""<!--zh: 用户确认后要执行的 CLI 安装命令。mode=install 时必填。-->
-用户确认后要执行的 CLI 安装命令。mode=install 时必填。""",
+        description="CLI installation command to run after user confirmation. Required when mode is install.",
     )
     commands: list[str] = Field(
         default_factory=list,
-        description="""<!--zh: 需要暴露的命令名。为空时默认使用 name。-->
-需要暴露的命令名。为空时默认使用 name。""",
+        description="Command names to expose. Defaults to name when empty.",
     )
     config_dirs: list[str] = Field(
         default_factory=list,
-        description="""<!--zh: 需要随 CLI 一起保留的 HOME 下配置目录，例如 ~/.foo。不要传入密钥明文。-->
-需要随 CLI 一起保留的 HOME 下配置目录，例如 ~/.foo。不要传入密钥明文。""",
+        description=(
+            "Configuration directories under HOME to persist with the CLI, such as ~/.foo. "
+            "Do not include plaintext secrets."
+        ),
     )
     env_keys: list[str] = Field(
         default_factory=list,
-        description="""<!--zh: CLI 依赖的环境变量名，仅记录 key，不保存 value。保存 value 请使用 env-manager。-->
-CLI 依赖的环境变量名，仅记录 key，不保存 value。保存 value 请使用 env-manager。""",
+        description=(
+            "Environment variable names required by the CLI. Only keys are recorded, not values. "
+            "Use env-manager to persist values."
+        ),
     )
     confirmed: bool = Field(
         False,
-        description="""<!--zh: 只有用户明确同意持久化后才传 true。-->
-只有用户明确同意持久化后才传 true。""",
+        description="Set true only after the user explicitly approves persistence.",
     )
 
 
-@tool(name="cli_manager_apply")
+@tool(name="cli_manager_apply", code_mode_only=True)
 class CliManagerApply(BaseTool[CliManagerApplyParams], CliManagerToolMixin):
-    """<!--zh: 安装或接管第三方 CLI，并持久化命令入口和配置目录。-->
-    安装或接管第三方 CLI，并持久化命令入口和配置目录。"""
-
-    code_mode_only = True
+    """Install or adopt a third-party CLI and persist its command entry points and configuration directories."""
 
     async def execute(self, tool_context: ToolContext, params: CliManagerApplyParams) -> ToolResult:
         """在用户明确确认后执行 CLI 持久化。"""

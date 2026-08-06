@@ -140,8 +140,8 @@ class AdminOperationLogApi extends AbstractPermissionApi
         if ($isOfficialOrganization && $organizationCode !== '') {
             $filters['organization_code'] = $organizationCode;
         }
-        $startDateMs = $this->parseDateToMs($startDate, false);
-        $endDateMs = $this->parseDateToMs($endDate, true);
+        $startDateMs = $this->parseDateToMs($startDate, '00:00:00');
+        $endDateMs = $this->parseDateToMs($endDate, '23:59:59');
         if ($startDateMs !== null) {
             $filters['start_operation_time'] = $startDateMs;
         }
@@ -229,16 +229,19 @@ class AdminOperationLogApi extends AbstractPermissionApi
         return $dt->getTimestamp() * 1000;
     }
 
-    private function parseDateToMs(string $date, bool $isEndOfDay): ?int
+    private function parseDateToMs(string $date, string $defaultTime): ?int
     {
         if ($date === '') {
             return null;
         }
 
-        $dateTime = DateTimeImmutable::createFromFormat(
-            'Y-m-d H:i:s',
-            $date . ($isEndOfDay ? ' 23:59:59' : ' 00:00:00')
-        );
+        $dateTime = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $date);
+        if (! $dateTime) {
+            $dateTime = DateTimeImmutable::createFromFormat(
+                'Y-m-d H:i:s',
+                $date . ' ' . $defaultTime
+            );
+        }
         if (! $dateTime) {
             return null;
         }

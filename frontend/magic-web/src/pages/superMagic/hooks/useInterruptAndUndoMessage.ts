@@ -51,7 +51,7 @@ export function useInterruptAndUndoMessage({
 				const revokedMessageIndex = currentMessageList.findIndex(
 					(message: any) => message?.seq_id === messageId,
 				)
-				const node = superMagicStore.getMessageNode(lastMessage?.app_message_id)
+				const node = superMagicStore.getMessageNode(lastMessage?.super_message_id)
 				if (!["suspended", "finished"].includes(node?.status)) {
 					// Call through pubsub to trigger useSendInterruptMessage handler
 					await new Promise<void>((resolve) => {

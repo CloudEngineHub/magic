@@ -53,6 +53,8 @@ export function ProjectShareSheetFooter({ controller }: ProjectShareSheetFooterP
 				<Button
 					type="button"
 					className="h-12 w-full rounded-xl bg-[#171717] text-[16px] font-medium text-white hover:bg-[#171717] active:opacity-80"
+					// Wait for the prefetched payload so copying never starts with an iOS-incompatible network request.
+					disabled={!controller.selectedShareMessageText}
 					onClick={controller.copySelectedShareUrl}
 					data-testid="project-share-sheet-copy-link-button"
 				>

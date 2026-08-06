@@ -16,40 +16,35 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2UpsertAppParams(BaseToolParams):
-    """注册或更新 OAuth2 app 的参数。"""
+    """Parameters for registering an OAuth2 app."""
 
-    app_name: str = Field(..., description="""<!--zh: OAuth2 app 稳定标识。-->
-Stable OAuth2 app name. Use lowercase letters, numbers, underscores, or hyphens.""")
-    label_name: Optional[str] = Field(None, description="""<!--zh: 用户可读的应用名称。-->
-Human-readable app label.""")
-    authorization_url: str = Field(..., description="""<!--zh: OAuth2 authorization endpoint。-->
-OAuth2 authorization endpoint.""")
-    token_url: str = Field(..., description="""<!--zh: OAuth2 token endpoint。-->
-OAuth2 token endpoint.""")
-    client_id: str = Field(..., description="""<!--zh: OAuth2 client_id。-->
-OAuth2 client_id.""")
-    client_secret: Optional[str] = Field(None, description="""<!--zh: OAuth2 client_secret 或 ${ENV_NAME} 引用。-->
-OAuth2 client_secret or a ${ENV_NAME} placeholder. Do not print this value.""")
-    scope: str = Field("", description="""<!--zh: OAuth2 scope，按平台文档填写。-->
-OAuth2 scope string from provider docs.""")
-    refresh_url: Optional[str] = Field(None, description="""<!--zh: refresh token endpoint，不填则使用 token_url。-->
-Refresh token endpoint. Defaults to token_url.""")
+    app_name: str = Field(
+        ...,
+        description="Stable app name using lowercase letters, numbers, underscores, or hyphens.",
+    )
+    label_name: Optional[str] = Field(None, description="User-facing app label.")
+    authorization_url: str = Field(..., description="OAuth2 authorization endpoint.")
+    token_url: str = Field(..., description="OAuth2 token endpoint.")
+    client_id: str = Field(..., description="OAuth2 client_id.")
+    client_secret: Optional[str] = Field(
+        None,
+        description="OAuth2 client_secret or ${ENV_NAME} reference. Do not print this value.",
+    )
+    scope: str = Field("", description="OAuth2 scope from provider documentation.")
+    refresh_url: Optional[str] = Field(None, description="Refresh-token endpoint. Defaults to token_url.")
     token_auth_method: Literal["client_secret_post", "client_secret_basic", "none"] = Field(
         "client_secret_post",
-        description="""<!--zh: token endpoint 的客户端认证方式。-->
-Client authentication method for the token endpoint.""",
+        description="Client authentication method for the token endpoint.",
     )
     token_content_type: Literal["application/x-www-form-urlencoded"] = Field(
         "application/x-www-form-urlencoded",
-        description="""<!--zh: token 请求体类型。第一阶段只支持标准表单。-->
-Token request content type. The first phase supports the standard form encoding.""",
+        description="Token request content type. Only standard form encoding is supported.",
     )
 
 
 @tool(name="oauth2_upsert_app")
 class OAuth2UpsertApp(BaseOAuth2Tool[OAuth2UpsertAppParams]):
-    """<!--zh: 注册或更新一个 OAuth2 app。仅保存 app 定义，不发起授权。-->
-    Register or update an OAuth2 app definition. This only saves app metadata; it does not authorize the app."""
+    """Register or update an OAuth2 app definition without authorizing it."""
 
     name = "oauth2_upsert_app"
 

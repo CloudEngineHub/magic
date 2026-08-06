@@ -15,6 +15,8 @@ use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\Token\Entity\MagicTokenEntity;
 use App\Domain\Token\Entity\ValueObject\MagicTokenType;
 use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -37,12 +39,16 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\InitializationMetadataD
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageMetadata;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\ProjectMode;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\SuperMagicProductContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\UserInfoValueObject;
 use Dtyq\SuperMagic\Domain\SuperAgent\Exception\WorkspaceReadyTimeoutException;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskMessageRepositoryInterface;
 use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TopicRepositoryInterface;
+use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
+use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Constant\WorkspaceStatus;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\AskUserResponseMessageRequest;
 use Dtyq\SuperMagic\Infrastructure\ExternalAPI\SandboxOS\Agent\Request\ChatMessageRequest;
@@ -92,7 +98,9 @@ class AgentDomainService
         private readonly SuperMagicAgentRepositoryInterface $superMagicAgentRepository,
         private readonly MagicTokenRepositoryInterface $magicTokenRepository,
         private readonly LockerInterface $locker,
+        private readonly ProjectRepositoryInterface $projectRepository,
         private readonly TopicRepositoryInterface $topicRepository,
+        private readonly WorkspaceRepositoryInterface $workspaceRepository,
         private readonly TaskMessageRepositoryInterface $taskMessageRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
     ) {
@@ -107,7 +115,12 @@ class AgentDomainService
         }
         $authToken = $dataIsolation->getUserAuthorizationToken() ?? '';
         // todo 初始化数据, 后续有些参数需要精简去掉
-        $agentInitContext = AgentInitContext::createDefault();
+        $superMagicProductContext = $this->buildSuperMagicProductContext(
+            $projectEntity,
+            $topicEntity,
+            $sandboxId
+        );
+        $agentInitContext = AgentInitContext::createDefault($superMagicProductContext);
         $agentInitContext->setMessageId((string) IdGenerator::getSnowId());
         $agentInitContext->setUserId($dataIsolation->getCurrentUserId()); // 待废弃
         $agentInitContext->setProjectId((string) $projectEntity->getId()); // 待废弃
@@ -695,6 +708,8 @@ class AgentDomainService
         $constraintText = $this->getPromptConstraint($taskContext);
         $prompt = $userRequest . $constraintText;
 
+        $superMagicProductContext = $this->buildCurrentSuperMagicProductContext($taskContext);
+
         // 构建 metadata（使用公共方法）
         $initMetadata = new InitializationMetadataDTO();
         $messageMetadata = $this->buildMessageMetadata($dataIsolation, $taskContext, $initMetadata);
@@ -719,6 +734,7 @@ class AgentDomainService
             dynamicConfig: $taskDynamicConfig,
             metadata: $messageMetadata->toArray(),
             agent: ! empty($agentProfile) ? $agentProfile : null,
+            superMagicProductContext: $superMagicProductContext,
         );
 
         $result = $this->agent->sendChatMessage($dataIsolation, $taskContext->getSandboxId(), $chatMessage);
@@ -790,7 +806,7 @@ class AgentDomainService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param string $sandboxId 沙箱ID
-     * @param string $name 工具名称（如 ask_user）
+     * @param string $name 工具名称（如 ask_user、plan）
      * @param string $toolCallId 工具调用ID
      * @param array $detail 工具特定的回复数据，结构由各工具自行约定
      */
@@ -1333,7 +1349,7 @@ class AgentDomainService
     /**
      * 根据用户ID获取 Authorization.
      * - 先以用户级别 token（MagicTokenType::User）为准，支持一个账号多个组织
-     * - 若 token 已存在但剩余有效期不足 30 天，则刷新至 30 天后.
+     * - 若 token 已存在但剩余有效期不足 29 天，则刷新至 30 天后.
      *
      * @param string $userId 用户ID
      * @return string Authorization 字符串，如果不存在则返回空字符串
@@ -1405,6 +1421,63 @@ class AgentDomainService
         $metadata = $initContext->getMetadata();
         $metadata['sandbox_id'] = $sandboxId;
         $initContext->setMetadata($metadata);
+
+        $initContext->setSuperMagicProductContext(
+            $initContext->getSuperMagicProductContext()->withSandboxId($sandboxId)
+        );
+    }
+
+    private function buildCurrentSuperMagicProductContext(TaskContext $taskContext): SuperMagicProductContext
+    {
+        $topicEntity = $this->topicRepository->getTopicById($taskContext->getTopicId());
+        if ($topicEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        if ($topicEntity->getProjectId() !== $taskContext->getProjectId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        $projectEntity = $this->projectRepository->findById($taskContext->getProjectId());
+        if ($projectEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+
+        return $this->buildSuperMagicProductContext(
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            sandboxId: $taskContext->getSandboxId(),
+        );
+    }
+
+    private function buildSuperMagicProductContext(
+        ProjectEntity $projectEntity,
+        TopicEntity $topicEntity,
+        string $sandboxId,
+    ): SuperMagicProductContext {
+        if ($topicEntity->getProjectId() !== $projectEntity->getId()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
+        }
+
+        if ($sandboxId === '') {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterMissing, 'sandbox_id is required');
+        }
+
+        $workspaceEntity = null;
+        $workspaceId = $projectEntity->getWorkspaceId();
+        if ($workspaceId !== null) {
+            $workspaceEntity = $this->workspaceRepository->getWorkspaceById($workspaceId);
+            if ($workspaceEntity === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::WORKSPACE_NOT_FOUND, 'workspace.workspace_not_found');
+            }
+        }
+
+        return SuperMagicProductContext::fromEntities(
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            workspaceEntity: $workspaceEntity,
+            sandboxId: $sandboxId,
+        );
     }
 
     /**
@@ -1758,6 +1831,9 @@ class AgentDomainService
         return match ($agentMode) {
             ProjectMode::MAGICLAW->value => $this->buildMagicClawProfile($dataIsolation, $agentCode),
             ProjectMode::CUSTOM_AGENT->value => $this->buildCustomAgentProfile($dataIsolation, $agentCode, $language),
+            // micro-app is backed by the built-in micro-app.agent file. Its localized
+            // profile is supplied by the Python runtime, not the digital employee table.
+            ProjectMode::MICRO_APP->value => [],
             default => $this->buildOfficialAgentProfile($agentMode, $language),
         };
     }
@@ -1872,21 +1948,21 @@ class AgentDomainService
     }
 
     /**
-     * 当用户 token 剩余有效期不足 30 天时，统一刷新到 30 天后以减少重复签发.
+     * 当用户 token 剩余有效期不足 29 天时，统一刷新到 30 天后以减少重复签发.
      *
      * @param MagicTokenEntity $tokenEntity 已存在的用户 token
      */
     private function refreshTokenExpirationIfNeeded(MagicTokenEntity $tokenEntity): void
     {
         $now = Carbon::now();
-        $threshold = $now->copy()->addDays(30);
+        $renewalThreshold = $now->copy()->addDays(29);
         $expiredAt = Carbon::parse($tokenEntity->getExpiredAt());
 
-        if ($expiredAt->greaterThanOrEqualTo($threshold)) {
+        if ($expiredAt->greaterThanOrEqualTo($renewalThreshold)) {
             return;
         }
 
-        $tokenEntity->setExpiredAt($threshold->toDateTimeString());
+        $tokenEntity->setExpiredAt($now->copy()->addDays(30)->toDateTimeString());
         $tokenEntity->setUpdatedAt($now->toDateTimeString());
         $this->magicTokenRepository->refreshTokenExpiration($tokenEntity);
     }

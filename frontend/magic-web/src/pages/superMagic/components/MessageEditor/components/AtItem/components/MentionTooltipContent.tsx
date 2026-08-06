@@ -36,6 +36,10 @@ export function MentionTooltipContent(props: MentionTooltipContentProps) {
 
 		case MentionItemType.FOLDER:
 			return (data.data as DirectoryMentionData).directory_path
+		case MentionItemType.MEMORY_FILE:
+			return (data.data as { file_path: string }).file_path
+		case MentionItemType.MEMORY_DIRECTORY:
+			return (data.data as { directory_path: string }).directory_path
 
 		case MentionItemType.PROJECT_FILE: {
 			const item = data.data as ProjectFileMentionData

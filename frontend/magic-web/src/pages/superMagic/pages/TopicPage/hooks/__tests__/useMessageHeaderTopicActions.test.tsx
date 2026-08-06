@@ -1,10 +1,24 @@
 import { renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ProjectListItem, Topic } from "../../../Workspace/types"
 import { TaskStatus } from "../../../Workspace/types"
 import { TopicMode } from "../../../Workspace/TopicMode"
 import SuperMagicService from "../../../../services"
 import { useMessageHeaderTopicActions } from "../useMessageHeaderTopicActions"
+
+const selectionServiceMock = vi.hoisted(() => ({
+	isAgentSelectionAvailable: vi.fn(() => true),
+	resolveDefaultAgentSelection: vi.fn(() => ({
+		modeIdentifier: TopicMode.General,
+		topicPattern: TopicMode.General,
+		agentCode: undefined,
+	})),
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	isAgentSelectionAvailable: selectionServiceMock.isAgentSelectionAvailable,
+	resolveDefaultAgentSelection: selectionServiceMock.resolveDefaultAgentSelection,
+}))
 
 vi.mock("../../../../services", () => ({
 	default: {
@@ -51,7 +65,17 @@ function createTopic(id: string, topicName: string): Topic {
 }
 
 describe("useMessageHeaderTopicActions", () => {
-	it("passes the current topic when creating a topic", async () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		selectionServiceMock.isAgentSelectionAvailable.mockReturnValue(true)
+		selectionServiceMock.resolveDefaultAgentSelection.mockReturnValue({
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		})
+	})
+
+	it("inherits the current topic mode when it is still available", async () => {
 		const selectedProject = { id: "project-1" } as ProjectListItem
 		const selectedTopic = createTopic("topic-1", "Existing Topic")
 		const topicStore = {
@@ -72,6 +96,44 @@ describe("useMessageHeaderTopicActions", () => {
 		expect(SuperMagicService.handleCreateTopic).toHaveBeenCalledWith({
 			selectedProject,
 			sourceTopic: selectedTopic,
+		})
+	})
+
+	it("uses the default mode when the current topic mode is unavailable", async () => {
+		selectionServiceMock.isAgentSelectionAvailable.mockReturnValue(false)
+		selectionServiceMock.resolveDefaultAgentSelection.mockReturnValue({
+			modeIdentifier: "SMA-default-agent",
+			topicPattern: TopicMode.CustomAgent,
+			agentCode: "SMA-default-agent",
+		})
+		const selectedProject = { id: "project-1" } as ProjectListItem
+		const selectedTopic = createTopic("topic-1", "Existing Topic")
+		const topicStore = {
+			setSelectedTopic: vi.fn(),
+			mergeTopic: vi.fn(),
+		}
+
+		const { result } = renderHook(() =>
+			useMessageHeaderTopicActions({
+				selectedProject,
+				selectedTopic,
+				topicStore: topicStore as never,
+			}),
+		)
+
+		await result.current.createTopic()
+
+		expect(selectionServiceMock.isAgentSelectionAvailable).toHaveBeenCalledWith(
+			TopicMode.CustomAgent,
+			"employee-code-1",
+		)
+		expect(SuperMagicService.handleCreateTopic).toHaveBeenCalledWith({
+			selectedProject,
+			sourceTopic: {
+				project_id: "project-1",
+				topic_mode: TopicMode.CustomAgent,
+				agent_code: "SMA-default-agent",
+			},
 		})
 	})
 })

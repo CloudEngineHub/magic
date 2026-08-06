@@ -22,6 +22,8 @@ export const whiteListRoutes = [
 	"/:clusterCode/file/*",
 	/** 分享 */
 	"/share/*",
+	/** 微应用发布页 */
+	"/micro-app/*",
 	/** 激活 */
 	"/activation/*",
 	/** 系统初始化 */

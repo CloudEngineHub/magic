@@ -526,7 +526,8 @@ class TopicDomainService
                     'id' => $topicId,
                     'user_id' => $dataIsolation->getCurrentUserId(),
                 ],
-                $updateData
+                $updateData,
+                touchUpdatedAt: false
             );
         }
 
@@ -780,8 +781,10 @@ class TopicDomainService
 
     /**
      * 执行消息回滚逻辑.
+     *
+     * @return array<int|string>
      */
-    public function rollbackMessages(string $targetSeqId): void
+    public function rollbackMessages(string $targetSeqId): array
     {
         // 根据seq_id获取magic_message_id
         $magicMessageId = $this->topicRepository->getMagicMessageIdBySeqId($targetSeqId);
@@ -812,12 +815,16 @@ class TopicDomainService
             // 删除magic_super_agent_message表的数据
             $this->topicRepository->deleteSuperAgentMessagesFromSeqId((int) $targetSeqId);
         });
+
+        return $allSeqIds;
     }
 
     /**
      * 执行消息回滚开始逻辑（标记状态而非删除）.
+     *
+     * @return array<int|string>
      */
-    public function rollbackMessagesStart(string $targetSeqId): void
+    public function rollbackMessagesStart(string $targetSeqId): array
     {
         // 根据seq_id获取magic_message_id
         $magicMessageId = $this->topicRepository->getMagicMessageIdBySeqId($targetSeqId);
@@ -850,19 +857,23 @@ class TopicDomainService
             // 2. 标记大于等于target_message_id的消息为撤回状态
             $this->topicRepository->batchUpdateSeqStatus($allSeqIdsFromCurrent, MagicMessageStatus::Revoked);
         });
+
+        return $allSeqIdsFromCurrent;
     }
 
     /**
      * 执行消息回滚提交逻辑（物理删除撤回状态的消息）.
+     *
+     * @return array<int|string>
      */
-    public function rollbackMessagesCommit(int $topicId, string $userId): void
+    public function rollbackMessagesCommit(int $topicId, string $userId): array
     {
         // 获取该话题中所有撤回状态的消息seq_ids
         $revokedSeqIds = $this->topicRepository->getRevokedSeqIdsByTopicId($topicId, $userId);
 
         if (empty($revokedSeqIds)) {
             // 没有撤回状态的消息，直接返回
-            return;
+            return [];
         }
 
         // 为了使用现有的删除逻辑，需要找到一个target_seq_id用于deleteSuperAgentMessagesFromSeqId
@@ -880,6 +891,8 @@ class TopicDomainService
             // 删除magic_super_agent_message表的数据
             $this->topicRepository->deleteSuperAgentMessagesFromSeqId($targetSeqId);
         });
+
+        return $revokedSeqIds;
     }
 
     /**
@@ -887,8 +900,9 @@ class TopicDomainService
      *
      * @param int $topicId 话题ID
      * @param string $userId 用户ID（权限验证）
+     * @return array<int|string>
      */
-    public function rollbackMessagesUndo(int $topicId, string $userId): void
+    public function rollbackMessagesUndo(int $topicId, string $userId): array
     {
         $this->logger->info('[TopicDomain] Starting message rollback undo', [
             'topic_id' => $topicId,
@@ -904,7 +918,7 @@ class TopicDomainService
                 'user_id' => $userId,
             ]);
             // 没有撤回状态的消息，直接返回
-            return;
+            return [];
         }
 
         $this->logger->info('[TopicDomain] Found revoked messages for undo', [
@@ -924,6 +938,8 @@ class TopicDomainService
             'user_id' => $userId,
             'restored_seq_ids_count' => count($revokedSeqIds),
         ]);
+
+        return $revokedSeqIds;
     }
 
     /**

@@ -13,12 +13,16 @@ from app.tools.oauth2._api_docs import BaseOAuth2ApiDocTool
 
 
 class OAuth2RemoveApiDocParams(BaseToolParams):
-    """移除 OAuth2 接口文档的参数。"""
+    """Parameters for removing OAuth2 API documentation."""
 
-    app_name: str = Field(..., description="""<!--zh: 已注册的 OAuth2 app_name。只允许删除同一个 app 下的接口文档。-->
-Registered OAuth2 app name. API documentation deletion is limited to one app per call.""")
-    operation_ids: list[str] = Field(..., description="""<!--zh: 要删除的 OpenAPI operationId 列表。删除单个接口文档时也传单元素数组。-->
-OpenAPI operationId list to delete. Use a single-item array when deleting one API document.""")
+    app_name: str = Field(
+        ...,
+        description="Registered OAuth2 app name. Each call can target only one app.",
+    )
+    operation_ids: list[str] = Field(
+        ...,
+        description="OpenAPI operationIds to delete. Use a one-item list for one document.",
+    )
 
     def target_operation_ids(self) -> list[str]:
         """返回归一化后的待删除 operationId 列表。"""
@@ -27,8 +31,7 @@ OpenAPI operationId list to delete. Use a single-item array when deleting one AP
 
 @tool(name="oauth2_remove_api_doc")
 class OAuth2RemoveApiDoc(BaseOAuth2ApiDocTool[OAuth2RemoveApiDocParams]):
-    """<!--zh: 根据 operationId 删除单个 OAuth2 app 下的一个或多个业务接口文档。-->
-    Delete one or more recorded business API documents under a single OAuth2 app."""
+    """Delete recorded API documents under one OAuth2 app by operationId."""
 
     name = "oauth2_remove_api_doc"
 

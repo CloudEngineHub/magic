@@ -777,7 +777,10 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 		const icon = getMentionIcon(attrs)
 		const uniqueId = getMentionUniqueId(attrs)
 
-		if (attrs.type === MentionItemType.FOLDER) {
+		if (
+			attrs.type === MentionItemType.FOLDER ||
+			attrs.type === MentionItemType.MEMORY_DIRECTORY
+		) {
 			displayName = `${displayName}/`
 		}
 

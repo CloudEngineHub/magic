@@ -35,6 +35,7 @@ return [
     'temperature_value_range_error' => 'temperature value must be between 0-2',
     'ai_ability_not_found' => 'AI ability not found',
     'ai_ability_disabled' => 'AI ability is not enabled',
+    'ai_ability_model_unavailable' => 'AI ability model is unavailable',
     'config_disabled' => 'Service provider configuration is disabled',
     'config_not_found' => 'Service provider configuration not found',
     'config_load_failed' => 'Configuration loading failed',

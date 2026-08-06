@@ -12,7 +12,15 @@ import magicToast from "@/components/base/MagicToaster/utils"
 
 const SAVE_INTERVAL = 2 * 60 * 1000
 
-function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string }) {
+function useEditMode({
+	fileId,
+	fileName,
+	editingPresenceEnabled = true,
+}: {
+	fileId?: string
+	fileName?: string
+	editingPresenceEnabled?: boolean
+}) {
 	const [isEditMode, _setIsEditMode] = useState(false)
 	const { t } = useTranslation("super")
 
@@ -57,13 +65,13 @@ function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string 
 		return () => {
 			stopSaveInterval()
 			// Best-effort leave when hook unmounts while still in edit mode
-			if (isEditModeRef.current && fileId) {
+			if (editingPresenceEnabled && isEditModeRef.current && fileId) {
 				SuperMagicApi.leaveFileEdit(fileId).catch((err) =>
 					console.debug("leaveFileEdit on unmount failed", err),
 				)
 			}
 		}
-	}, [fileId, stopSaveInterval])
+	}, [editingPresenceEnabled, fileId, stopSaveInterval])
 
 	// Best-effort cleanup on page close
 	useEffect(() => {
@@ -81,10 +89,12 @@ function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string 
 
 			// Best-effort cleanup: try to leave edit mode
 			// This is asynchronous and may not complete before page unload
-			try {
-				SuperMagicApi.leaveFileEdit(fileId)
-			} catch (err) {
-				// Silently fail - page is closing anyway
+			if (editingPresenceEnabled) {
+				try {
+					SuperMagicApi.leaveFileEdit(fileId)
+				} catch (err) {
+					// Silently fail - page is closing anyway
+				}
 			}
 
 			return message // For older browsers (ignored by modern browsers)
@@ -97,10 +107,16 @@ function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string 
 				window.removeEventListener("beforeunload", beforeUnloadRef.current)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [isEditMode, fileId])
+	}, [editingPresenceEnabled, isEditMode, fileId])
 
 	const joinEdit = useMemoizedFn(async (fileId: string) => {
 		if (!fileId) {
+			return
+		}
+		if (!editingPresenceEnabled) {
+			leaveStateRef.current.hasLeft = false
+			isEditModeRef.current = true
+			_setIsEditMode(true)
 			return
 		}
 		try {
@@ -119,6 +135,13 @@ function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string 
 
 	const leaveEdit = useMemoizedFn(async (fileId: string) => {
 		if (!fileId) {
+			return
+		}
+		if (!editingPresenceEnabled) {
+			stopSaveInterval()
+			leaveStateRef.current.hasLeft = true
+			isEditModeRef.current = false
+			_setIsEditMode(false)
 			return
 		}
 		// 这里需要“幂等”：
@@ -160,6 +183,9 @@ function useEditMode({ fileId, fileName }: { fileId?: string; fileName?: string 
 
 		if (value) {
 			const currentFileId = fileId
+			if (!editingPresenceEnabled) {
+				return joinEdit(currentFileId)
+			}
 			SuperMagicApi.getFileEditCount(currentFileId).then((res) => {
 				if (res.editing_user_count > 0) {
 					const modal = MagicModal.confirm({

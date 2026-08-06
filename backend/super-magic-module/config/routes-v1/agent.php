@@ -45,6 +45,8 @@ Router::addGroup('/api/v2/super-magic', static function () {
         Router::get('/featured/sort-list', [SuperMagicAgentApi::class, 'sortListQueries']);
         // 将智能体标记为高频使用。
         Router::put('/featured/frequent', [SuperMagicAgentApi::class, 'addToFrequent']);
+        // 检查当前用户是否拥有指定员工的使用权限。
+        Router::post('/access-check', [SuperMagicAgentApi::class, 'checkAccess']);
         // 按高级条件查询智能体列表。
         //        Router::post('/queries', [SuperMagicAgentApi::class, 'queries']);
         Router::post('/queries', [SuperMagicAgentApi::class, 'queryList']);

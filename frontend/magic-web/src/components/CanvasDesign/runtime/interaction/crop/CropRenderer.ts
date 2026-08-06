@@ -18,14 +18,17 @@ import {
 	localBoxToAbsoluteBox,
 	updateFrameGridLines,
 } from "../frame/FrameEditorShared"
+import { syncNodeTransformRelativeTo } from "../../shared/geometry/nodeTransform"
+import { getRectDifferenceSegments } from "./cropMaskGeometry"
 
 const CROP_OVERLAY_GROUP_NAME = "crop-overlay"
 const CROP_BOX_NAME = "crop-box"
 const CROP_AREA_NAME = "crop-area"
 const CROP_AREA_HIT_PROXY_NAME = "crop-area-hit-proxy"
+const CROP_MASK_OVERLAY_NAME = "crop-mask-overlay"
+const CROP_MASK_SEGMENT_NAME = "crop-mask-segment"
 const CROP_OVERFLOW_OVERLAY_NAME = "crop-overflow-overlay"
-const CROP_OVERFLOW_GRAY_NAME = "crop-overflow-gray"
-const CROP_OVERFLOW_CUT_NAME = "crop-overflow-cut"
+const CROP_OVERFLOW_SEGMENT_NAME = "crop-overflow-segment"
 const CROP_GRID_LINE_NAME = "crop-grid-line"
 const CROP_OVERLAY_GROUP_NAMES = [CROP_OVERLAY_GROUP_NAME]
 
@@ -33,10 +36,6 @@ const CROP_OVERLAY_GROUP_NAMES = [CROP_OVERLAY_GROUP_NAME]
 const DRAW_CONFIG = {
 	// 遮罩配置
 	MASK_FILL: "rgba(0, 0, 0, 0.6)",
-
-	// 裁剪区域配置
-	CROP_AREA_FILL: "rgba(0, 0, 0, 1)",
-	CROP_AREA_COMPOSITE_OPERATION: "destination-out" as GlobalCompositeOperation,
 
 	// 裁剪框溢出配置（图片外的部分显示灰色透明）
 	CROP_OVERFLOW_FILL: "rgba(128, 128, 128, 0.5)",
@@ -133,64 +132,44 @@ export class CropRenderer {
 	/**
 	 * 渲染裁剪框 overlay
 	 */
-	public render(): void {
+	public render(): boolean {
 		const tempCrop = this.canvas.cropManager.getTempCrop()
-		if (!tempCrop) return
+		if (!tempCrop) return false
 
 		const elementData = this.canvas.elementManager.getElementData(this.elementId)
-		if (!elementData || elementData.type !== ElementTypeEnum.Image) return
+		if (!elementData || elementData.type !== ElementTypeEnum.Image) return false
 
 		const imageElement = elementData as ImageElement
 		const elementInstance = this.canvas.elementManager.getElementInstance(this.elementId)
 		const elementNode = elementInstance?.getNode()
-		if (!elementNode) return
+		if (!elementNode) return false
 
 		// 使用节点的 width/height 作为裁剪边界（与 overlay 坐标系统一致，已考虑 scaleX/scaleY）
 		// crop 坐标空间是元素的逻辑尺寸，即 node.width() x node.height()，不受 scale 影响
 		const elementWidth = elementNode.width() ?? imageElement.width ?? 0
 		const elementHeight = elementNode.height() ?? imageElement.height ?? 0
-		if (elementWidth <= 0 || elementHeight <= 0) return
+		if (elementWidth <= 0 || elementHeight <= 0) return false
 
 		// 保存元素边界用于吸附计算
 		this.elementBounds = { width: elementWidth, height: elementHeight }
 
-		// 直接使用元素的变换属性（x, y, scaleX, scaleY, rotation）
-		// 因为 overlayGroup 和元素都在同一个 stage 的不同 layer 上，坐标系统一致
-		const elementX = elementNode.x()
-		const elementY = elementNode.y()
-		const elementScaleX = elementNode.scaleX()
-		const elementScaleY = elementNode.scaleY()
-		const elementRotation = elementNode.rotation()
-
 		this.overlayGroup = new Konva.Group({
-			x: elementX,
-			y: elementY,
-			scaleX: elementScaleX,
-			scaleY: elementScaleY,
-			rotation: elementRotation,
-			offset: { x: 0, y: 0 },
 			name: CROP_OVERLAY_GROUP_NAME,
 			listening: true,
 		})
+		syncNodeTransformRelativeTo(elementNode, this.overlayGroup, this.canvas.controlsLayer)
 
-		// 1. 半透明遮罩(裁剪框外区域) - listening: true 拦截点击，防止穿透到底层图片触发选中
-		const mask = new Konva.Rect({
-			x: 0,
-			y: 0,
-			width: elementWidth,
-			height: elementHeight,
-			fill: DRAW_CONFIG.MASK_FILL,
-			listening: true,
-		})
+		// 1. 使用四块普通矩形绘制裁剪框外遮罩。
+		// 不能使用 destination-out：代理图片与裁剪控件同处 controlsLayer，合成会擦除同层代理。
+		const maskOverlay = this.createMaskOverlay(tempCrop, elementWidth, elementHeight)
 
-		// 2. 裁剪框内的透明区域(挖空效果) - listening: true 拦截点击，防止穿透到底层图片
+		// 2. 裁剪框内透明交互区域，不参与场景合成。
 		const cropArea = new Konva.Rect({
 			x: tempCrop.x,
 			y: tempCrop.y,
 			width: tempCrop.width,
 			height: tempCrop.height,
-			fill: DRAW_CONFIG.CROP_AREA_FILL,
-			globalCompositeOperation: DRAW_CONFIG.CROP_AREA_COMPOSITE_OPERATION,
+			fill: "transparent",
 			listening: true,
 			draggable: true,
 			name: CROP_AREA_NAME,
@@ -245,6 +224,7 @@ export class CropRenderer {
 			cropAreaHitProxy.size(cropBox.size())
 			cropAreaHitProxy.position(cropBox.position())
 			this.updateGridLines(cropBox)
+			this.updateMaskOverlay(cropBox)
 			this.updateOverflowOverlay(cropBox)
 			this.canvas.cropManager.updateTempCrop({
 				x: cropBox.x(),
@@ -266,6 +246,7 @@ export class CropRenderer {
 			cropArea.position(snappedPosition)
 			cropAreaHitProxy.position(snappedPosition)
 			this.updateGridLines(cropBox)
+			this.updateMaskOverlay(cropBox)
 			this.updateOverflowOverlay(cropBox)
 			this.canvas.cropManager.updateTempCrop({
 				x: snappedPosition.x,
@@ -279,14 +260,14 @@ export class CropRenderer {
 		cropArea.on("dragmove", () => handleDragMove(cropArea))
 		cropAreaHitProxy.on("dragmove", () => handleDragMove(cropAreaHitProxy))
 
-		// 4. 裁剪框溢出层（图片外部分灰色半透明，destination-out 方案）
+		// 4. 裁剪框溢出层（图片外部分灰色半透明）
 		const overflowOverlay = this.createOverflowOverlay(tempCrop, elementWidth, elementHeight)
 
 		// 5. 九宫格线条（灰色）
 		const gridLines = this.createGridLines(cropBox)
 
 		this.overlayGroup.add(
-			mask,
+			maskOverlay,
 			cropArea,
 			overflowOverlay,
 			cropBox,
@@ -371,49 +352,113 @@ export class CropRenderer {
 		this.canvas.controlsLayer.add(this.cropTransformer)
 		this.cropTransformer.moveToTop()
 		this.canvas.controlsLayer.batchDraw()
+		return true
 	}
 
-	/**
-	 * 创建裁剪框溢出层（图片外部分灰色半透明）
-	 * destination-out 方案：灰层覆盖 crop，再用 (crop∩image) 挖空，保留 (crop-image) 的灰
-	 */
+	private createSegmentOverlay(options: {
+		name: string
+		segmentName: string
+		fill: string
+		listening: boolean
+	}): Konva.Group {
+		const group = new Konva.Group({
+			name: options.name,
+			listening: options.listening,
+		})
+		for (let index = 0; index < 4; index += 1) {
+			group.add(
+				new Konva.Rect({
+					fill: options.fill,
+					listening: options.listening,
+					visible: false,
+					name: options.segmentName,
+				}),
+			)
+		}
+		return group
+	}
+
+	private updateSegmentOverlay(
+		group: Konva.Group,
+		segments: ReturnType<typeof getRectDifferenceSegments>,
+	): void {
+		group.getChildren().forEach((node, index) => {
+			if (!(node instanceof Konva.Rect)) return
+			const segment = segments[index]
+			if (!segment) {
+				node.visible(false)
+				return
+			}
+			node.setAttrs({ ...segment, visible: true })
+		})
+	}
+
+	private createMaskOverlay(
+		crop: CropConfig,
+		elementWidth: number,
+		elementHeight: number,
+	): Konva.Group {
+		const group = this.createSegmentOverlay({
+			name: CROP_MASK_OVERLAY_NAME,
+			segmentName: CROP_MASK_SEGMENT_NAME,
+			fill: DRAW_CONFIG.MASK_FILL,
+			listening: true,
+		})
+		this.updateSegmentOverlay(
+			group,
+			getRectDifferenceSegments(
+				{ x: 0, y: 0, width: elementWidth, height: elementHeight },
+				crop,
+			),
+		)
+		return group
+	}
+
+	private updateMaskOverlay(cropBox: Konva.Rect): void {
+		if (!this.overlayGroup || !this.elementBounds) return
+		const group = this.overlayGroup.findOne(`.${CROP_MASK_OVERLAY_NAME}`)
+		if (!(group instanceof Konva.Group)) return
+
+		this.updateSegmentOverlay(
+			group,
+			getRectDifferenceSegments(
+				{
+					x: 0,
+					y: 0,
+					width: this.elementBounds.width,
+					height: this.elementBounds.height,
+				},
+				{
+					x: cropBox.x(),
+					y: cropBox.y(),
+					width: cropBox.width(),
+					height: cropBox.height(),
+				},
+			),
+		)
+	}
+
+	/** 创建裁剪框超出图片部分的灰色遮罩。 */
 	private createOverflowOverlay(
 		crop: CropConfig,
 		elementWidth: number,
 		elementHeight: number,
 	): Konva.Group {
-		const group = new Konva.Group({ name: CROP_OVERFLOW_OVERLAY_NAME, listening: false })
-
-		// 灰层：覆盖整个 crop
-		const grayRect = new Konva.Rect({
-			x: crop.x,
-			y: crop.y,
-			width: crop.width,
-			height: crop.height,
+		const group = this.createSegmentOverlay({
+			name: CROP_OVERFLOW_OVERLAY_NAME,
+			segmentName: CROP_OVERFLOW_SEGMENT_NAME,
 			fill: DRAW_CONFIG.CROP_OVERFLOW_FILL,
 			listening: false,
-			name: CROP_OVERFLOW_GRAY_NAME,
 		})
-		group.add(grayRect)
-
-		// 挖空层：(crop ∩ image) 使用 destination-out 从灰层中挖掉
-		const left = Math.max(crop.x, 0)
-		const top = Math.max(crop.y, 0)
-		const right = Math.min(crop.x + crop.width, elementWidth)
-		const bottom = Math.min(crop.y + crop.height, elementHeight)
-		if (left < right && top < bottom) {
-			const cutRect = new Konva.Rect({
-				x: left,
-				y: top,
-				width: right - left,
-				height: bottom - top,
-				fill: "rgba(0, 0, 0, 1)",
-				globalCompositeOperation: "destination-out",
-				listening: false,
-				name: CROP_OVERFLOW_CUT_NAME,
-			})
-			group.add(cutRect)
-		}
+		this.updateSegmentOverlay(
+			group,
+			getRectDifferenceSegments(crop, {
+				x: 0,
+				y: 0,
+				width: elementWidth,
+				height: elementHeight,
+			}),
+		)
 
 		return group
 	}
@@ -425,52 +470,21 @@ export class CropRenderer {
 		if (!this.overlayGroup || !this.elementBounds) return
 
 		const group = this.overlayGroup.findOne(`.${CROP_OVERFLOW_OVERLAY_NAME}`) as
-			| Konva.Group
-			| undefined
+			Konva.Group | undefined
 		if (!group) return
 
-		const x = cropBox.x()
-		const y = cropBox.y()
-		const width = cropBox.width()
-		const height = cropBox.height()
-		const { width: elemW, height: elemH } = this.elementBounds
-
-		const grayRect = group.findOne(`.${CROP_OVERFLOW_GRAY_NAME}`) as Konva.Rect
-		if (grayRect) {
-			grayRect.setAttrs({ x, y, width, height })
-		}
-
-		const left = Math.max(x, 0)
-		const top = Math.max(y, 0)
-		const right = Math.min(x + width, elemW)
-		const bottom = Math.min(y + height, elemH)
-
-		let cutRect = group.findOne(`.${CROP_OVERFLOW_CUT_NAME}`) as Konva.Rect | undefined
-		if (left < right && top < bottom) {
-			if (!cutRect) {
-				cutRect = new Konva.Rect({
-					x: left,
-					y: top,
-					width: right - left,
-					height: bottom - top,
-					fill: "rgba(0, 0, 0, 1)",
-					globalCompositeOperation: "destination-out",
-					listening: false,
-					name: CROP_OVERFLOW_CUT_NAME,
-				})
-				group.add(cutRect)
-			} else {
-				cutRect.setAttrs({
-					x: left,
-					y: top,
-					width: right - left,
-					height: bottom - top,
-				})
-			}
-		} else if (cutRect) {
-			cutRect.remove()
-			cutRect.destroy()
-		}
+		this.updateSegmentOverlay(
+			group,
+			getRectDifferenceSegments(
+				{
+					x: cropBox.x(),
+					y: cropBox.y(),
+					width: cropBox.width(),
+					height: cropBox.height(),
+				},
+				{ x: 0, y: 0, width: this.elementBounds.width, height: this.elementBounds.height },
+			),
+		)
 	}
 
 	/**
@@ -519,8 +533,7 @@ export class CropRenderer {
 		const cropBox = this.overlayGroup.findOne(`.${CROP_BOX_NAME}`) as Konva.Rect
 		const cropArea = this.overlayGroup.findOne(`.${CROP_AREA_NAME}`) as Konva.Rect
 		const cropAreaHitProxy = this.overlayGroup.findOne(`.${CROP_AREA_HIT_PROXY_NAME}`) as
-			| Konva.Rect
-			| undefined
+			Konva.Rect | undefined
 
 		if (cropBox && cropArea) {
 			cropBox.position({ x: data.tempCrop.x, y: data.tempCrop.y })
@@ -532,6 +545,7 @@ export class CropRenderer {
 				cropAreaHitProxy.size({ width: data.tempCrop.width, height: data.tempCrop.height })
 			}
 			this.updateGridLines(cropBox)
+			this.updateMaskOverlay(cropBox)
 			this.updateOverflowOverlay(cropBox)
 		}
 

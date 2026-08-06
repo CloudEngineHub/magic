@@ -25,14 +25,26 @@ export function getRawMessageNode(message?: RawSuperMagicIMMessage): RawSuperMag
 export function transformRawMessage(message: RawSuperMagicMessageSequence): MessageItem {
 	const imMessage = message?.message || {}
 	const msg = getRawMessageNode(imMessage)
+	const appMessageId = String(imMessage?.app_message_id || "")
+	const superMessageId =
+		msg?.role === "user" ? appMessageId : String(msg?.super_message_id || appMessageId)
+	const imStatus = String(imMessage?.status || "")
+	const superStatus = msg?.role === "user" ? undefined : String(msg?.status || "") || undefined
+	if (appMessageId) msg.app_message_id = appMessageId
+	if (superMessageId) msg.super_message_id = superMessageId
 	return {
 		...omit(imMessage, [imMessage?.type]),
 		debug: msg,
 		topic_id: imMessage?.topic_id as string,
 		type: imMessage?.type as string,
-		app_message_id: imMessage?.app_message_id as string,
+		app_message_id: appMessageId,
+		super_message_id: superMessageId,
 		send_time: imMessage?.send_time as number,
-		status: imMessage?.status as string,
+		// Keep `status` as a compatibility alias for the IM envelope only. The node
+		// execution state is carried independently as `superStatus`.
+		status: imStatus,
+		imStatus,
+		superStatus,
 		event: msg?.event as string,
 		parent_correlation_id: msg?.parent_correlation_id || "",
 		correlation_id: (msg?.correlation_id || msg?.tool?.id) as string,
@@ -111,7 +123,8 @@ export function shouldNotifyMessageUpdate({
 
 	return (
 		previousMessage.seq_id !== nextMessage.seq_id ||
-		previousMessage.status !== nextMessage.status ||
+		previousMessage.imStatus !== nextMessage.imStatus ||
+		previousMessage.superStatus !== nextMessage.superStatus ||
 		previousMessage.event !== nextMessage.event ||
 		previousMessage.role !== nextMessage.role ||
 		previousNode?.status !== nextNode?.status ||
@@ -210,15 +223,29 @@ export function calculateBatchSize(remaining: number, isFinalReceived: boolean):
 
 // ─── 流式状态工厂 ────────────────────────────────────────────
 
-export function createStreamState(): StreamState {
+export function createStreamState({
+	superMessageId,
+	correlationId,
+	taskId,
+}: {
+	superMessageId: string
+	correlationId: string
+	taskId: string
+}): StreamState {
 	return {
+		super_message_id: superMessageId,
+		correlation_id: correlationId,
+		task_id: taskId,
 		stage: "reasoning_content",
 		reasoning_content: "",
 		content: "",
 		currentToolIndex: 0,
 		tool_calls: [],
 		isFinalMessageReceived: false,
+		renderPace: "live",
+		settlingStartedAt: null,
 		finalCatchupDeadlineAt: null,
+		catchupMinimumFramesRemaining: 0,
 		recoveryAttempts: 0,
 	}
 }
@@ -226,6 +253,7 @@ export function createStreamState(): StreamState {
 export function getDefaultTopicMeta(): TopicMeta {
 	return {
 		timer: null,
+		activeRenderSuperMessageId: null,
 		recoveryTimer: null,
 		recoveryCorrelationId: null,
 		isStream: false,

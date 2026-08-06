@@ -53,6 +53,7 @@ export interface SuperMagicAddContentToChatPayload {
 	content?: JSONContent
 	extraData?: {
 		hasInput?: boolean
+		focusAtEnd?: boolean
 	}
 }
 

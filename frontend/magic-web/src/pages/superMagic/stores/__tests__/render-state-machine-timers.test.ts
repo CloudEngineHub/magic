@@ -19,7 +19,11 @@ const TOPIC_A = "topic-timer-a"
 const TOPIC_B = "topic-timer-b"
 const CORRELATION_A = "correlation-timer-a"
 const CORRELATION_B = "correlation-timer-b"
+const SUPER_MESSAGE_A = "super-message-timer-a"
+const SUPER_MESSAGE_B = "super-message-timer-b"
 const RENDER_SETTLE_MS = 2_000
+const FINAL_SETTLING_OBSERVATION_MS = 1_600
+const FINAL_SETTLING_SAFETY_MS = 3_600
 const RECOVERY_TIMEOUT_MS = 5_100
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -64,6 +68,7 @@ function createChoice({
 	toolCalls = [],
 }: Omit<ChunkOptions, "topicId" | "correlationId" | "i" | "choices"> = {}): ChunkChoice {
 	return {
+		...({ index: 0 } as const),
 		finish_reason: finishReason,
 		delta: {
 			content,
@@ -94,6 +99,8 @@ function createChunk({
 		chat_topic_id: topicId,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id: correlationId === CORRELATION_A ? SUPER_MESSAGE_A : SUPER_MESSAGE_B,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
@@ -136,6 +143,7 @@ function createFinalEnvelope({
 	correlationId = CORRELATION_A,
 	appMessageId = `final-${correlationId}`,
 	seqId = "100",
+	role = "assistant",
 	content = "",
 	reasoningContent = "",
 	toolCalls = [],
@@ -144,6 +152,7 @@ function createFinalEnvelope({
 	correlationId?: string
 	appMessageId?: string
 	seqId?: string
+	role?: "assistant" | "user"
 	content?: string
 	reasoningContent?: string
 	toolCalls?: ProjectedToolCall[]
@@ -161,16 +170,22 @@ function createFinalEnvelope({
 			message: {
 				magic_message_id: `magic-${appMessageId}`,
 				app_message_id: appMessageId,
-				sender_id: "assistant-timers",
+				sender_id: role === "user" ? "user-timers" : "assistant-timers",
 				send_time: Number(seqId),
 				status: ConversationMessageStatus.Read,
 				unread_count: 0,
 				topic_id: topicId,
 				type: ConversationMessageType.SuperMagicMessage,
 				super_magic_message: {
-					role: "assistant",
+					role,
 					topic_id: topicId,
 					message_id: `node-${appMessageId}`,
+					super_message_id:
+						role === "user"
+							? appMessageId
+							: correlationId === CORRELATION_A
+								? SUPER_MESSAGE_A
+								: SUPER_MESSAGE_B,
 					correlation_id: correlationId,
 					content,
 					reasoning_content: reasoningContent,
@@ -193,9 +208,9 @@ function createStore(activeTopicId = TOPIC_A): SuperMagicStore {
 
 function getProjectedNode(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_A,
+	superMessageId = SUPER_MESSAGE_A,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(correlationId)
+	const node = store.getRenderedMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -225,7 +240,8 @@ function expectSettled(
 	},
 ): void {
 	advanceRendering()
-	expect(getProjectedNode(store, correlationId)).toMatchObject(expected)
+	const superMessageId = correlationId === CORRELATION_B ? SUPER_MESSAGE_B : SUPER_MESSAGE_A
+	expect(getProjectedNode(store, superMessageId)).toMatchObject(expected)
 	expect(store.getStreamState(topicId, correlationId)).toBeUndefined()
 }
 
@@ -237,6 +253,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 	afterEach(() => {
 		// Self-scheduling render loops are deliberately never drained without a bound.
 		vi.clearAllTimers()
+		vi.restoreAllMocks()
 		vi.useRealTimers()
 	})
 
@@ -499,7 +516,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 		// A queued callback may finish canonical bookkeeping, but it must not render into topic B.
 		expect(store.isTopicStreaming(TOPIC_B)).toBe(false)
-		expect(getProjectedNode(store, CORRELATION_B)).toBeUndefined()
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)).toBeUndefined()
 
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
@@ -664,8 +681,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("A")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("A")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 	})
@@ -679,7 +696,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B done")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B done")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
 	})
@@ -709,8 +726,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("final-b")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("final-b")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeUndefined()
 	})
@@ -726,7 +743,7 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("B pending")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("B pending")
 
 		store.receiveChunk(
 			createChunk({
@@ -761,8 +778,8 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("final-b")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("final-b")
 	})
 
 	it("complete 后立即被晚到 chunk 重新创建。", () => {
@@ -824,6 +841,236 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 	})
 
+	it("Final 单独到达时立即结束 StreamState，并由 render-only 状态温和补齐正文。", () => {
+		const store = createStore()
+		const finalContent = `draft${"F".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		const projectedLength = getProjectedNode(store)?.content?.length || 0
+		expect(projectedLength).toBeGreaterThan("draft".length)
+		expect(projectedLength).toBeLessThan(finalContent.length)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+	})
+
+	it("不同 super_message_id 的后继 Chunk 不会把已 Final 的 render-only 状态重建为 StreamState。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+
+		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "next-stream" }))
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toMatchObject({
+			renderPace: "live",
+		})
+
+		advanceRendering(100)
+		store.receiveChunk(
+			createChunk({ correlationId: CORRELATION_B, i: 1, content: " continues" }),
+		)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
+
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next-stream continues")
+	})
+
+	it("不同 super_message_id 的后继 Final 不会恢复前一条消息的 StreamState。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				correlationId: CORRELATION_B,
+				appMessageId: "final-b",
+				seqId: "101",
+				content: "next final",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
+		expect(getProjectedNode(store)?.content).toBe(finalContent)
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("next final")
+	})
+
+	it("Final 后只有 User 消息时 render-only 补齐不影响消息级流状态。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				appMessageId: "user-next",
+				correlationId: "user-next-correlation",
+				seqId: "101",
+				role: "user",
+				content: "next question",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+		expect(getProjectedNode(store)?.content).not.toBe(finalContent)
+	})
+
+	it("相同 super_message_id 的迟到 Chunk 被 Final barrier 拒绝。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.receiveChunk(createChunk({ i: 1, content: " late" }))
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("其他 Topic 的 Chunk 不得恢复当前 Topic 已 Final 的 StreamState。", () => {
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		store.receiveChunk(
+			createChunk({
+				topicId: TOPIC_B,
+				correlationId: CORRELATION_B,
+				content: "other-topic",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_B, CORRELATION_B)).toBeDefined()
+	})
+
+	it("后继压力晚到时从压力发生时重新计算预算，不能因旧 deadline 过期而单帧写完。", () => {
+		let monotonicNow = 0
+		vi.spyOn(performance, "now").mockImplementation(() => monotonicNow)
+		const store = createStore()
+		const finalContent = `draft-a${"A".repeat(100_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft-a" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		const beforePressureLength = getProjectedNode(store)?.content?.length || 0
+
+		monotonicNow = 2_000
+		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "next-stream" }))
+		advanceRendering(16)
+
+		const afterFirstCatchupFrameLength = getProjectedNode(store)?.content?.length || 0
+		expect(afterFirstCatchupFrameLength).toBeGreaterThan(beforePressureLength)
+		expect(afterFirstCatchupFrameLength).toBeLessThan(finalContent.length)
+	})
+
+	it("Final 的 render-only 状态让 reasoning 与 content 共享同一帧预算。", () => {
+		const store = createStore()
+		const contentOnlyStore = createStore()
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		contentOnlyStore.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				reasoningContent: "R".repeat(100),
+				content: `draft${"C".repeat(10_000)}`,
+			}),
+		)
+		contentOnlyStore.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({ content: `draft${"C".repeat(10_000)}` }),
+		)
+		const beforeFrame = getProjectedNode(store)
+		const beforeReasoningLength = beforeFrame?.reasoning_content?.length || 0
+		const beforeContentLength = beforeFrame?.content?.length || 0
+		const beforeContentOnlyLength = getProjectedNode(contentOnlyStore)?.content?.length || 0
+		advanceRendering(16)
+
+		const afterFrame = getProjectedNode(store)
+		const reasoningDelta = (afterFrame?.reasoning_content?.length || 0) - beforeReasoningLength
+		const contentDelta = (afterFrame?.content?.length || 0) - beforeContentLength
+		const contentOnlyDelta =
+			(getProjectedNode(contentOnlyStore)?.content?.length || 0) - beforeContentOnlyLength
+		expect(reasoningDelta).toBe(100)
+		expect(contentDelta).toBeGreaterThan(0)
+		expect(contentOnlyDelta).toBeGreaterThan(0)
+		expect(reasoningDelta + contentDelta).toBe(contentOnlyDelta)
+		advanceRendering(16)
+		expect(getProjectedNode(store)?.content?.length || 0).toBeGreaterThan(beforeContentLength)
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+	})
+
+	it("提高字符批量时仍保持 16ms 的渲染 timer 间隔。", () => {
+		const store = createStore()
+		const finalContent = `draft${"A".repeat(10_000)}`
+
+		store.receiveChunk(createChunk({ content: "draft" }))
+		advanceRendering(32)
+		store.enqueueMessage(TOPIC_A, createFinalEnvelope({ content: finalContent }))
+		const firstFrameLength = getProjectedNode(store)?.content?.length || 0
+
+		advanceRendering(15)
+		expect(getProjectedNode(store)?.content?.length).toBe(firstFrameLength)
+		advanceRendering(1)
+		expect(getProjectedNode(store)?.content?.length).toBeGreaterThan(firstFrameLength)
+	})
+
+	it("Final 控制面结算不等待 timer，buffer 立即排空且视觉补齐独立推进。", () => {
+		const store = createStore()
+
+		for (let index = 0; index < 5; index += 1) {
+			store.receiveChunk(createChunk({ i: index, content: String(index + 1) }))
+		}
+		advanceRendering(32)
+		expect(getProjectedNode(store)?.content).toBe("12345")
+
+		store.enqueueMessage(
+			TOPIC_A,
+			createFinalEnvelope({
+				appMessageId: "higher-final",
+				correlationId: CORRELATION_A,
+				seqId: "100",
+				content: "123456789",
+			}),
+		)
+
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
+		expect(store.getMessageNode(SUPER_MESSAGE_A)).toMatchObject({ content: "123456789" })
+		advanceRendering(200)
+
+		expect(getProjectedNode(store)?.content).toBe("123456789")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(store.buffer.get(TOPIC_A)?.messages).toHaveLength(0)
+	})
+
 	it("`renderPolicy` 在 live、catchup、instant 间错误切换。", () => {
 		const store = createStore()
 
@@ -835,14 +1082,14 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("final-a")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("final-a")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 
 		store.setActiveTopicId(TOPIC_A)
 		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "new-live" }))
 		advanceRendering(200)
 
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("new-live")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("new-live")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
 	})
 
@@ -862,19 +1109,22 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		store.setActiveTopicId(TOPIC_A)
 		advanceRendering()
 
-		expect(getProjectedNode(store, CORRELATION_A)?.content).toBe("AB")
+		expect(getProjectedNode(store, SUPER_MESSAGE_A)?.content).toBe("AB")
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
 
 		store.receiveChunk(createChunk({ correlationId: CORRELATION_B, content: "live-again" }))
 		advanceRendering(200)
 		expect(store.getStreamState(TOPIC_A, CORRELATION_B)).toBeDefined()
-		expect(getProjectedNode(store, CORRELATION_B)?.content).toBe("live-again")
+		expect(getProjectedNode(store, SUPER_MESSAGE_B)?.content).toBe("live-again")
 	})
 
 	it("完整成功的空 authoritative snapshot 终结旧流并拒绝在途晚包。", () => {
 		const store = createStore()
 
 		store.receiveChunk(createChunk({ content: "A" }))
+		expect(getProjectedNode(store)).toBeDefined()
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeDefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
 		const generation = store.beginTopicSync(TOPIC_A)
 		store.initializeMessages(TOPIC_A, [])
 		expect(
@@ -886,13 +1136,23 @@ describe("SuperMagicStore / 渲染状态机与 Timer", () => {
 		).toBe(true)
 		expect(getProjectedNode(store)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) ?? []).filter(
+				(message) => message.super_message_id === SUPER_MESSAGE_A,
+			),
+		).toHaveLength(0)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 
 		store.receiveChunk(createChunk({ i: 1, content: "B", finishReason: "stop" }))
 		advanceRendering()
 
 		expect(getProjectedNode(store)).toBeUndefined()
 		expect(store.getStreamState(TOPIC_A, CORRELATION_A)).toBeUndefined()
+		expect(
+			(store.messages.get(TOPIC_A) ?? []).filter(
+				(message) => message.super_message_id === SUPER_MESSAGE_A,
+			),
+		).toHaveLength(0)
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
-		expect(vi.getTimerCount()).toBe(0)
 	})
 })

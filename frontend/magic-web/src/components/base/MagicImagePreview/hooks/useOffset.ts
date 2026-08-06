@@ -1,66 +1,114 @@
 import { useEffect, useRef, useState } from "react"
-import { useMemoizedFn, useThrottle } from "ahooks"
+import { useMemoizedFn } from "ahooks"
+
+export type Offset = { x: number; y: number }
+
+export function calculateZoomAnchoredOffset(
+	currentOffset: Offset,
+	anchor: { x: number; y: number },
+	scaleRatio: number,
+): Offset {
+	return {
+		x: currentOffset.x + (anchor.x - currentOffset.x) * (1 - scaleRatio),
+		y: currentOffset.y + (anchor.y - currentOffset.y) * (1 - scaleRatio),
+	}
+}
 
 const useOffset = (imageRef: React.RefObject<HTMLElement>) => {
-	const [offset, setOffset] = useState({ x: 0, y: 0 })
+	const [offset, setOffsetState] = useState<Offset>({ x: 0, y: 0 })
+	const offsetRef = useRef<Offset>(offset)
 	const isDragging = useRef(false)
 	const startPos = useRef({ x: 0, y: 0 })
-	const lastOffset = useRef({ x: 0, y: 0 })
+	const lastOffset = useRef<Offset>(offset)
+	const pendingOffset = useRef<Offset | null>(null)
+	const rafId = useRef<number | null>(null)
 
-	const handlePointerDown = useMemoizedFn((e: PointerEvent) => {
+	const flushPendingOffset = useMemoizedFn(() => {
+		rafId.current = null
+		if (!pendingOffset.current) return
+
+		const nextOffset = pendingOffset.current
+		pendingOffset.current = null
+		offsetRef.current = nextOffset
+		setOffsetState(nextOffset)
+	})
+
+	const scheduleOffset = useMemoizedFn((nextOffset: Offset) => {
+		pendingOffset.current = nextOffset
+		if (rafId.current === null) rafId.current = requestAnimationFrame(flushPendingOffset)
+	})
+
+	const setOffset = useMemoizedFn((nextOffset: Offset) => {
+		if (rafId.current !== null) {
+			cancelAnimationFrame(rafId.current)
+			rafId.current = null
+		}
+		pendingOffset.current = null
+		offsetRef.current = nextOffset
+		lastOffset.current = nextOffset
+		setOffsetState(nextOffset)
+	})
+	const getOffset = useMemoizedFn(() => offsetRef.current)
+
+	const handlePointerDown = useMemoizedFn((event: PointerEvent) => {
 		// 右键点击，不进行拖拽
-		if (e.button === 2) return
+		if (event.button === 2) return
 
-		e.preventDefault()
-
+		event.preventDefault()
 		isDragging.current = true
-		startPos.current = { x: e.clientX, y: e.clientY }
-		lastOffset.current = offset
+		startPos.current = { x: event.clientX, y: event.clientY }
+		lastOffset.current = offsetRef.current
 
 		if (imageRef.current) {
 			imageRef.current.style.cursor = "grabbing"
-			imageRef.current.setPointerCapture(e.pointerId)
+			imageRef.current.setPointerCapture(event.pointerId)
 		}
 	})
 
-	const handlePointerMove = useMemoizedFn((e: PointerEvent) => {
+	const handlePointerMove = useMemoizedFn((event: PointerEvent) => {
 		if (!isDragging.current) return
 
-		const deltaX = e.clientX - startPos.current.x
-		const deltaY = e.clientY - startPos.current.y
-
-		setOffset({
+		const deltaX = event.clientX - startPos.current.x
+		const deltaY = event.clientY - startPos.current.y
+		scheduleOffset({
 			x: lastOffset.current.x + deltaX,
 			y: lastOffset.current.y + deltaY,
 		})
 	})
 
-	const handlePointerUp = useMemoizedFn((e: PointerEvent) => {
+	const handlePointerUp = useMemoizedFn((event: PointerEvent) => {
 		isDragging.current = false
 		if (imageRef.current) {
 			imageRef.current.style.cursor = "grab"
-			imageRef.current.releasePointerCapture(e.pointerId)
+			if (imageRef.current.hasPointerCapture(event.pointerId)) {
+				imageRef.current.releasePointerCapture(event.pointerId)
+			}
 		}
 	})
 
 	useEffect(() => {
 		const image = imageRef.current
+		if (!image) return
 
-		image?.addEventListener("pointerdown", handlePointerDown)
-		image?.addEventListener("pointermove", handlePointerMove)
-		image?.addEventListener("pointerup", handlePointerUp)
-		image?.addEventListener("pointercancel", handlePointerUp)
+		image.addEventListener("pointerdown", handlePointerDown)
+		image.addEventListener("pointermove", handlePointerMove)
+		image.addEventListener("pointerup", handlePointerUp)
+		image.addEventListener("pointercancel", handlePointerUp)
 
 		return () => {
-			image?.removeEventListener("pointerdown", handlePointerDown)
-			image?.removeEventListener("pointermove", handlePointerMove)
-			image?.removeEventListener("pointerup", handlePointerUp)
-			image?.removeEventListener("pointercancel", handlePointerUp)
+			image.removeEventListener("pointerdown", handlePointerDown)
+			image.removeEventListener("pointermove", handlePointerMove)
+			image.removeEventListener("pointerup", handlePointerUp)
+			image.removeEventListener("pointercancel", handlePointerUp)
+			if (rafId.current !== null) cancelAnimationFrame(rafId.current)
+			rafId.current = null
+			pendingOffset.current = null
 		}
 	}, [handlePointerDown, handlePointerMove, handlePointerUp, imageRef])
 
 	return {
-		offset: useThrottle(offset, { wait: 50 }),
+		offset,
+		getOffset,
 		setOffset,
 	}
 }
