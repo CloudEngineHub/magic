@@ -2,4 +2,14 @@
 export enum SuperMagicApiErrorCode {
 	/** 文件/目录已存在 */
 	DuplicateFile = 51168,
+	/** 微应用对应项目无访问权限 */
+	ProjectAccessDenied = 51202,
+}
+
+/** 判断错误是否表示微应用对应项目无访问权限 */
+export function isProjectAccessDeniedError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false
+
+	const code = (error as { code?: unknown }).code
+	return code === SuperMagicApiErrorCode.ProjectAccessDenied
 }

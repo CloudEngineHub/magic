@@ -3173,10 +3173,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 根据 app_id 获取微应用对应的内部项目
 	 */
-	getMicroAppProject(appId: string) {
+	getMicroAppProject(appId: string, options?: { enableErrorMessagePrompt?: boolean }) {
 		return fetch.get<MicroAppProjectDetail>(
 			genRequestUrl("/api/v1/super-agent/micro-app-projects/${appId}", { appId }),
-			{ parseJsonLargeIntAsString: true },
+			{ parseJsonLargeIntAsString: true, ...options },
 		)
 	},
 

@@ -11,16 +11,12 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 		testId: "sidebar-content-slides-templates-button",
 		Icon: Presentation,
 	},
-	...(isPrivateDeployment()
-		? []
-		: [
-				{
-					titleKey: "sidebar:audioRecordings.title",
-					routeName: RouteName.AudioRecordings,
-					testId: "sidebar-content-audio-recordings-button",
-					Icon: Mic,
-				},
-			]),
+	{
+		titleKey: "sidebar:audioRecordings.title",
+		routeName: RouteName.AudioRecordings,
+		testId: "sidebar-content-audio-recordings-button",
+		Icon: Mic,
+	},
 	{
 		titleKey: "sidebar:crewMarket.title",
 		routeName: RouteName.CrewMarket,

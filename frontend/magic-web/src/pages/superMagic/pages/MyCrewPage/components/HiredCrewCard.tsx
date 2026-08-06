@@ -240,8 +240,9 @@ function HiredCrewCard({
 	}
 
 	return (
+		// Keep the avatar offset inside each grid item; Safari can otherwise overlap adjacent rows.
 		<div
-			className="relative flex h-full min-h-0 min-w-0 flex-col text-current"
+			className="relative flex min-h-0 min-w-0 flex-col pt-12 text-current"
 			data-href={href}
 			data-testid="my-crew-card"
 			data-my-crew-card-kind={isCollaboratedCard ? "collaborated" : "hired"}
@@ -250,7 +251,7 @@ function HiredCrewCard({
 				handleCardRootClick()
 			}}
 		>
-			<div className="relative flex h-full min-h-0 min-w-0 flex-col rounded-md border border-border bg-popover shadow-sm">
+			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-md border border-border bg-popover shadow-sm">
 				<MyCrewCardMainSection
 					employee={employee}
 					footer={

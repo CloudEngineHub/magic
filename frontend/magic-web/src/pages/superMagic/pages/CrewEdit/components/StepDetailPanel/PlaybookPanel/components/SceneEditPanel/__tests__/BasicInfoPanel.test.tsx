@@ -98,15 +98,15 @@ function renderPanel(store: SceneEditStore) {
 }
 
 describe("BasicInfoPanel", () => {
-	it("keeps basic info scrollable when the edit panel is shorter than its content", () => {
+	it("uses ScrollArea when the edit panel is shorter than its content", () => {
 		const store = new SceneEditStore(createScene(), vi.fn().mockResolvedValue(undefined))
 
 		renderPanel(store)
 
-		expect(screen.getByTestId("basic-info-scroll-container")).toHaveClass(
-			"min-h-0",
-			"overflow-y-auto",
-		)
+		const scrollArea = screen.getByTestId("basic-info-scroll-container")
+		expect(scrollArea).toHaveAttribute("data-slot", "scroll-area")
+		expect(scrollArea).toHaveClass("h-full", "min-h-0")
+		expect(scrollArea.querySelector('[data-slot="scroll-area-viewport"]')).toBeInTheDocument()
 	})
 	it("disables editing and hides save actions in read-only mode", () => {
 		const store = new SceneEditStore(createScene(), undefined, true)
