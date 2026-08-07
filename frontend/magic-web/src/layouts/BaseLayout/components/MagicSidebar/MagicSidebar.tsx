@@ -72,7 +72,10 @@ const MagicSidebar = observer(() => {
 					// The transparent dismiss layer must sit below body-portalled sidebar
 					// submenus (`z-popup` = 1000), otherwise their items cannot be clicked.
 					overlayClassName="!z-[999] bg-transparent"
-					className="!inset-y-0 !left-0 !h-full !w-[min(320px,100vw)] !max-w-none !gap-0 border-r"
+					// Keep the drawer content below body-portalled popovers too. Sheet's
+					// managed layer would otherwise allocate 1011 for the content while
+					// the dismiss overlay stays at 999.
+					className="!inset-y-0 !left-0 !z-[999] !h-full !w-[min(320px,100vw)] !max-w-none !gap-0 border-r"
 					data-testid="sidebar-workspace-drawer"
 				>
 					<SheetTitle className="sr-only">全局侧栏</SheetTitle>
