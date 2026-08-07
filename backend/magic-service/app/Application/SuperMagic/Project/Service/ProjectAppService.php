@@ -43,6 +43,7 @@ use App\Domain\SuperMagic\File\Service\AudioProjectDomainService;
 use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Service\MessageScheduleDomainService;
+use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectForkEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
@@ -550,10 +551,14 @@ class ProjectAppService extends AbstractAppService
 
         // 先获取项目实体用于事件发布和回收站记录
         $projectEntity = $this->projectDomainService->getProject($projectId, $dataIsolation->getCurrentUserId());
+        $microAppRecord = $this->microAppRepository->findByProjectId($projectId);
 
-        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity) {
+        $result = Db::transaction(function () use ($projectId, $dataIsolation, $projectEntity, $microAppRecord) {
             // 删除项目
             $result = $this->projectDomainService->deleteProject($projectId, $dataIsolation->getCurrentUserId());
+
+            // 微应用映射和稳定分享链接与项目保持同一删除事务。
+            $this->deleteMicroAppResources($projectId, $microAppRecord);
 
             // 删除项目协作关系
             $this->projectMemberDomainService->deleteByProjectId($projectId);
@@ -564,18 +569,24 @@ class ProjectAppService extends AbstractAppService
 
             // 记录到回收站表
             $this->recycleBinDomainService->recordDeletion(
-                resourceType: RecycleBinResourceType::Project,
-                resourceId: $projectId,
+                resourceType: $microAppRecord === null ? RecycleBinResourceType::Project : RecycleBinResourceType::MicroApp,
+                resourceId: $microAppRecord?->getId() ?? $projectId,
                 resourceName: $projectEntity->getProjectName(),
                 ownerId: $projectEntity->getUserId(),
                 deletedBy: (string) $dataIsolation->getCurrentUserId(),
                 parentId: $projectEntity->getWorkspaceId(),
-                extraData: [
+                extraData: array_filter([
                     'parent_info' => [
                         'workspace_id' => $workspaceId,
                         'workspace_name' => $workspace ? $workspace->getName() : '',
                     ],
-                ]
+                    'micro_app' => $microAppRecord === null ? null : [
+                        'app_id' => (string) $microAppRecord->getId(),
+                        'project_id' => (string) $projectId,
+                        'organization_code' => $microAppRecord->getOrganizationCode(),
+                        'resource_id' => $microAppRecord->getResourceId(),
+                    ],
+                ], static fn (mixed $value): bool => $value !== null)
             );
 
             return $result;
@@ -650,6 +661,7 @@ class ProjectAppService extends AbstractAppService
                 Db::transaction(function () use ($projectId, $userId, $dataIsolation, $orgCode) {
                     // Delete project and members
                     $this->projectDomainService->deleteProject($projectId, $userId);
+                    $this->deleteMicroAppResources($projectId);
                     $this->projectMemberDomainService->deleteByProjectId($projectId);
 
                     // Delete topics
@@ -2504,6 +2516,31 @@ class ProjectAppService extends AbstractAppService
         }
 
         return $project;
+    }
+
+    private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
+    {
+        $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
+        if ($microAppRecord === null) {
+            return;
+        }
+
+        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
+            $microAppRecord->getResourceId(),
+            ResourceType::Project->value
+        )) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app share for project %d',
+                $projectId
+            ));
+        }
+
+        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app record for project %d',
+                $projectId
+            ));
+        }
     }
 
     private function doCreateMicroAppProject(

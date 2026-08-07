@@ -15,12 +15,19 @@ class ListFilesRequestDTO
 {
     public string $parent_id = '';
 
+    public string $scope = '';
+
     public static function fromRequest(RequestInterface $request): self
     {
         $data = $request->all();
 
         $dto = new self();
         $dto->parent_id = trim((string) ($data['parent_id'] ?? ''));
+        $dto->scope = trim((string) ($data['scope'] ?? ''));
+
+        if ($dto->hasScope()) {
+            return $dto;
+        }
 
         // parent_id 必填：根目录列表没有项目锚点，无法做权限校验，统一在入参校验层拒绝
         if ($dto->parent_id === '' || $dto->parent_id === '0') {
@@ -32,5 +39,10 @@ class ListFilesRequestDTO
         }
 
         return $dto;
+    }
+
+    public function hasScope(): bool
+    {
+        return $this->scope !== '';
     }
 }

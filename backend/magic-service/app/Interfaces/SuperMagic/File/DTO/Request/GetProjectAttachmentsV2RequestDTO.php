@@ -18,6 +18,11 @@ class GetProjectAttachmentsV2RequestDTO
     protected string $projectId;
 
     /**
+     * 文件查询作用域。
+     */
+    protected string $scope = '';
+
+    /**
      * Optional directory to use as the first-page traversal root.
      */
     protected ?string $parentId = null;
@@ -63,6 +68,7 @@ class GetProjectAttachmentsV2RequestDTO
         $this->parentId = $this->normalizeParentId($data['parent_id'] ?? null);
         $this->nextParentIds = $this->normalizeNextParentIds($data['next_parent_ids'] ?? []);
         $this->token = $data['token'] ?? null;
+        $this->scope = trim((string) ($data['scope'] ?? ''));
 
         if (isset($data['file_type'])) {
             if (is_array($data['file_type'])) {
@@ -84,6 +90,16 @@ class GetProjectAttachmentsV2RequestDTO
     public function getProjectId(): string
     {
         return $this->projectId;
+    }
+
+    public function getScope(): string
+    {
+        return $this->scope;
+    }
+
+    public function hasScope(): bool
+    {
+        return $this->scope !== '';
     }
 
     public function getParentId(): ?string

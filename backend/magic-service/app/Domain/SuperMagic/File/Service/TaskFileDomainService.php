@@ -108,6 +108,19 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据文件编号获取文件实体，不限制文件所属空间。
+     */
+    public function getFileEntityById(int $fileId): TaskFileEntity
+    {
+        $fileEntity = $this->taskFileRepository->getById($fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+
+        return $fileEntity;
+    }
+
+    /**
      * Get file by ID, including soft-deleted records.
      */
     public function getByIdWithTrash(int $id): ?TaskFileEntity

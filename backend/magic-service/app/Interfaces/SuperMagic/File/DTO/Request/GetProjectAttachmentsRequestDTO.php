@@ -14,6 +14,11 @@ class GetProjectAttachmentsRequestDTO
     protected string $projectId;
 
     /**
+     * 文件查询作用域。
+     */
+    protected string $scope = '';
+
+    /**
      * Parent directory ID.
      */
     protected ?string $parentId = null;
@@ -46,6 +51,7 @@ class GetProjectAttachmentsRequestDTO
         $this->pageSize = (int) ($data['page_size'] ?? 200);
         $this->token = $data['token'] ?? null;
         $this->parentId = $data['parent_id'] ?? null;
+        $this->scope = trim((string) ($data['scope'] ?? ''));
         if ($this->parentId === '') {
             $this->parentId = null;
         }
@@ -77,6 +83,16 @@ class GetProjectAttachmentsRequestDTO
     public function getProjectId(): string
     {
         return $this->projectId;
+    }
+
+    public function getScope(): string
+    {
+        return $this->scope;
+    }
+
+    public function hasScope(): bool
+    {
+        return $this->scope !== '';
     }
 
     public function getParentId(): ?string

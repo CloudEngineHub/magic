@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\SuperMagic\File\Facade;
 
 use App\Application\SuperMagic\Common\Service\AccessTokenAuthorizationService;
+use App\Application\SuperMagic\File\FileScope\FileScopeHandlerResolver;
 use App\Application\SuperMagic\File\Service\AgentFileAppService;
 use App\Application\SuperMagic\File\Service\FileBatchAppService;
 use App\Application\SuperMagic\File\Service\FileManagementAppService;
@@ -64,6 +65,7 @@ class FileApi extends AbstractApi
         protected AgentFileAppService $agentFileAppService,
         private readonly SandboxFileNotificationAppService $sandboxFileNotificationAppService,
         private readonly AccessTokenAuthorizationService $accessTokenAuthorizationService,
+        private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -335,6 +337,12 @@ class FileApi extends AbstractApi
         $requestData = $this->request->all();
         $requestDTO = ProjectUploadTokenRequestDTO::fromRequest($requestData);
 
+        if ($requestDTO->hasScope()) {
+            return $this->fileScopeHandlerResolver
+                ->resolve($requestDTO->getScope())
+                ->getUploadToken($requestContext->getUserAuthorization(), $requestDTO);
+        }
+
         // 调用应用服务
         return $this->fileManagementAppService->getProjectUploadToken($requestContext, $requestDTO);
     }
@@ -593,5 +601,4 @@ class FileApi extends AbstractApi
         $requestDTO = ReplaceFileRequestDTO::fromRequest($this->request);
         return $this->fileManagementAppService->replaceFile($requestContext, $fileId, $requestDTO);
     }
-
 }
