@@ -15,6 +15,7 @@ import type { SceneEditorContext } from "@/pages/superMagic/components/MainInput
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { useTaskData } from "@/pages/superMagic/hooks/useTaskData"
 import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
