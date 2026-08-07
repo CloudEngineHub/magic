@@ -158,6 +158,11 @@ const TERMINAL_ASSISTANT_STATUSES = new Set(["finished", "error", "suspended", "
 /** 小 chunk 先短窗口合并，降低深序列化和 IndexedDB 事务频率。 */
 const STREAM_PERSISTENCE_BATCH_SIZE = 10
 const STREAM_PERSISTENCE_FLUSH_MS = 200
+const STREAM_PERSISTENCE_MIN_FLUSH_INTERVAL_MS = 100
+const STREAM_PERSISTENCE_MAX_PENDING_RECORDS = 200
+
+/** Inactive Topics keep only a bounded hot window; older pages are reloaded on demand. */
+const TOPIC_HOT_WINDOW_MAX_MESSAGES = 5_000
 
 /** 流式渲染保持约一帧一次；提速只增加单帧字符量。 */
 const STREAM_RENDER_FRAME_MS = 16
@@ -270,6 +275,17 @@ type ToolResponseRecordResult =
 interface PersistenceQueue {
 	messages: PersistableMessage[]
 	timer: ReturnType<typeof setTimeout> | null
+	lastFlushedAt: number
+	droppedRecords: number
+}
+
+interface TopicMessageIndex {
+	/** O(1) lookup for the hot streaming path and visible-row selectors. */
+	bySuperMessageId: Map<string, number>
+	byAppMessageId: Map<string, number>
+	/** Stable row revision; content updates must not rebuild the whole message array. */
+	revisionBySuperMessageId: Map<string, number>
+	messageRefs: Map<string, MessageItem>
 }
 
 type CanonicalFinalSource = "im" | "http"
@@ -387,6 +403,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		(payload: StreamRecoveryFailurePayload) => void
 	>()
 	private streamRecoveryStates = new Map<string, InternalStreamRecoveryState>()
+	/** Non-observable structural indexes; row revisions are exposed through messageRevisions. */
+	private topicMessageIndexes = new Map<string, TopicMessageIndex>()
+	/** Observable per-message revisions let rows subscribe to only their own canonical node. */
+	private messageRevisions = new Map<string, number>()
+	/** Parent projections subscribe only to Topic membership, never to streamed row payloads. */
+	private topicMessageMembershipRevisions = new Map<string, number>()
+	/** Topic-scoped canonical node sidecar prevents same SuperMessage IDs colliding across Topics. */
+	private topicMessageNodes = new Map<string, Map<string, unknown>>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
 	// 消息缓冲区
@@ -432,6 +456,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			| "streamRenderStarted"
 			| "streamCorrelationIds"
 			| "streamRecoveryStates"
+			| "topicMessageIndexes"
+			| "messageRevisions"
+			| "topicMessageMembershipRevisions"
+			| "topicMessageNodes"
+			| "messages"
 		>(
 			this,
 			{
@@ -460,6 +489,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				streamRenderStarted: false,
 				streamCorrelationIds: false,
 				streamRecoveryStates: false,
+				topicMessageIndexes: false,
+				messageRevisions: observable.shallow,
+				topicMessageMembershipRevisions: observable.shallow,
+				topicMessageNodes: false,
+				// Membership changes are observable, but streaming payloads are kept in
+				// messageMap/revision so mutating one row cannot invalidate the whole Topic.
+				messages: observable.shallow,
 			},
 			{ autoBind: true },
 		)
@@ -491,6 +527,263 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				message?.app_message_id ||
 				"",
 		).trim()
+	}
+
+	private getTopicMessageIndex(topicId: string): TopicMessageIndex {
+		let index = this.topicMessageIndexes.get(topicId)
+		if (!index) {
+			index = {
+				bySuperMessageId: new Map(),
+				byAppMessageId: new Map(),
+				revisionBySuperMessageId: new Map(),
+				messageRefs: new Map(),
+			}
+			this.topicMessageIndexes.set(topicId, index)
+		}
+		return index
+	}
+
+	private getMessageRevisionKey(topicId: string, superMessageId: string) {
+		return `${topicId}\u0000${superMessageId}`
+	}
+
+	private setTopicMessageNode(topicId: string, superMessageId: string, node: unknown) {
+		if (!topicId || !superMessageId) return
+		const nodes = this.topicMessageNodes.get(topicId) || new Map<string, unknown>()
+		nodes.set(superMessageId, node)
+		this.topicMessageNodes.set(topicId, nodes)
+	}
+
+	getTopicMessageNode(topicId: string, superMessageId?: string) {
+		if (!topicId || !superMessageId) return undefined
+		return this.topicMessageNodes.get(topicId)?.get(superMessageId)
+	}
+
+	/**
+	 * Rebuilds only the compact Topic index. The expensive message payload is not cloned here;
+	 * callers use this after membership changes, while stream frames update one row in place.
+	 */
+	private rebuildTopicMessageIndex(topicId: string, messages: MessageItem[]) {
+		const previous = this.getTopicMessageIndex(topicId)
+		const next: TopicMessageIndex = {
+			bySuperMessageId: new Map(),
+			byAppMessageId: new Map(),
+			revisionBySuperMessageId: new Map(),
+			messageRefs: new Map(),
+		}
+
+		messages.forEach((message, index) => {
+			const superMessageId = this.getMessageSuperMessageId(message)
+			const appMessageId = String(message.app_message_id || "").trim()
+			if (superMessageId) {
+				next.bySuperMessageId.set(superMessageId, index)
+				const previousRevision = previous.revisionBySuperMessageId.get(superMessageId) || 0
+				const revision =
+					previous.messageRefs.get(superMessageId) === message
+						? previousRevision
+						: previousRevision + 1
+				next.revisionBySuperMessageId.set(superMessageId, revision)
+				next.messageRefs.set(superMessageId, message)
+				this.messageRevisions.set(
+					this.getMessageRevisionKey(topicId, superMessageId),
+					revision,
+				)
+			}
+			if (appMessageId) next.byAppMessageId.set(appMessageId, index)
+		})
+
+		previous.revisionBySuperMessageId.forEach((_revision, superMessageId) => {
+			if (!next.revisionBySuperMessageId.has(superMessageId)) {
+				this.messageRevisions.delete(this.getMessageRevisionKey(topicId, superMessageId))
+			}
+		})
+		this.topicMessageIndexes.set(topicId, next)
+	}
+
+	/**
+	 * The compatibility write façade keeps all membership mutations in sync with the Topic index.
+	 * Stream rendering deliberately does not use this path for every frame.
+	 */
+	private setTopicMessages(topicId: string, messages: MessageItem[]) {
+		this.messages.set(topicId, messages)
+		this.rebuildTopicMessageIndex(topicId, messages)
+		this.topicMessageMembershipRevisions.set(
+			topicId,
+			(this.topicMessageMembershipRevisions.get(topicId) || 0) + 1,
+		)
+	}
+
+	/**
+	 * Bounds inactive Topic memory without touching an active stream or pending buffer. The
+	 * history cursor remains owned by useTopicMessages, so older pages can be fetched again.
+	 */
+	private trimInactiveTopicToHotWindow(
+		topicId: string,
+		maxMessages = TOPIC_HOT_WINDOW_MAX_MESSAGES,
+	) {
+		if (!topicId || topicId === this.activeTopicId) return
+		const topicMeta = this.topicMeta.get(topicId)
+		const topicBuffer = this.buffer.get(topicId)
+		const currentMessages = this.messages.get(topicId) || []
+		const topicPrefix = `${topicId}\u0000`
+		const hasPendingRuntime =
+			Array.from(this.streamRecoveryStates.keys()).some((key) =>
+				key.startsWith(topicPrefix),
+			) ||
+			Array.from(this.finalRenderStates.values()).some((state) => state.topicId === topicId)
+		if (
+			currentMessages.length <= maxMessages ||
+			(topicMeta?.content.size ?? 0) > 0 ||
+			(topicBuffer?.messages.length ?? 0) > 0 ||
+			hasPendingRuntime
+		)
+			return
+
+		const removedMessages = currentMessages.slice(0, -maxMessages)
+		const retainedMessages = currentMessages.slice(-maxMessages)
+		const removedSuperMessageIds = new Set(
+			removedMessages
+				.map((message) => this.getMessageSuperMessageId(message))
+				.filter(Boolean),
+		)
+		const removedToolIds = new Set<string>()
+		removedSuperMessageIds.forEach((superMessageId) => {
+			const messageNode = this.messageMap.get(superMessageId) as
+				RawSuperMagicMessageNode | undefined
+			this.getMessageNodeToolIds(messageNode).forEach((toolId) => removedToolIds.add(toolId))
+			this.messageMap.delete(superMessageId)
+			this.topicMessageNodes.get(topicId)?.delete(superMessageId)
+			this.messageRevisions.delete(this.getMessageRevisionKey(topicId, superMessageId))
+			this.canonicalFinalBarriers.delete(`${topicPrefix}${superMessageId}`)
+			this.streamTransportBarriers.delete(`${topicPrefix}${superMessageId}`)
+			this.streamChunkLedgers.delete(`${topicPrefix}${superMessageId}`)
+			this.streamCorrelationIds.delete(`${topicPrefix}${superMessageId}`)
+		})
+
+		const topicOwners = this.toolCallOwners.get(topicId)
+		topicOwners?.forEach((ownerSuperMessageId, toolId) => {
+			if (removedSuperMessageIds.has(ownerSuperMessageId)) removedToolIds.add(toolId)
+		})
+		removedToolIds.forEach((toolId) => {
+			this.toolResponseMap.get(topicId)?.delete(toolId)
+			this.latestToolResponseSeqIds.get(topicId)?.delete(toolId)
+			this.pendingHttpToolResponses.get(topicId)?.delete(toolId)
+			topicOwners?.delete(toolId)
+		})
+		if (this.toolResponseMap.get(topicId)?.size === 0) this.toolResponseMap.delete(topicId)
+		if (this.latestToolResponseSeqIds.get(topicId)?.size === 0) {
+			this.latestToolResponseSeqIds.delete(topicId)
+		}
+		if (this.pendingHttpToolResponses.get(topicId)?.size === 0) {
+			this.pendingHttpToolResponses.delete(topicId)
+		}
+		if (topicOwners?.size === 0) this.toolCallOwners.delete(topicId)
+		const recoveryMap = this.toolResponseRecoveryStates.get(topicId)
+		recoveryMap?.forEach((state, key) => {
+			if (
+				removedSuperMessageIds.has(state.ownerSuperMessageId) ||
+				removedToolIds.has(state.toolId)
+			) {
+				recoveryMap.delete(key)
+			}
+		})
+		if (recoveryMap?.size === 0) this.toolResponseRecoveryStates.delete(topicId)
+		this.refreshLatestRecoverableAssistant(topicId)
+		this.setTopicMessages(topicId, retainedMessages)
+	}
+
+	/** Explicit lifecycle boundary for callers that unmount a Topic permanently. */
+	disposeTopic(topicId: string): boolean {
+		if (!topicId || topicId === this.activeTopicId) return false
+		this.flushMessagePersistence(topicId)
+		const currentMessages = this.messages.get(topicId) || []
+		const topicIndex = this.topicMessageIndexes.get(topicId)
+		const topicMeta = this.topicMeta.get(topicId)
+		if (topicMeta?.timer) clearTimeout(topicMeta.timer)
+		if (topicMeta?.recoveryTimer) clearTimeout(topicMeta.recoveryTimer)
+		if (currentMessages.length > 0) {
+			this.removeTopicStateOutsideSnapshot(topicId, currentMessages, [])
+		}
+		// The index also knows about canonical rows that may no longer be present in
+		// the visible membership array after a partial/authoritative replacement.
+		topicIndex?.messageRefs.forEach((_message, superMessageId) => {
+			this.messageMap.delete(superMessageId)
+		})
+
+		this.messages.delete(topicId)
+		this.buffer.delete(topicId)
+		this.topicMeta.delete(topicId)
+		this.topicMessageIndexes.delete(topicId)
+		this.topicMessageMembershipRevisions.delete(topicId)
+		this.topicMessageNodes.delete(topicId)
+		this.streamRenderStarted.delete(topicId)
+		this.toolResponseMap.delete(topicId)
+		this.latestToolResponseSeqIds.delete(topicId)
+		this.toolCallOwners.delete(topicId)
+		this.toolResponseRecoveryStates.delete(topicId)
+		this.latestRecoverableAssistantByTopic.delete(topicId)
+		this.pendingHttpToolResponses.delete(topicId)
+		this.sharedReplayStates.delete(topicId)
+		this.persistenceQueues.delete(topicId)
+		this.topicMap.forEach((mappedTopicId, key) => {
+			if (mappedTopicId === topicId) this.topicMap.delete(key)
+		})
+
+		const topicPrefix = `${topicId}\u0000`
+		this.streamCorrelationIds.forEach((_value, key) => {
+			if (key.startsWith(topicPrefix)) this.streamCorrelationIds.delete(key)
+		})
+		this.streamRecoveryStates.forEach((_value, key) => {
+			if (!key.startsWith(topicPrefix)) return
+			if (_value.watchdogTimer) clearTimeout(_value.watchdogTimer)
+			if (_value.deadlineTimer) clearTimeout(_value.deadlineTimer)
+			this.streamRecoveryStates.delete(key)
+		})
+		this.messageRevisions.forEach((_value, key) => {
+			if (key.startsWith(topicPrefix)) this.messageRevisions.delete(key)
+		})
+		this.pendingTopicSyncFinalizations.delete(topicId)
+		this.topicSyncContexts.delete(topicId)
+		this.imStatusRestoreAuthorizations.delete(topicId)
+		this.canonicalFinalBarriers.forEach((_value, key) => {
+			if (key.startsWith(topicPrefix)) this.canonicalFinalBarriers.delete(key)
+		})
+		this.streamTransportBarriers.forEach((_value, key) => {
+			if (key.startsWith(topicPrefix)) this.streamTransportBarriers.delete(key)
+		})
+		this.streamChunkLedgers.forEach((_value, key) => {
+			if (key.startsWith(topicPrefix)) this.streamChunkLedgers.delete(key)
+		})
+		this.finalRenderStates.forEach((state, key) => {
+			if (state.topicId !== topicId) return
+			if (state.timer) clearTimeout(state.timer)
+			this.finalRenderStates.delete(key)
+		})
+		return true
+	}
+
+	/** Clears every inactive Topic while preserving the currently visible Topic. */
+	clearSession() {
+		Array.from(this.messages.keys()).forEach((topicId) => {
+			if (topicId !== this.activeTopicId) this.disposeTopic(topicId)
+		})
+	}
+
+	/** Public selector used by row-level observers and focused performance tests. */
+	getMessageRevision(topicId: string, superMessageId?: string): number {
+		if (!topicId || !superMessageId) return 0
+		return this.messageRevisions.get(this.getMessageRevisionKey(topicId, superMessageId)) || 0
+	}
+
+	getTopicMessageMembershipRevision(topicId: string): number {
+		if (!topicId) return 0
+		return this.topicMessageMembershipRevisions.get(topicId) || 0
+	}
+
+	/** O(1) canonical list index for a Topic-scoped SuperMessage. */
+	getTopicMessageIndexOf(topicId: string, superMessageId?: string): number {
+		if (!topicId || !superMessageId) return -1
+		return this.getTopicMessageIndex(topicId).bySuperMessageId.get(superMessageId) ?? -1
 	}
 
 	private normalizeAssistantMessageItem(
@@ -544,13 +837,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	}
 
 	private getAssistantMessageNode(_topicId: string, superMessageId: string) {
-		const messageNode = this.messageMap.get(superMessageId) as
-			RawSuperMagicMessageNode | undefined
+		const messageNode = (this.getTopicMessageNode(_topicId, superMessageId) ||
+			this.messageMap.get(superMessageId)) as RawSuperMagicMessageNode | undefined
 		return messageNode?.role === "assistant" ? messageNode : undefined
 	}
 
 	private setAssistantMessageNode(
-		_topicId: string,
+		topicId: string,
 		superMessageId: string,
 		messageNode: RawSuperMagicMessageNode,
 		appMessageId?: string,
@@ -559,17 +852,33 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (appMessageId) messageNode.app_message_id = appMessageId
 		// 跨 Topic 冲突暂不额外建复合键；单字符串 Map 按最后一次写入生效。
 		this.messageMap.set(superMessageId, messageNode)
+		this.setTopicMessageNode(topicId, superMessageId, messageNode)
+		const revisionKey = this.getMessageRevisionKey(topicId, superMessageId)
+		const nextRevision = (this.messageRevisions.get(revisionKey) || 0) + 1
+		this.messageRevisions.set(revisionKey, nextRevision)
+		this.getTopicMessageIndex(topicId).revisionBySuperMessageId.set(
+			superMessageId,
+			nextRevision,
+		)
 	}
 
 	/** User/Tool 与 Assistant 一样只写入归一化后的 SuperMessage ID。 */
 	private setNonAssistantMessageNode(
-		_topicId: string,
+		topicId: string,
 		superMessageId: string,
 		messageNode: RawSuperMagicMessageNode | undefined,
 	) {
 		if (!superMessageId || !messageNode) return
 		messageNode.super_message_id = superMessageId
 		this.messageMap.set(superMessageId, messageNode)
+		this.setTopicMessageNode(topicId, superMessageId, messageNode)
+		const revisionKey = this.getMessageRevisionKey(topicId, superMessageId)
+		const nextRevision = (this.messageRevisions.get(revisionKey) || 0) + 1
+		this.messageRevisions.set(revisionKey, nextRevision)
+		this.getTopicMessageIndex(topicId).revisionBySuperMessageId.set(
+			superMessageId,
+			nextRevision,
+		)
 	}
 
 	private findStreamIdentity(topicId: string, identity: string) {
@@ -612,23 +921,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const messageNode = this.getAssistantMessageNode(topicId, superMessageId)
 		if (!messageNode) return
 		const messages = this.messages.get(topicId) || []
-		const index = messages.findIndex(
-			(message) =>
-				message.role === "assistant" &&
-				this.getMessageSuperMessageId(message) === superMessageId,
-		)
-		if (index < 0) return
-		const nextMessages = messages.slice()
-		nextMessages[index] = {
-			...messages[index],
+		const index = this.getTopicMessageIndexOf(topicId, superMessageId)
+		if (index < 0 || messages[index]?.role !== "assistant") return
+
+		// Keep the observable row object stable. Copying the 10k/100k-item array for every
+		// reveal frame was the dominant stream cost; the row revision map provides the
+		// narrow invalidation signal for the visible Assistant row.
+		Object.assign(messages[index], {
 			super_message_id: superMessageId,
 			correlation_id: String(messageNode.correlation_id || ""),
 			content: messageNode.content,
 			reasoning_content: messageNode.reasoning_content,
 			tool_calls: messageNode.tool_calls,
 			debug: messageNode,
-		}
-		this.messages.set(topicId, nextMessages)
+		})
 	}
 
 	private getToolCallOwner(topicId: string, toolId: string) {
@@ -1650,6 +1956,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	) {
 		const candidate = this.resolveTaskCompletionCandidate(topicId, message, messageNode)
 		if (!candidate) return
+		if (!messageNode) return
 		const { taskId, correlationId, appMessageId } = candidate
 		const taskKey = this.getTaskCompletionKey(taskId)
 		if (context.lifecycleEventPolicy !== "live" || context.trigger !== "websocket") {
@@ -1756,12 +2063,26 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		message: PersistableMessage,
 		flushImmediately = false,
 	) {
-		const queue = this.persistenceQueues.get(topicId) || { messages: [], timer: null }
+		const queue = this.persistenceQueues.get(topicId) || {
+			messages: [],
+			timer: null,
+			lastFlushedAt: 0,
+			droppedRecords: 0,
+		}
 		queue.messages.push(message)
+		if (queue.messages.length > STREAM_PERSISTENCE_MAX_PENDING_RECORDS) {
+			const overflow = queue.messages.length - STREAM_PERSISTENCE_MAX_PENDING_RECORDS
+			queue.messages.splice(0, overflow)
+			queue.droppedRecords += overflow
+		}
 		this.persistenceQueues.set(topicId, queue)
 
-		if (flushImmediately || queue.messages.length >= STREAM_PERSISTENCE_BATCH_SIZE) {
+		if (flushImmediately) {
 			this.flushMessagePersistence(topicId)
+			return
+		}
+		if (queue.messages.length >= STREAM_PERSISTENCE_BATCH_SIZE) {
+			this.flushMessagePersistence(topicId, true)
 			return
 		}
 		if (queue.timer) return
@@ -1817,12 +2138,37 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		this.enqueuePersistenceRecord(topicId, recordedMessage, flushImmediately)
 	}
 
-	private flushMessagePersistence(topicId: string) {
+	private flushMessagePersistence(topicId: string, rateLimited = false) {
 		const queue = this.persistenceQueues.get(topicId)
 		if (!queue || queue.messages.length === 0) return
+		if (rateLimited) {
+			const elapsed = Date.now() - queue.lastFlushedAt
+			if (queue.lastFlushedAt > 0 && elapsed < STREAM_PERSISTENCE_MIN_FLUSH_INTERVAL_MS) {
+				// A small batch may already own the normal 200ms timer. Once the queue
+				// reaches the batch threshold, shorten it to the rate-limit boundary.
+				if (queue.timer) clearTimeout(queue.timer)
+				queue.timer = setTimeout(() => {
+					queue.timer = null
+					this.flushMessagePersistence(topicId)
+				}, STREAM_PERSISTENCE_MIN_FLUSH_INTERVAL_MS - elapsed)
+				return
+			}
+		}
 		if (queue.timer) clearTimeout(queue.timer)
-		this.persistenceQueues.delete(topicId)
-		persistMessagesToStorage(topicId, queue.messages)
+		queue.timer = null
+		const messages = queue.messages.splice(0, queue.messages.length)
+		queue.lastFlushedAt = Date.now()
+		persistMessagesToStorage(topicId, messages)
+	}
+
+	/** Lightweight diagnostic surface for tests/RUM without exposing queued payloads. */
+	getMessagePersistenceStats(topicId: string) {
+		const queue = this.persistenceQueues.get(topicId)
+		return {
+			pendingRecords: queue?.messages.length || 0,
+			droppedRecords: queue?.droppedRecords || 0,
+			lastFlushedAt: queue?.lastFlushedAt || 0,
+		}
 	}
 
 	/** 报告查询前冲刷 Store 批次，并等待当前页面已提交的 IndexedDB 写入完成。 */
@@ -1862,6 +2208,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		// 否则后台 Final 永远无法收敛 StreamState，也不会发布 Topic 终态事件。
 		if (prevTopicId && prevTopicId !== topicId) {
 			this.processMessageBufferAfterRenderRelease(prevTopicId)
+			this.trimInactiveTopicToHotWindow(prevTopicId)
 		}
 		if (topicId && topicId !== prevTopicId) {
 			const topicMeta = this.getTopicMetadata(topicId)
@@ -2685,6 +3032,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			// 只描述该工具自身，不能扩大为整个任务的中断信号。
 			this.handleTopicSuspended(topicId, "recovery")
 		} else if (isTerminalTopic && topicMeta.renderPolicy === "instant") {
+			// `error` is also a terminal Topic barrier. There may be no role=tool
+			// response after an interrupted setup/tool call, so settle its UI projection
+			// before releasing StreamState; otherwise the row falls back to embedded running.
+			if (succeeded) this.fillMissingToolResponses(topicId)
 			this.settleTopicStreamsInstantly(
 				topicId,
 				syncContext?.generation === generation ? syncContext.correlationIds : undefined,
@@ -2940,6 +3291,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const superMessageId = this.getMessageSuperMessageId(message)
 			if (!superMessageId || retainedSuperMessageIds.has(superMessageId)) return
 			this.messageMap.delete(superMessageId)
+			this.topicMessageNodes.get(_topicId)?.delete(superMessageId)
 		})
 	}
 
@@ -3064,7 +3416,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		})
 		buffer.isProcessing = false
 
-		removedSuperMessageIds.forEach((superMessageId) => this.messageMap.delete(superMessageId))
+		removedSuperMessageIds.forEach((superMessageId) => {
+			this.messageMap.delete(superMessageId)
+			this.topicMessageNodes.get(topicId)?.delete(superMessageId)
+		})
 		removedStreamSuperMessageIds.forEach((superMessageId) => {
 			const correlationId = this.getStreamCorrelationId(topicId, superMessageId)
 			removedCorrelations.add(correlationId)
@@ -3189,7 +3544,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				),
 		)
 		this.removeTopicMessageNodesOutsideSnapshot(topicId, previousMessages, retainedMessages)
-		this.messages.set(topicId, retainedMessages)
+		this.setTopicMessages(topicId, retainedMessages)
 
 		const buffer = this.getTopicBuffer(topicId)
 		buffer.messages = buffer.messages.filter((envelope) => {
@@ -3202,6 +3557,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (!discardedStreamIdentities.has(superMessageId)) return true
 
 			this.messageMap.delete(superMessageId)
+			this.topicMessageNodes.get(topicId)?.delete(superMessageId)
 			return false
 		})
 		buffer.isProcessing = false
@@ -3211,6 +3567,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const correlationId = this.getStreamCorrelationId(topicId, streamIdentity)
 			discardedCorrelationIds.set(streamIdentity, correlationId)
 			this.messageMap.delete(streamIdentity)
+			this.topicMessageNodes.get(topicId)?.delete(streamIdentity)
 			topicMeta.content.delete(streamIdentity)
 			topicMeta.streamSnapshots.delete(streamIdentity)
 			topicMeta.finalizedCorrelationIds.add(streamIdentity)
@@ -3404,7 +3761,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				messages,
 				allowImStatusRestore,
 			)
-			if (result.didChange) this.messages.set(topicId, sortMessages(result.nextMessages))
+			if (result.didChange) this.setTopicMessages(topicId, sortMessages(result.nextMessages))
 			committedUpdates = result.committedUpdates
 			settledStream = result.settledStream
 			this.resumeAfterHttpStatusReconciliation(topicId, settledStream)
@@ -3921,7 +4278,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			})
 
 			this.toolResponseMap.set(topicId, toolResponseMap)
-			this.messages.set(topicId, mergedServerMessages)
+			this.setTopicMessages(topicId, mergedServerMessages)
 			if (appliedMode !== "merge") {
 				this.removeTopicStateOutsideSnapshot(
 					topicId,
@@ -4085,11 +4442,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		runInAction(() => {
 			messages?.forEach((sharedMessage) => {
 				const messageId = String(sharedMessage?.message_id || "")
+				const sharedTopicId = String(sharedMessage?.topic_id || "")
 				if (sharedMessage?.type === "rich_text") {
-					this.messageMap.set(messageId, {
+					const node = {
 						...sharedMessage,
 						...(sharedMessage?.raw_content?.rich_text || {}),
-					})
+					}
+					this.messageMap.set(messageId, node)
+					this.setTopicMessageNode(sharedTopicId, messageId, node)
 				} else if (sharedMessage?.type === "super_magic_message") {
 					let rawNode = {
 						...(sharedMessage?.raw_content?.super_magic_message as Record<
@@ -4111,8 +4471,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					}
 
 					this.messageMap.set(superMessageId, rawNode)
+					this.setTopicMessageNode(topicId, superMessageId, rawNode)
 				} else {
 					this.messageMap.set(messageId, sharedMessage)
+					this.setTopicMessageNode(sharedTopicId, messageId, sharedMessage)
 				}
 			})
 		})
@@ -5020,13 +5382,20 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		toolCall: { id?: string; tool?: unknown },
 	) {
 		const embeddedResponse = toolCall?.tool as ToolResponseState | undefined
+		const canonicalResponse = this.toolResponseMap.get(topicId)?.get(String(toolCall?.id || ""))
+		// Always read the canonical entry before checking the render session. Besides
+		// preserving the terminal fallback, this keeps the row subscribed to late
+		// `response_missing`/real response updates while the Assistant typewriter is active.
+		// `response_missing` is a UI-only weak terminal: it exists specifically to
+		// break an orphaned loading state when no role=tool response will arrive.
+		// Strong real responses remain render-gated until the Assistant projection
+		// catches up, preserving the existing typewriter ordering contract.
+		if (canonicalResponse?.status === "response_missing") return canonicalResponse
 		const hasActiveRenderSession =
 			Boolean(this.getStreamState(topicId, ownerSuperMessageId)) ||
 			this.finalRenderStates.has(`${topicId}\u0000${ownerSuperMessageId}`)
 		if (hasActiveRenderSession) return embeddedResponse
-		return (
-			this.toolResponseMap.get(topicId)?.get(String(toolCall?.id || "")) || embeddedResponse
-		)
+		return canonicalResponse || embeddedResponse
 	}
 
 	/**
@@ -5147,7 +5516,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const nextMessages = messages.slice()
 			if (cardIndex >= 0) nextMessages[cardIndex] = canonicalMessage
 			else nextMessages.push(canonicalMessage)
-			this.messages.set(topicId, sortMessages(this.dedupeAuthoritativeMessages(nextMessages)))
+			this.setTopicMessages(
+				topicId,
+				sortMessages(this.dedupeAuthoritativeMessages(nextMessages)),
+			)
 		}
 
 		const topicMeta = this.getTopicMetadata(topicId)
@@ -5668,7 +6040,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				nextMessage.super_message_id,
 				messageNode,
 			)
-			this.messages.set(
+			this.setTopicMessages(
 				resolvedTopicId,
 				unionBy(sortMessages([...messageList, nextMessage]), "app_message_id"),
 			)
@@ -5790,12 +6162,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 		const messageList = this.messages.get(topicId) || []
 		runInAction(() => {
-			this.messages.set(
+			this.setTopicMessages(
 				topicId,
 				messageList.filter((item) => item.app_message_id !== appMessageId),
 			)
 			// User 的 SuperMessage ID 按协议恒等于 appMessageId。
 			this.messageMap.delete(appMessageId)
+			this.topicMessageNodes.get(topicId)?.delete(appMessageId)
 		})
 	}
 
@@ -5824,7 +6197,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			} else {
 				nextMessages.push(nextMessage)
 			}
-			this.messages.set(
+			this.setTopicMessages(
 				resolvedTopicId,
 				unionBy(sortMessages(nextMessages), "app_message_id"),
 			)
@@ -6118,7 +6491,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const messages = this.messages.get(topicId) || []
 			runInAction(() => {
 				this.setNonAssistantMessageNode(topicId, nextMessage.super_message_id, messageNode)
-				this.messages.set(topicId, [...messages, nextMessage])
+				this.setTopicMessages(topicId, [...messages, nextMessage])
 			})
 			return
 		}
@@ -6272,7 +6645,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (merged === existingCard) return
 		const nextMessages = messages.slice()
 		nextMessages[cardIndex] = merged
-		this.messages.set(topicId, sortMessages(nextMessages))
+		this.setTopicMessages(topicId, sortMessages(nextMessages))
 	}
 
 	private mergeFinalCardMetadata(existingCard: MessageItem, finalCard: MessageItem) {
@@ -6408,7 +6781,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 				const messages = this.messages.get(topicId) || []
 				messages.push(message)
-				this.messages.set(topicId, unionBy(sortMessages(messages), "app_message_id"))
+				this.setTopicMessages(topicId, unionBy(sortMessages(messages), "app_message_id"))
 				this.setNonAssistantMessageNode(topicId, message.super_message_id, messageNode)
 				this.publishMessageCommitted(topicId, message, messageNode, {
 					source: "im",
@@ -6566,7 +6939,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					message.role !== "assistant" ||
 					this.getMessageSuperMessageId(message) !== superMessageId,
 			)
-			this.messages.set(topicId, sortMessages([...nextMessages, card]))
+			this.setTopicMessages(topicId, sortMessages([...nextMessages, card]))
 		}
 
 		if (topicMeta.renderPolicy === "instant") {
@@ -6806,6 +7179,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				)
 			}
 			this.messageMap.set(superMessageId, cache)
+			this.setTopicMessageNode(topicId, superMessageId, cache)
 			this.syncAssistantCardProjection(topicId, superMessageId)
 			topicMeta.finalizedCorrelationIds.add(superMessageId)
 			this.ensureStreamTransportBarrierBeforeCleanup(

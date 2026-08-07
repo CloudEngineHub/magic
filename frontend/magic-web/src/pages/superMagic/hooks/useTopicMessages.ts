@@ -17,6 +17,7 @@ import {
 import type { SeqResponse } from "@/types/request"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { MessageStatus, TaskStatus, Topic } from "../pages/Workspace/types"
+import { topicHistoryPageCache } from "./topic-history-page-cache"
 
 // 完全同步时单次拉取的消息数量
 const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
@@ -125,6 +126,7 @@ interface PullMessageParams {
 	requiredSeqId?: string
 	recoveryAnchorAppMessageId?: string
 	allowRemoteRevokedAnchorCleanup?: boolean
+	useHistoryPageCache?: boolean
 	callback?: () => void
 }
 
@@ -425,12 +427,35 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			order,
 			limit = 20,
 			updatePageToken = true,
+			useHistoryPageCache = false,
 			callback,
 		}: Omit<
 			PullMessageParams,
 			"writeIntent" | "syncGeneration"
 		>): Promise<PullMessageResult> => {
 			try {
+				const cachedPage = useHistoryPageCache
+					? topicHistoryPageCache.get(chat_topic_id, page_token, order, limit)
+					: undefined
+				if (cachedPage) {
+					if (updatePageToken) {
+						if (cachedPage.response?.has_more === false) {
+							topicNotHaveMoreMessageMap.current[chat_topic_id] = true
+							delete topicPageTokenMap.current[chat_topic_id]
+						} else if (cachedPage.response?.page_token) {
+							topicNotHaveMoreMessageMap.current[chat_topic_id] = false
+							topicPageTokenMap.current[chat_topic_id] =
+								cachedPage.response.page_token
+						}
+					}
+					callback?.()
+					return {
+						didPullSucceed: true,
+						pulledItems: cachedPage.pulledItems,
+						statusItems: cachedPage.statusItems,
+						response: cachedPage.response,
+					}
+				}
 				const response = await requestMessagePage(
 					{
 						conversation_id,
@@ -464,6 +489,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				)
 				if (hasAttachments) {
 					checkNowDebounced?.()
+				}
+				if (useHistoryPageCache) {
+					topicHistoryPageCache.set(chat_topic_id, page_token, order, limit, {
+						pulledItems,
+						statusItems: pulledItems,
+						response,
+					})
 				}
 				if (updatePageToken) {
 					// 历史分页必须同时记录 token 和终页状态；仅保留旧 token 会让布局滚动
@@ -1212,6 +1244,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 						limit: 100,
 						updatePageToken: true,
 						writeIntent: "merge",
+						useHistoryPageCache: true,
 					})
 					if (!pullResult.didPullSucceed) {
 						delete lastHistoryPageTokenMapRef.current[topicId]
@@ -1512,7 +1545,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Handle refresh topic messages after revoke
 	useEffect(() => {
-		const handleRefreshTopicMessages = () =>
+		const handleRefreshTopicMessages = () => {
+			if (selectedTopic?.chat_topic_id) {
+				topicHistoryPageCache.clearTopic(selectedTopic.chat_topic_id)
+			}
 			updateTopicMessages({
 				// Revoke refresh is an authoritative snapshot: replace preserves the server's
 				// complete canonical membership, while visible-branch filtering stays in UI projection.
@@ -1521,13 +1557,14 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				// 本地 undo 成功后会先设置锚点；紧随其后的刷新不能把尚未收敛的 read 当作远端恢复。
 				allowRemoteRevokedAnchorCleanup: false,
 			})
+		}
 
 		pubsub.subscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 
 		return () => {
 			pubsub?.unsubscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 		}
-	}, [updateTopicMessages])
+	}, [selectedTopic?.chat_topic_id, updateTopicMessages])
 
 	// Cleanup on component unmount
 	useEffect(() => {

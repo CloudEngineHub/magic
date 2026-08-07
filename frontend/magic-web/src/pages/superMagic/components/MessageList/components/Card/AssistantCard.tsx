@@ -332,9 +332,14 @@ export function withAssistantCard<
 				{statusList.has(messageNode?.status) && (
 					<>
 						{messageNode?.role === "tool" && messageNode?.content && (
-							<div className="mb-1 text-muted-foreground">{messageNode?.content}</div>
+							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>
 						)}
-						<StatusBadge status={messageNode?.status} />
+						<div
+							className="ml-[var(--message-status-offset,0px)] w-fit"
+							data-testid="message-list-status-badge"
+						>
+							<StatusBadge status={messageNode?.status} />
+						</div>
 						{messageNode?.status === "finished" && (
 							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
 								<div className="flex items-center gap-1"></div>
