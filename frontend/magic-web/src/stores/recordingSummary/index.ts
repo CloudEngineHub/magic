@@ -14,7 +14,6 @@ import { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Work
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { isAudioProjectMode } from "@/services/audioRecordings"
 import { resolveIsOtherTabRecording } from "./resolveIsOtherTabRecording"
 
 /**
@@ -523,10 +522,8 @@ class RecordingSummaryStore {
 		// 初始化浮动面板位置
 		this.floatPanel.initializePosition()
 		this.floatPanel.setExpanded(true)
-		// Legacy summary projects expand AiChat on desktop; audio-recordings mode keeps it hidden.
-		const shouldExpandAiChat =
-			!this.floatPanel.isMobile && !isAudioProjectMode(project?.project_mode)
-		this.floatPanel.setExpandedAiChat(shouldExpandAiChat)
+		// Keep the conversation visible by default for every desktop recording flow.
+		this.floatPanel.setExpandedAiChat(!this.floatPanel.isMobile)
 		this.floatPanel.setEnterAnimationStatus(true)
 
 		setTimeout(() => {

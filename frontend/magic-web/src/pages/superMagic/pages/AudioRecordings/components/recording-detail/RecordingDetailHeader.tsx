@@ -364,7 +364,6 @@ export function RecordingDetailHeader({
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : null}
-
 					{capabilities.canManageShare ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>

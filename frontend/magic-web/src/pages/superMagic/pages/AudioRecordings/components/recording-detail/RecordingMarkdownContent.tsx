@@ -3,6 +3,7 @@ import { useLatest } from "ahooks"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { createRecordingMarkdownRemarkPlugin } from "../../utils/markdown-time-links"
 import {
 	createRecordingMarkdownComponents,
@@ -19,6 +20,8 @@ export interface RecordingMarkdownContentProps {
 	onTimeClick?: (seconds: number) => void
 	timeLinkTestId?: string
 	speakerLinkTestId?: string
+	attachments?: AttachmentFile[]
+	relativeFilePath?: string
 }
 
 /** Renders completed markdown and turns generated time marks into audio seek actions. */
@@ -31,6 +34,8 @@ export function RecordingMarkdownContent({
 	onTimeClick,
 	timeLinkTestId = "recording-detail-time-link",
 	speakerLinkTestId = "recording-detail-speaker-link",
+	attachments = [],
+	relativeFilePath,
 }: RecordingMarkdownContentProps) {
 	// Keep ReactMarkdown component overrides stable during playback RAF re-renders so chip clicks are not lost mid-press.
 	const onSpeakerClickRef = useLatest(onSpeakerClick)
@@ -47,8 +52,18 @@ export function RecordingMarkdownContent({
 				speakerNameMap,
 				timeLinkTestId,
 				speakerLinkTestId,
+				attachments,
+				relativeFilePath,
 			}),
-		[onSpeakerClickRef, onTimeClickRef, speakerLinkTestId, speakerNameMap, timeLinkTestId],
+		[
+			onSpeakerClickRef,
+			onTimeClickRef,
+			speakerLinkTestId,
+			speakerNameMap,
+			timeLinkTestId,
+			attachments,
+			relativeFilePath,
+		],
 	)
 
 	return (

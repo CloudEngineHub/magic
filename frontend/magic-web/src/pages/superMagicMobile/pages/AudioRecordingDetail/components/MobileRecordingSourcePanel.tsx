@@ -16,6 +16,7 @@ import type { MobileRecordingSourceTab, RecordingTranscriptSegment } from "../ty
 import { parseTranscriptMarkdown } from "../utils/transcript-parser"
 import { formatRecordingTime } from "../utils/time"
 import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 
 interface MobileRecordingSourcePanelProps {
 	transcriptContent?: string
@@ -30,6 +31,8 @@ interface MobileRecordingSourcePanelProps {
 	onOpenSpeakerSettings: () => void
 	onSeek: (seconds: number) => void
 	onContentScroll?: () => void
+	attachmentTree?: AttachmentFile[]
+	notesFilePath?: string
 }
 
 /** Shows completed source attachments: transcript timeline and readonly notes markdown. */
@@ -46,6 +49,8 @@ export function MobileRecordingSourcePanel({
 	onOpenSpeakerSettings,
 	onSeek,
 	onContentScroll,
+	attachmentTree = [],
+	notesFilePath,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
@@ -145,6 +150,8 @@ export function MobileRecordingSourcePanel({
 								speakerNameMap={speakerNameMap}
 								onSpeakerClick={onOpenSpeakerSettings}
 								onTimeClick={onSeek}
+								attachments={attachmentTree}
+								relativeFilePath={notesFilePath}
 							/>
 						</div>
 					) : (

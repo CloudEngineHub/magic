@@ -66,6 +66,7 @@ const {
 			isOtherTabRecording: false,
 			floatPanel: {
 				setExpanded: vi.fn(),
+				setExpandedAiChat: vi.fn(),
 			},
 			message: [] as Array<VoiceResultUtterance & { add_time: number; id: string }>,
 			note: { content: "", file_extension: "md" },
@@ -293,6 +294,7 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryStoreMock.status = "init"
 		recordSummaryStoreMock.isVisible = false
 		recordSummaryStoreMock.floatPanel.setExpanded.mockReset()
+		recordSummaryStoreMock.floatPanel.setExpandedAiChat.mockReset()
 		recordSummaryStoreMock.message = []
 		recordSummaryStoreMock.note = { content: "", file_extension: "md" }
 		recordSummaryStoreMock.errorState.recordingError = undefined
@@ -465,6 +467,7 @@ describe("useRecordingEntryFacade", () => {
 
 		expect(recordSummaryStoreMock.isVisible).toBe(true)
 		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
+		expect(recordSummaryStoreMock.floatPanel.setExpandedAiChat).toHaveBeenCalledWith(true)
 		expect(result.current.presentation).toBe("list")
 	})
 
@@ -472,6 +475,7 @@ describe("useRecordingEntryFacade", () => {
 		recordSummaryStoreMock.status = "recording"
 		recordSummaryStoreMock.isVisible = false
 		recordSummaryStoreMock.floatPanel.setExpanded.mockClear()
+		recordSummaryStoreMock.floatPanel.setExpandedAiChat.mockClear()
 
 		const { result } = renderHook(() => useRecordingEntryFacade())
 
@@ -481,6 +485,7 @@ describe("useRecordingEntryFacade", () => {
 
 		expect(recordSummaryStoreMock.isVisible).toBe(true)
 		expect(recordSummaryStoreMock.floatPanel.setExpanded).toHaveBeenCalledWith(true)
+		expect(recordSummaryStoreMock.floatPanel.setExpandedAiChat).toHaveBeenCalledWith(true)
 		expect(result.current.presentation).toBe("list")
 	})
 

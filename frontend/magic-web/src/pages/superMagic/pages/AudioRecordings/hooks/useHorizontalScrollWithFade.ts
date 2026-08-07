@@ -5,6 +5,16 @@ interface HorizontalScrollFadeState {
 	canScrollEnd: boolean
 }
 
+/** Centers one item inside its own horizontal scroller without moving scrollable ancestors. */
+export function centerHorizontalItemInContainer(container: HTMLElement, item: HTMLElement) {
+	const itemCenter = item.offsetLeft + item.offsetWidth / 2
+	const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+	container.scrollLeft = Math.max(
+		0,
+		Math.min(maxScrollLeft, itemCenter - container.clientWidth / 2),
+	)
+}
+
 /** Tracks horizontal overflow and maps vertical wheel to sideways scroll for pill/meta strips. */
 export function useHorizontalScrollWithFade<T extends HTMLElement>() {
 	const scrollRef = useRef<T>(null)

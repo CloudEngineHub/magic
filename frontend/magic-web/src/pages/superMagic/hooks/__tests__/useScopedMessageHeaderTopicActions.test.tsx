@@ -15,6 +15,11 @@ vi.mock("@/apis", () => ({
 	},
 }))
 
+vi.mock("@/pages/superMagic/services/chatConversationNameSync", () => ({
+	renameTopicWithChatSync: vi.fn(),
+}))
+
+/** Creates an isolated synthetic topic for scoped action tests. */
 function createTopic(id: string, topicName: string): Topic {
 	return {
 		id,

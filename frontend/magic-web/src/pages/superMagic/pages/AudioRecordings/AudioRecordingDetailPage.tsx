@@ -39,8 +39,10 @@ import { RecordingDetailHeader } from "./components/recording-detail/RecordingDe
 import { RecordingDetailWorkbench } from "./components/recording-detail/RecordingDetailWorkbench"
 import { RecordingDetailLeftColumn } from "./components/recording-detail/RecordingDetailLeftColumn"
 import { RecordingDetailRightPanel } from "./components/recording-detail/RecordingDetailRightPanel"
+import RecordingDetailChatPanel from "./components/recording-detail/RecordingDetailChatPanel"
 import {
 	RecordingDetailEmptyState,
+	RecordingDetailChatSkeleton,
 	RecordingDetailPageSkeleton,
 } from "./components/recording-detail/RecordingDetailEmptyState"
 import { RecordingDetailSpeakerDialog } from "./components/recording-detail/RecordingDetailSpeakerDialog"
@@ -53,7 +55,12 @@ import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Share/utils/recordingShareUiConfig"
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
-import SuperMagicService from "@/pages/superMagic/services"
+import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
+import {
+	RECORDING_CHAT_COLLAPSED_WIDTH,
+	RECORDING_CHAT_EXPANDED_WIDTH,
+	RECORDING_CHAT_HISTORY_WIDTH,
+} from "./components/recording-detail/recording-detail-layout"
 
 const MobileAudioRecordingDetailPage = lazy(
 	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
@@ -81,6 +88,7 @@ function AudioRecordingDetailPageDesktop() {
 		texts,
 		audioUrl,
 		title,
+		attachmentTree,
 		attachmentList,
 		refresh,
 		mutateAudioProjectItem,
@@ -108,6 +116,14 @@ function AudioRecordingDetailPageDesktop() {
 	const [deleteOpen, setDeleteOpen] = useState(false)
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [ungroupedCount, setUngroupedCount] = useState(0)
+	const [isConversationPanelCollapsed, setIsConversationPanelCollapsed] = useState(false)
+	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
+	const chat = useRecordingProjectChat({
+		projectId,
+		attachmentsLoading: loading,
+		attachmentTree,
+		attachmentList,
+	})
 
 	const resolvedItem = detailItem ?? projectItem
 	const displayTitle = titleOverride || title || t("detail.untitled")
@@ -135,6 +151,22 @@ function AudioRecordingDetailPageDesktop() {
 	useEffect(() => {
 		setDetailItem(projectItem)
 	}, [projectItem])
+
+	useEffect(() => {
+		setChatHistoryOpen(false)
+		setIsConversationPanelCollapsed(false)
+	}, [projectId])
+
+	/** Toggles the conversation rail and dismisses topic history before collapsing it. */
+	const handleToggleConversationPanel = useCallback(() => {
+		if (!isConversationPanelCollapsed) setChatHistoryOpen(false)
+		setIsConversationPanelCollapsed((current) => !current)
+	}, [isConversationPanelCollapsed])
+
+	/** Restores the full conversation width without changing the selected topic or messages. */
+	const handleExpandConversationPanel = useCallback(() => {
+		setIsConversationPanelCollapsed(false)
+	}, [])
 
 	useEffect(() => {
 		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
@@ -277,14 +309,8 @@ function AudioRecordingDetailPageDesktop() {
 		navigate({ name: RouteName.AudioRecordings })
 	}
 
-	/** Initializes the recording project state before entering its Super Magic project view. */
-	async function handleOpenProject() {
-		try {
-			await SuperMagicService.initializeState({ projectId })
-		} catch (error) {
-			console.error("Failed to initialize project state before navigation:", error)
-		}
-
+	/** Routes to the normal project view while leaving project-state hydration to the route owner. */
+	function handleOpenProject() {
 		navigate({
 			name: RouteName.SuperWorkspaceProjectState,
 			params: { projectId },
@@ -349,101 +375,157 @@ function AudioRecordingDetailPageDesktop() {
 		}
 	}
 
+	const conversationPanelWidth = isConversationPanelCollapsed
+		? RECORDING_CHAT_COLLAPSED_WIDTH
+		: RECORDING_CHAT_EXPANDED_WIDTH
+	const chatPanelWidth =
+		conversationPanelWidth + (chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0)
+
 	return (
 		<RecordingDetailProvider capabilities={OWNER_RECORDING_DETAIL_CAPABILITIES}>
-			<div
-				className={AUDIO_RECORDINGS_PAGE_SHELL_CLASS}
-				data-testid="audio-recording-detail-page"
-			>
-				<RecordingDetailHeader
-					title={displayTitle}
-					projectItem={resolvedItem}
-					fileMap={fileMap}
-					exportAvailability={actions.exportAvailability}
-					canGenerateSummary={actions.canGenerateSummary}
-					summarySubmitting={actions.summarySubmitting}
-					renaming={actions.renaming}
-					onBack={handleBack}
-					onRename={handleRename}
-					onGenerateSummary={handleSummaryAction}
-					onExportAudio={() => void actions.downloadAudio()}
-					onExportTranscript={() => void actions.downloadTranscript()}
-					onExportNotes={() => void actions.downloadNotes()}
-					onExportSummaryType={(type) => void actions.downloadSummaryType(type)}
-					onExportAll={() => void actions.downloadAll()}
-					onCreateShare={shareControls.openCreateShare}
-					onManageShare={shareControls.openManageShare}
-					onOpenProject={() => void handleOpenProject()}
-					onMoveGroup={() => setMoveGroupOpen(true)}
-					onCopyToProject={() => {
-						if (resolvedItem) void copyController.openCopyToProject(resolvedItem)
-					}}
-					onDelete={() => setDeleteOpen(true)}
-				/>
+			<>
+				<div
+					className="flex h-full min-h-0 w-full min-w-0 gap-2 overflow-hidden"
+					data-testid="audio-recording-detail-page"
+				>
+					<div
+						className={`${AUDIO_RECORDINGS_PAGE_SHELL_CLASS} min-w-0 flex-1`}
+						data-testid="audio-recording-detail-card"
+					>
+						<RecordingDetailHeader
+							title={displayTitle}
+							projectItem={resolvedItem}
+							fileMap={fileMap}
+							exportAvailability={actions.exportAvailability}
+							canGenerateSummary={actions.canGenerateSummary}
+							summarySubmitting={actions.summarySubmitting}
+							renaming={actions.renaming}
+							onBack={handleBack}
+							onRename={handleRename}
+							onGenerateSummary={handleSummaryAction}
+							onExportAudio={() => void actions.downloadAudio()}
+							onExportTranscript={() => void actions.downloadTranscript()}
+							onExportNotes={() => void actions.downloadNotes()}
+							onExportSummaryType={(type) => void actions.downloadSummaryType(type)}
+							onExportAll={() => void actions.downloadAll()}
+							onCreateShare={shareControls.openCreateShare}
+							onManageShare={shareControls.openManageShare}
+							onOpenProject={() => void handleOpenProject()}
+							onMoveGroup={() => setMoveGroupOpen(true)}
+							onCopyToProject={() => {
+								if (resolvedItem)
+									void copyController.openCopyToProject(resolvedItem)
+							}}
+							onDelete={() => setDeleteOpen(true)}
+						/>
 
-				{loading ? <RecordingDetailPageSkeleton /> : null}
+						{loading ? <RecordingDetailPageSkeleton /> : null}
 
-				{!loading && error ? (
-					<RecordingDetailEmptyState
-						variant="pageError"
-						className="flex-1"
-						onAction={handleBack}
-						actionLabel={t("detail.back")}
-					/>
-				) : null}
-
-				{!loading && !error && detailUnavailable ? (
-					<RecordingDetailEmptyState
-						variant="pageError"
-						className="flex-1"
-						onAction={handleBack}
-						actionLabel={t("detail.back")}
-					/>
-				) : null}
-
-				{!loading && !error && !detailUnavailable ? (
-					<RecordingDetailWorkbench
-						left={
-							<RecordingDetailLeftColumn
-								audioRef={player.audioRef}
-								audioUrl={audioUrl}
-								transcriptMarkdown={texts.transcript?.content}
-								currentSec={playerCurrentSec}
-								currentTime={player.currentTime}
-								duration={player.duration}
-								playing={player.playing}
-								expanded={playerExpanded}
-								playbackRate={player.playbackRate}
-								colorSegments={colorSegments}
-								speakerNameMap={speakerNameMap}
-								selectedSpeakerIds={effectiveSelectedSpeakerIds}
-								onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
-								onToggle={player.toggle}
-								onSeek={player.seekTo}
-								onPlaySegment={handlePlaySegment}
-								onExpandedChange={setPlayerExpanded}
-								onPlaybackRateChange={player.setPlaybackRate}
-								onOpenSpeakerSettings={openSpeakerSettings}
+						{!loading && error ? (
+							<RecordingDetailEmptyState
+								variant="pageError"
+								className="flex-1"
+								onAction={handleBack}
+								actionLabel={t("detail.back")}
 							/>
-						}
-						right={
-							<RecordingDetailRightPanel
-								fileMap={fileMap}
-								summaryContent={summaryContent}
-								notesContent={texts.notes?.content}
-								attachmentList={attachmentList}
-								summaryReady={summaryReady}
-								summarizing={detailSummaryState.status === "generating"}
-								summaryFailed={detailSummaryState.status === "failed"}
-								speakerNameMap={speakerNameMap}
-								onOpenSpeakerSettings={openSpeakerSettings}
-								onTimeClick={handleSummaryTimeClick}
-								onGenerateSummary={handleSummaryAction}
-								summarySubmitting={actions.summarySubmitting}
+						) : null}
+
+						{!loading && !error && detailUnavailable ? (
+							<RecordingDetailEmptyState
+								variant="pageError"
+								className="flex-1"
+								onAction={handleBack}
+								actionLabel={t("detail.back")}
 							/>
-						}
-					/>
-				) : null}
+						) : null}
+
+						{!loading && !error && !detailUnavailable ? (
+							<RecordingDetailWorkbench
+								left={
+									<RecordingDetailLeftColumn
+										audioRef={player.audioRef}
+										audioUrl={audioUrl}
+										transcriptMarkdown={texts.transcript?.content}
+										currentSec={playerCurrentSec}
+										currentTime={player.currentTime}
+										duration={player.duration}
+										playing={player.playing}
+										expanded={playerExpanded}
+										playbackRate={player.playbackRate}
+										colorSegments={colorSegments}
+										speakerNameMap={speakerNameMap}
+										selectedSpeakerIds={effectiveSelectedSpeakerIds}
+										onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
+										onToggle={player.toggle}
+										onSeek={player.seekTo}
+										onPlaySegment={handlePlaySegment}
+										onExpandedChange={setPlayerExpanded}
+										onPlaybackRateChange={player.setPlaybackRate}
+										onOpenSpeakerSettings={openSpeakerSettings}
+									/>
+								}
+								right={
+									<RecordingDetailRightPanel
+										fileMap={fileMap}
+										summaryContent={summaryContent}
+										notesContent={texts.notes?.content}
+										attachmentList={attachmentList}
+										summaryReady={summaryReady}
+										summarizing={detailSummaryState.status === "generating"}
+										summaryFailed={detailSummaryState.status === "failed"}
+										speakerNameMap={speakerNameMap}
+										onOpenSpeakerSettings={openSpeakerSettings}
+										onTimeClick={handleSummaryTimeClick}
+										onGenerateSummary={handleSummaryAction}
+										summarySubmitting={actions.summarySubmitting}
+									/>
+								}
+							/>
+						) : null}
+					</div>
+
+					{loading ? (
+						<div
+							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar"
+							style={{
+								width: RECORDING_CHAT_EXPANDED_WIDTH,
+								minWidth: RECORDING_CHAT_EXPANDED_WIDTH,
+							}}
+							data-testid="recording-detail-chat-skeleton-rail"
+						>
+							<RecordingDetailChatSkeleton />
+						</div>
+					) : null}
+
+					{!loading && !error && !detailUnavailable ? (
+						<div
+							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar transition-[width,min-width] duration-300"
+							style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}
+							data-testid="recording-detail-chat-rail"
+							data-collapsed={String(isConversationPanelCollapsed)}
+						>
+							{/* Keep the conversation mounted while only its sibling rail width changes. */}
+							<RecordingDetailChatPanel
+								isConversationPanelCollapsed={isConversationPanelCollapsed}
+								historyOpen={chatHistoryOpen}
+								onToggleConversationPanel={handleToggleConversationPanel}
+								onExpandConversationPanel={handleExpandConversationPanel}
+								onToggleHistory={() => setChatHistoryOpen((current) => !current)}
+								topicsLoading={chat.topicsLoading}
+								topicStore={chat.topicStore}
+								topicActions={chat.topicActions}
+								selectedTopic={chat.selectedTopic}
+								project={chat.project}
+								workspace={chat.workspace}
+								setSelectedTopic={chat.topicStore.setSelectedTopic}
+								projectFilesStore={chat.projectFilesStore}
+								mentionPanelStore={chat.mentionPanelStore}
+								attachments={chat.projectFilesStore.workspaceFileTree}
+								attachmentList={chat.projectFilesStore.workspaceFilesList}
+							/>
+						</div>
+					) : null}
+				</div>
 
 				<RecordingDetailSpeakerDialog
 					open={speakerSettingsOpen}
@@ -509,7 +591,7 @@ function AudioRecordingDetailPageDesktop() {
 					onClose={shareControls.closeManageShare}
 				/>
 				<AudioRecordingCopyDialog controller={copyController} />
-			</div>
+			</>
 		</RecordingDetailProvider>
 	)
 }

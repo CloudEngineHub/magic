@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageMain from ".."
+import ProjectTopicListView from "../ProjectTopicListView"
 
 const { mockNavigate, mockSetSelectedTopic, topicStoreMock } = vi.hoisted(() => ({
 	mockNavigate: vi.fn(),
@@ -201,5 +202,25 @@ describe("ProjectPageMain", () => {
 			"topic-item-topic-late",
 			"topic-item-topic-middle",
 		])
+	})
+
+	it("renders the dependency-injected topic view and forwards selection", () => {
+		const topic = createTopic({ id: "topic-scoped", topic_name: "Scoped topic" })
+
+		render(
+			<ProjectTopicListView
+				projectId="project-scoped"
+				topics={[topic]}
+				loading={false}
+				onRefresh={vi.fn(async () => undefined)}
+				onSelectTopic={vi.fn()}
+				onTopicPin={vi.fn()}
+				onTopicDelete={vi.fn()}
+			/>,
+		)
+
+		const row = screen.getByTestId("topic-item-topic-scoped")
+		fireEvent.click(within(row).getByTestId("topic-item-topic-scoped-action-pin"))
+		expect(screen.getByText("Scoped topic")).toBeInTheDocument()
 	})
 })

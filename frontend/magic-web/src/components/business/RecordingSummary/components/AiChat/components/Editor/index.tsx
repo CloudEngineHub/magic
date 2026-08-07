@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { merge } from "lodash-es"
 import type { FC } from "react"
 import recordingSummaryStore from "@/stores/recordingSummary"
@@ -9,6 +9,8 @@ import useMessageQueue from "@/pages/superMagic/components/MessagePanel/hooks/us
 import { MessageEditorProvider } from "@/pages/superMagic/components/MessageEditor"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
+import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
+import MobileComposerModeSelector from "@/pages/superMagicMobile/pages/ChatPage/components/mobile-composer/MobileComposerModeSelector"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { useTaskData } from "@/pages/superMagic/hooks/useTaskData"
@@ -20,6 +22,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { initializeService } from "@/services/recordSummary/serviceInstance"
 import { cn } from "@/lib/tiptap-utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 
 interface EditorProps {
 	messages: SuperMagicMessageItem[]
@@ -47,6 +50,8 @@ const Editor: FC<EditorProps> = ({
 	const recordSummaryService = initializeService()
 	const { taskData } = useTaskData({ selectedTopic })
 	const isMobile = useIsMobile()
+	// Share one model store between the visible selector and the mobile message composer.
+	const [topicModelStore] = useState(createSuperMagicTopicModelStore)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
@@ -109,6 +114,9 @@ const Editor: FC<EditorProps> = ({
 			attachments,
 			mentionPanelStore,
 			projectFilesStore,
+			topicModelStore,
+			// Keep the recording employee fixed while exposing the claw-style model selector on mobile.
+			mobileModeSelectorVariant: isMobile ? "claw" : undefined,
 			mergeSendParams: ({ defaultParams }) => {
 				return merge({}, defaultParams, {
 					extra: {
@@ -139,6 +147,7 @@ const Editor: FC<EditorProps> = ({
 		attachments,
 		mentionPanelStore,
 		projectFilesStore,
+		topicModelStore,
 		messageQueue.editingQueueItem,
 		messageQueue.addToQueue,
 		messageQueue.finishEditQueueItem,
@@ -173,10 +182,29 @@ const Editor: FC<EditorProps> = ({
 
 	return (
 		<MessageEditorProvider config={messageEditorProviderConfig}>
-			<div className={cn("m-2 rounded-xl", isMobile && "border border-border !p-0")}>
+			<div className={cn("w-full shrink-0 rounded-xl", isMobile ? "border-0 !p-0" : "m-2")}>
 				{taskDataNode}
 				{messageQueueNode}
-				<DefaultMessageEditorContainer editorContext={editorContext} />
+				{isMobile ? (
+					<div className="flex w-full flex-col gap-2">
+						{/* Keep employee selection hidden while exposing the general-model picker. */}
+						<div className="flex min-h-8 items-center px-2">
+							<MobileComposerModeSelector
+								selectedTopic={selectedTopic}
+								selectedProject={selectedProject}
+								topicMode={TopicMode.General}
+								selectorVariant="claw"
+								topicModelStore={topicModelStore}
+								messagesLength={messages.length}
+								onModeChange={undefined}
+							/>
+						</div>
+						{/* Reuse the same mobile input container as the standalone chat page. */}
+						<MobileInputContainer editorContext={editorContext} />
+					</div>
+				) : (
+					<DefaultMessageEditorContainer editorContext={editorContext} />
+				)}
 			</div>
 		</MessageEditorProvider>
 	)

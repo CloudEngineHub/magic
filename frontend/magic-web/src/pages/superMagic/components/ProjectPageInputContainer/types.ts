@@ -1,11 +1,11 @@
-import { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { HandleSendParams } from "../../services/messageSendFlowService"
 import type { SceneEditorContext } from "../MainInputContainer/components/editors/types"
-import { ProjectListItem, Topic, Workspace } from "../../pages/Workspace/types"
-import { MessageEditorLayoutConfig } from "../MessageEditor"
-import { MessageEditorSize } from "../MessageEditor/types"
-import { TopicModeLogic } from "../MessagePanel/types"
-import { AttachmentItem } from "../TopicFilesButton/hooks"
+import type { ProjectListItem, Topic, Workspace } from "../../pages/Workspace/types"
+import type { MessageEditorLayoutConfig, MessageEditorSize } from "../MessageEditor/types"
+import type { TopicModeLogic } from "../MessagePanel/types"
+import type { AttachmentItem } from "../TopicFilesButton/hooks"
+import type { TopicStore } from "../../stores/core/topic"
 
 export interface ProjectPageInputContainerProps {
 	messages?: any[]
@@ -38,6 +38,8 @@ export interface ProjectPageInputContainerProps {
 	attachments?: AttachmentItem[]
 	isShowLoadingInit?: boolean
 	mentionPanelStore?: MentionPanelStore
+	/** Keeps send-time topic mutations inside the caller's isolated topic scope. */
+	topicStore?: TopicStore
 	/**
 	 * 话题模式逻辑，用于控制话题模式的选择和切换
 	 */

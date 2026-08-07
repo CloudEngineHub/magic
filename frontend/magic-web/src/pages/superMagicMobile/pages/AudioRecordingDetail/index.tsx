@@ -1,10 +1,14 @@
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, Check, Ellipsis, FileAudio, Loader2, Pencil, Share2, X } from "lucide-react"
+import { ChevronLeft, Check, Ellipsis, FileAudio, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useParams } from "react-router"
+import { useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
+import ConversationActionsPopup from "@/pages/superMagicMobile/components/ConversationActionsPopup"
+import type { ActionGroup } from "@/pages/superMagicMobile/components/ActionSheet"
+import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/lib/utils"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
@@ -49,6 +53,15 @@ import { downloadRecordingAudioFile } from "@/pages/superMagic/pages/AudioRecord
 import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog"
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
 import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
+import { SuperMagicApi } from "@/apis"
+import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
+import { ProjectFilesStore } from "@/stores/projectFiles"
+import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
+import ProjectTopicListView from "@/pages/superMagicMobile/pages/ProjectPage/ProjectPageMain/ProjectTopicListView"
+import recordingSummaryStore from "@/stores/recordingSummary"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
@@ -65,6 +78,7 @@ export default function MobileAudioRecordingDetailPage() {
 	const { t } = useTranslation("audioRecordings")
 	const navigate = useNavigate()
 	const location = useLocation()
+	const [searchParams, setSearchParams] = useSearchParams()
 	const { projectId = "" } = useParams<{ projectId: string }>()
 	const locationState = location.state as AudioRecordingDetailLocationState | null
 	const {
@@ -75,6 +89,7 @@ export default function MobileAudioRecordingDetailPage() {
 		texts,
 		audioUrl,
 		title,
+		attachmentTree,
 		attachmentList,
 		mutateAudioProjectItem,
 	} = useMobileRecordingDetailData({
@@ -113,13 +128,266 @@ export default function MobileAudioRecordingDetailPage() {
 			detailItem?.card_status ?? projectItem?.card_status ?? locationState?.cardStatus
 		return cardStatus === "summarized" ? "summary" : "source"
 	}, [detailItem?.card_status, locationState?.cardStatus, projectItem?.card_status])
+	const requestedTab = searchParams.get("tab")
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>(defaultTab)
+	const [topics, setTopics] = useState<Topic[]>([])
+	const [topicsLoading, setTopicsLoading] = useState(false)
+	const [chatProject, setChatProject] = useState<ProjectListItem | null>(null)
+	const [chatWorkspace, setChatWorkspace] = useState<Workspace | null>(null)
+	const [composerTopic, setComposerTopic] = useState<Topic | null>(null)
+	const [topicActionItem, setTopicActionItem] = useState<Topic | null>(null)
+	const [topicActionsOpen, setTopicActionsOpen] = useState(false)
+	const [topicRenameOpen, setTopicRenameOpen] = useState(false)
+	const [topicRenameValue, setTopicRenameValue] = useState("")
+	const [topicDeleteOpen, setTopicDeleteOpen] = useState(false)
+	const [chatProjectFilesStore] = useState(() => new ProjectFilesStore())
+	const [chatMentionStore] = useState(() => createMentionPanelStore(chatProjectFilesStore))
+
+	useProjectAttachmentsChangeRealtime({
+		projectId,
+		enabled: activeTab === "ai",
+		store: chatProjectFilesStore,
+	})
 	const recordingShareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
 	const copyController = useAudioRecordingCopyToProject()
 
 	useEffect(() => {
-		setActiveTab(defaultTab)
-	}, [defaultTab])
+		// Clear scoped AI state at route boundaries so a previous recording never
+		// flashes its topics, workspace, or composer selection in the next detail.
+		setTopics([])
+		setChatProject(null)
+		setChatWorkspace(null)
+		setComposerTopic(null)
+	}, [projectId])
+
+	useEffect(() => {
+		// Depend on the query value instead of the URLSearchParams object identity so
+		// local Source/Summary switches are not reset by an equivalent params instance.
+		setActiveTab(requestedTab === "ai" ? "ai" : defaultTab)
+	}, [defaultTab, requestedTab])
+
+	useEffect(() => {
+		if (activeTab !== "ai" || !projectId) return
+		let disposed = false
+		setTopicsLoading(true)
+		// The recording detail keeps its own lightweight topic list so it can offer
+		// the same multi-topic entry point without mounting the full project shell.
+		SuperMagicApi.getTopicsByProjectId({ id: projectId, page: 1, page_size: 100 })
+			.then((response) => {
+				if (disposed) return
+				setTopics(response.list ?? [])
+			})
+			.catch(() => {
+				if (!disposed) setTopics([])
+			})
+			.finally(() => {
+				if (!disposed) setTopicsLoading(false)
+			})
+		return () => {
+			disposed = true
+		}
+	}, [activeTab, projectId])
+
+	useEffect(() => {
+		if (activeTab !== "ai" || !projectId) return
+		let disposed = false
+		SuperMagicApi.getProjectDetail({ id: projectId })
+			.then(async (project) => {
+				if (disposed) return
+				const nextProject = project as ProjectListItem
+				setChatProject(nextProject)
+				if (nextProject.workspace_id) {
+					const workspace = await SuperMagicApi.getWorkspaceDetail({
+						id: nextProject.workspace_id,
+					})
+					if (!disposed) setChatWorkspace(workspace)
+				}
+			})
+			.catch(() => undefined)
+		return () => {
+			disposed = true
+		}
+	}, [activeTab, projectId])
+
+	useEffect(() => {
+		if (activeTab !== "ai" || !projectId || loading || !chatProject) return
+		// Share the detail snapshot with the scoped composer store to avoid a second
+		// attachment request when users enter the AI tab.
+		chatMentionStore.initLoadAttachments(projectId)
+		chatProjectFilesStore.setSelectedProject(chatProject)
+		chatProjectFilesStore.setWorkspaceFileTree(attachmentTree, {
+			list: attachmentList,
+			source: "mobile-recording-detail",
+		})
+		chatMentionStore.finishLoadAttachmentsPromise(projectId)
+	}, [
+		activeTab,
+		attachmentList,
+		attachmentTree,
+		chatMentionStore,
+		chatProject,
+		chatProjectFilesStore,
+		loading,
+		projectId,
+	])
+
+	/** Updates the tab query so browser back/forward restores the AI tab. */
+	function handleTabChange(nextTab: MobileRecordingTopTab) {
+		setActiveTab(nextTab)
+		const nextParams = new URLSearchParams(searchParams)
+		if (nextTab === "ai") nextParams.set("tab", "ai")
+		else nextParams.delete("tab")
+		setSearchParams(nextParams, { replace: true })
+	}
+
+	/** Opens an existing recording topic in the regular project conversation screen. */
+	async function handleOpenTopic(topic: Topic) {
+		// Route-level project detail logic owns global store hydration; recording detail
+		// only provides the target IDs and preserves the ?tab=ai history entry.
+		navigate({
+			name: RouteName.SuperWorkspaceProjectTopicState,
+			params: { projectId, topicId: topic.id },
+		})
+	}
+
+	/** Refreshes the scoped topic list without touching the global project stores. */
+	async function refreshRecordingTopics() {
+		if (!projectId) return
+		setTopicsLoading(true)
+		try {
+			const response = await SuperMagicApi.getTopicsByProjectId({
+				id: projectId,
+				page: 1,
+				page_size: 100,
+			})
+			setTopics(response.list ?? [])
+		} finally {
+			setTopicsLoading(false)
+		}
+	}
+
+	/** Applies the same pin/unpin topic operations used by the regular mobile project page. */
+	async function handleRecordingTopicPin(topic: Topic) {
+		const response = topic.is_pinned
+			? await SuperMagicApi.unpinTopic(topic.id)
+			: await SuperMagicApi.pinTopic(topic.id)
+		const updated = response.topic
+		setTopics((current) =>
+			current.map((item) => (item.id === topic.id ? { ...item, ...updated } : item)),
+		)
+	}
+
+	/** Preserves the project-detail minimum-one-topic deletion rule. */
+	async function handleRecordingTopicDelete(topic: Topic) {
+		if (topics.length <= 1) return
+		if (recordingSummaryStore.isRecordingTopic(topic.id)) {
+			toast.error(t("super:messageHeader.cannotDeleteCurrentTopicInRecording"))
+			return
+		}
+		setTopicDeleteOpen(true)
+		setTopicActionItem(topic)
+	}
+
+	/** Opens the project-detail-style rename sheet for a scoped recording topic. */
+	function handleRecordingTopicRename(topic: Topic) {
+		setTopicActionItem(topic)
+		setTopicRenameValue(topic.topic_name || "")
+		setTopicRenameOpen(true)
+	}
+
+	/** Persists the rename-sheet value and keeps the scoped topic list in sync. */
+	async function submitRecordingTopicRename() {
+		const topic = topicActionItem
+		const nextName = topicRenameValue.trim()
+		if (!topic?.id || !nextName || nextName === topic.topic_name) {
+			setTopicRenameOpen(false)
+			return
+		}
+		await SuperMagicApi.editTopic({ id: topic.id, project_id: projectId, topic_name: nextName })
+		setTopics((current) =>
+			current.map((item) =>
+				item.id === topic.id ? { ...item, topic_name: nextName } : item,
+			),
+		)
+		setTopicActionItem(null)
+		setTopicRenameOpen(false)
+	}
+
+	/** Confirms deletion while preserving the project-detail minimum-one-topic rule. */
+	async function confirmRecordingTopicDelete() {
+		const topic = topicActionItem
+		if (!topic?.id || topics.length <= 1) return
+		await SuperMagicApi.deleteTopic({ id: topic.id })
+		setTopics((current) => current.filter((item) => item.id !== topic.id))
+		setTopicActionItem(null)
+		setTopicDeleteOpen(false)
+	}
+
+	/** Opens the same grouped mobile action sheet used by the regular project topic list. */
+	function openRecordingTopicActions(topic: Topic) {
+		setTopicActionItem(topic)
+		setTopicActionsOpen(true)
+	}
+
+	/** Builds rename/delete actions while keeping pin/delete swipe actions on the shared list rows. */
+	const topicActionGroups: ActionGroup[] = topicActionItem
+		? [
+				{
+					actions: [
+						{
+							key: "rename",
+							label: t("super:hierarchicalWorkspacePopup.rename"),
+							onClick: () => {
+								setTopicActionsOpen(false)
+								handleRecordingTopicRename(topicActionItem)
+							},
+						},
+					],
+				},
+				{
+					actions: [
+						{
+							key: "delete",
+							label: t("super:hierarchicalWorkspacePopup.deleteTopic"),
+							variant: "danger" as const,
+							disabled: topics.length <= 1,
+							onClick: () => {
+								setTopicActionsOpen(false)
+								void handleRecordingTopicDelete(topicActionItem)
+							},
+						},
+					],
+				},
+			]
+		: []
+
+	/** Creates a fully mapped topic for the bottom composer before its first send. */
+	async function createTopicForComposer() {
+		if (!chatProject?.id) return null
+		const created = await SuperMagicApi.createTopic({
+			project_id: chatProject.id,
+			topic_name: "",
+			project_mode: chatProject.project_mode,
+		})
+		let topic = created as Topic
+		if (topic?.id && (!topic.chat_topic_id || !topic.chat_conversation_id)) {
+			topic = await SuperMagicApi.getTopicDetail({ id: topic.id })
+		}
+		if (topic?.id) {
+			setComposerTopic(topic)
+			setTopics((current) => [topic, ...current.filter((item) => item.id !== topic.id)])
+		}
+		return topic ?? null
+	}
+
+	/** Routes successful direct questions into the created topic while preserving ?tab=ai history. */
+	function handleComposerSendSuccess({ currentTopic }: { currentTopic: Topic | null }) {
+		if (!currentTopic?.id) return
+		navigate({
+			name: RouteName.SuperWorkspaceProjectTopicState,
+			params: { projectId, topicId: currentTopic.id },
+		})
+	}
 
 	useEffect(() => {
 		setDetailItem(projectItem)
@@ -239,6 +507,10 @@ export default function MobileAudioRecordingDetailPage() {
 		setPlayerExpanded(false)
 		setShareExportSheetOpen(false)
 		setProjectShareSheetOpen(false)
+		setTopicActionItem(null)
+		setTopicActionsOpen(false)
+		setTopicRenameOpen(false)
+		setTopicDeleteOpen(false)
 	}, [projectId])
 
 	useEffect(() => {
@@ -537,29 +809,30 @@ export default function MobileAudioRecordingDetailPage() {
 						<ChevronLeft className="size-[22px]" />
 					</button>
 
-					{/* Keep the segmented tabs visually centered without stealing hit targets from the left/right floating action buttons. */}
-					<div className="pointer-events-none absolute inset-x-0 flex justify-center px-[114px]">
-						<div className="pointer-events-auto grid grid-cols-2 rounded-full bg-muted p-[3px]">
+					{/* Reserve the exact left/right action widths so all three labels stay on one line without overlapping the floating button. */}
+					<div className="pointer-events-none absolute left-[66px] right-[66px] flex justify-center">
+						{/* Use content-sized columns so Chinese stays compact while English labels retain their full width. */}
+						<div className="pointer-events-auto flex w-max max-w-full rounded-full bg-muted p-[3px]">
 							<TopTabButton
 								active={activeTab === "source"}
 								label={t("detail.tabs.source")}
-								onClick={() => setActiveTab("source")}
+								onClick={() => handleTabChange("source")}
 							/>
 							<TopTabButton
 								active={activeTab === "summary"}
 								label={t("detail.tabs.summaryRoot")}
-								onClick={() => setActiveTab("summary")}
+								onClick={() => handleTabChange("summary")}
+							/>
+							<TopTabButton
+								active={activeTab === "ai"}
+								label={t("detail.tabs.ai")}
+								onClick={() => handleTabChange("ai")}
 							/>
 						</div>
 					</div>
 
-					{/* Match the project detail action capsule so share/more icons use the same 48px slots and 22px Lucide sizing. */}
+					{/* Keep sharing inside the prototype-aligned more-actions menu while preserving the single 48px touch target. */}
 					<div className="ml-auto flex h-12 shrink-0 items-stretch overflow-hidden rounded-full bg-card text-foreground shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)] dark:shadow-[0px_8px_25px_0px_rgba(0,0,0,0.32)]">
-						<HeaderIconButton
-							label={t("detail.share")}
-							icon={<Share2 className="size-[22px]" />}
-							onClick={openShareExportSheet}
-						/>
 						<HeaderIconButton
 							label={t("card.moreActions")}
 							icon={<Ellipsis className="size-[22px]" />}
@@ -623,6 +896,8 @@ export default function MobileAudioRecordingDetailPage() {
 						onOpenSpeakerSettings={openSpeakerSettings}
 						onSeek={(seconds) => player.seekTo(seconds, { autoplay: true })}
 						onContentScroll={handlePlayerContentScroll}
+						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
+						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
 					/>
 				) : null}
 
@@ -655,23 +930,148 @@ export default function MobileAudioRecordingDetailPage() {
 						/>
 					)
 				) : null}
+
+				{!loading && !error && !detailUnavailable && activeTab === "ai" ? (
+					<div
+						className="flex min-h-0 flex-1 flex-col bg-mobile-background"
+						data-testid="mobile-recording-detail-ai"
+					>
+						{/* Keep list spacing independent from the edge-aligned shared mobile composer. */}
+						<div
+							className="flex min-h-0 flex-1 flex-col px-3 pt-2"
+							data-testid="mobile-recording-detail-ai-topics"
+						>
+							<ProjectTopicListView
+								className="min-h-0 flex-1"
+								projectId={projectId}
+								topics={topics}
+								loading={topicsLoading}
+								onRefresh={refreshRecordingTopics}
+								onSelectTopic={(topic) => void handleOpenTopic(topic)}
+								onTopicMore={openRecordingTopicActions}
+								onTopicPin={(topic) => void handleRecordingTopicPin(topic)}
+								onTopicDelete={(topic) => void handleRecordingTopicDelete(topic)}
+							/>
+						</div>
+						{chatProject ? (
+							/* Keep the safe-area gutter on the same surface as the shared composer. */
+							<div
+								className="shrink-0 bg-mobile-background pb-[max(env(safe-area-inset-bottom),8px)]"
+								data-testid="mobile-recording-detail-ai-composer"
+							>
+								<ProjectPageInputContainer
+									className="mx-auto max-w-3xl rounded-2xl"
+									selectedProject={chatProject}
+									selectedTopic={composerTopic}
+									setSelectedProject={setChatProject}
+									setSelectedTopic={setComposerTopic}
+									selectedWorkspace={chatWorkspace}
+									attachments={chatProjectFilesStore.workspaceFileTree}
+									mentionPanelStore={chatMentionStore}
+									isEmptyStatus
+									createTopic={createTopicForComposer}
+									onSendSuccess={handleComposerSendSuccess}
+								/>
+							</div>
+						) : null}
+					</div>
+				) : null}
 			</main>
 
-			<MobileRecordingAudioPlayer
-				audioRef={player.audioRef}
-				audioUrl={audioUrl}
-				currentSec={playerCurrentSec}
-				duration={player.duration}
-				playing={player.playing}
-				expanded={playerExpanded}
-				onToggle={player.toggle}
-				onSeek={(seconds) => player.seekTo(seconds, { autoplay: false })}
-				onExpandedChange={setPlayerExpanded}
-				playbackRate={player.playbackRate}
-				onPlaybackRateChange={player.setPlaybackRate}
-				colorSegments={colorSegments}
-				scrollSignal={playerScrollSignal}
+			{activeTab !== "ai" ? (
+				<MobileRecordingAudioPlayer
+					audioRef={player.audioRef}
+					audioUrl={audioUrl}
+					currentSec={playerCurrentSec}
+					duration={player.duration}
+					playing={player.playing}
+					expanded={playerExpanded}
+					onToggle={player.toggle}
+					onSeek={(seconds) => player.seekTo(seconds, { autoplay: false })}
+					onExpandedChange={setPlayerExpanded}
+					playbackRate={player.playbackRate}
+					onPlaybackRateChange={player.setPlaybackRate}
+					colorSegments={colorSegments}
+					scrollSignal={playerScrollSignal}
+				/>
+			) : null}
+
+			<ConversationActionsPopup
+				visible={topicActionsOpen}
+				title={topicActionItem?.topic_name || t("super:topic.unnamedTopic")}
+				actionGroups={topicActionGroups}
+				onClose={() => {
+					setTopicActionsOpen(false)
+					setTopicActionItem(null)
+				}}
 			/>
+
+			<MagicPopup
+				visible={topicRenameOpen}
+				onClose={() => {
+					setTopicRenameOpen(false)
+					setTopicActionItem(null)
+				}}
+				position="bottom"
+				title={t("super:hierarchicalWorkspacePopup.topicRename")}
+				headerVariant="actionHeader"
+				headerTitle={t("super:hierarchicalWorkspacePopup.topicRename")}
+				headerLeadingAction={{
+					icon: <X />,
+					ariaLabel: t("super:common.cancel"),
+					onClick: () => {
+						setTopicRenameOpen(false)
+						setTopicActionItem(null)
+					},
+				}}
+				headerTrailingAction={{
+					icon: <Check />,
+					ariaLabel: t("super:common.confirm"),
+					onClick: () => void submitRecordingTopicRename(),
+					disabled: !topicRenameValue.trim(),
+					tone: "primary",
+				}}
+				bodyClassName="max-h-[80dvh] p-4"
+			>
+				<Input
+					value={topicRenameValue}
+					onChange={(event) => setTopicRenameValue(event.target.value)}
+					placeholder={t("super:hierarchicalWorkspacePopup.inputTopicName")}
+					autoFocus
+				/>
+			</MagicPopup>
+
+			<MagicPopup
+				visible={topicDeleteOpen}
+				onClose={() => {
+					setTopicDeleteOpen(false)
+					setTopicActionItem(null)
+				}}
+				position="bottom"
+				headerVariant="actionHeader"
+				headerTitle={t("super:ui.deleteTopicConfirmTitle")}
+				headerLeadingAction={{
+					icon: <X />,
+					ariaLabel: t("super:common.cancel"),
+					onClick: () => {
+						setTopicDeleteOpen(false)
+						setTopicActionItem(null)
+					},
+				}}
+				headerTrailingAction={{
+					icon: <Check />,
+					ariaLabel: t("super:common.confirm"),
+					onClick: () => void confirmRecordingTopicDelete(),
+					tone: "destructive",
+				}}
+				bodyClassName="max-h-[80dvh] p-6"
+			>
+				<p className="text-base leading-6 text-muted-foreground">
+					{t("super:ui.deleteTopicDescription", {
+						name: topicActionItem?.topic_name || t("super:topic.unnamedTopic"),
+					})}
+				</p>
+			</MagicPopup>
 
 			<MobileRecordingRenameSheet
 				isOpen={renameDialogOpen}
@@ -814,7 +1214,7 @@ function buildFallbackActionItem(input: {
 	}
 }
 
-/** Top-level segmented tab used for Source/Summary switching. */
+/** Top-level segmented tab that keeps all three mobile detail labels on one line. */
 function TopTabButton({
 	active,
 	label,
@@ -828,7 +1228,7 @@ function TopTabButton({
 		<button
 			type="button"
 			className={cn(
-				"h-[30px] rounded-full px-4 text-[14px] transition-colors",
+				"h-[30px] shrink-0 whitespace-nowrap rounded-full px-3.5 text-[14px] leading-5 transition-colors",
 				active
 					? "bg-card font-medium text-foreground shadow-[0_8px_25px_rgba(0,0,0,0.10)]"
 					: "font-normal text-muted-foreground",

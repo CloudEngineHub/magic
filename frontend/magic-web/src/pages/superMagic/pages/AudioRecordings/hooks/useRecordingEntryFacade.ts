@@ -45,6 +45,8 @@ const RECORDING_START_TIMEOUT_MS = 15000
 function expandDesktopRecordingFloatPanel(): void {
 	recordSummaryStore.isVisible = true
 	recordSummaryStore.floatPanel.setExpanded(true)
+	// Audio recordings open with the conversation visible so the new entry is discoverable.
+	recordSummaryStore.floatPanel.setExpandedAiChat?.(true)
 }
 
 /**

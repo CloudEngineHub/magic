@@ -9,7 +9,7 @@ import type {
 	RecordingSummaryType as CommonRecordingSummaryType,
 } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
 
-export type MobileRecordingTopTab = "source" | "summary"
+export type MobileRecordingTopTab = "source" | "summary" | "ai"
 export type MobileRecordingSourceTab = "transcript" | "notes"
 
 export type MobileRecordingSummaryType = CommonRecordingSummaryType

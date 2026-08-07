@@ -3731,9 +3731,11 @@
 		},
 		"recordingEntry": {
 			"active": {
+				"askAi": "Ask AI",
 				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
 				"backAria": "Back to recordings list",
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"camera": "Camera",
 				"cancel": "Cancel recording",
 				"defaultTitle": "Current recording",
 				"enableTranscription": "Enable transcription",

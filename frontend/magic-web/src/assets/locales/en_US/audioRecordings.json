@@ -82,7 +82,9 @@
 		"exportUnavailable": "Only original recording export is available right now",
 		"loadFailed": "Failed to load. Please try again.",
 		"loading": "Loading recording detail...",
+		"newTopic": "New topic",
 		"noExportFilesSelected": "Please select at least one item to export",
+		"noTopics": "No topics yet",
 		"notSummarized": "No summary yet",
 		"notSummarizedHint": "Generate a summary to extract key points, minutes, and deeper insights.",
 		"openProject": "View project",
@@ -123,6 +125,7 @@
 		"summarizing": "Summarizing",
 		"summarizingHint": "All summary views will appear when it is ready.",
 		"tabs": {
+			"ai": "Ask AI",
 			"followup": "Follow-up",
 			"highlights": "Highlights",
 			"insights": "Insights",
@@ -137,6 +140,7 @@
 			"topics": "Topics",
 			"transcript": "Transcript"
 		},
+		"topicListTitle": "Topics",
 		"topicSummary": "Key points",
 		"transcriptCount": "Transcript · {{count}} segments",
 		"transcriptSegmentCountSuffix": "{{count}} segments",

@@ -82,7 +82,9 @@
 		"exportUnavailable": "当前仅支持导出原始录音文件",
 		"loadFailed": "加载失败，请稍后重试",
 		"loading": "正在加载录音详情...",
+		"newTopic": "新建话题",
 		"noExportFilesSelected": "请至少选择一项内容进行导出",
+		"noTopics": "暂无话题",
 		"notSummarized": "暂无总结",
 		"notSummarizedHint": "生成总结以提取关键要点、纪要和深度洞察。",
 		"openProject": "查看项目详情",
@@ -123,6 +125,7 @@
 		"summarizing": "正在总结中",
 		"summarizingHint": "完成后会展示所有总结视图。",
 		"tabs": {
+			"ai": "问 AI",
 			"followup": "待办事项",
 			"highlights": "精华",
 			"insights": "深度洞察",
@@ -137,6 +140,7 @@
 			"topics": "章节主题",
 			"transcript": "转写"
 		},
+		"topicListTitle": "话题",
 		"topicSummary": "要点总结",
 		"transcriptCount": "转写 {{count}} 段",
 		"transcriptSegmentCountSuffix": "{{count}} 段",

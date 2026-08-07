@@ -5,7 +5,7 @@ import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/Me
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
-import { renameTopicWithChatSync } from "@/pages/superMagic/services"
+import { renameTopicWithChatSync } from "@/pages/superMagic/services/chatConversationNameSync"
 
 interface UseScopedMessageHeaderTopicActionsParams {
 	selectedProject: ProjectListItem | null

@@ -3731,9 +3731,11 @@
 		},
 		"recordingEntry": {
 			"active": {
+				"askAi": "问 AI",
 				"audioSourceUnavailable": "无法获取可用的音频输入，请检查麦克风设备后重试",
 				"backAria": "返回录音列表",
 				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
+				"camera": "相机",
 				"cancel": "取消录音",
 				"defaultTitle": "当前录音",
 				"enableTranscription": "开启转写",

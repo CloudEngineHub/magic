@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 import {
 	type AttachmentFile,
 	type ImageUrlMap,
@@ -12,12 +13,13 @@ interface UseImageUrlResolverProps {
 	attachments?: AttachmentFile[]
 	relativeFilePath?: string
 	initialImageUrlMap?: ImageUrlMap
+	isReady?: boolean
 }
 
 interface UseImageUrlResolverReturn {
 	imageUrlMap: ImageUrlMap
 	setImageUrlMap: React.Dispatch<React.SetStateAction<ImageUrlMap>>
-	urlResolver: (relativePath: string) => Promise<string>
+	urlResolver: ProjectImageUrlResolver
 }
 
 /**
@@ -28,8 +30,20 @@ export function useImageUrlResolver({
 	attachments = [],
 	relativeFilePath,
 	initialImageUrlMap = new Map(),
+	isReady = true,
 }: UseImageUrlResolverProps): UseImageUrlResolverReturn {
 	const [imageUrlMap, setImageUrlMap] = useState<ImageUrlMap>(initialImageUrlMap)
+	const listenersRef = useRef(new Set<() => void>())
+	const isReadyRef = useRef(isReady)
+	isReadyRef.current = isReady
+
+	/** Registers image nodes that need to retry when attachment context changes. */
+	const subscribe = useMemoizedFn((listener: () => void) => {
+		listenersRef.current.add(listener)
+		return () => {
+			listenersRef.current.delete(listener)
+		}
+	})
 
 	const urlResolver = useMemoizedFn(async (relativePath: string) => {
 		try {
@@ -71,7 +85,14 @@ export function useImageUrlResolver({
 			console.error("Error resolving image URL:", error)
 			return relativePath
 		}
-	})
+	}) as ProjectImageUrlResolver
+	urlResolver.isReady = () => isReadyRef.current
+	urlResolver.subscribe = subscribe
+
+	/** Notifies mounted image nodes after attachment readiness or path context changes. */
+	useEffect(() => {
+		listenersRef.current.forEach((listener) => listener())
+	}, [attachments, isReady, relativeFilePath])
 
 	return {
 		imageUrlMap,
