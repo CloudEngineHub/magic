@@ -2458,8 +2458,8 @@ Since your subsequent output will be merged with pre-interruption content and di
         threshold_model_id = self._require_current_text_model_id()
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
-        # 压缩或 /new 会清空 Horizon 文件记录；在真正调用 LLM 前重新走真实 ReadFile 接管规则文件。
-        await self._append_auto_read_context_safely()
+        # 自动规则文件统一在真实模型调用前发现和读取；压缩或 /new 后会根据当前 ChatHistory 自动重建交付状态。
+        await AutoReadFileService.prepare_before_llm(self.agent_context, self.chat_history)
 
         # 使用ChatHistory获取格式化后的消息列表
         messages_for_llm = self.chat_history.get_messages_for_llm()
@@ -2612,19 +2612,6 @@ Since your subsequent output will be merged with pre-interruption content and di
             model_name=display_model_name,
             description=description,
         )
-
-    async def _append_auto_read_context_safely(self) -> None:
-        """把尚未被 Horizon 接管的规则文件通过真实 ReadFile 注入隐藏上下文。"""
-        try:
-            auto_read_context = await AutoReadFileService.build_context(self.agent_context)
-            if auto_read_context:
-                await self.chat_history.append_user_message(
-                    auto_read_context,
-                    show_in_ui=False,
-                    source="auto_read_file",
-                )
-        except Exception as auto_read_error:
-            logger.warning(f"自动读取文件失败，不阻塞本轮运行: {auto_read_error}")
 
     async def _build_horizon_context_update_safely(
         self,

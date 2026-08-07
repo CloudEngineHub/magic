@@ -164,7 +164,6 @@ def _encode_state(state: HorizonState) -> dict:
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
         "workspace_entries": state.workspace_entries,
-        "memory": state.memory,
         "client_context": state.client_context,
         "cli_status": state.cli_status,
         "context_usage_baseline_used": state.context_usage_baseline_used,
@@ -199,7 +198,6 @@ def _decode_state(data: dict) -> HorizonState:
         "user_preferred_language",
         "workspace_files",
         "workspace_entries",
-        "memory",
         "client_context",
         "cli_status",
         "context_usage_baseline_used",
@@ -242,7 +240,6 @@ def _decode_state(data: dict) -> HorizonState:
     state.user_preferred_language = data.get("user_preferred_language", "")
     state.workspace_files = data.get("workspace_files", "")
     state.workspace_entries = data.get("workspace_entries", [])
-    state.memory = data.get("memory", "")
     state.client_context = data.get("client_context", "")
     state.cli_status = data.get("cli_status", "")
     state.context_usage_baseline_used = int(data.get("context_usage_baseline_used", 0))

@@ -1,72 +1,432 @@
-"""按规则自动调用 read_file，并把结果注入当前模型上下文。"""
-
 from __future__ import annotations
 
+import hashlib
 import html
+import re
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
+from app.path_manager import PathManager
 from app.tools.read_file import ReadFile, ReadFileParams
-from app.utils.async_file_utils import async_exists, async_is_dir
+from app.utils.async_file_utils import (
+    async_exists,
+    async_is_dir,
+    async_is_symlink,
+    async_scandir,
+)
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
 
 logger = get_logger(__name__)
 
-AUTO_READ_FILE_PATHS: tuple[str, ...] = ("AGENTS.md",)
+_PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_AUTO_READ_SOURCE_PREFIX = "auto_read_file:"
+_INSTRUCTION_INDEX_SOURCE_PREFIX = "project_instruction_index:"
+_INSTRUCTION_INDEX_MAX_CHARS = 24 * 1024
+
+
+class AutoReadLoadPolicy(StrEnum):
+    """自动文件规则的正文加载策略。"""
+
+    ALWAYS = "always"
+    DISCOVER_ONLY = "discover_only"
+
+
+class AutoReadRuleId(StrEnum):
+    """模型可见的自动文件角色。"""
+
+    PROJECT_INSTRUCTIONS = "project_instructions"
+    GLOBAL_MEMORY = "global_memory"
+    PROJECT_MEMORY = "project_memory"
+    CLAW_MEMORY = "claw_memory"
+
+
+class AutoReadPathKind(StrEnum):
+    """规则候选路径的解析方式。"""
+
+    WORKSPACE_ROOT_AGENTS = "workspace_root_agents"
+    NESTED_AGENTS = "nested_agents"
+    GLOBAL_MEMORY = "global_memory"
+    PROJECT_MEMORY = "project_memory"
+    CLAW_MEMORY = "claw_memory"
+
+
+@dataclass(frozen=True)
+class AutoReadFileRule:
+    """声明自动文件的角色、加载方式和路径来源。"""
+
+    rule_id: AutoReadRuleId
+    load_policy: AutoReadLoadPolicy
+    path_kind: AutoReadPathKind
+    priority: int
+
+
+@dataclass(frozen=True)
+class AutoReadFileCandidate:
+    """已完成作用域和安全校验的自动文件候选。"""
+
+    rule_id: AutoReadRuleId
+    load_policy: AutoReadLoadPolicy
+    absolute_path: Path
+    display_path: str
+    scope: str
+    priority: int
+
+
+AUTO_READ_FILE_RULES: tuple[AutoReadFileRule, ...] = (
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.PROJECT_INSTRUCTIONS,
+        load_policy=AutoReadLoadPolicy.ALWAYS,
+        path_kind=AutoReadPathKind.WORKSPACE_ROOT_AGENTS,
+        priority=10,
+    ),
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.GLOBAL_MEMORY,
+        load_policy=AutoReadLoadPolicy.ALWAYS,
+        path_kind=AutoReadPathKind.GLOBAL_MEMORY,
+        priority=20,
+    ),
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.PROJECT_MEMORY,
+        load_policy=AutoReadLoadPolicy.ALWAYS,
+        path_kind=AutoReadPathKind.PROJECT_MEMORY,
+        priority=30,
+    ),
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.CLAW_MEMORY,
+        load_policy=AutoReadLoadPolicy.ALWAYS,
+        path_kind=AutoReadPathKind.CLAW_MEMORY,
+        priority=40,
+    ),
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.PROJECT_INSTRUCTIONS,
+        load_policy=AutoReadLoadPolicy.DISCOVER_ONLY,
+        path_kind=AutoReadPathKind.NESTED_AGENTS,
+        priority=50,
+    ),
+)
 
 
 class AutoReadFileService:
-    """通过真实 ReadFile 工具同步自动读取规则，不复制文件监听逻辑。"""
+    """在每次真实模型调用前统一发现并读取声明式自动文件。"""
+
+    @classmethod
+    async def prepare_before_llm(
+        cls,
+        agent_context: "AgentContext",
+        chat_history: ChatHistory,
+    ) -> None:
+        """追加新的规则索引，并通过真实 ReadFile 交付尚未进入上下文的文件。"""
+        try:
+            candidates = await cls._resolve_candidates(agent_context)
+            await cls._append_instruction_index(chat_history, candidates)
+            await cls._append_always_read_files(agent_context, chat_history, candidates)
+        except Exception as error:
+            logger.warning(f"自动文件准备失败，本轮继续执行: {error}", exc_info=True)
+
+    @classmethod
+    async def _resolve_candidates(
+        cls,
+        agent_context: "AgentContext",
+    ) -> tuple[AutoReadFileCandidate, ...]:
+        candidates: list[AutoReadFileCandidate] = []
+        for rule in AUTO_READ_FILE_RULES:
+            try:
+                candidates.extend(await cls._resolve_rule(agent_context, rule))
+            except Exception as error:
+                logger.warning(
+                    "自动文件规则解析失败，已跳过: "
+                    f"rule_id={rule.rule_id.value} path_kind={rule.path_kind.value} error={error}",
+                    exc_info=True,
+                )
+
+        deduplicated: dict[str, AutoReadFileCandidate] = {}
+        for candidate in sorted(
+            candidates,
+            key=lambda item: (item.priority, len(Path(item.display_path).parts), item.display_path),
+        ):
+            path_key = str(candidate.absolute_path.absolute())
+            existing = deduplicated.get(path_key)
+            if existing is None or candidate.load_policy == AutoReadLoadPolicy.ALWAYS:
+                deduplicated[path_key] = candidate
+
+        return tuple(
+            sorted(
+                deduplicated.values(),
+                key=lambda item: (item.priority, len(Path(item.display_path).parts), item.display_path),
+            )
+        )
+
+    @classmethod
+    async def _resolve_rule(
+        cls,
+        agent_context: "AgentContext",
+        rule: AutoReadFileRule,
+    ) -> list[AutoReadFileCandidate]:
+        workspace_dir = Path(agent_context.get_workspace_dir()).absolute()
+        memory_root = PathManager.get_memory_root_dir().expanduser().absolute()
+
+        if rule.path_kind == AutoReadPathKind.WORKSPACE_ROOT_AGENTS:
+            return await cls._single_candidate(
+                rule,
+                workspace_dir / "AGENTS.md",
+                display_path="AGENTS.md",
+                scope=".",
+                allowed_root=workspace_dir,
+            )
+        if rule.path_kind == AutoReadPathKind.NESTED_AGENTS:
+            return await cls._discover_nested_agents(workspace_dir, rule)
+        if rule.path_kind == AutoReadPathKind.GLOBAL_MEMORY:
+            return await cls._single_candidate(
+                rule,
+                memory_root / "global" / "MEMORY.md",
+                display_path=str(memory_root / "global" / "MEMORY.md"),
+                scope="user-global",
+                allowed_root=memory_root,
+            )
+        if rule.path_kind == AutoReadPathKind.PROJECT_MEMORY:
+            project_id = cls._resolve_project_id(agent_context)
+            if not project_id or agent_context.is_magiclaw():
+                return []
+            project_path = memory_root / "projects" / f"p_{project_id}" / "MEMORY.md"
+            return await cls._single_candidate(
+                rule,
+                project_path,
+                display_path=str(project_path),
+                scope=f"user-project:{project_id}",
+                allowed_root=memory_root,
+            )
+        if rule.path_kind == AutoReadPathKind.CLAW_MEMORY:
+            if not agent_context.is_magiclaw():
+                return []
+            claw_path = workspace_dir / ".magic" / "MEMORY.md"
+            return await cls._single_candidate(
+                rule,
+                claw_path,
+                display_path=".magic/MEMORY.md",
+                scope="claw-runtime",
+                allowed_root=workspace_dir / ".magic",
+            )
+        return []
+
+    @classmethod
+    async def _single_candidate(
+        cls,
+        rule: AutoReadFileRule,
+        file_path: Path,
+        *,
+        display_path: str,
+        scope: str,
+        allowed_root: Path,
+    ) -> list[AutoReadFileCandidate]:
+        if not await cls._is_safe_regular_file(file_path, allowed_root):
+            return []
+        return [
+            AutoReadFileCandidate(
+                rule_id=rule.rule_id,
+                load_policy=rule.load_policy,
+                absolute_path=file_path.absolute(),
+                display_path=display_path,
+                scope=scope,
+                priority=rule.priority,
+            )
+        ]
+
+    @classmethod
+    async def _discover_nested_agents(
+        cls,
+        workspace_dir: Path,
+        rule: AutoReadFileRule,
+    ) -> list[AutoReadFileCandidate]:
+        if not await async_exists(workspace_dir) or await async_is_symlink(workspace_dir):
+            return []
+
+        candidates: list[AutoReadFileCandidate] = []
+        pending_dirs = [workspace_dir]
+        while pending_dirs:
+            current_dir = pending_dirs.pop()
+            try:
+                entries = await async_scandir(current_dir)
+            except OSError as error:
+                logger.warning(f"扫描嵌套 AGENTS.md 失败，已跳过目录: path={current_dir}, error={error}")
+                continue
+
+            for entry in entries:
+                entry_path = Path(entry.path)
+                if entry.is_symlink():
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    if current_dir == workspace_dir and entry.name == ".magic":
+                        continue
+                    pending_dirs.append(entry_path)
+                    continue
+                if entry.name != "AGENTS.md" or current_dir == workspace_dir:
+                    continue
+                try:
+                    relative_path = entry_path.relative_to(workspace_dir)
+                except ValueError:
+                    continue
+                scope_path = relative_path.parent.as_posix()
+                candidates.append(
+                    AutoReadFileCandidate(
+                        rule_id=rule.rule_id,
+                        load_policy=rule.load_policy,
+                        absolute_path=entry_path.absolute(),
+                        display_path=relative_path.as_posix(),
+                        scope=f"{scope_path}/",
+                        priority=rule.priority,
+                    )
+                )
+        return candidates
 
     @staticmethod
-    async def build_context(agent_context: "AgentContext") -> str:
+    def _resolve_project_id(agent_context: "AgentContext") -> str:
+        project_id = str(agent_context.get_project_id() or "").strip()
+        if _PROJECT_ID_PATTERN.fullmatch(project_id):
+            return project_id
+        if project_id:
+            logger.warning("project_id 不符合安全路径规则，跳过项目记忆")
+        return ""
+
+    @staticmethod
+    async def _is_safe_regular_file(file_path: Path, allowed_root: Path) -> bool:
+        safe_root = allowed_root.expanduser().absolute()
+        candidate = file_path.expanduser().absolute()
+        try:
+            relative_path = candidate.relative_to(safe_root)
+        except ValueError:
+            logger.warning(f"自动文件路径越出允许根目录，已跳过: {candidate}")
+            return False
+
+        current_path = safe_root
+        if await async_is_symlink(current_path):
+            logger.warning(f"自动文件允许根目录是软链，已跳过: {current_path}")
+            return False
+        for path_part in relative_path.parts:
+            current_path = current_path / path_part
+            if await async_is_symlink(current_path):
+                logger.warning(f"自动文件路径包含软链，已跳过: {current_path}")
+                return False
+
+        return await async_exists(candidate) and not await async_is_dir(candidate)
+
+    @classmethod
+    async def _append_instruction_index(
+        cls,
+        chat_history: ChatHistory,
+        candidates: tuple[AutoReadFileCandidate, ...],
+    ) -> None:
+        nested_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.load_policy == AutoReadLoadPolicy.DISCOVER_ONLY
+        ]
+        index_lines = [
+            "<system_injected_context>",
+            '<available_project_instructions state="current">',
+            (
+                "These nested AGENTS.md files are discoverable project instructions. Their paths are indexed, "
+                "but their contents have not been read. After locating a target path, read every applicable "
+                "indexed AGENTS.md from the shallowest scope to the deepest scope before reading in detail, "
+                "modifying files, or running commands that affect that path."
+            ),
+        ]
+        omitted_count = 0
+        for order, candidate in enumerate(nested_candidates, start=1):
+            line = (
+                f'<instruction path="{html.escape(candidate.display_path, quote=True)}" '
+                f'scope="{html.escape(candidate.scope, quote=True)}" order="{order}" />'
+            )
+            projected_content = "\n".join(
+                (*index_lines, line, "</available_project_instructions>", "</system_injected_context>")
+            )
+            if len(projected_content) > _INSTRUCTION_INDEX_MAX_CHARS:
+                omitted_count += 1
+                continue
+            index_lines.append(line)
+        if omitted_count:
+            index_lines.append(
+                f'<index_status truncated="true" omitted_count="{omitted_count}">'
+                "Use file search to locate additional AGENTS.md files before changing an unlisted directory."
+                "</index_status>"
+            )
+        index_lines.extend(("</available_project_instructions>", "</system_injected_context>"))
+        content = "\n".join(index_lines)
+        fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()[:20]
+        source = f"{_INSTRUCTION_INDEX_SOURCE_PREFIX}{fingerprint}"
+        if cls._has_source(chat_history, source):
+            return
+        await chat_history.append_user_message(content, show_in_ui=False, source=source)
+
+    @classmethod
+    async def _append_always_read_files(
+        cls,
+        agent_context: "AgentContext",
+        chat_history: ChatHistory,
+        candidates: tuple[AutoReadFileCandidate, ...],
+    ) -> None:
         workspace_dir = Path(agent_context.get_workspace_dir())
         tool_context = ToolContext(metadata=agent_context.get_metadata())
         tool_context.register_extension("agent_context", agent_context)
         read_file = ReadFile(base_dir=workspace_dir)
 
-        context_blocks: list[str] = []
-        for relative_path in AUTO_READ_FILE_PATHS:
-            file_path = workspace_dir / relative_path
-            if await agent_context.horizon.is_file_tracked(file_path):
+        for candidate in candidates:
+            if candidate.load_policy != AutoReadLoadPolicy.ALWAYS:
                 continue
-
-            if not await async_exists(file_path) or await async_is_dir(file_path):
+            source = cls._build_file_source(candidate.absolute_path)
+            delivered = cls._has_source(chat_history, source)
+            tracked = await agent_context.horizon.is_file_tracked(candidate.absolute_path)
+            if delivered and tracked:
                 continue
 
             result = await read_file.execute(
                 tool_context,
                 ReadFileParams(
-                    file_path=relative_path,
+                    file_path=str(candidate.absolute_path),
                     offset=0,
                     limit=-1,
                 ),
             )
             if not result.ok:
-                logger.warning(f"自动读取文件失败: path={relative_path} content={result.content}")
+                logger.warning(
+                    "自动读取文件失败: "
+                    f"rule_id={candidate.rule_id.value} path={candidate.display_path} content={result.content}"
+                )
                 continue
 
-            context_blocks.append(
-                f'<read_file_result path="{html.escape(relative_path, quote=True)}">\n'
-                f"{html.escape(result.content, quote=False)}\n"
-                "</read_file_result>"
+            content = "\n".join(
+                (
+                    "<system_injected_context>",
+                    (
+                        f'<auto_read_file state="current" rule_id="{candidate.rule_id.value}" '
+                        f'path="{html.escape(candidate.display_path, quote=True)}" '
+                        f'scope="{html.escape(candidate.scope, quote=True)}">'
+                    ),
+                    (
+                        "The runtime called read_file for this file. Treat the result as content already read in "
+                        "the current context. The shared file-loading mechanism does not change the file's "
+                        "ownership or authority."
+                    ),
+                    "<read_file_result>",
+                    html.escape(result.content, quote=False),
+                    "</read_file_result>",
+                    "</auto_read_file>",
+                    "</system_injected_context>",
+                )
             )
+            await chat_history.append_user_message(content, show_in_ui=False, source=source)
 
-        if not context_blocks:
-            return ""
+    @staticmethod
+    def _build_file_source(file_path: Path) -> str:
+        path_hash = hashlib.sha256(str(file_path.absolute()).encode("utf-8")).hexdigest()[:20]
+        return f"{_AUTO_READ_SOURCE_PREFIX}{path_hash}"
 
-        return "\n".join(
-            [
-                "<system_injected_context>",
-                "<auto_read_files>",
-                "The runtime automatically called read_file for the following configured files. "
-                "Treat each successful read result exactly as file content you have read yourself.",
-                *context_blocks,
-                "</auto_read_files>",
-                "</system_injected_context>",
-            ]
-        )
+    @staticmethod
+    def _has_source(chat_history: ChatHistory, source: str) -> bool:
+        return any(getattr(message, "source", None) == source for message in chat_history.messages)

@@ -85,7 +85,6 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "context_usage",
     "model_info",
     "workspace_files_changed",
-    "persistent_memory",
     "client_context",
     "client_context_changed",
     "client_context_cleared",
@@ -383,7 +382,6 @@ class AgentHorizon:
         # 持久化 state.* 则始终表达模型上次已经看到的 baseline。
         self._workspace_files_current: Optional[str] = None
         self._workspace_entries_current: Optional[list] = None
-        self._memory_current: Optional[str] = None
         self._client_context_current: Optional[str] = None
         self._cli_status_current: Optional[str] = None
         self._language_current: Optional[str] = None
@@ -446,7 +444,6 @@ class AgentHorizon:
 
         self._workspace_files_current = None
         self._workspace_entries_current = None
-        self._memory_current = None
         self._client_context_current = None
         self._cli_status_current = None
         self._language_current = None
@@ -615,7 +612,7 @@ class AgentHorizon:
         - image_model / video_model：清空，确保新上下文重新获得模型信息
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
         - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
-        - workspace_files/memory/language：保留（首次注入时重新全量输出给新上下文）
+        - workspace_files/language：保留（首次注入时重新全量输出给新上下文）
         - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
         """
@@ -1092,10 +1089,6 @@ class AgentHorizon:
         entries = self._workspace_entries_current if self._workspace_entries_current is not None else self._state.workspace_entries
         return list(entries)
 
-    def _get_memory_current(self) -> str:
-        """返回本轮暂存或上次已注入的完整记忆上下文字符串。"""
-        return self._memory_current if self._memory_current is not None else self._state.memory
-
     def _get_client_context_current(self) -> str:
         return self._client_context_current if self._client_context_current is not None else self._state.client_context
 
@@ -1113,12 +1106,6 @@ class AgentHorizon:
         if snapshot.display != self._get_workspace_files_current() or new_paths != current_paths:
             self._workspace_files_current = snapshot.display
             self._workspace_entries_current = list(snapshot.entries)
-
-    async def set_memory(self, memory: str) -> None:
-        """更新预组装的记忆上下文字符串，不在 Horizon 内解释或组装内容。"""
-        await self._ensure_loaded()
-        if memory != self._get_memory_current():
-            self._memory_current = memory
 
     async def set_client_context(self, content: str) -> None:
         """更新运行时 current 客户端页面上下文，不直接覆盖持久化 baseline。"""
@@ -1180,7 +1167,7 @@ class AgentHorizon:
         编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
-          当前时间、运行环境、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
+          当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
 
         后续注入按需包含：
           <current_time>     — 始终输出
@@ -1189,7 +1176,6 @@ class AgentHorizon:
           <context_usage>    — context_total > 0 且达到分段阈值时
           <model_info>       — LLM 模型或图片模型发生变化时
           <workspace_files_changed> — workspace_files 变化时
-          <persistent_memory> — memory 变化时完整输出调用方提供的最新快照
           <local_cli_context_changed> — 本地 CLI 上下文变化时
           <language_changed> — user_preferred_language 变化时
           <file_changes>     — 文件有变化时
@@ -1243,7 +1229,6 @@ class AgentHorizon:
 
         current_workspace_files = self._get_workspace_files_current()
         current_workspace_entries = self._get_workspace_entries_current()
-        current_memory = self._get_memory_current()
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
@@ -1302,9 +1287,6 @@ class AgentHorizon:
                     "<!-- Current workspace file list (list_dir(path=\".\")): -->"
                     f"\n<workspace_files>\n{current_workspace_files}\n</workspace_files>"
                 )
-
-            if current_memory:
-                init_parts.append(current_memory)
 
             if current_client_context:
                 init_parts.append(
@@ -1399,10 +1381,6 @@ class AgentHorizon:
                 diff = _workspace_files_diff(self._state.workspace_entries, current_workspace_entries)
                 if diff:
                     parts.append(f"<workspace_files_changed>\n{diff}\n</workspace_files_changed>")
-
-            if self._state.memory != current_memory:
-                if current_memory:
-                    parts.append(current_memory)
 
             if self._state.client_context != current_client_context:
                 if not current_client_context and self._state.client_context:
@@ -1501,9 +1479,6 @@ class AgentHorizon:
             persistence_changed = True
         if self._state.workspace_entries != current_workspace_entries:
             self._state.workspace_entries = list(current_workspace_entries)
-            persistence_changed = True
-        if self._state.memory != current_memory:
-            self._state.memory = current_memory
             persistence_changed = True
         if self._state.client_context != current_client_context:
             self._state.client_context = current_client_context
