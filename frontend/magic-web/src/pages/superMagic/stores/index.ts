@@ -3076,6 +3076,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 
 	getLatestMessageSeqId(topicId: string): string {
 		return (this.messages.get(topicId) || []).reduce((latestSeqId, message) => {
+			// Active stream cards use a locally derived seq only to participate in the current
+			// list projection. They are not durable watermarks and must not advance HTTP/WS sync.
+			if (this.isActiveStreamPlaceholder(topicId, message)) return latestSeqId
 			const currentSeqId = String(message.seq_id || "")
 			if (!currentSeqId) return latestSeqId
 			if (!latestSeqId || compareMessageSeqId(currentSeqId, latestSeqId) > 0) {
@@ -3083,6 +3086,51 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 			return latestSeqId
 		}, "")
+	}
+
+	private isActiveStreamPlaceholder(topicId: string, message: MessageItem): boolean {
+		if (message.role !== "assistant") return false
+		const superMessageId = this.getMessageSuperMessageId(message)
+		return Boolean(
+			superMessageId &&
+			message.app_message_id === superMessageId &&
+			this.getTopicMetadata(topicId).content.has(superMessageId),
+		)
+	}
+
+	/**
+	 * HTTP may establish the durable User baseline after a background chunk already created
+	 * an Assistant placeholder. Rebase only those active placeholders after the latest durable
+	 * seq; Final revision arbitration continues to ignore this projection-only local value.
+	 */
+	private reanchorActiveStreamPlaceholders(
+		topicId: string,
+		messages: MessageItem[],
+		snapshotLatestSeqId: string,
+	): MessageItem[] {
+		let latestDurableSeqId = snapshotLatestSeqId
+		messages.forEach((message) => {
+			if (this.isActiveStreamPlaceholder(topicId, message)) return
+			const seqId = String(message.seq_id || "")
+			if (
+				seqId &&
+				(!latestDurableSeqId || compareMessageSeqId(seqId, latestDurableSeqId) > 0)
+			) {
+				latestDurableSeqId = seqId
+			}
+		})
+		if (!latestDurableSeqId) return messages
+
+		let nextProjectionSeqId = latestDurableSeqId
+		let didChange = false
+		const nextMessages = messages.map((message) => {
+			if (!this.isActiveStreamPlaceholder(topicId, message)) return message
+			nextProjectionSeqId = addOneToBigNumberString(nextProjectionSeqId)
+			if (message.seq_id === nextProjectionSeqId) return message
+			didChange = true
+			return { ...message, seq_id: nextProjectionSeqId }
+		})
+		return didChange ? nextMessages : messages
 	}
 
 	private getLatestAssistantMessageForIdentity(
@@ -4260,8 +4308,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				app_message_ids: incomingAppMessageIds,
 			})
 
+			const dedupedServerMessages = this.dedupeAuthoritativeMessages(authoritativeMessages)
 			const mergedServerMessages = sortMessages(
-				this.dedupeAuthoritativeMessages(authoritativeMessages),
+				this.reanchorActiveStreamPlaceholders(
+					topicId,
+					dedupedServerMessages,
+					snapshotLatestSeqId,
+				),
 			)
 			// Server history enters the in-memory list first, then local failed messages are restored by send-time anchors before a single UI update.
 			this.collaborators.getRestorableUserMessages(topicId).forEach((message) => {

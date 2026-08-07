@@ -278,6 +278,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	const initialLoadedTopicsRef = useRef<Set<string>>(new Set())
 	const selectedTopicRef = useRef(selectedTopic)
 	const recoveryOwnerTokenRef = useRef(Symbol("useTopicMessages"))
+	const activationTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	const foregroundTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	const lastForegroundSyncAtRef = useRef(0)
 	const foregroundRecoveryAnchorRef = useRef<Record<string, ForegroundRecoveryAnchorState>>({})
@@ -978,6 +979,67 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		superMagicStore.cancelTopicSync(inFlightSync.topicId, inFlightSync.generation)
 	})
 
+	const cancelActivationTopicSync = useMemoizedFn((topicId?: string) => {
+		const inFlightSync = activationTopicSyncRef.current
+		if (!inFlightSync || (topicId && inFlightSync.topicId !== topicId)) return
+		activationTopicSyncRef.current = null
+		superMagicStore.cancelTopicSync(inFlightSync.topicId, inFlightSync.generation)
+	})
+
+	/**
+	 * Topic 首次/切换激活也必须走 generation-scoped 权威同步。屏障要先于
+	 * setActiveTopicId 建立，否则该调用会同步恢复后台 StreamState，并在 User
+	 * 历史尚未写入时创建错误排序的 Assistant 占位卡。
+	 */
+	const syncSelectedTopicOnActivation = useMemoizedFn((topic: Topic) => {
+		const topicId = topic.chat_topic_id
+		const syncGeneration = superMagicStore.beginTopicSync(topicId)
+		const inFlightSync = { topicId, generation: syncGeneration }
+		activationTopicSyncRef.current = inFlightSync
+		superMagicStore.setActiveTopicId(topicId)
+
+		void pullMessage({
+			conversation_id: topic.chat_conversation_id,
+			chat_topic_id: topicId,
+			page_token: "",
+			order: "desc",
+			limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
+			updatePageToken: true,
+			writeIntent: "replace",
+			syncGeneration,
+		})
+			.then((pullResult) => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
+				const currentTopic = selectedTopicRef.current
+				if (currentTopic?.chat_topic_id !== topicId) return
+
+				superMagicStore.completeTopicSync(topicId, syncGeneration, {
+					succeeded: pullResult.didPullSucceed,
+					taskStatus: currentTopic.task_status || currentTopic.status,
+					latestSeqId: pullResult.didPullSucceed
+						? superMagicStore.getLatestMessageSeqId(topicId)
+						: undefined,
+				})
+				if (!pullResult.didPullSucceed) setIsMessagesInitialLoading(false)
+			})
+			.catch(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) {
+					superMagicStore.completeTopicSync(topicId, syncGeneration, {
+						succeeded: false,
+						taskStatus: selectedTopicRef.current?.task_status,
+					})
+				}
+				setIsMessagesInitialLoading(false)
+			})
+			.finally(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				activationTopicSyncRef.current = null
+				if (getTopicRecoveryStatus(topicId).hasScheduled) resumeTopicRecovery(topicId)
+			})
+	})
+
 	/**
 	 * 拉取当前选中话题的消息。
 	 * 除前台恢复外，其余场景继续使用既有的一次请求模型。
@@ -1258,26 +1320,32 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Initialize messages when topic changes
 	useEffect(() => {
-		const topicId = selectedTopic?.chat_topic_id
-		superMagicStore.setActiveTopicId(selectedTopic?.chat_topic_id || null)
+		const currentTopic = selectedTopicRef.current
+		const topicId = currentTopic?.chat_topic_id
 		setIsSelectedTopicMessagesReady(false)
 		if (topicId && !initialLoadedTopicsRef.current.has(topicId)) {
 			setIsMessagesInitialLoading(true)
 		} else {
 			setIsMessagesInitialLoading(false)
 		}
-		updateTopicMessages()
+		if (currentTopic?.id && topicId) {
+			syncSelectedTopicOnActivation(currentTopic)
+		} else {
+			superMagicStore.setActiveTopicId(null)
+		}
 		const requestOwnerToken = recoveryOwnerTokenRef.current
 		return () => {
 			releaseMessagePageRequests(requestOwnerToken)
+			cancelActivationTopicSync(topicId)
 			cancelForegroundTopicSync(topicId)
 		}
 	}, [
+		cancelActivationTopicSync,
 		cancelForegroundTopicSync,
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
-		updateTopicMessages,
+		syncSelectedTopicOnActivation,
 	])
 
 	useEffect(() => {
@@ -1291,6 +1359,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			conversationId,
 			canRecover: () =>
 				document.visibilityState === "visible" &&
+				!activationTopicSyncRef.current &&
 				!foregroundTopicSyncRef.current &&
 				superMagicStore.topicMeta.get(topicId)?.syncState !== "syncing",
 			getTaskStatus: () => {

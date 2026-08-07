@@ -869,19 +869,18 @@ const MessageList = observer(
 )
 
 export default function MessageListEntry(props: MessageListProps) {
+	// Initial Topic hydration is the visibility barrier for locally received stream overlays.
+	// Keep the existing canonical data intact, but do not flash a provisional card before the
+	// authoritative User baseline has established the list order.
+	if (props.isMessagesLoading) {
+		return (
+			<div className={cn("flex h-full w-full items-center justify-center", props.className)}>
+				<Spinner size={16} className="animate-spin text-muted-foreground" />
+			</div>
+		)
+	}
+
 	if (props.data.length === 0) {
-		if (props.isMessagesLoading) {
-			return (
-				<div
-					className={cn(
-						"flex h-full w-full items-center justify-center",
-						props.className,
-					)}
-				>
-					<Spinner size={16} className="animate-spin text-muted-foreground" />
-				</div>
-			)
-		}
 		return props.fallbackRender || <MessageListFallback className={props.className} />
 	}
 

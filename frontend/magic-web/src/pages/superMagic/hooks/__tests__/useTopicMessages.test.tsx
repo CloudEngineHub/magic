@@ -248,6 +248,39 @@ describe("useTopicMessages", () => {
 		)
 	})
 
+	it("establishes the activation sync barrier before exposing a Topic's stream projection", async () => {
+		const initialItems = [createMessageEnvelope("initial-user", "100")]
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: initialItems,
+			has_more: false,
+			page_token: "",
+		})
+
+		renderHook(() => useTopicMessages({ selectedTopic: createTopic() }))
+
+		const beginOrder = mockState.superMagicStoreMock.beginTopicSync.mock.invocationCallOrder[0]
+		const activeOrder =
+			mockState.superMagicStoreMock.setActiveTopicId.mock.invocationCallOrder[0]
+		expect(beginOrder).toBeLessThan(activeOrder)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		const generation = mockState.superMagicStoreMock.beginTopicSync.mock.results[0]?.value
+		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
+			"chat-topic-1",
+			initialItems,
+			expect.objectContaining({ mode: "replace", syncGeneration: generation }),
+		)
+		expect(mockState.superMagicStoreMock.completeTopicSync).toHaveBeenCalledWith(
+			"chat-topic-1",
+			generation,
+			expect.objectContaining({ succeeded: true }),
+		)
+	})
+
 	it("shares the same in-flight first page across multiple topic owners", async () => {
 		let resolveRequest!: (value: {
 			items: unknown[]
