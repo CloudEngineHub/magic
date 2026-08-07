@@ -16,6 +16,7 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import type { FileData } from "@/pages/superMagic/components/MessageEditor/types"
 import { extractFileExtension } from "@/pages/superMagic/components/MessageEditor/utils/mention"
+import { toDisplayUploadProgress } from "@/pages/superMagic/components/MessageEditor/utils/uploadProgress"
 import useObjectUrl from "@/pages/superMagic/components/MessageEditor/components/AtItem/hooks/useObjectURL"
 
 interface MobileComposerAttachmentsProps {
@@ -169,7 +170,12 @@ function VideoAttachmentThumbContent({ previewUrl }: { previewUrl: string }) {
 				data-testid="mobile-composer-attachments-video"
 			/>
 			{posterDataUrl ? (
-				<img src={posterDataUrl} alt="" className="h-full w-full bg-black object-cover"  data-testid="mobile-composer-attachments-image"/>
+				<img
+					src={posterDataUrl}
+					alt=""
+					className="h-full w-full bg-black object-cover"
+					data-testid="mobile-composer-attachments-image"
+				/>
 			) : (
 				<div className="h-full w-full bg-black" aria-hidden />
 			)}
@@ -199,8 +205,12 @@ function MobileComposerAttachmentThumb({
 	const objectUrl = useObjectUrl(needsPreviewUrl ? file.file : null)
 	const previewUrl = objectUrl ?? ""
 
-	const isUploading = file.status === "uploading"
+	// Keep the mobile attachment state aligned with the editor mention node: `init` is
+	// already an active upload and should show the same 0%/loading feedback.
+	const isUploading = file.status === "init" || file.status === "uploading"
 	const isError = file.status === "error"
+	const progress = toDisplayUploadProgress(file.progress) ?? 0
+	const shouldShowProgress = isUploading && !isImage && !isVideo
 
 	const { Icon: FileIcon, label: fileLabel } =
 		isImage || isVideo ? { Icon: File, label: "" } : getFileStyle(ext)
@@ -211,7 +221,12 @@ function MobileComposerAttachmentThumb({
 			data-testid="mobile-composer-attachment-item"
 		>
 			{isImage && previewUrl ? (
-				<img src={previewUrl} alt={file.name} className="h-full w-full object-cover"  data-testid="mobile-composer-attachments-image-2"/>
+				<img
+					src={previewUrl}
+					alt={file.name}
+					className="h-full w-full object-cover"
+					data-testid="mobile-composer-attachments-image-2"
+				/>
 			) : isVideo && previewUrl ? (
 				<VideoAttachmentThumbContent previewUrl={previewUrl} />
 			) : isImage && needsPreviewUrl && !previewUrl ? (
@@ -227,10 +242,8 @@ function MobileComposerAttachmentThumb({
 					<span className="w-full truncate text-xs leading-none text-foreground/35">
 						{file.name}
 					</span>
-					{isUploading ? (
-						<span className="text-xs text-muted-foreground">
-							{Math.round(file.progress ?? 0)}%
-						</span>
+					{shouldShowProgress ? (
+						<span className="text-xs text-muted-foreground">{progress}%</span>
 					) : null}
 				</div>
 			)}
