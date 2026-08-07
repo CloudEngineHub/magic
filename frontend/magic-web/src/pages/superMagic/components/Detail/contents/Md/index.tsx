@@ -98,6 +98,8 @@ interface TextEditorProps {
 	isExporting?: boolean
 	openFileTab?: (fileItem: { file_id: string } & Record<string, any>) => void
 	isPlaybackMode?: boolean
+	/** Cached file tabs use this to gate global preview shortcuts and background work. */
+	isTabActive?: boolean
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	/** playback 模式下，由 PlaybackTabContent 提供的 portal 挂载点 */
@@ -171,6 +173,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isExporting,
 		openFileTab,
 		isPlaybackMode,
+		isTabActive = true,
 		allowDownload,
 		mdToolbarContainer,
 	} = props
@@ -899,6 +902,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								resolveImagesFolderParentId={resolveImagesFolderParentId}
 								suppressLoadingIndicator={documentFlowFullscreen}
 								documentFlowFullscreen={documentFlowFullscreen}
+								isTabActive={isTabActive}
 							/>
 						</div>
 					</div>

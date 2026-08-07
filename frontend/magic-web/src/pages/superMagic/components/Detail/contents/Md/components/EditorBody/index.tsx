@@ -26,6 +26,10 @@ interface EditorBodyProps {
 	suppressLoadingIndicator?: boolean
 	/** Lets the markdown editor contribute its full height to the page scroll range. */
 	documentFlowFullscreen?: boolean
+	/** Cached file tabs pass their visibility down so global search is active only on the visible tab. */
+	isTabActive?: boolean
+	/** Disable interactive search for temporary offscreen export renders. */
+	enableSearch?: boolean
 	viewMode: "code" | "desktop" | "phone" | "markdown"
 	language?: string
 	content: string
@@ -56,6 +60,8 @@ function EditorBody({
 	isLoading,
 	suppressLoadingIndicator = false,
 	documentFlowFullscreen = false,
+	isTabActive = true,
+	enableSearch = true,
 	viewMode,
 	language = "text",
 	content,
@@ -245,6 +251,8 @@ function EditorBody({
 					<LargeMarkdownPreview
 						content={processedContent || content}
 						documentFlow={documentFlowFullscreen}
+						isTabActive={isTabActive}
+						enableSearch={enableSearch}
 						urlResolver={urlResolver}
 						onLinkClick={handleLinkClick}
 					/>

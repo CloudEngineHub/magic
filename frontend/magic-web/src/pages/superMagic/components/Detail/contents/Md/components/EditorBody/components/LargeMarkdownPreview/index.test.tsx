@@ -6,7 +6,7 @@ import {
 	type HTMLAttributes,
 	type ReactNode,
 } from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import LargeMarkdownPreview from "."
 
@@ -49,5 +49,21 @@ describe("LargeMarkdownPreview", () => {
 			height: "320px",
 			whiteSpace: "normal",
 		})
+	})
+
+	it("does not register the in-app search shortcut when search is disabled", () => {
+		render(<LargeMarkdownPreview content="Large content" enableSearch={false} />)
+
+		fireEvent.keyDown(window, { key: "f", ctrlKey: true })
+
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+	})
+
+	it("does not register the in-app search shortcut for an inactive cached tab", () => {
+		render(<LargeMarkdownPreview content="Large content" isTabActive={false} />)
+
+		fireEvent.keyDown(window, { key: "f", metaKey: true })
+
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
 	})
 })
