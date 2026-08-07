@@ -16,12 +16,11 @@ from app.tools.read_file import ReadFile, ReadFileParams
 from app.utils.async_file_utils import (
     async_exists,
     async_is_dir,
-    async_is_symlink,
-    async_scandir,
 )
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
+    from app.utils.file_utils import WorkspaceEntry
 
 logger = get_logger(__name__)
 
@@ -121,10 +120,12 @@ class AutoReadFileService:
         cls,
         agent_context: "AgentContext",
         chat_history: ChatHistory,
+        *,
+        workspace_entries: list["WorkspaceEntry"] | None = None,
     ) -> None:
-        """追加新的规则索引，并通过真实 ReadFile 交付尚未进入上下文的文件。"""
+        """使用现有工作区快照追加规则索引，并通过 ReadFile 交付自动文件。"""
         try:
-            candidates = await cls._resolve_candidates(agent_context)
+            candidates = await cls._resolve_candidates(agent_context, workspace_entries)
             await cls._append_instruction_index(chat_history, candidates)
             await cls._append_always_read_files(agent_context, chat_history, candidates)
         except Exception as error:
@@ -134,11 +135,12 @@ class AutoReadFileService:
     async def _resolve_candidates(
         cls,
         agent_context: "AgentContext",
+        workspace_entries: list["WorkspaceEntry"] | None,
     ) -> tuple[AutoReadFileCandidate, ...]:
         candidates: list[AutoReadFileCandidate] = []
         for rule in AUTO_READ_FILE_RULES:
             try:
-                candidates.extend(await cls._resolve_rule(agent_context, rule))
+                candidates.extend(await cls._resolve_rule(agent_context, rule, workspace_entries))
             except Exception as error:
                 logger.warning(
                     "自动文件规则解析失败，已跳过: "
@@ -168,6 +170,7 @@ class AutoReadFileService:
         cls,
         agent_context: "AgentContext",
         rule: AutoReadFileRule,
+        workspace_entries: list["WorkspaceEntry"] | None,
     ) -> list[AutoReadFileCandidate]:
         workspace_dir = Path(agent_context.get_workspace_dir()).absolute()
         memory_root = PathManager.get_memory_root_dir().expanduser().absolute()
@@ -178,17 +181,15 @@ class AutoReadFileService:
                 workspace_dir / "AGENTS.md",
                 display_path="AGENTS.md",
                 scope=".",
-                allowed_root=workspace_dir,
             )
         if rule.path_kind == AutoReadPathKind.NESTED_AGENTS:
-            return await cls._discover_nested_agents(workspace_dir, rule)
+            return cls._resolve_nested_agents_from_snapshot(workspace_dir, rule, workspace_entries)
         if rule.path_kind == AutoReadPathKind.GLOBAL_MEMORY:
             return await cls._single_candidate(
                 rule,
                 memory_root / "global" / "MEMORY.md",
                 display_path=str(memory_root / "global" / "MEMORY.md"),
                 scope="user-global",
-                allowed_root=memory_root,
             )
         if rule.path_kind == AutoReadPathKind.PROJECT_MEMORY:
             project_id = cls._resolve_project_id(agent_context)
@@ -200,7 +201,6 @@ class AutoReadFileService:
                 project_path,
                 display_path=str(project_path),
                 scope=f"user-project:{project_id}",
-                allowed_root=memory_root,
             )
         if rule.path_kind == AutoReadPathKind.CLAW_MEMORY:
             if not agent_context.is_magiclaw():
@@ -211,7 +211,6 @@ class AutoReadFileService:
                 claw_path,
                 display_path=".magic/MEMORY.md",
                 scope="claw-runtime",
-                allowed_root=workspace_dir / ".magic",
             )
         return []
 
@@ -223,9 +222,8 @@ class AutoReadFileService:
         *,
         display_path: str,
         scope: str,
-        allowed_root: Path,
     ) -> list[AutoReadFileCandidate]:
-        if not await cls._is_safe_regular_file(file_path, allowed_root):
+        if not await cls._is_safe_regular_file(file_path):
             return []
         return [
             AutoReadFileCandidate(
@@ -239,50 +237,36 @@ class AutoReadFileService:
         ]
 
     @classmethod
-    async def _discover_nested_agents(
+    def _resolve_nested_agents_from_snapshot(
         cls,
         workspace_dir: Path,
         rule: AutoReadFileRule,
+        workspace_entries: list["WorkspaceEntry"] | None,
     ) -> list[AutoReadFileCandidate]:
-        if not await async_exists(workspace_dir) or await async_is_symlink(workspace_dir):
+        if not workspace_entries:
             return []
 
         candidates: list[AutoReadFileCandidate] = []
-        pending_dirs = [workspace_dir]
-        while pending_dirs:
-            current_dir = pending_dirs.pop()
-            try:
-                entries = await async_scandir(current_dir)
-            except OSError as error:
-                logger.warning(f"扫描嵌套 AGENTS.md 失败，已跳过目录: path={current_dir}, error={error}")
+        for entry in workspace_entries:
+            relative_path = str(entry["path"]).strip()
+            if not relative_path or relative_path.endswith("/"):
                 continue
-
-            for entry in entries:
-                entry_path = Path(entry.path)
-                if entry.is_symlink():
-                    continue
-                if entry.is_dir(follow_symlinks=False):
-                    if current_dir == workspace_dir and entry.name == ".magic":
-                        continue
-                    pending_dirs.append(entry_path)
-                    continue
-                if entry.name != "AGENTS.md" or current_dir == workspace_dir:
-                    continue
-                try:
-                    relative_path = entry_path.relative_to(workspace_dir)
-                except ValueError:
-                    continue
-                scope_path = relative_path.parent.as_posix()
-                candidates.append(
-                    AutoReadFileCandidate(
-                        rule_id=rule.rule_id,
-                        load_policy=rule.load_policy,
-                        absolute_path=entry_path.absolute(),
-                        display_path=relative_path.as_posix(),
-                        scope=f"{scope_path}/",
-                        priority=rule.priority,
-                    )
+            path = Path(relative_path)
+            if path.name != "AGENTS.md" or relative_path == "AGENTS.md":
+                continue
+            if ".magic" in path.parts:
+                continue
+            scope_path = path.parent.as_posix()
+            candidates.append(
+                AutoReadFileCandidate(
+                    rule_id=rule.rule_id,
+                    load_policy=rule.load_policy,
+                    absolute_path=(workspace_dir / path).absolute(),
+                    display_path=relative_path,
+                    scope=f"{scope_path}/",
+                    priority=rule.priority,
                 )
+            )
         return candidates
 
     @staticmethod
@@ -295,25 +279,8 @@ class AutoReadFileService:
         return ""
 
     @staticmethod
-    async def _is_safe_regular_file(file_path: Path, allowed_root: Path) -> bool:
-        safe_root = allowed_root.expanduser().absolute()
+    async def _is_safe_regular_file(file_path: Path) -> bool:
         candidate = file_path.expanduser().absolute()
-        try:
-            relative_path = candidate.relative_to(safe_root)
-        except ValueError:
-            logger.warning(f"自动文件路径越出允许根目录，已跳过: {candidate}")
-            return False
-
-        current_path = safe_root
-        if await async_is_symlink(current_path):
-            logger.warning(f"自动文件允许根目录是软链，已跳过: {current_path}")
-            return False
-        for path_part in relative_path.parts:
-            current_path = current_path / path_part
-            if await async_is_symlink(current_path):
-                logger.warning(f"自动文件路径包含软链，已跳过: {current_path}")
-                return False
-
         return await async_exists(candidate) and not await async_is_dir(candidate)
 
     @classmethod
@@ -338,6 +305,7 @@ class AutoReadFileService:
             ),
         ]
         omitted_count = 0
+        truncation_reasons: set[str] = set()
         for order, candidate in enumerate(nested_candidates, start=1):
             line = (
                 f'<instruction path="{html.escape(candidate.display_path, quote=True)}" '
@@ -348,11 +316,14 @@ class AutoReadFileService:
             )
             if len(projected_content) > _INSTRUCTION_INDEX_MAX_CHARS:
                 omitted_count += 1
+                truncation_reasons.add("max_index_chars")
                 continue
             index_lines.append(line)
         if omitted_count:
+            reason = ",".join(sorted(truncation_reasons)) or "max_index_chars"
             index_lines.append(
-                f'<index_status truncated="true" omitted_count="{omitted_count}">'
+                f'<index_status truncated="true" reason="{html.escape(reason, quote=True)}" '
+                f'omitted_count="{omitted_count}">'
                 "Use file search to locate additional AGENTS.md files before changing an unlisted directory."
                 "</index_status>"
             )

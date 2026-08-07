@@ -262,6 +262,7 @@ class Agent(BaseAgent):
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
         self._tool_preflight_failures: Dict[str, str] = {}
+        self._workspace_snapshot: WorkspaceSnapshot | None = None
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -649,7 +650,9 @@ class Agent(BaseAgent):
             max_chars=WORKSPACE_FILES_DISPLAY_MAX_CHARS,
             scan_depth=WORKSPACE_TREE_SCAN_DEPTH,
         )
-        return WorkspaceSnapshot(display=display, entries=entries)
+        snapshot = WorkspaceSnapshot(display=display, entries=entries)
+        self._workspace_snapshot = snapshot
+        return snapshot
 
     async def async_complete_dynamic_init(self) -> None:
         """异步完成动态初始化，将 workspace 文件树和用户语言同步到 AgentHorizon。
@@ -2485,7 +2488,15 @@ Since your subsequent output will be merged with pre-interruption content and di
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
         # 自动规则文件统一在真实模型调用前发现和读取；压缩或 /new 后会根据当前 ChatHistory 自动重建交付状态。
-        await AutoReadFileService.prepare_before_llm(self.agent_context, self.chat_history)
+        await AutoReadFileService.prepare_before_llm(
+            self.agent_context,
+            self.chat_history,
+            workspace_entries=(
+                self._workspace_snapshot.entries
+                if self._workspace_snapshot is not None
+                else None
+            ),
+        )
 
         # 使用ChatHistory获取格式化后的消息列表
         messages_for_llm = self.chat_history.get_messages_for_llm()
