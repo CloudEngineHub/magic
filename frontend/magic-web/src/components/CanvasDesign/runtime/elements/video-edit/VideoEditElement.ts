@@ -5,10 +5,10 @@ import {
 	type VideoEditElement as VideoEditElementData,
 } from "../../document/types"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
-import type {
-	TransformContext,
+import {
 	BaseElement,
-	ElementTransformConstraints,
+	type ElementTransformConstraints,
+	type TransformContext,
 } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import type { Canvas } from "../../core/Canvas"
