@@ -358,8 +358,9 @@ export function useTopicMessages({
 						(message) => message.role !== "user",
 					)
 					const lastMessage = topicMessages?.[topicMessages.length - 1]
+					// Assistant and tool nodes are keyed by the canonical super message identity.
 					const lastMessageNode = superMagicStore.getMessageNode(
-						lastMessageWithRole?.app_message_id,
+						lastMessageWithRole?.super_message_id,
 					)
 
 					const isLoading =

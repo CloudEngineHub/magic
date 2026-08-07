@@ -135,6 +135,31 @@ describe("MobileRecordingSourcePanel", () => {
 		expect(screen.getByTestId("mobile-recording-transcript-item")).toBeInTheDocument()
 	})
 
+	it("uses compact vertical spacing for mobile transcript copy", () => {
+		render(
+			<MobileRecordingSourcePanel
+				transcriptContent="[00:05] Mock transcript"
+				notesContent="Mock notes"
+				playing={false}
+				currentTime={0}
+				scrollPaddingBottom={64}
+				availableSpeakerIds={[]}
+				selectedSpeakerIds={[]}
+				speakerNameMap={{}}
+				onOpenSpeakerSettings={vi.fn()}
+				onSeek={vi.fn()}
+			/>,
+		)
+
+		const transcriptItem = screen.getByTestId("mobile-recording-transcript-item")
+		const transcriptList = transcriptItem.parentElement
+		const transcriptText = screen.getByText("Mock transcript")
+
+		// Keep the regression focused on the visual rhythm that was tightened for mobile.
+		expect(transcriptList).toHaveClass("flex", "flex-col", "gap-3")
+		expect(transcriptText).toHaveClass("text-[16px]", "leading-6")
+	})
+
 	it("keeps the same scroll container when switching to notes", () => {
 		render(
 			<MobileRecordingSourcePanel

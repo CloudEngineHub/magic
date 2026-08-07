@@ -21,6 +21,21 @@ const TRANSCRIPT_HEADER_ACTION_BASE_CLASS =
 	"inline-flex shrink-0 items-center justify-center border border-black/10 bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:bg-muted/30"
 const TRANSCRIPT_HEADER_PILL_ACTION_CLASS = `${TRANSCRIPT_HEADER_ACTION_BASE_CLASS} h-8 rounded-full px-3 text-[12px] font-medium leading-none`
 
+/** Centers a transcript row inside its dedicated scroll port without moving ancestor layouts. */
+function centerTranscriptSegment(scrollPort: HTMLDivElement, segment: HTMLElement) {
+	const scrollPortRect = scrollPort.getBoundingClientRect()
+	const segmentRect = segment.getBoundingClientRect()
+	const segmentTop = scrollPort.scrollTop + segmentRect.top - scrollPortRect.top
+	const centeredScrollTop = segmentTop - (scrollPort.clientHeight - segmentRect.height) / 2
+	const maxScrollTop = Math.max(0, scrollPort.scrollHeight - scrollPort.clientHeight)
+
+	// Native scrollIntoView may also scroll overflow-hidden ancestors, so scroll only this list viewport.
+	scrollPort.scrollTo({
+		top: Math.min(Math.max(0, centeredScrollTop), maxScrollTop),
+		behavior: "smooth",
+	})
+}
+
 interface RecordingDetailTranscriptPanelProps {
 	segments: RecordingTranscriptSegment[]
 	availableSpeakerIds: string[]
@@ -57,12 +72,13 @@ export function RecordingDetailTranscriptPanel({
 		[segments, currentTime, playing],
 	)
 	const listRef = useRef<HTMLDivElement>(null)
+	const scrollPortRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
-		if (!activeSegmentId || !listRef.current) return
+		if (!activeSegmentId || !listRef.current || !scrollPortRef.current) return
 		const node = listRef.current.querySelector(`[data-segment-id="${activeSegmentId}"]`)
 		if (node instanceof HTMLElement) {
-			node.scrollIntoView({ block: "center", behavior: "smooth" })
+			centerTranscriptSegment(scrollPortRef.current, node)
 		}
 	}, [activeSegmentId])
 	const speakerLabels = useMemo(
@@ -144,6 +160,7 @@ export function RecordingDetailTranscriptPanel({
 				className="min-h-[320px] flex-1"
 				scrollClassName="px-4 pb-3 [scrollbar-width:thin]"
 				contentDeps={[segments.length]}
+				scrollPortRef={scrollPortRef}
 			>
 				{segments.length === 0 ? (
 					<RecordingDetailRegionEmptySlot>

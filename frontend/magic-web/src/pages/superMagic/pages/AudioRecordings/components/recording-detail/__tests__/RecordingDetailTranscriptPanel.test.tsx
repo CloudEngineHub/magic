@@ -1,12 +1,69 @@
-import type { ReactNode } from "react"
+import type { MutableRefObject, ReactNode, Ref } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecordingDetailProvider } from "../RecordingDetailProvider"
 import { RecordingDetailTranscriptPanel } from "../RecordingDetailTranscriptPanel"
 
+const scrollToMock = vi.fn()
+const scrollIntoViewMock = vi.fn()
+const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTo")
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+	HTMLElement.prototype,
+	"scrollIntoView",
+)
+
+/** Restores an HTMLElement method after a test replaces it with a deterministic mock. */
+function restoreHTMLElementMethod(
+	name: "scrollTo" | "scrollIntoView",
+	descriptor?: PropertyDescriptor,
+) {
+	if (descriptor) {
+		Object.defineProperty(HTMLElement.prototype, name, descriptor)
+		return
+	}
+	Reflect.deleteProperty(HTMLElement.prototype, name)
+}
+
+/** Creates the DOMRect subset needed for scroll-position calculations. */
+function createRect(top: number, height: number): DOMRect {
+	return {
+		x: 0,
+		y: top,
+		width: 100,
+		height,
+		top,
+		right: 100,
+		bottom: top + height,
+		left: 0,
+		toJSON: () => ({}),
+	}
+}
+
+beforeEach(() => {
+	scrollToMock.mockReset()
+	scrollIntoViewMock.mockReset()
+	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+		configurable: true,
+		value: scrollToMock,
+	})
+	Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+		configurable: true,
+		value: scrollIntoViewMock,
+	})
+})
+
+afterEach(() => {
+	vi.restoreAllMocks()
+	restoreHTMLElementMethod("scrollTo", originalScrollTo)
+	restoreHTMLElementMethod("scrollIntoView", originalScrollIntoView)
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, params?: { count?: number }) => {
+		t: (
+			key: string,
+			params?: { count?: number; visibleCount?: number; totalCount?: number },
+		) => {
 			const labels: Record<string, string> = {
 				"detail.tabs.transcript": "Transcript",
 				"detail.transcriptSegmentCountSuffix": `${params?.count ?? 0} segments`,
@@ -24,12 +81,32 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({
 		children,
+		scrollPortRef,
 		...props
 	}: {
 		children: ReactNode
+		scrollPortRef?: Ref<HTMLDivElement | null>
 		[key: string]: unknown
 	}) => (
-		<div data-testid="desktop-transcript-scroll-edge-fade" data-props={JSON.stringify(props)}>
+		<div
+			ref={(element) => {
+				if (element) {
+					// Provide stable viewport metrics before the panel effect calculates the centered row position.
+					Object.defineProperties(element, {
+						clientHeight: { configurable: true, value: 200 },
+						scrollHeight: { configurable: true, value: 500 },
+						scrollTop: { configurable: true, writable: true, value: 20 },
+					})
+				}
+				if (typeof scrollPortRef === "function") {
+					scrollPortRef(element)
+				} else if (scrollPortRef) {
+					;(scrollPortRef as MutableRefObject<HTMLDivElement | null>).current = element
+				}
+			}}
+			data-testid="desktop-transcript-scroll-edge-fade"
+			data-props={JSON.stringify(props)}
+		>
 			{children}
 		</div>
 	),
@@ -122,19 +199,18 @@ function renderTranscriptPanel(
 
 describe("RecordingDetailTranscriptPanel", () => {
 	it("keeps segment rows on the same box model while only emphasizing the active content", () => {
-		const scrollIntoViewMock = vi.fn()
-		const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-			HTMLElement.prototype,
-			"scrollIntoView",
-		)
-		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-			configurable: true,
-			value: scrollIntoViewMock,
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+			if (this.dataset.testid === "desktop-transcript-scroll-edge-fade") {
+				return createRect(100, 200)
+			}
+			if (this.dataset.segmentId === "segment-2") return createRect(250, 40)
+			return createRect(0, 0)
 		})
 
 		renderTranscriptPanel(10)
 
 		const panel = screen.getByTestId("recording-detail-transcript-panel")
+		const scrollPort = screen.getByTestId("desktop-transcript-scroll-edge-fade")
 		const segments = screen.getAllByTestId("recording-detail-transcript-segment")
 		const inactiveSegment = segments[0]
 		const activeSegment = segments[1]
@@ -170,24 +246,12 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(activeText).toHaveClass("text-foreground")
 		expect(speakerChips[0]).toHaveClass("opacity-70")
 		expect(speakerChips[1]).not.toHaveClass("opacity-70")
-		expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center", behavior: "smooth" })
-
-		if (originalScrollIntoView) {
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
-		}
+		expect(scrollToMock).toHaveBeenCalledWith({ top: 90, behavior: "smooth" })
+		expect(scrollToMock.mock.contexts[0]).toBe(scrollPort)
+		expect(scrollIntoViewMock).not.toHaveBeenCalled()
 	})
 
 	it("does not highlight or auto-scroll when playback is paused at a segment time", () => {
-		const scrollIntoViewMock = vi.fn()
-		const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-			HTMLElement.prototype,
-			"scrollIntoView",
-		)
-		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-			configurable: true,
-			value: scrollIntoViewMock,
-		})
-
 		renderTranscriptPanel(10, false)
 
 		const [inactiveTime, pausedTime] = screen.getAllByText(/00:(05|10)/)
@@ -201,11 +265,8 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(pausedText).toHaveClass("text-foreground")
 		expect(speakerChips[0]).not.toHaveClass("opacity-70")
 		expect(speakerChips[1]).not.toHaveClass("opacity-70")
+		expect(scrollToMock).not.toHaveBeenCalled()
 		expect(scrollIntoViewMock).not.toHaveBeenCalled()
-
-		if (originalScrollIntoView) {
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
-		}
 	})
 
 	it("keeps row seek and speaker settings interactions separate", () => {

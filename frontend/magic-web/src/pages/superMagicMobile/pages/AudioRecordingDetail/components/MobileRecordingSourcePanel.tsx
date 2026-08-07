@@ -226,7 +226,7 @@ function TranscriptList({
 	}
 
 	return (
-		<div className="flex flex-col gap-7">
+		<div className="flex flex-col gap-3">
 			{segments.map((segment) => {
 				const active =
 					playing &&
