@@ -28,6 +28,14 @@ export interface EditActionOptions {
 }
 
 /**
+ * 创建画框操作的选项
+ */
+export interface FrameCreateActionOptions {
+	/** 创建时向选中内容边界四周扩展的画布单位，不代表 Frame 的持久化 padding */
+	boundsExpansion?: number
+}
+
+/**
  * 视图操作的选项
  */
 export interface ViewActionOptions {
@@ -50,6 +58,7 @@ export interface DownloadActionOptions {
  */
 export interface UserActionOptionsMap {
 	"edit.paste": EditActionOptions
+	"frame.create": FrameCreateActionOptions
 	"view.focus-element": ViewActionOptions
 	"view.locate-project-file": LocateProjectFileActionOptions
 	"download.image": DownloadActionOptions

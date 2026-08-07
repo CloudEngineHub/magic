@@ -3,6 +3,8 @@ import styles from "./index.module.css"
 import { Frame } from "lucide-react"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 
+const TOOLBAR_FRAME_BOUNDS_EXPANSION = 100
+
 export default function FrameCreateButton() {
 	const { canvas } = useCanvas()
 
@@ -12,7 +14,9 @@ export default function FrameCreateButton() {
 		}
 
 		// 使用 UserActionRegistry 执行画框创建
-		canvas.userActionRegistry.execute("frame.create")
+		canvas.userActionRegistry.execute("frame.create", {
+			boundsExpansion: TOOLBAR_FRAME_BOUNDS_EXPANSION,
+		})
 	}
 
 	return (

@@ -373,10 +373,10 @@ export class FrameManager {
 	/**
 	 * 创建画框
 	 * 将选中的元素组合成一个画框
-	 * @param padding - 画框内边距
+	 * @param boundsExpansion - 创建时向选中内容边界四周扩展的画布单位
 	 * @returns 创建的画框 ID，如果创建失败返回 null
 	 */
-	public createFrame(padding: number = 0): string | null {
+	public createFrame(boundsExpansion: number = 0): string | null {
 		const selectedIds = this.canvas.selectionManager.getSelectedIds()
 		if (selectedIds.length === 0) {
 			return null
@@ -407,10 +407,10 @@ export class FrameManager {
 		}
 
 		// 计算画框的位置和尺寸，宽高向上取整
-		const frameX = rect.x - padding
-		const frameY = rect.y - padding
-		const frameWidth = Math.ceil(rect.width + padding * 2)
-		const frameHeight = Math.ceil(rect.height + padding * 2)
+		const frameX = rect.x - boundsExpansion
+		const frameY = rect.y - boundsExpansion
+		const frameWidth = Math.ceil(rect.width + boundsExpansion * 2)
+		const frameHeight = Math.ceil(rect.height + boundsExpansion * 2)
 
 		// 获取选中元素的最大 zIndex，Frame 将使用这个位置
 		const maxSelectedZIndex = Math.max(...selectedElements.map((el) => el.zIndex ?? 0))
