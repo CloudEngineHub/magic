@@ -8,9 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\SuperMagic;
 
 use App\Application\SuperMagic\Common\Contract\AllowAllPromptContentValidator;
-use App\Application\SuperMagic\Common\Contract\DefaultDeploymentId;
 use App\Application\SuperMagic\Common\Contract\DefaultUserAiWatermarkPolicy;
-use App\Application\SuperMagic\Common\Contract\DeploymentIdInterface;
 use App\Application\SuperMagic\Common\Contract\PromptContentValidatorInterface;
 use App\Application\SuperMagic\Common\Contract\UserAiWatermarkPolicyInterface;
 use App\Application\SuperMagic\Common\Share\Adapter\SingleFileShareableResource;
@@ -132,7 +130,6 @@ class ConfigProvider
     {
         return [
             'dependencies' => [
-                DeploymentIdInterface::class => DefaultDeploymentId::class,
                 PromptContentValidatorInterface::class => AllowAllPromptContentValidator::class,
                 UserAiWatermarkPolicyInterface::class => DefaultUserAiWatermarkPolicy::class,
                 // 添加接口到实现类的映射

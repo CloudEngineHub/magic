@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\File\Facade;
 
-use App\Application\SuperMagic\Common\Contract\DeploymentIdInterface;
 use App\Application\SuperMagic\Common\Service\AccessTokenAuthorizationService;
 use App\Application\SuperMagic\File\Service\AgentFileAppService;
 use App\Application\SuperMagic\File\Service\FileBatchAppService;
@@ -510,7 +509,7 @@ class FileApi extends AbstractApi
     public function getFileUrls(RequestContext $requestContext): array
     {
         // 获取请求DTO
-        $dto = GetFileUrlsRequestDTO::fromRequest($this->request, $this->getDefaultDownloadMode());
+        $dto = GetFileUrlsRequestDTO::fromRequest($this->request);
 
         if (! empty($dto->getToken())) {
             // 只在真正下载时才进行下载权限校验
@@ -595,8 +594,4 @@ class FileApi extends AbstractApi
         return $this->fileManagementAppService->replaceFile($requestContext, $fileId, $requestDTO);
     }
 
-    private function getDefaultDownloadMode(): string
-    {
-        return di(DeploymentIdInterface::class)->isPrivateDeployment() ? 'download' : 'preview';
-    }
 }
