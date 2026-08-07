@@ -33,6 +33,7 @@ Note: User terminology differs. The current working directory is a large project
   - `<llm id="..." name="..."/>`：实际生效的 LLM 模型，可能因运行时模型选择或紧凑模式而与初始配置不同。
   - `<image_model id="..."><size .../></image_model>`：当前图片生成模型及其可用尺寸，仅在模型或尺寸发生变化时注入。调用图片生成工具时使用这里提供的尺寸值。
 - `<workspace_files_changed>`：工作区文件树发生变化时注入。变更较少时列出新增和删除的文件或目录名称，变更过多时只显示数量。
+- `<auto_read_files>`：运行时按配置自动调用 `read_file` 的结果；将其视为你已经亲自读取过的文件内容，并遵循其中适用的项目规则。
 - `<persistent_memory>`：持久记忆的完整当前快照；在首次上下文和内容发生变化时注入。
 - `<user_preferred_language_changed>`：用户偏好语言发生变化时注入，包含新的语言值。
 - `<file_changes>`：之前读取过、此后被外部修改的文件。编辑前检查其中的差异，避免基于过期内容操作。
@@ -51,6 +52,7 @@ Sub-elements:
   - `<llm id="..." name="..."/>`: the LLM model that is actually in effect (may differ from initial config due to runtime model selection or compact mode).
   - `<image_model id="..."><size .../></image_model>`: the current image generation model and its available sizes; only emitted when the model or sizes change. Use these size values when calling image generation tools.
 - `<workspace_files_changed>`: emitted when the workspace file tree changes; shows added and removed files/dirs with their names when the count is small, falls back to counts only when the change is large.
+- `<auto_read_files>`: results from runtime-configured automatic `read_file` calls; treat them exactly as files you have read yourself and follow applicable project rules in their contents.
 - `<persistent_memory>`: the complete current persistent-memory snapshot, emitted in the initial context and whenever its content changes.
 - `<user_preferred_language_changed>`: emitted when the user's preferred language changes; contains the new language value.
 - `<file_changes>`: files you previously read that have since been modified externally. Review the diffs before editing to avoid stale-content conflicts.

@@ -77,6 +77,7 @@ from app.core.entity.message.server_message import TaskStatus
 # 多语言支持
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
+from app.service.auto_read_file_service import AutoReadFileService
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
@@ -2457,6 +2458,9 @@ Since your subsequent output will be merged with pre-interruption content and di
         threshold_model_id = self._require_current_text_model_id()
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
+        # 压缩或 /new 会清空 Horizon 文件记录；在真正调用 LLM 前重新走真实 ReadFile 接管规则文件。
+        await self._append_auto_read_context_safely()
+
         # 使用ChatHistory获取格式化后的消息列表
         messages_for_llm = self.chat_history.get_messages_for_llm()
         if not messages_for_llm:
@@ -2608,6 +2612,19 @@ Since your subsequent output will be merged with pre-interruption content and di
             model_name=display_model_name,
             description=description,
         )
+
+    async def _append_auto_read_context_safely(self) -> None:
+        """把尚未被 Horizon 接管的规则文件通过真实 ReadFile 注入隐藏上下文。"""
+        try:
+            auto_read_context = await AutoReadFileService.build_context(self.agent_context)
+            if auto_read_context:
+                await self.chat_history.append_user_message(
+                    auto_read_context,
+                    show_in_ui=False,
+                    source="auto_read_file",
+                )
+        except Exception as auto_read_error:
+            logger.warning(f"自动读取文件失败，不阻塞本轮运行: {auto_read_error}")
 
     async def _build_horizon_context_update_safely(
         self,

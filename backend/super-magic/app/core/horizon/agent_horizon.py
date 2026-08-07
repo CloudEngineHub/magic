@@ -560,6 +560,11 @@ class AgentHorizon:
         meta = await self.get_metadata(file_path)
         return meta.get(field_name) if meta else None
 
+    async def is_file_tracked(self, file_path: Union[str, Path]) -> bool:
+        """判断文件是否已由 Horizon 接管变化检测。"""
+        await self._ensure_loaded()
+        return _abs(file_path) in self._state.file_records
+
     async def on_context_reset(self) -> None:
         """聊天历史压缩或 /new 后调用，重置与上下文内容相关的所有状态。
 
