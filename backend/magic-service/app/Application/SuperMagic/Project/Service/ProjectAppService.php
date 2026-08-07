@@ -67,11 +67,13 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Domain\SuperMagic\Workspace\Entity\ValueObject\WorkspaceType;
 use App\Domain\SuperMagic\Workspace\Entity\WorkspaceEntity;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
+use App\ErrorCode\EventErrorCode;
 use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\ShareErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventException;
+use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\Utils\AccessTokenUtil;
 use App\Infrastructure\SuperMagic\Utils\FileMetadataUtil;
@@ -79,7 +81,9 @@ use App\Infrastructure\SuperMagic\Utils\FileTreeBuilder;
 use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\DTO\Response\BatchDeleteResultItemDTO;
 use App\Interfaces\SuperMagic\Common\Share\DTO\Request\CreateShareRequestDTO;
 use App\Interfaces\SuperMagic\File\DTO\Request\GetProjectAttachmentsRequestDTO;
@@ -103,6 +107,9 @@ use App\Interfaces\SuperMagic\Topic\DTO\Response\SidebarTopicListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\TopicItemDTO;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Dtyq\BillingManager\Domain\Quota\Service\QuotaDomainService;
+use Dtyq\BillingManager\Infrastructure\Core\Constants\BillManager\BillingTargetType;
+use Dtyq\BillingManager\Infrastructure\Core\Constants\BillManager\QuotaType;
 use Hyperf\Amqp\Producer;
 use Hyperf\DbConnection\Annotation\Transactional;
 use Hyperf\DbConnection\Db;
@@ -146,6 +153,7 @@ class ProjectAppService extends AbstractAppService
         private readonly ProjectDomainService $projectDomainService,
         private readonly ProjectRepositoryInterface $projectRepository,
         private readonly MicroAppRepositoryInterface $microAppRepository,
+        private readonly QuotaDomainService $quotaDomainService,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
         private readonly TopicDomainService $topicDomainService,
@@ -1883,67 +1891,38 @@ class ProjectAppService extends AbstractAppService
 
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $lockKey = 'micro_app:create:' . $organizationCode;
+        $lockOwner = IdGenerator::getUniqueId32();
 
-        $workspaceId = $requestDTO->getWorkspaceId();
-        if ($workspaceId !== '') {
-            if (! ctype_digit($workspaceId)) {
-                ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid workspace_id');
-            }
-            $workspaceIdInt = (int) $workspaceId;
-            $workspaceEntity = $this->validateWorkspaceAccess($dataIsolation, $workspaceIdInt);
-            $this->validateWorkspaceType($workspaceEntity, WorkspaceType::MicroApp, $workspaceIdInt);
-        } else {
-            $workspaceEntity = $this->workspaceDomainService->getOrCreateWorkspaceByType(
-                $dataIsolation,
-                WorkspaceType::MicroApp
-            );
+        if (! $this->locker->spinLock($lockKey, $lockOwner, 120, 5)) {
+            ExceptionBuilder::throw(GenericErrorCode::TooManyRequests, 'project.create_project_too_frequent');
         }
 
-        Db::beginTransaction();
         try {
-            $projectEntity = $this->projectDomainService->createProject(
-                $workspaceEntity->getId(),
-                $requestDTO->getProjectName(),
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode(),
-                '',
-                '',
-                ProjectMode::GENERAL->value
-            );
-            $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
-
-            $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
-            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
-
-            $this->taskFileDomainService->findOrCreateProjectRootDirectory(
-                projectId: $projectEntity->getId(),
-                workDir: $projectEntity->getWorkDir(),
-                userId: $dataIsolation->getCurrentUserId(),
-                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
-                projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+            $quotaType = QuotaType::ORGANIZATION_MICRO_APP_COUNT_LIMIT;
+            $organizationTargetType = BillingTargetType::ORGANIZATION->value;
+            $limit = $this->quotaDomainService->getQuotaLimit(
+                targetId: $organizationCode,
+                targetType: $organizationTargetType,
+                appliesId: $organizationCode,
+                appliesType: $organizationTargetType,
+                quotaType: $quotaType->value
             );
 
-            $microAppRecord = $this->microAppRepository->ensureByProjectId(
-                $projectEntity->getId(),
-                $projectEntity->getUserOrganizationCode(),
-                $projectEntity->getUserId(),
-                $projectEntity->getCreatedUid(),
-            );
+            if ($limit !== null && $limit >= 0) {
+                $currentCount = $this->microAppRepository->countActiveByOrganization($organizationCode);
+                if ($currentCount >= $limit) {
+                    EventExceptionBuilder::throw(
+                        EventErrorCode::EVENT_CREDIT_INSUFFICIENT_LIMIT,
+                        $quotaType->getInsufficientMessage(['amount' => $limit])
+                    );
+                }
+            }
 
-            Db::commit();
-
-            $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
-            $this->eventDispatcher->dispatch($projectCreatedEvent);
-
-            return [
-                'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
-                'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
-                'app_id' => (string) $microAppRecord->getId(),
-            ];
-        } catch (Throwable $e) {
-            Db::rollBack();
-            $this->logger->error('Create Micro App Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
-            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
+            return $this->doCreateMicroAppProject($requestDTO, $dataIsolation, $userAuthorization);
+        } finally {
+            $this->locker->release($lockKey, $lockOwner);
         }
     }
 
@@ -2525,6 +2504,74 @@ class ProjectAppService extends AbstractAppService
         }
 
         return $project;
+    }
+
+    private function doCreateMicroAppProject(
+        CreateMicroAppProjectRequestDTO $requestDTO,
+        DataIsolation $dataIsolation,
+        MagicUserAuthorization $userAuthorization
+    ): array {
+        $workspaceId = $requestDTO->getWorkspaceId();
+        if ($workspaceId !== '') {
+            if (! ctype_digit($workspaceId)) {
+                ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'Invalid workspace_id');
+            }
+            $workspaceIdInt = (int) $workspaceId;
+            $workspaceEntity = $this->validateWorkspaceAccess($dataIsolation, $workspaceIdInt);
+            $this->validateWorkspaceType($workspaceEntity, WorkspaceType::MicroApp, $workspaceIdInt);
+        } else {
+            $workspaceEntity = $this->workspaceDomainService->getOrCreateWorkspaceByType(
+                $dataIsolation,
+                WorkspaceType::MicroApp
+            );
+        }
+
+        Db::beginTransaction();
+        try {
+            $projectEntity = $this->projectDomainService->createProject(
+                $workspaceEntity->getId(),
+                $requestDTO->getProjectName(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                '',
+                '',
+                ProjectMode::GENERAL->value
+            );
+            $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
+
+            $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
+            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+
+            $this->taskFileDomainService->findOrCreateProjectRootDirectory(
+                projectId: $projectEntity->getId(),
+                workDir: $projectEntity->getWorkDir(),
+                userId: $dataIsolation->getCurrentUserId(),
+                organizationCode: $dataIsolation->getCurrentOrganizationCode(),
+                projectOrganizationCode: $projectEntity->getUserOrganizationCode(),
+            );
+
+            $microAppRecord = $this->microAppRepository->ensureByProjectId(
+                $projectEntity->getId(),
+                $projectEntity->getUserOrganizationCode(),
+                $projectEntity->getUserId(),
+                $projectEntity->getCreatedUid(),
+            );
+
+            Db::commit();
+
+            $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
+            $this->eventDispatcher->dispatch($projectCreatedEvent);
+
+            return [
+                'project' => ProjectItemDTO::fromEntity($projectEntity)->toArray(),
+                'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
+                'app_id' => (string) $microAppRecord->getId(),
+            ];
+        } catch (Throwable $e) {
+            Db::rollBack();
+            $this->logger->error('Create Micro App Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
+            ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
+        }
     }
 
     /**

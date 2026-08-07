@@ -27,6 +27,8 @@ interface MicroAppRepositoryInterface
 
     public function save(MicroAppEntity $entity): MicroAppEntity;
 
+    public function countActiveByOrganization(string $organizationCode): int;
+
     /**
      * @return MicroAppEntity[]
      */

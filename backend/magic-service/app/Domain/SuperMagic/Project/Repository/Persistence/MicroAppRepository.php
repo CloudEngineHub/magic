@@ -10,8 +10,10 @@ namespace App\Domain\SuperMagic\Project\Repository\Persistence;
 use App\Domain\SuperMagic\Project\Entity\MicroAppEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppListScope;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MicroAppPublishStatus;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectStatus;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Model\MicroAppModel;
+use App\Domain\SuperMagic\Workspace\Entity\ValueObject\WorkspaceType;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\DbConnection\Db;
 use RuntimeException;
@@ -113,6 +115,19 @@ class MicroAppRepository implements MicroAppRepositoryInterface
         $model->save();
 
         return $this->toEntity($model);
+    }
+
+    public function countActiveByOrganization(string $organizationCode): int
+    {
+        return (int) Db::table('magic_super_agent_project as p')
+            ->join('magic_super_agent_workspaces as w', 'w.id', '=', 'p.workspace_id')
+            ->where('p.user_organization_code', $organizationCode)
+            ->where('w.user_organization_code', $organizationCode)
+            ->where('w.workspace_type', WorkspaceType::MicroApp->value)
+            ->where('p.project_status', ProjectStatus::ACTIVE->value)
+            ->whereNull('p.deleted_at')
+            ->whereNull('w.deleted_at')
+            ->count('p.id');
     }
 
     public function findPublishedByOrganization(string $organizationCode): array
