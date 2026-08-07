@@ -16,7 +16,6 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import type { FileData } from "@/pages/superMagic/components/MessageEditor/types"
 import { extractFileExtension } from "@/pages/superMagic/components/MessageEditor/utils/mention"
-import { toDisplayUploadProgress } from "@/pages/superMagic/components/MessageEditor/utils/uploadProgress"
 import useObjectUrl from "@/pages/superMagic/components/MessageEditor/components/AtItem/hooks/useObjectURL"
 
 interface MobileComposerAttachmentsProps {
@@ -205,12 +204,10 @@ function MobileComposerAttachmentThumb({
 	const objectUrl = useObjectUrl(needsPreviewUrl ? file.file : null)
 	const previewUrl = objectUrl ?? ""
 
-	// Keep the mobile attachment state aligned with the editor mention node: `init` is
-	// already an active upload and should show the same 0%/loading feedback.
+	// `init` is already an active upload. Preview cards intentionally use loading only
+	// because their percentage can lag behind the editor-scoped upload state.
 	const isUploading = file.status === "init" || file.status === "uploading"
 	const isError = file.status === "error"
-	const progress = toDisplayUploadProgress(file.progress) ?? 0
-	const shouldShowProgress = isUploading && !isImage && !isVideo
 
 	const { Icon: FileIcon, label: fileLabel } =
 		isImage || isVideo ? { Icon: File, label: "" } : getFileStyle(ext)
@@ -242,9 +239,6 @@ function MobileComposerAttachmentThumb({
 					<span className="w-full truncate text-xs leading-none text-foreground/35">
 						{file.name}
 					</span>
-					{shouldShowProgress ? (
-						<span className="text-xs text-muted-foreground">{progress}%</span>
-					) : null}
 				</div>
 			)}
 

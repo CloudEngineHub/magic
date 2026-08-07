@@ -35,10 +35,13 @@ describe("MobileComposerAttachments", () => {
 		objectUrlMock.value = null
 	})
 
-	it("uses the same normalized display progress as the editor mention", () => {
+	it("shows only loading feedback for an ordinary file while uploading", () => {
 		render(<MobileComposerAttachments files={[createFile()]} onRemove={vi.fn()} />)
 
-		expect(screen.getByText("42%")).toBeInTheDocument()
+		expect(screen.queryByText("42%")).not.toBeInTheDocument()
+		expect(
+			screen.getByTestId("mobile-composer-attachment-item").querySelector(".animate-spin"),
+		).toBeInTheDocument()
 	})
 
 	it("treats init as uploading", () => {
@@ -49,7 +52,7 @@ describe("MobileComposerAttachments", () => {
 			/>,
 		)
 
-		expect(screen.getByText("0%")).toBeInTheDocument()
+		expect(screen.queryByText("0%")).not.toBeInTheDocument()
 		expect(
 			screen.getByTestId("mobile-composer-attachment-item").querySelector(".animate-spin"),
 		).toBeInTheDocument()
