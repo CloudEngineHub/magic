@@ -154,6 +154,13 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				"react-router-dom",
 				"i18next",
 				"react-i18next",
+				// These libraries expose shared React contexts. The standalone
+				// enterprise install root can otherwise resolve duplicate copies,
+				// making theme/config providers invisible to shared UI components.
+				"antd",
+				"antd-style",
+				"@emotion/react",
+				"@emotion/cache",
 			],
 			alias: [
 				{
