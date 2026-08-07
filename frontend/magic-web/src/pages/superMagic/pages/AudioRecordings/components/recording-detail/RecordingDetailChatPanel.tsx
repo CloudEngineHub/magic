@@ -10,6 +10,7 @@ import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { RECORDING_CHAT_HISTORY_WIDTH } from "./recording-detail-layout"
+import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 
 export interface RecordingDetailChatPanelProps {
 	isConversationPanelCollapsed: boolean
@@ -50,6 +51,13 @@ export default function RecordingDetailChatPanel({
 	attachmentList,
 }: RecordingDetailChatPanelProps) {
 	const { t } = useTranslation("super")
+
+	// Register the scoped topic-creation listener so employee switching creates and selects a new topic.
+	useCreateTopicListener({
+		enabled: Boolean(project),
+		selectedProject: project,
+		topicStore,
+	})
 
 	return (
 		<div

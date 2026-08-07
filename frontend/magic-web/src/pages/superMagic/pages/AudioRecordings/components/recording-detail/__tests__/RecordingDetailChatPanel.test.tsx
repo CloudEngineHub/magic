@@ -6,6 +6,7 @@ import { RECORDING_CHAT_HISTORY_WIDTH } from "../recording-detail-layout"
 
 const messageHeaderMock = vi.hoisted(() => vi.fn())
 const historyPanelMock = vi.hoisted(() => vi.fn())
+const createTopicListenerMock = vi.hoisted(() => vi.fn())
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -41,6 +42,10 @@ vi.mock("@/components/business/RecordingSummary/components/AiChat", () => ({
 			</button>
 		</div>
 	),
+}))
+
+vi.mock("@/pages/superMagic/components/TopicMode/useCreateTopicListener", () => ({
+	useCreateTopicListener: createTopicListenerMock,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
@@ -122,6 +127,11 @@ describe("RecordingDetailChatPanel", () => {
 			"data-project-detail-mode",
 			"true",
 		)
+		expect(createTopicListenerMock).toHaveBeenCalledWith({
+			enabled: true,
+			selectedProject: { id: "mock-project-001" },
+			topicStore,
+		})
 		fireEvent.click(screen.getByText("toggle history"))
 		expect(toggleHistory).toHaveBeenCalledTimes(1)
 		fireEvent.click(screen.getByText("toggle conversation"))
