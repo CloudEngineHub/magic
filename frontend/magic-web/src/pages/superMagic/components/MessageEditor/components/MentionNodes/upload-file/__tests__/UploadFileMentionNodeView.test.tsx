@@ -84,7 +84,7 @@ describe("UploadFileMentionNodeView", () => {
 			"!overflow-visible",
 			"!bg-transparent",
 			"!p-0",
-			"!align-baseline",
+			"align-middle",
 		)
 		expect(visual).toHaveClass(
 			"h-[18px]",

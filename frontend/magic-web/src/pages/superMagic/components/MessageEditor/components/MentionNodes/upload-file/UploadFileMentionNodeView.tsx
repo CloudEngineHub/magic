@@ -40,10 +40,7 @@ function UploadFileMentionNodeView({ attrs, deleteNode, selected }: MentionNodeV
 			as="span"
 			// The atomic wrapper only defines the ProseMirror boundary. Visual padding on this
 			// element makes the native caret appear inside the mention background at line end.
-			className={cn(
-				"magic-mention relative !inline-flex max-w-full !overflow-visible !bg-transparent !p-0",
-				isMobile ? "align-middle" : "!align-baseline",
-			)}
+			className="magic-mention relative !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 align-middle"
 			contentEditable={false}
 			data-type={attrs.type}
 			data-data={JSON.stringify(attrs.data || {})}
