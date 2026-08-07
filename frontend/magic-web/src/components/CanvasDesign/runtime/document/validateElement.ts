@@ -53,6 +53,82 @@ function isValidImageElementFields(element: Record<string, unknown>): boolean {
 	return ids.has(element.activeVersionId) && ids.has(element.mainVersionId)
 }
 
+function isOptionalString(value: unknown): boolean {
+	return value === undefined || typeof value === "string"
+}
+
+function isValidStoryboardGenerationConfig(value: unknown): boolean {
+	if (value === undefined) return true
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+	const config = value as Record<string, unknown>
+	if (!isOptionalString(config.model_id)) return false
+	if (!isOptionalString(config.size)) return false
+	if (!isOptionalString(config.resolution)) return false
+	if (config.image_generation_config === undefined) return true
+	if (
+		!config.image_generation_config ||
+		typeof config.image_generation_config !== "object" ||
+		Array.isArray(config.image_generation_config)
+	) {
+		return false
+	}
+
+	return Object.values(config.image_generation_config as Record<string, unknown>).every(
+		(item) => typeof item === "string",
+	)
+}
+
+function isValidStoryboardShots(value: unknown): boolean {
+	if (!Array.isArray(value)) return false
+
+	const shotIds = new Set<string>()
+	const outputImageElementIds = new Set<string>()
+	for (const item of value) {
+		if (!item || typeof item !== "object" || Array.isArray(item)) return false
+		const shot = item as Record<string, unknown>
+		if (typeof shot.id !== "string" || !shot.id || shotIds.has(shot.id)) return false
+		if (
+			typeof shot.durationSeconds !== "number" ||
+			!Number.isFinite(shot.durationSeconds) ||
+			shot.durationSeconds <= 0
+		) {
+			return false
+		}
+		if (typeof shot.description !== "string") return false
+		if (shot.outputImageElementId !== undefined) {
+			if (typeof shot.outputImageElementId !== "string" || !shot.outputImageElementId) {
+				return false
+			}
+			if (outputImageElementIds.has(shot.outputImageElementId)) return false
+			outputImageElementIds.add(shot.outputImageElementId)
+		}
+		shotIds.add(shot.id)
+	}
+
+	return true
+}
+
+function isValidElementIdSequence(value: unknown): value is string[] {
+	if (!Array.isArray(value)) return false
+	const ids = new Set<string>()
+	for (const item of value) {
+		if (typeof item !== "string" || !item || ids.has(item)) return false
+		ids.add(item)
+	}
+	return true
+}
+
+function isValidVideoEditOutput(value: unknown): boolean {
+	if (value === undefined) return true
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+
+	const output = value as Record<string, unknown>
+	return ["aspectRatio", "resolution", "format"].every(
+		(field) => output[field] === undefined || typeof output[field] === "string",
+	)
+}
+
 /**
  * 验证元素数据结构是否有效
  * @param data - 待验证的数据
@@ -206,6 +282,21 @@ export function isValidElementData(data: unknown): data is LayerElement {
 			if (element.src !== undefined && typeof element.src !== "string") {
 				return false
 			}
+			break
+
+		case ElementTypeEnum.Storyboard:
+			if (!isValidStoryboardGenerationConfig(element.generationConfig)) {
+				return false
+			}
+			if (!isValidStoryboardShots(element.shots)) {
+				return false
+			}
+			break
+
+		case ElementTypeEnum.VideoEdit:
+			if (!isValidElementIdSequence(element.videoSequence)) return false
+			if (!isValidElementIdSequence(element.audioSequence)) return false
+			if (!isValidVideoEditOutput(element.output)) return false
 			break
 	}
 

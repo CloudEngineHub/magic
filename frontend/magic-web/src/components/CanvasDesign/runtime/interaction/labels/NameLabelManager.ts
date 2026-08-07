@@ -43,16 +43,27 @@ export class NameLabelManager extends BaseLabelManager {
 				offsetLeft: NAME_LABEL_CONFIG.OFFSET_LEFT,
 			},
 			visibilityConfig: {
-				// 只有 Frame、Image 和 Video 元素显示名称标签
+				// 只有业务容器与媒体元素显示名称标签
 				elementTypes: new Set([
 					ElementTypeEnum.Frame,
 					ElementTypeEnum.Image,
 					ElementTypeEnum.Video,
+					ElementTypeEnum.Audio,
+					ElementTypeEnum.Storyboard,
+					ElementTypeEnum.VideoEdit,
 				]),
-				// Frame 元素一直显示
-				alwaysVisibleTypes: new Set([ElementTypeEnum.Frame]),
-				// Image / Video 元素在选中或 hover 时显示
-				hoverOrSelectTypes: new Set([ElementTypeEnum.Image, ElementTypeEnum.Video]),
+				// Frame 和函数型分镜节点始终显示名称，便于在大画布中定位业务阶段。
+				alwaysVisibleTypes: new Set([
+					ElementTypeEnum.Frame,
+					ElementTypeEnum.Storyboard,
+					ElementTypeEnum.VideoEdit,
+				]),
+				// 媒体元素在选中或 hover 时显示
+				hoverOrSelectTypes: new Set([
+					ElementTypeEnum.Image,
+					ElementTypeEnum.Video,
+					ElementTypeEnum.Audio,
+				]),
 			},
 		}
 

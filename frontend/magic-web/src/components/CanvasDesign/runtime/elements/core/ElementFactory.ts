@@ -1,4 +1,9 @@
-import type { LayerElement, ElementType } from "../../document/types"
+import type {
+	LayerElement,
+	ElementType,
+	StoryboardElement as StoryboardElementData,
+	StoryboardShot,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import { BaseElement, BASE_ELEMENT_DEFAULTS } from "./BaseElement"
 // import { RectangleElement } from "../shape/RectangleElement"
@@ -9,6 +14,7 @@ import { TextElement } from "../text/TextElement"
 import { ImageElement } from "../image/ImageElement"
 import { VideoElement } from "../video/VideoElement"
 import { AudioElement } from "../audio/AudioElement"
+import { StoryboardElement } from "../storyboard/StoryboardElement"
 // import { GroupElement } from "../frame/GroupElement"
 import { FrameElement } from "../frame/FrameElement"
 import type { Canvas } from "../../core/Canvas"
@@ -70,6 +76,9 @@ export class ElementFactory {
 
 			case ElementTypeEnum.Audio:
 				return new AudioElement(data, canvas)
+
+			case ElementTypeEnum.Storyboard:
+				return new StoryboardElement(normalizeStoryboardData(data), canvas)
 
 			// case ElementTypeEnum.Group:
 			// 	return new GroupElement(
@@ -166,6 +175,8 @@ export class ElementFactory {
 			videoWidth?: number
 			videoHeight?: number
 			audioWidth?: number
+			storyboardWidth?: number
+			storyboardHeight?: number
 		},
 	): Record<string, unknown> {
 		// 先获取基础元素默认配置
@@ -216,6 +227,15 @@ export class ElementFactory {
 				}
 				break
 
+			case ElementTypeEnum.Storyboard:
+				specificConfig = {
+					...StoryboardElement.getDefaultConfig(),
+					width: options?.storyboardWidth ?? StoryboardElement.getDefaultConfig().width,
+					height:
+						options?.storyboardHeight ?? StoryboardElement.getDefaultConfig().height,
+				}
+				break
+
 			case ElementTypeEnum.Frame:
 				specificConfig = FrameElement.getDefaultConfig()
 				break
@@ -231,5 +251,18 @@ export class ElementFactory {
 
 		// 合并基础配置和特定配置
 		return { ...baseConfig, ...specificConfig }
+	}
+}
+
+function normalizeStoryboardData(data: StoryboardElementData): StoryboardElementData {
+	if (!data.shots) return data
+
+	return {
+		...data,
+		shots: data.shots.map((shot) => {
+			const normalizedShot = { ...shot } as unknown as Record<string, unknown>
+			delete normalizedShot.status
+			return normalizedShot as StoryboardShot
+		}),
 	}
 }

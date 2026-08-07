@@ -70,4 +70,120 @@ describe("isValidElementData", () => {
 			}),
 		).toBe(false)
 	})
+
+	it("accepts a storyboard element with unique, valid shots", () => {
+		expect(
+			isValidElementData({
+				id: "storyboard-1",
+				type: ElementTypeEnum.Storyboard,
+				generationConfig: {
+					model_id: "gpt-image-2",
+					size: "1080x1920",
+					resolution: "1K",
+					image_generation_config: { aspect_ratio: "9:16" },
+				},
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 4,
+						description: "森林小路",
+					},
+				],
+			}),
+		).toBe(true)
+	})
+
+	it("rejects malformed storyboard shots and duplicate shot ids", () => {
+		expect(
+			isValidElementData({
+				id: "storyboard-1",
+				type: ElementTypeEnum.Storyboard,
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 0,
+						description: "森林小路",
+					},
+				],
+			}),
+		).toBe(false)
+		expect(
+			isValidElementData({
+				id: "storyboard-2",
+				type: ElementTypeEnum.Storyboard,
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 3,
+						description: "镜头一",
+					},
+					{
+						id: "shot-1",
+						durationSeconds: 3,
+						description: "镜头二",
+					},
+				],
+			}),
+		).toBe(false)
+		expect(
+			isValidElementData({
+				id: "storyboard-3",
+				type: ElementTypeEnum.Storyboard,
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 3,
+						description: "镜头一",
+						outputImageElementId: "image-output",
+					},
+					{
+						id: "shot-2",
+						durationSeconds: 3,
+						description: "镜头二",
+						outputImageElementId: "image-output",
+					},
+				],
+			}),
+		).toBe(false)
+	})
+
+	it("accepts a video merge element with ordered media inputs and output settings", () => {
+		expect(
+			isValidElementData({
+				id: "video-edit-1",
+				type: ElementTypeEnum.VideoEdit,
+				videoSequence: ["video-s01", "video-s02"],
+				audioSequence: ["audio-narration"],
+				output: { aspectRatio: "9:16", resolution: "1K", format: "mp4" },
+			}),
+		).toBe(true)
+		expect(
+			isValidElementData({
+				id: "video-edit-empty",
+				type: ElementTypeEnum.VideoEdit,
+				videoSequence: [],
+				audioSequence: [],
+			}),
+		).toBe(true)
+	})
+
+	it("rejects duplicate merge inputs and malformed output settings", () => {
+		expect(
+			isValidElementData({
+				id: "video-edit-duplicate",
+				type: ElementTypeEnum.VideoEdit,
+				videoSequence: ["video-s01", "video-s01"],
+				audioSequence: [],
+			}),
+		).toBe(false)
+		expect(
+			isValidElementData({
+				id: "video-edit-invalid-output",
+				type: ElementTypeEnum.VideoEdit,
+				videoSequence: [],
+				audioSequence: [],
+				output: { resolution: 1024 },
+			}),
+		).toBe(false)
+	})
 })

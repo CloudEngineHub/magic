@@ -1,0 +1,406 @@
+import Konva from "konva"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import type { Canvas } from "../../../core/Canvas"
+import { exportCanvasDocument } from "../../../document/exportDocument"
+import { ElementTypeEnum } from "../../../document/types"
+import { TransformBehavior } from "../../../interaction/transform/TransformManager"
+import { ElementFactory } from "../../core/ElementFactory"
+import { STORYBOARD_CONFIG } from "../StoryboardElement.config"
+import { resolveStoryboardElementLayout } from "../StoryboardElement.layout"
+import { StoryboardElement } from "../StoryboardElement"
+
+function createCanvasMock(modelIcon?: string, outputImageIds: string[] = []): Canvas {
+	const outputImageIdSet = new Set(outputImageIds)
+	return {
+		deviceInfo: {
+			formFactor: "desktop",
+			input: { touch: false, coarsePointer: false, hover: true },
+			viewport: { width: 1280, height: 800 },
+		},
+		elementManager: {
+			canDragElement: vi.fn(() => true),
+			canListenElement: vi.fn(() => true),
+			getElementData: vi.fn((elementId: string) =>
+				outputImageIdSet.has(elementId)
+					? { id: elementId, type: ElementTypeEnum.Image }
+					: undefined,
+			),
+		},
+		storyboardInteractionManager: {
+			bindControl: vi.fn(() => vi.fn()),
+			getModelIcon: vi.fn(() => modelIcon),
+		},
+	} as unknown as Canvas
+}
+
+describe("StoryboardElement", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+		vi.unstubAllGlobals()
+	})
+
+	it("creates a stable default storyboard DSL element", () => {
+		const element = StoryboardElement.createElementData({
+			id: "storyboard-1",
+			x: 10,
+			y: 20,
+		})
+
+		expect(element).toMatchObject({
+			id: "storyboard-1",
+			type: ElementTypeEnum.Storyboard,
+			x: 10,
+			y: 20,
+			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			interactionConfig: { aspectRatioLocked: false },
+		})
+		expect(element.shots).toHaveLength(1)
+		expect(element.shots[0]).toMatchObject({
+			durationSeconds: 3,
+			description: "",
+		})
+		expect(element.shots[0]).not.toHaveProperty("status")
+		expect(element.shots[0].id).toEqual(expect.any(String))
+	})
+
+	it("is created by the element factory and rejects resize transforms", () => {
+		const canvas = createCanvasMock()
+		const data = StoryboardElement.createElementData({ id: "storyboard-1", x: 0, y: 0 })
+		const element = ElementFactory.create(data, canvas)
+
+		expect(element).toBeInstanceOf(StoryboardElement)
+		expect(element?.getTransformBehavior()).toBe(TransformBehavior.APPLY_TO_SIZE)
+		expect(element?.supportsSizeEditing()).toBe(false)
+		expect(element?.getTransformConstraints()).toEqual({
+			enabledAnchors: [],
+			minWidth: STORYBOARD_CONFIG.MIN_WIDTH,
+			minHeight: STORYBOARD_CONFIG.MIN_HEIGHT,
+		})
+		expect(
+			element?.applyTransform(
+				{
+					x: 24,
+					y: 36,
+					width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+					height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+					scaleX: 0.5,
+					scaleY: 0.5,
+				},
+				{
+					isRealtime: true,
+					isScaling: true,
+					shouldKeepRatio: false,
+				},
+			),
+		).toEqual({
+			x: 24,
+			y: 36,
+			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			scaleX: 1,
+			scaleY: 1,
+		})
+
+		const legacyData = {
+			...data,
+			shots: data.shots?.map((shot) => ({ ...shot, status: "generated" })),
+		} as unknown as typeof data
+		const legacyElement = ElementFactory.create(legacyData, canvas)
+		expect(legacyElement?.getData().shots?.[0]).not.toHaveProperty("status")
+	})
+
+	it("renders generation settings and shot state as a lightweight Konva card", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-1",
+				x: 0,
+				y: 0,
+				generationConfig: {
+					model_id: "gpt-image-2",
+					size: "1080x1920",
+					resolution: "1K",
+					image_generation_config: { aspect_ratio: "9:16" },
+				},
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 4,
+						description: "雨后的森林小路，人物穿橙色冲锋衣进入画面。",
+						outputImageElementId: "image-output",
+					},
+				],
+			}),
+			createCanvasMock(undefined, ["image-output"]),
+		)
+
+		const group = element.render()
+		const texts = group.find("Text").map((node) => (node as Konva.Text).text())
+		const generateAll = group.findOne(".storyboard-generate-all") as Konva.Rect
+		const modelHit = group.find(".storyboard-control-hit").find((node) => {
+			const metadata = node.getAttr("storyboardControlMetadata") as
+				{ action?: { type?: string } } | undefined
+			return metadata?.action?.type === "select-model"
+		})
+		const modelMetadata = modelHit?.getAttr("storyboardControlMetadata") as
+			{ selectPresentation?: Record<string, number> } | undefined
+
+		expect(group.size()).toEqual({
+			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+		})
+		expect(group.clipFunc()).toEqual(expect.any(Function))
+		expect(group.findOne(".hit-area")).toBeTruthy()
+		expect(group.findOne(".storyboard-shot-shot-1")).toBeTruthy()
+		expect(group.find(".storyboard-control-hit").length).toBeGreaterThanOrEqual(8)
+		expect(group.find(".storyboard-control-hit").every((node) => node.listening())).toBe(true)
+		expect(texts).toEqual(
+			expect.arrayContaining([
+				"GPT Image 2",
+				"9:16",
+				"1K",
+				"分镜 1",
+				"已生成",
+				"4  秒",
+				"雨后的森林小路，人物穿橙色冲锋衣进入画面。",
+			]),
+		)
+		expect(group.find(".storyboard-control-suffix")).toHaveLength(3)
+		expect(group.findOne(".storyboard-points-cost")).toBeUndefined()
+		expect(modelMetadata?.selectPresentation).toEqual({
+			fontSize: 20,
+			horizontalPadding: 16,
+			suffixGap: 8,
+			suffixIconSize: 14,
+			modelIconUrl: undefined,
+			modelIconSize: 18,
+			modelIconGap: 8,
+		})
+		expect(generateAll.listening()).toBe(false)
+		expect(generateAll.fill()).toBe(STORYBOARD_CONFIG.ACCENT)
+	})
+
+	it("renders the selected model icon from runtime metadata without persisting it", () => {
+		vi.stubGlobal(
+			"Image",
+			class {
+				crossOrigin = ""
+				onload: (() => void) | null = null
+
+				set src(_value: string) {
+					this.onload?.()
+				}
+			},
+		)
+		const iconUrl = "https://example.com/model-icon.png"
+		const data = StoryboardElement.createElementData({
+			id: "storyboard-model-icon",
+			x: 0,
+			y: 0,
+			generationConfig: { model_id: "gpt-image-2" },
+		})
+		const element = new StoryboardElement(data, createCanvasMock(iconUrl))
+		const group = element.render()
+		const icon = group.findOne(".storyboard-model-icon") as Konva.Image
+		const modelIconRect = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+		).parameterRows.model.modelIconRect
+
+		expect(icon).toBeTruthy()
+		expect(icon.width()).toBe(18)
+		expect(icon.height()).toBe(18)
+		expect(icon.x()).toBeCloseTo(modelIconRect?.x ?? 0)
+		expect(icon.y()).toBeCloseTo(modelIconRect?.y ?? 0)
+		expect(data.generationConfig).toEqual({ model_id: "gpt-image-2" })
+		expect(JSON.stringify(data)).not.toContain(iconUrl)
+	})
+
+	it("expands coarse-pointer hit targets without changing the permanent visuals", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const canvas = createCanvasMock()
+		canvas.deviceInfo.input = { touch: true, coarsePointer: true, hover: false }
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-touch-hit",
+				x: 0,
+				y: 0,
+				shots: [
+					{
+						id: "shot-1",
+						durationSeconds: 3,
+						description: "",
+					},
+				],
+			}),
+			canvas,
+		)
+		const group = element.render()
+		element.onMounted()
+		const background = group.findOne(".storyboard-background") as Konva.Rect
+		const parameterLabel = group.findOne(".storyboard-control-label") as Konva.Text
+		const closeIcons = group.find(".storyboard-control-icon")
+		const deleteHit = group.find(".storyboard-control-hit").find((node) => {
+			const metadata = node.getAttr("storyboardControlMetadata") as
+				{ action?: { type?: string } } | undefined
+			return metadata?.action?.type === "delete-shot"
+		}) as Konva.Rect | undefined
+		const deleteBackground = group.findOne(".storyboard-control-background")
+
+		expect(deleteHit?.width()).toBe(STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE)
+		expect(deleteHit?.height()).toBe(STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE)
+		expect(deleteBackground?.listening()).toBe(false)
+		expect(background.cornerRadius()).toBe(0)
+		expect(parameterLabel.x()).toBeGreaterThan(30)
+		expect(closeIcons).toHaveLength(2)
+	})
+
+	it("keeps transformer bounds aligned through viewport transforms", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-transformer-bounds",
+				x: 320,
+				y: 240,
+			}),
+			createCanvasMock(),
+		)
+		const root = new Konva.Group()
+		const viewport = new Konva.Group({ x: 150, y: 90, scaleX: 0.5, scaleY: 0.5 })
+		const group = element.render()
+		root.add(viewport)
+		viewport.add(group)
+
+		expect(group.getClientRect({ relativeTo: root, skipStroke: true })).toEqual({
+			x: 310,
+			y: 210,
+			width: STORYBOARD_CONFIG.DEFAULT_WIDTH * 0.5,
+			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT * 0.5,
+		})
+	})
+
+	it("keeps internal logical geometry unchanged when the canvas zooms the Konva tree", () => {
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-zoom-layout",
+				x: 0,
+				y: 0,
+			}),
+			createCanvasMock(),
+		)
+		const group = element.render()
+		const background = group.findOne(".storyboard-background") as Konva.Rect
+		const shotList = group.findOne(".storyboard-shot-list-region") as Konva.Group
+		const before = {
+			background: {
+				width: background.width(),
+				height: background.height(),
+			},
+			shotList: {
+				x: shotList.x(),
+				y: shotList.y(),
+				width: shotList.width(),
+				height: shotList.height(),
+			},
+		}
+		const viewport = new Konva.Group({ scaleX: 0.35, scaleY: 0.35 })
+		viewport.add(group)
+
+		expect(background.width()).toBe(before.background.width)
+		expect(background.height()).toBe(before.background.height)
+		expect(shotList.x()).toBe(before.shotList.x)
+		expect(shotList.y()).toBe(before.shotList.y)
+		expect(shotList.width()).toBe(before.shotList.width)
+		expect(shotList.height()).toBe(before.shotList.height)
+		expect(group.getAbsoluteScale().x).toBeCloseTo(0.35)
+		expect(group.getAbsoluteScale().y).toBeCloseTo(0.35)
+	})
+
+	it("exports a deep-cloned formal storyboard DSL", () => {
+		const source = StoryboardElement.createElementData({
+			id: "storyboard-1",
+			x: 10,
+			y: 20,
+			generationConfig: {
+				model_id: "gpt-image-2",
+				image_generation_config: { aspect_ratio: "9:16" },
+			},
+			shots: [
+				{
+					id: "shot-1",
+					durationSeconds: 4,
+					description: "森林小路",
+				},
+			],
+		})
+
+		const [exported] = exportCanvasDocument([source]).elements ?? []
+
+		expect(exported).toEqual(source)
+		expect(exported).not.toBe(source)
+		if (exported?.type !== ElementTypeEnum.Storyboard) {
+			throw new Error("Expected storyboard element")
+		}
+		expect(exported.shots).not.toBe(source.shots)
+		expect(exported.generationConfig).not.toBe(source.generationConfig)
+
+		const legacySource = {
+			...source,
+			shots: source.shots?.map((shot) => ({ ...shot, status: "generated" })),
+		} as unknown as typeof source
+		const [legacyExported] = exportCanvasDocument([legacySource]).elements ?? []
+		if (legacyExported?.type !== ElementTypeEnum.Storyboard) {
+			throw new Error("Expected legacy storyboard element")
+		}
+		expect(legacyExported.shots?.[0]).not.toHaveProperty("status")
+	})
+
+	it("auto-grows the node and renders every shot without an overflow summary", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const shots = Array.from({ length: 20 }, (_, index) => ({
+			id: `shot-${index + 1}`,
+			durationSeconds: 3,
+			description: `镜头 ${index + 1}`,
+		}))
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-overflow",
+				x: 0,
+				y: 0,
+				shots,
+			}),
+			createCanvasMock(),
+		)
+
+		const group = element.render()
+		const renderedCards = shots.filter((shot) =>
+			Boolean(group.findOne(`.storyboard-shot-${shot.id}`)),
+		)
+
+		expect(renderedCards.length).toBe(shots.length)
+		expect(group.findOne(".storyboard-overflow-count")).toBeUndefined()
+		expect(group.height()).toBeGreaterThan(STORYBOARD_CONFIG.DEFAULT_HEIGHT)
+	})
+})

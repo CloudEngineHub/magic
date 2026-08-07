@@ -14,9 +14,11 @@ import {
 	type RichTextParagraph,
 	type RichTextNode,
 	type StarElement,
+	type StoryboardElement,
 	type TextElement,
 	type TextStyle,
 	type TriangleElement,
+	type VideoEditElement,
 	type VideoElement,
 } from "./types"
 import { compactTextDefaultStyle } from "../text/richText"
@@ -318,6 +320,43 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 				element,
 			)
 			if (element.src !== undefined) result.src = element.src
+			return result
+		}
+
+		case ElementTypeEnum.Storyboard: {
+			const result = assignBaseElementProps<StoryboardElement>(
+				{ id: element.id, type: element.type, shots: [] },
+				element,
+			)
+			if (element.generationConfig !== undefined) {
+				result.generationConfig = cloneSerializable(element.generationConfig)
+			}
+			const serializedShots = cloneSerializable(element.shots ?? []) as Array<
+				Record<string, unknown>
+			>
+			result.shots = serializedShots.map((shot) => {
+				const sanitizedShot = { ...shot }
+				delete sanitizedShot.status
+				return sanitizedShot
+			})
+			return result
+		}
+
+		case ElementTypeEnum.VideoEdit: {
+			const result = assignBaseElementProps<VideoEditElement>(
+				{
+					id: element.id,
+					type: element.type,
+					videoSequence: [],
+					audioSequence: [],
+				},
+				element,
+			)
+			result.videoSequence = [...element.videoSequence]
+			result.audioSequence = [...element.audioSequence]
+			if (element.output !== undefined) {
+				result.output = cloneSerializable(element.output)
+			}
 			return result
 		}
 

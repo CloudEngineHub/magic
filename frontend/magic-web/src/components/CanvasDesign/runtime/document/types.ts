@@ -132,6 +132,10 @@ export const ElementTypeEnum = {
 	Video: "video",
 	/** 音频 */
 	Audio: "audio",
+	/** 分镜 */
+	Storyboard: "storyboard",
+	/** 视频编辑 */
+	VideoEdit: "video-edit",
 } as const
 
 /** 元素类型 */
@@ -392,6 +396,54 @@ export interface AudioElement extends BaseElementProps {
 	src?: string
 }
 
+/** 分镜单镜头 */
+export interface StoryboardShot {
+	/** 镜头唯一标识 */
+	id: string
+	/** 镜头时长，单位为秒 */
+	durationSeconds: number
+	/** 画面描述 */
+	description: string
+	/** 稳定关联的输出图片元素 ID；缺省表示尚未创建输出元素 */
+	outputImageElementId?: string
+}
+
+/** 分镜统一使用的图片生成配置 */
+export type StoryboardGenerationConfig = Pick<
+	GenerateImageRequest,
+	"model_id" | "size" | "resolution" | "image_generation_config"
+>
+
+/** 分镜元素 */
+export interface StoryboardElement extends BaseElementProps {
+	type: typeof ElementTypeEnum.Storyboard
+	/** 对全部分镜生效的图片生成配置 */
+	generationConfig?: StoryboardGenerationConfig
+	/** 按展示顺序保存的分镜列表；文档校验与元素工厂会保证运行态存在 */
+	shots?: StoryboardShot[]
+}
+
+/** 视频编辑输出配置；成片时长由输入视频与编辑结果派生，不重复持久化。 */
+export interface VideoEditOutputConfig {
+	/** 输出画面比例，例如 9:16 */
+	aspectRatio?: string
+	/** 输出分辨率，例如 1K、1080P */
+	resolution?: string
+	/** 输出格式；当前产品默认使用 mp4 */
+	format?: string
+}
+
+/** 视频编辑节点；输入成员由 CanvasConnection 表达，序列字段只保存用户调整后的顺序。 */
+export interface VideoEditElement extends BaseElementProps {
+	type: typeof ElementTypeEnum.VideoEdit
+	/** 按编辑顺序排列的已连接视频元素 ID，可为空表示等待连接。 */
+	videoSequence: string[]
+	/** 按混音顺序排列的已连接音频元素 ID；音频输入可选。 */
+	audioSequence: string[]
+	/** 输出规格；任务、错误和生成结果属于运行态，不进入基础 DSL。 */
+	output?: VideoEditOutputConfig
+}
+
 /** 可上传/下载的文件类元素（图片、视频、音频），用于 uploadFiles / downloadFiles 等接口 */
 export type CanvasFileElement = ImageElement | VideoElement | AudioElement
 
@@ -407,6 +459,8 @@ export type LayerElement =
 	| ImageElement
 	| VideoElement
 	| AudioElement
+	| StoryboardElement
+	| VideoEditElement
 
 /** 视口状态 */
 export interface ViewportState {
@@ -485,6 +539,8 @@ export interface CanvasConnection {
 	sourceElementId: string
 	/** 下游/结果/消费方元素 ID */
 	targetElementId: string
+	/** 锁定的业务连接不可被普通用户删除；历史连接缺省为 false */
+	locked?: boolean
 }
 
 /** 画布文档结构 */

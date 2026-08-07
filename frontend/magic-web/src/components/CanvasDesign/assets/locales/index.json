@@ -496,6 +496,28 @@
 	"star": {
 		"defaultName": "星形"
 	},
+	"storyboard": {
+		"addShot": "添加分镜",
+		"aspectRatio": "画面比例",
+		"defaultName": "分镜生成",
+		"descriptionPlaceholder": "请输入分镜画面描述",
+		"empty": "暂无分镜",
+		"emptyDescription": "请先填写分镜 {{index}} 的画面描述",
+		"generate": "生成",
+		"generateAll": "全部生成",
+		"generated": "已生成",
+		"imageModel": "图片模型",
+		"menuName": "制作分镜",
+		"modelUnavailable": "当前没有可用的图片模型",
+		"notGenerated": "未生成",
+		"pointsCost": "消耗 {{count}} 点",
+		"referenceLimit": "当前模型最多支持 {{count}} 张参考图，请减少左侧连接图片",
+		"regenerate": "重新生成",
+		"resolution": "分辨率",
+		"seconds": "秒",
+		"shotList": "分镜列表",
+		"shotWithIndex": "分镜 {{index}}"
+	},
 	"text": {
 		"defaultName": "文本"
 	},

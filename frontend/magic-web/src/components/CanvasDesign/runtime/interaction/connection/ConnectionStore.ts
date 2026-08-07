@@ -106,8 +106,27 @@ export class ConnectionStore {
 		return this.addInternal(connection)
 	}
 
-	public removeConnections(connectionIds: Iterable<string>): string[] {
-		const connectionIdSet = new Set(connectionIds)
+	public update(connectionId: string, updates: Partial<CanvasConnection>): boolean {
+		const current = this.connectionsById.get(connectionId)
+		if (!current) return false
+		const next = { ...current, ...updates, id: current.id }
+		this.load(
+			this.connections.map((connection) =>
+				connection.id === connectionId ? next : connection,
+			),
+		)
+		return true
+	}
+
+	public removeConnections(
+		connectionIds: Iterable<string>,
+		options?: { force?: boolean },
+	): string[] {
+		const connectionIdSet = new Set(
+			Array.from(connectionIds).filter(
+				(connectionId) => options?.force || !this.connectionsById.get(connectionId)?.locked,
+			),
+		)
 		const deletedConnectionIds = this.connections
 			.filter((connection) => connectionIdSet.has(connection.id))
 			.map((connection) => connection.id)
@@ -117,8 +136,11 @@ export class ConnectionStore {
 		return deletedConnectionIds
 	}
 
-	public removeConnectionsByElementId(elementId: string): string[] {
-		return this.removeConnections(this.getConnectionIdsByElementId(elementId))
+	public removeConnectionsByElementId(
+		elementId: string,
+		options?: { force?: boolean },
+	): string[] {
+		return this.removeConnections(this.getConnectionIdsByElementId(elementId), options)
 	}
 
 	private addInternal(connection: CanvasConnection): boolean {

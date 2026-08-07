@@ -12,6 +12,7 @@ import {
 	Search,
 	Type,
 	Video,
+	Workflow,
 	X,
 } from "lucide-react"
 import { FolderIcon } from "../../primitives/icons/index"
@@ -275,6 +276,9 @@ export default function LayersDrawer() {
 					break
 				case ElementTypeEnum.Audio:
 					iconContent = <Music2 size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.Storyboard:
+					iconContent = <Workflow size={16} className={styles.layerNodeVideoIcon} />
 					break
 				default:
 					iconContent = <div className={styles.layerNodeElementIcon}></div>

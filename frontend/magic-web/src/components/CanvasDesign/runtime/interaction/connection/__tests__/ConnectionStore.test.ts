@@ -69,4 +69,16 @@ describe("ConnectionStore", () => {
 		expect(store.getUpstreamConnections("target")).toEqual([])
 		expect(store.getDownstreamConnections("target")).toEqual([])
 	})
+
+	it("keeps locked connections unless removal is explicitly forced", () => {
+		const store = new ConnectionStore()
+		store.load([
+			{ id: "locked", sourceElementId: "source", targetElementId: "target", locked: true },
+			{ id: "normal", sourceElementId: "source", targetElementId: "other" },
+		])
+
+		expect(store.removeConnections(["locked", "normal"])).toEqual(["normal"])
+		expect(store.removeConnections(["locked"], { force: true })).toEqual(["locked"])
+		expect(store.getConnections()).toEqual([])
+	})
 })

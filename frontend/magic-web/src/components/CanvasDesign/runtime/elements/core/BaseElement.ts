@@ -372,6 +372,18 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	}
 
 	/**
+	 * 判断元素是否支持尺寸编辑。
+	 *
+	 * 未声明 Transformer 约束时使用默认的全部尺寸锚点；显式声明空锚点
+	 * 则表示元素不支持尺寸编辑。这个能力只描述元素自身的尺寸交互能力，
+	 * 不包含画布 readonly 或元素 locked 等运行态权限限制。
+	 */
+	public supportsSizeEditing(): boolean {
+		const enabledAnchors = this.getTransformConstraints()?.enabledAnchors
+		return enabledAnchors === undefined || enabledAnchors.length > 0
+	}
+
+	/**
 	 * 当元素在 transform 过程中尺寸改变时调用（仅对 REALTIME_APPLY_TO_SIZE 生效）
 	 * 子类可以重写此方法来更新内部节点
 	 * @param width - 新的宽度

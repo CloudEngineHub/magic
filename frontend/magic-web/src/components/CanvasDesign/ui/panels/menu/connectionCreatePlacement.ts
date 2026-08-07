@@ -1,8 +1,19 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
-import type { LayerElement } from "../../../runtime/document/types"
 import type { Rect } from "../../../runtime/shared/ids"
+import {
+	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
+	resolveConnectionCreateGapForElement,
+	type ConnectionCreateOriginSide,
+} from "../../../runtime/shared/placement/connectionCreateGap"
 
-export type ConnectionCreateOriginSide = "left" | "right"
+export {
+	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
+	clampCreateElementGap,
+	getConnectionMenuTriggerAxisSize,
+	resolveConnectionCreateGapForElement,
+	type ConnectionCreateOriginSide,
+} from "../../../runtime/shared/placement/connectionCreateGap"
+
 export type ConnectionCreateSource = "handle" | "drag-empty"
 
 export interface ConnectionCreatePlacementContext {
@@ -12,9 +23,6 @@ export interface ConnectionCreatePlacementContext {
 	source: ConnectionCreateSource
 }
 
-export const CREATE_ELEMENT_GAP_MIN_CANVAS_PX = 1024
-const CREATE_ELEMENT_GAP_MAX_CANVAS_PX = 2048
-const CREATE_ELEMENT_GAP_SIZE_RATIO = 0.7
 export const CONNECTION_CREATE_NODE_SPACING = 120
 const CONNECTION_CREATE_MAX_ROW_INDEX = 8
 const CONNECTION_CREATE_MAX_COLUMNS = 8
@@ -33,35 +41,6 @@ interface ConnectedConnectionCreatePlacementOptions extends NonOverlappingConnec
 interface VerticalInterval {
 	start: number
 	end: number
-}
-
-export function clampCreateElementGap(gap: number): number {
-	return Math.min(
-		CREATE_ELEMENT_GAP_MAX_CANVAS_PX,
-		Math.max(CREATE_ELEMENT_GAP_MIN_CANVAS_PX, gap),
-	)
-}
-
-export function getConnectionMenuTriggerAxisSize(
-	element: LayerElement | undefined,
-	side: ConnectionCreateOriginSide,
-): number | null {
-	const size = side === "left" || side === "right" ? element?.width : element?.height
-	const scale = side === "left" || side === "right" ? element?.scaleX : element?.scaleY
-	const scaledSize = Math.abs((size ?? 0) * (scale ?? 1))
-	return Number.isFinite(scaledSize) && scaledSize > 0 ? scaledSize : null
-}
-
-export function resolveConnectionCreateGapForElement(
-	element: LayerElement | undefined,
-	side: ConnectionCreateOriginSide | undefined,
-): number {
-	if (!side) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
-
-	const triggerAxisSize = getConnectionMenuTriggerAxisSize(element, side)
-	if (!triggerAxisSize) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
-
-	return clampCreateElementGap(triggerAxisSize * CREATE_ELEMENT_GAP_SIZE_RATIO)
 }
 
 export function resolveConnectionCreateAnchorPoint(

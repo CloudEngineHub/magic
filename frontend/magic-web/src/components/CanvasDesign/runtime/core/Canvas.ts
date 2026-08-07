@@ -70,6 +70,7 @@ import { buildVirtualResourceScope } from "../shared/path/canvasResourcePath"
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
+import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import {
 	editActions,
@@ -135,6 +136,7 @@ export class Canvas {
 	public connectionManager: ConnectionManager
 	public connectionDragManager: ConnectionDragManager
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
+	public storyboardInteractionManager: StoryboardInteractionManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -445,6 +447,11 @@ export class Canvas {
 
 		// 初始化工具管理器（负责创建所有工具，使用 Content Layer）
 		this.toolManager = new ToolManager({
+			canvas: this,
+		})
+
+		// 分镜内部控件依赖选择工具、权限与 CursorManager，统一在工具初始化后接入。
+		this.storyboardInteractionManager = new StoryboardInteractionManager({
 			canvas: this,
 		})
 
@@ -1349,6 +1356,7 @@ export class Canvas {
 		this.audioPlaybackManager.destroy()
 		this.audioReplaceController.destroy()
 		this.imageReplaceController.destroy()
+		this.storyboardInteractionManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()

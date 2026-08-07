@@ -37,6 +37,7 @@ export function getCanvasConnectionHash(connection: CanvasConnection): string {
 	return JSON.stringify({
 		sourceElementId: connection.sourceElementId,
 		targetElementId: connection.targetElementId,
+		locked: connection.locked === true,
 	})
 }
 

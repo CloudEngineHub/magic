@@ -132,13 +132,18 @@ export class ConnectionManager {
 			id,
 			sourceElementId: connection.sourceElementId,
 			targetElementId: connection.targetElementId,
+			...(connection.locked ? { locked: true } : {}),
 		})
 		this.hitTester.invalidateConnections([id])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
 		return id
 	}
 
-	public connectElements(options: { sourceElementId: string; targetElementId: string }):
+	public connectElements(options: {
+		sourceElementId: string
+		targetElementId: string
+		locked?: boolean
+	}):
 		| { status: "created"; connectionId: string }
 		| {
 				status: "invalid"
@@ -173,10 +178,36 @@ export class ConnectionManager {
 			id,
 			sourceElementId,
 			targetElementId,
+			...(options.locked ? { locked: true } : {}),
 		})
 		this.hitTester.invalidateConnections([id])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
 		return { status: "created", connectionId: id }
+	}
+
+	/** 创建或升级分镜输出连接；升级过程不会破坏现有连接 ID。 */
+	public ensureLockedConnection(
+		sourceElementId: string,
+		targetElementId: string,
+	): { status: "created" | "existing" | "invalid"; connectionId?: string } {
+		const existing = this.getDownstreamConnections(sourceElementId).find(
+			(connection) => connection.targetElementId === targetElementId,
+		)
+		if (existing) {
+			if (!existing.locked) {
+				this.store.update(existing.id, { locked: true })
+				this.hitTester.invalidateConnections([existing.id])
+				this.emitChangeAndRender({ changedConnectionIds: [existing.id] })
+			}
+			return { status: "existing", connectionId: existing.id }
+		}
+
+		const result = this.connectElements({
+			sourceElementId,
+			targetElementId,
+			locked: true,
+		})
+		return result.status === "created" ? result : { status: "invalid" }
 	}
 
 	public replaceConnectionSelection(
@@ -262,9 +293,17 @@ export class ConnectionManager {
 
 	public removeConnections(
 		connectionIds: string[],
-		options?: { emitChange?: boolean },
+		options?: { emitChange?: boolean; force?: boolean },
 	): string[] {
-		const deletedConnectionIds = this.store.removeConnections(connectionIds)
+		const removableConnectionIds = options?.force
+			? connectionIds
+			: connectionIds.filter((connectionId) => {
+					const connection = this.store.getConnectionsByIds([connectionId])[0]
+					return !connection?.locked
+				})
+		const deletedConnectionIds = this.store.removeConnections(removableConnectionIds, {
+			force: options?.force,
+		})
 		if (deletedConnectionIds.length === 0) {
 			return []
 		}
@@ -283,7 +322,18 @@ export class ConnectionManager {
 		elementId: string,
 		options?: { emitChange?: boolean },
 	): void {
-		const deletedConnectionIds = this.store.removeConnectionsByElementId(elementId)
+		// 元素删除是系统联动清理，必须允许清理分镜输出的 locked 连接。
+		const deletedConnectionIds = this.store
+			.getConnectionIdsByElementId(elementId)
+			.reduce<string[]>((deleted, connectionId) => {
+				deleted.push(
+					...this.removeConnections([connectionId], {
+						emitChange: false,
+						force: true,
+					}),
+				)
+				return deleted
+			}, [])
 		if (deletedConnectionIds.length === 0) {
 			return
 		}

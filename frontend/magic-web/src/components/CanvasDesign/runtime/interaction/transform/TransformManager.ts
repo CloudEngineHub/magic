@@ -1,5 +1,5 @@
 import Konva from "konva"
-import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import type { LayerElement } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import type { Box } from "konva/lib/shapes/Transformer"
 import { getKeepRatioAspectRatio, isEdgeAnchor, applyAspectRatioToBoundBox } from "./anchorUtils"
@@ -923,16 +923,17 @@ export class TransformManager {
 				? this.canvas.elementManager.getElementInstance(transformableElementIds[0])
 				: undefined
 		const singleElementConstraints = singleElement?.getTransformConstraints()
-		const multiSelectionContainsAudio =
+		const multiSelectionContainsResizeRestrictedElement =
 			transformableElementIds.length > 1 &&
-			transformableElementIds.some(
-				(elementId) =>
-					this.canvas.elementManager.getElementData(elementId)?.type ===
-					ElementTypeEnum.Audio,
-			)
+			transformableElementIds.some((elementId) => {
+				const constraints = this.canvas.elementManager
+					.getElementInstance(elementId)
+					?.getTransformConstraints()
+				return constraints?.enabledAnchors !== undefined
+			})
 		let enabledAnchors: string[] = []
 		if (!this.canvas.readonly) {
-			enabledAnchors = multiSelectionContainsAudio
+			enabledAnchors = multiSelectionContainsResizeRestrictedElement
 				? []
 				: (singleElementConstraints?.enabledAnchors ?? [
 						"top-left",

@@ -482,6 +482,28 @@
 	"star": {
 		"defaultName": "Star"
 	},
+	"storyboard": {
+		"addShot": "Add shot",
+		"aspectRatio": "Aspect ratio",
+		"defaultName": "Storyboard generation",
+		"descriptionPlaceholder": "Describe this shot",
+		"empty": "No shots yet",
+		"emptyDescription": "Enter a description for shot {{index}} first",
+		"generate": "Generate",
+		"generateAll": "Generate all",
+		"generated": "Generated",
+		"imageModel": "Image model",
+		"menuName": "Create storyboard",
+		"modelUnavailable": "No image model is available",
+		"notGenerated": "Not generated",
+		"pointsCost": "Costs {{count}} points",
+		"referenceLimit": "This model supports up to {{count}} reference images",
+		"regenerate": "Regenerate",
+		"resolution": "Resolution",
+		"seconds": "sec",
+		"shotList": "Shot list",
+		"shotWithIndex": "Shot {{index}}"
+	},
 	"text": {
 		"defaultName": "Text"
 	},

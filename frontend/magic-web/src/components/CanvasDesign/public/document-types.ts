@@ -9,6 +9,11 @@ export type {
 	ImageElementVersion,
 	LayerElement,
 	Marker,
+	StoryboardElement,
+	StoryboardGenerationConfig,
+	StoryboardShot,
 	TextElement,
+	VideoEditElement,
+	VideoEditOutputConfig,
 	VideoElement,
 } from "../runtime/document/types"

@@ -824,6 +824,34 @@ describe("ConnectionManager", () => {
 		expect(onConnectionChange).toHaveBeenCalledTimes(1)
 	})
 
+	it("protects locked connections from ordinary deletion and upgrades existing ones", () => {
+		const { canvas } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		manager.loadDocument({
+			connections: [
+				{ id: "storyboard-output", sourceElementId: "source", targetElementId: "target" },
+			],
+		})
+
+		expect(manager.ensureLockedConnection("source", "target")).toEqual({
+			status: "existing",
+			connectionId: "storyboard-output",
+		})
+		expect(manager.exportConnections()).toEqual([
+			{
+				id: "storyboard-output",
+				sourceElementId: "source",
+				targetElementId: "target",
+				locked: true,
+			},
+		])
+		expect(manager.removeConnection("storyboard-output")).toBe(false)
+		expect(manager.exportConnections()).toHaveLength(1)
+
+		manager.removeConnectionsByElementId("target")
+		expect(manager.exportConnections()).toEqual([])
+	})
+
 	it("rejects reverse connections without changing the existing direction", () => {
 		const { canvas } = createCanvasStub()
 		const manager = new ConnectionManager({ canvas })

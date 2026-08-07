@@ -293,14 +293,19 @@ function createConstraintManager(elementTypes: Record<string, LayerElement["type
 	}))
 	const getElementInstance = vi.fn((elementId: string) => ({
 		getSize: () => ({ width: 480, height: 120 }),
-		getTransformConstraints: () =>
-			elementTypes[elementId] === ElementTypeEnum.Audio
-				? {
-						enabledAnchors: ["middle-left", "middle-right"],
-						minWidth: 240,
-						fixedHeight: 120,
-					}
-				: undefined,
+		getTransformConstraints: () => {
+			if (elementTypes[elementId] === ElementTypeEnum.Audio) {
+				return {
+					enabledAnchors: ["middle-left", "middle-right"],
+					minWidth: 240,
+					fixedHeight: 120,
+				}
+			}
+			if (elementTypes[elementId] === ElementTypeEnum.Storyboard) {
+				return { enabledAnchors: [] }
+			}
+			return undefined
+		},
 		shouldKeepRatio: () => false,
 	}))
 	const getSnappedBox = vi.fn((_oldBox, newBox) => newBox)
@@ -415,6 +420,17 @@ describe("TransformManager element constraints", () => {
 		)
 	})
 
+	it("does not expose resize anchors for a storyboard", () => {
+		const { manager } = createConstraintManager({
+			"storyboard-1": ElementTypeEnum.Storyboard,
+		})
+
+		manager.showTransformer(["storyboard-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+	})
+
 	it("disables resize anchors when a multi-selection contains audio", () => {
 		const { manager } = createConstraintManager({
 			"audio-1": ElementTypeEnum.Audio,
@@ -422,6 +438,19 @@ describe("TransformManager element constraints", () => {
 		})
 
 		manager.showTransformer(["audio-1", "rectangle-1"])
+		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
+
+		expect(transformer.enabledAnchors()).toEqual([])
+		expect(transformer.nodes()).toHaveLength(1)
+	})
+
+	it("disables resize anchors when a multi-selection contains a storyboard", () => {
+		const { manager } = createConstraintManager({
+			"storyboard-1": ElementTypeEnum.Storyboard,
+			"rectangle-1": ElementTypeEnum.Rectangle,
+		})
+
+		manager.showTransformer(["storyboard-1", "rectangle-1"])
 		const transformer = (manager as unknown as { transformer: Konva.Transformer }).transformer
 
 		expect(transformer.enabledAnchors()).toEqual([])
