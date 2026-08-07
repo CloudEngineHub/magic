@@ -6,14 +6,14 @@ from typing import Optional
 
 
 @dataclass
-class FileReadRecord:
-    """文件读取记录，用于后续变化检测、Diff 生成和编辑校验。"""
+class FileContextRecord:
+    """Horizon 已记录的文件版本，用于后续变化检测、Diff 生成和编辑校验。"""
     path: str                           # 绝对路径
     file_hash: str                      # 文件级变化探测信号（小文件真 hash，大文件 __mtime__ 伪 hash）
     file_mtime_ms: float                # 读取时的 mtime（毫秒）
     file_size_bytes: int                # 读取时的文件大小（bytes）
     file_content: str                   # 整文件文本快照（小文件存全文，大文件置空）
-    tool_name: str                      # 触发读取的工具名
+    tool_name: str                      # 产生这份已知版本的工具名
     truncated: bool                     # 是否因 token 限制被截断
     metadata: dict = field(default_factory=dict)
     # 留档字段：不参与主链路判断，但保留用于排查
@@ -177,7 +177,7 @@ class ContextUsage:
 class HorizonState:
     """AgentHorizon 的持久化状态。"""
     agent_id: str
-    file_records: dict[str, FileReadRecord] = field(default_factory=dict)        # abs_path -> record
+    file_records: dict[str, FileContextRecord] = field(default_factory=dict)     # abs_path -> record
     pending_notifications: list[PendingNotification] = field(default_factory=list)
     loaded_skills: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)

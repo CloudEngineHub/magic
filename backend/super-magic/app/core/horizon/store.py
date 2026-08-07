@@ -23,7 +23,7 @@ from typing import Optional
 from agentlang.logger import get_logger
 from app.core.horizon.migration import CURRENT_VERSION, apply_migrations
 from app.core.horizon.models import (
-    FileReadRecord,
+    FileContextRecord,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -42,7 +42,7 @@ from app.utils.async_file_utils import (
 logger = get_logger(__name__)
 
 
-def _record_to_dict(r: FileReadRecord) -> dict:
+def _record_to_dict(r: FileContextRecord) -> dict:
     return {
         "path": r.path,
         "file_hash": r.file_hash,
@@ -57,8 +57,8 @@ def _record_to_dict(r: FileReadRecord) -> dict:
     }
 
 
-def _record_from_dict(d: dict) -> FileReadRecord:
-    return FileReadRecord(
+def _record_from_dict(d: dict) -> FileContextRecord:
+    return FileContextRecord(
         path=d["path"],
         file_hash=d.get("file_hash", ""),
         file_mtime_ms=float(d.get("file_mtime_ms", 0.0)),

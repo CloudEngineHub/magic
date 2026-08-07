@@ -67,7 +67,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         self,
         tool_context: ToolContext,
         file_path: Union[str, Path],
-        update_timestamp: bool = True
+        track_in_horizon: bool = True
     ):
         """
         文件版本控制上下文管理器
@@ -79,7 +79,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         Args:
             tool_context: 工具上下文
             file_path: 文件路径
-            update_timestamp: 是否更新时间戳（默认 True）
+            track_in_horizon: 是否把写入后的文件状态记录到 Horizon（默认 True）
                             - True: 主模型参与的文件操作（如 write_file, edit_file）
                             - False: 工具自动生成的文件（如 analyze_audio_project 生成的分析文件）
 
@@ -92,7 +92,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
                 await async_write_text(file_path, content)
 
             # 工具自动生成文件（不需要 timestamp）
-            async with self._file_versioning_context(tool_context, file_path, update_timestamp=False):
+            async with self._file_versioning_context(tool_context, file_path, track_in_horizon=False):
                 await async_write_text(file_path, auto_generated_content)
         """
         from app.utils.async_file_utils import async_exists
@@ -104,15 +104,17 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         before_event = EventType.BEFORE_FILE_UPDATED if file_exists else EventType.BEFORE_FILE_CREATED
         await self._dispatch_file_event(tool_context, path_str, before_event)
 
+        operation_succeeded = False
         try:
             yield file_exists
+            operation_succeeded = True
         finally:
-            # 可选更新时间戳
-            if update_timestamp:
+            # 只有文件操作正常完成时，才把结果版本记录为新的 Horizon 基线。
+            if operation_succeeded and track_in_horizon:
                 try:
-                    await self.get_horizon(tool_context).update_timestamp(Path(path_str))
+                    await self.get_horizon(tool_context).record_file_write(Path(path_str))
                 except Exception as _e:
-                    logger.warning(f"[AbstractFileTool] update_timestamp 失败: {_e}")
+                    logger.warning(f"[AbstractFileTool] record_file_write 失败: {_e}")
 
             # 触发 AFTER 事件
             after_event = EventType.FILE_UPDATED if file_exists else EventType.FILE_CREATED
@@ -124,7 +126,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         file_path: Union[str, Path],
         content: str,
         encoding: str = 'utf-8',
-        update_timestamp: bool = True
+        track_in_horizon: bool = True
     ) -> bool:
         """
         带版本控制的文本写入
@@ -134,14 +136,14 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
             file_path: 文件路径
             content: 文本内容
             encoding: 编码格式
-            update_timestamp: 是否更新时间戳（默认 True）
+            track_in_horizon: 是否把写入后的文件状态记录到 Horizon（默认 True）
 
         Returns:
             bool: 文件操作前是否存在（True=更新，False=创建）
         """
         from app.utils.async_file_utils import async_write_text
 
-        async with self._file_versioning_context(tool_context, file_path, update_timestamp) as file_exists:
+        async with self._file_versioning_context(tool_context, file_path, track_in_horizon) as file_exists:
             await async_write_text(file_path, content, encoding)
             return file_exists
 
@@ -150,7 +152,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         tool_context: ToolContext,
         file_path: Union[str, Path],
         data: Dict[str, Any],
-        update_timestamp: bool = True,
+        track_in_horizon: bool = True,
         **kwargs
     ) -> bool:
         """
@@ -160,7 +162,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
             tool_context: 工具上下文
             file_path: 文件路径
             data: JSON 数据
-            update_timestamp: 是否更新时间戳（默认 True）
+            track_in_horizon: 是否把写入后的文件状态记录到 Horizon（默认 True）
             **kwargs: json.dumps 额外参数
 
         Returns:
@@ -168,7 +170,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         """
         from app.utils.async_file_utils import async_write_json
 
-        async with self._file_versioning_context(tool_context, file_path, update_timestamp) as file_exists:
+        async with self._file_versioning_context(tool_context, file_path, track_in_horizon) as file_exists:
             await async_write_json(file_path, data, **kwargs)
             return file_exists
 
@@ -177,7 +179,7 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
         tool_context: ToolContext,
         src_path: Union[str, Path],
         dst_path: Union[str, Path],
-        update_timestamp: bool = True
+        track_in_horizon: bool = True
     ) -> bool:
         """
         带版本控制的文件复制
@@ -186,14 +188,14 @@ class AbstractFileTool(BaseTool[T], Generic[T]):
             tool_context: 工具上下文
             src_path: 源文件路径
             dst_path: 目标文件路径
-            update_timestamp: 是否更新时间戳（默认 True）
+            track_in_horizon: 是否把写入后的文件状态记录到 Horizon（默认 True）
 
         Returns:
             bool: 目标文件操作前是否存在（True=更新，False=创建）
         """
         from app.utils.async_file_utils import async_copy2
 
-        async with self._file_versioning_context(tool_context, dst_path, update_timestamp) as file_exists:
+        async with self._file_versioning_context(tool_context, dst_path, track_in_horizon) as file_exists:
             await async_copy2(src_path, dst_path)
             return file_exists
 

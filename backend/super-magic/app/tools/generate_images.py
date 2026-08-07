@@ -483,7 +483,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         save_path = await resolve_safe_save_path(save_dir, filename_stem, extension)
 
         async with self._file_versioning_context(
-            tool_context, save_path, update_timestamp=False
+            tool_context, save_path, track_in_horizon=False
         ) as file_existed:
             await async_copy2(image.temp_file_path, save_path)
 

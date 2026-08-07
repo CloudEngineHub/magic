@@ -25,7 +25,7 @@ from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
 from app.core.horizon.models import (
     ContextUsage,
-    FileReadRecord,
+    FileContextRecord,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -469,13 +469,17 @@ class AgentHorizon:
         return copy.deepcopy(self._state)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 原 FileTimestampManager 兼容接口
+    # 文件版本基线记录与编辑校验
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def update_timestamp(
-        self, file_path: Union[str, Path], metadata: Optional[dict] = None
+    async def _record_current_file_state(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str,
+        metadata: Optional[dict] = None,
     ) -> None:
-        """写文件后调用，更新校验用 hash/mtime（不存内容快照）。"""
+        """记录文件当前状态，作为后续变化检测和 diff 生成的基线。"""
         await self._ensure_loaded()
         abs_path = _abs(file_path)
         try:
@@ -489,31 +493,70 @@ class AgentHorizon:
                 file_hash = f"__mtime__{stat.mtime}"
 
             ts = max(time.time() * 1000, mtime_ms) + NETWORK_FS_MTIME_BUFFER * 1000
+            file_content, snapshot_mode, snapshot_reason = await _read_file_content_for_snapshot(abs_path)
 
             rec = self._state.file_records.get(abs_path)
             if rec is not None:
                 rec.file_hash = file_hash
                 rec.file_mtime_ms = ts
                 rec.file_size_bytes = size
+                rec.file_content = file_content
+                rec.tool_name = tool_name
+                rec.truncated = False
+                rec.read_at = _iso_now()
+                rec.read_ranges = []
             else:
-                self._state.file_records[abs_path] = FileReadRecord(
+                self._state.file_records[abs_path] = FileContextRecord(
                     path=abs_path,
                     file_hash=file_hash,
                     file_mtime_ms=ts,
                     file_size_bytes=size,
-                    file_content="",
-                    tool_name="write",
+                    file_content=file_content,
+                    tool_name=tool_name,
                     truncated=False,
                     read_at=_iso_now(),
                 )
 
+            existing_meta = self._state.file_records[abs_path].metadata
+            existing_meta["snapshot_mode"] = snapshot_mode
+            if snapshot_reason:
+                existing_meta["snapshot_reason"] = snapshot_reason
+            else:
+                existing_meta.pop("snapshot_reason", None)
             if metadata:
-                existing_meta = self._state.file_records[abs_path].metadata
                 existing_meta.update(metadata)
 
             await self._save()
         except Exception as e:
-            logger.warning(f"[AgentHorizon] update_timestamp 失败 {abs_path}: {e}")
+            logger.warning(f"[AgentHorizon] 记录文件状态失败 {abs_path}: {e}")
+
+    async def record_file_write(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str = "write",
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """写文件成功后记录结果内容，使模型已知版本成为新的变化基线。"""
+        await self._record_current_file_state(
+            file_path,
+            tool_name=tool_name,
+            metadata=metadata,
+        )
+
+    async def record_file_observation(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """记录搜索等只读观察涉及的文件，不将其伪装成写入操作。"""
+        await self._record_current_file_state(
+            file_path,
+            tool_name=tool_name,
+            metadata=metadata,
+        )
 
     async def validate_file_not_modified(
         self, file_path: Union[str, Path]
@@ -634,7 +677,7 @@ class AgentHorizon:
             if snapshot_reason:
                 record_metadata["snapshot_reason"] = snapshot_reason
 
-            self._state.file_records[abs_path] = FileReadRecord(
+            self._state.file_records[abs_path] = FileContextRecord(
                 path=abs_path,
                 file_hash=file_hash,
                 file_mtime_ms=ts,

@@ -126,7 +126,7 @@ class CreateCalendarProject(AbstractFileTool[CreateCalendarProjectParams], Works
             source_index_path = Path(__file__).parent / "index.html"
             if await async_exists(source_index_path):
                 try:
-                    async with self._file_versioning_context(tool_context, target_index_path, update_timestamp=False):
+                    async with self._file_versioning_context(tool_context, target_index_path, track_in_horizon=False):
                         await async_copy2(source_index_path, target_index_path)
                     created_files.append(target_index_path)
                     logger.info(f"复制日历入口文件: {target_index_path}")
@@ -164,7 +164,7 @@ window.magicProjectConfigure(window.magicProjectConfig);
 """
 
             try:
-                async with self._file_versioning_context(tool_context, project_js_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, project_js_path, track_in_horizon=False):
                     await asyncio.to_thread(project_js_path.write_text, project_js_content, encoding="utf-8")
                 created_files.append(project_js_path)
                 logger.info(f"创建日历项目配置: {project_js_path}")

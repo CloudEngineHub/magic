@@ -217,7 +217,7 @@ class CreateDashboardProject(AbstractFileTool[CreateDashboardProjectParams], Wor
             for file_name in main_files:
                 file_path = target_path / file_name
                 if file_path.exists():
-                    async with self._file_versioning_context(tool_context, file_path, update_timestamp=False):
+                    async with self._file_versioning_context(tool_context, file_path, track_in_horizon=False):
                         pass  # Files already created, just need to trigger events
 
             # 统计复制的文件数量

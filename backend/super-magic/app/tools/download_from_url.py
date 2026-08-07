@@ -260,7 +260,7 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
                 async with self._file_versioning_context(
                     tool_context,
                     file_path,
-                    update_timestamp=False,
+                    track_in_horizon=False,
                 ):
                     download_result = await self._download_file(
                         url=params.url,

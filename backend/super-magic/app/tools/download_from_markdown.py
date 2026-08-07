@@ -538,7 +538,7 @@ class DownloadFromMarkdown(AbstractFileTool[DownloadFromMarkdownParams], Workspa
             return None
 
         # 使用 versioning context 处理资源（无需更新时间戳，因为是工具下载的文件）
-        async with self._file_versioning_context(tool_context, target_path, update_timestamp=False):
+        async with self._file_versioning_context(tool_context, target_path, track_in_horizon=False):
             # Handle local files and network resources differently
             if _is_local_path(resource.url):
                 # Local file handling

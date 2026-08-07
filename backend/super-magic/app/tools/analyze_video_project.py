@@ -295,7 +295,7 @@ class AnalyzeVideoProject(AbstractFileTool[AnalyzeVideoProjectParams], Workspace
             index_path = project_path / "index.html"
 
             # 使用 versioning context 写入可视化界面（无需更新时间戳，因为是工具生成的文件）
-            async with self._file_versioning_context(tool_context, index_path, update_timestamp=False):
+            async with self._file_versioning_context(tool_context, index_path, track_in_horizon=False):
                 # 使用 generate_index 动态生成 HTML 模板（视频专用）
                 from app.tools.magic_video.generate_index import generate_video_index
 
