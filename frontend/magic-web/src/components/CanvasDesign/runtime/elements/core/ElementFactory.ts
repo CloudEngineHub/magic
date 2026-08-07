@@ -15,6 +15,7 @@ import { ImageElement } from "../image/ImageElement"
 import { VideoElement } from "../video/VideoElement"
 import { AudioElement } from "../audio/AudioElement"
 import { StoryboardElement } from "../storyboard/StoryboardElement"
+import { VideoEditElement } from "../video-edit/VideoEditElement"
 // import { GroupElement } from "../frame/GroupElement"
 import { FrameElement } from "../frame/FrameElement"
 import type { Canvas } from "../../core/Canvas"
@@ -79,6 +80,9 @@ export class ElementFactory {
 
 			case ElementTypeEnum.Storyboard:
 				return new StoryboardElement(normalizeStoryboardData(data), canvas)
+
+			case ElementTypeEnum.VideoEdit:
+				return new VideoEditElement(data, canvas)
 
 			// case ElementTypeEnum.Group:
 			// 	return new GroupElement(
@@ -154,6 +158,16 @@ export class ElementFactory {
 			case ElementTypeEnum.Frame:
 				return FrameElement.createElementData(id, x, y, roundedWidth, roundedHeight, zIndex)
 
+			case ElementTypeEnum.VideoEdit:
+				return VideoEditElement.createElementData({
+					id,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+				})
+
 			default:
 				// 不支持的类型，抛出错误（因为这是创建数据的方法，调用者应该知道类型）
 				throw new Error(`Unsupported element type: ${elementType}`)
@@ -177,6 +191,8 @@ export class ElementFactory {
 			audioWidth?: number
 			storyboardWidth?: number
 			storyboardHeight?: number
+			videoEditWidth?: number
+			videoEditHeight?: number
 		},
 	): Record<string, unknown> {
 		// 先获取基础元素默认配置
@@ -236,6 +252,13 @@ export class ElementFactory {
 				}
 				break
 
+			case ElementTypeEnum.VideoEdit:
+				specificConfig = {
+					...VideoEditElement.getDefaultConfig(),
+					width: options?.videoEditWidth ?? VideoEditElement.getDefaultConfig().width,
+					height: options?.videoEditHeight ?? VideoEditElement.getDefaultConfig().height,
+				}
+				break
 			case ElementTypeEnum.Frame:
 				specificConfig = FrameElement.getDefaultConfig()
 				break

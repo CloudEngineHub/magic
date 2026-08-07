@@ -550,6 +550,10 @@
 		"retryEditing": "Please edit your video generation request again",
 		"uploading": "Uploading..."
 	},
+	"videoEditNode": {
+		"defaultName": "Video Editing",
+		"mergeVideos": "Merge Videos"
+	},
 	"videoEditor": {
 		"aspectRatio": "Aspect ratio",
 		"duration": "Duration",

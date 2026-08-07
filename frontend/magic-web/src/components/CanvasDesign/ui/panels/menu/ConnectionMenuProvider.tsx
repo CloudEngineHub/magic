@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react"
-import { Film, Type } from "lucide-react"
+import { Film, Type, Workflow } from "lucide-react"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -13,6 +13,16 @@ import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { MenuItemRenderer } from "./MenuItemRenderer"
 import type { MenuItem } from "./types"
 import {
+	canCreateStoryboardFromConnection,
+	createStoryboardFromImageConnection,
+	getStoryboardConnectionCreateSize,
+} from "../../../runtime/interaction/connection/storyboardConnectionCreation"
+import {
+	canCreateVideoEditFromFrameConnection,
+	createVideoEditFromFrameConnection,
+	getVideoEditConnectionCreateSize,
+} from "../../../runtime/interaction/connection/videoEditConnectionCreation"
+import {
 	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
 	collectConnectedElementSiblingRects,
 	collectConnectionCreateObstacleRects,
@@ -23,7 +33,8 @@ import {
 	type ConnectionCreatePlacementContext,
 } from "./connectionCreatePlacement"
 
-type ConnectionMenuCreateKind = "text" | "image-generator" | "video-generator"
+type ConnectionMenuCreateKind =
+	"text" | "image-generator" | "storyboard" | "video-edit" | "video-generator"
 
 interface ConnectionMenuContext extends ConnectionCreatePlacementContext {
 	connectionId?: string
@@ -174,6 +185,27 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 					point.y,
 					imageModelList,
 				)
+			} else if (kind === "storyboard") {
+				const size = getStoryboardConnectionCreateSize()
+				point = resolveCreateTopLeftPoint(context, size)
+				createStoryboardFromImageConnection(canvas, {
+					originElementId: context.originElementId,
+					originSide: context.originSide,
+					x: point.x,
+					y: point.y,
+					imageModelList,
+				})
+				return
+			} else if (kind === "video-edit") {
+				const size = getVideoEditConnectionCreateSize()
+				point = resolveCreateTopLeftPoint(context, size)
+				createVideoEditFromFrameConnection(canvas, {
+					originElementId: context.originElementId,
+					originSide: context.originSide,
+					x: point.x,
+					y: point.y,
+				})
+				return
 			} else if (kind === "video-generator") {
 				const videoGeneratorTool = canvas.toolManager.getVideoGeneratorTool()
 				const size = videoGeneratorTool.getVideoElementSizeForModelList(videoModelList)
@@ -204,7 +236,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			return t ? t(key, fallback) : fallback
 		}
 
-		return [
+		const items: MenuItem[] = [
 			{
 				id: "connection-add-text",
 				label: translate("tools.text", "文本"),
@@ -221,16 +253,37 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 					createElementAndConnect("image-generator", connectionMenuContext)
 				},
 			},
-			{
-				id: "connection-add-video-generator",
-				label: translate("tools.videoGenerator", "视频生成"),
+		]
+		items.push({
+			id: "connection-add-video-generator",
+			label: translate("tools.videoGenerator", "视频生成"),
+			icon: Film,
+			onClick: () => {
+				createElementAndConnect("video-generator", connectionMenuContext)
+			},
+		})
+		if (canCreateStoryboardFromConnection(canvas, connectionMenuContext)) {
+			items.push({
+				id: "connection-add-storyboard",
+				label: translate("storyboard.menuName", "制作分镜"),
+				icon: Workflow,
+				onClick: () => {
+					createElementAndConnect("storyboard", connectionMenuContext)
+				},
+			})
+		}
+		if (canCreateVideoEditFromFrameConnection(canvas, connectionMenuContext)) {
+			items.push({
+				id: "connection-add-video-edit",
+				label: translate("videoEditNode.mergeVideos", "合并视频"),
 				icon: Film,
 				onClick: () => {
-					createElementAndConnect("video-generator", connectionMenuContext)
+					createElementAndConnect("video-edit", connectionMenuContext)
 				},
-			},
-		]
-	}, [connectionMenuContext, createElementAndConnect, t])
+			})
+		}
+		return items
+	}, [canvas, connectionMenuContext, createElementAndConnect, t])
 
 	const handleMenuOpenChange = useCallback(
 		(open: boolean) => {

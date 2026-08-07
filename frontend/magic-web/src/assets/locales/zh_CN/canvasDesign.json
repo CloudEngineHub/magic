@@ -550,6 +550,10 @@
 		"retryEditing": "请重新编辑视频生成需求",
 		"uploading": "正在上传中..."
 	},
+	"videoEditNode": {
+		"defaultName": "视频编辑",
+		"mergeVideos": "合并视频"
+	},
 	"videoEditor": {
 		"aspectRatio": "比例",
 		"duration": "时长",
