@@ -6,7 +6,15 @@ import { CanvasResourceScheduler } from "../../scheduler/CanvasResourceScheduler
 
 class FakeAudioElement extends EventTarget {
 	preload = ""
-	src = ""
+	private source = ""
+	get src(): string {
+		return this.source
+	}
+	set src(value: string) {
+		this.source = value
+		this.currentTime = 0
+		this.readyState = 0
+	}
 	duration = 60
 	currentTime = 0
 	paused = true
@@ -92,8 +100,11 @@ describe("AudioPlaybackManager", () => {
 		const manager = new AudioPlaybackManager({
 			canvas: createCanvas({ getResource: vi.fn(() => resourcePromise) }),
 		})
+		const snapshots: AudioPlaybackSnapshot[] = []
+		manager.subscribe("audio-1", (snapshot) => snapshots.push(snapshot))
 
 		const pendingPrepare = manager.prepare("audio-1", "./audios/voice.mp3")
+		expect(manager.getSnapshot("audio-1").preparing).toBe(true)
 		manager.releaseAll()
 		resolveResource({ ossSrc: "https://example.test/voice.mp3" })
 
@@ -102,7 +113,39 @@ describe("AudioPlaybackManager", () => {
 		expect(manager.getSnapshot("audio-1")).toMatchObject({
 			paused: true,
 			duration: 0,
+			preparing: false,
 		})
+		expect(snapshots.at(-1)?.preparing).toBe(false)
+	})
+
+	it("exposes preparing from pending session creation through metadata readiness", async () => {
+		let resolveResource!: (value: { ossSrc: string }) => void
+		const resourcePromise = new Promise<{ ossSrc: string }>((resolve) => {
+			resolveResource = resolve
+		})
+		const audio = new FakeAudioElement()
+		const originalCreateElement = document.createElement.bind(document)
+		vi.spyOn(document, "createElement").mockImplementation(((tagName: string) =>
+			tagName.toLowerCase() === "audio"
+				? (audio as unknown as HTMLAudioElement)
+				: originalCreateElement(tagName)) as typeof document.createElement)
+		const manager = new AudioPlaybackManager({
+			canvas: createCanvas({ getResource: vi.fn(() => resourcePromise) }),
+		})
+		const snapshots: AudioPlaybackSnapshot[] = []
+		manager.subscribe("audio-1", (snapshot) => snapshots.push(snapshot))
+
+		const pending = manager.prepare("audio-1", "./audios/voice.mp3")
+		expect(manager.getSnapshot("audio-1").preparing).toBe(true)
+
+		resolveResource({ ossSrc: "https://example.test/voice.mp3" })
+		expect(await pending).toBe(true)
+		expect(manager.getSnapshot("audio-1")).toMatchObject({
+			preparing: false,
+			duration: 60,
+		})
+		expect(snapshots.some((snapshot) => snapshot.preparing)).toBe(true)
+		expect(snapshots.at(-1)?.preparing).toBe(false)
 	})
 
 	it("manages metadata sessions, playback coordination and release snapshots", async () => {
@@ -254,12 +297,14 @@ describe("AudioPlaybackManager", () => {
 		})
 
 		await manager.prepare("audio-1", "./audios/voice.mp3")
+		audio.currentTime = 24
 		audio.error = {} as MediaError
 		audio.dispatchEvent(new Event("error"))
 
 		await vi.waitFor(() => {
 			expect(audio.src).toBe("https://example.test/fresh.mp3")
 		})
+		expect(audio.currentTime).toBe(24)
 		expect(getResource).toHaveBeenLastCalledWith(
 			"./audios/voice.mp3",
 			expect.objectContaining({
@@ -434,5 +479,31 @@ describe("AudioPlaybackManager", () => {
 		resolvePendingResource({ ossSrc: "https://example.test/voice.mp3" })
 
 		expect(await pendingPrepare).toBe(false)
+	})
+
+	it("preserves playback metadata when a resource path is rebound", async () => {
+		const audio = new FakeAudioElement()
+		const originalCreateElement = document.createElement.bind(document)
+		vi.spyOn(document, "createElement").mockImplementation(((tagName: string) =>
+			tagName.toLowerCase() === "audio"
+				? (audio as unknown as HTMLAudioElement)
+				: originalCreateElement(tagName)) as typeof document.createElement)
+		const manager = new AudioPlaybackManager({
+			canvas: createCanvas({
+				getResource: vi.fn().mockResolvedValue({
+					ossSrc: "https://example.test/voice.mp3",
+				}),
+			}),
+		})
+
+		await manager.prepare("audio-1", "./audios/voice.mp3")
+		audio.currentTime = 12
+		manager.releaseByPath("./audios/voice.mp3", { preserveMetadata: true })
+
+		expect(manager.getSnapshot("audio-1")).toMatchObject({
+			currentTime: 12,
+			duration: 60,
+			paused: true,
+		})
 	})
 })

@@ -16,6 +16,9 @@ import {
 	type ResourceLoadFailureReason,
 } from "../media-common/resourceLoadFailure"
 
+const SUPERSEDED_RESOURCE_REQUEST = Symbol("superseded-resource-request")
+type ExchangeResult = string | null | typeof SUPERSEDED_RESOURCE_REQUEST
+
 export interface MediaResourceUrlEntry {
 	/** 可交给宿主 resolver/API 的资源引用路径，不能是 identity。 */
 	referencePath: string
@@ -30,7 +33,7 @@ export interface MediaResourceUrlEntry {
 	resourceVersion: string | null
 	sourceUpdatedAt: string | null
 	contentLength: number | null
-	exchangePromise: Promise<string | null> | null
+	exchangePromise: Promise<ExchangeResult> | null
 	exchangeToken?: symbol
 	backgroundRefreshPromise: Promise<void> | null
 	/** 最近一次后台 metadata 校验调度时间；用于避免缓存命中热路径反复强制换链 */
@@ -174,8 +177,19 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			}
 		}
 
-		const ossSrc = await this.exchangeOssSrc(path, entry, options)
+		const exchangeResult = await this.exchangeOssSrcInternal(path, entry, options)
 		if (this.isDestroyed()) return null
+		if (exchangeResult === SUPERSEDED_RESOURCE_REQUEST) {
+			this.options.setFailureReason(entry, null)
+			if (entry.ossSrc && !isOssExpired(entry.expiresAt)) {
+				return {
+					ossSrc: entry.ossSrc,
+					expiresAt: entry.expiresAt,
+				}
+			}
+			return null
+		}
+		const ossSrc = exchangeResult
 		if (!ossSrc) {
 			this.options.setFailureReason(entry, entry.lastFailureReason ?? "not-found")
 			if (
@@ -210,6 +224,19 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			priority?: FileUrlRequestPriority
 		},
 	): Promise<string | null> {
+		const result = await this.exchangeOssSrcInternal(path, entry, options)
+		return result === SUPERSEDED_RESOURCE_REQUEST ? null : result
+	}
+
+	private async exchangeOssSrcInternal(
+		path: string,
+		entry: TEntry,
+		options?: {
+			forceRefresh?: boolean
+			bypassVirtualResource?: boolean
+			priority?: FileUrlRequestPriority
+		},
+	): Promise<ExchangeResult> {
 		if (this.isDestroyed()) return null
 		const getFileInfo = this.options.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
@@ -242,24 +269,25 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					priority: options?.priority,
 				})
 				if (this.isDestroyed()) return null
+				// 一旦请求已被更高代换链或 primeCache 淘汰，后续任何返回形态都只代表旧请求：
+				// 不能继续解析 URL，也不能把空结果补成 not-found 覆盖当前资源状态。
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
 				if (fileInfo?.src) {
-					if (isCurrentExchange()) {
-						this.options.setFailureReason(entry, null)
-						const previousResourceVersion = entry.resourceVersion
-						this.applyFileInfoMetadata(entry, fileInfo)
-						if (!previousResourceVersion) {
-							this.options.onResourceMetadataHydrated?.(entry.resourceIdentity, entry)
-						} else if (
-							entry.resourceVersion &&
-							entry.resourceVersion !== previousResourceVersion
-						) {
-							this.options.onResourceVersionChanged?.(
-								entry.resourceIdentity,
-								entry,
-								previousResourceVersion,
-								entry.resourceVersion,
-							)
-						}
+					this.options.setFailureReason(entry, null)
+					const previousResourceVersion = entry.resourceVersion
+					this.applyFileInfoMetadata(entry, fileInfo)
+					if (!previousResourceVersion) {
+						this.options.onResourceMetadataHydrated?.(entry.resourceIdentity, entry)
+					} else if (
+						entry.resourceVersion &&
+						entry.resourceVersion !== previousResourceVersion
+					) {
+						this.options.onResourceVersionChanged?.(
+							entry.resourceIdentity,
+							entry,
+							previousResourceVersion,
+							entry.resourceVersion,
+						)
 					}
 					const resourceUrl =
 						await this.options.canvas.mediaResourceOfflineCacheManager.resolveResourceUrl(
@@ -278,17 +306,18 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 							},
 						)
 					if (this.isDestroyed()) return null
-					if (!isCurrentExchange()) return null
+					if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
 					entry.ossSrc = resourceUrl
 					entry.ossSrcFromCachedFallback = false
 					return resourceUrl
 				}
-				if (isCurrentExchange()) this.options.setFailureReason(entry, "load-error")
+				this.options.setFailureReason(entry, "load-error")
 				return null
 			} catch (error) {
 				const reason = getFailureReasonFromGetFileInfoError(error)
-				if (isCurrentExchange()) this.options.setFailureReason(entry, reason)
-				if (isCurrentExchange() && reason === "not-found") {
+				if (!isCurrentExchange()) return SUPERSEDED_RESOURCE_REQUEST
+				this.options.setFailureReason(entry, reason)
+				if (reason === "not-found") {
 					this.options.canvas.mediaResourceOfflineCacheManager.removeCachedResource({
 						path,
 						mediaType: this.options.mediaType,

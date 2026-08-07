@@ -7,6 +7,7 @@ export interface AudioPlaybackSnapshot {
 	currentTime: number
 	paused: boolean
 	ended: boolean
+	preparing: boolean
 	loading: boolean
 	error: boolean
 }
@@ -57,6 +58,7 @@ const EMPTY_SNAPSHOT: AudioPlaybackSnapshot = {
 	currentTime: 0,
 	paused: true,
 	ended: false,
+	preparing: false,
 	loading: false,
 	error: false,
 }
@@ -89,12 +91,14 @@ export class AudioPlaybackManager {
 	}
 
 	public getSnapshot(elementId: string): AudioPlaybackSnapshot {
+		const preparing = this.pendingSessions.has(elementId)
 		const session = this.sessions.get(elementId)
-		if (session) return this.createSnapshot(session.audio)
+		if (session) return { ...this.createSnapshot(session.audio), preparing }
 		const metadata = this.retainedMetadata.get(elementId)
-		return metadata
+		const snapshot = metadata
 			? this.createRetainedMetadataSnapshot(metadata.duration, metadata.currentTime)
 			: EMPTY_SNAPSHOT
+		return preparing ? { ...snapshot, preparing: true } : snapshot
 	}
 
 	public async prepare(
@@ -194,7 +198,7 @@ export class AudioPlaybackManager {
 	}
 
 	public release(elementId: string, options?: AudioPlaybackReleaseOptions): void {
-		this.cancelPendingSession(elementId)
+		this.cancelPendingSession(elementId, { emit: false })
 		const session = this.sessions.get(elementId)
 		if (!session) {
 			if (!options?.preserveMetadata) this.retainedMetadata.delete(elementId)
@@ -228,20 +232,20 @@ export class AudioPlaybackManager {
 		})
 	}
 
-	public releaseByPath(path: string): void {
+	public releaseByPath(path: string, options?: AudioPlaybackReleaseOptions): void {
 		Array.from(this.pendingSessions.entries()).forEach(([elementId, pendingSession]) => {
 			if (areCanvasHostResourceReferencesSame(this.canvas, pendingSession.path, path)) {
-				this.release(elementId)
+				this.release(elementId, options)
 			}
 		})
 		Array.from(this.sessions.entries()).forEach(([elementId, session]) => {
 			if (areCanvasHostResourceReferencesSame(this.canvas, session.path, path)) {
-				this.release(elementId)
+				this.release(elementId, options)
 			}
 		})
 		Array.from(this.retainedMetadata.entries()).forEach(([elementId, metadata]) => {
 			if (areCanvasHostResourceReferencesSame(this.canvas, metadata.path, path)) {
-				this.release(elementId)
+				this.release(elementId, options)
 			}
 		})
 	}
@@ -276,12 +280,12 @@ export class AudioPlaybackManager {
 		if (pending?.path === path) {
 			if (source === "interaction" && pending.source === "viewport") {
 				// Scheduler 不支持原地提升优先级，显式交互需要取消视口任务后重新以 critical 入队。
-				this.cancelPendingSession(elementId)
+				this.cancelPendingSession(elementId, { emit: false })
 			} else {
 				return pending.promise
 			}
 		} else if (pending) {
-			this.cancelPendingSession(elementId)
+			this.cancelPendingSession(elementId, { emit: false })
 		}
 
 		const token = Symbol(`audio-playback:${elementId}`)
@@ -305,6 +309,7 @@ export class AudioPlaybackManager {
 				if (current?.token !== token) return
 				current.cleanupExternalSignal()
 				this.pendingSessions.delete(elementId)
+				this.emitSnapshot(elementId, this.getSnapshot(elementId))
 			})
 		this.pendingSessions.set(elementId, {
 			path,
@@ -315,6 +320,7 @@ export class AudioPlaybackManager {
 			promise,
 			cleanupExternalSignal,
 		})
+		this.emitSnapshot(elementId, this.getSnapshot(elementId))
 		return promise
 	}
 
@@ -545,6 +551,9 @@ export class AudioPlaybackManager {
 		session.refreshing = true
 		const refreshAbortController = new AbortController()
 		session.refreshAbortController = refreshAbortController
+		const currentTimeBeforeRefresh = Number.isFinite(session.audio.currentTime)
+			? Math.max(0, session.audio.currentTime)
+			: 0
 		try {
 			const fallback = await this.canvas.audioResourceManager.resolveVirtualPlaybackFallback(
 				session.path,
@@ -593,6 +602,16 @@ export class AudioPlaybackManager {
 				this.emitLoadFailed(session.path)
 				return
 			}
+			try {
+				const duration = Number.isFinite(session.audio.duration)
+					? session.audio.duration
+					: 0
+				if (duration > 0) {
+					session.audio.currentTime = Math.min(duration, currentTimeBeforeRefresh)
+				}
+			} catch {
+				// Some media implementations can reject seeking immediately after a source refresh.
+			}
 			this.canvas.mediaResourceOfflineCacheManager.recordVirtualResourceLoadSuccess(
 				resource.ossSrc,
 			)
@@ -613,12 +632,15 @@ export class AudioPlaybackManager {
 		}
 	}
 
-	private cancelPendingSession(elementId: string): void {
+	private cancelPendingSession(elementId: string, options?: { emit?: boolean }): void {
 		const pending = this.pendingSessions.get(elementId)
 		if (!pending) return
 		pending.cleanupExternalSignal()
 		pending.abortController.abort()
 		this.pendingSessions.delete(elementId)
+		if (options?.emit !== false) {
+			this.emitSnapshot(elementId, this.getSnapshot(elementId))
+		}
 	}
 
 	private isPendingSessionCurrent(elementId: string, path: string, token: symbol): boolean {
@@ -679,6 +701,7 @@ export class AudioPlaybackManager {
 			currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
 			paused: audio.paused,
 			ended: audio.ended,
+			preparing: false,
 			loading: audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA,
 			error: Boolean(audio.error),
 		}

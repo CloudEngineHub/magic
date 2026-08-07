@@ -135,11 +135,53 @@ describe("AudioResourceManager", () => {
 			path: "./audios/voice.mp3",
 			mediaType: "audio",
 		})
-		expect(audioPlaybackManager.releaseByPath).toHaveBeenCalledWith("./audios/voice.mp3")
+		expect(audioPlaybackManager.releaseByPath).toHaveBeenCalledWith("./audios/voice.mp3", {
+			preserveMetadata: true,
+		})
 		expect(visibilityManager.invalidateAudioLoadRequest).toHaveBeenCalledWith(
 			"./audios/voice.mp3",
 			"resource-version-changed",
 		)
+	})
+
+	it("keeps the current audio resource when an older refresh is superseded", async () => {
+		let resolveFirst!: (value: Record<string, unknown>) => void
+		let resolveSecond!: (value: Record<string, unknown>) => void
+		const first = new Promise<Record<string, unknown>>((resolve) => {
+			resolveFirst = resolve
+		})
+		const second = new Promise<Record<string, unknown>>((resolve) => {
+			resolveSecond = resolve
+		})
+		const getFileInfo = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+		const { audioPlaybackManager, eventEmitter, manager } = createManager(getFileInfo)
+
+		const oldRequest = manager.getResource("./audios/voice.mp3", { forceRefresh: true })
+		const currentRequest = manager.getResource("./audios/voice.mp3", { forceRefresh: true })
+
+		resolveSecond({
+			src: "https://example.test/voice-v2.mp3",
+			fileName: "voice.mp3",
+			resource_version: "v2",
+		})
+		await expect(currentRequest).resolves.toMatchObject({
+			ossSrc: "https://example.test/voice-v2.mp3",
+			resourceVersion: "v2",
+		})
+
+		resolveFirst({
+			src: "https://example.test/voice-v1.mp3",
+			fileName: "voice.mp3",
+			resource_version: "v1",
+		})
+		await expect(oldRequest).resolves.toMatchObject({
+			ossSrc: "https://example.test/voice-v2.mp3",
+			resourceVersion: "v2",
+		})
+
+		expect(manager.getFailureReason("./audios/voice.mp3")).toBeNull()
+		expect(eventEmitter.emit).not.toHaveBeenCalled()
+		expect(audioPlaybackManager.releaseByPath).not.toHaveBeenCalled()
 	})
 
 	it("promotes an uploaded direct URL to a virtual audio URL without fetching the body", async () => {

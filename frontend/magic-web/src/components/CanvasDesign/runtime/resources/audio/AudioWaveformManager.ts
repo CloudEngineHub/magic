@@ -1,5 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasResourceTaskPriority } from "../scheduler/CanvasResourceScheduler"
+import type { CanvasResourceReferenceResolverChangeOptions } from "../../shared/path/canvasResourcePath"
 
 export type AudioWaveformStatus = "idle" | "loading" | "ready" | "error"
 
@@ -147,8 +148,21 @@ export class AudioWaveformManager {
 		this.invalidateIdentity(this.canvas.audioResourceManager.getResourceIdentity(path))
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
-		this.invalidateAll()
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
+		if (!options?.changedResourceIdentities) {
+			this.invalidateAll()
+			return
+		}
+
+		const affectedIdentities = new Set<string>()
+		this.snapshots.forEach((_snapshot, identity) => affectedIdentities.add(identity))
+		this.pendingByIdentity.forEach((_pending, identity) => affectedIdentities.add(identity))
+		this.cacheKeysByIdentity.forEach((_cacheKeys, identity) => affectedIdentities.add(identity))
+		affectedIdentities.forEach((identity) => {
+			if (options.changedResourceIdentities?.has(identity)) this.invalidateIdentity(identity)
+		})
 	}
 
 	public destroy(): void {

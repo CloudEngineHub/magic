@@ -478,6 +478,37 @@ describe("CanvasVisibilityManager audio viewport requests", () => {
 		)
 	})
 
+	it("retries a registered audio element through the critical metadata and waveform chain", async () => {
+		const { manager, prepareAudio, prepareWaveform } = createConstructedManager()
+		const internals = manager as unknown as {
+			registeredAudios: Map<string, { elementId: string; path: string }>
+		}
+		internals.registeredAudios.set("audio-1", {
+			elementId: "audio-1",
+			path: "./audios/a.mp3",
+		})
+
+		manager.requestImmediateAudioLoad("audio-1", {
+			reason: "audio-placeholder-retry",
+			priority: "critical",
+		})
+
+		expect(prepareAudio).toHaveBeenCalledWith(
+			"audio-1",
+			"./audios/a.mp3",
+			expect.objectContaining({
+				source: "viewport",
+				priority: "critical",
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		await Promise.resolve()
+		expect(prepareWaveform).toHaveBeenCalledWith(
+			"./audios/a.mp3",
+			expect.objectContaining({ priority: "critical" }),
+		)
+	})
+
 	it("upgrades a near URL request to visible preload and dedupes repeats", () => {
 		const { getAudioResource, manager, prepareAudio } = createConstructedManager()
 		const requestAudioLoad = (manager as unknown as { requestAudioLoad: RequestAudioLoad })

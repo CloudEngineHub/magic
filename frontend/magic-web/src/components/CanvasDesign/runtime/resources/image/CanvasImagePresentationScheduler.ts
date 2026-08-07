@@ -1,5 +1,8 @@
 import type { Canvas } from "../../core/Canvas"
-import { getCanvasHostResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
+import {
+	getCanvasHostResourceReferenceIdentity,
+	type CanvasResourceReferenceResolverChangeOptions,
+} from "../../shared/path/canvasResourcePath"
 import { getImageResourceMaxEdge } from "../visibility/CanvasMediaViewingPolicy"
 import type {
 	ImageResourceLoadPriority,
@@ -227,13 +230,24 @@ export class CanvasImagePresentationScheduler {
 		this.updateCurrentCounts()
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
 		if (this.destroyed) return
 
-		this.targetElementIdsByPath.clear()
+		const changedResourceIdentities = options?.changedResourceIdentities
+		if (!changedResourceIdentities) this.targetElementIdsByPath.clear()
 		this.targets.forEach((target, elementId) => {
 			const canonicalPath = this.canonicalPath(target.path)
+			if (
+				changedResourceIdentities &&
+				!changedResourceIdentities.has(target.canonicalPath) &&
+				!changedResourceIdentities.has(canonicalPath)
+			) {
+				return
+			}
 			if (target.canonicalPath !== canonicalPath) {
+				this.removeTargetFromPathIndex(target)
 				target.canonicalPath = canonicalPath
 				target.generation = ++this.generation
 				this.dropPendingTask(elementId)

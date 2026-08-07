@@ -3,11 +3,13 @@ import type {
 	CanvasConfig,
 	CanvasDeviceInfo,
 	CanvasDocument,
+	LayerElement,
 	ViewportState,
 	ToolType,
 } from "../document/types"
 import type { ElementDetailsProvenance } from "../document/elementDetailsProvenance"
-import { ToolTypeEnum } from "../document/types"
+import { ElementTypeEnum, ToolTypeEnum } from "../document/types"
+import { getActiveImageVersion } from "../document/imageVersion"
 import { ViewportController } from "../interaction/viewport/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
 import { ElementManager } from "../elements/core/ElementManager"
@@ -66,7 +68,12 @@ import { TextEditingManager } from "../interaction/text-editing/TextEditingManag
 import { TextFormattingManager } from "../interaction/text-editing/TextFormattingManager"
 import { CanvasInputManager } from "../interaction/input/index"
 import { isCanvasUIComponentNode } from "../shared/dom/domGuards"
-import { buildVirtualResourceScope } from "../shared/path/canvasResourcePath"
+import {
+	buildVirtualResourceScope,
+	getCanvasHostResourceReferenceResolver,
+	resolveCanvasStorageResourceReference,
+	type CanvasResourceReferenceResolverChangeOptions,
+} from "../shared/path/canvasResourcePath"
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
@@ -103,6 +110,15 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 			targetElementId,
 		})),
 	)
+}
+
+function getElementResourceReferencePath(element: LayerElement | undefined): string | undefined {
+	if (!element) return undefined
+	if (element.type === ElementTypeEnum.Image) return getActiveImageVersion(element).src
+	if (element.type === ElementTypeEnum.Video || element.type === ElementTypeEnum.Audio) {
+		return element.src
+	}
+	return undefined
 }
 
 /**
@@ -1302,14 +1318,62 @@ export class Canvas {
 		return this.connectionGroup
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
-		this.imageResourceManager.handleResourceReferenceResolverChanged()
-		this.audioResourceManager.handleResourceReferenceResolverChanged()
-		this.audioWaveformManager.handleResourceReferenceResolverChanged()
-		this.imagePresentationScheduler.handleResourceReferenceResolverChanged()
-		this.visibilityManager.handleResourceReferenceResolverChanged()
-		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged()
+	public handleResourceReferenceResolverChanged(options?: {
+		changedWorkspacePaths?: readonly string[]
+	}): void {
+		const changedWorkspacePaths = options?.changedWorkspacePaths
+		let affectedElementIds: Set<string> | undefined
+		let changedResourceIdentities: Set<string> | undefined
+		if (changedWorkspacePaths !== undefined) {
+			const resolver = getCanvasHostResourceReferenceResolver(this)
+			const resolvedResourceIdentities = new Set<string>()
+			let canScopeChange = Boolean(resolver)
+			if (resolver) {
+				for (const path of changedWorkspacePaths) {
+					const resolution = resolver({ namespace: "workspace-path", path })
+					if (resolution.status !== "resolved") {
+						canScopeChange = false
+						break
+					}
+					resolvedResourceIdentities.add(resolution.identity)
+				}
+			}
+
+			if (canScopeChange && resolver) {
+				changedResourceIdentities = resolvedResourceIdentities
+				affectedElementIds = new Set<string>()
+				for (const elementId of this.elementManager.getAllElementIds()) {
+					const path = getElementResourceReferencePath(
+						this.elementManager.getElementData?.(elementId) as LayerElement | undefined,
+					)
+					if (!path) continue
+					const resolution = resolveCanvasStorageResourceReference(path, resolver)
+					if (resolution.status !== "resolved") {
+						// 无法证明元素不受影响时必须回退全量重绑，禁止路径后缀猜测。
+						affectedElementIds = undefined
+						break
+					}
+					if (changedResourceIdentities.has(resolution.identity)) {
+						affectedElementIds.add(elementId)
+					}
+				}
+			}
+		}
+		if (affectedElementIds?.size === 0) {
+			return
+		}
+		const resolverChangeOptions: CanvasResourceReferenceResolverChangeOptions | undefined =
+			changedResourceIdentities ? { changedResourceIdentities } : undefined
+		this.imageResourceManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.audioResourceManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.audioWaveformManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.imagePresentationScheduler.handleResourceReferenceResolverChanged(
+			resolverChangeOptions,
+		)
+		this.visibilityManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
+		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged(resolverChangeOptions)
 		this.elementManager.getAllElementIds().forEach((elementId) => {
+			if (affectedElementIds && !affectedElementIds.has(elementId)) return
 			this.elementManager.getElementInstance(elementId)?.onResourceReferenceResolverChanged()
 		})
 	}

@@ -58,6 +58,7 @@ import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityMa
 import {
 	buildVirtualResourceScope,
 	getCanvasResourceAvailability,
+	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
 
 export type { ImageSource }
@@ -3100,12 +3101,20 @@ export class ImageResourceManager {
 	}
 
 	/** Reconcile decoded/persistent resources when the host publishes a new attachment snapshot. */
-	public handleResourceReferenceResolverChanged(): void {
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
 		if (this.destroyed) return
 		const resolveResourceReference =
 			this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
 		if (!resolveResourceReference) return
 		this.entries.forEach((entry, resourceIdentity) => {
+			if (
+				options?.changedResourceIdentities &&
+				!options.changedResourceIdentities.has(resourceIdentity)
+			) {
+				return
+			}
 			const availability = getCanvasResourceAvailability(
 				entry.referencePath,
 				resolveResourceReference,

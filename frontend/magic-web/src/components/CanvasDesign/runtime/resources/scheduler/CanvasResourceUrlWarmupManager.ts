@@ -5,6 +5,7 @@ import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
 import {
 	getCanvasHostResourceReferenceIdentity,
 	isRemoteOrSpecialPath,
+	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
 import {
 	getFailureReasonFromGetFileInfoError,
@@ -184,8 +185,27 @@ export class CanvasResourceUrlWarmupManager {
 		return { ...this.statsSnapshot }
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
 		if (this.destroyed) return
+		if (options?.changedResourceIdentities) {
+			let affected = false
+			this.entries.forEach((entry) => {
+				const identity = entry.key.split("\0").slice(1).join("\0")
+				if (!options.changedResourceIdentities?.has(identity)) return
+				affected = true
+				if (entry.status === "warming") return
+				this.queuedKeys.delete(entry.key)
+				entry.status = "idle"
+				entry.lastError = undefined
+				entry.failedAt = undefined
+				entry.retryAfterAt = undefined
+				this.enqueue(entry, "resource-reference-resolver-changed", entry.priority)
+			})
+			if (affected) this.refreshSnapshotCounts()
+			return
+		}
 		this.resolverGeneration += 1
 		this.warmupAbortController.abort()
 		this.warmupAbortController = new AbortController()

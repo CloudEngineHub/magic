@@ -6,6 +6,7 @@ import {
 } from "../offline-cache/MediaResourceUrlLifecycle"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import type { CanvasResourceTaskPriority } from "../scheduler/CanvasResourceScheduler"
+import type { CanvasResourceReferenceResolverChangeOptions } from "../../shared/path/canvasResourcePath"
 
 export interface LoadedAudioResource {
 	path: string
@@ -67,7 +68,9 @@ export class AudioResourceManager {
 			refreshResource: (path) => this.refresh(path),
 			onResourceVersionChanged: (_resourceIdentity, entry) => {
 				this.invalidateCachedBody(entry.referencePath)
-				this.canvas.audioPlaybackManager?.releaseByPath(entry.referencePath)
+				this.canvas.audioPlaybackManager?.releaseByPath(entry.referencePath, {
+					preserveMetadata: true,
+				})
 				this.canvas.audioWaveformManager?.invalidatePath(entry.referencePath)
 				this.canvas.visibilityManager?.invalidateAudioLoadRequest(
 					entry.referencePath,
@@ -110,6 +113,9 @@ export class AudioResourceManager {
 		})
 		if (options?.signal?.aborted || this.destroyed) return null
 		if (!result) {
+			// 生命周期可能因更新上传结果或更高代请求而主动淘汰当前请求；这不是资源删除，
+			// 不应广播失败或清理同一路径的其他音频播放会话。
+			if (!entry.lastFailureReason) return null
 			if (entry.lastFailureReason === "not-found") {
 				// 前台 getFileInfo 也可能直接确认删除；与后台 metadata deleted 走同一清理路径，
 				// 避免旧虚拟键和已存在的播放会话继续引用已删除 body。
@@ -183,15 +189,27 @@ export class AudioResourceManager {
 		}
 		this.invalidateCachedBody(path)
 		this.entries.delete(resourceIdentity)
-		this.canvas.audioPlaybackManager?.releaseByPath(path)
+		this.canvas.audioPlaybackManager?.releaseByPath(path, { preserveMetadata: true })
 		this.canvas.audioWaveformManager?.invalidatePath(path)
 		this.canvas.visibilityManager?.invalidateAudioLoadRequest(path, "audio-replaced", {
 			scheduleRefresh: false,
 		})
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
 		if (this.destroyed) return
+		if (options?.changedResourceIdentities) {
+			Array.from(this.entries.entries()).forEach(([resourceIdentity, entry]) => {
+				if (!options.changedResourceIdentities?.has(resourceIdentity)) return
+				entry.exchangeToken = undefined
+				entry.exchangePromise = null
+				entry.backgroundRefreshPromise = null
+				this.entries.delete(resourceIdentity)
+			})
+			return
+		}
 		this.entries.forEach((entry) => {
 			entry.exchangeToken = undefined
 			entry.exchangePromise = null

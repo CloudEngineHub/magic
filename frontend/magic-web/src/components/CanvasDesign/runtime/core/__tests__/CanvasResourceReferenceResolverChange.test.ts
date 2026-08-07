@@ -36,6 +36,34 @@ describe("Canvas resource reference resolver changes", () => {
 		})
 	})
 
+	it("reports canonical workspace paths changed inside a Design attachment revision", () => {
+		const firstRevision = JSON.stringify([
+			"project-1",
+			"design-1",
+			"画布",
+			"ready",
+			"画布/audios/existing.mp3\u0000file-1",
+		])
+		const secondRevision = JSON.stringify([
+			"project-1",
+			"design-1",
+			"画布",
+			"ready",
+			["画布/audios/existing.mp3\u0000file-1", "画布/audios/new.mp3\u0000file-2"].join(
+				"\u0001",
+			),
+		])
+		const manager = new MagicConfigManager({
+			canvas: {} as Canvas,
+			config: config(firstRevision, "/画布"),
+		})
+
+		expect(manager.update(config(secondRevision, "/画布"))).toEqual({
+			resourceReferenceResolverChanged: true,
+			resourceReferenceChangedPaths: ["/画布/audios/new.mp3"],
+		})
+	})
+
 	it("reindexes managers and rebinds every mounted element", () => {
 		const firstElementChanged = vi.fn()
 		const secondElementChanged = vi.fn()
@@ -50,6 +78,9 @@ describe("Canvas resource reference resolver changes", () => {
 		])
 		const canvas = Object.create(Canvas.prototype) as Canvas
 		Object.assign(canvas, {
+			audioWaveformManager: {
+				handleResourceReferenceResolverChanged: vi.fn(),
+			},
 			imageResourceManager: {
 				handleResourceReferenceResolverChanged: imageResourceChanged,
 			},
@@ -80,6 +111,52 @@ describe("Canvas resource reference resolver changes", () => {
 		expect(warmupChanged).toHaveBeenCalledTimes(1)
 		expect(firstElementChanged).toHaveBeenCalledTimes(1)
 		expect(secondElementChanged).toHaveBeenCalledTimes(1)
+	})
+
+	it("skips a resolver revision that only adds an unrelated attachment", () => {
+		const elementChanged = vi.fn()
+		const imageResourceChanged = vi.fn()
+		const audioResourceChanged = vi.fn()
+		const presentationChanged = vi.fn()
+		const visibilityChanged = vi.fn()
+		const warmupChanged = vi.fn()
+		const canvas = Object.create(Canvas.prototype) as Canvas
+		Object.assign(canvas, {
+			id: "canvas-1",
+			magicConfigManager: {
+				config: {
+					methods: {
+						resolveResourceReference: createTestResourceReferenceResolver({
+							currentCanvasWorkspacePath: "/画布",
+						}),
+					},
+				},
+			},
+			imageResourceManager: { handleResourceReferenceResolverChanged: imageResourceChanged },
+			audioResourceManager: { handleResourceReferenceResolverChanged: audioResourceChanged },
+			audioWaveformManager: { handleResourceReferenceResolverChanged: vi.fn() },
+			imagePresentationScheduler: {
+				handleResourceReferenceResolverChanged: presentationChanged,
+			},
+			visibilityManager: { handleResourceReferenceResolverChanged: visibilityChanged },
+			resourceUrlWarmupManager: { handleResourceReferenceResolverChanged: warmupChanged },
+			elementManager: {
+				getAllElementIds: () => ["audio-1"],
+				getElementData: () => ({ type: "audio", src: "./audios/existing.mp3" }),
+				getElementInstance: () => ({ onResourceReferenceResolverChanged: elementChanged }),
+			},
+		})
+
+		canvas.handleResourceReferenceResolverChanged({
+			changedWorkspacePaths: ["/画布/audios/new.mp3"],
+		})
+
+		expect(imageResourceChanged).not.toHaveBeenCalled()
+		expect(audioResourceChanged).not.toHaveBeenCalled()
+		expect(presentationChanged).not.toHaveBeenCalled()
+		expect(visibilityChanged).not.toHaveBeenCalled()
+		expect(warmupChanged).not.toHaveBeenCalled()
+		expect(elementChanged).not.toHaveBeenCalled()
 	})
 
 	it("aborts old identity requests and forces a new visibility pass", () => {

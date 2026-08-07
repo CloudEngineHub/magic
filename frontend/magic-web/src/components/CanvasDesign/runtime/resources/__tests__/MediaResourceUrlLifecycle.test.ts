@@ -31,6 +31,7 @@ function createLifecycle(options?: {
 	resolveResourceUrl?: ReturnType<typeof vi.fn>
 	onResourceMetadataHydrated?: ReturnType<typeof vi.fn>
 	onResourceVersionChanged?: ReturnType<typeof vi.fn>
+	onResourceDeleted?: ReturnType<typeof vi.fn>
 }) {
 	const getFileInfo =
 		options?.getFileInfo ??
@@ -46,6 +47,7 @@ function createLifecycle(options?: {
 	const resolveResourceUrl =
 		options?.resolveResourceUrl ?? vi.fn().mockResolvedValue("/virtual/image.png")
 	const incrementDiagnostic = vi.fn()
+	const onResourceDeleted = options?.onResourceDeleted ?? vi.fn()
 	const canvas = {
 		magicConfigManager: {
 			config: {
@@ -73,7 +75,7 @@ function createLifecycle(options?: {
 		setFailureReason: (entry, reason) => {
 			entry.lastFailureReason = reason
 		},
-		onResourceDeleted: vi.fn(),
+		onResourceDeleted,
 		refreshResource: options?.refreshResource ?? vi.fn().mockResolvedValue(true),
 		onResourceMetadataHydrated: options?.onResourceMetadataHydrated,
 		onResourceVersionChanged: options?.onResourceVersionChanged,
@@ -86,6 +88,7 @@ function createLifecycle(options?: {
 		incrementDiagnostic,
 		lifecycle,
 		resolveResourceUrl,
+		onResourceDeleted,
 	}
 }
 
@@ -231,6 +234,118 @@ describe("MediaResourceUrlLifecycle", () => {
 
 		expect(entry.resourceVersion).toBe("v2")
 		expect(entry.exchangePromise).toBeNull()
+	})
+
+	it("does not classify a superseded exchange as not-found", async () => {
+		let resolveFirst!: (value: Record<string, unknown>) => void
+		let resolveSecond!: (value: Record<string, unknown>) => void
+		const first = new Promise<Record<string, unknown>>((resolve) => {
+			resolveFirst = resolve
+		})
+		const second = new Promise<Record<string, unknown>>((resolve) => {
+			resolveSecond = resolve
+		})
+		const getFileInfo = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+		const { lifecycle, onResourceDeleted } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const oldRequest = lifecycle.ensureFreshOssInfo("./images/a.png", entry, {
+			allowCachedFallback: false,
+		})
+		const refreshedRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			forceRefresh: true,
+		})
+
+		resolveSecond({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		await refreshedRequest
+		resolveFirst({
+			src: "https://oss.test/image-v1.png",
+			fileName: "image.png",
+			resource_version: "v1",
+		})
+
+		await expect(oldRequest).resolves.toEqual({
+			ossSrc: "/virtual/image.png",
+			expiresAt: null,
+		})
+		expect(entry.lastFailureReason).toBeNull()
+		expect(onResourceDeleted).not.toHaveBeenCalled()
+	})
+
+	it("keeps the current resource when a superseded exchange returns empty", async () => {
+		let resolveFirst!: (value: undefined) => void
+		let resolveSecond!: (value: Record<string, unknown>) => void
+		const first = new Promise<undefined>((resolve) => {
+			resolveFirst = resolve
+		})
+		const second = new Promise<Record<string, unknown>>((resolve) => {
+			resolveSecond = resolve
+		})
+		const getFileInfo = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+		const { lifecycle, onResourceDeleted } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const oldRequest = lifecycle.ensureFreshOssInfo("./images/a.png", entry, {
+			allowCachedFallback: false,
+		})
+		const refreshedRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			forceRefresh: true,
+		})
+
+		resolveSecond({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		await refreshedRequest
+		resolveFirst(undefined)
+
+		await expect(oldRequest).resolves.toEqual({
+			ossSrc: "/virtual/image.png",
+			expiresAt: null,
+		})
+		expect(entry.lastFailureReason).toBeNull()
+		expect(onResourceDeleted).not.toHaveBeenCalled()
+	})
+
+	it("keeps the current resource when a superseded exchange rejects", async () => {
+		let rejectFirst!: (error: Error) => void
+		let resolveSecond!: (value: Record<string, unknown>) => void
+		const first = new Promise<Record<string, unknown>>((_, reject) => {
+			rejectFirst = reject
+		})
+		const second = new Promise<Record<string, unknown>>((resolve) => {
+			resolveSecond = resolve
+		})
+		const getFileInfo = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+		const { lifecycle, onResourceDeleted } = createLifecycle({ getFileInfo })
+		const entry = createEntry()
+
+		const oldRequest = lifecycle.ensureFreshOssInfo("./images/a.png", entry, {
+			allowCachedFallback: false,
+		})
+		const refreshedRequest = lifecycle.exchangeOssSrc("./images/a.png", entry, {
+			forceRefresh: true,
+		})
+
+		resolveSecond({
+			src: "https://oss.test/image-v2.png",
+			fileName: "image.png",
+			resource_version: "v2",
+		})
+		await refreshedRequest
+		rejectFirst(Object.assign(new Error("missing"), { code: "RESOURCE_NOT_FOUND" }))
+
+		await expect(oldRequest).resolves.toEqual({
+			ossSrc: "/virtual/image.png",
+			expiresAt: null,
+		})
+		expect(entry.lastFailureReason).toBeNull()
+		expect(onResourceDeleted).not.toHaveBeenCalled()
 	})
 
 	it("does not let an older background metadata probe overwrite a newer exchange", async () => {

@@ -39,6 +39,16 @@ interface CanvasResourceReferenceHost {
 	}
 }
 
+/**
+ * Resolver revision 变化时的增量失效范围。
+ *
+ * `changedResourceIdentities` 只允许承载 resolver 解析得到的 identity；
+ * 原始 referencePath 仍由各资源管理器保留并交给 resolver 处理。
+ */
+export interface CanvasResourceReferenceResolverChangeOptions {
+	changedResourceIdentities?: ReadonlySet<string>
+}
+
 export function isCanvasResourceRootPath(path: string): boolean {
 	return isCanvasRelativeResourcePathInternal(path)
 }

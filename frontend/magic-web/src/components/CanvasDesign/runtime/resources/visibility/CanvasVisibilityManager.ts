@@ -15,6 +15,7 @@ import { getViewportCanvasRect } from "../../shared/placement/elementUtils"
 import {
 	areCanvasHostResourceReferencesSame,
 	getCanvasHostResourceReferenceIdentity,
+	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import {
@@ -722,6 +723,30 @@ export class CanvasVisibilityManager {
 		)
 	}
 
+	public requestImmediateAudioLoad(
+		elementId: string,
+		options?: { reason?: string; priority?: ImageResourceLoadPriority },
+	): void {
+		const registered = this.registeredAudios.get(elementId)
+		if (!registered) return
+
+		const priority = options?.priority ?? "critical"
+		this.requestAudioLoad(
+			{
+				elementId,
+				path: registered.path,
+				priority,
+				tier: "preload",
+				visibilityState: "visible",
+				screenArea: 0,
+				screenLongEdge: 0,
+				distanceToViewportCenter: 0,
+			},
+			options?.reason ?? "immediate",
+			true,
+		)
+	}
+
 	public requestImmediateMediaLoadForElements(
 		elementIds: string[],
 		options?: {
@@ -813,8 +838,70 @@ export class CanvasVisibilityManager {
 		return { ...this.statsSnapshot }
 	}
 
-	public handleResourceReferenceResolverChanged(): void {
+	public handleResourceReferenceResolverChanged(
+		options?: CanvasResourceReferenceResolverChangeOptions,
+	): void {
 		if (this.destroyed) return
+		const changedResourceIdentities = options?.changedResourceIdentities
+		if (changedResourceIdentities) {
+			const affectedElementIds = new Set<string>()
+			const affectedResourceKeys = new Set<string>()
+			const collectAffected = <
+				T extends RegisteredImageElement | RegisteredVideoElement | RegisteredAudioElement,
+			>(
+				registered: Map<string, T>,
+				mediaType: "image" | "video" | "audio",
+			): void => {
+				registered.forEach((resource, elementId) => {
+					const identity = getCanvasHostResourceReferenceIdentity(
+						this.canvas,
+						resource.path,
+					)
+					if (!changedResourceIdentities.has(identity)) return
+					affectedElementIds.add(elementId)
+					affectedResourceKeys.add(`${mediaType}\0${identity}`)
+				})
+			}
+
+			collectAffected(this.registeredImages, "image")
+			collectAffected(this.registeredVideos, "video")
+			collectAffected(this.registeredAudios, "audio")
+
+			const controllers = this.getViewportResourceAbortControllers()
+			controllers.forEach((controller, key) => {
+				const separatorIndex = key.indexOf("\0")
+				const identity = separatorIndex >= 0 ? key.slice(separatorIndex + 1) : ""
+				if (!changedResourceIdentities.has(identity)) return
+				controller.abort()
+				controllers.delete(key)
+				affectedResourceKeys.add(key)
+			})
+
+			affectedElementIds.forEach((elementId) => {
+				this.lastVisibilityState.delete(elementId)
+				this.lastVideoVisibilityState.delete(elementId)
+				this.lastAudioVisibilityState.delete(elementId)
+				this.lastRequestedLoadState.delete(elementId)
+				this.lastRequestedVideoLoadState.delete(elementId)
+				this.lastRequestedAudioLoadState.delete(elementId)
+				this.imageRetentionHints.delete(elementId)
+				const fallbackPath = this.lowFallbackPreviewPathByElementId.get(elementId)
+				if (
+					fallbackPath &&
+					changedResourceIdentities.has(
+						getCanvasHostResourceReferenceIdentity(this.canvas, fallbackPath),
+					)
+				) {
+					this.lowFallbackPreviewPathByElementId.delete(elementId)
+				}
+			})
+
+			this.clearViewportResourceLoadRequestStates(affectedResourceKeys)
+			if (affectedResourceKeys.size > 0) {
+				this.scheduleRefresh("resource-reference-resolver-changed", true)
+			}
+			return
+		}
 
 		const controllers = this.getViewportResourceAbortControllers()
 		controllers.forEach((controller) => controller.abort())

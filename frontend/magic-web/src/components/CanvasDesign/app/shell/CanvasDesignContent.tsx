@@ -210,7 +210,9 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			permissions: permissions,
 		})
 		if (updateResult?.resourceReferenceResolverChanged) {
-			canvas?.handleResourceReferenceResolverChanged()
+			canvas?.handleResourceReferenceResolverChanged({
+				changedWorkspacePaths: updateResult.resourceReferenceChangedPaths,
+			})
 		}
 		canvas?.invalidateMagicModelListCaches()
 	}, [methods, permissions, canvas, t])
