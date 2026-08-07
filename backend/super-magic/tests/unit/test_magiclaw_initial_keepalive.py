@@ -31,6 +31,7 @@ from app.service.agent_event.channel_startup_listener_service import (
     ChannelStartupListenerService,
 )
 from app.core.keepalive_registry import KeepaliveRegistry
+from app.core.entity.message.client_message import InitClientMessage
 
 if _agent_event_package_was_stubbed:
     sys.modules.pop("app.service.agent_event", None)
@@ -163,9 +164,10 @@ async def test_unsuccessful_after_init_does_not_change_lifecycle(
 @pytest.mark.parametrize(
     ("config", "expected"),
     [
-        ({"agent": {"type": "magiclaw"}}, True),
-        ({"agent": {"type": "general"}}, False),
-        ({"agent": None}, False),
+        ({"agent_mode": "magiclaw"}, True),
+        ({"agent_mode": "general"}, False),
+        ({}, False),
+        ({"agent_mode": "general", "agent": {"type": "magiclaw"}}, False),
     ],
 )
 async def test_magiclaw_sandbox_identity_comes_from_init_message(
@@ -184,6 +186,20 @@ async def test_magiclaw_sandbox_identity_comes_from_init_message(
 
     assert await sandbox_env.is_magiclaw_sandbox() is expected
     read_init_message.assert_awaited_once_with(Path("/tmp/init_client_message.json"))
+
+
+def test_init_message_preserves_top_level_agent_mode(monkeypatch):
+    raw_init = {
+        "type": "init",
+        "agent_mode": "magiclaw",
+        "message_subscription_config": [{"method": "POST", "url": "https://example.test/init"}],
+        "metadata": {"project_id": "project-1"},
+    }
+
+    parsed = InitClientMessage.construct(**raw_init)
+
+    dumped = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
+    assert dumped["agent_mode"] == "magiclaw"
 
 
 def test_notify_connected_once_does_not_start_rolling_loop(monkeypatch):
