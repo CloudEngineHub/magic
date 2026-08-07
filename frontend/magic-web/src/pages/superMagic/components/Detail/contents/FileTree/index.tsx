@@ -18,7 +18,7 @@ import type { DetailFileTreeData, FileTreeNode } from "../../types"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import EmptyFiles from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
-import { isProjectInstructionsFile } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import { cx } from "antd-style"
 
 interface FileTreeProps {
@@ -115,7 +115,7 @@ function FileTreeItem({
 	const isExpanded = expandedNodes.has(node.relative_file_path)
 	const isDirectory = !!node.is_directory
 	const hasChildren = !!node.children && node.children.length > 0
-	const isProjectInstructions = isProjectInstructionsFile(node)
+	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(node)
 
 	// 计算显示的文件大小
 	const displaySize = useMemo(() => {
@@ -216,7 +216,7 @@ function FileTreeItem({
 									height={18}
 									data-testid="file-tree-image"
 								/>
-							) : isProjectInstructions ? (
+							) : projectInstructionsFileKind ? (
 								<TopicFileIcon
 									magicVariant="magic-file-agent"
 									size={isMobile ? 14 : 18}

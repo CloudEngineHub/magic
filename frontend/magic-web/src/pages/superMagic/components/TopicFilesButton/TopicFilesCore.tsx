@@ -107,7 +107,10 @@ import { DetailType } from "../Detail/types"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
-import { isMagicSystemFolder, isProjectInstructionsFile } from "./utils/magic-system-folder"
+import {
+	isMagicSystemFolder,
+	resolveProjectInstructionsFileKind,
+} from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
@@ -1784,7 +1787,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
-						) : isProjectInstructionsFile(item) ? (
+						) : resolveProjectInstructionsFileKind(item) ? (
 							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
 						) : item?.display_config?.type === "custom" ||
 						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (

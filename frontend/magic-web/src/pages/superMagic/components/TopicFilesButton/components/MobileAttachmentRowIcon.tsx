@@ -13,7 +13,10 @@ import { isEmpty } from "lodash-es"
 import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
 import { ProjectFileImageThumbnailIcon } from "./ProjectFileImageThumbnailIcon"
 import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
-import { isMagicSystemFolder, isProjectInstructionsFile } from "../utils/magic-system-folder"
+import {
+	isMagicSystemFolder,
+	resolveProjectInstructionsFileKind,
+} from "../utils/magic-system-folder"
 
 interface MobileAttachmentRowIconProps {
 	item: AttachmentItem
@@ -71,7 +74,7 @@ function resolveAttachmentMagicVariant(item: AttachmentItem): TopicFileMagicVari
 	if (isMagicSystemFolder(item)) {
 		return "magic-root"
 	}
-	if (isProjectInstructionsFile(item)) {
+	if (resolveProjectInstructionsFileKind(item) === "project") {
 		return "magic-file-agent"
 	}
 
