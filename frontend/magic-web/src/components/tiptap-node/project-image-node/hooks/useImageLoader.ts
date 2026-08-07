@@ -54,15 +54,17 @@ export function useImageLoader(options: UseImageLoaderOptions): UseImageLoaderRe
 		[retryConfig],
 	)
 
-	/** Resets a settled image load whenever its attachment resolution context changes. */
+	/** Keeps a successfully rendered image stable across attachment context refreshes. */
 	React.useEffect(() => {
 		return urlResolver.subscribe?.(() => {
+			if (loadedSrcRef.current === src) return
+
 			loadedSrcRef.current = null
 			setImageUrl(null)
 			setError(null)
 			setRetryTrigger((previous) => previous + 1)
 		})
-	}, [urlResolver])
+	}, [src, urlResolver])
 
 	React.useEffect(() => {
 		if (!shouldLoad || !src || isTempPath(src)) return

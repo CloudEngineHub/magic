@@ -78,4 +78,22 @@ describe("useImageLoader attachment readiness", () => {
 		})
 		expect(result.current.imageUrl).toBeNull()
 	})
+
+	it("keeps a loaded image stable when the attachment context refreshes", async () => {
+		const { resolver, markReady } = createResolver(true)
+		const { result } = renderHook(() =>
+			useImageLoader({
+				src: "./images/mock-stable.png",
+				shouldLoad: true,
+				urlResolver: resolver,
+				retryConfig,
+			}),
+		)
+
+		await waitFor(() => expect(result.current.imageUrl).not.toBeNull())
+		act(() => markReady())
+
+		expect(resolver).toHaveBeenCalledTimes(1)
+		expect(result.current.imageUrl).toBe("https://tos.invalid/./images/mock-stable.png")
+	})
 })
