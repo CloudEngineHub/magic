@@ -116,9 +116,9 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 					isImageElementV2(elementInstance.getData()) &&
 					activeVersion.status === "failed"
 				) {
-					await elementInstance.generateImageVersion(generateRequest)
+					await elementInstance.submitVersionGeneration(generateRequest)
 				} else {
-					await elementInstance.generateImage(generateRequest)
+					await elementInstance.submitGeneration(generateRequest)
 				}
 			} finally {
 				sendingRef.current = false

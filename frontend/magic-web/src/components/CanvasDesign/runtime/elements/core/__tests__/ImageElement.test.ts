@@ -9,6 +9,7 @@ import {
 } from "../../../../public/magic-types"
 import { RenderUtils } from "../../../shared/render/RenderUtils"
 import { ElementTypeEnum, type ImageElementV1, type ImageElementV2 } from "../../../document/types"
+import { isImageElementV2 } from "../../../document/imageVersion"
 import { GenerationRuntimeManager } from "../../../generation/GenerationRuntimeManager"
 import { GenerationAttemptCoordinator } from "../../../generation/GenerationAttemptCoordinator"
 import type { Canvas } from "../../../core/Canvas"
@@ -967,19 +968,16 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			data: ImageElementV2
 			isGenerating: boolean
-			versionActivationGuards: Map<string, string>
 			canvas: {
 				markerManager: { handleImageVersionChanged: typeof handleImageVersionChanged }
 			}
 		}
 		element.data = base
 		element.isGenerating = false
-		element.versionActivationGuards = new Map([["pending-version", "v1"]])
 		element.canvas = { markerManager: { handleImageVersionChanged } }
 
 		expect(element.update({ ...base, activeVersionId: "v2" })).toBe(true)
 		expect(handleImageVersionChanged).toHaveBeenCalledWith("image-1", "v1", "v2")
-		expect(element.versionActivationGuards.size).toBe(0)
 	})
 
 	it("exposes an image generation request while submission is pending", async () => {
@@ -1047,7 +1045,7 @@ describe("ImageElement mounted image node sync", () => {
 		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerender = vi.fn()
 
-		const resultPromise = element.generateImage({
+		const resultPromise = element.submitInitialGeneration({
 			model_id: "image-model",
 			prompt: "A product photo",
 		})
@@ -1080,7 +1078,7 @@ describe("ImageElement mounted image node sync", () => {
 		])
 	})
 
-	it("commits ordinary V2 generation state into the captured active version", async () => {
+	it("appends a successful V2 generation and activates the new version", async () => {
 		const generateImage = vi.fn().mockResolvedValue(undefined)
 		const generationRuntimeManager = new GenerationRuntimeManager()
 		const data: ImageElementV2 = {
@@ -1144,19 +1142,24 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerender = vi.fn()
 
 		await expect(
-			element.generateImage({ model_id: "image-model", prompt: "A product photo" }),
+			element.submitVersionGeneration({ model_id: "image-model", prompt: "A product photo" }),
 		).resolves.toBe(true)
 
 		const target = commitGenerationTargets.mock.calls[0]?.[0]?.[0]
-		expect(target).toMatchObject({ elementId: "image-1", versionId: "v2" })
-		expect(target?.persistedPatch).not.toHaveProperty("generateImageRequest")
+		expect(target).toMatchObject({ elementId: "image-1", versionId: expect.any(String) })
+		expect(target?.versionId).not.toBe("v2")
+		expect(target?.persistedPatch).toHaveProperty("versions")
 		expect(element.data).not.toHaveProperty("generateImageRequest")
-		expect(element.getVersionData("v2")?.generateImageRequest).toEqual(
+		if (!isImageElementV2(element.data)) throw new Error("Expected V2 image data")
+		expect(element.data.versions).toHaveLength(3)
+		expect(element.getVersionData(element.data.activeVersionId)?.generateImageRequest).toEqual(
 			expect.objectContaining({ image_id: expect.any(String), prompt: "A product photo" }),
 		)
+		expect(element.data.mainVersionId).toBe("v1")
+		expect(element.data.activeVersionId).toBe(target?.versionId)
 	})
 
-	it("keeps V1 data unchanged and exits submitting state when version submission fails", async () => {
+	it("persists a failed V2 version when a later submission fails", async () => {
 		const generateImage = vi.fn().mockRejectedValue(new Error("submit failed"))
 		const generationRuntimeManager = new GenerationRuntimeManager()
 		const initialData: ImageElementV1 = {
@@ -1168,11 +1171,10 @@ describe("ImageElement mounted image node sync", () => {
 			status: GenerationStatus.Completed,
 		}
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV1
+			data: ImageElementV1 | ImageElementV2
 			isGenerating: boolean
 			isErrorState: boolean
 			isRetryEditing: boolean
-			versionActivationGuards: Map<string, string>
 			canvas: Canvas
 			pollingManager: { start: ReturnType<typeof vi.fn> }
 			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
@@ -1182,7 +1184,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.isGenerating = false
 		element.isErrorState = false
 		element.isRetryEditing = false
-		element.versionActivationGuards = new Map()
 
 		const canvas = {
 			magicConfigManager: { config: { methods: { generateImage } } },
@@ -1190,7 +1191,14 @@ describe("ImageElement mounted image node sync", () => {
 			elementManager: {
 				getElementData: () => element.data,
 				getTemporaryElementMetadata: () => null,
-				commitGenerationTargets: vi.fn(),
+				commitGenerationTargets: vi.fn(
+					(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
+						element.data = {
+							...element.data,
+							...targets[0]?.persistedPatch,
+						} as ImageElementV2
+					},
+				),
 			},
 			eventEmitter: { emit: vi.fn() },
 		} as unknown as Canvas
@@ -1201,11 +1209,24 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
-			element.generateImageVersion({ model_id: "image-model", prompt: "new version" }),
+			element.submitVersionGeneration({ model_id: "image-model", prompt: "new version" }),
 		).resolves.toBe(false)
 
-		expect(element.data).toEqual(initialData)
-		expect(element.data).not.toHaveProperty("imageDslVersion")
+		expect(element.data).toMatchObject({
+			imageDslVersion: 2,
+			activeVersionId: expect.any(String),
+			mainVersionId: expect.any(String),
+		})
+		if (!isImageElementV2(element.data)) throw new Error("Expected V2 image data")
+		expect(element.data.versions).toHaveLength(2)
+		expect(element.data.versions[1]).toEqual(
+			expect.objectContaining({
+				status: GenerationStatus.Failed,
+				generateImageRequest: expect.objectContaining({ prompt: "new version" }),
+			}),
+		)
+		expect(element.data.activeVersionId).toBe(element.data.versions[1]?.id)
+		expect(element.data.mainVersionId).toBe(element.data.versions[0]?.id)
 		expect(element.isGenerating).toBe(false)
 		expect(generationRuntimeManager.getTargetState(element.data.id)).toBeNull()
 		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
@@ -1223,7 +1244,6 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 			isRetryEditing: boolean
-			versionActivationGuards: Map<string, string>
 			canvas: Canvas
 			pollingManager: { start: ReturnType<typeof vi.fn> }
 			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
@@ -1240,7 +1260,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.isGenerating = false
 		element.isErrorState = false
 		element.isRetryEditing = false
-		element.versionActivationGuards = new Map()
 		let elementExists = true
 
 		const canvas = {
@@ -1259,7 +1278,7 @@ describe("ImageElement mounted image node sync", () => {
 		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerenderWhenTransformIdle = vi.fn()
 
-		const resultPromise = element.generateImageVersion({
+		const resultPromise = element.submitVersionGeneration({
 			model_id: "image-model",
 			prompt: "new version",
 		})
@@ -1307,7 +1326,6 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 			isRetryEditing: boolean
-			versionActivationGuards: Map<string, string>
 			canvas: Canvas
 			pollingManager: { start: ReturnType<typeof vi.fn> }
 			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
@@ -1317,7 +1335,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.isGenerating = false
 		element.isErrorState = false
 		element.isRetryEditing = false
-		element.versionActivationGuards = new Map()
 		const canvas = {
 			magicConfigManager: { config: { methods: { generateImage } } },
 			generationRuntimeManager,
@@ -1335,7 +1352,7 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
-			element.generateImageVersion({ model_id: "image-model", prompt: "retry prompt" }),
+			element.submitVersionGeneration({ model_id: "image-model", prompt: "retry prompt" }),
 		).resolves.toBe(true)
 
 		expect(data.versions).toHaveLength(3)
@@ -1351,165 +1368,8 @@ describe("ImageElement mounted image node sync", () => {
 				generateImageRequest: expect.objectContaining({ prompt: "retry prompt" }),
 			}),
 		)
-		expect(data.activeVersionId).toBe("failed")
-	})
-
-	it("allows concurrent processing versions on one image element", async () => {
-		const first = createDeferred<void>()
-		const second = createDeferred<void>()
-		const generateImage = vi.fn((request: GenerateImageRequest) =>
-			request.prompt === "first" ? first.promise : second.promise,
-		)
-		const generationRuntimeManager = new GenerationRuntimeManager()
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			width: 100,
-			height: 100,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
-			],
-		}
-		const commitGenerationTargets = vi.fn(
-			(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
-				Object.assign(data, targets[0]?.persistedPatch)
-			},
-		)
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			versionActivationGuards: Map<string, unknown>
-			latestVersionSubmissionOrder: number
-			canvas: Canvas
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-		}
-		element.data = data
-		element.isGenerating = false
-		element.isErrorState = false
-		element.isRetryEditing = false
-		element.versionActivationGuards = new Map()
-		element.latestVersionSubmissionOrder = 0
-		const canvas = {
-			magicConfigManager: { config: { methods: { generateImage } } },
-			generationRuntimeManager,
-			elementManager: {
-				getElementData: () => data,
-				getTemporaryElementMetadata: () => null,
-				commitGenerationTargets,
-			},
-			eventEmitter: { emit: vi.fn() },
-		} as unknown as Canvas
-		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
-		element.canvas = canvas
-		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
-		element.rerenderWhenTransformIdle = vi.fn()
-
-		const firstPromise = element.generateImageVersion(
-			{ model_id: "image-model", prompt: "first" },
-			{ allowConcurrentProcessing: true, submissionOrder: 1 },
-		)
-		const secondPromise = element.generateImageVersion(
-			{ model_id: "image-model", prompt: "second" },
-			{ allowConcurrentProcessing: true, submissionOrder: 2 },
-		)
-		await Promise.resolve()
-
-		const currentTarget = generationRuntimeManager.getTargetState("image-1")
-		expect(
-			generationRuntimeManager.isCurrent(
-				currentTarget?.attemptId ?? "",
-				"image-1",
-				currentTarget?.versionId,
-			),
-		).toBe(true)
-
-		first.resolve()
-		second.resolve()
-		await expect(Promise.all([firstPromise, secondPromise])).resolves.toEqual([true, true])
-
-		expect(generateImage).toHaveBeenCalledTimes(2)
-		expect(data.versions).toHaveLength(3)
-		expect(
-			data.versions
-				.slice(1)
-				.every((version) => version.status === GenerationStatus.Processing),
-		).toBe(true)
-		expect(data.activeVersionId).toBe("v1")
-	})
-
-	it("does not arm auto-activation after active changes before submit confirmation", async () => {
-		const deferred = createDeferred()
-		const generateImage = vi.fn(() => deferred.promise)
-		const generationRuntimeManager = new GenerationRuntimeManager()
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			width: 100,
-			height: 100,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
-			],
-		}
-		const commitGenerationTargets = vi.fn(
-			(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
-				Object.assign(data, targets[0]?.persistedPatch)
-			},
-		)
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			versionActivationGuards: Map<string, string>
-			canvas: Canvas
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-		}
-		element.data = data
-		element.isGenerating = false
-		element.isErrorState = false
-		element.isRetryEditing = false
-		element.versionActivationGuards = new Map()
-		const canvas = {
-			magicConfigManager: { config: { methods: { generateImage } } },
-			generationRuntimeManager,
-			elementManager: {
-				getElementData: () => data,
-				getTemporaryElementMetadata: () => null,
-				commitGenerationTargets,
-			},
-			eventEmitter: { emit: vi.fn() },
-		} as unknown as Canvas
-		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
-		element.canvas = canvas
-		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
-		element.rerenderWhenTransformIdle = vi.fn()
-
-		const resultPromise = element.generateImageVersion({
-			model_id: "image-model",
-			prompt: "new version",
-		})
-		await Promise.resolve()
-		data.activeVersionId = "v2"
-		deferred.resolve()
-
-		await expect(resultPromise).resolves.toBe(true)
-		expect(data.activeVersionId).toBe("v2")
-		expect(element.versionActivationGuards.size).toBe(0)
+		expect(data.activeVersionId).toBe(data.versions[2]?.id)
+		expect(data.mainVersionId).toBe("v1")
 	})
 
 	it("exposes a video generation request while submission is pending", async () => {

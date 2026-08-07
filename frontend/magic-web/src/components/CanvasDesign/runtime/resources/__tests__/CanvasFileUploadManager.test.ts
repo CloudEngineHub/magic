@@ -122,6 +122,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 		const recordHistoryImmediate = vi.fn()
 		const primeCache = vi.fn()
 		const requestImmediateImageLoad = vi.fn()
+		const removeMarkersByImageVersion = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		const uploadResult: UploadFileResponse = {
 			path: "./images/new.png",
@@ -134,6 +135,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 				elementManager: { getElementInstance: vi.fn(() => image) },
 				historyManager: { disable, enable, recordHistoryImmediate },
 				imageResourceManager: { primeCache },
+				markerManager: { removeMarkersByImageVersion },
 				visibilityManager: { requestImmediateImageLoad },
 			},
 			uploadDirect: vi.fn(async () => [uploadResult]),
@@ -161,6 +163,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 		expect(disable).toHaveBeenCalledTimes(1)
 		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", null)
 		expect(requestImmediateImageLoad).toHaveBeenCalledWith("image-1", {
 			reason: "image-replaced",
 			priority: "critical",
@@ -169,6 +172,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 
 	it("replaces the active image version with an existing project path", () => {
 		const image = createImageInstance()
+		const removeMarkersByImageVersion = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
 			canvas: {
@@ -179,6 +183,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 					enable: vi.fn(),
 					recordHistoryImmediate: vi.fn(),
 				},
+				markerManager: { removeMarkersByImageVersion },
 				visibilityManager: { requestImmediateImageLoad: vi.fn() },
 			},
 		})
@@ -194,10 +199,12 @@ describe("CanvasFileUploadManager image replacement", () => {
 			expect.objectContaining({ src: "/images/project.webp", crop: undefined }),
 			{ silent: false },
 		)
+		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", null)
 	})
 
 	it("targets the V2 version that was active when replacement started", () => {
 		const image = createImageInstance(GenerationStatus.Completed, { v2: true })
+		const removeMarkersByImageVersion = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
 			canvas: {
@@ -208,6 +215,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 					enable: vi.fn(),
 					recordHistoryImmediate: vi.fn(),
 				},
+				markerManager: { removeMarkersByImageVersion },
 				visibilityManager: { requestImmediateImageLoad: vi.fn() },
 			},
 		})
@@ -225,6 +233,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 			{ silent: false },
 		)
 		expect(image.updateActiveVersionData).not.toHaveBeenCalled()
+		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", "version-1")
 	})
 
 	it("does not upload over an active processing image version", async () => {
@@ -403,11 +412,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(elementId).toEqual(expect.any(String))
 		expect(createTemporary).toHaveBeenCalledTimes(1)
+		expect(createTemporary.mock.calls[0]?.[1]).not.toHaveProperty("overwrite")
 		expect(uploadFiles).not.toHaveBeenCalled()
 
 		await manager.unlock()
 
 		expect(uploadFiles).toHaveBeenCalledTimes(1)
+		expect(uploadFiles.mock.calls[0]?.[0]?.[0]?.overwrite).toBe(true)
 		expect(convertToPermament).toHaveBeenCalledWith(
 			elementId,
 			{ src: "./audios/voice.mp3" },

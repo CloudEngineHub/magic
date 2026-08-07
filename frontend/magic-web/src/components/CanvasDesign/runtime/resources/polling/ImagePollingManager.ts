@@ -44,9 +44,12 @@ export class ImagePollingManager {
 	private isPolling = false
 	private pollingTimer?: ReturnType<typeof setTimeout>
 	private pollingRunId = 0
+	private pollingRequestSequence = 0
+	private inFlightPollingKeys = new Map<string, number>()
+	private nextPollAtByKey = new Map<string, number>()
+	private observedPollingKeyByIdentity = new Map<string, string>()
 	private pausedPollingKeys = new Set<string>()
 	private unsubscribeElementUpdated?: () => void
-	private hasElementUpdatedSubscription = false
 
 	constructor(config: PollingManagerConfig) {
 		this.config = config
@@ -57,38 +60,23 @@ export class ImagePollingManager {
 			) => () => void
 		}
 		if (typeof eventEmitter.on === "function") {
-			this.hasElementUpdatedSubscription = true
 			this.unsubscribeElementUpdated = eventEmitter.on("element:updated", (event) => {
 				if (event.data?.elementId !== this.config.elementId) return
-				this.pausedPollingKeys.clear()
-				if (this.isPolling) {
-					this.stop()
-					this.start()
-				} else {
-					this.syncWithElementData()
-				}
+				this.syncWithElementData()
 			})
 		}
 	}
 
 	public start(): void {
-		if (this.getPollingTargets().length === 0) {
-			this.stop()
-			return
-		}
-		if (this.isPolling) return
-		this.isPolling = true
-		const pollingRunId = ++this.pollingRunId
-		void this.pollAll(pollingRunId)
+		this.syncWithElementData()
 	}
 
 	public stop(): void {
 		this.isPolling = false
 		this.pollingRunId += 1
-		if (this.pollingTimer) {
-			clearTimeout(this.pollingTimer)
-			this.pollingTimer = undefined
-		}
+		this.clearPollingTimer()
+		this.inFlightPollingKeys.clear()
+		this.nextPollAtByKey.clear()
 	}
 
 	public isActive(): boolean {
@@ -96,48 +84,99 @@ export class ImagePollingManager {
 	}
 
 	public syncWithElementData(): void {
-		if (this.getPollingTargets().length === 0) {
-			if (this.isPolling) this.stop()
-			return
-		}
-		if (!this.isPolling) this.start()
-	}
-
-	private async pollAll(pollingRunId: number): Promise<void> {
-		if (!this.isCurrentPollingRunId(pollingRunId)) return
+		this.reconcileObservedTargets()
 		const targets = this.getPollingTargets()
 		if (targets.length === 0) {
-			this.stopIfCurrentRun(pollingRunId)
+			this.clearPollingTimer()
+			if (this.inFlightPollingKeys.size === 0 && this.isPolling) this.stop()
 			return
 		}
-
-		await Promise.all(
-			targets.map(async (target) => {
-				const imageIdSource = this.getImageIdSource(target)
-				if (imageIdSource === "agent") {
-					await this.recoverAgentGeneratedFile(target, pollingRunId)
-					return
-				}
-				if (imageIdSource === "unknown") {
-					this.pausedPollingKeys.add(this.getTargetIdentity(target))
-					return
-				}
-				await this.pollGenerationResult(target, pollingRunId)
-			}),
-		)
-
-		if (!this.isCurrentPollingRunId(pollingRunId)) return
-		if (this.getPollingTargets().length === 0) {
-			this.stopIfCurrentRun(pollingRunId)
-			return
+		if (!this.isPolling) {
+			this.isPolling = true
+			this.pollingRunId += 1
 		}
-		this.pollingTimer = setTimeout(() => {
-			this.pollingTimer = undefined
-			void this.pollAll(pollingRunId)
-		}, IMAGE_CONFIG.POLLING_INTERVAL)
+		this.schedulePolling(this.pollingRunId)
 	}
 
-	private getPollingTargets(): PollingTarget[] {
+	/**
+	 * 只启动当前尚未 in-flight 且已到期的目标。元素更新可以随时调用该方法：
+	 * 相同目标会被去重，新追加的版本则无需等待其他版本完成即可开始轮询。
+	 */
+	private schedulePolling(pollingRunId: number): void {
+		if (!this.isCurrentPollingRunId(pollingRunId)) return
+		this.clearPollingTimer()
+		const targets = this.getPollingTargets()
+		if (targets.length === 0) {
+			if (this.inFlightPollingKeys.size === 0) this.stopIfCurrentRun(pollingRunId)
+			return
+		}
+
+		const now = Date.now()
+		let nextPollAt = Number.POSITIVE_INFINITY
+		for (const target of targets) {
+			const pollingKey = this.getPollingKey(target)
+			if (this.inFlightPollingKeys.has(pollingKey)) continue
+
+			const targetNextPollAt = this.nextPollAtByKey.get(pollingKey)
+			if (targetNextPollAt === undefined || targetNextPollAt <= now) {
+				this.startPollingTarget(target, pollingRunId, pollingKey)
+				continue
+			}
+			nextPollAt = Math.min(nextPollAt, targetNextPollAt)
+		}
+
+		if (Number.isFinite(nextPollAt)) {
+			this.pollingTimer = setTimeout(
+				() => {
+					this.pollingTimer = undefined
+					this.schedulePolling(pollingRunId)
+				},
+				Math.max(0, nextPollAt - Date.now()),
+			)
+		}
+	}
+
+	private startPollingTarget(
+		target: PollingTarget,
+		pollingRunId: number,
+		pollingKey: string,
+	): void {
+		const requestSequence = ++this.pollingRequestSequence
+		this.inFlightPollingKeys.set(pollingKey, requestSequence)
+		this.nextPollAtByKey.delete(pollingKey)
+
+		void this.pollTarget(target, pollingRunId).finally(() => {
+			if (!this.isCurrentPollingRunId(pollingRunId)) return
+			if (this.inFlightPollingKeys.get(pollingKey) !== requestSequence) return
+
+			this.inFlightPollingKeys.delete(pollingKey)
+			this.reconcileObservedTargets()
+			const stillCurrent = this.getPollingTargets().some(
+				(candidate) => this.getPollingKey(candidate) === pollingKey,
+			)
+			if (stillCurrent) {
+				this.nextPollAtByKey.set(pollingKey, Date.now() + IMAGE_CONFIG.POLLING_INTERVAL)
+			} else {
+				this.nextPollAtByKey.delete(pollingKey)
+			}
+			this.schedulePolling(pollingRunId)
+		})
+	}
+
+	private async pollTarget(target: PollingTarget, pollingRunId: number): Promise<void> {
+		const imageIdSource = this.getImageIdSource(target)
+		if (imageIdSource === "agent") {
+			await this.recoverAgentGeneratedFile(target, pollingRunId)
+			return
+		}
+		if (imageIdSource === "unknown") {
+			this.pausedPollingKeys.add(this.getTargetIdentity(target))
+			return
+		}
+		await this.pollGenerationResult(target, pollingRunId)
+	}
+
+	private getCandidateTargets(): PollingTarget[] {
 		const element = this.config.getElementData()
 		if (isImageElementV2(element)) {
 			const targets: PollingTarget[] = []
@@ -145,9 +184,7 @@ export class ImagePollingManager {
 				const imageId = this.getVersionPollingImageId(version)
 				if (!imageId || version.src) continue
 				if (version.status && !shouldContinueGenerationPolling(version.status)) continue
-				const target = { versionId: version.id, version, imageId }
-				if (!this.pausedPollingKeys.has(this.getTargetIdentity(target)))
-					targets.push(target)
+				targets.push({ versionId: version.id, version, imageId })
 			}
 			return targets
 		}
@@ -164,8 +201,39 @@ export class ImagePollingManager {
 		const imageId = this.getVersionPollingImageId(version)
 		if (!imageId || version.src) return []
 		if (version.status && !shouldContinueGenerationPolling(version.status)) return []
-		const target = { version, imageId }
-		return this.pausedPollingKeys.has(this.getTargetIdentity(target)) ? [] : [target]
+		return [{ version, imageId }]
+	}
+
+	private getPollingTargets(): PollingTarget[] {
+		return this.getCandidateTargets().filter(
+			(target) => !this.pausedPollingKeys.has(this.getTargetIdentity(target)),
+		)
+	}
+
+	/**
+	 * paused 状态只属于具体的 versionId + imageId；普通几何更新不会解除暂停，
+	 * 任务 ID 或来源真正变化时，会通过 observed key 变化解除旧暂停并重新调度。
+	 */
+	private reconcileObservedTargets(): void {
+		const nextPollingKeyByIdentity = new Map<string, string>()
+		for (const target of this.getCandidateTargets()) {
+			nextPollingKeyByIdentity.set(this.getTargetIdentity(target), this.getPollingKey(target))
+		}
+
+		for (const identity of this.pausedPollingKeys) {
+			if (
+				this.observedPollingKeyByIdentity.get(identity) !==
+				nextPollingKeyByIdentity.get(identity)
+			) {
+				this.pausedPollingKeys.delete(identity)
+			}
+		}
+
+		const nextPollingKeys = new Set(nextPollingKeyByIdentity.values())
+		for (const pollingKey of this.nextPollAtByKey.keys()) {
+			if (!nextPollingKeys.has(pollingKey)) this.nextPollAtByKey.delete(pollingKey)
+		}
+		this.observedPollingKeyByIdentity = nextPollingKeyByIdentity
 	}
 
 	private getVersionPollingImageId(version: ImageElementVersion): string | undefined {
@@ -210,14 +278,15 @@ export class ImagePollingManager {
 		if (this.isCurrentPollingRunId(pollingRunId)) this.stop()
 	}
 
-	private syncIfCurrentRun(pollingRunId: number): void {
-		if (!this.isCurrentPollingRunId(pollingRunId)) return
-		if (this.hasElementUpdatedSubscription) {
-			this.stop()
-			this.start()
-			return
-		}
-		this.stop()
+	private clearPollingTimer(): void {
+		if (this.pollingTimer === undefined) return
+		clearTimeout(this.pollingTimer)
+		this.pollingTimer = undefined
+	}
+
+	private hasPatchChanges(current: object, patch: object): boolean {
+		const currentRecord = current as Record<string, unknown>
+		return Object.entries(patch).some(([key, value]) => currentRecord[key] !== value)
 	}
 
 	private getImageIdSource(target: PollingTarget): "agent" | "user" | "inline" | "unknown" {
@@ -269,7 +338,7 @@ export class ImagePollingManager {
 			const params: GetImageGenerationResultParams = { image_id: target.imageId }
 			const result = await getImageGenerationResult(params)
 			if (!this.isCurrentPollingRun(pollingRunId, target)) {
-				this.syncIfCurrentRun(pollingRunId)
+				this.syncWithElementData()
 				return
 			}
 
@@ -294,25 +363,31 @@ export class ImagePollingManager {
 			}
 
 			const currentElement = this.config.getElementData()
+			let didUpdateElement = false
 			if (isImageElementV2(currentElement) && target.versionId) {
-				const nextElement = updateImageVersion(
-					currentElement,
-					target.versionId,
-					versionPatch,
-				)
-				if (!isImageElementV2(nextElement)) return
+				const currentVersion = getImageVersionById(currentElement, target.versionId)
+				if (!currentVersion) return
 				const shouldActivate =
 					result.status === GenerationStatus.Completed &&
 					Boolean(storagePath) &&
 					this.config.shouldAutoActivateVersion?.(target.versionId)
-				this.config.canvas.elementManager.update(
-					this.config.elementId,
-					{
-						versions: nextElement.versions,
-						...(shouldActivate ? { activeVersionId: target.versionId } : {}),
-					},
-					{ silent: false },
-				)
+				if (this.hasPatchChanges(currentVersion, versionPatch) || shouldActivate) {
+					const nextElement = updateImageVersion(
+						currentElement,
+						target.versionId,
+						versionPatch,
+					)
+					if (!isImageElementV2(nextElement)) return
+					this.config.canvas.elementManager.update(
+						this.config.elementId,
+						{
+							versions: nextElement.versions,
+							...(shouldActivate ? { activeVersionId: target.versionId } : {}),
+						},
+						{ silent: false },
+					)
+					didUpdateElement = true
+				}
 			} else {
 				const updateData = {
 					...versionPatch,
@@ -320,29 +395,35 @@ export class ImagePollingManager {
 						? { name: extractSmartNameFromFileName(result.file_name) }
 						: {}),
 				}
-				this.config.canvas.elementManager.update(this.config.elementId, updateData, {
-					silent: false,
-				})
+				if (this.hasPatchChanges(currentElement, updateData)) {
+					this.config.canvas.elementManager.update(this.config.elementId, updateData, {
+						silent: false,
+					})
+					didUpdateElement = true
+				}
 			}
 
-			this.config.canvas.eventEmitter.emit({
-				type: "element:image:resultUpdated",
-				data: { elementId: this.config.elementId },
-			})
+			if (didUpdateElement) {
+				this.config.canvas.eventEmitter.emit({
+					type: "element:image:resultUpdated",
+					data: { elementId: this.config.elementId },
+				})
+			}
 
 			if (!shouldContinueGenerationPolling(versionPatch.status ?? result.status)) {
 				if (target.versionId) this.config.onVersionSettled?.(target.versionId)
 			}
 		} catch (error) {
 			if (!this.isCurrentPollingRun(pollingRunId, target)) {
-				this.syncIfCurrentRun(pollingRunId)
+				this.syncWithElementData()
 				return
 			}
 			if (isGenerationTaskNotFoundError(error, target.imageId)) {
 				this.recoverMissingTask(target, pollingRunId)
 				return
 			}
-			this.stopIfCurrentRun(pollingRunId)
+			// 单个版本查询失败不能终止同一图片元素的其他版本轮询。
+			this.pausedPollingKeys.add(this.getTargetIdentity(target))
 			this.config.onStatusUpdate?.(target.versionId)
 		}
 	}
@@ -364,13 +445,13 @@ export class ImagePollingManager {
 		const getFileInfo = this.config.canvas.magicConfigManager.config?.methods?.getFileInfo
 		const resolveResourceReference = getCanvasHostResourceReferenceResolver(this.config.canvas)
 		if (!getFileInfo || !resolveResourceReference || target.versionId) {
-			this.stopIfCurrentRun(pollingRunId)
+			this.pausedPollingKeys.add(this.getTargetIdentity(target))
 			return
 		}
 
 		for (const extension of AGENT_IMAGE_RECOVERY_EXTENSIONS) {
 			if (!this.canApplyAgentRecovery(pollingRunId, target)) {
-				this.syncIfCurrentRun(pollingRunId)
+				this.syncWithElementData()
 				return
 			}
 			const fileName = `${target.imageId}.${extension}`

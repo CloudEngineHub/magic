@@ -21,7 +21,7 @@ export interface GenerationAttemptFailureResult {
 export class GenerationAttemptCoordinator {
 	constructor(private readonly canvas: Canvas) {}
 
-	/** 后端确认成功后，提交正式字段并结束 Runtime attempt。 */
+	/** 提交结果收口后，提交正式字段并结束 Runtime attempt。 */
 	public confirmAttempt(attemptId: string, targets: CommitGenerationTarget[]): boolean {
 		const attempt = this.canvas.generationRuntimeManager.getAttempt(attemptId)
 		if (!attempt) return false

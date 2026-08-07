@@ -941,7 +941,7 @@ export class CanvasFileUploadManager {
 		let updated = false
 		historyManager.disable()
 		try {
-			// 替换属于当前查看/编辑版本；保留版本指针和其他版本，只重置新资源不再适用的裁剪与错误态。
+			// 替换属于当前查看/编辑版本；保留版本指针、其他版本和生成配置，只重置新资源不再适用的裁剪与错误态。
 			const patch = {
 				src: nextPath,
 				status: GenerationStatus.Completed,
@@ -956,6 +956,8 @@ export class CanvasFileUploadManager {
 		}
 		if (!updated) return false
 
+		// Marker 坐标绑定旧图片内容；仅在 src 成功写入后清理目标版本，失败时保持原状。
+		this.canvas.markerManager.removeMarkersByImageVersion(elementId, target.versionId)
 		historyManager.recordHistoryImmediate()
 		if (this.isImageReplacementTargetActive(target.element, target.versionId)) {
 			this.canvas.visibilityManager.requestImmediateImageLoad(elementId, {

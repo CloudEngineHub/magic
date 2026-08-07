@@ -5,10 +5,11 @@ import { ImageElement as ImageElementClass } from "../../../../../runtime/elemen
 import { createAndSubmitImageGeneration } from "../createAndSubmitImageGeneration"
 
 function createImageInstance(
-	generateImage: (request: unknown) => Promise<boolean>,
+	submitInitialGeneration: (request: unknown) => Promise<boolean>,
 ): ImageElementClass {
 	const instance = Object.create(ImageElementClass.prototype) as ImageElementClass
-	instance.generateImage = generateImage as ImageElementClass["generateImage"]
+	instance.submitInitialGeneration =
+		submitInitialGeneration as ImageElementClass["submitInitialGeneration"]
 	instance.saveTempGenerateImageRequest = vi.fn()
 	return instance
 }

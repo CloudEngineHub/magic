@@ -41,7 +41,7 @@ export async function createAndSubmitImageGeneration(
 
 	let submitted: boolean
 	try {
-		submitted = await elementInstance.generateImage(requestToSubmit)
+		submitted = await elementInstance.submitInitialGeneration(requestToSubmit)
 	} catch {
 		if (!canvas.elementManager.hasElement(elementId)) {
 			return false
@@ -64,7 +64,7 @@ export async function createAndSubmitImageGeneration(
 		if (canvas.generationRuntimeManager.getTargetState(elementId)) {
 			return false
 		}
-		// generateImage 已按 attempt 的 promote-empty 策略完成收尾；这里只处理建立 attempt 前的兜底。
+		// submitInitialGeneration 已按 attempt 的 promote-empty 策略完成收尾；这里只处理建立 attempt 前的兜底。
 		canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
 			elementId,
 			"promote-empty",
@@ -73,6 +73,6 @@ export async function createAndSubmitImageGeneration(
 		return false
 	}
 
-	// generateImage 已在后端确认后原子写入任务并转正。
+	// submitInitialGeneration 已在后端确认后原子写入任务并转正。
 	return true
 }

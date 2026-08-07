@@ -412,10 +412,15 @@ export class MarkerManager {
 		this.renderAllMarkers()
 	}
 
-	public removeMarkersByImageVersion(elementId: string, versionId: string): void {
+	/** V1 使用 null 表示其唯一的、没有 versionId 的图片版本。 */
+	public removeMarkersByImageVersion(elementId: string, versionId: string | null): void {
 		const hasRemoved = this.removeMarkerDataList(
 			this.markers.filter(
-				(marker) => marker.elementId === elementId && marker.versionId === versionId,
+				(marker) =>
+					marker.elementId === elementId &&
+					(versionId === null
+						? marker.versionId === undefined
+						: marker.versionId === versionId),
 			),
 		)
 		if (hasRemoved) this.renderAllMarkers()

@@ -30,11 +30,18 @@ interface BatchElementUpdate {
 	resourcePath?: string
 }
 
+interface BuildImageVersionUpdateOptions {
+	versionId?: string
+	extra?: Partial<LayerElement>
+}
+
 export interface ImageBatchPollingManagerConfig {
 	canvas: Canvas
 	imageId: string
 	elementIds: string[]
 	outputIndexes?: number[]
+	/** V2 版本目标；V1 元素对应项保持 undefined 以兼容旧调用方。 */
+	versionIds?: Array<string | undefined>
 	registry: ImageBatchPollingRegistry
 }
 
@@ -43,7 +50,9 @@ export class ImageBatchPollingManager {
 	private readonly imageId: string
 	private elementIds: string[]
 	private elementOutputIndexes: number[]
+	private elementVersionIds: Array<string | undefined>
 	private outputIndexToElementId = new Map<number, string>()
+	private outputIndexToVersionId = new Map<number, string | undefined>()
 	private readonly registry: ImageBatchPollingRegistry
 	private readonly aliveElementIds: Set<string>
 	private readonly syncedIndexes = new Set<number>()
@@ -59,8 +68,9 @@ export class ImageBatchPollingManager {
 		this.registry = config.registry
 		this.elementIds = []
 		this.elementOutputIndexes = []
+		this.elementVersionIds = []
 		this.aliveElementIds = new Set()
-		this.syncElementIds(config.elementIds, config.outputIndexes)
+		this.syncElementIds(config.elementIds, config.outputIndexes, config.versionIds)
 	}
 
 	/**
@@ -103,11 +113,40 @@ export class ImageBatchPollingManager {
 	}
 
 	private deleteMissingTaskElements(): void {
-		const ownedElementIds = this.elementIds.filter((elementId, index) =>
-			this.shouldSyncElement(elementId, this.elementOutputIndexes[index]),
-		)
-		if (ownedElementIds.length > 0) {
-			this.canvas.elementManager.batchDelete(ownedElementIds)
+		const ownedElementIds = new Set<string>()
+		this.elementIds.forEach((elementId, index) => {
+			const outputIndex = this.elementOutputIndexes[index]
+			const versionId = this.elementVersionIds[index]
+			if (!this.shouldSyncElement(elementId, outputIndex, versionId)) return
+
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (element?.type !== ElementTypeEnum.Image) return
+			if (isImageElementV2(element)) {
+				// A V2 output may already contain an older completed image; fail only the
+				// missing batch version instead of deleting the stable output element.
+				const next = updateImageVersion(element, versionId ?? element.activeVersionId, {
+					status: "failed",
+					errorMessage: undefined,
+					imageGenerationTaskMeta: undefined,
+				})
+				if (isImageElementV2(next)) {
+					this.canvas.elementManager.update(
+						elementId,
+						{ versions: next.versions },
+						{ silent: false },
+					)
+					this.canvas.eventEmitter.emit({
+						type: "element:image:generate-submit-failed",
+						data: { elementId },
+					})
+				}
+				return
+			}
+
+			ownedElementIds.add(elementId)
+		})
+		if (ownedElementIds.size > 0) {
+			this.canvas.elementManager.batchDelete([...ownedElementIds])
 		}
 	}
 
@@ -129,10 +168,16 @@ export class ImageBatchPollingManager {
 		return this.imageId
 	}
 
-	public syncElementIds(elementIds: string[], outputIndexes?: number[]): void {
+	public syncElementIds(
+		elementIds: string[],
+		outputIndexes?: number[],
+		versionIds?: Array<string | undefined>,
+	): void {
 		this.elementIds = elementIds
 		this.elementOutputIndexes = outputIndexes ?? elementIds.map((_, index) => index + 1)
+		this.elementVersionIds = versionIds ?? elementIds.map(() => undefined)
 		this.outputIndexToElementId = new Map<number, string>()
+		this.outputIndexToVersionId = new Map<number, string | undefined>()
 		this.aliveElementIds.clear()
 		elementIds.forEach((elementId, index) => {
 			if (!elementId) return
@@ -140,6 +185,7 @@ export class ImageBatchPollingManager {
 			if (!Number.isFinite(outputIndex) || outputIndex < 1) return
 			this.aliveElementIds.add(elementId)
 			this.outputIndexToElementId.set(outputIndex, elementId)
+			this.outputIndexToVersionId.set(outputIndex, this.elementVersionIds[index])
 			this.syncedIndexes.delete(outputIndex)
 		})
 	}
@@ -179,10 +225,11 @@ export class ImageBatchPollingManager {
 
 			const elementId = this.outputIndexToElementId.get(outputIndex)
 			if (!elementId) continue
-			if (!this.shouldSyncElement(elementId, outputIndex)) continue
+			const versionId = this.outputIndexToVersionId.get(outputIndex)
+			if (!this.shouldSyncElement(elementId, outputIndex, versionId)) continue
 			const element = this.canvas.elementManager.getElementData(elementId)
 			if (element?.type !== ElementTypeEnum.Image) continue
-			const updateData = this.buildCompletedElementUpdate(element, result, image)
+			const updateData = this.buildCompletedElementUpdate(element, result, image, versionId)
 			// 更新元素数据
 			this.canvas.elementManager.update(elementId, updateData.patch, { silent: false })
 			if (updateData.resourcePath && image.file_url) {
@@ -203,17 +250,22 @@ export class ImageBatchPollingManager {
 		if (result.status === "failed") {
 			this.elementIds.forEach((elementId, index) => {
 				const outputIndex = this.elementOutputIndexes[index]
+				const versionId = this.elementVersionIds[index]
 				if (this.syncedIndexes.has(outputIndex)) return
-				if (!this.shouldSyncElement(elementId, outputIndex)) return
+				if (!this.shouldSyncElement(elementId, outputIndex, versionId)) return
 				const element = this.canvas.elementManager.getElementData(elementId)
 				if (element?.type !== ElementTypeEnum.Image) return
 				this.canvas.elementManager.update(
 					elementId,
-					this.buildImageVersionUpdate(element, {
-						status: "failed",
-						errorMessage: result.error_message ?? undefined,
-						imageGenerationTaskMeta: undefined,
-					}),
+					this.buildImageVersionUpdate(
+						element,
+						{
+							status: "failed",
+							errorMessage: result.error_message ?? undefined,
+							imageGenerationTaskMeta: undefined,
+						},
+						{ versionId },
+					),
 					{ silent: false },
 				)
 				this.canvas.eventEmitter.emit({
@@ -232,16 +284,21 @@ export class ImageBatchPollingManager {
 			)
 			this.elementIds.forEach((elementId, index) => {
 				const outputIndex = this.elementOutputIndexes[index]
+				const versionId = this.elementVersionIds[index]
 				if (this.syncedIndexes.has(outputIndex)) return
-				if (!this.shouldSyncElement(elementId, outputIndex)) return
+				if (!this.shouldSyncElement(elementId, outputIndex, versionId)) return
 				const element = this.canvas.elementManager.getElementData(elementId)
 				if (element?.type !== ElementTypeEnum.Image) return
 				this.canvas.elementManager.update(
 					elementId,
-					this.buildImageVersionUpdate(element, {
-						...missingResourcePatch,
-						imageGenerationTaskMeta: undefined,
-					}),
+					this.buildImageVersionUpdate(
+						element,
+						{
+							...missingResourcePatch,
+							imageGenerationTaskMeta: undefined,
+						},
+						{ versionId },
+					),
 					{ silent: false },
 				)
 			})
@@ -255,6 +312,7 @@ export class ImageBatchPollingManager {
 		element: ImageElementData,
 		result: ImageGenerationResultsResponse,
 		image: GeneratedImageResultItem,
+		versionId?: string,
 	): BatchElementUpdate {
 		const storagePath =
 			result.file_dir && image.file_name
@@ -266,10 +324,14 @@ export class ImageBatchPollingManager {
 				: undefined
 		if (!storagePath || !image.file_name) {
 			return {
-				patch: this.buildImageVersionUpdate(element, {
-					...getGenerationResultStatusPatch("completed", result.error_message, false),
-					imageGenerationTaskMeta: undefined,
-				}),
+				patch: this.buildImageVersionUpdate(
+					element,
+					{
+						...getGenerationResultStatusPatch("completed", result.error_message, false),
+						imageGenerationTaskMeta: undefined,
+					},
+					{ versionId },
+				),
 			}
 		}
 
@@ -283,7 +345,10 @@ export class ImageBatchPollingManager {
 					imageGenerationTaskMeta: undefined,
 					src: storagePath,
 				},
-				{ name: extractSmartNameFromFileName(image.file_name) },
+				{
+					versionId,
+					extra: { name: extractSmartNameFromFileName(image.file_name) },
+				},
 			),
 			resourcePath: storagePath,
 		}
@@ -292,10 +357,15 @@ export class ImageBatchPollingManager {
 	private buildImageVersionUpdate(
 		element: ImageElementData,
 		patch: Partial<ImageElementVersion>,
-		extra?: Partial<LayerElement>,
+		options?: BuildImageVersionUpdateOptions,
 	): Partial<LayerElement> {
+		const extra = options?.extra
 		if (!isImageElementV2(element)) return { ...patch, ...extra }
-		const next = updateImageVersion(element, element.activeVersionId, patch)
+		const next = updateImageVersion(
+			element,
+			options?.versionId ?? element.activeVersionId,
+			patch,
+		)
 		if (!isImageElementV2(next)) return extra ?? {}
 		return { ...extra, versions: next.versions }
 	}
@@ -329,12 +399,16 @@ export class ImageBatchPollingManager {
 		})
 	}
 
-	private shouldSyncElement(elementId: string, outputIndex: number): boolean {
+	private shouldSyncElement(elementId: string, outputIndex: number, versionId?: string): boolean {
 		if (!this.aliveElementIds.has(elementId)) return false
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (elementData?.type !== ElementTypeEnum.Image) return false
 
-		const taskMeta = getImageGenerationTaskMeta(elementData)
+		const taskMeta =
+			versionId && isImageElementV2(elementData)
+				? elementData.versions.find((version) => version.id === versionId)
+						?.imageGenerationTaskMeta
+				: getImageGenerationTaskMeta(elementData)
 		return (
 			isBatchImageGenerationTaskMeta(taskMeta) &&
 			taskMeta.image_id === this.imageId &&

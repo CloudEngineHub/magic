@@ -91,6 +91,19 @@ describe("MarkerManager image versions", () => {
 		expect(emit).toHaveBeenCalledWith({ type: "marker:deleted", data: { id: "old-2" } })
 	})
 
+	it("removes versionless markers for a V1 image source replacement", () => {
+		const { manager, internals, emit } = createManager("v2")
+		internals.markers = [createMarker("v1-marker"), createMarker("v2-marker", "v2")]
+
+		manager.removeMarkersByImageVersion("image-1", null)
+
+		expect(manager.exportMarkers().map((marker) => marker.id)).toEqual(["v2-marker"])
+		expect(emit).toHaveBeenCalledWith({
+			type: "marker:deleted",
+			data: { id: "v1-marker" },
+		})
+	})
+
 	it("attaches loaded versionless markers to active and hides inactive versions", () => {
 		const { manager, internals } = createManager("v2")
 		manager.setMarkers([createMarker("legacy"), createMarker("inactive", "v1")])

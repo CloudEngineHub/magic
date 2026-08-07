@@ -78,11 +78,9 @@ function createHarness(options?: {
 			getData: () => ImageElementData
 			hasGenerationHistory: () => boolean
 			getLatestVersionData: () => any
-			generateImage: (request: Record<string, unknown>) => Promise<boolean>
-			generateImageVersion: (
-				request: Record<string, unknown>,
-				options?: Record<string, unknown>,
-			) => Promise<boolean>
+			submitInitialGeneration: (request: Record<string, unknown>) => Promise<boolean>
+			submitVersionGeneration: (request: Record<string, unknown>) => Promise<boolean>
+			submitGeneration: (request: Record<string, unknown>) => Promise<boolean>
 		}
 		instance.getData = () => elements.get(data.id) as ImageElementData
 		instance.hasGenerationHistory = vi.fn(() => {
@@ -93,7 +91,7 @@ function createHarness(options?: {
 			const current = elements.get(data.id) as ImageElementData
 			return current.imageDslVersion === 2 ? (current.versions.at(-1) ?? current) : current
 		})
-		instance.generateImage = vi.fn(async (request) => {
+		instance.submitInitialGeneration = vi.fn(async (request) => {
 			const submissionIndex = initialSubmissionCount++
 			if (options?.failInitialSubmissionIndex === submissionIndex) {
 				throw new Error("submit failed")
@@ -105,10 +103,15 @@ function createHarness(options?: {
 			})
 			return true
 		})
-		instance.generateImageVersion = vi.fn(async (request) => {
+		instance.submitVersionGeneration = vi.fn(async (request) => {
 			submissions.push({ elementId: data.id, kind: "version", request })
 			return true
 		})
+		instance.submitGeneration = vi.fn(async (request) =>
+			instance.hasGenerationHistory()
+				? instance.submitVersionGeneration(request)
+				: instance.submitInitialGeneration(request),
+		)
 		instances.set(data.id, instance)
 	}
 

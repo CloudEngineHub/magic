@@ -1,17 +1,18 @@
-import { ElementTypeEnum, type ImageElement as ImageElementData } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type ImageElement as ImageElementData,
+	type ImageElementVersion,
+} from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import { ImageBatchPollingManager } from "./ImageBatchPollingManager"
-import {
-	getImageGenerationTaskMeta,
-	isBatchImageGenerationTaskMeta,
-} from "../image/imageGenerationTaskMeta"
+import { isBatchImageGenerationTaskMeta } from "../image/imageGenerationTaskMeta"
 import { shouldContinueGenerationPolling } from "./generationPollingUtils"
 import { collectElementsByType } from "../../shared/ids"
-import { getActiveImageVersion } from "../../document/imageVersion"
+import { getImageElementVersions, isImageElementV2 } from "../../document/imageVersion"
 
 interface BatchPollingGroup {
 	imageId: string
-	items: Array<{ elementId: string; outputIndex: number }>
+	items: Array<{ elementId: string; outputIndex: number; versionId?: string }>
 }
 
 export function resumeImageBatchPollingManagers(canvas: Canvas): void {
@@ -20,22 +21,35 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 		ElementTypeEnum.Image,
 	) as ImageElementData[]
 	const groups = new Map<string, BatchPollingGroup>()
+	const seenTaskKeys = new Set<string>()
 
 	imageElements.forEach((element) => {
-		if (!shouldResumeBatchPolling(element)) return
+		// Batch submissions can live in a non-active version while the user views an older result.
+		// Restore every version so those tasks retain a polling owner after document hydration.
+		getImageElementVersions(element).forEach((version) => {
+			if (!shouldResumeBatchPolling(version)) return
 
-		const meta = getImageGenerationTaskMeta(element)
-		if (!isBatchImageGenerationTaskMeta(meta)) return
+			const meta = version.imageGenerationTaskMeta
+			if (!isBatchImageGenerationTaskMeta(meta)) return
 
-		const group =
-			groups.get(meta.image_id) ??
-			({
-				imageId: meta.image_id,
-				items: [],
-			} satisfies BatchPollingGroup)
+			const taskKey = `${meta.image_id}:${meta.output_index}`
+			if (seenTaskKeys.has(taskKey)) return
+			seenTaskKeys.add(taskKey)
 
-		group.items.push({ elementId: element.id, outputIndex: meta.output_index })
-		groups.set(meta.image_id, group)
+			const group =
+				groups.get(meta.image_id) ??
+				({
+					imageId: meta.image_id,
+					items: [],
+				} satisfies BatchPollingGroup)
+
+			group.items.push({
+				elementId: element.id,
+				outputIndex: meta.output_index,
+				...(isImageElementV2(element) ? { versionId: version.id } : {}),
+			})
+			groups.set(meta.image_id, group)
+		})
 	})
 
 	groups.forEach((group) => {
@@ -44,11 +58,17 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 
 		const elementIds = orderedItems.map((item) => item.elementId)
 		const outputIndexes = orderedItems.map((item) => item.outputIndex)
+		const versionIds = orderedItems.map((item) => item.versionId)
+		const hasVersionIds = versionIds.some((versionId) => versionId !== undefined)
 
 		const activeManager = canvas.imageBatchPollingRegistry.get(group.imageId)
 		// 如果已经存在轮询管理器，则同步元素 ID 和输出索引
 		if (activeManager) {
-			activeManager.syncElementIds(elementIds, outputIndexes)
+			if (hasVersionIds) {
+				activeManager.syncElementIds(elementIds, outputIndexes, versionIds)
+			} else {
+				activeManager.syncElementIds(elementIds, outputIndexes)
+			}
 			return
 		}
 
@@ -57,16 +77,16 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 			imageId: group.imageId,
 			elementIds,
 			outputIndexes,
+			...(hasVersionIds ? { versionIds } : {}),
 			registry: canvas.imageBatchPollingRegistry,
 		})
 		void batchPollingManager.start()
 	})
 }
 
-function shouldResumeBatchPolling(element: ImageElementData): boolean {
-	const active = getActiveImageVersion(element)
-	if (active.src) return false
-	if (active.status !== undefined && !shouldContinueGenerationPolling(active.status)) {
+function shouldResumeBatchPolling(version: ImageElementVersion): boolean {
+	if (version.src) return false
+	if (version.status !== undefined && !shouldContinueGenerationPolling(version.status)) {
 		return false
 	}
 

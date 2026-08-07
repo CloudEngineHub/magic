@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ElementTypeEnum, type ImageElement, type ImageElementV2 } from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
+import { EventEmitter } from "../../core/EventEmitter"
 import { INVALID_GENERATED_RESOURCE_PATH_ERROR } from "../polling/generationPollingUtils"
 import { ImagePollingManager } from "../polling/ImagePollingManager"
 
@@ -230,6 +231,337 @@ describe("ImagePollingManager", () => {
 				.slice(1)
 				.every((version) => version.status === GenerationStatus.Completed),
 		).toBe(true)
+	})
+
+	it("waits for the polling interval after a result update emits element:updated", async () => {
+		vi.useFakeTimers()
+		const element = createImageElement({ status: GenerationStatus.Pending })
+		const nextResult = createDeferred<{
+			image_id: string
+			status: GenerationStatus
+			file_dir: null
+			file_name: null
+			file_url: null
+			error_message: null
+		}>()
+		const getImageGenerationResult = vi
+			.fn()
+			.mockResolvedValueOnce({
+				image_id: "image-task-1",
+				status: GenerationStatus.Processing,
+				file_dir: null,
+				file_name: null,
+				file_url: null,
+				error_message: null,
+			})
+			.mockImplementation(() => nextResult.promise)
+		const eventEmitter = new EventEmitter()
+		const update = vi.fn((elementId: string, updates: Partial<ImageElement>) => {
+			if (elementId !== element.id) return
+			const previousData = { ...element }
+			Object.assign(element, updates)
+			eventEmitter.emit({
+				type: "element:updated",
+				data: { elementId, data: element, previousData },
+			})
+		})
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
+			},
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
+			elementManager: { update },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter,
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+
+		try {
+			manager.start()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(getImageGenerationResult).toHaveBeenCalledTimes(1)
+
+			await vi.advanceTimersByTimeAsync(4_999)
+			expect(getImageGenerationResult).toHaveBeenCalledTimes(1)
+
+			await vi.advanceTimersByTimeAsync(1)
+			expect(getImageGenerationResult).toHaveBeenCalledTimes(2)
+		} finally {
+			manager.stop()
+			nextResult.resolve({
+				image_id: "image-task-1",
+				status: GenerationStatus.Processing,
+				file_dir: null,
+				file_name: null,
+				file_url: null,
+				error_message: null,
+			})
+			await Promise.resolve()
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not persist an unchanged processing result", async () => {
+		vi.useFakeTimers()
+		const element = createImageElement({ status: GenerationStatus.Processing })
+		const getImageGenerationResult = vi.fn().mockResolvedValue({
+			image_id: "image-task-1",
+			status: GenerationStatus.Processing,
+			file_dir: null,
+			file_name: null,
+			file_url: null,
+			error_message: null,
+		})
+		const update = vi.fn()
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
+			},
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
+			elementManager: { update },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter: { emit: vi.fn() },
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+
+		try {
+			manager.start()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(getImageGenerationResult).toHaveBeenCalledTimes(1)
+			expect(update).not.toHaveBeenCalled()
+		} finally {
+			manager.stop()
+			vi.useRealTimers()
+		}
+	})
+
+	it("does not restart an in-flight target for an unrelated element update", async () => {
+		const element = createImageElement({ status: GenerationStatus.Processing })
+		const result = createDeferred<{
+			image_id: string
+			status: GenerationStatus
+			file_dir: null
+			file_name: null
+			file_url: null
+			error_message: null
+		}>()
+		const getImageGenerationResult = vi.fn(() => result.promise)
+		const eventEmitter = new EventEmitter()
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
+			},
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
+			elementManager: { update: vi.fn() },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter,
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+
+		manager.start()
+		await vi.waitFor(() => expect(getImageGenerationResult).toHaveBeenCalledTimes(1))
+		const previousData = { ...element }
+		element.x = 120
+		eventEmitter.emit({
+			type: "element:updated",
+			data: { elementId: element.id, data: element, previousData },
+		})
+		await Promise.resolve()
+
+		expect(getImageGenerationResult).toHaveBeenCalledTimes(1)
+		manager.stop()
+		result.resolve({
+			image_id: "image-task-1",
+			status: GenerationStatus.Processing,
+			file_dir: null,
+			file_name: null,
+			file_url: null,
+			error_message: null,
+		})
+	})
+
+	it("starts a newly appended version without duplicating an in-flight version", async () => {
+		const element: ImageElementV2 = {
+			id: "image-element-1",
+			type: ElementTypeEnum.Image,
+			imageDslVersion: 2,
+			activeVersionId: "v1",
+			mainVersionId: "v1",
+			versions: [
+				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+				{
+					id: "v2",
+					status: GenerationStatus.Processing,
+					generateImageRequest: { image_id: "image-task-2", prompt: "second" },
+				},
+			],
+		}
+		const secondResult = createDeferred<never>()
+		const thirdResult = createDeferred<never>()
+		const getImageGenerationResult = vi.fn(({ image_id }: { image_id: string }) =>
+			image_id === "image-task-2" ? secondResult.promise : thirdResult.promise,
+		)
+		const eventEmitter = new EventEmitter()
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
+			},
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
+			elementManager: { update: vi.fn() },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter,
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+		})
+
+		manager.start()
+		await vi.waitFor(() =>
+			expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-2" }),
+		)
+		const previousData = { ...element, versions: [...element.versions] }
+		element.versions = [
+			...element.versions,
+			{
+				id: "v3",
+				status: GenerationStatus.Processing,
+				generateImageRequest: { image_id: "image-task-3", prompt: "third" },
+			},
+		]
+		eventEmitter.emit({
+			type: "element:updated",
+			data: { elementId: element.id, data: element, previousData },
+		})
+
+		await vi.waitFor(() =>
+			expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-3" }),
+		)
+		expect(
+			getImageGenerationResult.mock.calls.filter(
+				([params]) => params.image_id === "image-task-2",
+			),
+		).toHaveLength(1)
+		expect(
+			getImageGenerationResult.mock.calls.filter(
+				([params]) => params.image_id === "image-task-3",
+			),
+		).toHaveLength(1)
+
+		manager.stop()
+	})
+
+	it("keeps other versions polling when one version request fails", async () => {
+		vi.useFakeTimers()
+		const element: ImageElementV2 = {
+			id: "image-element-1",
+			type: ElementTypeEnum.Image,
+			imageDslVersion: 2,
+			activeVersionId: "v1",
+			mainVersionId: "v1",
+			versions: [
+				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+				{
+					id: "v2",
+					status: GenerationStatus.Processing,
+					generateImageRequest: { image_id: "image-task-2", prompt: "second" },
+				},
+				{
+					id: "v3",
+					status: GenerationStatus.Processing,
+					generateImageRequest: { image_id: "image-task-3", prompt: "third" },
+				},
+			],
+		}
+		const nextResult = createDeferred<{
+			image_id: string
+			status: GenerationStatus
+			file_dir: null
+			file_name: null
+			file_url: null
+			error_message: null
+		}>()
+		const getImageGenerationResult = vi.fn(({ image_id }: { image_id: string }) => {
+			if (image_id === "image-task-2") return Promise.reject(new Error("temporary failure"))
+			return getImageGenerationResult.mock.calls.filter(
+				([params]) => params.image_id === "image-task-3",
+			).length === 1
+				? Promise.resolve({
+						image_id,
+						status: GenerationStatus.Processing,
+						file_dir: null,
+						file_name: null,
+						file_url: null,
+						error_message: null,
+					})
+				: nextResult.promise
+		})
+		const onStatusUpdate = vi.fn()
+		const canvas = {
+			elementDetailsRuntimeManager: {
+				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
+			},
+			magicConfigManager: {
+				config: { methods: { getImageGenerationResult, resolveResourceReference } },
+			},
+			elementManager: { update: vi.fn() },
+			imageResourceManager: { primeCache: vi.fn() },
+			eventEmitter: { emit: vi.fn() },
+		}
+		const manager = new ImagePollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			getElementData: () => element,
+			onStatusUpdate,
+		})
+
+		try {
+			manager.start()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(onStatusUpdate).toHaveBeenCalledWith("v2")
+			expect(manager.isActive()).toBe(true)
+			expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-3" })
+
+			await vi.advanceTimersByTimeAsync(5_000)
+			expect(
+				getImageGenerationResult.mock.calls.filter(
+					([params]) => params.image_id === "image-task-3",
+				),
+			).toHaveLength(2)
+		} finally {
+			manager.stop()
+			nextResult.resolve({
+				image_id: "image-task-3",
+				status: GenerationStatus.Processing,
+				file_dir: null,
+				file_name: null,
+				file_url: null,
+				error_message: null,
+			})
+			await Promise.resolve()
+			vi.useRealTimers()
+		}
 	})
 
 	it("recovers an Agent-produced file without calling the Design result API", async () => {

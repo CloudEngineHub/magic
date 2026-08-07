@@ -234,6 +234,91 @@ describe("ImageBatchPollingManager", () => {
 		},
 	)
 
+	it("writes a restored result into its non-active V2 version", async () => {
+		const element: ImageElement = {
+			id: "element-v2",
+			type: ElementTypeEnum.Image,
+			x: 0,
+			y: 0,
+			width: 512,
+			height: 512,
+			imageDslVersion: 2,
+			activeVersionId: "v1",
+			mainVersionId: "v1",
+			versions: [
+				{
+					id: "v1",
+					src: "./images/old.png",
+					status: "completed",
+				},
+				{
+					id: "v2",
+					status: "processing",
+					imageGenerationTaskMeta: createBatchImageTaskMeta({
+						imageId: "batch-1",
+						outputIndex: 1,
+						outputCount: 1,
+					}),
+				},
+			],
+		}
+		const update = vi.fn()
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						resolveResourceReference,
+						getImageGenerationResults: vi.fn().mockResolvedValue({
+							image_id: "batch-1",
+							status: "completed",
+							file_dir: "/images/",
+							images: [{ index: 1, file_name: "result.png", file_url: null }],
+						}),
+					},
+				},
+			},
+			elementManager: {
+				getElementData: vi.fn(() => element),
+				update,
+				batchDelete: vi.fn(),
+			},
+			imageResourceManager: {
+				primeCache: vi.fn(),
+				loadResource: vi.fn(),
+			},
+			eventEmitter: {
+				emit: vi.fn(),
+				on: vi.fn(() => vi.fn()),
+			},
+		}
+		const manager = new ImageBatchPollingManager({
+			canvas: canvas as never,
+			imageId: "batch-1",
+			elementIds: [element.id],
+			outputIndexes: [1],
+			versionIds: ["v2"],
+			registry: { track: vi.fn(), untrack: vi.fn() } as never,
+		})
+
+		await manager.start()
+
+		expect(update).toHaveBeenCalledWith(
+			element.id,
+			{
+				name: "result",
+				versions: [
+					element.versions[0],
+					{
+						id: "v2",
+						status: "completed",
+						src: "/images/result.png",
+					},
+				],
+			},
+			{ silent: false },
+		)
+	})
+
 	it("fails a completed output when its workspace path cannot be resolved", async () => {
 		const element = createBatchElement("element-1", 1)
 		const update = vi.fn()
@@ -324,6 +409,85 @@ describe("ImageBatchPollingManager", () => {
 
 		expect(batchDelete).toHaveBeenCalledOnce()
 		expect(batchDelete).toHaveBeenCalledWith(["element-1", "element-2"])
+	})
+
+	it("keeps a V2 element and fails only the missing batch version", async () => {
+		const element: ImageElement = {
+			id: "element-v2",
+			type: ElementTypeEnum.Image,
+			x: 0,
+			y: 0,
+			width: 512,
+			height: 512,
+			imageDslVersion: 2,
+			activeVersionId: "v1",
+			mainVersionId: "v1",
+			versions: [
+				{ id: "v1", src: "./images/old.png", status: "completed" },
+				{
+					id: "v2",
+					status: "processing",
+					imageGenerationTaskMeta: createBatchImageTaskMeta({
+						imageId: "batch-1",
+						outputIndex: 1,
+						outputCount: 1,
+					}),
+				},
+			],
+		}
+		const update = vi.fn()
+		const batchDelete = vi.fn()
+		const emit = vi.fn()
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						getImageGenerationResults: vi.fn().mockRejectedValue({
+							code: 14000,
+							message: "batch-1 未找到",
+						}),
+					},
+				},
+			},
+			elementManager: {
+				getElementData: vi.fn(() => element),
+				batchDelete,
+				update,
+			},
+			eventEmitter: {
+				emit,
+				on: vi.fn(() => vi.fn()),
+			},
+		}
+		const manager = new ImageBatchPollingManager({
+			canvas: canvas as never,
+			imageId: "batch-1",
+			elementIds: [element.id],
+			outputIndexes: [1],
+			versionIds: ["v2"],
+			registry: { track: vi.fn(), untrack: vi.fn() } as never,
+		})
+
+		await manager.start()
+
+		expect(batchDelete).not.toHaveBeenCalled()
+		expect(update).toHaveBeenCalledWith(
+			element.id,
+			{
+				versions: [
+					element.versions[0],
+					{
+						id: "v2",
+						status: "failed",
+					},
+				],
+			},
+			{ silent: false },
+		)
+		expect(emit).toHaveBeenCalledWith({
+			type: "element:image:generate-submit-failed",
+			data: { elementId: element.id },
+		})
 	})
 
 	it("does not delete an element that has moved to a newer batch task", async () => {

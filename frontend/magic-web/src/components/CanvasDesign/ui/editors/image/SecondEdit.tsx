@@ -130,7 +130,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				sendingRef.current = true
 				setIsSending(true)
 				try {
-					const submitted = await originalElementInstance.generateImageVersion(request)
+					const submitted = await originalElementInstance.submitVersionGeneration(request)
 					if (!submitted) return false
 					originalElementInstance.clearTempGenerateImageRequestPrompt()
 					if (options?.clearEditorPromptOnSuccess) setPrompt("")

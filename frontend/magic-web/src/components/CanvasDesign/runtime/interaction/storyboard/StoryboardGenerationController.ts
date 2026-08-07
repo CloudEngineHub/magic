@@ -52,8 +52,6 @@ interface EnsureOutputsResult {
  * 这样解除 Frame 后仍能复用已有图片，删除 Frame 后也能按缺失映射重建。
  */
 export class StoryboardGenerationController {
-	private generationBatchSequence = 0
-
 	constructor(
 		private readonly canvas: Canvas,
 		private readonly loadImageModels?: () => Promise<ImageModelItem[]>,
@@ -105,29 +103,16 @@ export class StoryboardGenerationController {
 			return
 		}
 
-		const batchOrder = ++this.generationBatchSequence
 		const outputs = this.ensureOutputStructure(storyboard, shots)
 		const requests = shots.map((shot) =>
 			this.buildRequest(shot, storyboard.generationConfig, modelId, model, references),
 		)
 
-		// TODO: 接入积分计算接口后，在提交前通过 batchOrder 计算并展示实际消耗；当前不展示积分。
 		await Promise.allSettled(
 			outputs.imageElementIds.map(async (imageElementId, index) => {
 				const imageElement = this.canvas.elementManager.getElementInstance(imageElementId)
 				if (!(imageElement instanceof ImageElement)) return false
-
-				const hasExistingRequest = imageElement.hasGenerationHistory()
-				const hasPendingAttempt = Boolean(
-					this.canvas.generationRuntimeManager.getTargetState(imageElementId),
-				)
-				if (hasExistingRequest || hasPendingAttempt) {
-					return imageElement.generateImageVersion(requests[index], {
-						allowConcurrentProcessing: true,
-						submissionOrder: batchOrder,
-					})
-				}
-				return imageElement.generateImage(requests[index])
+				return imageElement.submitGeneration(requests[index])
 			}),
 		)
 

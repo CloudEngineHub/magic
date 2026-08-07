@@ -89,18 +89,6 @@ type ImageResourceStructureReason =
 
 type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
 
-export interface GenerateImageVersionOptions {
-	/** 分镜批量生成允许同一元素同时提交多个版本。 */
-	allowConcurrentProcessing?: boolean
-	/** 批次单调序号，用于旧批次完成时阻止抢占最新 active version。 */
-	submissionOrder?: number
-}
-
-interface VersionActivationGuard {
-	activeVersionIdAtSubmission: string
-	submissionOrder: number
-}
-
 type ImageResourceReconcileResult =
 	| { type: "patched-content" }
 	| { type: "structure-required"; reason: ImageResourceStructureReason }
@@ -169,8 +157,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private deselectHandler?: (event: { data: { elementIds?: string[] } | undefined }) => void
 	private isRetryEditing = false
 	private generationRuntimeUnsubscribe?: () => void
-	private versionActivationGuards = new Map<string, VersionActivationGuard>()
-	private latestVersionSubmissionOrder = 0
 
 	constructor(data: ImageElementData, canvas: Canvas) {
 		super(data, canvas)
@@ -201,18 +187,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.ossSrcPromise = undefined
 				}
 				this.rerender()
-			},
-			shouldAutoActivateVersion: (versionId) => {
-				const guard = this.versionActivationGuards.get(versionId)
-				return Boolean(
-					guard &&
-					isImageElementV2(this.data) &&
-					this.data.activeVersionId === guard.activeVersionIdAtSubmission &&
-					guard.submissionOrder >= this.latestVersionSubmissionOrder,
-				)
-			},
-			onVersionSettled: (versionId) => {
-				this.versionActivationGuards.delete(versionId)
 			},
 		})
 
@@ -342,6 +316,25 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return Boolean(this.getActiveVersion().generateImageRequest) || isImageElementV2(data)
 	}
 
+	/**
+	 * 提交一次图片生成，由图片元素自身决定是首次生成还是追加版本。
+	 */
+	public submitGeneration(request: GenerateImageRequest): Promise<boolean> {
+		return this.hasGenerationHistory()
+			? this.submitVersionGeneration(request)
+			: this.submitInitialGeneration(request)
+	}
+
+	/** 提交新图片元素的首次生成。 */
+	public submitInitialGeneration(request: GenerateImageRequest): Promise<boolean> {
+		return this.generateInitialImage(request)
+	}
+
+	/** 提交当前图片元素的重新编辑/再次生成版本。 */
+	public submitVersionGeneration(request: GenerateImageRequest): Promise<boolean> {
+		return this.generateImageVersion(request)
+	}
+
 	public switchActiveVersion(versionId: string): boolean {
 		if (!isImageElementV2(this.data)) return false
 		if (!this.data.versions.some((version) => version.id === versionId)) return false
@@ -373,7 +366,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const result = deleteActiveImageVersion(this.data)
 		if (!result) return false
 		const deletedVersionId = result.deletedVersion.id
-		this.versionActivationGuards.delete(deletedVersionId)
 		this.canvas.elementDetailsRuntimeManager?.clearImageVersion(this.data.id, deletedVersionId)
 		this.canvas.markerManager.removeMarkersByImageVersion(this.data.id, deletedVersionId)
 		this.canvas.elementManager.update(
@@ -561,7 +553,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * @param request 请求参数
 	 * @returns 请求是否成功发起
 	 */
-	async generateImage(request: GenerateImageRequest): Promise<boolean> {
+	private async generateInitialImage(request: GenerateImageRequest): Promise<boolean> {
 		if (!this.canvas.magicConfigManager.config?.methods?.generateImage) {
 			return false
 		}
@@ -658,17 +650,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 在当前元素内追加一次重新编辑/再次生成任务。
 	 * V1 迁移与 processing 版本追加只在后端确认提交成功后通过一次文档更新完成。
 	 */
-	async generateImageVersion(
-		request: GenerateImageRequest,
-		options?: GenerateImageVersionOptions,
-	): Promise<boolean> {
+	private async generateImageVersion(request: GenerateImageRequest): Promise<boolean> {
 		const generateImage = this.canvas.magicConfigManager.config?.methods?.generateImage
-		const allowConcurrentProcessing = options?.allowConcurrentProcessing === true
-		if (
-			!generateImage ||
-			(!allowConcurrentProcessing &&
-				(this.isGenerating || hasProcessingImageVersion(this.data)))
-		)
+		if (!generateImage || this.isGenerating || hasProcessingImageVersion(this.data))
 			return false
 		if (!request.model_id || !request.prompt?.trim()) return false
 
@@ -678,38 +662,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			prompt: request.prompt.trim(),
 			image_id: generateUUID(),
 		}
-		const submissionOrder = options?.submissionOrder ?? this.latestVersionSubmissionOrder + 1
-		this.latestVersionSubmissionOrder = Math.max(
-			this.latestVersionSubmissionOrder,
-			submissionOrder,
-		)
-		if (!allowConcurrentProcessing) this.isGenerating = true
+		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
 
-		const currentBeforeSubmit = this.data
-		const baseV2 = isImageElementV2(currentBeforeSubmit)
-			? currentBeforeSubmit
-			: migrateImageElementV1(currentBeforeSubmit)
-		const activeVersionIdAtSubmission = baseV2.activeVersionId
-		const attemptId = this.beginOrReuseGenerationAttempt(
-			"image-generate",
-			{
-				elementId: this.data.id,
-				versionId,
-				activeVersionIdAtSubmission,
-				generateImageRequest: requestWithId,
-			},
-			{ allowConcurrent: allowConcurrentProcessing },
-		)
+		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
+			elementId: this.data.id,
+			versionId,
+			generateImageRequest: requestWithId,
+		})
 		const rejectSubmission = (): false => {
-			this.versionActivationGuards.delete(versionId)
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
-			if (!allowConcurrentProcessing) {
-				this.isGenerating = Boolean(
-					this.canvas.generationRuntimeManager.getTargetState(this.data.id),
-				)
-			}
+			this.isGenerating = false
 			this.isErrorState = true
 			this.saveTempGenerateImageRequest(requestWithId)
 			this.rerenderWhenTransformIdle()
@@ -729,53 +693,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				return rejectSubmission()
 			}
 
-			const current = this.canvas.elementManager.getElementData(this.data.id)
-			if (!current || current.type !== ElementTypeEnum.Image) return rejectSubmission()
-			if (!allowConcurrentProcessing && hasProcessingImageVersion(current)) {
-				return rejectSubmission()
-			}
-			const currentV2 = isImageElementV2(current)
-				? current
-				: migrateImageElementV1(current, baseV2.activeVersionId)
-			const next = appendImageVersion(currentV2, {
-				id: versionId,
-				generateImageRequest: requestWithId,
-				status: GenerationStatus.Processing,
-			})
-			// 记录提交开始时的 active；确认期间用户若切换版本，完成后不得抢回 active。
-			if (currentV2.activeVersionId === activeVersionIdAtSubmission) {
-				this.versionActivationGuards.set(versionId, {
-					activeVersionIdAtSubmission,
-					submissionOrder,
-				})
-			} else {
-				this.versionActivationGuards.delete(versionId)
-			}
-			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
-				{
-					elementId: this.data.id,
+			if (
+				!this.commitImageVersionAttempt(
+					attemptId,
 					versionId,
-					persistedPatch: isImageElementV2(current)
-						? { versions: next.versions }
-						: {
-								imageDslVersion: 2,
-								activeVersionId: next.activeVersionId,
-								mainVersionId: next.mainVersionId,
-								versions: next.versions,
-							},
-				},
-			])
-			if (!confirmed) {
-				return rejectSubmission()
-			}
-			if (!isImageElementV2(current)) {
-				this.canvas.markerManager.bindMarkersToImageVersion(
-					this.data.id,
-					currentV2.versions[0]?.id ?? currentV2.activeVersionId,
+					requestWithId,
+					GenerationStatus.Processing,
 				)
+			) {
+				return rejectSubmission()
 			}
 
-			if (!allowConcurrentProcessing) this.isGenerating = false
+			this.isGenerating = false
 			this.clearTempGenerateImageRequestPrompt()
 			this.pollingManager.start()
 			this.rerenderWhenTransformIdle()
@@ -786,11 +715,66 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			) {
 				return rejectSubmission()
 			}
+			const committed = this.commitImageVersionAttempt(
+				attemptId,
+				versionId,
+				requestWithId,
+				GenerationStatus.Failed,
+			)
 			this.canvas.eventEmitter.emit({
 				type: "element:image:generate-submit-failed",
 				data: { elementId: this.data.id },
 			})
-			return rejectSubmission()
+			if (!committed) return rejectSubmission()
+			this.isGenerating = false
+			this.isErrorState = true
+			this.saveTempGenerateImageRequest(requestWithId)
+			this.rerenderWhenTransformIdle()
+			return false
+		}
+	}
+
+	private commitImageVersionAttempt(
+		attemptId: string,
+		versionId: string,
+		request: GenerateImageRequest,
+		status: GenerationStatus,
+	): boolean {
+		const current = this.canvas.elementManager.getElementData(this.data.id)
+		if (!current || current.type !== ElementTypeEnum.Image) return false
+		const currentV2 = isImageElementV2(current) ? current : migrateImageElementV1(current)
+		const next = appendImageVersion(currentV2, {
+			id: versionId,
+			generateImageRequest: request,
+			status,
+		})
+		try {
+			const committed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+				{
+					elementId: this.data.id,
+					versionId,
+					persistedPatch: isImageElementV2(current)
+						? {
+								versions: next.versions,
+								activeVersionId: versionId,
+							}
+						: {
+								imageDslVersion: 2,
+								activeVersionId: versionId,
+								mainVersionId: next.mainVersionId,
+								versions: next.versions,
+							},
+				},
+			])
+			if (committed && !isImageElementV2(current)) {
+				this.canvas.markerManager.bindMarkersToImageVersion(
+					this.data.id,
+					currentV2.versions[0]?.id ?? currentV2.activeVersionId,
+				)
+			}
+			return committed
+		} catch {
+			return false
 		}
 	}
 
@@ -2203,8 +2187,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			nextActiveVersionId &&
 			currentActiveVersionId !== nextActiveVersionId
 		) {
-			// 只要生成期间发生过版本切换，后续完成结果就不得再自动抢占 active。
-			this.versionActivationGuards.clear()
 			// 所有 active 变更（含撤销/重做、远端合并与轮询完成）统一清理旧版本 Marker。
 			this.canvas.markerManager.handleImageVersionChanged(
 				this.data.id,
