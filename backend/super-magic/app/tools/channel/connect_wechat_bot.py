@@ -117,9 +117,10 @@ class ConnectWechatBot(BaseTool[ConnectWechatBotParams]):
 
 def _build_qr_render_message(qrcode_url: str, status_text: str | None = None) -> str:
     lines = [
-        "Reply to the user with the following content (no extra prose), "
-        "adapting the heading and description to user preferred language. "
-        "Then immediately call `wait_wechat_login`.",
+        "Output the following content as your reply (no extra prose), "
+        "adapting the heading and description to user preferred language, "
+        "and include a `wait_wechat_login` call in the same reply. "
+        "Do not end your turn after showing the QR — the user's scan would go unanswered.",
     ]
     if status_text:
         lines.extend(("", f"Current status: {status_text}"))
