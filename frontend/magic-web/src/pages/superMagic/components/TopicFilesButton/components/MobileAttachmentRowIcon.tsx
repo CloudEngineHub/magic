@@ -13,7 +13,7 @@ import { isEmpty } from "lodash-es"
 import { CustomFolderMagicIcon } from "./CustomFolderMagicIcon"
 import { ProjectFileImageThumbnailIcon } from "./ProjectFileImageThumbnailIcon"
 import { TopicFileIcon, type TopicFileMagicVariant } from "./TopicFileIcon"
-import { isMagicSystemFolder } from "../utils/magic-system-folder"
+import { isMagicSystemFolder, isProjectInstructionsFile } from "../utils/magic-system-folder"
 
 interface MobileAttachmentRowIconProps {
 	item: AttachmentItem
@@ -70,6 +70,9 @@ function getNormalizedPathSegments(item: AttachmentItem): string[] {
 function resolveAttachmentMagicVariant(item: AttachmentItem): TopicFileMagicVariant | undefined {
 	if (isMagicSystemFolder(item)) {
 		return "magic-root"
+	}
+	if (isProjectInstructionsFile(item)) {
+		return "magic-file-agent"
 	}
 
 	const pathSegments = getNormalizedPathSegments(item)

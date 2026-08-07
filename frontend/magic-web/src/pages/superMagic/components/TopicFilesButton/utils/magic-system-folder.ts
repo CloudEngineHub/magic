@@ -2,6 +2,39 @@ import type { AttachmentItem } from "../hooks/types"
 
 /** Keep in sync with MAGIC_ROOT_DIRECTORY_NAME (identity-markdown.ts). */
 const MAGIC_FOLDER_NAME = ".magic" as const
+const PROJECT_INSTRUCTIONS_FILE_NAME = "AGENTS.md" as const
+
+type ProjectInstructionsFileCandidate = Pick<
+	AttachmentItem,
+	| "is_directory"
+	| "name"
+	| "file_name"
+	| "filename"
+	| "display_filename"
+	| "relative_file_path"
+	| "path"
+>
+
+function basenameMatchesProjectInstructionsFile(item: ProjectInstructionsFileCandidate): boolean {
+	const candidates = [item.name, item.file_name, item.filename, item.display_filename]
+	return candidates.some((candidate) => candidate?.trim() === PROJECT_INSTRUCTIONS_FILE_NAME)
+}
+
+function pathLeafSegmentIsProjectInstructionsFile(path?: string): boolean {
+	if (!path) return false
+	const segments = path.replace(/\\/g, "/").split("/").filter(Boolean)
+	return segments[segments.length - 1] === PROJECT_INSTRUCTIONS_FILE_NAME
+}
+
+/** True for an `AGENTS.md` instruction file regardless of which attachment name field is populated. */
+export function isProjectInstructionsFile(item: ProjectInstructionsFileCandidate): boolean {
+	return (
+		!item.is_directory &&
+		(basenameMatchesProjectInstructionsFile(item) ||
+			pathLeafSegmentIsProjectInstructionsFile(item.relative_file_path) ||
+			pathLeafSegmentIsProjectInstructionsFile(item.path))
+	)
+}
 
 function basenameMatchesMagicFolder(item: AttachmentItem): boolean {
 	const candidates = [item.name, item.file_name, item.filename, item.display_filename]

@@ -60,6 +60,7 @@ interface TopicFileIconProps {
 	magicVariant?: TopicFileMagicVariant
 	hasChildren?: boolean
 	fileExtension?: string
+	size?: number
 	className?: string
 	dataTestId?: string
 }
@@ -166,17 +167,23 @@ export function TopicFileIcon({
 	magicVariant,
 	hasChildren = false,
 	fileExtension,
-	className = "block size-6 shrink-0 object-contain",
+	size,
+	className,
 	dataTestId,
 }: TopicFileIconProps) {
 	const resolvedMagicVariant = magicVariant || (isMagicFolder ? "magic-root" : undefined)
+	const resolvedClassName =
+		className ??
+		(size ? "block shrink-0 object-contain" : "block size-6 shrink-0 object-contain")
 
 	if (resolvedMagicVariant) {
 		return (
 			<img
 				src={MAGIC_ICON_SRC_MAP[resolvedMagicVariant]}
 				alt=""
-				className={className}
+				width={size}
+				height={size}
+				className={resolvedClassName}
 				data-testid={dataTestId}
 				aria-hidden
 			/>
@@ -185,5 +192,15 @@ export function TopicFileIcon({
 
 	const iconSrc = isDirectory ? getFolderIconSrc(hasChildren) : getFileIconSrc(fileExtension)
 
-	return <img src={iconSrc} alt="" className={className} data-testid={dataTestId} aria-hidden />
+	return (
+		<img
+			src={iconSrc}
+			alt=""
+			width={size}
+			height={size}
+			className={resolvedClassName}
+			data-testid={dataTestId}
+			aria-hidden
+		/>
+	)
 }
