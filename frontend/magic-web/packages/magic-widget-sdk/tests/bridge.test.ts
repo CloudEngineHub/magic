@@ -370,15 +370,33 @@ describe("WidgetBridge", () => {
 				replaceable: true,
 			},
 		}
+		const streamStartedEvent: MagicWidget.MessageStreamStartedEvent = {
+			type: "message.stream.started",
+			meta: {
+				sequence: 4,
+				revision: 1,
+				occurredAt: 1_700_000_000_100,
+				source: "stream",
+				topicId: "topic-mock-bridge",
+				correlationId: "correlation-mock-bridge",
+				streamGeneration: 1,
+			},
+			payload: {
+				chunkIndex: 0,
+				startsWith: "metadata",
+			},
+		}
 
 		dispatchRuntimeEvent(iframe, event)
+		dispatchRuntimeEvent(iframe, streamStartedEvent)
 		dispatchRuntimeEvent(iframe, event, {
 			origin: "https://untrusted-widget.example.invalid",
 		})
 		dispatchRuntimeEvent(iframe, event, { instanceId: "widget-wrong-instance" })
 
-		expect(listener).toHaveBeenCalledTimes(1)
-		expect(listener).toHaveBeenCalledWith(event)
+		expect(listener).toHaveBeenCalledTimes(2)
+		expect(listener).toHaveBeenNthCalledWith(1, event)
+		expect(listener).toHaveBeenNthCalledWith(2, streamStartedEvent)
 	})
 
 	it("ignores runtime messages whose nested event name is not public", () => {

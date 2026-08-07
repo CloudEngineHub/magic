@@ -6,7 +6,11 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { SuperMagicWidgetEditorCommandName } from "@/pages/superMagic/events/message"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import type { TaskCompletedEvent, ToolCallSettledEvent } from "@/pages/superMagic/stores"
+import type {
+	MessageStreamStartedEvent,
+	TaskCompletedEvent,
+	ToolCallSettledEvent,
+} from "@/pages/superMagic/stores"
 
 const PROTOCOL = "magic-widget"
 const VERSION = 1
@@ -171,8 +175,10 @@ export function useMagicWidgetBridge({
 		if (!context || window.parent === window) return
 		const targetOrigin = context.hostOrigin
 
-		/** Forwards one Store result without adding topic filters or changing its payload. */
-		const forwardRuntimeEvent = (event: ToolCallSettledEvent | TaskCompletedEvent) => {
+		/** Forwards one Store runtime event without adding topic filters or changing its payload. */
+		const forwardRuntimeEvent = (
+			event: MessageStreamStartedEvent | ToolCallSettledEvent | TaskCompletedEvent,
+		) => {
 			const cloneableEvent = createCloneableRuntimeValue(event)
 			window.parent.postMessage(
 				{
@@ -191,6 +197,10 @@ export function useMagicWidgetBridge({
 		)
 		const unsubscribeTaskCompleted = superMagicStore.subscribe(
 			"task.completed",
+			forwardRuntimeEvent,
+		)
+		const unsubscribeMessageStreamStarted = superMagicStore.subscribe(
+			"message.stream.started",
 			forwardRuntimeEvent,
 		)
 
@@ -301,6 +311,7 @@ export function useMagicWidgetBridge({
 			window.removeEventListener("message", handleMessage)
 			unsubscribeToolCallSettled()
 			unsubscribeTaskCompleted()
+			unsubscribeMessageStreamStarted()
 		}
 	}, [context, createNewConversation, executeEditorCommand, waitForAgentReadyAfter])
 

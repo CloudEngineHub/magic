@@ -81,7 +81,7 @@ window.MagicWidget
 | `open`            | `() => void`                                                   | Opens the panel programmatically. The floating button is hidden while the panel is open.                          | Must be called after `mount`; otherwise an error is thrown.          |
 | `close`           | `() => void`                                                   | Closes the panel programmatically. The floating button is shown again after the close animation.                  | Safe to call when the panel is already closed.                       |
 | `destroy`         | `() => void`                                                   | Removes the widget DOM, event listeners, timers, and current configuration.                                       | Call `mount` again before using `open`.                              |
-| `on`              | `on(event, listener)`                                          | Subscribes to Agent readiness, preview state, tool settlement, or task completion events.                         | Each event has a distinct listener signature; see Event API below.   |
+| `on`              | `on(event, listener)`                                          | Subscribes to Agent readiness, preview state, message stream start, tool settlement, or task completion events.   | Each event has a distinct listener signature; see Event API below.   |
 | `setInput`        | `(content: string) => Promise<void>`                           | Replaces the Agent editor text and focuses it without sending.                                                    | Requires a non-empty string; completion follows the iframe response. |
 | `appendInput`     | `(content: string) => Promise<void>`                           | Appends text to the current editor value and focuses it without sending.                                          | Requires a non-empty string; completion follows the iframe response. |
 | `clearInput`      | `() => Promise<void>`                                          | Clears the current editor without sending.                                                                        | Completion follows the iframe response.                              |
@@ -93,6 +93,25 @@ window.MagicWidget
 The object also exposes `window.MagicWidget.version` for diagnostics.
 
 ### Event API
+
+#### `message.stream.started`
+
+```ts
+on(event: "message.stream.started", listener: (event: MagicWidget.MessageStreamStartedEvent) => void): () => void
+```
+
+The SDK forwards the complete stream-start event when Magic Web accepts the first ordered chunk of a new stream generation:
+
+```js
+const unsubscribeStreamStarted = window.MagicWidget.on("message.stream.started", (event) => {
+	// Show temporary host feedback without depending on Magic Web's internal payload shape.
+	showHostStreamingState(event)
+})
+```
+
+- A stream may start with metadata, reasoning, content, or tool-call data; Magic Web owns the current payload classification.
+- A restart for the same correlation may create a new stream generation and another started event.
+- The SDK only guarantees the event name. Magic Web owns `meta` and `payload`, so hosts should validate or narrow specific fields inside their own business boundary.
 
 #### `toolCall.settled`
 
@@ -130,7 +149,7 @@ const unsubscribeTask = window.MagicWidget.on("task.completed", (event) => {
 
 The SDK does not define Magic Web's internal completion criteria or interpret result data. Event production and field contents follow Magic Web's current behavior.
 
-Both result events are best-effort browser notifications. They do not replay earlier events or guarantee delivery after Widget destruction, iframe reload, background scheduling, network loss, offline use, or execution on another device. Hosts may update temporary UI or trigger their own data refresh, but must not treat these events as durable business records. The SDK adds no current-topic filter; events actually emitted by Magic Web and observed by the iframe are forwarded directly.
+These runtime events are best-effort browser notifications. They do not replay earlier events or guarantee delivery after Widget destruction, iframe reload, background scheduling, network loss, offline use, or execution on another device. Hosts may update temporary UI or trigger their own data refresh, but must not treat these events as durable business records. The SDK adds no current-topic filter; events actually emitted by Magic Web and observed by the iframe are forwarded directly.
 
 #### `preview_fullscreen`
 
@@ -281,15 +300,15 @@ namespace MagicWidget {
 }
 ```
 
-| Field                        | Description                                                    | Boundary                                                                                                                                                                                                            |
-| ---------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. SDK embeds default to `mobile`; set `desktop` explicitly when needed.                                                                                         |
-| `shell.appSidebar`           | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                                                                                             |
-| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions.                                             |
-| `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
-| `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                                                               |
-| `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.        | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                                                                        |
-| `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                                                              |
+| Field                        | Description                                                    | Boundary                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `layout`                     | Selects the desktop or mobile Crew conversation content.       | It does not replace the surrounding application shell. SDK embeds default to `mobile`; set `desktop` explicitly when needed.                                             |
+| `shell.appSidebar`           | Shows or hides the application sidebar.                        | Applied only to a valid SDK embed whose effective Crew layout is `desktop`; it does not affect mobile embedded layouts.                                                  |
+| `responsive.mobileDetection` | Selects viewport-only or device-and-viewport mobile semantics. | SDK embeds default to `viewport` for compatibility with existing mobile hosts. Set `device-and-viewport` when narrow desktop iframes should retain desktop interactions. |
+| `conversation.projectFiles`  | Shows or hides the desktop project-files panel.                | Applied only by the desktop Crew conversation layout.                                                                                                                    |
+| `conversation.topicHistory`  | Enables or disables the desktop topic-history entry and panel. | Applied only by the desktop Crew conversation layout.                                                                                                                    |
+| `conversation.autoHire`      | Automatically attempts to hire an unusable Crew member.        | Enabled by default only for valid SDK embeds; ordinary Magic Web Crew pages never auto-hire.                                                                             |
+| `conversation.previewMode`   | Selects `split`, `fullscreen`, or `switchable` presentation.   | Desktop SDK embeds default to `switchable`; ordinary Magic Web pages keep their existing split layout.                                                                   |
 
 `split` keeps the expanded conversation and preview side by side. `fullscreen` shows only the preview in the current host-controlled Widget container and closes the preview when the user exits; it covers the host viewport only when the host resizes the Widget container accordingly. `switchable` keeps the preview inside the Widget layout, collapses the conversation when a new preview session starts, and lets the user expand or collapse the conversation without recreating the preview. Manual fullscreen remains available and returns to the previous conversation layout when the user exits. The controller keeps the same iframe mounted, so file tabs, playback state, editor content, and loaded preview data remain intact. A runtime configuration update affects the next preview activation and does not force the current layout to change.
 

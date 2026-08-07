@@ -81,7 +81,7 @@ window.MagicWidget
 | `open`            | `() => void`                                                   | 主动打开面板。面板打开时，悬浮按钮会隐藏。                                              | 必须在 `mount` 后调用；未挂载时调用会抛错。                   |
 | `close`           | `() => void`                                                   | 主动关闭面板。关闭动画结束后，悬浮按钮会重新显示。                                      | 面板已关闭时调用不会产生额外影响。                            |
 | `destroy`         | `() => void`                                                   | 移除 widget DOM、事件监听、定时器与当前配置。                                           | 调用后如需再次打开，需要先重新 `mount`。                      |
-| `on`              | `on(event, listener)`                                          | 订阅 Agent 就绪、预览状态、工具结算或任务完成事件，并返回取消订阅函数。                 | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
+| `on`              | `on(event, listener)`                                          | 订阅 Agent 就绪、预览状态、消息流开始、工具结算或任务完成事件，并返回取消订阅函数。     | 每种事件对应不同的 listener 签名，详见下方“事件 API”。        |
 | `setInput`        | `(content: string) => Promise<void>`                           | 将文本写入 Agent 输入框并聚焦，但不发送。                                               | 仅接受非空字符串；以 iframe response 为准。                   |
 | `appendInput`     | `(content: string) => Promise<void>`                           | 将文本追加到当前输入末尾并聚焦，但不发送。                                              | 仅接受非空字符串；以 iframe response 为准。                   |
 | `clearInput`      | `() => Promise<void>`                                          | 清空当前输入框并聚焦，不发送消息。                                                      | 以 iframe response 为准。                                     |
@@ -93,6 +93,25 @@ window.MagicWidget
 同时可以通过 `window.MagicWidget.version` 获取当前脚本版本，便于排查接入问题。
 
 ### 事件 API
+
+#### `message.stream.started`
+
+```ts
+on(event: "message.stream.started", listener: (event: MagicWidget.MessageStreamStartedEvent) => void): () => void
+```
+
+当 Magic Web 接受新流代次的首个有序 chunk 时，SDK 会将完整流开始事件实时透传给宿主：
+
+```js
+const unsubscribeStreamStarted = window.MagicWidget.on("message.stream.started", (event) => {
+	// Show temporary host feedback without depending on Magic Web's internal payload shape.
+	showHostStreamingState(event)
+})
+```
+
+- 流可能由元数据、reasoning、正文或工具调用数据启动；具体分类由 Magic Web 当前事件 payload 提供。
+- 同一 correlation 发生流重启时可能产生新的流代次和新的 started 事件。
+- SDK 只稳定承诺事件名；`meta` 与 `payload` 由 Magic Web 管理，宿主如需读取具体字段，应在自身业务边界内校验或窄化。
 
 #### `toolCall.settled`
 
@@ -130,7 +149,7 @@ const unsubscribeTask = window.MagicWidget.on("task.completed", (event) => {
 
 SDK 不定义“任务完成”的内部判断条件，也不解释结果数据；事件是否产生以及携带哪些字段完全沿用 Magic Web 当前行为。
 
-两个结果事件都只提供浏览器实时通知：不 replay 注册前事件，不承诺 Widget 销毁、iframe 重载、页面后台、网络中断、离线或其他设备事件送达。宿主可据此更新临时 UI 或主动刷新业务接口，但不应将其作为不可丢失的业务凭证。SDK 不增加当前话题过滤；Magic Web 实际发布并被 iframe 观察到的事件会直接透传。
+这些运行时事件都只提供浏览器实时通知：不 replay 注册前事件，不承诺 Widget 销毁、iframe 重载、页面后台、网络中断、离线或其他设备事件送达。宿主可据此更新临时 UI 或主动刷新业务接口，但不应将其作为不可丢失的业务凭证。SDK 不增加当前话题过滤；Magic Web 实际发布并被 iframe 观察到的事件会直接透传。
 
 #### `preview_fullscreen`
 
@@ -281,15 +300,15 @@ namespace MagicWidget {
 }
 ```
 
-| 字段                         | 作用                                                  | 边界限制                                                                                                                   |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；SDK 默认使用 `mobile`，可显式配置为 `desktop`。                                                        |
-| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                                               |
-| `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 默认使用 `viewport` 以兼容已有移动业务；需要窄 PC iframe 保持桌面交互时可配置为 `device-and-viewport`。                |
-| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                                             |
-| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                                             |
-| `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。        | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                                            |
-| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                                  |
+| 字段                         | 作用                                                  | 边界限制                                                                                                    |
+| ---------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `layout`                     | 选择 Crew 对话内容使用桌面版或移动版。                | 不替换外围应用外壳；SDK 默认使用 `mobile`，可显式配置为 `desktop`。                                         |
+| `shell.appSidebar`           | 显示或隐藏应用侧边栏。                                | 仅在合法 SDK 嵌入且最终 Crew 布局为 `desktop` 时生效，不影响移动端嵌入布局。                                |
+| `responsive.mobileDetection` | 选择仅视口或设备与视口组合的移动端语义。              | SDK 默认使用 `viewport` 以兼容已有移动业务；需要窄 PC iframe 保持桌面交互时可配置为 `device-and-viewport`。 |
+| `conversation.projectFiles`  | 显示或隐藏桌面版项目文件面板。                        | 仅由桌面版 Crew 对话布局消费。                                                                              |
+| `conversation.topicHistory`  | 启用或关闭桌面版历史话题入口和面板。                  | 仅由桌面版 Crew 对话布局消费。                                                                              |
+| `conversation.autoHire`      | 直开员工不可执行时是否自动尝试雇佣，默认开启。        | 仅在合法 SDK 嵌入中生效；普通 Magic Web Crew 页面不会自动雇佣。                                             |
+| `conversation.previewMode`   | 选择 `split`、`fullscreen` 或 `switchable` 预览策略。 | 桌面 SDK 嵌入默认 `switchable`；普通 Magic Web 页面继续使用现有并排布局。                                   |
 
 `split` 让展开的对话与预览并排展示；`fullscreen` 只在当前宿主控制的 Widget 容器内展示预览，退出时直接关闭预览；只有宿主同步放大 Widget 容器时，预览才会覆盖宿主视口；`switchable` 将预览保持在 Widget 内部布局中，新预览会话开始时自动收起对话，并允许用户展开或再次收起对话而不重建预览。用户仍可手动进入宿主全屏，退出后恢复进入前的对话布局。宿主控制器始终保持同一个 iframe 挂载，因此文件 Tab、工具回放状态、输入内容和已加载预览数据不会被重建。运行时更新配置只影响下一次预览激活，不会强制改变当前布局。
 

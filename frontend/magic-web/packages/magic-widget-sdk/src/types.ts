@@ -116,8 +116,8 @@ export declare namespace MagicWidget {
 		code: CommandErrorCode
 	}
 
-	/** Lists runtime result event names whose routing contract is stable. */
-	export type RuntimeEventName = "toolCall.settled" | "task.completed"
+	/** Lists runtime event names whose routing contract is stable. */
+	export type RuntimeEventName = "message.stream.started" | "toolCall.settled" | "task.completed"
 
 	/** Keeps the event envelope stable while leaving Magic Web-owned data opaque. */
 	export interface RuntimeEventEnvelope<T extends RuntimeEventName> {
@@ -132,8 +132,12 @@ export declare namespace MagicWidget {
 	/** Identifies a task completion without fixing its evolving business payload shape. */
 	export type TaskCompletedEvent = RuntimeEventEnvelope<"task.completed">
 
-	/** Maps result event names to the exact payload delivered to host listeners. */
+	/** Identifies a new message stream generation without fixing its evolving payload shape. */
+	export type MessageStreamStartedEvent = RuntimeEventEnvelope<"message.stream.started">
+
+	/** Maps runtime event names to the exact payload delivered to host listeners. */
 	export interface RuntimeEventMap {
+		"message.stream.started": MessageStreamStartedEvent
 		"toolCall.settled": ToolCallSettledEvent
 		"task.completed": TaskCompletedEvent
 	}
@@ -143,7 +147,7 @@ export declare namespace MagicWidget {
 		event: RuntimeEventMap[T],
 	) => void
 
-	/** Lists lifecycle, UI state, and runtime result events exposed to the embedding host. */
+	/** Lists lifecycle, UI state, and runtime events exposed to the embedding host. */
 	export type EventName = "agent_ready" | "preview_fullscreen" | RuntimeEventName
 	/** Handles notifications that the current Agent editor and draft state are ready. */
 	export type AgentReadyEventListener = () => void
@@ -165,6 +169,11 @@ export declare namespace MagicWidget {
 		 * The host owns any container resizing or fullscreen styling triggered by this state.
 		 */
 		on(event: "preview_fullscreen", listener: PreviewFullscreenEventListener): () => void
+		/** Subscribes to future message stream starts without replaying earlier generations. */
+		on(
+			event: "message.stream.started",
+			listener: RuntimeEventListener<"message.stream.started">,
+		): () => void
 		/** Subscribes to future tool settlements without replaying earlier results. */
 		on(
 			event: "toolCall.settled",

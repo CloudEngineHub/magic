@@ -194,6 +194,9 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let lifecycleId = 0
 	const agentReadyListeners = new Set<MagicWidget.AgentReadyEventListener>()
 	const previewFullscreenListeners = new Set<MagicWidget.PreviewFullscreenEventListener>()
+	const messageStreamStartedListeners = new Set<
+		MagicWidget.RuntimeEventListener<"message.stream.started">
+	>()
 	const toolCallSettledListeners = new Set<MagicWidget.RuntimeEventListener<"toolCall.settled">>()
 	const taskCompletedListeners = new Set<MagicWidget.RuntimeEventListener<"task.completed">>()
 
@@ -208,8 +211,18 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		})
 	}
 
-	/** Routes one validated result event to host listeners registered for its exact type. */
+	/** Routes one validated runtime event to host listeners registered for its exact type. */
 	const notifyRuntimeEvent = (event: MagicWidget.RuntimeEvent) => {
+		if (event.type === "message.stream.started") {
+			messageStreamStartedListeners.forEach((listener) => {
+				try {
+					listener(event)
+				} catch (error) {
+					console.error("Magic widget message.stream.started listener failed", error)
+				}
+			})
+			return
+		}
 		if (event.type === "toolCall.settled") {
 			toolCallSettledListeners.forEach((listener) => {
 				try {
@@ -642,12 +655,13 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		return bridge.send(command)
 	}
 
-	/** Subscribes to public lifecycle, UI state, and runtime result events. */
+	/** Subscribes to public lifecycle, UI state, and runtime events. */
 	const on = (
 		event: MagicWidget.EventName,
 		listener:
 			| MagicWidget.AgentReadyEventListener
 			| MagicWidget.PreviewFullscreenEventListener
+			| MagicWidget.RuntimeEventListener<"message.stream.started">
 			| MagicWidget.RuntimeEventListener<"toolCall.settled">
 			| MagicWidget.RuntimeEventListener<"task.completed">,
 	) => {
@@ -666,6 +680,12 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 			// Replay the current preview state synchronously so hosts can apply layout before the next paint.
 			previewListener(previewFullscreen)
 			return () => previewFullscreenListeners.delete(previewListener)
+		}
+		if (event === "message.stream.started") {
+			const runtimeListener =
+				listener as MagicWidget.RuntimeEventListener<"message.stream.started">
+			messageStreamStartedListeners.add(runtimeListener)
+			return () => messageStreamStartedListeners.delete(runtimeListener)
 		}
 		if (event === "toolCall.settled") {
 			const runtimeListener = listener as MagicWidget.RuntimeEventListener<"toolCall.settled">

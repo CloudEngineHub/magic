@@ -75,7 +75,7 @@ export interface WidgetUiCommandMessage {
 	command: "dismiss_preview"
 }
 
-/** Carries one validated SuperMagic runtime result from the iframe to its host. */
+/** Carries one validated SuperMagic runtime event from the iframe to its host. */
 export interface WidgetRuntimeEventMessage {
 	protocol: typeof WIDGET_PROTOCOL
 	version: typeof WIDGET_PROTOCOL_VERSION
@@ -94,11 +94,15 @@ export type WidgetProtocolMessage =
 	| WidgetRuntimeEventMessage
 	| WidgetResponseMessage
 
-/** Checks the minimal discriminated shape before the bridge exposes a runtime result. */
+/** Checks the minimal discriminated shape before the bridge exposes a runtime event. */
 function isRuntimeEvent(value: unknown): value is MagicWidget.RuntimeEvent {
 	if (!value || typeof value !== "object") return false
 	const event = value as Record<string, unknown>
-	return event.type === "toolCall.settled" || event.type === "task.completed"
+	return (
+		event.type === "message.stream.started" ||
+		event.type === "toolCall.settled" ||
+		event.type === "task.completed"
+	)
 }
 
 /** Checks the stable envelope before either side consumes a cross-window message. */

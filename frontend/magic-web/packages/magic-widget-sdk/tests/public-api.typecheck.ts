@@ -59,6 +59,19 @@ const unsubscribePreviewFullscreen = window.MagicWidget?.on(
 )
 void unsubscribePreviewFullscreen
 
+const unsubscribeMessageStreamStarted = window.MagicWidget?.on(
+	"message.stream.started",
+	(event) => {
+		const eventType: "message.stream.started" = event.type
+		const meta: Record<string, unknown> = event.meta
+		const payload: unknown = event.payload
+		void eventType
+		void meta
+		void payload
+	},
+)
+void unsubscribeMessageStreamStarted
+
 const unsubscribeToolCallSettled = window.MagicWidget?.on("toolCall.settled", (event) => {
 	const eventType: "toolCall.settled" = event.type
 	const meta: Record<string, unknown> = event.meta

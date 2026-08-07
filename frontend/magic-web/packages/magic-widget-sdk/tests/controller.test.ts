@@ -170,9 +170,9 @@ describe("createMagicWidgetController", () => {
 		expect(iframe?.getAttribute("src")).toContain("login-strategy=phone_password")
 		expect(iframe?.getAttribute("src")).toContain("organizationCode=org-001")
 		const initialConfig = JSON.parse(
-			new URL(iframe?.getAttribute("src") ?? "https://widget.example.invalid").searchParams.get(
-				"magicWidgetConfig",
-			) ?? "null",
+			new URL(
+				iframe?.getAttribute("src") ?? "https://widget.example.invalid",
+			).searchParams.get("magicWidgetConfig") ?? "null",
 		)
 		expect(initialConfig).toEqual({
 			layout: "mobile",
@@ -387,13 +387,20 @@ describe("createMagicWidgetController", () => {
 		const target = document.createElement("div")
 		document.body.append(target)
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const streamStartedEvents: unknown[] = []
 		const toolEvents: unknown[] = []
 		const taskEvents: unknown[] = []
 		const unsubscribeFailing = widget.on("toolCall.settled", () => {
 			throw new Error("mock host listener failure")
 		})
+		const unsubscribeFailingStreamStarted = widget.on("message.stream.started", () => {
+			throw new Error("mock stream listener failure")
+		})
 		const unsubscribeTool = widget.on("toolCall.settled", (event) => toolEvents.push(event))
 		const unsubscribeTask = widget.on("task.completed", (event) => taskEvents.push(event))
+		const unsubscribeStreamStarted = widget.on("message.stream.started", (event) =>
+			streamStartedEvents.push(event),
+		)
 
 		widget.mount({
 			page: { type: "crew", crewId: "crew-mock-runtime-events" },
@@ -442,26 +449,55 @@ describe("createMagicWidgetController", () => {
 				result: { attachments: [] },
 			},
 		}
+		const streamStartedEvent = {
+			type: "message.stream.started",
+			meta: {
+				sequence: 6,
+				revision: 1,
+				occurredAt: 1_700_000_000_200,
+				source: "stream",
+				topicId: "topic-mock-runtime-events",
+				correlationId: "correlation-mock-stream-started",
+				streamGeneration: 1,
+			},
+			payload: {
+				chunkIndex: 0,
+				startsWith: "content",
+			},
+		}
 
 		dispatchRuntimeEvent(iframe, frameWindow, origin, toolEvent)
 		dispatchRuntimeEvent(iframe, frameWindow, origin, taskEvent)
+		dispatchRuntimeEvent(iframe, frameWindow, origin, streamStartedEvent)
 
 		expect(toolEvents).toEqual([toolEvent])
 		expect(taskEvents).toEqual([taskEvent])
+		expect(streamStartedEvents).toEqual([streamStartedEvent])
 		expect(consoleError).toHaveBeenCalledWith(
 			"Magic widget toolCall.settled listener failed",
 			expect.any(Error),
 		)
+		expect(consoleError).toHaveBeenCalledWith(
+			"Magic widget message.stream.started listener failed",
+			expect.any(Error),
+		)
 
 		unsubscribeFailing()
+		unsubscribeFailingStreamStarted()
 		unsubscribeTool()
 		unsubscribeTask()
+		unsubscribeStreamStarted()
+		dispatchRuntimeEvent(iframe, frameWindow, origin, streamStartedEvent)
+		expect(streamStartedEvents).toEqual([streamStartedEvent])
 		widget.destroy()
 	})
 
 	it("rejects unsupported event names from JavaScript callers", () => {
 		const widget = createMagicWidgetController()
-		const subscribe = widget.on as unknown as (event: string, listener: () => void) => () => void
+		const subscribe = widget.on as unknown as (
+			event: string,
+			listener: () => void,
+		) => () => void
 
 		expect(() => subscribe("task.complete", vi.fn())).toThrow(
 			"Magic widget event name is not supported",

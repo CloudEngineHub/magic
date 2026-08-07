@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { isObservable, observable } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
-import type { TaskCompletedEvent, ToolCallSettledEvent } from "@/pages/superMagic/stores"
+import type {
+	MessageStreamStartedEvent,
+	TaskCompletedEvent,
+	ToolCallSettledEvent,
+} from "@/pages/superMagic/stores"
 import { useMagicWidgetBridge } from "../useMagicWidgetBridge"
 
 const { subscribeMock } = vi.hoisted(() => ({ subscribeMock: vi.fn() }))
@@ -197,20 +201,25 @@ describe("useMagicWidgetBridge", () => {
 		)
 	})
 
-	it("forwards Store result events without adding a topic scope and unsubscribes on cleanup", () => {
+	it("forwards Store runtime events without adding a topic scope and unsubscribes on cleanup", () => {
 		const callbacks = new Map<
 			string,
-			(event: ToolCallSettledEvent | TaskCompletedEvent) => void
+			(event: MessageStreamStartedEvent | ToolCallSettledEvent | TaskCompletedEvent) => void
 		>()
 		const unsubscribeTool = vi.fn()
 		const unsubscribeTask = vi.fn()
+		const unsubscribeStreamStarted = vi.fn()
 		subscribeMock.mockImplementation(
 			(
 				type: string,
-				callback: (event: ToolCallSettledEvent | TaskCompletedEvent) => void,
+				callback: (
+					event: MessageStreamStartedEvent | ToolCallSettledEvent | TaskCompletedEvent,
+				) => void,
 			) => {
 				callbacks.set(type, callback)
-				return type === "toolCall.settled" ? unsubscribeTool : unsubscribeTask
+				if (type === "toolCall.settled") return unsubscribeTool
+				if (type === "task.completed") return unsubscribeTask
+				return unsubscribeStreamStarted
 			},
 		)
 
@@ -223,6 +232,11 @@ describe("useMagicWidgetBridge", () => {
 
 		expect(subscribeMock).toHaveBeenNthCalledWith(1, "toolCall.settled", expect.any(Function))
 		expect(subscribeMock).toHaveBeenNthCalledWith(2, "task.completed", expect.any(Function))
+		expect(subscribeMock).toHaveBeenNthCalledWith(
+			3,
+			"message.stream.started",
+			expect.any(Function),
+		)
 
 		const toolEvent: ToolCallSettledEvent = {
 			type: "toolCall.settled",
@@ -258,9 +272,26 @@ describe("useMagicWidgetBridge", () => {
 				result: { detail: { completed: true }, attachments: [] },
 			},
 		}
+		const streamStartedEvent: MessageStreamStartedEvent = {
+			type: "message.stream.started",
+			meta: {
+				sequence: 9,
+				revision: 1,
+				occurredAt: 1_700_000_000_200,
+				source: "stream",
+				topicId: "topic-mock-background",
+				correlationId: "correlation-mock-stream",
+				streamGeneration: 1,
+			},
+			payload: {
+				chunkIndex: 0,
+				startsWith: "metadata",
+			},
+		}
 
 		act(() => callbacks.get("toolCall.settled")?.(toolEvent))
 		act(() => callbacks.get("task.completed")?.(taskEvent))
+		act(() => callbacks.get("message.stream.started")?.(streamStartedEvent))
 
 		expect(postMessage).toHaveBeenNthCalledWith(
 			1,
@@ -284,10 +315,22 @@ describe("useMagicWidgetBridge", () => {
 			},
 			HOST_ORIGIN,
 		)
+		expect(postMessage).toHaveBeenNthCalledWith(
+			3,
+			{
+				protocol: "magic-widget",
+				version: 1,
+				instanceId: INSTANCE_ID,
+				type: "event",
+				event: streamStartedEvent,
+			},
+			HOST_ORIGIN,
+		)
 
 		unmount()
 		expect(unsubscribeTool).toHaveBeenCalledTimes(1)
 		expect(unsubscribeTask).toHaveBeenCalledTimes(1)
+		expect(unsubscribeStreamStarted).toHaveBeenCalledTimes(1)
 	})
 
 	it("converts observable Store event branches before posting them to the host", () => {
