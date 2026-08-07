@@ -147,6 +147,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
 	const [isSending, setIsSending] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
+	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
 	const sendingRef = useRef(false)
 	const isMountedRef = useRef(false)
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
@@ -879,12 +880,19 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>
-			<LinkedEditorInputsBar
-				textConnections={linkedEditorInputs.textConnections}
-				isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
-				onTextConnectionSelectedChange={linkedEditorInputs.setTextConnectionSelected}
-				onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
-			/>
+			<div ref={setSourceListContainer} className={styles.sourceListMount} />
+			{linkedEditorInputs.textConnections.length > 0 ? (
+				<div className={styles.linkedInputs}>
+					<LinkedEditorInputsBar
+						textConnections={linkedEditorInputs.textConnections}
+						isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+						onTextConnectionSelectedChange={
+							linkedEditorInputs.setTextConnectionSelected
+						}
+						onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
+					/>
+				</div>
+			) : null}
 			<MessageEditor
 				ref={editorRef}
 				autoFocus={autoFocus}
@@ -913,7 +921,6 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onSelectSource={handleSelectSource}
 				onProjectSelect={handleProjectSelect}
 				onFocusEditor={() => editorRef.current?.focus()}
-				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs.mediaItems}
 				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
 				linkedFrameBindings={linkedFrameBindings}
@@ -959,6 +966,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						)}
 					</Button>
 				)}
+				sourceListContainer={sourceListContainer}
 			/>
 		</ReferenceResourceDropSurface>
 	)

@@ -4,7 +4,6 @@ import {
 	type CropConfig,
 	ElementTypeEnum,
 	type FrameElement,
-	type ImageElement,
 	type LayerElement,
 	type TextElement,
 	type VideoElement,
@@ -14,24 +13,31 @@ import {
 	extractPlainTextFromRichText,
 	extractPromptTextFromRichText,
 } from "../../../runtime/text/richText"
-import {
-	getCanvasResourceFileName,
-	getCanvasResourceReferenceIdentity,
-} from "../../../runtime/shared/path/canvasResourcePath"
+import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
+import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import {
+	getLinkedMediaReferenceIdentity,
+	mergeLinkedMediaPathsWithResolver,
+	mergeLinkedMediaReferences,
+	type LinkedMediaKind,
+	type LinkedMediaReference,
+} from "../../../runtime/shared/linkedMedia"
 import { getLinkedTextPromptText, type LinkedTextConnection } from "./linkedTextPrompt"
 
+export {
+	getLinkedMediaReferenceIdentity,
+	mergeLinkedMediaPathsWithResolver,
+	mergeLinkedMediaReferences,
+} from "../../../runtime/shared/linkedMedia"
+
 export type LinkedEditorTargetKind = "image" | "video"
-export type LinkedEditorMediaKind = "image" | "video" | "audio"
+export type LinkedEditorMediaKind = LinkedMediaKind
 export type LinkedEditorMediaStatus = "active" | "inactive"
 export type LinkedEditorMediaInactiveReason =
 	"unsupported-type" | "unsupported-mode" | "over-limit" | "missing-resource" | "duplicate"
 
-export interface LinkedEditorMediaReference {
-	kind: LinkedEditorMediaKind
-	path: string
-	sourceCrop?: CropConfig
-}
+export type LinkedEditorMediaReference = LinkedMediaReference
 
 export interface LinkedEditorMediaPolicy {
 	supportedKinds: LinkedEditorMediaKind[]
@@ -41,31 +47,6 @@ export interface LinkedEditorMediaPolicy {
 	validateActiveReferences?: (
 		references: LinkedEditorMediaReference[],
 	) => LinkedEditorMediaInactiveReason | null
-}
-
-/** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */
-export function getLinkedMediaReferenceIdentity(
-	path?: string,
-	resolveResourceReference?: ResolveCanvasResourceReference,
-): string {
-	return getCanvasResourceReferenceIdentity(path, resolveResourceReference)
-}
-
-export function mergeLinkedMediaPathsWithResolver(
-	resolveResourceReference: ResolveCanvasResourceReference | undefined,
-	...pathGroups: string[][]
-): string[] {
-	const merged: string[] = []
-	const seen = new Set<string>()
-	for (const paths of pathGroups) {
-		for (const path of paths) {
-			const identity = getLinkedMediaReferenceIdentity(path, resolveResourceReference)
-			if (!identity || seen.has(identity)) continue
-			seen.add(identity)
-			merged.push(path)
-		}
-	}
-	return merged
 }
 
 export interface LinkedEditorMediaCandidate {
@@ -79,6 +60,8 @@ export interface LinkedEditorMediaCandidate {
 	path?: string
 	fileName?: string
 	sourceCrop?: CropConfig
+	/** 本次关联解析命中的图片版本；仅为运行时快照，不改变连接 DSL。 */
+	sourceVersionId?: string
 }
 
 export interface LinkedEditorMediaItem extends LinkedEditorMediaCandidate {
@@ -507,6 +490,7 @@ export function resolveLinkedMediaItems(
 			kind: candidate.kind,
 			path: candidate.path,
 			sourceCrop: candidate.sourceCrop,
+			sourceVersionId: candidate.sourceVersionId,
 		}
 		const validationReason = mediaPolicy?.validateActiveReferences?.([
 			...activeReferences,
@@ -643,6 +627,7 @@ export function resolveLinkedMediaPolicySelection(
 		path: candidate.path,
 		fileName: candidate.fileName,
 		sourceCrop: candidate.sourceCrop,
+		sourceVersionId: candidate.sourceVersionId,
 	}))
 	const selectedConnectionIdSet = new Set(mentionedConnectionIds)
 	const selectedCandidates = normalizedCandidates.filter((candidate) =>
@@ -738,40 +723,10 @@ export function resolveLinkedMediaPolicySelection(
 			kind: item.kind,
 			path: item.path,
 			sourceCrop: item.sourceCrop,
+			sourceVersionId: item.sourceVersionId,
 		}))
 
 	return { items, activeMediaReferences }
-}
-
-export function mergeLinkedMediaReferences(
-	manualReferences: LinkedEditorMediaReference[],
-	linkedReferences: LinkedEditorMediaReference[],
-	resolveResourceReference?: ResolveCanvasResourceReference,
-): LinkedEditorMediaReference[] {
-	const merged: LinkedEditorMediaReference[] = []
-	const linkedByIdentity = new Map<string, LinkedEditorMediaReference>()
-	for (const reference of linkedReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveResourceReference)
-		if (!identity || linkedByIdentity.has(identity)) continue
-		linkedByIdentity.set(identity, reference)
-	}
-	const seenPathSet = new Set<string>()
-
-	for (const reference of manualReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveResourceReference)
-		if (!identity || seenPathSet.has(identity)) continue
-		seenPathSet.add(identity)
-		merged.push(linkedByIdentity.get(identity) ?? reference)
-	}
-
-	for (const reference of linkedReferences) {
-		const identity = getLinkedMediaReferenceIdentity(reference.path, resolveResourceReference)
-		if (!identity || seenPathSet.has(identity)) continue
-		seenPathSet.add(identity)
-		merged.push(reference)
-	}
-
-	return merged
 }
 
 export function resolveLinkedEditorInputs(
@@ -796,15 +751,18 @@ export function resolveLinkedEditorInputs(
 			}
 
 			if (sourceElement.type === ElementTypeEnum.Image) {
-				const imageElement = sourceElement as ImageElement
-				const path = imageElement.src
+				const imageElement = canvas.elementManager.getElementInstance(sourceElementId)
+				if (!(imageElement instanceof ImageElementClass)) return
+				const associatedVersion = imageElement.getAssociatedVersionData()
+				const path = associatedVersion.src
 				mediaCandidates.push({
 					connectionId,
 					sourceElementId,
 					kind: "image",
 					path,
 					fileName: path ? getFileName(path) : undefined,
-					sourceCrop: imageElement.crop,
+					sourceCrop: associatedVersion.crop,
+					sourceVersionId: associatedVersion.id,
 				})
 				return
 			}

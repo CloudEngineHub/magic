@@ -3,6 +3,7 @@ import imageBackgroundLoading from "../../../assets/image/image-background-loadi
 import imageBackgroundUnselected from "../../../assets/image/image-background-unselected.jpg"
 import imageIconError from "../../../assets/image/image-icon-error.png"
 import { VIDEO_CONFIG, VIDEO_PLACEHOLDER } from "./VideoElement.config"
+import { resolveImageControlCanvasOffset } from "../image/ImageElement.config"
 import { layoutLucideSolidPlayPath } from "./videoPlayIconPath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
@@ -614,8 +615,9 @@ export class VideoRenderer {
 		playButtonBg.radius(this.getPlayButtonRadius(iconSize))
 		layoutLucideSolidPlayPath(playTriangle, 0, 0, iconSize)
 		this.updatePauseBarsLayout(pauseBarLeft, pauseBarRight, iconSize)
-		const paddingX = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.x
-		const paddingY = VIDEO_CONFIG.CONTROL_PADDING * inverseScale.y
+		const absoluteScale = parentGroup.getAbsoluteScale()
+		const paddingX = resolveImageControlCanvasOffset(Math.abs(absoluteScale.x))
+		const paddingY = resolveImageControlCanvasOffset(Math.abs(absoluteScale.y))
 
 		progressGroup.scale(inverseScale)
 		const progressHeight = progressBackground.height() * inverseScale.y

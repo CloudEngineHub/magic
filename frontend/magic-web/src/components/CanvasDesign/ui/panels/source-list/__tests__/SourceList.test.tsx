@@ -6,7 +6,12 @@ import { createTestResourceReferenceResolver } from "../../../../public/__tests_
 import SourceList from "../index"
 
 vi.mock("../../../previews/reference-media/index", () => ({
-	default: () => <div data-testid="reference-media-preview" />,
+	default: (props: { enableTooltip?: boolean }) => (
+		<div
+			data-testid="reference-media-preview"
+			data-tooltip-enabled={props.enableTooltip ? "true" : "false"}
+		/>
+	),
 }))
 
 function renderSourceList(ui: ReactElement) {
@@ -83,8 +88,6 @@ describe("SourceList selection", () => {
 
 describe("SourceList preview", () => {
 	it("hides preview for a resource deleted from the attachment snapshot", () => {
-		const onPreviewResource = vi.fn()
-
 		renderSourceList(
 			<SourceList
 				resolveResourceReference={createTestResourceReferenceResolver({
@@ -97,20 +100,18 @@ describe("SourceList preview", () => {
 						value: "deleted-image",
 						slotIndex: 0,
 						resourcePath: "./images/deleted.png",
-						previewResourceAriaLabel: "预览媒体资源",
-						onPreviewResource,
 					},
 				]}
 			/>,
 		)
 
-		expect(screen.queryByRole("button", { name: "预览媒体资源" })).not.toBeInTheDocument()
-		expect(onPreviewResource).not.toHaveBeenCalled()
+		expect(screen.getByTestId("reference-media-preview")).toHaveAttribute(
+			"data-tooltip-enabled",
+			"false",
+		)
 	})
 
-	it("keeps preview enabled for an available resource", () => {
-		const onPreviewResource = vi.fn()
-
+	it("uses media tooltip preview for an available resource", () => {
 		renderSourceList(
 			<SourceList
 				resolveResourceReference={createTestResourceReferenceResolver({
@@ -126,16 +127,14 @@ describe("SourceList preview", () => {
 						value: "available-image",
 						slotIndex: 0,
 						resourcePath: "./images/available.png",
-						previewResourceAriaLabel: "预览媒体资源",
-						onPreviewResource,
 					},
 				]}
 			/>,
 		)
 
-		fireEvent.click(screen.getByRole("button", { name: "预览媒体资源" }))
-		expect(onPreviewResource).toHaveBeenCalledWith(
-			expect.objectContaining({ path: "./images/available.png" }),
+		expect(screen.getByTestId("reference-media-preview")).toHaveAttribute(
+			"data-tooltip-enabled",
+			"true",
 		)
 	})
 })

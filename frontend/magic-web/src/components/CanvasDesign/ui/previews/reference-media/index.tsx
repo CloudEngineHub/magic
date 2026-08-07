@@ -17,6 +17,8 @@ export default function ReferenceMediaPreview(props: ReferenceMediaPreviewProps)
 				path={props.path}
 				fillParent={props.fillParent}
 				objectFit={props.objectFit}
+				enableTooltip={props.enableTooltip}
+				tooltipSide={props.tooltipSide}
 			/>
 		)
 	}

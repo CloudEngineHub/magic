@@ -1,4 +1,4 @@
-import { Link2, Maximize2, PlusIcon, X } from "lucide-react"
+import { Link2, PlusIcon, X } from "lucide-react"
 import {
 	Fragment,
 	useCallback,
@@ -22,7 +22,6 @@ import {
 	getCanvasResourceAvailability,
 	getCanvasResourceFileName,
 } from "../../../runtime/shared/path/canvasResourcePath"
-import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { CropConfig } from "../../../runtime/document/types"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
@@ -60,9 +59,6 @@ export interface SourceListSlotOption {
 	onRemoveResource?: () => void
 	/** 删除按钮无障碍标签 */
 	removeResourceAriaLabel?: string
-	onPreviewResource?: (resource: MediaResourceFullscreenPreviewItem) => void
-	/** 预览按钮无障碍标签 */
-	previewResourceAriaLabel?: string
 }
 
 /**
@@ -221,17 +217,11 @@ export default function SourceList(props: SourceListProps) {
 						resourcePath,
 						resolveResourceReference,
 					)
-					const previewResource =
+					const hasMediaTooltip = Boolean(
 						resourcePath &&
 						resourceKind !== "other" &&
-						resourceAvailability !== "deleted"
-							? ({
-									path: resourcePath,
-									fileName: resourceDisplayName,
-									kind: resourceKind,
-									crop: entry.sourceCrop,
-								} satisfies MediaResourceFullscreenPreviewItem)
-							: null
+						resourceAvailability !== "deleted",
+					)
 					const handleSlotClick =
 						entry.selection && !entry.selection.disabled
 							? () => entry.selection?.onCheckedChange(!entry.selection.checked)
@@ -246,6 +236,8 @@ export default function SourceList(props: SourceListProps) {
 									objectFit="contain"
 									inlineOriginal
 									sourceCrop={entry.sourceCrop}
+									enableTooltip={hasMediaTooltip}
+									tooltipSide="top"
 								/>
 							</div>
 							{entry.isLinked ? (
@@ -257,29 +249,6 @@ export default function SourceList(props: SourceListProps) {
 								<span className={styles.sourceItemStatusLabel}>
 									{entry.resourceStatusLabel}
 								</span>
-							) : null}
-							{previewResource && entry.onPreviewResource ? (
-								<button
-									type="button"
-									className={styles.sourceItemPreviewButton}
-									aria-label={
-										entry.previewResourceAriaLabel ?? resourceDisplayName
-									}
-									onPointerDown={(e) => {
-										e.stopPropagation()
-									}}
-									onClick={(e) => {
-										e.preventDefault()
-										e.stopPropagation()
-										entry.onPreviewResource?.(previewResource)
-									}}
-								>
-									<Maximize2
-										size={14}
-										className={styles.sourceItemPreviewIcon}
-										aria-hidden
-									/>
-								</button>
 							) : null}
 							{entry.selection ? (
 								<Checkbox
@@ -344,29 +313,30 @@ export default function SourceList(props: SourceListProps) {
 						</div>
 					)
 
-					const contentNode = hasResource ? (
-						<Tooltip delayDuration={400}>
-							<TooltipTrigger asChild>
-								<div className={styles.sourceItemTooltipTrigger}>
-									{slotItemNode}
-								</div>
-							</TooltipTrigger>
-							<TooltipPrimitive.Portal container={portalContainer || undefined}>
-								<TooltipContent
-									side="top"
-									sideOffset={6}
-									className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
-								>
-									<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
-										{resourceDisplayName}
-									</span>
-									<TooltipPrimitive.Arrow className="fill-black" />
-								</TooltipContent>
-							</TooltipPrimitive.Portal>
-						</Tooltip>
-					) : (
-						slotItemNode
-					)
+					const contentNode =
+						hasResource && !hasMediaTooltip ? (
+							<Tooltip delayDuration={400}>
+								<TooltipTrigger asChild>
+									<div className={styles.sourceItemTooltipTrigger}>
+										{slotItemNode}
+									</div>
+								</TooltipTrigger>
+								<TooltipPrimitive.Portal container={portalContainer || undefined}>
+									<TooltipContent
+										side="top"
+										sideOffset={6}
+										className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
+									>
+										<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
+											{resourceDisplayName}
+										</span>
+										<TooltipPrimitive.Arrow className="fill-black" />
+									</TooltipContent>
+								</TooltipPrimitive.Portal>
+							</Tooltip>
+						) : (
+							slotItemNode
+						)
 
 					return <Fragment key={entry.value}>{contentNode}</Fragment>
 				})}

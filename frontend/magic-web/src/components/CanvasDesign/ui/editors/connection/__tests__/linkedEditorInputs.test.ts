@@ -5,8 +5,11 @@ import {
 	type CanvasConnection,
 	ElementTypeEnum,
 	type FrameElement,
+	type ImageElement as ImageElementData,
+	type ImageElementVersion,
 	type LayerElement,
 } from "../../../../runtime/document/types"
+import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import {
 	collectLinkedFrameSourceElements,
 	collectLinkedEditorSourceElements,
@@ -49,8 +52,31 @@ function audioElement(id: string, src?: string, zIndex = 0): LayerElement {
 	return { id, type: ElementTypeEnum.Audio, zIndex, src }
 }
 
-function createCanvasStub(elements: LayerElement[], connections: CanvasConnection[]): Canvas {
-	const elementById = new Map(elements.map((element) => [element.id, element]))
+function createCanvasStub(
+	elements: LayerElement[],
+	connections: CanvasConnection[],
+	associatedVersionByElementId: Record<string, ImageElementVersion> = {},
+): Canvas {
+	const elementById = new Map<string, LayerElement>()
+	const instanceById = new Map<string, ImageElementClass>()
+	const register = (element: LayerElement) => {
+		elementById.set(element.id, element)
+		if (element.type === ElementTypeEnum.Image) {
+			const instance = Object.create(ImageElementClass.prototype) as ImageElementClass & {
+				getData: () => ImageElementData
+			}
+			instance.getData = () => element
+			const associatedVersion = associatedVersionByElementId[element.id]
+			if (associatedVersion) {
+				instance.getAssociatedVersionData = () => associatedVersion
+			}
+			instanceById.set(element.id, instance)
+		}
+		if ("children" in element && Array.isArray(element.children)) {
+			element.children.forEach(register)
+		}
+	}
+	elements.forEach(register)
 	return {
 		connectionManager: {
 			getUpstreamConnections: (elementId: string) =>
@@ -58,11 +84,46 @@ function createCanvasStub(elements: LayerElement[], connections: CanvasConnectio
 		},
 		elementManager: {
 			getElementData: (elementId: string) => elementById.get(elementId),
+			getElementInstance: (elementId: string) => instanceById.get(elementId),
 		},
 	} as unknown as Canvas
 }
 
 describe("linked frame source collection", () => {
+	it("resolves linked image versions through the image element semantic entry", () => {
+		const source: ImageElementData = {
+			id: "source-image",
+			type: ElementTypeEnum.Image,
+			imageDslVersion: 2,
+			activeVersionId: "dsl-active",
+			mainVersionId: "dsl-active",
+			versions: [{ id: "dsl-active", src: "./images/dsl-active.png" }],
+		}
+		const target = videoElement("target", "./videos/target.mp4")
+		const associatedVersion: ImageElementVersion = {
+			id: "associated-version",
+			src: "./images/associated.png",
+			crop: { x: 10, y: 20, width: 300, height: 200 },
+		}
+		const canvas = createCanvasStub(
+			[source, target],
+			[{ id: "image-video", sourceElementId: source.id, targetElementId: target.id }],
+			{ [source.id]: associatedVersion },
+		)
+
+		const [item] = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: target.id,
+			targetKind: "video",
+		}).mediaItems
+
+		expect(item).toMatchObject({
+			path: associatedVersion.src,
+			sourceCrop: associatedVersion.crop,
+			sourceVersionId: associatedVersion.id,
+		})
+	})
+
 	it("collects direct and framed audio candidates for video targets", () => {
 		const directAudio = audioElement("direct-audio", "./audios/direct.mp3")
 		const framedAudio = audioElement("framed-audio", "./audios/framed.wav")

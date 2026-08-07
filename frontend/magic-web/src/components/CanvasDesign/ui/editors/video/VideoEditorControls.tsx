@@ -1,6 +1,7 @@
 import { ArrowLeftRight, LoaderCircle, X } from "lucide-react"
 import type { CSSProperties, ForwardedRef, PointerEvent, ReactNode, RefCallback } from "react"
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import EditorModelSelect from "./model-config/EditorModelSelect"
@@ -35,7 +36,6 @@ import type {
 } from "../../../public/props"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { useOverflowChange } from "../../../app/hooks/layout/useOverflowChange"
-import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { LinkedEditorMediaItem } from "../connection/linkedEditorInputs"
 import {
@@ -207,7 +207,7 @@ function resolveLinkedFrameAssignedRoles(
 	})
 }
 
-/** 视频编辑器底部工具区：模型、输入 Tab、参考图与发送区 */
+/** 视频编辑器底部工具区：模型、输入 Tab 与发送区；SourceList 可挂载到顶部。 */
 interface VideoEditorControlsProps {
 	config: VideoEditorConfig
 	hoveredMentionPath?: string | null
@@ -230,7 +230,6 @@ interface VideoEditorControlsProps {
 	renderSendButton?: () => React.ReactNode
 	/** 点击顶部栏空白区域（非 SourceList）时聚焦提示词编辑器 */
 	onFocusEditor?: () => void
-	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	linkedFrameBindings?: Array<LinkedFrameBinding | undefined>
@@ -240,6 +239,8 @@ interface VideoEditorControlsProps {
 		item: LinkedEditorMediaItem & { kind: "image"; path: string },
 	) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
+	/** 将媒体 SourceList 挂载到编辑器顶部；未传入时保留内联渲染。 */
+	sourceListContainer?: HTMLElement | null
 }
 
 export default function VideoEditorControls(props: VideoEditorControlsProps) {
@@ -252,12 +253,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onProjectSelect,
 		renderSendButton,
 		onFocusEditor,
-		onPreviewMediaResource,
 		linkedMediaItems = [],
 		onLinkedMediaSelectionChange,
 		linkedFrameBindings = [],
 		onLinkedMediaFrameSelect,
 		renderPromptOptimizationButton,
+		sourceListContainer,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { methods } = useMagic()
@@ -293,8 +294,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	} = config
 
 	const removeSlotAriaLabel = t("videoEditor.removeSlotResource", "移除该参考资源")
-	const previewResourceAriaLabel = t("mediaResourceFullscreenPreview.open", "预览媒体资源")
-
 	/** 文生视频走提示词，不作为模式 Tab 展示；仅展示需切换素材类型的模式 */
 	const inputModesForTabs = useMemo(
 		() => availableInputModes.filter((mode) => mode !== "standard"),
@@ -508,8 +507,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 								) ===
 								getLinkedMediaReferenceIdentity(path, resolveResourceReference),
 							removeResourceAriaLabel: removeSlotAriaLabel,
-							previewResourceAriaLabel,
-							onPreviewResource: onPreviewMediaResource,
 							onRemoveResource: () => handlers.handleFrameImageRemove(idx),
 						}
 					: {}),
@@ -542,8 +539,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 								) ===
 								getLinkedMediaReferenceIdentity(path, resolveResourceReference),
 							removeResourceAriaLabel: removeSlotAriaLabel,
-							previewResourceAriaLabel,
-							onPreviewResource: onPreviewMediaResource,
 							onRemoveResource: () => handlers.handleFrameImageRemove(idx),
 						}
 					: {}),
@@ -590,8 +585,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		frameImageInfos,
 		linkedFrameBindings,
 		removeSlotAriaLabel,
-		previewResourceAriaLabel,
-		onPreviewMediaResource,
 		handlers,
 		t,
 	])
@@ -675,8 +668,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					resourcePath: info.path,
 					resourceFileName: info.fileName,
 					removeResourceAriaLabel: removeSlotAriaLabel,
-					previewResourceAriaLabel,
-					onPreviewResource: onPreviewMediaResource,
 					onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 				})
 			})
@@ -687,8 +678,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						index: linkedIndex,
 						slotIndex: referenceImageInfos.length + linkedIndex,
 						label: referenceSlotLabelByType[kind],
-						previewResourceAriaLabel,
-						onPreviewMediaResource,
 						onLinkedMediaSelectionChange,
 					}),
 				)
@@ -726,8 +715,6 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		referenceSlotLabelByType,
 		createLinkedMediaSourceListOption,
 		removeSlotAriaLabel,
-		previewResourceAriaLabel,
-		onPreviewMediaResource,
 		onLinkedMediaSelectionChange,
 		handlers,
 	])
@@ -1104,82 +1091,89 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		referenceAssetOptions.length,
 	])
 
-	return (
-		<div className={styles.controllers} data-testid="video-generate-editor-controls">
-			{showTopImageInputs && (
-				<div className={styles.top} onPointerDown={handleTopPointerDown}>
-					<div
-						ref={sourceListScrollerRef}
-						className={styles.sourceListScroller}
-						data-has-scrollbar={hasSourceListScrollbar ? "" : undefined}
-					>
-						<div className={styles.sourceListScrollerContent}>
-							{activeInputTab === "frame" && frameOptions.length > 0 && (
-								<SourceList
-									options={frameOptions}
-									renderItem={renderFrameSourceListItem}
-									resolveResourceReference={resolveResourceReference}
-								/>
-							)}
-							{activeInputTab === "reference" && referenceAssetOptions.length > 0 && (
-								<SourceList
-									options={referenceAssetOptions}
-									renderItem={renderReferenceSourceListItem}
-									resolveResourceReference={resolveResourceReference}
-								/>
-							)}
-						</div>
-					</div>
-				</div>
-			)}
-			<div className={styles.bottom}>
-				<div className={styles.left}>
-					<EditorModelSelect
-						selectedModelId={selectedModelId}
-						modelOptions={modelOptions}
-						modelOptionGroups={modelOptionGroups}
-						selectedModelOption={selectedModelOption}
-						onModelChange={handlers.handleModelChange}
-					/>
-					{shouldShowModeTabs && (
-						<div className={styles.tabsList} role="tablist">
-							{inputModesForTabs.map((inputMode) => (
-								<button
-									key={inputMode}
-									type="button"
-									role="tab"
-									aria-selected={selectedInputMode === inputMode}
-									className={styles.tabsTrigger}
-									data-state={
-										selectedInputMode === inputMode ? "active" : undefined
-									}
-									data-testid={`video-generate-editor-mode-${inputMode}`}
-									onClick={() => handlers.handleInputModeChange(inputMode)}
-								>
-									{getInputModeLabel(inputMode, {
-										framesLabel: t("videoEditor.frames", "首尾帧"),
-										videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
-										referenceImageLabel: t(
-											"videoEditor.referenceImage",
-											"参考图",
-										),
-										referenceAssetLabel: t(
-											"videoEditor.referenceAsset",
-											"全能模式",
-										),
-									})}
-								</button>
-							))}
-						</div>
+	const sourceList = showTopImageInputs ? (
+		<div className={styles.top} onPointerDown={handleTopPointerDown}>
+			<div
+				ref={sourceListScrollerRef}
+				className={styles.sourceListScroller}
+				data-has-scrollbar={hasSourceListScrollbar ? "" : undefined}
+			>
+				<div className={styles.sourceListScrollerContent}>
+					{activeInputTab === "frame" && frameOptions.length > 0 && (
+						<SourceList
+							options={frameOptions}
+							renderItem={renderFrameSourceListItem}
+							resolveResourceReference={resolveResourceReference}
+						/>
 					)}
-				</div>
-				<div className={styles.right}>
-					<VideoGenerationSettingsPopover config={config} />
-					{renderPromptOptimizationButton && renderPromptOptimizationButton()}
-					{renderSendButton && renderSendButton()}
+					{activeInputTab === "reference" && referenceAssetOptions.length > 0 && (
+						<SourceList
+							options={referenceAssetOptions}
+							renderItem={renderReferenceSourceListItem}
+							resolveResourceReference={resolveResourceReference}
+						/>
+					)}
 				</div>
 			</div>
 		</div>
+	) : null
+
+	return (
+		<>
+			{sourceListContainer && sourceList
+				? createPortal(sourceList, sourceListContainer)
+				: null}
+			<div className={styles.controllers} data-testid="video-generate-editor-controls">
+				{sourceListContainer === undefined ? sourceList : null}
+				<div className={styles.bottom}>
+					<div className={styles.left}>
+						<EditorModelSelect
+							selectedModelId={selectedModelId}
+							modelOptions={modelOptions}
+							modelOptionGroups={modelOptionGroups}
+							selectedModelOption={selectedModelOption}
+							onModelChange={handlers.handleModelChange}
+						/>
+						{shouldShowModeTabs && (
+							<div className={styles.tabsList} role="tablist">
+								{inputModesForTabs.map((inputMode) => (
+									<button
+										key={inputMode}
+										type="button"
+										role="tab"
+										aria-selected={selectedInputMode === inputMode}
+										className={styles.tabsTrigger}
+										data-state={
+											selectedInputMode === inputMode ? "active" : undefined
+										}
+										data-testid={`video-generate-editor-mode-${inputMode}`}
+										onClick={() => handlers.handleInputModeChange(inputMode)}
+									>
+										{getInputModeLabel(inputMode, {
+											framesLabel: t("videoEditor.frames", "首尾帧"),
+											videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
+											referenceImageLabel: t(
+												"videoEditor.referenceImage",
+												"参考图",
+											),
+											referenceAssetLabel: t(
+												"videoEditor.referenceAsset",
+												"全能模式",
+											),
+										})}
+									</button>
+								))}
+							</div>
+						)}
+					</div>
+					<div className={styles.right}>
+						<VideoGenerationSettingsPopover config={config} />
+						{renderPromptOptimizationButton && renderPromptOptimizationButton()}
+						{renderSendButton && renderSendButton()}
+					</div>
+				</div>
+			</div>
+		</>
 	)
 }
 
