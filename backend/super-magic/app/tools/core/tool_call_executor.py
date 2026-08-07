@@ -59,6 +59,7 @@ class ToolCallExecutor:
         tool_calls: List[ToolCall],
         agent_context: AgentContext,
         is_code_mode: bool = False,
+        preflight_failures: Optional[Dict[str, str]] = None,
     ) -> List[ToolResult]:
         """执行工具调用（自动选择串行或并行模式）
 
@@ -80,7 +81,12 @@ class ToolCallExecutor:
         # 决策逻辑：根据配置和工具数量决定执行模式
         if not self.default_enable_parallel or len(tool_calls) <= 1:
             logger.debug("Using sequential execution mode for tool calls")
-            return await self.execute_sequential(tool_calls, agent_context, is_code_mode=is_code_mode)
+            return await self.execute_sequential(
+                tool_calls,
+                agent_context,
+                is_code_mode=is_code_mode,
+                preflight_failures=preflight_failures,
+            )
         else:
             logger.info(f"Using parallel execution mode for {len(tool_calls)} tool calls")
             return await self.execute_parallel(
@@ -112,6 +118,7 @@ class ToolCallExecutor:
         tool_calls: List[ToolCall],
         agent_context: AgentContext,
         is_code_mode: bool = False,
+        preflight_failures: Optional[Dict[str, str]] = None,
     ) -> List[ToolResult]:
         """使用顺序模式执行 Tools 调用
 
@@ -143,13 +150,70 @@ class ToolCallExecutor:
 
             try:
                 tool_name = tool_call.function.name
-                tool_arguments_dict = self._parse_tool_arguments(tool_call, tool_name)
                 openai_tool_call_for_event = ToolCallEventManager.create_openai_tool_call(
                     tool_call.id,
                     tool_call.type,
                     tool_name,
                     tool_call.function.arguments,
                 )
+
+                preflight_advice = (preflight_failures or {}).get(tool_call.id)
+                if preflight_advice:
+                    tool_arguments_dict = {}
+                    tool_context = ToolCallEventManager.create_tool_context(
+                        agent_context,
+                        tool_call.id,
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    result = ToolResult.error(
+                        "Tool call arguments are invalid. Do not reuse the same arguments. "
+                        f"Retry the '{tool_name}' call with corrected JSON parameters. "
+                        f"Validation advice: {preflight_advice}",
+                        tool_call_id=tool_call.id,
+                        name=tool_name,
+                        use_custom_remark=False,
+                    )
+                    await ToolCallEventManager.trigger_after_tool_call(
+                        agent_context,
+                        openai_tool_call_for_event,
+                        tool_context,
+                        tool_name,
+                        tool_arguments_dict,
+                        result,
+                        0.0,
+                    )
+                    results.append(result)
+                    continue
+
+                try:
+                    tool_arguments_dict = self._parse_tool_arguments(tool_call, tool_name)
+                except (json.JSONDecodeError, ValueError) as parse_error:
+                    tool_arguments_dict = {}
+                    tool_context = ToolCallEventManager.create_tool_context(
+                        agent_context,
+                        tool_call.id,
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    result = ToolResult.error(
+                        "Tool call arguments are invalid JSON. Retry the tool call with valid JSON parameters. "
+                        f"Parser detail: {parse_error}",
+                        tool_call_id=tool_call.id,
+                        name=tool_name,
+                        use_custom_remark=False,
+                    )
+                    await ToolCallEventManager.trigger_after_tool_call(
+                        agent_context,
+                        openai_tool_call_for_event,
+                        tool_context,
+                        tool_name,
+                        tool_arguments_dict,
+                        result,
+                        0.0,
+                    )
+                    results.append(result)
+                    continue
 
                 try:
                     # 创建工具上下文
@@ -377,7 +441,10 @@ class ToolCallExecutor:
             context_prefix: 日志上下文前缀（如"并行工具调用："）
 
         Returns:
-            Dict[str, Any]: 解析后的参数字典，最差情况下返回空字典
+            Dict[str, Any]: 解析后的参数字典
+
+        Raises:
+            ValueError: 参数不是 JSON 对象或 JSON 语法无效。
         """
         tool_arguments_str = tool_call.function.arguments
 
@@ -386,12 +453,12 @@ class ToolCallExecutor:
             tool_arguments_dict = json.loads(tool_arguments_str)
             if isinstance(tool_arguments_dict, dict):
                 return tool_arguments_dict
-            else:
-                logger.warning(f"{context_prefix}工具 '{tool_name}' 参数类型异常，使用空字典")
-                return {}
+            logger.warning(f"{context_prefix}工具 '{tool_name}' 参数类型异常，拒绝执行")
+            raise ValueError(
+                f"Invalid arguments for tool '{tool_name}': expected a JSON object"
+            )
         except json.JSONDecodeError as e:
-            logger.warning(f"{context_prefix}工具 '{tool_name}' 参数解析失败: {e}，使用空字典")
-            return {}
+            raise ValueError(f"Invalid JSON arguments for tool '{tool_name}': {e}") from e
 
 
 # 创建全局工具调用执行器实例

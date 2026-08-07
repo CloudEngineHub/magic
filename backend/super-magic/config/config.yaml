@@ -569,6 +569,13 @@ ai_abilities:
   agent_rerank:
     model_id: "${AGENT_RERANK_MODEL_ID:-deepseek-v4-flash}"
 
+  # Validate candidates produced by JSON repair before tool execution
+  json_repair_validation:
+    model_id: "${JSON_REPAIR_VALIDATION_MODEL_ID:-deepseek-v4-flash}"
+    timeout: 30
+    max_advice_words: 50
+    enabled: true
+
   # 记忆提取能力
   # 当前仅保留能力配置，供后续 AFTER_MAIN_AGENT_RUN 提取机制使用
   memory:

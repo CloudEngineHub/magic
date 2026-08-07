@@ -33,6 +33,7 @@ class AIAbility(str, Enum):
     SKILL_RERANK = "skill_rerank"
     MEMORY = "memory"
     AGENT_RERANK = "agent_rerank"
+    JSON_REPAIR_VALIDATION = "json_repair_validation"
 
 
 # Default configurations for each AI ability
@@ -127,6 +128,13 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # 为后续回合记忆提取保留独立的轻量模型能力
     AIAbility.MEMORY: {
         "model_id": "qwen3.5-flash",
+        "enabled": True,
+    },
+
+    AIAbility.JSON_REPAIR_VALIDATION: {
+        "model_id": "deepseek-v4-flash",
+        "timeout": 30,
+        "max_advice_words": 50,
         "enabled": True,
     },
 }

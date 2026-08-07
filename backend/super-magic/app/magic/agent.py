@@ -46,6 +46,9 @@ from agentlang.utils.token_estimator import num_tokens_from_string
 from agentlang.utils.datetime_formatter import get_current_datetime_str
 from agentlang.exceptions import UserFriendlyException, ResourceLimitExceededException, StreamChunkTimeoutError, StreamInterruptedError, iter_exception_chain
 from agentlang.utils.tool_param_utils import preprocess_tool_calls_batch
+from app.service.tool_argument_json_repair_validation_service import (
+    tool_argument_json_repair_validation_service,
+)
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
 from app.core.ai_abilities import get_compact_model_id
@@ -258,6 +261,7 @@ class Agent(BaseAgent):
         self._closed = False
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
+        self._tool_preflight_failures: Dict[str, str] = {}
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -1165,6 +1169,7 @@ class Agent(BaseAgent):
                     # 部分模型（如千问）截断工具参数时仍返回 finish_reason=tool_calls，
                     # 上面的 finish_reason 检测无法覆盖，通过检测畸形 JSON 来发现截断。
                     if llm_context.has_tool_calls:
+                        self._tool_preflight_failures = {}
                         preprocess_result = preprocess_tool_calls_batch(llm_context.tool_calls)
                         if preprocess_result.processed_count > 0:
                             logger.debug(f"工具调用参数预处理完成，处理了 {preprocess_result.processed_count} 个工具调用")
@@ -1189,6 +1194,27 @@ class Agent(BaseAgent):
                                 source="tool_args_truncation_recovery",
                             )
                             continue
+                        for candidate in preprocess_result.json_repair_candidates:
+                            validation = await tool_argument_json_repair_validation_service.validate(
+                                tool_name=candidate.tool_name,
+                                original_arguments=candidate.original_arguments,
+                                repaired_arguments=candidate.repaired_arguments,
+                                tool_schema=candidate.tool_schema,
+                                interruption_event=self.agent_context.get_interruption_event(),
+                            )
+                            if validation.valid:
+                                matching_call = next(
+                                    (
+                                        tc
+                                        for tc in llm_context.tool_calls
+                                        if tc.id == candidate.tool_call_id
+                                    ),
+                                    None,
+                                )
+                                if matching_call is not None:
+                                    matching_call.function.arguments = candidate.repaired_arguments
+                            else:
+                                self._tool_preflight_failures[candidate.tool_call_id] = validation.advice
 
                     # 添加工具调用响应到历史（现在包含修复后的参数）
                     # 中断时 stop_run 会在 cancel_blocker 归零后调用 task.cancel()，
@@ -3496,7 +3522,8 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         return await tool_call_executor.execute(
             tool_calls,
-            self.agent_context
+            self.agent_context,
+            preflight_failures=self._tool_preflight_failures,
         )
 
     async def _execute_tool_calls_sequential(self, tool_calls: List[ToolCall], llm_response_message: ChatCompletionMessage) -> List[ToolResult]:
