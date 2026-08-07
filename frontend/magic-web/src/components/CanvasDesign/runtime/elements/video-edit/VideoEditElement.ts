@@ -8,7 +8,7 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type {
 	TransformContext,
 	BaseElement,
-	type ElementTransformConstraints,
+	ElementTransformConstraints,
 } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import type { Canvas } from "../../core/Canvas"
