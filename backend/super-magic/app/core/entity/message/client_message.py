@@ -344,6 +344,7 @@ class InitClientMessage(ClientMessage):
         description="Flag to decide whether remote chat history should be downloaded during initialization",
     )
     dynamic_config: Optional[Dict[str, Any]] = None  # 动态配置（如 message_version），由 PHP 侧 dynamic_params 透传
+    agent_mode: Union[AgentMode, str] = AgentMode.GENERAL  # 沙箱运行模式，决定初始化后的生命周期策略
     agent: Optional["InitAgentConfig"] = Field(
         default=None,
         description="""<!--zh: 自定义 Agent 配置；type 标识类型，profile 携带名称/描述/角色等身份信息。外层 name/description 已废弃，仅做兜底兼容-->
