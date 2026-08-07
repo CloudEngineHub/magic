@@ -14,8 +14,14 @@ const DEFAULT_PLAYBACK_SNAPSHOT: AudioPlaybackSnapshot = {
 	currentTime: 0,
 	paused: true,
 	ended: false,
+	preparing: false,
 	loading: false,
 	error: false,
+}
+
+const READY_PLAYBACK_SNAPSHOT: AudioPlaybackSnapshot = {
+	...DEFAULT_PLAYBACK_SNAPSHOT,
+	duration: 60,
 }
 
 function mockCanvasRenderingContext(): void {
@@ -33,6 +39,10 @@ function createWaveformClipContext() {
 		restore: vi.fn(),
 		rect: vi.fn(),
 		clip: vi.fn(),
+		moveTo: vi.fn(),
+		lineTo: vi.fn(),
+		closePath: vi.fn(),
+		stroke: vi.fn(),
 	}
 }
 
@@ -41,6 +51,7 @@ function createStageMock(scale: number): Konva.Stage {
 	return {
 		scaleX: () => scale,
 		batchDraw: vi.fn(),
+		setPointersPositions: vi.fn(),
 		draggable: vi.fn((value?: boolean) => {
 			if (typeof value === "boolean") draggable = value
 			return draggable
@@ -58,8 +69,10 @@ function createAudioElementHarness(options?: {
 	replaceLabel?: string
 	coarsePointer?: boolean
 	temporary?: boolean
+	waveformSnapshot?: AudioWaveformSnapshot
 }) {
-	let playbackSnapshot = options?.snapshot ?? DEFAULT_PLAYBACK_SNAPSHOT
+	const src = options?.temporary ? options.src : (options?.src ?? "./audios/voice.mp3")
+	let playbackSnapshot = options?.snapshot ?? READY_PLAYBACK_SNAPSHOT
 	let playbackListener: ((snapshot: AudioPlaybackSnapshot) => void) | undefined
 	let waveformListener: ((snapshot: AudioWaveformSnapshot) => void) | undefined
 	const viewportScaleListeners = new Set<() => void>()
@@ -67,6 +80,8 @@ function createAudioElementHarness(options?: {
 	const seek = vi.fn()
 	const seekBy = vi.fn(async () => true)
 	const toggle = vi.fn(async () => true)
+	const release = vi.fn()
+	const requestImmediateAudioLoad = vi.fn()
 	const setTemporary = vi.fn()
 	const restoreToolCursor = vi.fn()
 	const emit = vi.fn()
@@ -83,13 +98,18 @@ function createAudioElementHarness(options?: {
 			seekBy,
 			toggle,
 			pause: vi.fn(),
-			release: vi.fn(),
+			release,
 		},
 		audioWaveformManager: {
 			subscribe: vi.fn(
 				(_path: string, listener: (snapshot: AudioWaveformSnapshot) => void) => {
 					waveformListener = listener
-					listener({ status: "idle", peaks: null })
+					listener(
+						options?.waveformSnapshot ?? {
+							status: "ready",
+							peaks: new Float32Array(512),
+						},
+					)
 					return vi.fn()
 				},
 			),
@@ -112,6 +132,7 @@ function createAudioElementHarness(options?: {
 			registerAudioElement: vi.fn(),
 			unregisterAudioElement: vi.fn(),
 			updateAudioElement: vi.fn(),
+			requestImmediateAudioLoad,
 		},
 		selectionManager: {
 			isSelected: vi.fn(() => false),
@@ -131,6 +152,10 @@ function createAudioElementHarness(options?: {
 			isTemporary: vi.fn(() => options?.temporary ?? false),
 		},
 		runtimeScheduler: { requestLayerDraw: vi.fn() },
+		transformManager: {
+			isTransformInteractionActive: vi.fn(() => false),
+			isTransforming: vi.fn(() => false),
+		},
 	} as unknown as Canvas
 	const element = new AudioElement(
 		AudioElement.createElementData({
@@ -138,7 +163,7 @@ function createAudioElementHarness(options?: {
 			x: 0,
 			y: 0,
 			width: options?.width,
-			src: options?.src,
+			src,
 		}),
 		canvas,
 	)
@@ -148,6 +173,8 @@ function createAudioElementHarness(options?: {
 		seek,
 		seekBy,
 		toggle,
+		release,
+		requestImmediateAudioLoad,
 		setTemporary,
 		restoreToolCursor,
 		emit,
@@ -196,6 +223,14 @@ describe("AudioElement", () => {
 		expect(element).not.toHaveProperty("paused")
 	})
 
+	it("preserves playback metadata when the resource resolver is rebound", () => {
+		const harness = createAudioElementHarness({ src: "./audios/voice.mp3" })
+
+		harness.element.onResourceReferenceResolverChanged()
+
+		expect(harness.release).toHaveBeenCalledWith("audio-1", { preserveMetadata: true })
+	})
+
 	it("declares horizontal-only resize constraints", () => {
 		const element = Object.create(AudioElement.prototype) as AudioElement
 
@@ -216,6 +251,7 @@ describe("AudioElement", () => {
 					currentTime: 0,
 					paused: true,
 					ended: false,
+					preparing: false,
 					loading: false,
 					error: false,
 				})),
@@ -274,8 +310,8 @@ describe("AudioElement", () => {
 		const { element } = createAudioElementHarness({ temporary: true })
 		const group = element.render()
 
-		expect(group.findOne(".audio-upload-placeholder")).toBeTruthy()
-		expect((group.findOne(".audio-upload-text") as Konva.Text).text()).toBe("正在上传中...")
+		expect(group.findOne(".audio-status-placeholder")).toBeTruthy()
+		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe("正在上传中...")
 		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
 		expect(group.findOne(".audio-progress-track")).toBeUndefined()
 		expect(group.findOne(".audio-operation-group")).toBeUndefined()
@@ -292,7 +328,7 @@ describe("AudioElement", () => {
 		const animationStop = vi.spyOn(Konva.Animation.prototype, "stop")
 		const { element } = createAudioElementHarness({ temporary: true })
 		const group = element.render()
-		const spinner = group.findOne(".audio-upload-spinner") as Konva.Shape
+		const spinner = group.findOne(".audio-status-spinner") as Konva.Shape
 		vi.spyOn(spinner, "getLayer").mockReturnValue({
 			batchDraw: vi.fn(),
 		} as unknown as Konva.Layer)
@@ -300,8 +336,8 @@ describe("AudioElement", () => {
 		element.onMounted()
 
 		expect(animationStart).toHaveBeenCalledTimes(1)
-		const animation = (element as unknown as { uploadSpinnerAnimation?: Konva.Animation })
-			.uploadSpinnerAnimation
+		const animation = (element as unknown as { statusSpinnerAnimation?: Konva.Animation })
+			.statusSpinnerAnimation
 		expect(animation).toBeInstanceOf(Konva.Animation)
 		const initialRotation = spinner.rotation()
 		animation?.func({ time: 200, timeDiff: 16, lastTime: 184, frameRate: 60 })
@@ -309,6 +345,75 @@ describe("AudioElement", () => {
 
 		element.destroy()
 		expect(animationStop).toHaveBeenCalled()
+	})
+
+	it("keeps formal audio in the preparing placeholder until metadata and waveform are ready", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({
+			snapshot: { ...DEFAULT_PLAYBACK_SNAPSHOT, preparing: true },
+			waveformSnapshot: { status: "idle", peaks: null },
+		})
+		const group = harness.element.render()
+
+		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe("正在加载音频...")
+		expect(group.findOne(".audio-status-spinner")).toBeTruthy()
+		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
+		expect(group.findOne(".audio-operation-group")).toBeUndefined()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeTruthy()
+
+		harness.emitPlayback({
+			...READY_PLAYBACK_SNAPSHOT,
+			preparing: false,
+		})
+		expect(group.findOne(".audio-status-text")).toBeTruthy()
+
+		harness.emitWaveform({ status: "loading", peaks: null })
+		expect(group.findOne(".audio-status-text")).toBeTruthy()
+
+		harness.emitWaveform({ status: "ready", peaks: new Float32Array(512) })
+		const readyGroup = harness.element.getNode() as Konva.Group
+		expect(readyGroup.findOne(".audio-status-text")).toBeUndefined()
+		expect(readyGroup.findOne(".audio-waveform-shape")).toBeTruthy()
+		expect(readyGroup.findOne(".audio-operation-group")).toBeTruthy()
+	})
+
+	it("renders an error placeholder with retry affordance after waveform failure", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({
+			waveformSnapshot: { status: "error", peaks: null },
+		})
+		const group = harness.element.render()
+
+		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe(
+			"音频加载失败，点击重试",
+		)
+		expect(group.findOne(".audio-status-spinner")).toBeUndefined()
+		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeTruthy()
+
+		;(group.findOne(".audio-status-text") as Konva.Text).fire("click", {
+			cancelBubble: false,
+		})
+		expect(harness.requestImmediateAudioLoad).toHaveBeenCalledWith("audio-1", {
+			reason: "audio-placeholder-retry",
+			priority: "critical",
+		})
+	})
+
+	it("keeps the ready player visible while playback buffers", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness()
+		const group = harness.element.render()
+		const rerender = vi.spyOn(harness.element, "rerender")
+
+		harness.emitPlayback({
+			...READY_PLAYBACK_SNAPSHOT,
+			loading: true,
+		})
+
+		expect(rerender).not.toHaveBeenCalled()
+		expect(group.findOne(".audio-waveform-shape")).toBeTruthy()
+		expect(group.findOne(".audio-operation-group")).toBeTruthy()
 	})
 
 	it("keeps transformer bounds aligned with the card when control hit areas expand", () => {
@@ -998,7 +1103,152 @@ describe("AudioElement", () => {
 		expect(seek.mock.calls[0]?.[1]).toBeCloseTo(0.5)
 	})
 
-	it("keeps playback and error node updates working inside the controls group", () => {
+	it("previews waveform movement while scrubbing and seeks only after release", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({
+			src: "./audios/voice.mp3",
+			snapshot: {
+				...DEFAULT_PLAYBACK_SNAPSHOT,
+				duration: 10,
+				currentTime: 0,
+				paused: false,
+			},
+		})
+		const group = harness.element.render()
+		vi.spyOn(group, "getStage").mockReturnValue(createStageMock(1))
+		harness.element.onMounted()
+		harness.emitWaveform({
+			status: "ready",
+			peaks: Float32Array.from({ length: 512 }, (_, index) => index / 511),
+		})
+
+		const controlsGroup = group.findOne(".audio-controls-group") as Konva.Group
+		const waveform = group.findOne(".audio-waveform-shape") as Konva.Shape
+		const progressTrack = group.findOne(".audio-progress-track") as Konva.Rect
+		const progressHit = group.findOne(".audio-progress-hit") as Konva.Rect
+		const stageMock = createStageMock(1)
+		vi.spyOn(controlsGroup, "getStage").mockReturnValue(stageMock)
+		vi.spyOn(controlsGroup, "getRelativePointerPosition").mockReturnValue({
+			x: progressTrack.x() + progressTrack.width() / 2,
+			y: progressTrack.y(),
+		})
+
+		const drawCenterBarHeight = () => {
+			const context = {
+				...createWaveformClipContext(),
+				beginPath: vi.fn(),
+				roundRect: vi.fn(),
+				moveTo: vi.fn(),
+				lineTo: vi.fn(),
+				closePath: vi.fn(),
+				fillStyle: "",
+				strokeStyle: "",
+				lineWidth: 0,
+				lineCap: "butt",
+				fill: vi.fn(),
+				stroke: vi.fn(),
+			}
+			waveform.sceneFunc()?.(context as never, waveform)
+			const centerX = waveform.width() / 2
+			const centerBar = context.roundRect.mock.calls.reduce<
+				(typeof context.roundRect.mock.calls)[number] | undefined
+			>((closest, candidate) => {
+				if (!closest) return candidate
+				const candidateCenter = Number(candidate[0]) + Number(candidate[2]) / 2
+				const closestCenter = Number(closest[0]) + Number(closest[2]) / 2
+				return Math.abs(candidateCenter - centerX) < Math.abs(closestCenter - centerX)
+					? candidate
+					: closest
+			}, undefined)
+			return Number(centerBar?.[3] ?? 0)
+		}
+
+		const initialCenterBarHeight = drawCenterBarHeight()
+		progressHit.fire("mousedown", {
+			evt: { stopPropagation: vi.fn(), preventDefault: vi.fn() },
+		})
+
+		expect(harness.seek).not.toHaveBeenCalled()
+		expect(drawCenterBarHeight()).toBeGreaterThan(initialCenterBarHeight)
+
+		const finishHandler = stageMock.on.mock.calls.find(([events]) =>
+			String(events).includes("mouseup.audioScrub"),
+		)?.[1] as (() => void) | undefined
+		finishHandler?.()
+
+		expect(harness.seek).toHaveBeenCalledTimes(1)
+		expect(harness.seek).toHaveBeenCalledWith("audio-1", 0.5)
+	})
+
+	it("cancels touch scrubbing without committing the preview position", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({
+			snapshot: {
+				...DEFAULT_PLAYBACK_SNAPSHOT,
+				duration: 60,
+				currentTime: 12,
+			},
+		})
+		const group = harness.element.render()
+		const controlsGroup = group.findOne(".audio-controls-group") as Konva.Group
+		const progressTrack = group.findOne(".audio-progress-track") as Konva.Rect
+		const progressThumbHit = group.findOne(".audio-progress-thumb-hit") as Konva.Circle
+		const stageMock = createStageMock(1)
+		vi.spyOn(controlsGroup, "getStage").mockReturnValue(stageMock)
+		vi.spyOn(controlsGroup, "getRelativePointerPosition").mockReturnValue({
+			x: progressTrack.x() + progressTrack.width() * 0.8,
+			y: progressTrack.y(),
+		})
+		harness.element.onMounted()
+
+		progressThumbHit.fire("touchstart", {
+			evt: { stopPropagation: vi.fn(), preventDefault: vi.fn() },
+		})
+		expect(harness.seek).not.toHaveBeenCalled()
+		const timeText = group.findOne(".audio-time") as Konva.Text
+		expect(timeText.text()).toBe("0:48 / 1:00")
+
+		const cancelHandler = stageMock.on.mock.calls.find(([events]) =>
+			String(events).includes("touchcancel.audioScrub"),
+		)?.[1] as (() => void) | undefined
+		cancelHandler?.()
+
+		expect(harness.seek).not.toHaveBeenCalled()
+		expect(timeText.text()).toBe("0:12 / 1:00")
+	})
+
+	it("finishes scrubbing when the pointer is released outside the stage", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({
+			snapshot: {
+				...DEFAULT_PLAYBACK_SNAPSHOT,
+				duration: 60,
+				currentTime: 0,
+			},
+		})
+		const group = harness.element.render()
+		const controlsGroup = group.findOne(".audio-controls-group") as Konva.Group
+		const progressTrack = group.findOne(".audio-progress-track") as Konva.Rect
+		const progressThumbHit = group.findOne(".audio-progress-thumb-hit") as Konva.Circle
+		const stageMock = createStageMock(1)
+		vi.spyOn(controlsGroup, "getStage").mockReturnValue(stageMock)
+		vi.spyOn(controlsGroup, "getRelativePointerPosition").mockReturnValue({
+			x: progressTrack.x() + progressTrack.width() * 0.6,
+			y: progressTrack.y(),
+		})
+		harness.element.onMounted()
+
+		progressThumbHit.fire("mousedown", {
+			evt: { stopPropagation: vi.fn(), preventDefault: vi.fn() },
+		})
+		window.dispatchEvent(new Event("pointerup"))
+
+		expect(stageMock.setPointersPositions).not.toHaveBeenCalled()
+		expect(harness.seek).toHaveBeenCalledTimes(1)
+		expect(harness.seek).toHaveBeenCalledWith("audio-1", 0.6)
+	})
+
+	it("switches from the player to the error placeholder after playback failure", () => {
 		mockCanvasRenderingContext()
 		const { element, emitPlayback } = createAudioElementHarness()
 		const group = element.render()
@@ -1008,6 +1258,7 @@ describe("AudioElement", () => {
 			currentTime: 60,
 			paused: false,
 			ended: false,
+			preparing: false,
 			loading: false,
 			error: false,
 		})
@@ -1018,8 +1269,6 @@ describe("AudioElement", () => {
 		const progressFill = group.findOne(".audio-progress-fill") as Konva.Rect
 		const progressThumb = group.findOne(".audio-progress-thumb") as Konva.Circle
 		const timeText = group.findOne(".audio-time") as Konva.Text
-		const errorText = group.findOne(".audio-error") as Konva.Text
-
 		expect(playTriangle.visible()).toBe(false)
 		expect(pauseBars.visible()).toBe(true)
 		expect(progressFill.width()).toBeCloseTo(progressTrack.width() / 2)
@@ -1032,10 +1281,15 @@ describe("AudioElement", () => {
 			currentTime: 60,
 			paused: true,
 			ended: false,
+			preparing: false,
 			loading: false,
 			error: true,
 		})
-		expect(errorText.text()).toBe("音频加载失败，点击播放重试")
+		const errorGroup = element.getNode() as Konva.Group
+		expect(errorGroup.findOne(".audio-error")).toBeUndefined()
+		expect((errorGroup.findOne(".audio-status-text") as Konva.Text).text()).toBe(
+			"音频加载失败，点击重试",
+		)
 	})
 
 	it("uses double-triangle seek icons with enabled, hover, active and disabled states", () => {
@@ -1048,6 +1302,7 @@ describe("AudioElement", () => {
 					currentTime: 0,
 					paused: true,
 					ended: false,
+					preparing: false,
 					loading: false,
 					error: false,
 				},
@@ -1094,6 +1349,7 @@ describe("AudioElement", () => {
 			currentTime: 30,
 			paused: true,
 			ended: false,
+			preparing: false,
 			loading: true,
 			error: false,
 		})
@@ -1105,6 +1361,7 @@ describe("AudioElement", () => {
 			currentTime: 60,
 			paused: true,
 			ended: true,
+			preparing: false,
 			loading: false,
 			error: false,
 		})
@@ -1275,6 +1532,7 @@ describe("AudioElement", () => {
 					currentTime: 0,
 					paused: true,
 					ended: false,
+					preparing: false,
 					loading: false,
 					error: false,
 				})),

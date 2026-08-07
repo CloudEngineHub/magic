@@ -1325,16 +1325,14 @@ export function normalizeDesignDataPathsAfterLoad(
 	})
 }
 
-/**
- * 递归收集目录下的所有图片文件
- * @param items 文件列表（嵌套结构）
- * @param targetPath 目标目录路径
- * @param targetDirectoryId 目标目录的 file_id（可选，如果提供则使用 parent_id 关系查找）
- */
-export function collectFilesInDirectory(
+type DirectoryFilePredicate = (item: FileItem) => boolean
+
+function collectFilesInDirectoryInternal(
 	items: FileItem[],
 	targetPath: string,
 	targetDirectoryId?: string,
+	predicate: DirectoryFilePredicate = (item) =>
+		IMAGE_EXTENSIONS.includes(item.file_extension?.toLowerCase() || ""),
 ): FileItem[] {
 	const result: FileItem[] = []
 
@@ -1366,9 +1364,6 @@ export function collectFilesInDirectory(
 				}
 			}
 		} else {
-			const fileExtension = item.file_extension?.toLowerCase() || ""
-			const isImage = IMAGE_EXTENSIONS.includes(fileExtension)
-
 			// 方法1: 如果当前在目标目录下（通过目录层级关系），直接匹配
 			let matchedByParentId = false
 			if (isInTargetDirectory) {
@@ -1390,7 +1385,7 @@ export function collectFilesInDirectory(
 
 			const isMatched = matchedByParentId || matchedByPath
 
-			if (isMatched && isImage) {
+			if (isMatched && predicate(item)) {
 				result.push(item)
 			}
 		}
@@ -1411,6 +1406,33 @@ export function collectFilesInDirectory(
 	}
 
 	return result
+}
+
+/**
+ * 递归收集目录下的所有文件。
+ *
+ * 目录遍历本身不再绑定媒体类型，调用方按业务语义决定是否过滤图片、音频或其他文件。
+ */
+export function collectAllFilesInDirectory(
+	items: FileItem[],
+	targetPath: string,
+	targetDirectoryId?: string,
+): FileItem[] {
+	return collectFilesInDirectoryInternal(items, targetPath, targetDirectoryId, () => true)
+}
+
+/**
+ * 递归收集目录下的所有图片文件。
+ * @param items 文件列表（嵌套结构）
+ * @param targetPath 目标目录路径
+ * @param targetDirectoryId 目标目录的 file_id（可选，如果提供则使用 parent_id 关系查找）
+ */
+export function collectFilesInDirectory(
+	items: FileItem[],
+	targetPath: string,
+	targetDirectoryId?: string,
+): FileItem[] {
+	return collectFilesInDirectoryInternal(items, targetPath, targetDirectoryId)
 }
 
 /**

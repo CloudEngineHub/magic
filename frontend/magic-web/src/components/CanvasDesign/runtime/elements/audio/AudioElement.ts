@@ -20,7 +20,7 @@ import { AUDIO_CONFIG } from "./AudioElement.config"
 import {
 	AUDIO_PLAYER_DESIGN,
 	resolveAudioPlayerLayout,
-	resolveAudioUploadPlaceholderLayout,
+	resolveAudioStatusPlaceholderLayout,
 	type AudioPlayerLayout,
 } from "./AudioElement.layout"
 import {
@@ -30,9 +30,9 @@ import {
 
 const NODE_NAMES = {
 	background: "audio-background",
-	uploadPlaceholder: "audio-upload-placeholder",
-	uploadSpinner: "audio-upload-spinner",
-	uploadText: "audio-upload-text",
+	statusPlaceholder: "audio-status-placeholder",
+	statusSpinner: "audio-status-spinner",
+	statusText: "audio-status-text",
 	player: "audio-player-group",
 	controls: "audio-controls-group",
 	waveform: "audio-waveform-shape",
@@ -85,9 +85,11 @@ const WAVEFORM_LAYOUT = {
 	amplitudePower: 1.5,
 } as const
 
-const AUDIO_UPLOAD_SPINNER_PERIOD_MS = 800
+const AUDIO_STATUS_SPINNER_PERIOD_MS = 800
 
 type InteractiveState = "idle" | "hover" | "active"
+type AudioRenderState = "uploading" | "preparing" | "ready" | "error"
+type AudioStatusPlaceholderState = Exclude<AudioRenderState, "ready">
 
 interface AudioControlHitBounds {
 	x: number
@@ -184,11 +186,14 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private controlInteractionMode: AudioControlInteractionMode = "full"
 	private pendingScrubProgress: number | null = null
 	private scrubStage?: Konva.Stage
+	private scrubWindowCleanup?: () => void
 	private scrubNodeWasDraggable = false
 	private scrubStageWasDraggable = false
 	private backButtonStateSync?: () => void
 	private forwardButtonStateSync?: () => void
-	private uploadSpinnerAnimation?: Konva.Animation
+	private renderedState?: AudioRenderState
+	private retryingPreparation = false
+	private statusSpinnerAnimation?: Konva.Animation
 
 	constructor(data: AudioElementData, canvas: Canvas) {
 		const normalizedData = normalizeLegacyAudioDimensions(data)
@@ -199,7 +204,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			(snapshot) => {
 				this.playbackSnapshot = snapshot
 				if (!snapshot.error && snapshot.duration > 0) this.resourceError = false
-				this.syncPlaybackNodes()
+				this.syncRenderState()
 			},
 		)
 		this.subscribeWaveform(normalizedData.src)
@@ -212,8 +217,9 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				) {
 					return
 				}
+				this.retryingPreparation = false
 				this.resourceError = true
-				this.rerenderWhenTransformIdle()
+				this.syncRenderState()
 			},
 		)
 		this.replaceStateUnsubscribe = canvas.eventEmitter.on(
@@ -284,8 +290,11 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				name: NODE_NAMES.background,
 			}),
 		)
-		if (this.isUploadingPlaceholder()) {
-			this.renderUploadPlaceholder(group)
+		const renderState = this.resolveRenderState()
+		this.renderedState = renderState
+		if (renderState !== "ready") {
+			this.renderStatusPlaceholder(group, renderState)
+			if (renderState !== "uploading") this.createCornerActions(group, width, height)
 			this.finalizeNode(group)
 			this.syncRenderLayout(width, height)
 			return group
@@ -325,46 +334,112 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		return !this.data.src && this.canvas.elementManager.isTemporary(this.data.id)
 	}
 
-	private renderUploadPlaceholder(group: Konva.Group): void {
+	private resolveRenderState(): AudioRenderState {
+		if (this.isUploadingPlaceholder()) return "uploading"
+		if (
+			!this.data.src ||
+			this.resourceError ||
+			this.playbackSnapshot.error ||
+			this.waveformSnapshot.status === "error"
+		) {
+			return this.retryingPreparation ? "preparing" : "error"
+		}
+
+		const metadataReady = !this.playbackSnapshot.preparing && this.playbackSnapshot.duration > 0
+		return metadataReady && this.waveformSnapshot.status === "ready" ? "ready" : "preparing"
+	}
+
+	private renderStatusPlaceholder(group: Konva.Group, state: AudioStatusPlaceholderState): void {
+		const showSpinner = state !== "error"
 		const placeholder = new Konva.Group({
-			name: NODE_NAMES.uploadPlaceholder,
-			listening: false,
+			name: NODE_NAMES.statusPlaceholder,
+			listening: state === "error",
 		})
-		const spinner = new Konva.Shape({
-			name: NODE_NAMES.uploadSpinner,
-			listening: false,
-			rotation: -90,
-			sceneFunc(context, shape) {
-				const radius = shape.getAttr("audioUploadSpinnerRadius") as number | undefined
-				const strokeWidth = shape.getAttr("audioUploadSpinnerStrokeWidth") as
-					number | undefined
-				if (!radius || !strokeWidth) return
+		if (showSpinner) {
+			placeholder.add(
+				new Konva.Shape({
+					name: NODE_NAMES.statusSpinner,
+					listening: false,
+					rotation: -90,
+					sceneFunc(context, shape) {
+						const radius = shape.getAttr("audioStatusSpinnerRadius") as
+							number | undefined
+						const strokeWidth = shape.getAttr("audioStatusSpinnerStrokeWidth") as
+							number | undefined
+						if (!radius || !strokeWidth) return
 
-				context.beginPath()
-				context.arc(0, 0, radius, 0, Math.PI * 2)
-				context.strokeStyle = "rgba(255, 255, 255, 0.24)"
-				context.lineWidth = strokeWidth
-				context.stroke()
+						context.beginPath()
+						context.arc(0, 0, radius, 0, Math.PI * 2)
+						context.strokeStyle = "rgba(255, 255, 255, 0.24)"
+						context.lineWidth = strokeWidth
+						context.stroke()
 
-				context.beginPath()
-				context.arc(0, 0, radius, 0, Math.PI * 0.65)
-				context.strokeStyle = AUDIO_CONFIG.PROGRESS
-				context.lineWidth = strokeWidth
-				context.lineCap = "round"
-				context.stroke()
-			},
+						context.beginPath()
+						context.arc(0, 0, radius, 0, Math.PI * 0.65)
+						context.strokeStyle = AUDIO_CONFIG.PROGRESS
+						context.lineWidth = strokeWidth
+						context.lineCap = "round"
+						context.stroke()
+					},
+				}),
+			)
+		}
+
+		const text = new Konva.Text({
+			name: NODE_NAMES.statusText,
+			text:
+				state === "uploading"
+					? this.getText("audio.uploading", "正在上传中...")
+					: state === "preparing"
+						? this.getText("audio.loading", "正在加载音频...")
+						: this.getAudioLoadErrorText(),
+			align: "center",
+			fill: state === "error" ? AUDIO_CONFIG.ERROR : AUDIO_CONFIG.SECONDARY_TEXT,
+			listening: state === "error",
 		})
-		placeholder.add(
-			spinner,
-			new Konva.Text({
-				name: NODE_NAMES.uploadText,
-				text: this.getText("audio.uploading", "正在上传中..."),
-				align: "center",
-				fill: AUDIO_CONFIG.SECONDARY_TEXT,
-				listening: false,
-			}),
-		)
+		if (state === "error") {
+			text.on("mouseenter", () => this.canvas.cursorManager?.setTemporary("pointer"))
+			text.on("mouseleave", () => this.canvas.cursorManager?.restoreToolCursor())
+			text.on("click tap", (event) => {
+				event.cancelBubble = true
+				this.retryPreparation()
+			})
+		}
+		placeholder.add(text)
 		group.add(placeholder)
+	}
+
+	private syncRenderState(): void {
+		const nextState = this.resolveRenderState()
+		if (!this.renderedState || !this.node) return
+		if (nextState !== this.renderedState) {
+			this.rerenderWhenTransformIdle()
+			return
+		}
+		if (nextState === "ready") {
+			this.syncPlaybackNodes()
+			this.syncWaveformNodes()
+		}
+	}
+
+	private retryPreparation(): void {
+		if (!this.data.src || this.retryingPreparation) return
+		this.retryingPreparation = true
+		this.resourceError = false
+		this.syncRenderState()
+		this.canvas.visibilityManager.requestImmediateAudioLoad(this.data.id, {
+			reason: "audio-placeholder-retry",
+			priority: "critical",
+		})
+	}
+
+	private getAudioLoadErrorText(): string {
+		const failureReason = this.data.src
+			? this.canvas.audioResourceManager.getFailureReason(this.data.src)
+			: null
+		return failureReason === "not-found"
+			? this.getText("audio.fileMissing", "音频文件不存在")
+			: this.getText("audio.loadFailed", "音频加载失败，点击重试")
 	}
 
 	public override onMounted(): void {
@@ -374,7 +449,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.syncInteractionHitTargets()
 			this.cornerActionsDecorator?.refresh()
 		}
-		this.startUploadSpinnerAnimation()
+		this.startStatusSpinnerAnimation()
 		if (this.data.src) {
 			this.canvas.visibilityManager.registerAudioElement(this.data.id, this.data.src)
 		}
@@ -394,6 +469,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.canvas.audioPlaybackManager.release(this.data.id)
 			this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
 			this.resourceError = false
+			this.retryingPreparation = false
 			this.replaceStatus = "idle"
 			this.subscribeWaveform(normalizedData.src)
 			if (normalizedData.src) {
@@ -492,8 +568,11 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public override onResourceReferenceResolverChanged(): void {
-		this.canvas.audioPlaybackManager.release(this.data.id)
+		// Resolver revision 变化只代表资源 URL/附件快照需要重新绑定；播放进度属于元素运行态，
+		// 释放底层 HTMLAudioElement 时必须保留 metadata，待新会话创建后恢复 currentTime。
+		this.canvas.audioPlaybackManager.release(this.data.id, { preserveMetadata: true })
 		this.resourceError = false
+		this.retryingPreparation = false
 		this.subscribeWaveform(this.data.src)
 	}
 
@@ -530,30 +609,30 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	protected override cleanupNodeListeners(node: Konva.Node): void {
-		this.stopUploadSpinnerAnimation()
+		this.stopStatusSpinnerAnimation()
 		this.interactionEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
 		this.interactionEventUnsubscribers = []
 		super.cleanupNodeListeners(node)
 	}
 
-	private startUploadSpinnerAnimation(): void {
-		this.stopUploadSpinnerAnimation()
+	private startStatusSpinnerAnimation(): void {
+		this.stopStatusSpinnerAnimation()
 		if (!(this.node instanceof Konva.Group)) return
-		const spinner = this.node.findOne(`.${NODE_NAMES.uploadSpinner}`) as Konva.Shape | undefined
+		const spinner = this.node.findOne(`.${NODE_NAMES.statusSpinner}`) as Konva.Shape | undefined
 		const layer = spinner?.getLayer()
 		if (!spinner || !layer) return
 
-		this.uploadSpinnerAnimation = new Konva.Animation((frame) => {
+		this.statusSpinnerAnimation = new Konva.Animation((frame) => {
 			const progress =
-				(frame.time % AUDIO_UPLOAD_SPINNER_PERIOD_MS) / AUDIO_UPLOAD_SPINNER_PERIOD_MS
+				(frame.time % AUDIO_STATUS_SPINNER_PERIOD_MS) / AUDIO_STATUS_SPINNER_PERIOD_MS
 			spinner.rotation(-90 + progress * 360)
 		}, layer)
-		this.uploadSpinnerAnimation.start()
+		this.statusSpinnerAnimation.start()
 	}
 
-	private stopUploadSpinnerAnimation(): void {
-		this.uploadSpinnerAnimation?.stop()
-		this.uploadSpinnerAnimation = undefined
+	private stopStatusSpinnerAnimation(): void {
+		this.statusSpinnerAnimation?.stop()
+		this.statusSpinnerAnimation = undefined
 	}
 
 	private renderWaveform(group: Konva.Group): void {
@@ -577,12 +656,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 						? Math.max(barWidth + minimumBarGap, (width - barWidth) / (barCount - 1))
 						: 0
 				const barPitch = Math.min(waveformStyle.barPitch, fittedBarPitch)
-				const progress =
-					this.playbackSnapshot.duration > 0
-						? clampProgress(
-								this.playbackSnapshot.currentTime / this.playbackSnapshot.duration,
-							)
-						: 0
+				const progress = this.resolveDisplayedProgress()
 				const peaks = this.waveformSnapshot.peaks
 				const hasRealPeaks = this.waveformSnapshot.status === "ready" && !!peaks?.length
 				// Timeline indices own stable amplitudes; playback progress only translates
@@ -1101,11 +1175,18 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 		const update = () => this.queueScrubFromPointer(playerGroup, track)
 		const finish = () => {
+			if (!this.scrubStage) return
 			update()
 			this.finishScrub()
 		}
+		const cancel = () => {
+			if (!this.scrubStage) return
+			this.cancelScrub()
+		}
 		stage.on("mousemove.audioScrub touchmove.audioScrub", update)
-		stage.on("mouseup.audioScrub touchend.audioScrub touchcancel.audioScrub", finish)
+		stage.on("mouseup.audioScrub touchend.audioScrub", finish)
+		stage.on("touchcancel.audioScrub", cancel)
+		this.bindScrubWindowListeners(stage, playerGroup, track)
 		update()
 	}
 
@@ -1122,6 +1203,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		if (!pointer || track.width() <= 0) return
 		const progress = clampProgress((pointer.x - track.x()) / track.width())
 		this.syncProgressNodes(progress)
+		this.syncTimeNode()
 		this.canvas.audioPlaybackManager.seek(this.data.id, progress)
 	}
 
@@ -1130,6 +1212,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		if (!pointer || track.width() <= 0) return
 		this.pendingScrubProgress = clampProgress((pointer.x - track.x()) / track.width())
 		this.syncProgressNodes(this.pendingScrubProgress)
+		this.syncTimeNode()
 	}
 
 	private flushScrubProgress(): void {
@@ -1140,8 +1223,22 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private finishScrub(): void {
-		const hadActiveScrub = !!this.scrubStage
 		this.flushScrubProgress()
+		this.cleanupScrubInteraction()
+	}
+
+	private cancelScrub(): void {
+		this.pendingScrubProgress = null
+		this.syncProgressNodes(this.resolveDisplayedProgress())
+		this.syncTimeNode()
+		this.syncWaveformNodes()
+		this.cleanupScrubInteraction()
+	}
+
+	private cleanupScrubInteraction(): void {
+		const hadActiveScrub = !!this.scrubStage
+		this.scrubWindowCleanup?.()
+		this.scrubWindowCleanup = undefined
 		if (this.scrubStage) {
 			this.scrubStage.off(".audioScrub")
 			this.scrubStage.draggable(this.scrubStageWasDraggable)
@@ -1150,6 +1247,47 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.scrubStage = undefined
 		this.canvas.cursorManager?.restoreToolCursor()
 		this.setProgressInteractionState("idle")
+	}
+
+	private bindScrubWindowListeners(
+		stage: Konva.Stage,
+		playerGroup: Konva.Group,
+		track: Konva.Rect,
+	): void {
+		if (typeof window === "undefined") return
+
+		const handleMove = (event: Event) => {
+			if (this.scrubStage !== stage) return
+			stage.setPointersPositions(event)
+			this.queueScrubFromPointer(playerGroup, track)
+		}
+		const handleFinish = () => {
+			if (this.scrubStage !== stage) return
+			this.finishScrub()
+		}
+		const handleCancel = () => {
+			if (this.scrubStage !== stage) return
+			this.cancelScrub()
+		}
+		const capture = true
+		window.addEventListener("mousemove", handleMove, capture)
+		window.addEventListener("touchmove", handleMove, capture)
+		window.addEventListener("pointermove", handleMove, capture)
+		window.addEventListener("mouseup", handleFinish, capture)
+		window.addEventListener("touchend", handleFinish, capture)
+		window.addEventListener("pointerup", handleFinish, capture)
+		window.addEventListener("touchcancel", handleCancel, capture)
+		window.addEventListener("pointercancel", handleCancel, capture)
+		this.scrubWindowCleanup = () => {
+			window.removeEventListener("mousemove", handleMove, capture)
+			window.removeEventListener("touchmove", handleMove, capture)
+			window.removeEventListener("pointermove", handleMove, capture)
+			window.removeEventListener("mouseup", handleFinish, capture)
+			window.removeEventListener("touchend", handleFinish, capture)
+			window.removeEventListener("pointerup", handleFinish, capture)
+			window.removeEventListener("touchcancel", handleCancel, capture)
+			window.removeEventListener("pointercancel", handleCancel, capture)
+		}
 	}
 
 	private seekBy(deltaSeconds: number): void {
@@ -1195,7 +1333,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		const background = group.findOne(`.${NODE_NAMES.background}`) as Konva.Rect | undefined
 		background?.size({ width, height })
 		background?.cornerRadius(AUDIO_CONFIG.CORNER_RADIUS)
-		this.syncUploadPlaceholderLayout(width, height)
+		this.syncStatusPlaceholderLayout(width, height)
 
 		const playerGroup = group.findOne(`.${NODE_NAMES.player}`) as Konva.Group | undefined
 		if (!playerGroup) return
@@ -1255,10 +1393,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		}
 		timeText?.setAttrs(layout.time)
 		errorText?.setAttrs(layout.error)
-		const progress =
-			this.playbackSnapshot.duration > 0
-				? clampProgress(this.playbackSnapshot.currentTime / this.playbackSnapshot.duration)
-				: 0
+		const progress = this.resolveDisplayedProgress()
 		this.syncProgressNodes(progress)
 
 		const operationGroup = playerGroup.findOne(`.${NODE_NAMES.operationGroup}`) as
@@ -1292,22 +1427,25 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		group.getLayer()?.batchDraw()
 	}
 
-	private syncUploadPlaceholderLayout(width: number, height: number): void {
+	private syncStatusPlaceholderLayout(width: number, height: number): void {
 		if (!(this.node instanceof Konva.Group)) return
-		const placeholder = this.node.findOne(`.${NODE_NAMES.uploadPlaceholder}`) as
+		const placeholder = this.node.findOne(`.${NODE_NAMES.statusPlaceholder}`) as
 			Konva.Group | undefined
 		if (!placeholder) return
-		const layout = resolveAudioUploadPlaceholderLayout(width, height)
+		const state = this.renderedState ?? "preparing"
+		const layout = resolveAudioStatusPlaceholderLayout(width, height, {
+			showSpinner: state !== "error",
+		})
 		placeholder.setAttrs(layout.group)
-		const spinner = placeholder.findOne(`.${NODE_NAMES.uploadSpinner}`) as
+		const spinner = placeholder.findOne(`.${NODE_NAMES.statusSpinner}`) as
 			Konva.Shape | undefined
 		spinner?.setAttrs({
 			x: layout.spinner.x,
 			y: layout.spinner.y,
-			audioUploadSpinnerRadius: layout.spinner.radius,
-			audioUploadSpinnerStrokeWidth: layout.spinner.strokeWidth,
+			audioStatusSpinnerRadius: layout.spinner.radius,
+			audioStatusSpinnerStrokeWidth: layout.spinner.strokeWidth,
 		})
-		const text = placeholder.findOne(`.${NODE_NAMES.uploadText}`) as Konva.Text | undefined
+		const text = placeholder.findOne(`.${NODE_NAMES.statusText}`) as Konva.Text | undefined
 		text?.setAttrs(layout.text)
 	}
 
@@ -1419,27 +1557,17 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private syncPlaybackNodes(): void {
 		if (!(this.node instanceof Konva.Group)) return
-		const { duration, currentTime, paused, ended, error } = this.playbackSnapshot
+		const { duration, paused, ended, error } = this.playbackSnapshot
 		const isPlaying = !paused && !ended
 		this.node.findOne(`.${NODE_NAMES.playTriangle}`)?.visible(!isPlaying)
 		this.node.findOne(`.${NODE_NAMES.pauseBars}`)?.visible(isPlaying)
 
-		const progress = duration > 0 ? clampProgress(currentTime / duration) : 0
+		const progress = this.resolveDisplayedProgress()
 		this.syncProgressNodes(progress)
-		const timeText = this.node.findOne(`.${NODE_NAMES.time}`) as Konva.Text | undefined
-		timeText?.text(`${formatTime(currentTime)} / ${formatTime(duration)}`)
+		this.syncTimeNode()
 		const errorText = this.node.findOne(`.${NODE_NAMES.error}`) as Konva.Text | undefined
 		if (errorText) {
-			const failureReason = this.data.src
-				? this.canvas.audioResourceManager.getFailureReason(this.data.src)
-				: null
-			errorText.text(
-				error || this.resourceError
-					? failureReason === "not-found"
-						? this.getText("audio.fileMissing", "音频文件不存在")
-						: this.getText("audio.loadFailed", "音频加载失败，点击播放重试")
-					: "",
-			)
+			errorText.text(error || this.resourceError ? this.getAudioLoadErrorText() : "")
 		}
 		this.backButtonStateSync?.()
 		this.forwardButtonStateSync?.()
@@ -1452,6 +1580,29 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private syncWaveformNodes(): void {
 		this.node?.findOne(`.${NODE_NAMES.waveform}`)?.getLayer()?.batchDraw()
+	}
+
+	private resolveDisplayedProgress(): number {
+		if (this.pendingScrubProgress !== null) return this.pendingScrubProgress
+		const { currentTime, duration } = this.playbackSnapshot
+		return duration > 0 ? clampProgress(currentTime / duration) : 0
+	}
+
+	private resolveDisplayedCurrentTime(): number {
+		const { currentTime, duration } = this.playbackSnapshot
+		if (this.pendingScrubProgress !== null && duration > 0) {
+			return duration * this.pendingScrubProgress
+		}
+		return currentTime
+	}
+
+	private syncTimeNode(): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const { duration } = this.playbackSnapshot
+		const timeText = this.node.findOne(`.${NODE_NAMES.time}`) as Konva.Text | undefined
+		timeText?.text(
+			`${formatTime(this.resolveDisplayedCurrentTime())} / ${formatTime(duration)}`,
+		)
 	}
 
 	private syncProgressNodes(progress: number): void {
@@ -1492,7 +1643,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.waveformUnsubscribe = this.canvas.audioWaveformManager.subscribe(path, (snapshot) => {
 			this.waveformSnapshot = snapshot
 			this.waveformNormalization = resolveWaveformNormalization(snapshot.peaks)
-			this.syncWaveformNodes()
+			if (snapshot.status === "ready" || snapshot.status === "error") {
+				this.retryingPreparation = false
+			}
+			this.syncRenderState()
 		})
 	}
 

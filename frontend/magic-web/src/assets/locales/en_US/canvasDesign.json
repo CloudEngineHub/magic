@@ -2,7 +2,8 @@
 	"audio": {
 		"defaultName": "Audio",
 		"fileMissing": "Audio file is missing",
-		"loadFailed": "Failed to load audio. Click play to retry.",
+		"loadFailed": "Failed to load audio. Click retry.",
+		"loading": "Loading audio...",
 		"replace": "Replace",
 		"replaceFailed": "Failed to replace audio. Please try again.",
 		"replaceUnsupported": "Unsupported audio format",

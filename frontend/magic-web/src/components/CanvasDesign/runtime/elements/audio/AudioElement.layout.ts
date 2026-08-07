@@ -35,11 +35,11 @@ export const AUDIO_PLAYER_DESIGN = {
 	waveformPlayheadTriangleWidth: 16,
 	waveformPlayheadTriangleHeight: 10,
 	operationIconReferenceButtonSize: 44,
-	uploadSpinnerRadius: 20,
-	uploadSpinnerStrokeWidth: 4,
-	uploadSpinnerToTextGap: 20,
-	uploadTextFontSize: 24,
-	uploadTextLineHeight: 1.3,
+	statusSpinnerRadius: 20,
+	statusSpinnerStrokeWidth: 4,
+	statusSpinnerToTextGap: 20,
+	statusTextFontSize: 24,
+	statusTextLineHeight: 1.3,
 } as const
 
 export interface AudioPlayerLayout {
@@ -62,7 +62,7 @@ export interface AudioPlayerLayout {
 	}
 }
 
-export interface AudioUploadPlaceholderLayout {
+export interface AudioStatusPlaceholderLayout {
 	group: LayoutRect
 	spinner: { x: number; y: number; radius: number; strokeWidth: number }
 	text: { x: number; y: number; width: number; fontSize: number; lineHeight: number }
@@ -200,19 +200,21 @@ export function resolveAudioPlayerLayout(width: number, height: number): AudioPl
 	}
 }
 
-export function resolveAudioUploadPlaceholderLayout(
+export function resolveAudioStatusPlaceholderLayout(
 	width: number,
 	height: number,
-): AudioUploadPlaceholderLayout {
+	options?: { showSpinner?: boolean },
+): AudioStatusPlaceholderLayout {
 	const playerLayout = resolveAudioPlayerLayout(width, height)
 	const scale = playerLayout.rootScale
-	const radius = AUDIO_PLAYER_DESIGN.uploadSpinnerRadius * scale
-	const strokeWidth = AUDIO_PLAYER_DESIGN.uploadSpinnerStrokeWidth * scale
-	const gap = AUDIO_PLAYER_DESIGN.uploadSpinnerToTextGap * scale
-	const fontSize = AUDIO_PLAYER_DESIGN.uploadTextFontSize * scale
-	const lineHeight = AUDIO_PLAYER_DESIGN.uploadTextLineHeight
+	const showSpinner = options?.showSpinner ?? true
+	const radius = AUDIO_PLAYER_DESIGN.statusSpinnerRadius * scale
+	const strokeWidth = AUDIO_PLAYER_DESIGN.statusSpinnerStrokeWidth * scale
+	const gap = AUDIO_PLAYER_DESIGN.statusSpinnerToTextGap * scale
+	const fontSize = AUDIO_PLAYER_DESIGN.statusTextFontSize * scale
+	const lineHeight = AUDIO_PLAYER_DESIGN.statusTextLineHeight
 	const textHeight = fontSize * lineHeight
-	const contentHeight = radius * 2 + gap + textHeight
+	const contentHeight = showSpinner ? radius * 2 + gap + textHeight : textHeight
 
 	return {
 		group: {
@@ -229,7 +231,7 @@ export function resolveAudioUploadPlaceholderLayout(
 		},
 		text: {
 			x: 0,
-			y: radius * 2 + gap,
+			y: showSpinner ? radius * 2 + gap : 0,
 			width,
 			fontSize,
 			lineHeight,

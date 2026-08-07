@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	resolveAudioPlayerLayout,
-	resolveAudioUploadPlaceholderLayout,
+	resolveAudioStatusPlaceholderLayout,
 } from "../AudioElement.layout"
 
 describe("resolveAudioPlayerLayout", () => {
@@ -43,9 +43,9 @@ describe("resolveAudioPlayerLayout", () => {
 	})
 })
 
-describe("resolveAudioUploadPlaceholderLayout", () => {
-	it("centers the upload indicator at the default audio size", () => {
-		const layout = resolveAudioUploadPlaceholderLayout(1280, 720)
+describe("resolveAudioStatusPlaceholderLayout", () => {
+	it("centers the status indicator at the default audio size", () => {
+		const layout = resolveAudioStatusPlaceholderLayout(1280, 720)
 
 		expect(layout.group.x).toBe(0)
 		expect(layout.group.width).toBe(1280)
@@ -54,8 +54,8 @@ describe("resolveAudioUploadPlaceholderLayout", () => {
 		expect(layout.text).toMatchObject({ x: 0, width: 1280, fontSize: 24, lineHeight: 1.3 })
 	})
 
-	it("keeps the upload indicator within a minimum-width audio element", () => {
-		const layout = resolveAudioUploadPlaceholderLayout(240, 720)
+	it("keeps the status indicator within a minimum-width audio element", () => {
+		const layout = resolveAudioStatusPlaceholderLayout(240, 720)
 
 		expect(layout.group.x).toBeGreaterThanOrEqual(0)
 		expect(layout.group.y).toBeGreaterThanOrEqual(0)
@@ -63,5 +63,14 @@ describe("resolveAudioUploadPlaceholderLayout", () => {
 		expect(layout.group.y + layout.group.height).toBeLessThanOrEqual(720)
 		expect(layout.spinner.x).toBe(120)
 		expect(layout.text.x + layout.text.width).toBeLessThanOrEqual(240)
+	})
+
+	it("centers error text without reserving spinner space", () => {
+		const layout = resolveAudioStatusPlaceholderLayout(1280, 720, {
+			showSpinner: false,
+		})
+
+		expect(layout.group.y + layout.group.height / 2).toBeCloseTo(360)
+		expect(layout.text.y).toBe(0)
 	})
 })

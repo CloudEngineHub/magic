@@ -1448,7 +1448,10 @@ export async function getFileResourceMetaByPath(
 			options?.designProjectId,
 		)
 		if (optimisticMeta) return optimisticMeta
-		return hasAttachmentSnapshot ? { status: "deleted" } : { status: "unknown" }
+		const result = hasAttachmentSnapshot
+			? { status: "deleted" as const }
+			: { status: "unknown" as const }
+		return result
 	}
 
 	return buildFileResourceMeta(fileItem)
