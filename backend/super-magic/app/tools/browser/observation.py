@@ -269,10 +269,6 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                     default_height=artifact.height,
                     default_quality=artifact.quality,
                 )
-                try:
-                    await self.get_horizon(tool_context).update_timestamp(file_path)
-                except Exception:
-                    logger.warning("Browser screenshot timestamp update failed", exc_info=True)
                 after_event = EventType.FILE_UPDATED if file_exists else EventType.FILE_CREATED
                 await self._dispatch_file_event(
                     tool_context,
