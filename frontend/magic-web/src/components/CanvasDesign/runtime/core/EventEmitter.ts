@@ -163,6 +163,15 @@ export interface CanvasEventMap {
 		elementId: string
 		status: "idle" | "uploading" | "error"
 	}
+	"element:audio:replaceClick": {
+		elementId: string
+		clientX?: number
+		clientY?: number
+	}
+	"element:audio:replaceStateChanged": {
+		elementId: string
+		status: "idle" | "uploading" | "error"
+	}
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件

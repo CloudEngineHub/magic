@@ -10,7 +10,7 @@ export class MediaPlaybackCoordinator {
 		this.canvas = options.canvas
 		this.deselectUnsubscribe = this.canvas.eventEmitter.on("element:deselect", () => {
 			this.pauseAll()
-			this.canvas.audioPlaybackManager.releaseAll()
+			this.canvas.audioPlaybackManager.releaseAll(undefined, { preserveMetadata: true })
 		})
 	}
 

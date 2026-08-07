@@ -132,7 +132,8 @@ function createManager(requestPreviewLoad = vi.fn()) {
 function createConstructedManager(requestPreviewLoad = vi.fn()) {
 	const ensureFreshOssInfo = vi.fn()
 	const getAudioResource = vi.fn()
-	const prepareAudio = vi.fn()
+	const prepareAudio = vi.fn(async () => true)
+	const prepareWaveform = vi.fn(async () => true)
 	const releaseAudio = vi.fn()
 	const releaseViewportPreload = vi.fn()
 	const imagePresentationScheduler = {
@@ -195,6 +196,9 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 			release: releaseAudio,
 			releaseViewportPreload,
 		},
+		audioWaveformManager: {
+			prepare: prepareWaveform,
+		},
 		imageResourceManager: {
 			getSnapshot: vi.fn(() => ({
 				decodeAttemptCount: 0,
@@ -253,6 +257,7 @@ function createConstructedManager(requestPreviewLoad = vi.fn()) {
 		imagePresentationScheduler,
 		manager,
 		prepareAudio,
+		prepareWaveform,
 		releaseAudio,
 		releaseViewportPreload,
 		requestPreviewLoad,
@@ -445,8 +450,9 @@ describe("CanvasVisibilityManager audio viewport requests", () => {
 		expect(prepareAudio).not.toHaveBeenCalled()
 	})
 
-	it("preloads visible audio through the managed viewport session", () => {
-		const { getAudioResource, manager, prepareAudio } = createConstructedManager()
+	it("preloads visible audio and then schedules waveform decoding", async () => {
+		const { getAudioResource, manager, prepareAudio, prepareWaveform } =
+			createConstructedManager()
 		const requestAudioLoad = (manager as unknown as { requestAudioLoad: RequestAudioLoad })
 			.requestAudioLoad
 
@@ -462,6 +468,14 @@ describe("CanvasVisibilityManager audio viewport requests", () => {
 			}),
 		)
 		expect(getAudioResource).not.toHaveBeenCalled()
+		await Promise.resolve()
+		expect(prepareWaveform).toHaveBeenCalledWith(
+			"./audios/a.mp3",
+			expect.objectContaining({
+				priority: "visible",
+				signal: expect.any(AbortSignal),
+			}),
+		)
 	})
 
 	it("upgrades a near URL request to visible preload and dedupes repeats", () => {

@@ -7,6 +7,7 @@ export type CanvasResourceTaskKind =
 	| "video:playback-acquire"
 	| "audio:preload"
 	| "audio:playback-acquire"
+	| "audio:waveform-decode"
 
 export type CanvasResourceTaskPriority = "critical" | "visible" | "near" | "background"
 
@@ -61,6 +62,7 @@ const TASK_KIND_LIMITS: Record<CanvasResourceTaskKind, number> = {
 	"video:playback-acquire": 2,
 	"audio:preload": 2,
 	"audio:playback-acquire": 2,
+	"audio:waveform-decode": 1,
 }
 
 const TOTAL_RESOURCE_TASK_LIMIT = 8
@@ -86,6 +88,7 @@ function createKindCountRecord(): Record<CanvasResourceTaskKind, number> {
 		"video:playback-acquire": 0,
 		"audio:preload": 0,
 		"audio:playback-acquire": 0,
+		"audio:waveform-decode": 0,
 	}
 }
 

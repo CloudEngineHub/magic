@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { CanvasFileUploadManager, type UploadRequest } from "../upload/CanvasFileUploadManager"
 import {
+	GenerationStatus,
 	UploadSubDir,
 	type UploadFile,
 	type UploadFileResponse,
@@ -9,6 +10,7 @@ import {
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import { ImageElement } from "../../elements/image/ImageElement"
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
@@ -86,28 +88,211 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 	})
 })
 
-describe("CanvasFileUploadManager audio element uploads", () => {
-	it("creates the audio element only after upload succeeds", async () => {
-		let resolveUpload!: (value: UploadFileResponse[]) => void
-		const uploadPromise = new Promise<UploadFileResponse[]>((resolve) => {
-			resolveUpload = resolve
+describe("CanvasFileUploadManager image replacement", () => {
+	function createImageInstance(status = GenerationStatus.Completed, options?: { v2?: boolean }) {
+		const instance = Object.create(ImageElement.prototype) as ImageElement
+		const version = { id: "version-1", status }
+		const data = options?.v2
+			? {
+					id: "image-1",
+					type: ElementTypeEnum.Image,
+					imageDslVersion: 2 as const,
+					activeVersionId: version.id,
+					mainVersionId: version.id,
+					versions: [version],
+				}
+			: { id: "image-1", type: ElementTypeEnum.Image, status }
+		Object.assign(instance, {
+			getData: vi.fn(() => data),
+			getActiveVersionData: vi.fn(() => version),
+			getVersionData: vi.fn((versionId: string) =>
+				options?.v2 && versionId === version.id ? version : undefined,
+			),
+			updateActiveVersionData: vi.fn(() => true),
+			updateVersionData: vi.fn(() => true),
+			setOssSrc: vi.fn(),
 		})
-		const create = vi.fn()
+		return instance
+	}
+
+	it("replaces only the active image version after upload and records one history entry", async () => {
+		const image = createImageInstance()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const primeCache = vi.fn()
+		const requestImmediateImageLoad = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		const uploadResult: UploadFileResponse = {
+			path: "./images/new.png",
+			src: "https://example.test/new.png",
+			fileName: "new.png",
+		}
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementInstance: vi.fn(() => image) },
+				historyManager: { disable, enable, recordHistoryImmediate },
+				imageResourceManager: { primeCache },
+				visibilityManager: { requestImmediateImageLoad },
+			},
+			uploadDirect: vi.fn(async () => [uploadResult]),
+		})
+
+		await expect(
+			manager.replaceImageElement({
+				elementId: "image-1",
+				file: new File(["new"], "new.png", { type: "image/png" }),
+				versionId: null,
+			}),
+		).resolves.toBe(true)
+
+		expect(image.updateActiveVersionData).toHaveBeenCalledWith(
+			{
+				src: "./images/new.png",
+				status: GenerationStatus.Completed,
+				errorMessage: undefined,
+				crop: undefined,
+			},
+			{ silent: false },
+		)
+		expect(image.setOssSrc).toHaveBeenCalledWith("https://example.test/new.png")
+		expect(primeCache).toHaveBeenCalledWith("./images/new.png", uploadResult)
+		expect(disable).toHaveBeenCalledTimes(1)
+		expect(enable).toHaveBeenCalledTimes(1)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+		expect(requestImmediateImageLoad).toHaveBeenCalledWith("image-1", {
+			reason: "image-replaced",
+			priority: "critical",
+		})
+	})
+
+	it("replaces the active image version with an existing project path", () => {
+		const image = createImageInstance()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementInstance: vi.fn(() => image) },
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+				visibilityManager: { requestImmediateImageLoad: vi.fn() },
+			},
+		})
+
+		expect(
+			manager.replaceImageElementFromProject({
+				elementId: "image-1",
+				path: "/images/project.webp",
+				versionId: null,
+			}),
+		).toBe(true)
+		expect(image.updateActiveVersionData).toHaveBeenCalledWith(
+			expect.objectContaining({ src: "/images/project.webp", crop: undefined }),
+			{ silent: false },
+		)
+	})
+
+	it("targets the V2 version that was active when replacement started", () => {
+		const image = createImageInstance(GenerationStatus.Completed, { v2: true })
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementInstance: vi.fn(() => image) },
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+				visibilityManager: { requestImmediateImageLoad: vi.fn() },
+			},
+		})
+
+		expect(
+			manager.replaceImageElementFromProject({
+				elementId: "image-1",
+				path: "/images/project.png",
+				versionId: "version-1",
+			}),
+		).toBe(true)
+		expect(image.updateVersionData).toHaveBeenCalledWith(
+			"version-1",
+			expect.objectContaining({ src: "/images/project.png", crop: undefined }),
+			{ silent: false },
+		)
+		expect(image.updateActiveVersionData).not.toHaveBeenCalled()
+	})
+
+	it("does not upload over an active processing image version", async () => {
+		const image = createImageInstance(GenerationStatus.Processing)
+		const uploadDirect = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementInstance: vi.fn(() => image) },
+			},
+			uploadDirect,
+		})
+
+		await expect(
+			manager.replaceImageElement({
+				elementId: "image-1",
+				file: new File(["new"], "new.png", { type: "image/png" }),
+				versionId: null,
+			}),
+		).resolves.toBe(false)
+		expect(uploadDirect).not.toHaveBeenCalled()
+		expect(image.updateActiveVersionData).not.toHaveBeenCalled()
+	})
+})
+
+describe("CanvasFileUploadManager audio element uploads", () => {
+	it("creates a temporary audio placeholder before upload and converts it after success", async () => {
+		let uploadContext:
+			| {
+					onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
+					onUploadFailed?: (elementId: string, error: Error) => void
+			  }
+			| undefined
+		const createTemporary = vi.fn(
+			(
+				_element: LayerElement,
+				context: {
+					onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
+					onUploadFailed?: (elementId: string, error: Error) => void
+				},
+			) => {
+				uploadContext = context
+			},
+		)
+		const convertToPermament = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
 		const recordHistoryImmediate = vi.fn()
 		const primeCache = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
+			pendingUploadBatches: [],
+			currentPendingBatchId: null,
 			canvas: {
+				eventEmitter: { emit: vi.fn() },
 				magicConfigManager: { config: { methods: { uploadFiles: vi.fn() } } },
 				elementManager: {
 					getElementsDict: vi.fn(() => ({})),
 					getMaxZIndexInLevel: vi.fn(() => 2),
-					create,
+					createTemporary,
+					hasElement: vi.fn(() => true),
+					isTemporary: vi.fn(() => true),
+					convertToPermament,
 				},
-				historyManager: { recordHistoryImmediate },
+				historyManager: { disable, enable, recordHistoryImmediate },
 				audioResourceManager: { primeCache },
 			},
-			uploadDirect: vi.fn(() => uploadPromise),
 		})
 		const onUploadComplete = vi.fn()
 		const file = new File(["audio"], "voice.mp3", { type: "audio/mpeg" })
@@ -117,64 +302,335 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			position: { x: 300, y: 200 },
 			onUploadComplete,
 		})
-		expect(create).not.toHaveBeenCalled()
+		expect(createTemporary).toHaveBeenCalledTimes(1)
+		const temporaryElement = createTemporary.mock.calls[0]?.[0] as Record<string, unknown>
+		expect(temporaryElement).toMatchObject({
+			type: ElementTypeEnum.Audio,
+			width: 1280,
+			height: 720,
+		})
+		expect(temporaryElement.src).toBeUndefined()
+		expect(temporaryElement).not.toHaveProperty("status")
+		expect(temporaryElement).not.toHaveProperty("errorMessage")
+		expect(disable).toHaveBeenCalledTimes(1)
+		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).not.toHaveBeenCalled()
+		const elementId = temporaryElement.id as string
+		await expect(pending).resolves.toBe(elementId)
+		expect(convertToPermament).not.toHaveBeenCalled()
 
 		const uploadResult: UploadFileResponse = {
 			path: "./audios/voice.mp3",
 			src: "https://example.test/voice.mp3",
 			fileName: "voice.mp3",
 		}
-		resolveUpload([uploadResult])
-		const elementId = await pending
+		uploadContext?.onUploadComplete?.(elementId, uploadResult)
 
-		expect(elementId).toEqual(expect.any(String))
-		expect(create).toHaveBeenCalledWith(
-			expect.objectContaining<Partial<LayerElement>>({
-				id: elementId ?? undefined,
-				type: ElementTypeEnum.Audio,
-				src: "./audios/voice.mp3",
-				width: 1280,
-				height: 720,
-			}),
+		expect(convertToPermament).toHaveBeenCalledWith(
+			elementId,
+			{ src: "./audios/voice.mp3" },
+			{ silent: true },
 		)
-		const createdElement = create.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(createdElement).not.toHaveProperty("status")
-		expect(createdElement).not.toHaveProperty("errorMessage")
 		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
+		expect(disable).toHaveBeenCalledTimes(1)
+		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
 		expect(onUploadComplete).toHaveBeenCalledWith(elementId, uploadResult)
 	})
 
-	it("does not create history or an empty audio element when upload fails", async () => {
-		const create = vi.fn()
+	it("returns the audio placeholder before a locked upload queue is released", async () => {
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/voice.mp3",
+			src: "https://example.test/voice.mp3",
+			fileName: "voice.mp3",
+		}
+		const uploadFiles = vi.fn(async (files: UploadFile[]) => {
+			files[0]?.onUploadComplete(uploadResult)
+			return [uploadResult]
+		})
+		const convertToPermament = vi.fn()
+		const primeCache = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		const createTemporary = vi.fn(
+			(
+				element: LayerElement,
+				context: {
+					uploadFiles: File[]
+					onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
+					onUploadFailed?: (elementId: string, error: Error) => void
+				},
+			) => {
+				manager.queueUpload({
+					elementId: element.id,
+					file: context.uploadFiles[0],
+					onUploadComplete: (result) => context.onUploadComplete?.(element.id, result),
+					onUploadFailed: (error) => context.onUploadFailed?.(element.id, error),
+				})
+			},
+		)
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			isLocked: false,
+			isProcessingQueue: false,
+			uploadQueue: [],
+			pendingUploadBatches: [],
+			currentPendingBatchId: null,
+			canvas: {
+				eventEmitter: { emit: vi.fn() },
+				magicConfigManager: { config: { methods: { uploadFiles } } },
+				elementManager: {
+					getElementsDict: vi.fn(() => ({})),
+					getMaxZIndexInLevel: vi.fn(() => 0),
+					createTemporary,
+					hasElement: vi.fn(() => true),
+					isTemporary: vi.fn(() => true),
+					convertToPermament,
+				},
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+				audioResourceManager: { primeCache },
+			},
+		})
+
+		manager.lock()
+		const elementId = await manager.uploadFileElement({
+			file: new File(["audio"], "voice.mp3", { type: "audio/mpeg" }),
+			position: { x: 0, y: 0 },
+			manageHistory: false,
+		})
+
+		expect(elementId).toEqual(expect.any(String))
+		expect(createTemporary).toHaveBeenCalledTimes(1)
+		expect(uploadFiles).not.toHaveBeenCalled()
+
+		await manager.unlock()
+
+		expect(uploadFiles).toHaveBeenCalledTimes(1)
+		expect(convertToPermament).toHaveBeenCalledWith(
+			elementId,
+			{ src: "./audios/voice.mp3" },
+			{ silent: true },
+		)
+		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
+	})
+
+	it("replaces only the audio source after upload succeeds and records one history entry", async () => {
+		const update = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const primeCache = vi.fn()
+		const invalidatePath = vi.fn()
+		const release = vi.fn()
+		const invalidateAudioLoadRequest = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		const current = {
+			id: "audio-1",
+			type: ElementTypeEnum.Audio,
+			x: 10,
+			y: 20,
+			width: 640,
+			height: 720,
+			name: "原名称",
+			src: "./audios/old.mp3",
+		}
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/new.mp3",
+			src: "https://example.test/new.mp3",
+			fileName: "new.mp3",
+		}
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: { disable, enable, recordHistoryImmediate },
+				audioResourceManager: {
+					getResourceIdentity: vi.fn((path: string) => path),
+					primeCache,
+				},
+				audioPlaybackManager: { release },
+				audioWaveformManager: { invalidatePath },
+				visibilityManager: { invalidateAudioLoadRequest },
+			},
+			uploadDirect: vi.fn(async () => [uploadResult]),
+		})
+
+		await expect(
+			manager.replaceAudioElement({
+				elementId: "audio-1",
+				file: new File(["new"], "new.mp3", { type: "audio/mpeg" }),
+			}),
+		).resolves.toBe(true)
+
+		expect(update).toHaveBeenCalledWith(
+			"audio-1",
+			{ src: "./audios/new.mp3" },
+			{ silent: false },
+		)
+		expect(primeCache).toHaveBeenCalledWith("./audios/new.mp3", uploadResult)
+		expect(release).toHaveBeenCalledWith("audio-1")
+		expect(invalidatePath).toHaveBeenCalledWith("./audios/old.mp3")
+		expect(disable).toHaveBeenCalledTimes(1)
+		expect(enable).toHaveBeenCalledTimes(1)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps the previous audio unchanged when replacement upload fails", async () => {
+		const update = vi.fn()
 		const recordHistoryImmediate = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
 			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: {
+					getElementData: vi.fn(() => ({
+						id: "audio-1",
+						type: ElementTypeEnum.Audio,
+						src: "./audios/old.mp3",
+					})),
+					update,
+				},
+				historyManager: { recordHistoryImmediate },
+			},
+			uploadDirect: vi.fn(async () => {
+				throw new Error("upload failed")
+			}),
+		})
+
+		await expect(
+			manager.replaceAudioElement({
+				elementId: "audio-1",
+				file: new File(["new"], "new.mp3", { type: "audio/mpeg" }),
+			}),
+		).rejects.toThrow("upload failed")
+		expect(update).not.toHaveBeenCalled()
+		expect(recordHistoryImmediate).not.toHaveBeenCalled()
+	})
+
+	it("replaces audio with an existing project path without uploading", () => {
+		const update = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const release = vi.fn()
+		const invalidatePath = vi.fn()
+		const invalidateAudioLoadRequest = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: {
+					getElementData: vi.fn(() => ({
+						id: "audio-1",
+						type: ElementTypeEnum.Audio,
+						src: "./audios/old.mp3",
+					})),
+					update,
+				},
+				historyManager: { disable, enable, recordHistoryImmediate },
+				audioResourceManager: {
+					getResourceIdentity: vi.fn((path: string) => path),
+				},
+				audioPlaybackManager: { release },
+				audioWaveformManager: { invalidatePath },
+				visibilityManager: { invalidateAudioLoadRequest },
+			},
+		})
+
+		expect(
+			manager.replaceAudioElementFromProject({
+				elementId: "audio-1",
+				path: "/audios/project.m4a",
+			}),
+		).toBe(true)
+
+		expect(update).toHaveBeenCalledWith(
+			"audio-1",
+			{ src: "/audios/project.m4a" },
+			{ silent: false },
+		)
+		expect(release).toHaveBeenCalledWith("audio-1")
+		expect(invalidatePath).toHaveBeenCalledWith("./audios/old.mp3")
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("rejects a non-audio project path before changing the element", () => {
+		const update = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { update },
+			},
+		})
+
+		expect(() =>
+			manager.replaceAudioElementFromProject({
+				elementId: "audio-1",
+				path: "/images/not-audio.png",
+			}),
+		).toThrow("不支持的音频格式")
+		expect(update).not.toHaveBeenCalled()
+	})
+
+	it("returns the audio placeholder immediately and removes it without history on failure", async () => {
+		let uploadContext:
+			| {
+					onUploadFailed?: (elementId: string, error: Error) => void
+			  }
+			| undefined
+		let hasElement = true
+		const createTemporary = vi.fn(
+			(
+				_element: LayerElement,
+				context: { onUploadFailed?: (elementId: string, error: Error) => void },
+			) => {
+				uploadContext = context
+			},
+		)
+		const deleteElement = vi.fn(() => {
+			hasElement = false
+		})
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			pendingUploadBatches: [],
+			currentPendingBatchId: null,
+			canvas: {
+				eventEmitter: { emit: vi.fn() },
 				magicConfigManager: { config: { methods: { uploadFiles: vi.fn() } } },
 				elementManager: {
 					getElementsDict: vi.fn(() => ({})),
 					getMaxZIndexInLevel: vi.fn(() => 0),
-					create,
+					createTemporary,
+					hasElement: vi.fn(() => hasElement),
+					delete: deleteElement,
 				},
-				historyManager: { recordHistoryImmediate },
+				historyManager: { disable, enable, recordHistoryImmediate },
 				audioResourceManager: { primeCache: vi.fn() },
 			},
-			uploadDirect: vi.fn().mockRejectedValue(new Error("upload failed")),
 		})
 		const onUploadFailed = vi.fn()
+		const pending = manager.uploadFileElement({
+			file: new File(["audio"], "voice.mp3", { type: "audio/mpeg" }),
+			position: { x: 0, y: 0 },
+			onUploadFailed,
+		})
+		const temporaryElement = createTemporary.mock.calls[0]?.[0] as Record<string, unknown>
+		await expect(pending).resolves.toBe(temporaryElement.id)
+		expect(deleteElement).not.toHaveBeenCalled()
+		const uploadError = new Error("upload failed")
+		uploadContext?.onUploadFailed?.(temporaryElement.id as string, uploadError)
 
-		expect(
-			await manager.uploadFileElement({
-				file: new File(["audio"], "voice.mp3", { type: "audio/mpeg" }),
-				position: { x: 0, y: 0 },
-				onUploadFailed,
-			}),
-		).toBeNull()
-		expect(create).not.toHaveBeenCalled()
+		expect(deleteElement).toHaveBeenCalledWith(temporaryElement.id)
+		expect(disable).toHaveBeenCalledTimes(2)
+		expect(enable).toHaveBeenCalledTimes(2)
 		expect(recordHistoryImmediate).not.toHaveBeenCalled()
-		expect(onUploadFailed).toHaveBeenCalledWith(expect.any(String), expect.any(Error))
+		expect(onUploadFailed).toHaveBeenCalledWith(temporaryElement.id, uploadError)
 	})
 })
 

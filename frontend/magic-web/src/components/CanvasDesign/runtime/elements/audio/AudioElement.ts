@@ -9,20 +9,94 @@ import {
 } from "../core/BaseElement"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
-import {
-	areCanvasHostResourceReferencesSame,
-	getCanvasResourceFileName,
-} from "../../shared/path/canvasResourcePath"
+import type { AudioWaveformSnapshot } from "../../resources/audio/AudioWaveformManager"
+import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
+import {
+	ElementCornerActionsDecorator,
+	type ElementCornerActionConfig,
+} from "../decorators/ElementCornerActionsDecorator"
 import { AUDIO_CONFIG } from "./AudioElement.config"
+import {
+	AUDIO_PLAYER_DESIGN,
+	resolveAudioPlayerLayout,
+	resolveAudioUploadPlaceholderLayout,
+	type AudioPlayerLayout,
+} from "./AudioElement.layout"
+import {
+	resolveAudioControlInteractionPolicy,
+	type AudioControlInteractionMode,
+} from "./AudioElement.interaction"
 
 const NODE_NAMES = {
+	background: "audio-background",
+	uploadPlaceholder: "audio-upload-placeholder",
+	uploadSpinner: "audio-upload-spinner",
+	uploadText: "audio-upload-text",
+	player: "audio-player-group",
+	controls: "audio-controls-group",
+	waveform: "audio-waveform-shape",
+	progressGroup: "audio-progress-group",
+	progressTrack: "audio-progress-track",
+	progressFill: "audio-progress-fill",
+	progressThumb: "audio-progress-thumb",
+	progressThumbHit: "audio-progress-thumb-hit",
+	progressHit: "audio-progress-hit",
+	time: "audio-time",
+	operationGroup: "audio-operation-group",
+	backButton: "audio-back-button",
+	backButtonIcon: "audio-back-button-icon",
+	playButton: "audio-play-button",
+	playButtonHit: "audio-play-button-hit",
 	playTriangle: "audio-play-triangle",
 	pauseBars: "audio-pause-bars",
-	progressFill: "audio-progress-fill",
-	time: "audio-time",
+	forwardButton: "audio-forward-button",
+	forwardButtonIcon: "audio-forward-button-icon",
 	error: "audio-error",
+	controlHit: "audio-control-hit",
 } as const
+
+const INTERACTION_COLORS = {
+	button: "rgba(255, 255, 255, 0)",
+	buttonHover: "rgba(255, 255, 255, 0.10)",
+	buttonActive: "rgba(255, 255, 255, 0.18)",
+	buttonDisabled: "rgba(255, 255, 255, 0)",
+	playButton: "#FFFFFF",
+	playButtonHover: "#F0F0F0",
+	playButtonActive: "#D9D9D9",
+	progressTrackHover: "rgba(255, 255, 255, 0.28)",
+	waveformPlayed: "rgba(255, 255, 255, 0.30)",
+	waveformUnplayed: "rgba(255, 255, 255, 0.14)",
+	waveformFallback: "rgba(255, 255, 255, 0.18)",
+	waveformPlayhead: "#45C8F5",
+} as const
+
+const WAVEFORM_LAYOUT = {
+	minBarCount: 24,
+	maxBarCount: 128,
+	minTimelineBarCount: 64,
+	timelineSecondsPerBar: 2,
+	barHeightRatio: 0.96,
+	sampleRadius: 2,
+	normalizationLowPercentile: 0.2,
+	normalizationHighPercentile: 0.95,
+	minNormalizationRange: 0.05,
+	amplitudeFloor: 0.03,
+	amplitudePower: 1.5,
+} as const
+
+const AUDIO_UPLOAD_SPINNER_PERIOD_MS = 800
+
+type InteractiveState = "idle" | "hover" | "active"
+
+interface AudioControlHitBounds {
+	x: number
+	y: number
+	width: number
+	height: number
+	expandX?: boolean
+	maxWidth?: number
+}
 
 function formatTime(seconds: number): string {
 	if (!Number.isFinite(seconds) || seconds <= 0) return "0:00"
@@ -44,12 +118,77 @@ function normalizeLegacyAudioDimensions(data: AudioElementData): AudioElementDat
 	}
 }
 
-/** 上传型音频卡片元素；播放、时长、错误等状态仅存在于运行时。 */
+function clampProgress(progress: number): number {
+	return Math.max(0, Math.min(1, progress))
+}
+
+function resolveWaveformBarCount(waveformLayoutWidth: number, barPitch: number): number {
+	const safeBarPitch = Math.max(0.0001, barPitch)
+	const evenBarCount = Math.floor(waveformLayoutWidth / safeBarPitch / 2) * 2
+	return Math.max(
+		WAVEFORM_LAYOUT.minBarCount,
+		Math.min(WAVEFORM_LAYOUT.maxBarCount, evenBarCount),
+	)
+}
+
+function resolveWaveformTimelineBarCount(duration: number): number {
+	if (!Number.isFinite(duration) || duration <= 0) return WAVEFORM_LAYOUT.minTimelineBarCount
+	return Math.max(
+		WAVEFORM_LAYOUT.minTimelineBarCount,
+		Math.ceil(duration / WAVEFORM_LAYOUT.timelineSecondsPerBar),
+	)
+}
+
+function resolveWaveformNormalization(peaks: Float32Array | null): {
+	low: number
+	range: number
+} {
+	if (!peaks?.length) return { low: 0, range: 1 }
+	const sortedPeaks = Array.from(peaks).sort((a, b) => a - b)
+	const lowPercentileIndex = Math.min(
+		sortedPeaks.length - 1,
+		Math.floor(sortedPeaks.length * WAVEFORM_LAYOUT.normalizationLowPercentile),
+	)
+	const highPercentileIndex = Math.min(
+		sortedPeaks.length - 1,
+		Math.floor(sortedPeaks.length * WAVEFORM_LAYOUT.normalizationHighPercentile),
+	)
+	const low = sortedPeaks[lowPercentileIndex] ?? 0
+	const high = sortedPeaks[highPercentileIndex] ?? 1
+	return {
+		low,
+		range: Math.max(WAVEFORM_LAYOUT.minNormalizationRange, high - low),
+	}
+}
+
+/** 上传型音频卡片元素；播放、波形、替换和错误状态仅存在于运行时。 */
 export class AudioElement extends BaseElement<AudioElementData> {
 	private playbackSnapshot: AudioPlaybackSnapshot
+	private waveformSnapshot: AudioWaveformSnapshot = { status: "idle", peaks: null }
+	private waveformBarCount = WAVEFORM_LAYOUT.minBarCount
+	private waveformNormalization = { low: 0, range: 1 }
+	private playerLayout: AudioPlayerLayout = resolveAudioPlayerLayout(
+		AUDIO_CONFIG.DEFAULT_WIDTH,
+		AUDIO_CONFIG.DEFAULT_HEIGHT,
+	)
 	private playbackUnsubscribe: () => void
+	private waveformUnsubscribe: () => void = () => undefined
 	private resourceFailureUnsubscribe: () => void
+	private replaceStateUnsubscribe: () => void
 	private resourceError = false
+	private replaceStatus: "idle" | "uploading" | "error" = "idle"
+	private interactionEventUnsubscribers: Array<() => void> = []
+	private cornerActionsDecorator?: ElementCornerActionsDecorator
+	private lastTouchActionAt = 0
+	private lastProgressTouchActionAt = 0
+	private controlInteractionMode: AudioControlInteractionMode = "full"
+	private pendingScrubProgress: number | null = null
+	private scrubStage?: Konva.Stage
+	private scrubNodeWasDraggable = false
+	private scrubStageWasDraggable = false
+	private backButtonStateSync?: () => void
+	private forwardButtonStateSync?: () => void
+	private uploadSpinnerAnimation?: Konva.Animation
 
 	constructor(data: AudioElementData, canvas: Canvas) {
 		const normalizedData = normalizeLegacyAudioDimensions(data)
@@ -63,6 +202,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				this.syncPlaybackNodes()
 			},
 		)
+		this.subscribeWaveform(normalizedData.src)
 		this.resourceFailureUnsubscribe = canvas.eventEmitter.on(
 			"resource:audio:load-failed",
 			({ data: eventData }) => {
@@ -74,6 +214,14 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				}
 				this.resourceError = true
 				this.rerenderWhenTransformIdle()
+			},
+		)
+		this.replaceStateUnsubscribe = canvas.eventEmitter.on(
+			"element:audio:replaceStateChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId !== this.data.id) return
+				this.replaceStatus = eventData.status
+				this.cornerActionsDecorator?.refresh()
 			},
 		)
 	}
@@ -133,18 +281,100 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				strokeWidth: 1,
 				cornerRadius: AUDIO_CONFIG.CORNER_RADIUS,
 				listening: false,
+				name: NODE_NAMES.background,
 			}),
 		)
+		if (this.isUploadingPlaceholder()) {
+			this.renderUploadPlaceholder(group)
+			this.finalizeNode(group)
+			this.syncRenderLayout(width, height)
+			return group
+		}
 
-		this.renderPlayButton(group, height)
-		this.renderContent(group, width, height)
+		const playerGroup = new Konva.Group({
+			name: `${NODE_NAMES.player} ${NODE_NAMES.controls}`,
+		})
+		group.add(playerGroup)
+		this.renderWaveform(playerGroup)
+		this.renderProgress(playerGroup)
+		this.renderOperations(playerGroup)
+		playerGroup.add(
+			new Konva.Text({
+				x: 0,
+				y: 0,
+				width: 0,
+				text: "",
+				fontSize: this.playerLayout.error.fontSize,
+				fill: AUDIO_CONFIG.ERROR,
+				name: NODE_NAMES.error,
+				ellipsis: true,
+				wrap: "none",
+				listening: false,
+			}),
+		)
+		this.createCornerActions(group, width, height)
+
 		this.finalizeNode(group)
+		this.syncRenderLayout(width, height)
 		this.syncPlaybackNodes()
+		this.syncWaveformNodes()
 		return group
+	}
+
+	private isUploadingPlaceholder(): boolean {
+		return !this.data.src && this.canvas.elementManager.isTemporary(this.data.id)
+	}
+
+	private renderUploadPlaceholder(group: Konva.Group): void {
+		const placeholder = new Konva.Group({
+			name: NODE_NAMES.uploadPlaceholder,
+			listening: false,
+		})
+		const spinner = new Konva.Shape({
+			name: NODE_NAMES.uploadSpinner,
+			listening: false,
+			rotation: -90,
+			sceneFunc(context, shape) {
+				const radius = shape.getAttr("audioUploadSpinnerRadius") as number | undefined
+				const strokeWidth = shape.getAttr("audioUploadSpinnerStrokeWidth") as
+					number | undefined
+				if (!radius || !strokeWidth) return
+
+				context.beginPath()
+				context.arc(0, 0, radius, 0, Math.PI * 2)
+				context.strokeStyle = "rgba(255, 255, 255, 0.24)"
+				context.lineWidth = strokeWidth
+				context.stroke()
+
+				context.beginPath()
+				context.arc(0, 0, radius, 0, Math.PI * 0.65)
+				context.strokeStyle = AUDIO_CONFIG.PROGRESS
+				context.lineWidth = strokeWidth
+				context.lineCap = "round"
+				context.stroke()
+			},
+		})
+		placeholder.add(
+			spinner,
+			new Konva.Text({
+				name: NODE_NAMES.uploadText,
+				text: this.getText("audio.uploading", "正在上传中..."),
+				align: "center",
+				fill: AUDIO_CONFIG.SECONDARY_TEXT,
+				listening: false,
+			}),
+		)
+		group.add(placeholder)
 	}
 
 	public override onMounted(): void {
 		super.onMounted()
+		if (this.node instanceof Konva.Group) {
+			this.syncRenderLayout(this.node.width(), this.node.height())
+			this.syncInteractionHitTargets()
+			this.cornerActionsDecorator?.refresh()
+		}
+		this.startUploadSpinnerAnimation()
 		if (this.data.src) {
 			this.canvas.visibilityManager.registerAudioElement(this.data.id, this.data.src)
 		}
@@ -157,7 +387,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		const resourceChanged = previousData.src !== normalizedData.src
 		const needsRerender =
 			resourceChanged ||
-			previousData.name !== normalizedData.name ||
 			previousData.width !== normalizedData.width ||
 			previousData.height !== normalizedData.height
 
@@ -165,6 +394,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.canvas.audioPlaybackManager.release(this.data.id)
 			this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
 			this.resourceError = false
+			this.replaceStatus = "idle"
+			this.subscribeWaveform(normalizedData.src)
 			if (normalizedData.src) {
 				this.canvas.visibilityManager.updateAudioElement(this.data.id, normalizedData.src)
 			} else {
@@ -190,6 +421,36 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		}
 	}
 
+	/**
+	 * Transformer 边界只应使用音频卡片本身的尺寸。
+	 *
+	 * 播放器内部的透明交互区域会在小缩放或触屏环境下扩大，不能让这些
+	 * 非视觉节点影响 Transformer 的边界。
+	 */
+	protected override setupCustomBoundingRect(node: Konva.Group): void {
+		if (!(node instanceof Konva.Group)) return
+
+		node.getClientRect = (config?: Parameters<Konva.Node["getClientRect"]>[0]) => {
+			const hitRect = node.findOne(".hit-area") as Konva.Rect | undefined
+			if (hitRect) {
+				return hitRect.getClientRect(config)
+			}
+
+			const width = node.width()
+			const height = node.height()
+			const scaleX = node.scaleX()
+			const scaleY = node.scaleY()
+			const position = config?.relativeTo ? node.getPosition() : node.getAbsolutePosition()
+
+			return {
+				x: position.x,
+				y: position.y,
+				width: width * scaleX,
+				height: height * scaleY,
+			}
+		}
+	}
+
 	public override applyTransform(
 		updates: Partial<LayerElement>,
 		context: TransformContext,
@@ -208,6 +469,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			}
 		}
 		return { x: updates.x, y: updates.y }
+	}
+
+	public override onTransformResize(width: number, _height: number): void {
+		this.syncRenderLayout(Math.max(AUDIO_CONFIG.MIN_WIDTH, width), AUDIO_CONFIG.DEFAULT_HEIGHT)
 	}
 
 	public playPreview(): void {
@@ -229,158 +494,938 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	public override onResourceReferenceResolverChanged(): void {
 		this.canvas.audioPlaybackManager.release(this.data.id)
 		this.resourceError = false
+		this.subscribeWaveform(this.data.src)
 	}
 
 	public override destroy(): void {
+		this.finishScrub()
 		this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
 		this.playbackUnsubscribe()
+		this.waveformUnsubscribe()
 		this.resourceFailureUnsubscribe()
+		this.replaceStateUnsubscribe()
+		this.cornerActionsDecorator?.destroy()
+		this.cornerActionsDecorator = undefined
+		this.backButtonStateSync = undefined
+		this.forwardButtonStateSync = undefined
+		if (this.node) this.cleanupNodeListeners(this.node)
 		super.destroy()
 	}
 
-	private renderPlayButton(group: Konva.Group, height: number): void {
-		const size = AUDIO_CONFIG.PLAY_BUTTON_SIZE
-		const x = AUDIO_CONFIG.PADDING
-		const y = (height - size) / 2
-		const button = new Konva.Group({
-			x,
-			y,
-			width: size,
-			height: size,
-			name: "audio-play-button",
-		})
-		button.add(
-			new Konva.Circle({
-				x: size / 2,
-				y: size / 2,
-				radius: size / 2,
-				fill: "rgba(255, 255, 255, 0.14)",
-			}),
-		)
-		button.add(
-			new Konva.Line({
-				name: NODE_NAMES.playTriangle,
-				points: [17, 12, 17, 32, 32, 22],
-				closed: true,
-				fill: AUDIO_CONFIG.PRIMARY_TEXT,
-				listening: false,
-			}),
-		)
-		const pauseBars = new Konva.Group({ name: NODE_NAMES.pauseBars, listening: false })
-		pauseBars.add(
-			new Konva.Rect({ x: 15, y: 13, width: 5, height: 18, fill: AUDIO_CONFIG.PRIMARY_TEXT }),
-			new Konva.Rect({ x: 25, y: 13, width: 5, height: 18, fill: AUDIO_CONFIG.PRIMARY_TEXT }),
-		)
-		button.add(pauseBars)
-		button.on("click tap", (event) => {
-			event.cancelBubble = true
-			this.playPreview()
-		})
-		group.add(button)
+	public override rerender(): Konva.Node | null {
+		this.cornerActionsDecorator?.destroy()
+		this.cornerActionsDecorator = undefined
+		return super.rerender()
 	}
 
-	private renderContent(group: Konva.Group, width: number, height: number): void {
-		const left = AUDIO_CONFIG.PADDING + AUDIO_CONFIG.PLAY_BUTTON_SIZE + 14
-		const right = AUDIO_CONFIG.PADDING
-		const contentWidth = Math.max(80, width - left - right)
-		const contentTop = Math.max(AUDIO_CONFIG.PADDING, (height - 100) / 2)
-		const fileName =
-			this.data.name || getCanvasResourceFileName(this.data.src) || this.getRenderName()
-		group.add(
-			new Konva.Text({
-				x: left,
-				y: contentTop,
-				width: contentWidth,
-				text: `♫  ${fileName}`,
-				fontSize: 15,
-				fontFamily: "Arial, sans-serif",
-				fill: AUDIO_CONFIG.PRIMARY_TEXT,
-				ellipsis: true,
-				wrap: "none",
-				listening: false,
-			}),
-		)
+	protected override setupNodeListeners(node: Konva.Node): void {
+		super.setupNodeListeners(node)
+		if (!(node instanceof Konva.Group)) return
 
-		const trackX = left
-		const trackY = contentTop + 44
-		const trackWidth = contentWidth
-		group.add(
-			new Konva.Rect({
-				x: trackX,
-				y: trackY,
-				width: trackWidth,
-				height: 4,
-				fill: AUDIO_CONFIG.TRACK,
-				cornerRadius: 2,
-				name: "audio-progress-track",
-			}),
-			new Konva.Rect({
-				x: trackX,
-				y: trackY,
-				width: 0,
-				height: 4,
-				fill: AUDIO_CONFIG.PROGRESS,
-				cornerRadius: 2,
-				name: NODE_NAMES.progressFill,
-				listening: false,
-			}),
+		const syncHitTargets = () => this.syncInteractionHitTargets()
+		this.interactionEventUnsubscribers.push(
+			this.canvas.eventEmitter.on("viewport:scale", syncHitTargets),
+			this.canvas.eventEmitter.on("canvas:devicechange", syncHitTargets),
+		)
+	}
+
+	protected override cleanupNodeListeners(node: Konva.Node): void {
+		this.stopUploadSpinnerAnimation()
+		this.interactionEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.interactionEventUnsubscribers = []
+		super.cleanupNodeListeners(node)
+	}
+
+	private startUploadSpinnerAnimation(): void {
+		this.stopUploadSpinnerAnimation()
+		if (!(this.node instanceof Konva.Group)) return
+		const spinner = this.node.findOne(`.${NODE_NAMES.uploadSpinner}`) as Konva.Shape | undefined
+		const layer = spinner?.getLayer()
+		if (!spinner || !layer) return
+
+		this.uploadSpinnerAnimation = new Konva.Animation((frame) => {
+			const progress =
+				(frame.time % AUDIO_UPLOAD_SPINNER_PERIOD_MS) / AUDIO_UPLOAD_SPINNER_PERIOD_MS
+			spinner.rotation(-90 + progress * 360)
+		}, layer)
+		this.uploadSpinnerAnimation.start()
+	}
+
+	private stopUploadSpinnerAnimation(): void {
+		this.uploadSpinnerAnimation?.stop()
+		this.uploadSpinnerAnimation = undefined
+	}
+
+	private renderWaveform(group: Konva.Group): void {
+		const waveform = new Konva.Shape({
+			x: 0,
+			y: 0,
+			width: 0,
+			height: this.playerLayout.waveform.height,
+			listening: false,
+			name: NODE_NAMES.waveform,
+			sceneFunc: (context, shape) => {
+				const width = shape.width()
+				const height = shape.height()
+				if (width <= 0 || height <= 0) return
+				const barCount = this.waveformBarCount
+				const waveformStyle = this.playerLayout.waveformStyle
+				const barWidth = waveformStyle.barWidth
+				const minimumBarGap = Math.max(1, barWidth * 0.25)
+				const fittedBarPitch =
+					barCount > 1
+						? Math.max(barWidth + minimumBarGap, (width - barWidth) / (barCount - 1))
+						: 0
+				const barPitch = Math.min(waveformStyle.barPitch, fittedBarPitch)
+				const progress =
+					this.playbackSnapshot.duration > 0
+						? clampProgress(
+								this.playbackSnapshot.currentTime / this.playbackSnapshot.duration,
+							)
+						: 0
+				const peaks = this.waveformSnapshot.peaks
+				const hasRealPeaks = this.waveformSnapshot.status === "ready" && !!peaks?.length
+				// Timeline indices own stable amplitudes; playback progress only translates
+				// those fixed bars beneath the centered playhead.
+				const timelineBarCount = resolveWaveformTimelineBarCount(
+					this.playbackSnapshot.duration,
+				)
+				const playheadBarPosition = progress * timelineBarCount
+				const visibleHalfSpan = width / barPitch / 2
+				const firstTimelineIndex = Math.floor(playheadBarPosition - visibleHalfSpan) - 1
+				const lastTimelineIndex = Math.ceil(playheadBarPosition + visibleHalfSpan) + 1
+				context.save()
+				context.beginPath()
+				context.rect(0, 0, width, height)
+				context.clip()
+				for (
+					let timelineIndex = firstTimelineIndex;
+					timelineIndex <= lastTimelineIndex;
+					timelineIndex += 1
+				) {
+					const barOffset = timelineIndex + 0.5 - playheadBarPosition
+					const x = width / 2 + barOffset * barPitch - barWidth / 2
+					if (x + barWidth <= 0 || x >= width) continue
+					const sourceProgress = (timelineIndex + 0.5) / timelineBarCount
+					const hasPeakAtPosition =
+						hasRealPeaks && timelineIndex >= 0 && timelineIndex < timelineBarCount
+					let amplitude = 0.025
+					if (hasPeakAtPosition && peaks?.length) {
+						const maxPeakIndex = peaks.length - 1
+						const centerPeakIndex = Math.round(sourceProgress * maxPeakIndex)
+						const peakStartIndex = Math.max(
+							0,
+							centerPeakIndex - WAVEFORM_LAYOUT.sampleRadius,
+						)
+						const peakEndIndex = Math.min(
+							maxPeakIndex,
+							centerPeakIndex + WAVEFORM_LAYOUT.sampleRadius,
+						)
+						let sumSquares = 0
+						let peakCount = 0
+						for (
+							let peakIndex = peakStartIndex;
+							peakIndex <= peakEndIndex;
+							peakIndex += 1
+						) {
+							const peak = peaks[peakIndex] ?? 0
+							sumSquares += peak * peak
+							peakCount += 1
+						}
+						if (peakCount > 0) {
+							const intervalRms = Math.sqrt(sumSquares / peakCount)
+							const normalizedAmplitude = clampProgress(
+								(intervalRms - this.waveformNormalization.low) /
+									this.waveformNormalization.range,
+							)
+							amplitude =
+								WAVEFORM_LAYOUT.amplitudeFloor +
+								(1 - WAVEFORM_LAYOUT.amplitudeFloor) *
+									Math.pow(normalizedAmplitude, WAVEFORM_LAYOUT.amplitudePower)
+						}
+					}
+					const barHeight = Math.max(
+						waveformStyle.minBarHeight,
+						amplitude * height * WAVEFORM_LAYOUT.barHeightRatio,
+					)
+					const y = (height - barHeight) / 2
+					const played = timelineIndex + 0.5 <= playheadBarPosition
+					context.beginPath()
+					context.roundRect(x, y, barWidth, barHeight, barWidth / 2)
+					context.fillStyle = hasRealPeaks
+						? played
+							? INTERACTION_COLORS.waveformPlayed
+							: INTERACTION_COLORS.waveformUnplayed
+						: INTERACTION_COLORS.waveformFallback
+					context.fill()
+				}
+				context.restore()
+				if (this.playbackSnapshot.duration > 0) {
+					const markerHalfWidth = waveformStyle.playheadTriangleWidth / 2
+					const markerX = width / 2
+					context.beginPath()
+					context.moveTo(markerX - markerHalfWidth, 0)
+					context.lineTo(markerX + markerHalfWidth, 0)
+					context.lineTo(markerX, waveformStyle.playheadTriangleHeight)
+					context.closePath()
+					context.fillStyle = INTERACTION_COLORS.waveformPlayhead
+					context.fill()
+					context.beginPath()
+					context.moveTo(markerX, waveformStyle.playheadTriangleHeight)
+					context.lineTo(markerX, height)
+					context.strokeStyle = INTERACTION_COLORS.waveformPlayhead
+					context.lineWidth = waveformStyle.playheadWidth
+					context.lineCap = "round"
+					context.stroke()
+				}
+			},
+		})
+		group.add(waveform)
+	}
+
+	private renderProgress(group: Konva.Group): void {
+		const progressGroup = new Konva.Group({ name: NODE_NAMES.progressGroup })
+		const track = new Konva.Rect({
+			x: 0,
+			y: 0,
+			width: 0,
+			height: this.playerLayout.progress.height,
+			fill: AUDIO_CONFIG.TRACK,
+			cornerRadius: this.playerLayout.progress.height / 2,
+			name: NODE_NAMES.progressTrack,
+			listening: false,
+		})
+		const fill = new Konva.Rect({
+			x: 0,
+			y: 0,
+			width: 0,
+			height: this.playerLayout.progress.height,
+			fill: AUDIO_CONFIG.PROGRESS,
+			cornerRadius: this.playerLayout.progress.height / 2,
+			name: NODE_NAMES.progressFill,
+			listening: false,
+		})
+		const thumb = new Konva.Circle({
+			x: 0,
+			y: 0,
+			radius: this.playerLayout.progressThumbRadius,
+			fill: AUDIO_CONFIG.PROGRESS,
+			name: NODE_NAMES.progressThumb,
+			listening: false,
+		})
+		const hit = new Konva.Rect({
+			x: 0,
+			y: 0,
+			width: 0,
+			height: this.playerLayout.progressHit.height,
+			fill: "rgba(0, 0, 0, 0.001)",
+			name: `${NODE_NAMES.progressHit} ${NODE_NAMES.controlHit}`,
+		})
+		this.setInteractionHitBaseBounds(hit, {
+			x: 0,
+			y: 0,
+			width: 0,
+			height: this.playerLayout.progressHit.height,
+			expandX: false,
+		})
+		const thumbHit = new Konva.Circle({
+			x: 0,
+			y: 0,
+			radius: this.playerLayout.progressThumbRadius,
+			fill: "rgba(0, 0, 0, 0.001)",
+			name: `${NODE_NAMES.progressThumbHit} ${NODE_NAMES.controlHit}`,
+		})
+		this.setInteractionCircleHitBaseRadius(thumbHit, this.playerLayout.progressThumbRadius)
+		progressGroup.add(
+			track,
+			fill,
+			thumb,
 			new Konva.Text({
-				x: left,
-				y: contentTop + 58,
-				width: contentWidth,
+				x: 0,
+				y: 0,
+				width: 0,
 				text: "0:00 / 0:00",
-				fontSize: 12,
+				fontSize: this.playerLayout.time.fontSize,
 				fill: AUDIO_CONFIG.SECONDARY_TEXT,
 				name: NODE_NAMES.time,
 				listening: false,
 			}),
-			new Konva.Text({
-				x: left,
-				y: contentTop + 76,
-				width: contentWidth,
-				text: "",
-				fontSize: 11,
-				fill: AUDIO_CONFIG.ERROR,
-				name: NODE_NAMES.error,
-				ellipsis: true,
-				wrap: "none",
-				listening: false,
-			}),
+			hit,
+			thumbHit,
 		)
-		const progressHit = new Konva.Rect({
-			x: trackX,
-			y: trackY - 8,
-			width: trackWidth,
-			height: 20,
-			fill: "transparent",
-			name: "audio-progress-hit",
+
+		const handlePointerEnter = () => {
+			if (!this.canUseControls()) return
+			this.setProgressInteractionState("hover")
+			this.canvas.cursorManager?.setTemporary("pointer")
+		}
+		const handlePointerLeave = () => {
+			if (this.scrubStage) return
+			this.setProgressInteractionState("idle")
+			this.canvas.cursorManager?.restoreToolCursor()
+		}
+		hit.on("mouseenter", handlePointerEnter)
+		hit.on("mouseleave", handlePointerLeave)
+		hit.on("mousedown touchstart", (event) => {
+			if (this.controlInteractionMode === "full") {
+				this.beginScrub(event, group, track)
+			}
 		})
-		progressHit.on("click tap", (event) => {
+		hit.on("click", (event) => {
+			if (
+				this.controlInteractionMode !== "compact" ||
+				Date.now() - this.lastProgressTouchActionAt < 500
+			) {
+				return
+			}
+			this.seekProgressAtPointer(event, group, track)
+		})
+		hit.on("tap", (event) => {
+			if (this.controlInteractionMode !== "compact") return
+			this.lastProgressTouchActionAt = Date.now()
+			this.seekProgressAtPointer(event, group, track)
+		})
+
+		thumbHit.on("mouseenter", handlePointerEnter)
+		thumbHit.on("mouseleave", handlePointerLeave)
+		thumbHit.on("mousedown touchstart", (event) => this.beginScrub(event, group, track))
+		group.add(progressGroup)
+	}
+
+	private renderOperations(group: Konva.Group): void {
+		const operationGroup = new Konva.Group({ name: NODE_NAMES.operationGroup })
+		const backButton = this.createSeekButton({
+			name: NODE_NAMES.backButton,
+			iconName: NODE_NAMES.backButtonIcon,
+			direction: "backward",
+			isEnabled: () => this.canSeekBackward(),
+			onActivate: () => this.seekBy(-5),
+		})
+		const playButton = this.createPlayButton()
+		const forwardButton = this.createSeekButton({
+			name: NODE_NAMES.forwardButton,
+			iconName: NODE_NAMES.forwardButtonIcon,
+			direction: "forward",
+			isEnabled: () => this.canSeekForward(),
+			onActivate: () => this.seekBy(5),
+		})
+		this.backButtonStateSync = backButton.syncState
+		this.forwardButtonStateSync = forwardButton.syncState
+		operationGroup.add(backButton.button, playButton, forwardButton.button)
+		group.add(operationGroup)
+	}
+
+	private createCornerActions(group: Konva.Group, width: number, height: number): void {
+		const replaceAction: ElementCornerActionConfig = {
+			key: "replace",
+			placement: "top-right",
+			label: () =>
+				this.replaceStatus === "uploading"
+					? this.getText("audio.replacing", "替换中")
+					: this.getText("audio.replace", "替换"),
+			minWidth: 40,
+			isVisible: () => !this.canvas.readonly,
+			isEnabled: () => !this.canvas.readonly && this.replaceStatus !== "uploading",
+			disabledCursor: "not-allowed",
+			onClick: ({ clientX, clientY }) => {
+				this.canvas.eventEmitter.emit({
+					type: "element:audio:replaceClick",
+					data: {
+						elementId: this.data.id,
+						...(clientX !== undefined ? { clientX } : undefined),
+						...(clientY !== undefined ? { clientY } : undefined),
+					},
+				})
+			},
+		}
+
+		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
+			elementId: this.data.id,
+			canvas: this.canvas,
+			width,
+			height,
+			actions: [replaceAction],
+			showOnSelection: true,
+		})
+		this.cornerActionsDecorator.create()
+	}
+
+	private createPlayButton(): Konva.Group {
+		const size = AUDIO_PLAYER_DESIGN.operationButtonSize
+		const button = new Konva.Group({ width: size, height: size, name: NODE_NAMES.playButton })
+		const hit = new Konva.Rect({
+			width: size,
+			height: size,
+			fill: "rgba(0, 0, 0, 0.001)",
+			name: `${NODE_NAMES.playButtonHit} ${NODE_NAMES.controlHit}`,
+		})
+		this.setInteractionHitBaseBounds(hit, {
+			x: 0,
+			y: 0,
+			width: size,
+			height: size,
+			maxWidth: size + AUDIO_PLAYER_DESIGN.operationGap,
+		})
+		const visual = new Konva.Group({ x: size / 2, y: size / 2, listening: false })
+		const background = new Konva.Circle({
+			radius: size / 2,
+			fill: INTERACTION_COLORS.playButton,
+			listening: false,
+		})
+		const playTriangle = new Konva.Line({
+			name: NODE_NAMES.playTriangle,
+			points: [-4, -9, -4, 9, 10, 0],
+			closed: true,
+			fill: "#171717",
+			listening: false,
+		})
+		const pauseBars = new Konva.Group({ name: NODE_NAMES.pauseBars, listening: false })
+		pauseBars.add(
+			new Konva.Rect({ x: -7, y: -9, width: 5, height: 18, fill: "#171717" }),
+			new Konva.Rect({ x: 2, y: -9, width: 5, height: 18, fill: "#171717" }),
+		)
+		visual.add(background, playTriangle, pauseBars)
+		button.add(hit, visual)
+		this.bindInteractiveButton({
+			button,
+			hit,
+			visual,
+			background,
+			idleFill: INTERACTION_COLORS.playButton,
+			hoverFill: INTERACTION_COLORS.playButtonHover,
+			activeFill: INTERACTION_COLORS.playButtonActive,
+			onActivate: () => this.playPreview(),
+		})
+		return button
+	}
+
+	private createSeekButton(options: {
+		name: string
+		iconName: string
+		direction: "backward" | "forward"
+		isEnabled: () => boolean
+		onActivate: () => void
+	}): { button: Konva.Group; syncState: () => void } {
+		const size = AUDIO_PLAYER_DESIGN.operationButtonSize
+		const button = new Konva.Group({ width: size, height: size, name: options.name })
+		const hit = new Konva.Rect({
+			width: size,
+			height: size,
+			fill: "rgba(0, 0, 0, 0.001)",
+			name: `${options.name}-hit ${NODE_NAMES.controlHit}`,
+		})
+		this.setInteractionHitBaseBounds(hit, {
+			x: 0,
+			y: 0,
+			width: size,
+			height: size,
+			maxWidth: size + AUDIO_PLAYER_DESIGN.operationGap,
+		})
+		const visual = new Konva.Group({ x: size / 2, y: size / 2, listening: false })
+		const background = new Konva.Circle({
+			radius: size / 2,
+			fill: INTERACTION_COLORS.button,
+			listening: false,
+			name: `${options.name}-background`,
+		})
+		const icon = new Konva.Group({ name: options.iconName, listening: false })
+		const iconTriangles =
+			options.direction === "backward"
+				? [
+						[-10, 0, -2, -8, -2, 8],
+						[-1, 0, 7, -8, 7, 8],
+					]
+				: [
+						[-7, -8, 1, 0, -7, 8],
+						[2, -8, 10, 0, 2, 8],
+					]
+		icon.add(
+			...iconTriangles.map(
+				(points) =>
+					new Konva.Line({
+						points,
+						closed: true,
+						fill: AUDIO_CONFIG.PRIMARY_TEXT,
+						listening: false,
+					}),
+			),
+		)
+		visual.add(background, icon)
+		button.add(hit, visual)
+		const syncState = this.bindInteractiveButton({
+			button,
+			hit,
+			visual,
+			background,
+			content: icon,
+			idleFill: INTERACTION_COLORS.button,
+			hoverFill: INTERACTION_COLORS.buttonHover,
+			activeFill: INTERACTION_COLORS.buttonActive,
+			disabledFill: INTERACTION_COLORS.buttonDisabled,
+			contentIdleOpacity: 0.64,
+			contentHoverOpacity: 0.88,
+			contentActiveOpacity: 1,
+			disabledContentOpacity: 0.24,
+			disabledButtonOpacity: 1,
+			disabledCursor: "not-allowed",
+			isEnabled: options.isEnabled,
+			onActivate: options.onActivate,
+		})
+		return { button, syncState }
+	}
+
+	private bindInteractiveButton(options: {
+		button: Konva.Group
+		hit: Konva.Rect
+		visual: Konva.Group
+		background: Konva.Shape
+		content?: Konva.Node
+		idleFill: string
+		hoverFill: string
+		activeFill: string
+		disabledFill?: string
+		contentIdleOpacity?: number
+		contentHoverOpacity?: number
+		contentActiveOpacity?: number
+		disabledContentOpacity?: number
+		disabledButtonOpacity?: number
+		disabledCursor?: "not-allowed"
+		onActivate: () => void
+		isEnabled?: () => boolean
+	}): () => void {
+		const isEnabled = () => this.canUseControls() && (options.isEnabled?.() ?? true)
+		let pointerInside = false
+		const setState = (state: InteractiveState) => {
+			const enabled = isEnabled()
+			options.background.fill(
+				!enabled
+					? (options.disabledFill ?? options.idleFill)
+					: state === "active"
+						? options.activeFill
+						: state === "hover"
+							? options.hoverFill
+							: options.idleFill,
+			)
+			options.visual.scale({
+				x: state === "active" && enabled ? 0.94 : 1,
+				y: state === "active" && enabled ? 0.94 : 1,
+			})
+			options.content?.opacity(
+				!enabled
+					? (options.disabledContentOpacity ?? 1)
+					: state === "active"
+						? (options.contentActiveOpacity ?? 1)
+						: state === "hover"
+							? (options.contentHoverOpacity ?? 1)
+							: (options.contentIdleOpacity ?? 1),
+			)
+			options.button.opacity(enabled ? 1 : (options.disabledButtonOpacity ?? 0.55))
+			options.button.getLayer()?.batchDraw()
+		}
+		const syncState = () => {
+			const enabled = isEnabled()
+			setState(pointerInside && enabled ? "hover" : "idle")
+			if (!pointerInside) return
+			if (enabled) {
+				this.canvas.cursorManager?.setTemporary("pointer")
+			} else if (options.disabledCursor) {
+				this.canvas.cursorManager?.setTemporary(options.disabledCursor)
+			} else {
+				this.canvas.cursorManager?.restoreToolCursor()
+			}
+		}
+		const stopEvent = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			event.cancelBubble = true
-			const pointer = group.getRelativePointerPosition()
-			if (!pointer) return
-			this.canvas.audioPlaybackManager.seek(this.data.id, (pointer.x - trackX) / trackWidth)
+			event.evt?.stopPropagation()
+		}
+		options.hit.on("mouseenter", () => {
+			pointerInside = true
+			syncState()
 		})
-		group.add(progressHit)
+		options.hit.on("mouseleave", () => {
+			pointerInside = false
+			setState("idle")
+			this.canvas.cursorManager?.restoreToolCursor()
+		})
+		options.hit.on("mousedown", (event) => {
+			stopEvent(event)
+			if (isEnabled()) setState("active")
+		})
+		options.hit.on("mouseup", (event) => {
+			stopEvent(event)
+			setState(pointerInside && isEnabled() ? "hover" : "idle")
+		})
+		options.hit.on("touchstart", (event) => {
+			stopEvent(event)
+			event.evt?.preventDefault()
+			if (isEnabled()) setState("active")
+		})
+		options.hit.on("touchend touchcancel", (event) => {
+			stopEvent(event)
+			setState("idle")
+		})
+		options.hit.on("click", (event) => {
+			stopEvent(event)
+			if (!isEnabled() || Date.now() - this.lastTouchActionAt < 500) return
+			options.onActivate()
+		})
+		options.hit.on("tap", (event) => {
+			stopEvent(event)
+			if (!isEnabled()) return
+			this.lastTouchActionAt = Date.now()
+			options.onActivate()
+		})
+		syncState()
+		return syncState
+	}
+
+	private beginScrub(
+		event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+		playerGroup: Konva.Group,
+		track: Konva.Rect,
+	): void {
+		if (!this.canUseControls()) return
+		event.cancelBubble = true
+		event.evt?.stopPropagation()
+		event.evt?.preventDefault()
+		const stage = playerGroup.getStage()
+		if (!stage) return
+		this.finishScrub()
+		this.scrubStage = stage
+		this.scrubNodeWasDraggable = this.node?.draggable() ?? false
+		this.scrubStageWasDraggable = stage.draggable()
+		this.node?.draggable(false)
+		stage.draggable(false)
+		this.setProgressInteractionState("active")
+		this.canvas.cursorManager?.setTemporary("grabbing")
+
+		const update = () => this.queueScrubFromPointer(playerGroup, track)
+		const finish = () => {
+			update()
+			this.finishScrub()
+		}
+		stage.on("mousemove.audioScrub touchmove.audioScrub", update)
+		stage.on("mouseup.audioScrub touchend.audioScrub touchcancel.audioScrub", finish)
+		update()
+	}
+
+	private seekProgressAtPointer(
+		event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+		playerGroup: Konva.Group,
+		track: Konva.Rect,
+	): void {
+		if (!this.canUseControls()) return
+		event.cancelBubble = true
+		event.evt?.stopPropagation()
+		event.evt?.preventDefault()
+		const pointer = playerGroup.getRelativePointerPosition()
+		if (!pointer || track.width() <= 0) return
+		const progress = clampProgress((pointer.x - track.x()) / track.width())
+		this.syncProgressNodes(progress)
+		this.canvas.audioPlaybackManager.seek(this.data.id, progress)
+	}
+
+	private queueScrubFromPointer(playerGroup: Konva.Group, track: Konva.Rect): void {
+		const pointer = playerGroup.getRelativePointerPosition()
+		if (!pointer || track.width() <= 0) return
+		this.pendingScrubProgress = clampProgress((pointer.x - track.x()) / track.width())
+		this.syncProgressNodes(this.pendingScrubProgress)
+	}
+
+	private flushScrubProgress(): void {
+		const progress = this.pendingScrubProgress
+		this.pendingScrubProgress = null
+		if (progress === null) return
+		this.canvas.audioPlaybackManager.seek(this.data.id, progress)
+	}
+
+	private finishScrub(): void {
+		const hadActiveScrub = !!this.scrubStage
+		this.flushScrubProgress()
+		if (this.scrubStage) {
+			this.scrubStage.off(".audioScrub")
+			this.scrubStage.draggable(this.scrubStageWasDraggable)
+		}
+		if (hadActiveScrub) this.node?.draggable(this.scrubNodeWasDraggable)
+		this.scrubStage = undefined
+		this.canvas.cursorManager?.restoreToolCursor()
+		this.setProgressInteractionState("idle")
+	}
+
+	private seekBy(deltaSeconds: number): void {
+		if (!this.data.src) return
+		if (deltaSeconds < 0 && !this.canSeekBackward()) return
+		if (deltaSeconds > 0 && !this.canSeekForward()) return
+		void this.canvas.audioPlaybackManager.seekBy(this.data.id, this.data.src, deltaSeconds)
+	}
+
+	private canSeekBackward(): boolean {
+		const { currentTime, duration, error, loading } = this.playbackSnapshot
+		return (
+			!!this.data.src &&
+			!error &&
+			!loading &&
+			Number.isFinite(duration) &&
+			duration > 0 &&
+			Number.isFinite(currentTime) &&
+			currentTime > 0.05
+		)
+	}
+
+	private canSeekForward(): boolean {
+		const { currentTime, duration, error, loading } = this.playbackSnapshot
+		return (
+			!!this.data.src &&
+			!error &&
+			!loading &&
+			Number.isFinite(duration) &&
+			duration > 0 &&
+			Number.isFinite(currentTime) &&
+			currentTime < duration - 0.05
+		)
+	}
+
+	private syncRenderLayout(width: number, height: number): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const group = this.node
+		group.size({ width, height })
+		const hitArea = group.findOne(".hit-area") as Konva.Rect | undefined
+		hitArea?.size({ width, height })
+		hitArea?.cornerRadius(AUDIO_CONFIG.CORNER_RADIUS)
+		const background = group.findOne(`.${NODE_NAMES.background}`) as Konva.Rect | undefined
+		background?.size({ width, height })
+		background?.cornerRadius(AUDIO_CONFIG.CORNER_RADIUS)
+		this.syncUploadPlaceholderLayout(width, height)
+
+		const playerGroup = group.findOne(`.${NODE_NAMES.player}`) as Konva.Group | undefined
+		if (!playerGroup) return
+		const layout = resolveAudioPlayerLayout(width, height)
+		this.playerLayout = layout
+		// The player is laid out entirely in element coordinates. Viewport zoom now
+		// scales the whole card uniformly, so waveform density and visible range only
+		// change when the audio element itself is resized.
+		this.waveformBarCount = resolveWaveformBarCount(
+			layout.waveform.width,
+			layout.waveformStyle.barPitch,
+		)
+		playerGroup.scale({ x: 1, y: 1 })
+		playerGroup.position({ x: 0, y: 0 })
+		playerGroup.size({ width, height })
+
+		const waveform = playerGroup.findOne(`.${NODE_NAMES.waveform}`) as Konva.Shape | undefined
+		waveform?.setAttrs(layout.waveform)
+		const progressTrack = playerGroup.findOne(`.${NODE_NAMES.progressTrack}`) as
+			Konva.Rect | undefined
+		const progressFill = playerGroup.findOne(`.${NODE_NAMES.progressFill}`) as
+			Konva.Rect | undefined
+		const progressThumb = playerGroup.findOne(`.${NODE_NAMES.progressThumb}`) as
+			Konva.Circle | undefined
+		const progressThumbHit = playerGroup.findOne(`.${NODE_NAMES.progressThumbHit}`) as
+			Konva.Circle | undefined
+		const progressHit = playerGroup.findOne(`.${NODE_NAMES.progressHit}`) as
+			Konva.Rect | undefined
+		const timeText = playerGroup.findOne(`.${NODE_NAMES.time}`) as Konva.Text | undefined
+		const errorText = playerGroup.findOne(`.${NODE_NAMES.error}`) as Konva.Text | undefined
+		progressTrack?.setAttrs({
+			...layout.progress,
+			cornerRadius: layout.progress.height / 2,
+		})
+		progressFill?.setAttrs({
+			x: layout.progress.x,
+			y: layout.progress.y,
+			height: layout.progress.height,
+			cornerRadius: layout.progress.height / 2,
+		})
+		progressThumb?.setAttrs({
+			y: layout.progress.y + layout.progress.height / 2,
+			radius: layout.progressThumbRadius,
+		})
+		if (progressThumbHit) {
+			progressThumbHit.y(layout.progress.y + layout.progress.height / 2)
+			this.setInteractionCircleHitBaseRadius(progressThumbHit, layout.progressThumbRadius)
+		}
+		if (progressHit) {
+			this.setInteractionHitBaseBounds(progressHit, {
+				x: layout.progressHit.x - layout.progressThumbRadius,
+				y: layout.progressHit.y,
+				width: layout.progressHit.width + layout.progressThumbRadius * 2,
+				height: layout.progressHit.height,
+				expandX: false,
+			})
+		}
+		timeText?.setAttrs(layout.time)
+		errorText?.setAttrs(layout.error)
+		const progress =
+			this.playbackSnapshot.duration > 0
+				? clampProgress(this.playbackSnapshot.currentTime / this.playbackSnapshot.duration)
+				: 0
+		this.syncProgressNodes(progress)
+
+		const operationGroup = playerGroup.findOne(`.${NODE_NAMES.operationGroup}`) as
+			Konva.Group | undefined
+		operationGroup?.setAttrs({
+			x: layout.operations.x,
+			y: layout.operations.y,
+			width: layout.operations.width,
+			height: layout.operations.height,
+		})
+		const operationButtons = [
+			playerGroup.findOne(`.${NODE_NAMES.backButton}`),
+			playerGroup.findOne(`.${NODE_NAMES.playButton}`),
+			playerGroup.findOne(`.${NODE_NAMES.forwardButton}`),
+		].filter((node): node is Konva.Group => node instanceof Konva.Group)
+		operationButtons.forEach((button, index) => {
+			this.syncOperationButtonLayout(
+				button,
+				layout.operations.buttonSize,
+				layout.operations.gap,
+			)
+			button.position({
+				x: index * (layout.operations.buttonSize + layout.operations.gap),
+				y: 0,
+			})
+		})
+
+		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.syncInteractionHitTargets()
+		this.syncPlaybackNodes()
+		group.getLayer()?.batchDraw()
+	}
+
+	private syncUploadPlaceholderLayout(width: number, height: number): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const placeholder = this.node.findOne(`.${NODE_NAMES.uploadPlaceholder}`) as
+			Konva.Group | undefined
+		if (!placeholder) return
+		const layout = resolveAudioUploadPlaceholderLayout(width, height)
+		placeholder.setAttrs(layout.group)
+		const spinner = placeholder.findOne(`.${NODE_NAMES.uploadSpinner}`) as
+			Konva.Shape | undefined
+		spinner?.setAttrs({
+			x: layout.spinner.x,
+			y: layout.spinner.y,
+			audioUploadSpinnerRadius: layout.spinner.radius,
+			audioUploadSpinnerStrokeWidth: layout.spinner.strokeWidth,
+		})
+		const text = placeholder.findOne(`.${NODE_NAMES.uploadText}`) as Konva.Text | undefined
+		text?.setAttrs(layout.text)
+	}
+
+	private syncOperationButtonLayout(button: Konva.Group, buttonSize: number, gap: number): void {
+		button.size({ width: buttonSize, height: buttonSize })
+		const hit = button.findOne(`.${NODE_NAMES.controlHit}`) as Konva.Rect | undefined
+		if (hit) {
+			this.setInteractionHitBaseBounds(hit, {
+				x: 0,
+				y: 0,
+				width: buttonSize,
+				height: buttonSize,
+				maxWidth: buttonSize + gap,
+			})
+		}
+
+		const visual = button
+			.getChildren()
+			.find((candidate) => candidate instanceof Konva.Group) as Konva.Group | undefined
+		visual?.position({ x: buttonSize / 2, y: buttonSize / 2 })
+		const background = visual
+			?.getChildren()
+			.find((candidate) => candidate instanceof Konva.Circle) as Konva.Circle | undefined
+		background?.radius(buttonSize / 2)
+
+		const iconScale = buttonSize / AUDIO_PLAYER_DESIGN.operationIconReferenceButtonSize
+		button.findOne(`.${NODE_NAMES.playTriangle}`)?.scale({ x: iconScale, y: iconScale })
+		button.findOne(`.${NODE_NAMES.pauseBars}`)?.scale({ x: iconScale, y: iconScale })
+		button.findOne(`.${NODE_NAMES.backButtonIcon}`)?.scale({ x: iconScale, y: iconScale })
+		button.findOne(`.${NODE_NAMES.forwardButtonIcon}`)?.scale({ x: iconScale, y: iconScale })
+	}
+
+	private setInteractionHitBaseBounds(hit: Konva.Rect, bounds: AudioControlHitBounds): void {
+		hit.setAttr("audioControlBaseHitBounds", bounds)
+		hit.setAttrs({
+			x: bounds.x,
+			y: bounds.y,
+			width: bounds.width,
+			height: bounds.height,
+		})
+	}
+
+	private setInteractionCircleHitBaseRadius(hit: Konva.Circle, radius: number): void {
+		hit.setAttr("audioControlBaseHitRadius", radius)
+		hit.radius(radius)
+	}
+
+	private syncInteractionHitTargets(): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const coarsePointer = this.canvas.deviceInfo?.input?.coarsePointer ?? false
+		const minimumScreenSize = coarsePointer
+			? AUDIO_CONFIG.COARSE_POINTER_MIN_HIT_SIZE
+			: AUDIO_CONFIG.DESKTOP_MIN_HIT_SIZE
+		const nodeScale = this.node.getAbsoluteScale()
+		const policy = resolveAudioControlInteractionPolicy({
+			screenWidth: this.node.width() * Math.abs(nodeScale.x),
+			screenHeight: this.node.height() * Math.abs(nodeScale.y),
+			coarsePointer,
+		})
+		const previousMode = this.controlInteractionMode
+		this.controlInteractionMode = policy.mode
+		if (policy.mode === "drag-only" && previousMode !== "drag-only") {
+			if (this.scrubStage) this.finishScrub()
+			this.setProgressInteractionState("idle")
+			this.canvas.cursorManager?.restoreToolCursor()
+		}
+
+		this.node.find(`.${NODE_NAMES.controlHit}`).forEach((candidate) => {
+			candidate.listening(policy.mode !== "drag-only")
+			if (policy.mode === "drag-only") return
+
+			if (candidate instanceof Konva.Circle) {
+				const baseRadius = candidate.getAttr("audioControlBaseHitRadius") as
+					number | undefined
+				if (baseRadius === undefined) return
+				const absoluteScale = candidate.getAbsoluteScale()
+				const minimumScale = Math.max(
+					0.0001,
+					Math.min(Math.abs(absoluteScale.x), Math.abs(absoluteScale.y)),
+				)
+				candidate.radius(Math.max(baseRadius, minimumScreenSize / minimumScale / 2))
+				return
+			}
+
+			if (!(candidate instanceof Konva.Rect)) return
+			const baseBounds = candidate.getAttr("audioControlBaseHitBounds") as
+				AudioControlHitBounds | undefined
+			if (!baseBounds) return
+			const absoluteScale = candidate.getAbsoluteScale()
+			const scaleX = Math.max(0.0001, Math.abs(absoluteScale.x))
+			const scaleY = Math.max(0.0001, Math.abs(absoluteScale.y))
+			const desiredWidth =
+				baseBounds.expandX === false
+					? baseBounds.width
+					: Math.max(baseBounds.width, minimumScreenSize / scaleX)
+			const width = Math.min(baseBounds.maxWidth ?? Number.POSITIVE_INFINITY, desiredWidth)
+			const minimumScreenHeight = candidate.hasName(NODE_NAMES.progressHit)
+				? policy.progressMinimumScreenHeight
+				: minimumScreenSize
+			const height = Math.max(baseBounds.height, minimumScreenHeight / scaleY)
+			candidate.setAttrs({
+				x: baseBounds.x - (width - baseBounds.width) / 2,
+				y: baseBounds.y - (height - baseBounds.height) / 2,
+				width,
+				height,
+			})
+		})
 	}
 
 	private syncPlaybackNodes(): void {
 		if (!(this.node instanceof Konva.Group)) return
 		const { duration, currentTime, paused, ended, error } = this.playbackSnapshot
 		const isPlaying = !paused && !ended
-		const playTriangle = this.node.findOne(`.${NODE_NAMES.playTriangle}`)
-		const pauseBars = this.node.findOne(`.${NODE_NAMES.pauseBars}`)
-		playTriangle?.visible(!isPlaying)
-		pauseBars?.visible(isPlaying)
+		this.node.findOne(`.${NODE_NAMES.playTriangle}`)?.visible(!isPlaying)
+		this.node.findOne(`.${NODE_NAMES.pauseBars}`)?.visible(isPlaying)
 
-		const progressFill = this.node.findOne(`.${NODE_NAMES.progressFill}`) as
-			Konva.Rect | undefined
-		const progressTrack = this.node.findOne(".audio-progress-track") as Konva.Rect | undefined
-		const progress = duration > 0 ? Math.max(0, Math.min(1, currentTime / duration)) : 0
-		if (progressFill && progressTrack) {
-			progressFill.width(progressTrack.width() * progress)
-		}
-
+		const progress = duration > 0 ? clampProgress(currentTime / duration) : 0
+		this.syncProgressNodes(progress)
 		const timeText = this.node.findOne(`.${NODE_NAMES.time}`) as Konva.Text | undefined
 		timeText?.text(`${formatTime(currentTime)} / ${formatTime(duration)}`)
 		const errorText = this.node.findOne(`.${NODE_NAMES.error}`) as Konva.Text | undefined
@@ -396,9 +1441,62 @@ export class AudioElement extends BaseElement<AudioElementData> {
 					: "",
 			)
 		}
+		this.backButtonStateSync?.()
+		this.forwardButtonStateSync?.()
+		this.syncWaveformNodes()
 		this.canvas.runtimeScheduler.requestLayerDraw("content", {
 			source: "AudioElement",
 			reason: "playback-state",
 		})
+	}
+
+	private syncWaveformNodes(): void {
+		this.node?.findOne(`.${NODE_NAMES.waveform}`)?.getLayer()?.batchDraw()
+	}
+
+	private syncProgressNodes(progress: number): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const track = this.node.findOne(`.${NODE_NAMES.progressTrack}`) as Konva.Rect | undefined
+		const fill = this.node.findOne(`.${NODE_NAMES.progressFill}`) as Konva.Rect | undefined
+		const thumb = this.node.findOne(`.${NODE_NAMES.progressThumb}`) as Konva.Circle | undefined
+		const thumbHit = this.node.findOne(`.${NODE_NAMES.progressThumbHit}`) as
+			Konva.Circle | undefined
+		if (!track) return
+		const normalizedProgress = clampProgress(progress)
+		fill?.width(track.width() * normalizedProgress)
+		const thumbPosition = {
+			x: track.x() + track.width() * normalizedProgress,
+			y: track.y() + track.height() / 2,
+		}
+		thumb?.position(thumbPosition)
+		thumbHit?.position(thumbPosition)
+		track.getLayer()?.batchDraw()
+	}
+
+	private setProgressInteractionState(state: InteractiveState): void {
+		if (!(this.node instanceof Konva.Group)) return
+		const track = this.node.findOne(`.${NODE_NAMES.progressTrack}`) as Konva.Rect | undefined
+		const thumb = this.node.findOne(`.${NODE_NAMES.progressThumb}`) as Konva.Circle | undefined
+		track?.fill(state === "idle" ? AUDIO_CONFIG.TRACK : INTERACTION_COLORS.progressTrackHover)
+		thumb?.fill(AUDIO_CONFIG.PROGRESS)
+		const thumbScale = state === "active" ? 1.25 : state === "hover" ? 1.15 : 1
+		thumb?.scale({ x: thumbScale, y: thumbScale })
+		this.node.getLayer()?.batchDraw()
+	}
+
+	private subscribeWaveform(path?: string): void {
+		this.waveformUnsubscribe()
+		this.waveformSnapshot = { status: "idle", peaks: null }
+		this.waveformNormalization = { low: 0, range: 1 }
+		if (!path || !this.canvas.audioWaveformManager?.subscribe) return
+		this.waveformUnsubscribe = this.canvas.audioWaveformManager.subscribe(path, (snapshot) => {
+			this.waveformSnapshot = snapshot
+			this.waveformNormalization = resolveWaveformNormalization(snapshot.peaks)
+			this.syncWaveformNodes()
+		})
+	}
+
+	private canUseControls(): boolean {
+		return this.canvas.permissionManager?.canUseSelectionToolAffordance?.() ?? true
 	}
 }

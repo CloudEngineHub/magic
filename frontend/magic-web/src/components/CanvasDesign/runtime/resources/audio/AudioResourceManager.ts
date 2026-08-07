@@ -12,6 +12,9 @@ export interface LoadedAudioResource {
 	ossSrc: string
 	fileName?: string
 	expiresAt: number | null
+	resourceIdentity: string
+	resourceVersion: string | null
+	sourceUpdatedAt: string | null
 }
 
 export interface AudioResourceLoadOptions {
@@ -65,6 +68,7 @@ export class AudioResourceManager {
 			onResourceVersionChanged: (_resourceIdentity, entry) => {
 				this.invalidateCachedBody(entry.referencePath)
 				this.canvas.audioPlaybackManager?.releaseByPath(entry.referencePath)
+				this.canvas.audioWaveformManager?.invalidatePath(entry.referencePath)
 				this.canvas.visibilityManager?.invalidateAudioLoadRequest(
 					entry.referencePath,
 					"resource-version-changed",
@@ -87,6 +91,7 @@ export class AudioResourceManager {
 
 		if (options?.forceRefresh) {
 			this.invalidateCachedBody(path)
+			this.canvas.audioWaveformManager?.invalidatePath(path)
 		}
 
 		if (!options?.forceRefresh) {
@@ -161,6 +166,28 @@ export class AudioResourceManager {
 	public getFailureReason(path: string): ResourceLoadFailureReason | null {
 		const identity = this.urlLifecycle.getResourceIdentity(path)
 		return this.entries.get(identity)?.lastFailureReason ?? null
+	}
+
+	public getResourceIdentity(path: string): string {
+		return this.urlLifecycle.getResourceIdentity(path)
+	}
+
+	public invalidateForReplacement(path: string): void {
+		if (this.destroyed || !path) return
+		const resourceIdentity = this.urlLifecycle.getResourceIdentity(path)
+		const entry = this.entries.get(resourceIdentity)
+		if (entry) {
+			entry.exchangeToken = undefined
+			entry.exchangePromise = null
+			entry.backgroundRefreshPromise = null
+		}
+		this.invalidateCachedBody(path)
+		this.entries.delete(resourceIdentity)
+		this.canvas.audioPlaybackManager?.releaseByPath(path)
+		this.canvas.audioWaveformManager?.invalidatePath(path)
+		this.canvas.visibilityManager?.invalidateAudioLoadRequest(path, "audio-replaced", {
+			scheduleRefresh: false,
+		})
 	}
 
 	public handleResourceReferenceResolverChanged(): void {
@@ -245,6 +272,7 @@ export class AudioResourceManager {
 		entry.contentLength = null
 		entry.lastFailureReason = "not-found"
 		this.canvas.audioPlaybackManager?.releaseByPath(entry.referencePath)
+		this.canvas.audioWaveformManager?.invalidatePath(entry.referencePath)
 		this.entries.set(resourceIdentity, entry)
 		this.emitLoadFailed(entry)
 	}
@@ -273,6 +301,9 @@ export class AudioResourceManager {
 			ossSrc: entry.ossSrc,
 			fileName: entry.fileName,
 			expiresAt: entry.expiresAt,
+			resourceIdentity: entry.resourceIdentity,
+			resourceVersion: entry.resourceVersion,
+			sourceUpdatedAt: entry.sourceUpdatedAt,
 		}
 	}
 }

@@ -2710,10 +2710,18 @@ export class CanvasVisibilityManager {
 			return
 		}
 
-		void this.canvas.audioPlaybackManager.prepare(candidate.elementId, candidate.path, {
-			source: "viewport",
-			priority: candidate.priority,
-			signal,
-		})
+		void this.canvas.audioPlaybackManager
+			.prepare(candidate.elementId, candidate.path, {
+				source: "viewport",
+				priority: candidate.priority,
+				signal,
+			})
+			.then((prepared) => {
+				if (!prepared || signal.aborted) return
+				void this.canvas.audioWaveformManager?.prepare(candidate.path, {
+					priority: candidate.priority,
+					signal,
+				})
+			})
 	}
 }

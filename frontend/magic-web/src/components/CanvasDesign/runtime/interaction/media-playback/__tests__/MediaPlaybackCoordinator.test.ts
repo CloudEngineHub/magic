@@ -95,7 +95,7 @@ describe("MediaPlaybackCoordinator", () => {
 		handleDeselect()
 
 		expect(pauseAllAudio).toHaveBeenCalledWith(undefined)
-		expect(releaseAllAudio).toHaveBeenCalledTimes(1)
+		expect(releaseAllAudio).toHaveBeenCalledWith(undefined, { preserveMetadata: true })
 		coordinator.destroy()
 		expect(unsubscribe).toHaveBeenCalledTimes(1)
 	})

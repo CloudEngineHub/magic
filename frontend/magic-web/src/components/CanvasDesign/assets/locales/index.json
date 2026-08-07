@@ -2,7 +2,13 @@
 	"audio": {
 		"defaultName": "音频",
 		"fileMissing": "音频文件不存在",
-		"loadFailed": "音频加载失败，点击播放重试"
+		"loadFailed": "音频加载失败，点击播放重试",
+		"replace": "替换",
+		"replaceFailed": "音频替换失败，请重试",
+		"replaceUnsupported": "不支持的音频格式",
+		"replacing": "替换中",
+		"uploadFailed": "音频上传失败",
+		"uploading": "正在上传中..."
 	},
 	"common": {
 		"cancel": "取消",

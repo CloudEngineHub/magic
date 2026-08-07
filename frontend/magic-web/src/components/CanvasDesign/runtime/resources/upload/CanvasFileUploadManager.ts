@@ -19,6 +19,7 @@ import {
 	isVideoFile,
 	isAudioFile,
 	SUPPORTED_IMAGE_EXTENSIONS,
+	SUPPORTED_AUDIO_EXTENSIONS,
 	validateFile,
 } from "../../shared/ids"
 import {
@@ -87,6 +88,11 @@ export interface UploadFileElementOptions {
 	onUploadFailed?: (elementId: string, error: Error) => void
 }
 
+export interface ReplaceAudioElementOptions {
+	elementId: string
+	file: File
+}
+
 export interface ReplaceImageElementOptions {
 	elementId: string
 	file: File
@@ -97,6 +103,11 @@ export interface ReplaceImageElementFromProjectOptions {
 	elementId: string
 	path: string
 	versionId: string | null
+}
+
+export interface ReplaceAudioElementFromProjectOptions {
+	elementId: string
+	path: string
 }
 
 /**
@@ -757,7 +768,7 @@ export class CanvasFileUploadManager {
 			return null
 		}
 		if (isAudioFile(file)) {
-			return this.uploadAudioElementAfterSuccess(options)
+			return this.uploadAudioElementWithPlaceholder(options)
 		}
 
 		const historyManager = manageHistory ? this.canvas.historyManager : null
@@ -965,6 +976,68 @@ export class CanvasFileUploadManager {
 			: !isImageElementV2(data)
 	}
 
+	public async replaceAudioElement(options: ReplaceAudioElementOptions): Promise<boolean> {
+		const validation = validateFile(options.file)
+		if (!validation.valid || !isAudioFile(options.file)) {
+			throw new Error(
+				validation.error ||
+					(this.canvas.t?.("audio.replaceUnsupported", "不支持的音频格式") ??
+						"不支持的音频格式"),
+			)
+		}
+
+		const current = this.canvas.elementManager.getElementData(options.elementId)
+		if (!current || current.type !== ElementTypeEnum.Audio) return false
+		const [uploadResult] = await this.uploadDirect([options.file])
+		if (!uploadResult) throw new Error("Upload failed: no result returned")
+
+		this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+		return this.applyAudioElementSourceReplacement(options.elementId, uploadResult.path)
+	}
+
+	public replaceAudioElementFromProject(options: ReplaceAudioElementFromProjectOptions): boolean {
+		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
+		if (!SUPPORTED_AUDIO_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
+			throw new Error(
+				this.canvas.t?.("audio.replaceUnsupported", "不支持的音频格式") ??
+					"不支持的音频格式",
+			)
+		}
+		return this.applyAudioElementSourceReplacement(options.elementId, options.path)
+	}
+
+	private applyAudioElementSourceReplacement(elementId: string, nextPath: string): boolean {
+		const latest = this.canvas.elementManager.getElementData(elementId)
+		if (!latest || latest.type !== ElementTypeEnum.Audio) return false
+		const previousPath = latest.src
+		if (previousPath) {
+			if (
+				this.canvas.audioResourceManager.getResourceIdentity(previousPath) ===
+				this.canvas.audioResourceManager.getResourceIdentity(nextPath)
+			) {
+				this.canvas.audioResourceManager.invalidateForReplacement(previousPath)
+			} else {
+				this.canvas.audioPlaybackManager.release(elementId)
+				this.canvas.audioWaveformManager.invalidatePath(previousPath)
+				this.canvas.visibilityManager.invalidateAudioLoadRequest(
+					previousPath,
+					"audio-replaced",
+					{ scheduleRefresh: false },
+				)
+			}
+		}
+
+		const historyManager = this.canvas.historyManager
+		historyManager.disable()
+		try {
+			this.canvas.elementManager.update(elementId, { src: nextPath }, { silent: false })
+		} finally {
+			historyManager.enable()
+		}
+		historyManager.recordHistoryImmediate()
+		return true
+	}
+
 	public async uploadRemoteFileElement(
 		options: UploadRemoteFileElementOptions,
 	): Promise<string | null> {
@@ -1082,9 +1155,7 @@ export class CanvasFileUploadManager {
 		return elementId
 	}
 
-	private async uploadAudioElementAfterSuccess(
-		options: UploadFileElementOptions,
-	): Promise<string | null> {
+	private uploadAudioElementWithPlaceholder(options: UploadFileElementOptions): string | null {
 		const {
 			file,
 			position,
@@ -1094,48 +1165,106 @@ export class CanvasFileUploadManager {
 			onUploadFailed,
 		} = options
 		const elementId = generateElementId()
+		const existingNames = getAllExistingNames(this.canvas.elementManager)
+		const baseName = file.name.replace(/\.[^/.]+$/, "")
+		const uniqueName = generateUniqueElementName(baseName, existingNames)
+		const width = Math.max(
+			(elementData as Partial<AudioElementData> | undefined)?.width ??
+				AUDIO_CONFIG.DEFAULT_WIDTH,
+			AUDIO_CONFIG.MIN_WIDTH,
+		)
+		const audioElement = AudioElementClass.createElementData({
+			id: elementId,
+			x: position.x - width / 2,
+			y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
+			width,
+			zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
+			name: uniqueName,
+		})
+		const temporaryElement: AudioElementData = {
+			...audioElement,
+			...(elementData as Partial<AudioElementData> | undefined),
+			id: elementId,
+			type: ElementTypeEnum.Audio,
+			width,
+			height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+			src: undefined,
+		}
+		const historyManager = manageHistory ? this.canvas.historyManager : null
+		const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
+		const removePlaceholderWithoutHistory = (targetElementId: string): void => {
+			if (!this.canvas.elementManager.hasElement(targetElementId)) return
+			historyManager?.disable()
+			try {
+				this.canvas.elementManager.delete(targetElementId)
+			} finally {
+				historyManager?.enable()
+			}
+		}
+		const handleUploadComplete = (
+			completedElementId: string,
+			uploadResult: UploadFileResponse,
+		): void => {
+			if (
+				!this.canvas.elementManager.hasElement(completedElementId) ||
+				!this.canvas.elementManager.isTemporary(completedElementId)
+			) {
+				return
+			}
+
+			try {
+				this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+				this.canvas.elementManager.convertToPermament(
+					completedElementId,
+					{ src: uploadResult.path },
+					{ silent: true },
+				)
+				this.markPendingUploadElementResolved(completedElementId)
+			} catch (error) {
+				removePlaceholderWithoutHistory(completedElementId)
+				onUploadFailed?.(
+					completedElementId,
+					error instanceof Error ? error : new Error(String(error)),
+				)
+				return
+			}
+
+			if (historyManager) {
+				const pendingBatchId = this.findPendingBatchIdByElement(completedElementId)
+				if (pendingBatchId) {
+					this.commitPendingUploadBatch(pendingBatchId)
+				}
+				historyManager.recordHistoryImmediate()
+			} else {
+				this.cleanupResolvedPendingBatch(batchId)
+			}
+			onUploadComplete?.(completedElementId, uploadResult)
+		}
+		const handleUploadFailed = (failedElementId: string, error: Error): void => {
+			if (!this.canvas.elementManager.hasElement(failedElementId)) return
+			removePlaceholderWithoutHistory(failedElementId)
+			onUploadFailed?.(failedElementId, error)
+		}
 
 		try {
-			const [uploadResult] = await this.uploadDirect([file])
-			if (!uploadResult) throw new Error("Upload failed: no result returned")
-
-			const existingNames = getAllExistingNames(this.canvas.elementManager)
-			const baseName = file.name.replace(/\.[^/.]+$/, "")
-			const uniqueName = generateUniqueElementName(baseName, existingNames)
-			const width = Math.max(
-				(elementData as Partial<AudioElementData> | undefined)?.width ??
-					AUDIO_CONFIG.DEFAULT_WIDTH,
-				AUDIO_CONFIG.MIN_WIDTH,
-			)
-			const audioElement = AudioElementClass.createElementData({
-				id: elementId,
-				x: position.x - width / 2,
-				y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
-				width,
-				zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
-				name: uniqueName,
-				src: uploadResult.path,
+			historyManager?.disable()
+			this.canvas.elementManager.createTemporary(temporaryElement, {
+				uploadFiles: [file],
+				onUploadComplete: handleUploadComplete,
+				onUploadFailed: handleUploadFailed,
 			})
-			const finalElement: AudioElementData = {
-				...audioElement,
-				...(elementData as Partial<AudioElementData> | undefined),
-				id: elementId,
-				type: ElementTypeEnum.Audio,
-				src: uploadResult.path,
-				height: AUDIO_CONFIG.DEFAULT_HEIGHT,
-			}
-			this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
-			this.canvas.elementManager.create(finalElement)
-			if (manageHistory) {
-				this.canvas.historyManager.recordHistoryImmediate()
-			}
-			onUploadComplete?.(elementId, uploadResult)
-			return elementId
+			this.registerPendingUploadElement(batchId, elementId)
 		} catch (error) {
-			const uploadError = error instanceof Error ? error : new Error(String(error))
-			onUploadFailed?.(elementId, uploadError)
+			removePlaceholderWithoutHistory(elementId)
 			return null
+		} finally {
+			historyManager?.enable()
+			if (!this.currentPendingBatchId) {
+				this.cleanupEmptyPendingBatch(batchId)
+			}
 		}
+
+		return elementId
 	}
 
 	private async uploadRemoteAudioElementAfterSuccess(
@@ -1451,7 +1580,6 @@ export class CanvasFileUploadManager {
 			if (pendingBatchId) {
 				this.commitPendingUploadBatch(pendingBatchId)
 			}
-			historyManager.enable()
 			historyManager.recordHistoryImmediate()
 		} else {
 			this.cleanupResolvedPendingBatch(batchId)

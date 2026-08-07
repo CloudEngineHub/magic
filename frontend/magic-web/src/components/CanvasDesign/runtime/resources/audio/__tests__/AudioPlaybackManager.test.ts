@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Canvas } from "../../../core/Canvas"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
-import { AudioPlaybackManager } from "../AudioPlaybackManager"
+import { AudioPlaybackManager, type AudioPlaybackSnapshot } from "../AudioPlaybackManager"
 import { CanvasResourceScheduler } from "../../scheduler/CanvasResourceScheduler"
 
 class FakeAudioElement extends EventTarget {
@@ -36,6 +36,7 @@ class FakeAudioElement extends EventTarget {
 afterEach(() => {
 	vi.useRealTimers()
 	vi.restoreAllMocks()
+	vi.unstubAllGlobals()
 })
 
 describe("AudioPlaybackManager", () => {
@@ -133,13 +134,108 @@ describe("AudioPlaybackManager", () => {
 		expect(audio.play).toHaveBeenCalledTimes(1)
 		expect(snapshots.at(-1)).toEqual({ paused: false, duration: 60 })
 
-		manager.release("audio-1")
+		audio.currentTime = 12
+		manager.release("audio-1", { preserveMetadata: true })
 		expect(audio.pause).toHaveBeenCalled()
 		expect(audio.removeAttribute).toHaveBeenCalledWith("src")
 		expect(manager.getSnapshot("audio-1")).toMatchObject({
 			paused: true,
+			currentTime: 12,
+			duration: 60,
+		})
+		manager.seek("audio-1", 0.5)
+		expect(manager.getSnapshot("audio-1")).toMatchObject({
+			paused: true,
+			currentTime: 30,
+			duration: 60,
+		})
+		expect(await manager.prepare("audio-1", "./audios/voice.mp3")).toBe(true)
+		expect(audio.currentTime).toBe(30)
+
+		manager.release("audio-1")
+		expect(manager.getSnapshot("audio-1")).toMatchObject({
+			paused: true,
 			duration: 0,
 		})
+	})
+
+	it("emits frame-accurate playback snapshots and stops the frame loop on pause", async () => {
+		const frameCallbacks = new Map<number, FrameRequestCallback>()
+		let nextFrameId = 1
+		const requestFrame = vi.fn((callback: FrameRequestCallback) => {
+			const frameId = nextFrameId
+			nextFrameId += 1
+			frameCallbacks.set(frameId, callback)
+			return frameId
+		})
+		const cancelFrame = vi.fn((frameId: number) => {
+			frameCallbacks.delete(frameId)
+		})
+		vi.stubGlobal("requestAnimationFrame", requestFrame)
+		vi.stubGlobal("cancelAnimationFrame", cancelFrame)
+
+		const audio = new FakeAudioElement()
+		const originalCreateElement = document.createElement.bind(document)
+		vi.spyOn(document, "createElement").mockImplementation(((tagName: string) =>
+			tagName.toLowerCase() === "audio"
+				? (audio as unknown as HTMLAudioElement)
+				: originalCreateElement(tagName)) as typeof document.createElement)
+		const manager = new AudioPlaybackManager({
+			canvas: createCanvas({
+				getResource: vi.fn().mockResolvedValue({
+					ossSrc: "https://example.test/voice.mp3",
+				}),
+			}),
+		})
+		const snapshots: AudioPlaybackSnapshot[] = []
+		manager.subscribe("audio-1", (snapshot) => snapshots.push(snapshot))
+
+		await manager.prepare("audio-1", "./audios/voice.mp3")
+		await manager.toggle("audio-1", "./audios/voice.mp3")
+		expect(requestFrame).toHaveBeenCalledTimes(1)
+
+		audio.currentTime = 0.25
+		const firstFrameEntry = frameCallbacks.entries().next().value as
+			[number, FrameRequestCallback] | undefined
+		expect(firstFrameEntry).toBeDefined()
+		if (!firstFrameEntry) return
+		frameCallbacks.delete(firstFrameEntry[0])
+		firstFrameEntry[1](16)
+
+		expect(snapshots.at(-1)?.currentTime).toBe(0.25)
+		expect(requestFrame).toHaveBeenCalledTimes(2)
+		const pendingFrameId = frameCallbacks.keys().next().value as number | undefined
+		expect(pendingFrameId).toBeDefined()
+
+		audio.pause()
+		expect(cancelFrame).toHaveBeenCalledWith(pendingFrameId)
+		expect(frameCallbacks.size).toBe(0)
+		manager.release("audio-1")
+	})
+
+	it("seeks backward and forward by seconds with duration clamping", async () => {
+		const audio = new FakeAudioElement()
+		const originalCreateElement = document.createElement.bind(document)
+		vi.spyOn(document, "createElement").mockImplementation(((tagName: string) =>
+			tagName.toLowerCase() === "audio"
+				? (audio as unknown as HTMLAudioElement)
+				: originalCreateElement(tagName)) as typeof document.createElement)
+		const manager = new AudioPlaybackManager({
+			canvas: createCanvas({
+				getResource: vi.fn().mockResolvedValue({
+					ossSrc: "https://example.test/voice.mp3",
+				}),
+			}),
+		})
+		await manager.prepare("audio-1", "./audios/voice.mp3")
+		audio.currentTime = 10
+
+		await expect(manager.seekBy("audio-1", "./audios/voice.mp3", 5)).resolves.toBe(true)
+		expect(audio.currentTime).toBe(15)
+		await manager.seekBy("audio-1", "./audios/voice.mp3", -30)
+		expect(audio.currentTime).toBe(0)
+		await manager.seekBy("audio-1", "./audios/voice.mp3", 90)
+		expect(audio.currentTime).toBe(60)
 	})
 
 	it("refreshes the URL after a playback error", async () => {

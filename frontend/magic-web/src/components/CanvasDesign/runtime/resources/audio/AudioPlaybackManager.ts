@@ -20,11 +20,16 @@ export interface AudioPlaybackPrepareOptions {
 	signal?: AbortSignal
 }
 
+export interface AudioPlaybackReleaseOptions {
+	preserveMetadata?: boolean
+}
+
 interface AudioPlaybackSession {
 	elementId: string
 	path: string
 	audio: HTMLAudioElement
 	cleanup: () => void
+	progressFrameId?: number
 	refreshing: boolean
 	refreshAbortController?: AbortController
 	wantsPlayback: boolean
@@ -39,6 +44,12 @@ interface PendingAudioPlaybackSession {
 	abortController: AbortController
 	promise: Promise<AudioPlaybackSession | "cancelled" | null>
 	cleanupExternalSignal: () => void
+}
+
+interface RetainedAudioMetadata {
+	path: string
+	duration: number
+	currentTime: number
 }
 
 const EMPTY_SNAPSHOT: AudioPlaybackSnapshot = {
@@ -57,6 +68,7 @@ export class AudioPlaybackManager {
 	private readonly canvas: Canvas
 	private readonly sessions = new Map<string, AudioPlaybackSession>()
 	private readonly pendingSessions = new Map<string, PendingAudioPlaybackSession>()
+	private readonly retainedMetadata = new Map<string, RetainedAudioMetadata>()
 	private readonly handlersByElementId = new Map<string, Set<AudioPlaybackSnapshotHandler>>()
 	private destroyed = false
 
@@ -78,7 +90,11 @@ export class AudioPlaybackManager {
 
 	public getSnapshot(elementId: string): AudioPlaybackSnapshot {
 		const session = this.sessions.get(elementId)
-		return session ? this.createSnapshot(session.audio) : EMPTY_SNAPSHOT
+		if (session) return this.createSnapshot(session.audio)
+		const metadata = this.retainedMetadata.get(elementId)
+		return metadata
+			? this.createRetainedMetadataSnapshot(metadata.duration, metadata.currentTime)
+			: EMPTY_SNAPSHOT
 	}
 
 	public async prepare(
@@ -132,11 +148,37 @@ export class AudioPlaybackManager {
 
 	public seek(elementId: string, progress: number): void {
 		const session = this.sessions.get(elementId)
-		if (!session) return
+		if (!session) {
+			const retained = this.retainedMetadata.get(elementId)
+			if (!retained || retained.duration <= 0) return
+			retained.currentTime = Math.max(0, Math.min(1, progress)) * retained.duration
+			this.emitSnapshot(
+				elementId,
+				this.createRetainedMetadataSnapshot(retained.duration, retained.currentTime),
+			)
+			return
+		}
 		const duration = Number.isFinite(session.audio.duration) ? session.audio.duration : 0
 		if (duration <= 0) return
 		session.audio.currentTime = Math.max(0, Math.min(1, progress)) * duration
 		this.emit(session)
+	}
+
+	public async seekBy(elementId: string, path: string, deltaSeconds: number): Promise<boolean> {
+		const session = await this.ensureSession(elementId, path, {
+			source: "interaction",
+			priority: "critical",
+		})
+		if (!session || session === "cancelled") return false
+		session.source = "interaction"
+		const duration = Number.isFinite(session.audio.duration) ? session.audio.duration : 0
+		if (duration <= 0) return false
+		session.audio.currentTime = Math.max(
+			0,
+			Math.min(duration, session.audio.currentTime + deltaSeconds),
+		)
+		this.emit(session)
+		return true
 	}
 
 	/** 只回收视口产生的会话；显式点击中的任务与正在播放的会话必须继续。 */
@@ -151,23 +193,38 @@ export class AudioPlaybackManager {
 		this.release(elementId)
 	}
 
-	public release(elementId: string): void {
+	public release(elementId: string, options?: AudioPlaybackReleaseOptions): void {
 		this.cancelPendingSession(elementId)
 		const session = this.sessions.get(elementId)
 		if (!session) {
-			this.emitSnapshot(elementId, EMPTY_SNAPSHOT)
+			if (!options?.preserveMetadata) this.retainedMetadata.delete(elementId)
+			this.emitSnapshot(elementId, this.getSnapshot(elementId))
 			return
+		}
+		const snapshot = this.createSnapshot(session.audio)
+		if (options?.preserveMetadata && snapshot.duration > 0) {
+			this.retainedMetadata.set(elementId, {
+				path: session.path,
+				duration: snapshot.duration,
+				currentTime: Math.max(0, Math.min(snapshot.duration, snapshot.currentTime)),
+			})
+		} else if (!options?.preserveMetadata) {
+			this.retainedMetadata.delete(elementId)
 		}
 		this.disposeSession(session)
 		this.sessions.delete(elementId)
-		this.emitSnapshot(elementId, EMPTY_SNAPSHOT)
+		this.emitSnapshot(elementId, this.getSnapshot(elementId))
 	}
 
-	public releaseAll(exceptElementId?: string): void {
-		const elementIds = new Set([...this.sessions.keys(), ...this.pendingSessions.keys()])
+	public releaseAll(exceptElementId?: string, options?: AudioPlaybackReleaseOptions): void {
+		const elementIds = new Set([
+			...this.sessions.keys(),
+			...this.pendingSessions.keys(),
+			...this.retainedMetadata.keys(),
+		])
 		elementIds.forEach((elementId) => {
 			if (elementId === exceptElementId) return
-			this.release(elementId)
+			this.release(elementId, options)
 		})
 	}
 
@@ -182,14 +239,17 @@ export class AudioPlaybackManager {
 				this.release(elementId)
 			}
 		})
+		Array.from(this.retainedMetadata.entries()).forEach(([elementId, metadata]) => {
+			if (areCanvasHostResourceReferencesSame(this.canvas, metadata.path, path)) {
+				this.release(elementId)
+			}
+		})
 	}
 
 	public destroy(): void {
 		if (this.destroyed) return
 		this.destroyed = true
-		Array.from(new Set([...this.sessions.keys(), ...this.pendingSessions.keys()])).forEach(
-			(elementId) => this.release(elementId),
-		)
+		this.releaseAll()
 		this.handlersByElementId.clear()
 	}
 
@@ -201,6 +261,10 @@ export class AudioPlaybackManager {
 		if (this.destroyed || !path || options?.signal?.aborted) return null
 		const source = options?.source ?? "interaction"
 		const priority = options?.priority ?? (source === "interaction" ? "critical" : "visible")
+		const retained = this.retainedMetadata.get(elementId)
+		if (retained && !areCanvasHostResourceReferencesSame(this.canvas, retained.path, path)) {
+			this.retainedMetadata.delete(elementId)
+		}
 		const existing = this.sessions.get(elementId)
 		if (existing?.path === path) {
 			if (source === "interaction") existing.source = "interaction"
@@ -330,6 +394,15 @@ export class AudioPlaybackManager {
 			this.disposeAudioElement(audio)
 			return null
 		}
+		const retained = this.retainedMetadata.get(elementId)
+		if (retained && areCanvasHostResourceReferencesSame(this.canvas, retained.path, path)) {
+			try {
+				audio.currentTime = Math.max(0, Math.min(audio.duration, retained.currentTime))
+			} catch {
+				// Some media implementations reject setting currentTime during metadata setup.
+			}
+			this.retainedMetadata.delete(elementId)
+		}
 
 		const session: AudioPlaybackSession = {
 			elementId,
@@ -385,25 +458,80 @@ export class AudioPlaybackManager {
 	private bindSessionEvents(session: AudioPlaybackSession): () => void {
 		const emit = () => this.emit(session)
 		const onError = () => {
+			this.stopPlaybackFrameLoop(session)
 			this.emit(session)
 			void this.refreshFailedSession(session)
 		}
-		const eventNames = [
-			"loadedmetadata",
-			"durationchange",
-			"timeupdate",
-			"play",
-			"pause",
-			"ended",
-			"waiting",
-			"canplay",
-		] as const
+		const onPlay = () => {
+			this.emit(session)
+			this.startPlaybackFrameLoop(session)
+		}
+		const onStop = () => {
+			this.stopPlaybackFrameLoop(session)
+			this.emit(session)
+		}
+		const onWaiting = () => {
+			this.stopPlaybackFrameLoop(session)
+			this.emit(session)
+		}
+		const onCanPlay = () => {
+			this.emit(session)
+			if (!session.audio.paused && !session.audio.ended) {
+				this.startPlaybackFrameLoop(session)
+			}
+		}
+		const eventNames = ["loadedmetadata", "durationchange", "timeupdate"] as const
 		eventNames.forEach((eventName) => session.audio.addEventListener(eventName, emit))
+		session.audio.addEventListener("play", onPlay)
+		session.audio.addEventListener("pause", onStop)
+		session.audio.addEventListener("ended", onStop)
+		session.audio.addEventListener("waiting", onWaiting)
+		session.audio.addEventListener("canplay", onCanPlay)
 		session.audio.addEventListener("error", onError)
 		return () => {
+			this.stopPlaybackFrameLoop(session)
 			eventNames.forEach((eventName) => session.audio.removeEventListener(eventName, emit))
+			session.audio.removeEventListener("play", onPlay)
+			session.audio.removeEventListener("pause", onStop)
+			session.audio.removeEventListener("ended", onStop)
+			session.audio.removeEventListener("waiting", onWaiting)
+			session.audio.removeEventListener("canplay", onCanPlay)
 			session.audio.removeEventListener("error", onError)
 		}
+	}
+
+	private startPlaybackFrameLoop(session: AudioPlaybackSession): void {
+		if (
+			this.destroyed ||
+			session.progressFrameId !== undefined ||
+			typeof requestAnimationFrame === "undefined"
+		) {
+			return
+		}
+		const tick = () => {
+			session.progressFrameId = undefined
+			if (
+				this.destroyed ||
+				this.sessions.get(session.elementId) !== session ||
+				session.audio.paused ||
+				session.audio.ended
+			) {
+				return
+			}
+			// HTMLAudioElement.currentTime remains authoritative; RAF only raises the
+			// visual sampling frequency above the browser's coarse timeupdate cadence.
+			this.emit(session)
+			if (session.audio.paused || session.audio.ended) return
+			session.progressFrameId = requestAnimationFrame(tick)
+		}
+		session.progressFrameId = requestAnimationFrame(tick)
+	}
+
+	private stopPlaybackFrameLoop(session: AudioPlaybackSession): void {
+		const frameId = session.progressFrameId
+		if (frameId === undefined) return
+		session.progressFrameId = undefined
+		if (typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(frameId)
 	}
 
 	private async refreshFailedSession(session: AudioPlaybackSession): Promise<void> {
@@ -514,6 +642,7 @@ export class AudioPlaybackManager {
 
 	private disposeSession(session: AudioPlaybackSession): void {
 		session.wantsPlayback = false
+		this.stopPlaybackFrameLoop(session)
 		session.refreshAbortController?.abort()
 		session.refreshAbortController = undefined
 		session.audio.pause()
@@ -552,6 +681,17 @@ export class AudioPlaybackManager {
 			ended: audio.ended,
 			loading: audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA,
 			error: Boolean(audio.error),
+		}
+	}
+
+	private createRetainedMetadataSnapshot(
+		duration: number,
+		currentTime: number,
+	): AudioPlaybackSnapshot {
+		return {
+			...EMPTY_SNAPSHOT,
+			duration,
+			currentTime,
 		}
 	}
 }

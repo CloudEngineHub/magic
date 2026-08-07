@@ -45,6 +45,8 @@ import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
+import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
+import { AudioReplaceController } from "../interaction/audio/AudioReplaceController"
 import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
 import { MediaPlaybackCoordinator } from "../interaction/media-playback/MediaPlaybackCoordinator"
 import { MediaResourceOfflineCacheManager } from "../resources/offline-cache/MediaResourceOfflineCacheManager"
@@ -159,6 +161,8 @@ export class Canvas {
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
+	public audioWaveformManager: AudioWaveformManager
+	public audioReplaceController: AudioReplaceController
 	public imageReplaceController: ImageReplaceController
 	public mediaPlaybackCoordinator: MediaPlaybackCoordinator
 	public mediaResourceOfflineCacheManager: MediaResourceOfflineCacheManager
@@ -302,6 +306,8 @@ export class Canvas {
 
 		this.audioResourceManager = new AudioResourceManager({ canvas: this })
 		this.audioPlaybackManager = new AudioPlaybackManager({ canvas: this })
+		this.audioWaveformManager = new AudioWaveformManager({ canvas: this })
+		this.audioReplaceController = new AudioReplaceController({ canvas: this })
 		this.imageReplaceController = new ImageReplaceController({ canvas: this })
 
 		// 初始化 ClipboardManager
@@ -1292,6 +1298,7 @@ export class Canvas {
 	public handleResourceReferenceResolverChanged(): void {
 		this.imageResourceManager.handleResourceReferenceResolverChanged()
 		this.audioResourceManager.handleResourceReferenceResolverChanged()
+		this.audioWaveformManager.handleResourceReferenceResolverChanged()
 		this.imagePresentationScheduler.handleResourceReferenceResolverChanged()
 		this.visibilityManager.handleResourceReferenceResolverChanged()
 		this.resourceUrlWarmupManager.handleResourceReferenceResolverChanged()
@@ -1307,6 +1314,7 @@ export class Canvas {
 		this.visibilityManager.destroy()
 		this.imagePresentationScheduler.destroy()
 		this.resourceUrlWarmupManager.destroy()
+		this.audioWaveformManager.destroy()
 		this.resourceScheduler.destroy()
 		this.runtimeScheduler.destroy()
 
@@ -1339,6 +1347,7 @@ export class Canvas {
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
 		this.audioPlaybackManager.destroy()
+		this.audioReplaceController.destroy()
 		this.imageReplaceController.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
