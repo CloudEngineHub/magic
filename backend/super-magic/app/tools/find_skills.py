@@ -87,14 +87,9 @@ Pass an empty list to browse the available Skills without relevance filtering.""
     search_scope: SearchScope = Field(
         "auto",
         description=(
-            "<!--zh: 搜索范围。local=只查本机可直接读取的 Skill；online=查全部需要联网的来源，"
-            "包括我的技能库和技能市场；auto=先查用户已经拥有的 Skill（本机 + 我的技能库），"
-            "没有合适候选时再查需要安装的来源。默认用 auto。-->\n"
-            "Search scope. local searches Skills already readable on this machine; "
-            "online searches every networked source, including the user's own skill library and "
-            "the skill marketplace; auto first searches Skills the user already has (this machine "
-            "plus their own library), then falls back to installable sources when nothing fits. "
-            "Prefer auto."
+            "<!--zh: 搜索范围。默认用 auto；只要本机已有的用 local，只查联网来源用 online。-->\n"
+            "Search scope. Use auto by default. Use local to stay on Skills already on "
+            "this machine, or online to look only at networked sources."
         ),
     )
     limit: int = Field(
@@ -111,10 +106,8 @@ Pass an empty list to browse the available Skills without relevance filtering.""
         1,
         ge=1,
         description=(
-            "<!--zh: 页码，仅在 keywords 为空的浏览模式下有效。翻页时直接使用上一次返回的 next_page。-->\n"
-            "Page number, only valid when keywords is empty. "
-            "Read next_page from the previous result instead of guessing. "
-            "Keyword search does not support paging because ranked order is not stable across pages."
+            "<!--zh: 浏览时的页码，直接使用上一次返回的 next_page。-->\n"
+            "Page number for browsing. Use next_page from the previous result."
         ),
     )
 
@@ -154,27 +147,13 @@ Pass an empty list to browse the available Skills without relevance filtering.""
 class FindSkillsTool(BaseTool[FindSkillsParams]):
     """<!--zh
     查找或浏览可用 Skill Candidate。keywords 与 query 一起给出时按需求查找最合适的候选；
-    keywords 留空时按稳定顺序浏览可用 Skill 清单，用 page 翻页，不做相关性筛选。
-    搜索范围：local 只查本机已可直接读取的 Skill；online 查全部需要联网的来源；
-    auto 先查用户已经拥有的 Skill（本机 + 我的技能库），没有合适候选时再查需要安装的来源。
-    浏览时会跳过必须带关键词的来源并在结果中说明。
-    system 内置 Skill 直接调用 read_skills，不要安装。其他来源安装前必须获得用户确认；
-    多个合适候选使用 ask_user(multi_select)。
+    keywords 留空时浏览可用 Skill 清单。
+    安装与加载约束由结果中的 next_step 和 install_skills 承担，此处不重复。
     -->
     Search or browse Skill candidates.
 
-    Provide keywords with query to search for the Skills that best fit a requirement. Leave
-    keywords empty to browse the available Skill list in a stable order, and use page to read
-    further pages. Browsing lists Skills without relevance filtering.
-
-    Scope: local covers Skills already readable on this machine; online covers every networked
-    source; auto first searches Skills the user already has, including their own skill library,
-    and only falls back to installable sources when nothing fits.
-    Sources that require a keyword are skipped while browsing and reported in the result.
-
-    Load system built-ins directly with read_skills and do not install them. Obtain user
-    confirmation before installing candidates from other sources; use ask_user(multi_select)
-    when several candidates are suitable.
+    Provide keywords with query to search for the Skills that best fit a requirement,
+    or leave keywords empty to browse what is available.
     """
 
     async def get_before_tool_call_friendly_action_and_remark(
