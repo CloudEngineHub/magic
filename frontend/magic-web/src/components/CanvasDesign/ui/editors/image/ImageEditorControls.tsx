@@ -8,6 +8,7 @@ import {
 	type ForwardedRef,
 	type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../primitives/shadcn/select"
 import styles from "./index.module.css"
 import { ChevronsUpDown } from "lucide-react"
@@ -29,7 +30,6 @@ import SourceList, {
 } from "../../panels/source-list/index"
 import sourceListStyles from "../../panels/source-list/SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
-import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { LinkedEditorMediaItem, LinkedEditorMediaKind } from "../connection/linkedEditorInputs"
 import {
 	getLinkedMediaReferenceIdentity,
@@ -147,11 +147,12 @@ interface ImageEditorControlsProps {
 	) => void
 	/** 参考文件删除回调，传入时优先使用（用于同步到 TipTap） */
 	onReferenceFileRemove?: (path: string) => void
-	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
 	renderSendButton?: () => React.ReactNode
+	/** 将媒体 SourceList 挂载到编辑器顶部；未传入时保留内联渲染。 */
+	sourceListContainer?: HTMLElement | null
 }
 
 export default function ImageEditorControls(props: ImageEditorControlsProps) {
@@ -161,11 +162,11 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onSelectSource,
 		onProjectSelect,
 		onReferenceFileRemove,
-		onPreviewMediaResource,
 		linkedMediaItems = [],
 		onLinkedMediaSelectionChange,
 		renderPromptOptimizationButton,
 		renderSendButton,
+		sourceListContainer,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const { methods } = useMagic()
@@ -254,11 +255,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					index,
 					slotIndex: index,
 					label: linkedMediaKindLabelByKind[item.kind],
-					previewResourceAriaLabel: t(
-						"mediaResourceFullscreenPreview.open",
-						"预览媒体资源",
-					),
-					onPreviewMediaResource,
 					onLinkedMediaSelectionChange,
 				}),
 			)
@@ -273,8 +269,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				resourcePath: info.path,
 				resourceFileName: info.fileName,
 				removeResourceAriaLabel: t("imageEditor.removeReferenceResource", "移除该参考资源"),
-				previewResourceAriaLabel: t("mediaResourceFullscreenPreview.open", "预览媒体资源"),
-				onPreviewResource: onPreviewMediaResource,
 				onRemoveResource: () => {
 					;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(info.path)
 				},
@@ -290,8 +284,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					item.kind === "image"
 						? t("imageEditor.referenceImage", "参考图")
 						: linkedMediaKindLabelByKind[item.kind],
-				previewResourceAriaLabel: t("mediaResourceFullscreenPreview.open", "预览媒体资源"),
-				onPreviewMediaResource,
 				onLinkedMediaSelectionChange,
 			}),
 		)
@@ -319,7 +311,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		linkedMediaKindLabelByKind,
 		t,
 		onReferenceFileRemove,
-		onPreviewMediaResource,
 		onLinkedMediaSelectionChange,
 		handlers.handleReferenceFileRemove,
 		canAddReferenceFile,
@@ -423,22 +414,28 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		],
 	)
 
+	const sourceList =
+		referenceSourceListOptions.length > 0 ? (
+			<div className={styles.top}>
+				<div className={styles.sourceListScroller}>
+					<div className={styles.sourceListScrollerContent}>
+						<SourceList
+							options={referenceSourceListOptions}
+							renderItem={renderReferenceSourceListItem}
+							resolveResourceReference={resolveResourceReference}
+						/>
+					</div>
+				</div>
+			</div>
+		) : null
+
 	return (
 		<>
+			{sourceListContainer && sourceList
+				? createPortal(sourceList, sourceListContainer)
+				: null}
 			<div className={styles.controllers}>
-				{referenceSourceListOptions.length > 0 && (
-					<div className={styles.top}>
-						<div className={styles.sourceListScroller}>
-							<div className={styles.sourceListScrollerContent}>
-								<SourceList
-									options={referenceSourceListOptions}
-									renderItem={renderReferenceSourceListItem}
-									resolveResourceReference={resolveResourceReference}
-								/>
-							</div>
-						</div>
-					</div>
-				)}
+				{sourceListContainer === undefined ? sourceList : null}
 				<div className={styles.bottom}>
 					<div className={styles.left}>
 						<EditorModelSelect

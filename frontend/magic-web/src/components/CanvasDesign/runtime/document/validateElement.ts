@@ -1,5 +1,58 @@
 import { ElementTypeEnum, type LayerElement } from "./types"
 
+function isValidImageVersion(value: unknown): value is Record<string, unknown> {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const version = value as Record<string, unknown>
+	if (typeof version.id !== "string" || !version.id) return false
+	if (version.src !== undefined && typeof version.src !== "string") return false
+	if (version.status !== undefined && typeof version.status !== "string") return false
+	if (version.errorMessage !== undefined && typeof version.errorMessage !== "string") return false
+	if (version.crop !== undefined && !isValidCropConfig(version.crop)) return false
+	return true
+}
+
+function isValidCropConfig(value: unknown): boolean {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false
+	const crop = value as Record<string, unknown>
+	return ["width", "height", "x", "y"].every(
+		(field) => typeof crop[field] === "number" && Number.isFinite(crop[field]),
+	)
+}
+
+function isValidImageElementFields(element: Record<string, unknown>): boolean {
+	if (element.imageDslVersion !== 2) {
+		if (element.imageDslVersion !== undefined) return false
+		if (element.src !== undefined && typeof element.src !== "string") return false
+		if (element.status !== undefined && typeof element.status !== "string") return false
+		if (element.errorMessage !== undefined && typeof element.errorMessage !== "string") {
+			return false
+		}
+		if (element.crop !== undefined && !isValidCropConfig(element.crop)) return false
+		return true
+	}
+
+	if (!Array.isArray(element.versions) || element.versions.length === 0) return false
+	if (typeof element.activeVersionId !== "string" || !element.activeVersionId) return false
+	if (typeof element.mainVersionId !== "string" || !element.mainVersionId) return false
+	for (const field of [
+		"src",
+		"status",
+		"errorMessage",
+		"generateImageRequest",
+		"imageGenerationTaskMeta",
+		"generateHightImageRequest",
+		"crop",
+	]) {
+		if (Object.prototype.hasOwnProperty.call(element, field)) return false
+	}
+	const ids = new Set<string>()
+	for (const version of element.versions) {
+		if (!isValidImageVersion(version) || ids.has(version.id as string)) return false
+		ids.add(version.id as string)
+	}
+	return ids.has(element.activeVersionId) && ids.has(element.mainVersionId)
+}
+
 /**
  * 验证元素数据结构是否有效
  * @param data - 待验证的数据
@@ -132,8 +185,12 @@ export function isValidElementData(data: unknown): data is LayerElement {
 			break
 
 		case ElementTypeEnum.Image:
+			if (!isValidImageElementFields(element as unknown as Record<string, unknown>)) {
+				return false
+			}
+			break
+
 		case ElementTypeEnum.Video:
-			// 验证图片特有的字段
 			if (element.src !== undefined && typeof element.src !== "string") {
 				return false
 			}

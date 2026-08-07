@@ -153,6 +153,16 @@ export interface CanvasEventMap {
 	"element:image:fullscreenClick": { elementId: string }
 	"element:video:fullscreenClick": { elementId: string }
 	"element:audio:fullscreenClick": { elementId: string }
+	"element:image:replaceClick": {
+		elementId: string
+		versionId: string | null
+		clientX?: number
+		clientY?: number
+	}
+	"element:image:replaceStateChanged": {
+		elementId: string
+		status: "idle" | "uploading" | "error"
+	}
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件

@@ -8,6 +8,7 @@ import type { Canvas } from "../../core/Canvas"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { ElementTypeEnum } from "../../document/types"
 import type { ImageElement as ImageElementData } from "../../document/types"
+import { getImageElementVersions } from "../../document/imageVersion"
 import type {
 	ImageResourceDecodeVariant,
 	ImageResourceWorkerRequest,
@@ -3804,10 +3805,10 @@ export class ImageResourceManager {
 			if (elementData.type === ElementTypeEnum.Image) {
 				const imageElement = elementData as ImageElementData
 
-				// 添加主图片路径
-				if (imageElement.src) {
-					usedPaths.add(this.getResourceIdentity(imageElement.src))
-				}
+				// 全部版本都属于文档存活引用；可见性调度仍只注册 active 版本。
+				getImageElementVersions(imageElement).forEach((version) => {
+					if (version.src) usedPaths.add(this.getResourceIdentity(version.src))
+				})
 
 				// 添加参考图路径
 				const elementInstance = this.canvas.elementManager.getElementInstance(

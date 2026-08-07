@@ -1,6 +1,7 @@
 import Konva from "konva"
 import { BaseTool, type ToolOptions, ToolCompletionStrategy } from "./BaseTool"
 import { MarkerTypeEnum } from "../../document/types"
+import { getActiveImageVersion } from "../../document/imageVersion"
 import type { CanvasPointerInput } from "../input/index"
 import { AREA_MARKER_STYLES } from "../marker/markers/markerStyles"
 
@@ -417,7 +418,7 @@ export class MarkerTool extends BaseTool {
 						!this.canvas.permissionManager.isLocked(element)
 					) {
 						// 检查图片是否有 src 且已加载完成
-						if (element.src) {
+						if (getActiveImageVersion(element).src) {
 							const elementInstance =
 								this.canvas.elementManager.getElementInstance(elementId)
 							if (

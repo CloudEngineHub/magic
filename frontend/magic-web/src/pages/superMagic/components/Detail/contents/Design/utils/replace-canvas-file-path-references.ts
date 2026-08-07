@@ -97,6 +97,20 @@ function replaceImageElementPaths(
 ): boolean {
 	let hasChanged = false
 
+	if (element.imageDslVersion === 2 && Array.isArray(element.versions)) {
+		for (const version of element.versions) {
+			if (!version || typeof version !== "object") continue
+			const versionRecord = version as Record<string, unknown>
+			const versionElement = Object.create(null) as Record<string, unknown>
+			Object.assign(versionElement, versionRecord, { type: "image" })
+			if (replaceImageElementPaths(versionElement, context)) {
+				Object.assign(versionRecord, versionElement)
+				hasChanged = true
+			}
+		}
+		return hasChanged
+	}
+
 	if (replacePathField(element, "src", context)) {
 		hasChanged = true
 	}

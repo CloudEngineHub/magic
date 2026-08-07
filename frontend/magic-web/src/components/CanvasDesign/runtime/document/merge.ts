@@ -1,4 +1,12 @@
-import type { CanvasConnection, CanvasDocument, LayerElement } from "./types"
+import type {
+	CanvasConnection,
+	CanvasDocument,
+	ImageElement,
+	ImageElementV2,
+	ImageElementVersion,
+	LayerElement,
+} from "./types"
+import { isImageElementV2 } from "./imageVersion"
 import {
 	buildCanvasDocumentConnectionIndex,
 	cloneCanvasConnection,
@@ -47,9 +55,7 @@ export type CanvasDocumentMergeElementConflictReason = Exclude<
 >
 
 export type CanvasDocumentMergeConnectionConflictReason =
-	| "duplicate-connection-id"
-	| "same-connection-changed"
-	| "connection-delete-update-conflict"
+	"duplicate-connection-id" | "same-connection-changed" | "connection-delete-update-conflict"
 
 export interface CanvasDocumentMergeChangeSummary {
 	localChangedElementIds: string[]
@@ -184,7 +190,7 @@ function getRecordValue(record: Record<string, unknown>, key: string): unknown {
 	return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined
 }
 
-const FIELD_LEVEL_MERGE_EXCLUDED_KEYS = new Set(["id", "type", "children"])
+const FIELD_LEVEL_MERGE_EXCLUDED_KEYS = new Set(["id", "type", "children", "versions"])
 
 function cloneCanvasFieldValue<T>(value: T): T {
 	return value === undefined ? value : cloneCanvasJson(value)
@@ -260,6 +266,16 @@ export function tryMergeCanvasElementsByField(
 		return null
 	}
 
+	// 后端尚未理解 V2。远端收到同 elementId 的 V1 回写时，必须保留本地完整 V2，
+	// 不允许 generic field merge 生成 V1/V2 混合对象。后续后端支持版本后在此处扩展。
+	if (
+		baseElement.type === "image" &&
+		isImageElementV2(localElement as ImageElement) &&
+		!isImageElementV2(remoteElement as ImageElement)
+	) {
+		return cloneCanvasElement(localElement)
+	}
+
 	try {
 		const mergeResult = mergeCanvasElementRecordsByField(
 			baseElement as unknown as Record<string, unknown>,
@@ -267,6 +283,31 @@ export function tryMergeCanvasElementsByField(
 			remoteElement as unknown as Record<string, unknown>,
 		)
 		if (!mergeResult.ok) return null
+
+		if (
+			baseElement.type === "image" &&
+			isImageElementV2(localElement as ImageElement) &&
+			isImageElementV2(remoteElement as ImageElement)
+		) {
+			const mergedVersions = mergeImageVersionsById(
+				isImageElementV2(baseElement as ImageElement)
+					? (baseElement as ImageElementV2).versions
+					: [],
+				(localElement as ImageElementV2).versions,
+				(remoteElement as ImageElementV2).versions,
+			)
+			if (!mergedVersions) return null
+			mergeResult.value.versions = mergedVersions
+			const mergedImage = mergeResult.value as unknown as ImageElementV2
+			if (
+				mergedVersions.length === 0 ||
+				!mergedVersions.some((version) => version.id === mergedImage.activeVersionId) ||
+				!mergedVersions.some((version) => version.id === mergedImage.mainVersionId)
+			) {
+				return null
+			}
+		}
+
 		const remoteChildren =
 			isCanvasContainerElement(remoteElement) && Array.isArray(remoteElement.children)
 				? { children: cloneCanvasElements(remoteElement.children) }
@@ -280,6 +321,110 @@ export function tryMergeCanvasElementsByField(
 	} catch {
 		return null
 	}
+}
+
+/**
+ * 版本数组是创建顺序，不是普通可覆盖字段。按 version.id 做三方合并：
+ * - 同一版本只有一侧变化时采用该侧；双方同时变化且内容不同则冲突；
+ * - 删除与另一侧修改冲突；
+ * - 顺序保持 base 中的创建顺序，再追加 local/remote 新增版本。
+ */
+function mergeImageVersionsById(
+	baseVersions: ImageElementVersion[],
+	localVersions: ImageElementVersion[],
+	remoteVersions: ImageElementVersion[],
+): ImageElementVersion[] | null {
+	const baseById = new Map(baseVersions.map((version) => [version.id, version]))
+	const localById = new Map(localVersions.map((version) => [version.id, version]))
+	const remoteById = new Map(remoteVersions.map((version) => [version.id, version]))
+	const mergedById = new Map<string, ImageElementVersion>()
+
+	const allIds = new Set<string>([...baseById.keys(), ...localById.keys(), ...remoteById.keys()])
+	for (const id of allIds) {
+		const base = baseById.get(id)
+		const local = localById.get(id)
+		const remote = remoteById.get(id)
+		const localChanged = JSON.stringify(base) !== JSON.stringify(local)
+		const remoteChanged = JSON.stringify(base) !== JSON.stringify(remote)
+
+		if (!local && !remote) continue
+		if (!local || !remote) {
+			// 一侧删除，另一侧只有在未改变时才可接受删除。
+			if (!base) {
+				const added = local ?? remote
+				if (local && remote && JSON.stringify(local) !== JSON.stringify(remote)) return null
+				if (added) mergedById.set(id, cloneCanvasJson(added))
+				continue
+			}
+			if (local && localChanged) return null
+			if (remote && remoteChanged) return null
+			continue
+		}
+
+		if (!localChanged && !remoteChanged) {
+			mergedById.set(id, cloneCanvasJson(base ?? local))
+		} else if (localChanged && !remoteChanged) {
+			mergedById.set(id, cloneCanvasJson(local))
+		} else if (!localChanged && remoteChanged) {
+			mergedById.set(id, cloneCanvasJson(remote))
+		} else if (JSON.stringify(local) === JSON.stringify(remote)) {
+			mergedById.set(id, cloneCanvasJson(local))
+		} else {
+			return null
+		}
+	}
+
+	const orderedIds: string[] = []
+	const appendIfPresent = (id: string) => {
+		if (mergedById.has(id) && !orderedIds.includes(id)) orderedIds.push(id)
+	}
+	baseVersions.forEach((version) => appendIfPresent(version.id))
+	localVersions.forEach((version) => appendIfPresent(version.id))
+	remoteVersions.forEach((version) => appendIfPresent(version.id))
+
+	return orderedIds.map((id) => mergedById.get(id) as ImageElementVersion)
+}
+
+/**
+ * 后端尚未理解 V2 时，远端同 elementId 的 V1 快照只是旧格式回写。
+ * 在计算 diff 前保留本地 V2，避免“本地未改动 + 远端 V1 改动”绕过字段合并而降级。
+ */
+function preserveLocalImageVersionsFromRemoteV1(
+	localElements: LayerElement[] | undefined,
+	remoteElements: LayerElement[] | undefined,
+): LayerElement[] | undefined {
+	if (!remoteElements) return remoteElements
+	const localById = new Map<string, LayerElement>()
+	const collectLocalElements = (elements: LayerElement[] | undefined): void => {
+		if (!elements) return
+		for (const element of elements) {
+			localById.set(element.id, element)
+			if (isCanvasContainerElement(element)) collectLocalElements(element.children)
+		}
+	}
+	collectLocalElements(localElements)
+
+	const cloneRemoteElements = (elements: LayerElement[]): LayerElement[] =>
+		elements.map((remoteElement) => {
+			const localElement = localById.get(remoteElement.id)
+			if (
+				remoteElement.type === "image" &&
+				localElement?.type === "image" &&
+				isImageElementV2(localElement) &&
+				!isImageElementV2(remoteElement)
+			) {
+				return cloneCanvasElement(localElement)
+			}
+			if (isCanvasContainerElement(remoteElement)) {
+				return {
+					...cloneCanvasElement(remoteElement),
+					children: cloneRemoteElements(remoteElement.children ?? []),
+				}
+			}
+			return cloneCanvasElement(remoteElement)
+		})
+
+	return cloneRemoteElements(remoteElements)
 }
 
 function findDuplicateConflict(
@@ -993,7 +1138,14 @@ export function mergeCanvasDocuments(options: {
 	localCanvas: CanvasDocument | undefined
 	remoteCanvas: CanvasDocument | undefined
 }): CanvasDocumentMergeResult {
-	const { baseCanvas, localCanvas, remoteCanvas } = options
+	const { baseCanvas, localCanvas } = options
+	const remoteCanvas = {
+		...(options.remoteCanvas ? cloneCanvasJson(options.remoteCanvas) : {}),
+		elements: preserveLocalImageVersionsFromRemoteV1(
+			localCanvas?.elements,
+			options.remoteCanvas?.elements,
+		),
+	} as CanvasDocument
 	const baseIndex = buildCanvasDocumentElementIndex(baseCanvas)
 	const localIndex = buildCanvasDocumentElementIndex(localCanvas)
 	const remoteIndex = buildCanvasDocumentElementIndex(remoteCanvas)

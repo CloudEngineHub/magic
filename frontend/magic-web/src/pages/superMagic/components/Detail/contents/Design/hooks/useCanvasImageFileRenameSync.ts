@@ -5,6 +5,7 @@ import type {
 	ImageElement,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
 import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignRef,
@@ -370,7 +371,8 @@ export function useCanvasImageFileRenameSync(
 				const nextElementName = (newElement.name || "").trim()
 				if (!nextElementName) return
 
-				const sourcePath = newElement.src || oldElement.src
+				const sourcePath =
+					getActiveImageVersion(newElement).src || getActiveImageVersion(oldElement).src
 				if (!sourcePath) return
 
 				const matchedFileItem = resolveDesignCanvasResourceFileItem(sourcePath, {

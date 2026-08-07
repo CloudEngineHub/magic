@@ -13,6 +13,7 @@ import { ElementTypeEnum } from "../document/types"
 import type { Canvas } from "../core/Canvas"
 import { ImageElement as ImageElementClass } from "../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
+import { getActiveImageVersion } from "../document/imageVersion"
 
 /**
  * 矩形边界
@@ -1185,7 +1186,7 @@ export function getLoadedImageElements(canvas: Canvas): ImageElement[] {
 		const imageElement = elementData as ImageElement
 
 		// 从 ImageElement 实例判断图片是否已加载
-		if (imageElement.src) {
+		if (getActiveImageVersion(imageElement).src) {
 			const elementInstance = canvas.elementManager.getElementInstance(id)
 			if (
 				elementInstance &&

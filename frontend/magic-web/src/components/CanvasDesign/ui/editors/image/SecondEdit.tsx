@@ -27,6 +27,13 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
 import { createAndSubmitImageGeneration as createAndSubmitNewImageGeneration } from "./submit/createAndSubmitImageGeneration"
+import {
+	ENABLE_IMAGE_VERSION_ITERATION,
+	getActiveImageVersion,
+	hasProcessingImageVersion,
+} from "../../../runtime/document/imageVersion"
+
+type SecondEditIntent = "quick-edit" | "re-edit" | "generate-again"
 
 interface SecondEditProps {
 	imageElement: ImageElement
@@ -41,15 +48,18 @@ export default function SecondEdit(props: SecondEditProps) {
 	const { t } = useCanvasDesignI18n()
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [pendingOpenMode, setPendingOpenMode] = useState<"quick-edit" | "regenerate" | null>(null)
+	const [editingIntent, setEditingIntent] =
+		useState<Extract<SecondEditIntent, "quick-edit" | "re-edit">>("quick-edit")
+	const activeVersion = getActiveImageVersion(props.imageElement)
 
 	// 使用共享的配置 hook（ossSrc 会直接从实例中获取，因为二次编辑只有在 ossSrc 准备好后才会显示）
 	const config = useImageEditorConfig({
 		imageElement: props.imageElement,
-		originalImageSrc: props.imageElement.src,
+		originalImageSrc: activeVersion.src,
 		editorFocusRef: editorRef,
 		originalImageName:
 			// 从 src 字段提取文件名（例如："/超级画布/images/111.jpg" -> "111.jpg"）
-			getCanvasResourceFileName(props.imageElement.src) ||
+			getCanvasResourceFileName(activeVersion.src) ||
 			props.imageElement.name ||
 			t("imageEditor.originalImage", "原图"), // 从 src 提取文件名，否则使用 name，最后使用默认值
 	})
@@ -62,8 +72,9 @@ export default function SecondEdit(props: SecondEditProps) {
 	const [isVisible, setIsVisible] = useState<boolean>(true)
 	const [isSending, setIsSending] = useState(false)
 	const sendingRef = useRef(false)
-	const canRegenerate = Boolean(props.imageElement.generateImageRequest?.model_id)
-	const directGenerateRequest = props.imageElement.generateImageRequest
+	const canRegenerate = Boolean(activeVersion.generateImageRequest?.model_id)
+	const directGenerateRequest = activeVersion.generateImageRequest
+	const hasProcessingVersion = hasProcessingImageVersion(props.imageElement)
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
@@ -91,6 +102,7 @@ export default function SecondEdit(props: SecondEditProps) {
 		async (
 			request: GenerateImageRequest,
 			options?: {
+				intent?: SecondEditIntent
 				closeEditorOnSuccess?: boolean
 				clearEditorPromptOnSuccess?: boolean
 				deselectOnSuccess?: boolean
@@ -110,6 +122,25 @@ export default function SecondEdit(props: SecondEditProps) {
 				!(originalElementInstance instanceof ImageElementClass)
 			) {
 				return false
+			}
+
+			const intent = options?.intent ?? "quick-edit"
+			if (ENABLE_IMAGE_VERSION_ITERATION && intent !== "quick-edit") {
+				if (hasProcessingImageVersion(originalElementInstance.getData())) return false
+				sendingRef.current = true
+				setIsSending(true)
+				try {
+					const submitted = await originalElementInstance.generateImageVersion(request)
+					if (!submitted) return false
+					originalElementInstance.clearTempGenerateImageRequestPrompt()
+					if (options?.clearEditorPromptOnSuccess) setPrompt("")
+					if (options?.closeEditorOnSuccess) setIsEditing(false)
+					if (options?.deselectOnSuccess) canvas.selectionManager.deselectAll()
+					return true
+				} finally {
+					sendingRef.current = false
+					setIsSending(false)
+				}
 			}
 
 			// 新元素位置间距常量（像素）
@@ -135,18 +166,17 @@ export default function SecondEdit(props: SecondEditProps) {
 			}
 
 			const imageProcessRequestPayload = getImageProcessRequestPayload({
-				crop: props.imageElement.crop,
+				crop: activeVersion.crop,
 				sourceDimensions: {
 					width: imageInfo?.naturalWidth ?? props.imageElement.width ?? 0,
 					height: imageInfo?.naturalHeight ?? props.imageElement.height ?? 0,
 				},
 			})
 
-			const croppedVisibleWidth = originalElement.width ?? originalElement.crop?.displayWidth
-			const croppedVisibleHeight =
-				originalElement.height ?? originalElement.crop?.displayHeight
+			const croppedVisibleWidth = originalElement.width ?? activeVersion.crop?.displayWidth
+			const croppedVisibleHeight = originalElement.height ?? activeVersion.crop?.displayHeight
 			const hasCroppedVisibleSize =
-				!!originalElement.crop &&
+				!!activeVersion.crop &&
 				Number.isFinite(croppedVisibleWidth) &&
 				Number.isFinite(croppedVisibleHeight) &&
 				!!croppedVisibleWidth &&
@@ -243,7 +273,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				setIsSending(false)
 			}
 		},
-		[canvas, imageModelList, props.imageElement, setPrompt],
+		[activeVersion.crop, canvas, imageModelList, props.imageElement, setPrompt],
 	)
 
 	// 处理发送按钮点击
@@ -268,18 +298,25 @@ export default function SecondEdit(props: SecondEditProps) {
 					model_id: requestParams.model_id,
 				},
 				{
+					intent: editingIntent,
 					clearEditorPromptOnSuccess: true,
 					closeEditorOnSuccess: true,
 					deselectOnSuccess: true,
 				},
 			)
 		},
-		[createAndSubmitImageGeneration, handlers, methods?.resolveResourceReference, prompt],
+		[
+			createAndSubmitImageGeneration,
+			editingIntent,
+			handlers,
+			methods?.resolveResourceReference,
+			prompt,
+		],
 	)
 
 	const handleGenerateAgain = useCallback(async () => {
 		if (!directGenerateRequest?.model_id || !directGenerateRequest.prompt) return
-		await createAndSubmitImageGeneration(directGenerateRequest)
+		await createAndSubmitImageGeneration(directGenerateRequest, { intent: "generate-again" })
 	}, [createAndSubmitImageGeneration, directGenerateRequest])
 
 	const openEditor = useCallback(() => {
@@ -300,9 +337,9 @@ export default function SecondEdit(props: SecondEditProps) {
 
 	/** 按已保存的 generateImageRequest 完整回填后进入编辑态（与快捷编辑仅对齐模型/尺寸不同） */
 	const handleRegenerateFromSavedConfig = useCallback(() => {
-		if (!props.imageElement.generateImageRequest?.model_id) return
+		if (!activeVersion.generateImageRequest?.model_id) return
 		setPendingOpenMode("regenerate")
-	}, [props.imageElement.generateImageRequest])
+	}, [activeVersion.generateImageRequest])
 
 	useEffect(() => {
 		if (!pendingOpenMode) return
@@ -316,8 +353,10 @@ export default function SecondEdit(props: SecondEditProps) {
 		setPendingOpenMode(null)
 
 		if (modeToOpen === "quick-edit") {
+			setEditingIntent("quick-edit")
 			restoreQuickEditConfigToUi()
 		} else {
+			setEditingIntent("re-edit")
 			restoreOriginalGenerateImageRequestToUi()
 		}
 		openEditor()
@@ -418,6 +457,7 @@ export default function SecondEdit(props: SecondEditProps) {
 						<IconButton
 							className={styles.secondEditButton}
 							onClick={handleRegenerateFromSavedConfig}
+							disabled={hasProcessingVersion}
 							key="re-edit"
 						>
 							<SquarePen size={14} />
@@ -428,6 +468,7 @@ export default function SecondEdit(props: SecondEditProps) {
 						<IconButton
 							className={styles.secondEditButton}
 							onClick={handleGenerateAgain}
+							disabled={hasProcessingVersion || isSending}
 							key="generate-again"
 						>
 							{isSending ? (

@@ -1,5 +1,10 @@
 import type { Canvas } from "../../core/Canvas"
-import { ElementTypeEnum, type ImageElement as ImageElementData } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type ImageElement as ImageElementData,
+	type ImageElementVersion,
+	type LayerElement,
+} from "../../document/types"
 import type {
 	GeneratedImageResultItem,
 	GetImageGenerationResultsParams,
@@ -18,6 +23,12 @@ import {
 	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
 } from "../image/imageGenerationTaskMeta"
+import { isImageElementV2, updateImageVersion } from "../../document/imageVersion"
+
+interface BatchElementUpdate {
+	patch: Partial<LayerElement>
+	resourcePath?: string
+}
 
 export interface ImageBatchPollingManagerConfig {
 	canvas: Canvas
@@ -169,11 +180,13 @@ export class ImageBatchPollingManager {
 			const elementId = this.outputIndexToElementId.get(outputIndex)
 			if (!elementId) continue
 			if (!this.shouldSyncElement(elementId, outputIndex)) continue
-			const updateData = this.buildCompletedElementUpdate(result, image)
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (element?.type !== ElementTypeEnum.Image) continue
+			const updateData = this.buildCompletedElementUpdate(element, result, image)
 			// 更新元素数据
-			this.canvas.elementManager.update(elementId, updateData, { silent: false })
-			if (updateData.src && image.file_url) {
-				this.canvas.imageResourceManager.loadResource(updateData.src, {
+			this.canvas.elementManager.update(elementId, updateData.patch, { silent: false })
+			if (updateData.resourcePath && image.file_url) {
+				this.canvas.imageResourceManager.loadResource(updateData.resourcePath, {
 					variant: "preview",
 					priority: "critical",
 				})
@@ -192,13 +205,15 @@ export class ImageBatchPollingManager {
 				const outputIndex = this.elementOutputIndexes[index]
 				if (this.syncedIndexes.has(outputIndex)) return
 				if (!this.shouldSyncElement(elementId, outputIndex)) return
+				const element = this.canvas.elementManager.getElementData(elementId)
+				if (element?.type !== ElementTypeEnum.Image) return
 				this.canvas.elementManager.update(
 					elementId,
-					{
+					this.buildImageVersionUpdate(element, {
 						status: "failed",
 						errorMessage: result.error_message ?? undefined,
 						imageGenerationTaskMeta: undefined,
-					} satisfies Partial<ImageElementData>,
+					}),
 					{ silent: false },
 				)
 				this.canvas.eventEmitter.emit({
@@ -219,12 +234,14 @@ export class ImageBatchPollingManager {
 				const outputIndex = this.elementOutputIndexes[index]
 				if (this.syncedIndexes.has(outputIndex)) return
 				if (!this.shouldSyncElement(elementId, outputIndex)) return
+				const element = this.canvas.elementManager.getElementData(elementId)
+				if (element?.type !== ElementTypeEnum.Image) return
 				this.canvas.elementManager.update(
 					elementId,
-					{
+					this.buildImageVersionUpdate(element, {
 						...missingResourcePatch,
 						imageGenerationTaskMeta: undefined,
-					} satisfies Partial<ImageElementData>,
+					}),
 					{ silent: false },
 				)
 			})
@@ -235,9 +252,10 @@ export class ImageBatchPollingManager {
 	 * 构建完成元素更新数据
 	 */
 	private buildCompletedElementUpdate(
+		element: ImageElementData,
 		result: ImageGenerationResultsResponse,
 		image: GeneratedImageResultItem,
-	): Partial<ImageElementData> {
+	): BatchElementUpdate {
 		const storagePath =
 			result.file_dir && image.file_name
 				? resolveCanvasGeneratedResourceStoragePath(
@@ -248,19 +266,38 @@ export class ImageBatchPollingManager {
 				: undefined
 		if (!storagePath || !image.file_name) {
 			return {
-				...getGenerationResultStatusPatch("completed", result.error_message, false),
-				imageGenerationTaskMeta: undefined,
+				patch: this.buildImageVersionUpdate(element, {
+					...getGenerationResultStatusPatch("completed", result.error_message, false),
+					imageGenerationTaskMeta: undefined,
+				}),
 			}
 		}
 
 		this.primeGeneratedImageResource(storagePath, image.file_url, image.file_name)
 		return {
-			status: "completed",
-			errorMessage: undefined,
-			imageGenerationTaskMeta: undefined,
-			src: storagePath,
-			name: extractSmartNameFromFileName(image.file_name),
+			patch: this.buildImageVersionUpdate(
+				element,
+				{
+					status: "completed",
+					errorMessage: undefined,
+					imageGenerationTaskMeta: undefined,
+					src: storagePath,
+				},
+				{ name: extractSmartNameFromFileName(image.file_name) },
+			),
+			resourcePath: storagePath,
 		}
+	}
+
+	private buildImageVersionUpdate(
+		element: ImageElementData,
+		patch: Partial<ImageElementVersion>,
+		extra?: Partial<LayerElement>,
+	): Partial<LayerElement> {
+		if (!isImageElementV2(element)) return { ...patch, ...extra }
+		const next = updateImageVersion(element, element.activeVersionId, patch)
+		if (!isImageElementV2(next)) return extra ?? {}
+		return { ...extra, versions: next.versions }
 	}
 
 	private primeGeneratedImageResource(

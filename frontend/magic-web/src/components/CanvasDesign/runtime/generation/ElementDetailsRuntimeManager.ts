@@ -36,8 +36,12 @@ export class ElementDetailsRuntimeManager {
 	public getGenerateImageRequest(
 		elementId: string,
 		imageId?: string,
+		versionId?: string,
 	): GenerateImageRequestProvenance | null {
-		const entry = this.provenance[elementId]?.generateImageRequest
+		const elementEntry = this.provenance[elementId]
+		const entry = versionId
+			? elementEntry?.imageVersionDetails?.[versionId]?.generateImageRequest
+			: elementEntry?.generateImageRequest
 		if (!entry) return null
 		if (imageId && entry.imageId !== imageId) return null
 		return entry
@@ -46,26 +50,45 @@ export class ElementDetailsRuntimeManager {
 	public getGenerateImageRequestImageIdSource(
 		elementId: string,
 		imageId?: string,
+		versionId?: string,
 	): ElementDetailSource {
 		return (
-			this.getGenerateImageRequest(elementId, imageId)?.imageIdSource ??
+			this.getGenerateImageRequest(elementId, imageId, versionId)?.imageIdSource ??
 			(this.hasExplicitProvenance ? "unknown" : "inline")
 		)
 	}
 
-	public markGenerateImageRequestAsUser(elementId: string, imageId: string): void {
+	public markGenerateImageRequestAsUser(
+		elementId: string,
+		imageId: string,
+		versionId?: string,
+	): void {
 		if (!imageId.trim()) return
 		this.hasExplicitProvenance = true
+		const requestProvenance: GenerateImageRequestProvenance = {
+			valueSource: "user",
+			imageId,
+			imageIdSource: "user",
+		}
+		const current = this.provenance[elementId]
 		this.provenance = {
 			...this.provenance,
-			[elementId]: {
-				...this.provenance[elementId],
-				generateImageRequest: {
-					valueSource: "user",
-					imageId,
-					imageIdSource: "user",
-				},
-			},
+			[elementId]: versionId
+				? {
+						...current,
+						imageVersionDetails: {
+							...current?.imageVersionDetails,
+							[versionId]: { generateImageRequest: requestProvenance },
+						},
+					}
+				: {
+						...current,
+						generateImageRequest: {
+							valueSource: "user",
+							imageId,
+							imageIdSource: "user",
+						},
+					},
 		}
 		this.onChange?.(this.export())
 	}
@@ -75,6 +98,24 @@ export class ElementDetailsRuntimeManager {
 		const next = { ...this.provenance }
 		delete next[elementId]
 		this.provenance = next
+		this.onChange?.(this.export())
+	}
+
+	public clearImageVersion(elementId: string, versionId: string): void {
+		const current = this.provenance[elementId]
+		if (!current?.imageVersionDetails?.[versionId]) return
+		const imageVersionDetails = { ...current.imageVersionDetails }
+		delete imageVersionDetails[versionId]
+		const nextElement = { ...current }
+		if (Object.keys(imageVersionDetails).length > 0) {
+			nextElement.imageVersionDetails = imageVersionDetails
+		} else {
+			delete nextElement.imageVersionDetails
+		}
+		this.provenance = {
+			...this.provenance,
+			[elementId]: nextElement,
+		}
 		this.onChange?.(this.export())
 	}
 }

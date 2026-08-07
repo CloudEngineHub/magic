@@ -54,6 +54,11 @@ function isDesignDataV2(designData: DesignData | null | undefined): boolean {
 	return isV2Version(designData?.version)
 }
 
+function isElementDetailsContentEqual(left: ElementDetailsDoc, right: ElementDetailsDoc): boolean {
+	// 1.0.0 与 1.1.0 只在 schema version 上不同；兼容读取时不应为了版本号单独写回 sidecar。
+	return isEqual(left.elements, right.elements)
+}
+
 /**
  * 在主文件同级目录下定位 sidecar 文件，并返回其所在目录 id（用于创建新文件）。
  */
@@ -198,7 +203,7 @@ export async function writeUserElementDetails(
 
 	if (userFileId) {
 		const currentUserDoc = await readComparableElementDetailsByFile(userLookup.fileItem)
-		if (currentUserDoc && isEqual(currentUserDoc, userDoc)) return true
+		if (currentUserDoc && isElementDetailsContentEqual(currentUserDoc, userDoc)) return true
 	}
 
 	if (!userFileId) {

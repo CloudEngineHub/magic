@@ -106,6 +106,12 @@
 		"imageRemoveBackground": {
 			"title": "Remove Background"
 		},
+		"imageReplace": {
+			"title": "Replace Image"
+		},
+		"imageVersionDelete": {
+			"title": "Delete current version"
+		},
 		"shapeStyle": {
 			"advanced": "Advanced",
 			"cornerRadius": "Corner Radius",
@@ -185,12 +191,19 @@
 			"uploading": "(Uploading)"
 		},
 		"nameWithIndex": "Image {{index}}",
+		"replaceFailed": "Failed to replace image. Please try again.",
+		"replaceUnsupported": "Unsupported image format",
+		"replacing": "Replacing",
 		"retryEditing": "Please edit your image generation request again",
 		"retryEditingEraser": "Please edit your eraser request again",
 		"retryEditingExpand": "Please edit your expand request again",
 		"retryEditingRemoveBackground": "Please edit your remove-background request again",
 		"uploadFailed": "Image upload failed",
-		"uploading": "Uploading..."
+		"uploading": "Uploading...",
+		"version": {
+			"main": "Main version",
+			"setMain": "Set as main"
+		}
 	},
 	"imageEditor": {
 		"currentImage": "(Current Image)",

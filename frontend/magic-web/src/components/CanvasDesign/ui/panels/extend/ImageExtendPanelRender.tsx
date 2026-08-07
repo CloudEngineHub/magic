@@ -4,6 +4,7 @@ import type {
 	ImageElement as ImageElementData,
 } from "../../../runtime/document/types"
 import { ElementTypeEnum } from "../../../runtime/document/types"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
@@ -61,6 +62,7 @@ type ProcessedPresetChild = {
 
 export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProps) {
 	const { imageElement } = props
+	const activeVersion = getActiveImageVersion(imageElement)
 	const { t } = useCanvasDesignI18n()
 	const { canvas } = useCanvas()
 	const { methods } = useMagic()
@@ -247,7 +249,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 			!canvas ||
 			!methods?.uploadPrivateFiles ||
 			!methods?.expandImage ||
-			!imageElement.src ||
+			!activeVersion.src ||
 			isSubmitting
 		) {
 			return
@@ -265,7 +267,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 
 		let createdElementId: string | undefined
 		let generationAttemptId: string | undefined
-		const imageSrc = imageElement.src
+		const imageSrc = activeVersion.src
 
 		void (async () => {
 			try {
@@ -288,7 +290,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 					file_path: imageSrc,
 					reference_image_options: buildReferenceImageOptions({
 						filePath: imageSrc,
-						crop: imageElement.crop,
+						crop: activeVersion.crop,
 					}),
 				})
 				createdElementId = generateElementId()
@@ -327,7 +329,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				const workerResult =
 					await canvas.submitImageWorkerManager.createExtendImagesInWorker({
 						src: imageSrc,
-						crop: imageElement.crop,
+						crop: activeVersion.crop,
 						elementSize: {
 							width: imageElement.width,
 							height: imageElement.height,
@@ -373,7 +375,11 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 							}
 
 							const files = await createExtendImageFiles({
-								element: imageElement,
+								element: {
+									width: imageElement.width,
+									height: imageElement.height,
+									crop: activeVersion.crop,
+								},
 								image: imageSource,
 								naturalWidth: imageInfo.naturalWidth,
 								naturalHeight: imageInfo.naturalHeight,
@@ -391,7 +397,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 						})()
 
 				const { crop } = getImageProcessRequestPayload({
-					crop: imageElement.crop,
+					crop: activeVersion.crop,
 					sourceDimensions: compositeResult.sourceDimensions,
 				})
 
@@ -455,7 +461,7 @@ export default function ImageExtendPanelRender(props: ImageExtendPanelRenderProp
 				setIsSubmitting(false)
 			}
 		})()
-	}, [canvas, methods, imageElement, isSubmitting, t])
+	}, [activeVersion, canvas, methods, imageElement, isSubmitting, t])
 
 	return (
 		<div ref={setRefs} className={styles.imageExtendPanel} data-canvas-ui-component>

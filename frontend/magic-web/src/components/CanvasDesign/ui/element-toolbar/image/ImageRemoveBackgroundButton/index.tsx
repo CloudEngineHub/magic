@@ -18,6 +18,7 @@ import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
 } from "../../../../runtime/resources/image/imageCropUtils"
+import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
 
 export default function ImageRemoveBackgroundButton() {
 	const { t } = useCanvasDesignI18n()
@@ -47,7 +48,8 @@ export default function ImageRemoveBackgroundButton() {
 			return
 		}
 
-		const filePath = selectedImageElement.src
+		const activeVersion = getActiveImageVersion(selectedImageElement)
+		const filePath = activeVersion.src
 		if (!filePath) return
 
 		canvas.eventEmitter.emit({
@@ -62,7 +64,7 @@ export default function ImageRemoveBackgroundButton() {
 		}
 
 		const imageProcessRequestPayload = getImageProcessRequestPayload({
-			crop: selectedImageElement.crop,
+			crop: activeVersion.crop,
 			sourceDimensions: {
 				width: imageInfo?.naturalWidth ?? selectedImageElement.width ?? 0,
 				height: imageInfo?.naturalHeight ?? selectedImageElement.height ?? 0,

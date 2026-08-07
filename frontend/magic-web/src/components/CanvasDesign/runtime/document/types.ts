@@ -316,8 +316,26 @@ export interface TextElement extends BaseElementProps {
 	defaultStyle?: TextStyle
 }
 
-/** 图片元素 */
-export interface ImageElement extends BaseElementProps {
+/** 图片版本中随版本变化的内容 */
+export interface ImageElementVersion {
+	/** 图片版本唯一标识 */
+	id: string
+	/** 图片源(用来换取 ossSrc 的临时 path) */
+	src?: string
+	/** 状态 */
+	status?: GenerationStatus
+	/** 错误信息 */
+	errorMessage?: string
+	/** 图片生成请求参数（请求成功后保存） */
+	generateImageRequest?: GenerateImageRequest
+	/** 图片生成任务元数据（用于高清放大 / 去背景 / 橡皮擦 / 扩图） */
+	imageGenerationTaskMeta?: ImageGenerationTaskMeta
+	/** 源图裁剪区域 */
+	crop?: CropConfig
+}
+
+/** 图片元素 V1：继续用于普通创建、上传和兼容旧文档 */
+export interface ImageElementV1 extends BaseElementProps {
 	type: typeof ElementTypeEnum.Image
 	/** 图片源(用来换取 ossSrc 的临时 path) */
 	src?: string
@@ -334,6 +352,21 @@ export interface ImageElement extends BaseElementProps {
 	/** 源图裁剪区域 */
 	crop?: CropConfig
 }
+
+/** 图片元素 V2：图片内容由有序版本列表承载 */
+export interface ImageElementV2 extends BaseElementProps {
+	type: typeof ElementTypeEnum.Image
+	imageDslVersion: 2
+	/** 当前渲染和编辑的版本 */
+	activeVersionId: string
+	/** 用户显式指定的主版本 */
+	mainVersionId: string
+	/** 按创建时间排序的版本列表 */
+	versions: ImageElementVersion[]
+}
+
+/** 图片元素公开类型，V1 与 V2 均可被加载和编辑 */
+export type ImageElement = ImageElementV1 | ImageElementV2
 
 /** 视频元素 */
 export interface VideoElement extends BaseElementProps {
@@ -404,6 +437,8 @@ export interface MarkerCommon {
 	filePath?: string
 	/** 关联的元素ID */
 	elementId: string
+	/** V2 图片 Marker 创建时绑定的版本 ID；V1 Marker 保持缺省 */
+	versionId?: string
 	/** 标记创建/更新时对应的图片裁剪信息 */
 	elementCrop?: CropConfigWithoutDisplaySize
 	/** 标记在元素内的相对X位置（0-1，相对于元素宽度的比例） */

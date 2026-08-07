@@ -124,7 +124,7 @@ describe("writeUserElementDetails", () => {
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledWith([
 			{
 				file_id: "user-details",
-				content: JSON.stringify(EMPTY_DETAILS_DOC, null, 2),
+				content: JSON.stringify({ version: "1.1.0", elements: {} }, null, 2),
 				enable_shadow: true,
 			},
 		])

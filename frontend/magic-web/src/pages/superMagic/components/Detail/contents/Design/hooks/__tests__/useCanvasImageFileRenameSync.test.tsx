@@ -79,6 +79,29 @@ function imageCanvas(options: {
 	}
 }
 
+function versionedImageCanvas(name: string): CanvasDocument {
+	return {
+		elements: [
+			{
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				name,
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 100,
+				imageDslVersion: 2,
+				activeVersionId: "version-2",
+				mainVersionId: "version-1",
+				versions: [
+					{ id: "version-1", src: "./images/older.png", status: "completed" },
+					{ id: "version-2", src: "./images/image.png", status: "completed" },
+				],
+			},
+		],
+	}
+}
+
 function renderRenameHook(options: {
 	currentCanvasData: CanvasDocument
 	flatAttachments: FileItem[]
@@ -202,6 +225,41 @@ describe("useCanvasImageFileRenameSync", () => {
 		expect(updateAttachments).toHaveBeenCalledTimes(1)
 		expect(updateData).toHaveBeenCalledWith(persistedCanvas)
 		expect(mocks.toastError).not.toHaveBeenCalled()
+	})
+
+	it("uses the active V2 image version when no element-name change metadata is available", async () => {
+		const flatAttachments = [attachment("canvas-a", "画布A/images/image.png")]
+		const previousCanvas = versionedImageCanvas("image")
+		const nextCanvas = versionedImageCanvas("Pikachu")
+		const { result, persistCanvasData } = renderRenameHook({
+			currentCanvasData: previousCanvas,
+			flatAttachments,
+		})
+
+		act(() => {
+			result.current.handleCanvasDesignDataChange(nextCanvas)
+		})
+
+		await waitFor(() => {
+			expect(mocks.renameFile).toHaveBeenCalledWith({
+				file_id: "canvas-a",
+				target_name: "Pikachu.png",
+			})
+			expect(persistCanvasData).toHaveBeenCalledTimes(1)
+		})
+
+		const persistedCanvas = persistCanvasData.mock.calls[0]?.[0] as CanvasDocument
+		const persistedImage = persistedCanvas.elements?.[0]
+		if (
+			persistedImage?.type !== ElementTypeEnum.Image ||
+			persistedImage.imageDslVersion !== 2
+		) {
+			throw new Error("Expected a V2 image element")
+		}
+		expect(persistedImage.versions).toEqual([
+			expect.objectContaining({ id: "version-1", src: "./images/older.png" }),
+			expect.objectContaining({ id: "version-2", src: "./images/Pikachu.png" }),
+		])
 	})
 
 	it("blocks a historical bare-path rename while attachments are pending", async () => {

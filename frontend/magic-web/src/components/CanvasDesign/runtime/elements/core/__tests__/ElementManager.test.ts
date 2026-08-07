@@ -1,9 +1,9 @@
 import Konva from "konva"
 import { describe, expect, it, vi } from "vitest"
 import { ElementManager } from "../ElementManager"
-import type { LayerElement } from "../../../document/types"
+import type { ImageElementV2, LayerElement } from "../../../document/types"
 import { CanvasDocumentIndex } from "../CanvasDocumentIndex"
-import { GenerationStatus } from "../../../../public/magic-types"
+import { GenerationStatus, type UploadFileResponse } from "../../../../public/magic-types"
 
 interface DragManagerHarness {
 	canvas: {
@@ -619,7 +619,11 @@ describe("ElementManager generation target commit", () => {
 		)
 		expect(temporaryElements.size).toBe(0)
 		expect(emit).toHaveBeenCalledTimes(3)
-		expect(markGenerateImageRequestAsUser).toHaveBeenCalledWith("image-1", "image-task-1")
+		expect(markGenerateImageRequestAsUser).toHaveBeenCalledWith(
+			"image-1",
+			"image-task-1",
+			undefined,
+		)
 		expect(emit).toHaveBeenLastCalledWith({
 			type: "element:batchupdated",
 			data: undefined,
@@ -656,6 +660,62 @@ describe("ElementManager generation target commit", () => {
 		expect(temporaryElements.has("image-2")).toBe(true)
 		expect(markGenerateImageRequestAsUser).not.toHaveBeenCalled()
 		expect(emit).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager explicit image version writes", () => {
+	it("rejects V2 top-level image version field patches", () => {
+		const manager = Object.create(ElementManager.prototype) as {
+			mergeElementData: (
+				currentData: LayerElement,
+				updates: Partial<LayerElement>,
+				elementId: string,
+			) => LayerElement
+		}
+		const current: ImageElementV2 = {
+			id: "image-1",
+			type: "image",
+			imageDslVersion: 2,
+			activeVersionId: "v1",
+			mainVersionId: "v1",
+			versions: [{ id: "v1", src: "./images/v1.png" }],
+		}
+
+		expect(() =>
+			manager.mergeElementData(current, { src: "./images/v2.png" }, current.id),
+		).toThrow("ImageElementV2 version fields must be updated through an explicit version API")
+		expect(() => manager.mergeElementData(current, { crop: undefined }, current.id)).toThrow(
+			"ImageElementV2 version fields must be updated through an explicit version API",
+		)
+	})
+
+	it("rejects mixed V1-to-V2 migration patches", () => {
+		const manager = Object.create(ElementManager.prototype) as {
+			mergeElementData: (
+				currentData: LayerElement,
+				updates: Partial<LayerElement>,
+				elementId: string,
+			) => LayerElement
+		}
+		const current: LayerElement = {
+			id: "image-1",
+			type: "image",
+			src: "./images/v1.png",
+		}
+
+		expect(() =>
+			manager.mergeElementData(
+				current,
+				{
+					imageDslVersion: 2,
+					activeVersionId: "v1",
+					mainVersionId: "v1",
+					versions: [],
+					src: "bad",
+				} as never,
+				current.id,
+			),
+		).toThrow("ImageElementV1 to V2 migration cannot include top-level version fields")
 	})
 })
 
@@ -755,6 +815,41 @@ describe("ElementManager temporary element creation", () => {
 			"Element temporary-1 could not be created",
 		)
 		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("forwards the normalized upload result to temporary element completion callbacks", () => {
+		const element = createElement("temporary-upload-1")
+		const queueUpload = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			canvas: {
+				canvasFileUploadManager: { queueUpload: typeof queueUpload }
+			}
+			elements: Map<string, unknown>
+			createTemporaryElement: ReturnType<typeof vi.fn>
+			createTemporary: ElementManager["createTemporary"]
+		}
+		manager.canvas = { canvasFileUploadManager: { queueUpload } }
+		manager.elements = new Map()
+		manager.createTemporaryElement = vi.fn((elementData: LayerElement) => {
+			manager.elements.set(elementData.id, {})
+		})
+		const onUploadComplete = vi.fn()
+
+		manager.createTemporary(element, {
+			uploadFiles: [new File(["audio"], "voice.mp3", { type: "audio/mpeg" })],
+			onUploadComplete,
+		})
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/voice.mp3",
+			src: "https://example.test/voice.mp3",
+			fileName: "voice.mp3",
+		}
+		const queuedRequest = queueUpload.mock.calls[0]?.[0] as {
+			onUploadComplete: (result: UploadFileResponse) => void
+		}
+		queuedRequest.onUploadComplete(uploadResult)
+
+		expect(onUploadComplete).toHaveBeenCalledWith(element.id, uploadResult)
 	})
 })
 

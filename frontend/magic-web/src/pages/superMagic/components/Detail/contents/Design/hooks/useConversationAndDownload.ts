@@ -2,7 +2,7 @@ import { useCallback } from "react"
 import {
 	ElementTypeEnum,
 	type CanvasFileElement,
-	type ImageElement,
+	type CropConfig,
 } from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
@@ -29,6 +29,7 @@ import {
 	CanvasImageSourceDimensions,
 	DownloadImageOptions,
 } from "@/components/CanvasDesign/public/magic-types"
+import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
 import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { resolveCanvasMediaDownloadPlan } from "../utils/mediaDownloadPlan"
@@ -59,7 +60,7 @@ function normalizeDimension(value: number | undefined): number {
 }
 
 function getPersistedSourceCropForDownload(params: {
-	crop: NonNullable<ImageElement["crop"]>
+	crop: CropConfig
 	sourceDimensions: CanvasImageSourceDimensions
 }) {
 	const { crop, sourceDimensions } = params
@@ -207,17 +208,17 @@ function buildImageProcessOptions(params: {
 	const { fileElement, fileItem, sourceDimensionsByElementId } = params
 
 	if (fileElement.type !== ElementTypeEnum.Image) return undefined
-	const imageElement = fileElement as ImageElement
+	const activeVersion = getActiveImageVersion(fileElement)
 
-	if (!imageElement.crop) return undefined
+	if (!activeVersion.crop) return undefined
 
-	const sourceDimensions = sourceDimensionsByElementId?.[imageElement.id]
+	const sourceDimensions = sourceDimensionsByElementId?.[fileElement.id]
 	const sourceCrop = sourceDimensions
 		? getPersistedSourceCropForDownload({
-				crop: imageElement.crop,
+				crop: activeVersion.crop,
 				sourceDimensions,
 			})
-		: imageElement.crop
+		: activeVersion.crop
 
 	if (sourceCrop.width <= 0 || sourceCrop.height <= 0) return undefined
 
@@ -294,12 +295,14 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 			// 处理每个图片元素
 			for (const item of data) {
-				if (!item.src) {
+				const source =
+					item.type === ElementTypeEnum.Image ? getActiveImageVersion(item) : item
+				if (!source.src) {
 					throw new Error(t("design.errors.imageSrcEmpty"))
 				}
 
 				// 从 flatAttachments 中查找对应的文件
-				const resolvedFile = resolveDesignCanvasResourceFileItem(item.src, {
+				const resolvedFile = resolveDesignCanvasResourceFileItem(source.src, {
 					flatAttachments,
 					attachmentsReady,
 					designProjectBasePath,
@@ -307,7 +310,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				})
 
 				if (!resolvedFile?.file_id) {
-					throw new Error(t("design.errors.fileNotFoundBySrc", { src: item.src }))
+					throw new Error(t("design.errors.fileNotFoundBySrc", { src: source.src }))
 				}
 
 				// 将 FileItem 转换为 AttachmentItem 格式
@@ -386,11 +389,18 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 			// 先完整解析选区；任一元素无法映射到项目文件时，整批不启动。
 			for (const element of data) {
-				if (!element.src) {
+				const activeImageVersion =
+					element.type === ElementTypeEnum.Image
+						? getActiveImageVersion(element)
+						: undefined
+				const elementSrc =
+					activeImageVersion?.src ??
+					(element.type === ElementTypeEnum.Image ? undefined : element.src)
+				if (!elementSrc) {
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
 				}
 
-				const resolvedFile = resolveDesignCanvasResourceFileItem(element.src, {
+				const resolvedFile = resolveDesignCanvasResourceFileItem(elementSrc, {
 					flatAttachments,
 					attachmentsReady,
 					designProjectBasePath,
@@ -399,7 +409,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 				if (!resolvedFile?.file_id) {
 					throw new CanvasMediaDownloadPreflightError(
-						t("design.errors.fileNotFoundBySrc", { src: element.src }),
+						t("design.errors.fileNotFoundBySrc", { src: elementSrc }),
 					)
 				}
 
@@ -408,7 +418,11 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 					fileItem: resolvedFile,
 					sourceDimensionsByElementId: downloadOptions?.sourceDimensionsByElementId,
 				})
-				if (element.type === ElementTypeEnum.Image && element.crop && !imageProcess) {
+				if (
+					element.type === ElementTypeEnum.Image &&
+					activeImageVersion?.crop &&
+					!imageProcess
+				) {
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.invalidImageCrop"))
 				}
 

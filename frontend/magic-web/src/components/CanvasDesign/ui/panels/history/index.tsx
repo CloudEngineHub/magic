@@ -11,6 +11,7 @@ import {
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 
 export default function MessageHistory() {
 	const { messageHistoryElementId } = useCanvasPanelUI()
@@ -34,7 +35,8 @@ export default function MessageHistory() {
 
 		if (
 			element.type === ElementTypeEnum.Image &&
-			(generationRuntime?.generateImageRequest || element.generateImageRequest)
+			(generationRuntime?.generateImageRequest ||
+				getActiveImageVersion(element).generateImageRequest)
 		) {
 			return (
 				<ImageMessageHistoryRender

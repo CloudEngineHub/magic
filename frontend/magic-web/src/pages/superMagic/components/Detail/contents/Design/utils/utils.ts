@@ -421,8 +421,27 @@ function replacePathsInElement(
 
 	let hasReplaced = false
 
+	if (
+		element.type === "image" &&
+		element.imageDslVersion === 2 &&
+		Array.isArray(element.versions)
+	) {
+		for (const version of element.versions) {
+			if (!version || typeof version !== "object") continue
+			const versionRecord = version as Record<string, unknown>
+			Object.defineProperty(versionRecord, "type", {
+				value: "image",
+				configurable: true,
+				enumerable: false,
+			})
+			hasReplaced =
+				replacePathsInElement(versionRecord, oldDirName, newDirName) || hasReplaced
+			delete versionRecord.type
+		}
+	}
+
 	// 处理 ImageElement
-	if (element.type === "image") {
+	if (element.type === "image" && element.imageDslVersion !== 2) {
 		// 替换 src 字段中的路径
 		if (element.src && typeof element.src === "string") {
 			const originalSrc = element.src as string

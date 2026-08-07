@@ -15,14 +15,22 @@ import {
 	generateElementId,
 	generateUniqueElementName,
 	getMediaDimensions,
+	isImageFile,
 	isVideoFile,
 	isAudioFile,
+	SUPPORTED_IMAGE_EXTENSIONS,
+	validateFile,
 } from "../../shared/ids"
 import {
 	getCanvasHostResourceReferenceIdentity,
 	isRemoteOrSpecialPath,
 	normalizeCanvasUploadFileResponsePath,
 } from "../../shared/path/canvasResourcePath"
+import {
+	getActiveImageVersionId,
+	isImageElementV2,
+	updateImageVersion,
+} from "../../document/imageVersion"
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
@@ -77,6 +85,18 @@ export interface UploadFileElementOptions {
 	onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 	/** 上传失败回调（用于外部同步真实上传进度） */
 	onUploadFailed?: (elementId: string, error: Error) => void
+}
+
+export interface ReplaceImageElementOptions {
+	elementId: string
+	file: File
+	versionId: string | null
+}
+
+export interface ReplaceImageElementFromProjectOptions {
+	elementId: string
+	path: string
+	versionId: string | null
 }
 
 /**
@@ -831,6 +851,120 @@ export class CanvasFileUploadManager {
 		}
 	}
 
+	public async replaceImageElement(options: ReplaceImageElementOptions): Promise<boolean> {
+		const validation = validateFile(options.file)
+		if (!validation.valid || !isImageFile(options.file)) {
+			throw new Error(
+				validation.error ||
+					(this.canvas.t?.("image.replaceUnsupported", "不支持的图片格式") ??
+						"不支持的图片格式"),
+			)
+		}
+
+		const target = this.getReplaceableImageTarget(options.elementId, options.versionId)
+		if (!target) return false
+		const [uploadResult] = await this.uploadDirect([options.file])
+		if (!uploadResult) throw new Error("Upload failed: no result returned")
+
+		this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
+		const success = this.applyImageElementSourceReplacement(
+			options.elementId,
+			uploadResult.path,
+			target.versionId,
+		)
+		if (success && uploadResult.src) {
+			const element = this.canvas.elementManager.getElementInstance(options.elementId)
+			if (
+				element instanceof ImageElementClass &&
+				this.isImageReplacementTargetActive(element, target.versionId)
+			) {
+				element.setOssSrc(uploadResult.src)
+			}
+		}
+		return success
+	}
+
+	public replaceImageElementFromProject(options: ReplaceImageElementFromProjectOptions): boolean {
+		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
+		if (!SUPPORTED_IMAGE_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
+			throw new Error(
+				this.canvas.t?.("image.replaceUnsupported", "不支持的图片格式") ??
+					"不支持的图片格式",
+			)
+		}
+		return this.applyImageElementSourceReplacement(
+			options.elementId,
+			options.path,
+			options.versionId,
+		)
+	}
+
+	private getReplaceableImageTarget(
+		elementId: string,
+		targetVersionId: string | null,
+	): { element: ImageElementClass; versionId: string | null } | null {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!(element instanceof ImageElementClass)) return null
+		const data = element.getData()
+		const versionId = targetVersionId
+		if (isImageElementV2(data) ? versionId === null : versionId !== null) return null
+		const version = versionId
+			? element.getVersionData(versionId)
+			: element.getActiveVersionData()
+		if (!version) return null
+		const status = version.status
+		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing)
+			return null
+		return { element, versionId }
+	}
+
+	private applyImageElementSourceReplacement(
+		elementId: string,
+		nextPath: string,
+		targetVersionId: string | null,
+	): boolean {
+		const target = this.getReplaceableImageTarget(elementId, targetVersionId)
+		if (!target) return false
+
+		const historyManager = this.canvas.historyManager
+		let updated = false
+		historyManager.disable()
+		try {
+			// 替换属于当前查看/编辑版本；保留版本指针和其他版本，只重置新资源不再适用的裁剪与错误态。
+			const patch = {
+				src: nextPath,
+				status: GenerationStatus.Completed,
+				errorMessage: undefined,
+				crop: undefined,
+			}
+			updated = target.versionId
+				? target.element.updateVersionData(target.versionId, patch, { silent: false })
+				: target.element.updateActiveVersionData(patch, { silent: false })
+		} finally {
+			historyManager.enable()
+		}
+		if (!updated) return false
+
+		historyManager.recordHistoryImmediate()
+		if (this.isImageReplacementTargetActive(target.element, target.versionId)) {
+			this.canvas.visibilityManager.requestImmediateImageLoad(elementId, {
+				reason: "image-replaced",
+				priority: "critical",
+			})
+		}
+		return true
+	}
+
+	private isImageReplacementTargetActive(
+		element: ImageElementClass,
+		targetVersionId: string | null,
+	): boolean {
+		const data = element.getData()
+		return targetVersionId
+			? isImageElementV2(data) && data.activeVersionId === targetVersionId
+			: !isImageElementV2(data)
+	}
+
 	public async uploadRemoteFileElement(
 		options: UploadRemoteFileElementOptions,
 	): Promise<string | null> {
@@ -1388,14 +1522,22 @@ export class CanvasFileUploadManager {
 			this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
 		}
 
-		this.canvas.elementManager.convertToPermament(
-			elementId,
-			{
-				src: uploadResult.path,
-				status: GenerationStatus.Completed,
-			},
-			{ silent: true },
-		)
+		const uploadPatch = {
+			src: uploadResult.path,
+			status: GenerationStatus.Completed,
+		}
+		if (element instanceof ImageElementClass && isImageElementV2(element.getData())) {
+			const data = element.getData()
+			const next = updateImageVersion(data, getActiveImageVersionId(data), uploadPatch)
+			if (!isImageElementV2(next)) return false
+			this.canvas.elementManager.convertToPermament(
+				elementId,
+				{ versions: next.versions },
+				{ silent: true },
+			)
+		} else {
+			this.canvas.elementManager.convertToPermament(elementId, uploadPatch, { silent: true })
+		}
 
 		if (element instanceof ImageElementClass && typeof element.setOssSrc === "function") {
 			element.setOssSrc(uploadResult.src)
@@ -1425,14 +1567,13 @@ export class CanvasFileUploadManager {
 			(this.canvas.t ? this.canvas.t("image.uploadFailed", "文件上传失败") : "文件上传失败")
 
 		// 更新元素状态为失败（使用 silent: true 避免再次记录历史）
-		this.canvas.elementManager.update(
-			elementId,
-			{
-				status: GenerationStatus.Failed,
-				errorMessage,
-			},
-			{ silent: true },
-		)
+		const instance = this.canvas.elementManager.getElementInstance(elementId)
+		const patch = { status: GenerationStatus.Failed, errorMessage }
+		if (instance instanceof ImageElementClass) {
+			instance.updateActiveVersionData(patch, { silent: true })
+		} else {
+			this.canvas.elementManager.update(elementId, patch, { silent: true })
+		}
 
 		this.markPendingUploadElementResolved(elementId)
 		return true

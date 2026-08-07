@@ -8,6 +8,10 @@ import {
 	type LayerElement,
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import {
+	getActiveImageVersion,
+	getImageElementVersions,
+} from "@/components/CanvasDesign/runtime/document/imageVersion"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -63,12 +67,15 @@ function walkCanvasMediaSources(
 	if (!elements?.length) return
 
 	for (const el of elements) {
-		if (
-			el.type === ElementTypeEnum.Image ||
-			el.type === ElementTypeEnum.Video ||
-			el.type === ElementTypeEnum.Audio
-		) {
-			const media = el as ImageElement | VideoElement | AudioElement
+		if (el.type === ElementTypeEnum.Image) {
+			for (const version of getImageElementVersions(el)) {
+				const src = version.src?.trim()
+				if (src && !/^file:/i.test(src)) onSrc(src)
+			}
+			continue
+		}
+		if (el.type === ElementTypeEnum.Video || el.type === ElementTypeEnum.Audio) {
+			const media = el as VideoElement | AudioElement
 			const s = media.src?.trim()
 			if (!s || /^file:/i.test(s)) continue
 			onSrc(s)
@@ -115,11 +122,11 @@ export function designDataHasPendingMediaWithoutGenerationRequest(designData: De
 		for (const element of elements) {
 			if (element.type === ElementTypeEnum.Image) {
 				const image = element as ImageElement
+				const active = getActiveImageVersion(image)
 				if (
-					(image.status === "pending" || image.status === "processing") &&
-					!image.generateImageRequest &&
-					!image.imageGenerationTaskMeta &&
-					!image.generateHightImageRequest
+					(active.status === "pending" || active.status === "processing") &&
+					!active.generateImageRequest &&
+					!active.imageGenerationTaskMeta
 				) {
 					missing = true
 					return

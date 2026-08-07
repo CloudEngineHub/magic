@@ -1,5 +1,6 @@
 import type { Canvas } from "../core/Canvas"
 import { ElementTypeEnum, type LayerElement } from "../document/types"
+import { isImageElementV2, updateImageVersion } from "../document/imageVersion"
 import type { CommitGenerationTarget } from "../elements/core/ElementManager"
 import type { GenerationAttempt, GenerationFailurePolicy } from "./GenerationRuntimeManager"
 
@@ -109,7 +110,11 @@ export class GenerationAttemptCoordinator {
 	private getCurrentTargetIds(attempt: GenerationAttempt): string[] {
 		return attempt.targets
 			.filter((target) =>
-				this.canvas.generationRuntimeManager.isCurrent(attempt.attemptId, target.elementId),
+				this.canvas.generationRuntimeManager.isCurrent(
+					attempt.attemptId,
+					target.elementId,
+					target.versionId,
+				),
 			)
 			.map((target) => target.elementId)
 	}
@@ -165,6 +170,15 @@ export class GenerationAttemptCoordinator {
 	private buildEmptyElementPatch(element: LayerElement): Partial<LayerElement> | null {
 		switch (element.type) {
 			case ElementTypeEnum.Image:
+				if (isImageElementV2(element)) {
+					const next = updateImageVersion(element, element.activeVersionId, {
+						generateImageRequest: undefined,
+						imageGenerationTaskMeta: undefined,
+						status: undefined,
+						errorMessage: undefined,
+					})
+					return isImageElementV2(next) ? { versions: next.versions } : null
+				}
 				return {
 					generateImageRequest: undefined,
 					imageGenerationTaskMeta: undefined,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { resolveImageSizeOptionFromRequest } from "../image-editor-config.utils"
+import {
+	buildImageSelectValue,
+	normalizeImageSizeValue,
+	resolveImageSizeOptionFromRequest,
+} from "../image-editor-config.utils"
 
 const seedreamSizes = [
 	{ label: "1:1", value: "2048x2048", scale: "2K" },
@@ -8,6 +12,20 @@ const seedreamSizes = [
 ]
 
 describe("resolveImageSizeOptionFromRequest", () => {
+	it("normalizes temporary select values before restoring or displaying a size", () => {
+		const encoded = buildImageSelectValue("1:1", "2048x2048")
+
+		expect(normalizeImageSizeValue(encoded)).toBe("2048x2048")
+		expect(normalizeImageSizeValue("2048x2048")).toBe("2048x2048")
+		expect(
+			resolveImageSizeOptionFromRequest({
+				sizes: seedreamSizes,
+				request: { size: encoded },
+				preferredResolution: "2K",
+			})?.size,
+		).toEqual(seedreamSizes[0])
+	})
+
 	it("restores a saved size even when the request has no resolution", () => {
 		const resolved = resolveImageSizeOptionFromRequest({
 			sizes: seedreamSizes,

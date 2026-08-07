@@ -22,6 +22,7 @@ import {
 	getImageGenerationTaskMeta,
 } from "../../../../runtime/resources/image/imageGenerationTaskMeta"
 import { ImageGenerationTaskTypeMap } from "../../../../public/magic-types"
+import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
 import {
 	buildReferenceImageOptions,
 	getNormalizedImageProcessCrop,
@@ -52,9 +53,12 @@ export default function ImageConvertHight() {
 	const imageGenerationTaskMeta = selectedImageElement
 		? getImageGenerationTaskMeta(selectedImageElement)
 		: undefined
+	const activeVersion = selectedImageElement
+		? getActiveImageVersion(selectedImageElement)
+		: undefined
 
 	const requestSize =
-		selectedImageElement?.generateImageRequest?.size ||
+		activeVersion?.generateImageRequest?.size ||
 		(imageGenerationTaskMeta?.type === ImageGenerationTaskTypeMap.High
 			? imageGenerationTaskMeta.size
 			: undefined) ||
@@ -105,7 +109,7 @@ export default function ImageConvertHight() {
 		}
 
 		// 获取当前图片的 src（文件路径）
-		const filePath = selectedImageElement.src
+		const filePath = activeVersion?.src
 		if (!filePath) {
 			return
 		}
@@ -123,7 +127,7 @@ export default function ImageConvertHight() {
 		}
 
 		const crop = getNormalizedImageProcessCrop({
-			crop: selectedImageElement.crop,
+			crop: activeVersion?.crop,
 			sourceDimensions: {
 				width: imageInfo?.naturalWidth ?? selectedImageElement.width ?? 0,
 				height: imageInfo?.naturalHeight ?? selectedImageElement.height ?? 0,

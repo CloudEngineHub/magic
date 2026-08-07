@@ -1,5 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import { getActiveImageVersion } from "../../document/imageVersion"
 import type { Rect } from "../../shared/ids"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
 import {
@@ -988,7 +989,7 @@ export class CanvasVisibilityManager {
 		maxImageCount: number,
 	): void {
 		if (imageIds.length >= maxImageCount) return
-		if (element.type !== ElementTypeEnum.Image || !element.src) {
+		if (element.type !== ElementTypeEnum.Image || !getActiveImageVersion(element).src) {
 			return
 		}
 		if (!this.registeredImages.has(element.id)) {
@@ -2276,7 +2277,7 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const registered = this.registeredImages.get(element.id)
-				const path = registered?.path ?? element.src
+				const path = registered?.path ?? getActiveImageVersion(element).src
 				if (!path) {
 					return
 				}

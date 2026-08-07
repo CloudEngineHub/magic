@@ -4,6 +4,7 @@ import type { CanvasDesignRef } from "../../../public/props"
 import type { CanvasDocument, Marker, PaddingInsetConfig } from "../../../runtime/document/types"
 import { toPlainObject } from "../../../runtime/shared/ids"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 
 const RESOURCE_REFRESH_CONCURRENCY = 3
 
@@ -155,10 +156,9 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				const elementInstance = canvas.elementManager.getElementInstance(elementId)
 				if (elementInstance && elementInstance instanceof ImageElementClass) {
 					const imageData = elementInstance.getData()
-					if (!imageData.src) return null
-					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(
-						imageData.src,
-					)
+					const active = getActiveImageVersion(imageData)
+					if (!active.src) return null
+					const ossInfo = await canvas.imageResourceManager.ensureFreshOssInfo(active.src)
 					return ossInfo?.ossSrc ?? null
 				}
 				return null
@@ -169,9 +169,10 @@ export function useCanvasDesignRef(ref: React.Ref<CanvasDesignRef>): void {
 				if (!(elementInstance instanceof ImageElementClass)) return null
 
 				const imageData = elementInstance.getData()
-				if (!imageData.src) return null
+				const active = getActiveImageVersion(imageData)
+				if (!active.src) return null
 
-				const resource = await canvas.imageResourceManager.getResource(imageData.src, {
+				const resource = await canvas.imageResourceManager.getResource(active.src, {
 					variant: "full",
 				})
 				if (!resource) return null

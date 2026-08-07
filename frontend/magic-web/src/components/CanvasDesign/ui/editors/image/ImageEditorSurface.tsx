@@ -115,6 +115,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const hostUiLocale = useHostUiLocale()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
+	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
 	const {
 		prompt,
 		handlers,
@@ -455,13 +456,18 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				style={{ display: "none" }}
 				onChange={handlers.handleFileChange}
 			/>
-			{linkedEditorInputs ? (
-				<LinkedEditorInputsBar
-					textConnections={linkedEditorInputs.textConnections}
-					isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
-					onTextConnectionSelectedChange={linkedEditorInputs.setTextConnectionSelected}
-					onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
-				/>
+			<div ref={setSourceListContainer} className={styles.sourceListMount} />
+			{linkedEditorInputs?.textConnections.length ? (
+				<div className={styles.linkedInputs}>
+					<LinkedEditorInputsBar
+						textConnections={linkedEditorInputs.textConnections}
+						isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+						onTextConnectionSelectedChange={
+							linkedEditorInputs.setTextConnectionSelected
+						}
+						onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
+					/>
+				</div>
 			) : null}
 			<MessageEditor
 				ref={editorRef}
@@ -489,7 +495,6 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				onSelectSource={handleSelectSource}
 				onProjectSelect={handleProjectSelect}
 				onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
-				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs?.mediaItems}
 				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
 				renderPromptOptimizationButton={() => (
@@ -516,6 +521,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						)}
 					</Button>
 				)}
+				sourceListContainer={sourceListContainer}
 			/>
 		</ReferenceResourceDropSurface>
 	)

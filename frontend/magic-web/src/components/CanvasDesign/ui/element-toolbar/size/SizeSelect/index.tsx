@@ -8,6 +8,7 @@ import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import SizeIconPreview from "../../../primitives/custom/SizeIconPreview/index"
 import { cn } from "../../../../runtime/shared/lib/utils"
 import { getPersistedSourceCrop } from "../../../../runtime/resources/image/imageCropUtils"
+import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
 
 interface SizeOption {
 	label: string
@@ -122,6 +123,13 @@ export default function SizeSelect(props: SizeSelectProps) {
 		}
 		return selectedMediaElement
 	}, [selectedMediaElement])
+	const activeImageVersion = selectedImageElement
+		? getActiveImageVersion(selectedImageElement)
+		: null
+	const selectedMediaSrc =
+		selectedMediaElement?.type === ElementTypeEnum.Image
+			? activeImageVersion?.src
+			: selectedMediaElement?.src
 
 	const sizeOptions = useMemo(() => {
 		if (!originalSizeOption) {
@@ -131,13 +139,13 @@ export default function SizeSelect(props: SizeSelectProps) {
 	}, [originalSizeOption])
 
 	useEffect(() => {
-		if (!canvas || !selectedMediaElement?.src) {
+		if (!canvas || !selectedMediaSrc) {
 			setOriginalSizeOption(null)
 			return
 		}
 
 		let cancelled = false
-		const mediaSrc = selectedMediaElement.src
+		const mediaSrc = selectedMediaSrc
 
 		const buildOriginalSizeOption = (
 			width: number,
@@ -173,7 +181,7 @@ export default function SizeSelect(props: SizeSelectProps) {
 					if (cancelled) return
 					const naturalWidth = resource?.imageInfo?.naturalWidth ?? 0
 					const naturalHeight = resource?.imageInfo?.naturalHeight ?? 0
-					const sourceCrop = getPersistedSourceCrop(selectedImageElement?.crop, {
+					const sourceCrop = getPersistedSourceCrop(activeImageVersion?.crop, {
 						width: naturalWidth,
 						height: naturalHeight,
 					})
@@ -210,9 +218,9 @@ export default function SizeSelect(props: SizeSelectProps) {
 		}
 	}, [
 		canvas,
-		selectedImageElement?.crop,
+		activeImageVersion?.crop,
 		selectedMediaElement?.id,
-		selectedMediaElement?.src,
+		selectedMediaSrc,
 		selectedMediaElement?.type,
 		t,
 	])

@@ -1,4 +1,5 @@
 import type { LayerElement } from "./types"
+import { getActiveImageVersion, isImageElementV2 } from "./imageVersion"
 
 /**
  * 重字段的运行时来源。
@@ -19,6 +20,7 @@ export interface GenerateImageRequestProvenance {
 
 export interface ElementDetailProvenance {
 	generateImageRequest?: GenerateImageRequestProvenance
+	imageVersionDetails?: Record<string, { generateImageRequest?: GenerateImageRequestProvenance }>
 }
 
 export type ElementDetailsProvenance = Record<string, ElementDetailProvenance>
@@ -27,7 +29,7 @@ type ElementWithChildren = LayerElement & { children?: LayerElement[] }
 
 function getGenerateImageRequestImageId(element: LayerElement): string | undefined {
 	if (element.type !== "image") return undefined
-	const imageId = element.generateImageRequest?.image_id
+	const imageId = getActiveImageVersion(element).generateImageRequest?.image_id
 	return typeof imageId === "string" && imageId.trim() ? imageId : undefined
 }
 
@@ -51,6 +53,25 @@ export function buildInlineElementDetailsProvenance(
 ): ElementDetailsProvenance {
 	const provenance: ElementDetailsProvenance = {}
 	walkElements(elements, (element) => {
+		if (element.type !== "image") return
+		if (isImageElementV2(element)) {
+			const imageVersionDetails: ElementDetailProvenance["imageVersionDetails"] = {}
+			for (const version of element.versions) {
+				const imageId = version.generateImageRequest?.image_id
+				if (!imageId) continue
+				imageVersionDetails[version.id] = {
+					generateImageRequest: {
+						valueSource: "inline",
+						imageId,
+						imageIdSource: "inline",
+					},
+				}
+			}
+			if (Object.keys(imageVersionDetails).length > 0) {
+				provenance[element.id] = { imageVersionDetails }
+			}
+			return
+		}
 		const imageId = getGenerateImageRequestImageId(element)
 		if (!imageId) return
 		provenance[element.id] = {
@@ -74,6 +95,32 @@ export function reconcileElementDetailsProvenance(
 ): ElementDetailsProvenance {
 	const result: ElementDetailsProvenance = {}
 	walkElements(elements, (element) => {
+		if (element.type === "image" && isImageElementV2(element)) {
+			const imageVersionDetails: NonNullable<ElementDetailProvenance["imageVersionDetails"]> =
+				{}
+			for (const version of element.versions) {
+				const imageId = version.generateImageRequest?.image_id
+				if (!imageId) continue
+				const matches = candidates
+					.map(
+						(candidate) =>
+							candidate?.[element.id]?.imageVersionDetails?.[version.id]
+								?.generateImageRequest,
+					)
+					.filter(
+						(entry): entry is GenerateImageRequestProvenance =>
+							entry?.imageId === imageId,
+					)
+				const match = chooseProvenance(matches)
+				imageVersionDetails[version.id] = {
+					generateImageRequest: match ?? unknownProvenance(imageId),
+				}
+			}
+			if (Object.keys(imageVersionDetails).length > 0) {
+				result[element.id] = { imageVersionDetails }
+			}
+			return
+		}
 		const imageId = getGenerateImageRequestImageId(element)
 		if (!imageId) return
 
@@ -81,19 +128,26 @@ export function reconcileElementDetailsProvenance(
 			.map((candidate) => candidate?.[element.id]?.generateImageRequest)
 			.filter((entry): entry is GenerateImageRequestProvenance => entry?.imageId === imageId)
 
-		const match =
-			matches.find((entry) => entry.imageIdSource === "agent") ??
-			matches.find((entry) => entry.imageIdSource === "user") ??
-			matches.find((entry) => entry.imageIdSource === "inline") ??
-			matches[0]
+		const match = chooseProvenance(matches)
 
 		result[element.id] = {
-			generateImageRequest: match ?? {
-				valueSource: "unknown",
-				imageId,
-				imageIdSource: "unknown",
-			},
+			generateImageRequest: match ?? unknownProvenance(imageId),
 		}
 	})
 	return result
+}
+
+function chooseProvenance(
+	matches: GenerateImageRequestProvenance[],
+): GenerateImageRequestProvenance | undefined {
+	return (
+		matches.find((entry) => entry.imageIdSource === "agent") ??
+		matches.find((entry) => entry.imageIdSource === "user") ??
+		matches.find((entry) => entry.imageIdSource === "inline") ??
+		matches[0]
+	)
+}
+
+function unknownProvenance(imageId: string): GenerateImageRequestProvenance {
+	return { valueSource: "unknown", imageId, imageIdSource: "unknown" }
 }

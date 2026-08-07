@@ -29,6 +29,7 @@ import {
 	type CanvasDownloadMenuContext,
 } from "./resolveCanvasDownloadMenuContext"
 import { getLoadedImageElements } from "../../../runtime/shared/ids"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 
 export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -70,10 +71,11 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		void (async () => {
 			const images = getLoadedImageElements(canvas)
 			for (const img of images) {
-				if (!img.src) continue
-				const entry = await canvas.imageResourceManager.getEntry(img.src)
+				const src = getActiveImageVersion(img).src
+				if (!src) continue
+				const entry = await canvas.imageResourceManager.getEntry(src)
 				if (entry?.fileName) continue
-				canvas.imageResourceManager.loadResource(img.src)
+				canvas.imageResourceManager.loadResource(src)
 			}
 		})()
 	}, [isMenuOpen, isCanvasMenu, canvas, menuKey, selectedElementIds, currentElementId])

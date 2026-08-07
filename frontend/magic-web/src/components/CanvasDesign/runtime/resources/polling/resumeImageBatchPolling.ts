@@ -7,6 +7,7 @@ import {
 } from "../image/imageGenerationTaskMeta"
 import { shouldContinueGenerationPolling } from "./generationPollingUtils"
 import { collectElementsByType } from "../../shared/ids"
+import { getActiveImageVersion } from "../../document/imageVersion"
 
 interface BatchPollingGroup {
 	imageId: string
@@ -63,8 +64,9 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 }
 
 function shouldResumeBatchPolling(element: ImageElementData): boolean {
-	if (element.src) return false
-	if (element.status !== undefined && !shouldContinueGenerationPolling(element.status)) {
+	const active = getActiveImageVersion(element)
+	if (active.src) return false
+	if (active.status !== undefined && !shouldContinueGenerationPolling(active.status)) {
 		return false
 	}
 

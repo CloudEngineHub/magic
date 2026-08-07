@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
-import type { CropConfig, ImageElement } from "../../document/types"
+import type { CropConfig, ImageElement, LayerElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import {
 	composeSourceCropFromVisibleCrop,
@@ -12,6 +12,12 @@ import {
 import { CropRenderer } from "./CropRenderer"
 import { calculateNodesRect } from "../../shared/ids"
 import { ImageEditingSession } from "../image-editing/ImageEditingSession"
+import {
+	getActiveImageVersion,
+	getActiveImageVersionId,
+	isImageElementV2,
+	updateImageVersion,
+} from "../../document/imageVersion"
 
 const FULL_CROP_EPSILON = 1e-6
 
@@ -36,7 +42,14 @@ export class CropManager {
 
 	// 进入裁剪前的原始元素状态(用于取消恢复)
 	private originalImageState:
-		Pick<ImageElement, "x" | "y" | "width" | "height" | "crop"> | undefined = undefined
+		| {
+				x?: number
+				y?: number
+				width?: number
+				height?: number
+				crop?: CropConfig
+		  }
+		| undefined = undefined
 
 	// 裁剪渲染器(由裁剪器绘制，与 ImageElement 解耦)
 	private cropRenderer: CropRenderer | null = null
@@ -60,6 +73,17 @@ export class CropManager {
 			width: imageInfo?.naturalWidth ?? imageElement.width ?? 0,
 			height: imageInfo?.naturalHeight ?? imageElement.height ?? 0,
 		}
+	}
+
+	private getActiveCropUpdates(
+		imageElement: ImageElement,
+		crop: CropConfig | undefined,
+	): Partial<LayerElement> {
+		if (!isImageElementV2(imageElement)) return { crop }
+		const next = updateImageVersion(imageElement, getActiveImageVersionId(imageElement), {
+			crop,
+		})
+		return isImageElementV2(next) ? { versions: next.versions } : {}
 	}
 
 	private getShiftedElementPosition(
@@ -238,18 +262,22 @@ export class CropManager {
 		const elementInstance = this.canvas.elementManager.getElementInstance(
 			elementId,
 		) as ImageElementClass | null
+		const activeVersion =
+			elementInstance instanceof ImageElementClass
+				? elementInstance.getActiveVersionData()
+				: getActiveImageVersion(imageElement)
 
 		this.originalImageState = {
 			x: imageElement.x,
 			y: imageElement.y,
 			width: imageElement.width,
 			height: imageElement.height,
-			crop: imageElement.crop ? { ...imageElement.crop } : undefined,
+			crop: activeVersion.crop ? { ...activeVersion.crop } : undefined,
 		}
 
 		const sourceDimensions = this.getSourceDimensions(elementInstance, imageElement)
 		const displaySize = getCropDisplaySize({
-			crop: imageElement.crop,
+			crop: activeVersion.crop,
 			elementSize: {
 				width: imageElement.width ?? 0,
 				height: imageElement.height ?? 0,
@@ -259,7 +287,7 @@ export class CropManager {
 
 		// 裁剪编辑态恢复到裁剪前的完整显示边界，并将当前可见区域映射为临时裁剪框
 		this.tempCrop = getVisibleCropFromSourceCrop({
-			crop: imageElement.crop,
+			crop: activeVersion.crop,
 			sourceDimensions,
 			displaySize,
 		})
@@ -361,17 +389,20 @@ export class CropManager {
 
 		// 如果需要恢复进入裁剪前的原始元素状态
 		if (shouldRestore && this.originalImageState) {
-			this.canvas.elementManager.update(
-				elementId,
-				{
-					x: this.originalImageState.x,
-					y: this.originalImageState.y,
-					width: this.originalImageState.width,
-					height: this.originalImageState.height,
-					crop: this.originalImageState.crop,
-				},
-				{ silent: true },
-			)
+			const elementData = this.canvas.elementManager.getElementData(elementId)
+			if (elementData?.type === ElementTypeEnum.Image) {
+				this.canvas.elementManager.update(
+					elementId,
+					{
+						x: this.originalImageState.x,
+						y: this.originalImageState.y,
+						width: this.originalImageState.width,
+						height: this.originalImageState.height,
+						...this.getActiveCropUpdates(elementData, this.originalImageState.crop),
+					},
+					{ silent: true },
+				)
+			}
 		}
 		this.canvas.markerManager.clearCropPreview(elementId)
 
@@ -525,7 +556,7 @@ export class CropManager {
 			y: nextPosition.y,
 			width: finalVisibleCrop.width,
 			height: finalVisibleCrop.height,
-			crop: nextPersistedCrop,
+			...this.getActiveCropUpdates(imageElement, nextPersistedCrop),
 		})
 		this.canvas.markerManager.applyConfirmedCropToMarkers(
 			this.croppingElementId,

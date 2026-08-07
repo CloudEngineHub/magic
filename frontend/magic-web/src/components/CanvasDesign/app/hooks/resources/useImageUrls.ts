@@ -3,6 +3,7 @@ import { useCanvas } from "../../providers/CanvasProvider"
 import { useCanvasEvent } from "../canvas"
 import { ElementTypeEnum } from "../../../runtime/document/types"
 import { areCanvasHostResourceReferencesSame } from "../../../runtime/shared/path/canvasResourcePath"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 import type { ImageInfo } from "../../../runtime/resources/image/ImageResourceManager"
 
 export interface UseImageLowUrlOptions {
@@ -82,7 +83,7 @@ export function useImageLowUrl(options: UseImageLowUrlOptions): UseImageLowUrlRe
 			({ data }) => {
 				if (!enabled || data.elementId !== elementId) return
 				if (data.data?.type !== ElementTypeEnum.Image) return
-				if (data.data.src !== src) return
+				if (getActiveImageVersion(data.data).src !== src) return
 				void syncLoadedLowUrl()
 			},
 			[elementId, enabled, src, syncLoadedLowUrl],

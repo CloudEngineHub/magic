@@ -1,7 +1,27 @@
 import Konva from "konva"
-import type { ImageElement as ImageElementData, LayerElement } from "../../document/types"
+import type {
+	CropConfig,
+	ImageElement as ImageElementData,
+	ImageElementVersion,
+	LayerElement,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import {
+	appendImageVersion,
+	createImageVersionId,
+	deleteActiveImageVersion,
+	getActiveImageVersion as resolveActiveImageVersion,
+	getActiveImageVersionId,
+	getImageVersionById,
+	getMainImageVersion as resolveMainImageVersion,
+	hasProcessingImageVersion,
+	isImageElementV2,
+	migrateImageElementV1,
+	updateImageVersion,
+	type ImageVersionFields,
+} from "../../document/imageVersion"
 import { BaseElement } from "../core/BaseElement"
+import type { ElementOperationOptions } from "../core/ElementManager"
 import imageIcon from "../../../assets/image/image-icon.png"
 import imageIconError from "../../../assets/image/image-icon-error.png"
 import imageBackgroundUnselected from "../../../assets/image/image-background-unselected.jpg"
@@ -40,6 +60,7 @@ import { IMAGE_CONFIG, COLORS } from "./ImageElement.config"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
+import { ImageVersionControlsDecorator } from "../decorators/ImageVersionControlsDecorator"
 import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
@@ -57,7 +78,6 @@ import {
 	createEraserTaskMeta,
 	createHighImageTaskMeta,
 	createRemoveBackgroundTaskMeta,
-	getImageGenerationTaskMeta,
 	isBatchImageGenerationTaskMeta,
 } from "../../resources/image/imageGenerationTaskMeta"
 import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
@@ -68,6 +88,18 @@ type ImageResourceStructureReason =
 	"missing-image-node" | "cleared-image-node" | "error-to-image" | "resource-failed"
 
 type ImageResourceMetadataReason = "non-fullsize-full" | "view-priority-blocked"
+
+export interface GenerateImageVersionOptions {
+	/** 分镜批量生成允许同一元素同时提交多个版本。 */
+	allowConcurrentProcessing?: boolean
+	/** 批次单调序号，用于旧批次完成时阻止抢占最新 active version。 */
+	submissionOrder?: number
+}
+
+interface VersionActivationGuard {
+	activeVersionIdAtSubmission: string
+	submissionOrder: number
+}
 
 type ImageResourceReconcileResult =
 	| { type: "patched-content" }
@@ -83,6 +115,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
+	private versionControlsDecorator?: ImageVersionControlsDecorator
 
 	// 生成相关
 	private isGenerating: boolean = false
@@ -136,6 +169,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private deselectHandler?: (event: { data: { elementIds?: string[] } | undefined }) => void
 	private isRetryEditing = false
 	private generationRuntimeUnsubscribe?: () => void
+	private versionActivationGuards = new Map<string, VersionActivationGuard>()
+	private latestVersionSubmissionOrder = 0
 
 	constructor(data: ImageElementData, canvas: Canvas) {
 		super(data, canvas)
@@ -155,7 +190,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			elementId: this.data.id,
 			canvas: this.canvas,
 			getElementData: () => this.data,
-			onStatusUpdate: () => {
+			onStatusUpdate: (versionId) => {
+				if (versionId && getActiveImageVersionId(this.data) !== versionId) return
 				this.isErrorState = true
 				// reject ossSrc Promise（生成失败）
 				if (this.ossSrcReject) {
@@ -165,6 +201,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.ossSrcPromise = undefined
 				}
 				this.rerender()
+			},
+			shouldAutoActivateVersion: (versionId) => {
+				const guard = this.versionActivationGuards.get(versionId)
+				return Boolean(
+					guard &&
+					isImageElementV2(this.data) &&
+					this.data.activeVersionId === guard.activeVersionIdAtSubmission &&
+					guard.submissionOrder >= this.latestVersionSubmissionOrder,
+				)
+			},
+			onVersionSettled: (versionId) => {
+				this.versionActivationGuards.delete(versionId)
 			},
 		})
 
@@ -176,9 +224,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.tempGenerateImageRequest = tempConfig
 		}
 		// 如果没有临时配置，从 generateImageRequest 恢复临时配置
-		else if (this.data.generateImageRequest && !this.tempGenerateImageRequest) {
+		else if (this.getActiveVersion().generateImageRequest && !this.tempGenerateImageRequest) {
 			const { model_id, resolution, size, image_generation_config } =
-				this.data.generateImageRequest || {}
+				this.getActiveVersion().generateImageRequest || {}
 			this.tempGenerateImageRequest = {
 				...(model_id && { model_id }),
 				...(resolution && { resolution }),
@@ -187,24 +235,158 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}
 		}
 
-		// 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度
-		if (this.data.src) {
+		const activeVersion = this.getActiveVersion()
+		// active 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度。
+		if (activeVersion.src) {
 			this.setupResourceLoadedListener()
 		}
-		// 没有 src 但有 generateImageRequest：启动轮询检查生成结果
-		else if (this.data.generateImageRequest?.image_id) {
+		if (!activeVersion.src && activeVersion.generateImageRequest?.image_id) {
 			this.createOssSrcPromise()
-			this.pollingManager.start()
-		} else {
+		} else if (!activeVersion.src) {
 			const imageGenerationTaskMeta = this.getImageGenerationTaskMeta()
 			if (
 				imageGenerationTaskMeta?.image_id &&
 				!isBatchImageGenerationTaskMeta(imageGenerationTaskMeta)
 			) {
 				this.createOssSrcPromise()
-				this.pollingManager.start()
 			}
 		}
+		// 任一 V2 processing 版本都需要继续轮询，即使 active 仍显示旧版本。
+		this.pollingManager.syncWithElementData()
+	}
+
+	private getActiveVersion(): ImageElementVersion {
+		return resolveActiveImageVersion(this.data)
+	}
+
+	public getActiveVersionData(): ImageElementVersion {
+		return this.getActiveVersion()
+	}
+
+	public getMainVersionData(): ImageElementVersion {
+		return resolveMainImageVersion(this.getData())
+	}
+
+	/**
+	 * 返回图片作为画布关联媒体时应消费的版本。
+	 * V2 固定消费主版本，V1 消费唯一版本。连线、Storyboard 等关联消费者必须通过此语义入口获取，
+	 * 禁止自行读取版本 DSL。
+	 */
+	public getAssociatedVersionData(): ImageElementVersion {
+		return this.getMainVersionData()
+	}
+
+	/**
+	 * 返回图片最近创建的版本，供生成流程读取版本状态，避免消费者解析图片 DSL。
+	 */
+	public getLatestVersionData(): ImageElementVersion {
+		const data = this.getData()
+		if (isImageElementV2(data)) return data.versions.at(-1) ?? this.getActiveVersion()
+		return this.getActiveVersion()
+	}
+
+	public getVersionData(versionId: string): ImageElementVersion | undefined {
+		return getImageVersionById(this.getData(), versionId)
+	}
+
+	public updateActiveVersionData(
+		patch: Partial<ImageVersionFields>,
+		options?: ElementOperationOptions,
+	): boolean {
+		const data = this.getData()
+		if (!isImageElementV2(data)) {
+			this.canvas.elementManager.update(
+				this.data.id,
+				patch as Partial<ImageElementData>,
+				options,
+			)
+			return true
+		}
+		return this.updateVersionData(data.activeVersionId, patch, options)
+	}
+
+	public updateVersionData(
+		versionId: string,
+		patch: Partial<ImageVersionFields>,
+		options?: ElementOperationOptions,
+	): boolean {
+		const data = this.getData()
+		if (!isImageElementV2(data) || !data.versions.some((version) => version.id === versionId)) {
+			return false
+		}
+		const next = updateImageVersion(data, versionId, patch)
+		if (!isImageElementV2(next)) return false
+		this.canvas.elementManager.update(this.data.id, { versions: next.versions }, options)
+		return true
+	}
+
+	private buildVersionElementPatch(
+		versionId: string | undefined,
+		patch: Partial<ImageVersionFields>,
+	): Partial<ImageElementData> {
+		const data = this.getData()
+		if (!isImageElementV2(data)) return patch as Partial<ImageElementData>
+		const targetVersionId = versionId ?? data.activeVersionId
+		if (!getImageVersionById(data, targetVersionId)) {
+			throw new Error(`Image version ${targetVersionId} not found`)
+		}
+		const next = updateImageVersion(data, targetVersionId, patch)
+		return isImageElementV2(next) ? { versions: next.versions } : {}
+	}
+
+	/**
+	 * 判断图片是否已有生成历史，供再次生成流程选择版本路径。
+	 */
+	public hasGenerationHistory(): boolean {
+		const data = this.getData()
+		return Boolean(this.getActiveVersion().generateImageRequest) || isImageElementV2(data)
+	}
+
+	public switchActiveVersion(versionId: string): boolean {
+		if (!isImageElementV2(this.data)) return false
+		if (!this.data.versions.some((version) => version.id === versionId)) return false
+		if (this.data.activeVersionId === versionId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ activeVersionId: versionId },
+			{ silent: false },
+		)
+		this.pollingManager.syncWithElementData()
+		return true
+	}
+
+	public setMainVersion(versionId: string): boolean {
+		if (!isImageElementV2(this.data)) return false
+		const target = this.data.versions.find((version) => version.id === versionId)
+		if (!target?.src || target.status !== GenerationStatus.Completed) return false
+		if (this.data.mainVersionId === versionId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ mainVersionId: versionId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public deleteActiveVersion(): boolean {
+		if (!isImageElementV2(this.data)) return false
+		const result = deleteActiveImageVersion(this.data)
+		if (!result) return false
+		const deletedVersionId = result.deletedVersion.id
+		this.versionActivationGuards.delete(deletedVersionId)
+		this.canvas.elementDetailsRuntimeManager?.clearImageVersion(this.data.id, deletedVersionId)
+		this.canvas.markerManager.removeMarkersByImageVersion(this.data.id, deletedVersionId)
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				versions: result.element.versions,
+				activeVersionId: result.element.activeVersionId,
+				mainVersionId: result.element.mainVersionId,
+			},
+			{ silent: false },
+		)
+		this.pollingManager.syncWithElementData()
+		return true
 	}
 
 	/**
@@ -217,6 +399,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
+		this.versionControlsDecorator?.destroy()
+		this.versionControlsDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -235,6 +419,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.pollingManager.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
+		this.versionControlsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
@@ -352,7 +537,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private peekExactResourceVariant(variant: ImageResourceVariant): LoadedResource | null {
-		const src = this.data.src
+		const src = this.getActiveVersion().src
 		if (!src) return null
 		const resource = this.canvas.imageResourceManager.peekResource(src, { variant })
 		return resource?.variant === variant ? resource : null
@@ -360,8 +545,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
-		if (this.data.src) {
-			this.canvas.visibilityManager.registerImageElement(this.data.id, this.data.src)
+		this.versionControlsDecorator?.refreshLayout()
+		const src = this.getActiveVersion().src
+		if (src) {
+			this.canvas.visibilityManager.registerImageElement(this.data.id, src)
 		}
 	}
 
@@ -396,8 +583,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
+		const versionId = getActiveImageVersionId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
 			elementId: this.data.id,
+			...(versionId ? { versionId } : {}),
 			generateImageRequest: requestWithId,
 		})
 		this.rerender()
@@ -410,7 +599,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 发起图片生成请求
 			await this.canvas.magicConfigManager.config?.methods?.generateImage(requestWithId)
 
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 
@@ -418,11 +609,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
-					persistedPatch: {
+					...(versionId ? { versionId } : {}),
+					persistedPatch: this.buildVersionElementPatch(versionId, {
 						generateImageRequest: requestWithId,
 						status: undefined,
 						errorMessage: undefined,
-					},
+					}),
 				},
 			])
 			if (!confirmed) return false
@@ -447,7 +639,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -457,6 +651,146 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			})
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			return false
+		}
+	}
+
+	/**
+	 * 在当前元素内追加一次重新编辑/再次生成任务。
+	 * V1 迁移与 processing 版本追加只在后端确认提交成功后通过一次文档更新完成。
+	 */
+	async generateImageVersion(
+		request: GenerateImageRequest,
+		options?: GenerateImageVersionOptions,
+	): Promise<boolean> {
+		const generateImage = this.canvas.magicConfigManager.config?.methods?.generateImage
+		const allowConcurrentProcessing = options?.allowConcurrentProcessing === true
+		if (
+			!generateImage ||
+			(!allowConcurrentProcessing &&
+				(this.isGenerating || hasProcessingImageVersion(this.data)))
+		)
+			return false
+		if (!request.model_id || !request.prompt?.trim()) return false
+
+		const versionId = createImageVersionId()
+		const requestWithId: GenerateImageRequest = {
+			...request,
+			prompt: request.prompt.trim(),
+			image_id: generateUUID(),
+		}
+		const submissionOrder = options?.submissionOrder ?? this.latestVersionSubmissionOrder + 1
+		this.latestVersionSubmissionOrder = Math.max(
+			this.latestVersionSubmissionOrder,
+			submissionOrder,
+		)
+		if (!allowConcurrentProcessing) this.isGenerating = true
+		this.isErrorState = false
+		this.isRetryEditing = false
+
+		const currentBeforeSubmit = this.data
+		const baseV2 = isImageElementV2(currentBeforeSubmit)
+			? currentBeforeSubmit
+			: migrateImageElementV1(currentBeforeSubmit)
+		const activeVersionIdAtSubmission = baseV2.activeVersionId
+		const attemptId = this.beginOrReuseGenerationAttempt(
+			"image-generate",
+			{
+				elementId: this.data.id,
+				versionId,
+				activeVersionIdAtSubmission,
+				generateImageRequest: requestWithId,
+			},
+			{ allowConcurrent: allowConcurrentProcessing },
+		)
+		const rejectSubmission = (): false => {
+			this.versionActivationGuards.delete(versionId)
+			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			if (!allowConcurrentProcessing) {
+				this.isGenerating = Boolean(
+					this.canvas.generationRuntimeManager.getTargetState(this.data.id),
+				)
+			}
+			this.isErrorState = true
+			this.saveTempGenerateImageRequest(requestWithId)
+			this.rerenderWhenTransformIdle()
+			return false
+		}
+		this.rerenderWhenTransformIdle()
+		this.canvas.eventEmitter.emit({
+			type: "element:image:generate-submit-started",
+			data: { elementId: this.data.id },
+		})
+
+		try {
+			await generateImage(requestWithId)
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
+				return rejectSubmission()
+			}
+
+			const current = this.canvas.elementManager.getElementData(this.data.id)
+			if (!current || current.type !== ElementTypeEnum.Image) return rejectSubmission()
+			if (!allowConcurrentProcessing && hasProcessingImageVersion(current)) {
+				return rejectSubmission()
+			}
+			const currentV2 = isImageElementV2(current)
+				? current
+				: migrateImageElementV1(current, baseV2.activeVersionId)
+			const next = appendImageVersion(currentV2, {
+				id: versionId,
+				generateImageRequest: requestWithId,
+				status: GenerationStatus.Processing,
+			})
+			// 记录提交开始时的 active；确认期间用户若切换版本，完成后不得抢回 active。
+			if (currentV2.activeVersionId === activeVersionIdAtSubmission) {
+				this.versionActivationGuards.set(versionId, {
+					activeVersionIdAtSubmission,
+					submissionOrder,
+				})
+			} else {
+				this.versionActivationGuards.delete(versionId)
+			}
+			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+				{
+					elementId: this.data.id,
+					versionId,
+					persistedPatch: isImageElementV2(current)
+						? { versions: next.versions }
+						: {
+								imageDslVersion: 2,
+								activeVersionId: next.activeVersionId,
+								mainVersionId: next.mainVersionId,
+								versions: next.versions,
+							},
+				},
+			])
+			if (!confirmed) {
+				return rejectSubmission()
+			}
+			if (!isImageElementV2(current)) {
+				this.canvas.markerManager.bindMarkersToImageVersion(
+					this.data.id,
+					currentV2.versions[0]?.id ?? currentV2.activeVersionId,
+				)
+			}
+
+			if (!allowConcurrentProcessing) this.isGenerating = false
+			this.clearTempGenerateImageRequestPrompt()
+			this.pollingManager.start()
+			this.rerenderWhenTransformIdle()
+			return true
+		} catch {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
+				return rejectSubmission()
+			}
+			this.canvas.eventEmitter.emit({
+				type: "element:image:generate-submit-failed",
+				data: { elementId: this.data.id },
+			})
+			return rejectSubmission()
 		}
 	}
 
@@ -486,15 +820,19 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		this.isGenerating = true
+		const versionId = getActiveImageVersionId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-high", {
 			elementId: this.data.id,
+			...(versionId ? { versionId } : {}),
 			imageGenerationTaskMeta: createHighImageTaskMeta(requestWithId),
 		})
 
 		try {
 			// 发起高清图片生成请求
 			await this.canvas.magicConfigManager.config?.methods?.generateHightImage(requestWithId)
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 
@@ -502,11 +840,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
-					persistedPatch: {
+					...(versionId ? { versionId } : {}),
+					persistedPatch: this.buildVersionElementPatch(versionId, {
 						imageGenerationTaskMeta: createHighImageTaskMeta(requestWithId),
 						status: undefined,
 						errorMessage: undefined,
-					},
+					}),
 				},
 			])
 			if (!confirmed) return false
@@ -525,7 +864,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -563,26 +904,31 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		const versionId = getActiveImageVersionId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-remove-background", {
 			elementId: this.data.id,
+			...(versionId ? { versionId } : {}),
 			imageGenerationTaskMeta: createRemoveBackgroundTaskMeta(requestWithId),
 		})
 		this.rerender()
 
 		try {
 			await this.canvas.magicConfigManager.config?.methods?.removeBackground(requestWithId)
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
-					persistedPatch: {
+					...(versionId ? { versionId } : {}),
+					persistedPatch: this.buildVersionElementPatch(versionId, {
 						imageGenerationTaskMeta: createRemoveBackgroundTaskMeta(requestWithId),
 						status: undefined,
 						errorMessage: undefined,
-					},
+					}),
 				},
 			])
 			if (!confirmed) return false
@@ -594,7 +940,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -628,26 +976,31 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		const versionId = getActiveImageVersionId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-eraser", {
 			elementId: this.data.id,
+			...(versionId ? { versionId } : {}),
 			imageGenerationTaskMeta: createEraserTaskMeta(requestWithId),
 		})
 		this.rerender()
 
 		try {
 			await this.canvas.magicConfigManager.config?.methods?.eraser(requestWithId)
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
-					persistedPatch: {
+					...(versionId ? { versionId } : {}),
+					persistedPatch: this.buildVersionElementPatch(versionId, {
 						imageGenerationTaskMeta: createEraserTaskMeta(requestWithId),
 						status: undefined,
 						errorMessage: undefined,
-					},
+					}),
 				},
 			])
 			if (!confirmed) return false
@@ -659,7 +1012,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -693,26 +1048,31 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		this.isGenerating = true
 		this.isErrorState = false
+		const versionId = getActiveImageVersionId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-extend", {
 			elementId: this.data.id,
+			...(versionId ? { versionId } : {}),
 			imageGenerationTaskMeta: createExpandImageTaskMeta(requestWithId),
 		})
 		this.rerender()
 
 		try {
 			await this.canvas.magicConfigManager.config?.methods?.expandImage(requestWithId)
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
-					persistedPatch: {
+					...(versionId ? { versionId } : {}),
+					persistedPatch: this.buildVersionElementPatch(versionId, {
 						imageGenerationTaskMeta: createExpandImageTaskMeta(requestWithId),
 						status: undefined,
 						errorMessage: undefined,
-					},
+					}),
 				},
 			])
 			if (!confirmed) return false
@@ -724,7 +1084,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, versionId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -734,23 +1096,28 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private getImageGenerationTaskMeta(): ImageGenerationTaskMeta | undefined {
-		return getImageGenerationTaskMeta(this.data)
+		return this.getActiveVersion().imageGenerationTaskMeta
 	}
 
 	private getActiveImageGenerationTaskMeta(): ImageGenerationTaskMeta | undefined {
+		const runtimeTarget = this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+		const activeVersionId = getActiveImageVersionId(this.data)
+		const runtimeTargetsActiveVersion =
+			!runtimeTarget?.versionId || runtimeTarget.versionId === activeVersionId
 		return (
-			this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
-				?.imageGenerationTaskMeta || this.getImageGenerationTaskMeta()
+			(runtimeTargetsActiveVersion ? runtimeTarget?.imageGenerationTaskMeta : undefined) ||
+			this.getImageGenerationTaskMeta()
 		)
 	}
 
 	private beginOrReuseGenerationAttempt(
 		operation: GenerationOperation,
 		target: GenerationAttemptTarget,
+		options?: { allowConcurrent?: boolean },
 	): string {
 		const runtimeManager = this.canvas.generationRuntimeManager
 		const current = runtimeManager.getTargetState(this.data.id)
-		if (current?.operation === operation) {
+		if (!options?.allowConcurrent && current?.operation === operation) {
 			runtimeManager.updateAttemptPhase(current.attemptId, "submitting")
 			return current.attemptId
 		}
@@ -779,15 +1146,20 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	isImageGenerating(): boolean {
 		return (
 			this.isGenerating ||
-			Boolean(this.canvas?.generationRuntimeManager?.getTargetState(this.data.id))
+			Boolean(this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)) ||
+			hasProcessingImageVersion(this.data)
 		)
 	}
 
 	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
 	public getActiveGenerateImageRequest(): GenerateImageRequest | undefined {
+		const runtimeTarget = this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+		const activeVersionId = getActiveImageVersionId(this.data)
+		const runtimeTargetsActiveVersion =
+			!runtimeTarget?.versionId || runtimeTarget.versionId === activeVersionId
 		return (
-			this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
-				?.generateImageRequest || this.data.generateImageRequest
+			(runtimeTargetsActiveVersion ? runtimeTarget?.generateImageRequest : undefined) ||
+			this.getActiveVersion().generateImageRequest
 		)
 	}
 
@@ -824,7 +1196,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.ossSrcPromise = undefined
 		}
 		// ossSrc 已获取，如果 src 存在则预加载图片
-		if (this.data.src) {
+		if (this.getActiveVersion().src) {
 			this.preloadImageInternal()
 		}
 
@@ -901,7 +1273,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 处理图片加载失败的逻辑
 	 */
 	private handleImageLoadFailure(): void {
-		const currentFailureSignature = `${this.data.src || ""}:${
+		const currentFailureSignature = `${this.getActiveVersion().src || ""}:${
 			this.imageLoadFailureReason || "load-error"
 		}`
 		const isSameFailureAsLastApplied =
@@ -925,7 +1297,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		closingImage: ImageSource,
 		closingVariant: ImageResourceVariant,
 	): LoadedResource | null {
-		if (!this.data.src) return null
+		if (!this.getActiveVersion().src) return null
 
 		const targetVariant =
 			this.targetDisplayResourceVariant ??
@@ -987,11 +1359,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private getImageLoadErrorText(): string {
+		const src = this.getActiveVersion().src
 		const failureReason =
 			this.imageLoadFailureReason ??
-			(this.data.src
-				? this.canvas.imageResourceManager.getFailureReason(this.data.src)
-				: null)
+			(src ? this.canvas.imageResourceManager.getFailureReason(src) : null)
 
 		if (failureReason === "not-found") {
 			return this.getText("image.fileMissing", "图片文件不存在")
@@ -1003,9 +1374,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	/** 监听必须同步处理的资源失败与 decoded surface 释放事件。 */
 	private setupResourceLoadedListener(): void {
 		this.removeResourceLoadedListener()
-		if (!this.data.src) return
+		const activeSrc = this.getActiveVersion().src
+		if (!activeSrc) return
 
-		const path = this.data.src
+		const path = activeSrc
 		const isCurrentResourcePath = (resourcePath: string): boolean =>
 			areCanvasHostResourceReferencesSame(this.canvas, resourcePath, path)
 
@@ -1079,7 +1451,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 使用 ImageResourceManager 统一管理资源，确保 render 和剪贴板使用同一个 Image 对象
 	 */
 	private preloadImageInternal(): void {
-		if (!this.data.src) {
+		const src = this.getActiveVersion().src
+		if (!src) {
 			return
 		}
 
@@ -1090,7 +1463,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用 ImageResourceManager 加载图片（通过 resource:image:loaded 事件获取完成通知）
 		this.isResourceLoading = true
-		this.canvas.imageResourceManager.loadResource(this.data.src, {
+		this.canvas.imageResourceManager.loadResource(src, {
 			variant: "preview",
 			priority: "visible",
 		})
@@ -1178,8 +1551,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 只有仍带任务 id 的请求才代表当前有生成轮询；无 id 的请求仅用于信息展示。
 		const hasActiveGenerationTask = this.hasActiveImageGenerationTask()
-		const hasSrc = !!this.data.src
-		const status = this.data.status
+		const activeVersion = this.getActiveVersion()
+		const hasSrc = !!activeVersion.src
+		const status = activeVersion.status
 
 		// 情况1: 有生成任务但还没有 src
 		if ((hasActiveGenerationTask || this.isActiveGenerationPlaceholder()) && !hasSrc) {
@@ -1195,7 +1569,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		// 情况3: 有 src 但还没有 ossSrc（正在换取中）
-		if (hasSrc && this.data.src && !this.storedOssSrc) {
+		if (hasSrc && activeVersion.src && !this.storedOssSrc) {
 			return true
 		}
 
@@ -1241,7 +1615,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		// 使用 getResource 加载并获取图片
-		const src = this.data.src
+		const src = this.getActiveVersion().src
 		if (!src) return null
 
 		try {
@@ -1291,7 +1665,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}
 		}
 
-		const src = this.data.src
+		const src = this.getActiveVersion().src
 		if (!src) return null
 
 		try {
@@ -1342,7 +1716,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 */
 	private getSourceCrop(image?: ImageSource) {
 		const sourceDimensions = this.getSourceDimensions(image)
-		const crop = getPersistedSourceCrop(this.data.crop, sourceDimensions)
+		const crop = getPersistedSourceCrop(this.getActiveVersion().crop, sourceDimensions)
 		if (crop.width <= 0 || crop.height <= 0) {
 			return undefined
 		}
@@ -1377,8 +1751,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	/** 比较持久化 crop 是否一致（用于判断是否需要整节点重渲染） */
 	private isPersistedCropConfigEqual(
-		a: ImageElementData["crop"],
-		b: ImageElementData["crop"],
+		a: CropConfig | undefined,
+		b: CropConfig | undefined,
 	): boolean {
 		if (a === b) return true
 		if (a === undefined || b === undefined) return false
@@ -1558,7 +1932,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		const hasRequest =
 			!!this.getActiveGenerateImageRequest() || !!this.getActiveImageGenerationTaskMeta()
-		const status = this.data.status
+		const activeVersion = this.getActiveVersion()
+		const status = activeVersion.status
 
 		if (this.isGenerating) {
 			const suffix = this.getGeneratingNameSuffix()
@@ -1590,7 +1965,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		// 优先检查：有 src 说明已经生成成功，检查 ossSrc 是否为空
-		if (this.data.src) {
+		if (activeVersion.src) {
 			// 有 src 但 ossSrc 为空，添加"(加载中)"后缀
 			if (!this.storedOssSrc) {
 				const suffix = this.getText("image.nameSuffix.loading", "(加载中)")
@@ -1717,7 +2092,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		imageLoaded: boolean
 		isLoading: boolean
 	} {
-		if (!this.data.src) {
+		if (!this.getActiveVersion().src) {
 			return {
 				ossSrc: null,
 				imageLoaded: false,
@@ -1736,10 +2111,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 检查是否有生成请求（生图或高清图）
 		const hasRequest =
 			!!this.getActiveGenerateImageRequest() || !!this.getActiveImageGenerationTaskMeta()
-		const status = this.data.status
+		const activeVersion = this.getActiveVersion()
+		const status = activeVersion.status
 
 		// 有 src：视为 completed 状态，直接渲染图片或加载状态
-		if (!!this.data.src || status === GenerationStatus.Completed) {
+		if (!!activeVersion.src || status === GenerationStatus.Completed) {
 			// 如果图片加载失败，渲染错误状态
 			if (this.isErrorState) {
 				return this.renderError(this.getImageLoadErrorText())
@@ -1750,7 +2126,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			// 主图已加载，直接渲染主图。缩放切档期间会继续显示已有图，
 			// 此时即使 oss 元数据暂时不在当前 slot 上，也不能回退到 loading 占位。
-			if (loadState.imageLoaded && this.data.src) {
+			if (loadState.imageLoaded && activeVersion.src) {
 				return this.renderImage()
 			}
 			return this.renderLoadingPlaceholder()
@@ -1764,7 +2140,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		// 有结果且失败，渲染错误信息
 		if (status === GenerationStatus.Failed) {
 			const errorMessage = resolveGenerationErrorMessage(
-				this.data.errorMessage,
+				activeVersion.errorMessage,
 				this.getText("image.generateFailed", "图片生成失败"),
 			)
 			return this.renderError(errorMessage)
@@ -1785,31 +2161,57 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	update(newData: ImageElementData): boolean {
-		// 判断是否需要重新渲染
-		const currentTaskMeta = this.getImageGenerationTaskMeta()
-		const nextTaskMeta = getImageGenerationTaskMeta(newData)
+		const currentActiveVersionId = getActiveImageVersionId(this.data)
+		const nextActiveVersionId = getActiveImageVersionId(newData)
+		const currentVersion = this.getActiveVersion()
+		const nextVersion = resolveActiveImageVersion(newData)
+		const currentTaskMeta = currentVersion.imageGenerationTaskMeta
+		const nextTaskMeta = nextVersion.imageGenerationTaskMeta
+		const versionControlsChanged =
+			isImageElementV2(this.data) !== isImageElementV2(newData) ||
+			(isImageElementV2(this.data) &&
+				isImageElementV2(newData) &&
+				(this.data.versions.length !== newData.versions.length ||
+					this.data.mainVersionId !== newData.mainVersionId))
 		const needsRerender =
-			this.data.generateImageRequest?.image_id !== newData.generateImageRequest?.image_id ||
+			versionControlsChanged ||
+			getActiveImageVersionId(this.data) !== getActiveImageVersionId(newData) ||
+			currentVersion.generateImageRequest?.image_id !==
+				nextVersion.generateImageRequest?.image_id ||
 			currentTaskMeta?.image_id !== nextTaskMeta?.image_id ||
 			currentTaskMeta?.type !== nextTaskMeta?.type ||
-			this.data.src !== newData.src ||
-			this.data.status !== newData.status ||
-			!this.isPersistedCropConfigEqual(this.data.crop, newData.crop)
+			currentVersion.src !== nextVersion.src ||
+			currentVersion.status !== nextVersion.status ||
+			!this.isPersistedCropConfigEqual(currentVersion.crop, nextVersion.crop)
 
 		// 检查 src 是否变化
-		const srcChanged = this.data.src !== newData.src
+		const srcChanged = currentVersion.src !== nextVersion.src
 
 		// 检查状态是否变为 failed
-		const oldStatus = this.data.status
-		const newStatus = newData.status
+		const oldStatus = currentVersion.status
+		const newStatus = nextVersion.status
 		const statusChangedToFailed =
 			oldStatus !== GenerationStatus.Failed && newStatus === GenerationStatus.Failed
 		const generationSettled =
-			!!newData.src ||
+			!!nextVersion.src ||
 			newStatus === GenerationStatus.Completed ||
 			newStatus === GenerationStatus.Failed
 
 		this.data = newData
+		if (
+			currentActiveVersionId &&
+			nextActiveVersionId &&
+			currentActiveVersionId !== nextActiveVersionId
+		) {
+			// 只要生成期间发生过版本切换，后续完成结果就不得再自动抢占 active。
+			this.versionActivationGuards.clear()
+			// 所有 active 变更（含撤销/重做、远端合并与轮询完成）统一清理旧版本 Marker。
+			this.canvas.markerManager.handleImageVersionChanged(
+				this.data.id,
+				currentActiveVersionId,
+				nextActiveVersionId,
+			)
+		}
 
 		if (generationSettled) {
 			this.isGenerating = false
@@ -1822,9 +2224,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.storedImageInfo = undefined
 			this.isResourceLoading = false
 			this.lastAppliedLoadFailureSignature = null
-			if (newData.src) {
+			if (nextVersion.src) {
 				this.setupResourceLoadedListener()
-				this.canvas.visibilityManager.updateImageElement(this.data.id, newData.src)
+				this.canvas.visibilityManager.updateImageElement(this.data.id, nextVersion.src)
 			} else {
 				this.removeResourceLoadedListener()
 				this.canvas.visibilityManager.unregisterImageElement(this.data.id)
@@ -1833,7 +2235,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 如果状态变为 failed，reject ossSrcPromise
 		if (statusChangedToFailed && this.ossSrcReject) {
-			this.ossSrcReject(new Error(newData.errorMessage || "Image generation failed"))
+			this.ossSrcReject(new Error(nextVersion.errorMessage || "Image generation failed"))
 			this.ossSrcResolve = undefined
 			this.ossSrcReject = undefined
 			this.ossSrcPromise = undefined
@@ -1908,6 +2310,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
+			this.createVersionControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -1966,6 +2369,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
+			this.createVersionControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -1985,7 +2389,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		return (
-			this.data.status === GenerationStatus.Processing &&
+			this.getActiveVersion().status === GenerationStatus.Processing &&
 			!this.canvas.elementManager.isTemporary(this.data.id)
 		)
 	}
@@ -2078,6 +2482,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
+			this.createVersionControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2113,6 +2518,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用预加载好的图片对象
 		if (!this.loadedImage) {
+			this.createVersionControls(group, width, height)
 			this.finalizeNode(group)
 			return group
 		}
@@ -2138,6 +2544,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.createBorder(group, width, height, false)
 
 		this.createCornerActions(group, width, height, { fullscreen: true })
+		this.createVersionControls(group, width, height, { reserveFullscreen: true })
 
 		this.finalizeNode(group)
 		return group
@@ -2198,7 +2605,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					})
 				},
 				// 仅文生图失败态展示“重新生成”；去背景/扩展/橡皮/高清放大轮询失败只保留错误提示。
-				hasGenerateImageRequest: !this.isRetryEditing && !!this.data.generateImageRequest,
+				hasGenerateImageRequest:
+					!this.isRetryEditing && !!this.getActiveVersion().generateImageRequest,
 				canvas: this.canvas,
 			}).then((contentGroup) => {
 				this.contentGroup = contentGroup
@@ -2208,6 +2616,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
+			this.createVersionControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2277,12 +2686,54 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator.create()
 	}
 
+	private createVersionControls(
+		group: Konva.Group,
+		width: number,
+		height: number,
+		options?: { reserveFullscreen?: boolean },
+	): void {
+		if (!isImageElementV2(this.data) || this.data.versions.length <= 1) return
+		this.versionControlsDecorator = new ImageVersionControlsDecorator(group, {
+			elementId: this.data.id,
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+			bottomRightReservedScreenWidth: options?.reserveFullscreen
+				? IMAGE_CONFIG.INFO_BUTTON_SIZE
+				: 0,
+			onPrevious: () => {
+				if (!isImageElementV2(this.data)) return
+				const data = this.data
+				const index = data.versions.findIndex(
+					(version) => version.id === data.activeVersionId,
+				)
+				const previous = data.versions[index - 1]
+				if (previous) this.switchActiveVersion(previous.id)
+			},
+			onNext: () => {
+				if (!isImageElementV2(this.data)) return
+				const data = this.data
+				const index = data.versions.findIndex(
+					(version) => version.id === data.activeVersionId,
+				)
+				const next = data.versions[index + 1]
+				if (next) this.switchActiveVersion(next.id)
+			},
+			onSetMain: () => {
+				if (!isImageElementV2(this.data)) return
+				this.setMainVersion(this.data.activeVersionId)
+			},
+		})
+		this.versionControlsDecorator.create()
+	}
+
 	private shouldShowInfoButton(): boolean {
 		return !!this.getActiveGenerateImageRequest()
 	}
 
 	private shouldShowFullscreenButton(): boolean {
-		return !!this.data.src
+		return !!this.getActiveVersion().src
 	}
 
 	/**
@@ -2324,6 +2775,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.updateContentScale(width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
+		if (this.versionControlsDecorator && isImageElementV2(this.data)) {
+			this.versionControlsDecorator.updateConfig({ width, height, data: this.data })
+		}
 		this.updateClipRegion(width, height)
 		this.node.getLayer()?.batchDraw()
 	}

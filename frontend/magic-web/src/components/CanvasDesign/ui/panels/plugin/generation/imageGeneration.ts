@@ -24,6 +24,7 @@ import {
 	type ImageElement,
 	type LayerElement,
 } from "../../../../runtime/document/types"
+import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
 import {
 	areCanvasHostResourceReferencesSame,
 	getCanvasHostResourceReferenceIdentity,
@@ -259,7 +260,7 @@ function getImageElements(canvas: Canvas): ImageElement[] {
 	return flattenLayerElements(canvas.elementManager.getAllElements()).filter(
 		(element): element is ImageElement =>
 			element.type === ElementTypeEnum.Image &&
-			Boolean(element.src) &&
+			Boolean(getActiveImageVersion(element).src) &&
 			isVisibleCanvasElement(canvas, element),
 	)
 }
@@ -276,7 +277,7 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 		return null
 	}
 	const imageElement = element as ImageElement
-	if (!imageElement.src) return null
+	if (!getActiveImageVersion(imageElement).src) return null
 	return imageElement
 }
 
@@ -284,19 +285,17 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 function resolveImageElementByReference(canvas: Canvas, reference: string): ImageElement | null {
 	return (
 		getImageElements(canvas).find((element) => {
-			if (!element.src) return false
-			return areCanvasHostResourceReferencesSame(canvas, element.src, reference)
+			const active = getActiveImageVersion(element)
+			if (!active.src) return false
+			return areCanvasHostResourceReferencesSame(canvas, active.src, reference)
 		}) ?? null
 	)
 }
 
 /** 判断图片是否是生成任务产物；这类元素不能作为下一次生成的来源兜底。 */
 function isGeneratedImageElement(element: ImageElement): boolean {
-	return Boolean(
-		element.generateImageRequest ||
-		element.imageGenerationTaskMeta ||
-		element.generateHightImageRequest,
-	)
+	const active = getActiveImageVersion(element)
+	return Boolean(active.generateImageRequest || active.imageGenerationTaskMeta)
 }
 
 /** 当插件没有带来源映射时，用当前选中的非生成图片作为最后兜底来源。 */
@@ -374,13 +373,11 @@ function collectMatchingGeneratedGridRects(
 			return []
 		}
 		const imageElement = element as ImageElement
-		if (!imageElement.generateImageRequest || !isGeneratedImageElement(imageElement)) {
+		const active = getActiveImageVersion(imageElement)
+		if (!active.generateImageRequest || !isGeneratedImageElement(imageElement)) {
 			return []
 		}
-		if (
-			getGenerationPlacementKey(canvas, imageElement.generateImageRequest) !==
-			targetPlacementKey
-		) {
+		if (getGenerationPlacementKey(canvas, active.generateImageRequest) !== targetPlacementKey) {
 			return []
 		}
 		const rect = layerElementToObstacleRect(imageElement)

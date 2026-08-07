@@ -5,7 +5,7 @@
 	z-index: 2;
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	gap: var(--spacing-2, 8px);
 	align-items: stretch;
 	align-self: flex-start;
 	box-sizing: border-box;
@@ -15,7 +15,8 @@
 	overflow-x: hidden;
 	background: var(--base-background, #fff);
 	border-radius: var(--border-radius-rounded-md, 8px);
-	box-shadow: var(--shadow-md-1-offset-x, 0) var(--shadow-md-1-offset-y, 4px)
+	box-shadow:
+		var(--shadow-md-1-offset-x, 0) var(--shadow-md-1-offset-y, 4px)
 			var(--shadow-md-1-blur-radius, 6px) var(--shadow-md-1-spread-radius, -1px)
 			var(--shadow-md-1-color, rgb(0 0 0 / 10%)),
 		var(--shadow-md-2-offset-x, 0) var(--shadow-md-2-offset-y, 2px)
@@ -104,12 +105,25 @@
 	width: 100%;
 }
 
+.source-list-mount {
+	display: contents;
+}
+
+.linked-inputs {
+	width: 100%;
+}
+
 .top,
 .bottom {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	width: 100%;
+}
+
+.top {
+	margin-top: -8px;
+	margin-bottom: -6px;
 }
 
 .source-list-scroller {

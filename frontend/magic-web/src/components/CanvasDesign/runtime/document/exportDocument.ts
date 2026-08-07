@@ -6,7 +6,8 @@ import {
 	type EllipseElement,
 	type FrameElement,
 	type GroupElement,
-	type ImageElement,
+	type ImageElementV1,
+	type ImageElementV2,
 	type InteractionConfig,
 	type LayerElement,
 	type RectangleElement,
@@ -20,6 +21,7 @@ import {
 } from "./types"
 import { compactTextDefaultStyle } from "../text/richText"
 import { getImageGenerationTaskMeta } from "../resources/image/imageGenerationTaskMeta"
+import { isImageElementV2 } from "./imageVersion"
 
 const BASE_EXPORT_DEFAULTS = {
 	visible: true,
@@ -252,7 +254,26 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 		}
 
 		case ElementTypeEnum.Image: {
-			const result = assignBaseElementProps<ImageElement>(
+			if (isImageElementV2(element)) {
+				const result = assignBaseElementProps<ImageElementV2>(
+					{
+						id: element.id,
+						type: element.type,
+						imageDslVersion: 2,
+						activeVersionId: element.activeVersionId,
+						mainVersionId: element.mainVersionId,
+						versions: [],
+					},
+					element,
+				)
+				result.versions = element.versions.map((version) => ({
+					...cloneSerializable(version),
+					...(version.crop ? { crop: exportCropConfig(version.crop) } : {}),
+				}))
+				return result
+			}
+
+			const result = assignBaseElementProps<ImageElementV1>(
 				{ id: element.id, type: element.type },
 				element,
 			)

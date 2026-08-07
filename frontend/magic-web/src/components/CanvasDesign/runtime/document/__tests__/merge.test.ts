@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import type { CanvasConnection, CanvasDocument, LayerElement } from "../types"
+import type {
+	CanvasConnection,
+	CanvasDocument,
+	ImageElementV2,
+	ImageElementVersion,
+	LayerElement,
+} from "../types"
 import {
 	mergeCanvasDocuments,
 	refreshCanvasDocumentElementMergeConflictsFromRemote,
@@ -66,7 +72,109 @@ function canvas(elements: LayerElement[], connections?: CanvasConnection[]): Can
 	return connections ? { elements, connections } : { elements }
 }
 
+function versionedImage(
+	versions: ImageElementVersion[],
+	activeVersionId = versions[0]?.id,
+	mainVersionId = versions[0]?.id,
+): ImageElementV2 {
+	return {
+		id: "versioned-image",
+		type: "image",
+		x: 0,
+		y: 0,
+		width: 100,
+		height: 100,
+		imageDslVersion: 2,
+		activeVersionId: activeVersionId as string,
+		mainVersionId: mainVersionId as string,
+		versions,
+	}
+}
+
 describe("mergeCanvasDocuments", () => {
+	it("preserves local V2 when a remote V1 snapshot updates the same element", () => {
+		const baseImage = versionedImage([{ id: "v1", src: "./images/base.png" }])
+		const localImage = versionedImage([{ id: "v1", src: "./images/base.png" }])
+		const remoteImage = image("versioned-image", {
+			src: "./images/remote.png",
+			status: "completed",
+		})
+
+		const result = mergeCanvasDocuments({
+			baseCanvas: canvas([baseImage]),
+			localCanvas: canvas([localImage]),
+			remoteCanvas: canvas([remoteImage]),
+		})
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(result.mergedCanvas.elements?.[0]).toEqual(localImage)
+	})
+
+	it("merges independent version additions while preserving creation order", () => {
+		const base = versionedImage([{ id: "v1", src: "./images/base.png" }])
+		const local = versionedImage([...base.versions, { id: "local-v2", status: "processing" }])
+		const remote = versionedImage([...base.versions, { id: "remote-v2", status: "failed" }])
+
+		const result = mergeCanvasDocuments({
+			baseCanvas: canvas([base]),
+			localCanvas: canvas([local]),
+			remoteCanvas: canvas([remote]),
+		})
+
+		expect(result.ok).toBe(true)
+		if (!result.ok) return
+		expect(
+			(result.mergedCanvas.elements?.[0] as ImageElementV2).versions.map((v) => v.id),
+		).toEqual(["v1", "local-v2", "remote-v2"])
+	})
+
+	it("enters the existing conflict flow when both sides edit one version differently", () => {
+		const base = versionedImage([{ id: "v1", src: "./images/base.png" }])
+		const local = versionedImage([{ id: "v1", src: "./images/local.png" }])
+		const remote = versionedImage([{ id: "v1", src: "./images/remote.png" }])
+
+		const result = mergeCanvasDocuments({
+			baseCanvas: canvas([base]),
+			localCanvas: canvas([local]),
+			remoteCanvas: canvas([remote]),
+		})
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isElementLevelConflict: true,
+				reason: "same-element-changed",
+				conflictElementIds: ["versioned-image"],
+			}),
+		)
+	})
+
+	it("conflicts when one side deletes a version while the other edits it", () => {
+		const base = versionedImage([
+			{ id: "v1", src: "./images/base.png" },
+			{ id: "v2", src: "./images/two.png" },
+		])
+		const local = versionedImage(base.versions.slice(0, 1))
+		const remote = versionedImage([
+			base.versions[0],
+			{ ...base.versions[1], crop: { x: 1, y: 1, width: 10, height: 10 } },
+		])
+
+		const result = mergeCanvasDocuments({
+			baseCanvas: canvas([base]),
+			localCanvas: canvas([local]),
+			remoteCanvas: canvas([remote]),
+		})
+
+		expect(result).toEqual(
+			expect.objectContaining({
+				ok: false,
+				isElementLevelConflict: true,
+				conflictElementIds: ["versioned-image"],
+			}),
+		)
+	})
 	it("merges local and remote changes on different elements", () => {
 		const baseCanvas = canvas([rect("local"), rect("remote")])
 		const localCanvas = canvas([rect("local", { x: 10 }), rect("remote")])

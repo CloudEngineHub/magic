@@ -45,6 +45,7 @@ import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
+import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
 import { MediaPlaybackCoordinator } from "../interaction/media-playback/MediaPlaybackCoordinator"
 import { MediaResourceOfflineCacheManager } from "../resources/offline-cache/MediaResourceOfflineCacheManager"
 import { CanvasVisibilityManager } from "../resources/visibility/CanvasVisibilityManager"
@@ -158,6 +159,7 @@ export class Canvas {
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
+	public imageReplaceController: ImageReplaceController
 	public mediaPlaybackCoordinator: MediaPlaybackCoordinator
 	public mediaResourceOfflineCacheManager: MediaResourceOfflineCacheManager
 	public visibilityManager: CanvasVisibilityManager
@@ -300,6 +302,7 @@ export class Canvas {
 
 		this.audioResourceManager = new AudioResourceManager({ canvas: this })
 		this.audioPlaybackManager = new AudioPlaybackManager({ canvas: this })
+		this.imageReplaceController = new ImageReplaceController({ canvas: this })
 
 		// 初始化 ClipboardManager
 		this.clipboardManager = new ClipboardManager({
@@ -1336,6 +1339,7 @@ export class Canvas {
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
 		this.audioPlaybackManager.destroy()
+		this.imageReplaceController.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()

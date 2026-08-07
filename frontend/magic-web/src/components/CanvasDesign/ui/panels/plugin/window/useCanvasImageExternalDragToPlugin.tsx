@@ -17,6 +17,7 @@ import {
 	type ImageElement,
 	type CanvasDesignPlugin,
 } from "../../../../runtime/document/types"
+import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
 import { useImageLowUrl } from "../../../../app/hooks/resources/useImageUrls"
 import {
 	createCanvasAssetDragSessionId,
@@ -85,11 +86,12 @@ function getImagePreviewItem(canvas: Canvas, elementId: string): DragPreviewItem
 	const element = canvas.elementManager.getElementData(elementId)
 	if (!element || element.type !== ElementTypeEnum.Image) return null
 	const imageElement = element as ImageElement
-	if (!imageElement.src) return null
+	const activeVersion = getActiveImageVersion(imageElement)
+	if (!activeVersion.src) return null
 	return {
 		id: elementId,
 		name: imageElement.name || "Image",
-		src: imageElement.src,
+		src: activeVersion.src,
 	}
 }
 

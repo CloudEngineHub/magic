@@ -60,6 +60,33 @@ describe("GenerationRuntimeManager", () => {
 		expect(manager.getTargetState("video-1")?.attemptId).toBe("newer")
 	})
 
+	it("keeps concurrent image version targets isolated on one element", () => {
+		const manager = new GenerationRuntimeManager()
+		const first = manager.beginAttempt({
+			attemptId: "version-1",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", versionId: "v1" }],
+		})
+		const second = manager.beginAttempt({
+			attemptId: "version-2",
+			operation: "image-generate",
+			failurePolicy: "restore-existing",
+			targets: [{ elementId: "image-1", versionId: "v2" }],
+		})
+
+		expect(manager.isCurrent(first, "image-1", "v1")).toBe(true)
+		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
+		expect(manager.getTargetState("image-1")).toMatchObject({
+			attemptId: second,
+			versionId: "v2",
+		})
+
+		manager.completeAttempt(first)
+		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
+		expect(manager.getTargetState("image-1")?.versionId).toBe("v2")
+	})
+
 	it("updates a batch phase and clears all remaining current targets atomically", () => {
 		const manager = new GenerationRuntimeManager()
 		const firstListener = vi.fn()

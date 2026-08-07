@@ -1,5 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { type CanvasDocument, ElementTypeEnum, type LayerElement } from "../../document/types"
+import { getActiveImageVersion } from "../../document/imageVersion"
 import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
 import {
 	getCanvasHostResourceReferenceIdentity,
@@ -315,10 +316,10 @@ export class CanvasResourceUrlWarmupManager {
 
 	private collectResourceRefs(element: LayerElement): WarmupResourceRef[] {
 		const refs: WarmupResourceRef[] = []
-		if (element.type === ElementTypeEnum.Image && element.src) {
+		if (element.type === ElementTypeEnum.Image && getActiveImageVersion(element).src) {
 			refs.push({
 				elementId: element.id,
-				path: element.src,
+				path: getActiveImageVersion(element).src as string,
 				mediaType: "image",
 			})
 		}

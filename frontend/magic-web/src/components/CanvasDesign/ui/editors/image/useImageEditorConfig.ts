@@ -6,6 +6,7 @@ import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { GenerateImageRequest, UploadFileResponse } from "../../../public/magic-types"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 import { useFileInput } from "../message/useFileInput"
 import type { MessageEditorRef } from "../message/MessageEditor"
 import { useReferenceImagesState } from "./useReferenceImagesState"
@@ -176,6 +177,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		editorFocusRef,
 		preferCurrentRequestOnRestore = false,
 	} = options
+	const activeImageVersion = getActiveImageVersion(imageElement)
 	const { imageModelList, methods } = useMagic()
 	const resolveResourceReference = methods?.resolveResourceReference
 	const { canvas } = useCanvas()
@@ -260,8 +262,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	} = referenceFilesState
 
 	const currentImageVisibleAspectRatio = useMemo(() => {
-		const width = imageElement.width ?? imageElement.crop?.displayWidth ?? 0
-		const height = imageElement.height ?? imageElement.crop?.displayHeight ?? 0
+		const width = imageElement.width ?? activeImageVersion.crop?.displayWidth ?? 0
+		const height = imageElement.height ?? activeImageVersion.crop?.displayHeight ?? 0
 		if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
 			return undefined
 		}
@@ -269,8 +271,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [
 		imageElement.width,
 		imageElement.height,
-		imageElement.crop?.displayWidth,
-		imageElement.crop?.displayHeight,
+		activeImageVersion.crop?.displayWidth,
+		activeImageVersion.crop?.displayHeight,
 	])
 
 	// 将模型列表转换为 Select 组件需要的格式
@@ -955,10 +957,10 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		const referenceImages = shouldIncludeReferenceFiles ? currentReferenceFiles : undefined
 
 		const referenceImageOptions =
-			imageElement.crop && originalImageSrc && referenceImages?.[0] === originalImageSrc
+			activeImageVersion.crop && originalImageSrc && referenceImages?.[0] === originalImageSrc
 				? buildReferenceImageOptions({
 						filePath: originalImageSrc,
-						crop: imageElement.crop,
+						crop: activeImageVersion.crop,
 					})
 				: undefined
 		const imageGenerationConfig = getSerializableImageGenerationConfig(
@@ -980,7 +982,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			image_generation_config: imageGenerationConfig,
 		}
 	}, [
-		imageElement.crop,
+		activeImageVersion.crop,
 		selectedModelId,
 		prompt,
 		selectedSize,
@@ -1056,7 +1058,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			return
 		}
 
-		const sourceRequest = imageElement.generateImageRequest
+		const sourceRequest = activeImageVersion.generateImageRequest
 		const restoredModelId = resolveQuickEditModelId(sourceRequest)
 
 		if (!restoredModelId) {
@@ -1117,7 +1119,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [
 		canvas,
 		cancelPendingDraftPersistence,
-		imageElement.generateImageRequest,
+		activeImageVersion.generateImageRequest,
 		imageModelList,
 		resolveQuickEditModelId,
 		applyQuickEditReferencePreset,
@@ -1141,7 +1143,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 		// 获取临时请求（统一使用 tempGenerateImageRequest）
 		const tempRequest = elementInstance.getTempGenerateImageRequest()
-		const currentRequest = imageElement.generateImageRequest
+		const currentRequest = activeImageVersion.generateImageRequest
 		const requestToRestore = resolveImageEditorRequestToRestore({
 			currentRequest,
 			tempRequest,
@@ -1322,7 +1324,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [
 		canvas,
 		imageElement.id,
-		imageElement.generateImageRequest,
+		activeImageVersion.generateImageRequest,
 		syncFromElement,
 		imageModelList,
 		preferCurrentRequestOnRestore,
@@ -1337,7 +1339,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		if (!canvas) return
 		if (isApplyingRestoreRef.current) return
 		if (imageModelList.length === 0) return
-		const source = imageElement.generateImageRequest
+		const source = activeImageVersion.generateImageRequest
 		if (!source?.model_id) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
@@ -1351,7 +1353,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [
 		canvas,
 		imageModelList.length,
-		imageElement.generateImageRequest,
+		activeImageVersion.generateImageRequest,
 		imageElement.id,
 		cancelPendingDraftPersistence,
 		restoreConfig,
@@ -1412,7 +1414,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		selectedLabel,
 		selectedScale,
 		selectedImageGenerationConfig,
-		referenceSourceCrop: imageElement.crop,
+		referenceSourceCrop: activeImageVersion.crop,
 		currentReferenceFiles,
 		protectedReferencePaths,
 		referenceBindingMode,

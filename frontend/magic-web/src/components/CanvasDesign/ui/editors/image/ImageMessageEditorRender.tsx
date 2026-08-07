@@ -12,6 +12,10 @@ import ImageEditorSurface from "./ImageEditorSurface"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
+import {
+	ENABLE_IMAGE_VERSION_ITERATION,
+	isImageElementV2,
+} from "../../../runtime/document/imageVersion"
 
 interface ImageMessageEditorRenderProps {
 	imageElement: ImageElement
@@ -106,7 +110,16 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 			try {
 				config.handlers.cancelPendingDraftPersistence()
 				config.handlers.saveDraftRequest(requestParams)
-				await elementInstance.generateImage(generateRequest)
+				const activeVersion = elementInstance.getActiveVersionData()
+				if (
+					ENABLE_IMAGE_VERSION_ITERATION &&
+					isImageElementV2(elementInstance.getData()) &&
+					activeVersion.status === "failed"
+				) {
+					await elementInstance.generateImageVersion(generateRequest)
+				} else {
+					await elementInstance.generateImage(generateRequest)
+				}
 			} finally {
 				sendingRef.current = false
 				setIsSending(false)

@@ -7,6 +7,7 @@ import { useCanvasSelectionUI } from "../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../app/providers/MagicProvider"
 import { useCanvas } from "../../app/providers/CanvasProvider"
 import useShowVideoOriginalSizeButton from "./hooks/useShowVideoOriginalSizeButton"
+import { getActiveImageVersion, isImageElementV2 } from "../../runtime/document/imageVersion"
 
 export default function ElementTools() {
 	const { convertHightConfig } = useMagic()
@@ -19,7 +20,9 @@ export default function ElementTools() {
 	const isSingleElement = selectedElements.length === 1
 
 	const imageSrc =
-		firstSelectedElement?.type === ElementTypeEnum.Image ? firstSelectedElement.src : undefined
+		firstSelectedElement?.type === ElementTypeEnum.Image
+			? getActiveImageVersion(firstSelectedElement).src
+			: undefined
 
 	const showVideoOriginalSizeButton = useShowVideoOriginalSizeButton({
 		canvas,
@@ -75,8 +78,18 @@ export default function ElementTools() {
 					]
 
 				case ElementTypeEnum.Image:
-					if (!imageSrc) return []
 					const imageElementTools: ElementToolOptionType[] = []
+					const hasMultipleImageVersions =
+						isImageElementV2(firstSelectedElement) &&
+						firstSelectedElement.versions.length > 1
+					if (!imageSrc) {
+						return [
+							{ type: ElementToolTypeEnum.ImageReplaceButton },
+							...(hasMultipleImageVersions
+								? [{ type: ElementToolTypeEnum.ImageVersionDeleteButton }]
+								: []),
+						]
+					}
 					imageElementTools.push({
 						type: ElementToolTypeEnum.SizeEditButton,
 					})
@@ -102,6 +115,15 @@ export default function ElementTools() {
 					imageElementTools.push({
 						type: ElementToolTypeEnum.ImagePromptExtractionButton,
 					})
+					imageElementTools.push(Divider)
+					imageElementTools.push({
+						type: ElementToolTypeEnum.ImageReplaceButton,
+					})
+					if (hasMultipleImageVersions) {
+						imageElementTools.push({
+							type: ElementToolTypeEnum.ImageVersionDeleteButton,
+						})
+					}
 					return imageElementTools
 
 				case ElementTypeEnum.Video:

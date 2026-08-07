@@ -1,6 +1,7 @@
 import type { LocateProjectFileActionOptions, UserAction, ViewActionOptions } from "../types"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
+import { getActiveImageVersion } from "../../document/imageVersion"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 
 interface SelectedMediaFile {
@@ -34,17 +35,19 @@ function resolveMediaElementFile(
 		element.type !== ElementTypeEnum.Audio
 	)
 		return null
-	if (!element.src) return null
-	if (!isLocatableProjectFilePath(element.src)) return null
+	const src =
+		element.type === ElementTypeEnum.Image ? getActiveImageVersion(element).src : element.src
+	if (!src) return null
+	if (!isLocatableProjectFilePath(src)) return null
 
 	const entry =
 		element.type === ElementTypeEnum.Image
-			? canvas.imageResourceManager.getEntry(element.src)
+			? canvas.imageResourceManager.getEntry(src)
 			: undefined
-	const fileName = entry?.fileName || getCanvasResourceFileName(element.src) || undefined
+	const fileName = entry?.fileName || getCanvasResourceFileName(src) || undefined
 
 	return {
-		src: element.src,
+		src,
 		fileName,
 	}
 }

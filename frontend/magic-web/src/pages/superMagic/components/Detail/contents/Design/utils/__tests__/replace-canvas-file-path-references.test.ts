@@ -36,6 +36,67 @@ function createResolver(files: FileItem[]): ResolveCanvasResourceReference {
 }
 
 describe("replaceCanvasFilePathReferences", () => {
+	it("rewrites every V2 version without adding top-level V1 fields", () => {
+		const canvas = {
+			elements: [
+				{
+					id: "versioned-image",
+					type: ElementTypeEnum.Image,
+					imageDslVersion: 2,
+					activeVersionId: "v2",
+					mainVersionId: "v1",
+					versions: [
+						{
+							id: "v1",
+							src: "./images/source.png",
+							generateImageRequest: {
+								reference_images: ["/画布A/images/source.png"],
+							},
+						},
+						{
+							id: "v2",
+							src: "/画布A/images/source.png",
+							imageGenerationTaskMeta: {
+								type: "high",
+								file_path: "./images/source.png",
+							},
+						},
+					],
+				},
+			],
+		} as CanvasDocument
+
+		const next = replaceCanvasFilePathReferences(canvas, {
+			oldWorkspaceRelativePath: "画布A/images/source.png",
+			newCanvasPath: "./images/renamed.png",
+			resolveResourceReference: createResolver([
+				attachment("canvas-a", "画布A/images/source.png"),
+			]),
+		})
+		const image = next.elements?.[0] as unknown as Record<string, unknown> & {
+			versions: Array<Record<string, unknown>>
+		}
+
+		expect(image.versions).toEqual([
+			expect.objectContaining({
+				id: "v1",
+				src: "./images/renamed.png",
+				generateImageRequest: expect.objectContaining({
+					reference_images: ["./images/renamed.png"],
+				}),
+			}),
+			expect.objectContaining({
+				id: "v2",
+				src: "./images/renamed.png",
+				imageGenerationTaskMeta: expect.objectContaining({
+					file_path: "./images/renamed.png",
+				}),
+			}),
+		])
+		expect(image).not.toHaveProperty("src")
+		expect(image).not.toHaveProperty("generateImageRequest")
+	})
+
 	it("rewrites only resolver-proven aliases of the renamed resource", () => {
 		const resolveDesignAResourceReference = createResolver([
 			attachment("canvas-a", "画布A/images/source.png"),

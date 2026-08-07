@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { FrameElement, ImageElement, VideoElement } from "../../document/types"
+import type { FrameElement, ImageElement, ImageElementV2, VideoElement } from "../../document/types"
 import { ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import {
 	addClipboardResourceAliasMappings,
@@ -9,6 +9,67 @@ import {
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
 describe("clipboardResourceReferences", () => {
+	it("collects and rewrites resources from every V2 image version", () => {
+		const image: ImageElementV2 = {
+			id: "image-v2",
+			type: "image",
+			imageDslVersion: 2,
+			activeVersionId: "v2",
+			mainVersionId: "v1",
+			versions: [
+				{
+					id: "v1",
+					src: "./images/one.png",
+					generateImageRequest: { reference_images: ["./images/ref-one.png"] },
+				},
+				{
+					id: "v2",
+					src: "./images/two.png",
+					imageGenerationTaskMeta: {
+						type: ImageGenerationTaskTypeMap.High,
+						file_path: "./images/base-two.png",
+					},
+				},
+			],
+		}
+
+		expect(collectElementResourceReferences([image]).map((ref) => ref.path)).toEqual([
+			"./images/one.png",
+			"./images/ref-one.png",
+			"./images/two.png",
+			"./images/base-two.png",
+		])
+
+		rewriteElementResourceReferences(
+			image,
+			new Map([
+				["./images/one.png", "./images/copied-one.png"],
+				["./images/ref-one.png", "./images/copied-ref-one.png"],
+				["./images/two.png", "./images/copied-two.png"],
+				["./images/base-two.png", "./images/copied-base-two.png"],
+			]),
+		)
+
+		expect(image.versions).toEqual([
+			expect.objectContaining({
+				id: "v1",
+				src: "./images/copied-one.png",
+				generateImageRequest: expect.objectContaining({
+					reference_images: ["./images/copied-ref-one.png"],
+				}),
+			}),
+			expect.objectContaining({
+				id: "v2",
+				src: "./images/copied-two.png",
+				imageGenerationTaskMeta: expect.objectContaining({
+					file_path: "./images/copied-base-two.png",
+				}),
+			}),
+		])
+		expect(image.activeVersionId).toBe("v2")
+		expect(image.mainVersionId).toBe("v1")
+	})
+
 	it("collects resource references recursively and skips remote paths", () => {
 		const image: ImageElement = {
 			id: "image-1",

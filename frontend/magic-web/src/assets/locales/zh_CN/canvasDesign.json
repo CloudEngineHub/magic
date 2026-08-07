@@ -106,6 +106,12 @@
 		"imageRemoveBackground": {
 			"title": "去背景"
 		},
+		"imageReplace": {
+			"title": "替换图片"
+		},
+		"imageVersionDelete": {
+			"title": "删除当前版本"
+		},
 		"shapeStyle": {
 			"advanced": "高级",
 			"cornerRadius": "圆角",
@@ -185,12 +191,19 @@
 			"uploading": "(上传中)"
 		},
 		"nameWithIndex": "图片 {{index}}",
+		"replaceFailed": "图片替换失败，请重试",
+		"replaceUnsupported": "不支持的图片格式",
+		"replacing": "替换中",
 		"retryEditing": "请重新编辑图片生成需求",
 		"retryEditingEraser": "请重新编辑擦除需求",
 		"retryEditingExpand": "请重新编辑扩展需求",
 		"retryEditingRemoveBackground": "请重新编辑去背景需求",
 		"uploadFailed": "图片上传失败",
-		"uploading": "正在上传中..."
+		"uploading": "正在上传中...",
+		"version": {
+			"main": "主版本",
+			"setMain": "设为主版本"
+		}
 	},
 	"imageEditor": {
 		"currentImage": "(当前图片)",

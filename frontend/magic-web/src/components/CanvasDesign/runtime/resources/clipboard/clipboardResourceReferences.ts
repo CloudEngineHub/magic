@@ -1,5 +1,6 @@
 import type { ImageElement, LayerElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { getActiveImageVersion, isImageElementV2 } from "../../document/imageVersion"
 import { getCanvasResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
@@ -105,6 +106,19 @@ function collectImageResourceReferences(
 	seen: Map<string, ClipboardResourceReference>,
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): void {
+	if (isImageElementV2(element)) {
+		const activeSourcePath = normalizeResourcePath(getActiveImageVersion(element).src)
+		for (const version of element.versions) {
+			addPath(refs, seen, version.src, activeSourcePath, resolveResourceReference)
+			collectImageResourceReferences(
+				version as unknown as ImageElement,
+				refs,
+				seen,
+				resolveResourceReference,
+			)
+		}
+		return
+	}
 	const ownerSourcePath = normalizeResourcePath(element.src)
 	const generateImageRequest = asRecord(element.generateImageRequest)
 	if (generateImageRequest) {
@@ -370,6 +384,27 @@ function rewriteImageResourceReferences(
 	replacementByIdentity: ReadonlyMap<string, string>,
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
+	if (isImageElementV2(element)) {
+		let hasChanged = false
+		for (const version of element.versions) {
+			hasChanged =
+				rewritePathField(
+					version as unknown as MutableRecord,
+					"src",
+					pathMap,
+					replacementByIdentity,
+					resolveResourceReference,
+				) || hasChanged
+			hasChanged =
+				rewriteImageResourceReferences(
+					version as unknown as ImageElement,
+					pathMap,
+					replacementByIdentity,
+					resolveResourceReference,
+				) || hasChanged
+		}
+		return hasChanged
+	}
 	let hasChanged = false
 	const generateImageRequest = asRecord(element.generateImageRequest)
 	if (generateImageRequest) {

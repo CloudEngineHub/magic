@@ -1,5 +1,6 @@
 import { isEqual } from "lodash-es"
 import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import { isImageElementV2 } from "@/components/CanvasDesign/runtime/document/imageVersion"
 import type {
 	ElementDetailSource,
 	ElementDetailsProvenance,
@@ -20,7 +21,7 @@ import type {
 
 export const ELEMENT_DETAILS_FILENAME = "element-details.json"
 export const ELEMENT_DETAILS_USER_FILENAME = "element-details-user.json"
-export const ELEMENT_DETAILS_VERSION = "1.0.0"
+export const ELEMENT_DETAILS_VERSION = "1.1.0"
 
 /** 数据来源标记，仅前端写入的条目带此标记 */
 export const ELEMENT_DETAIL_SOURCE_USER = "user"
@@ -35,8 +36,15 @@ export const HEAVY_FIELDS = [
 /** 单个元素的重字段集合（不含 source 等元信息） */
 export type ElementHeavyFields = Record<string, unknown>
 
+export interface ImageVersionDetailEntry {
+	generateImageRequest?: unknown
+}
+
 /** sidecar 中单个元素条目：重字段 + 可选 source 标记 */
-export type ElementDetailEntry = ElementHeavyFields & { source?: string }
+export type ElementDetailEntry = ElementHeavyFields & {
+	source?: string
+	imageVersionDetails?: Record<string, ImageVersionDetailEntry>
+}
 
 export interface ElementDetailsDoc {
 	version: string
@@ -97,6 +105,14 @@ export function collectElementIds(elements: LayerElement[] | undefined): Set<str
 function pickHeavyFields(element: AnyElement): ElementHeavyFields | null {
 	const detail: ElementHeavyFields = {}
 	for (const field of HEAVY_FIELDS) {
+		// V2 的生成请求按 versionId 存储；不要再把 active accessor 重复写成 V1 顶层字段。
+		if (
+			field === "generateImageRequest" &&
+			element.type === "image" &&
+			isImageElementV2(element)
+		) {
+			continue
+		}
 		const value = element[field]
 		if (value !== undefined && value !== null) {
 			detail[field] = value
@@ -105,9 +121,29 @@ function pickHeavyFields(element: AnyElement): ElementHeavyFields | null {
 	return Object.keys(detail).length > 0 ? detail : null
 }
 
+function pickImageVersionDetails(
+	element: AnyElement,
+): Record<string, ImageVersionDetailEntry> | null {
+	if (element.type !== "image" || !isImageElementV2(element)) return null
+	const details: Record<string, ImageVersionDetailEntry> = {}
+	for (const version of element.versions) {
+		if (version.generateImageRequest !== undefined && version.generateImageRequest !== null) {
+			details[version.id] = { generateImageRequest: version.generateImageRequest }
+		}
+	}
+	return Object.keys(details).length > 0 ? details : null
+}
+
 /** 原地剥离元素树上的重字段（用于 v2 主文件序列化前） */
 export function stripHeavyFields(elements: LayerElement[] | undefined): void {
 	walkElements(elements, (el) => {
+		if (el.type === "image" && isImageElementV2(el)) {
+			for (const version of el.versions) {
+				if (version.generateImageRequest !== undefined) {
+					delete version.generateImageRequest
+				}
+			}
+		}
 		for (const field of HEAVY_FIELDS) {
 			if (el[field] !== undefined) {
 				delete el[field]
@@ -124,6 +160,9 @@ function stripEntryMeta(entry: ElementDetailEntry | undefined): ElementHeavyFiel
 		if (entry[field] !== undefined && entry[field] !== null) {
 			result[field] = entry[field]
 		}
+	}
+	if (entry.imageVersionDetails && Object.keys(entry.imageVersionDetails).length > 0) {
+		result.imageVersionDetails = entry.imageVersionDetails
 	}
 	return result
 }
@@ -189,6 +228,50 @@ export function rehydrateHeavyFields(
 		if (!el.id) return
 		const userEntry = userDoc.elements[el.id]
 		const agentEntry = agentDoc.elements[el.id]
+
+		if (el.type === "image" && isImageElementV2(el)) {
+			const versionProvenance: NonNullable<
+				ElementDetailsProvenance[string]["imageVersionDetails"]
+			> = {}
+			for (const version of el.versions) {
+				const inlineImageId = getRequestImageId(version.generateImageRequest)
+				const userVersionEntry = userEntry?.imageVersionDetails?.[version.id]
+				const agentVersionEntry = agentEntry?.imageVersionDetails?.[version.id]
+				const { entry: winner, source: winnerSource } = resolveWinner(
+					userVersionEntry
+						? { ...userVersionEntry, source: userEntry?.source }
+						: undefined,
+					agentVersionEntry
+						? { ...agentVersionEntry, source: agentEntry?.source }
+						: undefined,
+				)
+				if (winner?.generateImageRequest !== undefined) {
+					version.generateImageRequest =
+						winner.generateImageRequest as typeof version.generateImageRequest
+				}
+				const finalImageId = getRequestImageId(version.generateImageRequest)
+				if (!finalImageId) continue
+				versionProvenance[version.id] = {
+					generateImageRequest: {
+						valueSource: winner ? winnerSource : "inline",
+						imageId: finalImageId,
+						imageIdSource: resolveImageIdSource({
+							finalImageId,
+							agentImageId: getRequestImageId(
+								agentVersionEntry?.generateImageRequest,
+							),
+							userImageId: getRequestImageId(userVersionEntry?.generateImageRequest),
+							inlineImageId,
+							winnerSource: winner ? winnerSource : "inline",
+						}),
+					},
+				}
+			}
+			if (Object.keys(versionProvenance).length > 0) {
+				provenance[el.id] = { imageVersionDetails: versionProvenance }
+			}
+			return
+		}
 		const inlineImageId = getInlineImageId(el)
 
 		const { entry: winner, source: winnerSource } = resolveWinner(userEntry, agentEntry)
@@ -233,8 +316,10 @@ export function buildUserElementDetailsDoc(
 	const result: Record<string, ElementDetailEntry> = {}
 	walkElements(elements, (el) => {
 		if (!el.id) return
-		const detail = pickHeavyFields(el)
-		if (!detail) return
+		const imageVersionDetails = pickImageVersionDetails(el)
+		const detail = pickHeavyFields(el) ?? {}
+		if (imageVersionDetails) detail.imageVersionDetails = imageVersionDetails
+		if (Object.keys(detail).length === 0) return
 
 		const baselineDetail = stripEntryMeta(agentBaseline.elements[el.id])
 		if (isEqual(detail, baselineDetail)) return
@@ -242,4 +327,10 @@ export function buildUserElementDetailsDoc(
 		result[el.id] = { ...detail, source: ELEMENT_DETAIL_SOURCE_USER }
 	})
 	return { version: ELEMENT_DETAILS_VERSION, elements: result }
+}
+
+function getRequestImageId(request: unknown): string | undefined {
+	if (!request || typeof request !== "object") return undefined
+	const imageId = (request as { image_id?: unknown }).image_id
+	return typeof imageId === "string" && imageId.trim() ? imageId : undefined
 }

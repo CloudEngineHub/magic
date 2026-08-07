@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useCanvasModeUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 import { GenerationStatus } from "../../../public/magic-types"
 import { useImageOssSrc } from "../../../app/hooks/resources/useImageOssSrc"
 import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
@@ -101,32 +102,33 @@ function ActiveImageMessageEditor({
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 	const generationRuntime = useGenerationRuntime(imageElement.id)
+	const activeVersion = getActiveImageVersion(imageElement)
 
 	const hasGenerateImageRequest = !!(
-		generationRuntime?.generateImageRequest || imageElement.generateImageRequest
+		generationRuntime?.generateImageRequest || activeVersion.generateImageRequest
 	)
-	const hasResultImage = !!imageElement.src
+	const hasResultImage = !!activeVersion.src
 	const { hasOssSrc } = useImageOssSrc(imageElement)
 
 	const isTemporaryElement =
 		canvas != null ? canvas.elementManager.isTemporary(imageElement.id) : false
 
 	const isUploading =
-		imageElement.status === GenerationStatus.Processing && !hasGenerateImageRequest
+		activeVersion.status === GenerationStatus.Processing && !hasGenerateImageRequest
 
 	const isRequestPlaceholder =
 		!hasResultImage &&
-		(imageElement.status === GenerationStatus.Pending ||
-			imageElement.status === GenerationStatus.Processing)
+		(activeVersion.status === GenerationStatus.Pending ||
+			activeVersion.status === GenerationStatus.Processing)
 	const hasTerminalImageGenerationState =
 		hasResultImage ||
-		imageElement.status === GenerationStatus.Completed ||
-		imageElement.status === GenerationStatus.Failed
+		activeVersion.status === GenerationStatus.Completed ||
+		activeVersion.status === GenerationStatus.Failed
 
 	const hasPendingImageTask =
-		!!imageElement.imageGenerationTaskMeta &&
+		!!activeVersion.imageGenerationTaskMeta &&
 		!hasResultImage &&
-		imageElement.status !== GenerationStatus.Failed
+		activeVersion.status !== GenerationStatus.Failed
 	const hasRuntimeGenerationAttempt = Boolean(generationRuntime)
 
 	const isGenerating = useMemo(() => {
@@ -180,7 +182,8 @@ function ActiveImageMessageEditor({
 		return null
 
 	const isRetryEditing =
-		imageElement.status === GenerationStatus.Failed && retryEditingElementId === imageElement.id
+		activeVersion.status === GenerationStatus.Failed &&
+		retryEditingElementId === imageElement.id
 
 	// 如果没有生成图片请求且没有结果图片，则显示图片编辑器
 	if ((!hasGenerateImageRequest && !hasResultImage) || isRetryEditing) {

@@ -1,5 +1,14 @@
-import type { Marker, ImageElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CropConfig,
+	Marker,
+	ImageElement,
+	ImageElementV1,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import {
+	getActiveImageVersion,
+	isImageElementV2,
+} from "@/components/CanvasDesign/runtime/document/imageVersion"
 import type {
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
@@ -51,7 +60,7 @@ export function isLikelyAbortError(error: string): boolean {
 export function fromCanvasMarkerMentionData(mentionData: CanvasMarkerMentionData): {
 	marker: Marker
 	designProjectId: string
-	element?: Pick<ImageElement, "src">
+	element?: { src?: string }
 } | null {
 	// Manager 仍以 Marker 为内部状态，消息侧只保存轻量 mention；这里作为边界适配层。
 	const marker = buildMarkerFromCanvasMarkerMentionData(mentionData)
@@ -71,8 +80,11 @@ function findImageElementById(
 	elementId: string,
 ): ImageElement | undefined {
 	for (const el of elements) {
-		if (el.id === elementId && el.type === ElementTypeEnum.Image && el.src) {
-			return el as ImageElement
+		if (el.id === elementId && el.type === ElementTypeEnum.Image) {
+			const image = el as ImageElement
+			const active = getActiveImageVersion(image)
+			if (!active.src) return undefined
+			return image
 		}
 		if (Array.isArray(el.children)) {
 			const found = findImageElementById(el.children as typeof elements, elementId)
@@ -217,7 +229,7 @@ export class SuperMagicMarkerManager {
 		}
 	}
 
-	private isElementCropEqual(left?: ImageElement["crop"], right?: ImageElement["crop"]): boolean {
+	private isElementCropEqual(left?: CropConfig, right?: CropConfig): boolean {
 		if (!left && !right) return true
 		if (!left || !right) return false
 
@@ -303,7 +315,7 @@ export class SuperMagicMarkerManager {
 		})
 	}
 
-	addMarker(designProjectId: string, marker: Marker, element?: Pick<ImageElement, "src">): void {
+	addMarker(designProjectId: string, marker: Marker, element?: { src?: string }): void {
 		const markers = this.getMarkers(designProjectId)
 		if (markers.some((m) => m.id === marker.id)) return
 		const updated = this.cloneMarkers([...markers, marker])
@@ -500,7 +512,7 @@ export class SuperMagicMarkerManager {
 				type: ElementTypeEnum.Image,
 				src: cachedSrc,
 				crop: marker.elementCrop,
-			} as ImageElement
+			} as ImageElementV1
 		}
 		if (!element) {
 			const elements = getCanvasElements?.(designProjectId)?.elements
@@ -510,11 +522,18 @@ export class SuperMagicMarkerManager {
 				marker.elementId,
 			)
 		}
-		if (!element?.src) return
+		if (!element) return
+		const activeVersion = getActiveImageVersion(element)
+		if (!activeVersion.src) return
 
 		// 计算 sequence：同元素下 markers 的序号（从 1 起）
+		const activeVersionId = isImageElementV2(element) ? activeVersion.id : undefined
 		const sameElementMarkers = this.getMarkers(designProjectId)
-			.filter((m) => m.elementId === marker.elementId)
+			.filter(
+				(m) =>
+					m.elementId === marker.elementId &&
+					(!activeVersionId || m.versionId === activeVersionId),
+			)
 			.sort((a, b) => {
 				const ax = a.relativeX + a.relativeY
 				const bx = b.relativeX + b.relativeY
@@ -525,7 +544,7 @@ export class SuperMagicMarkerManager {
 		this.loadingMarkers.add(markerId)
 		this.updateMarker(designProjectId, markerId, { error: undefined })
 
-		const elementSrc = element.src
+		const elementSrc = activeVersion.src
 		const invalidationKey = buildMarkerCompositeKey(elementSrc, marker)
 		const cachedComposite = this.getCompositePathCache(designProjectId)[markerId]
 		let canvasImageInfo: Awaited<
@@ -661,9 +680,11 @@ export class SuperMagicMarkerManager {
 			}[],
 			marker.elementId,
 		) as ImageElement | undefined
-		if (!element?.src) return null
+		if (!element) return null
+		const activeVersion = getActiveImageVersion(element)
+		if (!activeVersion.src) return null
 
-		const imagePath = element.src
+		const imagePath = activeVersion.src
 
 		const scaleX = element.scaleX ?? 1
 		const scaleY = element.scaleY ?? 1

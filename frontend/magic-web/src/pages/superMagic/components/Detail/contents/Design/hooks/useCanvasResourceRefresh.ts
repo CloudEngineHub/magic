@@ -11,6 +11,7 @@ import {
 	type LayerElement,
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -171,7 +172,7 @@ function collectCanvasResourceSnapshots(params: {
 	for (const element of elements) {
 		if (element.type === ElementTypeEnum.Image) {
 			addCanvasResourceSnapshot({
-				src: (element as ImageElement).src,
+				src: getActiveImageVersion(element as ImageElement).src,
 				mediaType: "image",
 				flatAttachments,
 				attachmentsReady,

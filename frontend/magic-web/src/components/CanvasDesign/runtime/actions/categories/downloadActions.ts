@@ -1,11 +1,13 @@
 import type { DownloadActionOptions, UserAction } from "../types"
 import { getSelectedFileElements, getSelectedImageElements } from "../../shared/ids"
 import type { DownloadImageOptions, CanvasImageSourceDimensions } from "../../../public/magic-types"
+import { getActiveImageVersion } from "../../document/imageVersion"
 
 function hasReadyMediaSource(fileElements: ReturnType<typeof getSelectedFileElements>): boolean {
-	return fileElements.some(
-		(element) => typeof element.src === "string" && element.src.trim().length > 0,
-	)
+	return fileElements.some((element) => {
+		const src = element.type === "image" ? getActiveImageVersion(element).src : element.src
+		return typeof src === "string" && src.trim().length > 0
+	})
 }
 
 async function getDownloadImageOptions(
@@ -14,10 +16,11 @@ async function getDownloadImageOptions(
 	const imageElements = getSelectedImageElements(canvas)
 	const entries = await Promise.all(
 		imageElements.map(async (imageElement) => {
-			if (!imageElement.id || !imageElement.src) return null
+			const src = getActiveImageVersion(imageElement).src
+			if (!imageElement.id || !src) return null
 
 			const resource = await canvas.imageResourceManager
-				.getResource(imageElement.src, { variant: "preview" })
+				.getResource(src, { variant: "preview" })
 				.catch(() => null)
 			const naturalWidth = resource?.imageInfo?.naturalWidth ?? 0
 			const naturalHeight = resource?.imageInfo?.naturalHeight ?? 0

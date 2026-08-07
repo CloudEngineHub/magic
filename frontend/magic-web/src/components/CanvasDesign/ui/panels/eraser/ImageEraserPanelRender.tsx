@@ -24,6 +24,7 @@ import {
 } from "../../../runtime/shared/ids"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
@@ -59,6 +60,9 @@ export default function ImageEraserPanelRender() {
 		if (!element || element.type !== ElementTypeEnum.Image) return null
 		return element as ImageElementData
 	}, [canvas, erasingElementId])
+	const activeVersion = erasingImageElement
+		? getActiveImageVersion(erasingImageElement)
+		: undefined
 
 	const erasingImageElementInstance = useMemo(() => {
 		if (!canvas || !erasingElementId) return null
@@ -136,7 +140,7 @@ export default function ImageEraserPanelRender() {
 		}
 
 		const strokes = canvas.eraserManager.getStrokes()
-		if (strokes.length === 0 || !erasingImageElement.src) return
+		if (strokes.length === 0 || !activeVersion?.src) return
 
 		setIsSubmitting(true)
 
@@ -157,10 +161,10 @@ export default function ImageEraserPanelRender() {
 			const requestImageId = generateUUID()
 			const placeholderTaskMeta = createEraserTaskMeta({
 				image_id: requestImageId,
-				file_path: erasingImageElement.src,
+				file_path: activeVersion.src,
 				reference_image_options: buildReferenceImageOptions({
-					filePath: erasingImageElement.src,
-					crop: erasingImageElement.crop,
+					filePath: activeVersion.src,
+					crop: activeVersion.crop,
 				}),
 			})
 			createdElementId = generateElementId()
@@ -204,8 +208,8 @@ export default function ImageEraserPanelRender() {
 					: undefined
 
 			const workerResult = await canvas.submitImageWorkerManager.createEraserMaskInWorker({
-				src: erasingImageElement.src,
-				crop: erasingImageElement.crop,
+				src: activeVersion.src,
+				crop: activeVersion.crop,
 				elementSize: {
 					width: erasingImageElement.width,
 					height: erasingImageElement.height,
@@ -235,7 +239,11 @@ export default function ImageEraserPanelRender() {
 						}
 
 						return createEraserMaskFile({
-							element: erasingImageElement,
+							element: {
+								width: erasingImageElement.width,
+								height: erasingImageElement.height,
+								crop: activeVersion.crop,
+							},
 							strokes,
 							naturalWidth: sourceDimensions.width,
 							naturalHeight: sourceDimensions.height,
@@ -248,7 +256,7 @@ export default function ImageEraserPanelRender() {
 			}
 
 			const imageProcessRequestPayload = getImageProcessRequestPayload({
-				crop: erasingImageElement.crop,
+				crop: activeVersion.crop,
 				sourceDimensions,
 			})
 
@@ -272,11 +280,11 @@ export default function ImageEraserPanelRender() {
 
 			const success = await newElementInstance.eraser({
 				image_id: requestImageId,
-				file_path: erasingImageElement.src,
+				file_path: activeVersion.src,
 				mark_path: maskPath,
 				size: imageProcessRequestPayload.size,
 				reference_image_options: buildReferenceImageOptions({
-					filePath: erasingImageElement.src,
+					filePath: activeVersion.src,
 					crop: imageProcessRequestPayload.crop,
 				}),
 			})
@@ -299,6 +307,7 @@ export default function ImageEraserPanelRender() {
 		}
 	}, [
 		canvas,
+		activeVersion,
 		methods,
 		erasingElementId,
 		erasingImageElement,

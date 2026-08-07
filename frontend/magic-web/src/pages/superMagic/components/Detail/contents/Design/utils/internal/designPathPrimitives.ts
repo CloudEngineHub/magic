@@ -331,6 +331,57 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 		if (!element || typeof element !== "object") return
 
 		if (element.type === "image") {
+			if (element.imageDslVersion === 2 && Array.isArray(element.versions)) {
+				for (const version of element.versions) {
+					if (!version || typeof version !== "object") continue
+					const versionRecord = version as Record<string, unknown>
+					setPathFieldForDsl(versionRecord, "src", base, rewritePath)
+
+					const versionRequest = versionRecord.generateImageRequest as
+						| {
+								file_dir?: string
+								reference_images?: string[]
+								reference_image_options?: Array<Record<string, unknown>>
+						  }
+						| undefined
+					if (versionRequest && typeof versionRequest === "object") {
+						setPathFieldForDsl(
+							versionRequest as Record<string, unknown>,
+							"file_dir",
+							base,
+							rewritePath,
+						)
+						if (Array.isArray(versionRequest.reference_images)) {
+							versionRequest.reference_images = versionRequest.reference_images.map(
+								(ref) => (typeof ref === "string" ? rewritePath(ref, base) : ref),
+							)
+						}
+						setReferenceImageOptionsForDsl(
+							versionRequest as Record<string, unknown>,
+							"reference_image_options",
+							base,
+							rewritePath,
+						)
+					}
+
+					const versionTaskMeta = versionRecord.imageGenerationTaskMeta
+					if (versionTaskMeta && typeof versionTaskMeta === "object") {
+						setPathFieldForDsl(
+							versionTaskMeta as Record<string, unknown>,
+							"file_path",
+							base,
+							rewritePath,
+						)
+						setReferenceImageOptionsForDsl(
+							versionTaskMeta as Record<string, unknown>,
+							"reference_image_options",
+							base,
+							rewritePath,
+						)
+					}
+				}
+			}
+
 			setPathFieldForDsl(element, "src", base, rewritePath)
 
 			const generateImageRequest = element.generateImageRequest as

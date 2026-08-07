@@ -4,9 +4,12 @@ import { makeAutoObservable } from "mobx"
 import type {
 	CanvasDocument,
 	ElementType,
+	ImageElement,
 	LayerElement,
+	VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
 import { CanvasFileIcon, FolderIcon } from "@/components/CanvasDesign/ui/primitives/icons"
 import { MentionItemType, type MentionItem } from "../../../../types"
 import { createProjectFileMentionData } from "../../../../utils/projectReferenceMention"
@@ -65,7 +68,7 @@ function isContainerElement(element: LayerElement): boolean {
 	return element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group
 }
 
-function isMediaElement(element: LayerElement): element is LayerElement & { src?: string } {
+function isMediaElement(element: LayerElement): element is ImageElement | VideoElement {
 	return element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video
 }
 
@@ -318,7 +321,9 @@ export class MentionPanelCanvasElementsStore {
 		}
 
 		if (isMediaElement(element)) {
-			const src = element.src
+			const imageVersion =
+				element.type === ElementTypeEnum.Image ? getActiveImageVersion(element) : undefined
+			const src = element.type === ElementTypeEnum.Image ? imageVersion?.src : element.src
 			const file = src ? this.context?.resolveFileBySrc(src) : null
 			if (src && file) {
 				const data = createProjectFileMentionData(file)
@@ -344,8 +349,8 @@ export class MentionPanelCanvasElementsStore {
 						elementId: element.id,
 						mediaType: element.type === ElementTypeEnum.Video ? "video" : "image",
 						src,
-						...(element.type === ElementTypeEnum.Image && element.crop
-							? { crop: element.crop }
+						...(element.type === ElementTypeEnum.Image && imageVersion?.crop
+							? { crop: imageVersion.crop }
 							: {}),
 					},
 				}

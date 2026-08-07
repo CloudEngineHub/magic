@@ -3,6 +3,7 @@ import { useCanvas } from "../../providers/CanvasProvider"
 import type { ImageElement } from "../../../runtime/document/types"
 import { useCanvasEvent } from "../canvas"
 import { areCanvasHostResourceReferencesSame } from "../../../runtime/shared/path/canvasResourcePath"
+import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
 
 /**
  * 检查图片元素的 ossSrc 是否已加载
@@ -13,7 +14,7 @@ export function useImageOssSrc(imageElement: ImageElement | null) {
 	const { canvas } = useCanvas()
 	const [ossSrc, setOssSrc] = useState<string | undefined>(undefined)
 
-	const path = imageElement?.src
+	const path = imageElement ? getActiveImageVersion(imageElement).src : undefined
 
 	// 初始同步及 path 变化时只换取 OSS URL，不触发图片解码
 	const syncOssSrc = useCallback(async () => {
