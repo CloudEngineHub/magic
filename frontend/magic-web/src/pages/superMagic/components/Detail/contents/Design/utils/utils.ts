@@ -170,6 +170,8 @@ export type MagicProjectCanvasStatus =
 export interface MagicProjectJsParseDiagnostics {
 	data: DesignData | null
 	canvasStatus: MagicProjectCanvasStatus
+	/** magic.project.js 信封中的原始版本；data 进入 Runtime 前可能已经升级为 v3。 */
+	sourceVersion?: string
 	error?: string
 }
 
@@ -218,9 +220,12 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		if (!config || typeof config !== "object") {
 			return { data: null, canvasStatus: "invalid", error: "invalid-config" }
 		}
+		const sourceVersion = (config as { version?: unknown }).version
+		const normalizedSourceVersion =
+			typeof sourceVersion === "string" ? sourceVersion : undefined
 
 		if (!Object.prototype.hasOwnProperty.call(config, "canvas")) {
-			return { data: null, canvasStatus: "missing" }
+			return { data: null, canvasStatus: "missing", sourceVersion: normalizedSourceVersion }
 		}
 
 		const canvasField = (config as { canvas?: unknown }).canvas
@@ -236,17 +241,26 @@ export function parseMagicProjectJsContentWithDiagnostics(
 				return {
 					data: null,
 					canvasStatus: "decompress-failed",
+					sourceVersion: normalizedSourceVersion,
 					error: error instanceof Error ? error.message : String(error),
 				}
 			}
 		} else if (canvasField && typeof canvasField === "object" && !Array.isArray(canvasField)) {
 			canvasObj = canvasField as { elements?: unknown; connections?: unknown }
 		} else {
-			return { data: null, canvasStatus: "invalid" }
+			return {
+				data: null,
+				canvasStatus: "invalid",
+				sourceVersion: normalizedSourceVersion,
+			}
 		}
 
 		if (!Array.isArray(canvasObj?.elements)) {
-			return { data: null, canvasStatus: "invalid" }
+			return {
+				data: null,
+				canvasStatus: "invalid",
+				sourceVersion: normalizedSourceVersion,
+			}
 		}
 
 		const elements = canvasObj.elements as LayerElement[]
@@ -256,6 +270,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 				buildDesignDataFromMagicProjectConfig(config, elements, connections),
 			),
 			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
+			sourceVersion: normalizedSourceVersion,
 		}
 	} catch (error) {
 		return {

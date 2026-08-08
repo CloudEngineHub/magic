@@ -12,7 +12,16 @@ import {
 	validateV3CanvasDocument,
 	type DesignDataCodecInput,
 } from "./designDataCodec"
-import { normalizeDesignDataPathsAfterLoad, parseMagicProjectJsContent } from "./utils"
+import {
+	normalizeDesignDataPathsAfterLoad,
+	parseMagicProjectJsContent,
+	parseMagicProjectJsContentWithDiagnostics,
+} from "./utils"
+import {
+	MAGIC_PROJECT_VERSION_V1,
+	MAGIC_PROJECT_VERSION_V2,
+	MAGIC_PROJECT_VERSION_V3,
+} from "./magicProjectCompression"
 
 export type DesignDataRuntimeSource =
 	| { content: string; designData?: never }
@@ -35,6 +44,11 @@ export type LoadDesignDataToRuntimeOptions = DesignDataRuntimeSource & {
 export interface LoadDesignDataToRuntimeResult {
 	data: DesignData
 	elementDetailsProvenance?: ElementDetailsProvenance
+	/** 数据进入 codec 前的信封版本。Runtime 中的 data.version 始终为 v3。 */
+	sourceVersion: string
+	didUpgrade: boolean
+	/** 仅远端合法 v1/v2 主文件需要自动回写；Draft/History 不在这里触发持久化。 */
+	needsPersist: boolean
 }
 
 /**
@@ -45,11 +59,24 @@ export interface LoadDesignDataToRuntimeResult {
 export async function loadDesignDataToRuntime(
 	options: LoadDesignDataToRuntimeOptions,
 ): Promise<LoadDesignDataToRuntimeResult | null> {
-	const data =
-		typeof options.content === "string"
-			? parseMagicProjectJsContent(options.content)
-			: upgradeDesignDataToV3(options.designData)
+	const isEnvelopeSource = typeof options.content === "string"
+	const diagnostics = isEnvelopeSource
+		? parseMagicProjectJsContentWithDiagnostics(options.content)
+		: null
+	const data = isEnvelopeSource
+		? (diagnostics?.data ?? parseMagicProjectJsContent(options.content))
+		: upgradeDesignDataToV3(options.designData)
 	if (!data) return null
+
+	const sourceVersion = isEnvelopeSource
+		? (diagnostics?.sourceVersion ?? data.version)
+		: options.designData.version
+	const didUpgrade = sourceVersion !== MAGIC_PROJECT_VERSION_V3
+	const needsPersist =
+		isEnvelopeSource &&
+		(diagnostics?.canvasStatus === "valid-empty" ||
+			diagnostics?.canvasStatus === "valid-non-empty") &&
+		(sourceVersion === MAGIC_PROJECT_VERSION_V1 || sourceVersion === MAGIC_PROJECT_VERSION_V2)
 
 	if (options.nameOverride) data.name = options.nameOverride
 
@@ -69,5 +96,11 @@ export async function loadDesignDataToRuntime(
 	})
 	validateV3CanvasDocument(data.canvas)
 
-	return { data, elementDetailsProvenance }
+	return {
+		data,
+		elementDetailsProvenance,
+		sourceVersion,
+		didUpgrade,
+		needsPersist,
+	}
 }

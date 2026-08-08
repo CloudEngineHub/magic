@@ -43,6 +43,28 @@ describe("loadDesignDataToRuntime", () => {
 				],
 			},
 		})
+		expect(loaded).toMatchObject({
+			sourceVersion: "1.0.0",
+			didUpgrade: true,
+			needsPersist: true,
+		})
+	})
+
+	it("does not request persistence for an already-v3 envelope", async () => {
+		const content = `window.magicProjectConfig = ${JSON.stringify({
+			version: MAGIC_PROJECT_VERSION_V3,
+			type: "design",
+			name: "v3",
+			canvas: { elements: [] },
+		})};`
+
+		const loaded = await loadDesignDataToRuntime({ content })
+
+		expect(loaded).toMatchObject({
+			sourceVersion: MAGIC_PROJECT_VERSION_V3,
+			didUpgrade: false,
+			needsPersist: false,
+		})
 	})
 
 	it("clones and validates in-memory Draft data before returning it to Runtime", async () => {
@@ -69,5 +91,10 @@ describe("loadDesignDataToRuntime", () => {
 			contents: [{ contentId: "text-1-content-1" }],
 		})
 		expect(draft.version).toBe("2.0.0")
+		expect(loaded).toMatchObject({
+			sourceVersion: "2.0.0",
+			didUpgrade: true,
+			needsPersist: false,
+		})
 	})
 })

@@ -12,6 +12,12 @@ import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/type
 
 export type DesignRemoteUpdateListenerMode = "message" | "file-change"
 
+export interface PendingDesignUpgrade {
+	fileId: string
+	sourceVersion: string
+	targetVersion: string
+}
+
 export type DesignConflictReason =
 	| "remote-update-with-local-dirty"
 	| "save-version-conflict"
@@ -100,6 +106,7 @@ export interface DesignProjectStateBagSetters {
 	setMagicProjectJsFileId: (v: string | null) => void
 	setDesignData: (data: DesignData) => void
 	setElementDetailsProvenance?: (provenance: ElementDetailsProvenance) => void
+	setPendingDesignUpgrade?: (upgrade: PendingDesignUpgrade | null) => void
 	setIsInitialLoading: (v: boolean) => void
 	setIsSaving: (v: boolean) => void
 	setIsReadOnly: (v: boolean) => void
@@ -113,6 +120,7 @@ export interface DesignProjectStateBagSetters {
 export interface DesignProjectStateBag {
 	getDesignData: () => DesignData
 	getElementDetailsProvenance?: () => ElementDetailsProvenance
+	getPendingDesignUpgrade?: () => PendingDesignUpgrade | null
 	getConflictState: () => DesignConflict | null
 	getMagicProjectJsFileId: () => string | null
 	getMagicProjectJsVersion: () => number | null

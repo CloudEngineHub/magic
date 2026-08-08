@@ -639,7 +639,7 @@
 		"saving": "Saving",
 		"upgrade": {
 			"autoUpgradingSubtitle": "Do not close or refresh this page.",
-			"autoUpgradingTitle": "Upgrading Canvas v2.0",
+			"autoUpgradingTitle": "Upgrading Canvas to v3.0",
 			"failed": "Upgrade failed, please try again later",
 			"failedSubtitle": "Check your network and try again. Canvas editing is unavailable until the upgrade completes.",
 			"failedTitle": "Canvas upgrade failed",

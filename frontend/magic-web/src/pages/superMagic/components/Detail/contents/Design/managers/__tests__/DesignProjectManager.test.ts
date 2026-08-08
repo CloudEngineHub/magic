@@ -5,7 +5,12 @@ import type {
 	RectangleElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { DesignProjectManager } from "../DesignProjectManager"
-import type { DesignConflict, DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
+import type {
+	DesignConflict,
+	DesignProjectManagerOptions,
+	DesignProjectStateBag,
+	PendingDesignUpgrade,
+} from "../types"
 import type { DesignData } from "../../types"
 import {
 	deleteDesignDraft,
@@ -89,9 +94,11 @@ function createManager(
 	let magicProjectJsVersion: number | null = 2
 	let prevDesignDataFingerprint = "initial-fingerprint"
 	let isReadOnly = false
+	let pendingDesignUpgrade: PendingDesignUpgrade | null = null
 
 	const stateBag: DesignProjectStateBag = {
 		getDesignData: () => designData,
+		getPendingDesignUpgrade: () => pendingDesignUpgrade,
 		getConflictState: () => conflictState,
 		getMagicProjectJsFileId: () => magicProjectJsFileId,
 		getMagicProjectJsVersion: () => magicProjectJsVersion,
@@ -109,6 +116,9 @@ function createManager(
 			}),
 			setDesignData: vi.fn((data: DesignData) => {
 				designData = data
+			}),
+			setPendingDesignUpgrade: vi.fn((upgrade: PendingDesignUpgrade | null) => {
+				pendingDesignUpgrade = upgrade
 			}),
 			setIsInitialLoading: vi.fn(),
 			setIsSaving: vi.fn(),
@@ -153,6 +163,7 @@ function createManager(
 			conflictState,
 			magicProjectJsVersion,
 			prevDesignDataFingerprint,
+			pendingDesignUpgrade,
 		}),
 	}
 }
@@ -196,6 +207,89 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(baseDesignData?.name).toBe("remote")
 	})
 
+	it("fully persists a pending legacy DSL upgrade and clears the pending state", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag, getState } = createManager(data)
+		stateBag.setters.setPendingDesignUpgrade?.({
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		})
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				cancelAutoSave: () => void
+				commitSave: (options?: unknown) => Promise<unknown>
+			}
+		}
+		managerInternals.saveManager.cancelAutoSave = vi.fn()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: null,
+			fullyPersisted: true,
+			savedDesignData: data,
+			savedFingerprint: hashDesignDataComparable(data),
+		})
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(true)
+
+		expect(managerInternals.saveManager.commitSave).toHaveBeenCalledWith({
+			designData: data,
+			updateCurrentDesignData: true,
+			source: "dsl-upgrade",
+		})
+		expect(getState().pendingDesignUpgrade).toBeNull()
+	})
+
+	it("keeps a pending legacy DSL upgrade retryable when sidecar persistence is incomplete", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag, getState } = createManager(data)
+		const pendingUpgrade: PendingDesignUpgrade = {
+			fileId: "file-1",
+			sourceVersion: "1.0.0",
+			targetVersion: "3.0.0",
+		}
+		stateBag.setters.setPendingDesignUpgrade?.(pendingUpgrade)
+		const managerInternals = manager as unknown as {
+			saveManager: {
+				cancelAutoSave: () => void
+				commitSave: (options?: unknown) => Promise<unknown>
+			}
+		}
+		managerInternals.saveManager.cancelAutoSave = vi.fn()
+		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+			ok: true,
+			savedVersion: 3,
+			savedUpdatedAt: null,
+			fullyPersisted: false,
+			savedDesignData: data,
+			savedFingerprint: hashDesignDataComparable(data),
+		})
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(false)
+
+		expect(getState().pendingDesignUpgrade).toEqual(pendingUpgrade)
+	})
+
+	it("does not persist a pending DSL upgrade while the canvas is read-only", async () => {
+		const data = createDesignData("legacy-upgraded")
+		const { manager, stateBag } = createManager(data)
+		stateBag.setters.setPendingDesignUpgrade?.({
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		})
+		stateBag.setters.setIsReadOnly(true)
+		const managerInternals = manager as unknown as {
+			saveManager: { commitSave: (options?: unknown) => Promise<unknown> }
+		}
+		managerInternals.saveManager.commitSave = vi.fn()
+
+		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(false)
+
+		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
+	})
+
 	it("writes manual refresh drafts through the emergency fallback", () => {
 		const draftData = createDesignData("manual-refresh", [rect("moved", { x: 120 })])
 		const { manager } = createManager()
@@ -224,6 +318,28 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		expect(managerInternals.loadManager.resetAndReload).toHaveBeenCalledTimes(1)
 		expect(deleteDesignDraft).not.toHaveBeenCalled()
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
+	})
+
+	it("publishes a pending DSL upgrade after the remote load lifecycle completes", async () => {
+		const { manager, getState } = createManager()
+		const pendingUpgrade: PendingDesignUpgrade = {
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+		}
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<{ pendingUpgrade: PendingDesignUpgrade | null }>
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockResolvedValue({ pendingUpgrade })
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.loadFromRemote()
+
+		expect(getState().pendingDesignUpgrade).toEqual(pendingUpgrade)
 		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
 	})
 

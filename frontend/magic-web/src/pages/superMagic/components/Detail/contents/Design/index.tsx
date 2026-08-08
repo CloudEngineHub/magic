@@ -55,6 +55,7 @@ import { useCanvasResourceRefresh } from "./hooks/useCanvasResourceRefresh"
 import { waitForNextAttachmentsRefreshForProject } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { useNetwork } from "ahooks"
 import { AlertTriangle, CloudOff } from "lucide-react"
+import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
 import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
@@ -469,6 +470,8 @@ function DesignViewer(props: DesignViewerProps) {
 		persistLocalDraft,
 		magicProjectJsFileId,
 		isInitialLoading,
+		pendingDesignUpgrade,
+		persistPendingDesignUpgrade,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
 		reloadPreservingLocalDraft,
@@ -499,6 +502,109 @@ function DesignViewer(props: DesignViewerProps) {
 	useEffect(() => {
 		latestDesignDataRef.current = designData
 	}, [designData])
+
+	const [isUpgrading, setIsUpgrading] = useState(false)
+	const [autoUpgradeFailed, setAutoUpgradeFailed] = useState(false)
+	const [upgradeProgress, setUpgradeProgress] = useState(0)
+	const autoUpgradeTaskKeyRef = useRef<string | null>(null)
+	const upgradeProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+	const clearUpgradeProgressTimer = useCallback(() => {
+		if (!upgradeProgressTimerRef.current) return
+		clearInterval(upgradeProgressTimerRef.current)
+		upgradeProgressTimerRef.current = null
+	}, [])
+
+	useEffect(() => clearUpgradeProgressTimer, [clearUpgradeProgressTimer])
+
+	const shouldAutoUpgrade =
+		!isInitialLoading &&
+		!!pendingDesignUpgrade &&
+		allowEdit &&
+		!isPlaybackMode &&
+		!isShareRoute &&
+		!isMobile &&
+		isNewestVersion &&
+		!isReadOnlyState &&
+		!conflictState
+
+	const automaticUpgradeKey = useMemo(() => {
+		if (!shouldAutoUpgrade || !projectId || !magicProjectJsFileId || !pendingDesignUpgrade) {
+			return null
+		}
+		return [
+			projectId,
+			magicProjectJsFileId,
+			pendingDesignUpgrade.sourceVersion,
+			pendingDesignUpgrade.targetVersion,
+			designProjectBasePath ?? "",
+		].join(":")
+	}, [
+		designProjectBasePath,
+		magicProjectJsFileId,
+		pendingDesignUpgrade,
+		projectId,
+		shouldAutoUpgrade,
+	])
+
+	useEffect(() => {
+		setAutoUpgradeFailed(false)
+		if (!automaticUpgradeKey) autoUpgradeTaskKeyRef.current = null
+	}, [automaticUpgradeKey])
+
+	const handleUpgrade = useCallback(async () => {
+		if (!pendingDesignUpgrade || isUpgrading) return
+
+		setIsUpgrading(true)
+		setAutoUpgradeFailed(false)
+		setUpgradeProgress(8)
+		clearUpgradeProgressTimer()
+		upgradeProgressTimerRef.current = setInterval(() => {
+			setUpgradeProgress((current) => {
+				if (current >= 92) return current
+				return Math.min(92, current + Math.max(1, Math.ceil((92 - current) * 0.12)))
+			})
+		}, 350)
+
+		try {
+			const didPersist = await persistPendingDesignUpgrade()
+			if (!didPersist) throw new Error("Canvas DSL upgrade was not fully persisted")
+
+			clearUpgradeProgressTimer()
+			setUpgradeProgress(100)
+			await new Promise((resolve) => setTimeout(resolve, 300))
+			updateAttachments()
+			toast.success(t("design.upgrade.success"))
+		} catch {
+			clearUpgradeProgressTimer()
+			setUpgradeProgress(0)
+			setAutoUpgradeFailed(true)
+			toast.error(t("design.upgrade.failed"))
+		} finally {
+			setIsUpgrading(false)
+		}
+	}, [
+		clearUpgradeProgressTimer,
+		isUpgrading,
+		pendingDesignUpgrade,
+		persistPendingDesignUpgrade,
+		t,
+		updateAttachments,
+	])
+
+	useEffect(() => {
+		if (!automaticUpgradeKey || isOffline || isUpgrading || autoUpgradeFailed) return
+		if (autoUpgradeTaskKeyRef.current === automaticUpgradeKey) return
+
+		autoUpgradeTaskKeyRef.current = automaticUpgradeKey
+		void handleUpgrade()
+	}, [autoUpgradeFailed, automaticUpgradeKey, handleUpgrade, isOffline, isUpgrading])
+
+	const isUpgradeBlockingCanvas = shouldAutoUpgrade && !isOffline
+	const shouldShowUpgradeProgress =
+		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
+	const shouldShowUpgradeFailed =
+		shouldAutoUpgrade && !isOffline && autoUpgradeFailed && !isUpgrading
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -1513,12 +1619,34 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
+							{shouldShowUpgradeProgress && (
+								<CanvasUpgradeOverlay
+									percent={upgradeProgress}
+									title={t("design.upgrade.autoUpgradingTitle")}
+									subtitle={t("design.upgrade.autoUpgradingSubtitle")}
+								/>
+							)}
+							{shouldShowUpgradeFailed && (
+								<CanvasUpgradeOverlay
+									percent={0}
+									status="error"
+									title={t("design.upgrade.failedTitle")}
+									subtitle={t("design.upgrade.failedSubtitle")}
+									actionLabel={t("design.upgrade.retry")}
+									actionDisabled={isUpgrading}
+									onAction={() => void handleUpgrade()}
+								/>
+							)}
 							<Suspense fallback={null}>
 								<CanvasDesign
 									key={`${designProjectId}:${canvasDesignKey}:${designProjectBasePath}`}
 									id={designProjectId}
 									ref={canvasDesignRef}
-									readonly={isReadOnlyState || shouldBlockCanvasForConflict}
+									readonly={
+										isReadOnlyState ||
+										isUpgradeBlockingCanvas ||
+										shouldBlockCanvasForConflict
+									}
 									magic={{
 										methods,
 										permissions: designCanvasMagicPermissions,

@@ -47,6 +47,7 @@ export type DesignSaveSource =
 	| "remote-apply"
 	| "remote-merge"
 	| "conflict-resolution"
+	| "dsl-upgrade"
 	| "manual-save"
 	| "unknown-auto"
 

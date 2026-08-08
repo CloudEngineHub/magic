@@ -8,6 +8,7 @@ import { DesignData } from "../types"
 import {
 	DesignProjectManager,
 	type DesignConflict,
+	type PendingDesignUpgrade,
 	type DesignProjectManagerOptions,
 	type DesignProjectStateBag,
 	type DesignSaveMetadata,
@@ -31,6 +32,7 @@ export interface UseDesignProjectManagerReturn {
 
 	isInitialLoading: boolean
 	isSaving: boolean
+	pendingDesignUpgrade: PendingDesignUpgrade | null
 
 	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
@@ -40,6 +42,7 @@ export interface UseDesignProjectManagerReturn {
 	) => void
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
+	persistPendingDesignUpgrade: () => Promise<boolean>
 
 	loadFromRemote: () => Promise<void>
 	reloadPreservingLocalDraft: () => Promise<void>
@@ -111,6 +114,9 @@ export function useDesignProjectManager(
 		!options.allowEdit || options.isPlaybackMode || options.isShareRoute || options.isMobile,
 	)
 	const [isSaving, setIsSaving] = useState(false)
+	const [pendingDesignUpgrade, setPendingDesignUpgrade] = useState<PendingDesignUpgrade | null>(
+		null,
+	)
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	const [fileVersion, setFileVersion] = useState<number | undefined>(undefined)
 	const [isProcessingRevoke, setIsProcessingRevoke] = useState(false)
@@ -119,6 +125,7 @@ export function useDesignProjectManager(
 
 	const designDataRef = useRef(designData)
 	const elementDetailsProvenanceRef = useRef(elementDetailsProvenance)
+	const pendingDesignUpgradeRef = useRef<PendingDesignUpgrade | null>(pendingDesignUpgrade)
 	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const isReadOnlyRef = useRef(isReadOnly)
@@ -129,6 +136,7 @@ export function useDesignProjectManager(
 
 	designDataRef.current = designData
 	elementDetailsProvenanceRef.current = elementDetailsProvenance
+	pendingDesignUpgradeRef.current = pendingDesignUpgrade
 	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
 	isReadOnlyRef.current = isReadOnly
@@ -148,6 +156,7 @@ export function useDesignProjectManager(
 		() => ({
 			getDesignData: () => designDataRef.current,
 			getElementDetailsProvenance: () => elementDetailsProvenanceRef.current,
+			getPendingDesignUpgrade: () => pendingDesignUpgradeRef.current,
 			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
 			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
@@ -168,6 +177,10 @@ export function useDesignProjectManager(
 				setElementDetailsProvenance: (provenance) => {
 					elementDetailsProvenanceRef.current = provenance
 					setElementDetailsProvenanceState(provenance)
+				},
+				setPendingDesignUpgrade: (upgrade) => {
+					pendingDesignUpgradeRef.current = upgrade
+					setPendingDesignUpgrade(upgrade)
 				},
 				setIsInitialLoading,
 				setIsSaving,
@@ -256,6 +269,7 @@ export function useDesignProjectManager(
 
 		isInitialLoading,
 		isSaving,
+		pendingDesignUpgrade,
 
 		scheduleAutoSave: (metadata) => manager.scheduleAutoSave(metadata),
 		cancelAutoSave: () => manager.cancelAutoSave(),
@@ -263,6 +277,7 @@ export function useDesignProjectManager(
 			manager.persistLocalDraft(data, persistOptions),
 		manualSave: () => manager.manualSave(),
 		syncDesignData: (data) => manager.syncDesignData(data),
+		persistPendingDesignUpgrade: () => manager.persistPendingDesignUpgrade(),
 
 		loadFromRemote: () => manager.loadFromRemote(),
 		reloadPreservingLocalDraft: () => manager.reloadPreservingLocalDraft(),

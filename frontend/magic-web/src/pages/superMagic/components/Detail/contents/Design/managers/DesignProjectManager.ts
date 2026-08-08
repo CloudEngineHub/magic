@@ -7,6 +7,7 @@ import type {
 	DesignElementConflict,
 	DesignProjectStateBag,
 	DesignProjectManagerOptions,
+	PendingDesignUpgrade,
 } from "./types"
 import { DesignRemoteListener } from "./DesignRemoteListener"
 import type {
@@ -105,6 +106,7 @@ export interface DesignProjectManagerAPI {
 	) => void
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
+	persistPendingDesignUpgrade: () => Promise<boolean>
 
 	loadFromRemote: () => Promise<void>
 	reloadPreservingLocalDraft: () => Promise<void>
@@ -1848,25 +1850,68 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.tryApplyPendingRemoteDesignData()
 	}
 
+	private applyPendingUpgradeFromLoad(
+		loadResult: { pendingUpgrade: PendingDesignUpgrade | null } | undefined,
+	): void {
+		if (!loadResult) return
+		this.stateBag.setters.setPendingDesignUpgrade?.(loadResult.pendingUpgrade)
+	}
+
 	async loadFromRemote(): Promise<void> {
 		this.clearPendingRemoteDesignData()
-		await this.loadManager.loadFromRemote()
+		const loadResult = await this.loadManager.loadFromRemote()
 		this.syncBaseDesignDataFromCurrent()
 		await this.tryRestoreLocalDraftAfterRemoteLoad()
+		this.applyPendingUpgradeFromLoad(loadResult)
 	}
 
 	async reloadPreservingLocalDraft(): Promise<void> {
 		this.clearPendingRemoteDesignData()
-		await this.loadManager.resetAndReload()
+		const loadResult = await this.loadManager.resetAndReload()
 		this.syncBaseDesignDataFromCurrent()
 		await this.tryRestoreLocalDraftAfterRemoteLoad()
+		this.applyPendingUpgradeFromLoad(loadResult)
 	}
 
 	async reloadDiscardingLocalDraft(): Promise<void> {
 		this.clearPendingRemoteDesignData()
 		this.clearLocalDraftBecauseVersionSwitched()
-		await this.loadManager.resetAndReload()
+		const loadResult = await this.loadManager.resetAndReload()
 		this.syncBaseDesignDataFromCurrent()
+		this.applyPendingUpgradeFromLoad(loadResult)
+	}
+
+	async persistPendingDesignUpgrade(): Promise<boolean> {
+		const pendingUpgrade = this.stateBag.getPendingDesignUpgrade?.()
+		if (!pendingUpgrade) return true
+		if (pendingUpgrade.fileId !== this.stateBag.getMagicProjectJsFileId()) return false
+		if (pendingUpgrade.targetVersion !== MAGIC_PROJECT_VERSION_V3) return false
+		if (this.stateBag.getDesignData().version !== MAGIC_PROJECT_VERSION_V3) return false
+		if (this.isVersionDataSourceLocked() || this.getIsReadOnly()) return false
+		if (this.hasBlockingConflict() || this.hasUnresolvedMergeConflicts()) return false
+
+		this.saveManager.cancelAutoSave()
+		this.stateBag.setters.setIsSaving(true)
+		const saveResult = await this.saveManager.commitSave({
+			designData: this.stateBag.getDesignData(),
+			updateCurrentDesignData: true,
+			source: "dsl-upgrade",
+		})
+		if (!saveResult.ok) {
+			await this.handleSaveResultConflict(saveResult)
+			this.tryApplyPendingRemoteDesignData()
+			return false
+		}
+
+		this.handleSuccessfulSaveResult(saveResult)
+		if (!saveResult.fullyPersisted) return false
+
+		if (!this.hasUnresolvedMergeConflicts()) {
+			this.clearLocalDraftAfterFullyPersistedSave()
+		}
+		this.pendingRemoteDesignData = null
+		this.stateBag.setters.setPendingDesignUpgrade?.(null)
+		return true
 	}
 
 	async saveToRemote(): Promise<void> {

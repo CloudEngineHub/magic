@@ -6,8 +6,17 @@ import {
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
-import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
+import type {
+	DesignProjectStateBag,
+	DesignProjectManagerOptions,
+	PendingDesignUpgrade,
+} from "./types"
 import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+
+export interface DesignLoadResult {
+	pendingUpgrade: PendingDesignUpgrade | null
+}
 
 export class DesignLoadManager {
 	private stateBag: DesignProjectStateBag
@@ -26,7 +35,7 @@ export class DesignLoadManager {
 		this.options = options
 	}
 
-	async loadFromRemote(): Promise<void> {
+	async loadFromRemote(): Promise<DesignLoadResult | undefined> {
 		const {
 			currentFile,
 			attachments,
@@ -50,7 +59,7 @@ export class DesignLoadManager {
 
 		if (!actualCurrentFileId || !actualCurrentFileName || !attachments) {
 			this.stateBag.setters.setIsInitialLoading(false)
-			return
+			return { pendingUpgrade: null }
 		}
 
 		const currentProjectId = projectId ?? null
@@ -66,8 +75,10 @@ export class DesignLoadManager {
 
 		this.currentProjectId = currentProjectId
 
-		if (this.isLoading) return
-		if (this.lastLoadedFileId === actualCurrentFileId && !hasProjectChanged) return
+		if (this.isLoading) return undefined
+		if (this.lastLoadedFileId === actualCurrentFileId && !hasProjectChanged) return undefined
+
+		let pendingUpgrade: PendingDesignUpgrade | null = null
 
 		try {
 			this.isLoading = true
@@ -115,6 +126,13 @@ export class DesignLoadManager {
 					})
 					if (loaded) {
 						const parsedData = loaded.data
+						if (loaded.needsPersist) {
+							pendingUpgrade = {
+								fileId: result.fileId,
+								sourceVersion: loaded.sourceVersion,
+								targetVersion: MAGIC_PROJECT_VERSION_V3,
+							}
+						}
 						this.stateBag.setters.setElementDetailsProvenance?.(
 							loaded.elementDetailsProvenance ?? {},
 						)
@@ -146,10 +164,12 @@ export class DesignLoadManager {
 			this.isLoading = false
 			this.stateBag.setters.setIsInitialLoading(false)
 		}
+
+		return { pendingUpgrade }
 	}
 
-	async resetAndReload(): Promise<void> {
+	async resetAndReload(): Promise<DesignLoadResult | undefined> {
 		this.lastLoadedFileId = null
-		await this.loadFromRemote()
+		return this.loadFromRemote()
 	}
 }
