@@ -28,7 +28,9 @@ function canvasWithImages(...paths: string[]): CanvasDocument {
 		elements: paths.map((src, index) => ({
 			id: `image-${index}`,
 			type: ElementTypeEnum.Image,
-			src,
+			contents: [{ contentId: `image-${index}-content-1`, src }],
+			activeContentId: `image-${index}-content-1`,
+			mainContentId: `image-${index}-content-1`,
 		})),
 	} as CanvasDocument
 }
@@ -144,7 +146,9 @@ describe("useCanvasResourceRefresh snapshots", () => {
 				{
 					id: "audio-1",
 					type: ElementTypeEnum.Audio,
-					src: "./audios/voice.mp3",
+					contents: [{ contentId: "audio-1-content-1", src: "./audios/voice.mp3" }],
+					activeContentId: "audio-1-content-1",
+					mainContentId: "audio-1-content-1",
 				},
 			],
 		} as CanvasDocument

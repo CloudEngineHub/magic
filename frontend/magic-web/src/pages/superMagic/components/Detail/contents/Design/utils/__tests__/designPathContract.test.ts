@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
+import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	resolveDesignPathForOperation,
 	resolveDesignAttachment,
@@ -11,6 +13,7 @@ import {
 	normalizePath,
 	replaceNameInMagicProjectJsContent,
 } from "../utils"
+import { decompressCanvasData } from "../magicProjectCompression"
 
 const DESIGN_A = "新建画布A"
 const DESIGN_B = "新建画布B"
@@ -24,6 +27,33 @@ function fileItem(fileId: string, relativeFilePath: string): FileItem {
 		relative_file_path: relativeFilePath,
 		is_directory: false,
 	}
+}
+
+function imageElement(src: string, id = "image-1"): LayerElement {
+	const contentId = `${id}-content-1`
+	return {
+		id,
+		type: "image",
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [{ contentId, src }],
+	} as LayerElement
+}
+
+function audioElement(src: string, id = "audio-1"): LayerElement {
+	const contentId = `${id}-content-1`
+	return {
+		id,
+		type: "audio",
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [{ contentId, src }],
+	} as LayerElement
+}
+
+function readCanvas(content: string): CanvasDocument {
+	const config = parseMagicProjectConfigContent(content) as { canvas: string }
+	return decompressCanvasData(config.canvas) as CanvasDocument
 }
 
 describe("designPath contract", () => {
@@ -172,69 +202,62 @@ describe("designPath contract", () => {
 	it("normalizes magic.project.js saved layer paths to DSL paths", () => {
 		const content = generateMagicProjectJsContent(
 			{
-				version: "1.0.0",
+				version: "3.0.0",
 				canvas: {
 					elements: [
-						{
-							id: "image-1",
-							type: "image",
-							src: `/${DESIGN_A}/images/cat.png`,
-						},
-						{
-							id: "audio-1",
-							type: "audio",
-							src: `/${DESIGN_A}/audios/voice.mp3`,
-						},
+						imageElement(`/${DESIGN_A}/images/cat.png`),
+						audioElement(`/${DESIGN_A}/audios/voice.mp3`),
 					],
 				},
 			} as never,
 			{ projectBasePath: DESIGN_A },
 		)
-
-		expect(content).toContain("./images/cat.png")
-		expect(content).toContain("./audios/voice.mp3")
-		expect(content).not.toContain(`/${DESIGN_A}/images/cat.png`)
-		expect(content).not.toContain(`/${DESIGN_A}/audios/voice.mp3`)
+		const canvas = readCanvas(content)
+		expect(canvas.elements?.[0]?.contents?.[0]).toMatchObject({
+			src: "./images/cat.png",
+		})
+		expect(canvas.elements?.[1].contents?.[0]).toMatchObject({ src: "./audios/voice.mp3" })
+		expect(JSON.stringify(canvas)).not.toContain(`/${DESIGN_A}/images/cat.png`)
+		expect(JSON.stringify(canvas)).not.toContain(`/${DESIGN_A}/audios/voice.mp3`)
 	})
 
 	it("keeps external workspace resources absolute when saving magic.project.js", () => {
 		const content = generateMagicProjectJsContent(
 			{
-				version: "1.0.0",
+				version: "3.0.0",
 				canvas: {
-					elements: [
-						{
-							id: "image-1",
-							type: "image",
-							src: `${DESIGN_B}/images/cat.png`,
-						},
-					],
+					elements: [imageElement(`${DESIGN_B}/images/cat.png`)],
 				},
 			} as never,
 			{ projectBasePath: DESIGN_A },
 		)
-
-		expect(content).toContain(`"src": "/${DESIGN_B}/images/cat.png"`)
+		expect(readCanvas(content).elements?.[0].contents?.[0]).toMatchObject({
+			src: `/${DESIGN_B}/images/cat.png`,
+		})
 	})
 
 	it("keeps private-upload task paths outside workspace save and rename rewriting", () => {
 		const content = generateMagicProjectJsContent(
 			{
-				version: "1.0.0",
+				version: "3.0.0",
 				name: DESIGN_A,
 				canvas: {
 					elements: [
 						{
-							id: "image-1",
-							type: "image",
-							src: `/${DESIGN_A}/images/cat.png`,
-							imageGenerationTaskMeta: {
-								type: "expand",
-								file_path: `/${DESIGN_A}/images/cat.png`,
-								canvas_path: `${DESIGN_A}/design-mark/canvas.png`,
-								mask_path: `${DESIGN_A}/design-mark/mask.png`,
-								mark_path: `${DESIGN_A}/design-mark/mark.png`,
-							},
+							...imageElement(`/${DESIGN_A}/images/cat.png`),
+							contents: [
+								{
+									contentId: "image-1-content-1",
+									src: `/${DESIGN_A}/images/cat.png`,
+									imageGenerationTaskMeta: {
+										type: "expand",
+										file_path: `/${DESIGN_A}/images/cat.png`,
+										canvas_path: `${DESIGN_A}/design-mark/canvas.png`,
+										mask_path: `${DESIGN_A}/design-mark/mask.png`,
+										mark_path: `${DESIGN_A}/design-mark/mark.png`,
+									},
+								},
+							],
 						},
 					],
 				},
@@ -242,15 +265,33 @@ describe("designPath contract", () => {
 			{ projectBasePath: DESIGN_A },
 		)
 
-		expect(content).toContain('"file_path": "./images/cat.png"')
-		expect(content).toContain(`"canvas_path": "${DESIGN_A}/design-mark/canvas.png"`)
-		expect(content).toContain(`"mask_path": "${DESIGN_A}/design-mark/mask.png"`)
-		expect(content).toContain(`"mark_path": "${DESIGN_A}/design-mark/mark.png"`)
+		const savedCanvas = readCanvas(content)
+		const savedContent = savedCanvas.elements?.[0].contents?.[0] as unknown as Record<
+			string,
+			unknown
+		>
+		expect(savedContent).toMatchObject({
+			src: "./images/cat.png",
+			imageGenerationTaskMeta: {
+				file_path: "./images/cat.png",
+				canvas_path: `${DESIGN_A}/design-mark/canvas.png`,
+				mask_path: `${DESIGN_A}/design-mark/mask.png`,
+				mark_path: `${DESIGN_A}/design-mark/mark.png`,
+			},
+		})
 
 		const renamed = replaceNameInMagicProjectJsContent(content, DESIGN_A, "重命名画布")
-		expect(renamed).toContain('"src": "./images/cat.png"')
-		expect(renamed).toContain(`"canvas_path": "${DESIGN_A}/design-mark/canvas.png"`)
-		expect(renamed).toContain(`"mask_path": "${DESIGN_A}/design-mark/mask.png"`)
-		expect(renamed).toContain(`"mark_path": "${DESIGN_A}/design-mark/mark.png"`)
+		const renamedContent = readCanvas(renamed).elements?.[0].contents?.[0] as unknown as Record<
+			string,
+			unknown
+		>
+		expect(renamedContent).toMatchObject({
+			src: "./images/cat.png",
+			imageGenerationTaskMeta: {
+				canvas_path: `${DESIGN_A}/design-mark/canvas.png`,
+				mask_path: `${DESIGN_A}/design-mark/mask.png`,
+				mark_path: `${DESIGN_A}/design-mark/mark.png`,
+			},
+		})
 	})
 })

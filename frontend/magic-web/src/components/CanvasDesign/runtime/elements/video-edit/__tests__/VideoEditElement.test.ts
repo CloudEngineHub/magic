@@ -29,8 +29,12 @@ describe("VideoEditElement", () => {
 		expect(data).toMatchObject({
 			id: "video-edit-1",
 			type: ElementTypeEnum.VideoEdit,
-			videoSequence: ["video-s01", "video-s02"],
-			audioSequence: ["audio-1"],
+			contents: [
+				{
+					videoSequence: ["video-s01", "video-s02"],
+					audioSequence: ["audio-1"],
+				},
+			],
 			width: VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
 			height: VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT,
 		})
@@ -57,8 +61,10 @@ describe("VideoEditElement", () => {
 		if (exported?.type !== ElementTypeEnum.VideoEdit) {
 			throw new Error("Expected video edit element")
 		}
-		expect(exported.videoSequence).not.toBe(source.videoSequence)
-		expect(exported.audioSequence).not.toBe(source.audioSequence)
-		expect(exported.output).not.toBe(source.output)
+		const exportedContent = exported.contents[0]
+		const sourceContent = source.contents[0]
+		expect(exportedContent?.videoSequence).not.toBe(sourceContent?.videoSequence)
+		expect(exportedContent?.audioSequence).not.toBe(sourceContent?.audioSequence)
+		expect(exportedContent?.output).not.toBe(sourceContent?.output)
 	})
 })

@@ -25,25 +25,25 @@ export class ImageReplaceController {
 		}
 	}
 
-	public openLocalFilePicker(elementId: string, versionId: string | null): void {
+	public openLocalFilePicker(elementId: string, contentId: string | null): void {
 		if (this.destroyed || this.canvas.readonly || this.replacingElementId) return
 		const input = this.ensureInput()
 		input.value = ""
 		input.dataset.elementId = elementId
-		input.dataset.versionId = versionId ?? ""
+		input.dataset.contentId = contentId ?? ""
 		input.click()
 	}
 
 	public replaceWithProjectFile(
 		elementId: string,
 		path: string,
-		versionId: string | null,
+		contentId: string | null,
 	): Promise<boolean> {
 		return this.performReplacement(elementId, () =>
 			this.canvas.canvasFileUploadManager.replaceImageElementFromProject({
 				elementId,
 				path,
-				versionId,
+				contentId,
 			}),
 		)
 	}
@@ -52,8 +52,8 @@ export class ImageReplaceController {
 		const input = this.input
 		const file = input?.files?.[0]
 		const elementId = input?.dataset.elementId
-		const versionId = input?.dataset.versionId
-		if (!input || !file || !elementId || versionId === undefined || this.destroyed) return
+		const contentId = input?.dataset.contentId
+		if (!input || !file || !elementId || contentId === undefined || this.destroyed) return
 
 		const validation = validateFile(file)
 		if (!validation.valid || !isImageFile(file)) {
@@ -69,7 +69,7 @@ export class ImageReplaceController {
 			this.canvas.canvasFileUploadManager.replaceImageElement({
 				elementId,
 				file,
-				versionId: versionId || null,
+				contentId: contentId || null,
 			}),
 		).finally(() => {
 			input.value = ""

@@ -195,6 +195,9 @@ describe("DesignSaveManager remote checks", () => {
 		const sourceElement: LayerElement = {
 			id: "source",
 			type: "text",
+			activeContentId: "source-content-1",
+			mainContentId: "source-content-1",
+			contents: [{ contentId: "source-content-1" }],
 			x: 0,
 			y: 0,
 			width: 100,
@@ -203,6 +206,9 @@ describe("DesignSaveManager remote checks", () => {
 		const targetElement: LayerElement = {
 			id: "target",
 			type: "text",
+			activeContentId: "target-content-1",
+			mainContentId: "target-content-1",
+			contents: [{ contentId: "target-content-1" }],
 			x: 200,
 			y: 0,
 			width: 100,

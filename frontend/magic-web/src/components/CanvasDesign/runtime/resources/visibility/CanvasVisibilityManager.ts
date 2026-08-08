@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
-import { getActiveImageVersion } from "../../document/imageVersion"
+import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
 import type { Rect } from "../../shared/ids"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
 import {
@@ -1076,7 +1076,7 @@ export class CanvasVisibilityManager {
 		maxImageCount: number,
 	): void {
 		if (imageIds.length >= maxImageCount) return
-		if (element.type !== ElementTypeEnum.Image || !getActiveImageVersion(element).src) {
+		if (element.type !== ElementTypeEnum.Image || !getActiveImageContent(element).src) {
 			return
 		}
 		if (!this.registeredImages.has(element.id)) {
@@ -2364,7 +2364,7 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const registered = this.registeredImages.get(element.id)
-				const path = registered?.path ?? getActiveImageVersion(element).src
+				const path = registered?.path ?? getActiveImageContent(element).src
 				if (!path) {
 					return
 				}
@@ -2421,7 +2421,7 @@ export class CanvasVisibilityManager {
 					return
 				}
 				const registered = this.registeredVideos.get(element.id)
-				const path = registered?.path ?? element.src
+				const path = registered?.path ?? getActiveContent(element)?.src
 				if (!path) {
 					return
 				}
@@ -2467,7 +2467,7 @@ export class CanvasVisibilityManager {
 			if (element.type === ElementTypeEnum.Audio) {
 				if (queuedMediaIds.has(element.id)) return
 				const registered = this.registeredAudios.get(element.id)
-				const path = registered?.path ?? element.src
+				const path = registered?.path ?? getActiveContent(element)?.src
 				if (!path) return
 
 				const elementBounds = this.getElementDataBoundsInCanvas(element, parentTransform)

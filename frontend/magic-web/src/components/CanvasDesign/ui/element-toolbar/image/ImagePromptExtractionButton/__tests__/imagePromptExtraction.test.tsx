@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ElementToolStateProvider } from "../../../../../app/providers/ElementToolStateProvider"
 import type { Canvas } from "../../../../../runtime/core/Canvas"
 import { ElementTypeEnum, type ImageElement } from "../../../../../runtime/document/types"
+import { getActiveContent } from "../../../../../runtime/document/elementContent"
 import { buildImagePromptExtractionPrompt } from "../imagePromptExtractionPrompt"
 import {
 	buildImagePromptTextElementData,
@@ -99,7 +100,9 @@ describe("image prompt text element helpers", () => {
 		scaleX: 1,
 		scaleY: 1,
 		zIndex: 1,
-		src: "images/product.png",
+		activeContentId: "image-1-content-1",
+		mainContentId: "image-1-content-1",
+		contents: [{ contentId: "image-1-content-1", src: "images/product.png" }],
 	}
 
 	it("creates text element data to the right of the image and connects image to text", () => {
@@ -121,7 +124,7 @@ describe("image prompt text element helpers", () => {
 			height: 100,
 			zIndex: 9,
 		})
-		expect(result.element.content?.[0]?.children?.[0]?.text).toBe(
+		expect(getActiveContent(result.element)?.content?.[0]?.children?.[0]?.text).toBe(
 			"商业摄影产品图，柔和光线，白色背景",
 		)
 		expect(result.connection).toEqual({
@@ -243,7 +246,7 @@ describe("image prompt text element helpers", () => {
 			measureLayout: () => ({ width: 1200, height: 900 }),
 		})
 
-		expect(result.element.defaultStyle?.fontSize).toBe(96)
+		expect(getActiveContent(result.element)?.defaultStyle?.fontSize).toBe(96)
 		expect(result.displayPrompt).toContain("\n")
 		result.displayPrompt.split("\n").forEach((line) => {
 			expect(line.length).toBeLessThanOrEqual(24)
@@ -263,7 +266,9 @@ describe("ImagePromptExtractionButton", () => {
 				width: 800,
 				height: 600,
 				zIndex: 1,
-				src: "images/product.png",
+				activeContentId: "image-1-content-1",
+				mainContentId: "image-1-content-1",
+				contents: [{ contentId: "image-1-content-1", src: "images/product.png" }],
 				name: "product.png",
 			},
 		]

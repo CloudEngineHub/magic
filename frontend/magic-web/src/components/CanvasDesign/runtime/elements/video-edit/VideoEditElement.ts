@@ -3,6 +3,7 @@ import {
 	ElementTypeEnum,
 	type LayerElement,
 	type VideoEditElement as VideoEditElementData,
+	type VideoEditElementContent,
 } from "../../document/types"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import {
@@ -11,7 +12,6 @@ import {
 	type TransformContext,
 } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
-import type { Canvas } from "../../core/Canvas"
 import { VIDEO_EDIT_CONFIG } from "./VideoEditElement.config"
 
 /**
@@ -37,7 +37,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		height?: number
 		videoSequence?: string[]
 		audioSequence?: string[]
-		output?: VideoEditElementData["output"]
+		output?: VideoEditElementContent["output"]
 	}): VideoEditElementData {
 		return {
 			id: options.id,
@@ -48,9 +48,16 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			height: options.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT,
 			zIndex: options.zIndex ?? 0,
 			name: options.name,
-			videoSequence: [...(options.videoSequence ?? [])],
-			audioSequence: [...(options.audioSequence ?? [])],
-			output: options.output ? { ...options.output } : undefined,
+			activeContentId: `${options.id}-content-1`,
+			mainContentId: `${options.id}-content-1`,
+			contents: [
+				{
+					contentId: `${options.id}-content-1`,
+					videoSequence: [...(options.videoSequence ?? [])],
+					audioSequence: [...(options.audioSequence ?? [])],
+					output: options.output ? { ...options.output } : undefined,
+				},
+			],
 			interactionConfig: { aspectRatioLocked: false },
 		}
 	}
@@ -60,6 +67,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	public render(): Konva.Group {
+		const content = this.getActiveContent<VideoEditElementContent>()
 		const width = Math.max(this.data.width ?? VIDEO_EDIT_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT, 1)
 		const group = new Konva.Group({ width, height })
@@ -93,9 +101,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			}),
 		)
 
-		const videoCount = this.data.videoSequence.length
-		const audioCount = this.data.audioSequence.length
-		const output = this.data.output
+		const videoCount = content?.videoSequence.length ?? 0
+		const audioCount = content?.audioSequence.length ?? 0
+		const output = content?.output
 		const outputSummary = [output?.aspectRatio, output?.resolution, output?.format]
 			.filter(Boolean)
 			.join(" · ")
@@ -144,13 +152,15 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public update(newData: VideoEditElementData): boolean {
 		const previousData = this.data
+		const previousContent = this.getActiveContent<VideoEditElementContent>()
 		this.data = newData
+		const nextContent = this.getActiveContent<VideoEditElementContent>()
 		const needsRerender =
 			previousData.width !== newData.width ||
 			previousData.height !== newData.height ||
-			previousData.videoSequence !== newData.videoSequence ||
-			previousData.audioSequence !== newData.audioSequence ||
-			previousData.output !== newData.output
+			previousContent?.videoSequence !== nextContent?.videoSequence ||
+			previousContent?.audioSequence !== nextContent?.audioSequence ||
+			previousContent?.output !== nextContent?.output
 
 		if (!needsRerender && this.node) {
 			this.updateBaseProps(this.node, newData)

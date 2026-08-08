@@ -8,6 +8,7 @@ import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
+import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
 import { createRemoveBackgroundTaskMeta } from "../../../../runtime/resources/image/imageGenerationTaskMeta"
 import {
 	generateElementId,
@@ -18,7 +19,7 @@ import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
 } from "../../../../runtime/resources/image/imageCropUtils"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../../runtime/document/elementContent"
 
 export default function ImageRemoveBackgroundButton() {
 	const { t } = useCanvasDesignI18n()
@@ -48,8 +49,8 @@ export default function ImageRemoveBackgroundButton() {
 			return
 		}
 
-		const activeVersion = getActiveImageVersion(selectedImageElement)
-		const filePath = activeVersion.src
+		const activeContent = getActiveImageContent(selectedImageElement)
+		const filePath = activeContent.src
 		if (!filePath) return
 
 		canvas.eventEmitter.emit({
@@ -64,7 +65,7 @@ export default function ImageRemoveBackgroundButton() {
 		}
 
 		const imageProcessRequestPayload = getImageProcessRequestPayload({
-			crop: activeVersion.crop,
+			crop: activeContent.crop,
 			sourceDimensions: {
 				width: imageInfo?.naturalWidth ?? selectedImageElement.width ?? 0,
 				height: imageInfo?.naturalHeight ?? selectedImageElement.height ?? 0,
@@ -85,16 +86,20 @@ export default function ImageRemoveBackgroundButton() {
 		const removeBackgroundSuffix = t("elementTools.imageRemoveBackground.title", "去背景")
 		const requestImageId = generateUUID()
 
-		const newImageElement: ImageElement = {
-			id: newElementId,
-			type: ElementTypeEnum.Image,
-			x: newPosition.x,
-			y: newPosition.y,
-			width: selectedImageElement.width ?? 1024,
-			height: selectedImageElement.height ?? 1024,
-			zIndex: newZIndex,
+		const newImageElement = {
+			...ElementFactory.createElementData(
+				ElementTypeEnum.Image,
+				newElementId,
+				newPosition.x,
+				newPosition.y,
+				selectedImageElement.width ?? 1024,
+				selectedImageElement.height ?? 1024,
+				newZIndex,
+			),
 			name: `${originalBaseName} ${removeBackgroundSuffix}`,
-		}
+		} as ImageElement
+		const targetContentId = newImageElement.activeContentId
+		if (!targetContentId) return
 
 		// 去背景任务确认前只保留运行时结果占位，避免 Pending 元素进入 DSL。
 		canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
@@ -106,6 +111,7 @@ export default function ImageRemoveBackgroundButton() {
 			targets: [
 				{
 					elementId: newElementId,
+					contentId: targetContentId,
 					imageGenerationTaskMeta: createRemoveBackgroundTaskMeta({
 						image_id: requestImageId,
 						file_path: filePath,

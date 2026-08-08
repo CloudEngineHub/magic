@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
-import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { useCanvasElement } from "../../../app/hooks/canvas"
 import ImageFullscreenOverlay from "../image/index"
 
@@ -14,8 +14,8 @@ export default function ImageElementFullscreenOverlay(props: ImageElementFullscr
 	const { elementId, onClose } = props
 	const element = useCanvasElement(elementId)
 	const imageElement = element?.type === ElementTypeEnum.Image ? (element as ImageElement) : null
-	const activeVersion = imageElement ? getActiveImageVersion(imageElement) : undefined
-	const imagePath = activeVersion?.src ?? ""
+	const activeContent = imageElement ? getActiveImageContent(imageElement) : undefined
+	const imagePath = activeContent?.src ?? ""
 
 	useEffect(() => {
 		if (imageElement && imagePath) {
@@ -27,7 +27,7 @@ export default function ImageElementFullscreenOverlay(props: ImageElementFullscr
 	return (
 		<ImageFullscreenOverlay
 			path={imagePath}
-			crop={activeVersion?.crop}
+			crop={activeContent?.crop}
 			isOpen={Boolean(imagePath)}
 			onClose={onClose}
 		/>

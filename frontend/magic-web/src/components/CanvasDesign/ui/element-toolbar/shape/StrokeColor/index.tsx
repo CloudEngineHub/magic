@@ -21,6 +21,7 @@ import {
 import StrokeSize from "../../../primitives/icons/StrokeSize"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
 
 export default function StrokeColor() {
 	const { t } = useCanvasDesignI18n()
@@ -54,7 +55,7 @@ export default function StrokeColor() {
 	const strokeColor = useMemo(() => {
 		if (!selectedElement) return undefined
 		const element = selectedElement as RectangleElement | EllipseElement
-		return element.stroke || undefined
+		return getActiveContent(element)?.stroke || undefined
 	}, [selectedElement])
 
 	// 获取透明状态
@@ -71,7 +72,7 @@ export default function StrokeColor() {
 	const strokeWidth = useMemo(() => {
 		if (!selectedElement) return 1
 		const element = selectedElement as RectangleElement | EllipseElement
-		return element.strokeWidth || 1
+		return getActiveContent(element)?.strokeWidth || 1
 	}, [selectedElement])
 
 	// 同步 strokeWidth 到 inputValue（取整）

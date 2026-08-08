@@ -22,6 +22,7 @@ import { collectPendingVideoGenerationRequestResourcePaths } from "./points/vide
 import { resolveVideoPointsEstimateGate } from "./points/video-points-estimate.policy"
 import type { GenerateVideoRequest } from "../../../public/magic-types"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -78,8 +79,9 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
+	const videoContent = getActiveContent(videoElement)
 	const confirmVideoGeneration = useVideoPointsConfirm()
-	const estimateRequest = videoElement.generateVideoRequest ?? null
+	const estimateRequest = videoContent?.generateVideoRequest ?? null
 	const generateAgainElementSize = useMemo(() => {
 		if (!estimateRequest?.generation) return null
 		const model = videoModelList.find((item) => item.model_id === estimateRequest.model_id)
@@ -108,16 +110,16 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	)
 
 	const handleStartRegenerate = useCallback(() => {
-		if (!canvas || !videoElement.generateVideoRequest) return
+		if (!canvas || !videoContent?.generateVideoRequest) return
 		const inst = canvas.elementManager.getElementInstance(videoElement.id)
 		if (inst instanceof VideoElementClass) {
 			inst.clearTempGenerateVideoRequest()
 		}
 		setIsEditing(true)
-	}, [canvas, videoElement.id, videoElement.generateVideoRequest])
+	}, [canvas, videoElement.id, videoContent?.generateVideoRequest])
 
 	const handleGenerateAgain = useCallback(async () => {
-		const generateVideoRequest = videoElement.generateVideoRequest
+		const generateVideoRequest = videoContent?.generateVideoRequest
 		if (!canvas || !generateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
 			return
 
@@ -198,7 +200,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		videoElement,
 	])
 
-	const canRestore = Boolean(videoElement.generateVideoRequest?.model_id)
+	const canRestore = Boolean(videoContent?.generateVideoRequest?.model_id)
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
 
 	if (!isEditing) {

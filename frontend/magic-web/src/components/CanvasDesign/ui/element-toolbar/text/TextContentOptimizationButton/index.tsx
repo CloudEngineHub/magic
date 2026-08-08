@@ -12,6 +12,8 @@ import type {
 	CompleteTextContentRequest,
 } from "../../../../public/magic-types"
 import { ElementToolTypeEnum } from "../../../../public/props"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
+import type { TextElementContent } from "../../../../runtime/document/types"
 import {
 	extractPlainTextFromRichText,
 	isRichTextContentEmpty,
@@ -45,9 +47,12 @@ export default function TextContentOptimizationButton() {
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const completeTextContent = canvas?.magicConfigManager.config?.methods?.completeTextContent
 	const completeImagePrompt = canvas?.magicConfigManager.config?.methods?.completeImagePrompt
+	const selectedTextContent = selectedTextElement
+		? getActiveContent<TextElementContent>(selectedTextElement)
+		: undefined
 	const currentText = useMemo(
-		() => extractPlainTextFromRichText(selectedTextElement?.content),
-		[selectedTextElement?.content],
+		() => extractPlainTextFromRichText(selectedTextContent?.content),
+		[selectedTextContent?.content],
 	)
 	const requestKey = useMemo(
 		() =>
@@ -111,7 +116,7 @@ export default function TextContentOptimizationButton() {
 	}, [])
 
 	const buildRequest = useCallback((): CompleteTextContentRequest | null => {
-		if (!selectedTextElement || isRichTextContentEmpty(selectedTextElement.content)) {
+		if (!selectedTextElement || isRichTextContentEmpty(selectedTextContent?.content)) {
 			return null
 		}
 
@@ -219,8 +224,8 @@ export default function TextContentOptimizationButton() {
 		if (!canvas || !selectedTextElement || !text) return
 		const content = buildRichTextContentFromPlainText(
 			text,
-			selectedTextElement.content,
-			selectedTextElement.defaultStyle,
+			selectedTextContent?.content,
+			selectedTextContent?.defaultStyle,
 		)
 		canvas.elementManager.update(selectedTextElement.id, { content })
 		setOpen(false)

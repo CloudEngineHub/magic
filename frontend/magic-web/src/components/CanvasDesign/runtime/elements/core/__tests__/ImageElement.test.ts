@@ -2,14 +2,16 @@ import Konva from "konva"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ImageElement } from "../../image/ImageElement"
 import { VideoElement } from "../../video/VideoElement"
-import {
-	GenerationStatus,
-	type GenerateImageRequest,
-	type GenerateVideoRequest,
-} from "../../../../public/magic-types"
+import { GenerationStatus, type GenerateImageRequest } from "../../../../public/magic-types"
 import { RenderUtils } from "../../../shared/render/RenderUtils"
-import { ElementTypeEnum, type ImageElementV1, type ImageElementV2 } from "../../../document/types"
-import { isImageElementV2 } from "../../../document/imageVersion"
+import {
+	ElementTypeEnum,
+	type ElementUpdatePatch,
+	type ImageElement as ImageElementData,
+	type ImageElementContent,
+	type VideoElement as VideoElementData,
+} from "../../../document/types"
+import { isImageElementContent } from "../../../document/elementContent"
 import { GenerationRuntimeManager } from "../../../generation/GenerationRuntimeManager"
 import { GenerationAttemptCoordinator } from "../../../generation/GenerationAttemptCoordinator"
 import type { Canvas } from "../../../core/Canvas"
@@ -23,6 +25,46 @@ function createDeferred() {
 		reject = rejectPromise
 	})
 	return { promise, resolve, reject }
+}
+
+function contentImage(
+	contents: ImageElementContent[],
+	activeContentId = contents[0]?.contentId ?? null,
+	mainContentId = contents[0]?.contentId ?? null,
+): ImageElementData {
+	return {
+		id: "image-1",
+		type: ElementTypeEnum.Image,
+		activeContentId,
+		mainContentId,
+		contents,
+	}
+}
+
+type ContentApiTestImageElement = {
+	data: ImageElementData
+	canvas: Canvas
+	getActiveContentData: ImageElement["getActiveContentData"]
+	getMainContentData: ImageElement["getMainContentData"]
+	getContentData: ImageElement["getContentData"]
+	updateActiveContentData: ImageElement["updateActiveContentData"]
+	updateContentData: ImageElement["updateContentData"]
+}
+
+type GenerationTestImageElement = {
+	data: ImageElementData
+	isGenerating: boolean
+	isErrorState: boolean
+	isRetryEditing: boolean
+	canvas: Canvas
+	pollingManager: { start: ReturnType<typeof vi.fn> }
+	clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
+	rerender?: ReturnType<typeof vi.fn>
+	rerenderWhenTransformIdle?: ReturnType<typeof vi.fn>
+	updateImageElementNames?: ReturnType<typeof vi.fn>
+	createOssSrcPromise?: ReturnType<typeof vi.fn>
+	submitContentGeneration: ImageElement["submitContentGeneration"]
+	getContentData: ImageElement["getContentData"]
 }
 
 describe("ImageElement mounted image node sync", () => {
@@ -109,7 +151,15 @@ describe("ImageElement mounted image node sync", () => {
 			node: Konva.Group
 			loadedImage: HTMLImageElement
 			loadedImageVariant: "preview"
-			data: { id: string; src: string; width: number; height: number }
+			data: {
+				id: string
+				type: typeof ElementTypeEnum.Image
+				width: number
+				height: number
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
 			canvas: {
 				cropManager: { getCroppingElementId: () => string | null }
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
@@ -127,7 +177,15 @@ describe("ImageElement mounted image node sync", () => {
 		element.node = group
 		element.loadedImage = oldImage
 		element.loadedImageVariant = "preview"
-		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			width: 100,
+			height: 80,
+			activeContentId: "image-1-content-1",
+			mainContentId: "image-1-content-1",
+			contents: [{ contentId: "image-1-content-1", src: "/image.png" }],
+		}
 		element.canvas = {
 			cropManager: {
 				getCroppingElementId: () => null,
@@ -186,7 +244,15 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			node: Konva.Group
 			loadedImage?: HTMLImageElement
-			data: { id: string; src: string; width: number; height: number }
+			data: {
+				id: string
+				type: typeof ElementTypeEnum.Image
+				width: number
+				height: number
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
 			canvas: {
 				cropManager: { getCroppingElementId: () => string | null }
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
@@ -202,7 +268,15 @@ describe("ImageElement mounted image node sync", () => {
 		}
 		element.node = group
 		element.loadedImage = undefined
-		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			width: 100,
+			height: 80,
+			activeContentId: "image-1-content-1",
+			mainContentId: "image-1-content-1",
+			contents: [{ contentId: "image-1-content-1", src: "/image.png" }],
+		}
 		element.canvas = {
 			cropManager: {
 				getCroppingElementId: () => null,
@@ -225,7 +299,15 @@ describe("ImageElement mounted image node sync", () => {
 		const imageGroup = new Konva.Group()
 		const loadingGroup = new Konva.Group()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: { id: string; src: string; status?: GenerationStatus }
+			data: {
+				id: string
+				type: typeof ElementTypeEnum.Image
+				width: number
+				height: number
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
 			isErrorState: boolean
 			storedOssSrc: string | null
 			storedImageInfo: undefined
@@ -234,7 +316,15 @@ describe("ImageElement mounted image node sync", () => {
 			renderImage: ReturnType<typeof vi.fn>
 			renderLoadingPlaceholder: ReturnType<typeof vi.fn>
 		}
-		element.data = { id: "image-1", src: "/image.png" }
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			width: 100,
+			height: 80,
+			activeContentId: "image-1-content-1",
+			mainContentId: "image-1-content-1",
+			contents: [{ contentId: "image-1-content-1", src: "/image.png" }],
+		}
 		element.isErrorState = false
 		element.storedOssSrc = null
 		element.storedImageInfo = undefined
@@ -253,8 +343,10 @@ describe("ImageElement mounted image node sync", () => {
 			data: {
 				id: string
 				name: string
-				status: GenerationStatus
-				generateImageRequest: { model_id: string; prompt: string }
+				type: typeof ElementTypeEnum.Image
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
 			}
 			canvas: { t: undefined; elementManager: { isTemporary: ReturnType<typeof vi.fn> } }
 			isGenerating: boolean
@@ -263,11 +355,19 @@ describe("ImageElement mounted image node sync", () => {
 		element.data = {
 			id: "pasted-image",
 			name: "Pasted image",
-			status: GenerationStatus.Processing,
-			generateImageRequest: {
-				model_id: "image-model",
-				prompt: "a friendly creature",
-			},
+			type: ElementTypeEnum.Image,
+			activeContentId: "pasted-image-content-1",
+			mainContentId: "pasted-image-content-1",
+			contents: [
+				{
+					contentId: "pasted-image-content-1",
+					status: GenerationStatus.Processing,
+					generateImageRequest: {
+						model_id: "image-model",
+						prompt: "a friendly creature",
+					},
+				},
+			],
 		}
 		element.canvas = {
 			t: undefined,
@@ -285,8 +385,10 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {
 				id: string
-				status: GenerationStatus
-				generateVideoRequest: { model_id: string; prompt: string }
+				type: typeof ElementTypeEnum.Video
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
 			}
 			canvas: {
 				t: undefined
@@ -297,11 +399,19 @@ describe("ImageElement mounted image node sync", () => {
 		}
 		element.data = {
 			id: "pasted-video",
-			status: GenerationStatus.Processing,
-			generateVideoRequest: {
-				model_id: "video-model",
-				prompt: "a cinematic clip",
-			},
+			type: ElementTypeEnum.Video,
+			activeContentId: "pasted-video-content-1",
+			mainContentId: "pasted-video-content-1",
+			contents: [
+				{
+					contentId: "pasted-video-content-1",
+					status: GenerationStatus.Processing,
+					generateVideoRequest: {
+						model_id: "video-model",
+						prompt: "a cinematic clip",
+					},
+				},
+			],
 		}
 		element.canvas = {
 			t: undefined,
@@ -322,8 +432,11 @@ describe("ImageElement mounted image node sync", () => {
 		const renderedError = new Konva.Group()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			data: {
-				status: GenerationStatus
-				errorMessage: string
+				id: string
+				type: typeof ElementTypeEnum.Image
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
 			}
 			canvas: { t: (key: string, fallback: string) => string }
 			isGenerating: boolean
@@ -332,8 +445,17 @@ describe("ImageElement mounted image node sync", () => {
 			renderError: ReturnType<typeof vi.fn>
 		}
 		element.data = {
-			status: GenerationStatus.Failed,
-			errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+			id: "failed-image",
+			type: ElementTypeEnum.Image,
+			activeContentId: "failed-image-content-1",
+			mainContentId: "failed-image-content-1",
+			contents: [
+				{
+					contentId: "failed-image-content-1",
+					status: GenerationStatus.Failed,
+					errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+				},
+			],
 		}
 		element.canvas = {
 			t: (key, fallback) => (key === "image.generateFailed" ? "本地化图片失败" : fallback),
@@ -350,16 +472,28 @@ describe("ImageElement mounted image node sync", () => {
 	it("renders a localized video generation failure when the completed path is unresolved", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {
-				status: GenerationStatus
-				errorMessage: string
+				id: string
+				type: typeof ElementTypeEnum.Video
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
 			}
 			canvas: { t: (key: string, fallback: string) => string }
 			isRetryEditing: boolean
 			resolveRenderState: () => { stage: string; placeholderMode?: string; text?: string }
 		}
 		element.data = {
-			status: GenerationStatus.Failed,
-			errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+			id: "failed-video",
+			type: ElementTypeEnum.Video,
+			activeContentId: "failed-video-content-1",
+			mainContentId: "failed-video-content-1",
+			contents: [
+				{
+					contentId: "failed-video-content-1",
+					status: GenerationStatus.Failed,
+					errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+				},
+			],
 		}
 		element.canvas = {
 			t: (key, fallback) => (key === "video.generateFailed" ? "本地化视频失败" : fallback),
@@ -377,10 +511,18 @@ describe("ImageElement mounted image node sync", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {
 				id: string
-				src?: string
-				status?: GenerationStatus
-				generateVideoRequest?: { video_id: string }
-				errorMessage?: string
+				type: typeof ElementTypeEnum.Video
+				width: number
+				height: number
+				activeContentId: string
+				mainContentId: string
+				contents: Array<{
+					contentId: string
+					src?: string
+					status?: GenerationStatus
+					generateVideoRequest?: { video_id: string }
+					errorMessage?: string
+				}>
 			}
 			isGenerating: boolean
 			cancelScheduledPreviewRefresh: ReturnType<typeof vi.fn>
@@ -395,8 +537,18 @@ describe("ImageElement mounted image node sync", () => {
 		}
 		element.data = {
 			id: "video-1",
-			status: GenerationStatus.Processing,
-			generateVideoRequest: { video_id: "task-1" },
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+			activeContentId: "video-1-content-1",
+			mainContentId: "video-1-content-1",
+			contents: [
+				{
+					contentId: "video-1-content-1",
+					status: GenerationStatus.Processing,
+					generateVideoRequest: { video_id: "task-1" },
+				},
+			],
 		}
 		element.isGenerating = true
 		element.cancelScheduledPreviewRefresh = vi.fn()
@@ -411,8 +563,13 @@ describe("ImageElement mounted image node sync", () => {
 
 		const shouldRerender = element.update({
 			...element.data,
-			src: "videos/result.mp4",
-			status: GenerationStatus.Completed,
+			contents: [
+				{
+					...element.data.contents[0],
+					src: "videos/result.mp4",
+					status: GenerationStatus.Completed,
+				},
+			],
 		})
 
 		expect(element.isGenerating).toBe(false)
@@ -595,7 +752,15 @@ describe("ImageElement mounted image node sync", () => {
 		element.node = group
 		element.loadedImage = closingImage
 		element.loadedImageVariant = "preview"
-		element.data = { id: "image-1", src: "/image.png", width: 100, height: 80 }
+		element.data = {
+			id: "image-1",
+			type: "image",
+			width: 100,
+			height: 80,
+			contents: [{ contentId: "content-1", src: "/image.png" }],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+		} as never
 		element.canvas = {
 			cropManager: {
 				getCroppingElementId: () => null,
@@ -669,7 +834,13 @@ describe("ImageElement mounted image node sync", () => {
 		const emit = vi.fn()
 		const rerenderWhenTransformIdle = vi.fn()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: { id: string; src: string }
+			data: {
+				id: string
+				type: typeof ElementTypeEnum.Image
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
 			canvas: {
 				imageResourceManager: {
 					loadResource: ReturnType<typeof vi.fn>
@@ -685,7 +856,13 @@ describe("ImageElement mounted image node sync", () => {
 			lastAppliedLoadFailureSignature: string | null
 			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
 		}
-		element.data = { id: "image-1", src: "./images/image.png" }
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-1-content-1",
+			mainContentId: "image-1-content-1",
+			contents: [{ contentId: "image-1-content-1", src: "./images/image.png" }],
+		}
 		element.canvas = {
 			imageResourceManager: { loadResource },
 			eventEmitter: { emit },
@@ -729,7 +906,13 @@ describe("ImageElement mounted image node sync", () => {
 		)
 		const setOssSrc = vi.fn()
 		const element = Object.create(ImageElement.prototype) as {
-			data: { id: string; src: string }
+			data: {
+				id: string
+				type: typeof ElementTypeEnum.Image
+				activeContentId: string
+				mainContentId: string
+				contents: ImageElementContent[]
+			}
 			canvas: {
 				magicConfigManager: { config: { methods: Record<string, never> } }
 				elementManager: { isTemporary: () => boolean }
@@ -744,7 +927,13 @@ describe("ImageElement mounted image node sync", () => {
 			removeResourceLoadedListener: () => void
 			setupResourceLoadedListener: () => void
 		}
-		element.data = { id: "image-1", src: "./images/a.png" }
+		element.data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-1-content-1",
+			mainContentId: "image-1-content-1",
+			contents: [{ contentId: "image-1-content-1", src: "./images/a.png" }],
+		}
 		element.canvas = {
 			magicConfigManager: { config: { methods: {} } },
 			elementManager: { isTemporary: () => false },
@@ -794,17 +983,12 @@ describe("ImageElement mounted image node sync", () => {
 		expect(setupResourceLoadedListener).toHaveBeenCalledTimes(1)
 	})
 
-	it("rerenders image version controls when versions are appended or main changes", () => {
-		const base: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed }],
-		}
+	it("rerenders image Content controls when Contents are appended or main changes", () => {
+		const base = contentImage([
+			{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+		])
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
+			data: ImageElementData
 			isGenerating: boolean
 		}
 		element.data = base
@@ -813,7 +997,10 @@ describe("ImageElement mounted image node sync", () => {
 		expect(
 			element.update({
 				...base,
-				versions: [...base.versions, { id: "v2", status: GenerationStatus.Processing }],
+				contents: [
+					...base.contents,
+					{ contentId: "v2", status: GenerationStatus.Processing },
+				],
 			}),
 		).toBe(true)
 
@@ -821,163 +1008,137 @@ describe("ImageElement mounted image node sync", () => {
 		expect(
 			element.update({
 				...withTwoVersions,
-				mainVersionId: "v2",
+				mainContentId: "v2",
 			}),
 		).toBe(true)
 	})
 
-	it("exposes the V2 main version through the associated-media semantic entry", () => {
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v2",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
+	it("exposes the main Content through the associated-media semantic entry", () => {
+		const data = contentImage(
+			[
+				{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+				{ contentId: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
 			],
-		}
+			"v2",
+			"v1",
+		)
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
+			data: ImageElementData
 		}
 		element.data = data
 
-		expect(element.getAssociatedVersionData()).toMatchObject({
-			id: "v1",
+		expect(element.getAssociatedContentData()).toMatchObject({
+			contentId: "v1",
 			src: "./images/v1.png",
 		})
 	})
 
-	it("exposes the V1 image as its only associated-media version", () => {
-		const data: ImageElementV1 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			width: 100,
-			height: 100,
-			src: "./images/v1.png",
-			status: GenerationStatus.Completed,
-		}
+	it("exposes an image Content as its associated-media entry", () => {
+		const data = contentImage([
+			{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+		])
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV1
+			data: ImageElementData
 		}
 		element.data = data
 
-		expect(element.getAssociatedVersionData()).toMatchObject({
+		expect(element.getAssociatedContentData()).toMatchObject({
 			src: "./images/v1.png",
 			status: GenerationStatus.Completed,
 		})
 	})
 
-	it("resolves and writes V2 versions through explicit instance methods", () => {
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v2",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
+	it("resolves and writes Contents through explicit instance methods", () => {
+		const data = contentImage(
+			[
+				{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+				{ contentId: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
 			],
-		}
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
-			canvas: { elementManager: { update: ReturnType<typeof vi.fn> } }
-		}
+			"v2",
+			"v1",
+		)
+		const element = Object.create(ImageElement.prototype) as ContentApiTestImageElement
 		element.data = data
 		element.canvas = {
 			elementManager: {
-				update: vi.fn((id: string, patch: Partial<ImageElementV2>) => {
+				update: vi.fn((_id: string, patch: ElementUpdatePatch) => {
 					element.data = { ...element.data, ...patch }
 				}),
 			},
-		}
+		} as unknown as Canvas
 
-		expect(element.getActiveVersionData().id).toBe("v2")
-		expect(element.getMainVersionData().id).toBe("v1")
-		expect(element.getVersionData("v1")?.src).toBe("./images/v1.png")
-		expect(element.getVersionData("missing")).toBeUndefined()
-		expect(element.updateActiveVersionData({ status: GenerationStatus.Failed })).toBe(true)
-		expect(element.getActiveVersionData().status).toBe(GenerationStatus.Failed)
-		expect(element.updateVersionData("v1", { src: "./images/v1-new.png" })).toBe(true)
-		expect(element.getVersionData("v1")?.src).toBe("./images/v1-new.png")
-		expect(element.updateVersionData("missing", { src: "./images/missing.png" })).toBe(false)
+		expect(element.getActiveContentData().contentId).toBe("v2")
+		expect(element.getMainContentData().contentId).toBe("v1")
+		expect(element.getContentData("v1")?.src).toBe("./images/v1.png")
+		expect(element.getContentData("missing")).toBeUndefined()
+		expect(element.updateActiveContentData({ status: GenerationStatus.Failed })).toBe(true)
+		expect(element.getActiveContentData().status).toBe(GenerationStatus.Failed)
+		expect(element.updateContentData("v1", { src: "./images/v1-new.png" })).toBe(true)
+		expect(element.getContentData("v1")?.src).toBe("./images/v1-new.png")
+		expect(element.updateContentData("missing", { src: "./images/missing.png" })).toBe(false)
 		expect(element.canvas.elementManager.update).toHaveBeenCalledTimes(2)
 	})
 
-	it("updates the single V1 version through the same active API", () => {
-		const data: ImageElementV1 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			src: "./images/v1.png",
-			status: GenerationStatus.Completed,
-		}
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV1
-			canvas: { elementManager: { update: ReturnType<typeof vi.fn> } }
-		}
-		const update = vi.fn((id: string, patch: Partial<ImageElementV1>) => {
+	it("updates a single Content through the same active API", () => {
+		const data = contentImage([
+			{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+		])
+		const element = Object.create(ImageElement.prototype) as ContentApiTestImageElement
+		const update = vi.fn((_id: string, patch: ElementUpdatePatch) => {
 			element.data = { ...element.data, ...patch }
 		})
 		element.data = data
-		element.canvas = { elementManager: { update } }
+		element.canvas = { elementManager: { update } } as unknown as Canvas
 
-		expect(element.updateActiveVersionData({ src: "./images/updated.png" })).toBe(true)
-		expect(element.getActiveVersionData().src).toBe("./images/updated.png")
-		expect(element.updateVersionData("v1", { src: "./images/noop.png" })).toBe(false)
+		expect(element.updateActiveContentData({ src: "./images/updated.png" })).toBe(true)
+		expect(element.getActiveContentData().src).toBe("./images/updated.png")
+		expect(element.updateContentData("v1", { src: "./images/noop.png" })).toBe(true)
 	})
 
-	it("exposes generation history and the latest version through semantic methods", () => {
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", status: GenerationStatus.Processing },
+	it("exposes generation history and the latest Content through semantic methods", () => {
+		const data = contentImage(
+			[
+				{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+				{ contentId: "v2", status: GenerationStatus.Processing },
 			],
-		}
+			"v1",
+			"v1",
+		)
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
+			data: ImageElementData
 		}
 		element.data = data
 
 		expect(element.hasGenerationHistory()).toBe(true)
-		expect(element.getLatestVersionData()).toMatchObject({
-			id: "v2",
+		expect(element.getLatestContentData()).toMatchObject({
+			contentId: "v2",
 			status: GenerationStatus.Processing,
 		})
 	})
 
 	it("cleans markers when active changes through a document update", () => {
-		const base: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", src: "./images/v1.png", status: GenerationStatus.Completed },
+		const base = contentImage(
+			[
+				{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+				{ contentId: "v2", src: "./images/v1.png", status: GenerationStatus.Completed },
 			],
-		}
-		const handleImageVersionChanged = vi.fn()
+			"v1",
+			"v1",
+		)
+		const handleImageContentChanged = vi.fn()
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
+			data: ImageElementData
 			isGenerating: boolean
 			canvas: {
-				markerManager: { handleImageVersionChanged: typeof handleImageVersionChanged }
+				markerManager: { handleImageContentChanged: typeof handleImageContentChanged }
 			}
 		}
 		element.data = base
 		element.isGenerating = false
-		element.canvas = { markerManager: { handleImageVersionChanged } }
+		element.canvas = { markerManager: { handleImageContentChanged } }
 
-		expect(element.update({ ...base, activeVersionId: "v2" })).toBe(true)
-		expect(handleImageVersionChanged).toHaveBeenCalledWith("image-1", "v1", "v2")
+		expect(element.update({ ...base, activeContentId: "v2" })).toBe(true)
+		expect(handleImageContentChanged).toHaveBeenCalledWith("image-1", "v1", "v2")
 	})
 
 	it("exposes an image generation request while submission is pending", async () => {
@@ -1078,47 +1239,23 @@ describe("ImageElement mounted image node sync", () => {
 		])
 	})
 
-	it("appends a successful V2 generation and activates the new version", async () => {
+	it("appends a successful Content generation and activates the new Content", async () => {
 		const generateImage = vi.fn().mockResolvedValue(undefined)
 		const generationRuntimeManager = new GenerationRuntimeManager()
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v2",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
-				{ id: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
+		const data = contentImage(
+			[
+				{ contentId: "v1", src: "./images/v1.png", status: GenerationStatus.Completed },
+				{ contentId: "v2", src: "./images/v2.png", status: GenerationStatus.Completed },
 			],
-		}
+			"v2",
+			"v1",
+		)
 		const commitGenerationTargets = vi.fn(
-			(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
+			(targets: Array<{ contentId?: string; persistedPatch: ElementUpdatePatch }>) => {
 				element.data = { ...element.data, ...targets[0]?.persistedPatch }
 			},
 		)
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			canvas: {
-				magicConfigManager: { config: { methods: { generateImage: typeof generateImage } } }
-				generationRuntimeManager: GenerationRuntimeManager
-				generationAttemptCoordinator: GenerationAttemptCoordinator
-				elementManager: {
-					getElementData: () => ImageElementV2
-					getTemporaryElementMetadata: () => null
-					commitGenerationTargets: typeof commitGenerationTargets
-				}
-				eventEmitter: { emit: ReturnType<typeof vi.fn> }
-			}
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			updateImageElementNames: ReturnType<typeof vi.fn>
-			createOssSrcPromise: ReturnType<typeof vi.fn>
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerender: ReturnType<typeof vi.fn>
-		}
+		const element = Object.create(ImageElement.prototype) as GenerationTestImageElement
 		element.data = data
 		element.isGenerating = false
 		element.isErrorState = false
@@ -1134,7 +1271,7 @@ describe("ImageElement mounted image node sync", () => {
 			eventEmitter: { emit: vi.fn() },
 		} as unknown as Canvas
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
-		element.canvas = canvas as typeof element.canvas
+		element.canvas = canvas
 		element.pollingManager = { start: vi.fn() }
 		element.updateImageElementNames = vi.fn()
 		element.createOssSrcPromise = vi.fn()
@@ -1142,44 +1279,35 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerender = vi.fn()
 
 		await expect(
-			element.submitVersionGeneration({ model_id: "image-model", prompt: "A product photo" }),
+			element.submitContentGeneration({ model_id: "image-model", prompt: "A product photo" }),
 		).resolves.toBe(true)
 
 		const target = commitGenerationTargets.mock.calls[0]?.[0]?.[0]
-		expect(target).toMatchObject({ elementId: "image-1", versionId: expect.any(String) })
-		expect(target?.versionId).not.toBe("v2")
-		expect(target?.persistedPatch).toHaveProperty("versions")
+		expect(target).toMatchObject({ elementId: "image-1", contentId: expect.any(String) })
+		expect(target?.contentId).not.toBe("v2")
+		expect(target?.persistedPatch).toHaveProperty("contents")
 		expect(element.data).not.toHaveProperty("generateImageRequest")
-		if (!isImageElementV2(element.data)) throw new Error("Expected V2 image data")
-		expect(element.data.versions).toHaveLength(3)
-		expect(element.getVersionData(element.data.activeVersionId)?.generateImageRequest).toEqual(
+		if (!isImageElementContent(element.data)) throw new Error("Expected image Content data")
+		expect(element.data.contents).toHaveLength(3)
+		if (!element.data.activeContentId) throw new Error("Expected active Content")
+		expect(element.getContentData(element.data.activeContentId)?.generateImageRequest).toEqual(
 			expect.objectContaining({ image_id: expect.any(String), prompt: "A product photo" }),
 		)
-		expect(element.data.mainVersionId).toBe("v1")
-		expect(element.data.activeVersionId).toBe(target?.versionId)
+		expect(element.data.mainContentId).toBe("v1")
+		expect(element.data.activeContentId).toBe(target?.contentId)
 	})
 
-	it("persists a failed V2 version when a later submission fails", async () => {
+	it("persists a failed Content when a later submission fails", async () => {
 		const generateImage = vi.fn().mockRejectedValue(new Error("submit failed"))
 		const generationRuntimeManager = new GenerationRuntimeManager()
-		const initialData: ImageElementV1 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			width: 100,
-			height: 100,
-			src: "./images/original.png",
-			status: GenerationStatus.Completed,
-		}
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV1 | ImageElementV2
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			canvas: Canvas
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-		}
+		const initialData = contentImage([
+			{
+				contentId: "v1",
+				src: "./images/original.png",
+				status: GenerationStatus.Completed,
+			},
+		])
+		const element = Object.create(ImageElement.prototype) as GenerationTestImageElement
 		element.data = { ...initialData }
 		element.isGenerating = false
 		element.isErrorState = false
@@ -1192,11 +1320,11 @@ describe("ImageElement mounted image node sync", () => {
 				getElementData: () => element.data,
 				getTemporaryElementMetadata: () => null,
 				commitGenerationTargets: vi.fn(
-					(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
+					(targets: Array<{ persistedPatch: ElementUpdatePatch }>) => {
 						element.data = {
 							...element.data,
 							...targets[0]?.persistedPatch,
-						} as ImageElementV2
+						} as ImageElementData
 					},
 				),
 			},
@@ -1209,24 +1337,19 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
-			element.submitVersionGeneration({ model_id: "image-model", prompt: "new version" }),
+			element.submitContentGeneration({ model_id: "image-model", prompt: "new version" }),
 		).resolves.toBe(false)
 
-		expect(element.data).toMatchObject({
-			imageDslVersion: 2,
-			activeVersionId: expect.any(String),
-			mainVersionId: expect.any(String),
-		})
-		if (!isImageElementV2(element.data)) throw new Error("Expected V2 image data")
-		expect(element.data.versions).toHaveLength(2)
-		expect(element.data.versions[1]).toEqual(
+		if (!isImageElementContent(element.data)) throw new Error("Expected image Content data")
+		expect(element.data.contents).toHaveLength(2)
+		expect(element.data.contents[1]).toEqual(
 			expect.objectContaining({
 				status: GenerationStatus.Failed,
 				generateImageRequest: expect.objectContaining({ prompt: "new version" }),
 			}),
 		)
-		expect(element.data.activeVersionId).toBe(element.data.versions[1]?.id)
-		expect(element.data.mainVersionId).toBe(element.data.versions[0]?.id)
+		expect(element.data.activeContentId).toBe(element.data.contents[1]?.contentId)
+		expect(element.data.mainContentId).toBe(element.data.contents[0]?.contentId)
 		expect(element.isGenerating).toBe(false)
 		expect(generationRuntimeManager.getTargetState(element.data.id)).toBeNull()
 		expect(canvas.eventEmitter.emit).toHaveBeenCalledWith({
@@ -1239,23 +1362,21 @@ describe("ImageElement mounted image node sync", () => {
 		const deferred = createDeferred()
 		const generateImage = vi.fn(() => deferred.promise)
 		const generationRuntimeManager = new GenerationRuntimeManager()
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV1
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			canvas: Canvas
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-		}
+		const element = Object.create(ImageElement.prototype) as GenerationTestImageElement
 		element.data = {
 			id: "image-1",
 			type: ElementTypeEnum.Image,
 			width: 100,
 			height: 100,
-			src: "./images/original.png",
-			status: GenerationStatus.Completed,
+			contents: [
+				{
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+			],
+			activeContentId: "v1",
+			mainContentId: "v1",
 		}
 		element.isGenerating = false
 		element.isErrorState = false
@@ -1278,7 +1399,7 @@ describe("ImageElement mounted image node sync", () => {
 		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerenderWhenTransformIdle = vi.fn()
 
-		const resultPromise = element.submitVersionGeneration({
+		const resultPromise = element.submitContentGeneration({
 			model_id: "image-model",
 			prompt: "new version",
 		})
@@ -1292,21 +1413,18 @@ describe("ImageElement mounted image node sync", () => {
 		expect(canvas.elementManager.commitGenerationTargets).not.toHaveBeenCalled()
 	})
 
-	it("appends a new processing version when retrying a failed V2 version", async () => {
+	it("appends a new processing Content when retrying a failed Content", async () => {
 		const generateImage = vi.fn().mockResolvedValue(undefined)
 		const generationRuntimeManager = new GenerationRuntimeManager()
-		const data: ImageElementV2 = {
-			id: "image-1",
-			type: ElementTypeEnum.Image,
-			width: 100,
-			height: 100,
-			imageDslVersion: 2,
-			activeVersionId: "failed",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+		const data = contentImage(
+			[
 				{
-					id: "failed",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "failed",
 					status: GenerationStatus.Failed,
 					generateImageRequest: {
 						image_id: "old-task",
@@ -1315,22 +1433,15 @@ describe("ImageElement mounted image node sync", () => {
 					},
 				},
 			],
-		}
+			"failed",
+			"v1",
+		)
 		const commitGenerationTargets = vi.fn(
-			(targets: Array<{ persistedPatch: Partial<ImageElementV2> }>) => {
+			(targets: Array<{ persistedPatch: ElementUpdatePatch }>) => {
 				Object.assign(data, targets[0]?.persistedPatch)
 			},
 		)
-		const element = Object.create(ImageElement.prototype) as ImageElement & {
-			data: ImageElementV2
-			isGenerating: boolean
-			isErrorState: boolean
-			isRetryEditing: boolean
-			canvas: Canvas
-			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
-			rerenderWhenTransformIdle: ReturnType<typeof vi.fn>
-		}
+		const element = Object.create(ImageElement.prototype) as GenerationTestImageElement
 		element.data = data
 		element.isGenerating = false
 		element.isErrorState = false
@@ -1352,36 +1463,30 @@ describe("ImageElement mounted image node sync", () => {
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
-			element.submitVersionGeneration({ model_id: "image-model", prompt: "retry prompt" }),
+			element.submitContentGeneration({ model_id: "image-model", prompt: "retry prompt" }),
 		).resolves.toBe(true)
 
-		expect(data.versions).toHaveLength(3)
-		expect(data.versions[1]).toEqual(
+		expect(data.contents).toHaveLength(3)
+		expect(data.contents[1]).toEqual(
 			expect.objectContaining({
-				id: "failed",
+				contentId: "failed",
 				status: GenerationStatus.Failed,
 			}),
 		)
-		expect(data.versions[2]).toEqual(
+		expect(data.contents[2]).toEqual(
 			expect.objectContaining({
 				status: GenerationStatus.Processing,
 				generateImageRequest: expect.objectContaining({ prompt: "retry prompt" }),
 			}),
 		)
-		expect(data.activeVersionId).toBe(data.versions[2]?.id)
-		expect(data.mainVersionId).toBe("v1")
+		expect(data.activeContentId).toBe(data.contents[2]?.contentId)
+		expect(data.mainContentId).toBe("v1")
 	})
 
 	it("exposes a video generation request while submission is pending", async () => {
 		const deferred = createDeferred()
 		const generateVideo = vi.fn(() => deferred.promise)
-		type TestVideoData = {
-			id: string
-			type: typeof ElementTypeEnum.Video
-			width: number
-			height: number
-			generateVideoRequest?: GenerateVideoRequest
-		}
+		type TestVideoData = VideoElementData
 		const generationRuntimeManager = new GenerationRuntimeManager()
 		const commitGenerationTargets = vi.fn(
 			(targets: Array<{ persistedPatch: Partial<TestVideoData> }>) => {
@@ -1413,6 +1518,9 @@ describe("ImageElement mounted image node sync", () => {
 			type: ElementTypeEnum.Video,
 			width: 100,
 			height: 100,
+			activeContentId: "video-1-content-1",
+			mainContentId: "video-1-content-1",
+			contents: [{ contentId: "video-1-content-1" }],
 		}
 		element.isGenerating = false
 		element.isErrorState = false
@@ -1439,7 +1547,7 @@ describe("ImageElement mounted image node sync", () => {
 		})
 		await Promise.resolve()
 
-		expect(element.data.generateVideoRequest).toBeUndefined()
+		expect(element.data.contents[0]?.generateVideoRequest).toBeUndefined()
 		expect(generationRuntimeManager.getTargetState("video-1")?.generateVideoRequest).toEqual(
 			expect.objectContaining({
 				model_id: "video-model",
@@ -1453,14 +1561,18 @@ describe("ImageElement mounted image node sync", () => {
 		deferred.resolve()
 		await expect(resultPromise).resolves.toBe(true)
 		expect(generationRuntimeManager.getTargetState("video-1")).toBeNull()
-		expect(element.data.generateVideoRequest).toEqual(
+		expect(element.data.contents[0]?.generateVideoRequest).toEqual(
 			expect.objectContaining({ video_id: expect.any(String) }),
 		)
 		expect(commitGenerationTargets).toHaveBeenCalledWith([
 			expect.objectContaining({
 				elementId: "video-1",
 				persistedPatch: expect.objectContaining({
-					generateVideoRequest: element.data.generateVideoRequest,
+					contents: expect.arrayContaining([
+						expect.objectContaining({
+							generateVideoRequest: element.data.contents[0]?.generateVideoRequest,
+						}),
+					]),
 				}),
 			}),
 		])

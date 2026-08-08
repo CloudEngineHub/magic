@@ -14,6 +14,64 @@ import {
 } from "../../../public/magic-types"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
+const CONTENT_FIELDS = new Set([
+	"src",
+	"status",
+	"errorMessage",
+	"generateImageRequest",
+	"imageGenerationTaskMeta",
+	"crop",
+	"generateVideoRequest",
+	"videoGenerationResultMeta",
+	"content",
+	"defaultStyle",
+	"fill",
+	"stroke",
+	"strokeWidth",
+	"cornerRadius",
+	"sides",
+	"innerRadiusRatio",
+	"generationConfig",
+	"shots",
+	"videoSequence",
+	"audioSequence",
+	"output",
+])
+
+function v3<T extends LayerElement>(element: Record<string, unknown>): T {
+	const { id, type, ...rest } = element
+	const contentFields: Record<string, unknown> = {}
+	for (const field of CONTENT_FIELDS) {
+		if (field in rest) {
+			contentFields[field] = rest[field]
+			delete rest[field]
+		}
+	}
+	const contentId = `${String(id)}-content`
+	return {
+		...rest,
+		id,
+		type,
+		contents: [{ contentId, ...contentFields }],
+		activeContentId: contentId,
+		mainContentId: contentId,
+	} as T
+}
+
+function activeContent(element: LayerElement): Record<string, any> {
+	const contentElement = element as LayerElement & {
+		contents: Array<Record<string, any>>
+		activeContentId: string | null
+	}
+	return (
+		contentElement.contents.find(
+			(content) => content.contentId === contentElement.activeContentId,
+		) ??
+		contentElement.contents[0] ??
+		{}
+	)
+}
+
 interface ClipboardManagerTestHarness {
 	canvas: {
 		canvasFileUploadManager: {
@@ -59,6 +117,7 @@ interface ClipboardManagerTestHarness {
 		pendingUploads: Array<{
 			sourceElementId: string
 			targetElementId: string
+			targetContentId: string
 			sourceCanvasId?: string
 			sourcePath?: string
 			file?: File
@@ -90,7 +149,7 @@ function createClipboardManager(): ClipboardManagerTestHarness {
 
 describe("ClipboardManager frame clipboard trees", () => {
 	it("starts media metadata lookups concurrently so get-file-url can batch them", async () => {
-		const firstImage: ImageElement = {
+		const firstImage = v3<ImageElement>({
 			id: "first-image",
 			type: "image",
 			name: "First image",
@@ -99,8 +158,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 			y: 0,
 			width: 80,
 			height: 60,
-		}
-		const secondImage: ImageElement = {
+		})
+		const secondImage = v3<ImageElement>({
 			id: "second-image",
 			type: "image",
 			name: "Second image",
@@ -109,13 +168,13 @@ describe("ClipboardManager frame clipboard trees", () => {
 			y: 0,
 			width: 80,
 			height: 60,
-		}
+		})
 		let resolveFirstLookup!: (value: { src: string; fileName: string }) => void
 		const firstLookup = new Promise<{ src: string; fileName: string }>((resolve) => {
 			resolveFirstLookup = resolve
 		})
 		const getFileInfo = vi.fn((path: string) => {
-			if (path === firstImage.src) {
+			if (path === activeContent(firstImage).src) {
 				return firstLookup
 			}
 			return Promise.resolve({
@@ -132,10 +191,10 @@ describe("ClipboardManager frame clipboard trees", () => {
 		await Promise.resolve()
 
 		expect(getFileInfo).toHaveBeenCalledTimes(2)
-		expect(getFileInfo).toHaveBeenNthCalledWith(1, firstImage.src, {
+		expect(getFileInfo).toHaveBeenNthCalledWith(1, activeContent(firstImage).src, {
 			useImageProcess: false,
 		})
-		expect(getFileInfo).toHaveBeenNthCalledWith(2, secondImage.src, {
+		expect(getFileInfo).toHaveBeenNthCalledWith(2, activeContent(secondImage).src, {
 			useImageProcess: false,
 		})
 
@@ -149,7 +208,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("collects media metadata from frame children", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -170,13 +229,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 				file_path: "source/image.png",
 				size: "2048x2048",
 			},
-			generateHightImageRequest: {
-				image_id: "legacy-high-task",
-				file_path: "source/image.png",
-				size: "2048x2048",
-			},
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			name: "Frame",
@@ -185,7 +239,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 300,
 			height: 200,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 		manager.getCanvasFileMetadata = vi.fn(async (element: ImageElement) => ({
 			element,
@@ -193,7 +247,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			mimeType: "image/png",
 			fileSize: 0,
 			sourceRef: {
-				src: element.src,
+				src: activeContent(element).src,
 				ossUrl: "https://example.test/image.png",
 			},
 		}))
@@ -212,7 +266,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("collects generation resource metadata from image requests", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -226,7 +280,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 				prompt: "a friendly creature",
 				reference_images: ["source/ref.png", "source/image.png"],
 			},
-		}
+		})
 		const manager = createClipboardManager()
 		manager.getCanvasFileMetadata = vi.fn(async (element: ImageElement) => ({
 			element,
@@ -234,7 +288,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			mimeType: "image/png",
 			fileSize: 0,
 			sourceRef: {
-				src: element.src,
+				src: activeContent(element).src,
 				ossUrl: "https://example.test/image.png",
 			},
 		}))
@@ -265,8 +319,62 @@ describe("ClipboardManager frame clipboard trees", () => {
 		])
 	})
 
+	it("collects non-active media Contents as cross-canvas generation resources", async () => {
+		const image: ImageElement = {
+			id: "image-with-contents",
+			type: "image",
+			name: "Image with contents",
+			x: 12,
+			y: 16,
+			width: 80,
+			height: 60,
+			contents: [
+				{ contentId: "inactive-content", src: "source/inactive.png" },
+				{ contentId: "active-content", src: "source/active.png" },
+			],
+			activeContentId: "active-content",
+			mainContentId: "inactive-content",
+		}
+		const manager = createClipboardManager()
+		manager.getCanvasFileMetadata = vi.fn(async (element: ImageElement) => ({
+			element,
+			filename: "active.png",
+			mimeType: "image/png",
+			fileSize: 0,
+			sourceRef: {
+				src: activeContent(element).src,
+				ossUrl: "https://example.test/active.png",
+			},
+		}))
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: {
+				methods: {
+					getFileInfo: vi.fn(async (path: string) => ({
+						src: `https://example.test/${path}`,
+						fileName: path.split("/").pop(),
+					})),
+				},
+			},
+		}
+
+		const result = await manager.collectClipboardFiles([image])
+
+		expect(result.metadata).toEqual([
+			expect.objectContaining({
+				elementId: image.id,
+				role: "element-media",
+				sourceRef: expect.objectContaining({ src: "source/active.png" }),
+			}),
+			expect.objectContaining({
+				role: "generation-resource",
+				resourcePath: "source/inactive.png",
+				sourceRef: expect.objectContaining({ src: "source/inactive.png" }),
+			}),
+		])
+	})
+
 	it("stores all source-canvas aliases on element media metadata", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -280,7 +388,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 				prompt: "reuse the current image",
 				reference_images: ["/画布A/images/image.png"],
 			},
-		}
+		})
 		const manager = createClipboardManager()
 		manager.getCanvasFileMetadata = vi.fn(async (element: ImageElement) => ({
 			element,
@@ -288,7 +396,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			mimeType: "image/png",
 			fileSize: 0,
 			sourceRef: {
-				src: element.src,
+				src: activeContent(element).src,
 				ossUrl: "https://example.test/image.png",
 			},
 		}))
@@ -315,7 +423,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("collects cross-element media references as generation resources", async () => {
-		const referencedElement: ImageElement = {
+		const referencedElement = v3<ImageElement>({
 			id: "referenced-image",
 			type: "image",
 			name: "Referenced image",
@@ -328,8 +436,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 				type: ImageGenerationTaskTypeMap.High,
 				file_path: "./images/referenced.png",
 			},
-		}
-		const referringElement: ImageElement = {
+		})
+		const referringElement = v3<ImageElement>({
 			id: "referring-image",
 			type: "image",
 			name: "Referring image",
@@ -343,7 +451,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 				prompt: "use the other pasted image",
 				reference_images: ["images/referenced.png"],
 			},
-		}
+		})
 		const manager = createClipboardManager()
 		manager.getCanvasFileMetadata = vi.fn(async (element: ImageElement) => ({
 			element,
@@ -351,8 +459,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 			mimeType: "image/png",
 			fileSize: 0,
 			sourceRef: {
-				src: element.src,
-				ossUrl: `https://example.test/${element.src}`,
+				src: activeContent(element).src,
+				ossUrl: `https://example.test/${activeContent(element).src}`,
 			},
 		}))
 		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
@@ -549,7 +657,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("prepares frame child media without rewriting references before uploads finish", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -570,13 +678,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 				file_path: "images/image.png",
 				size: "2048x2048",
 			},
-			generateHightImageRequest: {
-				image_id: "legacy-high-task",
-				file_path: "images/image.png",
-				size: "2048x2048",
-			},
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			name: "Frame",
@@ -586,7 +689,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			height: 200,
 			zIndex: 3,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 
 		const result = await manager.prepareClipboardTreeElement({
@@ -640,29 +743,29 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(pastedFrame.children?.[0]).toEqual(
 			expect.objectContaining({
 				type: "image",
-				src: undefined,
-				status: GenerationStatus.Processing,
-				generateImageRequest: expect.objectContaining({
-					model_id: "image-model",
-					prompt: "a friendly creature",
-				}),
-				imageGenerationTaskMeta: expect.objectContaining({
-					type: ImageGenerationTaskTypeMap.High,
-					file_path: "images/image.png",
-					size: "2048x2048",
-				}),
-				generateHightImageRequest: expect.objectContaining({
-					file_path: "images/image.png",
-					size: "2048x2048",
-				}),
+				contents: [
+					expect.objectContaining({
+						status: GenerationStatus.Processing,
+						generateImageRequest: expect.objectContaining({
+							model_id: "image-model",
+							prompt: "a friendly creature",
+						}),
+						imageGenerationTaskMeta: expect.objectContaining({
+							type: ImageGenerationTaskTypeMap.High,
+							file_path: "images/image.png",
+							size: "2048x2048",
+						}),
+					}),
+				],
 			}),
 		)
 		const pastedChild = pastedFrame.children?.[0] as ImageElement
+		const pastedContent = activeContent(pastedChild)
 		expect(pastedChild.id).not.toBe("image-child")
-		expect(pastedChild.generateImageRequest?.image_id).toBeUndefined()
-		expect(pastedChild.imageGenerationTaskMeta?.image_id).toBeUndefined()
-		expect(pastedChild.generateHightImageRequest?.image_id).toBeUndefined()
+		expect(pastedContent.generateImageRequest?.image_id).toBeUndefined()
+		expect(pastedContent.imageGenerationTaskMeta?.image_id).toBeUndefined()
 		expect(pastedChild.id).toBe(result.pendingUploads[0]?.targetElementId)
+		expect(pastedContent.contentId).toBe(result.pendingUploads[0]?.targetContentId)
 		expect(
 			manager.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer,
 		).not.toHaveBeenCalled()
@@ -670,7 +773,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("keeps image generation references until background transfers finish", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -696,12 +799,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 				mark_path: "source/mark.png",
 				reference_image_options: [{ path: "source/ref.png" }],
 			},
-			generateHightImageRequest: {
-				image_id: "legacy-high-task",
-				file_path: "source/ref.png",
-				reference_image_options: [{ path: "source/ref.png" }],
-			},
-		}
+		})
 		const manager = createClipboardManager()
 
 		const result = await manager.prepareClipboardTreeElement({
@@ -732,14 +830,15 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 
 		const pastedChild = result.element as ImageElement
+		const pastedContent = activeContent(pastedChild)
 		expect(result.pendingUploads).toEqual([
 			expect.objectContaining({
 				sourceElementId: "image-child",
 				sourceCanvasId: "source-canvas",
 			}),
 		])
-		expect(pastedChild.src).toBeUndefined()
-		expect(pastedChild.generateImageRequest).toEqual(
+		expect(pastedContent.src).toBeUndefined()
+		expect(pastedContent.generateImageRequest).toEqual(
 			expect.objectContaining({
 				model_id: "image-model",
 				prompt: "use source/ref.png as a reference",
@@ -747,10 +846,10 @@ describe("ClipboardManager frame clipboard trees", () => {
 				reference_image_options: [expect.objectContaining({ path: "source/ref.png" })],
 			}),
 		)
-		expect(pastedChild.generateImageRequest?.image_id).toBeUndefined()
-		expect(pastedChild.generateImageRequest?.project_id).toBeUndefined()
-		expect(pastedChild.generateImageRequest?.file_dir).toBeUndefined()
-		expect(pastedChild.imageGenerationTaskMeta).toEqual(
+		expect(pastedContent.generateImageRequest?.image_id).toBeUndefined()
+		expect(pastedContent.generateImageRequest?.project_id).toBeUndefined()
+		expect(pastedContent.generateImageRequest?.file_dir).toBeUndefined()
+		expect(pastedContent.imageGenerationTaskMeta).toEqual(
 			expect.objectContaining({
 				file_path: "source/image.png",
 				mask_path: "source/mask.png",
@@ -758,16 +857,10 @@ describe("ClipboardManager frame clipboard trees", () => {
 				reference_image_options: [expect.objectContaining({ path: "source/ref.png" })],
 			}),
 		)
-		expect(pastedChild.generateHightImageRequest).toEqual(
-			expect.objectContaining({
-				file_path: "source/ref.png",
-				reference_image_options: [expect.objectContaining({ path: "source/ref.png" })],
-			}),
-		)
 	})
 
 	it("keeps video generation inputs until background transfers finish", async () => {
-		const child: VideoElement = {
+		const child = v3<VideoElement>({
 			id: "video-child",
 			type: "video",
 			name: "Child video",
@@ -793,7 +886,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					audio: [{ uri: "source/audio.wav" }],
 				},
 			},
-		}
+		})
 		const manager = createClipboardManager()
 
 		const result = await manager.prepareClipboardTreeElement({
@@ -824,18 +917,19 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 
 		const pastedChild = result.element as VideoElement
+		const pastedContent = activeContent(pastedChild)
 		expect(result.pendingUploads).toEqual([
 			expect.objectContaining({
 				sourceElementId: "video-child",
 				sourceCanvasId: "source-canvas",
 			}),
 		])
-		expect(pastedChild.src).toBeUndefined()
-		expect(pastedChild.generateVideoRequest?.video_id).toBeUndefined()
-		expect(pastedChild.generateVideoRequest?.project_id).toBeUndefined()
-		expect(pastedChild.generateVideoRequest?.file_dir).toBeUndefined()
-		expect(pastedChild.generateVideoRequest?.file_name).toBeUndefined()
-		expect(pastedChild.generateVideoRequest?.inputs).toEqual({
+		expect(pastedContent.src).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.video_id).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.project_id).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.file_dir).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.file_name).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.inputs).toEqual({
 			frames: [expect.objectContaining({ uri: "source/start.png" })],
 			reference_images: [expect.objectContaining({ uri: "source/ref.png" })],
 			reference_videos: [expect.objectContaining({ uri: "source/ref.mp4" })],
@@ -847,7 +941,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("returns an uploading frame child placeholder before remote transfer finishes", async () => {
-		const child: ImageElement = {
+		const child = v3<ImageElement>({
 			id: "image-child",
 			type: "image",
 			name: "Child image",
@@ -866,8 +960,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 				image_id: "source-remove-bg-task",
 				file_path: "source/image.png",
 			},
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			name: "Frame",
@@ -876,7 +970,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 300,
 			height: 200,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 		const metadata = {
 			elementId: "image-child",
@@ -911,29 +1005,33 @@ describe("ClipboardManager frame clipboard trees", () => {
 		])
 		const pastedFrame = result.element as FrameElement
 		const pastedChild = pastedFrame.children?.[0] as ImageElement
+		const pastedContent = activeContent(pastedChild)
 		expect(pastedChild).toEqual(
 			expect.objectContaining({
 				type: "image",
-				src: undefined,
-				status: GenerationStatus.Processing,
-				generateImageRequest: expect.objectContaining({
-					model_id: "image-model",
-					prompt: "a friendly creature",
-				}),
-				imageGenerationTaskMeta: expect.objectContaining({
-					type: ImageGenerationTaskTypeMap.RemoveBackground,
-					file_path: "source/image.png",
-				}),
+				contents: [
+					expect.objectContaining({
+						status: GenerationStatus.Processing,
+						generateImageRequest: expect.objectContaining({
+							model_id: "image-model",
+							prompt: "a friendly creature",
+						}),
+						imageGenerationTaskMeta: expect.objectContaining({
+							type: ImageGenerationTaskTypeMap.RemoveBackground,
+							file_path: "source/image.png",
+						}),
+					}),
+				],
 			}),
 		)
-		expect(pastedChild.generateImageRequest?.image_id).toBeUndefined()
-		expect(pastedChild.imageGenerationTaskMeta?.image_id).toBeUndefined()
+		expect(pastedContent.generateImageRequest?.image_id).toBeUndefined()
+		expect(pastedContent.imageGenerationTaskMeta?.image_id).toBeUndefined()
 		expect(pastedChild.id).toBe(result.pendingUploads[0]?.targetElementId)
 		expect(pastedChild.id).not.toBe("image-child")
 	})
 
 	it("keeps pasted video info data but drops the source polling id", async () => {
-		const child: VideoElement = {
+		const child = v3<VideoElement>({
 			id: "video-child",
 			type: "video",
 			name: "Child video",
@@ -947,8 +1045,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 				model_id: "video-model",
 				prompt: "a cinematic clip",
 			},
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			name: "Frame",
@@ -957,7 +1055,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 300,
 			height: 200,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 		const metadata = {
 			elementId: "video-child",
@@ -992,24 +1090,28 @@ describe("ClipboardManager frame clipboard trees", () => {
 		])
 		const pastedFrame = result.element as FrameElement
 		const pastedChild = pastedFrame.children?.[0] as VideoElement
+		const pastedContent = activeContent(pastedChild)
 		expect(pastedChild).toEqual(
 			expect.objectContaining({
 				type: "video",
-				src: undefined,
-				status: GenerationStatus.Processing,
-				generateVideoRequest: expect.objectContaining({
-					model_id: "video-model",
-					prompt: "a cinematic clip",
-				}),
+				contents: [
+					expect.objectContaining({
+						status: GenerationStatus.Processing,
+						generateVideoRequest: expect.objectContaining({
+							model_id: "video-model",
+							prompt: "a cinematic clip",
+						}),
+					}),
+				],
 			}),
 		)
-		expect(pastedChild.generateVideoRequest?.video_id).toBeUndefined()
+		expect(pastedContent.generateVideoRequest?.video_id).toBeUndefined()
 		expect(pastedChild.id).toBe(result.pendingUploads[0]?.targetElementId)
 		expect(pastedChild.id).not.toBe("video-child")
 	})
 
 	it("uploads an audio child before returning the pasted frame", async () => {
-		const child: AudioElement = {
+		const child = v3<AudioElement>({
 			id: "audio-child",
 			type: "audio",
 			name: "Child audio",
@@ -1018,8 +1120,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 			y: 16,
 			width: 480,
 			height: 120,
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			name: "Frame",
@@ -1028,7 +1130,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 600,
 			height: 240,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 		manager.canvas.canvasFileUploadManager.transferRemoteResource.mockResolvedValue({
 			path: "target/audio.mp3",
@@ -1062,13 +1164,15 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(result.pendingUploads).toEqual([])
 		const pastedFrame = result.element as FrameElement
 		const pastedChild = pastedFrame.children?.[0] as AudioElement
+		const pastedContent = activeContent(pastedChild)
 		expect(pastedChild).toEqual(
 			expect.objectContaining({
 				type: "audio",
-				src: "target/audio.mp3",
-				visible: true,
+				contents: [expect.objectContaining({ src: "target/audio.mp3" })],
 			}),
 		)
+		expect(pastedChild.visible).toBe(true)
+		expect(pastedContent.src).toBe("target/audio.mp3")
 		expect(pastedFrame.children).toHaveLength(1)
 		expect(pastedChild.id).not.toBe("audio-child")
 		expect(manager.canvas.audioResourceManager.primeCache).toHaveBeenCalledWith(
@@ -1083,7 +1187,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			src: "https://target.test/image.png",
 			fileName: "image.png",
 		}
-		const currentElement: ImageElement = {
+		const currentElement = v3<ImageElement>({
 			id: "pasted-image",
 			type: "image",
 			name: "Pasted image",
@@ -1097,7 +1201,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 				prompt: "pasted image",
 				reference_images: ["/画布A/images/image.png"],
 			},
-		}
+		})
 		const setOssSrc = vi.fn()
 		const requestImmediateMediaLoadForElements = vi.fn()
 		const convertToPermament = vi.fn()
@@ -1123,6 +1227,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					upload: {
 						sourceElementId: string
 						targetElementId: string
+						targetContentId: string
 						sourcePath?: string
 						metadata?: {
 							resourceAliases?: string[]
@@ -1135,6 +1240,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			{
 				sourceElementId: "source-image",
 				targetElementId: "pasted-image",
+				targetContentId: "pasted-image-content",
 				sourcePath: "./images/image.png",
 				metadata: {
 					resourceAliases: ["./images/image.png", "/画布A/images/image.png"],
@@ -1147,12 +1253,16 @@ describe("ClipboardManager frame clipboard trees", () => {
 		const imageResourceUpdates = convertToPermament.mock.calls[0]?.[1]
 		expect(imageResourceUpdates).toEqual(
 			expect.objectContaining({
-				src: "target/image.png",
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
-				generateImageRequest: expect.objectContaining({
-					reference_images: ["target/image.png"],
-				}),
+				contents: [
+					expect.objectContaining({
+						src: "target/image.png",
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+						generateImageRequest: expect.objectContaining({
+							reference_images: ["target/image.png"],
+						}),
+					}),
+				],
 			}),
 		)
 		expect(imageResourceUpdates).not.toHaveProperty("id")
@@ -1174,13 +1284,168 @@ describe("ClipboardManager frame clipboard trees", () => {
 		})
 	})
 
+	it("writes a pasted image upload back to the captured Content after active changes", () => {
+		const uploadResult: UploadFileResponse = {
+			path: "target/uploaded.png",
+			src: "https://target.test/uploaded.png",
+			fileName: "uploaded.png",
+		}
+		const currentElement: ImageElement = {
+			id: "pasted-image",
+			type: "image",
+			name: "Pasted image",
+			x: 12,
+			y: 16,
+			width: 80,
+			height: 60,
+			contents: [
+				{
+					contentId: "upload-target",
+					src: undefined,
+					status: GenerationStatus.Processing,
+				},
+				{
+					contentId: "visible-content",
+					src: "target/visible.png",
+					status: GenerationStatus.Completed,
+				},
+			],
+			activeContentId: "visible-content",
+			mainContentId: "upload-target",
+		}
+		const setOssSrc = vi.fn()
+		const requestImmediateMediaLoadForElements = vi.fn()
+		const update = vi.fn()
+		const manager = createClipboardManager()
+		manager.canvas = {
+			...manager.canvas,
+			elementManager: {
+				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => currentElement),
+				getElementInstance: vi.fn(() => ({ setOssSrc })),
+				isTemporary: vi.fn(() => false),
+				convertToPermament: vi.fn(),
+				update,
+			},
+			visibilityManager: {
+				requestImmediateMediaLoadForElements,
+			},
+		} as unknown as ClipboardManagerTestHarness["canvas"]
+
+		const applied = (
+			manager as unknown as {
+				applyClipboardTreeUploadResult: (
+					upload: {
+						sourceElementId: string
+						targetElementId: string
+						targetContentId: string
+					},
+					nextUploadResult: UploadFileResponse,
+				) => boolean
+			}
+		).applyClipboardTreeUploadResult(
+			{
+				sourceElementId: "source-image",
+				targetElementId: "pasted-image",
+				targetContentId: "upload-target",
+			},
+			uploadResult,
+		)
+
+		expect(applied).toBe(true)
+		const resourceUpdates = update.mock.calls[0]?.[1]
+		expect(resourceUpdates).toEqual(
+			expect.objectContaining({
+				contents: [
+					expect.objectContaining({
+						contentId: "upload-target",
+						src: "target/uploaded.png",
+						status: GenerationStatus.Completed,
+					}),
+					expect.objectContaining({
+						contentId: "visible-content",
+						src: "target/visible.png",
+						status: GenerationStatus.Completed,
+					}),
+				],
+				activeContentId: "visible-content",
+				mainContentId: "upload-target",
+			}),
+		)
+		expect(setOssSrc).not.toHaveBeenCalled()
+		expect(requestImmediateMediaLoadForElements).not.toHaveBeenCalled()
+	})
+
+	it("writes a pasted media upload failure to the captured Content", () => {
+		const currentElement: VideoElement = {
+			id: "pasted-video",
+			type: "video",
+			contents: [
+				{
+					contentId: "upload-target",
+					status: GenerationStatus.Processing,
+				},
+				{
+					contentId: "visible-content",
+					src: "target/visible.mp4",
+					status: GenerationStatus.Completed,
+				},
+			],
+			activeContentId: "visible-content",
+			mainContentId: "upload-target",
+		}
+		const update = vi.fn()
+		const manager = createClipboardManager()
+		manager.canvas = {
+			...manager.canvas,
+			elementManager: {
+				hasElement: vi.fn(() => true),
+				getElementData: vi.fn(() => currentElement),
+				getElementInstance: vi.fn(() => undefined),
+				update,
+			},
+		} as unknown as ClipboardManagerTestHarness["canvas"]
+
+		;(
+			manager as unknown as {
+				applyClipboardTreeUploadFailure: (upload: {
+					sourceElementId: string
+					targetElementId: string
+					targetContentId: string
+				}) => void
+			}
+		).applyClipboardTreeUploadFailure({
+			sourceElementId: "source-video",
+			targetElementId: "pasted-video",
+			targetContentId: "upload-target",
+		})
+
+		expect(update).toHaveBeenCalledWith(
+			"pasted-video",
+			{
+				contents: [
+					expect.objectContaining({
+						contentId: "upload-target",
+						status: GenerationStatus.Failed,
+						errorMessage: expect.any(String),
+					}),
+					expect.objectContaining({
+						contentId: "visible-content",
+						status: GenerationStatus.Completed,
+					}),
+				],
+			},
+			{ silent: true },
+		)
+	})
+
 	it("activates pasted frame child video resources after upload applies", () => {
 		const uploadResult: UploadFileResponse = {
 			path: "target/video.mp4",
 			src: "https://target.test/video.mp4",
 			fileName: "video.mp4",
 		}
-		const currentElement: VideoElement = {
+		const currentElement = v3<VideoElement>({
 			id: "pasted-video",
 			type: "video",
 			name: "Pasted video",
@@ -1189,7 +1454,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 160,
 			height: 90,
 			status: GenerationStatus.Processing,
-		}
+		})
 		const requestPreviewLoad = vi.fn()
 		const requestImmediateMediaLoadForElements = vi.fn()
 		const convertToPermament = vi.fn()
@@ -1215,6 +1480,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					upload: {
 						sourceElementId: string
 						targetElementId: string
+						targetContentId: string
 						sourcePath?: string
 					},
 					nextUploadResult: UploadFileResponse,
@@ -1224,6 +1490,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			{
 				sourceElementId: "source-video",
 				targetElementId: "pasted-video",
+				targetContentId: "pasted-video-content",
 			},
 			uploadResult,
 		)
@@ -1232,9 +1499,13 @@ describe("ClipboardManager frame clipboard trees", () => {
 		const videoResourceUpdates = convertToPermament.mock.calls[0]?.[1]
 		expect(videoResourceUpdates).toEqual(
 			expect.objectContaining({
-				src: "target/video.mp4",
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
+				contents: [
+					expect.objectContaining({
+						src: "target/video.mp4",
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					}),
+				],
 			}),
 		)
 		expect(videoResourceUpdates).not.toHaveProperty("id")
@@ -1262,7 +1533,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			src: "https://target.test/audio.mp3",
 			fileName: "audio.mp3",
 		}
-		const currentElement: AudioElement = {
+		const currentElement = v3<AudioElement>({
 			id: "pasted-audio",
 			type: "audio",
 			name: "Pasted audio",
@@ -1271,7 +1542,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 480,
 			height: 120,
 			visible: false,
-		}
+		})
 		const requestImmediateMediaLoadForElements = vi.fn()
 		const convertToPermament = vi.fn()
 		const manager = createClipboardManager()
@@ -1296,6 +1567,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					upload: {
 						sourceElementId: string
 						targetElementId: string
+						targetContentId: string
 					},
 					nextUploadResult: UploadFileResponse,
 				) => boolean
@@ -1304,6 +1576,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			{
 				sourceElementId: "source-audio",
 				targetElementId: "pasted-audio",
+				targetContentId: "pasted-audio-content",
 			},
 			uploadResult,
 		)
@@ -1311,7 +1584,9 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(applied).toBe(true)
 		const audioResourceUpdates = convertToPermament.mock.calls[0]?.[1]
 		expect(audioResourceUpdates).toEqual({
-			src: "target/audio.mp3",
+			contents: [expect.objectContaining({ src: "target/audio.mp3" })],
+			activeContentId: "pasted-audio-content",
+			mainContentId: "pasted-audio-content",
 			visible: true,
 		})
 		expect(convertToPermament).toHaveBeenCalledWith("pasted-audio", audioResourceUpdates, {
@@ -1325,7 +1600,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 	})
 
 	it("omits a cross-canvas audio child when its upload fails", async () => {
-		const child: AudioElement = {
+		const child = v3<AudioElement>({
 			id: "source-audio",
 			type: "audio",
 			src: "source/audio.mp3",
@@ -1333,8 +1608,8 @@ describe("ClipboardManager frame clipboard trees", () => {
 			y: 16,
 			width: 480,
 			height: 120,
-		}
-		const frame: FrameElement = {
+		})
+		const frame = v3<FrameElement>({
 			id: "frame-1",
 			type: "frame",
 			x: 0,
@@ -1342,7 +1617,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			width: 600,
 			height: 240,
 			children: [child],
-		}
+		})
 		const manager = createClipboardManager()
 		manager.canvas.canvasFileUploadManager.transferRemoteResource.mockResolvedValue(null)
 		const metadata = {
@@ -1380,7 +1655,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 			fileName: "reference-copy.mp4",
 			expires_at: "2030-01-01 00:00:00",
 		}
-		const currentElement: VideoElement = {
+		const currentElement = v3<VideoElement>({
 			id: "pasted-video",
 			type: "video",
 			name: "Pasted video",
@@ -1395,7 +1670,7 @@ describe("ClipboardManager frame clipboard trees", () => {
 					reference_videos: [{ uri: "/画布A/videos/reference.mp4" }],
 				},
 			},
-		}
+		})
 		const transferRemoteResource = vi.fn(async () => uploadResult)
 		const update = vi.fn()
 		const recordHistoryImmediate = vi.fn()
@@ -1471,11 +1746,15 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(update).toHaveBeenCalledWith(
 			"pasted-video",
 			expect.objectContaining({
-				generateVideoRequest: expect.objectContaining({
-					inputs: expect.objectContaining({
-						reference_videos: [{ uri: "./videos/reference-copy.mp4" }],
+				contents: [
+					expect.objectContaining({
+						generateVideoRequest: expect.objectContaining({
+							inputs: expect.objectContaining({
+								reference_videos: [{ uri: "./videos/reference-copy.mp4" }],
+							}),
+						}),
 					}),
-				}),
+				],
 			}),
 			{ silent: false },
 		)

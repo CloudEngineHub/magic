@@ -1,11 +1,33 @@
 import { describe, expect, it, vi } from "vitest"
 import { ElementTypeEnum, type VideoElement } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import { GenerationStatus } from "../../../public/magic-types"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 import { INVALID_GENERATED_RESOURCE_PATH_ERROR } from "../polling/generationPollingUtils"
 import { VideoPollingManager } from "../polling/VideoPollingManager"
 
 const resolveResourceReference = createTestResourceReferenceResolver()
+
+function v3Video(fields: Record<string, unknown>): VideoElement {
+	const { id, type, ...rest } = fields
+	const contentId = `${String(id)}-content`
+	const contentFields = {
+		src: rest.src,
+		status: rest.status,
+		errorMessage: rest.errorMessage,
+		generateVideoRequest: rest.generateVideoRequest,
+		videoGenerationResultMeta: rest.videoGenerationResultMeta,
+	}
+	for (const field of Object.keys(contentFields)) delete rest[field]
+	return {
+		...rest,
+		id,
+		type,
+		contents: [{ contentId, ...contentFields }],
+		activeContentId: contentId,
+		mainContentId: contentId,
+	} as VideoElement
+}
 
 describe("VideoPollingManager", () => {
 	it.each([
@@ -14,7 +36,7 @@ describe("VideoPollingManager", () => {
 	])(
 		"preserves the workspace namespace for generated video path %s",
 		async (fileDir, expectedPath) => {
-			const element: VideoElement = {
+			const element = v3Video({
 				id: "video-element-1",
 				type: ElementTypeEnum.Video,
 				x: 0,
@@ -28,7 +50,7 @@ describe("VideoPollingManager", () => {
 					model_id: "model-1",
 					prompt: "demo",
 				},
-			}
+			})
 			const update = vi.fn((elementId: string, updates: Partial<VideoElement>) => {
 				if (elementId === element.id) Object.assign(element, updates)
 			})
@@ -61,14 +83,21 @@ describe("VideoPollingManager", () => {
 			await vi.waitFor(() => expect(update).toHaveBeenCalled())
 			expect(update).toHaveBeenCalledWith(
 				element.id,
-				expect.objectContaining({ src: expectedPath, status: GenerationStatus.Completed }),
+				expect.objectContaining({
+					contents: [
+						expect.objectContaining({
+							src: expectedPath,
+							status: GenerationStatus.Completed,
+						}),
+					],
+				}),
 				{ silent: false },
 			)
 		},
 	)
 
 	it("fails a completed result when its workspace path cannot be resolved", async () => {
-		const element: VideoElement = {
+		const element = v3Video({
 			id: "video-element-1",
 			type: ElementTypeEnum.Video,
 			x: 0,
@@ -82,7 +111,7 @@ describe("VideoPollingManager", () => {
 				model_id: "model-1",
 				prompt: "demo",
 			},
-		}
+		})
 		const update = vi.fn((elementId: string, updates: Partial<VideoElement>) => {
 			if (elementId === element.id) Object.assign(element, updates)
 		})
@@ -119,15 +148,19 @@ describe("VideoPollingManager", () => {
 		await vi.waitFor(() => expect(update).toHaveBeenCalled())
 		expect(element).toEqual(
 			expect.objectContaining({
-				status: GenerationStatus.Failed,
-				errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+				contents: [
+					expect.objectContaining({
+						status: GenerationStatus.Failed,
+						errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+					}),
+				],
 			}),
 		)
-		expect(element.src).toBeUndefined()
+		expect(getActiveContent(element)?.src).toBeUndefined()
 	})
 
 	it("clears a persisted video task when the backend confirms that exact task is missing", async () => {
-		const element: VideoElement = {
+		const element = v3Video({
 			id: "video-element-1",
 			type: ElementTypeEnum.Video,
 			x: 0,
@@ -141,7 +174,7 @@ describe("VideoPollingManager", () => {
 				model_id: "model-1",
 				prompt: "demo",
 			},
-		}
+		})
 		const update = vi.fn((elementId: string, updates: Partial<VideoElement>) => {
 			if (elementId === element.id) Object.assign(element, updates)
 		})
@@ -172,12 +205,16 @@ describe("VideoPollingManager", () => {
 		await vi.waitFor(() => expect(update).toHaveBeenCalled())
 		expect(update).toHaveBeenCalledWith(
 			element.id,
-			{
-				generateVideoRequest: undefined,
-				videoGenerationResultMeta: undefined,
-				status: undefined,
-				errorMessage: undefined,
-			},
+			expect.objectContaining({
+				contents: [
+					expect.objectContaining({
+						generateVideoRequest: undefined,
+						videoGenerationResultMeta: undefined,
+						status: undefined,
+						errorMessage: undefined,
+					}),
+				],
+			}),
 			{ silent: false },
 		)
 		expect(emit).toHaveBeenCalledWith({

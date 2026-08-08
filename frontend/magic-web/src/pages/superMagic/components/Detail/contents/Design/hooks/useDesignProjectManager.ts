@@ -12,7 +12,7 @@ import {
 	type DesignProjectStateBag,
 	type DesignSaveMetadata,
 } from "../managers"
-import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import type { DesignDraftReason } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 
@@ -89,7 +89,7 @@ export interface UseDesignProjectManagerReturn {
 const INITIAL_DESIGN_DATA: DesignData = {
 	type: "design",
 	name: "",
-	version: MAGIC_PROJECT_VERSION_V2,
+	version: MAGIC_PROJECT_VERSION_V3,
 	canvas: { elements: [] },
 }
 

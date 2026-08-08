@@ -91,31 +91,16 @@ function replaceUriItems(value: unknown, context: PathReplacementContext): boole
 	return hasChanged
 }
 
-function replaceImageElementPaths(
-	element: Record<string, unknown>,
+function replaceImageContentPaths(
+	content: Record<string, unknown>,
 	context: PathReplacementContext,
 ): boolean {
 	let hasChanged = false
-
-	if (element.imageDslVersion === 2 && Array.isArray(element.versions)) {
-		for (const version of element.versions) {
-			if (!version || typeof version !== "object") continue
-			const versionRecord = version as Record<string, unknown>
-			const versionElement = Object.create(null) as Record<string, unknown>
-			Object.assign(versionElement, versionRecord, { type: "image" })
-			if (replaceImageElementPaths(versionElement, context)) {
-				Object.assign(versionRecord, versionElement)
-				hasChanged = true
-			}
-		}
-		return hasChanged
-	}
-
-	if (replacePathField(element, "src", context)) {
+	if (replacePathField(content, "src", context)) {
 		hasChanged = true
 	}
 
-	const generateImageRequest = element.generateImageRequest as
+	const generateImageRequest = content.generateImageRequest as
 		| {
 				reference_images?: string[]
 				reference_image_options?: Array<{ path?: string }>
@@ -142,7 +127,7 @@ function replaceImageElementPaths(
 		}
 	}
 
-	const imageGenerationTaskMeta = element.imageGenerationTaskMeta as
+	const imageGenerationTaskMeta = content.imageGenerationTaskMeta as
 		ImageGenerationTaskMeta | undefined
 	if (imageGenerationTaskMeta && typeof imageGenerationTaskMeta === "object") {
 		const imageGenerationTaskMetaRecord = asRecord(imageGenerationTaskMeta)
@@ -161,46 +146,20 @@ function replaceImageElementPaths(
 		}
 	}
 
-	const generateHightImageRequest = element.generateHightImageRequest as
-		| {
-				file_path?: string
-				reference_image_options?: Array<{ path?: string }>
-		  }
-		| undefined
-	if (generateHightImageRequest && typeof generateHightImageRequest === "object") {
-		if (
-			replacePathField(
-				generateHightImageRequest as Record<string, unknown>,
-				"file_path",
-				context,
-			)
-		) {
-			hasChanged = true
-		}
-		if (
-			replaceReferenceImageOptionsPaths(
-				generateHightImageRequest.reference_image_options,
-				context,
-			)
-		) {
-			hasChanged = true
-		}
-	}
-
 	return hasChanged
 }
 
-function replaceVideoElementPaths(
-	element: Record<string, unknown>,
+function replaceVideoContentPaths(
+	content: Record<string, unknown>,
 	context: PathReplacementContext,
 ): boolean {
 	let hasChanged = false
 
-	if (replacePathField(element, "src", context)) {
+	if (replacePathField(content, "src", context)) {
 		hasChanged = true
 	}
 
-	const generateVideoRequest = element.generateVideoRequest as
+	const generateVideoRequest = content.generateVideoRequest as
 		| {
 				inputs?: {
 					frames?: Array<{ uri?: string }>
@@ -256,19 +215,43 @@ function replaceVideoElementPaths(
 }
 
 function replaceElementPaths(element: LayerElement, context: PathReplacementContext): boolean {
-	const elementRecord = element as unknown as Record<string, unknown>
 	let hasChanged = false
 
 	if (element.type === "image") {
-		hasChanged = replaceImageElementPaths(elementRecord, context)
+		for (const content of element.contents) {
+			if (content && typeof content === "object") {
+				hasChanged =
+					replaceImageContentPaths(
+						content as unknown as Record<string, unknown>,
+						context,
+					) || hasChanged
+			}
+		}
 	}
 
 	if (element.type === "video") {
-		hasChanged = replaceVideoElementPaths(elementRecord, context)
+		for (const content of element.contents) {
+			if (content && typeof content === "object") {
+				hasChanged =
+					replaceVideoContentPaths(
+						content as unknown as Record<string, unknown>,
+						context,
+					) || hasChanged
+			}
+		}
 	}
 
 	if (element.type === "audio") {
-		hasChanged = replacePathField(elementRecord, "src", context)
+		for (const content of element.contents) {
+			if (content && typeof content === "object") {
+				hasChanged =
+					replacePathField(
+						content as unknown as Record<string, unknown>,
+						"src",
+						context,
+					) || hasChanged
+			}
+		}
 	}
 
 	if ("children" in element && Array.isArray(element.children)) {

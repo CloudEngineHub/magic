@@ -17,12 +17,22 @@ describe("MediaPlaybackCoordinator", () => {
 					acquire: typeof acquire
 				}
 			}
-			data: { id: string; src: string }
+			data: {
+				id: string
+				contents: Array<{ contentId: string; src?: string }>
+				activeContentId: string
+				mainContentId: string
+			}
 			syncPlaybackAttachment: ReturnType<typeof vi.fn>
 			handoffPlaybackToFullscreen: () => HTMLVideoElement | null
 			acquireFullscreenPlayback: () => Promise<HTMLVideoElement | null>
 		}
-		element.data = { id: "video-1", src: "./videos/a.mp4" }
+		element.data = {
+			id: "video-1",
+			contents: [{ contentId: "video-1-content", src: "./videos/a.mp4" }],
+			activeContentId: "video-1-content",
+			mainContentId: "video-1-content",
+		}
 		element.canvas = {
 			mediaPlaybackCoordinator: { preparePlayback },
 			videoPlaybackManager: { handoff, acquire },

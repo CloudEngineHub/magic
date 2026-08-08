@@ -91,6 +91,9 @@
 			"italic": "Italic",
 			"placeholder": "Font Weight"
 		},
+		"imageContentDelete": {
+			"title": "Delete current content"
+		},
 		"imageConvertHight": {
 			"exitHint": "Exit",
 			"tip": "Select upscale factor",
@@ -115,9 +118,6 @@
 		},
 		"imageReplace": {
 			"title": "Replace Image"
-		},
-		"imageVersionDelete": {
-			"title": "Delete current version"
 		},
 		"shapeStyle": {
 			"advanced": "Advanced",
@@ -178,6 +178,10 @@
 	},
 	"image": {
 		"batchUploadFailed": "{{failed}}/{{total}} files upload failed",
+		"content": {
+			"main": "Main content",
+			"setMain": "Set as main"
+		},
 		"defaultName": "Image Generator",
 		"empty": "Please send an instruction to generate an image",
 		"errorPrefix": "Image generation failed, ",
@@ -206,11 +210,7 @@
 		"retryEditingExpand": "Please edit your expand request again",
 		"retryEditingRemoveBackground": "Please edit your remove-background request again",
 		"uploadFailed": "Image upload failed",
-		"uploading": "Uploading...",
-		"version": {
-			"main": "Main version",
-			"setMain": "Set as main"
-		}
+		"uploading": "Uploading..."
 	},
 	"imageEditor": {
 		"currentImage": "(Current Image)",

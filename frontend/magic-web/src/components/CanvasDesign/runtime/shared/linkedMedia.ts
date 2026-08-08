@@ -9,8 +9,8 @@ export interface LinkedMediaReference {
 	kind: LinkedMediaKind
 	path: string
 	sourceCrop?: CropConfig
-	/** 本次关联解析命中的图片版本；仅为运行时快照，不改变连接 DSL。 */
-	sourceVersionId?: string
+	/** 本次关联解析命中的图片 Content；仅为运行时快照，不改变连接 DSL。 */
+	sourceContentId?: string
 }
 
 /** 用于合并连线媒体、手动参考媒体和 @mention 的稳定资源身份。 */

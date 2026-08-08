@@ -155,6 +155,101 @@ export class ElementFactory {
 			case ElementTypeEnum.Text:
 				return TextElement.createElementData(id, x, y, roundedWidth, roundedHeight, zIndex)
 
+			case ElementTypeEnum.Image: {
+				const contentId = `${id}-content-1`
+				return {
+					id,
+					type: ElementTypeEnum.Image,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+					activeContentId: contentId,
+					mainContentId: contentId,
+					contents: [{ contentId }],
+				}
+			}
+
+			case ElementTypeEnum.Video: {
+				const contentId = `${id}-content-1`
+				return {
+					id,
+					type: ElementTypeEnum.Video,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+					activeContentId: contentId,
+					mainContentId: contentId,
+					contents: [{ contentId }],
+				}
+			}
+
+			case ElementTypeEnum.Audio: {
+				const contentId = `${id}-content-1`
+				return {
+					id,
+					type: ElementTypeEnum.Audio,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+					activeContentId: contentId,
+					mainContentId: contentId,
+					contents: [{ contentId }],
+				}
+			}
+
+			case ElementTypeEnum.Storyboard:
+				return StoryboardElement.createElementData({
+					id,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+				})
+
+			case ElementTypeEnum.Rectangle:
+			case ElementTypeEnum.Ellipse:
+			case ElementTypeEnum.Triangle:
+			case ElementTypeEnum.Star: {
+				const contentId = `${id}-content-1`
+				const config = this.getDefaultConfig(elementType)
+				const { width: _width, height: _height, ...content } = config
+				return {
+					id,
+					type: elementType,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+					activeContentId: contentId,
+					mainContentId: contentId,
+					contents: [{ contentId, ...content }],
+				}
+			}
+
+			case ElementTypeEnum.Group: {
+				const contentId = `${id}-content-1`
+				return {
+					id,
+					type: ElementTypeEnum.Group,
+					x,
+					y,
+					width: roundedWidth,
+					height: roundedHeight,
+					zIndex,
+					activeContentId: contentId,
+					mainContentId: contentId,
+					contents: [{ contentId }],
+				}
+			}
+
 			case ElementTypeEnum.Frame:
 				return FrameElement.createElementData(id, x, y, roundedWidth, roundedHeight, zIndex)
 
@@ -278,14 +373,15 @@ export class ElementFactory {
 }
 
 function normalizeStoryboardData(data: StoryboardElementData): StoryboardElementData {
-	if (!data.shots) return data
-
 	return {
 		...data,
-		shots: data.shots.map((shot) => {
-			const normalizedShot = { ...shot } as unknown as Record<string, unknown>
-			delete normalizedShot.status
-			return normalizedShot as StoryboardShot
-		}),
+		contents: data.contents.map((content) => ({
+			...content,
+			shots: content.shots?.map((shot) => {
+				const normalizedShot = { ...shot } as unknown as Record<string, unknown>
+				delete normalizedShot.status
+				return normalizedShot as unknown as StoryboardShot
+			}),
+		})),
 	}
 }

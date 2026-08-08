@@ -10,7 +10,7 @@ import type { DesignData } from "../../types"
 const DESIGN_DATA: DesignData = {
 	type: "design",
 	name: "design",
-	version: "2.0.0",
+	version: "3.0.0",
 	canvas: { elements: [] },
 }
 
@@ -67,6 +67,9 @@ describe("DesignRemoteListener file-change freshness", () => {
 						y: 0,
 						width: 100,
 						height: 100,
+						contents: [{ contentId: "frame-content-1" }],
+						activeContentId: "frame-content-1",
+						mainContentId: "frame-content-1",
 						children: [
 							{
 								id: "image-1",
@@ -76,7 +79,19 @@ describe("DesignRemoteListener file-change freshness", () => {
 								y: 0,
 								width: 100,
 								height: 100,
-								status: "processing",
+								contents: [
+									{
+										contentId: "image-content-1",
+										status: "completed",
+										generateImageRequest: { prompt: "active content" },
+									},
+									{
+										contentId: "image-content-2",
+										status: "processing",
+									},
+								],
+								activeContentId: "image-content-1",
+								mainContentId: "image-content-1",
 							},
 						],
 					},
@@ -86,9 +101,19 @@ describe("DesignRemoteListener file-change freshness", () => {
 
 		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(true)
 
-		const image = (data.canvas.elements[0] as { children: Array<Record<string, unknown>> })
-			.children[0]
-		image.generateImageRequest = { prompt: "A product photo" }
+		const image = (
+			data.canvas?.elements?.[0] as unknown as {
+				children: Array<{
+					contents: Array<Record<string, unknown>>
+					activeContentId: string
+				}>
+			}
+		).children[0]
+		const imageContent = image.contents.find(
+			(content) => content.contentId === "image-content-2",
+		)
+		if (!imageContent) throw new Error("Expected image content")
+		imageContent.generateImageRequest = { prompt: "A product photo" }
 		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(false)
 	})
 

@@ -1,6 +1,6 @@
 import { cloneDeep } from "lodash-es"
 import type { DesignData } from "../types"
-import { MAGIC_PROJECT_VERSION_V2 } from "../utils/magicProjectCompression"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import type {
 	DesignConflict,
 	DesignConnectionConflict,
@@ -27,10 +27,8 @@ import {
 import { DesignVersionManager } from "./DesignVersionManager"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import {
-	normalizeDesignDataPathsAfterLoad,
-	resolveDesignProjectBasePathFromAttachments,
-} from "../utils/utils"
+import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
+import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 import {
 	deleteDesignDraft,
 	getDesignDraftWriteDebounceMs,
@@ -216,7 +214,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.designData = {
 			type: "design",
 			name: "",
-			version: MAGIC_PROJECT_VERSION_V2,
+			version: MAGIC_PROJECT_VERSION_V3,
 			canvas: { elements: [] },
 		}
 		this.updateDesignData = noopDesignDataUpdater
@@ -486,7 +484,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				isVersionDataSourceLocked: this.isVersionDataSourceLocked(),
 				isRemoteApplying: context.isRemoteApplying,
 				fromDraft: context.fromDraft,
-				fromUpgrade: context.fromUpgrade,
 				hasPendingRemoteDesignData: this.pendingRemoteDesignData !== null,
 			}),
 		)
@@ -1619,24 +1616,29 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			!!draft.baseRemoteFingerprint && draft.baseRemoteFingerprint !== remoteFingerprint
 
 		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
-			const draftData = cloneDeep(draft.designData) as DesignData
 			const dslBase = this.getDesignProjectBasePath()
-			if (dslBase) {
-				normalizeDesignDataPathsAfterLoad(draftData, dslBase, {
+			const loadedDraft = await loadDesignDataToRuntime({
+				designData: draft.designData,
+				pathContext: {
+					projectBasePath: dslBase,
 					flatAttachments: this.options.flatAttachments,
 					attachmentIndex: this.options.attachmentIndex,
-				})
-			}
-			const draftBaseData = draft.baseRemoteData
-				? (cloneDeep(draft.baseRemoteData) as DesignData)
-				: null
-			if (draftBaseData) {
-				if (dslBase) {
-					normalizeDesignDataPathsAfterLoad(draftBaseData, dslBase, {
-						flatAttachments: this.options.flatAttachments,
-						attachmentIndex: this.options.attachmentIndex,
+				},
+			})
+			if (!loadedDraft) return
+			const draftData = loadedDraft.data
+			const loadedDraftBase = draft.baseRemoteData
+				? await loadDesignDataToRuntime({
+						designData: draft.baseRemoteData,
+						pathContext: {
+							projectBasePath: dslBase,
+							flatAttachments: this.options.flatAttachments,
+							attachmentIndex: this.options.attachmentIndex,
+						},
 					})
-				}
+				: null
+			const draftBaseData = loadedDraftBase?.data ?? null
+			if (draftBaseData) {
 				if (
 					this.tryMergeRemoteAdvancedDraft({
 						draft,
@@ -1666,14 +1668,17 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return
 		}
 
-		const restoredData = cloneDeep(draft.designData) as DesignData
 		const dslBase = this.getDesignProjectBasePath()
-		if (dslBase) {
-			normalizeDesignDataPathsAfterLoad(restoredData, dslBase, {
+		const loadedDraft = await loadDesignDataToRuntime({
+			designData: draft.designData,
+			pathContext: {
+				projectBasePath: dslBase,
 				flatAttachments: this.options.flatAttachments,
 				attachmentIndex: this.options.attachmentIndex,
-			})
-		}
+			},
+		})
+		if (!loadedDraft) return
+		const restoredData = loadedDraft.data
 
 		const oldData = this.stateBag.getDesignData()
 		this.stateBag.setters.setDesignData(restoredData)

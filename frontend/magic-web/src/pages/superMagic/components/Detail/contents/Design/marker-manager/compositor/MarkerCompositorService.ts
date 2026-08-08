@@ -11,7 +11,7 @@ import type {
 	UploadPrivateFileResponse,
 } from "@/components/CanvasDesign/public/magic-types"
 import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import { getActiveImageContent } from "@/components/CanvasDesign/runtime/document/elementContent"
 import { getCanvasResourceFileName } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { drawMarkerOnCanvas } from "./markerDrawers"
 import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
@@ -105,9 +105,9 @@ export class MarkerCompositorService {
 			image: providedImage,
 		} = input
 		const { getFileInfo, uploadPrivateFiles } = methods
-		const activeVersion = getActiveImageVersion(element)
+		const activeContent = getActiveImageContent(element)
 
-		if (!activeVersion.src) {
+		if (!activeContent.src) {
 			throw new Error("图片元素 src 为空")
 		}
 
@@ -115,10 +115,10 @@ export class MarkerCompositorService {
 		let ossUrl = providedOssUrl
 		if (!ossUrl) {
 			throwIfAborted(signal)
-			const fileInfo = await getFileInfo(activeVersion.src, { useImageProcess: true })
+			const fileInfo = await getFileInfo(activeContent.src, { useImageProcess: true })
 			ossUrl = fileInfo?.src
 			if (!ossUrl) {
-				throw new Error(`无法获取图片 OSS 地址: ${activeVersion.src}`)
+				throw new Error(`无法获取图片 OSS 地址: ${activeContent.src}`)
 			}
 		}
 
@@ -416,7 +416,7 @@ function getCompositeSourceCrop(
 	element: ImageElement,
 	imageInfo: ImageInfoForComposite,
 ): { x: number; y: number; width: number; height: number } | undefined {
-	const crop = getPersistedSourceCrop(getActiveImageVersion(element).crop, {
+	const crop = getPersistedSourceCrop(getActiveImageContent(element).crop, {
 		width: imageInfo.naturalWidth,
 		height: imageInfo.naturalHeight,
 	})

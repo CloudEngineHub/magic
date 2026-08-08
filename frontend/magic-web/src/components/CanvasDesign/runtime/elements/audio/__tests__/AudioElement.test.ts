@@ -214,7 +214,7 @@ describe("AudioElement", () => {
 			y: 20,
 			width: 1280,
 			height: 720,
-			src: "./audios/voice.mp3",
+			contents: [{ contentId: "audio-1-content-1", src: "./audios/voice.mp3" }],
 		})
 		expect(element).not.toHaveProperty("status")
 		expect(element).not.toHaveProperty("errorMessage")
@@ -267,6 +267,9 @@ describe("AudioElement", () => {
 				y: 0,
 				width: 480,
 				height: 120,
+				activeContentId: "audio-default-content",
+				mainContentId: "audio-default-content",
+				contents: [{ contentId: "audio-default-content" }],
 			},
 			canvas,
 		)
@@ -278,6 +281,9 @@ describe("AudioElement", () => {
 				y: 0,
 				width: 640,
 				height: 120,
+				activeContentId: "audio-custom-content",
+				mainContentId: "audio-custom-content",
+				contents: [{ contentId: "audio-custom-content" }],
 			},
 			canvas,
 		)
@@ -1500,9 +1506,9 @@ describe("AudioElement", () => {
 				y: 20,
 				width: 480,
 				height: 120,
-				src: "./audios/voice.mp3",
-				status: "failed",
-				errorMessage: "runtime-only",
+				activeContentId: "audio-1-content-1",
+				mainContentId: "audio-1-content-1",
+				contents: [{ contentId: "audio-1-content-1", src: "./audios/voice.mp3" }],
 				duration: 12,
 				paused: false,
 			} as never,
@@ -1511,7 +1517,7 @@ describe("AudioElement", () => {
 		expect(exported).toMatchObject({
 			id: "audio-1",
 			type: ElementTypeEnum.Audio,
-			src: "./audios/voice.mp3",
+			contents: [{ contentId: "audio-1-content-1", src: "./audios/voice.mp3" }],
 		})
 		expect(exported).not.toHaveProperty("status")
 		expect(exported).not.toHaveProperty("errorMessage")

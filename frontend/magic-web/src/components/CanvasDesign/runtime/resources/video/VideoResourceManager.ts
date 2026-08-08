@@ -1,6 +1,7 @@
 import type { Canvas } from "../../core/Canvas"
 import type { AttachmentSourceEnum, GetFileInfoResponse } from "../../../public/magic-types"
 import { ElementTypeEnum } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import type { ResourceLoadFailureReason } from "../media-common/resourceLoadFailure"
 import {
 	buildVideoResourceSnapshot,
@@ -934,10 +935,10 @@ export class VideoResourceManager {
 		const usedPaths = new Set<string>()
 		const elementsDict = this.canvas.elementManager.getElementsDict()
 		for (const elementData of Object.values(elementsDict)) {
-			if (elementData.type !== ElementTypeEnum.Video || !elementData.src) {
-				continue
-			}
-			usedPaths.add(this.getResourceIdentity(elementData.src))
+			if (elementData.type !== ElementTypeEnum.Video) continue
+			const activeContent = getActiveContent(elementData)
+			if (!activeContent?.src) continue
+			usedPaths.add(this.getResourceIdentity(activeContent.src))
 		}
 
 		this.entries.forEach((entry, resourceIdentity) => {

@@ -17,6 +17,9 @@ describe("FrameManager frame creation", () => {
 					width: 100,
 					height: 50,
 					zIndex: 1,
+					activeContentId: "first-content",
+					mainContentId: "first-content",
+					contents: [{ contentId: "first-content" }],
 				},
 			],
 			[
@@ -29,6 +32,9 @@ describe("FrameManager frame creation", () => {
 					width: 80,
 					height: 40,
 					zIndex: 2,
+					activeContentId: "second-content",
+					mainContentId: "second-content",
+					contents: [{ contentId: "second-content" }],
 				},
 			],
 		])
@@ -124,6 +130,9 @@ describe("FrameManager drag stacking", () => {
 			width: 100,
 			height: 80,
 			zIndex: 1,
+			activeContentId: "element-content",
+			mainContentId: "element-content",
+			contents: [{ contentId: "element-content" }],
 		}
 		const contentLayer = new Konva.Group()
 		const elementNode = new Konva.Group({ id: "element", x: 20, y: 30 })
@@ -168,6 +177,9 @@ describe("FrameManager drag stacking", () => {
 					width: 100,
 					height: 80,
 					zIndex: 1,
+					activeContentId: "lower-content",
+					mainContentId: "lower-content",
+					contents: [{ contentId: "lower-content" }],
 				},
 			],
 			[
@@ -180,6 +192,9 @@ describe("FrameManager drag stacking", () => {
 					width: 100,
 					height: 80,
 					zIndex: 2,
+					activeContentId: "upper-content",
+					mainContentId: "upper-content",
+					contents: [{ contentId: "upper-content" }],
 				},
 			],
 		])
@@ -229,6 +244,9 @@ describe("FrameManager drag stacking", () => {
 			y: 30,
 			width: 100,
 			height: 80,
+			activeContentId: "element-content",
+			mainContentId: "element-content",
+			contents: [{ contentId: "element-content" }],
 		}
 		const frame: LayerElement = {
 			id: "frame",
@@ -237,6 +255,9 @@ describe("FrameManager drag stacking", () => {
 			y: 100,
 			width: 400,
 			height: 300,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [],
 		}
 		const contentLayer = new Konva.Group()
@@ -278,6 +299,9 @@ describe("FrameManager drag stacking", () => {
 			y: 30,
 			width: 100,
 			height: 80,
+			activeContentId: "root-content",
+			mainContentId: "root-content",
+			contents: [{ contentId: "root-content" }],
 		}
 		const childElement: LayerElement = {
 			id: "child",
@@ -286,6 +310,9 @@ describe("FrameManager drag stacking", () => {
 			y: 50,
 			width: 100,
 			height: 80,
+			activeContentId: "child-content",
+			mainContentId: "child-content",
+			contents: [{ contentId: "child-content" }],
 		}
 		const frame: LayerElement = {
 			id: "frame",
@@ -294,6 +321,9 @@ describe("FrameManager drag stacking", () => {
 			y: 100,
 			width: 400,
 			height: 300,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [childElement],
 		}
 		const contentLayer = new Konva.Group()

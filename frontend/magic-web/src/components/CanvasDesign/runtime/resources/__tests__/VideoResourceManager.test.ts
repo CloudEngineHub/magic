@@ -348,7 +348,11 @@ describe("VideoResourceManager", () => {
 		const needsResourceReload = vi.fn(() => true)
 		const element = Object.create(VideoElement.prototype) as Record<string, unknown>
 		Object.defineProperty(element, "isDestroyed", { value: false })
-		element.data = { src: "./videos/a.mp4" }
+		element.data = {
+			contents: [{ contentId: "video-content", src: "./videos/a.mp4" }],
+			activeContentId: "video-content",
+			mainContentId: "video-content",
+		}
 		element.renderer = { hasPreview: vi.fn(() => true) }
 		element.canvas = { videoResourceManager: { needsResourceReload } }
 		element.loadPreviewFromPath = loadPreviewFromPath

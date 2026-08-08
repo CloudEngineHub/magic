@@ -11,6 +11,7 @@ import type {
 	VideoElement as VideoElementData,
 } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { ElementFactory } from "../../elements/core/ElementFactory"
 import {
 	generateElementId,
 	generateUniqueElementName,
@@ -28,10 +29,11 @@ import {
 	normalizeCanvasUploadFileResponsePath,
 } from "../../shared/path/canvasResourcePath"
 import {
-	getActiveImageVersionId,
-	isImageElementV2,
-	updateImageVersion,
-} from "../../document/imageVersion"
+	getActiveContent,
+	isImageElementContent,
+	updateContent,
+	updateImageContent,
+} from "../../document/elementContent"
 import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
@@ -96,13 +98,13 @@ export interface ReplaceAudioElementOptions {
 export interface ReplaceImageElementOptions {
 	elementId: string
 	file: File
-	versionId: string | null
+	contentId: string | null
 }
 
 export interface ReplaceImageElementFromProjectOptions {
 	elementId: string
 	path: string
-	versionId: string | null
+	contentId: string | null
 }
 
 export interface ReplaceAudioElementFromProjectOptions {
@@ -182,6 +184,52 @@ function getTransferErrorMessage(error: unknown, fallback: string): string {
 
 function getFileContentSignature(file: File): string {
 	return `${file.type}:${file.size}:${file.lastModified}`
+}
+
+function createUploadElementData(
+	elementType: ImageElementData["type"] | VideoElementData["type"] | AudioElementData["type"],
+	elementId: string,
+	position: { x: number; y: number },
+	size: { width: number; height: number },
+	zIndex: number,
+	name: string,
+	elementData:
+		| Partial<ImageElementData>
+		| Partial<VideoElementData>
+		| Partial<AudioElementData>
+		| undefined,
+	contentPatch: Record<string, unknown>,
+): ImageElementData | VideoElementData | AudioElementData {
+	const base = ElementFactory.createElementData(
+		elementType,
+		elementId,
+		position.x,
+		position.y,
+		size.width,
+		size.height,
+		zIndex,
+	) as ImageElementData | VideoElementData | AudioElementData
+	const {
+		contents: _contents,
+		activeContentId: _activeContentId,
+		mainContentId: _mainContentId,
+		src: _src,
+		status: _status,
+		errorMessage: _errorMessage,
+		...elementProps
+	} = (elementData ?? {}) as Record<string, unknown>
+	const merged = {
+		...base,
+		...elementProps,
+		id: elementId,
+		type: elementType,
+		name,
+	} as typeof base
+	return updateContent(
+		merged as never,
+		merged.activeContentId ?? undefined,
+		contentPatch as never,
+	) as typeof base
 }
 
 /**
@@ -785,31 +833,17 @@ export class CanvasFileUploadManager {
 			const isVideo = isVideoFile(file)
 			const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
 
-			const canvasFileElement = isVideo
-				? ({
-						x: targetX,
-						y: targetY,
-						width: dimensions.width,
-						height: dimensions.height,
-						status: GenerationStatus.Processing,
-						name: uniqueName,
-						zIndex: maxZIndex + 1,
-						...elementData,
-						id: elementId,
-						type: ElementTypeEnum.Video,
-					} satisfies VideoElementData)
-				: ({
-						x: targetX,
-						y: targetY,
-						width: dimensions.width,
-						height: dimensions.height,
-						status: GenerationStatus.Processing,
-						name: uniqueName,
-						zIndex: maxZIndex + 1,
-						...elementData,
-						id: elementId,
-						type: ElementTypeEnum.Image,
-					} satisfies ImageElementData)
+			const canvasFileElement = createUploadElementData(
+				isVideo ? ElementTypeEnum.Video : ElementTypeEnum.Image,
+				elementId,
+				{ x: targetX, y: targetY },
+				{ width: dimensions.width, height: dimensions.height },
+				maxZIndex + 1,
+				uniqueName,
+				elementData,
+				{ status: GenerationStatus.Processing },
+			)
+			const targetContentId = canvasFileElement.activeContentId
 
 			historyManager?.disable()
 			try {
@@ -822,7 +856,10 @@ export class CanvasFileUploadManager {
 							element instanceof VideoElementClass
 								? element.uploadResult
 								: undefined
-						const hasChanged = this.handleUploadCompleteInternal(elementId)
+						const hasChanged = this.handleUploadCompleteInternal(
+							elementId,
+							targetContentId,
+						)
 						if (uploadResult) {
 							onUploadComplete?.(elementId, uploadResult)
 						}
@@ -836,7 +873,11 @@ export class CanvasFileUploadManager {
 						}
 					},
 					onUploadFailed: (elementId, error) => {
-						const hasChanged = this.handleUploadFailedInternal(elementId, error)
+						const hasChanged = this.handleUploadFailedInternal(
+							elementId,
+							error,
+							targetContentId,
+						)
 						onUploadFailed?.(elementId, error)
 						if (historyManager && hasChanged) {
 							const pendingBatchId = this.findPendingBatchIdByElement(elementId)
@@ -872,7 +913,7 @@ export class CanvasFileUploadManager {
 			)
 		}
 
-		const target = this.getReplaceableImageTarget(options.elementId, options.versionId)
+		const target = this.getReplaceableImageTarget(options.elementId, options.contentId)
 		if (!target) return false
 		const [uploadResult] = await this.uploadDirect([options.file])
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
@@ -881,13 +922,13 @@ export class CanvasFileUploadManager {
 		const success = this.applyImageElementSourceReplacement(
 			options.elementId,
 			uploadResult.path,
-			target.versionId,
+			target.contentId,
 		)
 		if (success && uploadResult.src) {
 			const element = this.canvas.elementManager.getElementInstance(options.elementId)
 			if (
 				element instanceof ImageElementClass &&
-				this.isImageReplacementTargetActive(element, target.versionId)
+				this.isImageReplacementTargetActive(element, target.contentId)
 			) {
 				element.setOssSrc(uploadResult.src)
 			}
@@ -906,60 +947,56 @@ export class CanvasFileUploadManager {
 		return this.applyImageElementSourceReplacement(
 			options.elementId,
 			options.path,
-			options.versionId,
+			options.contentId,
 		)
 	}
 
 	private getReplaceableImageTarget(
 		elementId: string,
-		targetVersionId: string | null,
-	): { element: ImageElementClass; versionId: string | null } | null {
+		targetContentId: string | null,
+	): { element: ImageElementClass; contentId: string } | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!(element instanceof ImageElementClass)) return null
 		const data = element.getData()
-		const versionId = targetVersionId
-		if (isImageElementV2(data) ? versionId === null : versionId !== null) return null
-		const version = versionId
-			? element.getVersionData(versionId)
-			: element.getActiveVersionData()
-		if (!version) return null
-		const status = version.status
+		const contentId = targetContentId ?? data.activeContentId
+		if (!contentId) return null
+		const content = element.getContentData(contentId)
+		if (!content) return null
+		const status = content.status
 		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing)
 			return null
-		return { element, versionId }
+		return { element, contentId }
 	}
 
 	private applyImageElementSourceReplacement(
 		elementId: string,
 		nextPath: string,
-		targetVersionId: string | null,
+		targetContentId: string | null,
 	): boolean {
-		const target = this.getReplaceableImageTarget(elementId, targetVersionId)
+		const target = this.getReplaceableImageTarget(elementId, targetContentId)
 		if (!target) return false
 
 		const historyManager = this.canvas.historyManager
 		let updated = false
 		historyManager.disable()
 		try {
-			// 替换属于当前查看/编辑版本；保留版本指针、其他版本和生成配置，只重置新资源不再适用的裁剪与错误态。
+			// 替换属于当前查看/编辑 Content；保留 Content 指针、其他 Content 和生成配置，只重置新资源不再适用的裁剪与错误态。
 			const patch = {
 				src: nextPath,
 				status: GenerationStatus.Completed,
 				errorMessage: undefined,
 				crop: undefined,
 			}
-			updated = target.versionId
-				? target.element.updateVersionData(target.versionId, patch, { silent: false })
-				: target.element.updateActiveVersionData(patch, { silent: false })
+			updated = target.element.updateContentData(target.contentId, patch, { silent: false })
 		} finally {
 			historyManager.enable()
 		}
 		if (!updated) return false
 
-		// Marker 坐标绑定旧图片内容；仅在 src 成功写入后清理目标版本，失败时保持原状。
-		this.canvas.markerManager.removeMarkersByImageVersion(elementId, target.versionId)
+		// Marker 坐标绑定旧图片内容；仅在 src 成功写入后清理目标 Content，失败时保持原状。
+		this.canvas.markerManager.removeMarkersByImageContent(elementId, target.contentId)
 		historyManager.recordHistoryImmediate()
-		if (this.isImageReplacementTargetActive(target.element, target.versionId)) {
+		if (this.isImageReplacementTargetActive(target.element, target.contentId)) {
 			this.canvas.visibilityManager.requestImmediateImageLoad(elementId, {
 				reason: "image-replaced",
 				priority: "critical",
@@ -970,12 +1007,10 @@ export class CanvasFileUploadManager {
 
 	private isImageReplacementTargetActive(
 		element: ImageElementClass,
-		targetVersionId: string | null,
+		targetContentId: string,
 	): boolean {
 		const data = element.getData()
-		return targetVersionId
-			? isImageElementV2(data) && data.activeVersionId === targetVersionId
-			: !isImageElementV2(data)
+		return isImageElementContent(data) && data.activeContentId === targetContentId
 	}
 
 	public async replaceAudioElement(options: ReplaceAudioElementOptions): Promise<boolean> {
@@ -1011,7 +1046,7 @@ export class CanvasFileUploadManager {
 	private applyAudioElementSourceReplacement(elementId: string, nextPath: string): boolean {
 		const latest = this.canvas.elementManager.getElementData(elementId)
 		if (!latest || latest.type !== ElementTypeEnum.Audio) return false
-		const previousPath = latest.src
+		const previousPath = getActiveContent(latest)?.src
 		if (previousPath) {
 			if (
 				this.canvas.audioResourceManager.getResourceIdentity(previousPath) ===
@@ -1032,6 +1067,9 @@ export class CanvasFileUploadManager {
 		const historyManager = this.canvas.historyManager
 		historyManager.disable()
 		try {
+			// ElementManager routes Content business fields into the active Content.
+			// Keep the replacement as a narrow patch so element identity and unrelated
+			// element fields remain owned by the runtime document layer.
 			this.canvas.elementManager.update(elementId, { src: nextPath }, { silent: false })
 		} finally {
 			historyManager.enable()
@@ -1078,39 +1116,24 @@ export class CanvasFileUploadManager {
 		const elementId = generateElementId()
 		const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
 
-		const canvasFileElement =
-			elementType === ElementTypeEnum.Video
-				? ({
-						x: targetX,
-						y: targetY,
-						width,
-						height,
-						status: GenerationStatus.Processing,
-						name: uniqueName,
-						zIndex: maxZIndex + 1,
-						...elementData,
-						id: elementId,
-						type: ElementTypeEnum.Video,
-					} satisfies VideoElementData)
-				: ({
-						x: targetX,
-						y: targetY,
-						width,
-						height,
-						status: GenerationStatus.Processing,
-						name: uniqueName,
-						zIndex: maxZIndex + 1,
-						...elementData,
-						id: elementId,
-						type: ElementTypeEnum.Image,
-					} satisfies ImageElementData)
+		const canvasFileElement = createUploadElementData(
+			elementType,
+			elementId,
+			{ x: targetX, y: targetY },
+			{ width, height },
+			maxZIndex + 1,
+			uniqueName,
+			elementData,
+			{ status: GenerationStatus.Processing },
+		)
+		const targetContentId = canvasFileElement.activeContentId
 
 		historyManager?.disable()
 		try {
 			this.canvas.elementManager.createTemporary(canvasFileElement, {
 				uploadFiles: [],
 				onUploadComplete: (elementId) => {
-					const hasChanged = this.handleUploadCompleteInternal(elementId)
+					const hasChanged = this.handleUploadCompleteInternal(elementId, targetContentId)
 					if (historyManager && hasChanged) {
 						const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 						if (pendingBatchId) {
@@ -1123,7 +1146,11 @@ export class CanvasFileUploadManager {
 					}
 				},
 				onUploadFailed: (elementId, error) => {
-					const hasChanged = this.handleUploadFailedInternal(elementId, error)
+					const hasChanged = this.handleUploadFailedInternal(
+						elementId,
+						error,
+						targetContentId,
+					)
 					if (historyManager && hasChanged) {
 						const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 						if (pendingBatchId) {
@@ -1146,6 +1173,7 @@ export class CanvasFileUploadManager {
 
 		void this.downloadAndQueueRemoteUpload({
 			elementId,
+			contentId: targetContentId,
 			metadata,
 			sourceUrl: sourceRef.ossUrl,
 			batchId,
@@ -1175,23 +1203,17 @@ export class CanvasFileUploadManager {
 				AUDIO_CONFIG.DEFAULT_WIDTH,
 			AUDIO_CONFIG.MIN_WIDTH,
 		)
-		const audioElement = AudioElementClass.createElementData({
-			id: elementId,
-			x: position.x - width / 2,
-			y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
-			width,
-			zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
-			name: uniqueName,
-		})
-		const temporaryElement: AudioElementData = {
-			...audioElement,
-			...(elementData as Partial<AudioElementData> | undefined),
-			id: elementId,
-			type: ElementTypeEnum.Audio,
-			width,
-			height: AUDIO_CONFIG.DEFAULT_HEIGHT,
-			src: undefined,
-		}
+		const temporaryElement = createUploadElementData(
+			ElementTypeEnum.Audio,
+			elementId,
+			{ x: position.x - width / 2, y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2 },
+			{ width, height: AUDIO_CONFIG.DEFAULT_HEIGHT },
+			this.canvas.elementManager.getMaxZIndexInLevel() + 1,
+			uniqueName,
+			elementData,
+			{ src: undefined },
+		) as AudioElementData
+		const targetContentId = temporaryElement.activeContentId
 		const historyManager = manageHistory ? this.canvas.historyManager : null
 		const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
 		const removePlaceholderWithoutHistory = (targetElementId: string): void => {
@@ -1216,9 +1238,18 @@ export class CanvasFileUploadManager {
 
 			try {
 				this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+				const latest = this.canvas.elementManager.getElementData(completedElementId)
+				if (!latest || latest.type !== ElementTypeEnum.Audio || !targetContentId) {
+					throw new Error("Audio Content target not found")
+				}
+				const next = updateContent(latest, targetContentId, { src: uploadResult.path })
 				this.canvas.elementManager.convertToPermament(
 					completedElementId,
-					{ src: uploadResult.path },
+					{
+						contents: next.contents,
+						activeContentId: next.activeContentId,
+						mainContentId: next.mainContentId,
+					},
 					{ silent: true },
 				)
 				this.markPendingUploadElementResolved(completedElementId)
@@ -1295,22 +1326,19 @@ export class CanvasFileUploadManager {
 				existingNames,
 			)
 			const elementId = generateElementId()
-			const finalElement: AudioElementData = {
-				...AudioElementClass.createElementData({
-					id: elementId,
+			const finalElement = createUploadElementData(
+				ElementTypeEnum.Audio,
+				elementId,
+				{
 					x: audioData?.x ?? position.x - width / 2,
 					y: audioData?.y ?? position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2,
-					width,
-					zIndex: this.canvas.elementManager.getMaxZIndexInLevel() + 1,
-					name: uniqueName,
-					src: uploadResult.path,
-				}),
-				...audioData,
-				id: elementId,
-				type: ElementTypeEnum.Audio,
-				src: uploadResult.path,
-				height: AUDIO_CONFIG.DEFAULT_HEIGHT,
-			}
+				},
+				{ width, height: AUDIO_CONFIG.DEFAULT_HEIGHT },
+				this.canvas.elementManager.getMaxZIndexInLevel() + 1,
+				uniqueName,
+				audioData,
+				{ src: uploadResult.path },
+			) as AudioElementData
 			this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
 			this.canvas.elementManager.create(finalElement)
 			if (manageHistory) this.canvas.historyManager.recordHistoryImmediate()
@@ -1324,6 +1352,7 @@ export class CanvasFileUploadManager {
 
 	private async downloadAndQueueRemoteUpload(options: {
 		elementId: string
+		contentId: string | null
 		metadata: CanvasElementClipboardFileMetadata
 		sourceUrl: string
 		batchId: string
@@ -1333,6 +1362,7 @@ export class CanvasFileUploadManager {
 	}): Promise<void> {
 		const {
 			elementId,
+			contentId,
 			metadata,
 			sourceUrl,
 			batchId,
@@ -1348,6 +1378,7 @@ export class CanvasFileUploadManager {
 		if (existingTransfer?.status === "completed") {
 			this.applyRemoteUploadResult(
 				elementId,
+				contentId,
 				existingTransfer.result,
 				batchId,
 				historyManager,
@@ -1358,6 +1389,7 @@ export class CanvasFileUploadManager {
 		if (existingTransfer?.status === "uploading") {
 			this.attachRemoteResourceTransfer({
 				elementId,
+				contentId,
 				metadata,
 				batchId,
 				historyManager,
@@ -1401,6 +1433,7 @@ export class CanvasFileUploadManager {
 
 		this.attachRemoteResourceTransfer({
 			elementId,
+			contentId,
 			metadata,
 			batchId,
 			historyManager,
@@ -1533,22 +1566,27 @@ export class CanvasFileUploadManager {
 
 	private attachRemoteResourceTransfer(options: {
 		elementId: string
+		contentId: string | null
 		metadata: CanvasElementClipboardFileMetadata
 		batchId: string
 		historyManager: Canvas["historyManager"] | null
 		onDownloadFailed?: (error: Error) => void
 		promise: Promise<UploadFileResponse>
 	}): void {
-		const { elementId, batchId, historyManager, onDownloadFailed, promise } = options
+		const { elementId, contentId, batchId, historyManager, onDownloadFailed, promise } = options
 
 		void promise
 			.then((result) => {
-				this.applyRemoteUploadResult(elementId, result, batchId, historyManager)
+				this.applyRemoteUploadResult(elementId, contentId, result, batchId, historyManager)
 			})
 			.catch((error) => {
 				const transferError =
 					error instanceof Error ? error : new Error("Remote file transfer failed")
-				const hasChanged = this.handleUploadFailedInternal(elementId, transferError)
+				const hasChanged = this.handleUploadFailedInternal(
+					elementId,
+					transferError,
+					contentId,
+				)
 				if (isRemoteResourceDownloadError(transferError)) {
 					onDownloadFailed?.(transferError)
 				}
@@ -1567,6 +1605,7 @@ export class CanvasFileUploadManager {
 
 	private applyRemoteUploadResult(
 		elementId: string,
+		contentId: string | null,
 		result: UploadFileResponse,
 		batchId: string,
 		historyManager: Canvas["historyManager"] | null,
@@ -1576,7 +1615,7 @@ export class CanvasFileUploadManager {
 			element.uploadResult = result
 		}
 
-		const hasChanged = this.handleUploadCompleteInternal(elementId)
+		const hasChanged = this.handleUploadCompleteInternal(elementId, contentId)
 		if (historyManager && hasChanged) {
 			const pendingBatchId = this.findPendingBatchIdByElement(elementId)
 			if (pendingBatchId) {
@@ -1633,7 +1672,10 @@ export class CanvasFileUploadManager {
 	/**
 	 * 处理上传完成（内部方法）
 	 */
-	private handleUploadCompleteInternal(elementId: string): boolean {
+	private handleUploadCompleteInternal(
+		elementId: string,
+		targetContentId: string | null,
+	): boolean {
 		// 获取元素实例，从中提取 uploadResult
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) return false
@@ -1656,20 +1698,45 @@ export class CanvasFileUploadManager {
 			src: uploadResult.path,
 			status: GenerationStatus.Completed,
 		}
-		if (element instanceof ImageElementClass && isImageElementV2(element.getData())) {
+		if (element instanceof ImageElementClass && isImageElementContent(element.getData())) {
 			const data = element.getData()
-			const next = updateImageVersion(data, getActiveImageVersionId(data), uploadPatch)
-			if (!isImageElementV2(next)) return false
+			if (!targetContentId) return false
+			const next = updateImageContent(data, targetContentId, uploadPatch)
+			if (!isImageElementContent(next)) return false
 			this.canvas.elementManager.convertToPermament(
 				elementId,
-				{ versions: next.versions },
+				{
+					contents: next.contents,
+					activeContentId: next.activeContentId,
+					mainContentId: next.mainContentId,
+				},
+				{ silent: true },
+			)
+		} else if (element instanceof VideoElementClass || element instanceof AudioElementClass) {
+			const data = element.getData()
+			if (!targetContentId) return false
+			const next = updateContent(data, targetContentId, uploadPatch)
+			this.canvas.elementManager.convertToPermament(
+				elementId,
+				{
+					contents: next.contents,
+					activeContentId: next.activeContentId,
+					mainContentId: next.mainContentId,
+				},
 				{ silent: true },
 			)
 		} else {
 			this.canvas.elementManager.convertToPermament(elementId, uploadPatch, { silent: true })
 		}
 
-		if (element instanceof ImageElementClass && typeof element.setOssSrc === "function") {
+		const latest = this.canvas.elementManager.getElementData(elementId)
+		if (
+			element instanceof ImageElementClass &&
+			targetContentId &&
+			latest?.type === ElementTypeEnum.Image &&
+			latest.activeContentId === targetContentId &&
+			typeof element.setOssSrc === "function"
+		) {
 			element.setOssSrc(uploadResult.src)
 		}
 
@@ -1684,7 +1751,11 @@ export class CanvasFileUploadManager {
 	/**
 	 * 处理上传失败（内部方法）
 	 */
-	private handleUploadFailedInternal(elementId: string, error: Error): boolean {
+	private handleUploadFailedInternal(
+		elementId: string,
+		error: Error,
+		targetContentId: string | null,
+	): boolean {
 		if (!this.canvas.elementManager.hasElement(elementId)) {
 			return false
 		}
@@ -1699,10 +1770,25 @@ export class CanvasFileUploadManager {
 		// 更新元素状态为失败（使用 silent: true 避免再次记录历史）
 		const instance = this.canvas.elementManager.getElementInstance(elementId)
 		const patch = { status: GenerationStatus.Failed, errorMessage }
-		if (instance instanceof ImageElementClass) {
-			instance.updateActiveVersionData(patch, { silent: true })
+		if (
+			(instance instanceof ImageElementClass ||
+				instance instanceof VideoElementClass ||
+				instance instanceof AudioElementClass) &&
+			targetContentId
+		) {
+			const data = instance.getData()
+			const next = updateContent(data, targetContentId, patch)
+			this.canvas.elementManager.update(
+				elementId,
+				{
+					contents: next.contents,
+					activeContentId: next.activeContentId,
+					mainContentId: next.mainContentId,
+				},
+				{ silent: true },
+			)
 		} else {
-			this.canvas.elementManager.update(elementId, patch, { silent: true })
+			return false
 		}
 
 		this.markPendingUploadElementResolved(elementId)

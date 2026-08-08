@@ -6,13 +6,17 @@ import {
 	AlignRight,
 } from "lucide-react"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
-import type { RichTextParagraph } from "../../../../runtime/document/types"
+import type { RichTextParagraph, TextElementContent } from "../../../../runtime/document/types"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
 import { useTextToolController } from "../useTextToolController"
 import TextToolIconButtons from "../TextToolIconButtons"
 
 export default function RichTextTextAlign() {
 	const { t } = useCanvasDesignI18n()
 	const { state, selectedTextElement, isEditingText, setTextAlign } = useTextToolController()
+	const selectedTextContent = selectedTextElement
+		? getActiveContent<TextElementContent>(selectedTextElement)
+		: undefined
 
 	const RICH_TEXT_ALIGNS = useMemo(
 		() => [
@@ -42,10 +46,10 @@ export default function RichTextTextAlign() {
 
 	const richTextTextAlign = useMemo(() => {
 		if (isEditingText) {
-			return state.textAlign ?? getRichTextElementTextAlign(selectedTextElement?.content)
+			return state.textAlign ?? getRichTextElementTextAlign(selectedTextContent?.content)
 		}
-		return getRichTextElementTextAlign(selectedTextElement?.content)
-	}, [isEditingText, selectedTextElement?.content, state.textAlign])
+		return getRichTextElementTextAlign(selectedTextContent?.content)
+	}, [isEditingText, selectedTextContent?.content, state.textAlign])
 
 	return (
 		<TextToolIconButtons

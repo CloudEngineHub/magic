@@ -155,7 +155,7 @@ export interface CanvasEventMap {
 	"element:audio:fullscreenClick": { elementId: string }
 	"element:image:replaceClick": {
 		elementId: string
-		versionId: string | null
+		contentId: string | null
 		clientX?: number
 		clientY?: number
 	}

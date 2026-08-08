@@ -66,25 +66,25 @@ describe("GenerationRuntimeManager", () => {
 			attemptId: "version-1",
 			operation: "image-generate",
 			failurePolicy: "restore-existing",
-			targets: [{ elementId: "image-1", versionId: "v1" }],
+			targets: [{ elementId: "image-1", contentId: "v1" }],
 		})
 		const second = manager.beginAttempt({
 			attemptId: "version-2",
 			operation: "image-generate",
 			failurePolicy: "restore-existing",
-			targets: [{ elementId: "image-1", versionId: "v2" }],
+			targets: [{ elementId: "image-1", contentId: "v2" }],
 		})
 
 		expect(manager.isCurrent(first, "image-1", "v1")).toBe(true)
 		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
 		expect(manager.getTargetState("image-1")).toMatchObject({
 			attemptId: second,
-			versionId: "v2",
+			contentId: "v2",
 		})
 
 		manager.completeAttempt(first)
 		expect(manager.isCurrent(second, "image-1", "v2")).toBe(true)
-		expect(manager.getTargetState("image-1")?.versionId).toBe("v2")
+		expect(manager.getTargetState("image-1")?.contentId).toBe("v2")
 	})
 
 	it("updates a batch phase and clears all remaining current targets atomically", () => {

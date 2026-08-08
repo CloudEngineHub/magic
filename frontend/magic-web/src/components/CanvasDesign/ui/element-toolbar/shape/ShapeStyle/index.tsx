@@ -10,6 +10,7 @@ import IconButton from "../../../primitives/custom/IconButton/index"
 import { SplinePointer } from "lucide-react"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
 
 export default function ShapeStyle() {
 	const { t } = useCanvasDesignI18n()
@@ -38,16 +39,17 @@ export default function ShapeStyle() {
 		if (!selectedElement) return null
 		return selectedElement.type
 	}, [selectedElement])
+	const activeContent = selectedElement ? getActiveContent(selectedElement) : undefined
 
 	// 获取当前值
-	const cornerRadius = useMemo(() => selectedElement?.cornerRadius || 0, [selectedElement])
+	const cornerRadius = useMemo(() => activeContent?.cornerRadius || 0, [activeContent])
 
 	const sides = useMemo(() => {
 		if (selectedElement?.type === ElementTypeEnum.Star) {
-			return selectedElement.sides || 3
+			return getActiveContent(selectedElement)?.sides || 3
 		}
 		return 3
-	}, [selectedElement])
+	}, [activeContent, selectedElement])
 
 	const opacity = useMemo(
 		() => (selectedElement?.opacity !== undefined ? selectedElement.opacity : 1),
@@ -56,10 +58,10 @@ export default function ShapeStyle() {
 
 	const innerRadiusRatio = useMemo(() => {
 		if (selectedElement?.type === ElementTypeEnum.Star) {
-			return selectedElement.innerRadiusRatio || 0.5
+			return getActiveContent(selectedElement)?.innerRadiusRatio || 0.5
 		}
 		return 0.5
-	}, [selectedElement])
+	}, [activeContent, selectedElement])
 
 	// 同步值到输入框
 	useEffect(() => {

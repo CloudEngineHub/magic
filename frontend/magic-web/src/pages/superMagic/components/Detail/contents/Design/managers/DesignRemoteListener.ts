@@ -9,9 +9,9 @@ import {
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import {
-	getActiveImageVersion,
-	getImageElementVersions,
-} from "@/components/CanvasDesign/runtime/document/imageVersion"
+	getContents,
+	getImageContents,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -25,15 +25,12 @@ import {
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
-import { isV2Version } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
+import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -68,17 +65,18 @@ function walkCanvasMediaSources(
 
 	for (const el of elements) {
 		if (el.type === ElementTypeEnum.Image) {
-			for (const version of getImageElementVersions(el)) {
-				const src = version.src?.trim()
+			for (const content of getImageContents(el)) {
+				const src = content.src?.trim()
 				if (src && !/^file:/i.test(src)) onSrc(src)
 			}
 			continue
 		}
 		if (el.type === ElementTypeEnum.Video || el.type === ElementTypeEnum.Audio) {
-			const media = el as VideoElement | AudioElement
-			const s = media.src?.trim()
-			if (!s || /^file:/i.test(s)) continue
-			onSrc(s)
+			for (const content of getContents(el as VideoElement | AudioElement)) {
+				const src = content.src?.trim()
+				if (!src || /^file:/i.test(src)) continue
+				onSrc(src)
+			}
 			continue
 		}
 
@@ -113,7 +111,7 @@ function designDataHasMediaMissingFromAttachments(
 	return missing
 }
 
-/** v2 的生成配置位于 sidecar；processing 占位符缺配置时需要等待附件树同步后重读。 */
+/** 生成配置位于 sidecar；任一 processing Content 缺配置时需要等待附件树同步后重读。 */
 export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
 	let missing = false
 	const walk = (elements: LayerElement[] | undefined): void => {
@@ -121,22 +119,23 @@ export function designDataHasPendingMediaWithoutGenerationRequest(designData: De
 
 		for (const element of elements) {
 			if (element.type === ElementTypeEnum.Image) {
-				const image = element as ImageElement
-				const active = getActiveImageVersion(image)
-				if (
-					(active.status === "pending" || active.status === "processing") &&
-					!active.generateImageRequest &&
-					!active.imageGenerationTaskMeta
-				) {
+				const hasMissingRequest = getImageContents(element as ImageElement).some(
+					(content) =>
+						(content.status === "pending" || content.status === "processing") &&
+						!content.generateImageRequest &&
+						!content.imageGenerationTaskMeta,
+				)
+				if (hasMissingRequest) {
 					missing = true
 					return
 				}
 			} else if (element.type === ElementTypeEnum.Video) {
-				const video = element as VideoElement
-				if (
-					(video.status === "pending" || video.status === "processing") &&
-					!video.generateVideoRequest
-				) {
+				const hasMissingRequest = getContents(element as VideoElement).some(
+					(content) =>
+						(content.status === "pending" || content.status === "processing") &&
+						!content.generateVideoRequest,
+				)
+				if (hasMissingRequest) {
 					missing = true
 					return
 				}
@@ -670,24 +669,26 @@ export class DesignRemoteListener {
 		let parsed: DesignData | null = null
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			parsed = parseMagicProjectJsContent(content)
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				elementDetailsContext: {
+					attachments: this.options.attachments,
+					flatAttachments: this.options.flatAttachments,
+					mainFileId: fid,
+					projectId: this.options.projectId,
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				},
+			})
+			parsed = loaded?.data ?? null
 		} catch {
 			return null
 		}
 
 		if (!parsed) return null
-		if (dslBase) {
-			normalizeDesignDataPathsAfterLoad(parsed, dslBase, {
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
-			})
-		}
-		await hydrateDesignDataDetails(parsed, {
-			attachments: this.options.attachments,
-			flatAttachments: this.options.flatAttachments,
-			mainFileId: fid,
-			projectId: this.options.projectId,
-		})
 
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
@@ -700,7 +701,7 @@ export class DesignRemoteListener {
 			dslBase,
 		)
 		const hasPendingGenerationWithoutInfo =
-			isV2Version(parsed.version) && designDataHasPendingMediaWithoutGenerationRequest(parsed)
+			designDataHasPendingMediaWithoutGenerationRequest(parsed)
 		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return parsed
 
 		const projectId = this.options.projectId
@@ -715,22 +716,21 @@ export class DesignRemoteListener {
 
 		try {
 			const content = await loadMagicProjectJsContent(fid)
-			const again = parseMagicProjectJsContent(content)
-			if (again) {
-				if (dslBase) {
-					normalizeDesignDataPathsAfterLoad(again, dslBase, {
-						flatAttachments: this.options.flatAttachments,
-						attachmentIndex: this.options.attachmentIndex,
-					})
-				}
-				await hydrateDesignDataDetails(again, {
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				elementDetailsContext: {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
-				})
-			}
-			return again
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments: this.options.flatAttachments,
+					attachmentIndex: this.options.attachmentIndex,
+				},
+			})
+			return loaded?.data ?? null
 		} catch {
 			return null
 		}

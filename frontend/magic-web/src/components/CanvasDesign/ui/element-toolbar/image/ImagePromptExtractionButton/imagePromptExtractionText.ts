@@ -116,8 +116,15 @@ export function buildImagePromptTextElementData(
 		options.zIndex,
 		"",
 	)
-	element.content = content
-	element.defaultStyle = compactTextDefaultStyle(defaultStyle)
+	element.contents = element.contents.map((item) =>
+		item.contentId === element.activeContentId
+			? {
+					...item,
+					content,
+					defaultStyle: compactTextDefaultStyle(defaultStyle),
+				}
+			: item,
+	)
 
 	return {
 		element,
@@ -139,8 +146,7 @@ export function createImagePromptTextElement(options: {
 	if (!normalizedPrompt) return null
 
 	const imageElementInstance = canvas.elementManager.getElementInstance(imageElement.id) as
-		| { getBoundingRect?: () => Rect | null }
-		| undefined
+		{ getBoundingRect?: () => Rect | null } | undefined
 	const imageBoundingRect = imageElementInstance?.getBoundingRect?.() ?? null
 	const result = buildImagePromptTextElementData({
 		imageElement,

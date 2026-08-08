@@ -7,7 +7,7 @@ import {
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { writeUserElementDetails } from "../utils/elementDetailsIo"
-import { isV2Version } from "../utils/magicProjectCompression"
+import { isContentProjectVersion } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
@@ -43,7 +43,6 @@ export type DesignSaveSource =
 	| "canvas-full-export"
 	| "draft-restore"
 	| "manual-refresh-draft"
-	| "version-upgrade"
 	| "version-switch"
 	| "remote-apply"
 	| "remote-merge"
@@ -58,7 +57,6 @@ export interface DesignSaveMetadata {
 	nextElementCount?: number
 	isRemoteApplying?: boolean
 	fromDraft?: boolean
-	fromUpgrade?: boolean
 }
 
 export interface DesignSaveContext {
@@ -70,7 +68,6 @@ export interface DesignSaveContext {
 	magicProjectJsVersion: number | null
 	isRemoteApplying: boolean
 	fromDraft: boolean
-	fromUpgrade: boolean
 }
 
 export type DesignSaveResult =
@@ -252,7 +249,6 @@ export class DesignSaveManager {
 				nextElementCount: metadata?.nextElementCount,
 				isRemoteApplying: metadata?.isRemoteApplying,
 				fromDraft: metadata?.fromDraft,
-				fromUpgrade: metadata?.fromUpgrade,
 			}).then((result) => this.saveLifecycleHandlers.onAutoSaveResult?.(result))
 		}, AUTO_SAVE_DEBOUNCE_MS)
 	}
@@ -277,7 +273,6 @@ export class DesignSaveManager {
 			magicProjectJsVersion: this.stateBag.getMagicProjectJsVersion(),
 			isRemoteApplying: options?.isRemoteApplying ?? false,
 			fromDraft: options?.fromDraft ?? source === "draft-restore",
-			fromUpgrade: options?.fromUpgrade ?? source === "version-upgrade",
 		}
 	}
 
@@ -292,7 +287,6 @@ export class DesignSaveManager {
 		nextElementCount?: number
 		isRemoteApplying?: boolean
 		fromDraft?: boolean
-		fromUpgrade?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getIsReadOnly()) {
@@ -364,9 +358,9 @@ export class DesignSaveManager {
 			didSave = true
 			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
 
-			// v2：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
+			// v3：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
 			let didPersistDetails = true
-			if (isV2Version(designDataToSave.version)) {
+			if (isContentProjectVersion(designDataToSave.version)) {
 				didPersistDetails = await writeUserElementDetails(designDataToSave, {
 					attachments: this.options.attachments,
 					flatAttachments: this.options.flatAttachments,

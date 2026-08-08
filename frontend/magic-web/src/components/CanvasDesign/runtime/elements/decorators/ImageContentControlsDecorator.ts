@@ -1,6 +1,6 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
-import type { ImageElementV2 } from "../../document/types"
+import type { ImageElement } from "../../document/types"
 import {
 	COLORS,
 	IMAGE_CONFIG,
@@ -8,12 +8,12 @@ import {
 	resolveImageControlCanvasOffset,
 } from "../image/ImageElement.config"
 
-interface ImageVersionControlsDecoratorConfig {
+interface ImageContentControlsDecoratorConfig {
 	elementId: string
 	canvas: Canvas
 	width: number
 	height: number
-	data: ImageElementV2
+	data: ImageElement
 	bottomRightReservedScreenWidth?: number
 	onPrevious: () => void
 	onNext: () => void
@@ -39,8 +39,8 @@ const BUTTON_DISABLED_BG = "rgba(0,0,0,0.35)"
 const ACTIVE_BG = "rgba(0, 0, 0, 0.96)"
 const TRANSPARENT_BG = "rgba(0,0,0,0)"
 
-/** 图片版本控制器：保持屏幕尺寸，并提供完整 hover / active / disabled 反馈。 */
-export class ImageVersionControlsDecorator {
+/** 图片 Content 控制器：保持屏幕尺寸，并提供完整 hover / active / disabled 反馈。 */
+export class ImageContentControlsDecorator {
 	private root?: Konva.Group
 	private mainTag?: Konva.Group
 	private viewportHandler?: () => void
@@ -58,34 +58,34 @@ export class ImageVersionControlsDecorator {
 
 	constructor(
 		private readonly elementGroup: Konva.Group,
-		private config: ImageVersionControlsDecoratorConfig,
+		private config: ImageContentControlsDecoratorConfig,
 	) {}
 
 	public create(): void {
 		this.destroyNodes()
-		if (this.config.data.versions.length <= 1) return
-		const currentIndex = this.config.data.versions.findIndex(
-			(version) => version.id === this.config.data.activeVersionId,
+		if (this.config.data.contents.length <= 1) return
+		const currentIndex = this.config.data.contents.findIndex(
+			(content) => content.contentId === this.config.data.activeContentId,
 		)
 		if (currentIndex < 0) return
 
 		const root = new Konva.Group({
-			name: "image-version-controls",
+			name: "image-content-controls",
 			listening: true,
 		})
-		const active = this.config.data.versions[currentIndex]
-		if (active.id === this.config.data.mainVersionId) {
+		const active = this.config.data.contents[currentIndex]
+		if (active.contentId === this.config.data.mainContentId) {
 			this.mainTag = this.createMainTag()
 			this.elementGroup.add(this.mainTag)
 		}
 		const canSetMain =
-			active.id !== this.config.data.mainVersionId &&
+			active.contentId !== this.config.data.mainContentId &&
 			active.status === "completed" &&
 			Boolean(active.src)
 		const panelWidth = BUTTON_WIDTH * 2 + INDEX_WIDTH + PANEL_PADDING * 2
 		this.navigationScreenWidth = panelWidth
 		const panel = new Konva.Group({
-			name: "image-version-navigation",
+			name: "image-content-navigation",
 			listening: true,
 		})
 
@@ -110,7 +110,7 @@ export class ImageVersionControlsDecorator {
 		const nextButton = this.createButton({
 			x: PANEL_PADDING + BUTTON_WIDTH + INDEX_WIDTH,
 			key: "next",
-			disabled: currentIndex === this.config.data.versions.length - 1,
+			disabled: currentIndex === this.config.data.contents.length - 1,
 			variant: "plain",
 			chevron: "next",
 			onClick: this.config.onNext,
@@ -122,7 +122,7 @@ export class ImageVersionControlsDecorator {
 				y: 0,
 				width: INDEX_WIDTH,
 				height: CONTROL_HEIGHT,
-				text: `${currentIndex + 1} / ${this.config.data.versions.length}`,
+				text: `${currentIndex + 1} / ${this.config.data.contents.length}`,
 				fontSize: LAYOUT.TEXT_FONT_SIZE,
 				fontFamily: LAYOUT.TEXT_FONT_FAMILY,
 				align: "center",
@@ -136,8 +136,8 @@ export class ImageVersionControlsDecorator {
 
 		if (canSetMain) {
 			const label = this.config.canvas.t
-				? this.config.canvas.t("image.version.setMain", { defaultValue: "设为主版本" })
-				: "设为主版本"
+				? this.config.canvas.t("image.content.setMain", { defaultValue: "设为主内容" })
+				: "设为主内容"
 			const labelProbe = new Konva.Text({
 				text: label,
 				fontSize: LAYOUT.TEXT_FONT_SIZE,
@@ -168,7 +168,7 @@ export class ImageVersionControlsDecorator {
 		this.setupListeners()
 	}
 
-	public updateConfig(config: Partial<ImageVersionControlsDecoratorConfig>): void {
+	public updateConfig(config: Partial<ImageContentControlsDecoratorConfig>): void {
 		this.config = { ...this.config, ...config }
 		this.create()
 	}
@@ -213,8 +213,8 @@ export class ImageVersionControlsDecorator {
 
 	private createMainTag(): Konva.Group {
 		const label = this.config.canvas.t
-			? this.config.canvas.t("image.version.main", { defaultValue: "主版本" })
-			: "主版本"
+			? this.config.canvas.t("image.content.main", { defaultValue: "主内容" })
+			: "主内容"
 		const labelProbe = new Konva.Text({
 			text: label,
 			fontSize: LAYOUT.TEXT_FONT_SIZE,
@@ -226,7 +226,7 @@ export class ImageVersionControlsDecorator {
 		const tag = new Konva.Group({
 			width,
 			height: CONTROL_HEIGHT,
-			name: "image-version-main-tag",
+			name: "image-content-main-tag",
 			listening: false,
 		})
 		tag.add(
@@ -236,7 +236,7 @@ export class ImageVersionControlsDecorator {
 				cornerRadius: IMAGE_CONFIG.CORNER_RADIUS,
 				fill: COLORS.BUTTON_BG,
 				listening: false,
-				name: "image-version-main-tag-background",
+				name: "image-content-main-tag-background",
 			}),
 			new Konva.Text({
 				width,
@@ -248,7 +248,7 @@ export class ImageVersionControlsDecorator {
 				verticalAlign: "middle",
 				fill: BUTTON_TEXT_COLOR,
 				listening: false,
-				name: "image-version-main-tag-label",
+				name: "image-content-main-tag-label",
 			}),
 		)
 		return tag
@@ -270,14 +270,14 @@ export class ImageVersionControlsDecorator {
 			x: options.x,
 			width,
 			height: CONTROL_HEIGHT,
-			name: `image-version-button-${options.key}`,
+			name: `image-content-button-${options.key}`,
 			listening: true,
 		})
 		const visual = new Konva.Group({
 			x: width / 2,
 			y: CONTROL_HEIGHT / 2,
 			listening: false,
-			name: `image-version-button-${options.key}-visual`,
+			name: `image-content-button-${options.key}-visual`,
 		})
 		const background = new Konva.Rect({
 			x: -width / 2,
@@ -309,7 +309,7 @@ export class ImageVersionControlsDecorator {
 			height: CONTROL_HEIGHT,
 			fill: "rgba(0,0,0,0.001)",
 			listening: true,
-			name: `image-version-button-${options.key}-hit`,
+			name: `image-content-button-${options.key}-hit`,
 		})
 
 		visual.add(background, content)
@@ -349,7 +349,7 @@ export class ImageVersionControlsDecorator {
 				context.strokeShape(shape)
 			},
 			listening: false,
-			name: `image-version-button-${key}-chevron`,
+			name: `image-content-button-${key}-chevron`,
 		})
 	}
 
@@ -449,7 +449,7 @@ export class ImageVersionControlsDecorator {
 		const elementScreenWidth = Math.abs(this.config.width * totalScaleX)
 		const elementScreenHeight = Math.abs(this.config.height * totalScaleY)
 		const minElementScreenSize = Math.min(elementScreenWidth, elementScreenHeight)
-		const showVersionNavigation = minElementScreenSize >= LAYOUT.MIN_CONTENT_SCREEN_SIZE
+		const showContentNavigation = minElementScreenSize >= LAYOUT.MIN_CONTENT_SCREEN_SIZE
 		const edgeScreenOffset = canvasOffsetX * totalScaleX
 		const bottomRightReservedScreenWidth = Math.max(
 			0,
@@ -468,11 +468,11 @@ export class ImageVersionControlsDecorator {
 			y: this.config.height - CONTROL_HEIGHT / totalScaleY - canvasOffsetY,
 		})
 		const showInteractiveControls =
-			showVersionNavigation && this.isElementHovered && this.canShowInteractiveControls()
+			showContentNavigation && this.isElementHovered && this.canShowInteractiveControls()
 		this.root.visible(showInteractiveControls)
 		this.mainTag?.scale({ x: 1 / totalScaleX, y: 1 / totalScaleY })
 		this.mainTag?.position({ x: canvasOffsetX, y: canvasOffsetY })
-		this.mainTag?.visible(showVersionNavigation)
+		this.mainTag?.visible(showContentNavigation)
 		this.mainButton?.visible(
 			showInteractiveControls && elementScreenWidth >= requiredMainButtonScreenWidth,
 		)

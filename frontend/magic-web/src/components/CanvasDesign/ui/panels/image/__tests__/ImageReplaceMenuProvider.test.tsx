@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 		| ((event: {
 				data: {
 					elementId: string
-					versionId: string | null
+					contentId: string | null
 					clientX?: number
 					clientY?: number
 				}
@@ -31,7 +31,7 @@ vi.mock("../../../../app/hooks/canvas", () => ({
 		handler: (event: {
 			data: {
 				elementId: string
-				versionId: string | null
+				contentId: string | null
 				clientX?: number
 				clientY?: number
 			}
@@ -130,7 +130,7 @@ describe("ImageReplaceMenuProvider", () => {
 			mocks.eventHandler?.({
 				data: {
 					elementId: "image-1",
-					versionId: "version-1",
+					contentId: "version-1",
 					clientX: 110,
 					clientY: 220,
 				},
@@ -151,7 +151,7 @@ describe("ImageReplaceMenuProvider", () => {
 			mocks.eventHandler?.({
 				data: {
 					elementId: "image-2",
-					versionId: null,
+					contentId: null,
 					clientX: 210,
 					clientY: 320,
 				},

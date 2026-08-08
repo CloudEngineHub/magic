@@ -1,5 +1,10 @@
 import Konva from "konva"
-import type { BaseElementProps, LayerElement } from "../../document/types"
+import type { ElementContentBase, LayerElement } from "../../document/types"
+import {
+	getActiveContent as getElementActiveContent,
+	getMainContent as getElementMainContent,
+	isContentElement,
+} from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
 import type { Rect } from "../../shared/ids"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
@@ -55,7 +60,7 @@ export const BASE_ELEMENT_DEFAULTS = {
  * 基础元素抽象类
  * 每个元素都是一个实例，封装了数据和渲染节点
  */
-export abstract class BaseElement<T extends BaseElementProps = BaseElementProps> {
+export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	public canvas: Canvas
 
 	protected node: Konva.Node | null = null
@@ -112,6 +117,20 @@ export abstract class BaseElement<T extends BaseElementProps = BaseElementProps>
 	 */
 	getData(): T {
 		return this.data
+	}
+
+	/** 当前节点的 active Content；所有媒体/编辑字段都应从这里读取。 */
+	protected getActiveContent<TContent extends ElementContentBase>(): TContent | undefined {
+		return isContentElement(this.data)
+			? (getElementActiveContent(this.data) as TContent | undefined)
+			: undefined
+	}
+
+	/** 当前节点的 main Content；连接、导出和下游输入使用该稳定内容。 */
+	protected getMainContent<TContent extends ElementContentBase>(): TContent | undefined {
+		return isContentElement(this.data)
+			? (getElementMainContent(this.data) as TContent | undefined)
+			: undefined
 	}
 
 	/**

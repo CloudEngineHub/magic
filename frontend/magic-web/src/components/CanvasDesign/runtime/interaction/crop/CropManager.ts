@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
-import type { CropConfig, ImageElement, LayerElement } from "../../document/types"
+import type { CropConfig, ElementUpdatePatch, ImageElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import {
 	composeSourceCropFromVisibleCrop,
@@ -13,11 +13,11 @@ import { CropRenderer } from "./CropRenderer"
 import { calculateNodesRect } from "../../shared/ids"
 import { ImageEditingSession } from "../image-editing/ImageEditingSession"
 import {
-	getActiveImageVersion,
-	getActiveImageVersionId,
-	isImageElementV2,
-	updateImageVersion,
-} from "../../document/imageVersion"
+	getActiveImageContent,
+	getActiveImageContentId,
+	isImageElementContent,
+	updateImageContent,
+} from "../../document/elementContent"
 
 const FULL_CROP_EPSILON = 1e-6
 
@@ -78,12 +78,12 @@ export class CropManager {
 	private getActiveCropUpdates(
 		imageElement: ImageElement,
 		crop: CropConfig | undefined,
-	): Partial<LayerElement> {
-		if (!isImageElementV2(imageElement)) return { crop }
-		const next = updateImageVersion(imageElement, getActiveImageVersionId(imageElement), {
+	): ElementUpdatePatch {
+		if (!isImageElementContent(imageElement)) return { crop }
+		const next = updateImageContent(imageElement, getActiveImageContentId(imageElement), {
 			crop,
 		})
-		return isImageElementV2(next) ? { versions: next.versions } : {}
+		return isImageElementContent(next) ? { contents: next.contents } : {}
 	}
 
 	private getShiftedElementPosition(
@@ -262,22 +262,22 @@ export class CropManager {
 		const elementInstance = this.canvas.elementManager.getElementInstance(
 			elementId,
 		) as ImageElementClass | null
-		const activeVersion =
+		const activeContent =
 			elementInstance instanceof ImageElementClass
-				? elementInstance.getActiveVersionData()
-				: getActiveImageVersion(imageElement)
+				? elementInstance.getActiveContentData()
+				: getActiveImageContent(imageElement)
 
 		this.originalImageState = {
 			x: imageElement.x,
 			y: imageElement.y,
 			width: imageElement.width,
 			height: imageElement.height,
-			crop: activeVersion.crop ? { ...activeVersion.crop } : undefined,
+			crop: activeContent.crop ? { ...activeContent.crop } : undefined,
 		}
 
 		const sourceDimensions = this.getSourceDimensions(elementInstance, imageElement)
 		const displaySize = getCropDisplaySize({
-			crop: activeVersion.crop,
+			crop: activeContent.crop,
 			elementSize: {
 				width: imageElement.width ?? 0,
 				height: imageElement.height ?? 0,
@@ -287,7 +287,7 @@ export class CropManager {
 
 		// 裁剪编辑态恢复到裁剪前的完整显示边界，并将当前可见区域映射为临时裁剪框
 		this.tempCrop = getVisibleCropFromSourceCrop({
-			crop: activeVersion.crop,
+			crop: activeContent.crop,
 			sourceDimensions,
 			displaySize,
 		})

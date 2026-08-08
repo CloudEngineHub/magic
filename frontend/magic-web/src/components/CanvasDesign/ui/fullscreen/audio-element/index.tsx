@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { useCanvasElement } from "../../../app/hooks/canvas"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type AudioElement } from "../../../runtime/document/types"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import AudioFullscreenOverlay from "../audio/index"
 
 interface AudioElementFullscreenOverlayProps {
@@ -15,7 +16,7 @@ export default function AudioElementFullscreenOverlay(props: AudioElementFullscr
 	const { canvas } = useCanvas()
 	const element = useCanvasElement(elementId)
 	const audioElement = element?.type === ElementTypeEnum.Audio ? (element as AudioElement) : null
-	const audioPath = audioElement?.src ?? ""
+	const audioPath = audioElement ? (getActiveContent(audioElement)?.src ?? "") : ""
 
 	useEffect(() => {
 		if (audioElement && audioPath) return

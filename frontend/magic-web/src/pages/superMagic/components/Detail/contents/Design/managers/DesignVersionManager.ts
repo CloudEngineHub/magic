@@ -3,21 +3,14 @@ import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	loadMagicProjectJsContent,
-	parseMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import {
-	getHydratedElementDetailsProvenance,
-	hydrateDesignDataDetails,
-	setHydratedElementDetailsProvenance,
-} from "../utils/elementDetailsIo"
-import { buildInlineElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
-import { isV2Version } from "../utils/magicProjectCompression"
+import { getHydratedElementDetailsProvenance } from "../utils/elementDetailsIo"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
 import type { DesignData } from "../types"
 import type { DesignSaveManager } from "./DesignSaveManager"
+import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 
 export class DesignVersionManager {
 	private stateBag: DesignProjectStateBag
@@ -52,23 +45,22 @@ export class DesignVersionManager {
 		const content = await loadMagicProjectJsContent(magicProjectJsFileId, {
 			file_versions: { [magicProjectJsFileId]: version },
 		})
-		const data = parseMagicProjectJsContent(content)
-		if (data) {
-			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) {
-				normalizeDesignDataPathsAfterLoad(data, dslBase, {
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				})
-			}
-			if (!isV2Version(data.version)) {
-				setHydratedElementDetailsProvenance(
-					data,
-					buildInlineElementDetailsProvenance(data.canvas?.elements),
-				)
-			}
-		}
-		return data
+		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
+		const loaded = await loadDesignDataToRuntime({
+			content,
+			elementDetailsContext: {
+				attachments: this.options.attachments,
+				flatAttachments: this.options.flatAttachments,
+				mainFileId: magicProjectJsFileId,
+				projectId: this.options.projectId,
+			},
+			pathContext: {
+				projectBasePath: dslBase,
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			},
+		})
+		return loaded?.data ?? null
 	}
 
 	async loadLatest(): Promise<{ data: DesignData | null; version: number | null }> {
@@ -76,22 +68,22 @@ export class DesignVersionManager {
 		if (!magicProjectJsFileId) return { data: null, version: null }
 
 		const content = await loadMagicProjectJsContent(magicProjectJsFileId)
-		const data = parseMagicProjectJsContent(content)
-		if (data) {
-			const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-			if (dslBase) {
-				normalizeDesignDataPathsAfterLoad(data, dslBase, {
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				})
-			}
-			await hydrateDesignDataDetails(data, {
+		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
+		const loaded = await loadDesignDataToRuntime({
+			content,
+			elementDetailsContext: {
 				attachments: this.options.attachments,
 				flatAttachments: this.options.flatAttachments,
 				mainFileId: magicProjectJsFileId,
 				projectId: this.options.projectId,
-			})
-		}
+			},
+			pathContext: {
+				projectBasePath: dslBase,
+				flatAttachments: this.options.flatAttachments,
+				attachmentIndex: this.options.attachmentIndex,
+			},
+		})
+		const data = loaded?.data ?? null
 
 		let version: number | null = null
 		if (!this.options.isShareRoute) {

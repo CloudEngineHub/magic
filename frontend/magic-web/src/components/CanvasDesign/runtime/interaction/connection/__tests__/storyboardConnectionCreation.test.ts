@@ -48,6 +48,9 @@ function createCanvasMock(options?: {
 			{
 				id: "image-1",
 				type: options?.originType ?? ElementTypeEnum.Image,
+				contents: [{ contentId: "image-1-content" }],
+				activeContentId: "image-1-content",
+				mainContentId: "image-1-content",
 			} as LayerElement,
 		],
 	])
@@ -167,9 +170,9 @@ describe("storyboard connection creation", () => {
 				x: 1200,
 				y: 300,
 				zIndex: 7,
-				shots: [
+				contents: [
 					expect.objectContaining({
-						durationSeconds: 3,
+						shots: [expect.objectContaining({ durationSeconds: 3 })],
 					}),
 				],
 			}),

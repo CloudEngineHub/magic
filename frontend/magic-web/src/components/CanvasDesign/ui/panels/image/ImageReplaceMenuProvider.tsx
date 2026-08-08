@@ -14,7 +14,7 @@ import type {
 
 interface ImageReplaceMenuState {
 	elementId: string
-	versionId: string | null
+	contentId: string | null
 	x: number
 	y: number
 }
@@ -32,7 +32,7 @@ export function ImageReplaceMenuProvider({ children }: PropsWithChildren<unknown
 				const bounds = canvas.container.getBoundingClientRect()
 				setMenu({
 					elementId: data.elementId,
-					versionId: data.versionId,
+					contentId: data.contentId,
 					x: (data.clientX ?? bounds.left + bounds.width / 2) - bounds.left,
 					y: (data.clientY ?? bounds.top + bounds.height / 2) - bounds.top,
 				})
@@ -51,9 +51,9 @@ export function ImageReplaceMenuProvider({ children }: PropsWithChildren<unknown
 			if (!canvas || !menu) return
 			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.localUpload) return
 			const elementId = menu.elementId
-			const versionId = menu.versionId
+			const contentId = menu.contentId
 			setMenu(null)
-			canvas.imageReplaceController.openLocalFilePicker(elementId, versionId)
+			canvas.imageReplaceController.openLocalFilePicker(elementId, contentId)
 		},
 		[canvas, menu],
 	)
@@ -67,7 +67,7 @@ export function ImageReplaceMenuProvider({ children }: PropsWithChildren<unknown
 			void canvas.imageReplaceController.replaceWithProjectFile(
 				elementId,
 				item.data.file_path,
-				menu.versionId,
+				menu.contentId,
 			)
 		},
 		[canvas, menu],

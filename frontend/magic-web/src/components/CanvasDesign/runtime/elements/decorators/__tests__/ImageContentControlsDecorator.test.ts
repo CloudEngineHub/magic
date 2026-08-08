@@ -1,8 +1,8 @@
 import Konva from "konva"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { ImageElementV2 } from "../../../document/types"
+import type { ImageElement } from "../../../document/types"
 import { COLORS } from "../../image/ImageElement.config"
-import { ImageVersionControlsDecorator } from "../ImageVersionControlsDecorator"
+import { ImageContentControlsDecorator } from "../ImageContentControlsDecorator"
 
 function createEventEmitterMock() {
 	type TestCanvasEvent = { data: { elementId: string | null } }
@@ -27,7 +27,7 @@ function createEventEmitterMock() {
 }
 
 function createHarness(
-	data: ImageElementV2,
+	data: ImageElement,
 	readonly = false,
 	attachGroup = true,
 	options: {
@@ -73,12 +73,12 @@ function createHarness(
 			getSelectionCount: vi.fn(() => selectionCount),
 		},
 		t: (_key: string, options?: { defaultValue?: string }) =>
-			options?.defaultValue ?? "设为主版本",
+			options?.defaultValue ?? "设为主内容",
 	}
 	const onPrevious = vi.fn()
 	const onNext = vi.fn()
 	const onSetMain = vi.fn()
-	const decorator = new ImageVersionControlsDecorator(group, {
+	const decorator = new ImageContentControlsDecorator(group, {
 		elementId: data.id,
 		canvas: canvas as never,
 		width,
@@ -118,19 +118,18 @@ function createHarness(
 	}
 }
 
-function versionedImage(activeVersionId = "v2"): ImageElementV2 {
+function contentImage(activeContentId = "v2"): ImageElement {
 	return {
 		id: "image-1",
 		type: "image",
-		imageDslVersion: 2,
-		activeVersionId,
-		mainVersionId: "v1",
+		activeContentId,
+		mainContentId: "v1",
 		width: 240,
 		height: 160,
-		versions: [
-			{ id: "v1", src: "./images/v1.png", status: "completed" },
-			{ id: "v2", src: "./images/v2.png", status: "completed" },
-			{ id: "v3", status: "processing" },
+		contents: [
+			{ contentId: "v1", src: "./images/v1.png", status: "completed" },
+			{ contentId: "v2", src: "./images/v2.png", status: "completed" },
+			{ contentId: "v3", status: "processing" },
 		],
 	}
 }
@@ -139,7 +138,7 @@ function click(node: Konva.Node): void {
 	node.fire("click", { evt: { stopPropagation: vi.fn() } })
 }
 
-describe("ImageVersionControlsDecorator", () => {
+describe("ImageContentControlsDecorator", () => {
 	beforeEach(() => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
 			clearRect: vi.fn(),
@@ -156,12 +155,12 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("shows the current index, fixed screen scale, navigation, and set-main action", () => {
-		const harness = createHarness(versionedImage())
+		const harness = createHarness(contentImage())
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
 
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(root).toBeTruthy()
 		expect(root?.scale()).toEqual({ x: 1, y: 1 })
 		expect(root?.getChildren()).toHaveLength(2)
@@ -184,18 +183,18 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("shows a fixed-size main-version tag at the shared top-left offset", () => {
-		const harness = createHarness(versionedImage("v1"))
+	it("shows a fixed-size main-content tag at the shared top-left offset", () => {
+		const harness = createHarness(contentImage("v1"))
 		harness.decorator.create()
-		const tag = harness.group.findOne<Konva.Group>(".image-version-main-tag")
-		const background = tag?.findOne<Konva.Rect>(".image-version-main-tag-background")
-		const label = tag?.findOne<Konva.Text>(".image-version-main-tag-label")
+		const tag = harness.group.findOne<Konva.Group>(".image-content-main-tag")
+		const background = tag?.findOne<Konva.Rect>(".image-content-main-tag-background")
+		const label = tag?.findOne<Konva.Text>(".image-content-main-tag-label")
 
 		expect(tag).toBeTruthy()
 		expect(tag?.listening()).toBe(false)
 		expect(tag?.height()).toBe(24)
 		expect(background?.fill()).toBe(COLORS.BUTTON_BG)
-		expect(label?.text()).toBe("主版本")
+		expect(label?.text()).toBe("主内容")
 		expect(label?.fill()).toBe("#FFFFFF")
 		expect(label?.fontSize()).toBe(12)
 
@@ -217,25 +216,25 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("updates main-version tag visibility when active version changes", () => {
-		const harness = createHarness(versionedImage("v2"))
+	it("updates main-content tag visibility when active Content changes", () => {
+		const harness = createHarness(contentImage("v2"))
 		harness.decorator.create()
-		expect(harness.group.findOne(".image-version-main-tag")).toBeUndefined()
+		expect(harness.group.findOne(".image-content-main-tag")).toBeUndefined()
 
-		harness.decorator.updateConfig({ data: versionedImage("v1") })
-		expect(harness.group.findOne(".image-version-main-tag")).toBeTruthy()
+		harness.decorator.updateConfig({ data: contentImage("v1") })
+		expect(harness.group.findOne(".image-content-main-tag")).toBeTruthy()
 
-		harness.decorator.updateConfig({ data: versionedImage("v2") })
-		expect(harness.group.findOne(".image-version-main-tag")).toBeUndefined()
+		harness.decorator.updateConfig({ data: contentImage("v2") })
+		expect(harness.group.findOne(".image-content-main-tag")).toBeUndefined()
 
 		harness.decorator.destroy()
 		harness.stage.destroy()
 	})
 
 	it("recomputes its position after a rerendered image group is mounted", () => {
-		const harness = createHarness(versionedImage(), false, false)
+		const harness = createHarness(contentImage(), false, false)
 		harness.decorator.create()
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(root?.getStage()).toBeNull()
 
 		harness.layer.add(harness.group)
@@ -249,9 +248,9 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("matches the corner-action 4-8px screen offset across zoom levels", () => {
-		const harness = createHarness(versionedImage())
+		const harness = createHarness(contentImage())
 		harness.decorator.create()
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(root).toBeTruthy()
 
 		const cases = [
@@ -273,12 +272,12 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("hides the complete version controls below the minimum screen size", () => {
-		const harness = createHarness(versionedImage())
+	it("hides the complete Content controls below the minimum screen size", () => {
+		const harness = createHarness(contentImage())
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(root?.visible()).toBe(true)
 
 		harness.stage.scale({ x: 1.5, y: 1.5 })
@@ -293,10 +292,10 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("hides the main-version tag together with controls below the minimum screen size", () => {
-		const harness = createHarness(versionedImage("v1"))
+	it("hides the main-content tag together with controls below the minimum screen size", () => {
+		const harness = createHarness(contentImage("v1"))
 		harness.decorator.create()
-		const tag = harness.group.findOne<Konva.Group>(".image-version-main-tag")
+		const tag = harness.group.findOne<Konva.Group>(".image-content-main-tag")
 		expect(tag?.visible()).toBe(true)
 
 		harness.stage.scale({ x: 1.5, y: 1.5 })
@@ -312,7 +311,7 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("keeps navigation visible while hiding set-main when reserved space does not fit", () => {
-		const harness = createHarness(versionedImage(), false, true, {
+		const harness = createHarness(contentImage(), false, true, {
 			width: 180,
 			height: 180,
 			bottomRightReservedScreenWidth: 24,
@@ -320,11 +319,11 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
-		const mainButton = root?.findOne<Konva.Group>(".image-version-button-set-main")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
+		const mainButton = root?.findOne<Konva.Group>(".image-content-button-set-main")
 
 		expect(root?.visible()).toBe(true)
-		expect(root?.findOne(".image-version-navigation")?.visible()).toBe(true)
+		expect(root?.findOne(".image-content-navigation")?.visible()).toBe(true)
 		expect(mainButton?.visible()).toBe(false)
 
 		harness.decorator.destroy()
@@ -332,7 +331,7 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("shows set-main when navigation, reserved action, gaps, and offsets all fit", () => {
-		const harness = createHarness(versionedImage(), false, true, {
+		const harness = createHarness(contentImage(), false, true, {
 			width: 240,
 			height: 180,
 			bottomRightReservedScreenWidth: 24,
@@ -340,8 +339,8 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
-		const mainButton = root?.findOne<Konva.Group>(".image-version-button-set-main")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
+		const mainButton = root?.findOne<Konva.Group>(".image-content-button-set-main")
 
 		expect(root?.visible()).toBe(true)
 		expect(mainButton?.visible()).toBe(true)
@@ -350,8 +349,8 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("does not hide navigation when switching from main to a non-main version", () => {
-		const harness = createHarness(versionedImage("v1"), false, true, {
+	it("does not hide navigation when switching from main to a non-main Content", () => {
+		const harness = createHarness(contentImage("v1"), false, true, {
 			width: 180,
 			height: 180,
 			bottomRightReservedScreenWidth: 24,
@@ -359,12 +358,12 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		expect(harness.group.findOne<Konva.Group>(".image-version-controls")?.visible()).toBe(true)
+		expect(harness.group.findOne<Konva.Group>(".image-content-controls")?.visible()).toBe(true)
 
-		harness.decorator.updateConfig({ data: versionedImage("v2") })
-		const nextRoot = harness.group.findOne<Konva.Group>(".image-version-controls")
+		harness.decorator.updateConfig({ data: contentImage("v2") })
+		const nextRoot = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(nextRoot?.visible()).toBe(true)
-		expect(nextRoot?.findOne<Konva.Group>(".image-version-button-set-main")?.visible()).toBe(
+		expect(nextRoot?.findOne<Konva.Group>(".image-content-button-set-main")?.visible()).toBe(
 			false,
 		)
 
@@ -373,14 +372,14 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("shows version navigation and set-main only while the image element is hovered", () => {
-		const harness = createHarness(versionedImage(), false, true, {
+		const harness = createHarness(contentImage(), false, true, {
 			width: 240,
 			height: 180,
 			bottomRightReservedScreenWidth: 24,
 		})
 		harness.decorator.create()
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
-		const mainButton = root?.findOne<Konva.Group>(".image-version-button-set-main")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
+		const mainButton = root?.findOne<Konva.Group>(".image-content-button-set-main")
 
 		expect(root?.visible()).toBe(false)
 		expect(mainButton?.visible()).toBe(false)
@@ -398,13 +397,13 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("hides version controls when the pointer leaves the image for a connection handle", () => {
-		const harness = createHarness(versionedImage("v1"))
+	it("hides Content controls when the pointer leaves the image for a connection handle", () => {
+		const harness = createHarness(contentImage("v1"))
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
-		const mainTag = harness.group.findOne<Konva.Group>(".image-version-main-tag")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
+		const mainTag = harness.group.findOne<Konva.Group>(".image-content-main-tag")
 		expect(root?.visible()).toBe(true)
 
 		// 连线 Handle 仍携带当前 elementId，但位于图片 Group 之外。
@@ -421,11 +420,11 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("matches corner actions during connection drag, multi-selection, and tool gating", () => {
-		const harness = createHarness(versionedImage())
+		const harness = createHarness(contentImage())
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(root?.visible()).toBe(true)
 
 		harness.setConnectionDragging(true)
@@ -450,14 +449,14 @@ describe("ImageVersionControlsDecorator", () => {
 		harness.stage.destroy()
 	})
 
-	it("disables boundary navigation and hides set-main for processing versions", () => {
-		const firstHarness = createHarness(versionedImage("v1"))
+	it("disables boundary navigation and hides set-main for processing Contents", () => {
+		const firstHarness = createHarness(contentImage("v1"))
 		firstHarness.decorator.create()
-		const firstRoot = firstHarness.group.findOne<Konva.Group>(".image-version-controls")
+		const firstRoot = firstHarness.group.findOne<Konva.Group>(".image-content-controls")
 		const firstPanel = firstRoot?.getChildren()[0] as Konva.Group
-		const firstPreviousButton = firstPanel.getChildren()[1]
+		const firstPreviousButton = firstPanel.getChildren()[1] as Konva.Group
 		const firstPreviousVisual = firstPreviousButton.findOne<Konva.Group>(
-			".image-version-button-previous-visual",
+			".image-content-button-previous-visual",
 		)
 		const firstPreviousBackground = firstPreviousVisual?.getChildren()[0] as Konva.Rect
 		firstPreviousButton.fire("mouseenter")
@@ -468,22 +467,22 @@ describe("ImageVersionControlsDecorator", () => {
 		firstHarness.decorator.destroy()
 		firstHarness.stage.destroy()
 
-		const processingHarness = createHarness(versionedImage("v3"))
+		const processingHarness = createHarness(contentImage("v3"))
 		processingHarness.decorator.create()
 		const processingRoot =
-			processingHarness.group.findOne<Konva.Group>(".image-version-controls")
+			processingHarness.group.findOne<Konva.Group>(".image-content-controls")
 		expect(processingRoot?.getChildren()).toHaveLength(1)
 		processingHarness.decorator.destroy()
 		processingHarness.stage.destroy()
 	})
 
 	it("shows hover and pressed feedback on enabled navigation", () => {
-		const harness = createHarness(versionedImage())
+		const harness = createHarness(contentImage())
 		harness.decorator.create()
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		const panel = root?.getChildren()[0] as Konva.Group
-		const nextButton = panel.getChildren()[3]
-		const visual = nextButton.findOne<Konva.Group>(".image-version-button-next-visual")
+		const nextButton = panel.getChildren()[3] as Konva.Group
+		const visual = nextButton.findOne<Konva.Group>(".image-content-button-next-visual")
 		const background = visual?.getChildren()[0] as Konva.Rect
 		const chevron = visual?.getChildren()[1] as Konva.Shape
 		const idleChevronStroke = chevron.stroke()
@@ -508,11 +507,11 @@ describe("ImageVersionControlsDecorator", () => {
 	})
 
 	it("remains visible but blocks interaction in readonly mode", () => {
-		const harness = createHarness(versionedImage(), true)
+		const harness = createHarness(contentImage(), true)
 		harness.decorator.create()
 		harness.setHoveredElementId("image-1")
 		harness.handlers.get("element:hover")?.[0]?.({ data: { elementId: "image-1" } })
-		const root = harness.group.findOne<Konva.Group>(".image-version-controls")
+		const root = harness.group.findOne<Konva.Group>(".image-content-controls")
 		const panel = root?.getChildren()[0] as Konva.Group
 
 		expect(root?.opacity()).toBe(0.55)

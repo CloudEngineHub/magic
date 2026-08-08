@@ -2,7 +2,7 @@ import type { Canvas } from "../../../runtime/core/Canvas"
 import { AttachmentSource } from "../../../public/magic-types"
 import { getSelectedFileElements, getSelectedImageElements } from "../../../runtime/shared/ids"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
-import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 
 /**
  * 画布下载菜单判定「图片」扩展名（语义与宿主 Topic isImage 对齐；枚举值见 types.magic 的 AttachmentSource）。
@@ -93,7 +93,7 @@ export async function resolveCanvasDownloadMenuContext(
 	const getFileResourceMeta = canvas.magicConfigManager.config?.methods?.getFileResourceMeta
 	const flags = await Promise.all(
 		imageElements.map(async (img) => {
-			const src = getActiveImageVersion(img).src
+			const src = getActiveImageContent(img).src
 			if (!src) return false
 			const meta = getFileResourceMeta
 				? await getFileResourceMeta(src).catch(() => null)

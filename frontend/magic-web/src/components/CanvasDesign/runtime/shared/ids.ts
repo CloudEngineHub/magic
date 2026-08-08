@@ -13,7 +13,7 @@ import { ElementTypeEnum } from "../document/types"
 import type { Canvas } from "../core/Canvas"
 import { ImageElement as ImageElementClass } from "../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
-import { getActiveImageVersion } from "../document/imageVersion"
+import { getActiveContent, getActiveImageContent } from "../document/elementContent"
 
 /**
  * 矩形边界
@@ -1186,7 +1186,7 @@ export function getLoadedImageElements(canvas: Canvas): ImageElement[] {
 		const imageElement = elementData as ImageElement
 
 		// 从 ImageElement 实例判断图片是否已加载
-		if (getActiveImageVersion(imageElement).src) {
+		if (getActiveImageContent(imageElement).src) {
 			const elementInstance = canvas.elementManager.getElementInstance(id)
 			if (
 				elementInstance &&
@@ -1210,7 +1210,12 @@ export function getLoadedVideoElements(canvas: Canvas): CanvasFileElement[] {
 
 	for (const id of selectedIds) {
 		const elementData = canvas.elementManager.getElementData(id)
-		if (!elementData || elementData.type !== ElementTypeEnum.Video || !elementData.src) continue
+		if (
+			!elementData ||
+			elementData.type !== ElementTypeEnum.Video ||
+			!getActiveContent(elementData)?.src
+		)
+			continue
 
 		const elementInstance = canvas.elementManager.getElementInstance(id)
 		if (

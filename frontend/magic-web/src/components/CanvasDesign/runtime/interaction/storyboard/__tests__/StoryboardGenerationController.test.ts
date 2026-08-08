@@ -10,6 +10,7 @@ import type { ImageModelItem } from "../../../../public/magic-types"
 import { StoryboardGenerationController } from "../StoryboardGenerationController"
 
 function createStoryboard(): StoryboardElement {
+	const contentId = "storyboard-content"
 	return {
 		id: "storyboard-1",
 		type: ElementTypeEnum.Storyboard,
@@ -17,17 +18,32 @@ function createStoryboard(): StoryboardElement {
 		y: 200,
 		width: 960,
 		height: 1360,
-		shots: [
-			{ id: "shot-1", durationSeconds: 3, description: "wide shot" },
-			{ id: "shot-2", durationSeconds: 4, description: "close up" },
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [
+			{
+				contentId,
+				shots: [
+					{ id: "shot-1", durationSeconds: 3, description: "wide shot" },
+					{ id: "shot-2", durationSeconds: 4, description: "close up" },
+				],
+				generationConfig: {
+					model_id: "model-1",
+					size: "1024x1024",
+					resolution: "1K",
+					image_generation_config: { quality: "high" },
+				},
+			},
 		],
-		generationConfig: {
-			model_id: "model-1",
-			size: "1024x1024",
-			resolution: "1K",
-			image_generation_config: { quality: "high" },
-		},
 	}
+}
+
+function getStoryboardContent(storyboard: StoryboardElement) {
+	const content = storyboard.contents.find(
+		(item) => item.contentId === storyboard.activeContentId,
+	)
+	if (!content) throw new Error("Expected active storyboard Content")
+	return content
 }
 
 function createModel(maxReferenceImages = 4): ImageModelItem {
@@ -77,19 +93,22 @@ function createHarness(options?: {
 		const instance = Object.create(ImageElement.prototype) as ImageElement & {
 			getData: () => ImageElementData
 			hasGenerationHistory: () => boolean
-			getLatestVersionData: () => any
+			getLatestContentData: () => any
 			submitInitialGeneration: (request: Record<string, unknown>) => Promise<boolean>
-			submitVersionGeneration: (request: Record<string, unknown>) => Promise<boolean>
+			submitContentGeneration: (request: Record<string, unknown>) => Promise<boolean>
 			submitGeneration: (request: Record<string, unknown>) => Promise<boolean>
 		}
 		instance.getData = () => elements.get(data.id) as ImageElementData
 		instance.hasGenerationHistory = vi.fn(() => {
 			const current = elements.get(data.id) as ImageElementData
-			return Boolean(current.generateImageRequest) || current.imageDslVersion === 2
+			const active = current.contents.find(
+				(content) => content.contentId === current.activeContentId,
+			)
+			return current.contents.length > 1 || Boolean(active?.generateImageRequest)
 		})
-		instance.getLatestVersionData = vi.fn(() => {
+		instance.getLatestContentData = vi.fn(() => {
 			const current = elements.get(data.id) as ImageElementData
-			return current.imageDslVersion === 2 ? (current.versions.at(-1) ?? current) : current
+			return current.contents.at(-1) ?? { contentId: `${data.id}-content-1` }
 		})
 		instance.submitInitialGeneration = vi.fn(async (request) => {
 			const submissionIndex = initialSubmissionCount++
@@ -97,19 +116,24 @@ function createHarness(options?: {
 				throw new Error("submit failed")
 			}
 			submissions.push({ elementId: data.id, kind: "initial", request })
+			const current = elements.get(data.id) as ImageElementData
 			elements.set(data.id, {
-				...elements.get(data.id),
-				generateImageRequest: request,
+				...current,
+				contents: current.contents.map((content) =>
+					content.contentId === current.activeContentId
+						? { ...content, generateImageRequest: request }
+						: content,
+				),
 			})
 			return true
 		})
-		instance.submitVersionGeneration = vi.fn(async (request) => {
+		instance.submitContentGeneration = vi.fn(async (request) => {
 			submissions.push({ elementId: data.id, kind: "version", request })
 			return true
 		})
 		instance.submitGeneration = vi.fn(async (request) =>
 			instance.hasGenerationHistory()
-				? instance.submitVersionGeneration(request)
+				? instance.submitContentGeneration(request)
 				: instance.submitInitialGeneration(request),
 		)
 		instances.set(data.id, instance)
@@ -243,18 +267,24 @@ describe("StoryboardGenerationController", () => {
 		expect(harness.submissions.map((item) => item.kind)).toEqual(["initial", "initial"])
 		expect(harness.connections).toHaveLength(2)
 		expect(harness.connections.every((connection) => connection.locked)).toBe(true)
-		expect(harness.storyboard.shots?.map((shot) => shot.outputImageElementId)).toEqual(
-			expect.arrayContaining([expect.any(String), expect.any(String)]),
-		)
 		expect(
-			new Set(harness.storyboard.shots?.map((shot) => shot.outputImageElementId)).size,
+			getStoryboardContent(harness.storyboard).shots?.map(
+				(shot) => shot.outputImageElementId,
+			),
+		).toEqual(expect.arrayContaining([expect.any(String), expect.any(String)]))
+		expect(
+			new Set(
+				getStoryboardContent(harness.storyboard).shots?.map(
+					(shot) => shot.outputImageElementId,
+				),
+			).size,
 		).toBe(2)
 		controller.destroy()
 	})
 
 	it("blocks the whole batch for an empty shot description", async () => {
 		const storyboard = createStoryboard()
-		storyboard.shots![1].description = "   "
+		getStoryboardContent(storyboard).shots![1].description = "   "
 		const harness = createHarness({ storyboard })
 		const controller = new StoryboardGenerationController(harness.canvas, async () => [
 			harness.model,
@@ -275,7 +305,9 @@ describe("StoryboardGenerationController", () => {
 			y: 0,
 			width: 512,
 			height: 512,
-			src: "./images/reference.png",
+			activeContentId: "reference-content",
+			mainContentId: "reference-content",
+			contents: [{ contentId: "reference-content", src: "./images/reference.png" }],
 		}
 		const harness = createHarness({ inputImage, model: createModel(0) })
 		const controller = new StoryboardGenerationController(harness.canvas, async () => [
@@ -296,13 +328,17 @@ describe("StoryboardGenerationController", () => {
 		])
 
 		await controller.generateAll(harness.storyboard.id)
-		const outputIds = harness.storyboard.shots?.map((shot) => shot.outputImageElementId)
+		const outputIds = getStoryboardContent(harness.storyboard).shots?.map(
+			(shot) => shot.outputImageElementId,
+		)
 		await controller.generateAll(harness.storyboard.id)
 
 		expect(harness.frameCount()).toBe(1)
-		expect(harness.storyboard.shots?.map((shot) => shot.outputImageElementId)).toEqual(
-			outputIds,
-		)
+		expect(
+			getStoryboardContent(harness.storyboard).shots?.map(
+				(shot) => shot.outputImageElementId,
+			),
+		).toEqual(outputIds)
 		expect(harness.submissions.map((item) => item.kind)).toEqual([
 			"initial",
 			"initial",
@@ -319,8 +355,8 @@ describe("StoryboardGenerationController", () => {
 		])
 
 		await controller.generateAll(harness.storyboard.id)
-		const missingId = harness.storyboard.shots?.[1]?.outputImageElementId
-		const existingId = harness.storyboard.shots?.[0]?.outputImageElementId
+		const missingId = getStoryboardContent(harness.storyboard).shots?.[1]?.outputImageElementId
+		const existingId = getStoryboardContent(harness.storyboard).shots?.[0]?.outputImageElementId
 		const frameId = existingId ? harness.parents.get(existingId) : undefined
 		if (!missingId || !existingId || !frameId)
 			throw new Error("Expected generated frame outputs")
@@ -332,7 +368,7 @@ describe("StoryboardGenerationController", () => {
 
 		await controller.generateAll(harness.storyboard.id)
 
-		const restoredId = harness.storyboard.shots?.[1]?.outputImageElementId
+		const restoredId = getStoryboardContent(harness.storyboard).shots?.[1]?.outputImageElementId
 		expect(restoredId).toBeTruthy()
 		expect(restoredId).not.toBe(missingId)
 		expect(harness.parents.get(restoredId as string)).toBe(frameId)
@@ -341,7 +377,7 @@ describe("StoryboardGenerationController", () => {
 		controller.destroy()
 	})
 
-	it("shares the associated image version and crop options across every shot", async () => {
+	it("shares the associated image Content and crop options across every shot", async () => {
 		const inputImage: ImageElementData = {
 			id: "reference-image",
 			type: ElementTypeEnum.Image,
@@ -349,27 +385,26 @@ describe("StoryboardGenerationController", () => {
 			y: 0,
 			width: 512,
 			height: 512,
-			imageDslVersion: 2,
-			activeVersionId: "v2",
-			mainVersionId: "v2",
-			versions: [
+			activeContentId: "v2",
+			mainContentId: "v2",
+			contents: [
 				{
-					id: "v1",
+					contentId: "v1",
 					src: "./images/associated.png",
 					crop: { x: 1, y: 2, width: 100, height: 80 },
 				},
 				{
-					id: "v2",
+					contentId: "v2",
 					src: "./images/reference.png",
 					crop: { x: 10, y: 20, width: 300, height: 200 },
 				},
 			],
 		}
 		const harness = createHarness({ inputImage })
-		const getAssociatedVersionData = vi.fn(() => inputImage.versions[0])
+		const getAssociatedContentData = vi.fn(() => inputImage.contents[0])
 		const inputInstance = harness.instances.get(inputImage.id)
 		if (!inputInstance) throw new Error("Expected input image instance")
-		inputInstance.getAssociatedVersionData = getAssociatedVersionData
+		inputInstance.getAssociatedContentData = getAssociatedContentData
 		const controller = new StoryboardGenerationController(harness.canvas, async () => [
 			harness.model,
 		])
@@ -398,7 +433,7 @@ describe("StoryboardGenerationController", () => {
 				],
 			}),
 		)
-		expect(getAssociatedVersionData).toHaveBeenCalled()
+		expect(getAssociatedContentData).toHaveBeenCalled()
 		controller.destroy()
 	})
 
@@ -411,7 +446,11 @@ describe("StoryboardGenerationController", () => {
 
 		await controller.generateAll(harness.storyboard.id)
 		expect(harness.frameCount()).toBe(1)
-		expect(harness.storyboard.shots?.every((shot) => shot.outputImageElementId)).toBe(true)
+		expect(
+			getStoryboardContent(harness.storyboard).shots?.every(
+				(shot) => shot.outputImageElementId,
+			),
+		).toBe(true)
 		controller.destroy()
 	})
 })

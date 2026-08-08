@@ -7,7 +7,11 @@ import { useCanvasSelectionUI } from "../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../app/providers/MagicProvider"
 import { useCanvas } from "../../app/providers/CanvasProvider"
 import useShowVideoOriginalSizeButton from "./hooks/useShowVideoOriginalSizeButton"
-import { getActiveImageVersion, isImageElementV2 } from "../../runtime/document/imageVersion"
+import {
+	getActiveContent,
+	getActiveImageContent,
+	isImageElementContent,
+} from "../../runtime/document/elementContent"
 
 export default function ElementTools() {
 	const { convertHightConfig } = useMagic()
@@ -21,7 +25,7 @@ export default function ElementTools() {
 
 	const imageSrc =
 		firstSelectedElement?.type === ElementTypeEnum.Image
-			? getActiveImageVersion(firstSelectedElement).src
+			? getActiveImageContent(firstSelectedElement).src
 			: undefined
 
 	const showVideoOriginalSizeButton = useShowVideoOriginalSizeButton({
@@ -31,7 +35,7 @@ export default function ElementTools() {
 		elementId: firstSelectedElement?.id,
 		videoSrc:
 			firstSelectedElement?.type === ElementTypeEnum.Video
-				? firstSelectedElement.src
+				? getActiveContent(firstSelectedElement)?.src
 				: undefined,
 		elementWidth: firstSelectedElement?.width,
 		elementHeight: firstSelectedElement?.height,
@@ -79,14 +83,14 @@ export default function ElementTools() {
 
 				case ElementTypeEnum.Image:
 					const imageElementTools: ElementToolOptionType[] = []
-					const hasMultipleImageVersions =
-						isImageElementV2(firstSelectedElement) &&
-						firstSelectedElement.versions.length > 1
+					const hasMultipleImageContents =
+						isImageElementContent(firstSelectedElement) &&
+						firstSelectedElement.contents.length > 1
 					if (!imageSrc) {
 						return [
 							{ type: ElementToolTypeEnum.ImageReplaceButton },
-							...(hasMultipleImageVersions
-								? [{ type: ElementToolTypeEnum.ImageVersionDeleteButton }]
+							...(hasMultipleImageContents
+								? [{ type: ElementToolTypeEnum.ImageContentDeleteButton }]
 								: []),
 						]
 					}
@@ -119,9 +123,9 @@ export default function ElementTools() {
 					imageElementTools.push({
 						type: ElementToolTypeEnum.ImageReplaceButton,
 					})
-					if (hasMultipleImageVersions) {
+					if (hasMultipleImageContents) {
 						imageElementTools.push({
-							type: ElementToolTypeEnum.ImageVersionDeleteButton,
+							type: ElementToolTypeEnum.ImageContentDeleteButton,
 						})
 					}
 					return imageElementTools

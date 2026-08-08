@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import styles from "../drawer/index.module.css"
 import { Image as ImageIcon } from "lucide-react"
 import { type ImageElement } from "../../../runtime/document/types"
-import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { getPersistedSourceCrop } from "../../../runtime/resources/image/imageCropUtils"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
@@ -16,14 +16,14 @@ const TOOLTIP_PREVIEW_MAX_SIZE = 160
 
 export default function LayerImageLowPreview(props: { element: ImageElement; alt: string }) {
 	const { element, alt } = props
-	const activeVersion = getActiveImageVersion(element)
+	const activeContent = getActiveImageContent(element)
 	const { canvas } = useCanvas()
 	const portalContainer = usePortalContainer()
 	const previewRootRef = useRef<HTMLDivElement>(null)
 	const [shouldLoadLow, setShouldLoadLow] = useState(false)
 	const { lowUrl, imageInfo: lowImageInfo } = useImageLowUrl({
 		elementId: element.id,
-		src: activeVersion.src,
+		src: activeContent.src,
 		enabled: shouldLoadLow,
 	})
 	const elementInstance = canvas?.elementManager.getElementInstance(element.id)
@@ -63,14 +63,14 @@ export default function LayerImageLowPreview(props: { element: ImageElement; alt
 		setTooltipImageUrl(null)
 		setIsTooltipLoading(false)
 		setHasTooltipError(false)
-	}, [activeVersion.src])
+	}, [activeContent.src])
 
 	const loadTooltipImageUrl = useCallback(() => {
-		if (!canvas || !activeVersion.src) return
+		if (!canvas || !activeContent.src) return
 		setIsTooltipLoading(true)
 		setHasTooltipError(false)
 		canvas.imageResourceManager
-			.ensureFreshOssSrc(activeVersion.src)
+			.ensureFreshOssSrc(activeContent.src)
 			.then((ossSrc) => {
 				setTooltipImageUrl(ossSrc)
 				setHasTooltipError(!ossSrc)
@@ -82,7 +82,7 @@ export default function LayerImageLowPreview(props: { element: ImageElement; alt
 			.finally(() => {
 				setIsTooltipLoading(false)
 			})
-	}, [canvas, activeVersion.src])
+	}, [canvas, activeContent.src])
 
 	const handleTooltipOpenChange = useCallback(
 		(open: boolean) => {
@@ -124,7 +124,7 @@ export default function LayerImageLowPreview(props: { element: ImageElement; alt
 			}
 		}
 
-		const sourceCrop = getPersistedSourceCrop(activeVersion.crop, {
+		const sourceCrop = getPersistedSourceCrop(activeContent.crop, {
 			width: sourceWidth,
 			height: sourceHeight,
 		})
@@ -182,7 +182,7 @@ export default function LayerImageLowPreview(props: { element: ImageElement; alt
 				},
 			},
 		}
-	}, [activeVersion.crop, imageInfo, lowUrl])
+	}, [activeContent.crop, imageInfo, lowUrl])
 
 	return (
 		<Tooltip open={tooltipOpen} onOpenChange={handleTooltipOpenChange}>

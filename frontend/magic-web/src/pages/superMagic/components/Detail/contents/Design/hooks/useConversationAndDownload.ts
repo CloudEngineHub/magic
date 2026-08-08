@@ -29,7 +29,10 @@ import {
 	CanvasImageSourceDimensions,
 	DownloadImageOptions,
 } from "@/components/CanvasDesign/public/magic-types"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import {
+	getActiveImageContent,
+	getActiveContent,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { resolveCanvasMediaDownloadPlan } from "../utils/mediaDownloadPlan"
@@ -208,17 +211,17 @@ function buildImageProcessOptions(params: {
 	const { fileElement, fileItem, sourceDimensionsByElementId } = params
 
 	if (fileElement.type !== ElementTypeEnum.Image) return undefined
-	const activeVersion = getActiveImageVersion(fileElement)
+	const activeContent = getActiveImageContent(fileElement)
 
-	if (!activeVersion.crop) return undefined
+	if (!activeContent.crop) return undefined
 
 	const sourceDimensions = sourceDimensionsByElementId?.[fileElement.id]
 	const sourceCrop = sourceDimensions
 		? getPersistedSourceCropForDownload({
-				crop: activeVersion.crop,
+				crop: activeContent.crop,
 				sourceDimensions,
 			})
-		: activeVersion.crop
+		: activeContent.crop
 
 	if (sourceCrop.width <= 0 || sourceCrop.height <= 0) return undefined
 
@@ -296,8 +299,12 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			// 处理每个图片元素
 			for (const item of data) {
 				const source =
-					item.type === ElementTypeEnum.Image ? getActiveImageVersion(item) : item
-				if (!source.src) {
+					item.type === ElementTypeEnum.Image
+						? getActiveImageContent(item)
+						: item.type === ElementTypeEnum.Video
+							? getActiveContent(item)
+							: getActiveContent(item)
+				if (!source?.src) {
 					throw new Error(t("design.errors.imageSrcEmpty"))
 				}
 
@@ -389,13 +396,17 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 
 			// 先完整解析选区；任一元素无法映射到项目文件时，整批不启动。
 			for (const element of data) {
-				const activeImageVersion =
+				const activeImageContent =
 					element.type === ElementTypeEnum.Image
-						? getActiveImageVersion(element)
+						? getActiveImageContent(element)
 						: undefined
 				const elementSrc =
-					activeImageVersion?.src ??
-					(element.type === ElementTypeEnum.Image ? undefined : element.src)
+					activeImageContent?.src ??
+					(element.type === ElementTypeEnum.Video
+						? getActiveContent(element)?.src
+						: element.type === ElementTypeEnum.Audio
+							? getActiveContent(element)?.src
+							: undefined)
 				if (!elementSrc) {
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.imageSrcEmpty"))
 				}
@@ -420,7 +431,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 				})
 				if (
 					element.type === ElementTypeEnum.Image &&
-					activeImageVersion?.crop &&
+					activeImageContent?.crop &&
 					!imageProcess
 				) {
 					throw new CanvasMediaDownloadPreflightError(t("design.errors.invalidImageCrop"))

@@ -10,10 +10,10 @@ import type {
 import { generateMarkerId } from "../../shared/ids"
 import { MarkerTypeEnum } from "../../document/types"
 import {
-	getActiveImageVersionId,
-	getImageVersionById,
-	isImageElementV2,
-} from "../../document/imageVersion"
+	getActiveImageContentId,
+	getImageContentById,
+	isImageElementContent,
+} from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
 import type { IdentifyImageMarkResponse } from "../../../public/magic-types"
 import { BaseMarker } from "./markers/BaseMarker"
@@ -220,10 +220,10 @@ export class MarkerManager {
 				type: MarkerTypeEnum.Area,
 				id: generateMarkerId(),
 				elementId,
-				versionId: this.getActiveImageVersionId(elementId),
+				contentId: this.getActiveImageContentId(elementId),
 				elementCrop: this.getMarkerElementCrop(
 					elementId,
-					this.getActiveImageVersionId(elementId),
+					this.getActiveImageContentId(elementId),
 				),
 				relativeX,
 				relativeY,
@@ -236,10 +236,10 @@ export class MarkerManager {
 				type: MarkerTypeEnum.Mark,
 				id: generateMarkerId(),
 				elementId,
-				versionId: this.getActiveImageVersionId(elementId),
+				contentId: this.getActiveImageContentId(elementId),
 				elementCrop: this.getMarkerElementCrop(
 					elementId,
-					this.getActiveImageVersionId(elementId),
+					this.getActiveImageContentId(elementId),
 				),
 				relativeX,
 				relativeY,
@@ -368,59 +368,40 @@ export class MarkerManager {
 		if (hasRemoved) this.renderAllMarkers()
 	}
 
-	private getActiveImageVersionId(elementId: string): string | undefined {
+	private getActiveImageContentId(elementId: string): string | undefined {
 		const element = this.canvas.elementManager.getElementData(elementId)
-		return element?.type === "image" ? getActiveImageVersionId(element) : undefined
+		return element?.type === "image" ? getActiveImageContentId(element) : undefined
 	}
 
 	private isMarkerVisible(marker: Marker): boolean {
 		const element = this.canvas.elementManager.getElementData(marker.elementId)
 		if (!element || element.type !== "image") return true
-		if (!isImageElementV2(element)) return true
-		return marker.versionId === element.activeVersionId
+		if (!isImageElementContent(element)) return true
+		return marker.contentId === element.activeContentId
 	}
 
-	/** 切换版本后永久清理旧版本 Marker；Marker 不进入撤销恢复。 */
-	public handleImageVersionChanged(
+	/** 切换 Content 后永久清理旧 Content Marker；Marker 不进入撤销恢复。 */
+	public handleImageContentChanged(
 		elementId: string,
-		previousVersionId?: string,
-		nextVersionId?: string,
+		previousContentId?: string,
+		nextContentId?: string,
 	): void {
 		let hasRemoved = false
-		if (previousVersionId && previousVersionId !== nextVersionId) {
+		if (previousContentId && previousContentId !== nextContentId) {
 			hasRemoved = this.removeMarkerDataList(
 				this.markers.filter(
 					(marker) =>
-						marker.elementId === elementId && marker.versionId === previousVersionId,
+						marker.elementId === elementId && marker.contentId === previousContentId,
 				),
 			)
 		}
-		if (hasRemoved || previousVersionId !== nextVersionId) this.renderAllMarkers()
+		if (hasRemoved || previousContentId !== nextContentId) this.renderAllMarkers()
 	}
 
-	/** V1 懒迁移时给已有 Marker 绑定首版。 */
-	public bindMarkersToImageVersion(elementId: string, versionId: string): void {
-		this.markers.forEach((marker) => {
-			if (marker.elementId === elementId && marker.versionId === undefined) {
-				marker.versionId = versionId
-				this.canvas.eventEmitter.emit({
-					type: "marker:updated",
-					data: { marker },
-				})
-			}
-		})
-		this.renderAllMarkers()
-	}
-
-	/** V1 使用 null 表示其唯一的、没有 versionId 的图片版本。 */
-	public removeMarkersByImageVersion(elementId: string, versionId: string | null): void {
+	public removeMarkersByImageContent(elementId: string, contentId: string): void {
 		const hasRemoved = this.removeMarkerDataList(
 			this.markers.filter(
-				(marker) =>
-					marker.elementId === elementId &&
-					(versionId === null
-						? marker.versionId === undefined
-						: marker.versionId === versionId),
+				(marker) => marker.elementId === elementId && marker.contentId === contentId,
 			),
 		)
 		if (hasRemoved) this.renderAllMarkers()
@@ -504,7 +485,7 @@ export class MarkerManager {
 			marker1.id !== marker2.id ||
 			marker1.type !== marker2.type ||
 			marker1.elementId !== marker2.elementId ||
-			marker1.versionId !== marker2.versionId ||
+			marker1.contentId !== marker2.contentId ||
 			!this.isCropEqual(marker1.elementCrop, marker2.elementCrop) ||
 			marker1.relativeX !== marker2.relativeX ||
 			marker1.relativeY !== marker2.relativeY ||
@@ -555,11 +536,11 @@ export class MarkerManager {
 	 */
 	private getMarkerElementCrop(
 		elementId: string,
-		versionId?: string,
+		contentId?: string,
 	): CropConfigWithoutDisplaySize | undefined {
 		const element = this.canvas.elementManager.getElementData(elementId)
 		if (!element || element.type !== "image") return undefined
-		return this.normalizeCrop(getImageVersionById(element, versionId)?.crop)
+		return this.normalizeCrop(getImageContentById(element, contentId)?.crop)
 	}
 
 	/**
@@ -598,8 +579,8 @@ export class MarkerManager {
 	 * 将标记的裁剪信息与当前元素的裁剪信息同步
 	 */
 	private withCurrentElementCrop(marker: Marker): Marker {
-		const nextMarker = this.withCurrentImageVersion(marker)
-		const elementCrop = this.getMarkerElementCrop(nextMarker.elementId, nextMarker.versionId)
+		const nextMarker = this.withCurrentImageContent(marker)
+		const elementCrop = this.getMarkerElementCrop(nextMarker.elementId, nextMarker.contentId)
 		if (marker.type === MarkerTypeEnum.Area) {
 			return {
 				...nextMarker,
@@ -613,10 +594,10 @@ export class MarkerManager {
 		}
 	}
 
-	private withCurrentImageVersion(marker: Marker): Marker {
-		if (marker.versionId) return { ...marker }
-		const versionId = this.getActiveImageVersionId(marker.elementId)
-		return versionId ? { ...marker, versionId } : { ...marker }
+	private withCurrentImageContent(marker: Marker): Marker {
+		if (marker.contentId) return { ...marker }
+		const contentId = this.getActiveImageContentId(marker.elementId)
+		return contentId ? { ...marker, contentId } : { ...marker }
 	}
 
 	/**
@@ -760,7 +741,7 @@ export class MarkerManager {
 		this.markers.forEach((marker) => {
 			if (marker.elementId !== elementId || !this.isMarkerVisible(marker)) return
 
-			const elementCrop = this.getMarkerElementCrop(marker.elementId, marker.versionId)
+			const elementCrop = this.getMarkerElementCrop(marker.elementId, marker.contentId)
 			if (this.isCropEqual(marker.elementCrop, elementCrop)) return
 
 			marker.elementCrop = elementCrop
@@ -1052,7 +1033,7 @@ export class MarkerManager {
 			? markers.filter((marker) => this.canvas.elementManager.hasElement(marker.elementId))
 			: []
 		this.cropRenderOverrides.clear()
-		this.markers = validMarkers.map((marker) => this.withCurrentImageVersion(marker))
+		this.markers = validMarkers.map((marker) => this.withCurrentImageContent(marker))
 		this.renderAllMarkers()
 	}
 

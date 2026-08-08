@@ -11,7 +11,10 @@ import {
 	type LayerElement,
 	type VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import {
+	getActiveContent,
+	getActiveImageContent,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
@@ -172,7 +175,7 @@ function collectCanvasResourceSnapshots(params: {
 	for (const element of elements) {
 		if (element.type === ElementTypeEnum.Image) {
 			addCanvasResourceSnapshot({
-				src: getActiveImageVersion(element as ImageElement).src,
+				src: getActiveImageContent(element as ImageElement).src,
 				mediaType: "image",
 				flatAttachments,
 				attachmentsReady,
@@ -185,7 +188,7 @@ function collectCanvasResourceSnapshots(params: {
 
 		if (element.type === ElementTypeEnum.Video) {
 			addCanvasResourceSnapshot({
-				src: (element as VideoElement).src,
+				src: getActiveContent(element as VideoElement)?.src,
 				mediaType: "video",
 				flatAttachments,
 				attachmentsReady,
@@ -198,7 +201,7 @@ function collectCanvasResourceSnapshots(params: {
 
 		if (element.type === ElementTypeEnum.Audio) {
 			addCanvasResourceSnapshot({
-				src: (element as AudioElement).src,
+				src: getActiveContent(element as AudioElement)?.src,
 				mediaType: "audio",
 				flatAttachments,
 				attachmentsReady,

@@ -1,20 +1,24 @@
 import type { Canvas } from "../../core/Canvas"
+import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import type {
 	LayerElement,
 	AudioElement,
 	ImageElement,
-	ImageElementV1,
 	VideoElement,
 	CanvasFileElement,
+	ElementUpdatePatch,
 } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import {
-	createImageVersionId,
-	getActiveImageVersion,
-	isImageElementV2,
-	updateImageVersion,
-} from "../../document/imageVersion"
+	createContentId,
+	getActiveContent,
+	getActiveImageContent,
+	isImageElementContent,
+	mapContents,
+	updateContent,
+	updateImageContent,
+} from "../../document/elementContent"
 import { GenerationStatus, type UploadFileResponse } from "../../../public/magic-types"
 import { toast } from "sonner"
 import {
@@ -124,6 +128,7 @@ interface PreparedClipboardTreeFileElement {
 interface ClipboardTreeFileUpload {
 	sourceElementId: string
 	targetElementId: string
+	targetContentId: string
 	sourceCanvasId?: string
 	sourcePath?: string
 	file?: File
@@ -818,7 +823,7 @@ export class ClipboardManager {
 			sourceRef?: CanvasElementClipboardFileMetadata["sourceRef"]
 		}
 	} | null> {
-		const src = getActiveImageVersion(element).src
+		const src = getActiveImageContent(element).src
 		if (!src) {
 			return null
 		}
@@ -849,7 +854,7 @@ export class ClipboardManager {
 	}
 
 	private async getImageMetadata(element: ImageElement): Promise<CanvasFileMetadataData | null> {
-		const src = getActiveImageVersion(element).src
+		const src = getActiveImageContent(element).src
 		if (!src) {
 			return null
 		}
@@ -864,12 +869,13 @@ export class ClipboardManager {
 	}
 
 	private async getVideoMetadata(element: VideoElement): Promise<CanvasFileMetadataData | null> {
-		if (!element.src) {
+		const src = getActiveContent(element)?.src
+		if (!src) {
 			return null
 		}
 
 		const metadata = await this.fetchOriginalFileMetadata({
-			src: element.src,
+			src,
 			fallbackFilename: `${element.name || "video"}.mp4`,
 			fallbackMimeType: DEFAULT_VIDEO_MIME_TYPE,
 		})
@@ -878,9 +884,10 @@ export class ClipboardManager {
 	}
 
 	private async getAudioMetadata(element: AudioElement): Promise<CanvasFileMetadataData | null> {
-		if (!element.src) return null
+		const src = getActiveContent(element)?.src
+		if (!src) return null
 		const metadata = await this.fetchOriginalFileMetadata({
-			src: element.src,
+			src,
 			fallbackFilename: `${element.name || "audio"}.mp3`,
 			fallbackMimeType: DEFAULT_AUDIO_MIME_TYPE,
 		})
@@ -962,7 +969,13 @@ export class ClipboardManager {
 			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference
 		const resourceRefs = collectElementResourceReferences(elements, resolveResourceReference)
 		const resourceRefByIdentity = new Map(resourceRefs.map((ref) => [ref.identity, ref]))
-		const generationResourceRefs = resourceRefs.filter((ref) => !ref.isSelfReferenceOnly)
+		const nonActiveMediaResourceIdentities = this.getNonActiveMediaResourceIdentities(
+			elements,
+			resolveResourceReference,
+		)
+		const generationResourceRefs = resourceRefs.filter(
+			(ref) => !ref.isSelfReferenceOnly || nonActiveMediaResourceIdentities.has(ref.identity),
+		)
 		const [mediaMetadataResults, generationMetadataResults] = await Promise.all([
 			Promise.all(mediaElements.map((element) => this.getCanvasFileMetadata(element))),
 			Promise.all(
@@ -1044,14 +1057,42 @@ export class ClipboardManager {
 		return { metadata: metadataList, files, native }
 	}
 
+	private getNonActiveMediaResourceIdentities(
+		elements: LayerElement[],
+		resolveResourceReference?: ResolveCanvasResourceReference,
+	): Set<string> {
+		const identities = new Set<string>()
+
+		const collect = (element: LayerElement): void => {
+			if (CanvasElementClipboard.isCanvasFileElement(element)) {
+				const activeContentId = getActiveContent(element)?.contentId
+				for (const content of element.contents) {
+					if (content.contentId === activeContentId) continue
+					const identity = getClipboardResourcePathKey(
+						content.src,
+						resolveResourceReference,
+					)
+					if (identity) identities.add(identity)
+				}
+			}
+
+			if (isCanvasContainerElement(element) && Array.isArray(element.children)) {
+				element.children.forEach(collect)
+			}
+		}
+
+		elements.forEach(collect)
+		return identities
+	}
+
 	private getElementResourceMetadata(
 		element: CanvasFileElement,
 		resourceRefByIdentity: ReadonlyMap<string, ClipboardResourceReference>,
 	): Pick<CanvasElementClipboardFileMetadata, "resourceIdentity" | "resourceAliases"> {
 		const elementSrc =
 			element.type === ElementTypeEnum.Image
-				? getActiveImageVersion(element).src
-				: element.src
+				? getActiveImageContent(element).src
+				: getActiveContent(element)?.src
 		const resourceIdentity = getClipboardResourcePathKey(
 			elementSrc,
 			this.canvas.magicConfigManager?.config?.methods?.resolveResourceReference,
@@ -1228,92 +1269,89 @@ export class ClipboardManager {
 	private getFileElementDataWithUploadResult(
 		finalElement: CanvasFileElement,
 		uploadResult: UploadFileResponse,
+		targetContentId: string,
 	): CanvasFileElement {
 		if (finalElement.type === ElementTypeEnum.Audio) {
-			return { ...finalElement, src: uploadResult.path, visible: true }
+			return {
+				...updateContent(finalElement, targetContentId, {
+					src: uploadResult.path,
+				}),
+				visible: true,
+			} as CanvasFileElement
 		}
-		if (finalElement.type === ElementTypeEnum.Image && isImageElementV2(finalElement)) {
+		if (finalElement.type === ElementTypeEnum.Image && isImageElementContent(finalElement)) {
 			return this.stripMediaGenerationTaskIdentity(
-				updateImageVersion(finalElement, finalElement.activeVersionId, {
+				updateImageContent(finalElement, targetContentId, {
 					src: uploadResult.path,
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
 				}),
 			) as CanvasFileElement
 		}
-		return this.stripMediaGenerationTaskIdentity({
-			...finalElement,
-			src: uploadResult.path,
-			status: GenerationStatus.Completed,
-			errorMessage: undefined,
-		})
+		return this.stripMediaGenerationTaskIdentity(
+			updateContent(finalElement, targetContentId, {
+				src: uploadResult.path,
+				status: GenerationStatus.Completed,
+				errorMessage: undefined,
+			}),
+		)
 	}
 
 	/**
 	 * 上传完成只能提交资源域字段，不能把异步任务开始时的布局快照带回 ElementManager。
 	 * 多选拖动的实时阶段只更新 Konva node；若这里提交完整元素，旧 x/y 会覆盖正在拖动的位置。
 	 */
-	private getFileElementResourceUpdates(
-		uploadedElement: CanvasFileElement,
-	): Partial<ImageElement> | Partial<VideoElement> | Partial<AudioElement> {
+	private getFileElementResourceUpdates(uploadedElement: CanvasFileElement): ElementUpdatePatch {
 		if (uploadedElement.type === ElementTypeEnum.Audio) {
-			return { src: uploadedElement.src, visible: uploadedElement.visible }
+			return {
+				contents: uploadedElement.contents,
+				activeContentId: uploadedElement.activeContentId,
+				mainContentId: uploadedElement.mainContentId,
+				visible: uploadedElement.visible,
+			}
 		}
 
 		if (uploadedElement.type === ElementTypeEnum.Image) {
-			if (isImageElementV2(uploadedElement)) {
-				return {
-					versions: uploadedElement.versions,
-					activeVersionId: uploadedElement.activeVersionId,
-					mainVersionId: uploadedElement.mainVersionId,
-				}
-			}
 			return {
-				src: uploadedElement.src,
-				status: uploadedElement.status,
-				errorMessage: uploadedElement.errorMessage,
-				generateImageRequest: uploadedElement.generateImageRequest,
-				imageGenerationTaskMeta: uploadedElement.imageGenerationTaskMeta,
-				generateHightImageRequest: uploadedElement.generateHightImageRequest,
+				contents: uploadedElement.contents,
+				activeContentId: uploadedElement.activeContentId,
+				mainContentId: uploadedElement.mainContentId,
 			}
 		}
 
 		return {
-			src: uploadedElement.src,
-			status: uploadedElement.status,
-			errorMessage: uploadedElement.errorMessage,
-			generateVideoRequest: uploadedElement.generateVideoRequest,
+			contents: uploadedElement.contents,
+			activeContentId: uploadedElement.activeContentId,
+			mainContentId: uploadedElement.mainContentId,
 		}
 	}
 
 	private getFileElementUploadingPlaceholder(
 		finalElement: Exclude<CanvasFileElement, AudioElement>,
+		targetContentId: string,
 	): CanvasFileElement {
-		if (finalElement.type === ElementTypeEnum.Image && isImageElementV2(finalElement)) {
+		if (finalElement.type === ElementTypeEnum.Image && isImageElementContent(finalElement)) {
 			return this.stripMediaGenerationTaskIdentity(
-				updateImageVersion(finalElement, finalElement.activeVersionId, {
+				updateImageContent(finalElement, targetContentId, {
 					src: undefined,
 					status: GenerationStatus.Processing,
 					errorMessage: undefined,
 				}),
 			) as CanvasFileElement
 		}
-		return this.stripMediaGenerationTaskIdentity({
-			...finalElement,
-			src: undefined,
-			status: GenerationStatus.Processing,
-			errorMessage: undefined,
-		})
+		return this.stripMediaGenerationTaskIdentity(
+			updateContent(finalElement, targetContentId, {
+				src: undefined,
+				status: GenerationStatus.Processing,
+				errorMessage: undefined,
+			}),
+		)
 	}
 
-	private stripMediaGenerationTaskIdentity<
-		T extends
-			| CanvasFileElement
-			| Partial<ImageElement>
-			| Partial<VideoElement>
-			| Partial<AudioElement>,
-	>(element: T, options?: { normalizeUnresumableImageVersions?: boolean }): T {
-		const sanitized = { ...element } as T & Partial<ImageElement> & Partial<VideoElement>
+	private stripMediaGenerationTaskIdentity<T extends CanvasFileElement>(
+		element: T,
+		options?: { normalizeUnresumableImageContents?: boolean },
+	): T {
 		const stripRequestIdentity = (request: unknown, idKey: string) => {
 			if (!request || typeof request !== "object") return request
 			const nextRequest = { ...(request as Record<string, unknown>) }
@@ -1324,71 +1362,48 @@ export class ClipboardManager {
 			return nextRequest
 		}
 
-		if (
-			(sanitized as { imageDslVersion?: unknown }).imageDslVersion === 2 &&
-			Array.isArray((sanitized as { versions?: unknown }).versions)
-		) {
-			const image = sanitized as unknown as ImageElement
-			if (isImageElementV2(image)) {
-				const versions = image.versions.map((version) => ({
-					...version,
-					// 已确认的轮询任务不能在副本中继续；无任务 ID 的运行中版本降级为失败记录。
-					status:
-						options?.normalizeUnresumableImageVersions &&
-						(version.status === GenerationStatus.Pending ||
-							version.status === GenerationStatus.Processing)
-							? GenerationStatus.Failed
-							: version.status,
-					generateImageRequest: version.generateImageRequest
+		if (element.type === ElementTypeEnum.Image && isImageElementContent(element)) {
+			const image = element
+			const contents = image.contents.map((content) => ({
+				...content,
+				status:
+					options?.normalizeUnresumableImageContents &&
+					(content.status === GenerationStatus.Pending ||
+						content.status === GenerationStatus.Processing)
+						? GenerationStatus.Failed
+						: content.status,
+				generateImageRequest: content.generateImageRequest
+					? (stripRequestIdentity(
+							content.generateImageRequest,
+							"image_id",
+						) as typeof content.generateImageRequest)
+					: undefined,
+				imageGenerationTaskMeta: content.imageGenerationTaskMeta
+					? (stripRequestIdentity(
+							content.imageGenerationTaskMeta,
+							"image_id",
+						) as typeof content.imageGenerationTaskMeta)
+					: undefined,
+			}))
+			return { ...image, contents } as T
+		}
+
+		if (element.type === ElementTypeEnum.Video) {
+			return {
+				...element,
+				contents: element.contents.map((content) => ({
+					...content,
+					generateVideoRequest: content.generateVideoRequest
 						? (stripRequestIdentity(
-								version.generateImageRequest,
-								"image_id",
-							) as typeof version.generateImageRequest)
+								content.generateVideoRequest,
+								"video_id",
+							) as typeof content.generateVideoRequest)
 						: undefined,
-					imageGenerationTaskMeta: version.imageGenerationTaskMeta
-						? (stripRequestIdentity(
-								version.imageGenerationTaskMeta,
-								"image_id",
-							) as typeof version.imageGenerationTaskMeta)
-						: undefined,
-				}))
-				return {
-					...image,
-					versions,
-				} as T
-			}
+				})),
+			} as T
 		}
 
-		const sanitizedImageV1 = sanitized as T & Partial<ImageElementV1>
-		if (sanitizedImageV1.generateImageRequest) {
-			sanitizedImageV1.generateImageRequest = stripRequestIdentity(
-				sanitizedImageV1.generateImageRequest,
-				"image_id",
-			) as ImageElementV1["generateImageRequest"]
-		}
-
-		if (sanitizedImageV1.imageGenerationTaskMeta) {
-			sanitizedImageV1.imageGenerationTaskMeta = stripRequestIdentity(
-				sanitizedImageV1.imageGenerationTaskMeta,
-				"image_id",
-			) as ImageElementV1["imageGenerationTaskMeta"]
-		}
-
-		if (sanitizedImageV1.generateHightImageRequest) {
-			sanitizedImageV1.generateHightImageRequest = stripRequestIdentity(
-				sanitizedImageV1.generateHightImageRequest,
-				"image_id",
-			) as ImageElementV1["generateHightImageRequest"]
-		}
-
-		if (sanitized.generateVideoRequest) {
-			sanitized.generateVideoRequest = stripRequestIdentity(
-				sanitized.generateVideoRequest,
-				"video_id",
-			) as VideoElement["generateVideoRequest"]
-		}
-
-		return sanitized
+		return { ...element } as T
 	}
 
 	private sanitizeElementTreeForClipboard(element: LayerElement): LayerElement {
@@ -1403,7 +1418,7 @@ export class ClipboardManager {
 		}
 		if (CanvasElementClipboard.isCanvasFileElement(sanitized)) {
 			return this.stripMediaGenerationTaskIdentity(sanitized, {
-				normalizeUnresumableImageVersions: true,
+				normalizeUnresumableImageContents: true,
 			})
 		}
 		return sanitized
@@ -1458,30 +1473,23 @@ export class ClipboardManager {
 
 	private cloneElementForPaste(element: LayerElement, currentNames: Set<string>): LayerElement {
 		let clonedElement = { ...element, id: generateElementId() } as LayerElement
-		if (clonedElement.type === ElementTypeEnum.Image && isImageElementV2(clonedElement)) {
-			const versionIdMap = new Map<string, string>()
-			clonedElement.versions.forEach((version) => {
-				versionIdMap.set(version.id, createImageVersionId())
-			})
-			clonedElement = {
-				...clonedElement,
-				versions: clonedElement.versions.map((version) => ({
-					...version,
-					id: versionIdMap.get(version.id) as string,
-					generateImageRequest: version.generateImageRequest
-						? { ...version.generateImageRequest }
-						: undefined,
-					imageGenerationTaskMeta: version.imageGenerationTaskMeta
-						? { ...version.imageGenerationTaskMeta }
-						: undefined,
-				})),
-				activeVersionId:
-					versionIdMap.get(clonedElement.activeVersionId) ??
-					clonedElement.activeVersionId,
-				mainVersionId:
-					versionIdMap.get(clonedElement.mainVersionId) ?? clonedElement.mainVersionId,
-			}
-		}
+		const contentIdMap = new Map<string, string>()
+		clonedElement.contents.forEach((content) => {
+			contentIdMap.set(content.contentId, createContentId())
+		})
+		const mappedElement = mapContents(clonedElement, (content) => ({
+			...content,
+			contentId: contentIdMap.get(content.contentId) as string,
+		}))
+		clonedElement = {
+			...mappedElement,
+			activeContentId: mappedElement.activeContentId
+				? (contentIdMap.get(mappedElement.activeContentId) ?? mappedElement.activeContentId)
+				: null,
+			mainContentId: mappedElement.mainContentId
+				? (contentIdMap.get(mappedElement.mainContentId) ?? mappedElement.mainContentId)
+				: null,
+		} as LayerElement
 
 		if (clonedElement.name) {
 			clonedElement.name = generateUniqueElementName(clonedElement.name, currentNames)
@@ -1655,14 +1663,22 @@ export class ClipboardManager {
 		const metadata = metadataByElementId.get(sourceElement.id)
 		const sourcePath =
 			sourceElement.type === ElementTypeEnum.Image
-				? getActiveImageVersion(sourceElement).src
-				: sourceElement.src
+				? getActiveImageContent(sourceElement).src
+				: getActiveContent(sourceElement)?.src
 
 		const file = fileByElementId.get(sourceElement.id)
+		const targetContentId = getActiveContent(finalElement)?.contentId
+		if (!targetContentId) {
+			return {
+				element: null,
+				sourceReferenceFailureCount: 1,
+			}
+		}
 		const pendingUpload: ClipboardTreeFileUpload | null = file
 			? {
 					sourceElementId: sourceElement.id,
 					targetElementId: finalElement.id,
+					targetContentId,
 					sourceCanvasId,
 					sourcePath,
 					file,
@@ -1672,6 +1688,7 @@ export class ClipboardManager {
 				? {
 						sourceElementId: sourceElement.id,
 						targetElementId: finalElement.id,
+						targetContentId,
 						sourceCanvasId,
 						sourcePath,
 						metadata,
@@ -1706,7 +1723,7 @@ export class ClipboardManager {
 		}
 
 		return {
-			element: this.getFileElementUploadingPlaceholder(finalElement),
+			element: this.getFileElementUploadingPlaceholder(finalElement, targetContentId),
 			sourceReferenceFailureCount: 0,
 			pendingUpload,
 		}
@@ -1858,7 +1875,11 @@ export class ClipboardManager {
 				silent: false,
 			})
 		}
-		this.activateUploadedFileElementResource(uploadedElement, uploadResult)
+		this.activateUploadedFileElementResource(
+			uploadedElement,
+			uploadResult,
+			upload.targetContentId,
+		)
 
 		return true
 	}
@@ -1868,7 +1889,11 @@ export class ClipboardManager {
 		upload: ClipboardTreeFileUpload,
 		uploadResult: UploadFileResponse,
 	): CanvasFileElement {
-		const uploadedElement = this.getFileElementDataWithUploadResult(finalElement, uploadResult)
+		const uploadedElement = this.getFileElementDataWithUploadResult(
+			finalElement,
+			uploadResult,
+			upload.targetContentId,
+		)
 		if (upload.sourcePath) {
 			const pathMap = new Map<string, string>()
 			addClipboardResourceAliasMappings(
@@ -1889,7 +1914,11 @@ export class ClipboardManager {
 	private activateUploadedFileElementResource(
 		element: CanvasFileElement,
 		uploadResult: UploadFileResponse,
+		targetContentId: string,
 	): void {
+		if (element.activeContentId !== targetContentId) {
+			return
+		}
 		const elementInstance = this.canvas.elementManager.getElementInstance(element.id)
 
 		if (
@@ -1939,10 +1968,16 @@ export class ClipboardManager {
 		}
 		const instance = this.canvas.elementManager.getElementInstance(upload.targetElementId)
 		if (instance instanceof ImageElementClass) {
-			instance.updateActiveVersionData(patch, { silent: true })
+			instance.updateContentData(upload.targetContentId, patch, { silent: true })
 			return
 		}
-		this.canvas.elementManager.update(upload.targetElementId, patch, { silent: true })
+		if (!element || !CanvasElementClipboard.isCanvasFileElement(element)) return
+		const nextElement = updateContent(element, upload.targetContentId, patch)
+		this.canvas.elementManager.update(
+			upload.targetElementId,
+			{ contents: nextElement.contents },
+			{ silent: true },
+		)
 	}
 
 	private runClipboardTreeFileUploads(uploads: ClipboardTreeFileUpload[]): void {

@@ -18,7 +18,9 @@ import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { AudioElement, ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { updateContent } from "../../document/elementContent"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
+import { ElementFactory } from "../../elements/core/ElementFactory"
 import { toast } from "sonner"
 
 /**
@@ -992,17 +994,20 @@ export class DropOverlayManager {
 
 		// 创建图片元素数据
 		const elementId = generateElementId()
-		const imageElement: ImageElement = {
-			type: ElementTypeEnum.Image,
-			id: elementId,
-			x: targetX,
-			y: targetY,
-			width: dimensions.width,
-			height: dimensions.height,
-			src: filePath, // 使用文件路径作为 src，ImageElement 会自动通过轮询换取 ossSrc
-			name: uniqueName,
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Image,
+			elementId,
+			targetX,
+			targetY,
+			dimensions.width,
+			dimensions.height,
 			zIndex,
-		}
+		) as ImageElement
+		const imageElement = updateContent(
+			{ ...baseElement, name: uniqueName },
+			baseElement.activeContentId ?? undefined,
+			{ src: filePath },
+		)
 
 		this.canvas.elementManager.create(imageElement)
 		return elementId
@@ -1035,17 +1040,20 @@ export class DropOverlayManager {
 		const targetY = position.y - dimensions.height / 2
 
 		const elementId = generateElementId()
-		const videoElement: VideoElement = {
-			type: ElementTypeEnum.Video,
-			id: elementId,
-			x: targetX,
-			y: targetY,
-			width: dimensions.width,
-			height: dimensions.height,
-			src: filePath,
-			name: uniqueName,
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Video,
+			elementId,
+			targetX,
+			targetY,
+			dimensions.width,
+			dimensions.height,
 			zIndex,
-		}
+		) as VideoElement
+		const videoElement = updateContent(
+			{ ...baseElement, name: uniqueName },
+			baseElement.activeContentId ?? undefined,
+			{ src: filePath },
+		)
 
 		this.canvas.elementManager.create(videoElement)
 		return elementId
@@ -1065,17 +1073,20 @@ export class DropOverlayManager {
 		existingNames.add(uniqueName)
 
 		const elementId = generateElementId()
-		const audioElement: AudioElement = {
-			type: ElementTypeEnum.Audio,
-			id: elementId,
-			x: position.x - dimensions.width / 2,
-			y: position.y - dimensions.height / 2,
-			width: dimensions.width,
-			height: dimensions.height,
-			src: filePath,
-			name: uniqueName,
+		const baseElement = ElementFactory.createElementData(
+			ElementTypeEnum.Audio,
+			elementId,
+			position.x - dimensions.width / 2,
+			position.y - dimensions.height / 2,
+			dimensions.width,
+			dimensions.height,
 			zIndex,
-		}
+		) as AudioElement
+		const audioElement = updateContent(
+			{ ...baseElement, name: uniqueName },
+			baseElement.activeContentId ?? undefined,
+			{ src: filePath },
+		)
 
 		this.canvas.elementManager.create(audioElement)
 		return elementId

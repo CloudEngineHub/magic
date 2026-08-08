@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
 import { type CanvasDocument, ElementTypeEnum, type LayerElement } from "../../document/types"
-import { getActiveImageVersion } from "../../document/imageVersion"
+import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
 import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
 import {
 	getCanvasHostResourceReferenceIdentity,
@@ -336,17 +336,19 @@ export class CanvasResourceUrlWarmupManager {
 
 	private collectResourceRefs(element: LayerElement): WarmupResourceRef[] {
 		const refs: WarmupResourceRef[] = []
-		if (element.type === ElementTypeEnum.Image && getActiveImageVersion(element).src) {
+		if (element.type === ElementTypeEnum.Image && getActiveImageContent(element).src) {
 			refs.push({
 				elementId: element.id,
-				path: getActiveImageVersion(element).src as string,
+				path: getActiveImageContent(element).src as string,
 				mediaType: "image",
 			})
 		}
-		if (element.type === ElementTypeEnum.Video && element.src) {
+		if (element.type === ElementTypeEnum.Video) {
+			const activeContent = getActiveContent(element)
+			if (!activeContent?.src) return refs
 			refs.push({
 				elementId: element.id,
-				path: element.src,
+				path: activeContent.src,
 				mediaType: "video",
 			})
 		}

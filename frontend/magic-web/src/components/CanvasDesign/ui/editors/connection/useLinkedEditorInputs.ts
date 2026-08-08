@@ -72,7 +72,7 @@ function areLinkedMediaItemsEqual(
 		}
 		if (prevItem.fileName !== nextItem.fileName) return false
 		if (!areCropConfigsEqual(prevItem.sourceCrop, nextItem.sourceCrop)) return false
-		if (prevItem.sourceVersionId !== nextItem.sourceVersionId) return false
+		if (prevItem.sourceContentId !== nextItem.sourceContentId) return false
 		if (prevItem.status !== nextItem.status) return false
 		if (prevItem.reason !== nextItem.reason) return false
 		if (prevItem.selected !== nextItem.selected) return false
@@ -99,7 +99,7 @@ function areLinkedMediaReferencesEqual(
 			return false
 		}
 		if (!areCropConfigsEqual(prevItem.sourceCrop, nextItem.sourceCrop)) return false
-		if (prevItem.sourceVersionId !== nextItem.sourceVersionId) return false
+		if (prevItem.sourceContentId !== nextItem.sourceContentId) return false
 	}
 	return true
 }

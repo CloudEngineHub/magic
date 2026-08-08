@@ -1,6 +1,7 @@
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import { VideoElement as VideoElementClass } from "../../../../runtime/elements/video/VideoElement"
 import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document/types"
+import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
 import { calculateNewElementPosition, generateElementId } from "../../../../runtime/shared/ids"
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
 import { calculateCanvasSizeFromAspectRatio } from "../generation/video-editor-config.generation"
@@ -46,14 +47,15 @@ export async function createAndSubmitVideoGeneration(
 		resolvedNewElementSize?.height,
 	)
 
-	const newVideoElement: VideoElement = {
-		id: newElementId,
-		type: ElementTypeEnum.Video,
-		x: newPosition.x,
-		y: newPosition.y,
-		...size,
-		zIndex: newZIndex,
-	}
+	const newVideoElement = ElementFactory.createElementData(
+		ElementTypeEnum.Video,
+		newElementId,
+		newPosition.x,
+		newPosition.y,
+		size.width,
+		size.height,
+		newZIndex,
+	) as VideoElement
 
 	// 后端确认任务创建成功前，生成结果节点只属于运行时占位态。
 	// 这样即使创建事件触发画布导出，也不会把尚未成立的 video_id 写入 DSL。

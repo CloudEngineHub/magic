@@ -1,12 +1,13 @@
 import type { Canvas } from "../../../runtime/core/Canvas"
 import {
-	type AudioElement,
+	type AudioElementContent,
 	type CropConfig,
 	ElementTypeEnum,
 	type FrameElement,
+	type ImageElementContent,
 	type LayerElement,
-	type TextElement,
-	type VideoElement,
+	type TextElementContent,
+	type VideoElementContent,
 } from "../../../runtime/document/types"
 import { sortCanvasElementsByZIndexStable } from "../../../runtime/document/elementIndex"
 import {
@@ -15,7 +16,7 @@ import {
 } from "../../../runtime/text/richText"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
-import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { getDownstreamContent } from "../../../runtime/document/elementContent"
 import {
 	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaPathsWithResolver,
@@ -60,8 +61,8 @@ export interface LinkedEditorMediaCandidate {
 	path?: string
 	fileName?: string
 	sourceCrop?: CropConfig
-	/** 本次关联解析命中的图片版本；仅为运行时快照，不改变连接 DSL。 */
-	sourceVersionId?: string
+	/** 本次关联解析命中的图片 Content；仅为运行时快照，不改变连接 DSL。 */
+	sourceContentId?: string
 }
 
 export interface LinkedEditorMediaItem extends LinkedEditorMediaCandidate {
@@ -490,7 +491,7 @@ export function resolveLinkedMediaItems(
 			kind: candidate.kind,
 			path: candidate.path,
 			sourceCrop: candidate.sourceCrop,
-			sourceVersionId: candidate.sourceVersionId,
+			sourceContentId: candidate.sourceContentId,
 		}
 		const validationReason = mediaPolicy?.validateActiveReferences?.([
 			...activeReferences,
@@ -627,7 +628,7 @@ export function resolveLinkedMediaPolicySelection(
 		path: candidate.path,
 		fileName: candidate.fileName,
 		sourceCrop: candidate.sourceCrop,
-		sourceVersionId: candidate.sourceVersionId,
+		sourceContentId: candidate.sourceContentId,
 	}))
 	const selectedConnectionIdSet = new Set(mentionedConnectionIds)
 	const selectedCandidates = normalizedCandidates.filter((candidate) =>
@@ -723,7 +724,7 @@ export function resolveLinkedMediaPolicySelection(
 			kind: item.kind,
 			path: item.path,
 			sourceCrop: item.sourceCrop,
-			sourceVersionId: item.sourceVersionId,
+			sourceContentId: item.sourceContentId,
 		}))
 
 	return { items, activeMediaReferences }
@@ -740,7 +741,7 @@ export function resolveLinkedEditorInputs(
 		const sourceElements = collectLinkedEditorSourceElements(canvas, targetElementId)
 		sourceElements.forEach(({ connectionId, sourceElementId, element: sourceElement }) => {
 			if (sourceElement.type === ElementTypeEnum.Text) {
-				const content = (sourceElement as TextElement).content
+				const content = getDownstreamContent<TextElementContent>(sourceElement)?.content
 				if (!extractPlainTextFromRichText(content).trim()) return
 				textConnections.push({
 					connectionId,
@@ -751,42 +752,45 @@ export function resolveLinkedEditorInputs(
 			}
 
 			if (sourceElement.type === ElementTypeEnum.Image) {
-				const imageElement = canvas.elementManager.getElementInstance(sourceElementId)
-				if (!(imageElement instanceof ImageElementClass)) return
-				const associatedVersion = imageElement.getAssociatedVersionData()
-				const path = associatedVersion.src
+				const associatedContent = getDownstreamContent<ImageElementContent>(sourceElement)
+				if (!associatedContent) return
+				const path = associatedContent.src
 				mediaCandidates.push({
 					connectionId,
 					sourceElementId,
 					kind: "image",
 					path,
 					fileName: path ? getFileName(path) : undefined,
-					sourceCrop: associatedVersion.crop,
-					sourceVersionId: associatedVersion.id,
+					sourceCrop: associatedContent.crop,
+					sourceContentId: associatedContent.contentId,
 				})
 				return
 			}
 
 			if (sourceElement.type === ElementTypeEnum.Video) {
-				const path = (sourceElement as VideoElement).src
+				const content = getDownstreamContent<VideoElementContent>(sourceElement)
+				const path = content?.src
 				mediaCandidates.push({
 					connectionId,
 					sourceElementId,
 					kind: "video",
 					path,
 					fileName: path ? getFileName(path) : undefined,
+					sourceContentId: content?.contentId,
 				})
 				return
 			}
 
 			if (sourceElement.type === ElementTypeEnum.Audio) {
-				const path = (sourceElement as AudioElement).src
+				const content = getDownstreamContent<AudioElementContent>(sourceElement)
+				const path = content?.src
 				mediaCandidates.push({
 					connectionId,
 					sourceElementId,
 					kind: "audio",
 					path,
 					fileName: path ? getFileName(path) : undefined,
+					sourceContentId: content?.contentId,
 				})
 			}
 		})

@@ -24,7 +24,11 @@ import {
 	type ImageElement,
 	type LayerElement,
 } from "../../../../runtime/document/types"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import {
+	getActiveImageContent,
+	isImageElementContent,
+	updateImageContent,
+} from "../../../../runtime/document/elementContent"
 import {
 	areCanvasHostResourceReferencesSame,
 	getCanvasHostResourceReferenceIdentity,
@@ -137,6 +141,15 @@ export async function generatePluginImages(
 			.createImageElementsAtPositions(positions, imageSize.width, imageSize.height, {
 				temporary: true,
 			})
+		const targetContentIdByElementId = new Map<string, string>()
+		for (const elementId of nextElementIds) {
+			const element = canvas.elementManager.getElementData(elementId)
+			if (!element || !isImageElementContent(element) || !element.activeContentId) {
+				canvas.elementManager.batchDelete(nextElementIds)
+				throw new Error(`Image Content target ${elementId} not found`)
+			}
+			targetContentIdByElementId.set(elementId, element.activeContentId)
+		}
 
 		// 提交确认前只写 Canvas RuntimeManager；Element/DSL/历史/剪贴板均不包含任务身份。
 		nextElementIds.forEach((elementId) => {
@@ -152,6 +165,7 @@ export async function generatePluginImages(
 			failurePolicy: "remove-placeholder",
 			targets: nextElementIds.map((elementId, index) => ({
 				elementId,
+				contentId: targetContentIdByElementId.get(elementId) as string,
 				outputIndex: index + 1,
 				generateImageRequest: {
 					...generateImageRequest,
@@ -172,48 +186,67 @@ export async function generatePluginImages(
 			throw error
 		}
 
-		const committedElementIds = nextElementIds.filter(
-			(elementId) =>
-				canvas.generationRuntimeManager.isCurrent(attemptId, elementId) &&
-				canvas.elementManager.hasElement(elementId),
-		)
+		const committedElementIds = nextElementIds.filter((elementId) => {
+			const contentId = targetContentIdByElementId.get(elementId)
+			return (
+				canvas.generationRuntimeManager.isCurrent(attemptId, elementId, contentId) &&
+				canvas.elementManager.hasElement(elementId)
+			)
+		})
 		if (committedElementIds.length === 0) {
 			return []
 		}
 
 		// 只有批量提交成功后，才原子写入正式字段并允许剩余目标进入 DSL。
 		try {
+			const committedContentIds: string[] = []
 			const confirmed = canvas.generationAttemptCoordinator.confirmAttempt(
 				attemptId,
 				committedElementIds.map((elementId) => {
 					const outputIndex = nextElementIds.indexOf(elementId) + 1
+					const element = canvas.elementManager.getElementData(elementId)
+					const contentId = targetContentIdByElementId.get(elementId)
+					if (
+						!contentId ||
+						!element ||
+						!isImageElementContent(element) ||
+						!element.contents.some((content) => content.contentId === contentId)
+					) {
+						throw new Error(`Image Content target ${elementId} not found`)
+					}
+					const nextElement = updateImageContent(element, contentId, {
+						status: "processing",
+						errorMessage: undefined,
+						generateImageRequest,
+						imageGenerationTaskMeta: createBatchImageTaskMeta({
+							imageId: batchImageId,
+							outputIndex,
+							outputCount: count,
+						}),
+					})
+					committedContentIds.push(contentId)
 					return {
 						elementId,
+						contentId,
 						persistedPatch: {
-							status: "processing",
-							errorMessage: undefined,
-							generateImageRequest,
-							imageGenerationTaskMeta: createBatchImageTaskMeta({
-								imageId: batchImageId,
-								outputIndex,
-								outputCount: count,
-							}),
+							contents: nextElement.contents,
 						},
 					}
 				}),
 			)
 			if (!confirmed) return []
+			const batchPollingManager = new ImageBatchPollingManager({
+				canvas,
+				imageId: batchImageId,
+				elementIds: committedElementIds,
+				contentIds: committedContentIds,
+				registry: canvas.imageBatchPollingRegistry,
+			})
+			void batchPollingManager.start()
 		} catch (error) {
 			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			throw error
 		}
-		const batchPollingManager = new ImageBatchPollingManager({
-			canvas,
-			imageId: batchImageId,
-			elementIds: committedElementIds,
-			registry: canvas.imageBatchPollingRegistry,
-		})
-		void batchPollingManager.start()
 
 		return committedElementIds
 	})
@@ -260,7 +293,7 @@ function getImageElements(canvas: Canvas): ImageElement[] {
 	return flattenLayerElements(canvas.elementManager.getAllElements()).filter(
 		(element): element is ImageElement =>
 			element.type === ElementTypeEnum.Image &&
-			Boolean(getActiveImageVersion(element).src) &&
+			Boolean(getActiveImageContent(element).src) &&
 			isVisibleCanvasElement(canvas, element),
 	)
 }
@@ -277,7 +310,7 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 		return null
 	}
 	const imageElement = element as ImageElement
-	if (!getActiveImageVersion(imageElement).src) return null
+	if (!getActiveImageContent(imageElement).src) return null
 	return imageElement
 }
 
@@ -285,7 +318,7 @@ function getImageElementById(canvas: Canvas, elementId: string | undefined): Ima
 function resolveImageElementByReference(canvas: Canvas, reference: string): ImageElement | null {
 	return (
 		getImageElements(canvas).find((element) => {
-			const active = getActiveImageVersion(element)
+			const active = getActiveImageContent(element)
 			if (!active.src) return false
 			return areCanvasHostResourceReferencesSame(canvas, active.src, reference)
 		}) ?? null
@@ -294,7 +327,7 @@ function resolveImageElementByReference(canvas: Canvas, reference: string): Imag
 
 /** 判断图片是否是生成任务产物；这类元素不能作为下一次生成的来源兜底。 */
 function isGeneratedImageElement(element: ImageElement): boolean {
-	const active = getActiveImageVersion(element)
+	const active = getActiveImageContent(element)
 	return Boolean(active.generateImageRequest || active.imageGenerationTaskMeta)
 }
 
@@ -373,7 +406,7 @@ function collectMatchingGeneratedGridRects(
 			return []
 		}
 		const imageElement = element as ImageElement
-		const active = getActiveImageVersion(imageElement)
+		const active = getActiveImageContent(imageElement)
 		if (!active.generateImageRequest || !isGeneratedImageElement(imageElement)) {
 			return []
 		}

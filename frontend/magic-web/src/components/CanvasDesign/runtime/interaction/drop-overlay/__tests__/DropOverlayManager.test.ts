@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { toast } from "sonner"
-import type { LayerElement } from "../../../document/types"
+import {
+	ElementTypeEnum,
+	type AudioElement,
+	type ImageElement,
+	type LayerElement,
+	type VideoElement,
+} from "../../../document/types"
 import type { Canvas } from "../../../core/Canvas"
 import { DropOverlayManager } from "../DropOverlayManager"
 
@@ -152,16 +158,20 @@ describe("DropOverlayManager custom attachment drops", () => {
 
 		const elements = Array.from(harness.elements.values())
 		expect(elements).toHaveLength(2)
+		const imageElement = elements[0]
+		const videoElement = elements[1]
+		if (imageElement?.type !== ElementTypeEnum.Image) throw new Error("Expected image")
+		if (videoElement?.type !== ElementTypeEnum.Video) throw new Error("Expected video")
 		expect(elements[0]).toMatchObject({
 			width: 400,
 			height: 200,
-			src: "/outside/photo.png",
 		})
+		expect((imageElement as ImageElement).contents[0]?.src).toBe("/outside/photo.png")
 		expect(elements[1]).toMatchObject({
 			width: 1920,
 			height: 1080,
-			src: "/outside/clip.mp4",
 		})
+		expect((videoElement as VideoElement).contents[0]?.src).toBe("/outside/clip.mp4")
 		expect(harness.selectionManager.selectMultiple).toHaveBeenCalledWith(
 			elements.map(({ id }) => id),
 		)
@@ -206,12 +216,13 @@ describe("DropOverlayManager custom attachment drops", () => {
 		})
 
 		const [element] = harness.elements.values()
+		if (element?.type !== ElementTypeEnum.Audio) throw new Error("Expected audio")
 		expect(element).toMatchObject({
 			type: "audio",
 			width: 1280,
 			height: 720,
-			src: "./audios/voice.mp3",
 		})
+		expect((element as AudioElement).contents[0]?.src).toBe("./audios/voice.mp3")
 		expect(harness.canvas.audioResourceManager.primeCache).toHaveBeenCalledTimes(1)
 		expect(harness.canvas.imageResourceManager.loadResource).not.toHaveBeenCalled()
 		expect(harness.canvas.videoResourceManager.loadResource).not.toHaveBeenCalled()

@@ -7,9 +7,11 @@ import {
 	type FrameElement,
 	type ImageElement as ImageElementData,
 	type StoryboardElement,
+	type StoryboardElementContent,
 	type StoryboardGenerationConfig,
 	type StoryboardShot,
 } from "../../document/types"
+import { createContentId, getActiveContent, updateContent } from "../../document/elementContent"
 import { BASE_ELEMENT_DEFAULTS } from "../../elements/core/BaseElement"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
@@ -32,7 +34,7 @@ const FRAME_GAP = 50
 interface StoryboardReferenceImage {
 	path: string
 	crop?: CropConfig
-	sourceVersionId?: string
+	sourceContentId?: string
 }
 
 interface OutputLayout {
@@ -60,8 +62,10 @@ export class StoryboardGenerationController {
 	public async generateAll(elementId: string): Promise<void> {
 		const storyboard = this.getStoryboard(elementId)
 		if (!storyboard) return
+		const storyboardContent = getActiveContent<StoryboardElementContent>(storyboard)
+		if (!storyboardContent) return
 
-		const shots = storyboard.shots ?? []
+		const shots = storyboardContent.shots ?? []
 		if (shots.length === 0) {
 			toast.error(
 				this.canvas.t?.("storyboard.empty", "暂无可生成的分镜") ?? "暂无可生成的分镜",
@@ -81,8 +85,8 @@ export class StoryboardGenerationController {
 		}
 
 		const models = await this.getImageModels()
-		const model = this.resolveModel(storyboard.generationConfig, models)
-		const modelId = storyboard.generationConfig?.model_id ?? model?.model_id
+		const model = this.resolveModel(storyboardContent.generationConfig, models)
+		const modelId = storyboardContent.generationConfig?.model_id ?? model?.model_id
 		if (!modelId) {
 			toast.error(
 				this.canvas.t?.("storyboard.modelUnavailable", "当前没有可用的图片模型") ??
@@ -103,9 +107,9 @@ export class StoryboardGenerationController {
 			return
 		}
 
-		const outputs = this.ensureOutputStructure(storyboard, shots)
+		const outputs = this.ensureOutputStructure(storyboard, storyboardContent, shots)
 		const requests = shots.map((shot) =>
-			this.buildRequest(shot, storyboard.generationConfig, modelId, model, references),
+			this.buildRequest(shot, storyboardContent.generationConfig, modelId, model, references),
 		)
 
 		await Promise.allSettled(
@@ -150,23 +154,24 @@ export class StoryboardGenerationController {
 
 	private collectReferenceImages(targetElementId: string): StoryboardReferenceImage[] {
 		const resolver = this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
-		const references = this.canvas.connectionManager
+		const references: StoryboardReferenceImage[] = this.canvas.connectionManager
 			.getUpstreamConnections(targetElementId)
 			.map((connection) =>
 				this.canvas.elementManager.getElementInstance(connection.sourceElementId),
 			)
 			.filter((element): element is ImageElement => element instanceof ImageElement)
-			.map((element) => {
-				const associatedVersion = element.getAssociatedVersionData()
-				return associatedVersion.src
-					? {
-							path: associatedVersion.src,
-							crop: associatedVersion.crop,
-							sourceVersionId: associatedVersion.id,
-						}
-					: undefined
+			.flatMap((element) => {
+				const associatedContent = element.getAssociatedContentData()
+				return associatedContent.src
+					? [
+							{
+								path: associatedContent.src,
+								crop: associatedContent.crop,
+								sourceContentId: associatedContent.contentId,
+							},
+						]
+					: []
 			})
-			.filter((reference): reference is StoryboardReferenceImage => Boolean(reference))
 
 		const merged = mergeLinkedMediaReferences(
 			[],
@@ -174,7 +179,7 @@ export class StoryboardGenerationController {
 				kind: "image" as const,
 				path: reference.path,
 				sourceCrop: reference.crop,
-				sourceVersionId: reference.sourceVersionId,
+				sourceContentId: reference.sourceContentId,
 			})),
 			resolver,
 		)
@@ -182,7 +187,7 @@ export class StoryboardGenerationController {
 		return merged.map((reference) => ({
 			path: reference.path,
 			crop: reference.sourceCrop,
-			sourceVersionId: reference.sourceVersionId,
+			sourceContentId: reference.sourceContentId,
 		}))
 	}
 
@@ -240,6 +245,7 @@ export class StoryboardGenerationController {
 
 	private ensureOutputStructure(
 		storyboard: StoryboardElement,
+		storyboardContent: StoryboardElementContent,
 		shots: StoryboardShot[],
 	): EnsureOutputsResult {
 		const resolvedImageIds = shots.map((shot) =>
@@ -251,7 +257,7 @@ export class StoryboardGenerationController {
 		)
 		const existingOutputIds = resolvedImageIds.filter((id): id is string => Boolean(id))
 		const existingFrame = this.findOutputFrame(existingOutputIds)
-		const layout = this.resolveOutputLayout(storyboard.generationConfig, shots.length)
+		const layout = this.resolveOutputLayout(storyboardContent.generationConfig, shots.length)
 		const frameOffsetX = resolveConnectionCreateGapForElement(storyboard, "right")
 		const frameHeight = this.getFrameHeight(layout.heights)
 		const frameOrigin = this.resolveOutputFrameOrigin(storyboard, frameOffsetX, frameHeight)
@@ -305,12 +311,12 @@ export class StoryboardGenerationController {
 				this.canvas.elementManager.create(frameData, { silent: true })
 				const imageElementIds = resolvedImageIds.filter((id): id is string => Boolean(id))
 				this.ensureConnections(storyboard.id, imageElementIds)
-				this.commitShotOutputIds(storyboard, shots, imageElementIds)
+				this.commitShotOutputIds(storyboard, storyboardContent, shots, imageElementIds)
 				return { imageElementIds, frameId }
 			}
 
 			const missingImageData = missingIndexes.map((shotIndex) => {
-				const frameOrigin = existingFrame
+				const targetFrameOrigin = existingFrame
 					? {
 							x: existingFrame.x ?? 0,
 							y: existingFrame.y ?? 0,
@@ -321,8 +327,8 @@ export class StoryboardGenerationController {
 						}
 				const data = this.createImageData(
 					generateElementId(),
-					frameOrigin.x + FRAME_PADDING,
-					frameOrigin.y +
+					targetFrameOrigin.x + FRAME_PADDING,
+					targetFrameOrigin.y +
 						FRAME_PADDING +
 						this.getChildrenOffset(layout.heights, shotIndex),
 					layout.width,
@@ -335,6 +341,7 @@ export class StoryboardGenerationController {
 			missingImageData.forEach((data) =>
 				this.canvas.elementManager.create(data, { silent: true }),
 			)
+			const imageElementIds = resolvedImageIds.filter((id): id is string => Boolean(id))
 			if (existingFrame && missingImageData.length > 0) {
 				missingImageData.forEach((data) => {
 					this.canvas.elementManager.reparentElements({
@@ -349,11 +356,10 @@ export class StoryboardGenerationController {
 					})
 				})
 
-				this.layoutFrameChildren(existingFrame.id, resolvedImageIds, layout, shots.length)
+				this.layoutFrameChildren(existingFrame.id, imageElementIds, layout, shots.length)
 			}
-			const imageElementIds = resolvedImageIds.filter((id): id is string => Boolean(id))
 			this.ensureConnections(storyboard.id, imageElementIds)
-			this.commitShotOutputIds(storyboard, shots, imageElementIds)
+			this.commitShotOutputIds(storyboard, storyboardContent, shots, imageElementIds)
 			return { imageElementIds, frameId: existingFrame?.id }
 		} finally {
 			if (needsMutation) {
@@ -371,6 +377,7 @@ export class StoryboardGenerationController {
 		height: number,
 		index: number,
 	): ImageElementData {
+		const contentId = createContentId("image-content")
 		return {
 			...BASE_ELEMENT_DEFAULTS,
 			id,
@@ -380,6 +387,9 @@ export class StoryboardGenerationController {
 			width,
 			height,
 			zIndex: this.canvas.elementManager.getNextZIndexInLevel() + index,
+			contents: [{ contentId }],
+			activeContentId: contentId,
+			mainContentId: contentId,
 		}
 	}
 
@@ -434,6 +444,7 @@ export class StoryboardGenerationController {
 
 	private commitShotOutputIds(
 		storyboard: StoryboardElement,
+		storyboardContent: StoryboardElementContent,
 		shots: StoryboardShot[],
 		imageIds: string[],
 	): void {
@@ -441,8 +452,15 @@ export class StoryboardGenerationController {
 			...shot,
 			outputImageElementId: imageIds[index],
 		}))
-		if (JSON.stringify(storyboard.shots ?? []) === JSON.stringify(nextShots)) return
-		this.canvas.elementManager.update(storyboard.id, { shots: nextShots }, { silent: false })
+		if (JSON.stringify(storyboardContent.shots ?? []) === JSON.stringify(nextShots)) return
+		const nextStoryboard = updateContent(storyboard, storyboardContent.contentId, {
+			shots: nextShots,
+		})
+		this.canvas.elementManager.update(
+			storyboard.id,
+			{ contents: nextStoryboard.contents },
+			{ silent: false },
+		)
 	}
 
 	private findOutputFrame(imageIds: string[]): FrameElement | undefined {

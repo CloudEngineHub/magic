@@ -1,304 +1,192 @@
 import { ElementTypeEnum, type LayerElement } from "./types"
+import { getElementContentFields } from "./elementContent"
 
-function isValidImageVersion(value: unknown): value is Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false
-	const version = value as Record<string, unknown>
-	if (typeof version.id !== "string" || !version.id) return false
-	if (version.src !== undefined && typeof version.src !== "string") return false
-	if (version.status !== undefined && typeof version.status !== "string") return false
-	if (version.errorMessage !== undefined && typeof version.errorMessage !== "string") return false
-	if (version.crop !== undefined && !isValidCropConfig(version.crop)) return false
-	return true
+function isObject(value: unknown): value is Record<string, unknown> {
+	return Boolean(value && typeof value === "object" && !Array.isArray(value))
 }
 
-function isValidCropConfig(value: unknown): boolean {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false
-	const crop = value as Record<string, unknown>
-	return ["width", "height", "x", "y"].every(
-		(field) => typeof crop[field] === "number" && Number.isFinite(crop[field]),
-	)
-}
-
-function isValidImageElementFields(element: Record<string, unknown>): boolean {
-	if (element.imageDslVersion !== 2) {
-		if (element.imageDslVersion !== undefined) return false
-		if (element.src !== undefined && typeof element.src !== "string") return false
-		if (element.status !== undefined && typeof element.status !== "string") return false
-		if (element.errorMessage !== undefined && typeof element.errorMessage !== "string") {
-			return false
-		}
-		if (element.crop !== undefined && !isValidCropConfig(element.crop)) return false
-		return true
-	}
-
-	if (!Array.isArray(element.versions) || element.versions.length === 0) return false
-	if (typeof element.activeVersionId !== "string" || !element.activeVersionId) return false
-	if (typeof element.mainVersionId !== "string" || !element.mainVersionId) return false
-	for (const field of [
-		"src",
-		"status",
-		"errorMessage",
-		"generateImageRequest",
-		"imageGenerationTaskMeta",
-		"generateHightImageRequest",
-		"crop",
-	]) {
-		if (Object.prototype.hasOwnProperty.call(element, field)) return false
-	}
-	const ids = new Set<string>()
-	for (const version of element.versions) {
-		if (!isValidImageVersion(version) || ids.has(version.id as string)) return false
-		ids.add(version.id as string)
-	}
-	return ids.has(element.activeVersionId) && ids.has(element.mainVersionId)
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value)
 }
 
 function isOptionalString(value: unknown): boolean {
 	return value === undefined || typeof value === "string"
 }
 
-function isValidStoryboardGenerationConfig(value: unknown): boolean {
-	if (value === undefined) return true
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false
-
-	const config = value as Record<string, unknown>
-	if (!isOptionalString(config.model_id)) return false
-	if (!isOptionalString(config.size)) return false
-	if (!isOptionalString(config.resolution)) return false
-	if (config.image_generation_config === undefined) return true
-	if (
-		!config.image_generation_config ||
-		typeof config.image_generation_config !== "object" ||
-		Array.isArray(config.image_generation_config)
-	) {
-		return false
-	}
-
-	return Object.values(config.image_generation_config as Record<string, unknown>).every(
-		(item) => typeof item === "string",
-	)
+function isValidCropConfig(value: unknown): boolean {
+	if (!isObject(value)) return false
+	return ["width", "height", "x", "y"].every((field) => isFiniteNumber(value[field]))
 }
 
-function isValidStoryboardShots(value: unknown): boolean {
-	if (!Array.isArray(value)) return false
-
-	const shotIds = new Set<string>()
-	const outputImageElementIds = new Set<string>()
-	for (const item of value) {
-		if (!item || typeof item !== "object" || Array.isArray(item)) return false
-		const shot = item as Record<string, unknown>
-		if (typeof shot.id !== "string" || !shot.id || shotIds.has(shot.id)) return false
-		if (
-			typeof shot.durationSeconds !== "number" ||
-			!Number.isFinite(shot.durationSeconds) ||
-			shot.durationSeconds <= 0
-		) {
+function isValidContentContainer(element: Record<string, unknown>): boolean {
+	if (!Array.isArray(element.contents)) return false
+	const contentIds = new Set<string>()
+	for (const content of element.contents) {
+		if (!isObject(content) || typeof content.contentId !== "string" || !content.contentId) {
 			return false
 		}
+		if (Object.prototype.hasOwnProperty.call(content, "id") || "type" in content) return false
+		if (contentIds.has(content.contentId)) return false
+		contentIds.add(content.contentId)
+	}
+
+	const activeContentId = element.activeContentId
+	const mainContentId = element.mainContentId
+	if (element.contents.length === 0) {
+		return activeContentId === null && mainContentId === null
+	}
+	if (typeof activeContentId !== "string" || !contentIds.has(activeContentId)) return false
+	if (typeof mainContentId !== "string" || !contentIds.has(mainContentId)) {
+		return false
+	}
+	return true
+}
+
+const BASE_ELEMENT_FIELDS = new Set([
+	"id",
+	"name",
+	"type",
+	"visible",
+	"locked",
+	"opacity",
+	"x",
+	"y",
+	"width",
+	"height",
+	"scaleX",
+	"scaleY",
+	"zIndex",
+	"interactionConfig",
+	"contents",
+	"activeContentId",
+	"mainContentId",
+])
+
+function hasOnlyAllowedFields(record: Record<string, unknown>, fields: Set<string>): boolean {
+	return Object.keys(record).every((field) => fields.has(field))
+}
+
+function isValidTextContent(content: Record<string, unknown>): boolean {
+	if (content.content !== undefined && !Array.isArray(content.content)) return false
+	return content.defaultStyle === undefined || isObject(content.defaultStyle)
+}
+
+function isValidShapeContent(content: Record<string, unknown>, type: string): boolean {
+	for (const field of ["fill", "stroke"]) {
+		if (!isOptionalString(content[field])) return false
+	}
+	if (content.strokeWidth !== undefined && !isFiniteNumber(content.strokeWidth)) return false
+	if (content.cornerRadius !== undefined && !isFiniteNumber(content.cornerRadius)) return false
+	if (type === ElementTypeEnum.Star) {
+		if (content.sides !== undefined && !isFiniteNumber(content.sides)) return false
+		if (content.innerRadiusRatio !== undefined && !isFiniteNumber(content.innerRadiusRatio)) {
+			return false
+		}
+	}
+	return true
+}
+
+function isValidStoryboardContent(content: Record<string, unknown>): boolean {
+	if (content.generationConfig !== undefined && !isObject(content.generationConfig)) return false
+	if (content.shots === undefined) return true
+	if (!Array.isArray(content.shots)) return false
+	const ids = new Set<string>()
+	const outputElementIds = new Set<string>()
+	for (const shot of content.shots) {
+		if (!isObject(shot) || typeof shot.id !== "string" || ids.has(shot.id)) return false
+		if (!isFiniteNumber(shot.durationSeconds) || shot.durationSeconds <= 0) return false
 		if (typeof shot.description !== "string") return false
 		if (shot.outputImageElementId !== undefined) {
-			if (typeof shot.outputImageElementId !== "string" || !shot.outputImageElementId) {
+			if (
+				typeof shot.outputImageElementId !== "string" ||
+				outputElementIds.has(shot.outputImageElementId)
+			) {
 				return false
 			}
-			if (outputImageElementIds.has(shot.outputImageElementId)) return false
-			outputImageElementIds.add(shot.outputImageElementId)
+			outputElementIds.add(shot.outputImageElementId)
 		}
-		shotIds.add(shot.id)
-	}
-
-	return true
-}
-
-function isValidElementIdSequence(value: unknown): value is string[] {
-	if (!Array.isArray(value)) return false
-	const ids = new Set<string>()
-	for (const item of value) {
-		if (typeof item !== "string" || !item || ids.has(item)) return false
-		ids.add(item)
+		ids.add(shot.id)
 	}
 	return true
 }
 
-function isValidVideoEditOutput(value: unknown): boolean {
-	if (value === undefined) return true
-	if (!value || typeof value !== "object" || Array.isArray(value)) return false
-
-	const output = value as Record<string, unknown>
-	return ["aspectRatio", "resolution", "format"].every(
-		(field) => output[field] === undefined || typeof output[field] === "string",
-	)
+function isValidVideoEditContent(content: Record<string, unknown>): boolean {
+	if (!Array.isArray(content.videoSequence) || !Array.isArray(content.audioSequence)) return false
+	for (const sequence of [content.videoSequence, content.audioSequence]) {
+		if (sequence.some((id) => typeof id !== "string" || !id)) return false
+		if (new Set(sequence).size !== sequence.length) return false
+	}
+	if (content.output === undefined) return true
+	if (!isObject(content.output)) return false
+	const output = content.output
+	return ["aspectRatio", "resolution", "format"].every((field) => isOptionalString(output[field]))
 }
 
-/**
- * 验证元素数据结构是否有效
- * @param data - 待验证的数据
- * @returns 是否为有效的元素数据
- */
-export function isValidElementData(data: unknown): data is LayerElement {
-	if (!data || typeof data !== "object") {
-		return false
-	}
+function isValidElementContent(content: Record<string, unknown>, type: string): boolean {
+	const allowedFields = new Set(["contentId", ...getElementContentFields(type)])
+	if (!hasOnlyAllowedFields(content, allowedFields)) return false
+	if (!isOptionalString(content.src)) return false
+	if (!isOptionalString(content.status)) return false
+	if (!isOptionalString(content.errorMessage)) return false
+	if (content.crop !== undefined && !isValidCropConfig(content.crop)) return false
 
-	const element = data as Record<string, unknown>
-
-	// 验证必需字段
-	if (typeof element.id !== "string" || !element.id) {
-		return false
-	}
-
-	if (typeof element.type !== "string" || !element.type) {
-		return false
-	}
-
-	// 验证类型是否在支持的类型中
-	const validTypes = Object.values(ElementTypeEnum) as string[]
-	if (!validTypes.includes(element.type as string)) {
-		return false
-	}
-
-	// 验证可选的数值字段
-	const numericFields = ["x", "y", "width", "height", "scaleX", "scaleY", "zIndex", "opacity"]
-	for (const field of numericFields) {
-		if (element[field] !== undefined && typeof element[field] !== "number") {
-			return false
-		}
-	}
-
-	// 验证可选的布尔字段
-	const booleanFields = ["visible", "locked"]
-	for (const field of booleanFields) {
-		if (element[field] !== undefined && typeof element[field] !== "boolean") {
-			return false
-		}
-	}
-
-	// 验证可选的字符串字段
-	const stringFields = ["name"]
-	for (const field of stringFields) {
-		if (element[field] !== undefined && typeof element[field] !== "string") {
-			return false
-		}
-	}
-
-	// 验证特定类型的额外字段
-	switch (element.type) {
-		case ElementTypeEnum.Frame:
-		case ElementTypeEnum.Group:
-			// 验证 children 字段（如果存在）
-			if (element.children !== undefined) {
-				if (!Array.isArray(element.children)) {
-					return false
-				}
-				// 递归验证子元素
-				for (const child of element.children) {
-					if (!isValidElementData(child)) {
-						return false
-					}
-				}
-			}
-			break
-
+	switch (type) {
+		case ElementTypeEnum.Text:
+			return isValidTextContent(content)
 		case ElementTypeEnum.Rectangle:
 		case ElementTypeEnum.Ellipse:
 		case ElementTypeEnum.Triangle:
-			// 验证形状特有的字段
-			if (element.fill !== undefined && typeof element.fill !== "string") {
-				return false
-			}
-			if (element.stroke !== undefined && typeof element.stroke !== "string") {
-				return false
-			}
-			if (element.strokeWidth !== undefined && typeof element.strokeWidth !== "number") {
-				return false
-			}
-			if (
-				element.type === ElementTypeEnum.Rectangle &&
-				element.cornerRadius !== undefined &&
-				typeof element.cornerRadius !== "number"
-			) {
-				return false
-			}
-			break
-
 		case ElementTypeEnum.Star:
-			// 验证星形特有的字段
-			if (element.fill !== undefined && typeof element.fill !== "string") {
-				return false
-			}
-			if (element.stroke !== undefined && typeof element.stroke !== "string") {
-				return false
-			}
-			if (element.strokeWidth !== undefined && typeof element.strokeWidth !== "number") {
-				return false
-			}
-			if (element.cornerRadius !== undefined && typeof element.cornerRadius !== "number") {
-				return false
-			}
-			if (element.sides !== undefined && typeof element.sides !== "number") {
-				return false
-			}
-			if (
-				element.innerRadiusRatio !== undefined &&
-				typeof element.innerRadiusRatio !== "number"
-			) {
-				return false
-			}
-			break
-
-		case ElementTypeEnum.Text:
-			// 验证文本特有的字段
-			if (element.content !== undefined) {
-				if (!Array.isArray(element.content)) {
-					return false
-				}
-				// 简单验证段落结构
-				for (const paragraph of element.content) {
-					if (!paragraph || typeof paragraph !== "object") {
-						return false
-					}
-				}
-			}
-			break
-
-		case ElementTypeEnum.Image:
-			if (!isValidImageElementFields(element as unknown as Record<string, unknown>)) {
-				return false
-			}
-			break
-
-		case ElementTypeEnum.Video:
-			if (element.src !== undefined && typeof element.src !== "string") {
-				return false
-			}
-			if (element.status !== undefined && typeof element.status !== "string") {
-				return false
-			}
-			if (element.errorMessage !== undefined && typeof element.errorMessage !== "string") {
-				return false
-			}
-			break
-
-		case ElementTypeEnum.Audio:
-			if (element.src !== undefined && typeof element.src !== "string") {
-				return false
-			}
-			break
-
+			return isValidShapeContent(content, type)
 		case ElementTypeEnum.Storyboard:
-			if (!isValidStoryboardGenerationConfig(element.generationConfig)) {
-				return false
-			}
-			if (!isValidStoryboardShots(element.shots)) {
-				return false
-			}
-			break
-
+			return isValidStoryboardContent(content)
 		case ElementTypeEnum.VideoEdit:
-			if (!isValidElementIdSequence(element.videoSequence)) return false
-			if (!isValidElementIdSequence(element.audioSequence)) return false
-			if (!isValidVideoEditOutput(element.output)) return false
-			break
+			return isValidVideoEditContent(content)
+		default:
+			return true
+	}
+}
+
+/** 验证是否为标准 v3 Element。 */
+export function isValidElementData(data: unknown): data is LayerElement {
+	if (!isObject(data)) return false
+	if (typeof data.id !== "string" || !data.id) return false
+	if (typeof data.type !== "string") return false
+	if (!(Object.values(ElementTypeEnum) as string[]).includes(data.type)) return false
+
+	for (const field of ["x", "y", "width", "height", "scaleX", "scaleY", "zIndex", "opacity"]) {
+		if (data[field] !== undefined && !isFiniteNumber(data[field])) return false
+	}
+	for (const field of ["visible", "locked"]) {
+		if (data[field] !== undefined && typeof data[field] !== "boolean") return false
+	}
+	if (!isOptionalString(data.name)) return false
+	if (data.interactionConfig !== undefined && !isObject(data.interactionConfig)) return false
+	const allowedElementFields = new Set(BASE_ELEMENT_FIELDS)
+	if (data.type === ElementTypeEnum.Frame || data.type === ElementTypeEnum.Group) {
+		allowedElementFields.add("children")
+	}
+	if (!hasOnlyAllowedFields(data, allowedElementFields)) return false
+	for (const field of getElementContentFields(data.type)) {
+		if (Object.prototype.hasOwnProperty.call(data, field)) return false
+	}
+	if (!isValidContentContainer(data)) return false
+	for (const content of data.contents as Record<string, unknown>[]) {
+		if (!isValidElementContent(content, data.type)) return false
 	}
 
+	if (data.type === ElementTypeEnum.Frame || data.type === ElementTypeEnum.Group) {
+		if (data.children !== undefined && !Array.isArray(data.children)) return false
+		if (
+			Array.isArray(data.children) &&
+			data.children.some((child) => !isValidElementData(child))
+		) {
+			return false
+		}
+	}
 	return true
+}
+
+export function validateElementData(data: unknown): asserts data is LayerElement {
+	if (!isValidElementData(data)) throw new Error("Invalid v3 element data")
 }

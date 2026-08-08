@@ -4,7 +4,10 @@ import { useCanvasEvent } from "../../../../app/hooks/canvas"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useCanvasUI } from "../../../../app/providers/CanvasUIProvider"
-import { getActiveImageVersion, isImageElementV2 } from "../../../../runtime/document/imageVersion"
+import {
+	getActiveImageContent,
+	isImageElementContent,
+} from "../../../../runtime/document/elementContent"
 import { ElementTypeEnum } from "../../../../runtime/document/types"
 import { GenerationStatus } from "../../../../public/magic-types"
 import IconButton from "../../../primitives/custom/IconButton/index"
@@ -17,10 +20,10 @@ export default function ImageReplaceButton() {
 	const [replacingElementId, setReplacingElementId] = useState<string | null>(null)
 	const selected = selectedElements[0]
 	const selectedImage = selected?.type === ElementTypeEnum.Image ? selected : undefined
-	const activeVersion = selectedImage ? getActiveImageVersion(selectedImage) : undefined
+	const activeContent = selectedImage ? getActiveImageContent(selectedImage) : undefined
 	const activeIsProcessing =
-		activeVersion?.status === GenerationStatus.Pending ||
-		activeVersion?.status === GenerationStatus.Processing
+		activeContent?.status === GenerationStatus.Pending ||
+		activeContent?.status === GenerationStatus.Processing
 	const isReplacing = replacingElementId === selectedImage?.id
 
 	useCanvasEvent(
@@ -41,7 +44,9 @@ export default function ImageReplaceButton() {
 			type: "element:image:replaceClick",
 			data: {
 				elementId: selectedImage.id,
-				versionId: isImageElementV2(selectedImage) ? selectedImage.activeVersionId : null,
+				contentId: isImageElementContent(selectedImage)
+					? selectedImage.activeContentId
+					: null,
 				clientX: event.clientX,
 				clientY: event.clientY,
 			},

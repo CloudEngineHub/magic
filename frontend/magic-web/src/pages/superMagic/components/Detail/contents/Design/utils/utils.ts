@@ -13,7 +13,6 @@ import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
 import { ImageFormat, ImageProcessOptions } from "@/utils/image-processing"
-import type { ImageGenerationTaskMeta } from "@/components/CanvasDesign/public/magic-types"
 import { toDesignProjectBasePath } from "./designPath"
 import {
 	migrateLoadedDesignDataPaths,
@@ -24,13 +23,13 @@ import type { DesignAttachmentIndex } from "./designAttachmentIndex"
 import { getDesignProjectCurrentFileByProjectPath } from "./toolDesignProjectInfo"
 import { cloneDeep } from "lodash-es"
 import {
-	MAGIC_PROJECT_VERSION_V1,
+	MAGIC_PROJECT_VERSION_V3,
 	compressCanvasData,
 	decompressCanvasData,
 	isCompressedCanvas,
-	isV2Version,
 } from "./magicProjectCompression"
 import { stripHeavyFields } from "./elementDetailsStore"
+import { upgradeDesignDataToV3 } from "./designDataCodec"
 
 function layerTreeHasMedia(elements: LayerElement[] | undefined): boolean {
 	if (!elements?.length) return false
@@ -136,14 +135,10 @@ export function generateMagicProjectJsContent(
 	const rawElements = designData.canvas?.elements || []
 	const connections = getCanvasConnections(designData.canvas)
 	const basePath = options?.projectBasePath?.trim()
-	const isV2 = isV2Version(designData.version)
 	const needPathRewrite = !!basePath && layerTreeHasMedia(rawElements)
 
-	// v2 需先克隆再剥离重字段，避免污染内存态；路径改写同样需要克隆
-	let elements = rawElements
-	if (isV2 || needPathRewrite) {
-		elements = cloneDeep(rawElements)
-	}
+	// 保存只接受 Runtime 已经产出的标准 v3 Elements。
+	const elements = cloneDeep(rawElements)
 	if (needPathRewrite) {
 		rewriteDesignLayerPathsForTransitionMigration(elements, {
 			designProjectBasePath: basePath,
@@ -152,16 +147,11 @@ export function generateMagicProjectJsContent(
 		})
 	}
 
-	let canvasField: unknown
-	if (isV2) {
-		stripHeavyFields(elements)
-		canvasField = compressCanvasData(buildCanvasPayload(elements, connections))
-	} else {
-		canvasField = buildCanvasPayload(elements, connections)
-	}
+	stripHeavyFields(elements)
+	const canvasField = compressCanvasData(buildCanvasPayload(elements, connections))
 
 	const config = {
-		version: designData.version || "1.0.0",
+		version: MAGIC_PROJECT_VERSION_V3,
 		type: designData.type || "design",
 		name: designData.name || "",
 		canvas: canvasField,
@@ -191,7 +181,7 @@ function buildDesignDataFromMagicProjectConfig(
 	return {
 		type: (config as { type?: string }).type || "design",
 		name: (config as { name?: string }).name || "",
-		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V1,
+		version: (config as { version?: string }).version || MAGIC_PROJECT_VERSION_V3,
 		canvas: {
 			elements,
 			...(connections.length > 0 ? { connections } : {}),
@@ -262,7 +252,9 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		const elements = canvasObj.elements as LayerElement[]
 		const connections = getConnectionsFromCanvasObject(canvasObj)
 		return {
-			data: buildDesignDataFromMagicProjectConfig(config, elements, connections),
+			data: upgradeDesignDataToV3(
+				buildDesignDataFromMagicProjectConfig(config, elements, connections),
+			),
 			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
 		}
 	} catch (error) {
@@ -310,7 +302,9 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
 
-		return buildDesignDataFromMagicProjectConfig(config, elements, connections)
+		return upgradeDesignDataToV3(
+			buildDesignDataFromMagicProjectConfig(config, elements, connections),
+		)
 	} catch {
 		return null
 	}
@@ -403,311 +397,133 @@ function replaceReferenceImageOptionsPaths(
 	return hasChanged
 }
 
-/**
- * 递归替换元素中的路径字段
- * @param element 元素对象
- * @param oldDirName 旧目录名称
- * @param newDirName 新目录名称
- * @returns 是否进行了替换
- */
-function replacePathsInElement(
-	element: Record<string, unknown>,
+type PathRecord = Record<string, unknown>
+
+function replacePathRecordPath(
+	record: PathRecord,
+	field: string,
 	oldDirName: string,
 	newDirName: string,
 ): boolean {
-	if (!element || typeof element !== "object") {
-		return false
-	}
+	const originalPath = record[field]
+	if (typeof originalPath !== "string") return false
+	const nextPath = replaceDirectoryNameInPath(originalPath, oldDirName, newDirName)
+	if (nextPath === originalPath) return false
+	record[field] = nextPath
+	return true
+}
 
-	let hasReplaced = false
-
-	if (
-		element.type === "image" &&
-		element.imageDslVersion === 2 &&
-		Array.isArray(element.versions)
-	) {
-		for (const version of element.versions) {
-			if (!version || typeof version !== "object") continue
-			const versionRecord = version as Record<string, unknown>
-			Object.defineProperty(versionRecord, "type", {
-				value: "image",
-				configurable: true,
-				enumerable: false,
-			})
-			hasReplaced =
-				replacePathsInElement(versionRecord, oldDirName, newDirName) || hasReplaced
-			delete versionRecord.type
-		}
-	}
-
-	// 处理 ImageElement
-	if (element.type === "image" && element.imageDslVersion !== 2) {
-		// 替换 src 字段中的路径
-		if (element.src && typeof element.src === "string") {
-			const originalSrc = element.src as string
-			const newSrc = replaceDirectoryNameInPath(originalSrc, oldDirName, newDirName)
-
-			if (newSrc !== originalSrc) {
-				element.src = newSrc
+function replaceImageContentPaths(
+	content: PathRecord,
+	oldDirName: string,
+	newDirName: string,
+): boolean {
+	let hasReplaced = replacePathRecordPath(content, "src", oldDirName, newDirName)
+	const generateImageRequest = content.generateImageRequest as PathRecord | undefined
+	if (generateImageRequest) {
+		hasReplaced =
+			replacePathRecordPath(generateImageRequest, "file_dir", oldDirName, newDirName) ||
+			hasReplaced
+		if (Array.isArray(generateImageRequest.reference_images)) {
+			const referenceImages = generateImageRequest.reference_images
+			const nextReferences = referenceImages.map((reference) =>
+				typeof reference === "string"
+					? replaceDirectoryNameInPath(reference, oldDirName, newDirName)
+					: reference,
+			)
+			if (nextReferences.some((reference, index) => reference !== referenceImages[index])) {
+				generateImageRequest.reference_images = nextReferences
 				hasReplaced = true
 			}
 		}
-
-		// 处理 generateImageRequest
-		const generateImageRequest = element.generateImageRequest as
-			| {
-					file_dir?: string
-					reference_images?: string[]
-					reference_image_options?: Array<{ path?: string }>
-			  }
-			| undefined
-
-		if (generateImageRequest && typeof generateImageRequest === "object") {
-			// 替换 file_dir 字段
-			if (
-				generateImageRequest.file_dir &&
-				typeof generateImageRequest.file_dir === "string"
-			) {
-				const newFileDir = replaceDirectoryNameInPath(
-					generateImageRequest.file_dir,
-					oldDirName,
-					newDirName,
-				)
-				if (newFileDir !== generateImageRequest.file_dir) {
-					generateImageRequest.file_dir = newFileDir
-					hasReplaced = true
-				}
-			}
-
-			// 替换 reference_images 数组中的路径
-			if (
-				Array.isArray(generateImageRequest.reference_images) &&
-				generateImageRequest.reference_images.length > 0
-			) {
-				const originalRefs = [...generateImageRequest.reference_images]
-				generateImageRequest.reference_images = generateImageRequest.reference_images.map(
-					(ref: string) => replaceDirectoryNameInPath(ref, oldDirName, newDirName),
-				)
-
-				// 检查是否有变化
-				const hasChanged = originalRefs.some(
-					(ref, index) => ref !== generateImageRequest.reference_images?.[index],
-				)
-				if (hasChanged) {
-					hasReplaced = true
-				}
-			}
-			if (
-				replaceReferenceImageOptionsPaths(
-					generateImageRequest.reference_image_options,
-					oldDirName,
-					newDirName,
-				)
-			) {
-				hasReplaced = true
-			}
-		}
-
-		const imageGenerationTaskMeta = element.imageGenerationTaskMeta as
-			ImageGenerationTaskMeta | undefined
-		if (
-			imageGenerationTaskMeta &&
-			typeof imageGenerationTaskMeta === "object" &&
-			typeof imageGenerationTaskMeta.file_path === "string"
-		) {
-			const newFilePath = replaceDirectoryNameInPath(
-				imageGenerationTaskMeta.file_path,
+		hasReplaced =
+			replaceReferenceImageOptionsPaths(
+				generateImageRequest.reference_image_options,
 				oldDirName,
 				newDirName,
-			)
-			if (newFilePath !== imageGenerationTaskMeta.file_path) {
-				imageGenerationTaskMeta.file_path = newFilePath
-				hasReplaced = true
-			}
-		}
-		if (
-			imageGenerationTaskMeta &&
-			typeof imageGenerationTaskMeta === "object" &&
+			) || hasReplaced
+	}
+
+	const imageGenerationTaskMeta = content.imageGenerationTaskMeta as PathRecord | undefined
+	if (imageGenerationTaskMeta) {
+		hasReplaced =
+			replacePathRecordPath(imageGenerationTaskMeta, "file_path", oldDirName, newDirName) ||
+			hasReplaced
+		hasReplaced =
 			replaceReferenceImageOptionsPaths(
 				imageGenerationTaskMeta.reference_image_options,
 				oldDirName,
 				newDirName,
-			)
-		) {
-			hasReplaced = true
-		}
-		// canvas_path / mask_path / mark_path 来自 private upload，不属于可重命名的工作区目录。
+			) || hasReplaced
+	}
+	return hasReplaced
+}
 
-		const generateHightImageRequest = element.generateHightImageRequest as
-			| {
-					file_path?: string
-					reference_image_options?: Array<{ path?: string }>
-			  }
-			| undefined
-		if (
-			generateHightImageRequest &&
-			typeof generateHightImageRequest === "object" &&
-			generateHightImageRequest.file_path &&
-			typeof generateHightImageRequest.file_path === "string"
-		) {
-			const newFilePath = replaceDirectoryNameInPath(
-				generateHightImageRequest.file_path,
-				oldDirName,
-				newDirName,
-			)
-			if (newFilePath !== generateHightImageRequest.file_path) {
-				generateHightImageRequest.file_path = newFilePath
-				hasReplaced = true
-			}
-		}
-		if (
-			generateHightImageRequest &&
-			typeof generateHightImageRequest === "object" &&
-			replaceReferenceImageOptionsPaths(
-				generateHightImageRequest.reference_image_options,
-				oldDirName,
-				newDirName,
-			)
-		) {
-			hasReplaced = true
+function replaceVideoContentPaths(
+	content: PathRecord,
+	oldDirName: string,
+	newDirName: string,
+): boolean {
+	let hasReplaced = replacePathRecordPath(content, "src", oldDirName, newDirName)
+	const request = content.generateVideoRequest as PathRecord | undefined
+	const inputs = request?.inputs as PathRecord | undefined
+	if (!request || !inputs) return hasReplaced
+	hasReplaced = replacePathRecordPath(request, "file_dir", oldDirName, newDirName) || hasReplaced
+	const replaceUri = (item: PathRecord | undefined): void => {
+		if (!item) return
+		hasReplaced = replacePathRecordPath(item, "uri", oldDirName, newDirName) || hasReplaced
+	}
+	for (const field of [
+		"frames",
+		"reference_images",
+		"reference_videos",
+		"reference_audios",
+		"audio",
+	]) {
+		if (!Array.isArray(inputs[field])) continue
+		for (const item of inputs[field]) {
+			if (item && typeof item === "object") replaceUri(item as PathRecord)
 		}
 	}
+	replaceUri(inputs.video as PathRecord | undefined)
+	replaceUri(inputs.mask as PathRecord | undefined)
+	return hasReplaced
+}
 
-	if (element.type === "video") {
-		if (element.src && typeof element.src === "string") {
-			const originalSrc = element.src as string
-			const newSrc = replaceDirectoryNameInPath(originalSrc, oldDirName, newDirName)
-			if (newSrc !== originalSrc) {
-				element.src = newSrc
-				hasReplaced = true
-			}
-		}
+/** 递归替换标准 v3 Element 所有 Content 中的路径字段。 */
+function replacePathsInElement(
+	element: PathRecord,
+	oldDirName: string,
+	newDirName: string,
+): boolean {
+	if (!element || typeof element !== "object") return false
 
-		const generateVideoRequest = element.generateVideoRequest as
-			| {
-					file_dir?: string
-					inputs?: {
-						frames?: Array<{ uri?: string }>
-						reference_images?: Array<{ uri?: string }>
-						reference_videos?: Array<{ uri?: string }>
-						reference_audios?: Array<{ uri?: string }>
-						video?: { uri?: string }
-						mask?: { uri?: string }
-						audio?: Array<{ uri?: string }>
-					}
-			  }
-			| undefined
-
-		if (generateVideoRequest && typeof generateVideoRequest === "object") {
-			if (
-				generateVideoRequest.file_dir &&
-				typeof generateVideoRequest.file_dir === "string"
-			) {
-				const newFileDir = replaceDirectoryNameInPath(
-					generateVideoRequest.file_dir,
-					oldDirName,
-					newDirName,
-				)
-				if (newFileDir !== generateVideoRequest.file_dir) {
-					generateVideoRequest.file_dir = newFileDir
-					hasReplaced = true
-				}
-			}
-
-			if (Array.isArray(generateVideoRequest.inputs?.frames)) {
-				generateVideoRequest.inputs.frames.forEach((frame) => {
-					if (!frame.uri) return
-					const replacedUri = replaceDirectoryNameInPath(
-						frame.uri,
-						oldDirName,
-						newDirName,
-					)
-					if (replacedUri === frame.uri) return
-					frame.uri = replacedUri
-					hasReplaced = true
-				})
-			}
-
-			if (Array.isArray(generateVideoRequest.inputs?.reference_images)) {
-				generateVideoRequest.inputs.reference_images.forEach((item) => {
-					if (!item.uri) return
-					const replacedUri = replaceDirectoryNameInPath(item.uri, oldDirName, newDirName)
-					if (replacedUri === item.uri) return
-					item.uri = replacedUri
-					hasReplaced = true
-				})
-			}
-
-			if (Array.isArray(generateVideoRequest.inputs?.reference_videos)) {
-				generateVideoRequest.inputs.reference_videos.forEach((item) => {
-					if (!item.uri) return
-					const replacedUri = replaceDirectoryNameInPath(item.uri, oldDirName, newDirName)
-					if (replacedUri === item.uri) return
-					item.uri = replacedUri
-					hasReplaced = true
-				})
-			}
-
-			if (Array.isArray(generateVideoRequest.inputs?.reference_audios)) {
-				generateVideoRequest.inputs.reference_audios.forEach((item) => {
-					if (!item.uri) return
-					const replacedUri = replaceDirectoryNameInPath(item.uri, oldDirName, newDirName)
-					if (replacedUri === item.uri) return
-					item.uri = replacedUri
-					hasReplaced = true
-				})
-			}
-
-			if (generateVideoRequest.inputs?.video?.uri) {
-				const replacedUri = replaceDirectoryNameInPath(
-					generateVideoRequest.inputs.video.uri,
-					oldDirName,
-					newDirName,
-				)
-				if (replacedUri !== generateVideoRequest.inputs.video.uri) {
-					generateVideoRequest.inputs.video.uri = replacedUri
-					hasReplaced = true
-				}
-			}
-
-			if (generateVideoRequest.inputs?.mask?.uri) {
-				const replacedUri = replaceDirectoryNameInPath(
-					generateVideoRequest.inputs.mask.uri,
-					oldDirName,
-					newDirName,
-				)
-				if (replacedUri !== generateVideoRequest.inputs.mask.uri) {
-					generateVideoRequest.inputs.mask.uri = replacedUri
-					hasReplaced = true
-				}
-			}
-
-			if (Array.isArray(generateVideoRequest.inputs?.audio)) {
-				generateVideoRequest.inputs.audio.forEach((item) => {
-					if (!item.uri) return
-					const replacedUri = replaceDirectoryNameInPath(item.uri, oldDirName, newDirName)
-					if (replacedUri === item.uri) return
-					item.uri = replacedUri
-					hasReplaced = true
-				})
+	let hasReplaced = false
+	const type = element.type
+	if (Array.isArray(element.contents)) {
+		for (const content of element.contents) {
+			if (!content || typeof content !== "object") continue
+			const contentRecord = content as PathRecord
+			if (type === "image") {
+				hasReplaced =
+					replaceImageContentPaths(contentRecord, oldDirName, newDirName) || hasReplaced
+			} else if (type === "video") {
+				hasReplaced =
+					replaceVideoContentPaths(contentRecord, oldDirName, newDirName) || hasReplaced
+			} else if (type === "audio") {
+				hasReplaced =
+					replacePathRecordPath(contentRecord, "src", oldDirName, newDirName) ||
+					hasReplaced
 			}
 		}
 	}
 
-	if (element.type === "audio" && element.src && typeof element.src === "string") {
-		const originalSrc = element.src as string
-		const newSrc = replaceDirectoryNameInPath(originalSrc, oldDirName, newDirName)
-		if (newSrc !== originalSrc) {
-			element.src = newSrc
-			hasReplaced = true
-		}
-	}
-
-	// 递归处理子元素（Frame、Group 等）
 	if (Array.isArray(element.children)) {
 		for (const child of element.children) {
-			if (replacePathsInElement(child, oldDirName, newDirName)) {
-				hasReplaced = true
+			if (child && typeof child === "object") {
+				hasReplaced =
+					replacePathsInElement(child as PathRecord, oldDirName, newDirName) ||
+					hasReplaced
 			}
 		}
 	}

@@ -36,12 +36,12 @@ export class ElementDetailsRuntimeManager {
 	public getGenerateImageRequest(
 		elementId: string,
 		imageId?: string,
-		versionId?: string,
+		contentId?: string,
 	): GenerateImageRequestProvenance | null {
 		const elementEntry = this.provenance[elementId]
-		const entry = versionId
-			? elementEntry?.imageVersionDetails?.[versionId]?.generateImageRequest
-			: elementEntry?.generateImageRequest
+		const entry = contentId
+			? elementEntry?.contentDetails?.[contentId]?.generateImageRequest
+			: Object.values(elementEntry?.contentDetails ?? {})[0]?.generateImageRequest
 		if (!entry) return null
 		if (imageId && entry.imageId !== imageId) return null
 		return entry
@@ -50,10 +50,10 @@ export class ElementDetailsRuntimeManager {
 	public getGenerateImageRequestImageIdSource(
 		elementId: string,
 		imageId?: string,
-		versionId?: string,
+		contentId?: string,
 	): ElementDetailSource {
 		return (
-			this.getGenerateImageRequest(elementId, imageId, versionId)?.imageIdSource ??
+			this.getGenerateImageRequest(elementId, imageId, contentId)?.imageIdSource ??
 			(this.hasExplicitProvenance ? "unknown" : "inline")
 		)
 	}
@@ -61,7 +61,7 @@ export class ElementDetailsRuntimeManager {
 	public markGenerateImageRequestAsUser(
 		elementId: string,
 		imageId: string,
-		versionId?: string,
+		contentId?: string,
 	): void {
 		if (!imageId.trim()) return
 		this.hasExplicitProvenance = true
@@ -73,20 +73,19 @@ export class ElementDetailsRuntimeManager {
 		const current = this.provenance[elementId]
 		this.provenance = {
 			...this.provenance,
-			[elementId]: versionId
+			[elementId]: contentId
 				? {
 						...current,
-						imageVersionDetails: {
-							...current?.imageVersionDetails,
-							[versionId]: { generateImageRequest: requestProvenance },
+						contentDetails: {
+							...current?.contentDetails,
+							[contentId]: { generateImageRequest: requestProvenance },
 						},
 					}
 				: {
 						...current,
-						generateImageRequest: {
-							valueSource: "user",
-							imageId,
-							imageIdSource: "user",
+						contentDetails: {
+							...current?.contentDetails,
+							unknown: { generateImageRequest: requestProvenance },
 						},
 					},
 		}
@@ -101,21 +100,26 @@ export class ElementDetailsRuntimeManager {
 		this.onChange?.(this.export())
 	}
 
-	public clearImageVersion(elementId: string, versionId: string): void {
+	public clearContent(elementId: string, contentId: string): void {
 		const current = this.provenance[elementId]
-		if (!current?.imageVersionDetails?.[versionId]) return
-		const imageVersionDetails = { ...current.imageVersionDetails }
-		delete imageVersionDetails[versionId]
+		if (!current?.contentDetails?.[contentId]) return
+		const contentDetails = { ...current.contentDetails }
+		delete contentDetails[contentId]
 		const nextElement = { ...current }
-		if (Object.keys(imageVersionDetails).length > 0) {
-			nextElement.imageVersionDetails = imageVersionDetails
+		if (Object.keys(contentDetails).length > 0) {
+			nextElement.contentDetails = contentDetails
 		} else {
-			delete nextElement.imageVersionDetails
+			delete nextElement.contentDetails
 		}
 		this.provenance = {
 			...this.provenance,
 			[elementId]: nextElement,
 		}
 		this.onChange?.(this.export())
+	}
+
+	/** @deprecated 调用方迁移期间的兼容入口，语义已改为 Content。 */
+	public clearImageContent(elementId: string, contentId: string): void {
+		this.clearContent(elementId, contentId)
 	}
 }

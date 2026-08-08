@@ -6,19 +6,15 @@ import {
 	type CanvasConnection,
 	type LayerElement,
 	type StoryboardElement,
+	type StoryboardElementContent,
 } from "../../../document/types"
 import type { Canvas } from "../../../core/Canvas"
 import { StoryboardInteractionManager } from "../StoryboardInteractionManager"
 import type { ImageModelItem } from "../../../../public/magic-types"
 
 function createStoryboardData(): StoryboardElement {
-	return {
-		id: "storyboard-1",
-		type: ElementTypeEnum.Storyboard,
-		x: 0,
-		y: 0,
-		width: 960,
-		height: 1360,
+	const content: StoryboardElementContent = {
+		contentId: "storyboard-1-content",
 		shots: [
 			{
 				id: "shot-1",
@@ -26,6 +22,38 @@ function createStoryboardData(): StoryboardElement {
 				description: "",
 			},
 		],
+	}
+	return {
+		id: "storyboard-1",
+		type: ElementTypeEnum.Storyboard,
+		x: 0,
+		y: 0,
+		width: 960,
+		height: 1360,
+		contents: [content],
+		activeContentId: content.contentId,
+		mainContentId: content.contentId,
+	} as StoryboardElement
+}
+
+function getStoryboardContent(data: StoryboardElement): StoryboardElementContent {
+	const content = data.contents[0]
+	if (!content) throw new Error("Expected storyboard Content")
+	return content
+}
+
+function createImageOutput(id: string): LayerElement {
+	const contentId = `${id}-content`
+	return {
+		id,
+		type: ElementTypeEnum.Image,
+		x: 1000,
+		y: 0,
+		width: 512,
+		height: 512,
+		contents: [{ contentId }],
+		activeContentId: contentId,
+		mainContentId: contentId,
 	}
 }
 
@@ -173,15 +201,8 @@ describe("StoryboardInteractionManager", () => {
 
 	it("adds a shot without precreating an output after a previous generation", () => {
 		const data = createStoryboardData()
-		data.shots![0].outputImageElementId = "image-output"
-		const outputImage: LayerElement = {
-			id: "image-output",
-			type: ElementTypeEnum.Image,
-			x: 1000,
-			y: 0,
-			width: 512,
-			height: 512,
-		}
+		getStoryboardContent(data).shots![0].outputImageElementId = "image-output"
+		const outputImage = createImageOutput("image-output")
 		const harness = createCanvasMock(data, [outputImage])
 		harness.selected.value = true
 		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
@@ -197,7 +218,7 @@ describe("StoryboardInteractionManager", () => {
 		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
 		hit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
 
-		const shots = harness.updates[0]?.patch.shots as StoryboardElement["shots"]
+		const shots = harness.updates[0]?.patch.shots as StoryboardElementContent["shots"]
 		expect(shots).toHaveLength(2)
 		expect(shots?.[1]?.outputImageElementId).toBeUndefined()
 		expect(harness.canvas.elementManager.create).not.toHaveBeenCalled()
@@ -208,7 +229,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("deletes only the locked output connection when removing a generated shot", () => {
 		const data = createStoryboardData()
-		data.shots = [
+		getStoryboardContent(data).shots = [
 			{
 				id: "shot-1",
 				durationSeconds: 3,
@@ -221,14 +242,7 @@ describe("StoryboardInteractionManager", () => {
 				description: "close up",
 			},
 		]
-		const outputImage: LayerElement = {
-			id: "image-output",
-			type: ElementTypeEnum.Image,
-			x: 1000,
-			y: 0,
-			width: 512,
-			height: 512,
-		}
+		const outputImage = createImageOutput("image-output")
 		const outputConnection: CanvasConnection = {
 			id: "storyboard-output",
 			sourceElementId: data.id,
@@ -255,7 +269,7 @@ describe("StoryboardInteractionManager", () => {
 		})
 		expect(harness.canvas.elementManager.delete).not.toHaveBeenCalled()
 		expect(harness.elements.has(outputImage.id)).toBe(true)
-		const shots = harness.updates[0]?.patch.shots as StoryboardElement["shots"]
+		const shots = harness.updates[0]?.patch.shots as StoryboardElementContent["shots"]
 		expect(shots?.map((shot) => shot.id)).toEqual(["shot-2"])
 
 		manager.destroy()
@@ -286,7 +300,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("normalizes an oversized storyboard height from its shot count", () => {
 		const data = createStoryboardData()
-		data.shots = Array.from({ length: 20 }, (_, index) => ({
+		getStoryboardContent(data).shots = Array.from({ length: 20 }, (_, index) => ({
 			id: `shot-${index + 1}`,
 			durationSeconds: 3,
 			description: `镜头 ${index + 1}`,
@@ -303,7 +317,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("keeps unsupported model parameters disabled instead of exposing hover or pointer", async () => {
 		const data = createStoryboardData()
-		data.generationConfig = { model_id: "text-only-size-model" }
+		getStoryboardContent(data).generationConfig = { model_id: "text-only-size-model" }
 		const harness = createCanvasMock(data)
 		harness.selected.value = true
 		const getImageModelList =
@@ -360,7 +374,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("disables only resolution when the model exposes ratios without resolution scales", async () => {
 		const data = createStoryboardData()
-		data.generationConfig = { model_id: "ratio-only-model" }
+		getStoryboardContent(data).generationConfig = { model_id: "ratio-only-model" }
 		const harness = createCanvasMock(data)
 		harness.selected.value = true
 		const getImageModelList =
@@ -449,7 +463,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("derives size and resolution from the selected image model and commits once", async () => {
 		const data = createStoryboardData()
-		data.generationConfig = {
+		getStoryboardContent(data).generationConfig = {
 			model_id: "old-model",
 			size: "1080x1920",
 			resolution: "1K",
@@ -615,7 +629,7 @@ describe("StoryboardInteractionManager", () => {
 
 	it("renders aspect ratio options with the image editor preview and dimensions", async () => {
 		const data = createStoryboardData()
-		data.generationConfig = {
+		getStoryboardContent(data).generationConfig = {
 			model_id: "seedream-model",
 			size: "2048x2048",
 			resolution: "2K",

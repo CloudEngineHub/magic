@@ -1,6 +1,6 @@
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../../runtime/document/elementContent"
 import { pickPluginFiles, resolvePluginFileByPath } from "../assets/fileAssets"
 import type { PluginFileAsset } from "./types"
 
@@ -16,7 +16,7 @@ function getPngFilename(element: ImageElement): string {
 
 /** 判断图片在画布上是否存在需要重新渲染的视觉修改 */
 function hasVisualImageModification(element: ImageElement): boolean {
-	return Boolean(getActiveImageVersion(element).crop)
+	return Boolean(getActiveImageContent(element).crop)
 }
 
 /** 获取画布图片元素的显示尺寸 */
@@ -95,7 +95,7 @@ async function resolveImageElementAsAsset(
 	canvas: Canvas,
 	element: ImageElement,
 ): Promise<PluginFileAsset> {
-	const active = getActiveImageVersion(element)
+	const active = getActiveImageContent(element)
 	if (!active.src) {
 		throw new Error("Image element source is empty.")
 	}
@@ -129,7 +129,7 @@ export async function resolveCanvasImageDragAssets(
 		(element): element is ImageElement =>
 			Boolean(element) &&
 			element?.type === ElementTypeEnum.Image &&
-			Boolean(getActiveImageVersion(element).src),
+			Boolean(getActiveImageContent(element).src),
 	)
 
 	if (imageElements.length !== elementIds.length) {

@@ -9,7 +9,10 @@ import type {
 	VideoElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import {
+	getActiveContent,
+	getActiveImageContent,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import { CanvasFileIcon, FolderIcon } from "@/components/CanvasDesign/ui/primitives/icons"
 import { MentionItemType, type MentionItem } from "../../../../types"
 import { createProjectFileMentionData } from "../../../../utils/projectReferenceMention"
@@ -321,9 +324,9 @@ export class MentionPanelCanvasElementsStore {
 		}
 
 		if (isMediaElement(element)) {
-			const imageVersion =
-				element.type === ElementTypeEnum.Image ? getActiveImageVersion(element) : undefined
-			const src = element.type === ElementTypeEnum.Image ? imageVersion?.src : element.src
+			const imageContent =
+				element.type === ElementTypeEnum.Image ? getActiveImageContent(element) : undefined
+			const src = imageContent?.src ?? getActiveContent(element)?.src
 			const file = src ? this.context?.resolveFileBySrc(src) : null
 			if (src && file) {
 				const data = createProjectFileMentionData(file)
@@ -349,8 +352,8 @@ export class MentionPanelCanvasElementsStore {
 						elementId: element.id,
 						mediaType: element.type === ElementTypeEnum.Video ? "video" : "image",
 						src,
-						...(element.type === ElementTypeEnum.Image && imageVersion?.crop
-							? { crop: imageVersion.crop }
+						...(element.type === ElementTypeEnum.Image && imageContent?.crop
+							? { crop: imageContent.crop }
 							: {}),
 					},
 				}

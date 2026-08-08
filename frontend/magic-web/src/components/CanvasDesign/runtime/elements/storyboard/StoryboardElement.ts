@@ -3,6 +3,7 @@ import {
 	ElementTypeEnum,
 	type LayerElement,
 	type StoryboardElement as StoryboardElementData,
+	type StoryboardElementContent,
 	type StoryboardGenerationConfig,
 	type StoryboardShot,
 } from "../../document/types"
@@ -20,6 +21,7 @@ import {
 	type TransformContext,
 } from "../core/BaseElement"
 import { STORYBOARD_CONFIG } from "./StoryboardElement.config"
+import { getActiveContent } from "../../document/elementContent"
 import {
 	resolveStoryboardElementLayout,
 	resolveStoryboardRequiredHeight,
@@ -40,7 +42,7 @@ interface StoryboardControlMetadata {
 	baseBounds: { x: number; y: number; width: number; height: number }
 }
 
-type CreatedStoryboardElementData = StoryboardElementData & { shots: StoryboardShot[] }
+type CreatedStoryboardElementData = StoryboardElementData
 
 function formatModelName(modelId?: string): string {
 	if (!modelId) return "-"
@@ -117,8 +119,15 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			height: Math.max(options.height ?? STORYBOARD_CONFIG.DEFAULT_HEIGHT, requiredHeight),
 			zIndex: options.zIndex ?? 0,
 			name: options.name,
-			generationConfig: options.generationConfig,
-			shots,
+			activeContentId: `${options.id}-content-1`,
+			mainContentId: `${options.id}-content-1`,
+			contents: [
+				{
+					contentId: `${options.id}-content-1`,
+					generationConfig: options.generationConfig,
+					shots,
+				},
+			],
 			interactionConfig: { aspectRatioLocked: false },
 		}
 	}
@@ -128,9 +137,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	}
 
 	public render(): Konva.Group {
+		const content = this.getActiveContent<StoryboardElementContent>()
 		const width = Math.max(this.data.width ?? STORYBOARD_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? STORYBOARD_CONFIG.DEFAULT_HEIGHT, 1)
-		const layout = resolveStoryboardElementLayout(width, height, this.data.shots?.length ?? 0)
+		const layout = resolveStoryboardElementLayout(width, height, content?.shots?.length ?? 0)
 		const group = new Konva.Group({
 			width,
 			height,
@@ -163,11 +173,13 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	public update(newData: StoryboardElementData): boolean {
 		const previousData = this.data
 		this.data = newData
+		const previousContent = getActiveContent<StoryboardElementContent>(previousData)
+		const nextContent = this.getActiveContent<StoryboardElementContent>()
 		const needsRerender =
 			previousData.width !== newData.width ||
 			previousData.height !== newData.height ||
-			previousData.generationConfig !== newData.generationConfig ||
-			previousData.shots !== newData.shots
+			previousContent?.generationConfig !== nextContent?.generationConfig ||
+			previousContent?.shots !== nextContent?.shots
 
 		if (!needsRerender && this.node) {
 			this.updateBaseProps(this.node, newData)
@@ -267,7 +279,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			clipHeight: layout.settingsRect.height,
 		})
 		group.add(settingsGroup)
-		const config = this.data.generationConfig
+		const config = this.getActiveContent<StoryboardElementContent>()?.generationConfig
 
 		this.renderParameterRow(settingsGroup, layout.parameterRows.model, {
 			label: this.getText("storyboard.imageModel", "图片模型"),
@@ -447,7 +459,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			clipHeight: layout.shotListRect.height,
 		})
 		group.add(shotListGroup)
-		const shots = this.data.shots ?? []
+		const shots = this.getActiveContent<StoryboardElementContent>()?.shots ?? []
 		if (shots.length === 0) {
 			shotListGroup.add(
 				new Konva.Rect({

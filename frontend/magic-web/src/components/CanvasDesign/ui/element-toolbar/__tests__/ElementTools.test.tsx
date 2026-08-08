@@ -46,7 +46,7 @@ describe("ElementTools image replacement ordering", () => {
 		mocks.selectedElements = []
 	})
 
-	it("places replace immediately before delete for a multi-version image", () => {
+	it("places replace immediately before delete for a multi-Content image", () => {
 		mocks.selectedElements = [
 			{
 				id: "image-1",
@@ -55,12 +55,11 @@ describe("ElementTools image replacement ordering", () => {
 				y: 0,
 				width: 100,
 				height: 100,
-				imageDslVersion: 2,
-				activeVersionId: "version-2",
-				mainVersionId: "version-1",
-				versions: [
-					{ id: "version-1", src: "./images/one.png", status: "completed" },
-					{ id: "version-2", src: "./images/two.png", status: "completed" },
+				activeContentId: "version-2",
+				mainContentId: "version-1",
+				contents: [
+					{ contentId: "version-1", src: "./images/one.png", status: "completed" },
+					{ contentId: "version-2", src: "./images/two.png", status: "completed" },
 				],
 			},
 		]
@@ -73,7 +72,7 @@ describe("ElementTools image replacement ordering", () => {
 		expect(labels.slice(-3)).toEqual([
 			"Divider",
 			ElementToolTypeEnum.ImageReplaceButton,
-			ElementToolTypeEnum.ImageVersionDeleteButton,
+			ElementToolTypeEnum.ImageContentDeleteButton,
 		])
 	})
 })

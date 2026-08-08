@@ -54,7 +54,7 @@ describe("ImageReplaceController", () => {
 		expect(replaceImageElement).toHaveBeenCalledWith({
 			elementId: "image-1",
 			file: expect.any(File),
-			versionId: null,
+			contentId: null,
 		})
 		expect(states).toEqual(["uploading", "idle"])
 
@@ -95,7 +95,7 @@ describe("ImageReplaceController", () => {
 		expect(replaceImageElementFromProject).toHaveBeenCalledWith({
 			elementId: "image-1",
 			path: "/images/project.png",
-			versionId: "version-1",
+			contentId: "version-1",
 		})
 		expect(states).toEqual(["uploading", "idle"])
 	})

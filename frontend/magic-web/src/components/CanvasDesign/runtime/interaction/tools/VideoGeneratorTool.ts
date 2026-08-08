@@ -170,8 +170,7 @@ export class VideoGeneratorTool extends BaseTool {
 		const methods = this.canvas.magicConfigManager.config?.methods
 		const rootStorage = methods?.getRootStorage?.()
 		const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
-			| DefaultGenerateVideoConfig
-			| undefined
+			DefaultGenerateVideoConfig | undefined
 		const selectedModel =
 			videoModelList.find((model) => model.model_id === defaultConfig?.model_id) ||
 			videoModelList[0]
@@ -326,19 +325,15 @@ export class VideoGeneratorTool extends BaseTool {
 		const size = this.getVideoElementSize(width, height)
 		const elementId = generateElementId()
 		const newZIndex = this.canvas.elementManager.getNextZIndexInLevel()
-		const defaultConfig = ElementFactory.getDefaultConfig(ElementTypeEnum.Video, {
-			videoWidth: size.width,
-			videoHeight: size.height,
-		})
-
-		const videoElement: VideoElement = {
-			id: elementId,
-			type: ElementTypeEnum.Video,
+		const videoElement = ElementFactory.createElementData(
+			ElementTypeEnum.Video,
+			elementId,
 			x,
 			y,
-			...defaultConfig,
-			zIndex: newZIndex,
-		}
+			size.width,
+			size.height,
+			newZIndex,
+		) as VideoElement
 
 		this.canvas.elementManager.create(videoElement)
 		this.canvas.selectionManager?.select(elementId)

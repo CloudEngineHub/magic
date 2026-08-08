@@ -6,6 +6,7 @@ import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useMemo, useState, useCallback } from "react"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
+import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
 import type { GenerateHightImageRequest } from "../../../../public/magic-types"
 import {
 	generateElementId,
@@ -22,7 +23,7 @@ import {
 	getImageGenerationTaskMeta,
 } from "../../../../runtime/resources/image/imageGenerationTaskMeta"
 import { ImageGenerationTaskTypeMap } from "../../../../public/magic-types"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../../runtime/document/elementContent"
 import {
 	buildReferenceImageOptions,
 	getNormalizedImageProcessCrop,
@@ -53,12 +54,12 @@ export default function ImageConvertHight() {
 	const imageGenerationTaskMeta = selectedImageElement
 		? getImageGenerationTaskMeta(selectedImageElement)
 		: undefined
-	const activeVersion = selectedImageElement
-		? getActiveImageVersion(selectedImageElement)
+	const activeContent = selectedImageElement
+		? getActiveImageContent(selectedImageElement)
 		: undefined
 
 	const requestSize =
-		activeVersion?.generateImageRequest?.size ||
+		activeContent?.generateImageRequest?.size ||
 		(imageGenerationTaskMeta?.type === ImageGenerationTaskTypeMap.High
 			? imageGenerationTaskMeta.size
 			: undefined) ||
@@ -109,7 +110,7 @@ export default function ImageConvertHight() {
 		}
 
 		// 获取当前图片的 src（文件路径）
-		const filePath = activeVersion?.src
+		const filePath = activeContent?.src
 		if (!filePath) {
 			return
 		}
@@ -127,7 +128,7 @@ export default function ImageConvertHight() {
 		}
 
 		const crop = getNormalizedImageProcessCrop({
-			crop: activeVersion?.crop,
+			crop: activeContent?.crop,
 			sourceDimensions: {
 				width: imageInfo?.naturalWidth ?? selectedImageElement.width ?? 0,
 				height: imageInfo?.naturalHeight ?? selectedImageElement.height ?? 0,
@@ -166,16 +167,20 @@ export default function ImageConvertHight() {
 		const resolutionScale = selectedOption.data.scale || ""
 
 		// 创建新的图片元素数据，设置名称为 "原图片名称_分辨率scale"
-		const newImageElement: ImageElement = {
-			id: newElementId,
-			type: ElementTypeEnum.Image,
-			x: newX,
-			y: newY,
-			width: newWidth,
-			height: newHeight,
-			zIndex: newZIndex,
+		const newImageElement = {
+			...ElementFactory.createElementData(
+				ElementTypeEnum.Image,
+				newElementId,
+				newX,
+				newY,
+				newWidth,
+				newHeight,
+				newZIndex,
+			),
 			name: resolutionScale ? `${originalBaseName} ${resolutionScale}` : originalBaseName,
-		}
+		} as ImageElement
+		const targetContentId = newImageElement.activeContentId
+		if (!targetContentId) return
 
 		const hightImageRequest: GenerateHightImageRequest = {
 			image_id: requestImageId,
@@ -197,6 +202,7 @@ export default function ImageConvertHight() {
 			targets: [
 				{
 					elementId: newElementId,
+					contentId: targetContentId,
 					imageGenerationTaskMeta: createHighImageTaskMeta(hightImageRequest),
 				},
 			],

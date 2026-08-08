@@ -1,7 +1,7 @@
 import type { LocateProjectFileActionOptions, UserAction, ViewActionOptions } from "../types"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
-import { getActiveImageVersion } from "../../document/imageVersion"
+import { getActiveContent, getActiveImageContent } from "../../document/elementContent"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 
 interface SelectedMediaFile {
@@ -36,7 +36,9 @@ function resolveMediaElementFile(
 	)
 		return null
 	const src =
-		element.type === ElementTypeEnum.Image ? getActiveImageVersion(element).src : element.src
+		element.type === ElementTypeEnum.Image
+			? getActiveImageContent(element).src
+			: getActiveContent(element)?.src
 	if (!src) return null
 	if (!isLocatableProjectFilePath(src)) return null
 

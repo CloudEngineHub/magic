@@ -7,11 +7,31 @@ function createCanvas(options?: {
 	selectedIds?: string[]
 	elements?: Array<[string, object]>
 }) {
+	const imageContent = (id: string, src: string) => ({
+		contentId: `${id}-content`,
+		src,
+	})
+	const media = (id: string, type: "image" | "video", src: string) => ({
+		id,
+		type,
+		contents: [imageContent(id, src)],
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+	})
 	const elements = new Map<string, object>([
-		["video", { id: "video", type: "video", src: "videos/demo.mp4" }],
-		["text", { id: "text", type: "text", content: [] }],
-		["image", { id: "image", type: "image", src: "images/demo.png" }],
-		["generating-image", { id: "generating-image", type: "image", src: "" }],
+		["video", media("video", "video", "videos/demo.mp4")],
+		[
+			"text",
+			{
+				id: "text",
+				type: "text",
+				contents: [{ contentId: "text-content", content: [] }],
+				activeContentId: "text-content",
+				mainContentId: "text-content",
+			},
+		],
+		["image", media("image", "image", "images/demo.png")],
+		["generating-image", media("generating-image", "image", "")],
 		...(options?.elements ?? []),
 	])
 	const downloadFiles = vi.fn().mockResolvedValue(undefined)
@@ -44,8 +64,7 @@ describe("Canvas download actions", () => {
 	it("downloads selected media in selection order and ignores non-media elements", async () => {
 		const { canvas, downloadFiles } = createCanvas()
 		const action = downloadActions.find((item) => item.id === "download.image") as
-			| UserAction<"download.image">
-			| undefined
+			UserAction<"download.image"> | undefined
 
 		expect(action?.canExecute(canvas)).toBe(true)
 		await action?.execute(canvas, { downloadMode: "normal" })
@@ -66,8 +85,7 @@ describe("Canvas download actions", () => {
 	it("blocks both menu visibility and execution when download permission is denied", async () => {
 		const { canvas, downloadFiles } = createCanvas({ allowFileDownload: false })
 		const action = downloadActions.find((item) => item.id === "download.image") as
-			| UserAction<"download.image">
-			| undefined
+			UserAction<"download.image"> | undefined
 
 		expect(action?.canExecute(canvas)).toBe(false)
 		await action?.execute(canvas, { downloadMode: "default" })
@@ -79,16 +97,21 @@ describe("Canvas download actions", () => {
 			selectedIds: ["image", "generating-image"],
 		})
 		const action = downloadActions.find((item) => item.id === "download.image") as
-			| UserAction<"download.image">
-			| undefined
+			UserAction<"download.image"> | undefined
 
 		expect(action?.canExecute(canvas)).toBe(true)
 		await action?.execute(canvas, { downloadMode: "default" })
 
 		expect(downloadFiles).toHaveBeenCalledWith(
 			[
-				expect.objectContaining({ id: "image", src: "images/demo.png" }),
-				expect.objectContaining({ id: "generating-image", src: "" }),
+				expect.objectContaining({
+					id: "image",
+					contents: [expect.objectContaining({ src: "images/demo.png" })],
+				}),
+				expect.objectContaining({
+					id: "generating-image",
+					contents: [expect.objectContaining({ src: "" })],
+				}),
 			],
 			false,
 			false,
@@ -99,8 +122,7 @@ describe("Canvas download actions", () => {
 	it("hides the download action when all selected media sources are unavailable", async () => {
 		const { canvas, downloadFiles } = createCanvas({ selectedIds: ["generating-image"] })
 		const action = downloadActions.find((item) => item.id === "download.image") as
-			| UserAction<"download.image">
-			| undefined
+			UserAction<"download.image"> | undefined
 
 		expect(action?.canExecute(canvas)).toBe(false)
 		await action?.execute(canvas, { downloadMode: "default" })

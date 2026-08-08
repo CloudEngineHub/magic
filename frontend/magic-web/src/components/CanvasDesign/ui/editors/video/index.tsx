@@ -3,6 +3,7 @@ import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import { GenerationStatus } from "../../../public/magic-types"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
@@ -98,12 +99,13 @@ function ActiveVideoGenerateEditor({
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 	const generationRuntime = useGenerationRuntime(videoElement.id)
+	const videoContent = getActiveContent(videoElement)
 
-	const hasSrc = !!videoElement.src
+	const hasSrc = !!videoContent?.src
 	const hasTerminalVideoGenerationState =
 		hasSrc ||
-		videoElement.status === GenerationStatus.Completed ||
-		videoElement.status === GenerationStatus.Failed
+		videoContent?.status === GenerationStatus.Completed ||
+		videoContent?.status === GenerationStatus.Failed
 
 	const isGenerating = useMemo(() => {
 		if (!canvas || hasTerminalVideoGenerationState) return false
@@ -152,9 +154,9 @@ function ActiveVideoGenerateEditor({
 		canvas != null ? canvas.elementManager.isTemporary(videoElement.id) : false
 
 	const hasGenerateVideoRequest = !!(
-		generationRuntime?.generateVideoRequest || videoElement.generateVideoRequest
+		generationRuntime?.generateVideoRequest || videoContent?.generateVideoRequest
 	)
-	const isError = videoElement.status === GenerationStatus.Failed
+	const isError = videoContent?.status === GenerationStatus.Failed
 	const isRetryEditing = isError && retryEditingElementId === videoElement.id
 
 	const showEditor =

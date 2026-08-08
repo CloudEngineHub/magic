@@ -1,7 +1,12 @@
 import Konva from "konva"
 import { describe, expect, it, vi } from "vitest"
 import { ElementManager } from "../ElementManager"
-import type { ImageElementV2, LayerElement } from "../../../document/types"
+import type {
+	ElementType,
+	ElementUpdatePatch,
+	ImageElement,
+	LayerElement,
+} from "../../../document/types"
 import { CanvasDocumentIndex } from "../CanvasDocumentIndex"
 import { GenerationStatus, type UploadFileResponse } from "../../../../public/magic-types"
 
@@ -57,6 +62,9 @@ function createElement(id: string): LayerElement {
 		y: 0,
 		width: 100,
 		height: 100,
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+		contents: [{ contentId: `${id}-content` }],
 	}
 }
 
@@ -244,7 +252,14 @@ describe("ElementManager transform-safe full updates", () => {
 			y: 16,
 			width: 80,
 			height: 60,
-			status: GenerationStatus.Processing,
+			contents: [
+				{
+					contentId: "content-1",
+					status: GenerationStatus.Processing,
+				},
+			],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
 		} as LayerElement
 		const updateElement = vi.fn((nextData: LayerElement) => {
 			elementData = nextData
@@ -280,8 +295,13 @@ describe("ElementManager transform-safe full updates", () => {
 			expect.objectContaining({
 				x: 140,
 				y: 180,
-				src: "target/image.png",
-				status: GenerationStatus.Completed,
+				contents: [
+					expect.objectContaining({
+						contentId: "content-1",
+						src: "target/image.png",
+						status: GenerationStatus.Completed,
+					}),
+				],
 			}),
 		)
 		expect(rerenderWhenTransformIdle).toHaveBeenCalledTimes(1)
@@ -329,7 +349,9 @@ describe("ElementManager container child lifecycle", () => {
 			y: 0,
 			width: 100,
 			height: 80,
-			src: "./images/child.png",
+			activeContentId: "child-content",
+			mainContentId: "child-content",
+			contents: [{ contentId: "child-content", src: "./images/child.png" }],
 		} as LayerElement
 		const frame = {
 			id: "frame-1",
@@ -338,6 +360,9 @@ describe("ElementManager container child lifecycle", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [child],
 		} as LayerElement
 
@@ -401,7 +426,9 @@ describe("ElementManager document patch export", () => {
 			y: 24,
 			width: 80,
 			height: 60,
-			src: "./images/a.png",
+			activeContentId: "child-content",
+			mainContentId: "child-content",
+			contents: [{ contentId: "child-content", src: "./images/a.png" }],
 			runtimeOnly: true,
 		} as LayerElement
 		const frame = {
@@ -411,6 +438,9 @@ describe("ElementManager document patch export", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [child],
 		} as LayerElement
 		const manager = createPatchManager([frame, child])
@@ -426,7 +456,7 @@ describe("ElementManager document patch export", () => {
 					element: expect.objectContaining({
 						id: "child-1",
 						type: "image",
-						src: "./images/a.png",
+						contents: [expect.objectContaining({ src: "./images/a.png" })],
 					}),
 				},
 			],
@@ -438,7 +468,7 @@ describe("ElementManager document patch export", () => {
 	})
 
 	it("skips deleted and temporary elements while preserving deleted ids", () => {
-		const temp = { id: "temp-1", type: "rectangle", x: 0, y: 0 } as LayerElement
+		const temp = createElement("temp-1")
 		const manager = createPatchManager([temp], [{ id: "temp-1" }])
 
 		const patch = manager.exportDocumentPatch({
@@ -459,11 +489,12 @@ describe("ElementManager document patch export", () => {
 			y: 24,
 			width: 80,
 			height: 60,
-			src: undefined,
+			activeContentId: "temp-content",
+			mainContentId: "temp-content",
+			contents: [{ contentId: "temp-content" }],
 		} as LayerElement
 		const child = {
-			id: "child-1",
-			type: "rectangle",
+			...createElement("child-1"),
 			x: 20,
 			y: 32,
 			width: 40,
@@ -476,6 +507,9 @@ describe("ElementManager document patch export", () => {
 			y: 0,
 			width: 300,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [tempChild, child],
 		} as LayerElement
 		const manager = createPatchManager([frame, tempChild, child], [{ id: "temp-child" }])
@@ -663,74 +697,125 @@ describe("ElementManager generation target commit", () => {
 	})
 })
 
-describe("ElementManager explicit image version writes", () => {
-	it("rejects V2 top-level image version field patches", () => {
+describe("ElementManager Content writes", () => {
+	it("routes image business field patches into the active Content", () => {
 		const manager = Object.create(ElementManager.prototype) as {
 			mergeElementData: (
 				currentData: LayerElement,
-				updates: Partial<LayerElement>,
+				updates: ElementUpdatePatch,
 				elementId: string,
 			) => LayerElement
 		}
-		const current: ImageElementV2 = {
+		const current: ImageElement = {
 			id: "image-1",
 			type: "image",
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [{ id: "v1", src: "./images/v1.png" }],
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [{ contentId: "v1", src: "./images/v1.png" }],
 		}
 
-		expect(() =>
-			manager.mergeElementData(current, { src: "./images/v2.png" }, current.id),
-		).toThrow("ImageElementV2 version fields must be updated through an explicit version API")
-		expect(() => manager.mergeElementData(current, { crop: undefined }, current.id)).toThrow(
-			"ImageElementV2 version fields must be updated through an explicit version API",
+		const merged = manager.mergeElementData(current, { src: "./images/v2.png" }, current.id)
+		expect(merged.contents[0]).toEqual(
+			expect.objectContaining({ contentId: "v1", src: "./images/v2.png" }),
 		)
 	})
 
-	it("rejects mixed V1-to-V2 migration patches", () => {
+	it("keeps node identity stable while merging Content patches", () => {
 		const manager = Object.create(ElementManager.prototype) as {
 			mergeElementData: (
 				currentData: LayerElement,
-				updates: Partial<LayerElement>,
+				updates: ElementUpdatePatch & { id?: string; type?: ElementType },
 				elementId: string,
 			) => LayerElement
 		}
-		const current: LayerElement = {
+		const current: ImageElement = {
 			id: "image-1",
 			type: "image",
-			src: "./images/v1.png",
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [{ contentId: "v1", src: "./images/v1.png" }],
 		}
 
-		expect(() =>
-			manager.mergeElementData(
-				current,
-				{
-					imageDslVersion: 2,
-					activeVersionId: "v1",
-					mainVersionId: "v1",
-					versions: [],
-					src: "bad",
-				} as never,
+		const merged = manager.mergeElementData(
+			current,
+			{ id: current.id, type: current.type, src: "./images/next.png" },
+			current.id,
+		)
+		if (merged.type !== "image") throw new Error("Expected image Element")
+		expect(merged.id).toBe(current.id)
+		expect(merged.type).toBe(current.type)
+		expect(merged.contents[0]?.src).toBe("./images/next.png")
+	})
+
+	it("rejects creating an Element with invalid Content pointers before rendering", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			doCreate: (elementData: LayerElement, options: object) => void
+		}
+		const invalid: ImageElement = {
+			id: "image-1",
+			type: "image",
+			zIndex: 0,
+			activeContentId: "missing",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
+
+		expect(() => manager.doCreate(invalid, {})).toThrow("Invalid v3 element data")
+	})
+
+	it("rejects updates that leave Content pointers invalid before mutating the Element", () => {
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
+		const update = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<
+				string,
+				{ getData: () => LayerElement; getNode: () => null; update: typeof update }
+			>
+			doUpdate: (elementId: string, updates: Partial<LayerElement>, options: object) => void
+		}
+		manager.elements = new Map([
+			[
 				current.id,
-			),
-		).toThrow("ImageElementV1 to V2 migration cannot include top-level version fields")
+				{
+					getData: () => current,
+					getNode: () => null,
+					update,
+				},
+			],
+		])
+
+		expect(() =>
+			manager.doUpdate(current.id, { mainContentId: "missing" } as Partial<LayerElement>, {}),
+		).toThrow("Invalid v3 element data")
+		expect(update).not.toHaveBeenCalled()
 	})
 })
 
 describe("ElementManager batch update completion events", () => {
 	it("does not emit batchupdated when an update throws", () => {
 		const emit = vi.fn()
+		const current: ImageElement = {
+			id: "image-1",
+			type: "image",
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+			contents: [{ contentId: "content-1", src: "./images/a.png" }],
+		}
 		const manager = Object.create(ElementManager.prototype) as unknown as {
-			elements: Map<string, unknown>
+			elements: Map<string, { getData: () => LayerElement }>
 			batchMode: boolean
 			doUpdate: ReturnType<typeof vi.fn>
 			flush: ReturnType<typeof vi.fn>
 			canvas: { eventEmitter: { emit: typeof emit } }
 			batchUpdate: ElementManager["batchUpdate"]
 		}
-		manager.elements = new Map([["image-1", {}]])
+		manager.elements = new Map([["image-1", { getData: () => current }]])
 		manager.batchMode = false
 		manager.doUpdate = vi.fn(() => {
 			throw new Error("update failed")
@@ -743,6 +828,41 @@ describe("ElementManager batch update completion events", () => {
 		).toThrow("update failed")
 		expect(manager.flush).toHaveBeenCalledOnce()
 		expect(emit).not.toHaveBeenCalled()
+	})
+
+	it("validates every batch target before applying any update", () => {
+		const image = (id: string): ImageElement => ({
+			id,
+			type: "image",
+			activeContentId: `${id}-content`,
+			mainContentId: `${id}-content`,
+			contents: [{ contentId: `${id}-content`, src: `./images/${id}.png` }],
+		})
+		const first = image("image-1")
+		const second = image("image-2")
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			batchMode: boolean
+			doUpdate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			batchUpdate: ElementManager["batchUpdate"]
+		}
+		manager.elements = new Map([
+			[first.id, { getData: () => first }],
+			[second.id, { getData: () => second }],
+		])
+		manager.batchMode = false
+		manager.doUpdate = vi.fn()
+		manager.flush = vi.fn()
+
+		expect(() =>
+			manager.batchUpdate([
+				{ id: first.id, data: { name: "valid" } },
+				{ id: second.id, data: { activeContentId: "missing" } as Partial<LayerElement> },
+			]),
+		).toThrow("Invalid v3 element data")
+		expect(manager.doUpdate).not.toHaveBeenCalled()
+		expect(manager.flush).not.toHaveBeenCalled()
 	})
 })
 

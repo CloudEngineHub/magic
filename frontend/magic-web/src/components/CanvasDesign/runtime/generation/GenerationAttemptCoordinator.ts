@@ -1,6 +1,12 @@
 import type { Canvas } from "../core/Canvas"
-import { ElementTypeEnum, type LayerElement } from "../document/types"
-import { isImageElementV2, updateImageVersion } from "../document/imageVersion"
+import {
+	ElementTypeEnum,
+	type ElementUpdatePatch,
+	type ImageElement,
+	type LayerElement,
+	type VideoElement,
+} from "../document/types"
+import { updateContent } from "../document/elementContent"
 import type { CommitGenerationTarget } from "../elements/core/ElementManager"
 import type { GenerationAttempt, GenerationFailurePolicy } from "./GenerationRuntimeManager"
 
@@ -26,9 +32,19 @@ export class GenerationAttemptCoordinator {
 		const attempt = this.canvas.generationRuntimeManager.getAttempt(attemptId)
 		if (!attempt) return false
 
-		const currentTargetIds = this.getCurrentTargetIds(attempt)
-		const submittedTargetIds = targets.map((target) => target.elementId)
-		if (!this.isSameTargetSet(currentTargetIds, submittedTargetIds)) {
+		const currentTargetKeys = attempt.targets
+			.filter((target) =>
+				this.canvas.generationRuntimeManager.isCurrent(
+					attempt.attemptId,
+					target.elementId,
+					target.contentId,
+				),
+			)
+			.map((target) => this.getTargetKey(target.elementId, target.contentId))
+		const submittedTargetKeys = targets.map((target) =>
+			this.getTargetKey(target.elementId, target.contentId),
+		)
+		if (!this.isSameTargetSet(currentTargetKeys, submittedTargetKeys)) {
 			return false
 		}
 
@@ -113,19 +129,23 @@ export class GenerationAttemptCoordinator {
 				this.canvas.generationRuntimeManager.isCurrent(
 					attempt.attemptId,
 					target.elementId,
-					target.versionId,
+					target.contentId,
 				),
 			)
 			.map((target) => target.elementId)
 	}
 
-	private isSameTargetSet(currentTargetIds: string[], submittedTargetIds: string[]): boolean {
-		if (currentTargetIds.length !== submittedTargetIds.length) return false
-		const submitted = new Set(submittedTargetIds)
+	private isSameTargetSet(currentTargetKeys: string[], submittedTargetKeys: string[]): boolean {
+		if (currentTargetKeys.length !== submittedTargetKeys.length) return false
+		const submitted = new Set(submittedTargetKeys)
 		return (
-			submitted.size === submittedTargetIds.length &&
-			currentTargetIds.every((id) => submitted.has(id))
+			submitted.size === submittedTargetKeys.length &&
+			currentTargetKeys.every((key) => submitted.has(key))
 		)
+	}
+
+	private getTargetKey(elementId: string, contentId?: string): string {
+		return `${elementId}\u0000${contentId ?? ""}`
 	}
 
 	private getResolutionForPolicy(
@@ -167,31 +187,42 @@ export class GenerationAttemptCoordinator {
 		}
 	}
 
-	private buildEmptyElementPatch(element: LayerElement): Partial<LayerElement> | null {
+	private buildEmptyElementPatch(element: LayerElement): ElementUpdatePatch | null {
 		switch (element.type) {
-			case ElementTypeEnum.Image:
-				if (isImageElementV2(element)) {
-					const next = updateImageVersion(element, element.activeVersionId, {
+			case ElementTypeEnum.Image: {
+				const next = updateContent<ImageElement>(
+					element,
+					element.activeContentId ?? undefined,
+					{
 						generateImageRequest: undefined,
 						imageGenerationTaskMeta: undefined,
 						status: undefined,
 						errorMessage: undefined,
-					})
-					return isImageElementV2(next) ? { versions: next.versions } : null
+					},
+				)
+				return {
+					contents: next.contents,
+					activeContentId: next.activeContentId,
+					mainContentId: next.mainContentId,
 				}
+			}
+			case ElementTypeEnum.Video: {
+				const next = updateContent<VideoElement>(
+					element,
+					element.activeContentId ?? undefined,
+					{
+						generateVideoRequest: undefined,
+						videoGenerationResultMeta: undefined,
+						status: undefined,
+						errorMessage: undefined,
+					},
+				)
 				return {
-					generateImageRequest: undefined,
-					imageGenerationTaskMeta: undefined,
-					status: undefined,
-					errorMessage: undefined,
-				} as Partial<LayerElement>
-			case ElementTypeEnum.Video:
-				return {
-					generateVideoRequest: undefined,
-					videoGenerationResultMeta: undefined,
-					status: undefined,
-					errorMessage: undefined,
-				} as Partial<LayerElement>
+					contents: next.contents,
+					activeContentId: next.activeContentId,
+					mainContentId: next.mainContentId,
+				}
+			}
 			default:
 				return null
 		}

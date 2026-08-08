@@ -55,13 +55,13 @@ describe("StoryboardElement", () => {
 			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
 			interactionConfig: { aspectRatioLocked: false },
 		})
-		expect(element.shots).toHaveLength(1)
-		expect(element.shots[0]).toMatchObject({
+		expect(element.contents[0]?.shots).toHaveLength(1)
+		expect(element.contents[0]?.shots?.[0]).toMatchObject({
 			durationSeconds: 3,
 			description: "",
 		})
-		expect(element.shots[0]).not.toHaveProperty("status")
-		expect(element.shots[0].id).toEqual(expect.any(String))
+		expect(element.contents[0]?.shots?.[0]).not.toHaveProperty("status")
+		expect(element.contents[0]?.shots?.[0]?.id).toEqual(expect.any(String))
 	})
 
 	it("is created by the element factory and rejects resize transforms", () => {
@@ -102,12 +102,17 @@ describe("StoryboardElement", () => {
 			scaleY: 1,
 		})
 
-		const legacyData = {
+		const extraShotData = {
 			...data,
-			shots: data.shots?.map((shot) => ({ ...shot, status: "generated" })),
+			contents: data.contents.map((content) => ({
+				...content,
+				shots: content.shots?.map((shot) => ({ ...shot, status: "generated" })),
+			})),
 		} as unknown as typeof data
-		const legacyElement = ElementFactory.create(legacyData, canvas)
-		expect(legacyElement?.getData().shots?.[0]).not.toHaveProperty("status")
+		const elementWithExtraShotData = ElementFactory.create(extraShotData, canvas)
+		expect(
+			(elementWithExtraShotData?.getData() as typeof data).contents[0]?.shots?.[0],
+		).not.toHaveProperty("status")
 	})
 
 	it("renders generation settings and shot state as a lightweight Konva card", () => {
@@ -219,7 +224,7 @@ describe("StoryboardElement", () => {
 		expect(icon.height()).toBe(18)
 		expect(icon.x()).toBeCloseTo(modelIconRect?.x ?? 0)
 		expect(icon.y()).toBeCloseTo(modelIconRect?.y ?? 0)
-		expect(data.generationConfig).toEqual({ model_id: "gpt-image-2" })
+		expect(data.contents[0]?.generationConfig).toEqual({ model_id: "gpt-image-2" })
 		expect(JSON.stringify(data)).not.toContain(iconUrl)
 	})
 
@@ -358,18 +363,23 @@ describe("StoryboardElement", () => {
 		if (exported?.type !== ElementTypeEnum.Storyboard) {
 			throw new Error("Expected storyboard element")
 		}
-		expect(exported.shots).not.toBe(source.shots)
-		expect(exported.generationConfig).not.toBe(source.generationConfig)
+		expect(exported.contents[0]?.shots).not.toBe(source.contents[0]?.shots)
+		expect(exported.contents[0]?.generationConfig).not.toBe(
+			source.contents[0]?.generationConfig,
+		)
 
 		const legacySource = {
 			...source,
-			shots: source.shots?.map((shot) => ({ ...shot, status: "generated" })),
+			contents: source.contents.map((content) => ({
+				...content,
+				shots: content.shots?.map((shot) => ({ ...shot, status: "generated" })),
+			})),
 		} as unknown as typeof source
 		const [legacyExported] = exportCanvasDocument([legacySource]).elements ?? []
 		if (legacyExported?.type !== ElementTypeEnum.Storyboard) {
 			throw new Error("Expected legacy storyboard element")
 		}
-		expect(legacyExported.shots?.[0]).not.toHaveProperty("status")
+		expect(legacyExported.contents[0]?.shots?.[0]).not.toHaveProperty("status")
 	})
 
 	it("auto-grows the node and renders every shot without an overflow summary", () => {

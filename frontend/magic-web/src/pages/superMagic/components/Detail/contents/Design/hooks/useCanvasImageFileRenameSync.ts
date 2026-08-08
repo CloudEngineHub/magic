@@ -5,7 +5,7 @@ import type {
 	ImageElement,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import { getActiveImageContent } from "@/components/CanvasDesign/runtime/document/elementContent"
 import type {
 	CanvasDesignDataChangeMeta,
 	CanvasDesignRef,
@@ -17,6 +17,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { validateFilename } from "@/utils/filename-validator"
 import { compareDesignData, normalizePath, splitFileName } from "../utils/utils"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import {
 	getCanvasFilePathReplacementResult,
 	replaceCanvasFilePathReferences,
@@ -372,7 +373,7 @@ export function useCanvasImageFileRenameSync(
 				if (!nextElementName) return
 
 				const sourcePath =
-					getActiveImageVersion(newElement).src || getActiveImageVersion(oldElement).src
+					getActiveImageContent(newElement).src || getActiveImageContent(oldElement).src
 				if (!sourcePath) return
 
 				const matchedFileItem = resolveDesignCanvasResourceFileItem(sourcePath, {
@@ -452,8 +453,18 @@ export function useCanvasImageFileRenameSync(
 			}
 
 			const diff = compareDesignData(
-				{ type: "design", name: "", version: "1.0.0", canvas: previousCanvasData },
-				{ type: "design", name: "", version: "1.0.0", canvas: canvasData },
+				{
+					type: "design",
+					name: "",
+					version: MAGIC_PROJECT_VERSION_V3,
+					canvas: previousCanvasData,
+				},
+				{
+					type: "design",
+					name: "",
+					version: MAGIC_PROJECT_VERSION_V3,
+					canvas: canvasData,
+				},
 			)
 			if (!diff.modified.length) return
 

@@ -12,6 +12,7 @@ import type {
 	VideoInputMode,
 } from "../../../public/magic-types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import {
 	areCanvasResourceReferencesSame,
 	getCanvasResourceFileName,
@@ -134,6 +135,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const { t } = useCanvasDesignI18n()
 	const { videoModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
+	const savedRequest = getActiveContent(videoElement)?.generateVideoRequest
 	const resolveResourceReference = methods?.resolveResourceReference
 
 	const [selectedModelId, setSelectedModelId] = useState("")
@@ -1641,7 +1643,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				restoreOnMount === "originalRequestOnly"
 					? undefined
 					: elementInstance.getTempGenerateVideoRequest()
-			const currentRequest = videoElement.generateVideoRequest
+			const currentRequest = savedRequest
 			const requestToRestore = tempRequest
 				? {
 						...currentRequest,
@@ -1797,7 +1799,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		getModeDraftForView,
 		applyBindingStateFromPromptAndReferences,
 		videoElement.id,
-		videoElement.generateVideoRequest,
+		savedRequest,
 		videoModelList,
 		resolveModeDraftInputTab,
 		promptPlaceholderTokenConfig,
@@ -1809,7 +1811,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		if (isApplyingRestoreRef.current) return
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
-		if (!videoElement.generateVideoRequest) return
+		if (!savedRequest) return
 
 		cancelPendingDraftPersistence()
 		elementInstance.clearTempGenerateVideoRequest()
@@ -1817,13 +1819,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		modeDraftCacheRef.current = {}
 		hasRestoredRef.current = false
 		restoreConfig()
-	}, [
-		canvas,
-		videoElement.id,
-		videoElement.generateVideoRequest,
-		cancelPendingDraftPersistence,
-		restoreConfig,
-	])
+	}, [canvas, videoElement.id, savedRequest, cancelPendingDraftPersistence, restoreConfig])
 
 	useEffect(() => {
 		if (

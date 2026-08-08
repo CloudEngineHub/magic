@@ -21,9 +21,9 @@ export type GenerationFailurePolicy = "restore-existing" | "promote-empty" | "re
 
 export interface GenerationAttemptTarget {
 	elementId: string
-	versionId?: string
+	contentId?: string
 	/** 提交时的 active，用于结果完成后判断用户是否在生成期间手动切版 */
-	activeVersionIdAtSubmission?: string
+	activeContentIdAtSubmission?: string
 	outputIndex?: number
 	generateImageRequest?: GenerateImageRequest
 	generateVideoRequest?: GenerateVideoRequest
@@ -60,8 +60,8 @@ export interface BeginGenerationAttemptOptions {
  * Canvas 级生成任务运行时状态。
  *
  * 这里只保存后端尚未确认的提交尝试，绝不修改 Element data，也不会进入 DSL、历史或剪贴板。
- * 普通操作仍按元素独占 attempt；图片版本生成则按 elementId + versionId 隔离，
- * 允许同一图片的多个版本同时提交，并由各自的 versionId 防止异步结果串写。
+ * 普通操作仍按元素独占 attempt；图片 Content 生成则按 elementId + contentId 隔离，
+ * 允许同一图片的多个 Content 同时提交，并由各自的 contentId 防止异步结果串写。
  */
 export class GenerationRuntimeManager {
 	private attempts = new Map<string, GenerationAttempt>()
@@ -97,7 +97,7 @@ export class GenerationRuntimeManager {
 
 		const targetKeys = new Set<string>()
 		for (const target of options.targets) {
-			const targetKey = this.getTargetKey(target.elementId, target.versionId)
+			const targetKey = this.getTargetKey(target.elementId, target.contentId)
 			if (targetKeys.has(targetKey)) {
 				throw new Error(`Duplicate generation target ${targetKey}`)
 			}
@@ -124,7 +124,7 @@ export class GenerationRuntimeManager {
 
 		this.attempts.set(attemptId, attempt)
 		for (const target of attempt.targets) {
-			const targetKey = this.getTargetKey(target.elementId, target.versionId)
+			const targetKey = this.getTargetKey(target.elementId, target.contentId)
 			this.targetStates.set(targetKey, this.createTargetState(attempt, target))
 			this.latestTargetKeyByElementId.set(target.elementId, targetKey)
 			this.notifyElement(target.elementId)
@@ -139,7 +139,7 @@ export class GenerationRuntimeManager {
 
 		attempt.phase = phase
 		for (const target of attempt.targets) {
-			const targetKey = this.getTargetKey(target.elementId, target.versionId)
+			const targetKey = this.getTargetKey(target.elementId, target.contentId)
 			const current = this.targetStates.get(targetKey)
 			if (current?.attemptId !== attemptId) continue
 			this.targetStates.set(targetKey, this.createTargetState(attempt, target))
@@ -157,13 +157,13 @@ export class GenerationRuntimeManager {
 		return targetKey ? (this.targetStates.get(targetKey) ?? null) : null
 	}
 
-	public isCurrent(attemptId: string, elementId?: string, versionId?: string): boolean {
+	public isCurrent(attemptId: string, elementId?: string, contentId?: string): boolean {
 		if (elementId) {
-			const targetKey = this.getTargetKey(elementId, versionId)
+			const targetKey = this.getTargetKey(elementId, contentId)
 			const current = this.targetStates.get(targetKey)
 			return (
 				current?.attemptId === attemptId &&
-				(versionId === undefined || current.versionId === versionId)
+				(contentId === undefined || current.contentId === contentId)
 			)
 		}
 		return this.attempts.has(attemptId)
@@ -248,7 +248,7 @@ export class GenerationRuntimeManager {
 	}
 
 	private detachTargetFromCurrentAttempt(target: GenerationAttemptTarget): void {
-		const targetKey = this.getTargetKey(target.elementId, target.versionId)
+		const targetKey = this.getTargetKey(target.elementId, target.contentId)
 		const current = this.targetStates.get(targetKey)
 		if (!current) return
 
@@ -256,7 +256,7 @@ export class GenerationRuntimeManager {
 		if (previousAttempt) {
 			previousAttempt.targets = previousAttempt.targets.filter(
 				(candidate) =>
-					this.getTargetKey(candidate.elementId, candidate.versionId) !== targetKey,
+					this.getTargetKey(candidate.elementId, candidate.contentId) !== targetKey,
 			)
 			if (previousAttempt.targets.length === 0) {
 				this.attempts.delete(previousAttempt.attemptId)
@@ -272,7 +272,7 @@ export class GenerationRuntimeManager {
 
 		this.attempts.delete(attemptId)
 		for (const target of attempt.targets) {
-			const targetKey = this.getTargetKey(target.elementId, target.versionId)
+			const targetKey = this.getTargetKey(target.elementId, target.contentId)
 			const current = this.targetStates.get(targetKey)
 			if (current?.attemptId !== attemptId) continue
 			this.targetStates.delete(targetKey)
@@ -286,8 +286,8 @@ export class GenerationRuntimeManager {
 		this.listeners.get(elementId)?.forEach((listener) => listener())
 	}
 
-	private getTargetKey(elementId: string, versionId?: string): string {
-		return `${elementId}\u0000${versionId ?? ""}`
+	private getTargetKey(elementId: string, contentId?: string): string {
+		return `${elementId}\u0000${contentId ?? ""}`
 	}
 
 	private refreshLatestTargetKey(elementId: string): void {

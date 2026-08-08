@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import type { FrameElement, ImageElement, ImageElementV2, VideoElement } from "../../document/types"
+import type {
+	FrameElement,
+	ImageElement,
+	ImageElementContent,
+	VideoElement,
+	VideoElementContent,
+} from "../../document/types"
 import { ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import {
 	addClipboardResourceAliasMappings,
@@ -8,22 +14,36 @@ import {
 } from "../clipboard/clipboardResourceReferences"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
+function imageElement(
+	contents: ImageElementContent[],
+	activeContentId = contents[0]?.contentId ?? null,
+	mainContentId = contents[0]?.contentId ?? null,
+): ImageElement {
+	return { id: "image-1", type: "image", contents, activeContentId, mainContentId }
+}
+
+function videoElement(contents: VideoElementContent[]): VideoElement {
+	const contentId = contents[0]?.contentId ?? null
+	return {
+		id: "video-1",
+		type: "video",
+		contents,
+		activeContentId: contentId,
+		mainContentId: contentId,
+	}
+}
+
 describe("clipboardResourceReferences", () => {
-	it("collects and rewrites resources from every V2 image version", () => {
-		const image: ImageElementV2 = {
-			id: "image-v2",
-			type: "image",
-			imageDslVersion: 2,
-			activeVersionId: "v2",
-			mainVersionId: "v1",
-			versions: [
+	it("collects and rewrites resources from every image Content", () => {
+		const image = imageElement(
+			[
 				{
-					id: "v1",
+					contentId: "v1",
 					src: "./images/one.png",
 					generateImageRequest: { reference_images: ["./images/ref-one.png"] },
 				},
 				{
-					id: "v2",
+					contentId: "v2",
 					src: "./images/two.png",
 					imageGenerationTaskMeta: {
 						type: ImageGenerationTaskTypeMap.High,
@@ -31,7 +51,9 @@ describe("clipboardResourceReferences", () => {
 					},
 				},
 			],
-		}
+			"v2",
+			"v1",
+		)
 
 		expect(collectElementResourceReferences([image]).map((ref) => ref.path)).toEqual([
 			"./images/one.png",
@@ -50,59 +72,64 @@ describe("clipboardResourceReferences", () => {
 			]),
 		)
 
-		expect(image.versions).toEqual([
+		expect(image.contents).toEqual([
 			expect.objectContaining({
-				id: "v1",
+				contentId: "v1",
 				src: "./images/copied-one.png",
 				generateImageRequest: expect.objectContaining({
 					reference_images: ["./images/copied-ref-one.png"],
 				}),
 			}),
 			expect.objectContaining({
-				id: "v2",
+				contentId: "v2",
 				src: "./images/copied-two.png",
 				imageGenerationTaskMeta: expect.objectContaining({
 					file_path: "./images/copied-base-two.png",
 				}),
 			}),
 		])
-		expect(image.activeVersionId).toBe("v2")
-		expect(image.mainVersionId).toBe("v1")
+		expect(image.activeContentId).toBe("v2")
+		expect(image.mainContentId).toBe("v1")
 	})
 
 	it("collects resource references recursively and skips remote paths", () => {
-		const image: ImageElement = {
-			id: "image-1",
-			type: "image",
-			src: "./images/visible.png",
-			generateImageRequest: {
-				prompt: "plain text source/ref.png should not matter",
-				reference_images: ["source/ref.png", "https://example.test/remote.png"],
-				reference_image_options: [{ path: "source/ref.png" }],
-			},
-			imageGenerationTaskMeta: {
-				type: ImageGenerationTaskTypeMap.Eraser,
-				file_path: "./images/visible.png",
-				mask_path: "source/mask.png",
-				mark_path: "data:image/png;base64,aaaa",
-			},
-		}
-		const video: VideoElement = {
-			id: "video-1",
-			type: "video",
-			src: "source/video.mp4",
-			generateVideoRequest: {
-				inputs: {
-					frames: [{ role: "start", uri: "source/start.png" }],
-					reference_videos: [{ uri: "source/ref.mp4" }],
-					reference_audios: [{ uri: "blob:https://example.test/audio" }],
-					video: { uri: "source/video.mp4" },
+		const image = imageElement([
+			{
+				contentId: "image-content",
+				src: "./images/visible.png",
+				generateImageRequest: {
+					prompt: "plain text source/ref.png should not matter",
+					reference_images: ["source/ref.png", "https://example.test/remote.png"],
+					reference_image_options: [{ path: "source/ref.png" }],
+				},
+				imageGenerationTaskMeta: {
+					type: ImageGenerationTaskTypeMap.Eraser,
+					file_path: "./images/visible.png",
+					mask_path: "source/mask.png",
+					mark_path: "data:image/png;base64,aaaa",
 				},
 			},
-		}
+		])
+		const video = videoElement([
+			{
+				contentId: "video-content",
+				src: "source/video.mp4",
+				generateVideoRequest: {
+					inputs: {
+						frames: [{ role: "start", uri: "source/start.png" }],
+						reference_videos: [{ uri: "source/ref.mp4" }],
+						reference_audios: [{ uri: "blob:https://example.test/audio" }],
+						video: { uri: "source/video.mp4" },
+					},
+				},
+			},
+		])
 		const frame: FrameElement = {
 			id: "frame-1",
 			type: "frame",
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [image, video],
 		}
 
@@ -112,33 +139,35 @@ describe("clipboardResourceReferences", () => {
 				isSelfReferenceOnly: ref.isSelfReferenceOnly,
 			})),
 		).toEqual([
-			{ path: "source/ref.png", isSelfReferenceOnly: false },
 			{ path: "./images/visible.png", isSelfReferenceOnly: true },
+			{ path: "source/ref.png", isSelfReferenceOnly: false },
+			{ path: "source/video.mp4", isSelfReferenceOnly: true },
 			{ path: "source/start.png", isSelfReferenceOnly: false },
 			{ path: "source/ref.mp4", isSelfReferenceOnly: false },
-			{ path: "source/video.mp4", isSelfReferenceOnly: true },
 		])
 	})
 
 	it("rewrites only schema resource fields", () => {
-		const image: ImageElement = {
-			id: "image-1",
-			type: "image",
-			generateImageRequest: {
-				project_id: "source-project",
-				file_dir: "/source/images/",
-				prompt: "keep source/ref.png in prompt text",
-				reference_images: ["source/ref.png"],
-				reference_image_options: [{ path: "source/ref.png" }],
+		const image = imageElement([
+			{
+				contentId: "image-content",
+				generateImageRequest: {
+					project_id: "source-project",
+					file_dir: "/source/images/",
+					prompt: "keep source/ref.png in prompt text",
+					reference_images: ["source/ref.png"],
+					reference_image_options: [{ path: "source/ref.png" }],
+				},
+				imageGenerationTaskMeta: {
+					type: ImageGenerationTaskTypeMap.Expand,
+					file_path: "source/base.png",
+					canvas_path: "source/canvas.png",
+					mask_path: "source/mask.png",
+					mark_path: "source/mark.png",
+				},
 			},
-			imageGenerationTaskMeta: {
-				type: ImageGenerationTaskTypeMap.Expand,
-				file_path: "source/base.png",
-				canvas_path: "source/canvas.png",
-				mask_path: "source/mask.png",
-				mark_path: "source/mark.png",
-			},
-		}
+		])
+		const content = image.contents[0]
 
 		const changed = rewriteElementResourceReferences(
 			image,
@@ -152,14 +181,14 @@ describe("clipboardResourceReferences", () => {
 		)
 
 		expect(changed).toBe(true)
-		expect(image.generateImageRequest?.prompt).toBe("keep source/ref.png in prompt text")
-		expect(image.generateImageRequest?.reference_images).toEqual(["target/ref.png"])
-		expect(image.generateImageRequest?.reference_image_options).toEqual([
+		expect(content.generateImageRequest?.prompt).toBe("keep source/ref.png in prompt text")
+		expect(content.generateImageRequest?.reference_images).toEqual(["target/ref.png"])
+		expect(content.generateImageRequest?.reference_image_options).toEqual([
 			expect.objectContaining({ path: "target/ref.png" }),
 		])
-		expect(image.generateImageRequest?.project_id).toBeUndefined()
-		expect(image.generateImageRequest?.file_dir).toBeUndefined()
-		expect(image.imageGenerationTaskMeta).toEqual(
+		expect(content.generateImageRequest?.project_id).toBeUndefined()
+		expect(content.generateImageRequest?.file_dir).toBeUndefined()
+		expect(content.imageGenerationTaskMeta).toEqual(
 			expect.objectContaining({
 				file_path: "target/base.png",
 				canvas_path: "source/canvas.png",
@@ -171,16 +200,23 @@ describe("clipboardResourceReferences", () => {
 
 	it("dedupes and rewrites aliases without crossing workspace roots", () => {
 		const resolveResourceReference = createTestResourceReferenceResolver()
-		const image: ImageElement = {
-			id: "image-1",
-			type: "image",
-			src: "./images/owner.png",
-			generateImageRequest: {
-				reference_images: ["./images/x.png", "/画布A/images/x.png", "/images/x.png"],
+		const image = imageElement([
+			{
+				contentId: "image-content",
+				src: "./images/owner.png",
+				generateImageRequest: {
+					reference_images: ["./images/x.png", "/画布A/images/x.png", "/images/x.png"],
+				},
 			},
-		}
+		])
 
 		expect(collectElementResourceReferences([image], resolveResourceReference)).toEqual([
+			{
+				path: "./images/owner.png",
+				identity: "workspace:/画布A/images/owner.png",
+				aliases: ["./images/owner.png"],
+				isSelfReferenceOnly: true,
+			},
 			{
 				path: "./images/x.png",
 				identity: "workspace:/画布A/images/x.png",
@@ -201,7 +237,7 @@ describe("clipboardResourceReferences", () => {
 			resolveResourceReference,
 		)
 
-		expect(image.generateImageRequest?.reference_images).toEqual([
+		expect(image.contents[0].generateImageRequest?.reference_images).toEqual([
 			"./images/copied.png",
 			"./images/copied.png",
 			"/images/x.png",
@@ -215,13 +251,14 @@ describe("clipboardResourceReferences", () => {
 		const targetResolver = createTestResourceReferenceResolver({
 			currentCanvasWorkspacePath: "/画布B",
 		})
-		const image: ImageElement = {
-			id: "image-1",
-			type: "image",
-			generateImageRequest: {
-				reference_images: ["./images/x.png", "/画布A/images/x.png"],
+		const image = imageElement([
+			{
+				contentId: "image-content",
+				generateImageRequest: {
+					reference_images: ["./images/x.png", "/画布A/images/x.png"],
+				},
 			},
-		}
+		])
 		const [reference] = collectElementResourceReferences([image], sourceResolver)
 		const pathMap = new Map<string, string>()
 		addClipboardResourceAliasMappings(
@@ -233,7 +270,7 @@ describe("clipboardResourceReferences", () => {
 
 		rewriteElementResourceReferences(image, pathMap, targetResolver)
 
-		expect(image.generateImageRequest?.reference_images).toEqual([
+		expect(image.contents[0].generateImageRequest?.reference_images).toEqual([
 			"./images/copied.png",
 			"./images/copied.png",
 		])

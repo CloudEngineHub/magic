@@ -17,7 +17,7 @@ import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Worksp
 import type { TFunction } from "i18next"
 import { CanvasDesignRef } from "@/components/CanvasDesign/public/props"
 import { isLikelyAbortError, type SuperMagicMarkerManager } from "../marker-manager"
-import { getActiveImageVersion } from "@/components/CanvasDesign/runtime/document/imageVersion"
+import { getActiveImageContent } from "@/components/CanvasDesign/runtime/document/elementContent"
 
 interface UseDesignMarkerOptions {
 	/** 画布数据（包含 elements 和 markers） */
@@ -124,7 +124,7 @@ export function useDesignMarker(options: UseDesignMarkerOptions): UseDesignMarke
 					marker.elementId,
 					canvas?.elements,
 				) as ImageElement | null
-				const active = el ? getActiveImageVersion(el) : undefined
+				const active = el ? getActiveImageContent(el) : undefined
 				const element = active?.src ? { src: active.src } : undefined
 				markerManager.addMarker(designProjectId, marker, element)
 				markerManager.fetchMarkerData(designProjectId, marker.id)

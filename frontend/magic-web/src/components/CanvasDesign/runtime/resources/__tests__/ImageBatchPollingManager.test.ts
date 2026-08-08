@@ -12,6 +12,7 @@ function createBatchElement(
 	outputIndex: number,
 	imageId = "batch-1",
 ): ImageElement {
+	const contentId = `${elementId}-content`
 	return {
 		id: elementId,
 		type: ElementTypeEnum.Image,
@@ -20,12 +21,19 @@ function createBatchElement(
 		width: 512,
 		height: 512,
 		zIndex: outputIndex,
-		status: "processing",
-		imageGenerationTaskMeta: createBatchImageTaskMeta({
-			imageId,
-			outputIndex,
-			outputCount: 2,
-		}),
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [
+			{
+				contentId,
+				status: "processing",
+				imageGenerationTaskMeta: createBatchImageTaskMeta({
+					imageId,
+					outputIndex,
+					outputCount: 2,
+				}),
+			},
+		],
 	}
 }
 
@@ -221,9 +229,13 @@ describe("ImageBatchPollingManager", () => {
 			expect(update).toHaveBeenCalledWith(
 				"element-2",
 				expect.objectContaining({
-					status: "completed",
-					src: expectedPath,
-					imageGenerationTaskMeta: undefined,
+					contents: [
+						expect.objectContaining({
+							status: "completed",
+							src: expectedPath,
+							imageGenerationTaskMeta: undefined,
+						}),
+					],
 				}),
 				{ silent: false },
 			)
@@ -234,7 +246,7 @@ describe("ImageBatchPollingManager", () => {
 		},
 	)
 
-	it("writes a restored result into its non-active V2 version", async () => {
+	it("writes a restored result into its non-active Content", async () => {
 		const element: ImageElement = {
 			id: "element-v2",
 			type: ElementTypeEnum.Image,
@@ -242,17 +254,16 @@ describe("ImageBatchPollingManager", () => {
 			y: 0,
 			width: 512,
 			height: 512,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [
 				{
-					id: "v1",
+					contentId: "v1",
 					src: "./images/old.png",
 					status: "completed",
 				},
 				{
-					id: "v2",
+					contentId: "v2",
 					status: "processing",
 					imageGenerationTaskMeta: createBatchImageTaskMeta({
 						imageId: "batch-1",
@@ -296,7 +307,7 @@ describe("ImageBatchPollingManager", () => {
 			imageId: "batch-1",
 			elementIds: [element.id],
 			outputIndexes: [1],
-			versionIds: ["v2"],
+			contentIds: ["v2"],
 			registry: { track: vi.fn(), untrack: vi.fn() } as never,
 		})
 
@@ -306,10 +317,10 @@ describe("ImageBatchPollingManager", () => {
 			element.id,
 			{
 				name: "result",
-				versions: [
-					element.versions[0],
+				contents: [
+					element.contents[0],
 					{
-						id: "v2",
+						contentId: "v2",
 						status: "completed",
 						src: "/images/result.png",
 					},
@@ -361,9 +372,13 @@ describe("ImageBatchPollingManager", () => {
 		expect(update).toHaveBeenCalledWith(
 			element.id,
 			{
-				status: "failed",
-				errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
-				imageGenerationTaskMeta: undefined,
+				contents: [
+					expect.objectContaining({
+						status: "failed",
+						errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
+						imageGenerationTaskMeta: undefined,
+					}),
+				],
 			},
 			{ silent: false },
 		)
@@ -411,7 +426,7 @@ describe("ImageBatchPollingManager", () => {
 		expect(batchDelete).toHaveBeenCalledWith(["element-1", "element-2"])
 	})
 
-	it("keeps a V2 element and fails only the missing batch version", async () => {
+	it("keeps an element with history and fails only the missing batch Content", async () => {
 		const element: ImageElement = {
 			id: "element-v2",
 			type: ElementTypeEnum.Image,
@@ -419,13 +434,12 @@ describe("ImageBatchPollingManager", () => {
 			y: 0,
 			width: 512,
 			height: 512,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/old.png", status: "completed" },
+			activeContentId: "v1",
+			mainContentId: "v1",
+			contents: [
+				{ contentId: "v1", src: "./images/old.png", status: "completed" },
 				{
-					id: "v2",
+					contentId: "v2",
 					status: "processing",
 					imageGenerationTaskMeta: createBatchImageTaskMeta({
 						imageId: "batch-1",
@@ -464,7 +478,7 @@ describe("ImageBatchPollingManager", () => {
 			imageId: "batch-1",
 			elementIds: [element.id],
 			outputIndexes: [1],
-			versionIds: ["v2"],
+			contentIds: ["v2"],
 			registry: { track: vi.fn(), untrack: vi.fn() } as never,
 		})
 
@@ -474,10 +488,10 @@ describe("ImageBatchPollingManager", () => {
 		expect(update).toHaveBeenCalledWith(
 			element.id,
 			{
-				versions: [
-					element.versions[0],
+				contents: [
+					element.contents[0],
 					{
-						id: "v2",
+						contentId: "v2",
 						status: "failed",
 					},
 				],

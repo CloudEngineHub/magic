@@ -12,7 +12,15 @@ function createElement(
 	type: LayerElement["type"],
 	children?: LayerElement[],
 ): LayerElement {
-	return { id, type, ...(children ? { children } : {}) } as LayerElement
+	const contentId = `${id}-content`
+	return {
+		id,
+		type,
+		contents: [{ contentId }],
+		activeContentId: contentId,
+		mainContentId: contentId,
+		...(children ? { children } : {}),
+	} as LayerElement
 }
 
 function createCanvasMock(options?: {
@@ -146,8 +154,12 @@ describe("video edit connection creation", () => {
 				x: 1200,
 				y: 300,
 				zIndex: 7,
-				videoSequence: ["video-1"],
-				audioSequence: ["audio-1"],
+				contents: [
+					expect.objectContaining({
+						videoSequence: ["video-1"],
+						audioSequence: ["audio-1"],
+					}),
+				],
 			}),
 		)
 		expect(connectElements).toHaveBeenCalledWith({

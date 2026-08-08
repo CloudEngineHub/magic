@@ -69,11 +69,13 @@ describe("CanvasElementClipboard", () => {
 				{
 					id: "image-1",
 					type: "image",
-					src: "./images/owner.png",
 					x: 0,
 					y: 0,
 					width: 100,
 					height: 100,
+					contents: [{ contentId: "image-1-content", src: "./images/owner.png" }],
+					activeContentId: "image-1-content",
+					mainContentId: "image-1-content",
 				},
 			],
 			files: [metadata],
@@ -99,11 +101,13 @@ describe("CanvasElementClipboard", () => {
 		const element = {
 			id: "image-1",
 			type: "image" as const,
-			src: "./images/image.png",
 			x: 0,
 			y: 0,
 			width: 100,
 			height: 100,
+			contents: [{ contentId: "image-1-content", src: "./images/image.png" }],
+			activeContentId: "image-1-content",
+			mainContentId: "image-1-content",
 		}
 		const metadata = CanvasElementClipboard.createFileMetadata({
 			element,

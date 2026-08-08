@@ -16,7 +16,7 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 }))
 
 const EMPTY_DETAILS_DOC = {
-	version: "1.0.0",
+	version: "2.0.0",
 	elements: {},
 }
 
@@ -33,7 +33,7 @@ function designData(elements: LayerElement[] = []) {
 	return {
 		type: "design",
 		name: "design",
-		version: "2.0.0",
+		version: "3.0.0",
 		canvas: { elements } as CanvasDocument,
 	}
 }
@@ -62,10 +62,12 @@ describe("writeUserElementDetails", () => {
 
 	it("skips saving when an existing user sidecar content is unchanged", async () => {
 		const userDoc = {
-			version: "1.0.0",
+			version: "2.0.0",
 			elements: {
 				"image-1": {
-					generateImageRequest: { prompt: "same" },
+					contentDetails: {
+						"image-1-content-1": { generateImageRequest: { prompt: "same" } },
+					},
 					source: "user",
 				},
 			},
@@ -81,7 +83,14 @@ describe("writeUserElementDetails", () => {
 					y: 0,
 					width: 100,
 					height: 100,
-					generateImageRequest: { prompt: "same" },
+					activeContentId: "image-1-content-1",
+					mainContentId: "image-1-content-1",
+					contents: [
+						{
+							contentId: "image-1-content-1",
+							generateImageRequest: { prompt: "same" },
+						},
+					],
 				} as LayerElement,
 			]),
 			{
@@ -101,10 +110,12 @@ describe("writeUserElementDetails", () => {
 	it("saves one empty document when clearing a previously non-empty user sidecar", async () => {
 		vi.mocked(getFileContentById).mockResolvedValue(
 			JSON.stringify({
-				version: "1.0.0",
+				version: "2.0.0",
 				elements: {
 					"image-1": {
-						generateImageRequest: { prompt: "old" },
+						contentDetails: {
+							"image-1-content-1": { generateImageRequest: { prompt: "old" } },
+						},
 						source: "user",
 					},
 				},
@@ -124,7 +135,7 @@ describe("writeUserElementDetails", () => {
 		expect(SuperMagicApi.saveFileContent).toHaveBeenCalledWith([
 			{
 				file_id: "user-details",
-				content: JSON.stringify({ version: "1.1.0", elements: {} }, null, 2),
+				content: JSON.stringify({ version: "2.0.0", elements: {} }, null, 2),
 				enable_shadow: true,
 			},
 		])

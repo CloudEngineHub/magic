@@ -9,7 +9,7 @@ import type {
 } from "../document/types"
 import type { ElementDetailsProvenance } from "../document/elementDetailsProvenance"
 import { ElementTypeEnum, ToolTypeEnum } from "../document/types"
-import { getActiveImageVersion } from "../document/imageVersion"
+import { getActiveContent, getActiveImageContent } from "../document/elementContent"
 import { ViewportController } from "../interaction/viewport/ViewportController"
 import { EventEmitter, type CanvasEventMap } from "./EventEmitter"
 import { ElementManager } from "../elements/core/ElementManager"
@@ -114,9 +114,9 @@ function getCanvasConnectionComparable(connections: CanvasDocument["connections"
 
 function getElementResourceReferencePath(element: LayerElement | undefined): string | undefined {
 	if (!element) return undefined
-	if (element.type === ElementTypeEnum.Image) return getActiveImageVersion(element).src
+	if (element.type === ElementTypeEnum.Image) return getActiveImageContent(element).src
 	if (element.type === ElementTypeEnum.Video || element.type === ElementTypeEnum.Audio) {
-		return element.src
+		return getActiveContent(element)?.src as string | undefined
 	}
 	return undefined
 }

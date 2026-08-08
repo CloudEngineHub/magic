@@ -26,7 +26,8 @@ import {
 	DEFAULT_TEXT_LETTER_SPACING,
 	DEFAULT_TEXT_LINE_HEIGHT,
 } from "../../../../runtime/text/richText"
-import type { RichTextParagraph } from "../../../../runtime/document/types"
+import type { RichTextParagraph, TextElementContent } from "../../../../runtime/document/types"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
 import { useTextToolController } from "../useTextToolController"
 import {
 	RICH_TEXT_DECORATION_OPTIONS,
@@ -144,22 +145,25 @@ export default function RichTextAdvancedButton() {
 	const skipNextMetricBlurRef = useRef(false)
 	const isInteractingInsidePopoverRef = useRef(false)
 	const [open, setOpen] = useState(false)
+	const selectedTextContent = selectedTextElement
+		? getActiveContent<TextElementContent>(selectedTextElement)
+		: undefined
 
 	const selectedElementLineHeight = useMemo(
 		() =>
 			getUniformParagraphStyleValue(
-				selectedTextElement?.content,
+				selectedTextContent?.content,
 				(style) => style?.lineHeight ?? null,
 			),
-		[selectedTextElement?.content],
+		[selectedTextContent?.content],
 	)
 	const selectedElementListType = useMemo(
 		() =>
 			getUniformParagraphStyleValue(
-				selectedTextElement?.content,
+				selectedTextContent?.content,
 				(style) => style?.listType ?? null,
 			),
-		[selectedTextElement?.content],
+		[selectedTextContent?.content],
 	)
 	const displayedLineHeight =
 		isEditingText && state.lineHeight !== null ? state.lineHeight : selectedElementLineHeight

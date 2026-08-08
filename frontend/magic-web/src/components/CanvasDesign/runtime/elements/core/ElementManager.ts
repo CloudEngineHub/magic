@@ -1,5 +1,11 @@
 import Konva from "konva"
-import type { LayerElement, CanvasDocument, ImageElement } from "../../document/types"
+import type {
+	LayerElement,
+	CanvasDocument,
+	ImageElement,
+	ElementType,
+	ElementUpdatePatch,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import type {
 	CanvasElementChangePayload,
@@ -21,12 +27,14 @@ import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
 import {
-	getActiveImageVersion,
-	getActiveImageVersionId,
-	isImageElementV2,
-	updateImageVersion,
-} from "../../document/imageVersion"
+	getActiveImageContent,
+	updateImageContent,
+	getActiveContent,
+	getElementContentFields,
+	updateContent,
+} from "../../document/elementContent"
 import type { UploadFileResponse } from "../../../public/magic-types"
+import { validateElementData } from "../../document/validateElement"
 
 /**
  * 更新模式
@@ -106,8 +114,13 @@ const TEMPORARY_ELEMENT_METADATA: Record<TemporaryElementKind, TemporaryElementM
 
 export interface CommitGenerationTarget {
 	elementId: string
-	versionId?: string
-	persistedPatch: Partial<LayerElement>
+	contentId?: string
+	persistedPatch: ElementUpdatePatch
+}
+
+type ElementMutationPatch = ElementUpdatePatch & {
+	id?: string
+	type?: ElementType
 }
 
 /**
@@ -271,7 +284,7 @@ export class ElementManager {
 	 */
 	public convertToPermament(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		if (!this.temporaryElements.has(elementId)) {
@@ -333,21 +346,22 @@ export class ElementManager {
 		// batchUpdate 成功后才登记 user，避免写 DSL 失败时留下虚假的任务所有权。
 		for (const target of targets) {
 			const imagePatch = target.persistedPatch as Record<string, unknown>
-			const request = target.versionId
+			const request = target.contentId
 				? (
-						imagePatch.versions as
+						imagePatch.contents as
 							| Array<{
-									id: string
+									contentId: string
 									generateImageRequest?: { image_id?: string }
 							  }>
 							| undefined
-					)?.find((version) => version.id === target.versionId)?.generateImageRequest
+					)?.find((content) => content.contentId === target.contentId)
+						?.generateImageRequest
 				: (imagePatch.generateImageRequest as { image_id?: string } | undefined)
 			if (request?.image_id) {
 				this.canvas.elementDetailsRuntimeManager?.markGenerateImageRequestAsUser(
 					target.elementId,
 					request.image_id,
-					target.versionId,
+					target.contentId,
 				)
 			}
 		}
@@ -373,7 +387,7 @@ export class ElementManager {
 	 */
 	public update(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -413,7 +427,7 @@ export class ElementManager {
 	 */
 	public updateNode(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: { forceUpdate?: boolean },
 	): void {
 		this.update(elementId, updates, {
@@ -429,7 +443,7 @@ export class ElementManager {
 	 */
 	public updateData(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementUpdatePatch,
 		options?: ElementOperationOptions,
 	): void {
 		this.update(elementId, updates, {
@@ -465,9 +479,20 @@ export class ElementManager {
 	 * @param updates - 更新数组，每项包含 id 和要更新的数据
 	 */
 	public batchUpdate(
-		updates: Array<{ id: string; data: Partial<LayerElement> }>,
+		updates: Array<{ id: string; data: ElementUpdatePatch }>,
 		options?: ElementOperationOptions,
 	): void {
+		// 在任何 Element 落入 Runtime 前完成整批校验，避免后续目标非法时留下部分更新。
+		const stagedDataByElementId = new Map<string, LayerElement>()
+		for (const { id, data } of updates) {
+			const element = this.elements.get(id)
+			if (!element) continue
+			const currentData = stagedDataByElementId.get(id) ?? element.getData()
+			const nextData = this.mergeElementData(currentData, data, id)
+			validateElementData(nextData)
+			stagedDataByElementId.set(id, nextData)
+		}
+
 		this.batchMode = true
 		let succeeded = false
 		try {
@@ -636,102 +661,55 @@ export class ElementManager {
 		this.documentIndex.markDirty()
 	}
 
-	private updateChangesDocumentTopology(updates: Partial<LayerElement>): boolean {
+	private updateChangesDocumentTopology(updates: ElementMutationPatch): boolean {
 		return Object.prototype.hasOwnProperty.call(updates, "children")
 	}
 
 	private getElementSrc(data: LayerElement): string | undefined {
-		if (data.type === ElementTypeEnum.Image) return getActiveImageVersion(data).src
-		return "src" in data ? data.src : undefined
+		const content = getActiveContent(data)
+		return content && "src" in content && typeof content.src === "string"
+			? content.src
+			: undefined
 	}
 
 	private mergeElementData(
 		currentData: LayerElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		elementId: string,
 	): LayerElement {
-		if (currentData.type === ElementTypeEnum.Image && !isImageElementV2(currentData)) {
-			const structuralFields = ["versions", "activeVersionId", "mainVersionId"] as const
-			const hasStructuralUpdate = structuralFields.some((field) =>
-				Object.prototype.hasOwnProperty.call(updates, field),
-			)
-			if (
-				hasStructuralUpdate &&
-				(updates as { imageDslVersion?: unknown }).imageDslVersion !== 2
-			) {
-				throw new Error(
-					"ImageElementV1 version structure must be created through an explicit migration",
-				)
-			}
+		if (updates.id !== undefined && updates.id !== elementId) {
+			throw new Error(`Element ${elementId} id cannot be changed`)
+		}
+		if (updates.type !== undefined && updates.type !== currentData.type) {
+			throw new Error(`Element ${elementId} type cannot be changed`)
+		}
+		const contentFields = new Set(getElementContentFields(currentData.type))
+		const contentPatch: Record<string, unknown> = {}
+		const elementUpdates: Record<string, unknown> = {
+			...(updates as unknown as Record<string, unknown>),
+		}
+		for (const field of contentFields) {
+			if (!Object.prototype.hasOwnProperty.call(elementUpdates, field)) continue
+			contentPatch[field] = elementUpdates[field]
+			delete elementUpdates[field]
 		}
 
-		if (
-			currentData.type === ElementTypeEnum.Image &&
-			!isImageElementV2(currentData) &&
-			(updates as { imageDslVersion?: unknown }).imageDslVersion === 2
-		) {
-			const versionFields = [
-				"src",
-				"status",
-				"errorMessage",
-				"generateImageRequest",
-				"imageGenerationTaskMeta",
-				"generateHightImageRequest",
-				"crop",
-			] as const
-			const mixedFields = versionFields.filter((field) =>
-				Object.prototype.hasOwnProperty.call(updates, field),
-			)
-			if (mixedFields.length > 0) {
-				throw new Error(
-					`ImageElementV1 to V2 migration cannot include top-level version fields: ${mixedFields.join(
-						", ",
-					)}`,
-				)
-			}
-			// V1 -> V2 必须真正移除顶层版本字段，不能让对象展开留下 V1/V2 混合结构。
-			const {
-				src: _src,
-				status: _status,
-				errorMessage: _errorMessage,
-				generateImageRequest: _generateImageRequest,
-				imageGenerationTaskMeta: _imageGenerationTaskMeta,
-				generateHightImageRequest: _generateHightImageRequest,
-				crop: _crop,
-				...base
-			} = currentData
-			return { ...base, ...updates, id: elementId } as LayerElement
-		}
+		const currentRecord = currentData as unknown as Record<string, unknown>
+		const nextContentElement =
+			Object.keys(contentPatch).length > 0
+				? updateContent(
+						currentData as never,
+						(currentRecord.activeContentId as string | null | undefined) ?? undefined,
+						contentPatch as never,
+					)
+				: currentData
 
-		if (currentData.type === ElementTypeEnum.Image && isImageElementV2(currentData)) {
-			if (
-				Object.prototype.hasOwnProperty.call(updates, "imageDslVersion") &&
-				(updates as { imageDslVersion?: unknown }).imageDslVersion !== 2
-			) {
-				throw new Error("ImageElementV2 imageDslVersion cannot be changed")
-			}
-			const versionFields = [
-				"src",
-				"status",
-				"errorMessage",
-				"generateImageRequest",
-				"imageGenerationTaskMeta",
-				"generateHightImageRequest",
-				"crop",
-			] as const
-			const hasVersionFieldUpdate = versionFields.some((field) =>
-				Object.prototype.hasOwnProperty.call(updates, field),
-			)
-			if (hasVersionFieldUpdate) {
-				throw new Error(
-					`ImageElementV2 version fields must be updated through an explicit version API: ${versionFields
-						.filter((field) => Object.prototype.hasOwnProperty.call(updates, field))
-						.join(", ")}`,
-				)
-			}
-		}
-
-		return { ...currentData, ...updates, id: elementId } as LayerElement
+		return {
+			...(nextContentElement as unknown as LayerElement),
+			...elementUpdates,
+			id: elementId,
+			type: currentData.type,
+		} as LayerElement
 	}
 
 	private buildElementNameChange(
@@ -759,9 +737,9 @@ export class ElementManager {
 	 */
 	private normalizeUpdates(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
-	): Partial<LayerElement> {
+	): ElementMutationPatch {
 		const normalizedUpdates = { ...updates }
 		const currentData = element.getData()
 
@@ -786,17 +764,17 @@ export class ElementManager {
 					? (currentData as ImageElement)
 					: undefined
 			const normalizedImageUpdates = normalizedUpdates as Record<string, unknown>
-			const activeImageVersion = imageData ? getActiveImageVersion(imageData) : undefined
+			const activeImageContent = imageData ? getActiveImageContent(imageData) : undefined
 			const hasExplicitCropField = Object.prototype.hasOwnProperty.call(
 				normalizedUpdates,
 				"crop",
 			)
 			const shouldSyncCropOnResize =
-				!!activeImageVersion?.crop &&
+				!!activeImageContent?.crop &&
 				!hasExplicitCropField &&
 				!options?.skipImageCropResizeSync
 
-			if (shouldSyncCropOnResize && imageData && activeImageVersion?.crop) {
+			if (shouldSyncCropOnResize && imageData && activeImageContent?.crop) {
 				const imageInfo =
 					element instanceof ImageElementClass ? element.getImageInfo() : undefined
 				const sourceDimensions = imageInfo
@@ -810,7 +788,7 @@ export class ElementManager {
 						}
 
 				const nextCrop = syncCropConfigOnResize({
-					crop: activeImageVersion.crop,
+					crop: activeImageContent.crop,
 					prevElementSize: {
 						width: imageData.width ?? 0,
 						height: imageData.height ?? 0,
@@ -821,18 +799,14 @@ export class ElementManager {
 					},
 					sourceDimensions,
 				})
-				if (isImageElementV2(imageData)) {
-					const nextImage = updateImageVersion(
-						imageData,
-						getActiveImageVersionId(imageData),
-						{ crop: nextCrop },
-					)
-					if (isImageElementV2(nextImage)) {
-						normalizedImageUpdates.versions = nextImage.versions
-					}
-				} else {
-					normalizedImageUpdates.crop = nextCrop
-				}
+				const nextImage = updateImageContent(
+					imageData,
+					imageData.activeContentId ?? undefined,
+					{ crop: nextCrop },
+				)
+				normalizedImageUpdates.contents = nextImage.contents
+				normalizedImageUpdates.activeContentId = nextImage.activeContentId
+				normalizedImageUpdates.mainContentId = nextImage.mainContentId
 			}
 		}
 
@@ -844,7 +818,7 @@ export class ElementManager {
 	 */
 	private updateNodeOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		const node = element.getNode()
@@ -887,12 +861,13 @@ export class ElementManager {
 	 */
 	private updateDataOnly(
 		element: BaseElement,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options?: ElementOperationOptions,
 	): void {
 		// 获取当前数据并合并更新
 		const currentData = element.getData()
 		const newData = this.mergeElementData(currentData, updates, element.getId())
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 更新元素的内部数据（不触发 node 更新）
@@ -934,6 +909,7 @@ export class ElementManager {
 			const parentId = this.findParentIdForElement(finalElementData.id)
 			finalElementData.zIndex = this.getNextZIndexInLevel(parentId)
 		}
+		validateElementData(finalElementData)
 
 		const element = this.createElementInstance(finalElementData)
 		if (!element) {
@@ -1000,7 +976,7 @@ export class ElementManager {
 	 */
 	private doUpdate(
 		elementId: string,
-		updates: Partial<LayerElement>,
+		updates: ElementMutationPatch,
 		options: ElementOperationOptions,
 	): void {
 		const element = this.elements.get(elementId)
@@ -1027,6 +1003,7 @@ export class ElementManager {
 		}
 
 		const newData = this.mergeElementData(currentData, updates, elementId)
+		validateElementData(newData)
 		const nameChange = this.buildElementNameChange(currentData, newData)
 
 		// 检测 zIndex 是否改变
@@ -1885,12 +1862,7 @@ export class ElementManager {
 	 * 导出时「无 crop」不会写出 crop 字段，若合并时缺少该键，{ ...current, ...snapshot } 会错误保留旧 crop（撤销裁剪不生效）。
 	 */
 	private normalizeLayerElementFromSnapshot(data: LayerElement): LayerElement {
-		if (data.type !== ElementTypeEnum.Image) {
-			return data
-		}
-		if (!Object.prototype.hasOwnProperty.call(data, "crop")) {
-			return { ...(data as ImageElement), crop: undefined }
-		}
+		// v3 快照会整体替换 contents；Content 内缺失 crop 已能自然表达“撤销裁剪”。
 		return data
 	}
 

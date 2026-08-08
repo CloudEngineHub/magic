@@ -66,12 +66,14 @@ describe("TextContentOptimizationButton", () => {
 			width: 240,
 			height: 80,
 			zIndex: 1,
-			content: [
+			activeContentId: "text-1-content-1",
+			mainContentId: "text-1-content-1",
+			contents: [
 				{
-					children: [
+					contentId: "text-1-content-1",
+					content: [
 						{
-							type: "text",
-							text: "旧文案",
+							children: [{ type: "text", text: "旧文案" }],
 						},
 					],
 				},

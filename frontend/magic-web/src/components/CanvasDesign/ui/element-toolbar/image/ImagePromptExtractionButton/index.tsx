@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/sha
 import useElementToolPopoverAlign from "../../hooks/useElementToolPopoverAlign"
 import { buildImagePromptExtractionPrompt } from "./imagePromptExtractionPrompt"
 import { createImagePromptTextElement } from "./imagePromptExtractionText"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../../runtime/document/elementContent"
 import styles from "./index.module.css"
 
 interface ImagePromptExtractionToolState {
@@ -49,21 +49,21 @@ export default function ImagePromptExtractionButton() {
 			? (element as ImageElement)
 			: null
 	}, [selectedElements])
-	const activeVersion = selectedImageElement
-		? getActiveImageVersion(selectedImageElement)
+	const activeContent = selectedImageElement
+		? getActiveImageContent(selectedImageElement)
 		: undefined
 	const cropSignature = useMemo(
-		() => JSON.stringify(activeVersion?.crop ?? null),
-		[activeVersion?.crop],
+		() => JSON.stringify(activeContent?.crop ?? null),
+		[activeContent?.crop],
 	)
 	const requestKey = useMemo(
 		() =>
 			buildImagePromptExtractionRequestKey({
 				elementId: selectedImageElement?.id,
-				src: activeVersion?.src,
+				src: activeContent?.src,
 				cropSignature,
 			}),
-		[activeVersion?.src, cropSignature, selectedImageElement?.id],
+		[activeContent?.src, cropSignature, selectedImageElement?.id],
 	)
 	const { state: storedToolState, setState: setToolState } =
 		useElementToolState<ImagePromptExtractionToolState>(
@@ -76,7 +76,7 @@ export default function ImagePromptExtractionButton() {
 	const isGenerating = toolState?.status === "loading"
 	const hasExtractedPrompt = Boolean(extractedPrompt)
 	const isUnavailable = !completeImagePrompt
-	const buttonDisabled = isGenerating || isUnavailable || !activeVersion?.src
+	const buttonDisabled = isGenerating || isUnavailable || !activeContent?.src
 	const buttonLabel = isUnavailable
 		? t("imagePromptExtraction.unavailable", "图片提炼能力暂不可用")
 		: t("imagePromptExtraction.trigger", "提炼提示词")
@@ -117,21 +117,21 @@ export default function ImagePromptExtractionButton() {
 	}, [])
 
 	const buildRequest = useCallback(async (): Promise<CompleteImagePromptRequest | null> => {
-		if (!canvas || !selectedImageElement || !activeVersion?.src) return null
+		if (!canvas || !selectedImageElement || !activeContent?.src) return null
 
-		const filePath = activeVersion.src
+		const filePath = activeContent.src
 		const imageElementInstance = canvas.elementManager.getElementInstance(
 			selectedImageElement.id,
 		)
 		let referenceImageOptions: CompleteImagePromptRequest["reference_image_options"]
-		if (activeVersion.crop && imageElementInstance instanceof ImageElementClass) {
+		if (activeContent.crop && imageElementInstance instanceof ImageElementClass) {
 			let imageInfo = imageElementInstance.getImageInfo()
 			if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
 				await imageElementInstance.getHTMLImageElement({ variant: "preview" })
 				imageInfo = imageElementInstance.getImageInfo()
 			}
 			const processPayload = getImageProcessRequestPayload({
-				crop: activeVersion.crop,
+				crop: activeContent.crop,
 				sourceDimensions: {
 					width: imageInfo?.naturalWidth ?? selectedImageElement.width ?? 0,
 					height: imageInfo?.naturalHeight ?? selectedImageElement.height ?? 0,
@@ -155,7 +155,7 @@ export default function ImagePromptExtractionButton() {
 			request.reference_image_options = referenceImageOptions
 		}
 		return request
-	}, [activeVersion, canvas, hostUiLocale, selectedImageElement])
+	}, [activeContent, canvas, hostUiLocale, selectedImageElement])
 
 	const generateExtractedPrompt = useCallback(async () => {
 		if (!completeImagePrompt || isGenerating) return

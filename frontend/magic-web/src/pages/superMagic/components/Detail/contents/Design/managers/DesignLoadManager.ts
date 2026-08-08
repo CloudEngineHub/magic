@@ -1,15 +1,13 @@
 import {
 	findMagicProjectJsFile,
-	parseMagicProjectJsContent,
 	resolveDesignDirectoryNameFromAttachments,
 	resolveDesignProjectBasePathFromAttachments,
-	normalizeDesignDataPathsAfterLoad,
 	resolveActualDesignCurrentFile,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { SuperMagicApi } from "@/apis"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
 import type { DesignProjectStateBag, DesignProjectManagerOptions } from "./types"
+import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 
 export class DesignLoadManager {
 	private stateBag: DesignProjectStateBag
@@ -86,46 +84,39 @@ export class DesignLoadManager {
 
 				let didApplyDesignData = false
 				if (result.content) {
-					const parsedData = parseMagicProjectJsContent(result.content)
-					if (parsedData) {
-						const directoryName = resolveDesignDirectoryNameFromAttachments({
-							currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
-							flatAttachments,
+					const directoryName = resolveDesignDirectoryNameFromAttachments({
+						currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
+						flatAttachments,
+						attachments,
+						projectPath,
+					})
+					const dslBase = resolveDesignProjectBasePathFromAttachments({
+						currentFile: {
+							id: actualCurrentFileId,
+							name: actualCurrentFileName,
+						},
+						flatAttachments,
+						attachments,
+					})
+					const loaded = await loadDesignDataToRuntime({
+						content: result.content,
+						nameOverride: directoryName,
+						elementDetailsContext: {
 							attachments,
-							projectPath,
-						})
-						if (directoryName && parsedData.name !== directoryName) {
-							parsedData.name = directoryName
-						}
-
-						const dslBase = resolveDesignProjectBasePathFromAttachments({
-							currentFile: {
-								id: actualCurrentFileId,
-								name: actualCurrentFileName,
-							},
 							flatAttachments,
-							attachments,
-						})
-						if (dslBase) {
-							normalizeDesignDataPathsAfterLoad(parsedData, dslBase, {
-								flatAttachments,
-								attachmentIndex: this.options.attachmentIndex,
-							})
-						}
-
-						// v2：从 sidecar 回填重字段，让画布与生成编辑器拿到完整数据
-						const elementDetailsProvenance = await hydrateDesignDataDetails(
-							parsedData,
-							{
-								attachments,
-								flatAttachments,
-								mainFileId: result.fileId,
-								projectId: projectId ?? undefined,
-							},
-						)
-
+							mainFileId: result.fileId,
+							projectId: projectId ?? undefined,
+						},
+						pathContext: {
+							projectBasePath: dslBase,
+							flatAttachments,
+							attachmentIndex: this.options.attachmentIndex,
+						},
+					})
+					if (loaded) {
+						const parsedData = loaded.data
 						this.stateBag.setters.setElementDetailsProvenance?.(
-							elementDetailsProvenance,
+							loaded.elementDetailsProvenance ?? {},
 						)
 						this.stateBag.setters.setDesignData(parsedData)
 						this.stateBag.setPrevDesignDataFingerprint(

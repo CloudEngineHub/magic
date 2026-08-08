@@ -1,126 +1,84 @@
 import { describe, expect, it } from "vitest"
-import type { ImageElementV2, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type { ImageElement, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
 	ELEMENT_DETAIL_SOURCE_USER,
+	ELEMENT_DETAILS_VERSION,
 	buildUserElementDetailsDoc,
 	emptyElementDetailsDoc,
 	rehydrateHeavyFields,
 } from "../elementDetailsStore"
 
-function imageElement(generateImageRequest?: Record<string, unknown>): LayerElement {
+function imageElement(contents: ImageElement["contents"]): ImageElement {
 	return {
 		id: "image-1",
 		type: "image",
-		x: 0,
-		y: 0,
-		width: 100,
-		height: 100,
-		generateImageRequest,
-	} as LayerElement
+		activeContentId: contents[0]?.contentId ?? null,
+		mainContentId: contents[0]?.contentId ?? null,
+		contents,
+	}
 }
 
-describe("rehydrateHeavyFields provenance", () => {
-	it("rehydrates V2 requests by elementId and versionId", () => {
-		const elements = [
-			{
-				id: "image-1",
-				type: "image",
-				x: 0,
-				y: 0,
-				imageDslVersion: 2,
-				activeVersionId: "v2",
-				mainVersionId: "v1",
-				versions: [{ id: "v1", generateImageRequest: { image_id: "one" } }, { id: "v2" }],
-			},
-		] as LayerElement[]
+describe("Content sidecar", () => {
+	it("rehydrates requests by elementId and contentId", () => {
+		const elements: LayerElement[] = [
+			imageElement([
+				{ contentId: "c1", generateImageRequest: { image_id: "one" } },
+				{ contentId: "c2" },
+			]),
+		]
 		const provenance = rehydrateHeavyFields(elements, emptyElementDetailsDoc(), {
-			version: "1.1.0",
+			version: ELEMENT_DETAILS_VERSION,
 			elements: {
 				"image-1": {
-					imageVersionDetails: {
-						v2: {
-							generateImageRequest: { image_id: "two", prompt: "version two" },
+					contentDetails: {
+						c2: {
+							generateImageRequest: { image_id: "two", prompt: "content two" },
+							visualUnderstanding: { summary: "content two" },
 						},
 					},
 				},
 			},
 		})
 
-		expect((elements[0] as ImageElementV2).versions[1]).toEqual(
+		expect((elements[0] as ImageElement).contents[1]).toEqual(
 			expect.objectContaining({
-				id: "v2",
-				generateImageRequest: { image_id: "two", prompt: "version two" },
+				contentId: "c2",
+				generateImageRequest: { image_id: "two", prompt: "content two" },
+				visualUnderstanding: { summary: "content two" },
 			}),
 		)
-		expect(provenance["image-1"].imageVersionDetails?.v2.generateImageRequest).toEqual({
+		expect(provenance["image-1"].contentDetails?.c2.generateImageRequest).toEqual({
 			valueSource: "agent",
 			imageId: "two",
 			imageIdSource: "agent",
 		})
 	})
 
-	it("writes only version-specific requests for V2 user sidecar entries", () => {
-		const elements = [
-			{
-				id: "image-1",
-				type: "image",
-				x: 0,
-				y: 0,
-				imageDslVersion: 2,
-				activeVersionId: "v2",
-				mainVersionId: "v1",
-				versions: [
-					{ id: "v1", generateImageRequest: { image_id: "one" } },
-					{ id: "v2", generateImageRequest: { image_id: "two" } },
-				],
-			},
-		] as LayerElement[]
+	it("writes only Content-specific user details", () => {
+		const elements: LayerElement[] = [
+			imageElement([
+				{ contentId: "c1", generateImageRequest: { image_id: "one" } },
+				{ contentId: "c2", generateImageRequest: { image_id: "two" } },
+			]),
+		]
 		const doc = buildUserElementDetailsDoc(elements, emptyElementDetailsDoc())
 
-		expect(doc.elements["image-1"]).toEqual({
-			imageVersionDetails: {
-				v1: { generateImageRequest: { image_id: "one" } },
-				v2: { generateImageRequest: { image_id: "two" } },
-			},
-			source: "user",
-		})
-		expect(doc.version).toBe("1.1.0")
-	})
-	it("keeps the image id owned by Agent when a user overlay copies the same id", () => {
-		const elements = [imageElement()]
-		const provenance = rehydrateHeavyFields(
-			elements,
-			{
-				version: "1.0.0",
-				elements: {
-					"image-1": {
-						generateImageRequest: { image_id: "agent-file", prompt: "edited" },
-						source: ELEMENT_DETAIL_SOURCE_USER,
+		expect(doc).toEqual({
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"image-1": {
+					source: ELEMENT_DETAIL_SOURCE_USER,
+					contentDetails: {
+						c1: { generateImageRequest: { image_id: "one" } },
+						c2: { generateImageRequest: { image_id: "two" } },
 					},
 				},
 			},
-			{
-				version: "1.0.0",
-				elements: {
-					"image-1": {
-						generateImageRequest: { image_id: "agent-file", prompt: "original" },
-					},
-				},
-			},
-		)
-
-		expect(elements[0]).toMatchObject({
-			generateImageRequest: { image_id: "agent-file", prompt: "edited" },
-		})
-		expect(provenance["image-1"].generateImageRequest).toEqual({
-			valueSource: "user",
-			imageId: "agent-file",
-			imageIdSource: "agent",
 		})
 	})
 
-	it("recognizes a new user-side image id as a frontend Design task", () => {
-		const elements = [imageElement()]
+	it("migrates an old element-level sidecar entry into the first Content", () => {
+		const elements: LayerElement[] = [imageElement([{ contentId: "c1" }])]
 		const provenance = rehydrateHeavyFields(
 			elements,
 			{
@@ -132,30 +90,36 @@ describe("rehydrateHeavyFields provenance", () => {
 					},
 				},
 			},
-			{
-				version: "1.0.0",
-				elements: {
-					"image-1": {
-						generateImageRequest: { image_id: "agent-file", prompt: "original" },
-					},
-				},
-			},
+			emptyElementDetailsDoc(),
 		)
 
-		expect(provenance["image-1"].generateImageRequest?.imageIdSource).toBe("user")
+		expect((elements[0] as ImageElement).contents[0].generateImageRequest).toEqual({
+			image_id: "user-task",
+			prompt: "retry",
+		})
+		expect(provenance["image-1"].contentDetails?.c1.generateImageRequest?.imageIdSource).toBe(
+			"user",
+		)
 	})
 
-	it("marks legacy inline requests without sidecars as inline", () => {
-		const elements = [imageElement({ image_id: "legacy-task", prompt: "legacy" })]
+	it("marks inline Content requests as inline", () => {
+		const elements: LayerElement[] = [
+			imageElement([
+				{
+					contentId: "c1",
+					generateImageRequest: { image_id: "inline-task", prompt: "inline" },
+				},
+			]),
+		]
 		const provenance = rehydrateHeavyFields(
 			elements,
 			emptyElementDetailsDoc(),
 			emptyElementDetailsDoc(),
 		)
 
-		expect(provenance["image-1"].generateImageRequest).toEqual({
+		expect(provenance["image-1"].contentDetails?.c1.generateImageRequest).toEqual({
 			valueSource: "inline",
-			imageId: "legacy-task",
+			imageId: "inline-task",
 			imageIdSource: "inline",
 		})
 	})

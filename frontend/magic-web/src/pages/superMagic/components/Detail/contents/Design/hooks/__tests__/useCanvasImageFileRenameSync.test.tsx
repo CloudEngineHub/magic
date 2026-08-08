@@ -62,24 +62,33 @@ function imageCanvas(options: {
 				id: "image-1",
 				type: ElementTypeEnum.Image,
 				name: options.name,
-				src: options.src,
 				x: 0,
 				y: 0,
 				width: 100,
 				height: 100,
-				generateImageRequest: options.referenceImages
-					? {
-							model_id: "model-1",
-							prompt: "test",
-							reference_images: options.referenceImages,
-						}
-					: undefined,
+				activeContentId: "image-1-content-1",
+				mainContentId: "image-1-content-1",
+				contents: [
+					{
+						contentId: "image-1-content-1",
+						src: options.src,
+						...(options.referenceImages
+							? {
+									generateImageRequest: {
+										model_id: "model-1",
+										prompt: "test",
+										reference_images: options.referenceImages,
+									},
+								}
+							: {}),
+					},
+				],
 			},
 		],
 	}
 }
 
-function versionedImageCanvas(name: string): CanvasDocument {
+function multiContentImageCanvas(name: string): CanvasDocument {
 	return {
 		elements: [
 			{
@@ -90,12 +99,11 @@ function versionedImageCanvas(name: string): CanvasDocument {
 				y: 0,
 				width: 100,
 				height: 100,
-				imageDslVersion: 2,
-				activeVersionId: "version-2",
-				mainVersionId: "version-1",
-				versions: [
-					{ id: "version-1", src: "./images/older.png", status: "completed" },
-					{ id: "version-2", src: "./images/image.png", status: "completed" },
+				activeContentId: "content-2",
+				mainContentId: "content-1",
+				contents: [
+					{ contentId: "content-1", src: "./images/older.png", status: "completed" },
+					{ contentId: "content-2", src: "./images/image.png", status: "completed" },
 				],
 			},
 		],
@@ -220,17 +228,19 @@ describe("useCanvasImageFileRenameSync", () => {
 
 		const persistedCanvas = persistCanvasData.mock.calls[0]?.[0] as CanvasDocument
 		expect(persistedCanvas.elements?.[0]).toEqual(
-			expect.objectContaining({ src: "./images/Pikachu.png" }),
+			expect.objectContaining({
+				contents: [expect.objectContaining({ src: "./images/Pikachu.png" })],
+			}),
 		)
 		expect(updateAttachments).toHaveBeenCalledTimes(1)
 		expect(updateData).toHaveBeenCalledWith(persistedCanvas)
 		expect(mocks.toastError).not.toHaveBeenCalled()
 	})
 
-	it("uses the active V2 image version when no element-name change metadata is available", async () => {
+	it("uses the active image Content when no element-name change metadata is available", async () => {
 		const flatAttachments = [attachment("canvas-a", "画布A/images/image.png")]
-		const previousCanvas = versionedImageCanvas("image")
-		const nextCanvas = versionedImageCanvas("Pikachu")
+		const previousCanvas = multiContentImageCanvas("image")
+		const nextCanvas = multiContentImageCanvas("Pikachu")
 		const { result, persistCanvasData } = renderRenameHook({
 			currentCanvasData: previousCanvas,
 			flatAttachments,
@@ -250,15 +260,12 @@ describe("useCanvasImageFileRenameSync", () => {
 
 		const persistedCanvas = persistCanvasData.mock.calls[0]?.[0] as CanvasDocument
 		const persistedImage = persistedCanvas.elements?.[0]
-		if (
-			persistedImage?.type !== ElementTypeEnum.Image ||
-			persistedImage.imageDslVersion !== 2
-		) {
-			throw new Error("Expected a V2 image element")
+		if (persistedImage?.type !== ElementTypeEnum.Image) {
+			throw new Error("Expected an image element")
 		}
-		expect(persistedImage.versions).toEqual([
-			expect.objectContaining({ id: "version-1", src: "./images/older.png" }),
-			expect.objectContaining({ id: "version-2", src: "./images/Pikachu.png" }),
+		expect(persistedImage.contents).toEqual([
+			expect.objectContaining({ contentId: "content-1", src: "./images/older.png" }),
+			expect.objectContaining({ contentId: "content-2", src: "./images/Pikachu.png" }),
 		])
 	})
 
@@ -337,7 +344,14 @@ describe("useCanvasImageFileRenameSync", () => {
 		editedDuringRefresh.elements.push({
 			id: "text-added-during-refresh",
 			type: ElementTypeEnum.Text,
-			content: "keep me",
+			activeContentId: "text-added-during-refresh-content-1",
+			mainContentId: "text-added-during-refresh-content-1",
+			contents: [
+				{
+					contentId: "text-added-during-refresh-content-1",
+					content: [{ children: [{ type: "text", text: "keep me" }] }],
+				},
+			],
 			x: 10,
 			y: 20,
 			width: 120,
@@ -360,13 +374,17 @@ describe("useCanvasImageFileRenameSync", () => {
 		expect(persistedCanvas.elements?.[0]).toEqual(
 			expect.objectContaining({
 				x: 42,
-				src: "./images/Pikachu.png",
+				contents: [expect.objectContaining({ src: "./images/Pikachu.png" })],
 			}),
 		)
 		expect(persistedCanvas.elements?.[1]).toEqual(
 			expect.objectContaining({
 				id: "text-added-during-refresh",
-				content: "keep me",
+				contents: [
+					expect.objectContaining({
+						content: [{ children: [{ type: "text", text: "keep me" }] }],
+					}),
+				],
 			}),
 		)
 	})

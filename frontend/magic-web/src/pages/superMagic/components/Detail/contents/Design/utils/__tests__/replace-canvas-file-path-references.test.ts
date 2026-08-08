@@ -36,25 +36,24 @@ function createResolver(files: FileItem[]): ResolveCanvasResourceReference {
 }
 
 describe("replaceCanvasFilePathReferences", () => {
-	it("rewrites every V2 version without adding top-level V1 fields", () => {
+	it("rewrites every image Content without adding Element-level fields", () => {
 		const canvas = {
 			elements: [
 				{
 					id: "versioned-image",
 					type: ElementTypeEnum.Image,
-					imageDslVersion: 2,
-					activeVersionId: "v2",
-					mainVersionId: "v1",
-					versions: [
+					activeContentId: "v2",
+					mainContentId: "v1",
+					contents: [
 						{
-							id: "v1",
+							contentId: "v1",
 							src: "./images/source.png",
 							generateImageRequest: {
 								reference_images: ["/画布A/images/source.png"],
 							},
 						},
 						{
-							id: "v2",
+							contentId: "v2",
 							src: "/画布A/images/source.png",
 							imageGenerationTaskMeta: {
 								type: "high",
@@ -73,20 +72,18 @@ describe("replaceCanvasFilePathReferences", () => {
 				attachment("canvas-a", "画布A/images/source.png"),
 			]),
 		})
-		const image = next.elements?.[0] as unknown as Record<string, unknown> & {
-			versions: Array<Record<string, unknown>>
-		}
+		const image = next.elements?.[0] as unknown as Record<string, unknown>
 
-		expect(image.versions).toEqual([
+		expect(image.contents).toEqual([
 			expect.objectContaining({
-				id: "v1",
+				contentId: "v1",
 				src: "./images/renamed.png",
 				generateImageRequest: expect.objectContaining({
 					reference_images: ["./images/renamed.png"],
 				}),
 			}),
 			expect.objectContaining({
-				id: "v2",
+				contentId: "v2",
 				src: "./images/renamed.png",
 				imageGenerationTaskMeta: expect.objectContaining({
 					file_path: "./images/renamed.png",
@@ -108,36 +105,50 @@ describe("replaceCanvasFilePathReferences", () => {
 				{
 					id: "image-current",
 					type: ElementTypeEnum.Image,
-					src: "./images/source.png",
-					generateImageRequest: {
-						reference_images: [
-							"/画布A/images/source.png",
-							"/images/source.png",
-							"/画布B/images/source.png",
-						],
-						reference_image_options: [
-							{ path: "./images/source.png" },
-							{ path: "/images/source.png" },
-						],
-					},
-					imageGenerationTaskMeta: {
-						type: "expand",
-						file_path: "/画布A/images/source.png",
-						canvas_path: "/画布A/images/source.png",
-						mask_path: "/画布A/images/source.png",
-						mark_path: "/画布A/images/source.png",
-					},
+					activeContentId: "image-current-content-1",
+					mainContentId: "image-current-content-1",
+					contents: [
+						{
+							contentId: "image-current-content-1",
+							src: "./images/source.png",
+							generateImageRequest: {
+								reference_images: [
+									"/画布A/images/source.png",
+									"/images/source.png",
+									"/画布B/images/source.png",
+								],
+								reference_image_options: [
+									{ path: "./images/source.png" },
+									{ path: "/images/source.png" },
+								],
+							},
+							imageGenerationTaskMeta: {
+								type: "expand",
+								file_path: "/画布A/images/source.png",
+								canvas_path: "/画布A/images/source.png",
+								mask_path: "/画布A/images/source.png",
+								mark_path: "/画布A/images/source.png",
+							},
+						},
+					],
 				},
 				{
 					id: "video-current",
 					type: ElementTypeEnum.Video,
-					src: "/画布A/images/source.png",
-					generateVideoRequest: {
-						inputs: {
-							frames: [{ uri: "./images/source.png" }],
-							reference_images: [{ uri: "/images/source.png" }],
+					activeContentId: "video-current-content-1",
+					mainContentId: "video-current-content-1",
+					contents: [
+						{
+							contentId: "video-current-content-1",
+							src: "/画布A/images/source.png",
+							generateVideoRequest: {
+								inputs: {
+									frames: [{ uri: "./images/source.png" }],
+									reference_images: [{ uri: "/images/source.png" }],
+								},
+							},
 						},
-					},
+					],
 				},
 			],
 		} as CanvasDocument
@@ -148,49 +159,55 @@ describe("replaceCanvasFilePathReferences", () => {
 			resolveResourceReference: resolveDesignAResourceReference,
 		})
 		const image = next.elements?.[0] as unknown as {
-			src: string
-			generateImageRequest: {
-				reference_images: string[]
-				reference_image_options: Array<{ path: string }>
-			}
-			imageGenerationTaskMeta: {
-				file_path: string
-				canvas_path: string
-				mask_path: string
-				mark_path: string
-			}
+			contents: Array<{
+				src: string
+				generateImageRequest: {
+					reference_images: string[]
+					reference_image_options: Array<{ path: string }>
+				}
+				imageGenerationTaskMeta: {
+					file_path: string
+					canvas_path: string
+					mask_path: string
+					mark_path: string
+				}
+			}>
 		}
 		const video = next.elements?.[1] as unknown as {
-			src: string
-			generateVideoRequest: {
-				inputs: {
-					frames: Array<{ uri: string }>
-					reference_images: Array<{ uri: string }>
+			contents: Array<{
+				src: string
+				generateVideoRequest: {
+					inputs: {
+						frames: Array<{ uri: string }>
+						reference_images: Array<{ uri: string }>
+					}
 				}
-			}
+			}>
 		}
 
 		expect(next).not.toBe(canvas)
-		expect(image.src).toBe("./images/renamed.png")
-		expect(image.generateImageRequest.reference_images).toEqual([
+		expect(image.contents[0]?.src).toBe("./images/renamed.png")
+		expect(image.contents[0]?.generateImageRequest.reference_images).toEqual([
 			"./images/renamed.png",
 			"/images/source.png",
 			"/画布B/images/source.png",
 		])
-		expect(image.generateImageRequest.reference_image_options).toEqual([
+		expect(image.contents[0]?.generateImageRequest.reference_image_options).toEqual([
 			{ path: "./images/renamed.png" },
 			{ path: "/images/source.png" },
 		])
-		expect(image.imageGenerationTaskMeta).toEqual({
+		expect(image.contents[0]?.imageGenerationTaskMeta).toEqual({
 			type: "expand",
 			file_path: "./images/renamed.png",
 			canvas_path: "/画布A/images/source.png",
 			mask_path: "/画布A/images/source.png",
 			mark_path: "/画布A/images/source.png",
 		})
-		expect(video.src).toBe("./images/renamed.png")
-		expect(video.generateVideoRequest.inputs.frames).toEqual([{ uri: "./images/renamed.png" }])
-		expect(video.generateVideoRequest.inputs.reference_images).toEqual([
+		expect(video.contents[0]?.src).toBe("./images/renamed.png")
+		expect(video.contents[0]?.generateVideoRequest.inputs.frames).toEqual([
+			{ uri: "./images/renamed.png" },
+		])
+		expect(video.contents[0]?.generateVideoRequest.inputs.reference_images).toEqual([
 			{ uri: "/images/source.png" },
 		])
 	})
@@ -205,7 +222,11 @@ describe("replaceCanvasFilePathReferences", () => {
 				{
 					id: "workspace-root",
 					type: ElementTypeEnum.Image,
-					src: "/images/source.png",
+					activeContentId: "workspace-root-content-1",
+					mainContentId: "workspace-root-content-1",
+					contents: [
+						{ contentId: "workspace-root-content-1", src: "/images/source.png" },
+					],
 				},
 			],
 		} as CanvasDocument
@@ -225,7 +246,9 @@ describe("replaceCanvasFilePathReferences", () => {
 				{
 					id: "legacy-current",
 					type: ElementTypeEnum.Image,
-					src: "images/source.png",
+					activeContentId: "legacy-current-content-1",
+					mainContentId: "legacy-current-content-1",
+					contents: [{ contentId: "legacy-current-content-1", src: "images/source.png" }],
 				},
 			],
 		} as CanvasDocument
@@ -238,7 +261,11 @@ describe("replaceCanvasFilePathReferences", () => {
 		})
 
 		expect(next).not.toBe(canvas)
-		expect(next.elements?.[0]).toEqual(expect.objectContaining({ src: "./images/renamed.png" }))
+		expect(next.elements?.[0]).toEqual(
+			expect.objectContaining({
+				contents: [expect.objectContaining({ src: "./images/renamed.png" })],
+			}),
+		)
 	})
 
 	it("fails closed for a legacy bare path with current-canvas and workspace-root candidates", () => {
@@ -247,7 +274,11 @@ describe("replaceCanvasFilePathReferences", () => {
 				{
 					id: "legacy-ambiguous",
 					type: ElementTypeEnum.Image,
-					src: "images/source.png",
+					activeContentId: "legacy-ambiguous-content-1",
+					mainContentId: "legacy-ambiguous-content-1",
+					contents: [
+						{ contentId: "legacy-ambiguous-content-1", src: "images/source.png" },
+					],
 				},
 			],
 		} as CanvasDocument

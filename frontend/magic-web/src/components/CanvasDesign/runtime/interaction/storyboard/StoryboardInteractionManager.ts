@@ -5,9 +5,11 @@ import {
 	ElementTypeEnum,
 	type LayerElement,
 	type StoryboardElement,
+	type StoryboardElementContent,
 	type StoryboardGenerationConfig,
 	type StoryboardShot,
 } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import { STORYBOARD_CONFIG } from "../../elements/storyboard/StoryboardElement.config"
 import { generateUUID } from "../../shared/ids"
 import {
@@ -331,7 +333,8 @@ export class StoryboardInteractionManager {
 
 	private openModelSelect(binding: StoryboardControlBinding): void {
 		this.withImageModels(binding, (models, element) => {
-			const currentModelId = element.generationConfig?.model_id
+			const currentModelId =
+				getActiveContent<StoryboardElementContent>(element)?.generationConfig?.model_id
 			const options = models.map((model) => ({
 				label: model.model_name || model.model_id,
 				value: model.model_id,
@@ -357,7 +360,7 @@ export class StoryboardInteractionManager {
 	private openAspectRatioSelect(binding: StoryboardControlBinding): void {
 		this.withImageModels(binding, (models, element) => {
 			const model = this.findSelectedModel(models, element)
-			const config = element.generationConfig
+			const config = getActiveContent<StoryboardElementContent>(element)?.generationConfig
 			const sizes = buildSupportedAspectRatioOptions(
 				model,
 				buildImageSelectValue,
@@ -406,7 +409,7 @@ export class StoryboardInteractionManager {
 			}))
 			const resolution = getDefaultResolutionForModel(
 				model,
-				element.generationConfig?.resolution,
+				getActiveContent<StoryboardElementContent>(element)?.generationConfig?.resolution,
 			)
 			this.ensureCurrentOption(options, resolution)
 			this.mountSelect(binding, {
@@ -420,7 +423,11 @@ export class StoryboardInteractionManager {
 
 	private openDescriptionEditor(binding: StoryboardControlBinding, shotId: string): void {
 		const element = this.getStoryboardElement(binding.elementId)
-		const shot = element?.shots?.find((item) => item.id === shotId)
+		const shot = element
+			? getActiveContent<StoryboardElementContent>(element)?.shots?.find(
+					(item) => item.id === shotId,
+				)
+			: undefined
 		const anchorNode = binding.overlayAnchorNode
 		if (!element || !shot || !anchorNode) return
 
@@ -446,7 +453,11 @@ export class StoryboardInteractionManager {
 
 	private openDurationEditor(binding: StoryboardControlBinding, shotId: string): void {
 		const element = this.getStoryboardElement(binding.elementId)
-		const shot = element?.shots?.find((item) => item.id === shotId)
+		const shot = element
+			? getActiveContent<StoryboardElementContent>(element)?.shots?.find(
+					(item) => item.id === shotId,
+				)
+			: undefined
 		const anchorNode = binding.overlayAnchorNode
 		if (!element || !shot || !anchorNode) return
 
@@ -526,7 +537,7 @@ export class StoryboardInteractionManager {
 	private addShot(elementId: string): void {
 		const element = this.getStoryboardElement(elementId)
 		if (!element) return
-		const shots = element.shots ?? []
+		const shots = getActiveContent<StoryboardElementContent>(element)?.shots ?? []
 		const nextShots = [
 			...shots,
 			{
@@ -551,7 +562,8 @@ export class StoryboardInteractionManager {
 
 	private deleteShot(elementId: string, shotId: string): void {
 		const element = this.getStoryboardElement(elementId)
-		const shot = element?.shots?.find((item) => item.id === shotId)
+		const content = element ? getActiveContent<StoryboardElementContent>(element) : undefined
+		const shot = content?.shots?.find((item) => item.id === shotId)
 		if (!element || !shot) return
 
 		const history = this.canvas.historyManager
@@ -567,7 +579,7 @@ export class StoryboardInteractionManager {
 					})
 				}
 			}
-			const nextShots = element.shots.filter((item) => item.id !== shotId)
+			const nextShots = (content?.shots ?? []).filter((item) => item.id !== shotId)
 			this.canvas.elementManager.update(elementId, {
 				shots: nextShots,
 				height: this.getStoryboardRequiredHeight(element, nextShots.length),
@@ -584,9 +596,10 @@ export class StoryboardInteractionManager {
 		updater: (shot: StoryboardShot) => StoryboardShot,
 	): void {
 		const element = this.getStoryboardElement(elementId)
-		if (!element?.shots) return
+		const content = element ? getActiveContent<StoryboardElementContent>(element) : undefined
+		if (!content?.shots) return
 		let changed = false
-		const shots = element.shots.map((shot) => {
+		const shots = content.shots.map((shot) => {
 			if (shot.id !== shotId) return shot
 			const next = updater(shot)
 			changed =
@@ -600,9 +613,10 @@ export class StoryboardInteractionManager {
 	private updateModel(elementId: string, modelId: string, models: ImageModelItem[]): void {
 		const element = this.getStoryboardElement(elementId)
 		const model = models.find((item) => item.model_id === modelId)
-		if (!element || !model || element.generationConfig?.model_id === modelId) return
+		const content = element ? getActiveContent<StoryboardElementContent>(element) : undefined
+		if (!element || !model || content?.generationConfig?.model_id === modelId) return
 
-		const current = element.generationConfig
+		const current = content?.generationConfig
 		const sizes = model.image_size_config?.sizes ?? []
 		const preferredScale = getDefaultResolutionForModel(model)
 		const currentAspect = current?.image_generation_config?.aspect_ratio
@@ -624,7 +638,7 @@ export class StoryboardInteractionManager {
 	private updateSize(elementId: string, size: ImageSizeOption): void {
 		const element = this.getStoryboardElement(elementId)
 		if (!element) return
-		const current = element.generationConfig ?? {}
+		const current = getActiveContent<StoryboardElementContent>(element)?.generationConfig ?? {}
 		this.updateGenerationConfig(elementId, {
 			...current,
 			size: size.value,
@@ -642,8 +656,9 @@ export class StoryboardInteractionManager {
 		model: ImageModelItem | undefined,
 	): void {
 		const element = this.getStoryboardElement(elementId)
-		if (!element || element.generationConfig?.resolution === resolution) return
-		const current = element.generationConfig ?? {}
+		const content = element ? getActiveContent<StoryboardElementContent>(element) : undefined
+		if (!element || content?.generationConfig?.resolution === resolution) return
+		const current = content?.generationConfig ?? {}
 		const currentAspect = current.image_generation_config?.aspect_ratio
 		const sizes = (model?.image_size_config?.sizes ?? []).filter(
 			(size) => size.scale === resolution,
@@ -663,7 +678,10 @@ export class StoryboardInteractionManager {
 		elementId: string,
 		generationConfig: StoryboardGenerationConfig,
 	): void {
-		const current = this.getStoryboardElement(elementId)?.generationConfig
+		const element = this.getStoryboardElement(elementId)
+		const current = element
+			? getActiveContent<StoryboardElementContent>(element)?.generationConfig
+			: undefined
 		if (JSON.stringify(current ?? {}) === JSON.stringify(generationConfig)) return
 		this.canvas.elementManager.update(elementId, { generationConfig })
 	}
@@ -753,8 +771,11 @@ export class StoryboardInteractionManager {
 		element: StoryboardElement,
 	): ImageModelItem | undefined {
 		return (
-			models.find((model) => model.model_id === element.generationConfig?.model_id) ??
-			models[0]
+			models.find(
+				(model) =>
+					model.model_id ===
+					getActiveContent<StoryboardElementContent>(element)?.generationConfig?.model_id,
+			) ?? models[0]
 		)
 	}
 
@@ -819,7 +840,7 @@ export class StoryboardInteractionManager {
 	private getStoryboardRequiredHeight(element: StoryboardElement, shotCount?: number): number {
 		return resolveStoryboardRequiredHeight(
 			element.width ?? STORYBOARD_CONFIG.DEFAULT_WIDTH,
-			shotCount ?? element.shots?.length ?? 0,
+			shotCount ?? getActiveContent<StoryboardElementContent>(element)?.shots?.length ?? 0,
 		)
 	}
 
@@ -897,7 +918,8 @@ export class StoryboardInteractionManager {
 
 		const element = this.getStoryboardElement(elementId)
 		if (!element) return true
-		const configuredModelId = element.generationConfig?.model_id
+		const configuredModelId =
+			getActiveContent<StoryboardElementContent>(element)?.generationConfig?.model_id
 		const model = configuredModelId
 			? this.imageModels.find((item) => item.model_id === configuredModelId)
 			: undefined

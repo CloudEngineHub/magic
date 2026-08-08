@@ -1,5 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
-import type { VideoElement as VideoElementData } from "../../document/types"
+import type { VideoElement as VideoElementData, VideoElementContent } from "../../document/types"
+import { getContentById, getActiveContent, updateContent } from "../../document/elementContent"
 import type {
 	GetVideoGenerationResultParams,
 	VideoGenerationResultResponse,
@@ -20,6 +21,8 @@ export interface VideoPollingManagerConfig {
 	canvas: Canvas
 	/** 读取最新元素数据（含 generateVideoRequest.video_id） */
 	getElementData: () => VideoElementData
+	/** 轮询提交时捕获的目标 Content；异步结果不得写入其他 Content。 */
+	contentId?: string
 	/** 轮询同步出现临时异常时通知视图层自行处理展示态 */
 	onPollingIssue?: () => void
 }
@@ -84,20 +87,28 @@ export class VideoPollingManager {
 	}
 
 	private getPollingVideoId(): string | undefined {
-		return this.config.getElementData().generateVideoRequest?.video_id
+		return this.getPollingContent()?.generateVideoRequest?.video_id
+	}
+
+	private getPollingContent(): VideoElementContent | undefined {
+		const element = this.config.getElementData()
+		return (
+			getContentById(element, this.config.contentId) ??
+			getActiveContent<VideoElementContent>(element)
+		)
 	}
 
 	private shouldPollCurrentElement(): boolean {
-		const elementData = this.config.getElementData()
-		if (!elementData.generateVideoRequest?.video_id) {
+		const content = this.getPollingContent()
+		if (!content?.generateVideoRequest?.video_id) {
 			return false
 		}
 
-		if (elementData.src) {
+		if (content.src) {
 			return false
 		}
 
-		if (elementData.status && !shouldContinueGenerationPolling(elementData.status)) {
+		if (content.status && !shouldContinueGenerationPolling(content.status)) {
 			return false
 		}
 
@@ -132,25 +143,27 @@ export class VideoPollingManager {
 	private recoverMissingTask(videoId: string): void {
 		this.stop()
 		const elementData = this.config.getElementData()
-		if (elementData.generateVideoRequest?.video_id !== videoId) return
+		const content = this.getPollingContent()
+		if (content?.generateVideoRequest?.video_id !== videoId) return
+		const next = updateContent(elementData, this.config.contentId, {
+			generateVideoRequest: undefined,
+			videoGenerationResultMeta: undefined,
+			status: undefined,
+			errorMessage: undefined,
+		})
 
-		this.config.canvas.elementManager.update(
-			this.config.elementId,
-			{
-				generateVideoRequest: undefined,
-				videoGenerationResultMeta: undefined,
-				status: undefined,
-				errorMessage: undefined,
-			},
-			{ silent: false },
-		)
+		this.config.canvas.elementManager.update(this.config.elementId, next, { silent: false })
 		this.config.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-failed",
 			data: { elementId: this.config.elementId },
 		})
 	}
 
-	private buildResultPatch(result: VideoGenerationResultResponse): Partial<VideoElementData> {
+	private buildResultPatch(
+		result: VideoGenerationResultResponse,
+	): Partial<VideoElementContent> & {
+		name?: string
+	} {
 		const storagePath =
 			result.file_dir && result.file_name
 				? resolveCanvasGeneratedResourceStoragePath(
@@ -159,7 +172,7 @@ export class VideoPollingManager {
 						result.file_name,
 					)
 				: undefined
-		const updateData: Partial<VideoElementData> = {
+		const updateData: Partial<VideoElementContent> & { name?: string } = {
 			...getGenerationResultStatusPatch(
 				result.status,
 				result.error_message,
@@ -188,9 +201,16 @@ export class VideoPollingManager {
 
 		try {
 			const updateData = this.buildResultPatch(result)
-			this.config.canvas.elementManager.update(this.config.elementId, updateData, {
-				silent: false,
-			})
+			const elementData = this.config.getElementData()
+			const { name, ...contentPatch } = updateData
+			const next = updateContent(elementData, this.config.contentId, contentPatch)
+			this.config.canvas.elementManager.update(
+				this.config.elementId,
+				name ? { ...next, name } : next,
+				{
+					silent: false,
+				},
+			)
 			return true
 		} catch {
 			this.handleRecoverablePollingIssue()

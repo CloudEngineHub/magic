@@ -394,22 +394,17 @@ export class ImageGeneratorTool extends BaseTool {
 		// 获取下一个 zIndex（顶层元素的下一个 zIndex，因为新元素总是创建在顶层）
 		const newZIndex = this.canvas.elementManager.getNextZIndexInLevel()
 
-		// 获取图片元素的默认配置
-		const defaultConfig = ElementFactory.getDefaultConfig(ElementTypeEnum.Image, {
-			imageWidth: size.width,
-			imageHeight: size.height,
-		})
-
 		// 创建图片元素（使用占位图），传入左上角坐标
 		// 不传入 name，使用 getRenderName() 返回的默认名称
-		const imageElement: ImageElement = {
-			id: elementId,
-			type: ElementTypeEnum.Image,
-			x: x,
-			y: y,
-			...defaultConfig,
-			zIndex: newZIndex,
-		}
+		const imageElement = ElementFactory.createElementData(
+			ElementTypeEnum.Image,
+			elementId,
+			x,
+			y,
+			size.width,
+			size.height,
+			newZIndex,
+		) as ImageElement
 
 		if (options?.temporary) {
 			this.canvas.elementManager.createTemporaryElement(imageElement, { silent: true })

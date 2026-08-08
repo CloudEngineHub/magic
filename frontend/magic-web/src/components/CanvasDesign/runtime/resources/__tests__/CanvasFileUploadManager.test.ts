@@ -89,40 +89,37 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 })
 
 describe("CanvasFileUploadManager image replacement", () => {
-	function createImageInstance(status = GenerationStatus.Completed, options?: { v2?: boolean }) {
+	function createImageInstance(status = GenerationStatus.Completed) {
 		const instance = Object.create(ImageElement.prototype) as ImageElement
-		const version = { id: "version-1", status }
-		const data = options?.v2
-			? {
-					id: "image-1",
-					type: ElementTypeEnum.Image,
-					imageDslVersion: 2 as const,
-					activeVersionId: version.id,
-					mainVersionId: version.id,
-					versions: [version],
-				}
-			: { id: "image-1", type: ElementTypeEnum.Image, status }
+		const content = { contentId: "content-1", status }
+		const data = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: content.contentId,
+			mainContentId: content.contentId,
+			contents: [content],
+		}
 		Object.assign(instance, {
 			getData: vi.fn(() => data),
-			getActiveVersionData: vi.fn(() => version),
-			getVersionData: vi.fn((versionId: string) =>
-				options?.v2 && versionId === version.id ? version : undefined,
+			getActiveContentData: vi.fn(() => content),
+			getContentData: vi.fn((contentId: string) =>
+				contentId === content.contentId ? content : undefined,
 			),
-			updateActiveVersionData: vi.fn(() => true),
-			updateVersionData: vi.fn(() => true),
+			updateActiveContentData: vi.fn(() => true),
+			updateContentData: vi.fn(() => true),
 			setOssSrc: vi.fn(),
 		})
 		return instance
 	}
 
-	it("replaces only the active image version after upload and records one history entry", async () => {
+	it("replaces only the active image Content after upload and records one history entry", async () => {
 		const image = createImageInstance()
 		const disable = vi.fn()
 		const enable = vi.fn()
 		const recordHistoryImmediate = vi.fn()
 		const primeCache = vi.fn()
 		const requestImmediateImageLoad = vi.fn()
-		const removeMarkersByImageVersion = vi.fn()
+		const removeMarkersByImageContent = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		const uploadResult: UploadFileResponse = {
 			path: "./images/new.png",
@@ -135,7 +132,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 				elementManager: { getElementInstance: vi.fn(() => image) },
 				historyManager: { disable, enable, recordHistoryImmediate },
 				imageResourceManager: { primeCache },
-				markerManager: { removeMarkersByImageVersion },
+				markerManager: { removeMarkersByImageContent },
 				visibilityManager: { requestImmediateImageLoad },
 			},
 			uploadDirect: vi.fn(async () => [uploadResult]),
@@ -145,11 +142,12 @@ describe("CanvasFileUploadManager image replacement", () => {
 			manager.replaceImageElement({
 				elementId: "image-1",
 				file: new File(["new"], "new.png", { type: "image/png" }),
-				versionId: null,
+				contentId: null,
 			}),
 		).resolves.toBe(true)
 
-		expect(image.updateActiveVersionData).toHaveBeenCalledWith(
+		expect(image.updateContentData).toHaveBeenCalledWith(
+			"content-1",
 			{
 				src: "./images/new.png",
 				status: GenerationStatus.Completed,
@@ -163,16 +161,16 @@ describe("CanvasFileUploadManager image replacement", () => {
 		expect(disable).toHaveBeenCalledTimes(1)
 		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
-		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", null)
+		expect(removeMarkersByImageContent).toHaveBeenCalledWith("image-1", "content-1")
 		expect(requestImmediateImageLoad).toHaveBeenCalledWith("image-1", {
 			reason: "image-replaced",
 			priority: "critical",
 		})
 	})
 
-	it("replaces the active image version with an existing project path", () => {
+	it("replaces the active image Content with an existing project path", () => {
 		const image = createImageInstance()
-		const removeMarkersByImageVersion = vi.fn()
+		const removeMarkersByImageContent = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
 			canvas: {
@@ -183,7 +181,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 					enable: vi.fn(),
 					recordHistoryImmediate: vi.fn(),
 				},
-				markerManager: { removeMarkersByImageVersion },
+				markerManager: { removeMarkersByImageContent },
 				visibilityManager: { requestImmediateImageLoad: vi.fn() },
 			},
 		})
@@ -192,19 +190,20 @@ describe("CanvasFileUploadManager image replacement", () => {
 			manager.replaceImageElementFromProject({
 				elementId: "image-1",
 				path: "/images/project.webp",
-				versionId: null,
+				contentId: null,
 			}),
 		).toBe(true)
-		expect(image.updateActiveVersionData).toHaveBeenCalledWith(
+		expect(image.updateContentData).toHaveBeenCalledWith(
+			"content-1",
 			expect.objectContaining({ src: "/images/project.webp", crop: undefined }),
 			{ silent: false },
 		)
-		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", null)
+		expect(removeMarkersByImageContent).toHaveBeenCalledWith("image-1", "content-1")
 	})
 
-	it("targets the V2 version that was active when replacement started", () => {
-		const image = createImageInstance(GenerationStatus.Completed, { v2: true })
-		const removeMarkersByImageVersion = vi.fn()
+	it("targets the Content that was active when replacement started", () => {
+		const image = createImageInstance(GenerationStatus.Completed)
+		const removeMarkersByImageContent = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
 		Object.assign(manager as unknown as Record<string, unknown>, {
 			canvas: {
@@ -215,7 +214,7 @@ describe("CanvasFileUploadManager image replacement", () => {
 					enable: vi.fn(),
 					recordHistoryImmediate: vi.fn(),
 				},
-				markerManager: { removeMarkersByImageVersion },
+				markerManager: { removeMarkersByImageContent },
 				visibilityManager: { requestImmediateImageLoad: vi.fn() },
 			},
 		})
@@ -224,19 +223,19 @@ describe("CanvasFileUploadManager image replacement", () => {
 			manager.replaceImageElementFromProject({
 				elementId: "image-1",
 				path: "/images/project.png",
-				versionId: "version-1",
+				contentId: "content-1",
 			}),
 		).toBe(true)
-		expect(image.updateVersionData).toHaveBeenCalledWith(
-			"version-1",
+		expect(image.updateContentData).toHaveBeenCalledWith(
+			"content-1",
 			expect.objectContaining({ src: "/images/project.png", crop: undefined }),
 			{ silent: false },
 		)
-		expect(image.updateActiveVersionData).not.toHaveBeenCalled()
-		expect(removeMarkersByImageVersion).toHaveBeenCalledWith("image-1", "version-1")
+		expect(image.updateActiveContentData).not.toHaveBeenCalled()
+		expect(removeMarkersByImageContent).toHaveBeenCalledWith("image-1", "content-1")
 	})
 
-	it("does not upload over an active processing image version", async () => {
+	it("does not upload over an active processing image Content", async () => {
 		const image = createImageInstance(GenerationStatus.Processing)
 		const uploadDirect = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
@@ -252,11 +251,11 @@ describe("CanvasFileUploadManager image replacement", () => {
 			manager.replaceImageElement({
 				elementId: "image-1",
 				file: new File(["new"], "new.png", { type: "image/png" }),
-				versionId: null,
+				contentId: null,
 			}),
 		).resolves.toBe(false)
 		expect(uploadDirect).not.toHaveBeenCalled()
-		expect(image.updateActiveVersionData).not.toHaveBeenCalled()
+		expect(image.updateActiveContentData).not.toHaveBeenCalled()
 	})
 })
 
@@ -268,14 +267,16 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					onUploadFailed?: (elementId: string, error: Error) => void
 			  }
 			| undefined
+		let temporaryElement: LayerElement | undefined
 		const createTemporary = vi.fn(
 			(
-				_element: LayerElement,
+				element: LayerElement,
 				context: {
 					onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 					onUploadFailed?: (elementId: string, error: Error) => void
 				},
 			) => {
+				temporaryElement = element
 				uploadContext = context
 			},
 		)
@@ -297,6 +298,8 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					createTemporary,
 					hasElement: vi.fn(() => true),
 					isTemporary: vi.fn(() => true),
+					getElementData: vi.fn(() => temporaryElement),
+					delete: vi.fn(),
 					convertToPermament,
 				},
 				historyManager: { disable, enable, recordHistoryImmediate },
@@ -312,19 +315,24 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			onUploadComplete,
 		})
 		expect(createTemporary).toHaveBeenCalledTimes(1)
-		const temporaryElement = createTemporary.mock.calls[0]?.[0] as Record<string, unknown>
-		expect(temporaryElement).toMatchObject({
+		const createdTemporaryElement = createTemporary.mock.calls[0]?.[0] as Record<
+			string,
+			unknown
+		>
+		expect(createdTemporaryElement).toMatchObject({
 			type: ElementTypeEnum.Audio,
 			width: 1280,
 			height: 720,
 		})
-		expect(temporaryElement.src).toBeUndefined()
-		expect(temporaryElement).not.toHaveProperty("status")
-		expect(temporaryElement).not.toHaveProperty("errorMessage")
+		expect(
+			(createdTemporaryElement.contents as Array<Record<string, unknown>>)[0]?.src,
+		).toBeUndefined()
+		expect(createdTemporaryElement).not.toHaveProperty("status")
+		expect(createdTemporaryElement).not.toHaveProperty("errorMessage")
 		expect(disable).toHaveBeenCalledTimes(1)
 		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).not.toHaveBeenCalled()
-		const elementId = temporaryElement.id as string
+		const elementId = createdTemporaryElement.id as string
 		await expect(pending).resolves.toBe(elementId)
 		expect(convertToPermament).not.toHaveBeenCalled()
 
@@ -337,7 +345,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(convertToPermament).toHaveBeenCalledWith(
 			elementId,
-			{ src: "./audios/voice.mp3" },
+			expect.objectContaining({
+				contents: [expect.objectContaining({ src: "./audios/voice.mp3" })],
+			}),
 			{ silent: true },
 		)
 		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
@@ -360,6 +370,7 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		const convertToPermament = vi.fn()
 		const primeCache = vi.fn()
 		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		let temporaryElement: LayerElement | undefined
 		const createTemporary = vi.fn(
 			(
 				element: LayerElement,
@@ -369,6 +380,7 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					onUploadFailed?: (elementId: string, error: Error) => void
 				},
 			) => {
+				temporaryElement = element
 				manager.queueUpload({
 					elementId: element.id,
 					file: context.uploadFiles[0],
@@ -392,6 +404,7 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					createTemporary,
 					hasElement: vi.fn(() => true),
 					isTemporary: vi.fn(() => true),
+					getElementData: vi.fn(() => temporaryElement),
 					convertToPermament,
 				},
 				historyManager: {
@@ -421,7 +434,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(uploadFiles.mock.calls[0]?.[0]?.[0]?.overwrite).toBe(true)
 		expect(convertToPermament).toHaveBeenCalledWith(
 			elementId,
-			{ src: "./audios/voice.mp3" },
+			expect.objectContaining({
+				contents: [expect.objectContaining({ src: "./audios/voice.mp3" })],
+			}),
 			{ silent: true },
 		)
 		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
@@ -445,7 +460,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			width: 640,
 			height: 720,
 			name: "原名称",
-			src: "./audios/old.mp3",
+			contents: [{ contentId: "content-1", src: "./audios/old.mp3" }],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
 		}
 		const uploadResult: UploadFileResponse = {
 			path: "./audios/new.mp3",
@@ -499,7 +516,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					getElementData: vi.fn(() => ({
 						id: "audio-1",
 						type: ElementTypeEnum.Audio,
-						src: "./audios/old.mp3",
+						contents: [{ contentId: "content-1", src: "./audios/old.mp3" }],
+						activeContentId: "content-1",
+						mainContentId: "content-1",
 					})),
 					update,
 				},
@@ -536,7 +555,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					getElementData: vi.fn(() => ({
 						id: "audio-1",
 						type: ElementTypeEnum.Audio,
-						src: "./audios/old.mp3",
+						contents: [{ contentId: "content-1", src: "./audios/old.mp3" }],
+						activeContentId: "content-1",
+						mainContentId: "content-1",
 					})),
 					update,
 				},

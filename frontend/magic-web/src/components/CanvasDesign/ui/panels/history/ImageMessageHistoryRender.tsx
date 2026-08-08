@@ -20,7 +20,7 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
 import { useGenerationRuntime } from "../../../app/hooks/canvas"
-import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { normalizeImageSizeValue } from "../../editors/image/image-editor-config.utils"
 
 interface ImageMessageHistoryRenderProps {
@@ -41,7 +41,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	// 获取请求信息
 	const request =
 		generationRuntime?.generateImageRequest ||
-		getActiveImageVersion(imageElement).generateImageRequest
+		getActiveImageContent(imageElement).generateImageRequest
 
 	const imageGenerationTaskMeta =
 		generationRuntime?.imageGenerationTaskMeta || getImageGenerationTaskMeta(imageElement)

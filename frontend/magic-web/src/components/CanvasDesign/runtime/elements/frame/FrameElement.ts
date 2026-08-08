@@ -50,6 +50,9 @@ export class FrameElement extends BaseElement<FrameElementData> {
 			width,
 			height,
 			zIndex,
+			activeContentId: `${id}-content-1`,
+			mainContentId: `${id}-content-1`,
+			contents: [{ contentId: `${id}-content-1` }],
 		}
 	}
 

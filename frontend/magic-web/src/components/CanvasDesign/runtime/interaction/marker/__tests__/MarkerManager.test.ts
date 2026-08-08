@@ -3,32 +3,31 @@ import { MarkerManager } from "../MarkerManager"
 import {
 	ElementTypeEnum,
 	MarkerTypeEnum,
-	type ImageElementV2,
+	type ImageElement,
 	type Marker,
 } from "../../../document/types"
 import type { Canvas } from "../../../core/Canvas"
 
-function createMarker(id: string, versionId?: string): Marker {
+function createMarker(id: string, contentId?: string): Marker {
 	return {
 		id,
 		type: MarkerTypeEnum.Mark,
 		elementId: "image-1",
-		versionId,
+		contentId,
 		relativeX: 0.5,
 		relativeY: 0.5,
 	}
 }
 
-function createManager(activeVersionId = "v2") {
-	const image: ImageElementV2 = {
+function createManager(activeContentId = "v2") {
+	const image: ImageElement = {
 		id: "image-1",
 		type: ElementTypeEnum.Image,
-		imageDslVersion: 2,
-		activeVersionId,
-		mainVersionId: "v1",
-		versions: [
-			{ id: "v1", src: "./images/v1.png", status: "completed" },
-			{ id: "v2", src: "./images/v2.png", status: "completed" },
+		activeContentId,
+		mainContentId: "v1",
+		contents: [
+			{ contentId: "v1", src: "./images/v1.png", status: "completed" },
+			{ contentId: "v2", src: "./images/v2.png", status: "completed" },
 		],
 	}
 	const emit = vi.fn()
@@ -61,22 +60,16 @@ function createManager(activeVersionId = "v2") {
 	return { manager, internals, emit, image }
 }
 
-describe("MarkerManager image versions", () => {
-	it("binds legacy markers to the first V2 version and emits marker updates", () => {
-		const { manager, internals, emit } = createManager("v1")
-		internals.markers = [createMarker("legacy"), createMarker("existing", "v2")]
+describe("MarkerManager image Contents", () => {
+	it("binds loaded markers without a Content to the active Content", () => {
+		const { manager } = createManager("v1")
+		manager.setMarkers([createMarker("legacy"), createMarker("existing", "v2")])
 
-		manager.bindMarkersToImageVersion("image-1", "v1")
-
-		expect(manager.getMarker("legacy")?.versionId).toBe("v1")
-		expect(manager.getMarker("existing")?.versionId).toBe("v2")
-		expect(emit).toHaveBeenCalledWith({
-			type: "marker:updated",
-			data: { marker: manager.getMarker("legacy") },
-		})
+		expect(manager.getMarker("legacy")?.contentId).toBe("v1")
+		expect(manager.getMarker("existing")?.contentId).toBe("v2")
 	})
 
-	it("permanently removes every previous-version marker during a system version switch", () => {
+	it("permanently removes every previous-Content marker during a system Content switch", () => {
 		const { manager, internals, emit } = createManager("v2")
 		internals.markers = [
 			createMarker("old-1", "v1"),
@@ -84,18 +77,18 @@ describe("MarkerManager image versions", () => {
 			createMarker("current", "v2"),
 		]
 
-		manager.handleImageVersionChanged("image-1", "v1", "v2")
+		manager.handleImageContentChanged("image-1", "v1", "v2")
 
 		expect(manager.exportMarkers().map((marker) => marker.id)).toEqual(["current"])
 		expect(emit).toHaveBeenCalledWith({ type: "marker:deleted", data: { id: "old-1" } })
 		expect(emit).toHaveBeenCalledWith({ type: "marker:deleted", data: { id: "old-2" } })
 	})
 
-	it("removes versionless markers for a V1 image source replacement", () => {
+	it("removes markers for the replaced image Content", () => {
 		const { manager, internals, emit } = createManager("v2")
-		internals.markers = [createMarker("v1-marker"), createMarker("v2-marker", "v2")]
+		internals.markers = [createMarker("v1-marker", "v1"), createMarker("v2-marker", "v2")]
 
-		manager.removeMarkersByImageVersion("image-1", null)
+		manager.removeMarkersByImageContent("image-1", "v1")
 
 		expect(manager.exportMarkers().map((marker) => marker.id)).toEqual(["v2-marker"])
 		expect(emit).toHaveBeenCalledWith({
@@ -104,11 +97,11 @@ describe("MarkerManager image versions", () => {
 		})
 	})
 
-	it("attaches loaded versionless markers to active and hides inactive versions", () => {
+	it("attaches loaded Content-less markers to active and hides inactive Contents", () => {
 		const { manager, internals } = createManager("v2")
 		manager.setMarkers([createMarker("legacy"), createMarker("inactive", "v1")])
 
-		expect(manager.getMarker("legacy")?.versionId).toBe("v2")
+		expect(manager.getMarker("legacy")?.contentId).toBe("v2")
 		expect(internals.isMarkerVisible(manager.getMarker("legacy") as Marker)).toBe(true)
 		expect(internals.isMarkerVisible(manager.getMarker("inactive") as Marker)).toBe(false)
 	})

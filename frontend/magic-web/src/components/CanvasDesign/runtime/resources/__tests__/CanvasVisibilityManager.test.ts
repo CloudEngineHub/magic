@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { CanvasVisibilityManager } from "../visibility/CanvasVisibilityManager"
 import type { ImageResourceLoadPriority, ImageResourceVariant } from "../image/ImageResourceManager"
-import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type BaseElementProps,
+	type FrameElement,
+	type LayerElement,
+} from "../../document/types"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 
 interface VideoCandidate {
@@ -1799,6 +1804,40 @@ describe("CanvasVisibilityManager skipped pan visible refresh", () => {
 })
 
 describe("CanvasVisibilityManager immediate media loading", () => {
+	function mediaElement(
+		id: string,
+		type:
+			| typeof ElementTypeEnum.Image
+			| typeof ElementTypeEnum.Video
+			| typeof ElementTypeEnum.Audio,
+		src: string,
+	): LayerElement {
+		const contentId = `${id}-content`
+		return {
+			id,
+			type,
+			contents: [{ contentId, src }],
+			activeContentId: contentId,
+			mainContentId: contentId,
+		} as LayerElement
+	}
+
+	function containerElement(
+		id: string,
+		type: typeof ElementTypeEnum.Frame | typeof ElementTypeEnum.Group,
+		children: LayerElement[],
+	): LayerElement {
+		const contentId = `${id}-content`
+		return {
+			id,
+			type,
+			contents: [{ contentId }],
+			activeContentId: contentId,
+			mainContentId: contentId,
+			children,
+		} as LayerElement
+	}
+
 	function createImmediateMediaManager(elements: Record<string, LayerElement>) {
 		const requestImmediateImageLoad = vi.fn()
 		const manager = Object.create(
@@ -1831,27 +1870,17 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 
 	it("expands frame children and requests critical image loads", () => {
 		const { manager, requestImmediateImageLoad } = createImmediateMediaManager({
-			"frame-1": {
-				id: "frame-1",
-				type: ElementTypeEnum.Frame,
-				children: [
-					{ id: "image-1", type: ElementTypeEnum.Image, src: "./images/a.png" },
-					{
-						id: "group-1",
-						type: ElementTypeEnum.Group,
-						children: [
-							{ id: "image-2", type: ElementTypeEnum.Image, src: "./images/b.png" },
-						],
-					},
-				],
-			},
-			"image-1": { id: "image-1", type: ElementTypeEnum.Image, src: "./images/a.png" },
-			"image-2": { id: "image-2", type: ElementTypeEnum.Image, src: "./images/b.png" },
-			"group-1": {
-				id: "group-1",
-				type: ElementTypeEnum.Group,
-				children: [{ id: "image-2", type: ElementTypeEnum.Image, src: "./images/b.png" }],
-			},
+			"frame-1": containerElement("frame-1", ElementTypeEnum.Frame, [
+				mediaElement("image-1", ElementTypeEnum.Image, "./images/a.png"),
+				containerElement("group-1", ElementTypeEnum.Group, [
+					mediaElement("image-2", ElementTypeEnum.Image, "./images/b.png"),
+				]),
+			]),
+			"image-1": mediaElement("image-1", ElementTypeEnum.Image, "./images/a.png"),
+			"image-2": mediaElement("image-2", ElementTypeEnum.Image, "./images/b.png"),
+			"group-1": containerElement("group-1", ElementTypeEnum.Group, [
+				mediaElement("image-2", ElementTypeEnum.Image, "./images/b.png"),
+			]),
 		})
 
 		manager.requestImmediateMediaLoadForElements(["frame-1"], { reason: "test-focus" })
@@ -1869,17 +1898,15 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 
 	it("can skip direct root images while still loading container descendants", () => {
 		const { manager, requestImmediateImageLoad } = createImmediateMediaManager({
-			"direct-image": {
-				id: "direct-image",
-				type: ElementTypeEnum.Image,
-				src: "./images/direct.png",
-			},
-			"frame-1": {
-				id: "frame-1",
-				type: ElementTypeEnum.Frame,
-				children: [{ id: "image-1", type: ElementTypeEnum.Image, src: "./images/a.png" }],
-			},
-			"image-1": { id: "image-1", type: ElementTypeEnum.Image, src: "./images/a.png" },
+			"direct-image": mediaElement(
+				"direct-image",
+				ElementTypeEnum.Image,
+				"./images/direct.png",
+			),
+			"frame-1": containerElement("frame-1", ElementTypeEnum.Frame, [
+				mediaElement("image-1", ElementTypeEnum.Image, "./images/a.png"),
+			]),
+			"image-1": mediaElement("image-1", ElementTypeEnum.Image, "./images/a.png"),
 		})
 
 		manager.requestImmediateMediaLoadForElements(["direct-image", "frame-1"], {
@@ -1960,14 +1987,16 @@ describe("CanvasVisibilityManager immediate media loading", () => {
 })
 
 describe("CanvasVisibilityManager image load priorities", () => {
+	type ElementGeometryPatch = Partial<Omit<BaseElementProps, "id" | "type">>
+
 	function createImageCandidateManager(options?: {
-		audio?: Partial<LayerElement>
-		frame?: Partial<LayerElement>
-		image?: Partial<LayerElement>
+		audio?: ElementGeometryPatch
+		frame?: ElementGeometryPatch
+		image?: ElementGeometryPatch
 		registered?: boolean
 		registeredAudio?: boolean
 		registeredVideo?: boolean
-		video?: Partial<LayerElement>
+		video?: ElementGeometryPatch
 	}) {
 		const manager = Object.create(
 			CanvasVisibilityManager.prototype,
@@ -2003,52 +2032,65 @@ describe("CanvasVisibilityManager image load priorities", () => {
 			>
 			lastContainerDisplayVariant: Map<string, ImageResourceVariant>
 		}
+		const imageContentId = "image-1-content"
 		const imageElement = {
 			id: "image-1",
 			type: ElementTypeEnum.Image,
-			src: "./images/a.png",
 			x: 0,
 			y: 0,
 			width: 200,
 			height: 160,
 			...options?.image,
+			contents: [{ contentId: imageContentId, src: "./images/a.png" }],
+			activeContentId: imageContentId,
+			mainContentId: imageContentId,
 		} as LayerElement
+		const videoContentId = "video-1-content"
 		const videoElement = {
 			id: "video-1",
 			type: ElementTypeEnum.Video,
-			src: "./videos/a.mp4",
 			x: 20,
 			y: 20,
 			width: 300,
 			height: 180,
 			...options?.video,
+			contents: [{ contentId: videoContentId, src: "./videos/a.mp4" }],
+			activeContentId: videoContentId,
+			mainContentId: videoContentId,
 		} as LayerElement
+		const audioContentId = "audio-1-content"
 		const audioElement = {
 			id: "audio-1",
 			type: ElementTypeEnum.Audio,
-			src: "./audios/a.mp3",
 			x: 40,
 			y: 40,
 			width: 240,
 			height: 120,
 			...options?.audio,
+			contents: [{ contentId: audioContentId, src: "./audios/a.mp3" }],
+			activeContentId: audioContentId,
+			mainContentId: audioContentId,
 		} as LayerElement
-		const frameChildren = [
+		const frameChildren: LayerElement[] = [
 			imageElement,
 			...(options?.video ? [videoElement] : []),
 			...(options?.audio ? [audioElement] : []),
 		]
+		const frameElement: FrameElement = {
+			id: "frame-1",
+			type: ElementTypeEnum.Frame,
+			x: 0,
+			y: 0,
+			width: 400,
+			height: 300,
+			children: frameChildren,
+			...options?.frame,
+			contents: [{ contentId: "frame-1-content" }],
+			activeContentId: "frame-1-content",
+			mainContentId: "frame-1-content",
+		}
 		const elements: Record<string, LayerElement> = {
-			"frame-1": {
-				id: "frame-1",
-				type: ElementTypeEnum.Frame,
-				x: 0,
-				y: 0,
-				width: 400,
-				height: 300,
-				children: frameChildren,
-				...options?.frame,
-			},
+			"frame-1": frameElement,
 			"image-1": imageElement,
 			"video-1": videoElement,
 			"audio-1": audioElement,

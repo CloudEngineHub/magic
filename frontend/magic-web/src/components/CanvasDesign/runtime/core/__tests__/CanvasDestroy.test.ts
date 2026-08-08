@@ -26,6 +26,9 @@ describe("Canvas destroy", () => {
 			generationRuntimeManager: destroyable("generationRuntimeManager"),
 			mediaPlaybackCoordinator: destroyable("mediaPlaybackCoordinator"),
 			audioPlaybackManager: destroyable("audioPlaybackManager"),
+			audioReplaceController: destroyable("audioReplaceController"),
+			imageReplaceController: destroyable("imageReplaceController"),
+			storyboardInteractionManager: destroyable("storyboardInteractionManager"),
 			eventEmitter: {
 				removeAllListeners: vi.fn(() => destroyOrder.push("eventEmitter")),
 			},
@@ -64,6 +67,7 @@ describe("Canvas destroy", () => {
 			videoPlaybackManager: destroyable("videoPlaybackManager"),
 			videoResourceManager: destroyable("videoResourceManager"),
 			audioResourceManager: destroyable("audioResourceManager"),
+			audioWaveformManager: destroyable("audioWaveformManager"),
 			mediaResourceOfflineCacheManager: destroyable("mediaResourceOfflineCacheManager"),
 			pluginManager: destroyable("pluginManager"),
 			stage: destroyable("stage"),

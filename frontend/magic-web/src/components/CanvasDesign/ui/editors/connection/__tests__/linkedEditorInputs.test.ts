@@ -3,13 +3,16 @@ import type { Canvas } from "../../../../runtime/core/Canvas"
 import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	type CanvasConnection,
+	type AudioElement,
 	ElementTypeEnum,
 	type FrameElement,
+	type GroupElement,
 	type ImageElement as ImageElementData,
-	type ImageElementVersion,
 	type LayerElement,
+	type RectangleElement,
+	type TextElement,
+	type VideoElement,
 } from "../../../../runtime/document/types"
-import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import {
 	collectLinkedFrameSourceElements,
 	collectLinkedEditorSourceElements,
@@ -31,47 +34,56 @@ import {
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
 
-function textElement(id: string, text: string, zIndex = 0): LayerElement {
+function textElement(id: string, text: string, zIndex = 0): TextElement {
 	return {
 		id,
 		type: ElementTypeEnum.Text,
 		zIndex,
-		content: [{ children: [{ type: "text", text }] }],
+		activeContentId: `${id}-content-1`,
+		mainContentId: `${id}-content-1`,
+		contents: [
+			{ contentId: `${id}-content-1`, content: [{ children: [{ type: "text", text }] }] },
+		],
 	}
 }
 
-function imageElement(id: string, src: string, zIndex = 0): LayerElement {
-	return { id, type: ElementTypeEnum.Image, zIndex, src }
+function imageElement(id: string, src: string, zIndex = 0): ImageElementData {
+	return {
+		id,
+		type: ElementTypeEnum.Image,
+		zIndex,
+		activeContentId: `${id}-content-1`,
+		mainContentId: `${id}-content-1`,
+		contents: [{ contentId: `${id}-content-1`, src }],
+	}
 }
 
-function videoElement(id: string, src: string, zIndex = 0): LayerElement {
-	return { id, type: ElementTypeEnum.Video, zIndex, src }
+function videoElement(id: string, src: string, zIndex = 0): VideoElement {
+	return {
+		id,
+		type: ElementTypeEnum.Video,
+		zIndex,
+		activeContentId: `${id}-content-1`,
+		mainContentId: `${id}-content-1`,
+		contents: [{ contentId: `${id}-content-1`, src }],
+	}
 }
 
-function audioElement(id: string, src?: string, zIndex = 0): LayerElement {
-	return { id, type: ElementTypeEnum.Audio, zIndex, src }
+function audioElement(id: string, src?: string, zIndex = 0): AudioElement {
+	return {
+		id,
+		type: ElementTypeEnum.Audio,
+		zIndex,
+		activeContentId: `${id}-content-1`,
+		mainContentId: `${id}-content-1`,
+		contents: [{ contentId: `${id}-content-1`, ...(src ? { src } : {}) }],
+	}
 }
 
-function createCanvasStub(
-	elements: LayerElement[],
-	connections: CanvasConnection[],
-	associatedVersionByElementId: Record<string, ImageElementVersion> = {},
-): Canvas {
+function createCanvasStub(elements: LayerElement[], connections: CanvasConnection[]): Canvas {
 	const elementById = new Map<string, LayerElement>()
-	const instanceById = new Map<string, ImageElementClass>()
 	const register = (element: LayerElement) => {
 		elementById.set(element.id, element)
-		if (element.type === ElementTypeEnum.Image) {
-			const instance = Object.create(ImageElementClass.prototype) as ImageElementClass & {
-				getData: () => ImageElementData
-			}
-			instance.getData = () => element
-			const associatedVersion = associatedVersionByElementId[element.id]
-			if (associatedVersion) {
-				instance.getAssociatedVersionData = () => associatedVersion
-			}
-			instanceById.set(element.id, instance)
-		}
 		if ("children" in element && Array.isArray(element.children)) {
 			element.children.forEach(register)
 		}
@@ -84,31 +96,30 @@ function createCanvasStub(
 		},
 		elementManager: {
 			getElementData: (elementId: string) => elementById.get(elementId),
-			getElementInstance: (elementId: string) => instanceById.get(elementId),
 		},
 	} as unknown as Canvas
 }
 
 describe("linked frame source collection", () => {
-	it("resolves linked image versions through the image element semantic entry", () => {
+	it("resolves linked image inputs from the main Content", () => {
 		const source: ImageElementData = {
 			id: "source-image",
 			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "dsl-active",
-			mainVersionId: "dsl-active",
-			versions: [{ id: "dsl-active", src: "./images/dsl-active.png" }],
+			activeContentId: "dsl-active",
+			mainContentId: "associated-content",
+			contents: [
+				{ contentId: "dsl-active", src: "./images/dsl-active.png" },
+				{
+					contentId: "associated-content",
+					src: "./images/associated.png",
+					crop: { x: 10, y: 20, width: 300, height: 200 },
+				},
+			],
 		}
 		const target = videoElement("target", "./videos/target.mp4")
-		const associatedVersion: ImageElementVersion = {
-			id: "associated-version",
-			src: "./images/associated.png",
-			crop: { x: 10, y: 20, width: 300, height: 200 },
-		}
 		const canvas = createCanvasStub(
 			[source, target],
 			[{ id: "image-video", sourceElementId: source.id, targetElementId: target.id }],
-			{ [source.id]: associatedVersion },
 		)
 
 		const [item] = resolveLinkedEditorInputs({
@@ -118,10 +129,61 @@ describe("linked frame source collection", () => {
 		}).mediaItems
 
 		expect(item).toMatchObject({
-			path: associatedVersion.src,
-			sourceCrop: associatedVersion.crop,
-			sourceVersionId: associatedVersion.id,
+			path: "./images/associated.png",
+			sourceCrop: { x: 10, y: 20, width: 300, height: 200 },
+			sourceContentId: "associated-content",
 		})
+	})
+
+	it("resolves text, video, and audio downstream inputs from their main Contents", () => {
+		const text = textElement("source-text", "active prompt")
+		text.contents.push({
+			contentId: "source-text-main",
+			content: [{ children: [{ type: "text", text: "main prompt" }] }],
+		})
+		text.mainContentId = "source-text-main"
+
+		const video = videoElement("source-video", "./videos/active.mp4")
+		video.contents.push({ contentId: "source-video-main", src: "./videos/main.mp4" })
+		video.mainContentId = "source-video-main"
+
+		const audio = audioElement("source-audio", "./audios/active.mp3")
+		audio.contents.push({ contentId: "source-audio-main", src: "./audios/main.mp3" })
+		audio.mainContentId = "source-audio-main"
+
+		const target = videoElement("target", "./videos/target.mp4")
+		const canvas = createCanvasStub(
+			[text, video, audio, target],
+			[text, video, audio].map((source) => ({
+				id: `${source.id}-connection`,
+				sourceElementId: source.id,
+				targetElementId: target.id,
+			})),
+		)
+
+		const result = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: target.id,
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["video", "audio"] },
+		})
+
+		expect(result.textPrompt).toContain("main prompt")
+		expect(result.textPrompt).not.toContain("active prompt")
+		expect(result.mediaItems).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					sourceElementId: video.id,
+					path: "./videos/main.mp4",
+					sourceContentId: "source-video-main",
+				}),
+				expect.objectContaining({
+					sourceElementId: audio.id,
+					path: "./audios/main.mp3",
+					sourceContentId: "source-audio-main",
+				}),
+			]),
+		)
 	})
 
 	it("collects direct and framed audio candidates for video targets", () => {
@@ -130,6 +192,9 @@ describe("linked frame source collection", () => {
 		const frame: FrameElement = {
 			id: "audio-frame",
 			type: ElementTypeEnum.Frame,
+			activeContentId: "audio-frame-content-1",
+			mainContentId: "audio-frame-content-1",
+			contents: [{ contentId: "audio-frame-content-1" }],
 			children: [framedAudio],
 		}
 		const target = videoElement("target", "./videos/target.mp4")
@@ -198,15 +263,28 @@ describe("linked frame source collection", () => {
 		const frame: FrameElement = {
 			id: "frame-source",
 			type: ElementTypeEnum.Frame,
+			activeContentId: "frame-source-content-1",
+			mainContentId: "frame-source-content-1",
+			contents: [{ contentId: "frame-source-content-1" }],
 			children: [
 				textElement("text-top", "top", 20),
-				{
+				<GroupElement>{
 					id: "nested-group",
 					type: ElementTypeEnum.Group,
 					zIndex: 10,
+					activeContentId: "nested-group-content-1",
+					mainContentId: "nested-group-content-1",
+					contents: [{ contentId: "nested-group-content-1" }],
 					children: [imageElement("image", "/images/a.png", 1)],
 				},
-				{ id: "shape", type: ElementTypeEnum.Rectangle, zIndex: 15 },
+				<RectangleElement>{
+					id: "shape",
+					type: ElementTypeEnum.Rectangle,
+					zIndex: 15,
+					activeContentId: "shape-content-1",
+					mainContentId: "shape-content-1",
+					contents: [{ contentId: "shape-content-1" }],
+				},
 				{ ...videoElement("hidden-video", "/videos/a.mp4", 30), visible: false },
 			],
 		}
@@ -233,6 +311,9 @@ describe("linked frame source collection", () => {
 		const frame: FrameElement = {
 			id: "frame-source",
 			type: ElementTypeEnum.Frame,
+			activeContentId: "frame-source-content-1",
+			mainContentId: "frame-source-content-1",
+			contents: [{ contentId: "frame-source-content-1" }],
 			children: [
 				textElement("frame-text", "frame prompt", 0),
 				sharedImage,
@@ -334,7 +415,13 @@ describe("linked upstream source collection", () => {
 
 	it("continues through non-consumable graph nodes", () => {
 		const elementA = textElement("A", "A")
-		const elementB: LayerElement = { id: "B", type: ElementTypeEnum.Rectangle }
+		const elementB: RectangleElement = {
+			id: "B",
+			type: ElementTypeEnum.Rectangle,
+			activeContentId: "B-content-1",
+			mainContentId: "B-content-1",
+			contents: [{ contentId: "B-content-1" }],
+		}
 		const elementC = videoElement("C", "/videos/c.mp4")
 		const canvas = createCanvasStub(
 			[elementA, elementB, elementC],

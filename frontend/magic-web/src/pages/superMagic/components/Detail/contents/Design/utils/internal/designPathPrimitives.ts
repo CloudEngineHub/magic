@@ -326,200 +326,62 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 	const base = stripEdgeSlashes(projectBasePath)
 	if (!base || !elements?.length) return
 	const rewritePath = options?.rewritePath ?? toDesignDslRelativeStoragePath
+	const rewriteImageContent = (content: Record<string, unknown>): void => {
+		setPathFieldForDsl(content, "src", base, rewritePath)
+		const request = content.generateImageRequest as Record<string, unknown> | undefined
+		if (request) {
+			setPathFieldForDsl(request, "file_dir", base, rewritePath)
+			if (Array.isArray(request.reference_images)) {
+				request.reference_images = request.reference_images.map((reference) =>
+					typeof reference === "string" ? rewritePath(reference, base) : reference,
+				)
+			}
+			setReferenceImageOptionsForDsl(request, "reference_image_options", base, rewritePath)
+		}
+		const taskMeta = content.imageGenerationTaskMeta as Record<string, unknown> | undefined
+		if (taskMeta) {
+			setPathFieldForDsl(taskMeta, "file_path", base, rewritePath)
+			setReferenceImageOptionsForDsl(taskMeta, "reference_image_options", base, rewritePath)
+		}
+	}
+	const rewriteVideoContent = (content: Record<string, unknown>): void => {
+		setPathFieldForDsl(content, "src", base, rewritePath)
+		const request = content.generateVideoRequest as Record<string, unknown> | undefined
+		const inputs = request?.inputs as Record<string, unknown> | undefined
+		if (!request) return
+		setPathFieldForDsl(request, "file_dir", base, rewritePath)
+		if (!inputs) return
+		const rewriteUri = (value: unknown): void => {
+			if (value && typeof value === "object") {
+				setPathFieldForDsl(value as Record<string, unknown>, "uri", base, rewritePath)
+			}
+		}
+		for (const field of [
+			"frames",
+			"reference_images",
+			"reference_videos",
+			"reference_audios",
+			"audio",
+		]) {
+			const items = inputs[field]
+			if (Array.isArray(items)) items.forEach(rewriteUri)
+		}
+		rewriteUri(inputs.video)
+		rewriteUri(inputs.mask)
+	}
 
 	function walk(element: Record<string, unknown>): void {
 		if (!element || typeof element !== "object") return
-
-		if (element.type === "image") {
-			if (element.imageDslVersion === 2 && Array.isArray(element.versions)) {
-				for (const version of element.versions) {
-					if (!version || typeof version !== "object") continue
-					const versionRecord = version as Record<string, unknown>
-					setPathFieldForDsl(versionRecord, "src", base, rewritePath)
-
-					const versionRequest = versionRecord.generateImageRequest as
-						| {
-								file_dir?: string
-								reference_images?: string[]
-								reference_image_options?: Array<Record<string, unknown>>
-						  }
-						| undefined
-					if (versionRequest && typeof versionRequest === "object") {
-						setPathFieldForDsl(
-							versionRequest as Record<string, unknown>,
-							"file_dir",
-							base,
-							rewritePath,
-						)
-						if (Array.isArray(versionRequest.reference_images)) {
-							versionRequest.reference_images = versionRequest.reference_images.map(
-								(ref) => (typeof ref === "string" ? rewritePath(ref, base) : ref),
-							)
-						}
-						setReferenceImageOptionsForDsl(
-							versionRequest as Record<string, unknown>,
-							"reference_image_options",
-							base,
-							rewritePath,
-						)
-					}
-
-					const versionTaskMeta = versionRecord.imageGenerationTaskMeta
-					if (versionTaskMeta && typeof versionTaskMeta === "object") {
-						setPathFieldForDsl(
-							versionTaskMeta as Record<string, unknown>,
-							"file_path",
-							base,
-							rewritePath,
-						)
-						setReferenceImageOptionsForDsl(
-							versionTaskMeta as Record<string, unknown>,
-							"reference_image_options",
-							base,
-							rewritePath,
-						)
-					}
+		if (Array.isArray(element.contents)) {
+			for (const content of element.contents) {
+				if (!content || typeof content !== "object") continue
+				const contentRecord = content as Record<string, unknown>
+				if (element.type === "image") rewriteImageContent(contentRecord)
+				if (element.type === "video") rewriteVideoContent(contentRecord)
+				if (element.type === "audio") {
+					setPathFieldForDsl(contentRecord, "src", base, rewritePath)
 				}
 			}
-
-			setPathFieldForDsl(element, "src", base, rewritePath)
-
-			const generateImageRequest = element.generateImageRequest as
-				| {
-						file_dir?: string
-						reference_images?: string[]
-						reference_image_options?: Array<Record<string, unknown>>
-				  }
-				| undefined
-			if (generateImageRequest && typeof generateImageRequest === "object") {
-				setPathFieldForDsl(
-					generateImageRequest as Record<string, unknown>,
-					"file_dir",
-					base,
-					rewritePath,
-				)
-				if (
-					Array.isArray(generateImageRequest.reference_images) &&
-					generateImageRequest.reference_images.length > 0
-				) {
-					generateImageRequest.reference_images =
-						generateImageRequest.reference_images.map((ref) =>
-							typeof ref === "string" ? rewritePath(ref, base) : ref,
-						)
-				}
-				setReferenceImageOptionsForDsl(
-					generateImageRequest as Record<string, unknown>,
-					"reference_image_options",
-					base,
-					rewritePath,
-				)
-			}
-
-			const imageGenerationTaskMeta = element.imageGenerationTaskMeta as
-				Record<string, unknown> | undefined
-			if (imageGenerationTaskMeta && typeof imageGenerationTaskMeta === "object") {
-				setPathFieldForDsl(imageGenerationTaskMeta, "file_path", base, rewritePath)
-				// 生成辅助图来自 private upload，保持其独立存储命名空间，不参与工作区持久化改写。
-				setReferenceImageOptionsForDsl(
-					imageGenerationTaskMeta,
-					"reference_image_options",
-					base,
-					rewritePath,
-				)
-			}
-
-			const generateHightImageRequest = element.generateHightImageRequest as
-				Record<string, unknown> | undefined
-			if (generateHightImageRequest && typeof generateHightImageRequest === "object") {
-				setPathFieldForDsl(generateHightImageRequest, "file_path", base, rewritePath)
-				setPathFieldForDsl(generateHightImageRequest, "file_dir", base, rewritePath)
-				setReferenceImageOptionsForDsl(
-					generateHightImageRequest,
-					"reference_image_options",
-					base,
-					rewritePath,
-				)
-			}
-		}
-
-		if (element.type === "video") {
-			setPathFieldForDsl(element, "src", base, rewritePath)
-
-			const generateVideoRequest = element.generateVideoRequest as
-				| {
-						file_dir?: string
-						inputs?: {
-							frames?: Array<{ uri?: string }>
-							reference_images?: Array<{ uri?: string }>
-							reference_videos?: Array<{ uri?: string }>
-							reference_audios?: Array<{ uri?: string }>
-							video?: { uri?: string }
-							mask?: { uri?: string }
-							audio?: Array<{ uri?: string }>
-						}
-				  }
-				| undefined
-
-			if (generateVideoRequest && typeof generateVideoRequest === "object") {
-				setPathFieldForDsl(
-					generateVideoRequest as Record<string, unknown>,
-					"file_dir",
-					base,
-					rewritePath,
-				)
-
-				if (Array.isArray(generateVideoRequest.inputs?.frames)) {
-					generateVideoRequest.inputs.frames.forEach((frame) => {
-						if (frame?.uri && typeof frame.uri === "string") {
-							frame.uri = rewritePath(frame.uri, base)
-						}
-					})
-				}
-				if (Array.isArray(generateVideoRequest.inputs?.reference_images)) {
-					generateVideoRequest.inputs.reference_images.forEach((item) => {
-						if (item?.uri && typeof item.uri === "string") {
-							item.uri = rewritePath(item.uri, base)
-						}
-					})
-				}
-				if (Array.isArray(generateVideoRequest.inputs?.reference_videos)) {
-					generateVideoRequest.inputs.reference_videos.forEach((item) => {
-						if (item?.uri && typeof item.uri === "string") {
-							item.uri = rewritePath(item.uri, base)
-						}
-					})
-				}
-				if (Array.isArray(generateVideoRequest.inputs?.reference_audios)) {
-					generateVideoRequest.inputs.reference_audios.forEach((item) => {
-						if (item?.uri && typeof item.uri === "string") {
-							item.uri = rewritePath(item.uri, base)
-						}
-					})
-				}
-				if (generateVideoRequest.inputs?.video?.uri) {
-					generateVideoRequest.inputs.video.uri = rewritePath(
-						generateVideoRequest.inputs.video.uri,
-						base,
-					)
-				}
-				if (generateVideoRequest.inputs?.mask?.uri) {
-					generateVideoRequest.inputs.mask.uri = rewritePath(
-						generateVideoRequest.inputs.mask.uri,
-						base,
-					)
-				}
-				if (Array.isArray(generateVideoRequest.inputs?.audio)) {
-					generateVideoRequest.inputs.audio.forEach((item) => {
-						if (item?.uri && typeof item.uri === "string") {
-							item.uri = rewritePath(item.uri, base)
-						}
-					})
-				}
-			}
-		}
-
-		if (element.type === "audio") {
-			setPathFieldForDsl(element, "src", base, rewritePath)
 		}
 
 		if (Array.isArray(element.children)) {

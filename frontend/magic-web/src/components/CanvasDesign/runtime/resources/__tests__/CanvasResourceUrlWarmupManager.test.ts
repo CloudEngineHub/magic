@@ -7,26 +7,35 @@ import { createTestResourceReferenceResolver } from "../../../public/__tests__/t
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 
 function createImage(id: string, src: string): LayerElement {
+	const contentId = `${id}-content`
 	return {
 		id,
 		type: ElementTypeEnum.Image,
-		src,
+		contents: [{ contentId, src }],
+		activeContentId: contentId,
+		mainContentId: contentId,
 	}
 }
 
 function createVideo(id: string, src: string): LayerElement {
+	const contentId = `${id}-content`
 	return {
 		id,
 		type: ElementTypeEnum.Video,
-		src,
+		contents: [{ contentId, src }],
+		activeContentId: contentId,
+		mainContentId: contentId,
 	}
 }
 
 function createAudio(id: string, src: string): LayerElement {
+	const contentId = `${id}-content`
 	return {
 		id,
 		type: ElementTypeEnum.Audio,
-		src,
+		contents: [{ contentId, src }],
+		activeContentId: contentId,
+		mainContentId: contentId,
 	}
 }
 

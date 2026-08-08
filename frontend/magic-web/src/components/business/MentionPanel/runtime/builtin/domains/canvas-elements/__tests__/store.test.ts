@@ -29,57 +29,95 @@ const files: FileItem[] = [
 	},
 ]
 
+function content(contentId: string, fields: Record<string, unknown> = {}) {
+	return { contentId, ...fields }
+}
+
+function contentElement(
+	element: Record<string, unknown>,
+	contentId: string,
+	contentFields: Record<string, unknown> = {},
+) {
+	return {
+		...element,
+		contents: [content(contentId, contentFields)],
+		activeContentId: contentId,
+		mainContentId: contentId,
+	}
+}
+
 const canvasDocument: CanvasDocument = {
 	elements: [
-		{
-			id: "shape",
-			type: ElementTypeEnum.Rectangle,
-			name: "Background Shape",
-			zIndex: 1,
-		},
-		{
-			id: "frame",
-			type: ElementTypeEnum.Frame,
-			name: "Main Frame",
-			zIndex: 3,
-			children: [
-				{
-					id: "hero",
-					type: ElementTypeEnum.Image,
-					name: "Hero Layer",
-					src: "./images/hero.png",
-					zIndex: 2,
-				},
-				{
-					id: "caption",
-					type: ElementTypeEnum.Text,
-					name: "Caption Text",
-					zIndex: 1,
-				},
-				{
-					id: "missing",
-					type: ElementTypeEnum.Image,
-					name: "Missing Media",
-					src: "./images/missing.png",
-					zIndex: 0,
-				},
-				{
-					id: "group",
-					type: ElementTypeEnum.Group,
-					name: "Nested Group",
-					zIndex: 4,
-					children: [
+		contentElement(
+			{
+				id: "shape",
+				type: ElementTypeEnum.Rectangle,
+				name: "Background Shape",
+				zIndex: 1,
+			},
+			"shape-content",
+		),
+		contentElement(
+			{
+				id: "frame",
+				type: ElementTypeEnum.Frame,
+				name: "Main Frame",
+				zIndex: 3,
+				children: [
+					contentElement(
 						{
-							id: "clip",
-							type: ElementTypeEnum.Video,
-							name: "Clip Layer",
-							src: "./videos/clip.mp4",
+							id: "hero",
+							type: ElementTypeEnum.Image,
+							name: "Hero Layer",
+							zIndex: 2,
+						},
+						"hero-content",
+						{ src: "./images/hero.png" },
+					),
+					contentElement(
+						{
+							id: "caption",
+							type: ElementTypeEnum.Text,
+							name: "Caption Text",
 							zIndex: 1,
 						},
-					],
-				},
-			],
-		},
+						"caption-content",
+					),
+					contentElement(
+						{
+							id: "missing",
+							type: ElementTypeEnum.Image,
+							name: "Missing Media",
+							zIndex: 0,
+						},
+						"missing-content",
+						{ src: "./images/missing.png" },
+					),
+					contentElement(
+						{
+							id: "group",
+							type: ElementTypeEnum.Group,
+							name: "Nested Group",
+							zIndex: 4,
+							children: [
+								contentElement(
+									{
+										id: "clip",
+										type: ElementTypeEnum.Video,
+										name: "Clip Layer",
+										zIndex: 1,
+									},
+									"clip-content",
+									{ src: "./videos/clip.mp4" },
+								),
+							],
+						},
+						"group-content",
+					),
+				],
+			},
+			"frame-content",
+		),
 	],
 }
 
@@ -193,13 +231,16 @@ describe("MentionPanelCanvasElementsStore", () => {
 	it("rebuilds the snapshot after cache invalidation", () => {
 		const nextDocument: CanvasDocument = {
 			elements: [
-				{
-					id: "clip",
-					type: ElementTypeEnum.Video,
-					name: "Fresh Clip",
-					src: "./videos/clip.mp4",
-					zIndex: 1,
-				},
+				contentElement(
+					{
+						id: "clip",
+						type: ElementTypeEnum.Video,
+						name: "Fresh Clip",
+						zIndex: 1,
+					},
+					"fresh-clip-content",
+					{ src: "./videos/clip.mp4" },
+				),
 			],
 		}
 		let currentDocument = canvasDocument
@@ -307,13 +348,16 @@ describe("MentionPanelCanvasElementsStore", () => {
 			canvasName: "Pink Design",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "clip",
-						type: ElementTypeEnum.Video,
-						name: "Clip Layer",
-						src: "./videos/clip.mp4",
-						zIndex: 1,
-					},
+					contentElement(
+						{
+							id: "clip",
+							type: ElementTypeEnum.Video,
+							name: "Clip Layer",
+							zIndex: 1,
+						},
+						"clip-content",
+						{ src: "./videos/clip.mp4" },
+					),
 				],
 			}),
 			resolveFileBySrc: () => ({

@@ -1,11 +1,14 @@
 import type { DownloadActionOptions, UserAction } from "../types"
 import { getSelectedFileElements, getSelectedImageElements } from "../../shared/ids"
 import type { DownloadImageOptions, CanvasImageSourceDimensions } from "../../../public/magic-types"
-import { getActiveImageVersion } from "../../document/imageVersion"
+import { getActiveImageContent, getActiveContent } from "../../document/elementContent"
 
 function hasReadyMediaSource(fileElements: ReturnType<typeof getSelectedFileElements>): boolean {
 	return fileElements.some((element) => {
-		const src = element.type === "image" ? getActiveImageVersion(element).src : element.src
+		const src =
+			element.type === "image"
+				? getActiveImageContent(element).src
+				: getActiveContent(element)?.src
 		return typeof src === "string" && src.trim().length > 0
 	})
 }
@@ -16,7 +19,7 @@ async function getDownloadImageOptions(
 	const imageElements = getSelectedImageElements(canvas)
 	const entries = await Promise.all(
 		imageElements.map(async (imageElement) => {
-			const src = getActiveImageVersion(imageElement).src
+			const src = getActiveImageContent(imageElement).src
 			if (!imageElement.id || !src) return null
 
 			const resource = await canvas.imageResourceManager

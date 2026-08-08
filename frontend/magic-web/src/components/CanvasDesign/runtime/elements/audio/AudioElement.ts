@@ -1,6 +1,11 @@
 import Konva from "konva"
-import type { AudioElement as AudioElementData, LayerElement } from "../../document/types"
+import type {
+	AudioElement as AudioElementData,
+	AudioElementContent,
+	LayerElement,
+} from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
 import {
 	BaseElement,
@@ -207,13 +212,17 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				this.syncRenderState()
 			},
 		)
-		this.subscribeWaveform(normalizedData.src)
+		this.subscribeWaveform(getActiveContent<AudioElementContent>(normalizedData)?.src)
 		this.resourceFailureUnsubscribe = canvas.eventEmitter.on(
 			"resource:audio:load-failed",
 			({ data: eventData }) => {
 				if (
-					!this.data.src ||
-					!areCanvasHostResourceReferencesSame(this.canvas, this.data.src, eventData.path)
+					!this.getAudioSrc() ||
+					!areCanvasHostResourceReferencesSame(
+						this.canvas,
+						this.getAudioSrc()!,
+						eventData.path,
+					)
 				) {
 					return
 				}
@@ -258,13 +267,23 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			height: AUDIO_CONFIG.DEFAULT_HEIGHT,
 			zIndex: options.zIndex ?? 0,
 			name: options.name,
-			src: options.src,
+			activeContentId: `${options.id}-content-1`,
+			mainContentId: `${options.id}-content-1`,
+			contents: [{ contentId: `${options.id}-content-1`, src: options.src }],
 			interactionConfig: { aspectRatioLocked: false },
 		}
 	}
 
 	public getRenderName(): string {
 		return this.getText("audio.defaultName", "音频")
+	}
+
+	private getAudioContent(): AudioElementContent | undefined {
+		return this.getActiveContent<AudioElementContent>()
+	}
+
+	private getAudioSrc(): string | undefined {
+		return this.getAudioContent()?.src
 	}
 
 	public render(): Konva.Group {
@@ -331,13 +350,13 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private isUploadingPlaceholder(): boolean {
-		return !this.data.src && this.canvas.elementManager.isTemporary(this.data.id)
+		return !this.getAudioSrc() && this.canvas.elementManager.isTemporary(this.data.id)
 	}
 
 	private resolveRenderState(): AudioRenderState {
 		if (this.isUploadingPlaceholder()) return "uploading"
 		if (
-			!this.data.src ||
+			!this.getAudioSrc() ||
 			this.resourceError ||
 			this.playbackSnapshot.error ||
 			this.waveformSnapshot.status === "error"
@@ -423,7 +442,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private retryPreparation(): void {
-		if (!this.data.src || this.retryingPreparation) return
+		if (!this.getAudioSrc() || this.retryingPreparation) return
 		this.retryingPreparation = true
 		this.resourceError = false
 		this.syncRenderState()
@@ -434,9 +453,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private getAudioLoadErrorText(): string {
-		const failureReason = this.data.src
-			? this.canvas.audioResourceManager.getFailureReason(this.data.src)
-			: null
+		const src = this.getAudioSrc()
+		const failureReason = src ? this.canvas.audioResourceManager.getFailureReason(src) : null
 		return failureReason === "not-found"
 			? this.getText("audio.fileMissing", "音频文件不存在")
 			: this.getText("audio.loadFailed", "音频加载失败，点击重试")
@@ -450,16 +468,19 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.cornerActionsDecorator?.refresh()
 		}
 		this.startStatusSpinnerAnimation()
-		if (this.data.src) {
-			this.canvas.visibilityManager.registerAudioElement(this.data.id, this.data.src)
+		const src = this.getAudioSrc()
+		if (src) {
+			this.canvas.visibilityManager.registerAudioElement(this.data.id, src)
 		}
 	}
 
 	public update(newData: AudioElementData): boolean {
 		const normalizedData = normalizeLegacyAudioDimensions(newData)
 		const previousData = this.data
+		const previousContent = this.getAudioContent()
 		this.data = normalizedData
-		const resourceChanged = previousData.src !== normalizedData.src
+		const nextContent = this.getAudioContent()
+		const resourceChanged = previousContent?.src !== nextContent?.src
 		const needsRerender =
 			resourceChanged ||
 			previousData.width !== normalizedData.width ||
@@ -471,9 +492,9 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.resourceError = false
 			this.retryingPreparation = false
 			this.replaceStatus = "idle"
-			this.subscribeWaveform(normalizedData.src)
-			if (normalizedData.src) {
-				this.canvas.visibilityManager.updateAudioElement(this.data.id, normalizedData.src)
+			this.subscribeWaveform(nextContent?.src)
+			if (nextContent?.src) {
+				this.canvas.visibilityManager.updateAudioElement(this.data.id, nextContent.src)
 			} else {
 				this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
 			}
@@ -552,15 +573,14 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public playPreview(): void {
-		if (!this.data.src) return
-		void this.canvas.audioPlaybackManager
-			.toggle(this.data.id, this.data.src)
-			.then((success) => {
-				if (!success) {
-					this.resourceError = true
-					this.rerenderWhenTransformIdle()
-				}
-			})
+		const src = this.getAudioSrc()
+		if (!src) return
+		void this.canvas.audioPlaybackManager.toggle(this.data.id, src).then((success) => {
+			if (!success) {
+				this.resourceError = true
+				this.rerenderWhenTransformIdle()
+			}
+		})
 	}
 
 	public pausePreview(): void {
@@ -573,7 +593,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.canvas.audioPlaybackManager.release(this.data.id, { preserveMetadata: true })
 		this.resourceError = false
 		this.retryingPreparation = false
-		this.subscribeWaveform(this.data.src)
+		this.subscribeWaveform(this.getAudioSrc())
 	}
 
 	public override destroy(): void {
@@ -1291,16 +1311,17 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private seekBy(deltaSeconds: number): void {
-		if (!this.data.src) return
+		const src = this.getAudioSrc()
+		if (!src) return
 		if (deltaSeconds < 0 && !this.canSeekBackward()) return
 		if (deltaSeconds > 0 && !this.canSeekForward()) return
-		void this.canvas.audioPlaybackManager.seekBy(this.data.id, this.data.src, deltaSeconds)
+		void this.canvas.audioPlaybackManager.seekBy(this.data.id, src, deltaSeconds)
 	}
 
 	private canSeekBackward(): boolean {
 		const { currentTime, duration, error, loading } = this.playbackSnapshot
 		return (
-			!!this.data.src &&
+			!!this.getAudioSrc() &&
 			!error &&
 			!loading &&
 			Number.isFinite(duration) &&
@@ -1313,7 +1334,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private canSeekForward(): boolean {
 		const { currentTime, duration, error, loading } = this.playbackSnapshot
 		return (
-			!!this.data.src &&
+			!!this.getAudioSrc() &&
 			!error &&
 			!loading &&
 			Number.isFinite(duration) &&

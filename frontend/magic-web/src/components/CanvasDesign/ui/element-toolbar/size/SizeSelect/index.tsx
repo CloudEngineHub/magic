@@ -8,7 +8,10 @@ import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import SizeIconPreview from "../../../primitives/custom/SizeIconPreview/index"
 import { cn } from "../../../../runtime/shared/lib/utils"
 import { getPersistedSourceCrop } from "../../../../runtime/resources/image/imageCropUtils"
-import { getActiveImageVersion } from "../../../../runtime/document/imageVersion"
+import {
+	getActiveContent,
+	getActiveImageContent,
+} from "../../../../runtime/document/elementContent"
 
 interface SizeOption {
 	label: string
@@ -123,13 +126,15 @@ export default function SizeSelect(props: SizeSelectProps) {
 		}
 		return selectedMediaElement
 	}, [selectedMediaElement])
-	const activeImageVersion = selectedImageElement
-		? getActiveImageVersion(selectedImageElement)
+	const activeImageContent = selectedImageElement
+		? getActiveImageContent(selectedImageElement)
 		: null
 	const selectedMediaSrc =
 		selectedMediaElement?.type === ElementTypeEnum.Image
-			? activeImageVersion?.src
-			: selectedMediaElement?.src
+			? activeImageContent?.src
+			: selectedMediaElement
+				? getActiveContent(selectedMediaElement)?.src
+				: undefined
 
 	const sizeOptions = useMemo(() => {
 		if (!originalSizeOption) {
@@ -181,7 +186,7 @@ export default function SizeSelect(props: SizeSelectProps) {
 					if (cancelled) return
 					const naturalWidth = resource?.imageInfo?.naturalWidth ?? 0
 					const naturalHeight = resource?.imageInfo?.naturalHeight ?? 0
-					const sourceCrop = getPersistedSourceCrop(activeImageVersion?.crop, {
+					const sourceCrop = getPersistedSourceCrop(activeImageContent?.crop, {
 						width: naturalWidth,
 						height: naturalHeight,
 					})
@@ -218,7 +223,7 @@ export default function SizeSelect(props: SizeSelectProps) {
 		}
 	}, [
 		canvas,
-		activeImageVersion?.crop,
+		activeImageContent?.crop,
 		selectedMediaElement?.id,
 		selectedMediaSrc,
 		selectedMediaElement?.type,

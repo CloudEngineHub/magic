@@ -7,7 +7,7 @@ import {
 	buildInlineElementDetailsProvenance,
 	type ElementDetailsProvenance,
 } from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
-import { isV2Version } from "./magicProjectCompression"
+import { isContentProjectVersion } from "./magicProjectCompression"
 import {
 	ELEMENT_DETAILS_FILENAME,
 	ELEMENT_DETAILS_USER_FILENAME,
@@ -17,6 +17,7 @@ import {
 	normalizeElementDetailsDoc,
 	rehydrateHeavyFields,
 } from "./elementDetailsStore"
+import { validateV3CanvasDocument } from "./designDataCodec"
 
 interface SiblingFileLookup {
 	fileItem: FileItem | null
@@ -50,8 +51,8 @@ function flattenFileItems(files: FileItem[] | undefined): FileItem[] {
 	return files.flatMap((file) => [file, ...flattenFileItems(file.children)])
 }
 
-function isDesignDataV2(designData: DesignData | null | undefined): boolean {
-	return isV2Version(designData?.version)
+function isContentDesignData(designData: DesignData | null | undefined): boolean {
+	return isContentProjectVersion(designData?.version)
 }
 
 function isElementDetailsContentEqual(left: ElementDetailsDoc, right: ElementDetailsDoc): boolean {
@@ -126,8 +127,8 @@ export interface ElementDetailsContext {
 }
 
 /**
- * v2 项目：把两个 sidecar 的重字段回填到 designData 元素上（原地）。
- * v1 或缺少定位信息时静默跳过。
+ * v3 项目：把两个 sidecar 的重字段回填到 Content 上（原地）。
+ * 非 v3 数据由主数据 codec 先升级后再进入这里。
  */
 export async function hydrateDesignDataDetails(
 	designData: DesignData | null,
@@ -139,7 +140,7 @@ export async function hydrateDesignDataDetails(
 		setHydratedElementDetailsProvenance(designData, {})
 		return {}
 	}
-	if (!isDesignDataV2(designData)) {
+	if (!isContentDesignData(designData)) {
 		const inlineProvenance = buildInlineElementDetailsProvenance(elements)
 		setHydratedElementDetailsProvenance(designData, inlineProvenance)
 		return inlineProvenance
@@ -164,19 +165,20 @@ export async function hydrateDesignDataDetails(
 	])
 
 	const provenance = rehydrateHeavyFields(elements, userDoc, agentDoc)
+	validateV3CanvasDocument(designData.canvas)
 	setHydratedElementDetailsProvenance(designData, provenance)
 	return provenance
 }
 
 /**
- * v2 项目：根据内存元素树写出 element-details-user.json。
+ * v3 项目：根据内存元素树写出 element-details-user.json。
  * 仅写用户文件，永不触碰后端的 element-details.json。
  */
 export async function writeUserElementDetails(
 	designData: DesignData,
 	ctx: ElementDetailsContext,
 ): Promise<boolean> {
-	if (!isDesignDataV2(designData) || !ctx.mainFileId) return true
+	if (!isContentDesignData(designData) || !ctx.mainFileId) return true
 
 	const agentLookup = findSiblingFile(
 		ctx.attachments,

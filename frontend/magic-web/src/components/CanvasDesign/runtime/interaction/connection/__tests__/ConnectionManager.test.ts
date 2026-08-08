@@ -37,7 +37,17 @@ function createCanvasStub(
 	const elementData = new Map<string, LayerElement>(
 		["source", "target", "other"].map((id) => [
 			id,
-			{ id, type: ElementTypeEnum.Text, x: 0, y: 0, width: 100, height: 40 },
+			{
+				id,
+				type: ElementTypeEnum.Text,
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 40,
+				activeContentId: `${id}-content`,
+				mainContentId: `${id}-content`,
+				contents: [{ contentId: `${id}-content` }],
+			},
 		]),
 	)
 	const connectionGroup = {
@@ -277,6 +287,9 @@ describe("ConnectionManager", () => {
 			y: 50,
 			width: 360,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [],
 		})
 
@@ -353,6 +366,9 @@ describe("ConnectionManager", () => {
 			y: 50,
 			width: 360,
 			height: 200,
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			contents: [{ contentId: "frame-content" }],
 			children: [],
 		})
 

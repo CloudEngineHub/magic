@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type {
 	CanvasConnection,
 	LayerElement,
+	RectangleElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { DesignProjectManager } from "../DesignProjectManager"
 import type { DesignConflict, DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
@@ -21,7 +22,8 @@ vi.mock("../../utils/designDraftStorage", () => ({
 	deleteDesignDraft: vi.fn(),
 }))
 
-function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
+function rect(id: string, options: Partial<RectangleElement> = {}): RectangleElement {
+	const contentId = `${id}-content-1`
 	return {
 		id,
 		type: "rectangle",
@@ -30,6 +32,9 @@ function rect(id: string, options: Partial<LayerElement> = {}): LayerElement {
 		width: 100,
 		height: 100,
 		zIndex: 1,
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [{ contentId }],
 		...options,
 	}
 }
@@ -50,7 +55,7 @@ function createDesignData(
 	return {
 		type: "design",
 		name,
-		version: "2.0.0",
+		version: "3.0.0",
 		canvas: { elements, ...(connections ? { connections } : {}) },
 	}
 }

@@ -7,6 +7,7 @@ import { zhCN } from "@/components/business/MentionPanel/i18n/locales/zh-CN"
 import {
 	ElementTypeEnum,
 	type CanvasDocument,
+	type LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import { createTestResourceReferenceResolver } from "@/components/CanvasDesign/public/__tests__/testResourceReferenceResolver"
 
@@ -63,6 +64,24 @@ function createService(
 	return service
 }
 
+function mediaElement(
+	type: typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video,
+	id: string,
+	src: string,
+	name: string,
+): LayerElement {
+	const contentId = `${id}-content-1`
+	return {
+		id,
+		type,
+		name,
+		zIndex: 1,
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [{ contentId, src }],
+	} as LayerElement
+}
+
 describe("CanvasDesignMentionDataService", () => {
 	it("keeps folders navigable while keeping project files selectable", async () => {
 		const service = createService([
@@ -100,18 +119,15 @@ describe("CanvasDesignMentionDataService", () => {
 		])
 		const document: CanvasDocument = {
 			elements: [
-				{
-					id: "hero",
-					type: ElementTypeEnum.Image,
-					name: "Hero Layer",
-					src: "./images/cat.png",
-					zIndex: 1,
-				},
+				mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 				{
 					id: "shape",
 					type: ElementTypeEnum.Rectangle,
 					name: "Shape Layer",
 					zIndex: 2,
+					activeContentId: "shape-content-1",
+					mainContentId: "shape-content-1",
+					contents: [{ contentId: "shape-content-1" }],
 				},
 			],
 		}
@@ -178,13 +194,7 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "/design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "hero",
-						type: ElementTypeEnum.Image,
-						name: "Hero Layer",
-						src: "./images/cat.png",
-						zIndex: 1,
-					},
+					mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 				],
 			}),
 		})
@@ -231,13 +241,7 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "hero",
-						type: ElementTypeEnum.Image,
-						name: "Hero Layer",
-						src: "./images/cat.png",
-						zIndex: 1,
-					},
+					mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 				],
 			}),
 		})
@@ -268,13 +272,7 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "hero",
-						type: ElementTypeEnum.Image,
-						name: "Hero Layer",
-						src: "./images/cat.png",
-						zIndex: 1,
-					},
+					mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 				],
 			}),
 		})
@@ -310,13 +308,7 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "hero",
-						type: ElementTypeEnum.Image,
-						name: "Hero Layer",
-						src: "./images/cat.png",
-						zIndex: 1,
-					},
+					mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 				],
 			}),
 		})
@@ -344,13 +336,12 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "hero",
-						type: ElementTypeEnum.Image,
-						name: "Hero Layer",
-						src: "design-b/images/cat.png",
-						zIndex: 1,
-					},
+					mediaElement(
+						ElementTypeEnum.Image,
+						"hero",
+						"design-b/images/cat.png",
+						"Hero Layer",
+					),
 				],
 			}),
 		})
@@ -380,13 +371,7 @@ describe("CanvasDesignMentionDataService", () => {
 			rootFolderId: "design-a",
 			getCanvasDocument: () => ({
 				elements: [
-					{
-						id: "clip",
-						type: ElementTypeEnum.Video,
-						name: "Clip Layer",
-						src: "./videos/clip.mp4",
-						zIndex: 1,
-					},
+					mediaElement(ElementTypeEnum.Video, "clip", "./videos/clip.mp4", "Clip Layer"),
 				],
 			}),
 		})
@@ -425,24 +410,12 @@ describe("CanvasDesignMentionDataService", () => {
 		])
 		const firstDocument: CanvasDocument = {
 			elements: [
-				{
-					id: "hero",
-					type: ElementTypeEnum.Image,
-					name: "Hero Layer",
-					src: "./images/cat.png",
-					zIndex: 1,
-				},
+				mediaElement(ElementTypeEnum.Image, "hero", "./images/cat.png", "Hero Layer"),
 			],
 		}
 		const nextDocument: CanvasDocument = {
 			elements: [
-				{
-					id: "clip",
-					type: ElementTypeEnum.Video,
-					name: "Clip Layer",
-					src: "./videos/clip.mp4",
-					zIndex: 1,
-				},
+				mediaElement(ElementTypeEnum.Video, "clip", "./videos/clip.mp4", "Clip Layer"),
 			],
 		}
 		let currentDocument = firstDocument

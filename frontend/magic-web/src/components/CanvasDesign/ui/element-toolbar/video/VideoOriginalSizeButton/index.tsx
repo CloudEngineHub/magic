@@ -6,6 +6,7 @@ import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useCanvasUI } from "../../../../app/providers/CanvasUIProvider"
 import IconButton from "../../../primitives/custom/IconButton/index"
 import styles from "./index.module.css"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
 
 export default function VideoOriginalSizeButton() {
 	const { t } = useCanvasDesignI18n()
@@ -17,7 +18,11 @@ export default function VideoOriginalSizeButton() {
 		if (!canvas || isApplying) return
 
 		const videoElement = selectedElements[0]
-		if (!videoElement || videoElement.type !== ElementTypeEnum.Video || !videoElement.src)
+		const videoContent =
+			videoElement && videoElement.type === ElementTypeEnum.Video
+				? getActiveContent(videoElement)
+				: undefined
+		if (!videoElement || videoElement.type !== ElementTypeEnum.Video || !videoContent?.src)
 			return
 
 		const elementWidth = videoElement.width ?? 0
@@ -27,7 +32,7 @@ export default function VideoOriginalSizeButton() {
 
 		setIsApplying(true)
 		try {
-			const resource = await canvas.videoResourceManager.getPreviewResource(videoElement.src)
+			const resource = await canvas.videoResourceManager.getPreviewResource(videoContent.src)
 			const videoWidth = resource?.metadata?.videoWidth ?? 0
 			const videoHeight = resource?.metadata?.videoHeight ?? 0
 			if (videoWidth <= 0 || videoHeight <= 0) return

@@ -7,7 +7,7 @@ import { ImageElement } from "../../../../runtime/elements/image/ImageElement"
 import IconButton from "../../../primitives/custom/IconButton/index"
 import styles from "../ImageCropButton/index.module.css"
 
-export default function ImageVersionDeleteButton() {
+export default function ImageContentDeleteButton() {
 	const { canvas } = useCanvas()
 	const { selectedElements } = useCanvasUI()
 	const { t } = useCanvasDesignI18n()
@@ -17,7 +17,7 @@ export default function ImageVersionDeleteButton() {
 		const selected = selectedElements[0]
 		if (!selected || selected.type !== ElementTypeEnum.Image) return
 		const instance = canvas.elementManager.getElementInstance(selected.id)
-		if (instance instanceof ImageElement) instance.deleteActiveVersion()
+		if (instance instanceof ImageElement) instance.deleteActiveContent()
 	}
 
 	return (
@@ -28,7 +28,7 @@ export default function ImageVersionDeleteButton() {
 		>
 			<Trash2 size={16} />
 			<span className={styles.buttonText}>
-				{t("elementTools.imageVersionDelete.title", "删除当前版本")}
+				{t("elementTools.imageContentDelete.title", "删除当前内容")}
 			</span>
 		</IconButton>
 	)

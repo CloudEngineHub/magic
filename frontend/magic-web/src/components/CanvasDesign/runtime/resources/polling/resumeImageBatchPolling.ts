@@ -1,18 +1,18 @@
 import {
 	ElementTypeEnum,
 	type ImageElement as ImageElementData,
-	type ImageElementVersion,
+	type ImageElementContent,
 } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import { ImageBatchPollingManager } from "./ImageBatchPollingManager"
 import { isBatchImageGenerationTaskMeta } from "../image/imageGenerationTaskMeta"
 import { shouldContinueGenerationPolling } from "./generationPollingUtils"
 import { collectElementsByType } from "../../shared/ids"
-import { getImageElementVersions, isImageElementV2 } from "../../document/imageVersion"
+import { getImageContents } from "../../document/elementContent"
 
 interface BatchPollingGroup {
 	imageId: string
-	items: Array<{ elementId: string; outputIndex: number; versionId?: string }>
+	items: Array<{ elementId: string; outputIndex: number; contentId: string }>
 }
 
 export function resumeImageBatchPollingManagers(canvas: Canvas): void {
@@ -24,12 +24,12 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 	const seenTaskKeys = new Set<string>()
 
 	imageElements.forEach((element) => {
-		// Batch submissions can live in a non-active version while the user views an older result.
-		// Restore every version so those tasks retain a polling owner after document hydration.
-		getImageElementVersions(element).forEach((version) => {
-			if (!shouldResumeBatchPolling(version)) return
+		// Batch submissions can live in a non-active Content while the user views another result.
+		// Restore every Content so those tasks retain a polling owner after document hydration.
+		getImageContents(element).forEach((content) => {
+			if (!shouldResumeBatchPolling(content)) return
 
-			const meta = version.imageGenerationTaskMeta
+			const meta = content.imageGenerationTaskMeta
 			if (!isBatchImageGenerationTaskMeta(meta)) return
 
 			const taskKey = `${meta.image_id}:${meta.output_index}`
@@ -46,7 +46,7 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 			group.items.push({
 				elementId: element.id,
 				outputIndex: meta.output_index,
-				...(isImageElementV2(element) ? { versionId: version.id } : {}),
+				contentId: content.contentId,
 			})
 			groups.set(meta.image_id, group)
 		})
@@ -58,17 +58,12 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 
 		const elementIds = orderedItems.map((item) => item.elementId)
 		const outputIndexes = orderedItems.map((item) => item.outputIndex)
-		const versionIds = orderedItems.map((item) => item.versionId)
-		const hasVersionIds = versionIds.some((versionId) => versionId !== undefined)
+		const contentIds = orderedItems.map((item) => item.contentId)
 
 		const activeManager = canvas.imageBatchPollingRegistry.get(group.imageId)
 		// 如果已经存在轮询管理器，则同步元素 ID 和输出索引
 		if (activeManager) {
-			if (hasVersionIds) {
-				activeManager.syncElementIds(elementIds, outputIndexes, versionIds)
-			} else {
-				activeManager.syncElementIds(elementIds, outputIndexes)
-			}
+			activeManager.syncElementIds(elementIds, outputIndexes, contentIds)
 			return
 		}
 
@@ -77,16 +72,16 @@ export function resumeImageBatchPollingManagers(canvas: Canvas): void {
 			imageId: group.imageId,
 			elementIds,
 			outputIndexes,
-			...(hasVersionIds ? { versionIds } : {}),
+			contentIds,
 			registry: canvas.imageBatchPollingRegistry,
 		})
 		void batchPollingManager.start()
 	})
 }
 
-function shouldResumeBatchPolling(version: ImageElementVersion): boolean {
-	if (version.src) return false
-	if (version.status !== undefined && !shouldContinueGenerationPolling(version.status)) {
+function shouldResumeBatchPolling(content: ImageElementContent): boolean {
+	if (content.src) return false
+	if (content.status !== undefined && !shouldContinueGenerationPolling(content.status)) {
 		return false
 	}
 

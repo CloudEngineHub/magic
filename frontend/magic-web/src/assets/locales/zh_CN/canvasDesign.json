@@ -91,6 +91,9 @@
 			"italic": "斜体",
 			"placeholder": "字重"
 		},
+		"imageContentDelete": {
+			"title": "删除当前内容"
+		},
 		"imageConvertHight": {
 			"exitHint": "退出",
 			"tip": "选择放大倍数",
@@ -115,9 +118,6 @@
 		},
 		"imageReplace": {
 			"title": "替换图片"
-		},
-		"imageVersionDelete": {
-			"title": "删除当前版本"
 		},
 		"shapeStyle": {
 			"advanced": "高级",
@@ -178,6 +178,10 @@
 	},
 	"image": {
 		"batchUploadFailed": "有 {{failed}}/{{total}} 个文件上传失败",
+		"content": {
+			"main": "主内容",
+			"setMain": "设为主内容"
+		},
 		"defaultName": "图片生成器",
 		"empty": "请发送生成图像的指令",
 		"errorPrefix": "图像生成失败, ",
@@ -206,11 +210,7 @@
 		"retryEditingExpand": "请重新编辑扩展需求",
 		"retryEditingRemoveBackground": "请重新编辑去背景需求",
 		"uploadFailed": "图片上传失败",
-		"uploading": "正在上传中...",
-		"version": {
-			"main": "主版本",
-			"setMain": "设为主版本"
-		}
+		"uploading": "正在上传中..."
 	},
 	"imageEditor": {
 		"currentImage": "(当前图片)",

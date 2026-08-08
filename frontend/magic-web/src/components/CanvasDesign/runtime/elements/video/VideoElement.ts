@@ -1,6 +1,11 @@
 import Konva from "konva"
-import type { VideoElement as VideoElementData, LayerElement } from "../../document/types"
+import type {
+	VideoElement as VideoElementData,
+	VideoElementContent,
+	LayerElement,
+} from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
+import { getActiveContent } from "../../document/elementContent"
 import type {
 	GenerateVideoRequest,
 	StoredVideoModeDraftsMap,
@@ -104,6 +109,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.pollingManager = new VideoPollingManager({
 			elementId: this.data.id,
 			canvas: this.canvas,
+			contentId: this.getVideoContent()?.contentId,
 			getElementData: () => this.data,
 			onPollingIssue: () => {
 				this.handlePollingIssue()
@@ -114,21 +120,24 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.modeInputDrafts = VideoElement.getModeInputDraftsFromStorage(this.canvas, this.data.id)
 		if (tempConfig) {
 			this.tempGenerateVideoRequest = tempConfig
-		} else if (this.data.generateVideoRequest) {
-			// 无本地临时草稿时，从元素已保存的请求恢复可继续编辑的字段子集
-			const { model_id, input_mode, task, generation, inputs, video_id } =
-				this.data.generateVideoRequest
-			this.tempGenerateVideoRequest = {
-				...(model_id && { model_id }),
-				...(input_mode && { input_mode }),
-				...(task && { task }),
-				...(generation ? { generation } : {}),
-				...(inputs ? { inputs } : {}),
-				...(video_id ? { video_id } : {}),
+		} else {
+			const generateVideoRequest = this.getVideoContent()?.generateVideoRequest
+			if (generateVideoRequest) {
+				// 无本地临时草稿时，从元素已保存的请求恢复可继续编辑的字段子集
+				const { model_id, input_mode, task, generation, inputs, video_id } =
+					generateVideoRequest
+				this.tempGenerateVideoRequest = {
+					...(model_id && { model_id }),
+					...(input_mode && { input_mode }),
+					...(task && { task }),
+					...(generation ? { generation } : {}),
+					...(inputs ? { inputs } : {}),
+					...(video_id ? { video_id } : {}),
+				}
 			}
 		}
 
-		if (!this.data.src && this.data.generateVideoRequest?.video_id) {
+		if (!this.getVideoSrc() && this.getVideoContent()?.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
 	}
@@ -188,10 +197,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			// 复用已有 video_id，避免同一次编辑链路上被当成新任务
 			video_id:
 				request.video_id ||
-				this.data.generateVideoRequest?.video_id ||
+				this.getVideoRequest()?.video_id ||
 				this.tempGenerateVideoRequest?.video_id ||
 				generateUUID(),
 		}
+		const contentId =
+			this.getVideoContent()?.contentId ?? this.data.activeContentId ?? undefined
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
@@ -204,6 +215,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			targets: [
 				{
 					elementId: this.data.id,
+					...(contentId ? { contentId } : {}),
 					generateVideoRequest: requestWithId,
 				},
 			],
@@ -217,7 +229,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		try {
 			await generateVideo(requestWithId)
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -225,12 +239,22 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
 					elementId: this.data.id,
+					...(contentId ? { contentId } : {}),
 					persistedPatch: {
-						generateVideoRequest: requestWithId,
-						videoGenerationResultMeta: undefined,
-						status: undefined,
-						errorMessage: undefined,
-						src: undefined,
+						contents: this.data.contents.map((content) =>
+							content.contentId === contentId
+								? {
+										...content,
+										generateVideoRequest: requestWithId,
+										videoGenerationResultMeta: undefined,
+										status: undefined,
+										errorMessage: undefined,
+										src: undefined,
+									}
+								: content,
+						),
+						activeContentId: this.data.activeContentId,
+						mainContentId: this.data.mainContentId,
 					},
 				},
 			])
@@ -242,7 +266,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.rerender()
 			return true
 		} catch (error) {
-			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
 				return false
 			}
 			this.isGenerating = false
@@ -267,7 +293,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		try {
 			const loaded = await this.canvas.videoResourceManager.getPreviewResource(path, options)
 			if (!loaded) {
-				if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+				if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 					return
 				}
 				if (options?.signal?.aborted) {
@@ -290,7 +316,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				return
 			}
 
-			if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+			if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 				return
 			}
 
@@ -300,7 +326,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isErrorState = false
 			this.schedulePreviewRefresh()
 		} catch (error) {
-			if (loadToken !== this.previewLoadToken || this.data.src !== path) {
+			if (loadToken !== this.previewLoadToken || this.getVideoSrc() !== path) {
 				return
 			}
 			this.isLoadingState = false
@@ -314,7 +340,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	public requestPreviewLoad(options?: VideoResourceLoadOptions & { force?: boolean }): void {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path || this.isDestroyed) return
 		if (!options?.force) {
 			if (
@@ -379,7 +405,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private setupVideoResourceRefreshedListener(): void {
 		this.videoResourceRefreshedHandler = ({ data }) => {
-			const currentPath = this.data.src
+			const currentPath = this.getVideoSrc()
 			if (!currentPath) return
 			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
@@ -408,7 +434,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private setupVideoResourceLoadFailedListener(): void {
 		this.videoResourceLoadFailedHandler = ({ data }) => {
-			const currentPath = this.data.src
+			const currentPath = this.getVideoSrc()
 			if (!currentPath) return
 			if (!areCanvasHostResourceReferencesSame(this.canvas, data.path, currentPath)) {
 				return
@@ -477,7 +503,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private async ensureInlinePlayback(autoPlay: boolean): Promise<boolean> {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path) {
 			return false
 		}
@@ -516,7 +542,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				const session = await this.canvas.videoPlaybackManager.acquire(path, consumerId, {
 					autoPlay,
 				})
-				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
+				if (
+					requestToken !== this.inlinePlaybackRequestToken ||
+					this.getVideoSrc() !== path
+				) {
 					if (session) {
 						this.canvas.videoPlaybackManager.release(consumerId)
 					}
@@ -535,7 +564,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.rerenderWhenTransformIdle()
 				return true
 			} catch {
-				if (requestToken !== this.inlinePlaybackRequestToken || this.data.src !== path) {
+				if (
+					requestToken !== this.inlinePlaybackRequestToken ||
+					this.getVideoSrc() !== path
+				) {
 					return false
 				}
 				this.isInlinePlaybackPending = false
@@ -577,7 +609,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 为全屏层申请独立 consumer 的 video（自动播放），不经过内联 handoff 时使用 */
 	public async acquireFullscreenPlayback(): Promise<HTMLVideoElement | null> {
-		const path = this.data.src
+		const path = this.getVideoSrc()
 		if (!path) {
 			return null
 		}
@@ -606,8 +638,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		if (this.isGenerating) return true
 
 		const hasActiveGenerationTask = this.hasActiveVideoGenerationTask()
-		const hasSrc = !!this.data.src
-		const status = this.data.status
+		const hasSrc = !!this.getVideoSrc()
+		const status = this.getVideoStatus()
 
 		if (hasActiveGenerationTask && !hasSrc) return true
 		if (
@@ -667,23 +699,27 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.syncRenderLayout(this.data.width, this.data.height)
-		if (this.data.src) {
-			this.canvas.visibilityManager.registerVideoElement(this.data.id, this.data.src)
+		const src = this.getVideoSrc()
+		if (src) {
+			this.canvas.visibilityManager.registerVideoElement(this.data.id, src)
 		}
 	}
 
 	update(newData: VideoElementData): boolean {
-		const srcChanged = this.data.src !== newData.src
-		const newStatus = newData.status
+		const previousContent = this.getVideoContent()
+		const nextContent = getActiveContent<VideoElementContent>(newData)
+		const srcChanged = previousContent?.src !== nextContent?.src
+		const newStatus = nextContent?.status
 		const generationSettled =
-			!!newData.src ||
+			!!nextContent?.src ||
 			newStatus === GenerationStatus.Completed ||
 			newStatus === GenerationStatus.Failed
 		const needsRerender =
-			this.data.generateVideoRequest?.video_id !== newData.generateVideoRequest?.video_id ||
-			this.data.src !== newData.src ||
-			this.data.status !== newData.status ||
-			this.data.errorMessage !== newData.errorMessage
+			previousContent?.generateVideoRequest?.video_id !==
+				nextContent?.generateVideoRequest?.video_id ||
+			previousContent?.src !== nextContent?.src ||
+			previousContent?.status !== nextContent?.status ||
+			previousContent?.errorMessage !== nextContent?.errorMessage
 
 		this.data = newData
 
@@ -702,8 +738,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.isErrorState = false
 			this.releasePlaybackConsumers()
 			this.renderer.resetPreview()
-			if (newData.src) {
-				this.canvas.visibilityManager.updateVideoElement(this.data.id, newData.src)
+			if (nextContent?.src) {
+				this.canvas.visibilityManager.updateVideoElement(this.data.id, nextContent.src)
 			} else {
 				this.canvas.visibilityManager.unregisterVideoElement(this.data.id)
 			}
@@ -762,10 +798,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		},
 	): void {
 		const isGeneratingStage = options.stage === "generating" || options.stage === "uploading"
+		const status = this.getVideoStatus()
+		const request = this.getVideoRequest()
 		const shouldShowRetryButton =
 			options.mode === "error" &&
-			this.data.status === GenerationStatus.Failed &&
-			!!this.data.generateVideoRequest &&
+			status === GenerationStatus.Failed &&
+			!!request &&
 			!this.isVideoResourceErrorText(options.text) &&
 			!this.isRetryEditing
 		this.isLoadingState = options.stage === "loading"
@@ -917,9 +955,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private getVideoLoadErrorText(): string {
-		const failureReason = this.data.src
-			? this.canvas.videoResourceManager.getFailureReason(this.data.src)
-			: null
+		const src = this.getVideoSrc()
+		const failureReason = src ? this.canvas.videoResourceManager.getFailureReason(src) : null
 
 		if (failureReason === "not-found") {
 			return this.getText("video.fileMissing", "视频文件不存在")
@@ -936,15 +973,16 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private resolveRenderState(): VideoRenderState {
-		const hasSrc = !!this.data.src
-		const status = this.data.status
+		const src = this.getVideoSrc()
+		const hasSrc = !!src
+		const status = this.getVideoStatus()
 
 		if (hasSrc || status === GenerationStatus.Completed) {
 			if (this.isErrorState) {
 				return {
 					stage: "error",
 					placeholderMode: "error",
-					text: this.data.errorMessage || this.getVideoLoadErrorText(),
+					text: this.getVideoErrorMessage() || this.getVideoLoadErrorText(),
 				}
 			}
 
@@ -966,7 +1004,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				text: this.isRetryEditing
 					? this.getText("video.retryEditing", "请重新编辑视频生成需求")
 					: resolveGenerationErrorMessage(
-							this.data.errorMessage,
+							this.getVideoErrorMessage(),
 							this.getText("video.generateFailed", "视频生成失败"),
 						),
 			}
@@ -1005,7 +1043,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		return (
-			this.data.status === GenerationStatus.Processing &&
+			this.getVideoStatus() === GenerationStatus.Processing &&
 			!this.canvas.elementManager.isTemporary(this.data.id)
 		)
 	}
@@ -1038,12 +1076,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	public getActiveGenerateVideoRequest(): GenerateVideoRequest | undefined {
 		return (
 			this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
-				?.generateVideoRequest || this.data.generateVideoRequest
+				?.generateVideoRequest || this.getVideoRequest()
 		)
 	}
 
 	private shouldShowFullscreenButton(): boolean {
-		return !!this.data.src
+		return !!this.getVideoSrc()
 	}
 
 	private setupContentUpdateListener(group: Konva.Group): void {
@@ -1220,6 +1258,26 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		return this.getText("video.defaultName", "视频生成器")
 	}
 
+	private getVideoContent(): VideoElementContent | undefined {
+		return this.getActiveContent<VideoElementContent>()
+	}
+
+	private getVideoSrc(): string | undefined {
+		return this.getVideoContent()?.src
+	}
+
+	private getVideoStatus(): VideoElementContent["status"] {
+		return this.getVideoContent()?.status
+	}
+
+	private getVideoErrorMessage(): string | undefined {
+		return this.getVideoContent()?.errorMessage
+	}
+
+	private getVideoRequest(): GenerateVideoRequest | undefined {
+		return this.getVideoContent()?.generateVideoRequest
+	}
+
 	/** 内联预览播放（必要时先 acquire 会话） */
 	public playPreview(): void {
 		if (this.isInlinePlaybackPending) {
@@ -1263,7 +1321,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	/** 已有成片且解码出预览后可交互播放 */
 	public canTogglePlayback(): boolean {
-		return !!this.data.src && this.renderer.hasPreview() && !this.isInlinePlaybackPending
+		return !!this.getVideoSrc() && this.renderer.hasPreview() && !this.isInlinePlaybackPending
 	}
 
 	/** 更新内存与 storage 中的草稿请求 */

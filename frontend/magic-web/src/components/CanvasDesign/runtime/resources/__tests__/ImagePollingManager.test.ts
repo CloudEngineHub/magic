@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { ElementTypeEnum, type ImageElement, type ImageElementV2 } from "../../document/types"
+import { ElementTypeEnum, type ImageElement, type ImageElementContent } from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 import { EventEmitter } from "../../core/EventEmitter"
@@ -13,7 +13,8 @@ const resolveResourceReference = createTestResourceReferenceResolver({
 	},
 })
 
-function createImageElement(overrides?: Partial<ImageElement>): ImageElement {
+function createImageElement(overrides?: Partial<ImageElementContent>): ImageElement {
+	const contentId = "content-1"
 	return {
 		id: "image-element-1",
 		type: ElementTypeEnum.Image,
@@ -22,12 +23,38 @@ function createImageElement(overrides?: Partial<ImageElement>): ImageElement {
 		width: 512,
 		height: 512,
 		zIndex: 1,
-		generateImageRequest: {
-			image_id: "image-task-1",
-			model_id: "model-1",
-			prompt: "pikachu",
-		},
-		...overrides,
+		activeContentId: contentId,
+		mainContentId: contentId,
+		contents: [
+			{
+				contentId,
+				generateImageRequest: {
+					image_id: "image-task-1",
+					model_id: "model-1",
+					prompt: "pikachu",
+				},
+				...overrides,
+			},
+		],
+	}
+}
+
+function createImageElementWithContents(
+	contents: ImageElementContent[],
+	activeContentId = contents[0]?.contentId ?? null,
+	mainContentId = contents[0]?.contentId ?? null,
+): ImageElement {
+	return {
+		id: "image-element-1",
+		type: ElementTypeEnum.Image,
+		x: 0,
+		y: 0,
+		width: 512,
+		height: 512,
+		zIndex: 1,
+		contents,
+		activeContentId,
+		mainContentId,
 	}
 }
 
@@ -42,17 +69,16 @@ function createDeferred<T>() {
 }
 
 describe("ImagePollingManager", () => {
-	it("writes a completed result to its V2 version without changing a manually selected active", async () => {
-		const element: ImageElementV2 = {
-			id: "image-element-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+	it("writes a completed result to its Content without changing a manually selected active", async () => {
+		const element = createImageElementWithContents(
+			[
 				{
-					id: "v2",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "v2",
 					status: GenerationStatus.Processing,
 					generateImageRequest: {
 						image_id: "image-task-2",
@@ -61,11 +87,13 @@ describe("ImagePollingManager", () => {
 					},
 				},
 			],
-		}
+			"v1",
+			"v1",
+		)
 		const update = vi.fn((elementId: string, updates: Partial<ImageElement>) => {
 			if (elementId === element.id) Object.assign(element, updates)
 		})
-		const markerManager = { handleImageVersionChanged: vi.fn() }
+		const markerManager = { handleImageContentChanged: vi.fn() }
 		const canvas = {
 			elementDetailsRuntimeManager: {
 				getGenerateImageRequestImageIdSource: vi.fn(() => "user"),
@@ -95,39 +123,40 @@ describe("ImagePollingManager", () => {
 			elementId: element.id,
 			canvas: canvas as never,
 			getElementData: () => element,
-			shouldAutoActivateVersion: () => false,
+			shouldAutoActivateContent: () => false,
 		})
 		manager.start()
 
 		await vi.waitFor(() => expect(manager.isActive()).toBe(false))
-		expect(element.activeVersionId).toBe("v1")
-		expect(element.versions[1]).toEqual(
+		expect(element.activeContentId).toBe("v1")
+		expect(element.contents[1]).toEqual(
 			expect.objectContaining({
-				id: "v2",
+				contentId: "v2",
 				src: "./images/image-task-2.png",
 				status: GenerationStatus.Completed,
 			}),
 		)
-		expect(markerManager.handleImageVersionChanged).not.toHaveBeenCalled()
+		expect(markerManager.handleImageContentChanged).not.toHaveBeenCalled()
 	})
 
-	it("auto-activates the completed V2 version", async () => {
-		const element: ImageElementV2 = {
-			id: "image-element-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+	it("auto-activates the completed Content", async () => {
+		const element = createImageElementWithContents(
+			[
 				{
-					id: "v2",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "v2",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-2", prompt: "new version" },
 				},
 			],
-		}
-		const markerManager = { handleImageVersionChanged: vi.fn() }
+			"v1",
+			"v1",
+		)
+		const markerManager = { handleImageContentChanged: vi.fn() }
 		const update = vi.fn((elementId: string, updates: Partial<ImageElement>) => {
 			if (elementId === element.id) Object.assign(element, updates)
 		})
@@ -160,35 +189,36 @@ describe("ImagePollingManager", () => {
 			elementId: element.id,
 			canvas: canvas as never,
 			getElementData: () => element,
-			shouldAutoActivateVersion: () => true,
+			shouldAutoActivateContent: () => true,
 		})
 		manager.start()
 
 		await vi.waitFor(() => expect(manager.isActive()).toBe(false))
-		expect(element.activeVersionId).toBe("v2")
+		expect(element.activeContentId).toBe("v2")
 	})
 
-	it("polls every processing version in the same image element", async () => {
-		const element: ImageElementV2 = {
-			id: "image-element-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+	it("polls every processing Content in the same image element", async () => {
+		const element = createImageElementWithContents(
+			[
 				{
-					id: "v2",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "v2",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-2", prompt: "second" },
 				},
 				{
-					id: "v3",
+					contentId: "v3",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-3", prompt: "third" },
 				},
 			],
-		}
+			"v1",
+			"v1",
+		)
 		const update = vi.fn((elementId: string, updates: Partial<ImageElement>) => {
 			if (elementId === element.id) Object.assign(element, updates)
 		})
@@ -218,7 +248,7 @@ describe("ImagePollingManager", () => {
 			elementId: element.id,
 			canvas: canvas as never,
 			getElementData: () => element,
-			shouldAutoActivateVersion: () => false,
+			shouldAutoActivateContent: () => false,
 		})
 		manager.start()
 
@@ -227,9 +257,9 @@ describe("ImagePollingManager", () => {
 		expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-2" })
 		expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-3" })
 		expect(
-			element.versions
+			element.contents
 				.slice(1)
-				.every((version) => version.status === GenerationStatus.Completed),
+				.every((content) => content.status === GenerationStatus.Completed),
 		).toBe(true)
 	})
 
@@ -398,22 +428,23 @@ describe("ImagePollingManager", () => {
 		})
 	})
 
-	it("starts a newly appended version without duplicating an in-flight version", async () => {
-		const element: ImageElementV2 = {
-			id: "image-element-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+	it("starts a newly appended Content without duplicating an in-flight Content", async () => {
+		const element = createImageElementWithContents(
+			[
 				{
-					id: "v2",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "v2",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-2", prompt: "second" },
 				},
 			],
-		}
+			"v1",
+			"v1",
+		)
 		const secondResult = createDeferred<never>()
 		const thirdResult = createDeferred<never>()
 		const getImageGenerationResult = vi.fn(({ image_id }: { image_id: string }) =>
@@ -441,11 +472,11 @@ describe("ImagePollingManager", () => {
 		await vi.waitFor(() =>
 			expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "image-task-2" }),
 		)
-		const previousData = { ...element, versions: [...element.versions] }
-		element.versions = [
-			...element.versions,
+		const previousData = { ...element, contents: [...element.contents] }
+		element.contents = [
+			...element.contents,
 			{
-				id: "v3",
+				contentId: "v3",
 				status: GenerationStatus.Processing,
 				generateImageRequest: { image_id: "image-task-3", prompt: "third" },
 			},
@@ -472,28 +503,29 @@ describe("ImagePollingManager", () => {
 		manager.stop()
 	})
 
-	it("keeps other versions polling when one version request fails", async () => {
+	it("keeps other Contents polling when one Content request fails", async () => {
 		vi.useFakeTimers()
-		const element: ImageElementV2 = {
-			id: "image-element-1",
-			type: ElementTypeEnum.Image,
-			imageDslVersion: 2,
-			activeVersionId: "v1",
-			mainVersionId: "v1",
-			versions: [
-				{ id: "v1", src: "./images/original.png", status: GenerationStatus.Completed },
+		const element = createImageElementWithContents(
+			[
 				{
-					id: "v2",
+					contentId: "v1",
+					src: "./images/original.png",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "v2",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-2", prompt: "second" },
 				},
 				{
-					id: "v3",
+					contentId: "v3",
 					status: GenerationStatus.Processing,
 					generateImageRequest: { image_id: "image-task-3", prompt: "third" },
 				},
 			],
-		}
+			"v1",
+			"v1",
+		)
 		const nextResult = createDeferred<{
 			image_id: string
 			status: GenerationStatus
@@ -607,9 +639,14 @@ describe("ImagePollingManager", () => {
 		expect(update).toHaveBeenCalledWith(
 			element.id,
 			{
-				src: "./images/image-task-1.png",
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
+				contents: [
+					expect.objectContaining({
+						contentId: "content-1",
+						src: "./images/image-task-1.png",
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					}),
+				],
 			},
 			{ silent: false },
 		)
@@ -723,8 +760,8 @@ describe("ImagePollingManager", () => {
 		manager.start()
 
 		await vi.waitFor(() => expect(getFileInfo).toHaveBeenCalled())
-		element.generateImageRequest = {
-			...element.generateImageRequest,
+		element.contents[0].generateImageRequest = {
+			...element.contents[0].generateImageRequest,
 			image_id: "image-task-2",
 		}
 		fileInfo.resolve({
@@ -761,8 +798,8 @@ describe("ImagePollingManager", () => {
 		manager.start()
 
 		await vi.waitFor(() => expect(getFileInfo).toHaveBeenCalled())
-		element.src = "./images/agent-final.png"
-		element.status = GenerationStatus.Completed
+		element.contents[0].src = "./images/agent-final.png"
+		element.contents[0].status = GenerationStatus.Completed
 		fileInfo.resolve({
 			src: "https://example.test/image-task-1.png",
 			fileName: "image-task-1.png",
@@ -858,8 +895,8 @@ describe("ImagePollingManager", () => {
 		await vi.waitFor(() =>
 			expect(getFileInfo).toHaveBeenCalledWith("images/image-task-1.png", expect.any(Object)),
 		)
-		element.generateImageRequest = {
-			...element.generateImageRequest,
+		element.contents[0].generateImageRequest = {
+			...element.contents[0].generateImageRequest,
 			image_id: "image-task-2",
 		}
 		elementUpdatedListener?.({ data: { elementId: element.id } })
@@ -868,9 +905,14 @@ describe("ImagePollingManager", () => {
 			expect(update).toHaveBeenCalledWith(
 				element.id,
 				{
-					src: "./images/image-task-2.png",
-					status: GenerationStatus.Completed,
-					errorMessage: undefined,
+					contents: [
+						expect.objectContaining({
+							contentId: "content-1",
+							src: "./images/image-task-2.png",
+							status: GenerationStatus.Completed,
+							errorMessage: undefined,
+						}),
+					],
 				},
 				{ silent: false },
 			),
@@ -948,7 +990,7 @@ describe("ImagePollingManager", () => {
 
 		await vi.waitFor(() => expect(update).toHaveBeenCalled())
 		expect(getImageGenerationResult).toHaveBeenCalledWith({ image_id: "high-task-1" })
-		expect(element.src).toBe("./images/high.png")
+		expect(element.contents[0].src).toBe("./images/high.png")
 	})
 
 	it("primes generated image metadata and leaves loading to visibility scheduling", async () => {
@@ -1052,13 +1094,13 @@ describe("ImagePollingManager", () => {
 		manager.start()
 
 		await vi.waitFor(() => expect(update).toHaveBeenCalled())
-		expect(element).toEqual(
+		expect(element.contents[0]).toEqual(
 			expect.objectContaining({
 				status: GenerationStatus.Failed,
 				errorMessage: INVALID_GENERATED_RESOURCE_PATH_ERROR,
 			}),
 		)
-		expect(element.src).toBeUndefined()
+		expect(element.contents[0].src).toBeUndefined()
 	})
 
 	it("clears a persisted image task when the backend confirms that exact task is missing", async () => {
@@ -1096,9 +1138,12 @@ describe("ImagePollingManager", () => {
 		expect(update).toHaveBeenCalledWith(
 			element.id,
 			{
-				generateImageRequest: undefined,
-				status: undefined,
-				errorMessage: undefined,
+				contents: [
+					expect.objectContaining({
+						contentId: "content-1",
+						status: GenerationStatus.Failed,
+					}),
+				],
 			},
 			{ silent: false },
 		)

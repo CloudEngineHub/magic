@@ -10,6 +10,7 @@ import {
 	type ImageElement as ImageElementData,
 } from "../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
+import { ElementFactory } from "../../../runtime/elements/core/ElementFactory"
 import { createEraserMaskFile } from "../../../runtime/resources/image/eraserMaskComposer"
 import { flattenEraserStrokes } from "../../../runtime/resources/image/eraserStrokeTransfer"
 import { createEraserTaskMeta } from "../../../runtime/resources/image/imageGenerationTaskMeta"
@@ -24,7 +25,7 @@ import {
 } from "../../../runtime/shared/ids"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import { getActiveImageVersion } from "../../../runtime/document/imageVersion"
+import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
@@ -60,8 +61,8 @@ export default function ImageEraserPanelRender() {
 		if (!element || element.type !== ElementTypeEnum.Image) return null
 		return element as ImageElementData
 	}, [canvas, erasingElementId])
-	const activeVersion = erasingImageElement
-		? getActiveImageVersion(erasingImageElement)
+	const activeContent = erasingImageElement
+		? getActiveImageContent(erasingImageElement)
 		: undefined
 
 	const erasingImageElementInstance = useMemo(() => {
@@ -140,7 +141,7 @@ export default function ImageEraserPanelRender() {
 		}
 
 		const strokes = canvas.eraserManager.getStrokes()
-		if (strokes.length === 0 || !activeVersion?.src) return
+		if (strokes.length === 0 || !activeContent?.src) return
 
 		setIsSubmitting(true)
 
@@ -161,25 +162,29 @@ export default function ImageEraserPanelRender() {
 			const requestImageId = generateUUID()
 			const placeholderTaskMeta = createEraserTaskMeta({
 				image_id: requestImageId,
-				file_path: activeVersion.src,
+				file_path: activeContent.src,
 				reference_image_options: buildReferenceImageOptions({
-					filePath: activeVersion.src,
-					crop: activeVersion.crop,
+					filePath: activeContent.src,
+					crop: activeContent.crop,
 				}),
 			})
 			createdElementId = generateElementId()
-			const newImageElement: ImageElementData = {
-				id: createdElementId,
-				type: ElementTypeEnum.Image,
-				x: newPosition.x,
-				y: newPosition.y,
-				width: erasingImageElement.width ?? 1024,
-				height: erasingImageElement.height ?? 1024,
-				zIndex: canvas.elementManager.getNextZIndexInLevel(),
+			const newImageElement = {
+				...ElementFactory.createElementData(
+					ElementTypeEnum.Image,
+					createdElementId,
+					newPosition.x,
+					newPosition.y,
+					erasingImageElement.width ?? 1024,
+					erasingImageElement.height ?? 1024,
+					canvas.elementManager.getNextZIndexInLevel(),
+				),
 				name: `${
 					erasingImageElement.name || erasingImageElementInstance.getRenderName()
 				} ${t("elementTools.imageEraser.title", "橡皮工具")}`,
-			}
+			} as ImageElementData
+			const targetContentId = newImageElement.activeContentId
+			if (!targetContentId) return
 
 			// 橡皮任务包含本地处理和文件上传，整个提交窗口都不能把占位元素导出。
 			canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
@@ -191,6 +196,7 @@ export default function ImageEraserPanelRender() {
 				targets: [
 					{
 						elementId: createdElementId,
+						contentId: targetContentId,
 						imageGenerationTaskMeta: placeholderTaskMeta,
 					},
 				],
@@ -208,8 +214,8 @@ export default function ImageEraserPanelRender() {
 					: undefined
 
 			const workerResult = await canvas.submitImageWorkerManager.createEraserMaskInWorker({
-				src: activeVersion.src,
-				crop: activeVersion.crop,
+				src: activeContent.src,
+				crop: activeContent.crop,
 				elementSize: {
 					width: erasingImageElement.width,
 					height: erasingImageElement.height,
@@ -242,7 +248,7 @@ export default function ImageEraserPanelRender() {
 							element: {
 								width: erasingImageElement.width,
 								height: erasingImageElement.height,
-								crop: activeVersion.crop,
+								crop: activeContent.crop,
 							},
 							strokes,
 							naturalWidth: sourceDimensions.width,
@@ -256,7 +262,7 @@ export default function ImageEraserPanelRender() {
 			}
 
 			const imageProcessRequestPayload = getImageProcessRequestPayload({
-				crop: activeVersion.crop,
+				crop: activeContent.crop,
 				sourceDimensions,
 			})
 
@@ -280,11 +286,11 @@ export default function ImageEraserPanelRender() {
 
 			const success = await newElementInstance.eraser({
 				image_id: requestImageId,
-				file_path: activeVersion.src,
+				file_path: activeContent.src,
 				mark_path: maskPath,
 				size: imageProcessRequestPayload.size,
 				reference_image_options: buildReferenceImageOptions({
-					filePath: activeVersion.src,
+					filePath: activeContent.src,
 					crop: imageProcessRequestPayload.crop,
 				}),
 			})
@@ -307,7 +313,7 @@ export default function ImageEraserPanelRender() {
 		}
 	}, [
 		canvas,
-		activeVersion,
+		activeContent,
 		methods,
 		erasingElementId,
 		erasingImageElement,
