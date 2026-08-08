@@ -29,6 +29,98 @@ from app.tools.visual_understanding_utils import (
 logger = get_logger(__name__)
 
 
+def _format_safe_error(error_type: str, action: str) -> str:
+    """构造不包含上游原始信息的模型可读错误。"""
+    return f"Visual understanding failed. Error type: {error_type}. Action: {action}"
+
+
+def _classify_visual_request_error(error: Exception) -> str:
+    """将上游异常归类为安全、可执行的模型提示。"""
+    message = str(error).lower()
+
+    if "unsupportedimageformat" in message or "unsupported image format" in message:
+        return _format_safe_error(
+            "unsupported image format",
+            "convert the image to JPEG, PNG, or WebP, then retry",
+        )
+    if "invalidparameter" in message or "invalid parameter" in message:
+        return _format_safe_error(
+            "invalid image input",
+            "verify that each image is complete and readable, then retry",
+        )
+    if LLMRequestHandler.is_request_too_large_error(error):
+        return _format_safe_error(
+            "request too large",
+            "reduce the image count or dimensions, or split the request into smaller batches",
+        )
+    if any(marker in message for marker in ("rate limit", "rate_limit", "too many requests", "429")):
+        return _format_safe_error(
+            "rate limited",
+            "do not retry immediately; use non-visual evidence when possible, otherwise tell the user that visual analysis is temporarily unavailable",
+        )
+    if any(marker in message for marker in ("timeout", "timed out", "deadline exceeded")):
+        return _format_safe_error(
+            "request timeout",
+            "retry once with fewer or smaller images; if it fails again, use non-visual evidence or tell the user that visual analysis is unavailable",
+        )
+    if any(marker in message for marker in ("unauthorized", "forbidden", "authentication", "permission denied", "401", "403")):
+        return _format_safe_error(
+            "service authorization failure",
+            "do not retry unchanged; use non-visual evidence when possible, otherwise tell the user that visual analysis is unavailable",
+        )
+    if any(marker in message for marker in ("model not found", "model_not_found", "unsupported model", "vision not supported")):
+        return _format_safe_error(
+            "visual model unavailable",
+            "do not retry unchanged; use non-visual evidence when possible, otherwise tell the user that visual analysis is unavailable",
+        )
+    if any(marker in message for marker in ("connection", "connect error", "network", "dns", "ssl")):
+        return _format_safe_error(
+            "service connection failure",
+            "retry once; if it fails again, use non-visual evidence or tell the user that visual analysis is unavailable",
+        )
+
+    return _format_safe_error(
+        "upstream service failure",
+        "do not retry the same request unchanged; use non-visual evidence when possible, otherwise tell the user that visual analysis is unavailable",
+    )
+
+
+def _classify_image_processing_error(error: str | None) -> str:
+    """将图片预处理错误归类，避免把路径、URL 或底层异常写入模型上下文。"""
+    message = (error or "").lower()
+
+    if any(marker in message for marker in ("不存在", "not found", "no such file")):
+        return _format_safe_error(
+            "image not found",
+            "provide an existing local image or an accessible image URL, then retry",
+        )
+    if any(marker in message for marker in ("格式", "unsupported", "invalid image", "invalid content")):
+        return _format_safe_error(
+            "invalid or unsupported image",
+            "provide a readable JPEG, PNG, GIF, WebP, or BMP image, then retry",
+        )
+    if any(marker in message for marker in ("超时", "timeout", "timed out")):
+        return _format_safe_error(
+            "image download timeout",
+            "retry once or provide a local copy of the image",
+        )
+    if any(marker in message for marker in ("过大", "too large", "size limit")):
+        return _format_safe_error(
+            "image too large",
+            "reduce the image dimensions or file size, then retry",
+        )
+    if any(marker in message for marker in ("下载", "download", "connection", "network")):
+        return _format_safe_error(
+            "image download failure",
+            "verify that the image URL is accessible or provide a local image, then retry",
+        )
+
+    return _format_safe_error(
+        "image preprocessing failure",
+        "verify that the image is accessible and readable, then retry with a supported image",
+    )
+
+
 class VisualUnderstandingParams(BaseToolParams):
     images: List[str] = Field(
         ...,
@@ -174,10 +266,14 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
 
             # 检查参数有效性
             if not images:
-                return ToolResult.error("请提供至少一张图片进行分析")
+                return ToolResult.error(
+                    _format_safe_error("missing image input", "provide at least one image")
+                )
 
             if not query or not query.strip():
-                return ToolResult.error("请提供对图片的分析需求或问题")
+                return ToolResult.error(
+                    _format_safe_error("missing analysis request", "provide a question or analysis requirement")
+                )
 
             # 并发处理所有图片来源
             tasks = [
@@ -193,8 +289,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 # 并发执行所有图片处理任务
                 results = await asyncio.gather(*tasks, return_exceptions=True)
             except Exception as e:
-                logger.error(f"并发图片处理过程中发生异常: {e}")
-                return ToolResult.error("图片处理时发生异常")
+                logger.warning(f"Concurrent image processing failed: {e}")
+                return ToolResult.error(_classify_image_processing_error(str(e)))
 
             # 处理结果 - 使用封装的数据类
             batch_results = BatchImageProcessingResults()
@@ -216,15 +312,18 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             # 如果是单张图片且失败，直接返回错误
             if total_count == 1 and failed_count == 1:
                 failed_result = batch_results.failed_results[0]
-                error_message = f"图片处理失败: {failed_result.error}"
-                logger.error(f"单张图片处理失败，直接返回错误: {error_message}")
-                return ToolResult.error(error_message)
+                logger.warning(f"Single image processing failed: {failed_result.error}")
+                return ToolResult.error(failed_result.error or _classify_image_processing_error(None))
 
             # 如果所有图片都失败，返回错误
             if success_count == 0:
-                error_message = f"所有图片处理失败 ({failed_count}张图片)"
-                logger.error(f"所有图片处理失败: {error_message}")
-                return ToolResult.error(error_message)
+                logger.warning(f"All image processing attempts failed: count={failed_count}")
+                return ToolResult.error(
+                    _format_safe_error(
+                        "all images failed preprocessing",
+                        "remove invalid images or provide accessible images in supported formats, then retry",
+                    )
+                )
 
             # 调用 LLM 进行视觉理解
             response = await self._call_llm_for_visual_understanding(
@@ -271,8 +370,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             return result
 
         except Exception as e:
-            logger.error(f"视觉理解操作失败: {e}")
-            return ToolResult.error(f"视觉理解操作失败，可能有图片链接无法被下载，请换其它图片链接尝试")
+            logger.warning(f"Visual understanding operation failed: {e}")
+            return ToolResult.error(_classify_image_processing_error(str(e)))
         finally:
             # 清理复制的文件，保持文件在 .visual 目录中
             await cleanup_copied_files(self._image_processor.copied_files)
@@ -390,30 +489,21 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 batch_results=batch_results
             )
         except Exception as llm_error:
-            # 记录具体的 LLM 调用错误，包含图片 URL 信息
-            image_urls_info = ", ".join([f"图{i+1}: {url}" for i, url in enumerate(images)])
-            logger.warning(f"LLM 最终调用失败 (模型: {model_id}): {llm_error}")
-            logger.warning(f"相关图片: {image_urls_info}")
-
-            # 返回友好的错误消息
-            if "UnsupportedImageFormat" in str(llm_error):
-                return ToolResult.error("图片格式不受支持，请尝试使用 JPEG、PNG 等常见格式的图片")
-            elif "InvalidParameter" in str(llm_error):
-                return ToolResult.error("图片参数无效，请检查图片是否完整或格式是否正确")
-            elif LLMRequestHandler.is_request_too_large_error(llm_error):
-                return ToolResult.error("视觉理解请求体过大，请减少图片数量、降低图片尺寸，或分批调用视觉理解")
-            else:
-                error_text = str(llm_error).strip() or type(llm_error).__name__
-                return ToolResult.error(
-                    "Visual understanding request failed. "
-                    f"Reason: {error_text}. "
-                    "Do not repeat the same request unchanged. Use available non-visual evidence "
-                    "to continue when possible; otherwise tell the user that visual analysis is unavailable."
-                )
+            # 原始异常仅进入内部日志；模型侧只返回脱敏后的错误分类和应对措施。
+            logger.warning(
+                f"Visual understanding LLM request failed (model={model_id}, image_count={len(images)}): "
+                f"{llm_error}"
+            )
+            return ToolResult.error(_classify_visual_request_error(llm_error))
 
         # 处理响应
         if not response or not response.choices or len(response.choices) == 0:
-            return ToolResult.error("没有从模型收到有效响应")
+            return ToolResult.error(
+                _format_safe_error(
+                    "empty model response",
+                    "retry once; if the response is still empty, use non-visual evidence or tell the user that visual analysis is unavailable",
+                )
+            )
 
         return response
 
@@ -434,12 +524,12 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         """
         # 处理异常结果
         if isinstance(result, Exception):
-            logger.warning(f"处理图片 {image_source} 时发生异常: {result}")
+            logger.warning(f"Image processing raised an exception for {image_source}: {result}")
             batch_results.add_failed_image(
                 index=index + 1,
                 source=image_source,
                 name=extract_image_source_name(image_source),
-                error=f"处理异常: {str(result)}"
+                error=_classify_image_processing_error(str(result))
             )
             return
 
@@ -447,8 +537,11 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         if isinstance(result, ImageProcessResult):
             if not result.success or not result.image_data:
                 # 处理失败
-                logger.warning(f"图片 {image_source} 处理失败")
-                error_message = result.error_message or "图片处理失败"
+                logger.warning(
+                    f"Image processing failed for {image_source}: "
+                    f"{result.error_message or 'unknown preprocessing error'}"
+                )
+                error_message = _classify_image_processing_error(result.error_message)
 
                 batch_results.add_failed_image(
                     index=index + 1,
@@ -477,10 +570,10 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             return
 
         # 处理未知结果类型
-        logger.warning(f"图片 {image_source} 返回未知结果类型: {type(result)}")
+        logger.warning(f"Image processing returned an unknown result type for {image_source}: {type(result)}")
         batch_results.add_failed_image(
             index=index + 1,
             source=image_source,
             name=extract_image_source_name(image_source),
-            error=f"未知结果类型: {type(result)}"
+            error=_classify_image_processing_error(None)
         )
