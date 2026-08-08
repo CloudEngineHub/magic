@@ -403,7 +403,13 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             elif LLMRequestHandler.is_request_too_large_error(llm_error):
                 return ToolResult.error("视觉理解请求体过大，请减少图片数量、降低图片尺寸，或分批调用视觉理解")
             else:
-                return ToolResult.error("Visual understanding service temporarily unavailable")
+                error_text = str(llm_error).strip() or type(llm_error).__name__
+                return ToolResult.error(
+                    "Visual understanding request failed. "
+                    f"Reason: {error_text}. "
+                    "Do not repeat the same request unchanged. Use available non-visual evidence "
+                    "to continue when possible; otherwise tell the user that visual analysis is unavailable."
+                )
 
         # 处理响应
         if not response or not response.choices or len(response.choices) == 0:
