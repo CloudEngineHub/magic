@@ -20,7 +20,7 @@ from app.tools.browser.presentation.models import (
     BrowserNetworkStats,
     BrowserOperationPresentation,
     BrowserPageListStats,
-    BrowserSnapshotStats,
+    BrowserElementListStats,
 )
 
 
@@ -109,7 +109,7 @@ class BrowserDetailBuilder:
         cls,
         action: str,
         result: ToolResult,
-        stats: BrowserPageListStats | BrowserSnapshotStats | BrowserConsoleStats | BrowserNetworkStats | None,
+        stats: BrowserPageListStats | BrowserElementListStats | BrowserConsoleStats | BrowserNetworkStats | None,
         *,
         page: Mapping[str, object],
         target: str,
@@ -125,7 +125,7 @@ class BrowserDetailBuilder:
             return cls._message("browser.detail.failed", action=action, error=cls._user_error(result))
         if isinstance(stats, BrowserPageListStats):
             return cls._message("browser.detail.pages", count=stats.total)
-        if isinstance(stats, BrowserSnapshotStats):
+        if isinstance(stats, BrowserElementListStats):
             return cls._message(
                 "browser.detail.snapshot",
                 count=stats.interactive_elements,
@@ -156,7 +156,7 @@ class BrowserDetailBuilder:
     def _stats(
         cls,
         result: ToolResult,
-    ) -> BrowserPageListStats | BrowserSnapshotStats | BrowserConsoleStats | BrowserNetworkStats | None:
+    ) -> BrowserPageListStats | BrowserElementListStats | BrowserConsoleStats | BrowserNetworkStats | None:
         pages = result.data.get("pages")
         if isinstance(pages, list):
             active = sum(1 for page in pages if isinstance(page, Mapping) and page.get("active") is True)
@@ -167,7 +167,7 @@ class BrowserDetailBuilder:
             root_nodes = snapshot.get("root_nodes")
             node_count, ref_count = cls._snapshot_counts(root_nodes)
             diff = snapshot.get("diff")
-            return BrowserSnapshotStats(
+            return BrowserElementListStats(
                 nodes=node_count,
                 interactive_elements=ref_count,
                 truncated=snapshot.get("truncated") is True,
@@ -209,7 +209,7 @@ class BrowserDetailBuilder:
     ) -> str:
         if tool_name == "browser_read_page":
             return cls._read_page_body(result)
-        if tool_name == "browser_snapshot":
+        if tool_name == "browser_list_elements":
             return cls._snapshot_body(result)
         if tool_name == "browser_wait":
             return cls._wait_body(arguments)

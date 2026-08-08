@@ -556,7 +556,7 @@
         "en_US": "Image understanding completed"
     },
     "visual_understanding_webpage.error": {
-        "zh_CN": "网页视觉分析失败: {{error}}",
+        "zh_CN": "网页视觉理解失败: {{error}}",
         "en_US": "Webpage visual analysis failed: {{error}}"
     },
     "visual_understanding_webpage.analysis_webpage": {
@@ -1592,20 +1592,20 @@
         "en_US": "Click element"
     },
     "browser.find_interactive_element_visually": {
-        "zh_CN": "查找可交互元素",
-        "en_US": "Find interactive elements"
+        "zh_CN": "视觉定位元素",
+        "en_US": "Locate element visually"
     },
-    "browser.get_interactive_elements": {
-        "zh_CN": "查找可交互元素",
-        "en_US": "Find interactive elements"
+    "browser.find_element": {
+        "zh_CN": "定位网页元素",
+        "en_US": "Find webpage elements"
+    },
+    "browser.list_elements": {
+        "zh_CN": "查看可操作元素",
+        "en_US": "List interactive elements"
     },
     "browser.goto": {
         "zh_CN": "打开网页",
         "en_US": "Open webpage"
-    },
-    "browser.goto_and_read": {
-        "zh_CN": "打开网页并阅读网页内容",
-        "en_US": "Open webpage and read content"
     },
     "browser.input_text": {
         "zh_CN": "输入内容",
@@ -1615,13 +1615,21 @@
         "zh_CN": "阅读网页内容",
         "en_US": "Read webpage content"
     },
+    "browser.read_html": {
+        "zh_CN": "查看网页结构",
+        "en_US": "Inspect webpage structure"
+    },
+    "browser.add_init_script": {
+        "zh_CN": "注册页面初始化脚本",
+        "en_US": "Register page init script"
+    },
     "browser.scroll_to": {
         "zh_CN": "滚动屏幕",
         "en_US": "Scroll screen"
     },
     "browser.visual_query": {
-        "zh_CN": "阅读网页内容",
-        "en_US": "Read webpage content"
+        "zh_CN": "视觉理解网页",
+        "en_US": "Understand webpage visually"
     },
     "browser.remark.running": {
         "zh_CN": "正在{{action}}",
@@ -1807,9 +1815,9 @@
         "zh_CN": "上传文件：{{count}} 个",
         "en_US": "Uploaded files: {{count}}"
     },
-    "browser.attachment.snapshot": {
+    "browser.attachment.screenshot": {
         "zh_CN": "网页操作截图",
-        "en_US": "Browser snapshot"
+        "en_US": "Browser screenshot"
     },
     "browser.error.invalid_config": {
         "zh_CN": "浏览器配置不完整或不正确",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -43,6 +43,16 @@ class BrowserWaitParams(BaseToolParams):
     duration_ms: float | None = Field(None, gt=0, description="Duration in milliseconds for a time wait.")
     state: str | None = Field(None, description="Required load state, or optional text/ref state.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
+
+    @model_validator(mode="after")
+    def validate_condition_arguments(self) -> "BrowserWaitParams":
+        if self.condition is WaitConditionKind.TIME and self.duration_ms is None:
+            raise ValueError("a time wait requires duration_ms")
+        if self.condition in {WaitConditionKind.URL, WaitConditionKind.TEXT, WaitConditionKind.REF} and not self.value:
+            raise ValueError(f"a {self.condition.value} wait requires value")
+        if self.condition is WaitConditionKind.LOAD_STATE and not self.state:
+            raise ValueError("a load_state wait requires state")
+        return self
 
 
 class BrowserKeepAliveParams(BaseToolParams):

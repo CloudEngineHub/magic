@@ -34,7 +34,7 @@ class BrowserSavedScreenshot:
     height: int
     quality: int | None
     file_size: int
-    uses_snapshot_defaults: bool
+    uses_artifact_defaults: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +61,28 @@ class BrowserFileAdapter:
             yield file_path
         finally:
             await async_unlink(file_path)
+
+    @staticmethod
+    @asynccontextmanager
+    async def temporary_image(image: bytes) -> AsyncIterator[str]:
+        """将视觉分析截图编码为高质量 WebP，并在调用结束后清理临时文件。"""
+        temp_dir = Path(tempfile.gettempdir()) / "super-magic" / "browser-visual"
+        await async_mkdir(temp_dir, parents=True, exist_ok=True)
+        fd, file_path = await async_mkstemp(suffix=".webp", prefix="browser-", dir=temp_dir)
+        await async_close_fd(fd)
+        try:
+            encoded = await asyncio.to_thread(BrowserFileAdapter._encode_visual_webp, image)
+            await async_write_bytes(file_path, encoded)
+            yield file_path
+        finally:
+            await async_unlink(file_path)
+
+    @staticmethod
+    def _encode_visual_webp(image: bytes) -> bytes:
+        with Image.open(io.BytesIO(image)) as source:
+            output = io.BytesIO()
+            source.convert("RGB").save(output, format="WEBP", quality=90, method=6)
+            return output.getvalue()
 
     @classmethod
     async def resolve_workspace_output_path(
@@ -121,7 +143,7 @@ class BrowserFileAdapter:
             height=encoded.height,
             quality=effective_quality,
             file_size=file_size,
-            uses_snapshot_defaults=scale is None and quality is None,
+            uses_artifact_defaults=scale is None and quality is None,
         )
 
     @staticmethod

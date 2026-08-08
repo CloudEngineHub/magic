@@ -14,7 +14,7 @@ class BrowserPageListStats:
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserSnapshotStats:
+class BrowserElementListStats:
     nodes: int
     interactive_elements: int
     truncated: bool
@@ -37,7 +37,7 @@ class BrowserNetworkStats:
     pending: int
 
 
-BrowserOperationStats = BrowserPageListStats | BrowserSnapshotStats | BrowserConsoleStats | BrowserNetworkStats
+BrowserOperationStats = BrowserPageListStats | BrowserElementListStats | BrowserConsoleStats | BrowserNetworkStats
 
 
 @dataclass(frozen=True, slots=True)

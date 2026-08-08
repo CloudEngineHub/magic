@@ -1,6 +1,6 @@
-# Snapshots and Refs
+# Elements and Refs
 
-Read [SKILL.md](../SKILL.md) first. This reference contains the exact signatures for page observation and visual tools, and explains how structured observations and visual labels share one element identity system.
+Read [SKILL.md](../SKILL.md) first. This reference contains the exact signatures for page observation tools and explains the element identity system used by structured observations.
 
 ## Tool Signatures
 
@@ -10,35 +10,39 @@ browser_read_page(
     scope: "viewport" | "full" = "viewport",
     session_id: str | None = None,
 )
-browser_snapshot(
+browser_read_html(
+    page_id: str,
+    ref: str | None = None,
+    detail: "outline" | "full" = "outline",
+    max_chars: int = 20000,
+    session_id: str | None = None,
+)
+browser_find(
+    page_id: str,
+    role: str | None = None,
+    name: str | None = None,
+    text: str | None = None,
+    visible_only: bool = True,
+    limit: int = 20,
+    session_id: str | None = None,
+)
+browser_list_elements(
     page_id: str,
     scope: "interactive" | "viewport" | "subtree" | "full" | "changes" = "interactive",
     ref: str | None = None,
     session_id: str | None = None,
 )
-browser_screenshot(
-    page_id: str,
-    labels: bool = False,
-    full_page: bool = False,
-    output_path: str | None = None,
-    scale: float | None = None,
-    quality: int | None = None,
-    session_id: str | None = None,
-)
-browser_visual_query(
-    page_id: str,
-    query: str,
-    full_page: bool = False,
-    session_id: str | None = None,
-)
-browser_find_visual(page_id: str, target: str, session_id: str | None = None)
 ```
 
-`browser_read_page` returns rendered content, not raw HTML or a DOM snapshot. `browser_visual_query` captures and analyzes the page in one call. `browser_find_visual` returns one validated visual match and fails instead of guessing when the target is missing or ambiguous.
+`browser_read_page` is for article-style rendered content. `browser_read_html` exposes real tags, classes, and data attributes for application-style pages. `browser_find` filters the full element set and returns refs without silently choosing one.
 
-Screenshot format is inferred from `.webp`, `.jpg`, `.jpeg`, or `.png`. Omit `scale` and `quality` normally. `scale` accepts 0.5-3.0; WebP and JPEG `quality` accepts 1-100; PNG rejects `quality`.
+On a very large page, do not dump everything. Narrow down in three steps:
 
-## Snapshot Scopes
+1. Use `browser_find` to get a region ref.
+2. Use `browser_read_html(ref=that_ref)` to inspect real markup.
+3. Use `browser_evaluate` with selectors taken from that output to read the required values.
+
+## Element-list Scopes
 
 - `interactive`: interactive nodes plus the minimum ancestor context needed to understand dialogs, forms, navigation, lists, tables, and page regions. Use this by default before acting.
 - `viewport`: the visible page structure, including useful non-interactive context.
@@ -102,7 +106,7 @@ action = tool.call("browser_click", {
 if not action.ok:
     print(action.content)
 else:
-    changes = tool.call("browser_snapshot", {
+    changes = tool.call("browser_list_elements", {
         "page_id": page_id,
         "scope": "changes",
     })
@@ -112,30 +116,6 @@ else:
 If no observable change is available, report that the action was dispatched and inspect the page again using the method appropriate to the task.
 
 ## Labeled Screenshots
-
-`browser_screenshot(labels=True)` first obtains an interactive viewport snapshot, then renders labels for selected snapshot refs, captures the image, and removes the overlay.
-
-Labels exist only for that screenshot. The overlay is temporary, and labels are not stable identifiers.
-
-The result includes a `label_to_ref` mapping. Convert a visual choice back to the mapped ref and use a normal interaction tool:
-
-```python
-shot = tool.call("browser_screenshot", {
-    "page_id": page_id,
-    "labels": True,
-})
-print(shot.content)
-if shot.ok:
-    target_ref = shot.data["label_to_ref"]["A2"]
-    print(tool.call("browser_click", {
-        "page_id": page_id,
-        "ref": target_ref,
-    }).content)
-```
-
-Do not infer a ref from the label text. Do not reuse a label mapping after scrolling, resizing, navigation, or another snapshot that changes the page state.
-
-Prefer `browser_find_visual` when the goal is to find one visually described control. It performs the labeled screenshot and returns one validated ref directly.
 
 ## Stale Ref Recovery
 

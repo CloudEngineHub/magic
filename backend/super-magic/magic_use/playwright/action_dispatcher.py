@@ -183,6 +183,34 @@ class PlaywrightActionDispatcher:
     async def _click(cdp: CDPSession, backend_node_id: int) -> None:
         await PlaywrightActionDispatcher._scroll_into_view(cdp, backend_node_id)
         x, y = await PlaywrightActionDispatcher._box_center(cdp, backend_node_id)
+        object_id = await PlaywrightActionDispatcher._resolve_object(cdp, backend_node_id)
+        try:
+            covering = await PlaywrightActionDispatcher._call(
+                cdp,
+                object_id,
+                """
+                function() {
+                  const rect = this.getBoundingClientRect();
+                  const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                  if (!hit || hit === this || this.contains(hit)) return null;
+                  return {
+                    tag: hit.tagName?.toLowerCase() || 'element',
+                    className: typeof hit.className === 'string' ? hit.className.trim() : '',
+                  };
+                }
+                """,
+            )
+        finally:
+            await cdp.send("Runtime.releaseObject", {"objectId": object_id})
+        if isinstance(covering, dict):
+            tag = covering.get("tag") if isinstance(covering.get("tag"), str) else "element"
+            class_name = covering.get("className") if isinstance(covering.get("className"), str) else ""
+            element = f'<{tag} class="{class_name}">' if class_name else f"<{tag}>"
+            raise BrowserSDKError(
+                BrowserErrorCode.ACTION_FAILED,
+                f"Click failed: the element at ({x:g}, {y:g}) is covered by {element}. "
+                "Dismiss the overlay first, then retry.",
+            )
         await cdp.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1})
         await cdp.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1})
 

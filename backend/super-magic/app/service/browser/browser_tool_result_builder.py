@@ -11,7 +11,7 @@ from typing import TypeAlias
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agentlang.tools.tool_result import ToolResult
-from app.service.browser.browser_artifact_service import BrowserScreenshotArtifact
+from app.service.browser.browser_artifact_service import BrowserEncodedScreenshot, BrowserScreenshotArtifact
 from app.service.browser.browser_file_adapter import BrowserSavedScreenshot
 from magic_use.errors import BrowserSDKError
 from magic_use.models import (
@@ -22,10 +22,11 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
-    PageSnapshot,
+    PageElements,
     ScreenshotResult,
-    SnapshotDiff,
-    SnapshotNode,
+    ElementDiff,
+    ElementNode,
+    FindResult,
 )
 
 StructuredValue: TypeAlias = str | int | float | bool | None | list["StructuredValue"] | dict[str, "StructuredValue"]
@@ -73,6 +74,9 @@ class BrowserToolResultBuilder:
     def page(cls, page: BrowserPage, message: str) -> ToolResult:
         expires = cls._format_time(page.expires_at) if page.expires_at is not None else "not set"
         warning = f"\n- Warning: {page.resource_warning}" if page.resource_warning else ""
+        redirect = ""
+        if len(page.redirect_chain) > 1:
+            redirect = f"\n- Page was redirected: {' -> '.join(cls.safe_url(url) for url in page.redirect_chain)}"
         return ToolResult(
             content=(
                 f"{message}\n"
@@ -82,6 +86,7 @@ class BrowserToolResultBuilder:
                 f"- Document generation: {page.document_generation}\n"
                 f"- Expires: {expires}\n"
                 f"- Status: open and available for further Browser calls{warning}"
+                f"{redirect}"
             ),
             data={"page_id": page.id, "session_id": page.session_id, "page": cls._structured(page)},
         )
@@ -95,6 +100,47 @@ class BrowserToolResultBuilder:
             f"Scope: {scope}\n\n"
             f"{markdown}"
         )
+
+    @classmethod
+    def html_outline(
+        cls,
+        page: BrowserPage,
+        *,
+        ref: str | None,
+        detail: str,
+        html: str,
+        truncated: bool,
+        max_chars: int,
+    ) -> ToolResult:
+        lines = [
+            f"HTML structure from {page.title or cls.safe_url(page.url)}",
+            f"Page ID: {page.id}",
+            f"URL: {cls.safe_url(page.url)}",
+            f"Detail: {detail}",
+        ]
+        if ref is not None:
+            lines.append(f"Root ref: {ref}")
+        lines.extend(("", html))
+        if truncated:
+            lines.extend(
+                (
+                    "",
+                    f"[Truncated at {max_chars} characters. Narrow the range with a ref from "
+                    "browser_find, or keep detail set to outline.]",
+                )
+            )
+        return ToolResult(
+            content="\n".join(lines),
+            data={
+                "page_id": page.id,
+                "session_id": page.session_id,
+                "page": cls._structured(page),
+                "ref": ref,
+                "detail": detail,
+                "html": html,
+                "truncated": truncated,
+            },
+        )
         return ToolResult(
             content=content,
             data={
@@ -107,7 +153,7 @@ class BrowserToolResultBuilder:
         )
 
     @classmethod
-    def snapshot(cls, snapshot: PageSnapshot) -> ToolResult:
+    def snapshot(cls, snapshot: PageElements) -> ToolResult:
         lines = [
             f"Page snapshot for {snapshot.title or cls.safe_url(snapshot.url)}",
             f"Page ID: {snapshot.page_id}",
@@ -128,6 +174,28 @@ class BrowserToolResultBuilder:
                 "page_id": snapshot.page_id,
                 "snapshot_id": snapshot.id,
                 "snapshot": cls._structured(snapshot),
+            },
+        )
+
+    @classmethod
+    def find(cls, result: FindResult) -> ToolResult:
+        lines = [f"Found {len(result.matches)} matching element(s) on page {result.page_id}."]
+        for match in result.matches:
+            location = "in viewport" if match.in_viewport else "outside viewport"
+            target = match.name or match.text or "(unnamed)"
+            actions = ", ".join(sorted(match.actions)) or "no direct actions"
+            lines.append(f"- {match.ref} {match.role} {target!r} ({location}; actions: {actions})")
+        if not result.matches:
+            lines.append("No exact match was found.")
+        if result.suggestions:
+            lines.append("Available names for this role: " + ", ".join(f'"{name}"' for name in result.suggestions))
+        return ToolResult(
+            content="\n".join(lines),
+            data={
+                "page_id": result.page_id,
+                "matches": cls._structured(result.matches),
+                "truncated": result.truncated,
+                "suggestions": list(result.suggestions),
             },
         )
 
@@ -180,7 +248,7 @@ class BrowserToolResultBuilder:
         cls,
         page: BrowserPage,
         result: ScreenshotResult,
-        artifact: BrowserScreenshotArtifact,
+        artifact: BrowserScreenshotArtifact | BrowserEncodedScreenshot,
         saved: BrowserSavedScreenshot | None = None,
     ) -> ToolResult:
         label_to_ref = dict(result.labels)
@@ -198,7 +266,7 @@ class BrowserToolResultBuilder:
             lines.append(f"Saved file: {saved.workspace_path}")
             lines.append(f"Saved format: {saved.format}")
             lines.append(f"Saved resolution: {saved.width}x{saved.height}")
-            profile = " (Tool Detail snapshot default)" if saved.uses_snapshot_defaults else ""
+            profile = " (Tool Detail artifact default)" if saved.uses_artifact_defaults else ""
             lines.append(f"Saved scale: {saved.scale:g}{profile}")
             if saved.quality is not None:
                 lines.append(f"Saved quality: {saved.quality}")
@@ -219,7 +287,7 @@ class BrowserToolResultBuilder:
                     "saved_height": saved.height,
                     "quality": saved.quality,
                     "file_size": saved.file_size,
-                    "uses_snapshot_defaults": saved.uses_snapshot_defaults,
+                    "uses_artifact_defaults": saved.uses_artifact_defaults,
                 }
             )
         return ToolResult(
@@ -232,12 +300,16 @@ class BrowserToolResultBuilder:
                 "label_to_ref": label_to_ref,
                 **({"output_path": saved.workspace_path} if saved is not None else {}),
             },
-            extra_info={
-                "browser_snapshot_file_key": artifact.file_key,
-                "browser_snapshot_file_size": artifact.file_size,
-                "browser_snapshot_content_hash": artifact.content_hash,
-                **({"browser_snapshot_file_url": artifact.file_url} if artifact.file_url is not None else {}),
-            },
+            extra_info=(
+                {
+                    "browser_screenshot_file_key": artifact.file_key,
+                    "browser_screenshot_file_size": artifact.file_size,
+                    "browser_screenshot_content_hash": artifact.content_hash,
+                    **({"browser_screenshot_file_url": artifact.file_url} if artifact.file_url is not None else {}),
+                }
+                if isinstance(artifact, BrowserScreenshotArtifact)
+                else {}
+            ),
         )
 
     @classmethod
@@ -413,7 +485,7 @@ class BrowserToolResultBuilder:
         )
 
     @classmethod
-    def _append_node(cls, lines: list[str], node: SnapshotNode, *, depth: int) -> None:
+    def _append_node(cls, lines: list[str], node: ElementNode, *, depth: int) -> None:
         indent = "  " * depth
         attributes = [node.role or "node"]
         if node.ref:
@@ -431,7 +503,7 @@ class BrowserToolResultBuilder:
             cls._append_node(lines, child, depth=depth + 1)
 
     @staticmethod
-    def _diff_lines(diff: SnapshotDiff) -> list[str]:
+    def _diff_lines(diff: ElementDiff) -> list[str]:
         lines = ["Changes:"]
         if not diff.has_changes:
             return ["Changes: none observed"]

@@ -19,6 +19,17 @@ class BrowserEvaluateParams(BaseToolParams):
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
+class BrowserAddInitScriptParams(BaseToolParams):
+    page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
+    source: str = Field(
+        ...,
+        min_length=1,
+        description="""<!--zh: 在每个新文档创建时、任何站点脚本运行前执行的 JavaScript。对当前已加载的文档无效。-->
+JavaScript that runs on every new document before any page script. Has no effect on the currently loaded document.""",
+    )
+    session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
+
+
 class BrowserDiagnosticParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
     clear: bool = Field(True, description="Clear this page's current diagnostic buffer after reading.")
@@ -43,6 +54,29 @@ class BrowserEvaluate(BrowserToolBase[BrowserEvaluateParams]):
                 params.session_id,
             )
             return BrowserToolResultBuilder.value(value, "Browser JavaScript evaluation completed.")
+
+        return await self.execute_safely(operation())
+
+
+# Agent-facing usage is documented in agents/skills/browser/.
+@tool(name="browser_add_init_script", code_mode_only=True)
+class BrowserAddInitScript(BrowserToolBase[BrowserAddInitScriptParams]):
+    """Register JavaScript that runs before page scripts on future navigations."""
+
+    name = "browser_add_init_script"
+    operation_key = "browser.add_init_script"
+
+    async def execute(self, tool_context: ToolContext, params: BrowserAddInitScriptParams) -> ToolResult:
+        async def operation() -> ToolResult:
+            await BrowserService(tool_context).add_init_script(params.page_id, params.source, params.session_id)
+            return ToolResult(
+                content=(
+                    "Init script registered. It will run before any page script on the next navigation "
+                    "of this page, and on every navigation after that. It did not run on the current document; "
+                    "navigate or reload to apply it."
+                ),
+                data={"page_id": params.page_id},
+            )
 
         return await self.execute_safely(operation())
 

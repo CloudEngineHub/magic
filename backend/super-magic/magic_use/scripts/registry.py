@@ -57,6 +57,24 @@ class ScriptRegistry:
                 injection_policy=InjectionPolicy.SCREENSHOT,
                 entrypoint="MagicMarker.render",
             ),
+            "outline": ScriptDescriptor(
+                name="outline",
+                version="1",
+                path=base_dir / "outline.js",
+                dependencies=(),
+                world=ScriptWorld.MAIN,
+                injection_policy=InjectionPolicy.ON_DEMAND,
+                entrypoint="MagicOutline.read",
+            ),
+            "mask": ScriptDescriptor(
+                name="mask",
+                version="1",
+                path=base_dir / "mask.js",
+                dependencies=(),
+                world=ScriptWorld.MAIN,
+                injection_policy=InjectionPolicy.DOCUMENT_START,
+                entrypoint="",
+            ),
         }
         self._artifacts: dict[str, ScriptArtifact] = {}
         self._lock = asyncio.Lock()

@@ -6,7 +6,7 @@ from app.tools.browser.presentation.models import (
     BrowserNetworkStats,
     BrowserOperationPresentation,
     BrowserPageListStats,
-    BrowserSnapshotStats,
+    BrowserElementListStats,
 )
 from app.tools.browser.presentation.remarks import BrowserRemarkBuilder
 
@@ -17,5 +17,5 @@ __all__ = [
     "BrowserOperationPresentation",
     "BrowserPageListStats",
     "BrowserRemarkBuilder",
-    "BrowserSnapshotStats",
+    "BrowserElementListStats",
 ]

@@ -1,4 +1,4 @@
-"""Browser Snapshot 编码、上传与去重。"""
+"""Browser screenshot artifact 编码、上传与去重。"""
 
 from __future__ import annotations
 
@@ -35,7 +35,8 @@ class BrowserScreenshotArtifact:
 
 
 @dataclass(frozen=True, slots=True)
-class _EncodedWebP:
+class BrowserEncodedScreenshot:
+    content_hash: str
     content: bytes
     width: int
     height: int
@@ -50,26 +51,27 @@ class BrowserArtifactService:
         self._tool_context = tool_context
         self._agent_context = agent_context
 
-    async def publish(self, image: bytes) -> BrowserScreenshotArtifact:
-        content_hash = hashlib.sha256(image).hexdigest()
+    async def encode(self, image: bytes) -> BrowserEncodedScreenshot:
         config = BrowserConfigAdapter.artifact_config()
-        encoded = await asyncio.to_thread(self._encode_webp, image, config)
+        return await asyncio.to_thread(self._encode_webp, image, config)
+
+    async def publish(self, image: bytes | BrowserEncodedScreenshot) -> BrowserScreenshotArtifact:
+        encoded = await self.encode(image) if isinstance(image, bytes) else image
         try:
-            artifact = await self._publish_remote(content_hash, encoded)
+            artifact = await self._publish_remote(encoded)
         except asyncio.CancelledError:
             raise
         except Exception:
             if not Environment.is_local():
                 raise
-            artifact = self._create_local_artifact(content_hash, encoded)
+            artifact = self._create_local_artifact(encoded)
         # Browser Tool Detail 截图是短期展示资源，不能加入 EventContext attachments；
         # 普通附件链路会把它登记为 MagicFS 项目文件，使 Agent 能通过工作区文件系统看到它。
         return artifact
 
     async def _publish_remote(
         self,
-        content_hash: str,
-        encoded: _EncodedWebP,
+        encoded: BrowserEncodedScreenshot,
     ) -> BrowserScreenshotArtifact:
         storage = await StorageFactory.get_storage(
             sts_token_refresh=self._agent_context.get_init_client_message_sts_token_refresh(),
@@ -78,9 +80,9 @@ class BrowserArtifactService:
         )
         if storage.credentials is None:
             raise BrowserSDKError(BrowserErrorCode.INVALID_CONFIG, "Object storage credentials are unavailable")
-        file_key = self._snapshot_file_key(
+        file_key = self._screenshot_file_key(
             get_workspace_dir(storage.credentials),
-            content_hash,
+            encoded.content_hash,
         )
         reused = await storage.exists(file_key)
         if not reused:
@@ -97,7 +99,7 @@ class BrowserArtifactService:
                 file_url = None
 
         return BrowserScreenshotArtifact(
-            content_hash=content_hash,
+            content_hash=encoded.content_hash,
             file_key=file_key,
             file_size=len(encoded.content),
             width=encoded.width,
@@ -110,13 +112,12 @@ class BrowserArtifactService:
 
     @staticmethod
     def _create_local_artifact(
-        content_hash: str,
-        encoded: _EncodedWebP,
+        encoded: BrowserEncodedScreenshot,
     ) -> BrowserScreenshotArtifact:
         encoded_image = base64.b64encode(encoded.content).decode("ascii")
         return BrowserScreenshotArtifact(
-            content_hash=content_hash,
-            file_key=f"local-browser-snapshot:{content_hash}",
+            content_hash=encoded.content_hash,
+            file_key=f"local-browser-screenshot:{encoded.content_hash}",
             file_size=len(encoded.content),
             width=encoded.width,
             height=encoded.height,
@@ -125,7 +126,7 @@ class BrowserArtifactService:
             file_url=f"data:image/webp;base64,{encoded_image}",
         )
 
-    def _snapshot_file_key(self, workspace_key: str, content_hash: str) -> str:
+    def _screenshot_file_key(self, workspace_key: str, content_hash: str) -> str:
         context = self._agent_context.get_super_magic_product_context()
         metadata = self._agent_context.get_metadata()
         project_id = context.project.id if context is not None else str(metadata.get("project_id") or "")
@@ -135,7 +136,7 @@ class BrowserArtifactService:
         if not project_id or not topic_id:
             raise BrowserSDKError(
                 BrowserErrorCode.INVALID_CONFIG,
-                "Project and topic context are required to store a Browser snapshot",
+                "Project and topic context are required to store a Browser screenshot",
             )
 
         parts = PurePosixPath(workspace_key.strip("/")).parts
@@ -143,7 +144,7 @@ class BrowserArtifactService:
         if project_part not in parts:
             raise BrowserSDKError(
                 BrowserErrorCode.INVALID_CONFIG,
-                "The Browser snapshot storage path does not match the current project",
+                "The Browser screenshot storage path does not match the current project",
             )
 
         project_index = parts.index(project_part)
@@ -151,21 +152,24 @@ class BrowserArtifactService:
         if project_suffix not in ((), ("workspace",)):
             raise BrowserSDKError(
                 BrowserErrorCode.INVALID_CONFIG,
-                "The Browser snapshot storage path is not a project root or workspace path",
+                "The Browser screenshot storage path is not a project root or workspace path",
             )
 
         return PurePosixPath(
             *parts[: project_index + 1],
             "runtime",
             f"topic_{topic_id}",
-            "snapshots",
+            "screenshots",
             f"{content_hash}.webp",
         ).as_posix()
 
     @staticmethod
-    def _encode_webp(image: bytes, config: BrowserArtifactConfig) -> _EncodedWebP:
+    def _encode_webp(image: bytes, config: BrowserArtifactConfig) -> BrowserEncodedScreenshot:
         with Image.open(io.BytesIO(image)) as source:
             original = source.convert("RGB")
+        max_source_height = max(1, round(original.width * config.max_height_ratio))
+        if original.height > max_source_height:
+            original = original.crop((0, 0, original.width, max_source_height))
         quality_values = list(
             range(config.webp_quality, config.webp_min_quality - 1, -config.webp_quality_step)
         )
@@ -174,7 +178,18 @@ class BrowserArtifactService:
 
         width = min(original.width, config.max_width)
         height = max(1, round(original.height * width / original.width))
-        last = _EncodedWebP(content=b"", width=width, height=height, quality=config.webp_min_quality)
+        budget = min(
+            config.max_bytes,
+            max(config.min_bytes, round(width * height * config.target_bpp / 8)),
+        )
+        content_hash = hashlib.sha256(image).hexdigest()
+        last = BrowserEncodedScreenshot(
+            content_hash=content_hash,
+            content=b"",
+            width=width,
+            height=height,
+            quality=config.webp_min_quality,
+        )
         while True:
             rendered = (
                 original
@@ -184,13 +199,14 @@ class BrowserArtifactService:
             for quality in quality_values:
                 output = io.BytesIO()
                 rendered.save(output, format="WEBP", quality=quality, method=6)
-                last = _EncodedWebP(
+                last = BrowserEncodedScreenshot(
+                    content_hash=content_hash,
                     content=output.getvalue(),
                     width=rendered.width,
                     height=rendered.height,
                     quality=quality,
                 )
-                if len(last.content) <= config.max_bytes:
+                if len(last.content) <= budget:
                     return last
 
             shortest_dimension = min(width, height)

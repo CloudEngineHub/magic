@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from typing import Generic, TypeVar
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import ToolDetail
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.service.browser import BrowserArtifactService, BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
@@ -21,6 +21,28 @@ from magic_use.errors import BrowserErrorCode, BrowserSDKError
 P = TypeVar("P", bound=BaseToolParams)
 
 logger = get_logger(__name__)
+
+_RECOVERY_HINTS: Mapping[BrowserErrorCode, str] = {
+    BrowserErrorCode.STALE_REF: "Take a fresh interactive snapshot and retry with a current ref.",
+    BrowserErrorCode.AMBIGUOUS_REF: "Take a fresh interactive snapshot and retry with a current ref.",
+    BrowserErrorCode.REF_NOT_FOUND: "This ref never existed on this page. Take a snapshot and use a ref from it.",
+    BrowserErrorCode.PAGE_NOT_FOUND: "List pages to get a valid page ID, or open a new page.",
+    BrowserErrorCode.PAGE_CLOSED: "This page is gone. Open a new page and navigate again.",
+    BrowserErrorCode.PAGE_EXPIRED: "The page lease expired. Open a new page, or call keep alive earlier next time.",
+    BrowserErrorCode.SESSION_CLOSED: "The browser session ended. Open a page to start a new one.",
+    BrowserErrorCode.NAVIGATION_FAILED: "The URL did not load. Check the URL, then retry once with wait_until set to commit.",
+    BrowserErrorCode.ACTION_FAILED: "The element did not accept the action. Take a fresh snapshot to check whether it is still visible and enabled.",
+    BrowserErrorCode.SNAPSHOT_FAILED: "The page was not in a readable state. Wait for the load state, then snapshot again.",
+    BrowserErrorCode.SCREENSHOT_FAILED: "The screenshot could not be captured. Wait for the load state and retry once.",
+    BrowserErrorCode.RESOURCE_LIMIT: "Too many pages or sessions are open. Close pages you no longer need.",
+    BrowserErrorCode.CAPABILITY_UNAVAILABLE: "This browser backend does not support the operation. Use a different approach.",
+    BrowserErrorCode.SCRIPT_INJECTION_FAILED: "The script could not be injected. Check it for syntax errors.",
+    BrowserErrorCode.SCRIPT_NOT_FOUND: "The requested built-in script is not registered. This is a configuration problem, not a page problem.",
+    BrowserErrorCode.CONNECTION_FAILED: "The browser is unreachable. Report this instead of retrying.",
+    BrowserErrorCode.BACKEND_UNAVAILABLE: "The browser backend is not available. Report this instead of retrying.",
+    BrowserErrorCode.VERSION_MISMATCH: "The browser and the controller versions do not match. Report this instead of retrying.",
+    BrowserErrorCode.INVALID_CONFIG: "The browser configuration is invalid. Report this instead of retrying.",
+}
 
 
 class BrowserToolBase(AbstractFileTool[P], Generic[P]):
@@ -43,6 +65,7 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
                     "user_error": self._error_message(exc.code),
                 },
             )
+
         except (TypeError, ValueError) as exc:
             return ToolResult.error(
                 f"Browser request is invalid: {exc}",
@@ -62,6 +85,26 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
                     "user_error": self._message("browser.error.unexpected"),
                 },
             )
+
+    async def record_page_observation(
+        self,
+        tool_context: ToolContext,
+        *,
+        page_id: str,
+        url: str,
+        title: str,
+    ) -> None:
+        """把观察工具成功返回的页面状态登记到 Horizon。"""
+        try:
+            await self.get_horizon(tool_context).record_browser_page_observation(
+                page_id=page_id,
+                url=url,
+                title=title,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Browser page observation could not be recorded", exc_info=True)
 
     async def execute_state_change(
         self,
@@ -141,6 +184,12 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
         result: ToolResult,
         arguments: dict[str, object] | None = None,
     ) -> ToolDetail:
+        output_path = result.data.get("output_path")
+        if self.name == "browser_screenshot" and result.ok and isinstance(output_path, str) and output_path:
+            return ToolDetail(
+                type=DisplayType.IMAGE,
+                data=FileContent(file_name=output_path, content=output_path),
+            )
         presentation = BrowserDetailBuilder.presentation(
             self._operation_name(),
             result,
@@ -163,9 +212,8 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
     @staticmethod
     def _model_error_message(error: BrowserSDKError) -> str:
         prefix = f"Browser operation failed [{error.code.value}]: {error}"
-        if error.code in {BrowserErrorCode.STALE_REF, BrowserErrorCode.AMBIGUOUS_REF}:
-            return prefix + " Take a fresh interactive snapshot and retry with a current ref."
-        return prefix
+        hint = _RECOVERY_HINTS.get(error.code)
+        return f"{prefix} {hint}" if hint else prefix
 
     @staticmethod
     def _message(key: str, **kwargs: object) -> str:
@@ -203,15 +251,15 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
 
     @staticmethod
     def _screenshot_file_key(result: ToolResult) -> str | None:
-        file_key = result.extra_info.get("browser_snapshot_file_key")
+        file_key = result.extra_info.get("browser_screenshot_file_key")
         return file_key if isinstance(file_key, str) and file_key else None
 
     @staticmethod
     def _screenshot_file_size(result: ToolResult) -> int:
-        file_size = result.extra_info.get("browser_snapshot_file_size")
+        file_size = result.extra_info.get("browser_screenshot_file_size")
         return file_size if isinstance(file_size, int) and file_size >= 0 else 0
 
     @staticmethod
     def _screenshot_file_url(result: ToolResult) -> str | None:
-        file_url = result.extra_info.get("browser_snapshot_file_url")
+        file_url = result.extra_info.get("browser_screenshot_file_url")
         return file_url if isinstance(file_url, str) and file_url else None

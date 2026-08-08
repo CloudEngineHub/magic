@@ -170,7 +170,7 @@ skills:
 | `browser_list_sessions` / `browser_list_pages` | Inspect Browser sessions and pages |
 | `browser_open_page` / `browser_close_page` / `browser_activate_page` | Manage pages in a Browser session |
 | `browser_navigate` / `browser_wait` | Navigate and wait for explicit page conditions |
-| `browser_read_page` / `browser_snapshot` / `browser_screenshot` | Read text, inspect page structure, and capture screenshots |
+| `browser_read_page` / `browser_list_elements` / `browser_screenshot` | Read text, inspect page structure, and capture screenshots |
 | `browser_click` / `browser_fill` / `browser_press` / `browser_hover` / `browser_scroll` | Interact with snapshot refs |
 | `browser_select` / `browser_check` / `browser_upload_file` | Operate form controls and file inputs |
 | `browser_visual_query` / `browser_find_visual` | Use visual analysis when structured observation is insufficient |

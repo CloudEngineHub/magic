@@ -23,7 +23,7 @@ from app.tools.browser.base import BrowserToolBase
 from app.tools.core import BaseToolParams, tool
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.utils.async_file_utils import async_exists
-from magic_use import SnapshotOptions, SnapshotScope
+from magic_use import ElementQuery, ElementScope, FindQuery
 from magic_use.errors import BrowserSDKError
 
 P = TypeVar("P", bound=BaseToolParams)
@@ -43,32 +43,63 @@ class BrowserReadScope(StrEnum):
     FULL = "full"
 
 
+class BrowserHtmlDetail(StrEnum):
+    OUTLINE = "outline"
+    FULL = "full"
+
+
 class BrowserReadPageParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
     scope: BrowserReadScope = Field(BrowserReadScope.VIEWPORT, description="Read the viewport or full rendered page.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
-class BrowserSnapshotParams(BaseToolParams):
+class BrowserReadHtmlParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
-    scope: SnapshotScope = Field(SnapshotScope.INTERACTIVE, description="Structured snapshot scope.")
-    ref: str | None = Field(None, description="Root ref required for a subtree snapshot.")
+    ref: str | None = Field(
+        None,
+        description="""<!--zh: 以该元素为根只读它这一块。省略则读整个 body。-->
+Read only this element's subtree. Omit to read the whole body.""",
+    )
+    detail: BrowserHtmlDetail = Field(
+        BrowserHtmlDetail.OUTLINE,
+        description="""<!--zh: outline 折叠重复节点并截断文本，用来看清结构；full 展开全部内容，只对已经缩小的范围使用。-->
+outline collapses repeated nodes and trims text, for seeing structure. full expands everything and should only be used on a narrowed ref.""",
+    )
+    max_chars: int = Field(20_000, ge=1_000, le=200_000, description="Maximum characters to return.")
+    session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
+
+
+class BrowserFindParams(BaseToolParams):
+    page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
+    role: str | None = Field(None, description="ARIA role. Omit when the role is uncertain.")
+    name: str | None = Field(None, description="Accessible name substring, case-insensitive.")
+    text: str | None = Field(None, description="Visible text substring, case-insensitive.")
+    visible_only: bool = Field(True, description="Only return visible elements.")
+    limit: int = Field(20, ge=1, le=100, description="Maximum number of matches to return.")
+    session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
+
+
+class BrowserListElementsParams(BaseToolParams):
+    page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
+    scope: ElementScope = Field(ElementScope.INTERACTIVE, description="Structured element-list scope.")
+    ref: str | None = Field(None, description="Root ref required for a subtree element list.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
 class BrowserScreenshotParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
-    labels: bool = Field(False, description="Overlay labels mapped to current snapshot refs.")
+    labels: bool = Field(False, description="Overlay labels mapped to current element refs.")
     full_page: bool = Field(False, description="Capture the full scrollable page instead of the viewport.")
     output_path: str | None = Field(
         None,
-        description="Optional workspace path ending in .webp, .jpg, .jpeg, or .png. Omit for a temporary UI snapshot.",
+        description="Optional workspace path ending in .webp, .jpg, .jpeg, or .png. Omit for a temporary UI screenshot. Do not capture a screenshot in order to analyze it; use browser_visual_query instead.",
     )
     scale: float | None = Field(
         None,
         ge=0.5,
         le=3.0,
-        description="Optional saved-resolution multiplier. Omit to use the same adaptive resolution as the Tool Detail snapshot.",
+        description="Optional saved-resolution multiplier. Omit to use the same adaptive resolution as the Tool Detail screenshot.",
     )
     quality: int | None = Field(
         None,
@@ -81,9 +112,9 @@ class BrowserScreenshotParams(BaseToolParams):
     @model_validator(mode="after")
     def validate_output_options(self) -> "BrowserScreenshotParams":
         if self.quality is not None and self.output_path is None:
-            raise ValueError("quality requires output_path because temporary snapshots use managed settings")
+            raise ValueError("quality requires output_path because temporary screenshots use managed settings")
         if self.scale is not None and self.output_path is None:
-            raise ValueError("scale requires output_path because temporary snapshots use managed settings")
+            raise ValueError("scale requires output_path because temporary screenshots use managed settings")
         if self.quality is not None and Path(self.output_path or "").suffix.lower() == ".png":
             raise ValueError("quality is only valid for WebP or JPEG screenshot output")
         return self
@@ -177,6 +208,13 @@ class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
                         artifact_task.result(),
                     )
                 return error_result
+            if self.name == "browser_visual_query":
+                await self.record_page_observation(
+                    tool_context,
+                    page_id=page.id,
+                    url=page.url,
+                    title=page.title,
+                )
             return BrowserToolResultBuilder.visual(page, screenshot, artifact, analysis)
 
         return await self.execute_safely(operation())
@@ -197,28 +235,105 @@ class BrowserReadPage(BrowserToolBase[BrowserReadPageParams]):
                 params.scope.value,
                 params.session_id,
             )
+            await self.record_page_observation(
+                tool_context,
+                page_id=page.id,
+                url=page.url,
+                title=page.title,
+            )
             return BrowserToolResultBuilder.markdown(page, params.scope.value, markdown)
 
         return await self.execute_safely(operation())
 
 
 # Agent-facing usage is documented in agents/skills/browser/.
-@tool(name="browser_snapshot", code_mode_only=True)
-class BrowserSnapshot(BrowserToolBase[BrowserSnapshotParams]):
+@tool(name="browser_read_html", code_mode_only=True)
+class BrowserReadHtml(BrowserToolBase[BrowserReadHtmlParams]):
+    """Read real markup structure for application-style pages and selector discovery.
+
+    Use browser_read_page for articles and documents. Use this when browser_read_page
+    returns little or nothing, or before browser_evaluate so selectors come from real markup.
+    """
+
+    name = "browser_read_html"
+    operation_key = "browser.read_html"
+
+    async def execute(self, tool_context: ToolContext, params: BrowserReadHtmlParams) -> ToolResult:
+        async def operation() -> ToolResult:
+            page, html, truncated = await BrowserService(tool_context).read_html(
+                params.page_id,
+                ref=params.ref,
+                detail=params.detail.value,
+                max_chars=params.max_chars,
+                session_id=params.session_id,
+            )
+            await self.record_page_observation(
+                tool_context,
+                page_id=page.id,
+                url=page.url,
+                title=page.title,
+            )
+            return BrowserToolResultBuilder.html_outline(
+                page,
+                ref=params.ref,
+                detail=params.detail.value,
+                html=html,
+                truncated=truncated,
+                max_chars=params.max_chars,
+            )
+
+        return await self.execute_safely(operation())
+
+
+# Agent-facing usage is documented in agents/skills/browser/.
+@tool(name="browser_find", code_mode_only=True)
+class BrowserFind(BrowserToolBase[BrowserFindParams]):
+    """Find page elements by accessible role, name, or visible text without guessing a ref."""
+
+    name = "browser_find"
+    operation_key = "browser.find_element"
+
+    async def execute(self, tool_context: ToolContext, params: BrowserFindParams) -> ToolResult:
+        async def operation() -> ToolResult:
+            result = await BrowserService(tool_context).find(
+                params.page_id,
+                FindQuery(
+                    role=params.role,
+                    name=params.name,
+                    text=params.text,
+                    visible_only=params.visible_only,
+                    limit=params.limit,
+                ),
+                params.session_id,
+            )
+            return BrowserToolResultBuilder.find(result)
+
+        return await self.execute_safely(operation())
+
+
+# Agent-facing usage is documented in agents/skills/browser/.
+@tool(name="browser_list_elements", code_mode_only=True)
+class BrowserListElements(BrowserToolBase[BrowserListElementsParams]):
     """Capture a structured page snapshot and element refs."""
 
-    name = "browser_snapshot"
-    operation_key = "browser.get_interactive_elements"
+    name = "browser_list_elements"
+    operation_key = "browser.list_elements"
 
-    async def execute(self, tool_context: ToolContext, params: BrowserSnapshotParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext, params: BrowserListElementsParams) -> ToolResult:
         async def operation() -> ToolResult:
             snapshot = await BrowserService(tool_context).snapshot(
                 params.page_id,
-                SnapshotOptions(
+                ElementQuery(
                     scope=params.scope,
                     root_ref=params.ref,
                 ),
                 params.session_id,
+            )
+            await self.record_page_observation(
+                tool_context,
+                page_id=snapshot.page_id,
+                url=snapshot.url,
+                title=snapshot.title,
             )
             return BrowserToolResultBuilder.snapshot(snapshot)
 
@@ -241,7 +356,8 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                 labels=params.labels,
                 session_id=params.session_id,
             )
-            artifact = await BrowserArtifactService(tool_context).publish(screenshot.image)
+            artifact_service = BrowserArtifactService(tool_context)
+            encoded = await artifact_service.encode(screenshot.image)
             saved = None
             if params.output_path is not None:
                 agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
@@ -265,9 +381,9 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                     workspace_path=workspace_path,
                     scale=params.scale,
                     quality=params.quality,
-                    default_width=artifact.width,
-                    default_height=artifact.height,
-                    default_quality=artifact.quality,
+                    default_width=encoded.width,
+                    default_height=encoded.height,
+                    default_quality=encoded.quality,
                 )
                 after_event = EventType.FILE_UPDATED if file_exists else EventType.FILE_CREATED
                 await self._dispatch_file_event(
@@ -276,6 +392,9 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                     after_event,
                     is_screenshot=True,
                 )
+                artifact = encoded
+            else:
+                artifact = await artifact_service.publish(encoded)
             return BrowserToolResultBuilder.screenshot(page, screenshot, artifact, saved)
 
         return await self.execute_safely(operation())

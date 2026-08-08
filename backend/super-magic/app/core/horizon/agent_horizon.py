@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
+from urllib.parse import urldefrag
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
 from app.core.horizon.models import (
+    BrowserPageObservation,
     ContextUsage,
     FileContextRecord,
     HorizonState,
@@ -85,6 +87,7 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "context_usage",
     "model_info",
     "workspace_files_changed",
+    "browser_pages_changed",
     "client_context",
     "client_context_changed",
     "client_context_cleared",
@@ -831,6 +834,96 @@ class AgentHorizon:
             self._state.loaded_skills.append(skill_name)
             await self._save()
 
+    async def record_browser_page_observation(
+        self,
+        *,
+        page_id: str,
+        url: str,
+        title: str,
+    ) -> None:
+        """记录模型通过观察工具实际看到的 Browser 页面。"""
+        await self._ensure_loaded()
+        self._state.browser_pages[page_id] = BrowserPageObservation(
+            page_id=page_id,
+            url=url,
+            title=title,
+            observed_at=_iso_now(),
+        )
+        await self._save()
+
+    async def _build_browser_pages_changed_context(
+        self,
+    ) -> tuple[str, dict[str, BrowserPageObservation]]:
+        """比较已观察页面与当前页面，返回变化块和注入后的新 baseline。"""
+        if not self._state.browser_pages or self._agent_context is None:
+            return "", dict(self._state.browser_pages)
+
+        from app.service.browser.browser_runtime_registry import BrowserRuntimeRegistry
+
+        entries = BrowserRuntimeRegistry.get_instance().list(self._agent_context.context_id)
+        current_pages: dict[str, object] = {}
+        complete = True
+        for entry in entries:
+            try:
+                pages = await entry.client.list_pages()
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                complete = False
+                logger.warning(
+                    "[AgentHorizon] Browser 页面漂移检查失败: session_id=%s error=%s",
+                    entry.session.id,
+                    error,
+                )
+                continue
+            current_pages.update({page.id: page for page in pages})
+
+        blocks: list[str] = []
+        next_observations = dict(self._state.browser_pages)
+        for page_id, previous in self._state.browser_pages.items():
+            current = current_pages.get(page_id)
+            if current is None:
+                if complete:
+                    blocks.extend(
+                        (
+                            f'  <page id="{_xml_attr(page_id)}">',
+                            "    <summary>Page closed since your last observation</summary>",
+                            f"    <url>{_xml_text(previous.url)} -&gt; (closed)</url>",
+                            f"    <title>{_xml_text(previous.title)} -&gt; (closed)</title>",
+                            "  </page>",
+                        )
+                    )
+                    next_observations.pop(page_id, None)
+                continue
+
+            current_url = str(getattr(current, "url"))
+            current_title = str(getattr(current, "title"))
+            previous_without_fragment = urldefrag(previous.url).url
+            current_without_fragment = urldefrag(current_url).url
+            if previous.url == current_url and previous.title == current_title:
+                continue
+            next_observations[page_id] = BrowserPageObservation(
+                page_id=page_id,
+                url=current_url,
+                title=current_title,
+                observed_at=_iso_now(),
+            )
+            if previous_without_fragment == current_without_fragment:
+                continue
+            blocks.extend(
+                (
+                    f'  <page id="{_xml_attr(page_id)}">',
+                    "    <summary>Page navigated since your last observation</summary>",
+                    f"    <url>{_xml_text(previous.url)} -&gt; {_xml_text(current_url)}</url>",
+                    f"    <title>{_xml_text(previous.title)} -&gt; {_xml_text(current_title)}</title>",
+                    "  </page>",
+                )
+            )
+
+        if not blocks:
+            return "", next_observations
+        return "\n".join(("<browser_pages_changed>", *blocks, "</browser_pages_changed>")), next_observations
+
     def get_loaded_skills(self) -> list[str]:
         return list(self._state.loaded_skills)
 
@@ -1210,6 +1303,7 @@ class AgentHorizon:
 
         # 文件变化检测
         file_blocks = await detect_file_changes(self._state, current_hashes, current_mtimes)
+        browser_pages_context, next_browser_pages = await self._build_browser_pages_changed_context()
 
         # 通知块
         notif_blocks = [
@@ -1427,6 +1521,9 @@ class AgentHorizon:
             parts.extend(file_blocks)
             parts.append("</file_changes>")
 
+        if browser_pages_context:
+            parts.append(browser_pages_context)
+
         if notif_blocks:
             parts.append("<notifications>")
             parts.extend(notif_blocks)
@@ -1502,6 +1599,10 @@ class AgentHorizon:
                 )
                 or persistence_changed
             )
+
+        if self._state.browser_pages != next_browser_pages:
+            self._state.browser_pages = next_browser_pages
+            persistence_changed = True
 
         state_changed = bool(file_blocks) or bool(self._state.pending_notifications) or persistence_changed
         for abs_path, (cur_hash, cur_size) in current_hashes.items():

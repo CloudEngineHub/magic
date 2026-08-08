@@ -29,6 +29,16 @@ class PendingNotification:
     content: str     # 通知正文
 
 
+@dataclass(frozen=True)
+class BrowserPageObservation:
+    """模型最后一次观察 Browser 页面时的状态。"""
+
+    page_id: str
+    url: str
+    title: str
+    observed_at: str
+
+
 @dataclass
 class ImageModelState:
     """持久化的图片生成模型状态，用于跨对话检测 sizes 是否变化。"""
@@ -179,6 +189,7 @@ class HorizonState:
     agent_id: str
     file_records: dict[str, FileContextRecord] = field(default_factory=dict)     # abs_path -> record
     pending_notifications: list[PendingNotification] = field(default_factory=list)
+    browser_pages: dict[str, BrowserPageObservation] = field(default_factory=dict)
     loaded_skills: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)
     video_model: VideoModelState = field(default_factory=VideoModelState)
