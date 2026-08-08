@@ -24,6 +24,11 @@ class CreateAgentProjectRequestDTO extends AbstractRequestDTO
      */
     public bool $initTemplateFiles = true;
 
+    /**
+     * Internal binding code used when creating a fixed-mode Agent project.
+     */
+    public string $agentCode = '';
+
     public function getProjectName(): string
     {
         return $this->projectName;
@@ -42,6 +47,16 @@ class CreateAgentProjectRequestDTO extends AbstractRequestDTO
     public function setInitTemplateFiles(bool $initTemplateFiles): void
     {
         $this->initTemplateFiles = $initTemplateFiles;
+    }
+
+    public function getAgentCode(): string
+    {
+        return $this->agentCode;
+    }
+
+    public function setAgentCode(string $agentCode): void
+    {
+        $this->agentCode = trim($agentCode);
     }
 
     /**

@@ -272,7 +272,8 @@ class TopicDomainService
         string $sourceId = '',
         bool $isHidden = false,
         ?int $hiddenType = null,
-        ?array $dynamicParams = null
+        ?array $dynamicParams = null,
+        string $agentCode = ''
     ): TopicEntity {
         // Get current user info
         $userId = $dataIsolation->getCurrentUserId();
@@ -309,6 +310,9 @@ class TopicDomainService
         $topicEntity->setHiddenType($hiddenType);
         if ($dynamicParams !== null) {
             $topicEntity->setDynamicParams($dynamicParams);
+        }
+        if ($agentCode !== '') {
+            $topicEntity->setAgentCode($agentCode);
         }
         return $this->topicRepository->createTopic($topicEntity);
     }

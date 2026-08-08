@@ -115,6 +115,7 @@ use Hyperf\Amqp\Producer;
 use Hyperf\DbConnection\Annotation\Transactional;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
+use InvalidArgumentException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
@@ -1856,8 +1857,24 @@ class ProjectAppService extends AbstractAppService
             );
             $this->logger->info(sprintf('Created core project, projectId=%s', $projectEntity->getId()));
 
+            $topicMode = '';
+            $agentCode = '';
+            if ($projectMode === ProjectMode::MAGICLAW) {
+                $topicMode = ProjectMode::MAGICLAW->value;
+                $agentCode = $requestDTO->getAgentCode();
+                if ($agentCode === '') {
+                    throw new InvalidArgumentException('MagicClaw agent code is required');
+                }
+            }
+
             // Standard initialization flow (steps 2-6 + 8) - workspace can be null for audio projects
-            $topicEntity = $this->initializeProject($dataIsolation, null, $projectEntity);
+            $topicEntity = $this->initializeProject(
+                dataIsolation: $dataIsolation,
+                workspaceEntity: null,
+                projectEntity: $projectEntity,
+                topicMode: $topicMode,
+                agentCode: $agentCode,
+            );
 
             // 2. Initialize root directory and optionally upload template files
             $this->initCustomTemplateFiles(
@@ -3085,7 +3102,8 @@ class ProjectAppService extends AbstractAppService
         ?WorkspaceEntity $workspaceEntity,
         ProjectEntity $projectEntity,
         ?array $dynamicParams = null,
-        string $topicMode = ''
+        string $topicMode = '',
+        string $agentCode = ''
     ): TopicEntity {
         // 2. Get project work directory
         $workDir = WorkDirectoryUtil::getWorkDir(
@@ -3100,19 +3118,20 @@ class ProjectAppService extends AbstractAppService
         // 4. Create default topic
         $this->logger->info('开始创建默认话题');
         $topicEntity = $this->topicDomainService->createTopic(
-            $dataIsolation,
-            $workspaceEntity?->getId(),
-            $projectEntity->getId(),
-            $chatConversationId,
-            $chatConversationTopicId,
-            '',
-            $workDir,
-            $topicMode,
-            CreationSource::USER_CREATED->value,
-            '',
-            false,
-            null,
-            $dynamicParams
+            dataIsolation: $dataIsolation,
+            workspaceId: $workspaceEntity?->getId(),
+            projectId: $projectEntity->getId(),
+            chatConversationId: $chatConversationId,
+            chatTopicId: $chatConversationTopicId,
+            topicName: '',
+            workDir: $workDir,
+            topicMode: $topicMode,
+            source: CreationSource::USER_CREATED->value,
+            sourceId: '',
+            isHidden: false,
+            hiddenType: null,
+            dynamicParams: $dynamicParams,
+            agentCode: $agentCode,
         );
         $this->logger->info(sprintf('创建默认话题成功, topicId=%s', $topicEntity->getId()));
 
