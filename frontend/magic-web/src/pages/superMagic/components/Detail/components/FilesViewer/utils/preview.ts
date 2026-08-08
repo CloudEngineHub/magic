@@ -6,17 +6,106 @@ import {
 } from "../../../types"
 import type { FileItem } from "../types"
 import { isMagicProjectConfigFile } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
+import { normalizeAttachmentPath } from "../hooks/previewPolicy"
 
 /** 易被误标为文本、进而拉取/序列化大资源导致卡顿的 detail 类型 */
 const TEXT_LIKE_DETAIL_TYPES: string[] = [DetailType.Text, DetailType.Md, DetailType.Code]
 
 interface CorrectDetailTypeOptions {
-	attachmentList?: unknown[]
+	attachmentList?: readonly AttachmentNode[]
+	isAttachmentListReady?: boolean
 }
 
 interface AttachmentNode {
-	file_id?: string
+	file_id?: string | number
+	file_name?: string
+	file_extension?: string
+	relative_file_path?: string
 	display_config?: Record<string, unknown>
+}
+
+interface HistoricalToolDetail {
+	type?: string
+	data?: Record<string, unknown>
+	[key: string]: unknown
+}
+
+function normalizeFileId(fileId: unknown): string {
+	if (typeof fileId === "string" && fileId.trim()) return fileId.trim()
+	if (typeof fileId === "number" && Number.isFinite(fileId)) return String(fileId)
+	return ""
+}
+
+// 文件型 ToolDetail 至少包含 file_name；file_id 不能单独证明它属于项目附件树。
+function resolveDetailFileName(data: Record<string, unknown>): string {
+	return typeof data.file_name === "string" ? data.file_name.trim() : ""
+}
+
+// 路径型 ToolDetail 用 content=file_name 表示工作区路径；两者不一致时 content 是文件正文。
+function resolveWorkspaceDetailPath(data: Record<string, unknown> | undefined): string {
+	if (!data) return ""
+
+	const fileName = normalizeAttachmentPath(resolveDetailFileName(data))
+	const contentPath = normalizeAttachmentPath(data?.content)
+	return fileName && fileName === contentPath ? fileName : ""
+}
+
+function resolveHistoricalFileDetail(
+	detail: HistoricalToolDetail,
+	options?: CorrectDetailTypeOptions,
+): HistoricalToolDetail {
+	// 首屏附件列表可能暂时为空，只有加载完成后才能把缺失判定为删除。
+	if (!detail?.data || options?.isAttachmentListReady !== true) return detail
+	// Browser 类型使用临时截图生命周期；传 output_path 的工作区截图会以 Image 类型返回。
+	if (detail.type === DetailType.Browser) return detail
+
+	const fileName = resolveDetailFileName(detail.data)
+	if (!fileName) return detail
+
+	const attachments = options.attachmentList || []
+	const fileId = normalizeFileId(detail.data.file_id)
+	const workspacePath = resolveWorkspaceDetailPath(detail.data)
+	if (!fileId && !workspacePath) return detail
+
+	const attachmentById = fileId
+		? attachments.find((item) => normalizeFileId(item.file_id) === fileId)
+		: undefined
+	const attachment =
+		attachmentById ||
+		(workspacePath
+			? attachments.find(
+					(item) =>
+						Boolean(normalizeFileId(item.file_id)) &&
+						normalizeAttachmentPath(item.relative_file_path) === workspacePath,
+				)
+			: undefined)
+
+	if (!attachment) {
+		return {
+			...detail,
+			type: DetailType.Deleted,
+			data: {
+				...detail.data,
+				file_id: fileId,
+				file_name: fileName,
+				file_extension:
+					detail.data.file_extension || inferFileExtensionFromDetailData(detail.data),
+				content: null,
+			},
+		}
+	}
+
+	return {
+		...detail,
+		data: {
+			...detail.data,
+			file_id: normalizeFileId(attachment.file_id),
+			file_extension:
+				detail.data.file_extension ||
+				attachment.file_extension ||
+				inferFileExtensionFromDetailData(detail.data),
+		},
+	}
 }
 
 function inferFileExtensionFromDetailData(data: any): string {
@@ -222,7 +311,7 @@ export function correctDetailType(_detail: any, options?: CorrectDetailTypeOptio
 	if (!_detail) return _detail
 
 	// magic.project.js 保持为代码模式
-	const detail = resolveDetailMetadata(_detail, options)
+	const detail = resolveDetailMetadata(resolveHistoricalFileDetail(_detail, options), options)
 	const fileName = detail?.data?.file_name || detail?.data?.display_filename
 	if (isMagicProjectConfigFile(fileName)) {
 		return detail
