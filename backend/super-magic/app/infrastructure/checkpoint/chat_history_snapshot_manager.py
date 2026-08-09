@@ -1,27 +1,36 @@
 # -*- coding: utf-8 -*-
-"""只保存和恢复当前主 Agent 可重启上下文的聊天历史快照。"""
+"""聊天记录目录快照与恢复。
+
+目录边界：
+
+    .chat_history/  = 话题的持久状态，需要 checkpoint 和归档
+    .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
+    .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
+    .checkpoints/   = checkpoint 自身，不能复制进自己
+
+因此 checkpoint 复制整个 ``.chat_history/``，包括 ``compacted/``、
+``subagents/`` 和根目录辅助 JSON；``.runtime/`` 不在快照源目录内，
+不会被复制，也不会在恢复时被删除。
+"""
 
 from pathlib import Path
-from collections.abc import Iterable
 
-from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.logger import get_logger
-from app.core.horizon.store import HorizonStore
 from app.path_manager import PathManager
 from app.utils.async_file_utils import (
     async_copy2,
+    async_copytree,
     async_exists,
     async_mkdir,
     async_rmtree,
     async_scandir,
-    async_unlink,
 )
 
 logger = get_logger(__name__)
 
 
 class ChatHistorySnapshotManager:
-    """Checkpoint 仅管理当前主 Agent 的 history、session 和 Horizon 三个文件。"""
+    """按话题目录保存和恢复完整聊天记录持久状态。"""
 
     async def create_initial_chat_history_snapshot(
         self,
@@ -33,10 +42,8 @@ class ChatHistorySnapshotManager:
     ) -> bool:
         return await self._create_snapshot(
             snapshot_dir,
-            agent_name=agent_name,
-            agent_id=agent_id,
             chat_history_dir=chat_history_dir,
-            label="初始",
+            label=f"初始（owner={agent_name}<{agent_id}>）",
         )
 
     async def create_latest_chat_history_snapshot(
@@ -49,10 +56,8 @@ class ChatHistorySnapshotManager:
     ) -> bool:
         return await self._create_snapshot(
             snapshot_dir,
-            agent_name=agent_name,
-            agent_id=agent_id,
             chat_history_dir=chat_history_dir,
-            label="最新",
+            label=f"最新（owner={agent_name}<{agent_id}>）",
         )
 
     async def restore_from_initial_chat_history(self, snapshot_dir: Path) -> bool:
@@ -65,96 +70,56 @@ class ChatHistorySnapshotManager:
         self,
         snapshot_dir: Path,
         *,
-        agent_name: str,
-        agent_id: str,
         chat_history_dir: Path,
         label: str,
     ) -> bool:
         try:
+            if not await async_exists(chat_history_dir):
+                logger.info("聊天记录目录不存在，跳过%s快照", label)
+                return True
+
             if await async_exists(snapshot_dir):
                 await async_rmtree(snapshot_dir)
             await async_mkdir(snapshot_dir, parents=True, exist_ok=True)
 
-            for source in self._agent_files(agent_name, agent_id, chat_history_dir):
-                if await async_exists(source):
-                    await async_copy2(source, snapshot_dir / source.name)
+            for entry in await async_scandir(chat_history_dir):
+                source = Path(entry.path)
+                target = snapshot_dir / entry.name
+                if entry.is_file(follow_symlinks=False):
+                    await async_copy2(source, target)
+                elif entry.is_dir(follow_symlinks=False):
+                    await async_copytree(source, target)
 
-            logger.info(f"聊天历史{label}快照完成: {snapshot_dir}")
+            logger.info("聊天记录%s快照完成: %s", label, snapshot_dir)
             return True
         except Exception as error:
-            logger.error(f"创建聊天历史{label}快照失败: {error}")
+            logger.error("创建聊天记录%s快照失败: %s", label, error)
             return False
 
     async def _restore_snapshot(self, snapshot_dir: Path, *, label: str) -> bool:
         try:
             if not await async_exists(snapshot_dir):
-                logger.warning(f"{label}快照目录不存在: {snapshot_dir}")
+                logger.warning("%s聊天记录快照目录不存在: %s", label, snapshot_dir)
                 return True
 
-            snapshot_files = [
-                Path(entry.path)
-                for entry in await async_scandir(snapshot_dir)
-                if entry.is_file(follow_symlinks=False)
-            ]
-            identity = await self._resolve_identity(snapshot_files)
-            if identity is None:
-                logger.warning(f"{label}快照无法确定主 Agent，跳过聊天历史恢复")
-                return False
-
-            agent_name, agent_id = identity
             target_dir = PathManager.get_chat_history_dir()
-            snapshot_by_name = {path.name: path for path in snapshot_files}
-            for target in self._agent_files(agent_name, agent_id, target_dir):
-                source = snapshot_by_name.get(target.name)
-                if source is None:
-                    await async_unlink(target)
-                else:
-                    await async_copy2(source, target)
+            if await async_exists(target_dir):
+                await async_rmtree(target_dir)
+            await async_mkdir(target_dir, parents=True, exist_ok=True)
 
-            logger.info(f"从{label}快照恢复当前主 Agent 聊天历史完成")
+            for entry in await async_scandir(snapshot_dir):
+                source = Path(entry.path)
+                target = target_dir / entry.name
+                if entry.is_file(follow_symlinks=False):
+                    await async_copy2(source, target)
+                elif entry.is_dir(follow_symlinks=False):
+                    await async_copytree(source, target)
+
+            logger.info("恢复%s聊天记录快照完成: %s", label, target_dir)
             return True
         except Exception as error:
-            logger.error(f"从{label}快照恢复聊天历史失败: {error}")
+            logger.error("恢复%s聊天记录快照失败: %s", label, error)
             return False
 
-    async def _resolve_identity(self, snapshot_files: list[Path]) -> tuple[str, str] | None:
-        identities = self._identities_from_names(path.name for path in snapshot_files)
-        if len(identities) == 1:
-            return next(iter(identities))
 
-        root = PathManager.get_chat_history_dir()
-        if not await async_exists(root):
-            return None
-        root_names = (
-            entry.name
-            for entry in await async_scandir(root)
-            if entry.is_file(follow_symlinks=False)
-        )
-        identities = self._identities_from_names(root_names)
-        return next(iter(identities)) if len(identities) == 1 else None
-
-    @staticmethod
-    def _identities_from_names(names: Iterable[str]) -> set[tuple[str, str]]:
-        identities: set[tuple[str, str]] = set()
-        for name in names:
-            base = name
-            for suffix in (".session.json", ".horizon.json", ".json"):
-                if base.endswith(suffix):
-                    base = base[:-len(suffix)]
-                    break
-            else:
-                continue
-            if "<" not in base or not base.endswith(">"):
-                continue
-            agent_name, agent_id = base.rsplit("<", 1)
-            if agent_name and agent_id[:-1]:
-                identities.add((agent_name, agent_id[:-1]))
-        return identities
-
-    @staticmethod
-    def _agent_files(agent_name: str, agent_id: str, chat_history_dir: Path) -> tuple[Path, Path, Path]:
-        return (
-            ChatHistory.history_path_for_session(agent_name, agent_id, chat_history_dir),
-            ChatHistory.session_path_for_session(agent_name, agent_id, chat_history_dir),
-            HorizonStore.path_for_session(agent_name, agent_id, chat_history_dir),
-        )
+__all__ = ["ChatHistorySnapshotManager"]

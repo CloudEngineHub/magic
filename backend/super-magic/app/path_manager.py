@@ -48,6 +48,12 @@ class PathManager(BasePathManager):
     - 应用层预创建目录仅以 `_ensure_app_directories_exist()` 中显式创建的目录为准
     - 未在该方法中创建的目录一律视为按需创建，首次写入时由调用方自行创建
     - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
+
+    持久化边界：
+    - `.chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
+    - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
+    - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
+    - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
     """
 
     # ── project_root 下 ───────────────────────────────────────────────────────

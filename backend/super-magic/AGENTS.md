@@ -405,6 +405,7 @@ xattr 缺失说明文件尚未与对象存储同步完成，应直接抛错让�
 | Skill + Tool 双活机制 | `agents/guides/TOOL_OR_SKILL.md` | 将工具迁移到 Skill 范式时、理解工具层与 Skill 层信息隔离规则、preload 机制时 |
 | Skill 概念与加载链路 | `agents/guides/SKILLS_OVERVIEW.md` | 快速了解 Skill 是什么、加载方式、来源与模型使用规则时 |
 | Skill 开发指南 | `agents/guides/SKILLS_DEVELOPMENT_GUIDE.md` | 新建或修改 Skill、需要了解 SKILL.md 规范和最佳实践时 |
+| Magic 文件系统与目录边界 | `agents/guides/MAGIC_FILE_SYSTEM_GUIDE.md` | 新增运行文件、聊天记录、checkpoint、workspace 或 runtime 数据时，确认目录归属和持久化边界 |
 
 ## 20. 每次改动前自检
 

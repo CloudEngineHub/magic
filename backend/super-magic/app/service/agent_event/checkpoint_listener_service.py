@@ -21,7 +21,12 @@ logger = get_logger(__name__)
 
 
 class CheckpointListenerService:
-    """Checkpoint事件监听服务"""
+    """Checkpoint 事件监听服务。
+
+    checkpoint 只由主 Agent 创建，但聊天记录快照代表整个话题的
+    ``.chat_history/`` 持久状态；``.runtime/`` 是可重新生成的运行数据，
+    不由本监听器传入快照源，也不参与恢复。
+    """
 
     @staticmethod
     def register_standard_listeners(agent_context: AgentContext) -> None:
