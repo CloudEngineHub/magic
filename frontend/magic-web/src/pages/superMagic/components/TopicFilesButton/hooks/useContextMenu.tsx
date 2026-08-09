@@ -105,8 +105,8 @@ interface UseContextMenuOptions {
 	isSelectMode?: boolean
 	/* File tree index for parent checks */
 	treeIndex?: AttachmentIndex
-	handleExpandFolderContents?: (item: AttachmentItem) => void
-	handleCollapseFolderContents?: (item: AttachmentItem) => void
+	isFolderContentsExpanded?: (item: AttachmentItem) => boolean
+	handleToggleFolderContents?: (item: AttachmentItem) => void
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
 }
@@ -312,8 +312,8 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
 		treeIndex,
-		handleExpandFolderContents,
-		handleCollapseFolderContents,
+		isFolderContentsExpanded,
+		handleToggleFolderContents,
 		attachments = [],
 	} = options
 
@@ -486,30 +486,12 @@ export function useContextMenu(options: UseContextMenuOptions) {
 			const hasFolderContents = Boolean(
 				folderEntry && treeIndex?.getChildKeysByKey(folderEntry.key).length,
 			)
+			const folderContentsExpanded = isFolderContentsExpanded?.(item) ?? false
 			// 特殊项目目录内不允许嵌套创建画布、自媒体项目或 AI 卡片。
 			const canCreateDesignProject =
 				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
 
 			menuItems.push(
-				...(hasFolderContents && handleExpandFolderContents && handleCollapseFolderContents
-					? [
-							{
-								key: "expandFolderContents",
-								label: t("topicFiles.contextMenu.expandAll"),
-								icon: (
-									<MagicIcon component={IconChevronsDown} stroke={2} size={18} />
-								),
-								onClick: () => handleExpandFolderContents(item),
-							},
-							{
-								key: "collapseFolderContents",
-								label: t("topicFiles.contextMenu.collapseAll"),
-								icon: <MagicIcon component={IconChevronsUp} stroke={2} size={18} />,
-								onClick: () => handleCollapseFolderContents(item),
-							},
-							{ type: "divider" as const },
-						]
-					: []),
 				{
 					key: "createFile",
 					label: t("topicFiles.contextMenu.createFile"),
@@ -752,6 +734,28 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						]
 					: []),
 				...showInfoMenuItems,
+				...(hasFolderContents && isFolderContentsExpanded && handleToggleFolderContents
+					? [
+							{
+								key: "toggleFolderContents",
+								label: folderContentsExpanded
+									? t("topicFiles.contextMenu.collapseAll")
+									: t("topicFiles.contextMenu.expandAll"),
+								icon: (
+									<MagicIcon
+										component={
+											folderContentsExpanded
+												? IconChevronsUp
+												: IconChevronsDown
+										}
+										stroke={2}
+										size={18}
+									/>
+								),
+								onClick: () => handleToggleFolderContents(item),
+							},
+						]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "delete",

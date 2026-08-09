@@ -622,11 +622,23 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		return [folderEntry.key, ...treeIndex.getDescendantKeysByKey(folderEntry.key)]
 	})
 
-	const handleExpandFolderContents = useMemoizedFn((item: AttachmentItem) => {
+	const getExpandableFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
 		// 展开状态只需要目录 key，文件节点无需写入 expandedKeys。
-		const expandableSubtreeKeys = getFolderSubtreeKeys(item).filter(
+		return getFolderSubtreeKeys(item).filter(
 			(key) => (treeIndex.childKeysByKey.get(key)?.length || 0) > 0,
 		)
+	})
+
+	const isFolderContentsExpanded = useMemoizedFn((item: AttachmentItem): boolean => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
+		return (
+			expandableSubtreeKeys.length > 0 &&
+			expandableSubtreeKeys.every((key) => expandedKeySet.has(key))
+		)
+	})
+
+	const handleExpandFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
 		if (expandableSubtreeKeys.length === 0) return
 
 		setExpandedKeys((currentKeys) =>
@@ -641,6 +653,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setExpandedKeys((currentKeys) =>
 			currentKeys.filter((key) => !subtreeKeySet.has(String(key))),
 		)
+	})
+
+	const handleToggleFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		if (isFolderContentsExpanded(item)) {
+			handleCollapseFolderContents(item)
+			return
+		}
+
+		handleExpandFolderContents(item)
 	})
 
 	// 文件定位 hook
@@ -1040,10 +1061,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		treeIndex,
-		handleExpandFolderContents: externalSearchValue ? undefined : handleExpandFolderContents,
-		handleCollapseFolderContents: externalSearchValue
-			? undefined
-			: handleCollapseFolderContents,
+		isFolderContentsExpanded: externalSearchValue ? undefined : isFolderContentsExpanded,
+		handleToggleFolderContents: externalSearchValue ? undefined : handleToggleFolderContents,
 		attachments,
 	})
 
