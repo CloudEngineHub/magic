@@ -1,6 +1,13 @@
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from app.utils.async_file_utils import (
+    async_chmod,
+    async_create_temp_text_file,
+    async_gettempdir,
+    async_mkdir,
+)
 
 
 CURRENT_MODEL_ENV_NAME = "SUPER_MAGIC_CURRENT_MODEL_ID"
@@ -21,6 +28,29 @@ class SnippetEnvironment:
         if requested_path.is_absolute():
             return requested_path
         return workspace_path / requested_path
+
+    @staticmethod
+    async def create_temporary_script(
+        python_code: str,
+        capability: Literal["run-python", "run-sdk"],
+    ) -> Path:
+        """在系统临时目录中创建仅当前用户可访问的短期 Python 脚本。"""
+        temp_root = await async_gettempdir()
+        temp_dir = temp_root / "super-magic" / "snippets" / capability
+        await async_mkdir(temp_dir, parents=True, exist_ok=True)
+        await async_chmod(temp_dir, 0o700)
+
+        return await async_create_temp_text_file(
+            python_code,
+            suffix=".py",
+            prefix="",
+            directory=temp_dir,
+        )
+
+    @staticmethod
+    def format_execution_error(summary: str, error: Exception) -> str:
+        """为模型和代码执行详情保留可修复的原始异常信息。"""
+        return f"{summary}\n\nError details:\n{type(error).__name__}: {error}"
 
     @staticmethod
     def apply_current_model(extra_env: dict[str, str], agent_ctx: Any) -> None:

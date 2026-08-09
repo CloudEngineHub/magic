@@ -407,7 +407,7 @@ Background mode rules (allow_background=True):
             elif stdout:
                 output = stdout
             else:
-                output = "Command execution failed, no output"
+                output = result.content or "Command execution failed, no output"
 
         # Create terminal content object
         terminal_content = TerminalContent(

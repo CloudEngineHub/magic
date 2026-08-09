@@ -1,6 +1,5 @@
 import asyncio
 import shlex
-import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -19,7 +18,7 @@ from app.tools.core import AutoMount, BaseToolParams, tool
 from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
-from app.utils.async_file_utils import async_mkdir, async_unlink, async_write_text
+from app.utils.async_file_utils import async_unlink
 from app.utils.process_executor import ProcessExecutor
 from app.utils.terminal_tool_detail_generator import TerminalToolDetailGenerator
 
@@ -73,7 +72,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
     重要提示：
     - 适用于中小型Python代码片段（<=200行）
     - 复杂脚本、会长期反复使用的脚本，应持久化到文件后再使用shell_exec工具执行
-    - 工具在运行时目录自动创建临时脚本，默认以当前工作空间为工作目录，也可通过 cwd 指定，结束后删除临时脚本
+    - 工具在系统临时目录自动创建临时脚本，默认以当前工作空间为工作目录，也可通过 cwd 指定，结束后删除临时脚本
 
     使用示例：
     ```python
@@ -88,7 +87,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
     Important notes:
     - Suitable for small to medium Python snippets (<=200 lines)
     - Complex scripts or scripts for long-term repeated use should be persisted to files then executed with shell_exec tool
-    - The tool stores its temporary script in the runtime directory, uses the current workspace as cwd by default, accepts an explicit cwd, and deletes the script afterward
+    - The tool stores its temporary script in the system temporary directory, uses the current workspace as cwd by default, accepts an explicit cwd, and deletes the script afterward
 
     Usage example:
     ```python
@@ -209,24 +208,30 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
                 agent_ctx.get_workspace_dir(),
                 cwd,
             )
-            runtime_dir = PathManager.get_runtime_dir() / "python_scripts"
-            await async_mkdir(runtime_dir, parents=True, exist_ok=True)
-
-            script_file_path = runtime_dir / f"temp_python_{uuid.uuid4().hex}.py"
+            try:
+                script_file_path = await SnippetEnvironment.create_temporary_script(
+                    prepared_python_code,
+                    "run-python",
+                )
+            except Exception as e:
+                logger.exception(f"Failed to prepare temporary Python script: {e}")
+                error_content = SnippetEnvironment.format_execution_error(
+                    "Failed to prepare the temporary Python script.",
+                    e,
+                )
+                return TerminalToolResult.error(
+                    error_content,
+                    command=command,
+                    exit_code=-2,
+                    extra_info={
+                        "stdout": "",
+                        "stderr": error_content,
+                        "exit_code": -2,
+                    },
+                )
             logger.debug(f"创建临时Python脚本: {script_file_path}")
 
-            # 第一步：写入Python代码到临时文件
-            try:
-                await async_write_text(script_file_path, prepared_python_code)
-                logger.debug(f"成功写入Python代码到: {script_file_path}")
-            except Exception as e:
-                logger.exception(f"写入Python脚本失败: {e}")
-                return TerminalToolResult(
-                    error=f"写入Python脚本失败: {e}",
-                    command=command,
-                )
-
-            # 第二步：使用 ProcessExecutor 执行Python脚本
+            # 使用 ProcessExecutor 执行Python脚本
             command = f"python {shlex.quote(str(script_file_path))}"
 
             logger.debug(f"执行Python脚本: {command}")
@@ -244,20 +249,32 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
             raise
 
         except Exception as e:
-            logger.exception(f"执行Python代码片段时出错: {e}")
-            return TerminalToolResult(
-                error=f"执行Python代码片段时出错: {e}",
+            logger.exception(f"Python snippet execution failed: {e}")
+            error_content = SnippetEnvironment.format_execution_error(
+                "Python snippet execution failed.",
+                e,
+            )
+            return TerminalToolResult.error(
+                error_content,
                 command=command,
                 exit_code=-2,
+                extra_info={
+                    "stdout": "",
+                    "stderr": error_content,
+                    "exit_code": -2,
+                },
             )
         finally:
-            # 第三步：清理临时文件
+            # 清理临时文件
             if script_file_path is not None:
                 try:
                     await async_unlink(script_file_path)
                     logger.debug(f"已删除临时Python脚本: {script_file_path}")
                 except Exception as e:
-                    logger.warning(f"删除临时Python脚本失败: {script_file_path}, 错误: {e}")
+                    logger.warning(
+                        f"Failed to delete temporary Python script: "
+                        f"path={script_file_path}, error={e}"
+                    )
 
     @staticmethod
     def _get_purpose(arguments: Dict[str, Any] | None) -> str:
