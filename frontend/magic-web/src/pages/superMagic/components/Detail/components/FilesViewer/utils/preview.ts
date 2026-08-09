@@ -50,6 +50,11 @@ function resolveWorkspaceDetailPath(data: Record<string, unknown> | undefined): 
 	return fileName && fileName === contentPath ? fileName : ""
 }
 
+function isNonWorkspaceFile(data: Record<string, unknown>): boolean {
+	const storageType = data.storage_type
+	return typeof storageType === "string" && storageType !== "workspace"
+}
+
 function resolveHistoricalFileDetail(
 	detail: HistoricalToolDetail,
 	options?: CorrectDetailTypeOptions,
@@ -58,6 +63,8 @@ function resolveHistoricalFileDetail(
 	if (!detail?.data || options?.isAttachmentListReady !== true) return detail
 	// Browser 类型使用临时截图生命周期；传 output_path 的工作区截图会以 Image 类型返回。
 	if (detail.type === DetailType.Browser) return detail
+	// 工具消息正文和临时截图不属于项目附件树。
+	if (isNonWorkspaceFile(detail.data)) return detail
 
 	const fileName = resolveDetailFileName(detail.data)
 	if (!fileName) return detail
