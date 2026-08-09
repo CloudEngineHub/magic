@@ -12,6 +12,9 @@ from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
+from app.tools.list_chat_history import ListChatHistory
+from app.tools.search_chat_history import SearchChatHistory
+from app.tools.read_chat_history import ReadChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
 from app.tools.create_slide_project import CreateSlideProject
@@ -242,6 +245,9 @@ __all__ = [
     "ConnectWechatBot",
     "WaitWechatLogin",
     "CompactChatHistory",
+    "ListChatHistory",
+    "SearchChatHistory",
+    "ReadChatHistory",
     "ConvertPptxToSlideTemplate",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",
