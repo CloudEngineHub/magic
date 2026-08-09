@@ -100,6 +100,16 @@ class BrowserToolResultBuilder:
             f"Scope: {scope}\n\n"
             f"{markdown}"
         )
+        return ToolResult(
+            content=content,
+            data={
+                "page_id": page.id,
+                "session_id": page.session_id,
+                "page": cls._structured(page),
+                "scope": scope,
+                "markdown": markdown,
+            },
+        )
 
     @classmethod
     def html_outline(
@@ -139,16 +149,6 @@ class BrowserToolResultBuilder:
                 "detail": detail,
                 "html": html,
                 "truncated": truncated,
-            },
-        )
-        return ToolResult(
-            content=content,
-            data={
-                "page_id": page.id,
-                "session_id": page.session_id,
-                "page": cls._structured(page),
-                "scope": scope,
-                "markdown": markdown,
             },
         )
 
