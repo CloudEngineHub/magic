@@ -20,7 +20,11 @@ class BrowserRefParams(BaseToolParams):
 
 
 class BrowserFillParams(BrowserRefParams):
-    value: str = Field(..., description="Text to place in the referenced control.")
+    value: str = Field(
+        ...,
+        description="Text to place in the referenced control.",
+        json_schema_extra={"log_sensitive": True},
+    )
 
 
 class BrowserPressParams(BaseToolParams):

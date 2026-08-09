@@ -22,6 +22,7 @@ from app.api.http_dto.response import (
 from app.service.agent_dispatcher import AgentDispatcher
 from app.service.sdk_call_registry import SdkCallEntry, SdkCallRegistry
 from app.tools.core.tool_call_executor import tool_call_executor
+from app.tools.core.tool_executor import tool_executor
 from app.i18n import i18n
 
 router = APIRouter(prefix="/sdk", tags=["SDK"])
@@ -89,8 +90,13 @@ async def sdk_tool_call(request: SdkToolCallRequest):
     tool_call_id = request.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
     agent_label = agent_context.get_agent_session_label()
+    safe_tool_params = tool_executor.sanitize_tool_arguments_for_log(
+        request.tool_name,
+        request.tool_params,
+    )
     logger.info(
-        f"SDK tool call: {request.tool_name}, params: {request.tool_params}, "
+        f"SDK tool call: {request.tool_name}, parameter fields: "
+        f"{tool_executor.get_tool_parameter_names(safe_tool_params)}, "
         f"tool_call_id: {tool_call_id}, agent: {agent_label}, agent_context_id: {request.agent_context_id}"
     )
 
@@ -295,8 +301,13 @@ async def sdk_tool_debug_call(request: SdkDebugToolCallRequest):
 
     tool_call_id = request.tool_call_id or f"call_{uuid.uuid4().hex[:24]}"
 
+    safe_tool_params = tool_executor.sanitize_tool_arguments_for_log(
+        request.tool_name,
+        request.tool_params,
+    )
     logger.info(
-        f"SDK tool debug call: {request.tool_name}, params: {request.tool_params}, "
+        f"SDK tool debug call: {request.tool_name}, parameter fields: "
+        f"{tool_executor.get_tool_parameter_names(safe_tool_params)}, "
         f"tool_call_id: {tool_call_id}, workspace_path: {request.workspace_path}"
     )
 

@@ -261,7 +261,14 @@ class ToolCallExecutor:
                         tool_name,
                         json.dumps(tool_arguments_dict, ensure_ascii=False),
                     )
-                    logger.info(f"开始执行工具: {tool_name}, 参数: {tool_arguments_dict}")
+                    safe_tool_arguments = tool_executor.sanitize_tool_arguments_for_log(
+                        tool_name,
+                        tool_arguments_dict,
+                    )
+                    logger.info(
+                        f"开始执行工具: {tool_name}, 参数字段: "
+                        f"{tool_executor.get_tool_parameter_names(safe_tool_arguments)}"
+                    )
 
                     # 触发工具调用前事件
                     await ToolCallEventManager.trigger_before_tool_call(
