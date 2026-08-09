@@ -134,6 +134,7 @@ class AgentContext(BaseAgentContext):
             self._cancelable_event.set()
         self._subagent_depth = 0
         self._subagent_parent_agent_name: Optional[str] = None
+        self._subagent_parent_agent_id: Optional[str] = None
 
         # 运行时身份 / 上下文标识
         # context_id 用于 Skill Code Mode 路由；
@@ -205,6 +206,14 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_name(self) -> Optional[str]:
         """获取父 Agent 名称；主 Agent 返回 None。"""
         return self._subagent_parent_agent_name
+
+    def set_subagent_parent_agent_id(self, agent_id: Optional[str]) -> None:
+        """记录调用当前子 Agent 的父 Agent ID。"""
+        self._subagent_parent_agent_id = agent_id
+
+    def get_subagent_parent_agent_id(self) -> Optional[str]:
+        """获取父 Agent ID；主 Agent 返回 None。"""
+        return self._subagent_parent_agent_id
 
     def set_agent_id(self, agent_id: str) -> None:
         """设置运行时 agent_id，并同步更新依赖该 ID 的上下文设施。"""

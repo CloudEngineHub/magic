@@ -80,11 +80,10 @@ async def save_llm_debug_log(
         if is_success and not ENABLE_LLM_SUCCESS_REQUEST_LOG:
             return
 
-        # 创建聊天历史目录下的 llm_request 子目录
-        from agentlang.path_manager import PathManager
-        chat_history_dir = PathManager.get_chat_history_dir()
-        llm_request_dir = chat_history_dir / "llm_request"
-        llm_request_dir.mkdir(exist_ok=True)
+        from app.path_manager import PathManager
+        from app.utils.runtime_storage import ensure_runtime_directory
+
+        llm_request_dir = await ensure_runtime_directory(PathManager.get_llm_request_dir())
 
         # 计算耗时（毫秒）
         duration_ms = _calculate_duration_ms(start_timestamp, end_timestamp)
@@ -107,9 +106,11 @@ async def save_llm_debug_log(
             duration_ms=duration_ms
         )
 
-        # 写入文件
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(log_content)
+        from app.utils.async_file_utils import async_write_text
+        await async_write_text(file_path, log_content)
+
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
         logger.debug(f"已保存调试日志: {file_path}")
 

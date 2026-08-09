@@ -497,6 +497,17 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
+# 聊天记录统计与清理。默认全部为空，只统计，不删除用户历史。
+chat_history_cleanup:
+  completed_subagent_max_age_days: null
+  completed_subagent_max_count: null
+  compacted_max_age_days: null
+  compacted_max_count: null
+  total_max_bytes: null
+  llm_request_max_age_days: null
+  llm_request_max_count: null
+  llm_request_max_bytes: null
+
 # =====================================================
 # AI Ability Configuration (AI能力配置)
 # =====================================================

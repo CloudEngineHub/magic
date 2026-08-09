@@ -136,6 +136,8 @@ For a new session, provide a human-readable base ID such as `market-research`.
 - Continue an existing session: `fork=False, resume=True`
 - `fork=True, resume=True` is invalid
 
+Completed sub-agent histories can be inspected later with the `chat-history` skill. Parent identity is stored explicitly in each new sub-agent's `.session.json`; do not infer parent-child relationships from directory nesting.
+
 Fork creates a new independent session and never overwrites an existing one. Resume is always explicit because the caller may not know that an older session used the same name.
 
 ### task_label

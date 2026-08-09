@@ -42,7 +42,7 @@ magic-service。只有在排查静态 config.yaml provider 时才使用 `--allow
   `summary_ok=true`、`apply_ok=true`、`first_check_result=false`、`second_check_result=true`。
 
 需要人工检查压缩质量时，加 `--keep-artifacts`。脚本会保留主 Agent 的压缩后
-chat history、`.compacted/*_backup.json`，以及 `.chat_history/subagents/` 下对应
+chat history、`compacted/{agent_name}<{agent_id}>_{YYYYMMDDHHMMSS}.json`，以及 `.runtime/background_compact/` 下对应
 subagent 的历史和 token usage。检查完临时产物后用 `trash` 清理，不要用 `rm`。
 """
 
@@ -362,7 +362,7 @@ async def _snapshot_debug_files() -> set[Path]:
     from app.path_manager import PathManager
     from app.utils.async_file_utils import async_exists, async_iterdir
 
-    debug_dir = PathManager.get_chat_history_dir() / "llm_request"
+    debug_dir = PathManager.get_llm_request_dir()
     if not await async_exists(debug_dir):
         return set()
     return set(await async_iterdir(debug_dir))
@@ -386,15 +386,12 @@ async def _cleanup_run_artifacts(
             cleaned = True
 
     if subagent_id:
-        subagent_dir = PathManager.get_subagents_chat_history_dir()
+        subagent_dir = PathManager.get_subagent_chat_history_dir(agent_name, subagent_id)
         if await async_exists(subagent_dir):
-            prefix = f"{agent_name}<{subagent_id}>"
-            for path in await async_iterdir(subagent_dir):
-                if path.name.startswith(prefix):
-                    await async_unlink(path)
-                    cleaned = True
+            await async_rmtree(subagent_dir)
+            cleaned = True
 
-    debug_dir = PathManager.get_chat_history_dir() / "llm_request"
+    debug_dir = PathManager.get_llm_request_dir()
     if await async_exists(debug_dir):
         for path in await async_iterdir(debug_dir):
             if path not in debug_files_before:

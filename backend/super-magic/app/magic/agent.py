@@ -3087,24 +3087,25 @@ Since your subsequent output will be merged with pre-interruption content and di
         await VideoModelConfigService.sync_to_horizon(dynamic_config, self.agent_context.horizon)
 
     async def _backup_before_compact(self) -> None:
-        """Backup chat history before compact for recovery purposes"""
-        try:
-            # Create backup directory
-            backup_dir = os.path.join(self.chat_history.chat_history_dir, '.compacted')
-            os.makedirs(backup_dir, exist_ok=True)
+        """压缩前完整保存当前聊天记录；写入失败时中止本次压缩。"""
+        from app.utils.async_file_utils import async_write_json
 
-            # Generate backup filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            backup_filename = f'{self.agent_name}_{self.id}_{timestamp}_backup.json'
-            backup_file_path = os.path.join(backup_dir, backup_filename)
-
-            # Save backup using chat history's save method
-            await self.chat_history.save(custom_file_path=backup_file_path)
-
-            logger.info(f"Chat history backed up to: {backup_file_path}")
-
-        except Exception as e:
-            logger.error(f"Failed to backup chat history before compact: {e}", exc_info=True)
+        backup_dir = Path(self.chat_history.chat_history_dir) / "compacted"
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_file_path = backup_dir / f"{self.agent_name}<{self.id}>_{timestamp}.json"
+        history_document = [
+            self.chat_history._message_to_storage_dict(message)
+            for message in self.chat_history.messages
+        ]
+        await async_write_json(
+            backup_file_path,
+            history_document,
+            ensure_ascii=False,
+            indent=4,
+        )
+        logger.info(f"Chat history backed up to: {backup_file_path}")
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
     # 输出过长恢复消息的共享上限（覆盖流式降级 + 退避重试 + finish_reason 截断等场景）
     _MAX_OUTPUT_RECOVERY_LIMIT = 6
@@ -3425,7 +3426,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 按需查看并调用，不再通过 tool_factory 暴露给模型。
 
         # 保存工具列表到与聊天记录同名的.tools.json文件
-        if self.chat_history and tools_list:
+        if self.chat_history and tools_list and not self.agent_context.is_subagent_context():
             self.chat_history.save_tools_list(tools_list)
 
         # 创建 ToolContext 实例
