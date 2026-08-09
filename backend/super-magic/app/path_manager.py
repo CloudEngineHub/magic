@@ -22,11 +22,15 @@ class PathManager(BasePathManager):
         .project_schemas/    ← 项目架构（应用层，预创建）
         .client_message/     ← 客户端消息（应用层，预创建）
         .mcp/                ← MCP 配置（应用层，预创建）
-        .runtime/            ← 运行时数据（应用层，按需创建）
-            bg_shell/        ← 后台 shell 任务日志（按需创建）
+        .runtime/            ← sandbox 本地运行数据（应用管理清理，按需创建）
+            snippets/       ← Run Python / SDK 短期执行脚本
+            bg_shell/       ← 后台 shell 任务日志
+            mcp_outputs/    ← MCP 自动大结果
+            oauth2/         ← OAuth2 local callback
+            verification/   ← 验证脚本产物
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
-        .workspace/          ← 工作区（父类管理）
+        .workspace/          ← MagicFS 云端持久工作区（父类管理）
             .asr_states/     ← ASR 状态（按需创建）
             .magic/          ← Magic 配置（按需创建）
                 config/      ← Magic 全局配置
@@ -80,7 +84,7 @@ class PathManager(BasePathManager):
     # 浏览器存储状态文件：project_root/.browser/storage_state.json（由父类目录承载）
     _browser_storage_state_file: ClassVar[Optional[Path]] = None
 
-    # 运行时数据目录：project_root/.runtime（按需创建）
+    # sandbox 本地运行数据目录：project_root/.runtime（按需创建，由各 owner 清理）
     _runtime_dir_name: ClassVar[str] = ".runtime"
     _runtime_dir: ClassVar[Optional[Path]] = None
 
@@ -571,7 +575,7 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_runtime_dir(cls) -> Path:
-        """获取运行时数据目录（project_root/.runtime，按需创建）"""
+        """获取 sandbox 本地运行数据目录（project_root/.runtime，按需创建）。"""
         cls._ensure_app_initialization()
         return cls._runtime_dir
 

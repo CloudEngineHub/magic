@@ -39,7 +39,6 @@ from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
-from app.utils.async_file_utils import async_unlink
 from app.utils.process_executor import ProcessExecutor
 
 # 匹配 tool.call('tool_name', ...) 或 tool.call("tool_name", ...) 中的工具名
@@ -375,14 +374,14 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             agent_ctx = tool_context.get_extension_typed("agent_context", AgentContext)
             if agent_ctx is None:
                 raise RuntimeError(
-                    "run_sdk_snippet: tool_context 中不存在 agent_context，"
-                    "无法确定调用方 Agent 标识"
+                    "run_sdk_snippet requires agent_context in tool_context to identify "
+                    "the calling Agent."
                 )
 
             try:
                 script_file_path = await SnippetEnvironment.create_temporary_script(
                     python_code,
-                    "run-sdk",
+                    "run_sdk",
                 )
             except Exception as e:
                 logger.exception(f"Failed to prepare temporary SDK script: {e}")
@@ -508,7 +507,7 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
         finally:
             if script_file_path is not None:
                 try:
-                    await async_unlink(script_file_path)
+                    await SnippetEnvironment.delete_temporary_script(script_file_path)
                     logger.debug(f"已删除 SDK 代码片段脚本: {script_file_path}")
                 except Exception as cleanup_error:
                     logger.warning(

@@ -18,7 +18,6 @@ from app.tools.core import AutoMount, BaseToolParams, tool
 from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
-from app.utils.async_file_utils import async_unlink
 from app.utils.process_executor import ProcessExecutor
 from app.utils.terminal_tool_detail_generator import TerminalToolDetailGenerator
 
@@ -72,7 +71,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
     重要提示：
     - 适用于中小型Python代码片段（<=200行）
     - 复杂脚本、会长期反复使用的脚本，应持久化到文件后再使用shell_exec工具执行
-    - 工具在系统临时目录自动创建临时脚本，默认以当前工作空间为工作目录，也可通过 cwd 指定，结束后删除临时脚本
+    - 工具在 sandbox 本地 `.runtime` 目录创建临时脚本，默认以当前工作空间为工作目录，也可通过 cwd 指定，结束后删除临时脚本
 
     使用示例：
     ```python
@@ -87,7 +86,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
     Important notes:
     - Suitable for small to medium Python snippets (<=200 lines)
     - Complex scripts or scripts for long-term repeated use should be persisted to files then executed with shell_exec tool
-    - The tool stores its temporary script in the system temporary directory, uses the current workspace as cwd by default, accepts an explicit cwd, and deletes the script afterward
+    - The tool stores its temporary script under the sandbox-local .runtime directory, uses the current workspace as cwd by default, accepts an explicit cwd, and deletes the script afterward
 
     Usage example:
     ```python
@@ -200,8 +199,8 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
             agent_ctx = tool_context.get_extension_typed("agent_context", AgentContext)
             if agent_ctx is None:
                 raise RuntimeError(
-                    "run_python_snippet: tool_context 中不存在 agent_context，"
-                    "无法确定当前工作空间"
+                    "run_python_snippet requires agent_context in tool_context to resolve "
+                    "the current workspace."
                 )
 
             work_dir = SnippetEnvironment.resolve_working_dir(
@@ -211,7 +210,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
             try:
                 script_file_path = await SnippetEnvironment.create_temporary_script(
                     prepared_python_code,
-                    "run-python",
+                    "run_python",
                 )
             except Exception as e:
                 logger.exception(f"Failed to prepare temporary Python script: {e}")
@@ -268,7 +267,7 @@ class RunPythonSnippet(AbstractFileTool[RunPythonSnippetParams]):
             # 清理临时文件
             if script_file_path is not None:
                 try:
-                    await async_unlink(script_file_path)
+                    await SnippetEnvironment.delete_temporary_script(script_file_path)
                     logger.debug(f"已删除临时Python脚本: {script_file_path}")
                 except Exception as e:
                     logger.warning(

@@ -1,12 +1,17 @@
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
+from app.path_manager import PathManager
 from app.utils.async_file_utils import (
-    async_chmod,
     async_create_temp_text_file,
-    async_gettempdir,
-    async_mkdir,
+    async_unlink,
+)
+from app.utils.runtime_storage import (
+    RuntimeEvictionPolicy,
+    ensure_runtime_directory,
+    evict_runtime_files,
+    trigger_opportunistic_cleanup,
 )
 
 
@@ -16,6 +21,15 @@ _TOOL_CALL_USAGE_PATTERN = re.compile(r"\btool\.call\s*\(")
 
 class SnippetEnvironment:
     """代码片段子进程环境变量构建辅助类。"""
+
+    _active_scripts: ClassVar[set[Path]] = set()
+    _eviction_policy: ClassVar[RuntimeEvictionPolicy] = RuntimeEvictionPolicy(
+        max_entries=64,
+        target_entries=48,
+        max_total_bytes=16 * 1024 * 1024,
+        target_total_bytes=12 * 1024 * 1024,
+        max_age_seconds=7 * 24 * 60 * 60,
+    )
 
     @staticmethod
     def resolve_working_dir(workspace_dir: str, cwd: str | None) -> Path:
@@ -32,20 +46,35 @@ class SnippetEnvironment:
     @staticmethod
     async def create_temporary_script(
         python_code: str,
-        capability: Literal["run-python", "run-sdk"],
+        capability: Literal["run_python", "run_sdk"],
     ) -> Path:
-        """在系统临时目录中创建仅当前用户可访问的短期 Python 脚本。"""
-        temp_root = await async_gettempdir()
-        temp_dir = temp_root / "super-magic" / "snippets" / capability
-        await async_mkdir(temp_dir, parents=True, exist_ok=True)
-        await async_chmod(temp_dir, 0o700)
-
-        return await async_create_temp_text_file(
+        """在 `.runtime/snippets` 中创建仅当前用户可访问的短期脚本。"""
+        runtime_dir = await ensure_runtime_directory(
+            PathManager.get_runtime_dir() / "snippets" / capability
+        )
+        script_path = await async_create_temp_text_file(
             python_code,
             suffix=".py",
             prefix="",
-            directory=temp_dir,
+            directory=runtime_dir,
         )
+        SnippetEnvironment._active_scripts.add(script_path)
+        trigger_opportunistic_cleanup(
+            f"snippets:{capability}",
+            lambda: evict_runtime_files(
+                runtime_dir,
+                policy=SnippetEnvironment._eviction_policy,
+                suffixes=(".py",),
+                protected_paths=frozenset(SnippetEnvironment._active_scripts),
+            ),
+        )
+        return script_path
+
+    @staticmethod
+    async def delete_temporary_script(script_path: Path) -> None:
+        """解除活跃脚本保护并删除文件；删除失败时允许后续机会式清理接管。"""
+        SnippetEnvironment._active_scripts.discard(script_path)
+        await async_unlink(script_path)
 
     @staticmethod
     def format_execution_error(summary: str, error: Exception) -> str:
