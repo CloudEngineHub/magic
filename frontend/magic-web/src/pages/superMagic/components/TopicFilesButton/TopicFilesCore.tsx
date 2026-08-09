@@ -119,6 +119,7 @@ import {
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
+import { getAttachmentKey } from "./utils/getAttachmentKey"
 
 export interface TopicFilesExpansionState {
 	hasExpandableFolders: boolean
@@ -613,6 +614,35 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setExpandedKeys(expansionState.allFoldersExpanded ? [] : expandableFolderKeys)
 	})
 
+	const getFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
+		const folderEntry =
+			treeIndex.getEntryById(item.file_id) || treeIndex.getEntryByKey(getAttachmentKey(item))
+		if (!folderEntry) return []
+
+		return [folderEntry.key, ...treeIndex.getDescendantKeysByKey(folderEntry.key)]
+	})
+
+	const handleExpandFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		// 展开状态只需要目录 key，文件节点无需写入 expandedKeys。
+		const expandableSubtreeKeys = getFolderSubtreeKeys(item).filter(
+			(key) => (treeIndex.childKeysByKey.get(key)?.length || 0) > 0,
+		)
+		if (expandableSubtreeKeys.length === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			Array.from(new Set([...currentKeys.map(String), ...expandableSubtreeKeys])),
+		)
+	})
+
+	const handleCollapseFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const subtreeKeySet = new Set(getFolderSubtreeKeys(item))
+		if (subtreeKeySet.size === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			currentKeys.filter((key) => !subtreeKeySet.has(String(key))),
+		)
+	})
+
 	// 文件定位 hook
 	const { locatingFileId } = useLocateFile({
 		treeIndex,
@@ -1010,6 +1040,10 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		treeIndex,
+		handleExpandFolderContents: externalSearchValue ? undefined : handleExpandFolderContents,
+		handleCollapseFolderContents: externalSearchValue
+			? undefined
+			: handleCollapseFolderContents,
 		attachments,
 	})
 

@@ -5805,7 +5805,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI Edit",
-		"addFileOrFolder": "Add File / Add Folder",
+		"addFileOrFolder": "Add File/Folder",
 		"aiPick": "AI Pick",
 		"aiPickTooltip": "Click to select a page element and let AI modify it",
 		"batchExportingPdf": "Batch Exporting PDF...",
@@ -5850,6 +5850,7 @@
 			"batchCopy": "Batch Copy",
 			"batchMove": "Batch Move",
 			"cancel": "Cancel",
+			"collapseAll": "Collapse All",
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
@@ -5915,6 +5916,7 @@
 			"downloadPdfRaster": "Download PDF Format (Screenshot)",
 			"downloadPpt": "Download PPT Format",
 			"downloadPptx": "Download PPTX Format (Editable)",
+			"expandAll": "Expand All",
 			"fileExport": {
 				"checkStatusFailed": "Failed to check export status",
 				"emptyFileId": "File ID cannot be empty",

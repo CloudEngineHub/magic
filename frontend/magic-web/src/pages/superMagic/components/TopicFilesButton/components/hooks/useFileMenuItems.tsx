@@ -49,6 +49,17 @@ export function createFileMenuItems({
 	onAddFolder,
 }: CreateFileMenuItemsParams): MenuProps["items"] {
 	return [
+		...(onAddFolder
+			? [
+					{
+						key: "createFolder",
+						label: t("topicFiles.contextMenu.createFolder"),
+						onClick: onAddFolder,
+						icon: <MagicIcon component={IconFolderPlus} stroke={2} size={18} />,
+					},
+					{ type: "divider" as const },
+				]
+			: []),
 		{
 			key: "createTxt",
 			label: t("topicFiles.contextMenu.createSubMenu.txtFile"),
@@ -124,17 +135,6 @@ export function createFileMenuItems({
 			onClick: () => onAddFile?.("customFile"),
 			icon: <MagicFileIcon type="customFile" size={18} />,
 		},
-		...(onAddFolder
-			? [
-					{ type: "divider" as const },
-					{
-						key: "createFolder",
-						label: t("topicFiles.contextMenu.createFolder"),
-						onClick: onAddFolder,
-						icon: <MagicIcon component={IconFolderPlus} stroke={2} size={18} />,
-					},
-				]
-			: []),
 	]
 }
 
