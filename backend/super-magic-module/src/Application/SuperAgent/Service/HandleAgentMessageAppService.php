@@ -938,6 +938,7 @@ class HandleAgentMessageAppService extends AbstractAppService
 
             // Modify tool data structure
             $tool['detail']['data']['file_id'] = (string) $fileId;
+            $tool['detail']['data']['storage_type'] = StorageType::TOPIC->value;
             $tool['detail']['data']['content'] = ''; // Clear content
             $tool['detail']['data']['file_extension'] = $fileExtension;
 

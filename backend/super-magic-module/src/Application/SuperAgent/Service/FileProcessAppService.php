@@ -145,14 +145,14 @@ class FileProcessAppService extends AbstractAppService
             $fileType = FileType::tryFrom((string) ($detailData['file_tag'] ?? '')) ?? FileType::PROCESS;
             $projectEntity = $this->projectDomainService->getProjectNotUserId($task->getProjectId());
             $fullPrefix = $this->taskFileDomainService->getFullPrefix($projectEntity->getUserOrganizationCode());
-            $snapshotDir = WorkDirectoryUtil::getTopicRootDir(
+            $screenshotDir = WorkDirectoryUtil::getTopicRootDir(
                 $task->getUserId(),
                 $task->getProjectId(),
                 $task->getTopicId()
-            ) . '/snapshots';
-            $fullSnapshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $snapshotDir);
-            if (! WorkDirectoryUtil::checkEffectiveFileKey($fullSnapshotDir, $fileKey)) {
-                $this->logger->warning('Tool Detail snapshot path does not belong to the current topic', [
+            ) . '/screenshots';
+            $fullScreenshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $screenshotDir);
+            if (! WorkDirectoryUtil::checkEffectiveFileKey($fullScreenshotDir, $fileKey)) {
+                $this->logger->warning('Tool Detail screenshot path does not belong to the current topic', [
                     'task_id' => $task->getTaskId(),
                     'file_key' => $fileKey,
                 ]);

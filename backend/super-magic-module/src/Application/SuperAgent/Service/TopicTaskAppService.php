@@ -1287,6 +1287,7 @@ class TopicTaskAppService extends AbstractAppService
 
             // 修改工具数据结构
             $tool['detail']['data']['file_id'] = (string) $fileId;
+            $tool['detail']['data']['storage_type'] = StorageType::TOPIC->value;
             $tool['detail']['data']['content'] = ''; // 清空内容
             if (! empty($sourceFileId)) {
                 $tool['detail']['data']['source_file_id'] = $sourceFileId;

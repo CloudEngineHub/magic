@@ -39,6 +39,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageMetadata;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessagePayload;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MessageType;
+use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\UserInfoValueObject;
@@ -1327,6 +1328,7 @@ class TaskAppService extends AbstractAppService
 
             // 修改工具数据结构
             $tool['detail']['data']['file_id'] = (string) $fileId;
+            $tool['detail']['data']['storage_type'] = StorageType::TOPIC->value;
             $tool['detail']['data']['content'] = ''; // 清空内容
             $tool['detail']['data']['file_extension'] = $fileExtension;
 
