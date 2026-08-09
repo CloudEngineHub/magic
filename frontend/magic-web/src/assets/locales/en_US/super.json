@@ -5805,8 +5805,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI Edit",
-		"addFile": "Add File",
-		"addFolder": "Add Folder",
+		"addFileOrFolder": "Add File / Add Folder",
 		"aiPick": "AI Pick",
 		"aiPickTooltip": "Click to select a page element and let AI modify it",
 		"batchExportingPdf": "Batch Exporting PDF...",

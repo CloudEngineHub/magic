@@ -5818,8 +5818,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI 编辑",
-		"addFile": "添加文件",
-		"addFolder": "添加文件夹",
+		"addFileOrFolder": "添加文件 / 添加文件夹",
 		"aiPick": "AI 选取",
 		"aiPickTooltip": "点击后选取页面元素，让 AI 对其进行修改",
 		"batchExportingPdf": "批量导出 PDF 中",

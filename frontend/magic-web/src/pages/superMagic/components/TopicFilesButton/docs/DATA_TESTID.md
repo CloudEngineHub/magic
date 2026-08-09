@@ -57,9 +57,9 @@
 | TestID | 元素 | 说明 |
 |--------|------|------|
 | `file-header-search-button` | 搜索按钮 | 进入搜索模式的按钮 |
-| `file-header-add-file-button` | 添加文件按钮 | 打开添加文件菜单的按钮 |
-| `file-header-add-folder-button` | 添加文件夹按钮 | 创建新文件夹的按钮 |
+| `file-header-add-file-button` | 添加文件 / 文件夹按钮 | 打开添加文件 / 文件夹菜单的按钮 |
 | `file-header-upload-button` | 上传按钮 | 打开上传菜单的按钮 |
+| `file-header-toggle-all-button` | 展开 / 折叠按钮 | 展开或折叠全部非空目录的按钮 |
 | `file-header-refresh-button` | 刷新按钮 | 刷新文件列表的按钮 |
 | `file-header-select-mode-button` | 进入选择模式按钮 | 进入批量选择模式的按钮 |
 

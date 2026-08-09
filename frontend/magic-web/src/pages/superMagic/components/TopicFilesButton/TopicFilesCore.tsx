@@ -2,7 +2,7 @@ import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef, useRef } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -120,6 +120,11 @@ import {
 } from "./utils/batch-selection"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 
+export interface TopicFilesExpansionState {
+	hasExpandableFolders: boolean
+	allFoldersExpanded: boolean
+}
+
 interface TopicFilesCoreProps {
 	className?: string
 	attachments?: AttachmentItem[]
@@ -140,6 +145,7 @@ interface TopicFilesCoreProps {
 	onSelectAll?: () => void
 	onDeselectAll?: () => void
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
+	onExpansionStateChange?: (state: TopicFilesExpansionState) => void
 	allowEdit?: boolean
 	onUpdateAttachments?: () => void
 	afterAddFileToNewTopic?: () => void
@@ -189,6 +195,7 @@ export interface TopicFilesCoreRef {
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
 	openBatchMoveByFileIds: (fileIds: string[]) => void
+	toggleAllFolders: () => void
 	resetAllStates: () => void
 }
 
@@ -211,6 +218,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isSelectMode = false,
 		onSelectModeChange,
 		onSelectionChange,
+		onExpansionStateChange,
 		allowEdit = true,
 		onUpdateAttachments,
 		afterAddFileToNewTopic,
@@ -577,6 +585,33 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			refreshLoading,
 			selectedProjectId: selectedProject?.id || projectId,
 		})
+
+	// 复用现有索引收集非空目录，避免在大文件树上再次递归 attachments。
+	const expandableFolderKeys = useMemo(() => {
+		const folderKeys: string[] = []
+		treeIndex.childKeysByKey.forEach((childKeys, key) => {
+			if (childKeys.length > 0) folderKeys.push(key)
+		})
+		return folderKeys
+	}, [treeIndex])
+	const expansionState = useMemo<TopicFilesExpansionState>(() => {
+		const hasExpandableFolders = expandableFolderKeys.length > 0
+		return {
+			hasExpandableFolders,
+			allFoldersExpanded:
+				hasExpandableFolders &&
+				expandableFolderKeys.every((key) => expandedKeySet.has(key)),
+		}
+	}, [expandableFolderKeys, expandedKeySet])
+
+	// 项目切换时也重新上报，避免 Header 沿用上一个项目的展开摘要。
+	useEffect(() => {
+		onExpansionStateChange?.(expansionState)
+	}, [expansionState, onExpansionStateChange, projectId])
+
+	const toggleAllFolders = useMemoizedFn(() => {
+		setExpandedKeys(expansionState.allFoldersExpanded ? [] : expandableFolderKeys)
+	})
 
 	// 文件定位 hook
 	const { locatingFileId } = useLocateFile({
@@ -1017,6 +1052,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		openBatchMoveByFileIds: (fileIds: string[]) => {
 			moveFileHook.openBatchMoveByFileIds(fileIds)
 		},
+		toggleAllFolders,
 		resetAllStates,
 	}))
 
