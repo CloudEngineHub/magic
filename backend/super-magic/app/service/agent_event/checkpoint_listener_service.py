@@ -5,6 +5,8 @@ Checkpoint事件监听服务
 这个模块负责监听代理运行和聊天历史变更事件，自动创建checkpoint和备份聊天历史快照。
 """
 
+from pathlib import Path
+
 from agentlang.event.event import Event, EventType
 from agentlang.event.data import BeforeMainAgentRunEventData, ChatHistoryChangedEventData
 from app.core.context.agent_context import AgentContext
@@ -52,7 +54,7 @@ class CheckpointListenerService:
             checkpoint_info = await checkpoint_service.create_checkpoint(message_id)
 
             # 在 checkpoint 创建后，保存 initial chat_history 快照
-            await CheckpointListenerService._save_initial_chat_history_snapshot(message_id)
+            await CheckpointListenerService._save_initial_chat_history_snapshot(message_id, agent_context)
 
             # 将checkpoint信息存储到代理上下文中供后续使用
             CheckpointUtils.set_current_checkpoint(agent_context, checkpoint_info)
@@ -63,7 +65,7 @@ class CheckpointListenerService:
             logger.error(f"创建checkpoint失败: {e}")
 
     @staticmethod
-    async def _save_initial_chat_history_snapshot(checkpoint_id: str) -> None:
+    async def _save_initial_chat_history_snapshot(checkpoint_id: str, agent_context: AgentContext) -> None:
         """
         保存 initial chat_history 快照（在 checkpoint 创建时调用）
 
@@ -80,7 +82,12 @@ class CheckpointListenerService:
             initial_snapshot_dir = storage.get_initial_chat_history_snapshots_dir(checkpoint_id)
 
             # 创建 initial 聊天历史快照
-            success = await chat_history_manager.create_initial_chat_history_snapshot(initial_snapshot_dir)
+            success = await chat_history_manager.create_initial_chat_history_snapshot(
+                initial_snapshot_dir,
+                agent_name=agent_context.agent_name,
+                agent_id=agent_context.get_agent_id() or "main",
+                chat_history_dir=Path(agent_context.get_chat_history_dir()),
+            )
 
             if success:
                 logger.info(f"成功保存 initial chat_history 快照到 checkpoint {checkpoint_id}")
@@ -113,7 +120,12 @@ class CheckpointListenerService:
             latest_snapshot_dir = storage.get_latest_chat_history_snapshots_dir(current_checkpoint_id)
 
             # 创建 latest 聊天历史快照
-            success = await chat_history_manager.create_latest_chat_history_snapshot(latest_snapshot_dir)
+            success = await chat_history_manager.create_latest_chat_history_snapshot(
+                latest_snapshot_dir,
+                agent_name=event_data.agent_name,
+                agent_id=event_data.agent_id,
+                chat_history_dir=Path(event_data.chat_history_dir),
+            )
 
             if success:
                 logger.info(f"成功备份 latest chat_history 到 checkpoint {current_checkpoint_id}")
