@@ -470,6 +470,7 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			width: 1280,
 			height: 720,
 		})
+		expect(createdTemporaryElement).not.toHaveProperty("name")
 		expect(
 			(createdTemporaryElement.contents as Array<Record<string, unknown>>)[0]?.src,
 		).toBeUndefined()

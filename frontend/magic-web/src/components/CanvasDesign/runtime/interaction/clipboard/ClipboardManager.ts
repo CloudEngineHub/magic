@@ -888,7 +888,9 @@ export class ClipboardManager {
 		if (!src) return null
 		const metadata = await this.fetchOriginalFileMetadata({
 			src,
-			fallbackFilename: `${element.name || "audio"}.mp3`,
+			fallbackFilename:
+				(element.name ? `${element.name}.mp3` : getCanvasResourceFileName(src)) ||
+				"audio.mp3",
 			fallbackMimeType: DEFAULT_AUDIO_MIME_TYPE,
 		})
 		return metadata ? { element, ...metadata } : null

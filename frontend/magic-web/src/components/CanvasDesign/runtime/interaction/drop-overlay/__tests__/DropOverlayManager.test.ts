@@ -222,6 +222,7 @@ describe("DropOverlayManager custom attachment drops", () => {
 			width: 1280,
 			height: 720,
 		})
+		expect(element).not.toHaveProperty("name")
 		expect((element as AudioElement).contents[0]?.src).toBe("./audios/voice.mp3")
 		expect(harness.canvas.audioResourceManager.primeCache).toHaveBeenCalledTimes(1)
 		expect(harness.canvas.imageResourceManager.loadResource).not.toHaveBeenCalled()

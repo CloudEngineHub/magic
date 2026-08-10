@@ -17,6 +17,9 @@ export default function AudioElementFullscreenOverlay(props: AudioElementFullscr
 	const element = useCanvasElement(elementId)
 	const audioElement = element?.type === ElementTypeEnum.Audio ? (element as AudioElement) : null
 	const audioPath = audioElement ? (getActiveContent(audioElement)?.src ?? "") : ""
+	const audioDisplayName = audioElement
+		? canvas?.elementManager.getElementInstance(elementId)?.getNameLabelText()
+		: undefined
 
 	useEffect(() => {
 		if (audioElement && audioPath) return
@@ -32,7 +35,7 @@ export default function AudioElementFullscreenOverlay(props: AudioElementFullscr
 	return (
 		<AudioFullscreenOverlay
 			path={audioPath}
-			fileName={audioElement?.name}
+			fileName={audioDisplayName}
 			isOpen={Boolean(audioPath)}
 			autoPlay={false}
 			onClose={onClose}

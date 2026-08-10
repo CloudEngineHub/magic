@@ -1061,17 +1061,10 @@ export class DropOverlayManager {
 
 	private createAudioElement(
 		filePath: string,
-		fileInfo: { fileName: string },
 		dimensions: { width: number; height: number },
 		position: { x: number; y: number },
 		zIndex: number,
-		existingNames: Set<string>,
 	): string {
-		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "audio"
-		const baseName = fileName.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
-		existingNames.add(uniqueName)
-
 		const elementId = generateElementId()
 		const baseElement = ElementFactory.createElementData(
 			ElementTypeEnum.Audio,
@@ -1082,11 +1075,9 @@ export class DropOverlayManager {
 			dimensions.height,
 			zIndex,
 		) as AudioElement
-		const audioElement = updateContent(
-			{ ...baseElement, name: uniqueName },
-			baseElement.activeContentId ?? undefined,
-			{ src: filePath },
-		)
+		const audioElement = updateContent(baseElement, baseElement.activeContentId ?? undefined, {
+			src: filePath,
+		})
 
 		this.canvas.elementManager.create(audioElement)
 		return elementId
@@ -1154,14 +1145,7 @@ export class DropOverlayManager {
 							existingNames,
 						)
 					} else if (mediaType === "audio") {
-						elementId = this.createAudioElement(
-							filePath,
-							fileInfo,
-							dimensions,
-							position,
-							zIndex,
-							existingNames,
-						)
+						elementId = this.createAudioElement(filePath, dimensions, position, zIndex)
 					} else {
 						elementId = this.createImageElement(
 							filePath,

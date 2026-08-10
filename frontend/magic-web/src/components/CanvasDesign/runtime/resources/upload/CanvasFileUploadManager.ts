@@ -224,7 +224,7 @@ function createUploadElementData(
 	position: { x: number; y: number },
 	size: { width: number; height: number },
 	zIndex: number,
-	name: string,
+	name?: string,
 	elementData:
 		| Partial<ImageElementData>
 		| Partial<VideoElementData>
@@ -255,7 +255,7 @@ function createUploadElementData(
 		...elementProps,
 		id: elementId,
 		type: elementType,
-		name,
+		...(name !== undefined ? { name } : {}),
 	} as typeof base
 	return updateContent(
 		merged as never,
@@ -1392,9 +1392,6 @@ export class CanvasFileUploadManager {
 			onUploadFailed,
 		} = options
 		const elementId = generateElementId()
-		const existingNames = getAllExistingNames(this.canvas.elementManager)
-		const baseName = file.name.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
 		const width = Math.max(
 			(elementData as Partial<AudioElementData> | undefined)?.width ??
 				AUDIO_CONFIG.DEFAULT_WIDTH,
@@ -1406,7 +1403,7 @@ export class CanvasFileUploadManager {
 			{ x: position.x - width / 2, y: position.y - AUDIO_CONFIG.DEFAULT_HEIGHT / 2 },
 			{ width, height: AUDIO_CONFIG.DEFAULT_HEIGHT },
 			this.canvas.elementManager.getMaxZIndexInLevel() + 1,
-			uniqueName,
+			undefined,
 			elementData,
 			{ src: undefined },
 		) as AudioElementData
@@ -1517,11 +1514,6 @@ export class CanvasFileUploadManager {
 				audioData?.width ?? AUDIO_CONFIG.DEFAULT_WIDTH,
 				AUDIO_CONFIG.MIN_WIDTH,
 			)
-			const existingNames = getAllExistingNames(this.canvas.elementManager)
-			const uniqueName = generateUniqueElementName(
-				metadata.filename.replace(/\.[^/.]+$/, ""),
-				existingNames,
-			)
 			const elementId = generateElementId()
 			const finalElement = createUploadElementData(
 				ElementTypeEnum.Audio,
@@ -1532,7 +1524,7 @@ export class CanvasFileUploadManager {
 				},
 				{ width, height: AUDIO_CONFIG.DEFAULT_HEIGHT },
 				this.canvas.elementManager.getMaxZIndexInLevel() + 1,
-				uniqueName,
+				undefined,
 				audioData,
 				{ src: uploadResult.path },
 			) as AudioElementData

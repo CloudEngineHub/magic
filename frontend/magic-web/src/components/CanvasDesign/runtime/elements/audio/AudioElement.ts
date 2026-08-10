@@ -19,7 +19,10 @@ import {
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
 import type { AudioWaveformSnapshot } from "../../resources/audio/AudioWaveformManager"
-import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
+import {
+	areCanvasHostResourceReferencesSame,
+	getCanvasResourceFileName,
+} from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { AUDIO_CONFIG } from "./AudioElement.config"
 import {
@@ -247,7 +250,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		name?: string
 		width?: number
 	}): AudioElementData {
-		return {
+		const data: AudioElementData = {
 			id: options.id,
 			type: ElementTypeEnum.Audio,
 			x: options.x,
@@ -255,16 +258,19 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			width: options.width ?? AUDIO_CONFIG.DEFAULT_WIDTH,
 			height: AUDIO_CONFIG.DEFAULT_HEIGHT,
 			zIndex: options.zIndex ?? 0,
-			name: options.name,
 			activeContentId: `${options.id}-content-1`,
 			mainContentId: `${options.id}-content-1`,
 			contents: [{ contentId: `${options.id}-content-1`, src: options.src }],
 			interactionConfig: { aspectRatioLocked: false },
 		}
+		if (options.name !== undefined) data.name = options.name
+		return data
 	}
 
 	public getRenderName(): string {
-		return this.getText("audio.defaultName", "音频")
+		const fileName = getCanvasResourceFileName(this.getAudioSrc())
+		const baseName = fileName.replace(/\.[^/.]+$/, "")
+		return baseName || this.getText("audio.defaultName", "音频")
 	}
 
 	public switchActiveContent(contentId: string): boolean {

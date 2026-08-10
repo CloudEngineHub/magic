@@ -69,6 +69,7 @@ function createAudioElementHarness(options?: {
 	coarsePointer?: boolean
 	temporary?: boolean
 	empty?: boolean
+	name?: string
 	waveformSnapshot?: AudioWaveformSnapshot
 }) {
 	const src = options?.empty
@@ -166,6 +167,7 @@ function createAudioElementHarness(options?: {
 			y: 0,
 			width: options?.width,
 			src,
+			name: options?.name,
 		}),
 		canvas,
 	)
@@ -223,6 +225,21 @@ describe("AudioElement", () => {
 		expect(element).not.toHaveProperty("duration")
 		expect(element).not.toHaveProperty("currentTime")
 		expect(element).not.toHaveProperty("paused")
+		expect(element).not.toHaveProperty("name")
+	})
+
+	it("uses the active audio source filename without its extension as the default name", () => {
+		const harness = createAudioElementHarness({ src: "./audios/voice.recording.mp3?version=1" })
+
+		expect(harness.element.getRenderName()).toBe("voice.recording")
+		expect(harness.element.getNameLabelText()).toBe("voice.recording")
+		expect(
+			createAudioElementHarness({
+				name: "配音",
+				src: "./audios/voice.mp3",
+			}).element.getNameLabelText(),
+		).toBe("配音")
+		expect(createAudioElementHarness({ empty: true }).element.getRenderName()).toBe("音频")
 	})
 
 	it("preserves playback metadata when the resource resolver is rebound", () => {
