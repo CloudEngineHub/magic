@@ -137,7 +137,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
 
         if ($queue === []) {
             $root = $this->resolveTraversalRoot($authorization, $requestDTO->getParentId());
-            $list[] = $this->formatAttachmentRowV2($root->toArray());
+            $list[] = $this->formatMemoryTraversalRootV2($root);
             --$remaining;
             $queue[] = $this->makeParentState((string) $root->getFileId());
         } else {
@@ -340,6 +340,22 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
         $item = TaskFileItemDTO::fromArray($row)->toArray();
         $item['file_url'] = '';
         unset($item['relative_file_path']);
+
+        return $item;
+    }
+
+    /**
+     * 将记忆空间遍历根节点转换为 V2 响应格式。
+     */
+    private function formatMemoryTraversalRootV2(TaskFileEntity $root): array
+    {
+        $item = $this->formatAttachmentRowV2($root->toArray());
+
+        if ($root->getFileName() === 'memory' && $root->getIsDirectory()) {
+            // 前端特殊处理：scope=memory 时，业务上需要将 memory 目录实体作为根目录返回。
+            // 根目录的 parent_id 应为 null，因此这里只重写响应字段，不修改实际文件父子关系。
+            $item['parent_id'] = null;
+        }
 
         return $item;
     }
