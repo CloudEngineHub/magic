@@ -66,6 +66,7 @@ import {
 } from "./utils/pastedTextAttachment"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isAllowedMention as defaultIsAllowedMention } from "./utils/mention"
+import { resolveMessageSendModels } from "./utils/messageSendModelFallback"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -415,9 +416,14 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handleSendMessageByContent = useMemoizedFn(
-				(data: SendMessageByContentPayload) => {
-					const { isLanguageModelReady, selectedLanguageModel } = store.topicModelStore
-					if (!isLanguageModelReady || !selectedLanguageModel) {
+				async (data: SendMessageByContentPayload) => {
+					const models = await resolveMessageSendModels({
+						topicModelStore: store.topicModelStore,
+						selectedModel: data.selectedModel,
+						selectedImageModel: data.selectedImageModel,
+						selectedVideoModel: data.selectedVideoModel,
+					})
+					if (!models) {
 						magicToast.error(t("messageEditor.pleaseSelectModel"))
 						return
 					}
@@ -425,11 +431,9 @@ export const MessageEditorContainer = observer(
 						value: data.jsonContent,
 						mentionItems:
 							data.mentionItems ?? collectMentionItemsFromContent(data.jsonContent),
-						selectedModel: data.selectedModel ?? selectedLanguageModel,
-						selectedImageModel:
-							data.selectedImageModel ?? store.topicModelStore.selectedImageModel,
-						selectedVideoModel:
-							data.selectedVideoModel ?? store.topicModelStore.selectedVideoModel,
+						selectedModel: models.selectedModel,
+						selectedImageModel: models.selectedImageModel,
+						selectedVideoModel: models.selectedVideoModel,
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,
