@@ -7,7 +7,7 @@
 ```json
 {
   "schema_version": "1.0",
-  "template_id": "SLIDE-navy-quarterly-review",
+  "template_id": "SLIDE-navy-quarterly-review-A1B2C3",
   "category_code": "PPT-CATE-business-report",
   "tag_codes": [
     "purpose-quarterly-review",
@@ -52,7 +52,7 @@
 ## Rules
 
 - `schema_version` is always `"1.0"`.
-- `template_id` must match the backend rule `^SLIDE-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`; this skill emits `SLIDE-` IDs and recommends lowercase semantic kebab-case words such as `SLIDE-navy-quarterly-review`.
+- `template_id` must match the backend rule `^SLIDE-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`. The create tool accepts a lowercase semantic base such as `SLIDE-navy-quarterly-review` and appends a six-character uppercase hexadecimal suffix such as `A1B2C3`; the final ID stored in `template.json` and used as the directory name is the returned ID.
 - `category_code` is required and must be an active exact code in the bundled taxonomy. Do not invent a code that only matches the backend pattern.
 - `tag_codes` is a required non-empty array of unique exact codes in the bundled taxonomy. Use `scripts/template_taxonomy.py` as described in `template-taxonomy.md`; never invent tags or add `featured` automatically.
 - Bilingual labels and descriptions are required and describe the reusable template, not the production process.

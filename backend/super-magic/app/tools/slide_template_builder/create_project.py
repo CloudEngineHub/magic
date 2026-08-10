@@ -14,6 +14,7 @@ from app.tools.slide_template_builder.common import (
     SCAFFOLD_MARKER,
     SlideTemplateBuilderError,
     WORK_DIR_NAME,
+    generate_unique_template_id,
     resolve_workspace_template_dir,
     safe_slide_path,
     validate_taxonomy_selection,
@@ -27,14 +28,14 @@ from app.tools.slide_template_builder.models import (
     TemplateSourceParams,
 )
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_exists, async_mkdir, async_write_json, async_write_text
+from app.utils.async_file_utils import async_mkdir, async_write_json, async_write_text
 
 
 class CreateSlideTemplateProjectParams(BaseToolParams):
     template_id: str = Field(
         ...,
-        description="""<!--zh: 后台兼容的模板 ID，使用 SLIDE- 加小写 kebab-case，例如 SLIDE-navy-quarterly-review。-->
-Backend-compatible template ID using SLIDE- plus alphanumeric kebab-case segments. Prefer lowercase semantic IDs, for example SLIDE-navy-quarterly-review.""",
+        description="""<!--zh: 模板 ID 基础名，使用 SLIDE- 加小写 kebab-case。工具会自动追加随机唯一后缀，不要自行添加随机后缀。-->
+Semantic base template ID using SLIDE- plus alphanumeric kebab-case segments. The tool appends a short six-character uppercase hexadecimal suffix automatically; do not add the suffix yourself.""",
     )
     category_code: str = Field(
         ...,
@@ -71,17 +72,29 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
 
     async def execute(self, tool_context: ToolContext, params: CreateSlideTemplateProjectParams) -> ToolResult:
         try:
-            template_id = validate_template_id(params.template_id)
+            requested_template_id = validate_template_id(params.template_id)
             category_code, tag_codes = validate_taxonomy_selection(params.category_code, params.tag_codes)
-            template_dir = resolve_workspace_template_dir(Path(self.base_dir), template_id)
-            if await async_exists(template_dir):
-                return ToolResult.error(f"Template directory already exists: {template_id}")
-
             slide_files = [item.file for item in params.slides]
             if len(slide_files) != len(set(slide_files)):
                 return ToolResult.error("Slide file paths must be unique.")
 
-            await async_mkdir(template_dir, parents=True, exist_ok=False)
+            template_dir = None
+            template_id = None
+            for _ in range(5):
+                candidate_id = generate_unique_template_id(requested_template_id)
+                candidate_dir = resolve_workspace_template_dir(Path(self.base_dir), candidate_id)
+                try:
+                    await async_mkdir(candidate_dir, parents=True, exist_ok=False)
+                except FileExistsError:
+                    continue
+                template_id = candidate_id
+                template_dir = candidate_dir
+                break
+            if template_id is None or template_dir is None:
+                return ToolResult.error(
+                    f"Could not allocate a unique template ID from base: {requested_template_id}"
+                )
+
             await async_mkdir(template_dir / "images", parents=True, exist_ok=False)
             await async_mkdir(template_dir / "slides", parents=True, exist_ok=False)
             await async_mkdir(template_dir / WORK_DIR_NAME, parents=True, exist_ok=False)
@@ -121,6 +134,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 await async_write_text(slide_path, self._slide_scaffold(slide.title, slide.layout))
 
             data = {
+                "requested_template_id": requested_template_id,
                 "template_id": template_id,
                 "category_code": category_code,
                 "tag_codes": tag_codes,
@@ -202,6 +216,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             content = "\n".join([
                 "# Slide template project",
                 "",
+                f"- Requested base ID: `{data.get('requested_template_id', '')}`",
                 f"- Template ID: `{data.get('template_id', '')}`",
                 f"- Category: `{data.get('category_code', '')}`",
                 f"- Tags: {', '.join(data.get('tag_codes', []))}",

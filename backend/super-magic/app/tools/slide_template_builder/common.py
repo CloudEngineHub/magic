@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import uuid
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -71,6 +72,12 @@ def validate_template_id(value: str) -> str:
             "template_id must match the backend format: SLIDE- followed by alphanumeric kebab-case segments."
         )
     return template_id
+
+
+def generate_unique_template_id(base_id: str) -> str:
+    """Append a short uppercase UUID-derived suffix to a validated semantic ID."""
+    semantic_id = validate_template_id(base_id)
+    return f"{semantic_id}-{uuid.uuid4().hex[:6].upper()}"
 
 
 def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str, list[str]]:

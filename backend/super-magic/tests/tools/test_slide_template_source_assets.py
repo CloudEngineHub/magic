@@ -76,9 +76,9 @@ def _write_source_pptx(path: Path, image_path: Path) -> None:
 
 async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, dict]:
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
-    result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
-    assert result.ok, result.content
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    created = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
+    assert created.ok, created.content
+    template_dir = Path(created.data["template_directory"])
     page_image = tmp_path / "source-page.png"
     embedded_image = tmp_path / "embedded.png"
     source_pptx = tmp_path / "source.pptx"
@@ -87,15 +87,15 @@ async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, dict]:
     _write_source_pptx(source_pptx, embedded_image)
 
     prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
-    result = await prepare_tool.execute(
+    prepared = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
-            template_dir=template_dir.name,
+            template_dir=created.data["template_id"],
             page_images=[str(page_image)],
             source_presentation=str(source_pptx),
         ),
     )
-    assert result.ok, result.content
+    assert prepared.ok, prepared.content
     manifest_path = template_dir / WORK_DIR_NAME / "source-analysis.json"
     return template_dir, await async_read_json(manifest_path)
 

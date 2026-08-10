@@ -1,4 +1,5 @@
 import json
+import re
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -36,7 +37,7 @@ from app.tools.slide_template_builder.models import (
     TemplateSlideParams,
     TemplateSourceParams,
 )
-from app.utils.async_file_utils import async_read_json, async_write_json, async_write_text
+from app.utils.async_file_utils import async_read_json, async_scandir, async_write_json, async_write_text
 
 
 def _params():
@@ -91,8 +92,10 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
 
     assert result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(result.data["template_directory"])
     assert result.data["template_directory"] == str(template_dir)
+    assert result.data["requested_template_id"] == "SLIDE-navy-quarterly-review"
+    assert re.fullmatch(r"SLIDE-navy-quarterly-review-[0-9A-F]{6}", result.data["template_id"])
     assert (template_dir / "template.json").exists()
     assert (template_dir / "visual-spec.md").exists()
     assert (template_dir / "theme.css").exists()
@@ -102,7 +105,7 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     assert result.data["working_directory"] == str(template_dir / WORK_DIR_NAME)
     assert "slide-template-scaffold" in (template_dir / "theme.css").read_text()
     metadata = json.loads((template_dir / "template.json").read_text())
-    assert metadata["template_id"] == "SLIDE-navy-quarterly-review"
+    assert metadata["template_id"] == result.data["template_id"]
     assert metadata["category_code"] == "PPT-CATE-business-report"
     assert metadata["tag_codes"] == [
         "purpose-quarterly-review",
@@ -115,14 +118,29 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_create_project_does_not_overwrite_existing_directory(tmp_path):
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
-    template_dir.mkdir()
+async def test_create_project_generates_distinct_ids_for_repeated_base_names(tmp_path):
     tool = CreateSlideTemplateProject(base_dir=tmp_path)
-    result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
+    first = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
+    second = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
+
+    assert first.ok, first.content
+    assert second.ok, second.content
+    assert first.data["template_id"] != second.data["template_id"]
+    assert first.data["template_directory"] != second.data["template_directory"]
+
+
+@pytest.mark.asyncio
+async def test_create_project_does_not_leave_a_directory_when_slide_plan_is_invalid(tmp_path):
+    params = _params()
+    params.slides = [params.slides[0], params.slides[0]]
+    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+
+    result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
 
     assert not result.ok
-    assert "already exists" in result.content
+    assert "Slide file paths must be unique" in result.content
+    created_entries = await async_scandir(tmp_path)
+    assert not [entry for entry in created_entries if entry.name.startswith("SLIDE-navy-quarterly-review-")]
 
 
 @pytest.mark.asyncio
@@ -146,7 +164,7 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(create_result.data["template_directory"])
 
     page_image = tmp_path / "source-page.png"
     Image.new("RGB", (1920, 1080), "#102a43").save(page_image)
@@ -159,7 +177,7 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
-            template_dir="SLIDE-navy-quarterly-review",
+            template_dir=create_result.data["template_id"],
             page_images=[str(page_image)],
             source_presentation=str(source_pptx),
         ),
@@ -191,7 +209,7 @@ async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(create_result.data["template_directory"])
     await async_write_text(
         template_dir / "visual-spec.md",
         "# Visual Specification\n\nNavy report system.\n",
@@ -215,7 +233,7 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(create_result.data["template_directory"])
     page_image = tmp_path / "source-page.png"
     Image.new("RGB", (1920, 1080), "#102a43").save(page_image)
 
@@ -223,7 +241,7 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
     prepare_result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
-            template_dir="SLIDE-navy-quarterly-review",
+            template_dir=create_result.data["template_id"],
             page_images=[str(page_image)],
         ),
     )
@@ -275,7 +293,7 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(create_result.data["template_directory"])
     page_image = tmp_path / "source-page.png"
     embedded_image = tmp_path / "embedded.png"
     source_pptx = tmp_path / "source.pptx"
@@ -287,7 +305,7 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     prepare_result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
-            template_dir="SLIDE-navy-quarterly-review",
+            template_dir=create_result.data["template_id"],
             page_images=[str(page_image)],
             source_presentation=str(source_pptx),
         ),
@@ -308,7 +326,7 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     select_result = await select_tool.execute(
         ToolContext(tool_name=select_tool.name, arguments={}),
         SelectSlideTemplateSourceAssetsParams(
-            template_dir="SLIDE-navy-quarterly-review",
+            template_dir=create_result.data["template_id"],
             decisions=[
                 SourceAssetDecisionParams(
                     asset=catalog[0]["asset"],
@@ -377,7 +395,7 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
     create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
+    template_dir = Path(create_result.data["template_directory"])
     await async_write_text(
         template_dir / "visual-spec.md",
         "# Visual Specification\n\nNavy report system.\n",
@@ -394,7 +412,7 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
     finalize_tool = FinalizeSlideTemplate(base_dir=tmp_path)
     result = await finalize_tool.execute(
         ToolContext(tool_name=finalize_tool.name, arguments={}),
-        FinalizeSlideTemplateParams(template_dir="SLIDE-navy-quarterly-review"),
+        FinalizeSlideTemplateParams(template_dir=create_result.data["template_id"]),
     )
 
     assert result.ok, result.content

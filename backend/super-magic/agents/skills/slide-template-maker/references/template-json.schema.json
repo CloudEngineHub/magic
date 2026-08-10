@@ -19,6 +19,7 @@
     "schema_version": { "type": "string", "const": "1.0" },
     "template_id": {
       "type": "string",
+      "description": "Final ID with the six-character uppercase hexadecimal suffix returned by create_slide_template_project.",
       "pattern": "^SLIDE-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
     },
     "category_code": {
