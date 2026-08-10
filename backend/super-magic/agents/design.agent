@@ -19,6 +19,9 @@ tools:
 skills:
   preload:
     - name: canvas-designer
+      files:
+        - SKILL.md
+        - reference/video/generation.md
   system_skills:
     - name: skill-vetter
     - name: using-mcp
