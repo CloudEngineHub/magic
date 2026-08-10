@@ -1,21 +1,16 @@
-import { MousePointerClick, Palette, Search, X } from "lucide-react"
 import { useSize } from "ahooks"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { Button } from "@/components/shadcn-ui/button"
-import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/lib/utils"
-import TemplateGroupSelector from "@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSelector"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import { useSlidesTemplateCatalogState } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateCatalogState"
 import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import type { MySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "./SlidesTemplateCanvas"
-import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
-import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
 import SlidesTemplatePromptDock from "./SlidesTemplatePromptDock"
+import SlidesTemplatesToolbar from "./SlidesTemplatesToolbar"
 import { getTemplateCoverUrl, getTemplateKey } from "./canvasInteraction"
 import {
 	getAvailableTemplateColors,
@@ -30,6 +25,8 @@ import {
 	subscribeTemplateColorExtractionSettled,
 } from "./templateColorExtractionStore"
 import { useTemplateColorExtractionVersion } from "./useResolvedTemplateColors"
+import MySlidesTemplatesEmptyState from "./MySlidesTemplatesEmptyState"
+import { MY_SLIDES_TEMPLATES_GROUP_KEY, useMySlidesTemplates } from "./useMySlidesTemplates"
 
 const BOTTOM_TOOLS_OFFSET = 24
 // 接口单页上限是 200。固定使用较大的页大小，保证后续 page 分页的 offset 连续，
@@ -39,15 +36,20 @@ const CANVAS_INITIAL_TEMPLATE_TARGET_COUNT = CANVAS_TEMPLATE_PAGE_SIZE * 2
 const CANVAS_EDGE_GAP = 40
 const SIMILAR_COLOR_TARGET_COUNT = 200
 const SIMILAR_COLOR_LOAD_MORE_INTERVAL_MS = 600
-const GROUP_SCROLL_CONTROL_CLASS_NAME =
-	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
-function SlidesTemplatesPage() {
-	const { t } = useTranslation("crew/create")
+export interface SlidesTemplatesPageProps {
+	myTemplatesAdapter?: MySlidesTemplateAdapter
+}
+
+export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageProps) {
 	const lt = useLocaleText()
 	const slidesState = useSlidesTemplateCatalogState({ pageSize: CANVAS_TEMPLATE_PAGE_SIZE })
 	const { loadMore: loadMoreTemplates } = slidesState
-	const [searchValue, setSearchValue] = useState(slidesState.keyword)
+	const [publicSearchValue, setPublicSearchValue] = useState(slidesState.keyword)
+	const mySlidesTemplates = useMySlidesTemplates({
+		adapter: myTemplatesAdapter,
+		groups: slidesState.groups,
+	})
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const [similarColorSource, setSimilarColorSource] = useState<OptionItem | null>(null)
 	const [isInlinePreviewOpen, setIsInlinePreviewOpen] = useState(false)
@@ -60,13 +62,17 @@ function SlidesTemplatesPage() {
 	const similarColorSourceKeyRef = useRef("")
 	const bottomToolsSize = useSize(bottomToolsRef)
 	const reduceMotion = useReducedMotion()
-	const hasGroups = slidesState.groups.length > 1
+	const searchValue = mySlidesTemplates.isSelected
+		? mySlidesTemplates.searchValue
+		: publicSearchValue
+	const hasGroups = mySlidesTemplates.groups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
 	const colorExtractionVersion = useTemplateColorExtractionVersion(isSimilarColorFilterActive)
 	const isUnfilteredAllTemplatesView =
+		!mySlidesTemplates.isSelected &&
 		slidesState.selectedGroupKey === ALL_SLIDES_TEMPLATE_GROUP_KEY &&
 		slidesState.selectedChildTagCodes.length === 0 &&
-		!searchValue.trim() &&
+		!publicSearchValue.trim() &&
 		!slidesState.debouncedKeyword &&
 		!similarColorSource
 	const isInitialPrefetchPending =
@@ -127,16 +133,17 @@ function SlidesTemplatesPage() {
 	const loadTemplateDetail = slidesState.loadTemplateDetail
 	const handleTemplateDetailLoad = useCallback(
 		(template: OptionItem) => {
+			if (mySlidesTemplates.isSelected) return Promise.resolve(template)
 			const code = typeof template.value === "string" ? template.value : ""
 			return code ? loadTemplateDetail(code) : Promise.resolve(template)
 		},
-		[loadTemplateDetail],
+		[loadTemplateDetail, mySlidesTemplates.isSelected],
 	)
 
 	useEffect(() => {
-		if (isComposingRef.current) return
-		setSearchValue(slidesState.keyword)
-	}, [slidesState.keyword])
+		if (mySlidesTemplates.isSelected || isComposingRef.current) return
+		setPublicSearchValue(slidesState.keyword)
+	}, [mySlidesTemplates.isSelected, slidesState.keyword])
 
 	useEffect(() => {
 		if (
@@ -157,7 +164,7 @@ function SlidesTemplatesPage() {
 	}, [
 		isUnfilteredAllTemplatesView,
 		loadMoreTemplates,
-		searchValue,
+		publicSearchValue,
 		similarColorSource,
 		slidesState.debouncedKeyword,
 		slidesState.hasMore,
@@ -226,19 +233,31 @@ function SlidesTemplatesPage() {
 	])
 
 	const handleLoadMoreTemplates = useCallback(() => {
-		if (isSimilarColorFilterActive) return
+		if (mySlidesTemplates.isSelected || isSimilarColorFilterActive) return
 		loadMoreTemplates()
-	}, [isSimilarColorFilterActive, loadMoreTemplates])
+	}, [isSimilarColorFilterActive, loadMoreTemplates, mySlidesTemplates.isSelected])
+
+	const canvasTemplateOptions = mySlidesTemplates.isSelected
+		? mySlidesTemplates.templates
+		: isInitialPrefetchPending
+			? []
+			: visibleTemplateOptions
 
 	// 服务端筛选只有在新结果真正替换后才递增 templateViewRevision。
 	// 画布复位必须与这次替换同一帧发生，不能在分类按钮或防抖关键词变化时提前复位旧模板。
-	const resetKey = `${slidesState.templateViewRevision}:${
-		similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
-	}`
+	const resetKey = mySlidesTemplates.isSelected
+		? mySlidesTemplates.resetKey
+		: `${slidesState.templateViewRevision}:${
+				similarColorSource ? getTemplateKey(similarColorSource) : "all-colors"
+			}`
 
 	function handleSearchChange(value: string) {
 		setSimilarColorSource(null)
-		setSearchValue(value)
+		if (mySlidesTemplates.isSelected) {
+			mySlidesTemplates.setSearchValue(value)
+			return
+		}
+		setPublicSearchValue(value)
 		if (isComposingRef.current) return
 
 		slidesState.setKeyword(value)
@@ -251,13 +270,21 @@ function SlidesTemplatesPage() {
 	function handleCompositionEnd(value: string) {
 		setSimilarColorSource(null)
 		isComposingRef.current = false
-		setSearchValue(value)
+		if (mySlidesTemplates.isSelected) {
+			mySlidesTemplates.setSearchValue(value)
+			return
+		}
+		setPublicSearchValue(value)
 		slidesState.setKeyword(value)
 	}
 
 	function handleClearSearch() {
 		setSimilarColorSource(null)
-		setSearchValue("")
+		if (mySlidesTemplates.isSelected) {
+			mySlidesTemplates.setSearchValue("")
+			return
+		}
+		setPublicSearchValue("")
 		slidesState.setKeyword("")
 	}
 
@@ -301,6 +328,11 @@ function SlidesTemplatesPage() {
 		templateDetailRequestSeqRef.current += 1
 		setSelectedTemplate(null)
 		setSimilarColorSource(null)
+		if (groupKey === MY_SLIDES_TEMPLATES_GROUP_KEY) {
+			mySlidesTemplates.select()
+			return
+		}
+		mySlidesTemplates.leave()
 		slidesState.setSelectedGroupKey(groupKey)
 	}
 
@@ -309,27 +341,51 @@ function SlidesTemplatesPage() {
 			className="relative size-full overflow-hidden rounded-lg bg-[#101114]"
 			data-testid="slides-templates-page"
 		>
-			<SlidesTemplateCanvas
-				ref={canvasRef}
-				enableInfiniteLoop={enableInfiniteLoop}
-				initialAlignment={isSimilarColorFilterActive ? "top" : "center"}
-				templates={isInitialPrefetchPending ? [] : visibleTemplateOptions}
-				selectedTemplate={selectedTemplate}
-				onTemplateSelect={handleTemplateSelect}
-				hasMore={isSimilarColorFilterActive ? false : slidesState.hasMore}
-				isLoading={slidesState.isLoading || isInitialPrefetchPending}
-				isLoadingMore={slidesState.isLoadingMore}
-				isRefreshFailed={slidesState.isRefreshFailed}
-				isRefreshing={slidesState.isRefreshing}
-				onLoadMore={handleLoadMoreTemplates}
-				loadMoreSignal={slidesState.loadedTemplateCount}
-				onFindSimilarColors={handleFindSimilarColors}
-				onPreviewOpenChange={setIsInlinePreviewOpen}
-				onRetryRefresh={slidesState.retryRefresh}
-				onTemplateDetailLoad={handleTemplateDetailLoad}
-				resetKey={resetKey}
-				viewportInsets={canvasViewportInsets}
-			/>
+			{mySlidesTemplates.emptyStatus ? (
+				<MySlidesTemplatesEmptyState
+					status={mySlidesTemplates.emptyStatus}
+					onRetry={() => void mySlidesTemplates.retry()}
+					bottomInset={(bottomToolsSize?.height ?? 0) + BOTTOM_TOOLS_OFFSET}
+				/>
+			) : (
+				<SlidesTemplateCanvas
+					ref={canvasRef}
+					enableInfiniteLoop={enableInfiniteLoop}
+					initialAlignment={isSimilarColorFilterActive ? "top" : "center"}
+					templates={canvasTemplateOptions}
+					selectedTemplate={selectedTemplate}
+					onTemplateSelect={handleTemplateSelect}
+					hasMore={
+						mySlidesTemplates.isSelected || isSimilarColorFilterActive
+							? false
+							: slidesState.hasMore
+					}
+					isLoading={
+						mySlidesTemplates.isSelected
+							? false
+							: slidesState.isLoading || isInitialPrefetchPending
+					}
+					isLoadingMore={mySlidesTemplates.isSelected ? false : slidesState.isLoadingMore}
+					isRefreshFailed={
+						mySlidesTemplates.isSelected ? false : slidesState.isRefreshFailed
+					}
+					isRefreshing={mySlidesTemplates.isSelected ? false : slidesState.isRefreshing}
+					onLoadMore={handleLoadMoreTemplates}
+					loadMoreSignal={
+						mySlidesTemplates.isSelected
+							? mySlidesTemplates.loadMoreSignal
+							: slidesState.loadedTemplateCount
+					}
+					onFindSimilarColors={
+						mySlidesTemplates.isSelected ? undefined : handleFindSimilarColors
+					}
+					onPreviewOpenChange={setIsInlinePreviewOpen}
+					onRetryRefresh={slidesState.retryRefresh}
+					onTemplateDetailLoad={handleTemplateDetailLoad}
+					resetKey={resetKey}
+					viewportInsets={canvasViewportInsets}
+				/>
+			)}
 
 			<AnimatePresence initial={false}>
 				{isInlinePreviewOpen ? null : (
@@ -387,7 +443,11 @@ function SlidesTemplatesPage() {
 									>
 										<SlidesTemplatePromptDock
 											selectedTemplate={selectedTemplate}
-											onFindSimilarColors={handleFindSimilarColors}
+											onFindSimilarColors={
+												mySlidesTemplates.isSelected
+													? undefined
+													: handleFindSimilarColors
+											}
 											onPreviewSelectedTemplate={
 												handlePreviewSelectedTemplate
 											}
@@ -397,114 +457,29 @@ function SlidesTemplatesPage() {
 								</div>
 							</div>
 
-							<div
-								className={cn(
-									"flex min-w-0 items-center gap-3",
-									selectedTemplate && "mt-2.5",
-								)}
-							>
-								<div className="relative min-w-[220px] flex-1">
-									<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/[0.45]" />
-									<Input
-										value={searchValue}
-										onChange={(event) => handleSearchChange(event.target.value)}
-										onCompositionStart={handleCompositionStart}
-										onCompositionEnd={(event) =>
-											handleCompositionEnd(event.currentTarget.value)
-										}
-										placeholder={t(
-											"playbook.edit.presets.form.searchPlaceholder",
-										)}
-										className="h-10 rounded-2xl border-0 bg-white/[0.09] pl-9 pr-9 text-sm text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.11)] placeholder:text-white/[0.45] focus-visible:ring-white/20"
-										data-testid="slides-templates-page-search-input"
-									/>
-									{searchValue ? (
-										<Button
-											type="button"
-											size="icon"
-											variant="ghost"
-											className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-full text-white/[0.65] hover:bg-white/10 hover:text-white"
-											aria-label={t("playbook.edit.presets.close")}
-											onClick={handleClearSearch}
-											data-testid="slides-templates-page-search-clear"
-										>
-											<X className="size-4" />
-										</Button>
-									) : null}
-								</div>
-								<Button
-									type="button"
-									variant="ghost"
-									className="group relative isolate h-10 shrink-0 overflow-hidden rounded-2xl border-0 bg-white/[0.075] px-3 text-sm text-white/[0.88] shadow-[0_8px_22px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-white/[0.11] hover:text-white hover:shadow-[0_10px_28px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.16)]"
-									aria-label={t("playbook.edit.presets.form.randomTemplate")}
-									disabled={slidesState.templateOptions.length === 0}
-									onClick={handleFocusRandomTemplate}
-									data-testid="slides-templates-page-random-template"
-								>
-									<SlidesTemplateGlowBorder
-										className="opacity-90 group-hover:opacity-100"
-										radius={15}
-									/>
-									<MousePointerClick className="relative z-40 mr-1.5 size-4" />
-									<span className="relative z-40">
-										{t("playbook.edit.presets.form.randomTemplate")}
-									</span>
-								</Button>
-							</div>
-
-							{similarColorSource ? (
-								<div
-									className="mt-2.5 flex min-w-0 items-center gap-2 rounded-xl border border-white/[0.12] bg-white/[0.07] px-2.5 py-2 text-white/[0.84] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-									style={
-										similarColorAmbient
-											? {
-													backgroundImage: `radial-gradient(circle at 8% 50%, ${similarColorAmbient}, transparent 34%)`,
-												}
-											: undefined
-									}
-									data-testid="slides-templates-page-similar-colors-filter"
-								>
-									<Palette className="size-4 shrink-0 text-white/[0.72]" />
-									<SlidesTemplateColorPalette
-										colors={similarColorSourceColors}
-										compact
-									/>
-									<span className="min-w-0 flex-1 truncate text-xs font-medium">
-										{t("playbook.edit.presets.form.similarColorsFor", {
-											name: similarColorSourceName,
-										})}
-									</span>
-									<Button
-										type="button"
-										size="icon-sm"
-										variant="ghost"
-										className="size-7 shrink-0 rounded-full text-white/[0.58] hover:bg-white/10 hover:text-white"
-										aria-label={t(
-											"playbook.edit.presets.form.clearSimilarColors",
-										)}
-										onClick={() => {
-											setSimilarColorSource(null)
-										}}
-										data-testid="slides-templates-page-clear-similar-colors"
-									>
-										<X className="size-3.5" />
-									</Button>
-								</div>
-							) : null}
-
-							{hasGroups ? (
-								<TemplateGroupSelector
-									groups={slidesState.groups}
-									selectedGroupKey={slidesState.selectedGroupKey}
-									onGroupChange={handleGroupChange}
-									showEmptyGroups
-									className="mt-2.5 [&_button:hover]:border-white/[0.18] [&_button:hover]:bg-white/[0.16] [&_button:hover]:text-white [&_button[aria-pressed=true]]:border-white/[0.32] [&_button[aria-pressed=true]]:bg-white/[0.22] [&_button[aria-pressed=true]]:text-white [&_button[aria-pressed=true]]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_8px_22px_rgba(0,0,0,0.14)] [&_button]:border-white/[0.10] [&_button]:bg-white/[0.10] [&_button]:text-white/[0.82] [&_button]:shadow-none"
-									controlBackground="transparent"
-									leftControlClassName={GROUP_SCROLL_CONTROL_CLASS_NAME}
-									rightControlClassName={GROUP_SCROLL_CONTROL_CLASS_NAME}
-									data-testid="slides-templates-page-group-selector"
-								/>
-							) : null}
+							<SlidesTemplatesToolbar
+								className={selectedTemplate ? "mt-2.5" : undefined}
+								groups={mySlidesTemplates.groups}
+								onClearSearch={handleClearSearch}
+								onClearSimilarColors={() => setSimilarColorSource(null)}
+								onCompositionEnd={handleCompositionEnd}
+								onCompositionStart={handleCompositionStart}
+								onFocusRandomTemplate={handleFocusRandomTemplate}
+								onGroupChange={handleGroupChange}
+								onSearchChange={handleSearchChange}
+								randomDisabled={canvasTemplateOptions.length === 0}
+								searchValue={searchValue}
+								selectedGroupKey={
+									mySlidesTemplates.isSelected
+										? MY_SLIDES_TEMPLATES_GROUP_KEY
+										: slidesState.selectedGroupKey
+								}
+								similarColorAmbient={similarColorAmbient}
+								similarColorSourceColors={similarColorSourceColors}
+								similarColorSourceName={similarColorSourceName}
+								showGroups={hasGroups}
+								showSimilarColors={Boolean(similarColorSource)}
+							/>
 						</motion.div>
 					</motion.div>
 				)}

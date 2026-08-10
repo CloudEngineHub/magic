@@ -23,6 +23,7 @@ export enum DetailType {
 	Design = "design",
 	SelfMedia = "self-media",
 	AICard = "ai-card",
+	SlidesTemplate = "slides-template",
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -73,6 +74,7 @@ export interface DetailData {
 	[DetailType.Empty]: any
 	[DetailType.Excel]: DetailUniverData
 	[DetailType.PowerPoint]: DetailUniverData
+	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
 }
 

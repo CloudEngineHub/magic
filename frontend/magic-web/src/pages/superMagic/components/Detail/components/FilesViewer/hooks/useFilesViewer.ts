@@ -25,6 +25,7 @@ import {
 	getFileTabTitle,
 	normalizeSlideProjectTabItem,
 	dedupeTabsById,
+	mergeAttachmentFileForTab,
 } from "../utils/tabUtils"
 import { DetailType } from "../../../types"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -1422,23 +1423,29 @@ export function useFilesViewer(props: FilesViewerProps) {
 					return tab
 				}
 
-				// Refresh real file data.
-				if (JSON.stringify(updatedFile) !== JSON.stringify(tab.fileData) || tab.isLoading) {
+				const syncedFileData = mergeAttachmentFileForTab(tab, updatedFile)
+				const syncedDisplayConfig = syncedFileData.display_config
+
+				// Refresh real file data, while retaining memory-only template metadata.
+				if (
+					JSON.stringify(syncedFileData) !== JSON.stringify(tab.fileData) ||
+					tab.isLoading
+				) {
 					hasUpdates = true
 
 					// Handles index.html title fallback.
 					const tabTitle = getFileTabTitle(
-						updatedFile,
+						syncedFileData,
 						attachments,
-						updatedFile.display_config,
+						syncedDisplayConfig,
 					)
 
 					return {
 						...tab,
 						id: updatedFile.file_id,
 						title: tabTitle,
-						fileData: updatedFile,
-						display_config: updatedFile.display_config,
+						fileData: syncedFileData,
+						display_config: syncedDisplayConfig,
 						filePath: updatedFile.relative_file_path,
 						isDeleted: false,
 						isLoading: false,
@@ -1451,17 +1458,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 					// Handles index.html title fallback.
 					const tabTitle = getFileTabTitle(
-						updatedFile,
+						syncedFileData,
 						attachments,
-						updatedFile.display_config,
+						syncedDisplayConfig,
 					)
 
 					return {
 						...tab,
 						id: updatedFile.file_id,
 						title: tabTitle,
-						fileData: updatedFile,
-						display_config: updatedFile.display_config,
+						fileData: syncedFileData,
+						display_config: syncedDisplayConfig,
 						filePath: updatedFile.relative_file_path,
 						isDeleted: false,
 						isLoading: false,

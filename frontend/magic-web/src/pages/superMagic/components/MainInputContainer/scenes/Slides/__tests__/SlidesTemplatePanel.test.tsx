@@ -143,6 +143,8 @@ function createSlidesTemplatePanelContentState(
 		tagGroups: [],
 		templateOptions: [],
 		total: 0,
+		myTemplatesEmptyStatus: null,
+		retryMyTemplates: vi.fn(),
 		...overrides,
 	}
 }
@@ -282,8 +284,7 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -300,8 +301,7 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})
@@ -654,6 +654,24 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.queryByTestId("slides-template-panel-template-count")).toBeNull()
 	})
 
+	it("opens My templates from the home category selector", async () => {
+		render(
+			<SlidesTemplatePanel
+				config={createSlidesPresetPanelConfig([])}
+				variant={ScenePanelVariant.HomePage}
+			/>,
+		)
+
+		const myTemplatesTab = await screen.findByTestId(
+			"template-group-selector-option-__my_slides_templates__",
+		)
+		Object.assign(myTemplatesTab, { scrollIntoView: vi.fn() })
+		fireEvent.click(myTemplatesTab)
+
+		expect(await screen.findByTestId("my-slides-templates-unavailable")).toBeInTheDocument()
+		expect(myTemplatesTab).toHaveAttribute("aria-pressed", "true")
+	})
+
 	it("does not render when there are no templates", async () => {
 		vi.mocked(SuperMagicApi.getSlidesTemplates).mockResolvedValue({
 			page: 1,
@@ -928,6 +946,36 @@ describe("SlidesTemplatePanel", () => {
 		expect(categoryButton).toBeInTheDocument()
 		fireEvent.click(categoryButton)
 		expect(setSelectedGroupKey).toHaveBeenCalledWith("all")
+	})
+
+	it("shows My templates before Featured on the homepage selector", () => {
+		const myTemplatesGroupKey = "__my_slides_templates__"
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					groups: [
+						{ group_key: "all", group_name: "All", children: [] },
+						{
+							group_key: myTemplatesGroupKey,
+							group_name: "My templates",
+							children: [],
+						},
+						{ group_key: "tag:featured", group_name: "Featured", children: [] },
+					],
+				})}
+				onTemplateClick={vi.fn()}
+				showMyTemplates
+			/>,
+		)
+
+		const myTemplatesTab = screen.getByTestId(
+			`template-group-selector-option-${myTemplatesGroupKey}`,
+		)
+		const featuredTab = screen.getByTestId("template-group-selector-option-tag:featured")
+		expect(myTemplatesTab).toContainElement(screen.getByTestId("my-slides-templates-tab-icon"))
+		expect(
+			myTemplatesTab.compareDocumentPosition(featuredTab) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 	})
 
 	it("renders each tag group as a multi-select dropdown", () => {

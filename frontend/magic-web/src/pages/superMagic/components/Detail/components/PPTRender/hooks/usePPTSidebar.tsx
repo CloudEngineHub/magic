@@ -23,6 +23,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
+import type { PPTSlideStructureAdapter } from "../types"
 
 interface UsePPTSidebarOptions {
 	slides: SlideItem[]
@@ -40,6 +41,7 @@ interface UsePPTSidebarOptions {
 	onSortSave?: (newSlidesPaths: string[]) => void
 	store: PPTStore
 	isAnySlideEditing?: boolean
+	slideStructureAdapter?: PPTSlideStructureAdapter
 }
 
 export function usePPTSidebar({
@@ -58,10 +60,13 @@ export function usePPTSidebar({
 	onSortSave,
 	store,
 	isAnySlideEditing = false,
+	slideStructureAdapter,
 }: UsePPTSidebarOptions) {
 	const { t } = useTranslation("super")
 	const isInsertingRef = useRef(false)
 	const isDeletingRef = useRef(false)
+	const slideStructureAdapterRef = useRef(slideStructureAdapter)
+	slideStructureAdapterRef.current = slideStructureAdapter
 	const [isDeleteModalOpen, setIsModalOpen] = useState(false)
 	const getMagicProjectLookupAttachments = useMemoizedFn(() => {
 		const treeAttachments = Array.isArray(attachments) ? attachments : []
@@ -79,6 +84,20 @@ export function usePPTSidebar({
 		store.syncManager.registerSyncFunction(
 			// Sync function: update magic.project.js
 			async (slidesToSync: SlideItem[]) => {
+				const newSlidesOrder = slidesToSync.map((slide) => slide.path)
+				const currentStructureAdapter = slideStructureAdapterRef.current
+				if (currentStructureAdapter) {
+					await currentStructureAdapter.reorder(newSlidesOrder)
+					const currentPathsStr = newSlidesOrder.join(",")
+					const lastPathsStr = lastSyncedPaths.join(",")
+					if (currentPathsStr !== lastPathsStr) {
+						lastSyncedPaths = newSlidesOrder
+						store.markSkipNextExternalSync()
+						onSortSave?.(newSlidesOrder)
+					}
+					return
+				}
+
 				const magicProjectFile = await findMagicProjectJsFile({
 					attachments: getMagicProjectLookupAttachments(),
 					currentFileId: mainFileId || "",
@@ -88,8 +107,6 @@ export function usePPTSidebar({
 				if (!magicProjectFile) {
 					throw new Error("Magic project file not found")
 				}
-
-				const newSlidesOrder = slidesToSync.map((slide) => slide.path)
 
 				await updateSlidesOrder({
 					fileId: magicProjectFile.fileId,
@@ -150,7 +167,7 @@ export function usePPTSidebar({
 	const handleInsertSlide = useMemoizedFn(
 		async (position: number, direction: "before" | "after") => {
 			if (!allowEdit) return
-			if (!projectId) {
+			if (!projectId && !slideStructureAdapter) {
 				magicToast.error(t("fileViewer.insertSlideFailed"))
 				return
 			}
@@ -174,6 +191,62 @@ export function usePPTSidebar({
 			})
 
 			try {
+				if (slideStructureAdapter) {
+					const result = await slideStructureAdapter.insert({
+						position,
+						direction,
+					})
+					const downloadUrls = await getTemporaryDownloadUrl({
+						file_ids: [result.fileId],
+					})
+					const newFileUrl = downloadUrls?.[0]?.url || ""
+
+					const insertIndex = direction === "before" ? position : position + 1
+					const clampedIndex = Math.min(Math.max(0, insertIndex), store.slides.length)
+					const newSlide: SlideItem = {
+						id: `slide-${result.fileId}`,
+						path: result.filePath,
+						url: newFileUrl,
+						index: clampedIndex,
+						loadingState: "loading",
+						title: result.filePath
+							.split("/")
+							.pop()
+							?.replace(/\.html$/i, ""),
+					}
+					const newSlides = [...store.slides]
+					newSlides.splice(clampedIndex, 0, newSlide)
+					newSlides.forEach((slide, index) => {
+						slide.index = index
+					})
+					store.setSlides(newSlides, true)
+					store.pathMappingService.setPathFileIdMapping(result.filePath, result.fileId)
+					if (newFileUrl) {
+						store.pathMappingService.setPathUrlMapping(result.filePath, newFileUrl)
+					}
+					store.setActiveIndex(clampedIndex)
+					store.markSkipNextExternalSync()
+					onSortSave?.(store.slidePaths)
+					projectFilesStore.addWorkspaceFile({
+						file_id: result.fileId,
+						file_name: result.filePath.split("/").pop(),
+						relative_file_path: result.filePath,
+					})
+					requestProjectAttachmentsFullRefresh({
+						projectId,
+						reason: "ppt-template-insert-slide",
+					})
+					await store.loadSlideContentByFileId(result.fileId, {
+						path: result.filePath,
+						url: newFileUrl,
+						indexHint: clampedIndex,
+					})
+					await store.ensureSlideScreenshot(clampedIndex)
+					magicToast.destroy(toastId)
+					magicToast.success(t("fileViewer.insertSlideSuccess"))
+					return
+				}
+
 				// Find magic project file
 				const magicProjectFile = await findMagicProjectJsFile({
 					attachments: getMagicProjectLookupAttachments(),
@@ -490,6 +563,17 @@ export function usePPTSidebar({
 						duration: 0,
 					})
 
+					if (slideStructureAdapter) {
+						await slideStructureAdapter.remove(slidePath)
+						requestProjectAttachmentsFullRefresh({
+							projectId,
+							reason: "ppt-template-delete-slide",
+						})
+						magicToast.destroy(toastId)
+						magicToast.success(t("fileViewer.deleteSlideSuccess"))
+						return
+					}
+
 					// Background API calls (deleteSlide API will update magic.project.js)
 					const magicProjectFile = await findMagicProjectJsFile({
 						attachments: getMagicProjectLookupAttachments(),
@@ -525,6 +609,16 @@ export function usePPTSidebar({
 					magicToast.success(t("fileViewer.deleteSlideSuccess"))
 				} catch (error) {
 					console.error("Failed to delete slide:", error)
+					if (slideStructureAdapter) {
+						const restoredFileId = slideStructureAdapter.getFileId?.(slidePath)
+						if (restoredFileId) {
+							store.pathMappingService.setPathFileIdMapping(slidePath, restoredFileId)
+						}
+						requestProjectAttachmentsFullRefresh({
+							projectId,
+							reason: "ppt-template-delete-slide-rollback",
+						})
+					}
 
 					// Rollback on failure
 					store.setSlides(previousSlides, true) // skipSync = true
@@ -606,6 +700,26 @@ export function usePPTSidebar({
 			// Notify parent with updated paths immediately
 			if (onSortSave) {
 				onSortSave(store.slidePaths)
+			}
+
+			if (slideStructureAdapter) {
+				const newPath = await slideStructureAdapter.rename(oldPath, newFileName)
+				if (newPath !== optimisticNewPath) {
+					const finalSlides = store.slides.map((slide) =>
+						slide.path === optimisticNewPath ? { ...slide, path: newPath } : slide,
+					)
+					store.setSlides(finalSlides, true)
+					store.pathMappingService.setPathFileIdMapping(newPath, fileId)
+					if (currentUrl) {
+						store.pathMappingService.setPathUrlMapping(newPath, currentUrl)
+					}
+				}
+				onSortSave?.(store.slidePaths)
+				requestProjectAttachmentsFullRefresh({
+					projectId,
+					reason: "ppt-template-rename-slide",
+				})
+				return
 			}
 
 			// Background API calls (renameSlide API will update magic.project.js)

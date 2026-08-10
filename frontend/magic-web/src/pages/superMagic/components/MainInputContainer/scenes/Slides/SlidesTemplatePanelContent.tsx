@@ -5,6 +5,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/lib/utils"
+import GroupIcon from "../../panels/GroupIcon"
 import TemplateGroupSelector from "../../panels/TemplateGroupSelector"
 import SlidesPresetGrid from "../../panels/slides-preset/SlidesPresetGrid"
 import type { OptionItem } from "../../panels/types"
@@ -16,6 +17,9 @@ import {
 import SlidesTemplateTagGroupSelect from "./SlidesTemplateTagGroupSelect"
 import SlidesTemplateMobileTagFilters from "./SlidesTemplateMobileTagFilters"
 import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
+import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "@/pages/superMagic/pages/SlidesTemplates/useMySlidesTemplates"
+import MySlidesTemplatesEmptyState from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesEmptyState"
+import MySlidesTemplatesTabIcon from "./MySlidesTemplatesTabIcon"
 
 interface SlidesTemplatePanelContentProps {
 	slidesState: SlidesTemplatePanelState
@@ -28,6 +32,7 @@ interface SlidesTemplatePanelContentProps {
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
 	onPreviewOpenChange?: (open: boolean) => void
+	showMyTemplates?: boolean
 }
 
 function SlidesTemplatePanelContent({
@@ -41,6 +46,7 @@ function SlidesTemplatePanelContent({
 	hoverDetailsContainer,
 	disableEntryAnimation = false,
 	onPreviewOpenChange,
+	showMyTemplates = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
 	const isMobile = useIsMobile()
@@ -48,7 +54,9 @@ function SlidesTemplatePanelContent({
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
-	const selectorGroups = slidesState.groups
+	const selectorGroups = showMyTemplates
+		? slidesState.groups
+		: slidesState.groups.filter((group) => group.group_key !== MY_SLIDES_TEMPLATES_GROUP_KEY)
 	const selectedGroupKey = slidesState.selectedGroupKey
 	const setSelectedGroupKey = slidesState.setSelectedGroupKey
 	const hasGroups = selectorGroups.length > 1
@@ -140,6 +148,17 @@ function SlidesTemplatePanelContent({
 							groups={selectorGroups}
 							selectedGroupKey={slidesState.selectedGroupKey}
 							onGroupChange={handlePrimaryGroupChange}
+							renderGroupIcon={(group) => {
+								if (group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY) {
+									return <MySlidesTemplatesTabIcon />
+								}
+								return group.group_icon ? (
+									<GroupIcon
+										icon={group.group_icon}
+										className="size-4 shrink-0"
+									/>
+								) : null
+							}}
 							showEmptyGroups
 							className="flex-1"
 						/>
@@ -241,25 +260,33 @@ function SlidesTemplatePanelContent({
 					/>
 				) : null}
 			</div>
-			<SlidesPresetGrid
-				templates={slidesState.templateOptions}
-				selectedTemplate={selectedTemplate ?? undefined}
-				onTemplateClick={onTemplateClick}
-				isLoading={slidesState.isLoading}
-				isRefreshing={slidesState.isRefreshing}
-				hasMore={slidesState.hasMore}
-				isLoadingMore={slidesState.isLoadingMore}
-				isLoadMoreFailed={slidesState.isLoadMoreFailed}
-				onLoadMore={slidesState.loadMore}
-				onRetryLoadMore={slidesState.retryLoadMore}
-				onPreviewOpenChange={handlePreviewOpenChange}
-				onPreviewDetailLoad={handlePreviewDetailLoad}
-				className={gridClassName}
-				showHoverDetails={showHoverDetails}
-				hoverDetailsContainer={hoverDetailsContainer}
-				disableEntryAnimation={disableEntryAnimation}
-				disableContentVisibility={isMobile}
-			/>
+			{slidesState.myTemplatesEmptyStatus ? (
+				<MySlidesTemplatesEmptyState
+					status={slidesState.myTemplatesEmptyStatus}
+					onRetry={slidesState.retryMyTemplates}
+					variant="inline"
+				/>
+			) : (
+				<SlidesPresetGrid
+					templates={slidesState.templateOptions}
+					selectedTemplate={selectedTemplate ?? undefined}
+					onTemplateClick={onTemplateClick}
+					isLoading={slidesState.isLoading}
+					isRefreshing={slidesState.isRefreshing}
+					hasMore={slidesState.hasMore}
+					isLoadingMore={slidesState.isLoadingMore}
+					isLoadMoreFailed={slidesState.isLoadMoreFailed}
+					onLoadMore={slidesState.loadMore}
+					onRetryLoadMore={slidesState.retryLoadMore}
+					onPreviewOpenChange={handlePreviewOpenChange}
+					onPreviewDetailLoad={handlePreviewDetailLoad}
+					className={gridClassName}
+					showHoverDetails={showHoverDetails}
+					hoverDetailsContainer={hoverDetailsContainer}
+					disableEntryAnimation={disableEntryAnimation}
+					disableContentVisibility={isMobile}
+				/>
+			)}
 		</div>
 	)
 }

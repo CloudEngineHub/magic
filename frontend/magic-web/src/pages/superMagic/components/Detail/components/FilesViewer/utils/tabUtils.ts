@@ -13,6 +13,18 @@ function getAttachmentFileName(item: FileItem | AttachmentItem): string {
 	return item.display_filename || item.file_name || item.filename || ""
 }
 
+/** 附件树刷新时保留只存在于 Tab 内存中的模板预览类型。 */
+export function mergeAttachmentFileForTab(tab: TabItem, updatedFile: FileItem): FileItem {
+	const displayConfig =
+		tab.fileData.display_config?.type === "slide-template"
+			? tab.fileData.display_config
+			: updatedFile.display_config
+	return {
+		...updatedFile,
+		display_config: displayConfig,
+	}
+}
+
 function isSlideProjectFolder(item: FileItem | AttachmentItem | undefined): boolean {
 	return Boolean(item?.is_directory && item?.display_config?.type === "slide")
 }

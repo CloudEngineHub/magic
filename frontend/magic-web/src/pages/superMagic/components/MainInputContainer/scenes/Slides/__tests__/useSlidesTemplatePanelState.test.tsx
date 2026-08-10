@@ -2,10 +2,13 @@ import { StrictMode, type ReactNode } from "react"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
+import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "@/pages/superMagic/pages/SlidesTemplates/useMySlidesTemplates"
+import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "../../../panels/slides-preset/templateMeta"
 import {
 	SLIDES_TEMPLATE_IMAGE_PROCESS,
 	SLIDES_TEMPLATE_PAGE_SIZE,
 	createSlidesTemplateCategoryGroupKey,
+	createSlidesTemplateTagGroupKey,
 	type SlidesTemplateCategoryItem,
 	type SlidesTemplateItem,
 } from "../slidesTemplateState"
@@ -25,6 +28,12 @@ const slidesTemplateImageOptions = {
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
+}))
+
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -144,6 +153,41 @@ describe("useSlidesTemplatePanelState", () => {
 		)
 		expect(result.current.groups[0].group_key).toBe("all")
 		expect(result.current.templateOptions[0].value).toBe(businessTemplate.code)
+	})
+
+	it("inserts My templates immediately before Featured", async () => {
+		vi.mocked(SuperMagicApi.getSlidesTemplateTagGroups).mockResolvedValue([
+			{
+				id: "operational",
+				code: "operational_group",
+				name_i18n: { zh_CN: "运营标签", en_US: "Operational" },
+				sort: 100,
+				tags: [
+					{
+						id: "featured",
+						code: FEATURED_SLIDES_TEMPLATE_TAG_CODE,
+						name_i18n: { zh_CN: "精选", en_US: "Featured" },
+						sort: 100,
+						template_count: 1,
+						is_official: true,
+					},
+				],
+			},
+		])
+
+		const { result } = renderHook(() => useSlidesTemplatePanelState())
+		const featuredGroupKey = createSlidesTemplateTagGroupKey(FEATURED_SLIDES_TEMPLATE_TAG_CODE)
+
+		await waitFor(() =>
+			expect(
+				result.current.groups.some((group) => group.group_key === featuredGroupKey),
+			).toBe(true),
+		)
+
+		const groupKeys = result.current.groups.map((group) => group.group_key)
+		expect(groupKeys.indexOf(MY_SLIDES_TEMPLATES_GROUP_KEY)).toBe(
+			groupKeys.indexOf(featuredGroupKey) - 1,
+		)
 	})
 
 	it("marks all templates as empty when the first page list is empty", async () => {

@@ -66,6 +66,8 @@ interface TopicFilesPanelProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 }
 
 export interface TopicFilesPanelRef {
@@ -102,6 +104,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			onSaveSlidesTemplate,
+			onConvertToSlidesTemplate,
 		},
 		ref,
 	) {
@@ -604,6 +608,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								allowReadonlySelection={isShareRoute}
 								resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 								refreshLoading={refreshLoading}
+								onSaveSlidesTemplate={onSaveSlidesTemplate}
+								onConvertToSlidesTemplate={onConvertToSlidesTemplate}
 							/>
 						</>
 					)}

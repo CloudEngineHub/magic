@@ -1,4 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef } from "react"
+import { useTranslation } from "react-i18next"
+import { useMemoizedFn } from "ahooks"
 import { useStyles } from "./style"
 import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
@@ -6,6 +8,10 @@ import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
+import magicToast from "@/components/base/MagicToaster/utils"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { mySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -44,6 +50,8 @@ export interface TopicFilesButtonProps {
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
+	onSaveSlidesTemplate?: (item: AttachmentItem) => void | Promise<void>
+	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 }
 
 export interface TopicFilesButtonRef {
@@ -80,13 +88,53 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
+			onSaveSlidesTemplate,
+			onConvertToSlidesTemplate,
 		},
 		ref,
 	) {
 		const { styles, cx } = useStyles()
+		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
 		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
 		const panelRef = useRef<TopicFilesPanelRef>(null)
+		const handleSaveSlidesTemplate = useMemoizedFn(async (item: AttachmentItem) => {
+			if (onSaveSlidesTemplate) {
+				await onSaveSlidesTemplate(item)
+				return
+			}
+
+			if (!mySlidesTemplateAdapter.enabled) {
+				magicToast.info(t("mySlidesTemplates.saveUnavailable"))
+				return
+			}
+
+			const resolvedProjectId = selectedProject?.id || projectId
+			const folderId = item.file_id
+			if (!resolvedProjectId || !folderId) {
+				magicToast.error(t("mySlidesTemplates.saveFailed"))
+				return
+			}
+
+			try {
+				await mySlidesTemplateAdapter.saveFromFolder({
+					projectId: resolvedProjectId,
+					folderId,
+					folderName:
+						item.file_name || item.filename || item.name || item.display_filename || "",
+				})
+				magicToast.success(t("mySlidesTemplates.saveSuccess"))
+			} catch {
+				magicToast.error(t("mySlidesTemplates.saveFailed"))
+			}
+		})
+		const handleConvertToSlidesTemplate = useMemoizedFn((item: AttachmentItem) => {
+			if (onConvertToSlidesTemplate) {
+				onConvertToSlidesTemplate(item)
+				return
+			}
+			pubsub.publish(PubSubEvents.Create_New_Topic, buildConvertToSlidesTemplatePayload(item))
+		})
 
 		// Expose file operation methods to parent
 		useImperativeHandle(ref, () => ({
@@ -135,6 +183,8 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}
+					onSaveSlidesTemplate={handleSaveSlidesTemplate}
+					onConvertToSlidesTemplate={handleConvertToSlidesTemplate}
 				/>
 			</div>
 		)

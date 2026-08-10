@@ -7,12 +7,15 @@ import {
 	waitForElementToBeRemoved,
 } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { forwardRef, useImperativeHandle } from "react"
+import { forwardRef, useImperativeHandle, type ReactNode } from "react"
 import type {
 	OptionGroup,
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
+import { RouteName } from "@/routes/constants"
+import type { MySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 import SlidesTemplatesPage from "../index"
+import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "../useMySlidesTemplates"
 
 const {
 	catalogStateMock,
@@ -23,6 +26,7 @@ const {
 	findSimilarCallbackHistory,
 	focusRandomTemplateMock,
 	getExtractedTemplateColorsMock,
+	navigateMock,
 	openPreviewMock,
 	relatedTemplate,
 	sameFamilyTemplate,
@@ -68,6 +72,11 @@ const {
 			children: [template, related, unrelated],
 		},
 		{
+			group_key: "tag:featured",
+			group_name: "Featured",
+			children: [template],
+		},
+		{
 			group_key: "business",
 			group_name: "Business",
 			children: [template, related, unrelated],
@@ -82,6 +91,7 @@ const {
 		findSimilarCallbackHistory: [] as Array<((template: OptionItem) => void) | undefined>,
 		focusRandomTemplateMock: vi.fn(),
 		getExtractedTemplateColorsMock: vi.fn(() => [] as string[]),
+		navigateMock: vi.fn(),
 		openPreviewMock: vi.fn(),
 		relatedTemplate: related,
 		sameFamilyTemplate: sameFamily,
@@ -137,6 +147,10 @@ vi.mock("react-i18next", () => ({
 		i18n: { language: "en_US" },
 		t: (key: string, options?: { name?: string }) => options?.name ?? key,
 	}),
+}))
+
+vi.mock("@/routes/hooks/useNavigate", () => ({
+	default: () => navigateMock,
 }))
 
 vi.mock(
@@ -271,16 +285,44 @@ vi.mock("../SlidesTemplatePromptDock", () => ({
 
 vi.mock("@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSelector", () => ({
 	__esModule: true,
-	default: ({ onGroupChange }: { onGroupChange: (groupKey: string) => void }) => (
-		<button
-			type="button"
-			data-testid="slides-templates-page-group-selector"
-			onClick={() => onGroupChange("business")}
-		>
-			groups
-		</button>
+	default: ({
+		groups,
+		onGroupChange,
+		renderGroupIcon,
+		selectedGroupKey,
+	}: {
+		groups: OptionGroup[]
+		onGroupChange: (groupKey: string) => void
+		renderGroupIcon?: (group: OptionGroup) => ReactNode
+		selectedGroupKey: string
+	}) => (
+		<div data-testid="slides-templates-page-group-selector">
+			{groups.map((group) => (
+				<button
+					type="button"
+					key={group.group_key}
+					aria-pressed={group.group_key === selectedGroupKey}
+					data-testid={`slides-templates-page-group-${group.group_key}`}
+					onClick={() => onGroupChange(group.group_key)}
+				>
+					{renderGroupIcon?.(group)}
+					{String(group.group_name)}
+				</button>
+			))}
+		</div>
 	),
 }))
+
+function createMyTemplatesAdapter(
+	listMine: MySlidesTemplateAdapter["listMine"],
+	enabled = true,
+): MySlidesTemplateAdapter {
+	return {
+		enabled,
+		listMine: vi.fn(listMine),
+		saveFromFolder: vi.fn(async () => ({ id: "saved", name: "Saved" })),
+	}
+}
 
 describe("SlidesTemplatesPage", () => {
 	beforeEach(() => {
@@ -312,16 +354,114 @@ describe("SlidesTemplatesPage", () => {
 		)
 	})
 
+	it("places My templates before Featured and renders a distinct icon", () => {
+		render(<SlidesTemplatesPage />)
+
+		const myTemplatesTab = screen.getByTestId(
+			`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`,
+		)
+		const featuredTab = screen.getByTestId("slides-templates-page-group-tag:featured")
+
+		expect(myTemplatesTab).toContainElement(screen.getByTestId("my-slides-templates-tab-icon"))
+		expect(
+			myTemplatesTab.compareDocumentPosition(featuredTab) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
+	it("shows the compact guide when the personal template adapter is unavailable", () => {
+		render(<SlidesTemplatesPage />)
+
+		fireEvent.click(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		)
+
+		expect(screen.getByTestId("my-slides-templates-unavailable")).toBeInTheDocument()
+		expect(screen.getByText("mySlidesTemplates.guide.chat")).toBeInTheDocument()
+		expect(screen.getByText("mySlidesTemplates.guide.project")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-slides-template-canvas")).not.toBeInTheDocument()
+		expect(catalogStateMock.setSelectedGroupKey).not.toHaveBeenCalled()
+	})
+
+	it("returns to the homepage from the conversation guide", () => {
+		render(<SlidesTemplatesPage />)
+
+		fireEvent.click(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		)
+		fireEvent.click(screen.getByTestId("my-slides-templates-go-home"))
+
+		expect(navigateMock).toHaveBeenCalledWith({ name: RouteName.Super })
+	})
+
+	it("shows the compact guide when My templates is empty", async () => {
+		const adapter = createMyTemplatesAdapter(async () => ({
+			items: [],
+			page: 1,
+			pageSize: 40,
+			total: 0,
+		}))
+		render(<SlidesTemplatesPage myTemplatesAdapter={adapter} />)
+
+		fireEvent.click(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		)
+
+		expect(await screen.findByTestId("my-slides-templates-empty")).toBeInTheDocument()
+		expect(adapter.listMine).toHaveBeenCalledWith({
+			page: 1,
+			pageSize: 40,
+			keyword: undefined,
+		})
+	})
+
+	it("renders personal templates in the existing canvas", async () => {
+		const adapter = createMyTemplatesAdapter(async () => ({
+			items: [
+				{
+					id: "PPT-mine",
+					name: "My Template",
+					thumbnailUrl: "https://example.com/my-template.png",
+				},
+			],
+			page: 1,
+			pageSize: 40,
+			total: 1,
+		}))
+		render(<SlidesTemplatesPage myTemplatesAdapter={adapter} />)
+
+		fireEvent.click(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		)
+
+		expect(await screen.findByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
+			"PPT-mine",
+		)
+		expect(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		).toHaveAttribute("aria-pressed", "true")
+	})
+
+	it("restores the public template canvas after leaving My templates", () => {
+		render(<SlidesTemplatesPage />)
+
+		fireEvent.click(
+			screen.getByTestId(`slides-templates-page-group-${MY_SLIDES_TEMPLATES_GROUP_KEY}`),
+		)
+		fireEvent.click(screen.getByTestId("slides-templates-page-group-business"))
+
+		expect(screen.getByTestId("mock-slides-template-canvas-options")).toHaveTextContent(
+			String(businessTemplate.value),
+		)
+		expect(catalogStateMock.setSelectedGroupKey).toHaveBeenCalledWith("business")
+	})
+
 	it("prefetches a second backend-sized batch for the unfiltered home canvas", async () => {
 		catalogStateMock.hasMore = true
 		catalogStateMock.loadedTemplateCount = 200
-		catalogStateMock.templateOptions = Array.from(
-			{ length: 200 },
-			(_, index): OptionItem => ({
-				value: `PPT-initial-${index}`,
-				label: `Initial Template ${index}`,
-			}),
-		)
+		catalogStateMock.templateOptions = Array.from({ length: 200 }, (_, index): OptionItem => ({
+			value: `PPT-initial-${index}`,
+			label: `Initial Template ${index}`,
+		}))
 
 		render(<SlidesTemplatesPage />)
 
@@ -608,14 +748,11 @@ describe("SlidesTemplatesPage", () => {
 		catalogStateMock.loadedTemplateCount = 200
 		catalogStateMock.templateOptions = [
 			businessTemplate,
-			...Array.from(
-				{ length: 199 },
-				(_, index): OptionItem => ({
-					value: `PPT-blue-${index}`,
-					label: `Blue Template ${index}`,
-					colors: ["#60A5FA"],
-				}),
-			),
+			...Array.from({ length: 199 }, (_, index): OptionItem => ({
+				value: `PPT-blue-${index}`,
+				label: `Blue Template ${index}`,
+				colors: ["#60A5FA"],
+			})),
 		]
 		render(<SlidesTemplatesPage />)
 		vi.clearAllMocks()
@@ -687,7 +824,7 @@ describe("SlidesTemplatesPage", () => {
 		fireEvent.change(screen.getByTestId("slides-templates-page-search-input"), {
 			target: { value: "business" },
 		})
-		fireEvent.click(screen.getByTestId("slides-templates-page-group-selector"))
+		fireEvent.click(screen.getByTestId("slides-templates-page-group-business"))
 
 		expect(catalogStateMock.setKeyword).toHaveBeenCalledWith("business")
 		expect(catalogStateMock.setSelectedGroupKey).toHaveBeenCalledWith("business")
@@ -702,7 +839,7 @@ describe("SlidesTemplatesPage", () => {
 			"false",
 		)
 
-		fireEvent.click(screen.getByTestId("slides-templates-page-group-selector"))
+		fireEvent.click(screen.getByTestId("slides-templates-page-group-business"))
 
 		expect(screen.getByTestId("slides-templates-page-prompt-panel")).toHaveAttribute(
 			"aria-hidden",

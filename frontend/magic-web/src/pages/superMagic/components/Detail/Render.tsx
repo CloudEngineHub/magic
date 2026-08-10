@@ -2,7 +2,7 @@ import ContentRenderer from "./components/ContentRenderer"
 import { DetailType } from "./types"
 import { SuperMagicApi } from "@/apis"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useDeepCompareEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
@@ -21,7 +21,7 @@ import { prepareSingleSlideExport } from "@/pages/superMagic/services/pptService
 import { exportPPTX } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
-import { hasPPTMetadata, isFileInPPTMode } from "./utils/file"
+import { isFileInPPTMode, isFileInSlideCanvasMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import {
@@ -92,10 +92,17 @@ export default function Render(props: any) {
 		mdToolbarContainer,
 	} = props
 	const { t } = useTranslation("super")
+	const isHtmlSlideCanvasMode = useMemo(
+		() =>
+			type === DetailType.Html &&
+			(data?.display_config?.type === "slide" ||
+				isFileInSlideCanvasMode(data?.file_id, attachmentList ?? [])),
+		[attachmentList, data?.display_config?.type, data?.file_id, type],
+	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
-		(type === DetailType.Html &&
-			(hasPPTMetadata(data) || isFileInPPTMode(data?.file_id, attachmentList ?? [])))
+		type === DetailType.SlidesTemplate ||
+		isHtmlSlideCanvasMode
 	const supportsDocumentFlow =
 		documentFlowFullscreen &&
 		!isPptRenderer &&
@@ -692,6 +699,7 @@ export default function Render(props: any) {
 		userSelectDetail,
 		isFullscreen,
 		attachmentList,
+		isHtmlSlideCanvasMode,
 		isEditMode,
 		setIsEditMode,
 		saveEditContent,

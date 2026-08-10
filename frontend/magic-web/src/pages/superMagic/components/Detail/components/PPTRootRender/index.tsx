@@ -133,6 +133,8 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		projectId,
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
+		slideStructureAdapter,
+		disableMagicProjectLookup = false,
 	} = props
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
@@ -155,6 +157,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	}, [attachments, attachmentList, displayData])
 	const processAttachments = pptAttachmentList
 	const magicProjectFile = useMemo(() => {
+		if (disableMagicProjectLookup) return undefined
 		if (!displayData?.file_id || pptAttachmentList.length === 0) return undefined
 
 		const entryFile = pptAttachmentList.find(
@@ -181,6 +184,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			return Boolean(targetPath && item?.relative_file_path === targetPath)
 		})
 	}, [
+		disableMagicProjectLookup,
 		pptAttachmentList,
 		displayData?.file_id,
 		entryData?.is_directory,
@@ -190,6 +194,9 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	// 同步派生 slidePaths：解析完成前先用 displayConfig.slides 快速首屏；
 	// 一旦 magic.project.js 内容解析完成，就以文件内容为准，避免旧 displayConfig 盖住新 slides。
 	const derivedSlidePaths = useMemo(() => {
+		if (disableMagicProjectLookup && originalSlidesPaths.length > 0) {
+			return originalSlidesPaths
+		}
 		if (hasProcessedContent && (magicProjectFile?.file_id || originalSlidesPaths.length > 0)) {
 			return originalSlidesPaths
 		}
@@ -201,7 +208,13 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			return displayConfig.slides
 		}
 		return originalSlidesPaths
-	}, [displayConfig?.slides, hasProcessedContent, magicProjectFile?.file_id, originalSlidesPaths])
+	}, [
+		disableMagicProjectLookup,
+		displayConfig?.slides,
+		hasProcessedContent,
+		magicProjectFile?.file_id,
+		originalSlidesPaths,
+	])
 
 	const entryContentFileId = entryData?.is_directory ? "" : displayData?.file_id || ""
 	const { fileData: htmlFileData, loading } = useFileData({
@@ -427,7 +440,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 				<PPTRender
 					key={`ppt-${renderKey}`}
 					slidePaths={derivedSlidePaths}
-					attachments={pptAttachmentList}
+					attachments={attachments}
 					attachmentList={pptAttachmentList}
 					projectId={projectId}
 					mainFileId={displayData?.file_id}
@@ -449,6 +462,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					allowDownload={allowDownload}
 					onRegisterCheckBeforeClose={onRegisterCheckBeforeClose}
 					onUnregisterCheckBeforeClose={onUnregisterCheckBeforeClose}
+					slideStructureAdapter={slideStructureAdapter}
 				/>
 			)}
 		</div>

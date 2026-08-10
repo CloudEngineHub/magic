@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
+import type { PPTSlideStructureAdapter } from "./types"
 
 interface ManualSaveResult {
 	fileId?: string
@@ -102,6 +103,7 @@ interface PPTRenderProps {
 	isTabActive?: boolean
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void
+	slideStructureAdapter?: PPTSlideStructureAdapter
 }
 
 /**
@@ -190,6 +192,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	allowDownload,
 	onRegisterCheckBeforeClose,
 	onUnregisterCheckBeforeClose,
+	slideStructureAdapter,
 }: PPTRenderProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -326,6 +329,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		onSortSave,
 		store,
 		isAnySlideEditing,
+		slideStructureAdapter,
 	})
 
 	// 导航函数（上一张/下一张/跳转）

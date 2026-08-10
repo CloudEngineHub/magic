@@ -340,6 +340,7 @@ function SlidesTemplatePanel({
 				toolbarClassName="sticky top-0 z-50 bg-background/95 pb-3 backdrop-blur"
 				// 首页由外层 ScrollArea 负责滚动，避免网格的 overscroll 限制阻断滚轮事件。
 				gridClassName="overflow-y-visible overscroll-y-auto"
+				showMyTemplates
 				onPreviewOpenChange={onPreviewOpenChange}
 			/>
 		)
