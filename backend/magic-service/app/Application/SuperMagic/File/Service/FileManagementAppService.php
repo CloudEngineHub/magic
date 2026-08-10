@@ -1226,9 +1226,8 @@ class FileManagementAppService extends AbstractAppService
     {
         try {
             $userAuthorization = $requestContext->getUserAuthorization();
-            $dataIsolation = $this->createDataIsolation($userAuthorization);
 
-            return $this->getFileUrlsGroupedByProject($dataIsolation, $fileIds, $downloadMode, $options, $fileVersions);
+            return $this->getFileUrlsGroupedByProject($userAuthorization, $fileIds, $downloadMode, $options, $fileVersions);
         } catch (BusinessException $e) {
             $this->logger->warning(sprintf(
                 'Business logic error in get file URLs: %s, File IDs: %s, Download Mode: %s, Error Code: %d',
@@ -2866,30 +2865,48 @@ class FileManagementAppService extends AbstractAppService
     /**
      * 通过 file_ids 批量查询文件实体，按 project_id 分组分别做权限校验和 URL 生成，合并结果返回.
      */
-    private function getFileUrlsGroupedByProject(DataIsolation $dataIsolation, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
+    private function getFileUrlsGroupedByProject(MagicUserAuthorization $authorization, array $fileIds, string $downloadMode, array $options, array $fileVersions): array
     {
         $fileEntities = $this->taskFileDomainService->getFilesByIds($fileIds);
         if (empty($fileEntities)) {
             return [];
         }
 
-        // 按 project_id 分组收集 file_id 列表
-        $fileIdsByProject = [];
+        // 按 project_id 分组保留文件实体，避免重复查询项目权限。
+        $fileEntitiesByProject = [];
         foreach ($fileEntities as $fileEntity) {
-            $fileIdsByProject[$fileEntity->getProjectId()][] = (string) $fileEntity->getFileId();
+            $fileEntitiesByProject[$fileEntity->getProjectId()][] = $fileEntity;
         }
 
         $result = [];
-        foreach ($fileIdsByProject as $groupProjectId => $groupFileIds) {
-            $projectEntity = $this->getAccessibleProject(
-                $groupProjectId,
-                $dataIsolation->getCurrentUserId(),
-                $dataIsolation->getCurrentOrganizationCode()
+        foreach ($fileEntitiesByProject as $groupProjectId => $groupFileEntities) {
+            $groupFileIds = array_map(
+                static fn (TaskFileEntity $fileEntity): string => (string) $fileEntity->getFileId(),
+                $groupFileEntities
             );
 
+            $projectEntity = $this->getAccessibleProjectForTaskFile(
+                $groupFileEntities[0],
+                $authorization,
+                MemberRole::VIEWER,
+            );
+            if ($projectEntity === null) {
+                // 用户空间没有项目权限，逐文件校验 task_files owner 信息。
+                foreach ($groupFileEntities as $groupFileEntity) {
+                    $this->getAccessibleProjectForTaskFile(
+                        $groupFileEntity,
+                        $authorization,
+                        MemberRole::VIEWER,
+                    );
+                }
+                $organizationCode = $groupFileEntities[0]->getOrganizationCode();
+            } else {
+                $organizationCode = $projectEntity->getUserOrganizationCode();
+            }
+
             $urls = $this->taskFileDomainService->getFileUrls(
-                $projectEntity->getUserOrganizationCode(),
-                $projectEntity->getId(),
+                $organizationCode,
+                (int) $groupProjectId,
                 $groupFileIds,
                 $downloadMode,
                 $options,

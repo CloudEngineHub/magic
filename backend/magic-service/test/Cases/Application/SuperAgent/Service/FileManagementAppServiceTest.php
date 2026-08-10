@@ -22,6 +22,7 @@ use App\Domain\SuperMagic\File\Service\FileCollectionDomainService;
 use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -34,6 +35,8 @@ use App\Interfaces\SuperMagic\File\DTO\Request\BatchDeleteFilesRequestDTO;
 use Hyperf\Amqp\Message\ProducerMessage;
 use Hyperf\Amqp\Producer;
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Contract\ConfigInterface;
+use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Redis\Redis;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -366,6 +369,68 @@ class FileManagementAppServiceTest extends TestCase
         $this->assertSame('/docs/image.png', $method->invoke($service, $fileEntity, 900));
     }
 
+    public function testGetFileUrlsAllowsUserSpaceFileWithoutProjectLookup(): void
+    {
+        $fileEntity = $this->createTaskFileEntity(501, '/user/memory.md');
+        $fileEntity->setProjectId(0);
+        $fileEntity->setSpaceType('user');
+        $fileEntity->setUserId('U1');
+        $fileEntity->setOrganizationCode('ORG1');
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getFilesByIds')
+            ->with([501])
+            ->willReturn([$fileEntity]);
+        $taskFileDomainService->expects($this->once())
+            ->method('getFileUrls')
+            ->with('ORG1', 0, ['501'], 'preview', [], [], true)
+            ->willReturn([['file_id' => '501', 'url' => 'https://example.test/memory.md']]);
+
+        $service = $this->createService($this->createMock(EventDispatcherInterface::class));
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')
+            ->with('error_message')
+            ->willReturn(require BASE_PATH . '/config/autoload/error_message.php');
+
+        ApplicationContext::setContainer(new class($this->createMock(TranslatorInterface::class), $config) implements ContainerInterface {
+            public function __construct(
+                private readonly TranslatorInterface $translator,
+                private readonly ConfigInterface $config,
+            )
+            {
+            }
+
+            public function get(string $id): mixed
+            {
+                if ($id === TranslatorInterface::class) {
+                    return $this->translator;
+                }
+
+                if ($id === ConfigInterface::class) {
+                    return $this->config;
+                }
+
+                throw new RuntimeException("Container binding not found for {$id}");
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === TranslatorInterface::class || $id === ConfigInterface::class;
+            }
+        });
+
+        $this->assertSame(
+            [['file_id' => '501', 'url' => 'https://example.test/memory.md']],
+            $service->getFileUrls($requestContext, [501], 'preview')
+        );
+    }
+
     public function testGetFileUrlsByAccessTokenFiltersFileCollectionScope(): void
     {
         $this->bindAccessToken('token-file-collection', 'share-file-collection');
@@ -643,6 +708,11 @@ final readonly class FileManagementAccessTokenTestContainer implements Container
 
 class TestableFileManagementAppService extends FileManagementAppService
 {
+    public function getAccessibleProject(int $projectId, string $userId, string $organizationCode, MemberRole $requiredRole = MemberRole::VIEWER): ProjectEntity
+    {
+        throw new BusinessException('project lookup should not run for user-space files');
+    }
+
     public function getAccessibleProjectWithEditor(int $projectId, string $userId, string $organizationCode): ProjectEntity
     {
         return new ProjectEntity(['id' => $projectId, 'user_id' => $userId, 'user_organization_code' => $organizationCode]);
