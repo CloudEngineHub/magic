@@ -130,7 +130,14 @@ export class StreamChunkManager {
 		this.clearTimeout(fileIndex)
 
 		const timer = setTimeout(() => {
-			logger.error(`File ${fileIndex} timed out after ${this.timeout}ms`)
+			const error = new Error(`File ${fileIndex} timed out after ${this.timeout}ms`)
+			logger.error({
+				eventKey: "stream_file_timeout",
+				errorKind: "timeout",
+				error,
+				message: "Stream file timed out",
+				context: { fileIndex, timeoutMs: this.timeout },
+			})
 			this.clearFile(fileIndex)
 		}, this.timeout)
 

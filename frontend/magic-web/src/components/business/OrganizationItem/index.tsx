@@ -93,7 +93,12 @@ const OrganizationItem = observer((props: OrganizationItemProps) => {
 				switchOrganization(account, organization)
 			}
 		} catch (error) {
-			logger.error("switch organization failed", error)
+			logger.error({
+				eventKey: "switch_organization_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "switch organization failed",
+			})
 		}
 	})
 

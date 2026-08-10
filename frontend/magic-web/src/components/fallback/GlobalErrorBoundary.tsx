@@ -97,7 +97,13 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 	return (
 		<ErrorBoundary
 			onError={(error, errorInfo) => {
-				logger.error("Global Error Boundary caught an error:", error, errorInfo)
+				logger.error({
+					eventKey: "app_root_render_failed",
+					errorKind: "render",
+					error: error,
+					message: "Global Error Boundary caught an error:",
+					context: { componentStack: errorInfo.componentStack },
+				})
 				setTargetDate(Date.now() + 3000)
 				getNativePort().environment.webHasNewVersionToUpdate()
 			}}

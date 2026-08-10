@@ -154,9 +154,12 @@ export class PPTActiveIndexCacheManager {
 				metadata: { index, fileId: mainFileId },
 			})
 		} catch (error) {
-			this.logger.error("Failed to save activeIndex", {
-				operation: "saveActiveIndex",
-				error,
+			this.logger.error({
+				eventKey: "save_active_index_failed",
+				errorKind: "render",
+				error: error,
+				message: "Failed to save activeIndex",
+				context: { operation: "saveActiveIndex" },
 			})
 		}
 	}
@@ -223,9 +226,12 @@ export class PPTActiveIndexCacheManager {
 
 			return null
 		} catch (error) {
-			this.logger.error("Failed to restore activeIndex", {
-				operation: "restoreActiveIndex",
-				error,
+			this.logger.error({
+				eventKey: "restore_active_index_failed",
+				errorKind: "render",
+				error: error,
+				message: "Failed to restore activeIndex",
+				context: { operation: "restoreActiveIndex" },
 			})
 			return null
 		}

@@ -294,9 +294,12 @@ export class PPTStore {
 						},
 					})
 				} catch (error) {
-					this.logger.error("获取临时 URL 失败", error, {
-						operation: "initializeSlides",
-						metadata: { fileIdCount: fileIds.length },
+					this.logger.error({
+						eventKey: "initialize_slides_fetch_urls_failed",
+						errorKind: "network",
+						error,
+						message: "获取临时 URL 失败",
+						context: { operation: "initializeSlides", fileIdCount: fileIds.length },
 					})
 				}
 			}
@@ -435,9 +438,12 @@ export class PPTStore {
 							metadata: { collectedFileIds: fileIds.size },
 						})
 					} catch (error) {
-						this.logger.error("加载原始内容失败", error, {
-							operation: "loadAllSlides",
-							slideIndex: index,
+						this.logger.error({
+							eventKey: "load_slide_source_content_failed",
+							errorKind: "network",
+							error,
+							message: "加载原始内容失败",
+							context: { operation: "loadAllSlides", slideIndex: index },
 						})
 
 						// Mark slide as error if loading failed
@@ -487,9 +493,12 @@ export class PPTStore {
 						},
 					})
 				} catch (error) {
-					this.logger.error("获取临时下载 URL 失败", error, {
-						operation: "loadAllSlides",
-						metadata: { fileIdCount: allFileIds.size },
+					this.logger.error({
+						eventKey: "fetch_slide_download_urls_failed",
+						errorKind: "network",
+						error,
+						message: "获取临时下载 URL 失败",
+						context: { operation: "loadAllSlides", fileIdCount: allFileIds.size },
 					})
 				}
 			}
@@ -563,9 +572,12 @@ export class PPTStore {
 							metadata: { progress: this.loadingPercentage },
 						})
 					} catch (error) {
-						this.logger.error("处理幻灯片失败", error, {
-							operation: "loadAllSlides",
-							slideIndex: index,
+						this.logger.error({
+							eventKey: "process_slide_failed",
+							errorKind: "render",
+							error,
+							message: "处理幻灯片失败",
+							context: { operation: "loadAllSlides", slideIndex: index },
 						})
 
 						runInAction(() => {

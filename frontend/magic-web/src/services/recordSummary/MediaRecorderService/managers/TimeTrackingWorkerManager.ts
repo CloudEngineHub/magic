@@ -68,7 +68,12 @@ export class TimeTrackingWorkerManager {
 			// Handle worker errors
 			// 处理 Worker 错误
 			this.worker.onerror = (error) => {
-				this.logger.error("TimeTrackingWorker error:", error)
+				this.logger.error({
+					eventKey: "time_tracking_worker_failed",
+					errorKind: "worker",
+					error: error,
+					message: "TimeTrackingWorker error:",
+				})
 			}
 
 			// Start periodic checking
@@ -81,7 +86,12 @@ export class TimeTrackingWorkerManager {
 
 			this.logger.log("TimeTrackingWorker started", { interval })
 		} catch (error) {
-			this.logger.error("Failed to start TimeTrackingWorker:", error)
+			this.logger.error({
+				eventKey: "start_time_tracking_worker_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to start TimeTrackingWorker:",
+			})
 			// Don't throw - allow system to work without Worker fallback
 			// 不抛出异常 - 允许系统在没有 Worker 兜底的情况下工作
 		}
@@ -105,7 +115,12 @@ export class TimeTrackingWorkerManager {
 				// 终止 Worker
 				this.worker.terminate()
 			} catch (error) {
-				this.logger.error("Error stopping TimeTrackingWorker:", error)
+				this.logger.error({
+					eventKey: "stopping_time_tracking_worker_failed",
+					errorKind: "worker",
+					error: error,
+					message: "Error stopping TimeTrackingWorker:",
+				})
 			}
 
 			this.worker = null

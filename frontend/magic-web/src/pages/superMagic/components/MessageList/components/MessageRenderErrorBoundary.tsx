@@ -44,11 +44,16 @@ export default function MessageRenderErrorBoundary({
 		<ErrorBoundary
 			resetKeys={resetKey === undefined ? undefined : [resetKey]}
 			onError={(error, errorInfo) => {
-				logger.error("Message render failed", {
-					messageKey,
-					error,
-					componentStack: errorInfo.componentStack,
-					errorBoundary: "MessageRenderErrorBoundary",
+				logger.error({
+					eventKey: "super_magic_message_render_failed",
+					errorKind: "render",
+					error: error,
+					message: "Message render failed",
+					context: {
+						messageKey,
+						componentStack: errorInfo.componentStack,
+						errorBoundary: "MessageRenderErrorBoundary",
+					},
 				})
 			}}
 			fallbackRender={({ resetErrorBoundary }) => {

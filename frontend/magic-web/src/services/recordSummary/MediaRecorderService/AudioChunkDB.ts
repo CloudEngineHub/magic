@@ -164,8 +164,11 @@ export class AudioChunkDB extends GlobalBaseRepository<StoredAudioChunk> {
 	async updateChunkUploadStatus(chunkId: string, status: UploadStatus): Promise<void> {
 		const chunk = await this.get(chunkId)
 		if (!chunk) {
-			logger.error("更新分片状态失败：分片不存在", {
-				chunkId,
+			logger.error({
+				eventKey: "chunk_status_target_missing",
+				errorKind: "invalid_state",
+				message: "更新分片状态失败：分片不存在",
+				context: { chunkId },
 			})
 			throw new Error(`Chunk ${chunkId} not found`)
 		}

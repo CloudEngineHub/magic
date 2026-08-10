@@ -44,7 +44,12 @@ export class AppActiveListener {
 
 			logger.log("App active state listener initialized")
 		} catch (error) {
-			logger.error("Failed to initialize app active state listener", error)
+			logger.error({
+				eventKey: "app_active_listener_initialization_failed",
+				errorKind: "network",
+				error: error,
+				message: "Failed to initialize app active state listener",
+			})
 			this.initialized = false
 		}
 	}

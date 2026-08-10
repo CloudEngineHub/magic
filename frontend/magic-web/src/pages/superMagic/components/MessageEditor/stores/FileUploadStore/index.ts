@@ -571,7 +571,12 @@ export class FileUploadStore {
 							.upload(this.buildUploadParams(newFileDataList, retryCustomCredentials))
 							.then((retryRes) => {
 								if (retryRes.rejected.length > 0) {
-									logger.error("reUpload file failed", retryRes.rejected)
+									logger.error({
+										eventKey: "re_upload_file_failed",
+										errorKind: "unknown",
+										error: retryRes.rejected,
+										message: "reUpload file failed",
+									})
 								}
 							})
 					}
@@ -629,7 +634,12 @@ export class FileUploadStore {
 
 		this.uploadService.upload(this.buildUploadParams([file], customCredentials)).then((res) => {
 			if (res.rejected.length > 0) {
-				logger.error("reUpload file failed", res.rejected)
+				logger.error({
+					eventKey: "re_upload_file_failed",
+					errorKind: "unknown",
+					error: res.rejected,
+					message: "reUpload file failed",
+				})
 			}
 		})
 	}

@@ -1,4 +1,5 @@
 import { logger as Logger } from "@/utils/log"
+import type { StructuredErrorInput } from "@/utils/log/errorReport"
 
 const logger = Logger.createLogger("PPTLoggerService")
 
@@ -144,19 +145,11 @@ export class PPTLoggerService {
 	/**
 	 * Error level log
 	 */
-	error(message: string, error?: Error | unknown, context?: Partial<LogContext>): void {
+	error(input: StructuredErrorInput): void {
 		if (!this.shouldLog("error")) return
 
-		const formattedMessage = this.formatMessage(message, context)
-		const metadata = this.formatMetadata(context)
-
-		if (error instanceof Error) {
-			logger.error(formattedMessage, ...metadata, error)
-		} else if (error) {
-			logger.error(formattedMessage, ...metadata, { error })
-		} else {
-			logger.error(formattedMessage, ...metadata)
-		}
+		// PPT 业务已经在调用点声明稳定 key；适配层不得再格式化成 legacy 多参数而丢失协议字段。
+		logger.error(input)
 	}
 
 	/**
@@ -231,9 +224,15 @@ export class PPTLoggerService {
 			this.endTiming(operation, { ...context, operation })
 		}
 
-		this.error(`Operation failed`, error, {
-			...context,
-			operation,
+		this.error({
+			eventKey: "ppt_operation_failed",
+			errorKind: "unknown",
+			error,
+			message: "PPT operation failed",
+			context: {
+				...context,
+				operation,
+			},
 		})
 	}
 

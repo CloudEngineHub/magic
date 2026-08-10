@@ -1,8 +1,5 @@
 import chatDb from "@/database/chat"
-import EditorDraftStore, {
-	EditorDraft,
-	EditorDraftWithInfo,
-} from "@/stores/chatNew/editorDraft"
+import EditorDraftStore, { EditorDraft, EditorDraftWithInfo } from "@/stores/chatNew/editorDraft"
 import { logger as Logger } from "@/utils/log"
 import { cloneDeep, omit } from "lodash-es"
 
@@ -58,7 +55,16 @@ class DraftService {
 			}) as EditorDraftWithInfo
 
 			table?.put(draftWithInfo).catch((error) => {
-				logger.error("持久化草稿失败", error, draftWithInfo)
+				logger.error({
+					eventKey: "persist_draft_failed",
+					errorKind: "storage",
+					error: error,
+					message: "持久化草稿失败",
+					// 草稿正文和文件明细不可上报，只保留定位持久化记录所需的低体积字段。
+					context: {
+						draftWithInfo,
+					},
+				})
 			})
 
 			this.persistDraftCallback = null

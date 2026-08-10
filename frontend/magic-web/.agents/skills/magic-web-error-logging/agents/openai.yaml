@@ -1,0 +1,4 @@
+interface:
+    display_name: "Magic Web Error Logging"
+    short_description: "Enforce structured Magic Web error logging rules"
+    default_prompt: "Use $magic-web-error-logging to implement or review structured error logging without losing diagnostic information."
