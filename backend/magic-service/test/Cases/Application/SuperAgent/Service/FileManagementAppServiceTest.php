@@ -97,6 +97,19 @@ class FileManagementAppServiceTest extends TestCase
         );
     }
 
+    public function testDispatchFileUploadedEventSkipsUserSpaceFile(): void
+    {
+        $fileEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $this->createService($dispatcher)->dispatchOne(
+            $fileEntity,
+            $this->createAuthorization('U1', 'ORG1')
+        );
+    }
+
     public function testDispatchFileUploadedEventsDispatchesEveryPersistedFileAndSkipsNull(): void
     {
         $dispatchedFileIds = [];
@@ -166,6 +179,43 @@ class FileManagementAppServiceTest extends TestCase
         );
     }
 
+    public function testDispatchFilesBatchDeletedEventSkipsUserSpaceFiles(): void
+    {
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $this->createService($dispatcher)->dispatchBatchDeleted(
+            0,
+            [$this->createUserSpaceFileEntity(501, '/user/memory.md')],
+            $this->createAuthorization('U1', 'ORG1')
+        );
+    }
+
+    public function testDeleteFileAllowsOwnedUserSpaceFileWithoutProjectLookup(): void
+    {
+        $fileEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('getFileById')
+            ->with('501')
+            ->willReturn($fileEntity);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('deleteFile')
+            ->with('501');
+
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $service = $this->createService($dispatcher);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+
+        $this->assertSame(['file_id' => 501], $service->deleteFile($requestContext, 501));
+    }
+
     public function testBatchDeleteFilesUsesAuthorizedProjectScopeAndNormalizesDuplicateIds(): void
     {
         $file501 = $this->createTaskFileEntity(501, '/workspace/a.md');
@@ -179,8 +229,15 @@ class FileManagementAppServiceTest extends TestCase
             ->with([501, 502], false, 900)
             ->willReturn([$file501, $file502]);
 
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getProjectFilesByIds')
+            ->with(900, [501, 502])
+            ->willReturn([$file501, $file502]);
+
         $service = $this->createService($this->createMock(EventDispatcherInterface::class));
         $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
 
         $requestContext = new RequestContext();
         $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
@@ -195,6 +252,76 @@ class FileManagementAppServiceTest extends TestCase
         ], $service->batchDeleteFiles($requestContext, $requestDTO));
     }
 
+    public function testBatchDeleteFilesAllowsOwnedUserSpaceFilesWithoutProjectLookup(): void
+    {
+        $file501 = $this->createUserSpaceFileEntity(501, '/user/a.md');
+        $file502 = $this->createUserSpaceFileEntity(502, '/user/b.md');
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getFilesByIds')
+            ->with([501, 502])
+            ->willReturn([$file501, $file502]);
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('deleteFiles')
+            ->with([501, 502], false, 0)
+            ->willReturn([$file501, $file502]);
+
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $service = $this->createService($dispatcher);
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+        $requestDTO = new BatchDeleteFilesRequestDTO();
+        $requestDTO->projectId = '0';
+        $requestDTO->fileIds = [501, 501, 502];
+
+        $this->assertSame([
+            'project_id' => 0,
+            'file_ids' => [501, 502],
+            'count' => 2,
+        ], $service->batchDeleteFiles($requestContext, $requestDTO));
+    }
+
+    public function testRenameFileAllowsOwnedUserSpaceFileWithoutProjectLookup(): void
+    {
+        $fileEntity = $this->createUserSpaceFileEntity(501, '/user/memory.md');
+        $renamedEntity = $this->createUserSpaceFileEntity(501, '/user/profile.md');
+
+        $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
+        $magicFSFileDomainService->expects($this->once())
+            ->method('getFileById')
+            ->with('501')
+            ->willReturn($fileEntity);
+
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('renameFileWithCheck')
+            ->with('501', 'profile.md')
+            ->willReturn($renamedEntity);
+
+        $dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $dispatcher->expects($this->never())->method('dispatch');
+
+        $service = $this->createService($dispatcher);
+        $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
+
+        $requestContext = new RequestContext();
+        $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
+
+        $result = $service->renameFile($requestContext, 501, 'profile.md');
+
+        $this->assertSame('501', $result['file_id']);
+        $this->assertSame('profile.md', $result['file_name']);
+    }
+
     public function testBatchDeleteFilesDoesNotDispatchEventWhenDomainRejectsProjectScope(): void
     {
         $magicFSFileDomainService = $this->createMock(MagicFSFileDomainService::class);
@@ -206,8 +333,15 @@ class FileManagementAppServiceTest extends TestCase
         $dispatcher = $this->createMock(EventDispatcherInterface::class);
         $dispatcher->expects($this->never())->method('dispatch');
 
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('getProjectFilesByIds')
+            ->with(900, [501, 999])
+            ->willReturn([]);
+
         $service = $this->createService($dispatcher);
         $this->setPrivateProperty($service, 'magicFSFileDomainService', $magicFSFileDomainService);
+        $this->setPrivateProperty($service, 'taskFileDomainService', $taskFileDomainService);
 
         $requestContext = new RequestContext();
         $requestContext->setUserAuthorization($this->createAuthorization('U1', 'ORG1'));
@@ -396,7 +530,7 @@ class FileManagementAppServiceTest extends TestCase
         $config = $this->createMock(ConfigInterface::class);
         $config->method('get')
             ->with('error_message')
-            ->willReturn(require BASE_PATH . '/config/autoload/error_message.php');
+            ->willReturn([]);
 
         ApplicationContext::setContainer(new class($this->createMock(TranslatorInterface::class), $config) implements ContainerInterface {
             public function __construct(
@@ -636,6 +770,18 @@ class FileManagementAppServiceTest extends TestCase
         $entity->setFileExtension((string) pathinfo($fileKey, PATHINFO_EXTENSION));
         $entity->setIsDirectory($isDirectory);
         $entity->setSource(0);
+        $entity->setProjectId(900);
+
+        return $entity;
+    }
+
+    private function createUserSpaceFileEntity(int $fileId, string $fileKey, bool $isDirectory = false): TaskFileEntity
+    {
+        $entity = $this->createTaskFileEntity($fileId, $fileKey, $isDirectory);
+        $entity->setProjectId(0);
+        $entity->setSpaceType('user');
+        $entity->setUserId('U1');
+        $entity->setOrganizationCode('ORG1');
 
         return $entity;
     }
@@ -715,6 +861,10 @@ class TestableFileManagementAppService extends FileManagementAppService
 
     public function getAccessibleProjectWithEditor(int $projectId, string $userId, string $organizationCode): ProjectEntity
     {
+        if ($projectId <= 0) {
+            throw new BusinessException('project lookup should not run for user-space files');
+        }
+
         return new ProjectEntity(['id' => $projectId, 'user_id' => $userId, 'user_organization_code' => $organizationCode]);
     }
 
