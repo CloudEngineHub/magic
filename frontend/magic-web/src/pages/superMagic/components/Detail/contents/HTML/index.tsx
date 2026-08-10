@@ -4,7 +4,6 @@ import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererContentMetrics,
 	type IsolatedHTMLRendererRef,
 } from "./IsolatedHTMLRenderer"
-import PureShareHTMLRenderer from "./components/PureShareHTMLRenderer"
 import {
 	createParentMessageHandler,
 	injectFetchInterceptorScript,
@@ -274,7 +273,6 @@ export default memo(function HTML(props: HTMLProps) {
 	const isImmersiveLayout = !showFileHeader && !showFooter
 	// The simulated phone frame has a fixed height and cannot be used for page-level scrolling.
 	const shouldUsePhonePreviewFrame = !documentFlowFullscreen && viewMode === "phone"
-	const shouldRenderPureShareInDocument = documentFlowFullscreen && !isInPPTMode && !isEditMode
 	// 通过 previewPolicy 声明能力，详情页消费配置
 	const previewPolicy = displayData?.display_config?.previewPolicy
 	const isReadonlyPreview = previewPolicy?.readonly === true
@@ -1544,12 +1542,6 @@ export default memo(function HTML(props: HTMLProps) {
 							/>
 						) : htmlIsDeleted ? (
 							<Deleted data={displayData} showHeader={false} />
-						) : shouldRenderPureShareInDocument ? (
-							<PureShareHTMLRenderer
-								key={`pure-share-html-${renderKey}`}
-								content={processedContent}
-								onReady={handlePreviewRenderReady}
-							/>
 						) : (
 							<>
 								<IsolatedHTMLRenderer
