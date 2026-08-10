@@ -14,6 +14,12 @@ import {
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { transformInspectorContent } from "./inspector-detail"
 
+interface CopyMessageOptions {
+	onMentionsInsert?: (items: TiptapMentionAttributes[]) => void
+	onContentChange?: (content: JSONContent) => void
+	dataService?: DataService | null
+}
+
 function prepareMentionAttrs(
 	attrs: TiptapMentionAttributes,
 	metadata: MagicClipboardMetadata,
@@ -76,12 +82,12 @@ function prepareRichTextContent(
 	return transformedContent
 }
 
-const CopyMessageExtension = Extension.create({
+const CopyMessageExtension = Extension.create<CopyMessageOptions>({
 	name: "copyMessage",
 
 	addOptions() {
 		return {
-			onMentionsInsert: () => null,
+			onMentionsInsert: undefined,
 			dataService: null,
 		}
 	},
@@ -109,17 +115,21 @@ const CopyMessageExtension = Extension.create({
 							return false
 						}
 
+						const mentions = Array.isArray(metadata.mentions) ? metadata.mentions : null
+						const mentionItems = mentions
+							? prepareMentionItems(
+									mentions,
+									metadata,
+									this.options.dataService ?? null,
+								)
+							: []
+						const syncMentions = () => {
+							if (mentions) this.options.onMentionsInsert?.(mentionItems)
+						}
+
 						// 处理富文本内容
 						if (metadata.richText) {
 							try {
-								const mentionItems =
-									metadata.mentions && Array.isArray(metadata.mentions)
-										? prepareMentionItems(
-												metadata.mentions,
-												metadata,
-												this.options.dataService ?? null,
-											)
-										: []
 								const content = prepareRichTextContent(
 									JSON.parse(metadata.richText),
 									metadata,
@@ -132,7 +142,7 @@ const CopyMessageExtension = Extension.create({
 										(editor) => {
 											if (!editor.commands.insertContent(editorContent))
 												return false
-											this.options.onMentionsInsert?.(mentionItems)
+											syncMentions()
 											return true
 										},
 										false,
@@ -140,7 +150,10 @@ const CopyMessageExtension = Extension.create({
 								)
 							} catch (err) {
 								console.error("❌ Failed to parse rich text content:", err)
+								syncMentions()
 							}
+						} else {
+							syncMentions()
 						}
 
 						return false
