@@ -49,6 +49,18 @@ const MEMORY_SPACE_CAPABILITIES: NonNullable<TopicFilesSpaceConfig["capabilities
 	share: false,
 }
 
+/**
+ * 文件列表 Tab 切换时组件会被卸载/重新挂载，因此把最近一次成功结果
+ * 放在模块级缓存中，重新进入时先复用旧列表，再静默拉取最新数据。
+ */
+const memoryFileTreeCache: {
+	attachments: AttachmentItem[]
+	hasLoaded: boolean
+} = {
+	attachments: [],
+	hasLoaded: false,
+}
+
 /** 判断节点是否为用户记忆空间的固定根目录。 */
 function isMemoryRoot(item?: AttachmentItem): boolean {
 	return Boolean(item?.is_directory && getMemoryTreeNodeName(item) === MEMORY_ROOT_NAME)
@@ -112,40 +124,59 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	showTitle = true,
 }: MemoryFileTreePanelProps) {
 	const { t } = useTranslation("super/longMemory")
-	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-	const [loading, setLoading] = useState(false)
+	const [attachments, setAttachments] = useState<AttachmentItem[]>(
+		() => memoryFileTreeCache.attachments,
+	)
+	const [loading, setLoading] = useState(() => !memoryFileTreeCache.hasLoaded)
 	const [loadError, setLoadError] = useState(false)
 
 	/** 重新加载当前用户的完整记忆文件树。 */
-	const refreshMemoryFiles = useCallback(async (signal?: AbortSignal) => {
-		setLoading(true)
-		setLoadError(false)
-		try {
-			const result = await loadProjectAttachments({
-				projectId: MEMORY_PROJECT_ID,
-				scope: MEMORY_SCOPE,
-				temporaryToken: null,
-				signal,
-				onBatchSnapshot: (snapshot) => {
-					setAttachments(snapshot.tree)
-				},
-			})
-			setAttachments(result.tree)
-		} catch (error) {
-			if ((error as { name?: string })?.name === "AbortError") return
-			console.error("加载记忆文件树失败", error)
-			setLoadError(true)
-			throw error
-		} finally {
-			if (!signal?.aborted) setLoading(false)
-		}
-	}, [])
+	const refreshMemoryFiles = useCallback(
+		async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+			const silent = options?.silent ?? false
+			if (!silent) setLoading(true)
+			setLoadError(false)
+			try {
+				const result = await loadProjectAttachments({
+					projectId: MEMORY_PROJECT_ID,
+					scope: MEMORY_SCOPE,
+					temporaryToken: null,
+					signal,
+					onBatchSnapshot: (snapshot) => {
+						memoryFileTreeCache.attachments = snapshot.tree
+						memoryFileTreeCache.hasLoaded = true
+						setAttachments(snapshot.tree)
+					},
+				})
+				if (signal?.aborted) return
+				memoryFileTreeCache.attachments = result.tree
+				memoryFileTreeCache.hasLoaded = true
+				setAttachments(result.tree)
+			} catch (error) {
+				if ((error as { name?: string })?.name === "AbortError") return
+				console.error("加载记忆文件树失败", error)
+				setLoadError(true)
+				throw error
+			} finally {
+				if (!signal?.aborted && !silent) setLoading(false)
+			}
+		},
+		[],
+	)
 
 	useEffect(() => {
 		const controller = new AbortController()
-		void refreshMemoryFiles(controller.signal).catch(() => undefined)
+		void refreshMemoryFiles(controller.signal, {
+			silent: memoryFileTreeCache.hasLoaded,
+		}).catch(() => undefined)
 		return () => controller.abort()
 	}, [refreshMemoryFiles])
+
+	const handleAttachmentsChange = useCallback((nextAttachments: AttachmentItem[]) => {
+		memoryFileTreeCache.attachments = nextAttachments
+		memoryFileTreeCache.hasLoaded = true
+		setAttachments(nextAttachments)
+	}, [])
 
 	const memoryNodePathIndex = useMemo(
 		() => buildMemoryTreeNodePathIndex(attachments),
@@ -289,8 +320,9 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 			allowDownload
 			isInProject
 			showMobileActions
+			refreshLoading={loading}
 			refreshAttachments={handleRefresh}
-			onAttachmentsChange={setAttachments}
+			onAttachmentsChange={handleAttachmentsChange}
 			onFileClick={handleMemoryFileClick}
 			filterMenuItems={filterMemoryTreeMenuItems}
 			resolveTopicFileRowDecoration={resolveMemoryRowDecoration}

@@ -94,7 +94,7 @@ class ProjectAttachmentsAbortError extends Error {
 	}
 }
 
-const DEFAULT_THRESHOLD = 0
+const DEFAULT_THRESHOLD = 1000
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200
