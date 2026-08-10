@@ -7,52 +7,52 @@ import { isDev } from "@/utils/env"
 import { merge, chunk } from "lodash-es"
 
 /**
- * 上报插件配置
+ * Reporter plugin configuration.
  */
 export interface ReporterPluginOptions {
-	/** 是否启用 */
+	/** Whether the plugin is enabled. */
 	enabled?: boolean
-	/** 上报配置 */
+	/** Reporter configuration. */
 	reporter?: {
-		/** 上报URL */
+		/** Reporter URL. */
 		url?: string
-		/** 需要上报的日志级别 */
+		/** Log levels to report. */
 		logType?: LogType[]
-		/** 是否在开发环境上报 */
+		/** Whether to report in development. */
 		enableInDev?: boolean
-		/** 请求头 */
+		/** Request headers. */
 		headers?: Record<string, string>
-		/** 请求超时时间 */
+		/** Request timeout. */
 		timeout?: number
-		/** 压缩配置 */
+		/** Compression configuration. */
 		compression?: CompressionConfig
-		/** 批量上报配置 */
+		/** Batch reporting configuration. */
 		batch?: {
-			/** 是否启用批量上报 */
+			/** Whether batch reporting is enabled. */
 			enabled?: boolean
-			/** 批量大小 */
+			/** Batch size. */
 			size?: number
-			/** 批量间隔（毫秒） */
+			/** Batch interval in milliseconds. */
 			interval?: number
 		}
-		/** 重试配置 */
+		/** Retry configuration. */
 		retry?: {
-			/** 最大重试次数 */
+			/** Maximum number of retries. */
 			maxRetries?: number
-			/** 重试间隔（毫秒） */
+			/** Retry interval in milliseconds. */
 			interval?: number
 		}
 	}
 }
 
 /**
- * 日志上报插件
- * 负责将日志发送到服务器
+ * Log reporter plugin.
+ * Sends logs to the server.
  */
 export class ReporterPlugin implements LoggerPlugin {
 	readonly name = "reporter"
 	readonly version = "1.0.0"
-	readonly priority = 100 // 最低优先级，最后执行
+	readonly priority = 100 // Lowest priority; runs last.
 
 	enabled = true
 	private options: ReporterPluginOptions
@@ -92,7 +92,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	init() {
-		// 聚拢页面销毁、关闭前日志队列的消费
+		// Flush the pending log queue when the page is unloaded or closed.
 		const beforeUnloadHandler = () => {
 			const logs = this.batchQueue.splice(0).map((context) => this.formatLogData(context))
 			chunk(logs, 30).map((o) => this.reportLogs(o))
@@ -101,21 +101,21 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 检查是否应该处理此日志
+	 * Check whether this log should be processed.
 	 */
 	shouldHandle(context: LogContext): boolean {
 		const reporterConfig = this.options.reporter!
-		// 检查是否跳过上报
+		// Check whether reporting should be skipped.
 		if (context.skipReport) {
 			return false
 		}
 
-		// 检查日志级别
+		// Check the log level.
 		if (!reporterConfig.logType?.includes(context.logType)) {
 			return false
 		}
 
-		// 检查开发环境设置
+		// Check the development environment setting.
 		if (isDev && !reporterConfig.enableInDev) {
 			return false
 		}
@@ -124,7 +124,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 处理日志上下文 - 上报日志
+	 * Process the log context and report the log.
 	 */
 	process(context: LogContext): LogContext {
 		const reporterConfig = this.options.reporter!
@@ -143,7 +143,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 发送单条日志
+	 * Send a single log.
 	 */
 	private sendLog(context: LogContext): void {
 		const logData = this.formatLogData(context)
@@ -151,18 +151,18 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 添加到批量队列
+	 * Add a log to the batch queue.
 	 */
 	private addToBatch(context: LogContext): void {
 		const batchConfig = this.options.reporter!.batch!
 
 		this.batchQueue.push(context)
 
-		// 检查是否达到批量大小
+		// Check whether the batch size has been reached.
 		if (this.batchQueue.length >= (batchConfig.size || 10)) {
 			this.flushBatch()
 		} else if (!this.batchTimer) {
-			// 设置定时器
+			// Set the flush timer.
 			this.batchTimer = setTimeout(() => {
 				this.flushBatch()
 			}, batchConfig.interval || 2000)
@@ -170,7 +170,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 刷新批量队列
+	 * Flush the batch queue.
 	 */
 	private flushBatch(): void {
 		if (this.batchQueue.length === 0) return
@@ -178,7 +178,7 @@ export class ReporterPlugin implements LoggerPlugin {
 		const logs = this.batchQueue.splice(0).map((context) => this.formatLogData(context))
 		this.reportLogs(logs)
 
-		// 清除定时器
+		// Clear the flush timer.
 		if (this.batchTimer) {
 			clearTimeout(this.batchTimer)
 			this.batchTimer = null
@@ -186,7 +186,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 格式化日志数据
+	 * Format log data.
 	 */
 	private formatLogData(context: LogContext) {
 		return {
@@ -201,7 +201,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 上报日志数据
+	 * Report log data.
 	 */
 	private reportLogs(logData: any): void {
 		// requestIdleCallback(async () => {
@@ -211,22 +211,22 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 发送请求（支持重试）
+	 * Send the request with retry support.
 	 */
 	private async sendRequest(logData: any, retryCount: number): Promise<void> {
 		const reporterConfig = this.options.reporter!
 		const retryConfig = reporterConfig.retry!
 
 		try {
-			// 压缩日志数据
+			// Compress the log data.
 			const compressionResult = await compressLogData(logData, reporterConfig.compression)
 
-			// 准备请求头
+			// Prepare request headers.
 			const headers = { ...reporterConfig.headers }
 			let body: string | Uint8Array
 
 			if (compressionResult.compressed) {
-				// 根据压缩类型设置相应的头部
+				// Set headers according to the compression type.
 				switch (compressionResult.type) {
 					case CompressionType.GZIP:
 						headers["Content-Encoding"] = "gzip"
@@ -264,7 +264,7 @@ export class ReporterPlugin implements LoggerPlugin {
 			if (!response.ok) {
 				console.error(`HTTP ${response.status}: ${response.statusText}`)
 			} else {
-				// // 记录压缩效果（仅在开发模式下）
+				// // Record compression results in development only.
 				// if (isDev && compressionResult.compressed) {
 				// 	console.log(
 				// 		`Log compression: ${compressionResult.originalSize} -> ${compressionResult.compressedSize} bytes ` +
@@ -275,7 +275,7 @@ export class ReporterPlugin implements LoggerPlugin {
 		} catch (error) {
 			console.error("Failed to report logs:", error)
 
-			// 检查是否需要重试
+			// Check whether a retry is needed.
 			if (retryCount < (retryConfig.maxRetries || 3)) {
 				setTimeout(() => {
 					this.sendRequest(logData, retryCount + 1)
@@ -285,13 +285,13 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 插件销毁
+	 * Destroy the plugin.
 	 */
 	destroy(): void {
-		// 刷新剩余的批量数据
+		// Flush remaining batched data.
 		this.flushBatch()
 
-		// 清除定时器
+		// Clear the flush timer.
 		if (this.batchTimer) {
 			clearTimeout(this.batchTimer)
 			this.batchTimer = null
@@ -299,7 +299,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 获取队列状态
+	 * Get the queue status.
 	 */
 	getQueueStatus() {
 		return {
@@ -310,7 +310,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 手动刷新队列
+	 * Manually flush the queue.
 	 */
 	flush(): void {
 		this.flushBatch()
@@ -318,7 +318,7 @@ export class ReporterPlugin implements LoggerPlugin {
 }
 
 /**
- * 上报插件工厂函数
+ * Reporter plugin factory.
  */
 export function createReporterPlugin(options?: ReporterPluginOptions): ReporterPlugin {
 	return new ReporterPlugin(options)
