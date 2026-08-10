@@ -23,6 +23,7 @@ import {
 } from "@/types/chat/intermediate_message"
 
 const TOPIC_ID = "topic-events"
+const SUPER_MAGIC_TOPIC_ID = "super-magic-topic-events"
 const CORRELATION_ID = "correlation-events"
 const SUPER_MESSAGE_ID = "super-message-events"
 const FINISH_TASK_APP_MESSAGE_ID = "938540548324491265"
@@ -251,6 +252,7 @@ function createToolEnvelope({
 	detail = { type: "json", data: { code: "crew-events" } },
 	attachments = [],
 	toolAttachments = [],
+	superMagicTopicId = TOPIC_ID,
 }: {
 	appMessageId?: string
 	superMessageId?: string
@@ -264,13 +266,14 @@ function createToolEnvelope({
 	detail?: Record<string, unknown>
 	attachments?: Array<Record<string, unknown>>
 	toolAttachments?: Array<Record<string, unknown>>
+	superMagicTopicId?: string
 } = {}) {
 	return createEnvelope({
 		appMessageId,
 		seqId,
 		node: {
 			role: "tool",
-			topic_id: TOPIC_ID,
+			topic_id: superMagicTopicId,
 			message_id: `node-${appMessageId}`,
 			super_message_id: superMessageId,
 			correlation_id: correlationId,
@@ -385,6 +388,35 @@ describe("SuperMagic Store typed events", () => {
 			superStatus: "finished",
 		})
 		expect((events[1] as TopicExecutionEndedEvent).payload.status).toBe("finished")
+	})
+
+	it("does not backfill the business Topic from a canonical node", () => {
+		const store = new SuperMagicStore()
+		const committed: MessageCommittedEvent[] = []
+		const initial = createAssistantEnvelope({
+			seqId: "100",
+			status: "running",
+		})
+		const incoming = createAssistantEnvelope({
+			seqId: "101",
+			status: "finished",
+		})
+		delete (incoming.seq.message.super_magic_message as { topic_id?: string }).topic_id
+		store.initializeMessages(TOPIC_ID, [initial])
+		store.subscribe("message.committed", (event) => committed.push(event))
+
+		store.initializeMessages(TOPIC_ID, [incoming], {
+			mode: "merge",
+			eventPolicy: "live_arrival",
+			canonicalCommitContext: {
+				source: "http",
+				lifecycleEventPolicy: "live",
+				trigger: "websocket",
+			},
+		})
+
+		expect(committed).toHaveLength(1)
+		expect(committed[0].meta).not.toHaveProperty("superMagicTopicId")
 	})
 
 	it("publishes a Topic-level terminal event only when the authoritative Final stops the Topic", () => {
@@ -857,11 +889,21 @@ describe("SuperMagic Store typed events", () => {
 				],
 			}),
 		)
-		store.enqueueMessage(TOPIC_ID, createToolEnvelope({ legacyToolCallId: "tool-events" }))
+		store.enqueueMessage(
+			TOPIC_ID,
+			createToolEnvelope({
+				legacyToolCallId: "tool-events",
+				superMagicTopicId: SUPER_MAGIC_TOPIC_ID,
+			}),
+		)
 
 		expect(settled).toHaveLength(1)
 		expect(settled[0]).toMatchObject({
-			meta: { toolCallId: "tool-events" },
+			meta: {
+				topicId: TOPIC_ID,
+				superMagicTopicId: SUPER_MAGIC_TOPIC_ID,
+				toolCallId: "tool-events",
+			},
 			payload: {
 				toolCall: { id: "tool-events", name: "update_agent" },
 				response: { status: "finished" },
@@ -877,6 +919,46 @@ describe("SuperMagic Store typed events", () => {
 			"tool-events",
 		])
 		expect(topicEnded).toEqual([])
+	})
+
+	it("preserves the business Topic on a live HTTP tool settlement", () => {
+		const store = new SuperMagicStore()
+		const settled: ToolCallSettledEvent[] = []
+		const tool = createToolEnvelope({
+			toolId: "http-tool-events",
+			superMagicTopicId: SUPER_MAGIC_TOPIC_ID,
+		})
+		const assistant = createAssistantEnvelope({
+			status: "running",
+			toolCalls: [
+				{
+					id: "http-tool-events",
+					index: 0,
+					type: "function",
+					function: { name: "update_agent", arguments: "{}" },
+				},
+			],
+		})
+		const writeOptions = {
+			eventPolicy: "live_arrival",
+			toolProjectionPolicy: "preserve_live",
+			canonicalCommitContext: {
+				source: "http",
+				lifecycleEventPolicy: "live",
+				trigger: "websocket",
+			},
+		} as const
+		store.subscribe("toolCall.settled", (event) => settled.push(event))
+
+		store.initializeMessages(TOPIC_ID, [tool], writeOptions)
+		store.initializeMessages(TOPIC_ID, [assistant], writeOptions)
+
+		expect(settled).toHaveLength(1)
+		expect(settled[0].meta).toMatchObject({
+			topicId: TOPIC_ID,
+			superMagicTopicId: SUPER_MAGIC_TOPIC_ID,
+			source: "http",
+		})
 	})
 
 	it("rejects a generic orphan tool result whose numeric tool.id has no matching Assistant call", () => {

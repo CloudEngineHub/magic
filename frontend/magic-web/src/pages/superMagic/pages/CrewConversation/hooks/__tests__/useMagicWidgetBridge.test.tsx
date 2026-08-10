@@ -246,6 +246,7 @@ describe("useMagicWidgetBridge", () => {
 				occurredAt: 1_700_000_000_000,
 				source: "im",
 				topicId: "topic-mock-background",
+				superMagicTopicId: "super-magic-topic-mock-background",
 				toolCallId: "tool-mock-result",
 			},
 			payload: {

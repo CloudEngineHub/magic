@@ -17,6 +17,8 @@ export interface SuperMagicEventMeta {
 	source: SuperMagicEventSource
 	/** 事件所属的 SuperMagic 话题 ID。 */
 	topicId: string
+	/** Business SuperMagic Topic ID from protocol topic_id; omitted when the message lacks it. */
+	superMagicTopicId?: string
 	/** 事件关联的流或 Assistant 逻辑消息 correlation_id。 */
 	correlationId?: string
 	/** 事件关联的服务端消息 app_message_id。 */
