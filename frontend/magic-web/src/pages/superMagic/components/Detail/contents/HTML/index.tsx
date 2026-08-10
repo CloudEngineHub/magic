@@ -79,8 +79,15 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
+import {
+	shouldShowHtmlPermissionManager,
+	useHtmlAppPermissions,
+} from "./hooks/useHtmlAppPermissions"
 import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
+import {
+	type HtmlPermissionManagerHandle,
+	useHtmlPermissionManagerBridge,
+} from "./hooks/useHtmlPermissionManagerBridge"
 
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
 const HtmlPermissionManagerDialog = lazy(
@@ -150,6 +157,8 @@ interface HTMLProps {
 	onAIEditActiveChange?: (active: boolean) => void
 	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
 	onDevConsoleActiveChange?: (active: boolean) => void
+	/** 向无文件头的外部页面注册当前 HTML 的授权管理入口。 */
+	onHtmlPermissionManagerChange?: (manager: HtmlPermissionManagerHandle | null) => void
 	isPlaybackMode?: boolean
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	isInPPTMode?: boolean
@@ -249,6 +258,7 @@ export default memo(function HTML(props: HTMLProps) {
 		onAIEditActiveChange,
 		onRegisterDevConsoleToggle,
 		onDevConsoleActiveChange,
+		onHtmlPermissionManagerChange,
 		isPlaybackMode = false,
 		onRegisterSaveHandler,
 		isInPPTMode = false,
@@ -284,7 +294,6 @@ export default memo(function HTML(props: HTMLProps) {
 	const [editingCodeContent, setEditingCodeContent] = useState<string>("")
 	/** 是否正处于编辑后的状态 */
 	const [isEditingAfter, setIsEditingAfter] = useState(false)
-	const [permissionManagerOpen, setPermissionManagerOpen] = useState(false)
 	const [serverUpdatedContent, setServerUpdatedContent] = useState<string>()
 	const editSessionUpdatedAtRef = useRef<string | undefined>(undefined)
 	const serverUpdateRequestIdRef = useRef(0)
@@ -401,18 +410,30 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 	const {
 		hasHtmlPermissionDeclarations,
+		activeHtmlPermissionGrantCount,
 		getPermissionSnapshot,
+		preauthorizeHtmlPermission,
 		revokeHtmlPermission,
 		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
 		permissionRevision,
 	} = htmlPermissionController
-
-	useEffect(() => {
-		if (isDataAnalysis || htmlIsDeleted || !hasHtmlPermissionDeclarations) {
-			setPermissionManagerOpen(false)
-		}
-	}, [hasHtmlPermissionDeclarations, htmlIsDeleted, isDataAnalysis])
+	const canManageHtmlPermissions = Boolean(
+		!isDataAnalysis &&
+		!htmlIsDeleted &&
+		shouldShowHtmlPermissionManager(
+			hasHtmlPermissionDeclarations,
+			activeHtmlPermissionGrantCount,
+		),
+	)
+	const {
+		open: permissionManagerOpen,
+		setOpen: setPermissionManagerOpen,
+		openManager: handleOpenHtmlPermissionManager,
+	} = useHtmlPermissionManagerBridge({
+		available: canManageHtmlPermissions,
+		onManagerChange: onHtmlPermissionManagerChange,
+	})
 
 	/**
 	 * 仅可视化预览：dashboard / audio / video 入口 HTML 走构建内 templates；dashboard 另换壳 CSS/JS。
@@ -1328,12 +1349,11 @@ export default memo(function HTML(props: HTMLProps) {
 					key: "html-permission-manager",
 					zone: "secondary",
 					before: "refresh",
-					visible: () =>
-						Boolean(!isDataAnalysis && !htmlIsDeleted && hasHtmlPermissionDeclarations),
+					visible: () => canManageHtmlPermissions,
 					render: (context) => (
 						<ActionButton
 							icon={<ShieldCheck size={16} />}
-							onClick={() => setPermissionManagerOpen(true)}
+							onClick={handleOpenHtmlPermissionManager}
 							title={t("htmlEditor.permissionManager.open")}
 							text={t("htmlEditor.permissionManager.open")}
 							showText={context.showButtonText}
@@ -1388,6 +1408,8 @@ export default memo(function HTML(props: HTMLProps) {
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
+			canManageHtmlPermissions,
+			handleOpenHtmlPermissionManager,
 			isDataAnalysis,
 			htmlIsDeleted,
 			hasHtmlPermissionDeclarations,
@@ -1601,13 +1623,14 @@ export default memo(function HTML(props: HTMLProps) {
 					radius: 8,
 				}}
 			/>
-			{permissionManagerOpen && hasHtmlPermissionDeclarations ? (
+			{permissionManagerOpen && canManageHtmlPermissions ? (
 				<Suspense fallback={null}>
 					<HtmlPermissionManagerDialog
 						open={permissionManagerOpen}
 						onOpenChange={setPermissionManagerOpen}
 						permissionRevision={permissionRevision}
 						getPermissionSnapshot={getPermissionSnapshot}
+						onAuthorize={preauthorizeHtmlPermission}
 						onRevoke={revokeHtmlPermission}
 						onUpdateTtl={updateHtmlPermissionTtl}
 						onRevokeAll={revokeAllHtmlPermissions}

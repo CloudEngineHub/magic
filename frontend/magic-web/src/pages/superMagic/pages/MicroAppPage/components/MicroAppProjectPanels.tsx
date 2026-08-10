@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react"
 import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
 
 import type { MicroAppWorkspaceView } from "./MicroAppWorkspaceNav"
@@ -27,6 +28,8 @@ interface MicroAppProjectPanelsProps {
 	workspaceName?: string
 	projectName?: string
 	topicId?: string
+	activeLongMemoryFileId?: string | null
+	onLongMemoryFileClick?: (fileItem: AttachmentItem) => void
 }
 
 const PROJECT_PANEL_VIEWS: MicroAppWorkspaceView[] = [
@@ -80,6 +83,8 @@ export default function MicroAppProjectPanels({
 	workspaceName,
 	projectName,
 	topicId,
+	activeLongMemoryFileId,
+	onLongMemoryFileClick,
 }: MicroAppProjectPanelsProps) {
 	const isProjectPanelActive = PROJECT_PANEL_VIEWS.includes(activeView)
 
@@ -128,6 +133,8 @@ export default function MicroAppProjectPanels({
 							<LongTremMemorySider
 								className={PROJECT_PANEL_CLASS_NAME}
 								projectId={projectId}
+								activeFileId={activeLongMemoryFileId}
+								onFileClick={onLongMemoryFileClick}
 							/>
 						) : null}
 					</Suspense>

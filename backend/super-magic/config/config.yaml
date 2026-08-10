@@ -508,6 +508,14 @@ chat_history_cleanup:
   llm_request_max_count: null
   llm_request_max_bytes: null
 
+# 文件记忆运行时配置
+memory:
+  after_run:
+    # 累计达到指定数量的有效主任务后触发一次完整 fork 提取
+    extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-3}
+    # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
+    extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
+
 # =====================================================
 # AI Ability Configuration (AI能力配置)
 # =====================================================
@@ -597,7 +605,7 @@ ai_abilities:
   # 记忆提取能力
   # 当前仅保留能力配置，供后续 AFTER_MAIN_AGENT_RUN 提取机制使用
   memory:
-    model_id: "${MEMORY_MODEL_ID:-qwen3.5-flash}"
+    model_id: "${MEMORY_MODEL_ID:-deepseek-v4-flash}"
 
 # =====================================================
 # Web Scraping 网页爬取配置

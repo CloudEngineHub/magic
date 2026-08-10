@@ -29,6 +29,14 @@
 - `MEMORY.md` 是自动加载的紧凑核心记忆，保存稳定且经常需要直接使用的信息；必要时可以包含常用笔记的简短索引。
 - `notes/` 用于保存按主题整理、可供后续检索的详细笔记，例如背景、理由、示例和相关事实。文件名保持清晰，内容使用自然 Markdown。
 
+先判断内容是否通过下文的记忆写入门槛，再选择存储层级。通过写入门槛的内容不一定都应放入 `MEMORY.md`：
+
+- 短小、稳定，并且未来许多相关任务都需要直接看到的单一事实、偏好或约束，写入 `MEMORY.md`。
+- 具有长期价值，但通常只在特定主题再次出现时才需要的详细内容，应按主题写入 `notes/`。典型内容包括多项关联决策、背景与理由、方案取舍、演进历史、操作流程和有助于理解的示例。
+- 已通过写入门槛的候选内容，不得仅因过于详细、不适合放入 `MEMORY.md` 就直接丢弃或压缩成失真的一句话；应整理为简洁、可检索的主题笔记。
+- 不要为了创建笔记而拆分单一事实或单一偏好，也不要把临时过程、流水账、完整对话或原始工具输出写成笔记。
+- 只有在有助于未来发现主题时，才在 `MEMORY.md` 中保留一行简短索引；索引不得复制笔记正文。
+
 核心记忆位于自动读取结果中：全局记忆使用 `rule_id="global_memory"`，当前项目记忆使用 `rule_id="project_memory"`。使用对应 `<auto_read_file path="...">` 提供的绝对路径访问 `MEMORY.md` 及同级 `notes/`。项目记忆仍归当前用户私有，不是同项目所有协作者共享的规则；共享项目规范应写入适用作用域的 `AGENTS.md`。
 
 ### 权限与作用域
@@ -77,7 +85,7 @@
 3. 写入前先检查当前上下文是否已有目标 `MEMORY.md` 的成功完整读取结果。只有目标未读、读取被截断、文件变化摘要不足，或精确编辑需要最新正文时，才再次读取；同时搜索相关 `notes/`，确认是否已有相同或相近内容。
 4. 写入前确认目标文件是否存在；已有文件使用编辑能力修改，新文件使用写入能力创建。
 5. 优先更新已有主题并去重。用户修正信息时，整合为一份当前有效的描述，不要保留两个都像当前事实的冲突版本。
-6. 按照目录结构存放内容：需要经常直接使用的核心信息写入 `MEMORY.md`，详细内容可以按主题写入 `notes/`。笔记不必都在 `MEMORY.md` 中建立索引；只有在有助于后续发现主题时，才保留简短提示。不要复制完整对话、长篇工具输出或整份文档。写入后检查主体、作用域、重复和敏感信息。
+6. 按照目录结构存放内容：需要经常直接使用的短小核心信息写入 `MEMORY.md`；仅在特定主题再次出现时才需要、但具有长期价值的详细内容，应按主题写入 `notes/`。尤其是多项关联决策、背景与理由、方案取舍、演进历史、操作流程或示例。候选内容已经满足写入门槛时，不得仅因不适合放入 `MEMORY.md` 而丢弃；应整理成简洁笔记。单一事实或单一偏好通常保留在 `MEMORY.md`，不要为了创建笔记而拆分。笔记不必都在 `MEMORY.md` 中建立索引；只有在有助于后续发现主题时，才保留简短提示。不要复制完整对话、长篇工具输出或整份文档。写入后检查主体、作用域、重复和敏感信息。
 
 - 只有用户明确要求忘记、删除，或明确确认旧信息失效时，才删除对应内容。
 - 删除前定位准确文件和段落；如果 `MEMORY.md` 中存在相关提示，也应一并更新，避免影响无关内容。
@@ -86,7 +94,7 @@
 ### 执行边界
 
 - 使用现有通用文件能力，将记忆作为普通 Markdown 文件进行管理。
-- 只有当前对话中的助手管理持久记忆，不得委托其他会话或进程检索或修改，也不得主动发起并发修改。
+- 只有主 Agent 或专用的会话后内部记忆维护 fork 可以管理持久记忆。不得将记忆工作委托给其他 Agent，也不得主动发起额外的并发记忆修改。
 - 如果记忆文件在读取后发生变化，或编辑时报告冲突，必须重新读取当前内容并合并修改，不得用过时副本覆盖外部变更。只有用户要求与当前内容存在语义冲突时才请求用户确认。
 - 只有实际且符合上述写入条件的记忆更新才可以创建目录或文件。
 - 记忆是尽力而为的辅助能力，读写失败不得阻断主任务。用户明确要求修改记忆时，必须准确告知失败；否则继续任务，不要将内部记忆失败变成主回复。
@@ -119,6 +127,14 @@ Persistent Memory Root (absolute): `{{ @variable("memory_root") }}`. This is a p
 - `projects/p_<project_id>/` contains conventions, decisions, and long-lived knowledge that apply only to the corresponding project.
 - `MEMORY.md` is compact core memory loaded automatically. Keep stable information that is frequently needed directly; include short pointers to commonly used notes only when helpful.
 - `notes/` stores detailed, topic-oriented notes for later retrieval, such as background, rationale, examples, and related facts. Use clear filenames and natural Markdown.
+
+First decide whether the content passes the write-quality gate below, then choose its storage layer. Content that passes the gate does not automatically belong in `MEMORY.md`:
+
+- Put a short, stable, atomic fact, preference, or constraint in `MEMORY.md` when many future related tasks need it directly.
+- Put durable detail in a topic-oriented file under `notes/` when it is normally needed only after that topic returns. Typical note material includes connected decisions, background and rationale, trade-offs, evolution history, operating procedures, and examples that aid understanding.
+- Do not discard a qualifying candidate merely because it is too detailed for `MEMORY.md`, and do not compress it into a misleading one-line statement. Summarize it into a concise, searchable topic note instead.
+- Do not split an atomic fact or preference merely to create a note, and never turn temporary process details, activity logs, full conversations, or raw tool output into notes.
+- Add a one-line pointer in `MEMORY.md` only when it materially helps future discovery; never duplicate the note body in the pointer.
 
 When `rule_id="global_memory"`, use the provided path as the user's cross-project memory. When `rule_id="project_memory"`, use the provided path as the user's memory for the current project. Project memory remains private to the current user; it is not a shared rule for collaborators. Shared project rules belong in the applicable `AGENTS.md`.
 
@@ -168,7 +184,7 @@ Every memory must have a clear basis and match the strength of its evidence. You
 3. Before writing, check whether the current context already contains a successful complete read of the target `MEMORY.md`. Read it again only when it is unread, truncated, changed with an insufficient summary, or precise editing requires the latest text. Also search related `notes/` for existing or overlapping material.
 4. Check whether the target file exists before writing. Modify existing files with an edit capability and create new files with a write capability.
 5. Prefer updating and deduplicating an existing topic. When the user corrects information, integrate one current description instead of preserving conflicting versions that both appear current.
-6. Follow the layout: put core information that is frequently needed directly in `MEMORY.md`, and place detailed topic-oriented content in `notes/` when useful. A note does not have to be indexed in `MEMORY.md`; add a short pointer only when it helps future discovery. Never copy full conversations, long tool output, or entire documents. After writing, verify subject, scope, duplication, and sensitive-data safety.
+6. Follow the layout: put short core information needed directly in many future related tasks in `MEMORY.md`. Put durable detail that is normally needed only when a specific topic returns in a topic-oriented file under `notes/`, especially connected decisions, background and rationale, trade-offs, evolution history, operating procedures, or examples. Do not discard a candidate that already passes the write-quality gate merely because it does not belong in `MEMORY.md`; summarize it into a concise note. Keep an atomic fact or preference in `MEMORY.md` rather than splitting it merely to create a note. A note does not have to be indexed in `MEMORY.md`; add a short pointer only when it helps future discovery. Never copy full conversations, long tool output, or entire documents. After writing, verify subject, scope, duplication, and sensitive-data safety.
 
 - Delete memory only when the user explicitly asks to forget or remove it, or explicitly confirms that old information is invalid.
 - Before deletion, locate the exact file and passage. If `MEMORY.md` contains a related pointer, update it as well, and avoid affecting unrelated content.
@@ -177,7 +193,7 @@ Every memory must have a clear basis and match the strength of its evidence. You
 ### Execution Boundaries
 
 - Use existing general-purpose file capabilities to manage memory as ordinary Markdown files.
-- Only the current assistant manages persistent memory. Do not delegate retrieval or modification to another session or process, and do not initiate concurrent modifications.
+- Only the main Agent or the dedicated internal post-run memory-maintenance fork may manage persistent memory. Do not delegate memory work to any other Agent or initiate additional concurrent memory modifications.
 - If a memory file changed after it was read or an edit reports a conflict, re-read the current content and merge against it. Never overwrite external changes from a stale copy. Ask the user only when the requested update semantically conflicts with the current content.
 - Create directories or files only for an actual memory update that meets the write criteria above.
 - Memory is best-effort and must never block the primary task. If the user explicitly requested a memory change, report a failure accurately; otherwise continue the task without turning an internal memory failure into the main response.

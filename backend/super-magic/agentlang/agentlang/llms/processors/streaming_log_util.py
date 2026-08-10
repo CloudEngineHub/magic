@@ -5,6 +5,7 @@ Streaming Log Utility Module
 """
 
 import json
+import os
 from typing import Any, Dict, Optional
 
 from agentlang.logger import get_logger
@@ -18,6 +19,13 @@ SLOW_CHUNK_THRESHOLD = 3.0  # 警告阈值：3秒（正常 chunk 间隔 <1s，�
 VERY_SLOW_CHUNK_THRESHOLD = 7.0  # 严重警告阈值：7秒（chunk 超时为 10s，7s 时提前告警）
 CHUNK_PROGRESS_INTERVAL = 200  # 每N个chunk打印一次进度
 CHUNK_DETAIL_LOG_COUNT = 5  # 前N个chunk记录详细信息
+# 临时调试开关：开启后记录每一个收到的 chunk 的完整内容。
+ENABLE_ALL_CHUNK_LOGS = os.getenv("ENABLE_ALL_CHUNK_LOGS", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 class StreamingLogger:
@@ -66,7 +74,7 @@ class StreamingLogger:
             )
 
         # 记录前几个 chunk 的详细信息
-        if chunk_count <= CHUNK_DETAIL_LOG_COUNT:
+        if ENABLE_ALL_CHUNK_LOGS or chunk_count <= CHUNK_DETAIL_LOG_COUNT:
             logger.info(
                 f"[{request_id}] 第{chunk_count}个数据块已接收，"
                 f"总耗时: {total_latency:.3f}秒，间隔: {interval_time:.3f}秒，"

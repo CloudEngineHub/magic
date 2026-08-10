@@ -13,7 +13,12 @@ import {
 import { userStore } from "@/models/user"
 import { getIframeDownloadUrl } from "../iframe-api/iframeApi"
 import { htmlMicroAppPreviewLogger } from "../utils/htmlMicroAppPreviewLogger"
-import { SessionStorageHtmlPermissionGrantStore } from "../iframe-api/services/HtmlPermissionGrantStore"
+import {
+	HTML_PERMISSION_GRANTS_CHANGED_EVENT,
+	LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY,
+} from "../iframe-api/services/HtmlPermissionGrantStore"
+import { createHtmlPermissionGrantBroadcastChannel } from "../iframe-api/services/HtmlPermissionGrantNotifications"
+import { getHtmlPermissionGrantStore } from "../iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import {
 	IframePermissionService,
 	type HtmlAppConfigState,
@@ -22,6 +27,11 @@ import {
 } from "../iframe-api/services/IframePermissionService"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../iframe-api/types"
 import { hasManageableHtmlPermissionDeclarations } from "../iframe-api/services/htmlPermissionDeclarations"
+import {
+	parseHtmlPermissionTtl,
+	serializeHtmlPermissionTtl,
+	type HtmlPermissionTtl,
+} from "../iframe-api/services/htmlPermissionPolicy"
 import { useHtmlPermissionI18n } from "./useHtmlPermissionI18n"
 
 interface HtmlAppFileItem {
@@ -39,6 +49,13 @@ interface UseHtmlAppPermissionsOptions {
 	enabled?: boolean
 }
 
+export function shouldShowHtmlPermissionManager(
+	hasPermissionDeclarations: boolean,
+	activeGrantCount: number,
+) {
+	return hasPermissionDeclarations || activeGrantCount > 0
+}
+
 export function useHtmlAppPermissions({
 	content,
 	rawSourceCode,
@@ -50,6 +67,14 @@ export function useHtmlAppPermissions({
 	const { t } = useTranslation("super")
 	const { getScopeLabel, getTtlLabel, getUserInfoFieldLabel } = useHtmlPermissionI18n()
 	const [grantRevision, setGrantRevision] = useState(0)
+	// 服务实例包含当前 HTML 的运行指纹，避免切换文件时短暂复用上一应用的授权数量。
+	const [activeGrantState, setActiveGrantState] = useState<{
+		service: IframePermissionService | null
+		count: number
+	}>({
+		service: null,
+		count: 0,
+	})
 	const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
 	const lastSlash = cleanedEntryPath.lastIndexOf("/")
 	const appRootDir = lastSlash >= 0 ? cleanedEntryPath.slice(0, lastSlash + 1) : ""
@@ -92,21 +117,37 @@ export function useHtmlAppPermissions({
 	const appConfigFileId = appConfigFile?.file_id || ""
 	const appConfigFileUpdatedAt = appConfigFile?.updated_at || ""
 
+	const userId = userStore.user.userInfo?.user_id?.trim() || ""
 	const htmlAppInstance = useMemo(() => {
-		const info = userStore.user.userInfo
-		const magicId = info?.magic_id?.trim()
-		const userId = info?.user_id?.trim()
-		const userKey = magicId ? `magic_id:${magicId}` : userId ? `user_id:${userId}` : ""
 		return {
-			userKey,
+			userId,
 			projectId: projectId || "",
 			appRootDir,
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
+			runtimeFingerprint: JSON.stringify(
+				fileList
+					.filter((file) => {
+						const filePath = file?.relative_file_path || ""
+						return (
+							isFileInsideHtmlApp(filePath, appRootDir) &&
+							isHtmlOrJavaScriptFile(filePath)
+						)
+					})
+					.map((file) => ({
+						fileId: file.file_id,
+						path: file.relative_file_path.replace(/^\/+/, ""),
+						updatedAt: file.updated_at || "",
+					}))
+					.sort((a, b) => a.path.localeCompare(b.path)),
+			),
+			hasUnversionedExternalRuntimeResources: hasUnversionedExternalRuntimeResources(
+				rawSourceCode || content || "",
+			),
 		}
-	}, [appRootDir, cleanedEntryPath, content, projectId, rawSourceCode])
+	}, [appRootDir, cleanedEntryPath, content, fileList, projectId, rawSourceCode, userId])
 
-	const htmlPermissionGrantStore = useMemo(() => new SessionStorageHtmlPermissionGrantStore(), [])
+	const htmlPermissionGrantStore = useMemo(() => getHtmlPermissionGrantStore(), [])
 
 	const confirmHtmlPermission = useMemoizedFn(
 		({
@@ -119,7 +160,7 @@ export function useHtmlAppPermissions({
 			ttlOptions,
 			defaultTtlMs,
 		}: HtmlPermissionConfirmRequest) =>
-			new Promise<{ allowed: boolean; ttlMs: number }>((resolve) => {
+			new Promise<{ allowed: boolean; ttlMs: HtmlPermissionTtl }>((resolve) => {
 				let selectedTtlMs = defaultTtlMs
 				const displayAppName = appName || t("htmlEditor.permissionManager.defaultAppName")
 				const scopeLabel = scopes
@@ -191,25 +232,23 @@ export function useHtmlAppPermissions({
 								{t("htmlEditor.permissionAuthorizationConfirm.durationLabel")}
 							</p>
 							<Select
-								defaultValue={String(defaultTtlMs)}
+								defaultValue={serializeHtmlPermissionTtl(defaultTtlMs)}
 								onValueChange={(value) => {
-									selectedTtlMs = Number(value)
+									selectedTtlMs = parseHtmlPermissionTtl(value)
 								}}
 							>
 								<SelectTrigger className="mt-3 w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									{ttlOptions.map(
-										(option: { labelKey: string; ttlMs: number }) => (
-											<SelectItem
-												key={option.ttlMs}
-												value={String(option.ttlMs)}
-											>
-												{getTtlLabel(option.ttlMs)}
-											</SelectItem>
-										),
-									)}
+									{ttlOptions.map((option) => (
+										<SelectItem
+											key={serializeHtmlPermissionTtl(option.ttlMs)}
+											value={serializeHtmlPermissionTtl(option.ttlMs)}
+										>
+											{getTtlLabel(option.ttlMs)}
+										</SelectItem>
+									))}
 								</SelectContent>
 							</Select>
 						</div>
@@ -252,6 +291,31 @@ export function useHtmlAppPermissions({
 		setGrantRevision((revision) => revision + 1)
 	})
 
+	useEffect(() => {
+		// 不启动常驻定时器；HTML 应用初始化时清理浏览器关闭期间已经过期的授权。
+		void htmlPermissionGrantStore.prune(Date.now())
+	}, [htmlPermissionGrantStore])
+
+	useEffect(() => {
+		// 当前标签页用自定义事件，其他标签页用 BroadcastChannel；两者只刷新 UI，不承担互斥。
+		const handlePermissionChange = () => notifyGrantsChanged()
+		const handlePermissionStorageChange = (event: StorageEvent) => {
+			if (event.key === LOCAL_STORAGE_HTML_PERMISSION_GRANT_FALLBACK_KEY) {
+				handlePermissionChange()
+			}
+		}
+		window.addEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+		window.addEventListener("storage", handlePermissionStorageChange)
+		const channel = createHtmlPermissionGrantBroadcastChannel()
+		channel?.addEventListener("message", handlePermissionChange)
+		return () => {
+			window.removeEventListener(HTML_PERMISSION_GRANTS_CHANGED_EVENT, handlePermissionChange)
+			window.removeEventListener("storage", handlePermissionStorageChange)
+			channel?.removeEventListener("message", handlePermissionChange)
+			channel?.close()
+		}
+	}, [notifyGrantsChanged])
+
 	const htmlPermissionService = useMemo(
 		() =>
 			new IframePermissionService({
@@ -275,6 +339,9 @@ export function useHtmlAppPermissions({
 	const authorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
 		return htmlPermissionService.authorize(scope)
 	})
+	const preauthorizeHtmlPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+		return htmlPermissionService.authorize(scope, { allowOnce: false })
+	})
 
 	const authorizeHtmlPermissions = useMemoizedFn(
 		async (
@@ -292,7 +359,7 @@ export function useHtmlAppPermissions({
 	})
 
 	const updateHtmlPermissionTtl = useMemoizedFn(
-		async (scope: HtmlPermissionScope, ttlMs: number) => {
+		async (scope: HtmlPermissionScope, ttlMs: HtmlPermissionTtl) => {
 			return htmlPermissionService.updateGrantTtl(scope, ttlMs)
 		},
 	)
@@ -300,6 +367,36 @@ export function useHtmlAppPermissions({
 	const revokeAllHtmlPermissions = useMemoizedFn(async () => {
 		return htmlPermissionService.revokeAll()
 	})
+
+	useEffect(() => {
+		let cancelled = false
+
+		if (!enabled || htmlAppConfigState.status === "loading") {
+			setActiveGrantState({ service: htmlPermissionService, count: 0 })
+			return
+		}
+
+		void htmlPermissionService
+			.getPermissionSnapshot()
+			.then((snapshot) => {
+				if (cancelled) return
+				setActiveGrantState({
+					service: htmlPermissionService,
+					count: snapshot.activeGrantCount,
+				})
+			})
+			.catch((error) => {
+				if (cancelled) return
+				setActiveGrantState({ service: htmlPermissionService, count: 0 })
+				htmlMicroAppPreviewLogger.warn("Failed to read active permission grants", {
+					error,
+				})
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [enabled, grantRevision, htmlAppConfigState.status, htmlPermissionService])
 
 	useEffect(() => {
 		let cancelled = false
@@ -364,9 +461,14 @@ export function useHtmlAppPermissions({
 	return {
 		htmlAppConfig,
 		htmlAppConfigState,
+		isLegacyHtmlPermissionMode:
+			htmlAppConfigState.status === "absent" || htmlAppConfigState.status === "error",
 		hasHtmlPermissionDeclarations,
+		activeHtmlPermissionGrantCount:
+			activeGrantState.service === htmlPermissionService ? activeGrantState.count : 0,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
+		preauthorizeHtmlPermission,
 		authorizeHtmlPermissions,
 		getPermissionSnapshot,
 		revokeHtmlPermission,
@@ -374,6 +476,26 @@ export function useHtmlAppPermissions({
 		revokeAllHtmlPermissions,
 		permissionRevision: `${htmlAppInstanceKey}:${htmlAppConfigState.status}:${grantRevision}`,
 	}
+}
+
+function isFileInsideHtmlApp(path: string, appRootDir: string): boolean {
+	const normalizedPath = path.replace(/^\/+/, "")
+	return normalizedPath.startsWith(appRootDir)
+}
+
+function isHtmlOrJavaScriptFile(path: string): boolean {
+	// 只有会执行 Magic API 的 HTML/JS 文件影响运行时指纹，资源、配置和数据文件变化不应使授权失效。
+	return /\.(?:html?|(?:c|m)?js)$/i.test(path.split(/[?#]/, 1)[0])
+}
+
+function hasUnversionedExternalRuntimeResources(content: string): boolean {
+	return (
+		/<script\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\//i.test(content) ||
+		/<link\b(?=[^>]*\b(?:rel\s*=\s*["'][^"']*stylesheet|as\s*=\s*["']script))(?=[^>]*\bhref\s*=\s*["'](?:https?:)?\/\/)[^>]*>/i.test(
+			content,
+		) ||
+		/(?:import\s*\(|new\s+(?:Worker|SharedWorker)\s*\()\s*["'](?:https?:)?\/\//i.test(content)
+	)
 }
 
 export type HtmlAppPermissionController = ReturnType<typeof useHtmlAppPermissions>

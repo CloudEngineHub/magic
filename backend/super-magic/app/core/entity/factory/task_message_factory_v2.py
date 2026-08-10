@@ -11,27 +11,27 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from agentlang.agent.state import AgentState
 from agentlang.event.data import (
     AfterAgentReplyEventData,
+    AfterAgentThinkEventData,
     AfterInitEventData,
+    AfterLlmResponseEventData,
     AfterMainAgentRunEventData,
     AfterToolCallEventData,
     BeforeAgentReplyEventData,
     BeforeAgentThinkEventData,
-    AfterAgentThinkEventData,
     BeforeInitEventData,
     BeforeLlmRequestEventData,
-    AfterLlmResponseEventData,
     BeforeToolCallEventData,
     PendingToolCallEventData,
 )
-from agentlang.agent.state import AgentState
 from agentlang.event.event import Event, EventType
 from agentlang.llms.token_usage.models import TokenUsage, TokenUsageCollection
 from agentlang.logger import get_logger
 from agentlang.utils.snowflake import Snowflake
-from app.core.context.agent_context import AgentContext
 from app.core.config.debug_config import is_local_debug_mode_enabled
+from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import Attachment, AttachmentTag
 from app.core.entity.event.event import (
     AfterClientChatEventData,
@@ -39,8 +39,8 @@ from app.core.entity.event.event import (
     BeforeMcpInitEventData,
 )
 from app.core.entity.event.event_context import EventContext
+from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
 from app.core.entity.final_task_state import FinalTaskState, render_final_task_state_message
-from app.core.entity.project_archive import ProjectArchiveInfo
 from app.core.entity.message.message import MessageType
 from app.core.entity.message.server_message import (
     DisplayType,
@@ -51,9 +51,9 @@ from app.core.entity.message.server_message import (
     ToolDetail,
     ToolStatus,
 )
-from app.core.entity.factory.task_message_factory_protocol import TaskMessageFactoryProtocol
-from app.tools.core.tool_executor import tool_executor
+from app.core.entity.project_archive import ProjectArchiveInfo
 from app.i18n import i18n
+from app.tools.core.tool_executor import tool_executor
 from app.utils.attachment_sorter import AttachmentSorter
 
 logger = get_logger(__name__)
@@ -730,6 +730,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                     pending_state.batch_subsequent_ids = {tc["id"] for tc in p_tool_calls[1:]}
 
                 # 获取第一个工具的展示信息并构建 tool_call item
+                has_visible_tool_call = event.data.tool_instance.is_visible_in_ui()
                 first_item = await cls._build_running_tool_call_item(
                     event.data.tool_instance,
                     event.data.tool_name,
@@ -747,7 +748,9 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                     func = tc.get("function", {})
                     tool_name = func.get("name", "")
                     sub_instance = tool_executor.get_tool(tool_name)
+                    sub_tool_visible_in_ui = True
                     if sub_instance:
+                        sub_tool_visible_in_ui = sub_instance.is_visible_in_ui()
                         try:
                             args_str = func.get("arguments", "{}")
                             sub_args = json.loads(args_str) if isinstance(args_str, str) else (args_str or {})
@@ -775,6 +778,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                             action=func.get("label", ""),
                             status=ToolStatus.RUNNING,
                         )
+                    has_visible_tool_call = has_visible_tool_call or sub_tool_visible_in_ui
 
                 inner = cls._build_inner_message(
                     agent_context,
@@ -783,7 +787,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                     correlation_id=llm_correlation_id,
                     content=p_content or None,
                     reasoning_content=p_reasoning or None,
-                    tool_calls=p_tool_calls,
+                    tool_calls=p_tool_calls or None,
                     status="running",
                 )
                 return cls._build_and_send(
@@ -794,6 +798,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                     correlation_id=llm_correlation_id,
                     message_id=p_message_id,
                     token_usage_details=p_token_usage_report,
+                    show_in_ui=has_visible_tool_call,
                 )
 
         # 批量后续工具：第一条 before 消息已包含所有 tool_calls（均为 running），跳过后续 before 事件
@@ -820,11 +825,13 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             status=TaskStatus.RUNNING,
             event_type=EventType.BEFORE_TOOL_CALL,
             correlation_id=event.data.correlation_id,
+            show_in_ui=event.data.tool_instance.is_visible_in_ui(),
         )
 
     @classmethod
     async def create_pending_tool_call_message(cls, event: Event[PendingToolCallEventData]) -> Optional[ServerMessage]:
         agent_context = event.data.tool_context.get_extension_typed("agent_context", AgentContext)
+        tool_instance = event.data.tool_instance
         arguments = getattr(event.data, "arguments", {})
 
         # correlation_id 优先用 event.data，fallback 到 arguments
@@ -859,6 +866,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             event_type=event.event_type,
             correlation_id=correlation_id,
             outer_tool=tool_obj,
+            show_in_ui=tool_instance.is_visible_in_ui(),
         )
 
     @classmethod
@@ -925,6 +933,7 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
             event_type=event.event_type,
             correlation_id=correlation_id,
             outer_tool=tool_obj,
+            show_in_ui=tool_instance.is_visible_in_ui(),
         )
 
     # ──────────────────────────────────────────────
