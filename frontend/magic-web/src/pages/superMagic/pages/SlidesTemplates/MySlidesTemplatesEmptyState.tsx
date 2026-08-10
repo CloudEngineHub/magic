@@ -112,7 +112,7 @@ export default function MySlidesTemplatesEmptyState({
 				</p>
 
 				<ul className="mt-6 flex w-full max-w-xl flex-col gap-5 text-left">
-					<li className="flex items-start justify-between gap-4">
+					<li className={cn("flex items-start gap-4", isOverlay && "justify-between")}>
 						<div className="flex min-w-0 items-start gap-3">
 							<MessageCircleMore
 								className={cn(
@@ -140,21 +140,19 @@ export default function MySlidesTemplatesEmptyState({
 								</p>
 							</div>
 						</div>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className={cn(
-								"mt-0.5 gap-1.5",
-								isOverlay &&
-									"border-white/15 bg-transparent text-white hover:bg-white/5 hover:text-white",
-							)}
-							onClick={() => navigate({ name: RouteName.Super })}
-							data-testid="my-slides-templates-go-home"
-						>
-							<House className="size-4" aria-hidden="true" />
-							{t("shell.brandGoHome")}
-						</Button>
+						{isOverlay ? (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="mt-0.5 gap-1.5 border-white/15 bg-transparent text-white hover:bg-white/5 hover:text-white"
+								onClick={() => navigate({ name: RouteName.Super })}
+								data-testid="my-slides-templates-go-home"
+							>
+								<House className="size-4" aria-hidden="true" />
+								{t("mobile.shell.brandGoHome")}
+							</Button>
+						) : null}
 					</li>
 					<li className="flex items-start gap-3">
 						<Presentation
