@@ -48,6 +48,7 @@ use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectForkEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
+use App\Domain\SuperMagic\Project\Event\BeforeCreateMicroAppEvent;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectCreatedEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectDeletedEvent;
@@ -68,13 +69,11 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Domain\SuperMagic\Workspace\Entity\ValueObject\WorkspaceType;
 use App\Domain\SuperMagic\Workspace\Entity\WorkspaceEntity;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
-use App\ErrorCode\EventErrorCode;
 use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\ShareErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventException;
-use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\Utils\AccessTokenUtil;
 use App\Infrastructure\SuperMagic\Utils\FileMetadataUtil;
@@ -108,9 +107,6 @@ use App\Interfaces\SuperMagic\Topic\DTO\Response\SidebarTopicListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\TopicItemDTO;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
-use Dtyq\BillingManager\Domain\Quota\Service\QuotaDomainService;
-use Dtyq\BillingManager\Infrastructure\Core\Constants\BillManager\BillingTargetType;
-use Dtyq\BillingManager\Infrastructure\Core\Constants\BillManager\QuotaType;
 use Hyperf\Amqp\Producer;
 use Hyperf\DbConnection\Annotation\Transactional;
 use Hyperf\DbConnection\Db;
@@ -155,7 +151,6 @@ class ProjectAppService extends AbstractAppService
         private readonly ProjectDomainService $projectDomainService,
         private readonly ProjectRepositoryInterface $projectRepository,
         private readonly MicroAppRepositoryInterface $microAppRepository,
-        private readonly QuotaDomainService $quotaDomainService,
         private readonly ProjectMemberDomainService $projectMemberDomainService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
         private readonly TopicDomainService $topicDomainService,
@@ -1929,25 +1924,13 @@ class ProjectAppService extends AbstractAppService
         }
 
         try {
-            $quotaType = QuotaType::ORGANIZATION_MICRO_APP_COUNT_LIMIT;
-            $organizationTargetType = BillingTargetType::ORGANIZATION->value;
-            $limit = $this->quotaDomainService->getQuotaLimit(
-                targetId: $organizationCode,
-                targetType: $organizationTargetType,
-                appliesId: $organizationCode,
-                appliesType: $organizationTargetType,
-                quotaType: $quotaType->value
-            );
-
-            if ($limit !== null && $limit >= 0) {
-                $currentCount = $this->microAppRepository->countActiveByOrganization($organizationCode);
-                if ($currentCount >= $limit) {
-                    EventExceptionBuilder::throw(
-                        EventErrorCode::EVENT_CREDIT_INSUFFICIENT_LIMIT,
-                        $quotaType->getInsufficientMessage(['amount' => $limit])
-                    );
-                }
-            }
+            $currentCount = $this->microAppRepository->countActiveByOrganization($organizationCode);
+            $this->eventDispatcher->dispatch(new BeforeCreateMicroAppEvent(
+                $organizationCode,
+                $dataIsolation->getCurrentUserId(),
+                $currentCount,
+                $requestDTO->getProjectName()
+            ));
 
             return $this->doCreateMicroAppProject($requestDTO, $dataIsolation, $userAuthorization);
         } finally {
