@@ -5,6 +5,7 @@ import {
 	type ImageElement as ImageElementData,
 	type StoryboardElement,
 } from "../../../document/types"
+import { isValidElementData } from "../../../document/validateElement"
 import { ImageElement } from "../../../elements/image/ImageElement"
 import type { ImageModelItem } from "../../../../public/magic-types"
 import { StoryboardGenerationController } from "../StoryboardGenerationController"
@@ -261,6 +262,14 @@ describe("StoryboardGenerationController", () => {
 		const outputFrame = Array.from(harness.elements.values()).find(
 			(element) => element.type === ElementTypeEnum.Frame,
 		)
+		expect(isValidElementData(outputFrame)).toBe(true)
+		expect(
+			outputFrame?.children?.every((child: Record<string, unknown>) =>
+				["draggable", "listening", "perfectDrawEnabled"].every(
+					(field) => !(field in child),
+				),
+			),
+		).toBe(true)
 		expect(outputFrame?.x).toBe(100 + 960 + 1024)
 		expect(outputFrame?.y).toBe(200 + 1360 / 2 - (outputFrame?.height ?? 0) / 2)
 		expect(harness.submissions).toHaveLength(2)

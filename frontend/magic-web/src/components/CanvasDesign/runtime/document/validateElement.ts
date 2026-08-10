@@ -188,5 +188,6 @@ export function isValidElementData(data: unknown): data is LayerElement {
 }
 
 export function validateElementData(data: unknown): asserts data is LayerElement {
-	if (!isValidElementData(data)) throw new Error("Invalid v3 element data")
+	if (!isValidElementData(data))
+		throw new Error(`Invalid v3 element data ${JSON.stringify(data)}`)
 }

@@ -12,7 +12,7 @@ import {
 	type StoryboardShot,
 } from "../../document/types"
 import { createContentId, getActiveContent, updateContent } from "../../document/elementContent"
-import { BASE_ELEMENT_DEFAULTS } from "../../elements/core/BaseElement"
+import { BASE_ELEMENT_DATA_DEFAULTS } from "../../elements/core/BaseElement"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
@@ -379,7 +379,7 @@ export class StoryboardGenerationController {
 	): ImageElementData {
 		const contentId = createContentId("image-content")
 		return {
-			...BASE_ELEMENT_DEFAULTS,
+			...BASE_ELEMENT_DATA_DEFAULTS,
 			id,
 			type: ElementTypeEnum.Image,
 			x,

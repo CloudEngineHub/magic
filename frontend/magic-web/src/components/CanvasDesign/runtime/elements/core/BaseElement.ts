@@ -46,14 +46,24 @@ export interface ElementTransformConstraints {
 /**
  * 基础元素默认配置
  */
-export const BASE_ELEMENT_DEFAULTS = {
+export const BASE_ELEMENT_DATA_DEFAULTS = {
 	visible: true,
 	opacity: 1,
 	locked: false,
+	zIndex: 0,
+} as const
+
+/**
+ * Konva 运行时默认配置。
+ *
+ * draggable/listening/perfectDrawEnabled 只用于渲染节点，不属于 v3 DSL，
+ * 因此不能直接展开到持久化 Element 数据中。
+ */
+export const BASE_ELEMENT_DEFAULTS = {
+	...BASE_ELEMENT_DATA_DEFAULTS,
 	draggable: true,
 	listening: true,
 	perfectDrawEnabled: false,
-	zIndex: 0,
 } as const
 
 /**

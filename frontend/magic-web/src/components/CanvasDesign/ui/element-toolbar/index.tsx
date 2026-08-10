@@ -87,12 +87,9 @@ export default function ElementTools() {
 						isImageElementContent(firstSelectedElement) &&
 						firstSelectedElement.contents.length > 1
 					if (!imageSrc) {
-						return [
-							{ type: ElementToolTypeEnum.ImageReplaceButton },
-							...(hasMultipleImageContents
-								? [{ type: ElementToolTypeEnum.ImageContentDeleteButton }]
-								: []),
-						]
+						return hasMultipleImageContents
+							? [{ type: ElementToolTypeEnum.ImageContentDeleteButton }]
+							: []
 					}
 					imageElementTools.push({
 						type: ElementToolTypeEnum.SizeEditButton,
