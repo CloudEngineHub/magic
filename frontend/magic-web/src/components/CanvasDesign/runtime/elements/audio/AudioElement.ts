@@ -93,7 +93,7 @@ const WAVEFORM_LAYOUT = {
 const AUDIO_STATUS_SPINNER_PERIOD_MS = 800
 
 type InteractiveState = "idle" | "hover" | "active"
-type AudioRenderState = "uploading" | "preparing" | "ready" | "error"
+type AudioRenderState = "empty" | "uploading" | "preparing" | "ready" | "error"
 type AudioStatusPlaceholderState = Exclude<AudioRenderState, "ready">
 
 interface AudioControlHitBounds {
@@ -313,7 +313,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.renderedState = renderState
 		if (renderState !== "ready") {
 			this.renderStatusPlaceholder(group, renderState)
-			if (renderState !== "uploading") this.createCornerActions(group, width, height)
+			// 暂时由元素工具栏承载替换/上传入口，保留右上角实现供后续恢复。
+			// if (renderState !== "uploading") this.createCornerActions(group, width, height)
 			this.finalizeNode(group)
 			this.syncRenderLayout(width, height)
 			return group
@@ -340,7 +341,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				listening: false,
 			}),
 		)
-		this.createCornerActions(group, width, height)
+		// 暂时由元素工具栏承载替换/上传入口，保留右上角实现供后续恢复。
+		// this.createCornerActions(group, width, height)
 
 		this.finalizeNode(group)
 		this.syncRenderLayout(width, height)
@@ -355,8 +357,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private resolveRenderState(): AudioRenderState {
 		if (this.isUploadingPlaceholder()) return "uploading"
+		if (!this.getAudioSrc()) return "empty"
 		if (
-			!this.getAudioSrc() ||
 			this.resourceError ||
 			this.playbackSnapshot.error ||
 			this.waveformSnapshot.status === "error"
@@ -369,7 +371,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private renderStatusPlaceholder(group: Konva.Group, state: AudioStatusPlaceholderState): void {
-		const showSpinner = state !== "error"
+		const showSpinner = state === "uploading" || state === "preparing"
 		const placeholder = new Konva.Group({
 			name: NODE_NAMES.statusPlaceholder,
 			listening: state === "error",
@@ -407,11 +409,13 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		const text = new Konva.Text({
 			name: NODE_NAMES.statusText,
 			text:
-				state === "uploading"
-					? this.getText("audio.uploading", "正在上传中...")
-					: state === "preparing"
-						? this.getText("audio.loading", "正在加载音频...")
-						: this.getAudioLoadErrorText(),
+				state === "empty"
+					? this.getText("audio.empty", "暂无音频内容")
+					: state === "uploading"
+						? this.getText("audio.uploading", "正在上传中...")
+						: state === "preparing"
+							? this.getText("audio.loading", "正在加载音频...")
+							: this.getAudioLoadErrorText(),
 			align: "center",
 			fill: state === "error" ? AUDIO_CONFIG.ERROR : AUDIO_CONFIG.SECONDARY_TEXT,
 			listening: state === "error",
@@ -910,13 +914,20 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private createCornerActions(group: Konva.Group, width: number, height: number): void {
+		const hasSource = Boolean(this.getAudioSrc())
 		const replaceAction: ElementCornerActionConfig = {
 			key: "replace",
 			placement: "top-right",
-			label: () =>
-				this.replaceStatus === "uploading"
-					? this.getText("audio.replacing", "替换中")
-					: this.getText("audio.replace", "替换"),
+			label: () => {
+				if (this.replaceStatus === "uploading") {
+					return hasSource
+						? this.getText("audio.replacing", "替换中")
+						: this.getText("audio.adding", "添加中")
+				}
+				return hasSource
+					? this.getText("audio.replace", "替换")
+					: this.getText("audio.add", "添加音频")
+			},
 			minWidth: 40,
 			isVisible: () => !this.canvas.readonly,
 			isEnabled: () => !this.canvas.readonly && this.replaceStatus !== "uploading",
@@ -1455,7 +1466,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		if (!placeholder) return
 		const state = this.renderedState ?? "preparing"
 		const layout = resolveAudioStatusPlaceholderLayout(width, height, {
-			showSpinner: state !== "error",
+			showSpinner: state === "uploading" || state === "preparing",
 		})
 		placeholder.setAttrs(layout.group)
 		const spinner = placeholder.findOne(`.${NODE_NAMES.statusSpinner}`) as

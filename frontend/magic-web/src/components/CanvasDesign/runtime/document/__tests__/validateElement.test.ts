@@ -56,6 +56,7 @@ describe("isValidElementData", () => {
 	})
 
 	it("validates audio Content", () => {
+		expect(isValidElementData(contentElement(ElementTypeEnum.Audio, {}))).toBe(true)
 		expect(
 			isValidElementData(
 				contentElement(ElementTypeEnum.Audio, { src: "./audios/voice.mp3" }),

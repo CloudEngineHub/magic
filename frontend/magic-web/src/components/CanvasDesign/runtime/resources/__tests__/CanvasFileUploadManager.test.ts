@@ -505,6 +505,62 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
 	})
 
+	it("adds an uploaded source to an empty audio node without invalidating prior resources", async () => {
+		const update = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const primeCache = vi.fn()
+		const release = vi.fn()
+		const invalidatePath = vi.fn()
+		const invalidateAudioLoadRequest = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		const current = {
+			id: "audio-empty",
+			type: ElementTypeEnum.Audio,
+			contents: [{ contentId: "content-1" }],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+		}
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/voice.mp3",
+			src: "https://example.test/voice.mp3",
+			fileName: "voice.mp3",
+		}
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: { disable, enable, recordHistoryImmediate },
+				audioResourceManager: { primeCache },
+				audioPlaybackManager: { release },
+				audioWaveformManager: { invalidatePath },
+				visibilityManager: { invalidateAudioLoadRequest },
+			},
+			uploadDirect: vi.fn(async () => [uploadResult]),
+		})
+
+		await expect(
+			manager.replaceAudioElement({
+				elementId: "audio-empty",
+				file: new File(["voice"], "voice.mp3", { type: "audio/mpeg" }),
+			}),
+		).resolves.toBe(true)
+
+		expect(update).toHaveBeenCalledWith(
+			"audio-empty",
+			{ src: "./audios/voice.mp3" },
+			{ silent: false },
+		)
+		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
+		expect(release).not.toHaveBeenCalled()
+		expect(invalidatePath).not.toHaveBeenCalled()
+		expect(invalidateAudioLoadRequest).not.toHaveBeenCalled()
+		expect(disable).toHaveBeenCalledTimes(1)
+		expect(enable).toHaveBeenCalledTimes(1)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
 	it("keeps the previous audio unchanged when replacement upload fails", async () => {
 		const update = vi.fn()
 		const recordHistoryImmediate = vi.fn()
@@ -585,6 +641,54 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		)
 		expect(release).toHaveBeenCalledWith("audio-1")
 		expect(invalidatePath).toHaveBeenCalledWith("./audios/old.mp3")
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("adds a project audio path to an empty audio node", () => {
+		const update = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const release = vi.fn()
+		const invalidatePath = vi.fn()
+		const invalidateAudioLoadRequest = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: {
+					getElementData: vi.fn(() => ({
+						id: "audio-empty",
+						type: ElementTypeEnum.Audio,
+						contents: [{ contentId: "content-1" }],
+						activeContentId: "content-1",
+						mainContentId: "content-1",
+					})),
+					update,
+				},
+				historyManager: { disable, enable, recordHistoryImmediate },
+				audioResourceManager: {},
+				audioPlaybackManager: { release },
+				audioWaveformManager: { invalidatePath },
+				visibilityManager: { invalidateAudioLoadRequest },
+			},
+		})
+
+		expect(
+			manager.replaceAudioElementFromProject({
+				elementId: "audio-empty",
+				path: "/audios/project.m4a",
+			}),
+		).toBe(true)
+
+		expect(update).toHaveBeenCalledWith(
+			"audio-empty",
+			{ src: "/audios/project.m4a" },
+			{ silent: false },
+		)
+		expect(release).not.toHaveBeenCalled()
+		expect(invalidatePath).not.toHaveBeenCalled()
+		expect(invalidateAudioLoadRequest).not.toHaveBeenCalled()
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
 	})
 

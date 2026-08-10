@@ -141,4 +141,54 @@ describe("ElementTools image replacement ordering", () => {
 
 		expect(labels).toContain(ElementToolTypeEnum.FrameDownloadButton)
 	})
+
+	it("shows download for a single audio element", () => {
+		mocks.selectedElements = [
+			{
+				id: "audio-1",
+				type: ElementTypeEnum.Audio,
+				x: 0,
+				y: 0,
+				width: 320,
+				height: 96,
+				contents: [{ contentId: "audio-content", src: "./audios/demo.mp3" }],
+				activeContentId: "audio-content",
+				mainContentId: "audio-content",
+			},
+		]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).toEqual([
+			ElementToolTypeEnum.AudioReplaceButton,
+			"Divider",
+			ElementToolTypeEnum.AudioDownloadButton,
+		])
+	})
+
+	it("shows upload for an empty audio element", () => {
+		mocks.selectedElements = [
+			{
+				id: "audio-empty",
+				type: ElementTypeEnum.Audio,
+				x: 0,
+				y: 0,
+				width: 320,
+				height: 96,
+				contents: [{ contentId: "audio-content" }],
+				activeContentId: "audio-content",
+				mainContentId: "audio-content",
+			},
+		]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).toEqual([ElementToolTypeEnum.AudioReplaceButton])
+	})
 })

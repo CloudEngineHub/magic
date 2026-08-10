@@ -1,6 +1,9 @@
 {
 	"audio": {
+		"add": "添加音频",
+		"adding": "添加中",
 		"defaultName": "音频",
+		"empty": "暂无音频内容",
 		"fileMissing": "音频文件不存在",
 		"loadFailed": "音频加载失败，点击重试",
 		"loading": "正在加载音频...",
@@ -67,6 +70,10 @@
 		"useRemote": "使用新的"
 	},
 	"elementTools": {
+		"audioReplace": {
+			"title": "替换音频",
+			"upload": "上传音频"
+		},
 		"elementAlign": {
 			"bottom": "底部对齐",
 			"horizontalCenter": "水平居中",
@@ -524,6 +531,7 @@
 		"unavailable": "内容优化能力暂不可用"
 	},
 	"tools": {
+		"audioGenerator": "音频生成",
 		"frame": "画框",
 		"hand": "抓手工具",
 		"imageGenerator": "图像生成",

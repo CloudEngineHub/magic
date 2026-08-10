@@ -69,12 +69,20 @@ function createAudioElementHarness(options?: {
 	replaceLabel?: string
 	coarsePointer?: boolean
 	temporary?: boolean
+	empty?: boolean
 	waveformSnapshot?: AudioWaveformSnapshot
 }) {
-	const src = options?.temporary ? options.src : (options?.src ?? "./audios/voice.mp3")
+	const src = options?.empty
+		? undefined
+		: options?.temporary
+			? options.src
+			: (options?.src ?? "./audios/voice.mp3")
 	let playbackSnapshot = options?.snapshot ?? READY_PLAYBACK_SNAPSHOT
 	let playbackListener: ((snapshot: AudioPlaybackSnapshot) => void) | undefined
 	let waveformListener: ((snapshot: AudioWaveformSnapshot) => void) | undefined
+	let replaceStateListener:
+		| ((event: { data: { elementId: string; status: "idle" | "uploading" | "error" } }) => void)
+		| undefined
 	const viewportScaleListeners = new Set<() => void>()
 	const deviceChangeListeners = new Set<() => void>()
 	const seek = vi.fn()
@@ -117,9 +125,12 @@ function createAudioElementHarness(options?: {
 		audioResourceManager: { getFailureReason: vi.fn(() => null) },
 		eventEmitter: {
 			emit,
-			on: vi.fn((eventType: string, listener: () => void) => {
+			on: vi.fn((eventType: string, listener: (...args: never[]) => void) => {
 				if (eventType === "viewport:scale") viewportScaleListeners.add(listener)
 				if (eventType === "canvas:devicechange") deviceChangeListeners.add(listener)
+				if (eventType === "element:audio:replaceStateChanged") {
+					replaceStateListener = listener as typeof replaceStateListener
+				}
 				return () => {
 					viewportScaleListeners.delete(listener)
 					deviceChangeListeners.delete(listener)
@@ -184,6 +195,9 @@ function createAudioElementHarness(options?: {
 		},
 		emitWaveform(snapshot: AudioWaveformSnapshot) {
 			waveformListener?.(snapshot)
+		},
+		emitReplaceState(status: "idle" | "uploading" | "error") {
+			replaceStateListener?.({ data: { elementId: "audio-1", status } })
 		},
 		emitViewportScale() {
 			viewportScaleListeners.forEach((listener) => listener())
@@ -311,6 +325,37 @@ describe("AudioElement", () => {
 		expect(hasFullscreenGlyph).toBe(false)
 	})
 
+	it("renders a persistent empty placeholder without a corner add-audio action", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({ empty: true })
+		const group = harness.element.render()
+		const statusText = group.findOne(".audio-status-text") as Konva.Text
+
+		expect(statusText.text()).toBe("暂无音频内容")
+		expect(statusText.listening()).toBe(false)
+		expect(group.findOne(".audio-status-spinner")).toBeUndefined()
+		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
+		expect(group.findOne(".audio-progress-track")).toBeUndefined()
+		expect(group.findOne(".audio-operation-group")).toBeUndefined()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
+		expect(harness.requestImmediateAudioLoad).not.toHaveBeenCalled()
+	})
+
+	it("keeps the empty placeholder without a corner action while adding changes state", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({ empty: true })
+		const group = harness.element.render()
+		vi.spyOn(group, "getStage").mockReturnValue(createStageMock(1))
+		harness.element.onMounted()
+
+		harness.emitReplaceState("uploading")
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
+
+		harness.emitReplaceState("error")
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
+		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe("暂无音频内容")
+	})
+
 	it("renders a runtime-only uploading placeholder without player controls", () => {
 		mockCanvasRenderingContext()
 		const { element } = createAudioElementHarness({ temporary: true })
@@ -365,7 +410,7 @@ describe("AudioElement", () => {
 		expect(group.findOne(".audio-status-spinner")).toBeTruthy()
 		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
 		expect(group.findOne(".audio-operation-group")).toBeUndefined()
-		expect(group.findOne(".decorator-corner-action-replace")).toBeTruthy()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
 
 		harness.emitPlayback({
 			...READY_PLAYBACK_SNAPSHOT,
@@ -395,7 +440,7 @@ describe("AudioElement", () => {
 		)
 		expect(group.findOne(".audio-status-spinner")).toBeUndefined()
 		expect(group.findOne(".audio-waveform-shape")).toBeUndefined()
-		expect(group.findOne(".decorator-corner-action-replace")).toBeTruthy()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
 
 		;(group.findOne(".audio-status-text") as Konva.Text).fire("click", {
 			cancelBubble: false,
@@ -468,7 +513,8 @@ describe("AudioElement", () => {
 		},
 	)
 
-	it.each([0.5, 1, 2])(
+	// 暂时保留右上角入口的几何回归用例，待入口重新启用时恢复执行。
+	it.skip.each([0.5, 1, 2])(
 		"keeps the replace button pinned to the element top-right at viewport scale %s",
 		(viewportScale) => {
 			mockCanvasRenderingContext()
@@ -512,7 +558,8 @@ describe("AudioElement", () => {
 		},
 	)
 
-	it("hides the replace button below the image info-button screen-size threshold", () => {
+	// 暂时保留右上角入口的尺寸阈值回归用例，待入口重新启用时恢复执行。
+	it.skip("hides the replace button below the image info-button screen-size threshold", () => {
 		mockCanvasRenderingContext()
 		const { element } = createAudioElementHarness()
 		const group = element.render()
@@ -524,7 +571,8 @@ describe("AudioElement", () => {
 		expect(group.findOne(".decorator-corner-actions")?.visible()).toBe(false)
 	})
 
-	it("expands the compact visual width for a longer localized replace label", () => {
+	// 暂时保留右上角入口的文案宽度回归用例，待入口重新启用时恢复执行。
+	it.skip("expands the compact visual width for a longer localized replace label", () => {
 		mockCanvasRenderingContext()
 		const { element } = createAudioElementHarness({ replaceLabel: "Replace" })
 		const group = element.render()
@@ -1434,7 +1482,8 @@ describe("AudioElement", () => {
 		expect(restoreToolCursor).toHaveBeenCalled()
 	})
 
-	it("makes the replace button clickable with mouse and touch feedback", () => {
+	// 暂时保留右上角入口的交互回归用例，待入口重新启用时恢复执行。
+	it.skip("makes the replace button clickable with mouse and touch feedback", () => {
 		mockCanvasRenderingContext()
 		const writableHarness = createAudioElementHarness()
 		const writableGroup = writableHarness.element.render()
@@ -1497,6 +1546,15 @@ describe("AudioElement", () => {
 		).toBe(false)
 	})
 
+	it("does not render the corner replace action because the toolbar owns it", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness()
+		const group = harness.element.render()
+
+		expect(group.findOne(".decorator-corner-actions")).toBeUndefined()
+		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
+	})
+
 	it("exports only base fields and src from the formal audio DSL", () => {
 		const [exported] = exportCanvasDocument([
 			{
@@ -1523,6 +1581,25 @@ describe("AudioElement", () => {
 		expect(exported).not.toHaveProperty("errorMessage")
 		expect(exported).not.toHaveProperty("duration")
 		expect(exported).not.toHaveProperty("paused")
+	})
+
+	it("exports an empty audio Content without inventing runtime or generation fields", () => {
+		const emptyAudio = AudioElement.createElementData({
+			id: "audio-empty",
+			x: 10,
+			y: 20,
+		})
+		const [exported] = exportCanvasDocument([emptyAudio]).elements
+
+		expect(exported).toMatchObject({
+			id: "audio-empty",
+			type: ElementTypeEnum.Audio,
+			activeContentId: "audio-empty-content-1",
+			mainContentId: "audio-empty-content-1",
+			contents: [{ contentId: "audio-empty-content-1" }],
+		})
+		expect(exported.contents[0]).not.toHaveProperty("src")
+		expect(exported.contents[0]).not.toHaveProperty("status")
 	})
 
 	it("does not create an audio node until visibility admits the mounted element", () => {

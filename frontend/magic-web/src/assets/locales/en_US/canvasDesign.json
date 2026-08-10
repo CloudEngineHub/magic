@@ -1,6 +1,9 @@
 {
 	"audio": {
+		"add": "Add Audio",
+		"adding": "Adding",
 		"defaultName": "Audio",
+		"empty": "No audio content",
 		"fileMissing": "Audio file is missing",
 		"loadFailed": "Failed to load audio. Click retry.",
 		"loading": "Loading audio...",
@@ -67,6 +70,10 @@
 		"useRemote": "Use new"
 	},
 	"elementTools": {
+		"audioReplace": {
+			"title": "Replace Audio",
+			"upload": "Upload Audio"
+		},
 		"elementAlign": {
 			"bottom": "Bottom",
 			"horizontalCenter": "Center",
@@ -524,6 +531,7 @@
 		"unavailable": "Content optimization is currently unavailable"
 	},
 	"tools": {
+		"audioGenerator": "Audio Generator",
 		"frame": "Frame",
 		"hand": "Hand Tool",
 		"imageGenerator": "Image Generator",

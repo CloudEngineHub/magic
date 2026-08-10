@@ -97,4 +97,36 @@ describe("AudioReplaceController", () => {
 		})
 		expect(states).toEqual(["uploading", "idle"])
 	})
+
+	it("restores the source action after adding audio fails", async () => {
+		const states: string[] = []
+		const canvas = {
+			container: document.createElement("div"),
+			readonly: false,
+			t: vi.fn((_key: string, fallback: string) => fallback),
+			eventEmitter: {
+				emit: vi.fn(
+					(event: { type: string; data: { elementId: string; status?: string } }) => {
+						if (
+							event.type === "element:audio:replaceStateChanged" &&
+							event.data.status
+						) {
+							states.push(event.data.status)
+						}
+					},
+				),
+			},
+			canvasFileUploadManager: {
+				replaceAudioElement: vi.fn(),
+				replaceAudioElementFromProject: vi.fn(() => false),
+			},
+		} as unknown as Canvas
+		const controller = new AudioReplaceController({ canvas })
+
+		await expect(
+			controller.replaceWithProjectFile("audio-empty", "/audios/project.mp3"),
+		).resolves.toBe(false)
+
+		expect(states).toEqual(["uploading", "error"])
+	})
 })

@@ -93,6 +93,7 @@ export const ToolTypeEnum = {
 	Frame: "frame", // 画框
 	ImageGenerator: "image-generator", // 图像生成
 	VideoGenerator: "video-generator", // 视频生成
+	AudioGenerator: "audio-generator", // 音频生成
 	Marker: "Marker", // 标记
 	Rect: "rect", // 矩形形状
 	Ellipse: "ellipse", // 圆形形状

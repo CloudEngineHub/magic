@@ -10,7 +10,7 @@ import {
 	MousePointer2,
 	Type,
 	Image as ImageIcon,
-	Music2,
+	Mic,
 	Upload,
 } from "lucide-react"
 import { ImageSparkles } from "../primitives/icons/index"
@@ -25,6 +25,7 @@ import { PanTool } from "../../runtime/interaction/tools/PanTool"
 import { MarkerTool } from "../../runtime/interaction/tools/MarkerTool"
 import { TextTool } from "../../runtime/interaction/tools/TextTool"
 import { VideoGeneratorTool } from "../../runtime/interaction/tools/VideoGeneratorTool"
+import { AudioGeneratorTool } from "../../runtime/interaction/tools/AudioGeneratorTool"
 import { ToolTypeEnum, type ToolType } from "../../runtime/document/types"
 import type { ToolOptionItem } from "./types"
 import ToolItemWithPopover from "./ToolItemWithPopover"
@@ -69,6 +70,9 @@ function toolToToolType(tool: BaseTool | null): ToolType | null {
 	if (tool instanceof VideoGeneratorTool) {
 		return ToolTypeEnum.VideoGenerator
 	}
+	if (tool instanceof AudioGeneratorTool) {
+		return ToolTypeEnum.AudioGenerator
+	}
 	return null
 }
 
@@ -107,6 +111,8 @@ export default function Tools() {
 				toolManager.getImageGeneratorTool().createImageAtCenter(imageModelList)
 			} else if (tool === ToolTypeEnum.VideoGenerator) {
 				toolManager.getVideoGeneratorTool().createVideoAtCenter(videoModelList)
+			} else if (tool === ToolTypeEnum.AudioGenerator) {
+				toolManager.getAudioGeneratorTool().createAudioAtCenter()
 			} else if (tool) {
 				toolManager.setActiveToolByType(tool, "ui")
 			} else {
@@ -278,6 +284,12 @@ export default function Tools() {
 			value: ToolTypeEnum.VideoGenerator,
 		},
 		{
+			label: t("tools.audioGenerator", "音频生成"),
+			icon: Mic,
+			value: ToolTypeEnum.AudioGenerator,
+		},
+		Divider,
+		{
 			label: t("tools.marker", "标记"),
 			icon: MapPinPlusInside,
 			value: ToolTypeEnum.Marker,
@@ -303,7 +315,7 @@ export default function Tools() {
 				},
 				{
 					label: t("tools.uploadAudio", "上传音频"),
-					icon: Music2,
+					icon: Mic,
 					onClick: () => {
 						openLocalUploadPicker("audio")
 					},

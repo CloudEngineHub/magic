@@ -27,6 +27,10 @@ export default function ElementTools() {
 		firstSelectedElement?.type === ElementTypeEnum.Image
 			? getActiveImageContent(firstSelectedElement).src
 			: undefined
+	const audioSrc =
+		firstSelectedElement?.type === ElementTypeEnum.Audio
+			? getActiveContent(firstSelectedElement)?.src
+			: undefined
 
 	const showVideoOriginalSizeButton = useShowVideoOriginalSizeButton({
 		canvas,
@@ -134,6 +138,15 @@ export default function ElementTools() {
 						? [{ type: ElementToolTypeEnum.VideoOriginalSizeButton }]
 						: []
 
+				case ElementTypeEnum.Audio:
+					return audioSrc
+						? [
+								{ type: ElementToolTypeEnum.AudioReplaceButton },
+								Divider,
+								{ type: ElementToolTypeEnum.AudioDownloadButton },
+							]
+						: [{ type: ElementToolTypeEnum.AudioReplaceButton }]
+
 				default:
 					break
 			}
@@ -156,6 +169,7 @@ export default function ElementTools() {
 	}, [
 		convertHightConfig?.supported,
 		firstSelectedElement?.type,
+		audioSrc,
 		imageSrc,
 		isDragging,
 		isSelecting,

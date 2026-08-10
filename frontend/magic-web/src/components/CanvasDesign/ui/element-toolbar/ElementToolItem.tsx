@@ -12,6 +12,8 @@ import ElementAlign from "./layout/ElementAlign/index"
 import ElementDistribute from "./layout/ElementDistribute/index"
 import ShapeStyle from "./shape/ShapeStyle/index"
 import DownloadButton from "./download/DownloadButton/index"
+import AudioReplaceButton from "./audio/AudioReplaceButton/index"
+import AudioDownloadButton from "./audio/AudioDownloadButton/index"
 import RichTextAdvancedButton from "./text/RichTextAdvancedButton/index"
 import TextContentOptimizationButton from "./text/TextContentOptimizationButton/index"
 import ImagePromptExtractionButton from "./image/ImagePromptExtractionButton/index"
@@ -57,6 +59,10 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <ShapeStyle />
 		case ElementToolTypeEnum.DownloadButton:
 			return <DownloadButton />
+		case ElementToolTypeEnum.AudioReplaceButton:
+			return <AudioReplaceButton />
+		case ElementToolTypeEnum.AudioDownloadButton:
+			return <AudioDownloadButton />
 		case ElementToolTypeEnum.RichTextAdvancedButton:
 			return <RichTextAdvancedButton />
 		case ElementToolTypeEnum.TextContentOptimizationButton:
