@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Agent;
 
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;

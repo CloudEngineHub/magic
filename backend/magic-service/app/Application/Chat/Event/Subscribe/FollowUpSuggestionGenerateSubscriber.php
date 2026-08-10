@@ -9,10 +9,10 @@ namespace App\Application\Chat\Event\Subscribe;
 
 use App\Application\Chat\Service\FollowUpSuggestionAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
+use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
 use App\Infrastructure\Util\Context\CoContext;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskStatus;
-use Dtyq\SuperMagic\Domain\SuperAgent\Event\RunTaskCallbackEvent;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;

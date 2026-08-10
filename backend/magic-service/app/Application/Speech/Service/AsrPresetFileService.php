@@ -8,12 +8,12 @@ declare(strict_types=1);
 namespace App\Application\Speech\Service;
 
 use App\Application\Speech\Assembler\AsrAssembler;
+use App\Application\SuperMagic\Common\Service\AbstractAppService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\Context\CoContext;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Codec\Json;
 use Hyperf\Contract\TranslatorInterface;
 use Hyperf\Logger\LoggerFactory;
