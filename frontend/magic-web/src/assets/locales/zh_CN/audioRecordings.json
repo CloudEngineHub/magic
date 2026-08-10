@@ -68,6 +68,7 @@
 		"emptySummaryFile": "该内容暂未生成",
 		"emptyTranscript": "暂无转写内容",
 		"emptyTranscriptFiltered": "当前筛选下暂无转写内容",
+		"emptyTranscriptSearch": "未找到匹配内容",
 		"entryNotFound": "未找到录音入口文件",
 		"export": "导出",
 		"exportAll": "导出全部",
@@ -143,6 +144,9 @@
 		"topicListTitle": "话题",
 		"topicSummary": "要点总结",
 		"transcriptCount": "转写 {{count}} 段",
+		"transcriptSearchClear": "清空转写搜索",
+		"transcriptSearchLabel": "搜索转写",
+		"transcriptSearchPlaceholder": "搜索转写内容",
 		"transcriptSegmentCountSuffix": "{{count}} 段",
 		"transcriptVisibleCount": "{{visibleCount}}/{{totalCount}} 段",
 		"untitled": "未命名录音"

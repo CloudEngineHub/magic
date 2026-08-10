@@ -1,5 +1,5 @@
 import type { MutableRefObject, ReactNode, Ref } from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecordingDetailProvider } from "../RecordingDetailProvider"
 import { RecordingDetailTranscriptPanel } from "../RecordingDetailTranscriptPanel"
@@ -42,6 +42,15 @@ function createRect(top: number, height: number): DOMRect {
 beforeEach(() => {
 	scrollToMock.mockReset()
 	scrollIntoViewMock.mockReset()
+	// Provide the observer contract used by Radix positioning when the search menu opens.
+	vi.stubGlobal(
+		"ResizeObserver",
+		class ResizeObserverMock {
+			observe = vi.fn()
+			unobserve = vi.fn()
+			disconnect = vi.fn()
+		},
+	)
 	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
 		configurable: true,
 		value: scrollToMock,
@@ -53,7 +62,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	vi.useRealTimers()
 	vi.restoreAllMocks()
+	vi.unstubAllGlobals()
 	restoreHTMLElementMethod("scrollTo", originalScrollTo)
 	restoreHTMLElementMethod("scrollIntoView", originalScrollIntoView)
 })
@@ -69,9 +80,13 @@ vi.mock("react-i18next", () => ({
 				"detail.transcriptSegmentCountSuffix": `${params?.count ?? 0} segments`,
 				"detail.transcriptVisibleCount": `${params?.visibleCount ?? 0}/${params?.totalCount ?? 0} segments`,
 				"detail.emptyTranscriptFiltered": "No transcript in this filter",
+				"detail.emptyTranscriptSearch": "No matching transcript",
 				"detail.speakerFilterAll": "All speakers",
 				"detail.speakerFilterTitle": "Filter speakers",
 				"detail.openSpeakerSettings": "Speakers",
+				"detail.transcriptSearchClear": "Clear transcript search",
+				"detail.transcriptSearchLabel": "Search transcript",
+				"detail.transcriptSearchPlaceholder": "Search transcript content",
 			}
 			return labels[key] ?? key
 		},
@@ -166,6 +181,7 @@ function renderTranscriptPanel(
 			}}
 		>
 			<RecordingDetailTranscriptPanel
+				searchScopeKey="recording-alpha"
 				segments={[
 					{
 						id: "segment-1",
@@ -187,6 +203,7 @@ function renderTranscriptPanel(
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				totalSegmentsCount={2}
 				onSegmentClick={onSegmentClick}
 				onSelectedSpeakerIdsChange={onSelectedSpeakerIdsChange}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
@@ -224,6 +241,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const settingsButton = screen.getByTestId("recording-detail-open-speaker-settings")
 		const settingsIcon = screen.getByTestId("recording-detail-speaker-settings-icon")
 		const accessory = screen.getByTestId("recording-detail-open-speaker-filter")
+		const searchButton = screen.getByTestId("recording-detail-open-transcript-search")
 
 		expect(panel).not.toHaveClass("border", "bg-card")
 		expect(title).toHaveTextContent("Transcript")
@@ -234,6 +252,9 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(settingsIcon).toHaveClass("size-4", "shrink-0")
 		expect(settingsIcon).toHaveAttribute("aria-hidden", "true")
 		expect(accessory).toHaveClass("size-8", "rounded-full", "border", "bg-white")
+		expect(searchButton).toHaveClass("size-8", "rounded-full", "border", "bg-white")
+		expect(settingsButton.nextElementSibling).toBe(searchButton)
+		expect(searchButton.nextElementSibling).toBe(accessory)
 		expect(inactiveSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
 		expect(activeSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
 		expect(inactiveSegment).toHaveClass("px-2")
@@ -291,6 +312,162 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(onSelectedSpeakerIdsChange).toHaveBeenCalledWith(["Speaker-1"])
 	})
 
+	it("debounces transcript filtering and keeps the query after closing the menu", () => {
+		vi.useFakeTimers()
+		renderTranscriptPanel(0, false)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		expect(screen.getByTestId("recording-detail-transcript-search-menu")).toHaveAttribute(
+			"data-side",
+			"right",
+		)
+		const input = screen.getByTestId("recording-detail-transcript-search-input")
+		fireEvent.change(input, { target: { value: "earlier" } })
+
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+		expect(screen.getByTestId("recording-detail-transcript-search-active")).toBeInTheDocument()
+
+		act(() => {
+			vi.advanceTimersByTime(299)
+		})
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+
+		act(() => {
+			vi.advanceTimersByTime(1)
+		})
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(1)
+		expect(screen.getByTestId("recording-detail-transcript-count")).toHaveTextContent(
+			"1/2 segments",
+		)
+		expect(
+			screen.getByTestId("recording-detail-transcript-search-highlight"),
+		).toHaveTextContent("Earlier")
+		fireEvent.keyDown(input, { key: "Escape" })
+		expect(screen.queryByTestId("recording-detail-transcript-search-menu")).toBeNull()
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(1)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		expect(screen.getByTestId("recording-detail-transcript-search-input")).toHaveValue(
+			"earlier",
+		)
+		fireEvent.click(screen.getByTestId("recording-detail-transcript-search-clear"))
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+		expect(screen.queryByTestId("recording-detail-transcript-search-active")).toBeNull()
+	})
+
+	it("shows a dedicated empty state when debounced text search has no matches", () => {
+		vi.useFakeTimers()
+		renderTranscriptPanel(0, false)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		fireEvent.change(screen.getByTestId("recording-detail-transcript-search-input"), {
+			target: { value: "unmatched phrase" },
+		})
+		act(() => {
+			vi.advanceTimersByTime(300)
+		})
+
+		expect(screen.getByTestId("recording-detail-transcript-search-empty")).toHaveTextContent(
+			"No matching transcript",
+		)
+		expect(screen.getByTestId("recording-detail-transcript-count")).toHaveTextContent(
+			"0/2 segments",
+		)
+	})
+
+	it("clears search state when the recording scope changes", () => {
+		const { rerender } = render(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: false,
+					canRenameProject: false,
+					canDeleteProject: false,
+					canMoveProject: false,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: false,
+					canTriggerSummary: false,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-alpha"
+					segments={[
+						{
+							id: "segment-alpha",
+							start: 3,
+							text: "Synthetic transcript",
+						},
+					]}
+					availableSpeakerIds={[]}
+					playing={false}
+					currentTime={0}
+					selectedSpeakerIds={[]}
+					speakerNameMap={{}}
+					totalSegmentsCount={1}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		fireEvent.change(screen.getByTestId("recording-detail-transcript-search-input"), {
+			target: { value: "synthetic" },
+		})
+
+		rerender(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: false,
+					canRenameProject: false,
+					canDeleteProject: false,
+					canMoveProject: false,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: false,
+					canTriggerSummary: false,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-beta"
+					segments={[
+						{
+							id: "segment-beta",
+							start: 4,
+							text: "Another synthetic transcript",
+						},
+					]}
+					availableSpeakerIds={[]}
+					playing={false}
+					currentTime={0}
+					selectedSpeakerIds={[]}
+					speakerNameMap={{}}
+					totalSegmentsCount={1}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		expect(screen.queryByTestId("recording-detail-transcript-search-menu")).toBeNull()
+		expect(screen.queryByTestId("recording-detail-transcript-search-active")).toBeNull()
+		expect(screen.getByText("Another synthetic transcript")).toBeInTheDocument()
+	})
+
 	it("shows the filtered empty state when transcript exists but the selection hides every row", () => {
 		render(
 			<RecordingDetailProvider
@@ -308,6 +485,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				}}
 			>
 				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-filtered"
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
 					playing={false}
@@ -344,6 +522,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				}}
 			>
 				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-filtered"
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
 					playing={false}

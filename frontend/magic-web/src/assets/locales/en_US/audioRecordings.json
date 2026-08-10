@@ -68,6 +68,7 @@
 		"emptySummaryFile": "This content has not been generated yet",
 		"emptyTranscript": "No transcript yet",
 		"emptyTranscriptFiltered": "No transcript matches this filter",
+		"emptyTranscriptSearch": "No matching transcript",
 		"entryNotFound": "Recording entry file not found",
 		"export": "Export",
 		"exportAll": "Export all",
@@ -143,6 +144,9 @@
 		"topicListTitle": "Topics",
 		"topicSummary": "Key points",
 		"transcriptCount": "Transcript · {{count}} segments",
+		"transcriptSearchClear": "Clear transcript search",
+		"transcriptSearchLabel": "Search transcript",
+		"transcriptSearchPlaceholder": "Search transcript content",
 		"transcriptSegmentCountSuffix": "{{count}} segments",
 		"transcriptVisibleCount": "{{visibleCount}}/{{totalCount}} segments",
 		"untitled": "Untitled recording"

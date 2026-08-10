@@ -8,6 +8,7 @@ import { RecordingDetailAudioPlayer } from "./RecordingDetailAudioPlayer"
 import { RecordingDetailTranscriptPanel } from "./RecordingDetailTranscriptPanel"
 
 interface RecordingDetailLeftColumnProps {
+	searchScopeKey: string
 	audioRef: RefObject<HTMLAudioElement>
 	audioUrl: string
 	transcriptMarkdown?: string
@@ -32,6 +33,7 @@ interface RecordingDetailLeftColumnProps {
 
 /** Left workbench column combining inline player and transcript list. */
 export function RecordingDetailLeftColumn({
+	searchScopeKey,
 	audioRef,
 	audioUrl,
 	transcriptMarkdown,
@@ -86,6 +88,7 @@ export function RecordingDetailLeftColumn({
 				onPlaybackRateChange={onPlaybackRateChange}
 			/>
 			<RecordingDetailTranscriptPanel
+				searchScopeKey={searchScopeKey}
 				segments={visibleSegments}
 				availableSpeakerIds={availableSpeakerIds}
 				playing={playing}
