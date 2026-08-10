@@ -18,7 +18,6 @@ class AttachmentStorageType(str, Enum):
 
     WORKSPACE = "workspace"
     TOPIC = "topic"
-    SNAPSHOT = "snapshot"
     OBJECT_STORAGE = "object_storage"
 
 

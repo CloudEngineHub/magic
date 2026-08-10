@@ -15,6 +15,7 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.file import generate_safe_filename
+from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -516,9 +517,21 @@ class DownloadFromUrl(AbstractFileTool[DownloadFromUrlParams], WorkspaceTool[Dow
         if not file_path or not await async_exists(file_path):
             return None
 
+        resolved_file_path = Path(file_path)
+        try:
+            relative_file_path = resolved_file_path.relative_to(self.base_dir).as_posix()
+        except ValueError:
+            logger.error(f"下载文件不在当前工作区内: {resolved_file_path}")
+            return None
+
         return ToolDetail(
             type=self.get_display_type_by_extension(file_path),
-            data=FileContent(file_name=Path(file_path).name, content=""),
+            data=FileContent(
+                file_name=resolved_file_path.name,
+                content="",
+                relative_file_path=relative_file_path,
+                storage_type=AttachmentStorageType.WORKSPACE,
+            ),
         )
 
     async def get_after_tool_call_friendly_action_and_remark(

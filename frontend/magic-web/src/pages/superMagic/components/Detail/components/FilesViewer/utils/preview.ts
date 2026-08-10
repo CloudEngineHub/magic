@@ -41,15 +41,6 @@ function resolveDetailFileName(data: Record<string, unknown>): string {
 	return typeof data.file_name === "string" ? data.file_name.trim() : ""
 }
 
-// 路径型 ToolDetail 用 content=file_name 表示工作区路径；两者不一致时 content 是文件正文。
-function resolveWorkspaceDetailPath(data: Record<string, unknown> | undefined): string {
-	if (!data) return ""
-
-	const fileName = normalizeAttachmentPath(resolveDetailFileName(data))
-	const contentPath = normalizeAttachmentPath(data?.content)
-	return fileName && fileName === contentPath ? fileName : ""
-}
-
 function isNonWorkspaceFile(data: Record<string, unknown>): boolean {
 	const storageType = data.storage_type
 	return typeof storageType === "string" && storageType !== "workspace"
@@ -71,7 +62,7 @@ function resolveHistoricalFileDetail(
 
 	const attachments = options.attachmentList || []
 	const fileId = normalizeFileId(detail.data.file_id)
-	const workspacePath = resolveWorkspaceDetailPath(detail.data)
+	const workspacePath = normalizeAttachmentPath(detail.data.relative_file_path)
 	if (!fileId && !workspacePath) return detail
 
 	const attachmentById = fileId

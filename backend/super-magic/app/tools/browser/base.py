@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Mapping
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.service.browser import BrowserArtifactService, BrowserService
@@ -186,9 +188,15 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
     ) -> ToolDetail:
         output_path = result.data.get("output_path")
         if self.name == "browser_screenshot" and result.ok and isinstance(output_path, str) and output_path:
+            relative_file_path = Path(output_path).as_posix()
             return ToolDetail(
                 type=DisplayType.IMAGE,
-                data=FileContent(file_name=output_path, content=output_path),
+                data=FileContent(
+                    file_name=Path(relative_file_path).name,
+                    content="",
+                    relative_file_path=relative_file_path,
+                    storage_type=AttachmentStorageType.WORKSPACE,
+                ),
             )
         presentation = BrowserDetailBuilder.presentation(
             self._operation_name(),
