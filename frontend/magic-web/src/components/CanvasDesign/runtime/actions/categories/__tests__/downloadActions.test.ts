@@ -82,6 +82,75 @@ describe("Canvas download actions", () => {
 		)
 	})
 
+	it("downloads media descendants from the selected frame in document order", async () => {
+		const framedImage = {
+			id: "framed-image",
+			type: "image",
+			contents: [{ contentId: "framed-image-content", src: "images/framed.png" }],
+			activeContentId: "framed-image-content",
+			mainContentId: "framed-image-content",
+		}
+		const framedVideo = {
+			id: "framed-video",
+			type: "video",
+			contents: [{ contentId: "framed-video-content", src: "videos/framed.mp4" }],
+			activeContentId: "framed-video-content",
+			mainContentId: "framed-video-content",
+		}
+		const outsideAudio = {
+			id: "outside-audio",
+			type: "audio",
+			contents: [{ contentId: "outside-audio-content", src: "audios/outside.mp3" }],
+			activeContentId: "outside-audio-content",
+			mainContentId: "outside-audio-content",
+		}
+		const frame = {
+			id: "frame",
+			type: "frame",
+			contents: [{ contentId: "frame-content" }],
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			children: [
+				{
+					id: "group",
+					type: "group",
+					contents: [{ contentId: "group-content" }],
+					activeContentId: "group-content",
+					mainContentId: "group-content",
+					children: [framedImage],
+				},
+				framedVideo,
+			],
+		}
+		const { canvas, downloadFiles } = createCanvas({
+			selectedIds: ["frame"],
+			elements: [
+				["frame", frame],
+				["outside-audio", outsideAudio],
+			],
+		})
+		const action = downloadActions.find((item) => item.id === "download.frame") as
+			UserAction<"download.frame"> | undefined
+
+		expect(action?.canExecute(canvas)).toBe(true)
+		await action?.execute(canvas, { downloadMode: "default" })
+
+		expect(downloadFiles).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({ id: "framed-image" }),
+				expect.objectContaining({ id: "framed-video" }),
+			],
+			false,
+			false,
+			{
+				downloadMode: "default",
+				sourceDimensionsByElementId: {
+					"framed-image": { width: 1200, height: 800 },
+				},
+			},
+		)
+	})
+
 	it("blocks both menu visibility and execution when download permission is denied", async () => {
 		const { canvas, downloadFiles } = createCanvas({ allowFileDownload: false })
 		const action = downloadActions.find((item) => item.id === "download.image") as

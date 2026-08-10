@@ -77,6 +77,8 @@ export default function ElementTools() {
 						Divider,
 						{ type: ElementToolTypeEnum.SizeEditButton },
 						Divider,
+						{ type: ElementToolTypeEnum.FrameDownloadButton },
+						Divider,
 						{ type: ElementToolTypeEnum.ElementAlign },
 						{ type: ElementToolTypeEnum.ElementDistribute },
 					]

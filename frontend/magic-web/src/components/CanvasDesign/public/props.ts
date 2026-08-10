@@ -286,6 +286,7 @@ export const ElementToolTypeEnum = {
 	SizeEditButton: "size-edit-button", // 编辑尺寸（Popover 内预设 + 宽高）
 	FrameCreateButton: "frame-create-button", // 创建画框按钮
 	FrameRemoveButton: "frame-remove-button", // 解除画框按钮
+	FrameDownloadButton: "frame-download-button", // 批量下载画框内媒体资源按钮
 	RichTextFontFamily: "rich-text-font-family", // 富文本字体簇(font-family)
 	RichTextFontStyle: "rich-text-font-style", // 富文本文字粗细(font-weight)
 	RichTextFontSize: "rich-text-font-size", // 富文本字体大小(font-size)

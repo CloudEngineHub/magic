@@ -63,6 +63,7 @@ export interface UserActionOptionsMap {
 	"view.locate-project-file": LocateProjectFileActionOptions
 	"download.image": DownloadActionOptions
 	"download.image-no-watermark": DownloadActionOptions
+	"download.frame": DownloadActionOptions
 }
 
 /**

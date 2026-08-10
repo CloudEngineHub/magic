@@ -121,4 +121,24 @@ describe("ElementTools image replacement ordering", () => {
 			ElementToolTypeEnum.ImageContentDeleteButton,
 		])
 	})
+
+	it("shows batch download for a single frame", () => {
+		mocks.selectedElements = [
+			{
+				id: "frame-1",
+				type: ElementTypeEnum.Frame,
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 100,
+			},
+		]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).toContain(ElementToolTypeEnum.FrameDownloadButton)
+	})
 })

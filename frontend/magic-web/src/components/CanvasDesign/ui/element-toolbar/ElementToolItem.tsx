@@ -3,6 +3,7 @@ import StrokeColor from "./shape/StrokeColor/index"
 import SizeEditButton from "./size/SizeEditButton/index"
 import FrameCreateButton from "./frame/FrameCreateButton/index"
 import FrameRemoveButton from "./frame/FrameRemoveButton/index"
+import FrameDownloadButton from "./frame/FrameDownloadButton/index"
 import RichTextFontFamily from "./text/RichTextFontFamily/index"
 import RichTextFontStyle from "./text/RichTextFontStyle/index"
 import RichTextFontSize from "./text/RichTextFontSize/index"
@@ -38,6 +39,8 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <FrameCreateButton />
 		case ElementToolTypeEnum.FrameRemoveButton:
 			return <FrameRemoveButton />
+		case ElementToolTypeEnum.FrameDownloadButton:
+			return <FrameDownloadButton />
 		case ElementToolTypeEnum.RichTextFontFamily:
 			return <RichTextFontFamily />
 		case ElementToolTypeEnum.RichTextFontStyle:

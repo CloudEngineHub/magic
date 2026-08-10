@@ -267,6 +267,7 @@
 		"addFrame": "Add Frame",
 		"addToCurrentConversation": "Add to Current Conversation",
 		"addToNewConversation": "Add to New Topic",
+		"batchDownload": "Batch download",
 		"clipboardSourceUnavailable": "Original file link expired or cannot be accessed. Please copy and paste again.",
 		"copy": "Copy",
 		"copyLoadingDescription": "Preparing media files, please wait...",
