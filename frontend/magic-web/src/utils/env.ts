@@ -150,9 +150,6 @@ export const isPreEnv = (): boolean =>
  */
 export const isTestEnv = (): boolean => env("MAGIC_APP_ENV") === AppEnv.Test
 
-/** 商业化版本 */
-export const isCommercial = () => env("MAGIC_EDITION") === "ENTERPRISE"
-
 /**
  * @description 私有化部署配置
  * @returns {boolean} 是否私有化部署

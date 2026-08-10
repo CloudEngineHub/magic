@@ -466,6 +466,14 @@
 		"latest": "Latest",
 		"latestVersion": "Latest Version",
 		"loading": "Loading",
+		"markdownImage": {
+			"address": "Image address",
+			"emptySource": "Image address is empty",
+			"fileMissing": "Image file does not exist",
+			"loadFailed": "Image failed to load",
+			"notImage": "This resource is not an image",
+			"urlFailed": "Failed to fetch image address"
+		},
 		"meetingMode": "Summary",
 		"more": "More",
 		"moreActions": "More",

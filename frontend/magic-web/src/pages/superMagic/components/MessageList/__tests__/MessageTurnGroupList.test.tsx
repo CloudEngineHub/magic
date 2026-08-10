@@ -52,6 +52,9 @@ describe("MessageTurnGroupList", () => {
 		)
 		expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 		expect(container.querySelector('[data-testid="msg-a1"]')).not.toBeNull()
+		expect(container.querySelector('[data-message-id="a1"]')).toHaveClass(
+			"[--message-status-offset:-1.5rem]",
+		)
 	})
 
 	it("keeps sticky wrapper on desktop for user turns", () => {

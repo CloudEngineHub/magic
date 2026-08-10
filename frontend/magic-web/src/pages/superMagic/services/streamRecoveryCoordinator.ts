@@ -24,6 +24,8 @@ export interface StreamRecoveryOwnerRegistration {
 	topicId: string
 	conversationId: string
 	getTaskStatus: () => string | undefined
+	/** hidden 页面只保留待恢复请求，不启动新的 HTTP authoritative recovery。 */
+	canRecover?: () => boolean
 	recover: (context: StreamRecoveryContext) => Promise<StreamRecoveryResult>
 }
 
@@ -232,6 +234,7 @@ export class StreamRecoveryCoordinator {
 
 		const owner = this.selectCurrentOwner(topicId)
 		if (!owner) return
+		if (owner.canRecover && !owner.canRecover()) return
 
 		// Must happen before recover() reaches its first await so Store can merge later watchdogs.
 		const generation = this.store.beginTopicSync(topicId)
@@ -245,6 +248,22 @@ export class StreamRecoveryCoordinator {
 		this.store.markToolResponseRecoveryInFlight?.(topicId)
 
 		void this.executeRecovery(inFlightRecovery)
+	}
+
+	getTopicRecoveryStatus(topicId: string) {
+		const scheduled = this.scheduledRecoveries.get(topicId)
+		const inFlight = this.inFlightRecoveries.get(topicId)
+		return {
+			hasScheduled: Boolean(scheduled),
+			hasInFlight: Boolean(inFlight),
+			reason: scheduled?.payload.reason || inFlight?.payload.reason,
+		}
+	}
+
+	resumeTopicRecovery(topicId: string) {
+		const scheduled = this.scheduledRecoveries.get(topicId)
+		if (!scheduled || this.inFlightRecoveries.has(topicId)) return
+		this.scheduleRecovery(scheduled, 0)
 	}
 
 	private selectCurrentOwner(topicId: string): RegisteredRecoveryOwner | undefined {
@@ -426,4 +445,12 @@ export function registerStreamRecoveryOwner(registration: StreamRecoveryOwnerReg
 
 export function requestTopicRecovery(payload: StreamRecoveryRequestPayload) {
 	streamRecoveryCoordinator.requestRecovery(payload)
+}
+
+export function getTopicRecoveryStatus(topicId: string) {
+	return streamRecoveryCoordinator.getTopicRecoveryStatus(topicId)
+}
+
+export function resumeTopicRecovery(topicId: string) {
+	streamRecoveryCoordinator.resumeTopicRecovery(topicId)
 }

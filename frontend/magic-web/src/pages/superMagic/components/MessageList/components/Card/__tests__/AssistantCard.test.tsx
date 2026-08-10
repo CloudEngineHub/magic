@@ -185,6 +185,22 @@ function Wrapper() {
 const AssistantCard = withAssistantCard(Wrapper as ComponentType<any>)
 
 describe("AssistantCard", () => {
+	it("uses the row-provided offset for terminal status badge alignment", () => {
+		render(
+			<AssistantCard
+				node={{
+					app_message_id: "assistant-2",
+					super_message_id: "assistant-2",
+				}}
+				selectedTopic={{ id: "topic-1", chat_topic_id: "chat-topic-1" }}
+			/>,
+		)
+
+		expect(screen.getByTestId("message-list-status-badge")).toHaveClass(
+			"ml-[var(--message-status-offset,0px)]",
+		)
+	})
+
 	it("reports the cleaned persisted conversation round through the global logger", async () => {
 		render(
 			<AssistantCard

@@ -3,7 +3,11 @@ import { useMemoizedFn } from "ahooks"
 import { reaction } from "mobx"
 import { isEmpty, isObject } from "lodash-es"
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
-import { registerStreamRecoveryOwner } from "@/pages/superMagic/services/streamRecoveryCoordinator"
+import {
+	getTopicRecoveryStatus,
+	registerStreamRecoveryOwner,
+	resumeTopicRecovery,
+} from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
@@ -53,6 +57,7 @@ export function useTopicMessages({
 	const topicPageTokenMap = useRef<Record<string, string>>({})
 	const selectedTopicRef = useRef(selectedTopic)
 	const recoveryOwnerTokenRef = useRef(Symbol("recordingSummaryUseTopicMessages"))
+	const activationTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	selectedTopicRef.current = selectedTopic
 	const [showLoading, setShowLoading] = useState(false)
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
@@ -295,14 +300,68 @@ export function useTopicMessages({
 
 	// Update messages when topic changes
 	useEffect(() => {
-		superMagicStore.setActiveTopicId(selectedTopic?.chat_topic_id || null)
-		updateTopicMessages()
+		const topicId = selectedTopic?.chat_topic_id
+		if (!selectedWorkspace?.id || !selectedTopic?.id || !topicId) {
+			superMagicStore.setActiveTopicId(null)
+			return
+		}
+
+		// 与主 SuperMagic 页面保持同一激活顺序：先冻结 StreamState 投影，再切换
+		// active Topic，避免后台 chunk 在 User 历史写入前创建低 seq Assistant 卡。
+		const syncGeneration = superMagicStore.beginTopicSync(topicId)
+		const inFlightSync = { topicId, generation: syncGeneration }
+		activationTopicSyncRef.current = inFlightSync
+		superMagicStore.setActiveTopicId(topicId)
+
+		void pullMessage({
+			conversation_id: selectedTopic.chat_conversation_id,
+			chat_topic_id: topicId,
+			page_token: "",
+			order: "desc",
+			limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
+			updatePageToken: true,
+			writeIntent: "replace",
+			syncGeneration,
+		})
+			.then((pullResult) => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
+				const currentTopic = selectedTopicRef.current
+				if (currentTopic?.chat_topic_id !== topicId) return
+				superMagicStore.completeTopicSync(topicId, syncGeneration, {
+					succeeded: pullResult.didPullSucceed,
+					taskStatus: currentTopic.task_status || currentTopic.status,
+					latestSeqId: pullResult.didPullSucceed
+						? superMagicStore.getLatestMessageSeqId(topicId)
+						: undefined,
+				})
+			})
+			.catch(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) {
+					superMagicStore.completeTopicSync(topicId, syncGeneration, {
+						succeeded: false,
+						taskStatus: selectedTopicRef.current?.task_status,
+					})
+				}
+			})
+			.finally(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				activationTopicSyncRef.current = null
+				if (getTopicRecoveryStatus(topicId).hasScheduled) resumeTopicRecovery(topicId)
+			})
+
+		return () => {
+			if (activationTopicSyncRef.current !== inFlightSync) return
+			activationTopicSyncRef.current = null
+			superMagicStore.cancelTopicSync(topicId, syncGeneration)
+		}
 	}, [
+		pullMessage,
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
 		selectedWorkspace?.id,
-		updateTopicMessages,
 	])
 
 	useEffect(() => {
@@ -314,6 +373,9 @@ export function useTopicMessages({
 			ownerToken: recoveryOwnerTokenRef.current,
 			topicId,
 			conversationId,
+			canRecover: () =>
+				!activationTopicSyncRef.current &&
+				superMagicStore.topicMeta.get(topicId)?.syncState !== "syncing",
 			getTaskStatus: () => {
 				const currentTopic = selectedTopicRef.current
 				if (currentTopic?.chat_topic_id !== topicId) return undefined

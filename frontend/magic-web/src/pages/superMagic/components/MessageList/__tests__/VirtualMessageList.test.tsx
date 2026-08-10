@@ -7,6 +7,7 @@ import { VirtualMessageList } from "../components/VirtualMessageList"
 
 const virtualState = vi.hoisted(() => ({
 	toolStatus: "completed",
+	canonicalNode: undefined as Record<string, unknown> | undefined,
 	startIndex: 3,
 	endIndex: 4,
 	scrollOffset: 0,
@@ -49,6 +50,8 @@ vi.mock("@tanstack/react-virtual", async (importOriginal) => {
 vi.mock("@/pages/superMagic/stores", () => ({
 	superMagicStore: {
 		getMessageNode: () => ({ status: virtualState.toolStatus }),
+		getTopicMessageNode: () => virtualState.canonicalNode,
+		getMessageRevision: () => 1,
 	},
 }))
 
@@ -71,6 +74,7 @@ function message(id: string, role: "user" | "assistant" | "tool"): SuperMagicMes
 describe("VirtualMessageList", () => {
 	beforeEach(() => {
 		virtualState.toolStatus = "completed"
+		virtualState.canonicalNode = undefined
 		virtualState.startIndex = 3
 		virtualState.endIndex = 4
 		virtualState.scrollOffset = 0
@@ -112,6 +116,9 @@ describe("VirtualMessageList", () => {
 				?.querySelector('[data-virtual-message-spacing="true"]'),
 		).toHaveClass("h-2")
 		expect(container.querySelector('[data-message-id="assistant-1"]')).toHaveClass("pb-2")
+		expect(container.querySelector('[data-message-id="assistant-1"]')).toHaveClass(
+			"[--message-status-offset:-1.5rem]",
+		)
 	})
 
 	it("pushes the active User upward when the next User reaches the sticky boundary", () => {
@@ -224,6 +231,41 @@ describe("VirtualMessageList", () => {
 		expect(container.querySelector('[data-virtual-message-hidden="true"]')).toHaveStyle({
 			height: "0px",
 		})
+	})
+
+	it("keeps the outer chat Topic ID when merging a historical canonical node", () => {
+		virtualState.startIndex = 0
+		virtualState.endIndex = 0
+		virtualState.virtualItems = [
+			{ index: 0, key: "assistant-0", start: 0, end: 80, size: 80, lane: 0 },
+		]
+		virtualState.canonicalNode = {
+			role: "assistant",
+			topic_id: "inner-sandbox-topic",
+			super_message_id: "assistant-0",
+		}
+		const historicalAssistant = {
+			...message("assistant-0", "assistant"),
+			topic_id: "chat-topic",
+		}
+		const projection = buildVirtualMessageProjection([historicalAssistant])
+		let renderedTopicId = ""
+
+		render(
+			<VirtualMessageList
+				topicId="chat-topic"
+				items={projection.items}
+				userIndices={projection.userIndices}
+				isMobile={false}
+				getScrollElement={() => null}
+				renderNode={({ item }) => {
+					renderedTopicId = String(item.node?.topic_id || "")
+					return <span>{item.key}</span>
+				}}
+			/>,
+		)
+
+		expect(renderedTopicId).toBe("chat-topic")
 	})
 
 	it("keeps other rows mounted when a render callback throws", () => {
