@@ -97,4 +97,28 @@ describe("ElementBottomToolbar", () => {
 		expect(generateAgain).toHaveAttribute("aria-busy", "true")
 		expect(onGenerateAgain).not.toHaveBeenCalled()
 	})
+
+	it("renders custom version controls as a section beside result actions", () => {
+		const { container } = render(
+			<ElementBottomToolbar
+				floatingId="test-bottom-toolbar"
+				sections={[
+					{
+						id: "result-actions",
+						group: "result-actions",
+						items: [{ id: "edit", label: "重新编辑", onClick: vi.fn() }],
+					},
+					{
+						id: "versions",
+						group: "versions",
+						content: <span data-testid="version-controls">2/4</span>,
+					},
+				]}
+			/>,
+		)
+
+		expect(screen.getByRole("button", { name: "重新编辑" })).toBeInTheDocument()
+		expect(screen.getByTestId("version-controls")).toHaveTextContent("2/4")
+		expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1)
+	})
 })

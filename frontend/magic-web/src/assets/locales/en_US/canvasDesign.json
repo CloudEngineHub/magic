@@ -59,6 +59,15 @@
 		"unsupportedDropContent": "This dragged content cannot be added as a reference image",
 		"unsupportedReferenceImageType": "Only image files can be added as reference images"
 	},
+	"elementBottomToolbar": {
+		"deleteVersion": "Delete version",
+		"label": "Element bottom toolbar",
+		"mainVersion": "Main version",
+		"nextVersion": "Next version",
+		"previousVersion": "Previous version",
+		"setMainVersion": "Set as main version",
+		"versionCount": "{{current}}/{{total}}"
+	},
 	"elementConflict": {
 		"deleteElement": "Delete element",
 		"description": "This element has new synced content and your current changes.",
@@ -97,9 +106,6 @@
 			"bold": "Blob",
 			"italic": "Italic",
 			"placeholder": "Font Weight"
-		},
-		"imageContentDelete": {
-			"title": "Delete current content"
 		},
 		"imageConvertHight": {
 			"exitHint": "Exit",

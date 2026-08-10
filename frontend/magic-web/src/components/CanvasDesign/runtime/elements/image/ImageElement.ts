@@ -60,7 +60,6 @@ import { IMAGE_CONFIG, COLORS } from "./ImageElement.config"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { BorderDecorator } from "../decorators/BorderDecorator"
-import { ImageContentControlsDecorator } from "../decorators/ImageContentControlsDecorator"
 import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
@@ -103,7 +102,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private contentControlsDecorator?: ImageContentControlsDecorator
 
 	// 生成相关
 	private isGenerating: boolean = false
@@ -401,8 +399,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
-		this.contentControlsDecorator?.destroy()
-		this.contentControlsDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -421,7 +417,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.pollingManager.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
-		this.contentControlsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
@@ -547,7 +542,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
-		this.contentControlsDecorator?.refreshLayout()
 		const src = this.getActiveContentData().src
 		if (src) {
 			this.canvas.visibilityManager.registerImageElement(this.data.id, src)
@@ -2291,7 +2285,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createContentControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2350,7 +2343,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createContentControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2463,7 +2455,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createContentControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2499,7 +2490,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用预加载好的图片对象
 		if (!this.loadedImage) {
-			this.createContentControls(group, width, height)
 			this.finalizeNode(group)
 			return group
 		}
@@ -2525,7 +2515,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.createBorder(group, width, height, false)
 
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createContentControls(group, width, height, { reserveFullscreen: true })
 
 		this.finalizeNode(group)
 		return group
@@ -2597,7 +2586,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createContentControls(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2667,48 +2655,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator.create()
 	}
 
-	private createContentControls(
-		group: Konva.Group,
-		width: number,
-		height: number,
-		options?: { reserveFullscreen?: boolean },
-	): void {
-		if (!isImageElementContent(this.data) || this.data.contents.length <= 1) return
-		this.contentControlsDecorator = new ImageContentControlsDecorator(group, {
-			elementId: this.data.id,
-			canvas: this.canvas,
-			width,
-			height,
-			data: this.data,
-			bottomRightReservedScreenWidth: options?.reserveFullscreen
-				? IMAGE_CONFIG.INFO_BUTTON_SIZE
-				: 0,
-			onPrevious: () => {
-				if (!isImageElementContent(this.data)) return
-				const data = this.data
-				const index = data.contents.findIndex(
-					(content) => content.contentId === data.activeContentId,
-				)
-				const previous = data.contents[index - 1]
-				if (previous) this.switchActiveContent(previous.contentId)
-			},
-			onNext: () => {
-				if (!isImageElementContent(this.data)) return
-				const data = this.data
-				const index = data.contents.findIndex(
-					(content) => content.contentId === data.activeContentId,
-				)
-				const next = data.contents[index + 1]
-				if (next) this.switchActiveContent(next.contentId)
-			},
-			onSetMain: () => {
-				if (!isImageElementContent(this.data)) return
-				if (this.data.activeContentId) this.setMainContent(this.data.activeContentId)
-			},
-		})
-		this.contentControlsDecorator.create()
-	}
-
 	private shouldShowInfoButton(): boolean {
 		return !!this.getActiveGenerateImageRequest()
 	}
@@ -2756,9 +2702,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.updateContentScale(width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
-		if (this.contentControlsDecorator && isImageElementContent(this.data)) {
-			this.contentControlsDecorator.updateConfig({ width, height, data: this.data })
-		}
 		this.updateClipRegion(width, height)
 		this.node.getLayer()?.batchDraw()
 	}

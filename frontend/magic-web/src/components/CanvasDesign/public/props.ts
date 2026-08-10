@@ -310,7 +310,6 @@ export const ElementToolTypeEnum = {
 	ImageRemoveBackgroundButton: "image-remove-background-button", // 去背景按钮
 	ImageEraserButton: "image-eraser-button", // 橡皮工具按钮
 	ImageReplaceButton: "image-replace-button", // 替换当前图片 Content 资源
-	ImageContentDeleteButton: "image-content-delete-button", // 删除当前图片 Content
 	VideoOriginalSizeButton: "video-original-size-button", // 视频原始尺寸按钮
 } as const
 

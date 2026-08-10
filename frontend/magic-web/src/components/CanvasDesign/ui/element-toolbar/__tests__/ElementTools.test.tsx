@@ -66,7 +66,7 @@ describe("ElementTools image replacement ordering", () => {
 		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
 	})
 
-	it("keeps only delete for an empty active Content when other Contents exist", () => {
+	it("moves pending multi-version deletion out of the top toolbar", () => {
 		mocks.selectedElements = [
 			{
 				id: "image-1",
@@ -85,14 +85,10 @@ describe("ElementTools image replacement ordering", () => {
 		]
 
 		render(<ElementTools />)
-		const labels = Array.from(screen.getByTestId("element-tools").children).map(
-			(node) => node.textContent,
-		)
-
-		expect(labels).toEqual([ElementToolTypeEnum.ImageContentDeleteButton])
+		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
 	})
 
-	it("places the common download and replace tools before image Content deletion", () => {
+	it("keeps replace and download in the image top toolbar", () => {
 		mocks.selectedElements = [
 			{
 				id: "image-1",
@@ -115,11 +111,10 @@ describe("ElementTools image replacement ordering", () => {
 			(node) => node.textContent,
 		)
 
-		expect(labels.slice(-4)).toEqual([
+		expect(labels.slice(-3)).toEqual([
 			"Divider",
 			ElementToolTypeEnum.MediaReplaceButton,
 			ElementToolTypeEnum.MediaDownloadButton,
-			ElementToolTypeEnum.ImageContentDeleteButton,
 		])
 	})
 

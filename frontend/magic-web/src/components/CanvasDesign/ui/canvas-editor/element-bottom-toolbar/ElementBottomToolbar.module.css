@@ -45,6 +45,12 @@
 	align-items: center;
 }
 
+.content {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+}
+
 .button {
 	display: inline-flex;
 	gap: var(--spacing-1-5, 6px);

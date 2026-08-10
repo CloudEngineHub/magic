@@ -27,6 +27,8 @@ import ImageEraserPanel from "../../ui/panels/eraser/index"
 import ElementRenameOverlay from "../../ui/panels/rename/index"
 import ElementActionHints from "../../ui/panels/action-hints/index"
 import PluginPanel from "../../ui/panels/plugin/window/index"
+import { ElementBottomToolbarProvider } from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
+import ElementBottomToolbarHost from "../../ui/canvas-editor/element-bottom-toolbar/ElementBottomToolbarHost"
 
 import styles from "./index.module.css"
 
@@ -223,44 +225,47 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	return (
 		<FloatingUIProvider canvas={canvas}>
-			<div ref={canvasContainerRef} className={styles.canvasContainer} />
-			<ElementActionHints
-				hints={elementActionHints}
-				onAction={onElementActionHintAction}
-				connectionHints={connectionActionHints}
-				onConnectionAction={onConnectionActionHintAction}
-			/>
-			{!readonly && <ElementRenameOverlay />}
-			{!readonly && <ElementTools />}
-			{!readonly && <ImageMessageEditor />}
-			{!readonly && <VideoGenerateEditor />}
-			{!readonly && <ImageCropPanel />}
-			{!readonly && <ImageExtendPanel />}
-			{!readonly && <ImageEraserPanel />}
-			<MessageHistory />
-			{fullscreenMediaElement?.type === "video" ? (
-				<VideoFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
+			<ElementBottomToolbarProvider>
+				<div ref={canvasContainerRef} className={styles.canvasContainer} />
+				<ElementActionHints
+					hints={elementActionHints}
+					onAction={onElementActionHintAction}
+					connectionHints={connectionActionHints}
+					onConnectionAction={onConnectionActionHintAction}
 				/>
-			) : null}
-			{fullscreenMediaElement?.type === "image" ? (
-				<ImageElementFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
-				/>
-			) : null}
-			{fullscreenMediaElement?.type === "audio" ? (
-				<AudioElementFullscreenOverlay
-					elementId={fullscreenMediaElement.elementId}
-					onClose={() => setFullscreenMediaElement(null)}
-				/>
-			) : null}
-			<Layers />
-			{!readonly && <Tools />}
-			{!readonly && <PluginPanel />}
-			{!readonly && <CanvasTips />}
-			<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
+				{!readonly && <ElementRenameOverlay />}
+				{!readonly && <ElementTools />}
+				{!readonly && <ImageMessageEditor />}
+				{!readonly && <VideoGenerateEditor />}
+				{!readonly && <ElementBottomToolbarHost />}
+				{!readonly && <ImageCropPanel />}
+				{!readonly && <ImageExtendPanel />}
+				{!readonly && <ImageEraserPanel />}
+				<MessageHistory />
+				{fullscreenMediaElement?.type === "video" ? (
+					<VideoFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "image" ? (
+					<ImageElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{fullscreenMediaElement?.type === "audio" ? (
+					<AudioElementFullscreenOverlay
+						elementId={fullscreenMediaElement.elementId}
+						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				<Layers />
+				{!readonly && <Tools />}
+				{!readonly && <PluginPanel />}
+				{!readonly && <CanvasTips />}
+				<ViewportControls shareHostBottomChrome={shareHostBottomChrome} />
+			</ElementBottomToolbarProvider>
 		</FloatingUIProvider>
 	)
 })

@@ -9,6 +9,7 @@ import { GenerationStatus } from "../../../public/magic-types"
 import {
 	appendContent,
 	createContentId,
+	deleteActiveContent as deleteContentFromData,
 	getActiveContent,
 	getContentById,
 	getPendingVideoGenerationContent,
@@ -23,7 +24,6 @@ import { BaseElement } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { generateUUID, type Rect } from "../../shared/ids"
 import { BorderDecorator } from "../decorators/BorderDecorator"
-import { ImageContentControlsDecorator } from "../decorators/ImageContentControlsDecorator"
 import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
@@ -72,7 +72,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private contentControlsDecorator?: ImageContentControlsDecorator
 	public isGenerating = false
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
@@ -169,7 +168,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
-		this.contentControlsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
@@ -186,8 +184,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
-		this.contentControlsDecorator?.destroy()
-		this.contentControlsDecorator = undefined
 		return super.rerender()
 	}
 
@@ -423,6 +419,33 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.canvas.elementManager.update(
 			this.data.id,
 			{ mainContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public deleteActiveContent(): boolean {
+		const activeContent = getActiveContent<VideoElementContent>(this.data)
+		if (
+			activeContent?.status === GenerationStatus.Pending ||
+			activeContent?.status === GenerationStatus.Processing ||
+			this.isGenerating
+		) {
+			return false
+		}
+
+		const result = deleteContentFromData(
+			this.data,
+			(content) => Boolean(content.src) && content.status === GenerationStatus.Completed,
+		)
+		if (!result) return false
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				contents: result.element.contents,
+				activeContentId: result.element.activeContentId,
+				mainContentId: result.element.mainContentId,
+			},
 			{ silent: false },
 		)
 		return true
@@ -841,7 +864,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
-		this.contentControlsDecorator?.refreshLayout()
 		if (!(this.node instanceof Konva.Group) || !this.data.width || !this.data.height) {
 			return
 		}
@@ -938,7 +960,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createContentControls(group, width, height, { reserveFullscreen: true })
 		this.setupContentUpdateListener(group)
 	}
 
@@ -999,7 +1020,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
-				this.createContentControls(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -1018,44 +1038,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
-	}
-
-	private createContentControls(
-		group: Konva.Group,
-		width: number,
-		height: number,
-		options?: { reserveFullscreen?: boolean },
-	): void {
-		if (this.data.contents.length <= 1) return
-		this.contentControlsDecorator = new ImageContentControlsDecorator(group, {
-			elementId: this.data.id,
-			canvas: this.canvas,
-			width,
-			height,
-			data: this.data,
-			namePrefix: "video",
-			bottomRightReservedScreenWidth: options?.reserveFullscreen
-				? VIDEO_CONFIG.CONTROL_BUTTON_SIZE
-				: 0,
-			onPrevious: () => {
-				const index = this.data.contents.findIndex(
-					(content) => content.contentId === this.data.activeContentId,
-				)
-				const previous = this.data.contents[index - 1]
-				if (previous) this.switchActiveContent(previous.contentId)
-			},
-			onNext: () => {
-				const index = this.data.contents.findIndex(
-					(content) => content.contentId === this.data.activeContentId,
-				)
-				const next = this.data.contents[index + 1]
-				if (next) this.switchActiveContent(next.contentId)
-			},
-			onSetMain: () => {
-				if (this.data.activeContentId) this.setMainContent(this.data.activeContentId)
-			},
-		})
-		this.contentControlsDecorator.create()
 	}
 
 	private setupRetryEditingListeners(): void {
@@ -1337,7 +1319,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
-		this.contentControlsDecorator?.updateConfig({ width, height, data: this.data })
 		this.node.getLayer()?.batchDraw()
 	}
 

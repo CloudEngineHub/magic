@@ -26,7 +26,6 @@ import ImageExtendButton from "./image/ImageExtendButton/index"
 import ImageRemoveBackgroundButton from "./image/ImageRemoveBackgroundButton/index"
 import ImageEraserButton from "./image/ImageEraserButton/index"
 import ImageReplaceButton from "./image/ImageReplaceButton/index"
-import ImageContentDeleteButton from "./image/ImageContentDeleteButton/index"
 import VideoOriginalSizeButton from "./video/VideoOriginalSizeButton/index"
 import { ElementToolTypeEnum } from "../../public/props"
 import type { ElementToolType } from "../../public/props"
@@ -89,8 +88,6 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <ImageEraserButton />
 		case ElementToolTypeEnum.ImageReplaceButton:
 			return <ImageReplaceButton />
-		case ElementToolTypeEnum.ImageContentDeleteButton:
-			return <ImageContentDeleteButton />
 		case ElementToolTypeEnum.VideoOriginalSizeButton:
 			return <VideoOriginalSizeButton />
 		default:

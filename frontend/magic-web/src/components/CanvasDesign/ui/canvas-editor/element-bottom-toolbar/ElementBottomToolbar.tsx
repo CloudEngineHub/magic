@@ -17,8 +17,17 @@ export interface ElementBottomToolbarItem {
 	onClick: () => void
 }
 
+export interface ElementBottomToolbarSection {
+	id: string
+	order?: number
+	group?: string
+	items?: Array<ElementBottomToolbarItem | null | false | undefined>
+	content?: ReactNode
+}
+
 export interface ElementBottomToolbarProps {
-	items: Array<ElementBottomToolbarItem | null | false | undefined>
+	items?: Array<ElementBottomToolbarItem | null | false | undefined>
+	sections?: ElementBottomToolbarSection[]
 	/** Floating component identifier; it must be unique within the canvas. */
 	floatingId: string
 	/** Whether the toolbar should be visible for the current selection/bounds. */
@@ -35,14 +44,22 @@ export interface ElementBottomToolbarProps {
 export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 	const {
 		items,
+		sections,
 		floatingId,
 		shouldShow,
 		offset = 12,
 		ariaLabel = "元素底部工具栏",
 		className,
 	} = props
-	const visibleItems = useMemo(() => items.filter(Boolean) as ElementBottomToolbarItem[], [items])
-	const isEmpty = visibleItems.length === 0
+	const visibleSections = useMemo(() => {
+		if (sections) {
+			return sections.filter(
+				(section) => Boolean(section.content) || Boolean(section.items?.some(Boolean)),
+			)
+		}
+		return items?.some(Boolean) ? [{ id: "items", items }] : []
+	}, [items, sections])
+	const isEmpty = visibleSections.length === 0
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
@@ -72,31 +89,53 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 			aria-label={ariaLabel}
 			aria-hidden={isEmpty || undefined}
 		>
-			{visibleItems.map((item, index) => {
-				const previousItem = visibleItems[index - 1]
-				const shouldShowDivider =
-					index > 0 &&
-					(item.group !== undefined || previousItem?.group !== undefined) &&
-					item.group !== previousItem?.group
+			{visibleSections.map((section, sectionIndex) => {
+				const previousSection = visibleSections[sectionIndex - 1]
+				const shouldShowSectionDivider =
+					sectionIndex > 0 && section.group !== previousSection?.group
+				const visibleItems = section.items?.filter(Boolean) as
+					ElementBottomToolbarItem[] | undefined
 
 				return (
-					<Fragment key={item.id}>
-						{shouldShowDivider ? <div className={styles.divider} aria-hidden /> : null}
-						<div className={styles.item}>
-							<button
-								type="button"
-								className={styles.button}
-								disabled={item.disabled || item.loading}
-								aria-busy={item.loading || undefined}
-								onClick={item.onClick}
-							>
-								{item.icon}
-								<span>{item.label}</span>
-								{item.shortcut ? (
-									<span className={styles.shortcut}>{item.shortcut}</span>
-								) : null}
-							</button>
-						</div>
+					<Fragment key={section.id}>
+						{shouldShowSectionDivider ? (
+							<div className={styles.divider} aria-hidden />
+						) : null}
+						{section.content ? (
+							<div className={styles.content}>{section.content}</div>
+						) : null}
+						{visibleItems?.map((item, itemIndex) => {
+							const previousItem = visibleItems[itemIndex - 1]
+							const shouldShowItemDivider =
+								itemIndex > 0 &&
+								(item.group !== undefined || previousItem?.group !== undefined) &&
+								item.group !== previousItem?.group
+
+							return (
+								<Fragment key={item.id}>
+									{shouldShowItemDivider ? (
+										<div className={styles.divider} aria-hidden />
+									) : null}
+									<div className={styles.item}>
+										<button
+											type="button"
+											className={styles.button}
+											disabled={item.disabled || item.loading}
+											aria-busy={item.loading || undefined}
+											onClick={item.onClick}
+										>
+											{item.icon}
+											<span>{item.label}</span>
+											{item.shortcut ? (
+												<span className={styles.shortcut}>
+													{item.shortcut}
+												</span>
+											) : null}
+										</button>
+									</div>
+								</Fragment>
+							)
+						})}
 					</Fragment>
 				)
 			})}

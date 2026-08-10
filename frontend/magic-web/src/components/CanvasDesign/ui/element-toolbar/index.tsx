@@ -7,11 +7,7 @@ import { useCanvasSelectionUI } from "../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../app/providers/MagicProvider"
 import { useCanvas } from "../../app/providers/CanvasProvider"
 import useShowVideoOriginalSizeButton from "./hooks/useShowVideoOriginalSizeButton"
-import {
-	getActiveContent,
-	getActiveImageContent,
-	isImageElementContent,
-} from "../../runtime/document/elementContent"
+import { getActiveContent, getActiveImageContent } from "../../runtime/document/elementContent"
 
 export default function ElementTools() {
 	const { convertHightConfig } = useMagic()
@@ -92,14 +88,7 @@ export default function ElementTools() {
 
 				case ElementTypeEnum.Image:
 					const imageElementTools: ElementToolOptionType[] = []
-					const hasMultipleImageContents =
-						isImageElementContent(firstSelectedElement) &&
-						firstSelectedElement.contents.length > 1
-					if (!imageSrc) {
-						return hasMultipleImageContents
-							? [{ type: ElementToolTypeEnum.ImageContentDeleteButton }]
-							: []
-					}
+					if (!imageSrc) return []
 					imageElementTools.push({
 						type: ElementToolTypeEnum.SizeEditButton,
 					})
@@ -132,11 +121,6 @@ export default function ElementTools() {
 					imageElementTools.push({
 						type: ElementToolTypeEnum.MediaDownloadButton,
 					})
-					if (hasMultipleImageContents) {
-						imageElementTools.push({
-							type: ElementToolTypeEnum.ImageContentDeleteButton,
-						})
-					}
 					return imageElementTools
 
 				case ElementTypeEnum.Video:

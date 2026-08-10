@@ -59,6 +59,15 @@
 		"unsupportedDropContent": "当前拖拽内容不支持添加为参考图",
 		"unsupportedReferenceImageType": "当前仅支持添加图片类型的参考图"
 	},
+	"elementBottomToolbar": {
+		"deleteVersion": "删除版本",
+		"label": "元素底部工具栏",
+		"mainVersion": "主版本",
+		"nextVersion": "下一个版本",
+		"previousVersion": "上一个版本",
+		"setMainVersion": "设为主版本",
+		"versionCount": "{{current}}/{{total}}"
+	},
 	"elementConflict": {
 		"deleteElement": "删除这个元素",
 		"description": "这个元素有新的同步内容，也有你当前的修改。",
@@ -97,9 +106,6 @@
 			"bold": "粗体",
 			"italic": "斜体",
 			"placeholder": "字重"
-		},
-		"imageContentDelete": {
-			"title": "删除当前版本"
 		},
 		"imageConvertHight": {
 			"exitHint": "退出",

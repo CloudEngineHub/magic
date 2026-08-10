@@ -5,7 +5,11 @@ import type {
 	LayerElement,
 } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
-import { getActiveContent } from "../../document/elementContent"
+import {
+	deleteActiveContent as deleteContentFromData,
+	getActiveContent,
+	getContentById,
+} from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
 import {
 	BaseElement,
@@ -261,6 +265,44 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	public getRenderName(): string {
 		return this.getText("audio.defaultName", "音频")
+	}
+
+	public switchActiveContent(contentId: string): boolean {
+		if (!getContentById(this.data, contentId)) return false
+		if (this.data.activeContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ activeContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public setMainContent(contentId: string): boolean {
+		const target = getContentById(this.data, contentId)
+		if (!target?.src) return false
+		if (this.data.mainContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ mainContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public deleteActiveContent(): boolean {
+		const result = deleteContentFromData(this.data, (content) => Boolean(content.src))
+		if (!result) return false
+		this.canvas.elementManager.update(
+			this.data.id,
+			{
+				contents: result.element.contents,
+				activeContentId: result.element.activeContentId,
+				mainContentId: result.element.mainContentId,
+			},
+			{ silent: false },
+		)
+		return true
 	}
 
 	private getAudioContent(): AudioElementContent | undefined {

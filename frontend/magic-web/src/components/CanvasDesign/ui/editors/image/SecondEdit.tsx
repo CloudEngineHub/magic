@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useEventListener, useLatest } from "ahooks"
 import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import { ElementBottomToolbar } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
+import { useElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
 import styles from "./index.module.css"
 import { LoaderCircle, Pencil, RotateCcw, SquarePen } from "lucide-react"
 import { type MessageEditorRef } from "../message/MessageEditor"
@@ -382,38 +382,14 @@ export default function SecondEdit(props: SecondEditProps) {
 		{ target: window },
 	)
 
-	if (isEditing) {
-		return (
-			<ImageEditorSurface
-				imageElement={props.imageElement}
-				config={config}
-				editorRef={editorRef}
-				shouldShow={() =>
-					selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
-				}
-				floatingId="second-edit"
-				selectionPersistenceKey={`image-second-edit:${props.imageElement.id}`}
-				placeholder={t("imageEditor.editPlaceholder", "请输入您的编辑需求")}
-				onSend={handleSend}
-				isSending={isSending}
-				autoFocus
-				isDropEnabled={isEditing}
-				className={styles.imageMessageEditor}
-				style={{ visibility: isVisible ? "visible" : "hidden" }}
-				onPreviewMediaResource={props.onPreviewMediaResource}
-				isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
-			/>
-		)
-	}
-
-	return (
-		<ElementBottomToolbar
-			floatingId="second-edit-result"
-			ariaLabel={t("imageEditor.bottomToolbar", "图片元素底部工具栏")}
-			shouldShow={() =>
-				selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
-			}
-			items={[
+	const resultActionSection = useMemo(
+		() => ({
+			id: "image-result-actions",
+			elementId: props.imageElement.id,
+			order: 10,
+			group: "result-actions",
+			visible: !isEditing,
+			items: [
 				{
 					id: "quick-edit",
 					group: "quick-edit",
@@ -447,9 +423,47 @@ export default function SecondEdit(props: SecondEditProps) {
 							onClick: handleGenerateAgain,
 						}
 					: null,
-			]}
-		/>
+			],
+		}),
+		[
+			canRegenerate,
+			handleGenerateAgain,
+			handleRegenerateFromSavedConfig,
+			handleStartEditing,
+			hasProcessingContent,
+			isEditing,
+			isSending,
+			props.imageElement.id,
+			t,
+		],
 	)
+	useElementBottomToolbarSection(resultActionSection)
+
+	if (isEditing) {
+		return (
+			<ImageEditorSurface
+				imageElement={props.imageElement}
+				config={config}
+				editorRef={editorRef}
+				shouldShow={() =>
+					selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
+				}
+				floatingId="second-edit"
+				selectionPersistenceKey={`image-second-edit:${props.imageElement.id}`}
+				placeholder={t("imageEditor.editPlaceholder", "请输入您的编辑需求")}
+				onSend={handleSend}
+				isSending={isSending}
+				autoFocus
+				isDropEnabled={isEditing}
+				className={styles.imageMessageEditor}
+				style={{ visibility: isVisible ? "visible" : "hidden" }}
+				onPreviewMediaResource={props.onPreviewMediaResource}
+				isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
+			/>
+		)
+	}
+
+	return null
 }
 
 function parseImageElementSize(size?: string): { width: number; height: number } | null {

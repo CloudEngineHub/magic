@@ -1,13 +1,12 @@
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
-import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type { Canvas } from "../../../runtime/core/Canvas"
-import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
+import type { VideoElement } from "../../../runtime/document/types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
-import { ElementBottomToolbar } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
+import { useElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
@@ -63,7 +62,6 @@ async function waitForPendingVideoGenerationResources(
 /** 视频成片结果态：重新编辑可调整已保存请求，再次生成则直接追加同配置 Content。 */
 export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
-	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
 	const { methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } = useMagic()
 	const { t } = useCanvasDesignI18n()
@@ -166,42 +164,53 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 
 	const canRestore = Boolean(savedGenerateVideoRequest?.model_id)
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
+	const resultActionSection = useMemo(
+		() => ({
+			id: "video-result-actions",
+			elementId: videoElement.id,
+			order: 10,
+			group: "result-actions",
+			visible: !isEditing && canRestore,
+			items: [
+				{
+					id: "re-edit",
+					group: "edit",
+					icon: <SquarePen size={14} />,
+					label: t("videoEditor.reEditFromSaved", "重新编辑"),
+					onClick: handleStartRegenerate,
+				},
+				{
+					id: "generate-again",
+					group: "generation",
+					icon: generateAgainBusy ? (
+						<LoaderCircle size={14} className="animate-spin" />
+					) : (
+						<RotateCcw size={14} />
+					),
+					label: t("videoEditor.generateAgain", "再次生成"),
+					disabled: generateAgainBusy,
+					loading: generateAgainBusy,
+					onClick: handleGenerateAgain,
+				},
+			],
+		}),
+		[
+			canRestore,
+			generateAgainBusy,
+			handleGenerateAgain,
+			handleStartRegenerate,
+			isEditing,
+			t,
+			videoElement.id,
+		],
+	)
+	useElementBottomToolbarSection(resultActionSection)
 
 	if (!isEditing) {
 		if (!canRestore) {
 			return null
 		}
-		return (
-			<ElementBottomToolbar
-				floatingId="video-second-edit"
-				ariaLabel={t("videoEditor.bottomToolbar", "视频元素底部工具栏")}
-				shouldShow={() =>
-					selectedElements.some((element) => element?.type === ElementTypeEnum.Video)
-				}
-				items={[
-					{
-						id: "re-edit",
-						group: "edit",
-						icon: <SquarePen size={14} />,
-						label: t("videoEditor.reEditFromSaved", "重新编辑"),
-						onClick: handleStartRegenerate,
-					},
-					{
-						id: "generate-again",
-						group: "generation",
-						icon: generateAgainBusy ? (
-							<LoaderCircle size={14} className="animate-spin" />
-						) : (
-							<RotateCcw size={14} />
-						),
-						label: t("videoEditor.generateAgain", "再次生成"),
-						disabled: generateAgainBusy,
-						loading: generateAgainBusy,
-						onClick: handleGenerateAgain,
-					},
-				]}
-			/>
-		)
+		return null
 	}
 
 	return (
