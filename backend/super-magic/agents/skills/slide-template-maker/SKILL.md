@@ -57,7 +57,7 @@ During authoring, `create_slide_template_project` also creates `<template-id>/.t
 4. Determine the audience, use case, visual thesis, scene, semantic name, page inventory, asset strategy, and sensitive-content risks.
 5. Query the bundled taxonomy through `scripts/template_taxonomy.py`. Select one exact active `category_code` and 4–10 exact `tag_codes`, then run the script's `validate` command. Never invent taxonomy codes or add `featured` automatically.
 6. Determine a backend-compatible semantic base ID before writing: use `SLIDE-` plus lowercase kebab-case words, for example `SLIDE-navy-quarterly-review`. `create_slide_template_project` automatically appends a short six-character uppercase hexadecimal suffix, for example `-A1B2C3`; use the returned `created.data["template_id"]` and `created.data["template_directory"]` for every subsequent call.
-7. For a presentation source, render every page at high resolution with `document-converter`, then call `create_slide_template_project` with the validated category, tags, and semantic base ID. Do not create the template directory manually. Use `created.data["working_directory"]` for all intermediate files.
+7. For a presentation source, render every page at high resolution with `document-converter`, determine one shared source canvas from the rendered page ratio, then call `create_slide_template_project` with that canvas, the validated category, tags, and semantic base ID. Do not create the template directory manually. Use `created.data["working_directory"]` for all intermediate files.
 8. Call `prepare_slide_template_source` with the rendered page images and the original OOXML presentation whenever the input is a presentation. This extracts image candidates into `.template-work/source-analysis/source-assets/`; it does not copy every candidate into the final `images/` directory.
 9. Analyze every source page in two passes: first the full page for hierarchy and composition, then its bounded detail crops for typography, texture, image-internal details, charts, and small decorations. Fill every page's `visual_analysis` with `status: complete`, `must_preserve`, `visual_elements`, and `style_tokens` before authoring. Do not analyze only representative pages.
 10. Select the reconstruction mode: use `high-fidelity` when the user asks to preserve the original closely, `template-abstraction` when reusable layout families matter more than page-specific detail, and `hybrid` by default. The mode is recorded in `source-analysis.json`.
@@ -72,7 +72,7 @@ During authoring, `create_slide_template_project` also creates `<template-id>/.t
 
 ## Authoring Rules
 
-- Use a fixed 1920x1080 canvas with no responsive layout.
+- Use the declared source canvas from `template.json` with no responsive layout. Default to `1920x1080` only when the source does not provide dimensions, and preserve source ratios such as `1:1`.
 - Make `visual-spec.md` the design contract: palette, typography, spacing, backgrounds, components, chart rules, image treatment, page rhythm, editing guidance, and forbidden patterns.
 - Keep reusable visual-system CSS in `theme.css`; keep page-specific grid, flex, padding, and positioning in each slide HTML file.
 - Use lowercase kebab-case filenames for English-context templates. Chinese-context templates may use concise Chinese semantic filenames such as `封面.html`, while `layout` remains lowercase kebab-case.
@@ -104,7 +104,12 @@ created = tool.call("create_slide_template_project", {
     ],
     "label": {"zh_CN": "深蓝经营复盘", "en_US": "Navy Business Review"},
     "description": {"zh_CN": "适合经营复盘和指标分析。", "en_US": "A reusable template for operating reviews and metric analysis."},
-    "source": {"kind": "derived", "method": "visual-reconstruction", "file": "source-deck.pptx"},
+    "source": {
+        "kind": "derived",
+        "method": "visual-reconstruction",
+        "file": "source-deck.pptx",
+        "canvas": {"width": 1920, "height": 1080}
+    },
     "slides": [
         {"file": "slides/cover.html", "title": "Business Review", "layout": "cover", "description": "Opening cover."}
     ]
@@ -137,7 +142,7 @@ selected = tool.call("select_slide_template_source_assets", {
 })
 ```
 
-`prepare_slide_template_source` is a read-only evidence-preparation tool. It never generates HTML or a final slide. It stores extracted images as temporary candidates and returns `asset_analysis_batches` for visual review. Complete page analysis and call `select_slide_template_source_assets` before authoring when candidates exist. Finalization rejects pages that remain `pending`, incomplete asset decisions, selected assets that are not referenced, or extra files left in `images/source-assets/`.
+`prepare_slide_template_source` inspects the source without modifying it. It never generates HTML or a final slide. It stores extracted images as temporary candidates, corrects `template.json` when the rendered source ratio differs from the declared canvas, and returns the effective canvas plus `asset_analysis_batches` for visual review. Read `prepared.data["canvas"]` before authoring. Complete page analysis and call `select_slide_template_source_assets` before authoring when candidates exist. Finalization rejects pages that remain `pending`, incomplete asset decisions, selected assets that are not referenced, or extra files left in `images/source-assets/`.
 
 `finalize_slide_template` does not create a ZIP or upload files. Its `template-assets.json` records the validated `category_code` and `tag_codes`, local thumbnail, collage, page previews, cleanup result, a complete `SaveSlidesTemplateRequest`-compatible field set, and the fields that still require a separate upload/publish workflow. Local preview paths are not file keys; the publish workflow fills the `*_file_key` values after uploading the corresponding files.
 
@@ -147,7 +152,7 @@ selected = tool.call("select_slide_template_source_assets", {
 - Use `visual_understanding` for standalone images and screenshots, not as a replacement for `document-converter` when reading presentation files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
 - Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML and sampled final slides visually.
-- Use `analysis_slide_webpage` through that Code Mode path for 1920x1080 overflow, clipping, scrollbar, and broken-image checks.
+- Use `analysis_slide_webpage` through that Code Mode path for the declared canvas overflow, clipping, scrollbar, and broken-image checks.
 - Use `generate_images` only for neutral, non-sensitive visual assets when the source does not provide enough usable imagery.
 - Use `ask_user` only for material decisions such as ambiguous sensitive assets, intentional template updates, or an occupied user-provided target.
 
@@ -165,10 +170,12 @@ if not visual_result.ok:
     raise SystemExit(visual_result.content)
 print(visual_result.content)
 
+canvas_width = 1920  # Read source.canvas.width from template.json.
+canvas_height = 1080  # Read source.canvas.height from template.json.
 layout_result = tool.call("analysis_slide_webpage", {
     "target": "<template-id>/slides/cover.html",
-    "max_width": 1920,
-    "max_height": 1080
+    "max_width": canvas_width,
+    "max_height": canvas_height
 })
 if not layout_result.ok:
     raise SystemExit(layout_result.content)

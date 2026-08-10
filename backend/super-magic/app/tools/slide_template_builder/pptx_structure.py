@@ -11,6 +11,7 @@ from typing import Any
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
+from app.tools.slide_template_builder.canvas import normalize_canvas_size
 
 SUPPORTED_IMAGE_EXTENSIONS = {
     "bmp",
@@ -150,7 +151,13 @@ def _text_value(shape: Any) -> dict[str, Any] | None:
     }
 
 
-def _bbox(shape: Any, slide_width: int, slide_height: int) -> dict[str, Any]:
+def _bbox(
+    shape: Any,
+    slide_width: int,
+    slide_height: int,
+    normalized_width: int,
+    normalized_height: int,
+) -> dict[str, Any]:
     left = int(getattr(shape, "left", 0) or 0)
     top = int(getattr(shape, "top", 0) or 0)
     width = int(getattr(shape, "width", 0) or 0)
@@ -158,10 +165,10 @@ def _bbox(shape: Any, slide_width: int, slide_height: int) -> dict[str, Any]:
     return {
         "emu": {"left": left, "top": top, "width": width, "height": height},
         "canvas": {
-            "left": round(left / slide_width * 1920, 2),
-            "top": round(top / slide_height * 1080, 2),
-            "width": round(width / slide_width * 1920, 2),
-            "height": round(height / slide_height * 1080, 2),
+            "left": round(left / slide_width * normalized_width, 2),
+            "top": round(top / slide_height * normalized_height, 2),
+            "width": round(width / slide_width * normalized_width, 2),
+            "height": round(height / slide_height * normalized_height, 2),
         },
     }
 
@@ -181,13 +188,15 @@ def _shape_value(
     shape: Any,
     slide_width: int,
     slide_height: int,
+    normalized_width: int,
+    normalized_height: int,
     asset_paths: dict[str, str],
     asset_blobs: dict[str, bytes],
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "name": shape.name,
         "type": _enum_name(shape.shape_type),
-        "bbox": _bbox(shape, slide_width, slide_height),
+        "bbox": _bbox(shape, slide_width, slide_height, normalized_width, normalized_height),
         "rotation": float(getattr(shape, "rotation", 0) or 0),
     }
     if getattr(shape, "is_placeholder", False):
@@ -229,7 +238,15 @@ def _shape_value(
         }
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         result["children"] = [
-            _shape_value(child, slide_width, slide_height, asset_paths, asset_blobs)
+            _shape_value(
+                child,
+                slide_width,
+                slide_height,
+                normalized_width,
+                normalized_height,
+                asset_paths,
+                asset_blobs,
+            )
             for child in shape.shapes
         ]
     return result
@@ -257,12 +274,21 @@ def extract_pptx_structure(source_path: Path) -> ExtractedPptxStructure:
     presentation = Presentation(str(source_path))
     slide_width = int(presentation.slide_width)
     slide_height = int(presentation.slide_height)
+    normalized_canvas = normalize_canvas_size(slide_width, slide_height)
     asset_paths: dict[str, str] = {}
     asset_blobs: dict[str, bytes] = {}
     slides = []
     for slide_index, slide in enumerate(presentation.slides, 1):
         shapes = [
-            _shape_value(shape, slide_width, slide_height, asset_paths, asset_blobs)
+            _shape_value(
+                shape,
+                slide_width,
+                slide_height,
+                normalized_canvas.width,
+                normalized_canvas.height,
+                asset_paths,
+                asset_blobs,
+            )
             for shape in slide.shapes
         ]
         background = _fill_value(slide.background.fill)
@@ -282,7 +308,7 @@ def extract_pptx_structure(source_path: Path) -> ExtractedPptxStructure:
             "schema_version": "1.0",
             "source_file": source_path.name,
             "slide_size_emu": {"width": slide_width, "height": slide_height},
-            "normalized_canvas": {"width": 1920, "height": 1080},
+            "normalized_canvas": normalized_canvas.model_dump(),
             "slide_count": len(slides),
             "source_asset_count": len(assets),
             "slides": slides,

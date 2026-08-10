@@ -10,7 +10,7 @@ Passing schema validation is necessary but not sufficient. A finished template m
 4. Data pages contain readable sample values, legends, labels, and hierarchy.
 5. Text-heavy pages use grouping, sidebars, highlights, numbered structures, or pull quotes.
 6. Color roles, typography, spacing, radii, borders, shadows, icons, charts, and image treatment remain coherent.
-7. Normal content pages intentionally use the 1920x1080 canvas. Accidental empty lower halves, tiny type, and scattered cards are failures.
+7. Normal content pages intentionally use the declared source canvas. Accidental empty areas caused by changing the source ratio, tiny type, and scattered cards are failures.
 8. Default content is realistic and editable. Do not use lorem ipsum, fake contact details, fake URLs, or gray placeholders.
 
 ## Scene Page Inventory

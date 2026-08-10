@@ -66,7 +66,7 @@ Author the files in this order:
 4. `slides/*.html`: new semantic HTML and page-specific CSS.
 5. `template.json`: final metadata and semantic slide order.
 
-For presentation-derived templates, write:
+For presentation-derived templates, write the source canvas detected from the presentation. For example:
 
 ```json
 "source": {
@@ -78,6 +78,8 @@ For presentation-derived templates, write:
 ```
 
 Keep `source.file` to the source basename. Never expose an absolute workspace path.
+
+Do not replace a square or other source canvas with `1920x1080`; the dimensions may be normalized for authoring, but the aspect ratio must remain unchanged.
 
 ## 5. Asset Handling
 

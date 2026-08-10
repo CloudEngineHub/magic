@@ -1,20 +1,19 @@
-"""Shared validation and rendering helpers for slide template tools."""
+"""Shared validation helpers for slide template tools."""
 
-import asyncio
 import re
 import uuid
 from dataclasses import dataclass
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
+from app.tools.slide_template_builder.canvas import validate_canvas_size
+from app.tools.slide_template_builder.errors import SlideTemplateBuilderError
 from app.tools.slide_template_builder.models import (
     BACKEND_CATEGORY_CODE_PATTERN,
     BACKEND_TEMPLATE_ID_PATTERN,
     LAYOUT_PATTERN,
     SLIDE_FILE_PATTERN,
+    TemplateCanvas,
 )
 from app.tools.slide_template_builder.taxonomy import active_category_codes, tag_records_by_code
 from app.utils.async_file_utils import (
@@ -23,17 +22,8 @@ from app.utils.async_file_utils import (
     async_read_text,
     async_rmtree,
     async_scandir,
-    async_write_bytes,
 )
 
-SLIDE_SIZE = (1920, 1080)
-THUMBNAIL_SIZE = (1280, 720)
-COLLAGE_TILE_SIZE = (640, 360)
-COLLAGE_COLUMNS = 3
-COLLAGE_GAP = 24
-COLLAGE_PADDING = 32
-COLLAGE_BACKGROUND = "#f5f7fa"
-MAX_COLLAGE_SLIDES = 9
 SCAFFOLD_MARKER = "slide-template-scaffold"
 WORK_DIR_NAME = ".template-work"
 ANALYSIS_DIR_NAME = "source-analysis"
@@ -41,15 +31,12 @@ SOURCE_ANALYSIS_FILE = "source-analysis.json"
 RECONSTRUCTION_MODES = {"high-fidelity", "template-abstraction", "hybrid"}
 
 
-class SlideTemplateBuilderError(Exception):
-    """User-correctable slide template project error."""
-
-
 @dataclass(frozen=True)
 class ValidatedTemplate:
     template_dir: Path
     metadata: dict[str, Any]
     slides: list[dict[str, Any]]
+    canvas: TemplateCanvas
     source_analysis_summary: dict[str, Any] | None
 
 
@@ -121,6 +108,13 @@ def _required_text(value: Any, field_name: str) -> str:
     if not text:
         raise SlideTemplateBuilderError(f"Missing required template field: {field_name}")
     return text
+
+
+def validate_canvas(value: Any, field_name: str = "source.canvas") -> TemplateCanvas:
+    try:
+        return validate_canvas_size(value, field_name)
+    except ValueError as exc:
+        raise SlideTemplateBuilderError(str(exc)) from exc
 
 
 def _resolve_analysis_artifact(template_dir: Path, relative_path: str) -> Path:
@@ -309,8 +303,7 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
     source_file = str(source.get("file") or "")
     if "/" in source_file or "\\" in source_file:
         raise SlideTemplateBuilderError("source.file must be a basename.")
-    if source.get("canvas") != {"width": 1920, "height": 1080}:
-        raise SlideTemplateBuilderError("source.canvas must be 1920x1080.")
+    canvas = validate_canvas(source.get("canvas"))
 
     slides = metadata.get("slides")
     if not isinstance(slides, list) or not slides:
@@ -404,86 +397,9 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
         template_dir=template_dir,
         metadata=metadata,
         slides=slides,
+        canvas=canvas,
         source_analysis_summary=source_analysis_summary,
     )
-
-
-async def capture_slide(page: Any, slide_path: Path) -> tuple[bytes, dict[str, Any]]:
-    await page.set_viewport_size({"width": SLIDE_SIZE[0], "height": SLIDE_SIZE[1]})
-    await page.goto(slide_path.as_uri(), wait_until="domcontentloaded", timeout=20000)
-    await page.evaluate("document.fonts && document.fonts.ready")
-    await page.wait_for_timeout(300)
-    inspection = await page.evaluate(
-        """
-        () => ({
-          scrollWidth: document.documentElement.scrollWidth,
-          scrollHeight: document.documentElement.scrollHeight,
-          bodyScrollWidth: document.body ? document.body.scrollWidth : 0,
-          bodyScrollHeight: document.body ? document.body.scrollHeight : 0,
-          brokenImages: Array.from(document.images).filter((img) => !img.complete || img.naturalWidth === 0).map((img) => img.getAttribute('src') || ''),
-          viewport: { width: window.innerWidth, height: window.innerHeight }
-        })
-        """
-    )
-    overflow = max(inspection["scrollWidth"], inspection["bodyScrollWidth"]) > SLIDE_SIZE[0] or max(
-        inspection["scrollHeight"], inspection["bodyScrollHeight"]
-    ) > SLIDE_SIZE[1]
-    if overflow:
-        raise SlideTemplateBuilderError(f"Slide overflows the 1920x1080 canvas: {slide_path.name}")
-    if inspection["brokenImages"]:
-        raise SlideTemplateBuilderError(
-            f"Slide contains broken images: {slide_path.name}: {', '.join(inspection['brokenImages'][:5])}"
-        )
-    screenshot = await page.screenshot(
-        type="png",
-        clip={"x": 0, "y": 0, "width": SLIDE_SIZE[0], "height": SLIDE_SIZE[1]},
-    )
-    return screenshot, inspection
-
-
-def _resize_png(buffer: bytes, size: tuple[int, int]) -> bytes:
-    with Image.open(BytesIO(buffer)) as image:
-        rendered = image.convert("RGB").resize(size, Image.Resampling.LANCZOS)
-        output = BytesIO()
-        rendered.save(output, format="PNG")
-        return output.getvalue()
-
-
-def _create_collage(buffers: list[bytes]) -> bytes:
-    selected = buffers[:MAX_COLLAGE_SLIDES]
-    columns = min(COLLAGE_COLUMNS, len(selected))
-    rows = (len(selected) + columns - 1) // columns
-    width = COLLAGE_PADDING * 2 + columns * COLLAGE_TILE_SIZE[0] + (columns - 1) * COLLAGE_GAP
-    height = COLLAGE_PADDING * 2 + rows * COLLAGE_TILE_SIZE[1] + (rows - 1) * COLLAGE_GAP
-    collage = Image.new("RGB", (width, height), COLLAGE_BACKGROUND)
-    for index, buffer in enumerate(selected):
-        with Image.open(BytesIO(buffer)) as image:
-            tile = image.convert("RGB").resize(COLLAGE_TILE_SIZE, Image.Resampling.LANCZOS)
-        left = COLLAGE_PADDING + (index % columns) * (COLLAGE_TILE_SIZE[0] + COLLAGE_GAP)
-        top = COLLAGE_PADDING + (index // columns) * (COLLAGE_TILE_SIZE[1] + COLLAGE_GAP)
-        collage.paste(tile, (left, top))
-    output = BytesIO()
-    collage.save(output, format="PNG")
-    return output.getvalue()
-
-
-async def write_preview_images(
-    preview_dir: Path,
-    slide_buffers: list[bytes],
-) -> tuple[Path, Path, list[Path]]:
-    slides_dir = preview_dir / "slides"
-    slide_paths = []
-    for index, buffer in enumerate(slide_buffers, 1):
-        slide_path = slides_dir / f"slide-{index:03d}.png"
-        await async_write_bytes(slide_path, buffer)
-        slide_paths.append(slide_path)
-    thumbnail_path = preview_dir / "thumbnail.png"
-    collage_path = preview_dir / "collage.png"
-    thumbnail = await asyncio.to_thread(_resize_png, slide_buffers[0], THUMBNAIL_SIZE)
-    collage = await asyncio.to_thread(_create_collage, slide_buffers)
-    await async_write_bytes(thumbnail_path, thumbnail)
-    await async_write_bytes(collage_path, collage)
-    return thumbnail_path, collage_path, slide_paths
 
 
 async def cleanup_template_intermediates(template_dir: Path) -> list[str]:

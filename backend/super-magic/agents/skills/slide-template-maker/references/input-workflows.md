@@ -16,7 +16,7 @@ After calling `create_slide_template_project`, store source copies, screenshots,
 1. Read the HTML, CSS, scripts, and local assets.
 2. Use `visual_understanding_webpage` through `run_sdk_snippet` with `sdk.tool.call(...)` on representative pages when rendering is available, following the Code Mode example in the main skill.
 3. Extract reusable visual rules and layout families; do not copy source-specific business content or unnecessary runtime code.
-4. Rebuild the result into independent 1920x1080 slide pages with shared `theme.css` and local assets.
+4. Rebuild the result into independent fixed-size slide pages using the source canvas declared in `template.json`; preserve source ratios such as `1:1`, and use `1920x1080` only as the fallback.
 5. Use `source.kind: "derived"` and `source.method: "html-import"`.
 
 ## Text Style Brief

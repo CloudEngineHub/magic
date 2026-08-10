@@ -24,7 +24,7 @@
     {
       "id": 5,
       "prompt": "把这个 HTML 演示页面整理成可复用的模板。",
-      "expected_output": "Load slide-template-maker and the HTML workflow. Inspect source HTML/CSS/assets and representative rendered pages, extract reusable visual rules and layout families, remove source-specific content and runtime noise, and rebuild independent 1920x1080 semantic template pages."
+      "expected_output": "Load slide-template-maker and the HTML workflow. Inspect source HTML/CSS/assets, source canvas dimensions, and representative rendered pages; preserve the source aspect ratio while rebuilding independent fixed-canvas semantic template pages."
     },
     {
       "id": 6,

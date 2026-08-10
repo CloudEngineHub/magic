@@ -62,6 +62,6 @@
 - `source.kind` is `original` or `derived` for newly generated templates.
 - `source.method` is one of `manual`, `brief-generator`, `image-rebuild`, `html-import`, `visual-reconstruction`, or `project-extract`.
 - `source.file` contains a source basename or an empty string, never an absolute path.
-- `source.canvas` is always 1920x1080.
+- `source.canvas` records the fixed source canvas in CSS pixels. Preserve the source aspect ratio; use `1920x1080` only when the source does not declare another size.
 
 Do not write `name`, `template_dir`, `package_type`, `created_at`, `updated_at`, `taxonomy`, `review_status`, `copyright_notice`, `publish_options`, `files.package_zip`, `slides[].slots`, `slides[].source_slide`, `slides[].best_for`, or `slides[].risks`.

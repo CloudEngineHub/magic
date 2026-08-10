@@ -12,8 +12,8 @@ from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
     SCAFFOLD_MARKER,
-    SlideTemplateBuilderError,
     WORK_DIR_NAME,
+    SlideTemplateBuilderError,
     generate_unique_template_id,
     resolve_workspace_template_dir,
     safe_slide_path,
@@ -22,6 +22,7 @@ from app.tools.slide_template_builder.common import (
 )
 from app.tools.slide_template_builder.models import (
     BACKEND_CATEGORY_CODE_PATTERN,
+    TemplateCanvas,
     TemplateDescriptionText,
     TemplateLabelText,
     TemplateSlideParams,
@@ -114,7 +115,6 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 "slides": [item.model_dump() for item in params.slides],
                 "source": {
                     **params.source.model_dump(),
-                    "canvas": {"width": 1920, "height": 1080},
                 },
                 "warnings": [],
             }
@@ -130,7 +130,10 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             for slide in params.slides:
                 slide_path = safe_slide_path(template_dir, slide.file)
                 await async_mkdir(slide_path.parent, parents=True, exist_ok=True)
-                await async_write_text(slide_path, self._slide_scaffold(slide.title, slide.layout))
+                await async_write_text(
+                    slide_path,
+                    self._slide_scaffold(slide.title, slide.layout, params.source.canvas),
+                )
 
             data = {
                 "requested_template_id": requested_template_id,
@@ -145,6 +148,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 "slides_directory": str(template_dir / "slides"),
                 "working_directory": str(template_dir / WORK_DIR_NAME),
                 "slide_count": len(params.slides),
+                "canvas": params.source.canvas.model_dump(),
             }
             return ToolResult(
                 content=(
@@ -161,18 +165,18 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             return ToolResult.error(f"Failed to create slide template project: {exc}")
 
     @staticmethod
-    def _slide_scaffold(title: str, layout: str) -> str:
+    def _slide_scaffold(title: str, layout: str, canvas: TemplateCanvas) -> str:
         return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=1920, height=1080">
+  <meta name="viewport" content="width={canvas.width}, height={canvas.height}">
   <title>{title}</title>
   <link rel="stylesheet" href="../theme.css">
   <!-- {SCAFFOLD_MARKER} -->
 </head>
 <body>
-  <main class="slide" data-layout="{layout}"></main>
+  <main class="slide" data-layout="{layout}" data-width="{canvas.width}" data-height="{canvas.height}"></main>
 </body>
 </html>
 """

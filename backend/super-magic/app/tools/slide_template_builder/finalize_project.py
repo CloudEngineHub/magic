@@ -12,12 +12,11 @@ from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
     SlideTemplateBuilderError,
-    capture_slide,
     cleanup_template_intermediates,
     resolve_workspace_template_dir,
     validate_template_project,
-    write_preview_images,
 )
+from app.tools.slide_template_builder.preview import capture_slide, write_preview_images
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
     async_exists,
@@ -72,7 +71,7 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
             try:
                 browser = await playwright.chromium.launch(headless=True)
                 context = await browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
+                    viewport={"width": validated.canvas.width, "height": validated.canvas.height},
                     device_scale_factor=1,
                 )
                 page = await context.new_page()
@@ -80,9 +79,9 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                 inspections = []
                 for index, slide in enumerate(validated.slides, 1):
                     slide_path = template_dir / slide["file"]
-                    buffer, inspection = await capture_slide(page, slide_path)
-                    slide_buffers.append(buffer)
-                    inspections.append({"index": index, "file": slide["file"], **inspection})
+                    capture = await capture_slide(page, slide_path, validated.canvas)
+                    slide_buffers.append(capture.screenshot)
+                    inspections.append({"index": index, "file": slide["file"], **capture.inspection})
                 await context.close()
             finally:
                 if browser is not None:
@@ -92,16 +91,17 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                     await playwright.stop()
                     playwright = None
 
-            thumbnail_path, collage_path, slide_paths = await write_preview_images(
+            preview_images = await write_preview_images(
                 temp_preview_dir,
                 slide_buffers,
+                validated.canvas,
             )
             if await async_exists(preview_dir):
                 await async_rmtree(preview_dir)
             await async_rename(temp_preview_dir, preview_dir)
             removed_temporary_paths = await cleanup_template_intermediates(template_dir)
 
-            relative_slide_paths = [f"previews/slides/{path.name}" for path in slide_paths]
+            relative_slide_paths = [f"previews/slides/{path.name}" for path in preview_images.slide_paths]
             manifest = {
                 "schema_version": "1.0",
                 "template_id": validated.metadata["template_id"],
@@ -141,7 +141,7 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                 "slide_count": len(validated.slides),
                 "collage_slide_count": min(len(validated.slides), 9),
                 "validation": {
-                    "canvas": {"width": 1920, "height": 1080},
+                    "canvas": validated.canvas.model_dump(),
                     "slides": inspections,
                 },
                 "source_analysis": validated.source_analysis_summary,
@@ -159,17 +159,17 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                 "tag_codes": validated.metadata["tag_codes"],
                 "template_directory": str(template_dir),
                 "preview_directory": str(preview_dir),
-                "thumbnail": str(preview_dir / thumbnail_path.name),
-                "collage": str(preview_dir / collage_path.name),
-                "preview_images": [str(preview_dir / "slides" / path.name) for path in slide_paths],
+                "thumbnail": str(preview_dir / preview_images.thumbnail_path.name),
+                "collage": str(preview_dir / preview_images.collage_path.name),
+                "preview_images": [str(preview_dir / "slides" / path.name) for path in preview_images.slide_paths],
                 "manifest": str(manifest_path),
-                "slide_count": len(slide_paths),
+                "slide_count": len(preview_images.slide_paths),
                 "removed_temporary_paths": removed_temporary_paths,
                 "zip_created": False,
             }
             return ToolResult(
                 content=(
-                    f"Slide template finalized: {len(slide_paths)} slides rendered. "
+                    f"Slide template finalized: {len(preview_images.slide_paths)} slides rendered. "
                     f"Preview assets and source files are together under `{template_dir}`. "
                     f"Removed {len(removed_temporary_paths)} temporary work path(s). No ZIP was created."
                 ),

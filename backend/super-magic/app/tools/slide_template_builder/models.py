@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # Keep the runtime validator aligned with the slide template backend contract.
 # Template IDs use the SLIDE- prefix; category codes remain PPT-CATE-* values.
 BACKEND_TEMPLATE_ID_PATTERN = r"^SLIDE-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
@@ -12,6 +11,16 @@ BACKEND_CATEGORY_CODE_PATTERN = r"^(?:PPT|SLIDE)-CATE-[a-z0-9]+(?:-[a-z0-9]+)*$"
 SLIDE_FILE_PATTERN = r"^slides/[A-Za-z0-9\u3400-\u4DBF\u4E00-\u9FFF][A-Za-z0-9\u3400-\u4DBF\u4E00-\u9FFF-]*\.html$"
 LAYOUT_PATTERN = r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
 ReconstructionMode = Literal["high-fidelity", "template-abstraction", "hybrid"]
+
+
+class TemplateCanvas(BaseModel):
+    """Fixed slide canvas dimensions in CSS pixels."""
+
+    width: int = Field(..., ge=320, le=8192)
+    height: int = Field(..., ge=180, le=8192)
+
+    def as_tuple(self) -> tuple[int, int]:
+        return self.width, self.height
 
 
 class TemplateI18nText(BaseModel):
@@ -48,6 +57,7 @@ class TemplateSourceParams(BaseModel):
         "project-extract",
     ]
     file: str = Field("", max_length=255)
+    canvas: TemplateCanvas = Field(default_factory=lambda: TemplateCanvas(width=1920, height=1080))
 
     @field_validator("file")
     @classmethod

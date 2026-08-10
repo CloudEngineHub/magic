@@ -6,8 +6,9 @@ Use this workflow when the user provides an existing Super Magic slide project a
 
 1. Read `magic.project.js` and confirm `type: "slide"`.
 2. Read the configured slide order and confirm every referenced HTML file exists.
-3. Inspect shared CSS, page-level CSS, local assets, charts, and runtime dependencies.
-4. Do not modify the source project.
+3. Inspect the configured or rendered width and height for every page. Require one shared aspect ratio, record that canvas, and preserve it in the template.
+4. Inspect shared CSS, page-level CSS, local assets, charts, and runtime dependencies.
+5. Do not modify the source project.
 
 Stop and ask for the correct project directory if the configuration is missing, invalid, or incomplete.
 
@@ -32,6 +33,7 @@ Plan the extracted page inventory, then call `create_slide_template_project` to 
 - Remove project controllers, `magic.project.js`, `index.html`, `slide-bridge.js`, debug attributes, and unused scripts.
 - Preserve useful `data-slot` attributes and add `data-content-hint` where the editing intent is not obvious.
 - Use `source.kind: "derived"` and `source.method: "project-extract"`.
+- Set `source.canvas` to the source project's fixed canvas. Do not replace a square source with the default `1920x1080` canvas.
 - After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed.
 
 ## 4. Sensitive Content

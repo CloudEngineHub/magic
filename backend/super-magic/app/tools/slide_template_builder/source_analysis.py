@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import math
-from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image
 from pydantic import Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
@@ -17,16 +15,19 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
+from app.tools.slide_template_builder.canvas import PixelSize, detect_source_canvas
 from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
     SOURCE_ANALYSIS_FILE,
-    SlideTemplateBuilderError,
     WORK_DIR_NAME,
+    SlideTemplateBuilderError,
     resolve_workspace_template_dir,
+    validate_canvas,
     validate_template_id,
 )
-from app.tools.slide_template_builder.models import ReconstructionMode
+from app.tools.slide_template_builder.models import ReconstructionMode, TemplateCanvas
 from app.tools.slide_template_builder.pptx_structure import extract_pptx_structure
+from app.tools.slide_template_builder.source_images import build_page_artifacts, create_contact_sheet
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
     async_exists,
@@ -40,22 +41,6 @@ from app.utils.async_file_utils import (
 )
 
 SUPPORTED_PRESENTATION_STRUCTURE_SUFFIXES = {".pptx", ".pptm", ".potx", ".potm", ".ppsx", ".ppsm"}
-
-
-@dataclass(frozen=True)
-class CropArtifact:
-    row: int
-    column: int
-    bounds: tuple[int, int, int, int]
-    png: bytes
-
-
-@dataclass(frozen=True)
-class PageArtifacts:
-    width: int
-    height: int
-    full_png: bytes
-    crops: tuple[CropArtifact, ...]
 
 
 class PrepareSlideTemplateSourceParams(BaseToolParams):
@@ -99,64 +84,6 @@ Reconstruction mode. high-fidelity preserves representative page details, templa
         if any(not value for value in normalized):
             raise ValueError("page image paths cannot be empty")
         return normalized
-
-
-def _png_bytes(image: Image.Image) -> bytes:
-    output = BytesIO()
-    image.save(output, format="PNG", optimize=True)
-    return output.getvalue()
-
-
-def _build_page_artifacts(data: bytes, columns: int, rows: int) -> PageArtifacts:
-    with Image.open(BytesIO(data)) as source:
-        image = ImageOps.exif_transpose(source).convert("RGB")
-    width, height = image.size
-    if width < 320 or height < 180:
-        raise SlideTemplateBuilderError(f"Source page image is too small for detailed analysis: {width}x{height}")
-    cell_width = width / columns
-    cell_height = height / rows
-    overlap_x = cell_width * 0.1
-    overlap_y = cell_height * 0.1
-    crops = []
-    for row in range(rows):
-        for column in range(columns):
-            left = max(0, math.floor(column * cell_width - overlap_x))
-            top = max(0, math.floor(row * cell_height - overlap_y))
-            right = min(width, math.ceil((column + 1) * cell_width + overlap_x))
-            bottom = min(height, math.ceil((row + 1) * cell_height + overlap_y))
-            crops.append(CropArtifact(
-                row=row + 1,
-                column=column + 1,
-                bounds=(left, top, right, bottom),
-                png=_png_bytes(image.crop((left, top, right, bottom))),
-            ))
-    return PageArtifacts(
-        width=width,
-        height=height,
-        full_png=_png_bytes(image),
-        crops=tuple(crops),
-    )
-
-
-def _create_contact_sheet(pages: list[bytes]) -> bytes:
-    columns = min(4, len(pages))
-    rows = math.ceil(len(pages) / columns)
-    tile_width, tile_height = 480, 270
-    label_height = 28
-    gap = 20
-    padding = 24
-    width = padding * 2 + columns * tile_width + (columns - 1) * gap
-    height = padding * 2 + rows * (tile_height + label_height) + (rows - 1) * gap
-    sheet = Image.new("RGB", (width, height), "#eef1f5")
-    draw = ImageDraw.Draw(sheet)
-    for index, data in enumerate(pages, 1):
-        with Image.open(BytesIO(data)) as source:
-            image = ImageOps.pad(source.convert("RGB"), (tile_width, tile_height), color="#ffffff")
-        left = padding + ((index - 1) % columns) * (tile_width + gap)
-        top = padding + ((index - 1) // columns) * (tile_height + label_height + gap)
-        sheet.paste(image, (left, top))
-        draw.text((left, top + tile_height + 6), f"Slide {index:03d}", fill="#1f2937")
-    return _png_bytes(sheet)
 
 
 def _source_asset_slide_indices(structure: dict[str, Any]) -> dict[str, list[int]]:
@@ -243,6 +170,19 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 if not await async_is_file(page_path):
                     raise SlideTemplateBuilderError(f"Source page image does not exist: {page_path}")
 
+            structure = None
+            presentation_canvas = None
+            if params.source_presentation:
+                presentation_path = self.resolve_path(params.source_presentation).resolve(strict=False)
+                if not await async_is_file(presentation_path):
+                    raise SlideTemplateBuilderError(f"Source presentation does not exist: {presentation_path}")
+                if presentation_path.suffix.lower() not in SUPPORTED_PRESENTATION_STRUCTURE_SUFFIXES:
+                    raise SlideTemplateBuilderError(
+                        "source_presentation must be an OOXML presentation. Convert legacy PPT to PPTX first."
+                    )
+                structure = await asyncio.to_thread(extract_pptx_structure, presentation_path)
+                presentation_canvas = TemplateCanvas.model_validate(structure.metadata["normalized_canvas"])
+
             if await async_exists(analysis_root):
                 await async_rmtree(analysis_root)
             await async_mkdir(analysis_root / "full", parents=True, exist_ok=False)
@@ -251,10 +191,11 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             slide_records = []
             analysis_batches = []
             full_page_buffers = []
+            source_page_sizes = []
             for index, page_path in enumerate(page_paths, 1):
                 source_bytes = await async_read_bytes(page_path)
                 artifacts = await asyncio.to_thread(
-                    _build_page_artifacts,
+                    build_page_artifacts,
                     source_bytes,
                     params.crop_columns,
                     params.crop_rows,
@@ -263,6 +204,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 full_path = template_dir / full_relative
                 await async_write_bytes(full_path, artifacts.full_png)
                 full_page_buffers.append(artifacts.full_png)
+                source_page_sizes.append(PixelSize(width=artifacts.width, height=artifacts.height))
 
                 crop_records = []
                 crop_paths = []
@@ -310,7 +252,32 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     "images": [str(full_path), *crop_paths],
                 })
 
-            contact_sheet = await asyncio.to_thread(_create_contact_sheet, full_page_buffers)
+            source = metadata.get("source") if isinstance(metadata.get("source"), dict) else {}
+            declared_canvas = validate_canvas(source.get("canvas"))
+            canvas_warnings = []
+            try:
+                canvas_detection = detect_source_canvas(
+                    declared_canvas,
+                    source_page_sizes,
+                    presentation_canvas,
+                )
+            except ValueError as exc:
+                raise SlideTemplateBuilderError(str(exc)) from exc
+            detected_canvas = canvas_detection.canvas
+            canvas_warning = canvas_detection.warning
+            if canvas_warning:
+                source["canvas"] = detected_canvas.model_dump()
+                metadata["source"] = source
+                metadata_warnings = metadata.get("warnings")
+                if not isinstance(metadata_warnings, list):
+                    metadata_warnings = []
+                if canvas_warning not in metadata_warnings:
+                    metadata_warnings.append(canvas_warning)
+                metadata["warnings"] = metadata_warnings
+                canvas_warnings.append(canvas_warning)
+                await async_write_json(metadata_path, metadata, ensure_ascii=False, indent=2)
+
+            contact_sheet = await asyncio.to_thread(create_contact_sheet, full_page_buffers)
             contact_sheet_path = analysis_root / "contact-sheet.png"
             await async_write_bytes(contact_sheet_path, contact_sheet)
 
@@ -319,15 +286,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             extracted_asset_count = 0
             asset_catalog = []
             asset_analysis_paths = []
-            if params.source_presentation:
-                presentation_path = self.resolve_path(params.source_presentation).resolve(strict=False)
-                if not await async_is_file(presentation_path):
-                    raise SlideTemplateBuilderError(f"Source presentation does not exist: {presentation_path}")
-                if presentation_path.suffix.lower() not in SUPPORTED_PRESENTATION_STRUCTURE_SUFFIXES:
-                    raise SlideTemplateBuilderError(
-                        "source_presentation must be an OOXML presentation. Convert legacy PPT to PPTX first."
-                    )
-                structure = await asyncio.to_thread(extract_pptx_structure, presentation_path)
+            if structure is not None:
                 structure_path = analysis_root / "pptx-structure.json"
                 await async_write_json(structure_path, structure.metadata, ensure_ascii=False, indent=2)
                 structure_slide_count = structure.metadata["slide_count"]
@@ -358,7 +317,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     asset_analysis_paths.append(str(source_path))
                 extracted_asset_count = len(structure.assets)
 
-            warnings = []
+            warnings = list(canvas_warnings)
             if structure_slide_count is not None and structure_slide_count != len(slide_records):
                 warnings.append(
                     f"Rendered page count ({len(slide_records)}) differs from PPTX slide count ({structure_slide_count})."
@@ -388,6 +347,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "contact_sheet": str(contact_sheet_path),
                 "pptx_structure": str(structure_path) if structure_path else None,
                 "reconstruction_mode": params.reconstruction_mode,
+                "canvas": detected_canvas.model_dump(),
                 "slide_count": len(slide_records),
                 "detail_crop_count": len(slide_records) * params.crop_columns * params.crop_rows,
                 "extracted_asset_count": extracted_asset_count,
@@ -402,8 +362,11 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             return ToolResult(
                 content=(
                     f"Slide template source prepared for {len(slide_records)} page(s) in {params.reconstruction_mode} mode. "
-                    f"Extracted {extracted_asset_count} source asset candidate(s) for review. Analyze every page, crop, and asset, "
-                    f"then call select_slide_template_source_assets before authoring when candidates exist."
+                    f"Canvas: {detected_canvas.width}x{detected_canvas.height}. "
+                    f"Extracted {extracted_asset_count} source asset candidate(s) for review. "
+                    + (f"Warnings: {' '.join(warnings)} " if warnings else "")
+                    + "Analyze every page, crop, and asset, "
+                    "then call select_slide_template_source_assets before authoring when candidates exist."
                 ),
                 data=data,
                 extra_info=data,

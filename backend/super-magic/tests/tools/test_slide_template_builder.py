@@ -19,23 +19,22 @@ from app.tools.slide_template_builder import (
 )
 from app.tools.slide_template_builder.common import (
     WORK_DIR_NAME,
-    _create_collage,
-    _resize_png,
     cleanup_template_intermediates,
     validate_template_id,
 )
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
 from app.tools.slide_template_builder.finalize_project import FinalizeSlideTemplateParams
-from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplateSourceParams
-from app.tools.slide_template_builder.source_asset_selection import (
-    SelectSlideTemplateSourceAssetsParams,
-    SourceAssetDecisionParams,
-)
 from app.tools.slide_template_builder.models import (
     TemplateDescriptionText,
     TemplateLabelText,
     TemplateSlideParams,
     TemplateSourceParams,
+)
+from app.tools.slide_template_builder.preview import _create_collage, _resize_png
+from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplateSourceParams
+from app.tools.slide_template_builder.source_asset_selection import (
+    SelectSlideTemplateSourceAssetsParams,
+    SourceAssetDecisionParams,
 )
 from app.utils.async_file_utils import async_read_json, async_scandir, async_write_json, async_write_text
 

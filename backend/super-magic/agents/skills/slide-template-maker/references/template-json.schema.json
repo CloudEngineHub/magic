@@ -92,8 +92,8 @@
           "additionalProperties": false,
           "required": ["width", "height"],
           "properties": {
-            "width": { "type": "integer", "const": 1920 },
-            "height": { "type": "integer", "const": 1080 }
+            "width": { "type": "integer", "minimum": 320, "maximum": 8192 },
+            "height": { "type": "integer", "minimum": 180, "maximum": 8192 }
           }
         }
       }
