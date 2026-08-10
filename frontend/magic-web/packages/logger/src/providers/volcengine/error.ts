@@ -1,16 +1,9 @@
 import { ErrorCaptureSource, type ProviderErrorInput } from "../../core/types"
+import { normalizeError } from "../../core/error"
 
 export interface NormalizedVolcengineError {
 	error: Error
 	attributes: ProviderErrorInput["attributes"] & { syntheticError: boolean }
-}
-
-class MagicLoggerSyntheticError extends Error {
-	constructor(message: string) {
-		super(message)
-		// 使用独立名称，便于在探针平台直接识别 Logger 内部合成的异常。
-		this.name = "MagicLoggerSyntheticError"
-	}
 }
 
 export function isProviderErrorInput(value: unknown): value is ProviderErrorInput {
@@ -28,25 +21,19 @@ export function isProviderErrorInput(value: unknown): value is ProviderErrorInpu
 	)
 }
 
-function toSafeMessage(value: unknown, fallbackMessage: string): string {
-	if (value instanceof Error && value.message) return value.message
-	if (typeof value === "string" && value.trim()) return value
-	return fallbackMessage
-}
-
 export function normalizeVolcengineError(args: unknown[]): NormalizedVolcengineError {
 	const internalInput = args.length === 1 && isProviderErrorInput(args[0]) ? args[0] : undefined
-	// 新旧调用都优先复用真实 Error；合成 Error 仅用于满足火山 captureException 的入参要求。
+	// 新旧调用都优先复用真实 Error；非 Error 值通过共享规则归一化。
 	const originalError = internalInput
 		? internalInput.value instanceof Error
 			? internalInput.value
 			: undefined
 		: args.find((value): value is Error => value instanceof Error)
 	const value = internalInput?.value ?? originalError ?? args[0]
-	const fallbackMessage = toSafeMessage(value, internalInput?.fallbackMessage ?? "Unknown error")
+	const normalizedError = normalizeError(value, internalInput?.fallbackMessage ?? "Unknown error")
 
 	return {
-		error: originalError ?? new MagicLoggerSyntheticError(fallbackMessage),
+		error: normalizedError.error,
 		attributes: {
 			namespace: internalInput?.attributes.namespace ?? "global",
 			eventId: internalInput?.attributes.eventId ?? "",
@@ -54,8 +41,8 @@ export function normalizeVolcengineError(args: unknown[]): NormalizedVolcengineE
 			captureSource: internalInput?.attributes.captureSource ?? ErrorCaptureSource.MANUAL,
 			eventKey: internalInput?.attributes.eventKey,
 			errorKind: internalInput?.attributes.errorKind,
-			// 合成堆栈只代表 Provider 调用位置，必须显式标记，不能冒充业务异常堆栈。
-			syntheticError: !originalError,
+			// 合成堆栈只代表 Logger 归一化位置，不能冒充业务异常堆栈。
+			syntheticError: normalizedError.syntheticError,
 		},
 	}
 }

@@ -1,5 +1,9 @@
 import { isPlainObject } from "lodash-es"
-import { ErrorCaptureSource, type ProviderErrorInput } from "../../../packages/logger/src"
+import {
+	ErrorCaptureSource,
+	normalizeError,
+	type ProviderErrorInput,
+} from "../../../packages/logger/src"
 
 export { ErrorCaptureSource }
 
@@ -21,12 +25,13 @@ export interface ErrorReport {
 	namespace: string
 	eventKey: string
 	errorKind: string
-	error?: unknown
+	error: SerializedError
 	message?: string
 	context?: Record<string, unknown>
 	captureSource: ErrorCaptureSource
 	eventId: string
 	release: string
+	syntheticError: boolean
 }
 
 export type ParsedErrorCall =
@@ -62,9 +67,7 @@ export function parseErrorCall(data: unknown): ParsedErrorCall {
 	return { kind: "structured", input: input as unknown as StructuredErrorInput }
 }
 
-export function serializeError(error: unknown): unknown {
-	if (!(error instanceof Error)) return error
-
+export function serializeError(error: Error): SerializedError {
 	// Error 的关键属性不可枚举，显式序列化后才能进入自建 /log-report 请求体。
 	return {
 		name: error.name,
@@ -80,16 +83,22 @@ export function createErrorReport(
 	release: string,
 	captureSource: ErrorCaptureSource = ErrorCaptureSource.MANUAL,
 ): ErrorReport {
+	const normalizedError = normalizeError(
+		input.error ?? input.message,
+		input.message || input.eventKey,
+	)
+
 	return {
 		namespace,
 		eventKey: input.eventKey,
 		errorKind: input.errorKind,
-		error: serializeError(input.error),
+		error: serializeError(normalizedError.error),
 		message: input.message,
 		context: input.context,
 		captureSource,
 		eventId,
 		release,
+		syntheticError: normalizedError.syntheticError,
 	}
 }
 

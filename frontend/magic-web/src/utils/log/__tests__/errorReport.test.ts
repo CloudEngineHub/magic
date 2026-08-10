@@ -50,6 +50,7 @@ describe("errorReport protocol", () => {
 				name: "TypeError",
 				message: "database unavailable",
 			},
+			syntheticError: false,
 		})
 		expect(report.error).not.toBe(error)
 	})
@@ -63,7 +64,52 @@ describe("errorReport protocol", () => {
 		if (parsed.kind !== "structured") return
 
 		const providerInput = createProviderErrorInput(parsed, "websocket", "event-2", "sha-1")
+		const report = createErrorReport(parsed.input, "websocket", "event-2", "sha-1")
 		expect(providerInput.fallbackMessage).toBe("connection_failed")
+		expect(report.syntheticError).toBe(true)
+		expect(report.error).toMatchObject({
+			name: "MagicLoggerSyntheticError",
+			message: "connection_failed",
+		})
+	})
+
+	it("uses a non-empty string error as the synthetic Error message", () => {
+		const report = createErrorReport(
+			{
+				eventKey: "connection_failed",
+				errorKind: "network",
+				error: "socket timeout",
+				message: "WebSocket connection failed",
+			},
+			"websocket",
+			"event-3",
+			"sha-2",
+		)
+
+		expect(report.syntheticError).toBe(true)
+		expect(report.error.message).toBe("socket timeout")
+	})
+
+	it("creates a serialized synthetic Error for self reporting when error is missing", () => {
+		const report = createErrorReport(
+			{
+				eventKey: "get_safe_area_failed",
+				errorKind: "unknown",
+				error: undefined,
+				message: "Failed to get native safe area",
+			},
+			"useSafeArea",
+			"event-4",
+			"sha-3",
+		)
+
+		expect(report.syntheticError).toBe(true)
+		expect(report.error).toMatchObject({
+			name: "MagicLoggerSyntheticError",
+			message: "Failed to get native safe area",
+		})
+		expect((report.error as { stack?: string }).stack).toEqual(expect.any(String))
+		expect(JSON.parse(JSON.stringify(report))).toHaveProperty("error")
 	})
 
 	it("marks internally captured global errors without changing manual defaults", () => {
