@@ -1939,8 +1939,8 @@ class TaskFileDomainService
      */
     public function findOrCreateProjectRootDirectory(int $projectId, string $workDir, string $userId, string $organizationCode, string $projectOrganizationCode, TaskFileSource $source = TaskFileSource::PROJECT_DIRECTORY): int
     {
-        // Look for existing root directory (parent_id IS NULL and is_directory = true)
-        $rootDir = $this->findDirectoryByParentIdAndName(null, '/', $projectId);
+        // 按完整根目录条件精确查询，不能扫描 parent_id=NULL 的全部同级记录。
+        $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
 
         if ($rootDir !== null) {
             return $rootDir->getFileId();

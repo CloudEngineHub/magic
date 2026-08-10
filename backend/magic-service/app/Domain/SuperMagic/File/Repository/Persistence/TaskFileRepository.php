@@ -1619,8 +1619,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * Find root directory by project ID.
-     * Root directory is identified by: parent_id IS NULL AND file_name = '/' AND is_directory = true.
+     * Find workspace root directory by project ID.
+     * Root identity includes parent_id, file_name, is_directory and storage_type.
      */
     public function findRootDirectoryByProjectId(int $projectId): ?TaskFileEntity
     {
@@ -1629,6 +1629,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->whereNull('parent_id')
             ->where('file_name', '/')
             ->where('is_directory', true)
+            ->where('storage_type', StorageType::WORKSPACE->value)
             ->orderBy('file_id', 'asc')
             ->first();
 
