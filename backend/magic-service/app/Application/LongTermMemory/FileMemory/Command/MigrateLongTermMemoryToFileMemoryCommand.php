@@ -9,13 +9,13 @@ namespace App\Application\LongTermMemory\FileMemory\Command;
 
 use App\Application\LongTermMemory\Enum\AppCodeEnum;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
+use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
+use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\MagicFS\Service\MagicFSFileDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\TaskFileRepositoryInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Database\Query\Builder;

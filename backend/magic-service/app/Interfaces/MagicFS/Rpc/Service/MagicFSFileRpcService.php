@@ -8,7 +8,9 @@ declare(strict_types=1);
 namespace App\Interfaces\MagicFS\Rpc\Service;
 
 use App\Application\Authentication\Service\AuthSandboxAppService;
+use App\Application\SuperMagic\File\Service\MagicFSFileAppService;
 use App\ErrorCode\GenericErrorCode;
+use App\ErrorCode\MagicFSErrorCode;
 use App\ErrorCode\UserErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -16,8 +18,6 @@ use App\Infrastructure\Rpc\Annotation\RpcMethod;
 use App\Infrastructure\Rpc\Annotation\RpcService;
 use App\Infrastructure\Rpc\Method\SvcMethods;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Application\MagicFS\Service\MagicFSFileAppService;
-use Dtyq\SuperMagic\ErrorCode\MagicFSErrorCode;
 use Psr\Log\LoggerInterface;
 use Throwable;
 

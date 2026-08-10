@@ -12,11 +12,11 @@ use App\Application\Speech\Assembler\AsrPromptAssembler;
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
 use App\Application\Speech\DTO\NoteDTO;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Contract\TranslatorInterface;
 use Throwable;
 

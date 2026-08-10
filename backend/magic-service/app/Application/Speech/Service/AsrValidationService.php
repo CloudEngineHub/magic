@@ -8,13 +8,13 @@ declare(strict_types=1);
 namespace App\Application\Speech\Service;
 
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
+use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Service\AsrTaskDomainService;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\AsrErrorCode;
+use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
-use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 
 /**
  * ASR 验证服务

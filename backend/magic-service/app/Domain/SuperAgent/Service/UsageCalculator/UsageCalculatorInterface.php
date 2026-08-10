@@ -7,23 +7,15 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperAgent\Service\UsageCalculator;
 
+use App\Domain\SuperMagic\Task\Service\UsageCalculator\UsageCalculatorInterface as SuperMagicUsageCalculatorInterface;
+
 /**
- * Usage calculator interface for SuperAgent tasks.
- * Provides usage information calculation for completed tasks.
+ * Backward-compatibility shim for dtyq/magic-enterprise-service (pre-release),
+ * which still references the pre-migration namespace.
+ * Remove once magic-enterprise-service switches to the SuperMagic namespace.
+ *
+ * @deprecated use {@see SuperMagicUsageCalculatorInterface} instead
  */
-interface UsageCalculatorInterface
+interface UsageCalculatorInterface extends SuperMagicUsageCalculatorInterface
 {
-    /**
-     * Calculate usage information for a task.
-     *
-     * @param int $taskId Task ID
-     * @return array usage information array, format: [
-     *               "type" => "task_points",
-     *               "detail" => [
-     *               "consume" => 100
-     *               ]
-     *               ]
-     *               Returns empty array [] if no usage data available
-     */
-    public function calculateUsage(int $taskId): array;
 }
