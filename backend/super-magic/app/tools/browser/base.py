@@ -13,7 +13,7 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
-from app.service.browser import BrowserArtifactService, BrowserService
+from app.service.browser import BrowserScreenshotService, BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.browser.presentation import BrowserDetailBuilder, BrowserRemarkBuilder
@@ -127,7 +127,7 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
                 labels=False,
                 session_id=session_id,
             )
-            artifact = await BrowserArtifactService(tool_context).publish(screenshot.image)
+            artifact = await BrowserScreenshotService(tool_context).publish(screenshot.image)
             BrowserToolResultBuilder.attach_screenshot(result, page, screenshot, artifact)
         except asyncio.CancelledError:
             raise

@@ -11,7 +11,7 @@ from typing import TypeAlias
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agentlang.tools.tool_result import ToolResult
-from app.service.browser.browser_artifact_service import BrowserEncodedScreenshot, BrowserScreenshotArtifact
+from app.service.browser.browser_screenshot_service import BrowserEncodedScreenshot, BrowserScreenshotArtifact
 from app.service.browser.browser_file_adapter import BrowserSavedScreenshot
 from magic_use.errors import BrowserSDKError
 from magic_use.models import (

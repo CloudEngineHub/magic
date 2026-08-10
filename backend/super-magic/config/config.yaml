@@ -42,17 +42,17 @@ browser:
     host_idle_seconds: ${BROWSER_HOST_IDLE_SECONDS:-120}
     sweep_interval_seconds: ${BROWSER_LIFECYCLE_SWEEP_INTERVAL_SECONDS:-5}
 
-  artifacts:
+  screenshot:
     webp_quality: ${BROWSER_WEBP_QUALITY:-82}
     webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-58}
     webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-6}
-    target_bpp: ${BROWSER_ARTIFACT_TARGET_BPP:-0.5}
-    min_bytes: ${BROWSER_ARTIFACT_MIN_BYTES:-131072}
-    max_bytes: ${BROWSER_ARTIFACT_MAX_BYTES:-262144}
-    max_width: ${BROWSER_ARTIFACT_MAX_WIDTH:-1600}
-    max_height_ratio: ${BROWSER_ARTIFACT_MAX_HEIGHT_RATIO:-1.6}
-    resize_step: ${BROWSER_ARTIFACT_RESIZE_STEP:-0.85}
-    min_dimension: ${BROWSER_ARTIFACT_MIN_DIMENSION:-1280}
+    target_bpp: ${BROWSER_SCREENSHOT_TARGET_BPP:-0.5}
+    min_bytes: ${BROWSER_SCREENSHOT_MIN_BYTES:-131072}
+    max_bytes: ${BROWSER_SCREENSHOT_MAX_BYTES:-262144}
+    max_width: ${BROWSER_SCREENSHOT_MAX_WIDTH:-1600}
+    max_height_ratio: ${BROWSER_SCREENSHOT_MAX_HEIGHT_RATIO:-1.6}
+    resize_step: ${BROWSER_SCREENSHOT_RESIZE_STEP:-0.85}
+    min_dimension: ${BROWSER_SCREENSHOT_MIN_DIMENSION:-1280}
 
   resources:
     soft_contexts: ${BROWSER_SOFT_CONTEXTS:-8}

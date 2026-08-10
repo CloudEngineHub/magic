@@ -1,4 +1,4 @@
-"""Browser screenshot artifact 编码、上传与去重。"""
+"""Browser screenshot 编码、上传与去重。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from app.core.context.agent_context import AgentContext
 from app.infrastructure.storage.factory import StorageFactory
 from app.service.browser.browser_config_adapter import BrowserConfigAdapter
 from app.utils.path_utils import get_workspace_dir
-from magic_use.config import BrowserArtifactConfig
+from magic_use.config import BrowserScreenshotConfig
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
 
 
@@ -43,7 +43,7 @@ class BrowserEncodedScreenshot:
     quality: int
 
 
-class BrowserArtifactService:
+class BrowserScreenshotService:
     def __init__(self, tool_context: ToolContext) -> None:
         agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
         if agent_context is None:
@@ -52,22 +52,22 @@ class BrowserArtifactService:
         self._agent_context = agent_context
 
     async def encode(self, image: bytes) -> BrowserEncodedScreenshot:
-        config = BrowserConfigAdapter.artifact_config()
+        config = BrowserConfigAdapter.screenshot_config()
         return await asyncio.to_thread(self._encode_webp, image, config)
 
     async def publish(self, image: bytes | BrowserEncodedScreenshot) -> BrowserScreenshotArtifact:
         encoded = await self.encode(image) if isinstance(image, bytes) else image
         try:
-            artifact = await self._publish_remote(encoded)
+            screenshot = await self._publish_remote(encoded)
         except asyncio.CancelledError:
             raise
         except Exception:
             if not Environment.is_local():
                 raise
-            artifact = self._create_local_artifact(encoded)
+            screenshot = self._create_local_artifact(encoded)
         # Browser Tool Detail 截图是短期展示资源，不能加入 EventContext attachments；
         # 普通附件链路会把它登记为 MagicFS 项目文件，使 Agent 能通过工作区文件系统看到它。
-        return artifact
+        return screenshot
 
     async def _publish_remote(
         self,
@@ -164,7 +164,7 @@ class BrowserArtifactService:
         ).as_posix()
 
     @staticmethod
-    def _encode_webp(image: bytes, config: BrowserArtifactConfig) -> BrowserEncodedScreenshot:
+    def _encode_webp(image: bytes, config: BrowserScreenshotConfig) -> BrowserEncodedScreenshot:
         with Image.open(io.BytesIO(image)) as source:
             original = source.convert("RGB")
         max_source_height = max(1, round(original.width * config.max_height_ratio))

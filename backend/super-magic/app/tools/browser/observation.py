@@ -16,7 +16,7 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.context.agent_context import AgentContext
-from app.service.browser import BrowserArtifactService, BrowserService
+from app.service.browser import BrowserScreenshotService, BrowserService
 from app.service.browser.browser_file_adapter import BrowserFileAdapter
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
@@ -153,7 +153,7 @@ class _BrowserVisualToolBase(BrowserToolBase[P], Generic[P]):
                 session_id=session_id,
             )
             artifact_task = asyncio.create_task(
-                BrowserArtifactService(tool_context).publish(screenshot.image)
+                BrowserScreenshotService(tool_context).publish(screenshot.image)
             )
             analysis_task = asyncio.create_task(
                 service.analyze_screenshot(screenshot.image, query)
@@ -356,8 +356,8 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                 labels=params.labels,
                 session_id=params.session_id,
             )
-            artifact_service = BrowserArtifactService(tool_context)
-            encoded = await artifact_service.encode(screenshot.image)
+            screenshot_service = BrowserScreenshotService(tool_context)
+            encoded = await screenshot_service.encode(screenshot.image)
             saved = None
             if params.output_path is not None:
                 agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
@@ -394,7 +394,7 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
                 )
                 artifact = encoded
             else:
-                artifact = await artifact_service.publish(encoded)
+                artifact = await screenshot_service.publish(encoded)
             return BrowserToolResultBuilder.screenshot(page, screenshot, artifact, saved)
 
         return await self.execute_safely(operation())

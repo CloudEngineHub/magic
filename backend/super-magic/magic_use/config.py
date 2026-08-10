@@ -133,7 +133,7 @@ class ElementScanConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserArtifactConfig:
+class BrowserScreenshotConfig:
     webp_quality: int = 82
     webp_min_quality: int = 58
     webp_quality_step: int = 6
@@ -149,15 +149,15 @@ class BrowserArtifactConfig:
         if not 0 <= self.webp_min_quality <= self.webp_quality <= 100:
             raise BrowserConfigError("Browser WebP quality range is invalid")
         if self.webp_quality_step < 1 or min(self.min_bytes, self.max_bytes, self.max_width, self.min_dimension) < 1:
-            raise BrowserConfigError("Browser artifact limits must be positive")
+            raise BrowserConfigError("Browser screenshot limits must be positive")
         if self.target_bpp <= 0 or self.max_height_ratio <= 0:
-            raise BrowserConfigError("Browser artifact ratios must be positive")
+            raise BrowserConfigError("Browser screenshot ratios must be positive")
         if self.min_bytes > self.max_bytes:
-            raise BrowserConfigError("Browser artifact minimum bytes cannot exceed maximum bytes")
+            raise BrowserConfigError("Browser screenshot minimum bytes cannot exceed maximum bytes")
         if self.max_width < self.min_dimension:
-            raise BrowserConfigError("Browser artifact max width cannot be smaller than its minimum dimension")
+            raise BrowserConfigError("Browser screenshot max width cannot be smaller than its minimum dimension")
         if not 0 < self.resize_step < 1:
-            raise BrowserConfigError("Browser artifact resize step must be between zero and one")
+            raise BrowserConfigError("Browser screenshot resize step must be between zero and one")
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +221,7 @@ class BrowserRuntimeConfig:
     context: BrowserContextConfig = field(default_factory=BrowserContextConfig)
     scripts: BrowserScriptConfig = field(default_factory=BrowserScriptConfig)
     elements: ElementScanConfig = field(default_factory=ElementScanConfig)
-    artifacts: BrowserArtifactConfig = field(default_factory=BrowserArtifactConfig)
+    screenshot: BrowserScreenshotConfig = field(default_factory=BrowserScreenshotConfig)
     timeouts: BrowserTimeouts = field(default_factory=BrowserTimeouts)
     lifecycle: BrowserLifecycleConfig = field(default_factory=BrowserLifecycleConfig)
     resources: BrowserResourceLimits = field(default_factory=BrowserResourceLimits)
