@@ -220,6 +220,7 @@
 		"uploading": "Uploading..."
 	},
 	"imageEditor": {
+		"bottomToolbar": "Image element bottom toolbar",
 		"currentImage": "(Current Image)",
 		"custom": "Custom",
 		"editPlaceholder": "Please enter your edit requirements",
@@ -566,6 +567,7 @@
 	},
 	"videoEditor": {
 		"aspectRatio": "Aspect ratio",
+		"bottomToolbar": "Video element bottom toolbar",
 		"duration": "Duration",
 		"firstFrame": "First frame",
 		"frameResourceAlreadyUsed": "This resource is already used for another frame",

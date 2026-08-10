@@ -3,17 +3,13 @@ import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
-import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
-import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import type { Canvas } from "../../../runtime/core/Canvas"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
-import IconButton from "../../primitives/custom/IconButton/index"
-import { MediaResultActionBar } from "../../canvas-editor/media-result-action-bar/MediaResultActionBar"
+import { ElementBottomToolbar } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
-import styles from "./index.module.css"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
 import { buildVideoPointsEstimateSignature } from "./points/video-points-estimate.utils"
 import { collectPendingVideoGenerationRequestResourcePaths } from "./points/video-points-estimate.resources"
@@ -77,27 +73,6 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const videoContent = getActiveContent(videoElement)
 	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
 	const confirmVideoGeneration = useVideoPointsConfirm()
-
-	const { containerRef: positionRef } = useElementPositionEffect({
-		position: "bottom",
-		offset: 12,
-		shouldShow: () => {
-			return selectedElements.some((element) => element?.type === ElementTypeEnum.Video)
-		},
-	})
-
-	const { containerRef: floatingRef } = useFloatingComponent({
-		id: "video-second-edit",
-		enableWheelForwarding: true,
-	})
-
-	const setCollapsedRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			positionRef.current = node
-			floatingRef.current = node
-		},
-		[positionRef, floatingRef],
-	)
 
 	const handleStartRegenerate = useCallback(() => {
 		if (!canvas || !savedGenerateVideoRequest) return
@@ -197,39 +172,35 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			return null
 		}
 		return (
-			<div
-				ref={setCollapsedRefs}
-				className={`${styles.videoMessageEditor} ${styles.videoSecondEditNoEditing}`}
-				data-canvas-ui-component
-			>
-				<MediaResultActionBar
-					showDividers
-					dividerBeforeIndices={[]}
-					actions={[
-						<IconButton
-							className={styles.secondEditButton}
-							onClick={handleStartRegenerate}
-							key="re-edit"
-						>
-							<SquarePen size={14} />
-							<span>{t("videoEditor.reEditFromSaved", "重新编辑")}</span>
-						</IconButton>,
-						<IconButton
-							className={styles.secondEditButton}
-							onClick={handleGenerateAgain}
-							disabled={generateAgainBusy}
-							key="generate-again"
-						>
-							{generateAgainBusy ? (
-								<LoaderCircle size={14} className="animate-spin" />
-							) : (
-								<RotateCcw size={14} />
-							)}
-							<span>{t("videoEditor.generateAgain", "再次生成")}</span>
-						</IconButton>,
-					]}
-				/>
-			</div>
+			<ElementBottomToolbar
+				floatingId="video-second-edit"
+				ariaLabel={t("videoEditor.bottomToolbar", "视频元素底部工具栏")}
+				shouldShow={() =>
+					selectedElements.some((element) => element?.type === ElementTypeEnum.Video)
+				}
+				items={[
+					{
+						id: "re-edit",
+						group: "edit",
+						icon: <SquarePen size={14} />,
+						label: t("videoEditor.reEditFromSaved", "重新编辑"),
+						onClick: handleStartRegenerate,
+					},
+					{
+						id: "generate-again",
+						group: "generation",
+						icon: generateAgainBusy ? (
+							<LoaderCircle size={14} className="animate-spin" />
+						) : (
+							<RotateCcw size={14} />
+						),
+						label: t("videoEditor.generateAgain", "再次生成"),
+						disabled: generateAgainBusy,
+						loading: generateAgainBusy,
+						onClick: handleGenerateAgain,
+					},
+				]}
+			/>
 		)
 	}
 

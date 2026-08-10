@@ -5,9 +5,7 @@ import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
-import IconButton from "../../primitives/custom/IconButton/index"
-import { MediaResultActionBar } from "../../canvas-editor/media-result-action-bar/MediaResultActionBar"
+import { ElementBottomToolbar } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
 import styles from "./index.module.css"
 import { LoaderCircle, Pencil, RotateCcw, SquarePen } from "lucide-react"
 import { type MessageEditorRef } from "../message/MessageEditor"
@@ -22,7 +20,6 @@ import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasRe
 import { getImageProcessRequestPayload } from "../../../runtime/resources/image/imageCropUtils"
 import type { GenerateImageRequest } from "../../../public/magic-types"
 import { useImageEditorConfig } from "./useImageEditorConfig"
-import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import ImageEditorSurface from "./ImageEditorSurface"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
@@ -32,6 +29,7 @@ import {
 	getActiveImageContent,
 	hasProcessingImageContent,
 } from "../../../runtime/document/elementContent"
+import { isEditorInteractiveKeyboardTarget } from "../keyboard"
 
 type SecondEditIntent = "quick-edit" | "re-edit" | "generate-again"
 
@@ -75,28 +73,6 @@ export default function SecondEdit(props: SecondEditProps) {
 	const canRegenerate = Boolean(activeContent.generateImageRequest?.model_id)
 	const directGenerateRequest = activeContent.generateImageRequest
 	const hasProcessingContent = hasProcessingImageContent(props.imageElement)
-
-	const { containerRef: positionRef } = useElementPositionEffect({
-		position: "bottom",
-		offset: 12,
-		shouldShow: () => {
-			return selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
-		},
-	})
-
-	const { containerRef: floatingRef } = useFloatingComponent({
-		id: "second-edit-result",
-		enableWheelForwarding: true,
-	})
-
-	// 合并 refs
-	const setRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			positionRef.current = node
-			floatingRef.current = node
-		},
-		[positionRef, floatingRef],
-	)
 
 	const createAndSubmitImageGeneration = useCallback(
 		async (
@@ -392,13 +368,8 @@ export default function SecondEdit(props: SecondEditProps) {
 				return
 			}
 
-			// 如果用户在输入框中，不处理 Tab 键
-			const target = e.target as HTMLElement
-			if (
-				target.tagName === "INPUT" ||
-				target.tagName === "TEXTAREA" ||
-				target.isContentEditable
-			) {
+			// 交互控件内保留原生 Tab 焦点导航，不触发画布快捷编辑。
+			if (isEditorInteractiveKeyboardTarget(e.target)) {
 				return
 			}
 
@@ -436,54 +407,48 @@ export default function SecondEdit(props: SecondEditProps) {
 	}
 
 	return (
-		<div
-			ref={setRefs}
-			className={`${styles.imageMessageEditor} ${styles.secondEditImageMessageEditorNoEditing}`}
-			data-canvas-ui-component
-			style={{ visibility: isVisible ? "visible" : "hidden" }}
-		>
-			<MediaResultActionBar
-				showDividers
-				dividerBeforeIndices={canRegenerate ? [1] : []}
-				actions={[
-					<IconButton
-						className={styles.secondEditButton}
-						onClick={handleStartEditing}
-						key="quick-edit"
-					>
-						<Pencil size={14} />
-						<span>{t("imageEditor.quickEdit", "快捷编辑")}</span>
-						<span className={styles.secondEditButtonTag}>Tab</span>
-					</IconButton>,
-					canRegenerate ? (
-						<IconButton
-							className={styles.secondEditButton}
-							onClick={handleRegenerateFromSavedConfig}
-							disabled={hasProcessingContent}
-							key="re-edit"
-						>
-							<SquarePen size={14} />
-							<span>{t("imageEditor.reEditFromSaved", "重新编辑")}</span>
-						</IconButton>
-					) : null,
-					canRegenerate ? (
-						<IconButton
-							className={styles.secondEditButton}
-							onClick={handleGenerateAgain}
-							disabled={hasProcessingContent || isSending}
-							key="generate-again"
-						>
-							{isSending ? (
+		<ElementBottomToolbar
+			floatingId="second-edit-result"
+			ariaLabel={t("imageEditor.bottomToolbar", "图片元素底部工具栏")}
+			shouldShow={() =>
+				selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
+			}
+			items={[
+				{
+					id: "quick-edit",
+					group: "quick-edit",
+					icon: <Pencil size={14} />,
+					label: t("imageEditor.quickEdit", "快捷编辑"),
+					shortcut: "Tab",
+					onClick: handleStartEditing,
+				},
+				canRegenerate
+					? {
+							id: "re-edit",
+							group: "generation",
+							icon: <SquarePen size={14} />,
+							label: t("imageEditor.reEditFromSaved", "重新编辑"),
+							disabled: hasProcessingContent,
+							onClick: handleRegenerateFromSavedConfig,
+						}
+					: null,
+				canRegenerate
+					? {
+							id: "generate-again",
+							group: "generation",
+							icon: isSending ? (
 								<LoaderCircle size={14} className="animate-spin" />
 							) : (
 								<RotateCcw size={14} />
-							)}
-							<span>{t("imageEditor.generateAgain", "再次生成")}</span>
-						</IconButton>
-					) : null,
-				]}
-			/>
-		</div>
+							),
+							label: t("imageEditor.generateAgain", "再次生成"),
+							disabled: hasProcessingContent || isSending,
+							loading: isSending,
+							onClick: handleGenerateAgain,
+						}
+					: null,
+			]}
+		/>
 	)
 }
 

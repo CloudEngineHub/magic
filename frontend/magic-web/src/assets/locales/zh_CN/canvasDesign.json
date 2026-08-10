@@ -220,6 +220,7 @@
 		"uploading": "正在上传中..."
 	},
 	"imageEditor": {
+		"bottomToolbar": "图片元素底部工具栏",
 		"currentImage": "(当前图片)",
 		"custom": "自定义",
 		"editPlaceholder": "请输入您的编辑需求",
@@ -566,6 +567,7 @@
 	},
 	"videoEditor": {
 		"aspectRatio": "比例",
+		"bottomToolbar": "视频元素底部工具栏",
 		"duration": "时长",
 		"firstFrame": "首帧",
 		"frameResourceAlreadyUsed": "该资源已用于其他帧",

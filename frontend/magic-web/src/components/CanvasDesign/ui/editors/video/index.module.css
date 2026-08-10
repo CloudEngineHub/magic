@@ -390,28 +390,3 @@
 .referenceImageDelete:hover {
 	background: var(--base-sidebar-accent, #f5f5f5);
 }
-
-/* 成片后「重新生成」结果态：与图片 SecondEdit 未展开时同风格缩窄外壳 */
-.videoSecondEditNoEditing {
-	width: unset !important;
-	height: 42px;
-	padding: var(--spacing-1, 4px);
-	border: 1px solid var(--base-border, #e5e5e5);
-	border-radius: var(--border-radius-rounded-md, 8px);
-	box-shadow: var(--shadow-xs-offset-x, 0) var(--shadow-xs-offset-y, 1px)
-		var(--shadow-xs-blur-radius, 2px) var(--shadow-xs-spread-radius, 0)
-		var(--shadow-xs-color, rgb(0 0 0 / 5%));
-}
-
-.secondEditButton {
-	display: flex;
-	gap: var(--spacing-1-5, 6px);
-	align-items: center;
-	justify-content: center;
-	height: var(--width-w-8, 32px);
-	padding: var(--spacing-0, 0) var(--spacing-1-5, 6px);
-	color: var(--base-foreground, #030712);
-	background: var(--tailwind-colors-base-transparent, rgb(255 255 255 / 0%));
-	border-radius: var(--border-radius-rounded-sm, 6px);
-	cursor: pointer;
-}
