@@ -113,7 +113,7 @@ function FileShareListNew({
 		)
 	}
 
-	// 空状态
+	// Empty state
 	if (data.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center">
@@ -142,7 +142,7 @@ function FileShareListNew({
 						<div
 							key={item.resource_id}
 							className={cn(
-								"flex h-14 cursor-pointer items-start gap-2 rounded-lg p-2 transition-colors duration-200",
+								"flex h-14 min-w-0 cursor-pointer items-start gap-2 rounded-lg p-2 transition-colors duration-200",
 								isHovered && "bg-neutral-100",
 							)}
 							onMouseEnter={() => setHoveredId(item.resource_id)}
@@ -150,42 +150,42 @@ function FileShareListNew({
 							onClick={() => handleItemClick(item)}
 							data-testid="set-hovered-id"
 						>
-							{/* 分享类型图标 */}
+							{/* Share type icon */}
 							<div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
 								{getShareTypeIcon(item.share_type)}
 							</div>
 
-							{/* 内容区域 */}
+							{/* Row content */}
 							<div className="flex min-w-0 flex-1 flex-col gap-2">
-								{/* 第一行：文件信息和操作 */}
-								<div className="flex h-5 items-center justify-between gap-2">
-									<div className="flex min-w-0 flex-1 items-center gap-2">
-										{/* 文件名 */}
-										<span className="truncate text-sm font-medium leading-5 text-gray-900">
-											{displayName}
-										</span>
+								{/* File details and actions */}
+								<div className="flex h-5 min-w-0 items-center gap-2">
+									{/* Share name */}
+									<span
+										className="min-w-0 flex-1 truncate text-sm font-medium leading-5 text-gray-900"
+										title={displayName}
+									>
+										{displayName}
+									</span>
 
-										<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-											{/* 项目名badge */}
-											<ProjectNameBadge
-												projectId={item.project_id}
-												projectName={item.project_name}
-												className="bg-neutral-100 text-neutral-600"
-											/>
-											<Badge
-												variant="secondary"
-												className={cn(
-													"flex-shrink-0 rounded-full px-2 py-1 text-xs leading-none",
-													badgeStyles.bgClassName,
-													badgeStyles.textClassName,
-												)}
-											>
-												{getShareTypeText(item.share_type, t)}
-											</Badge>
-										</div>
-									</div>
+									{/* Project name */}
+									<ProjectNameBadge
+										projectId={item.project_id}
+										projectName={item.project_name}
+										className="bg-neutral-100 text-neutral-600"
+									/>
 
-									{/* 操作按钮 */}
+									<Badge
+										variant="secondary"
+										className={cn(
+											"flex-shrink-0 rounded-full px-2 py-1 text-xs leading-none",
+											badgeStyles.bgClassName,
+											badgeStyles.textClassName,
+										)}
+									>
+										{getShareTypeText(item.share_type, t)}
+									</Badge>
+
+									{/* Row actions */}
 									{showActions && (
 										<div className="flex flex-shrink-0 items-center gap-1">
 											<Dropdown
@@ -216,7 +216,7 @@ function FileShareListNew({
 									)}
 								</div>
 
-								{/* 第二行：统计信息 */}
+								{/* Share statistics */}
 								<div className="flex items-center gap-2 text-xs text-gray-500">
 									<span className="flex-shrink-0">
 										{(item.extend?.file_count || 0) > 1

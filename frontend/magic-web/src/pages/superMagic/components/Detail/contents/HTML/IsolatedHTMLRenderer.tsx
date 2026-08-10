@@ -752,7 +752,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					"*",
 				)
 			} catch (error) {
-				logger.error("获取 HTML context 失败", error)
+				logger.error({
+					eventKey: "get_html_context_failed",
+					errorKind: "unknown",
+					error,
+					message: "获取 HTML context 失败",
+				})
 				iframeRef.current?.contentWindow?.postMessage(
 					{
 						type: "MAGIC_CONTEXT_GET_RESPONSE",
@@ -1891,19 +1896,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					try {
 						openNewTab(fileId || "", href, autoEdit)
 					} catch (error) {
-						logger.error(
-							"处理 iframe 链接点击失败",
-							buildMessageLogContext(event, messageType, {
+						logger.error({
+							eventKey: "process_iframe_failed",
+							errorKind: "render",
+							error: error,
+							message: "处理 iframe 链接点击失败",
+							// 保留历史上报中的完整链接和错误详情，便于定位 iframe 跳转失败。
+							context: buildMessageLogContext(event, messageType, {
 								isExpectedSource,
 								isAllowedType,
 								href,
 								autoEdit,
-								errorMessage:
-									error instanceof Error ? error.message : String(error),
-								errorStack: error instanceof Error ? error.stack : undefined,
 							}),
-							error,
-						)
+						})
 					}
 				} else if (event.data && event.data.type === "DOWNLOAD_IMAGE") {
 					console.log("下载图片", event.data)
@@ -2014,16 +2019,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					pubsub.publish(PubSubEvents.Exit_Fullscreen)
 				}
 			} catch (error) {
-				logger.error(
-					"处理 iframe message 失败",
-					buildMessageLogContext(event, messageType, {
+				logger.error({
+					eventKey: "process_iframe_message_failed",
+					errorKind: "render",
+					error: error,
+					message: "处理 iframe message 失败",
+					context: buildMessageLogContext(event, messageType, {
 						isExpectedSource,
 						isAllowedType,
-						errorMessage: error instanceof Error ? error.message : String(error),
-						errorStack: error instanceof Error ? error.stack : undefined,
 					}),
-					error,
-				)
+				})
 			}
 		})
 		// 处理 iframe 内容更新：同源 /husky.html 和跨域渲染站都必须等 shell ready。

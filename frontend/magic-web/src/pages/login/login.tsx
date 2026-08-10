@@ -48,7 +48,12 @@ function LoginPage() {
 					.magicOrganizationSync(clusterCode || "", access_token)
 				redirect()
 			} catch (error: any) {
-				logger.error("error", error)
+				logger.error({
+					eventKey: "login_page_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "error",
+				})
 			} finally {
 				setLoading(false)
 			}

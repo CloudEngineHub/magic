@@ -10,10 +10,10 @@ namespace App\Infrastructure\Design;
 use App\Domain\Design\Contract\VideoGatewayPayloadBuilderInterface;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderInterface
 {

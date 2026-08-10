@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const apiMocks = vi.hoisted(() => ({
 	createFile: vi.fn(),
@@ -9,6 +9,10 @@ const apiMocks = vi.hoisted(() => ({
 const uploadTokenServiceMocks = vi.hoisted(() => ({
 	getUploadToken: vi.fn(),
 	changeDir: vi.fn(),
+}))
+
+const uploadServiceMocks = vi.hoisted(() => ({
+	upload: vi.fn(),
 }))
 
 vi.mock("@/opensource/utils/log", () => ({
@@ -47,7 +51,8 @@ vi.mock("@/apis", () => ({
 
 vi.mock("../../../services/UploadService", () => ({
 	UploadService: class {
-		upload() {
+		upload(params: unknown) {
+			uploadServiceMocks.upload(params)
 			return Promise.resolve({ rejected: [] })
 		}
 	},
@@ -103,6 +108,72 @@ describe("FileUploadStore", () => {
 			onFileRemoved,
 			onFileUpload,
 			onChange,
+		})
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	describe("upload progress", () => {
+		it("batches intermediate progress without replacing the files array", async () => {
+			vi.useFakeTimers()
+			const [addedFile] = (await store.addFiles([
+				new File(["demo"], "demo.txt", { type: "text/plain" }),
+			])) as FileData[]
+			const uploadOptions = uploadServiceMocks.upload.mock.calls[0][0] as {
+				onInit?: (file: FileData, tools: { cancel?: () => void }, attemptId: symbol) => void
+				onProgress?: (file: FileData, progress: number, attemptId: symbol) => void
+			}
+			const attemptId = Symbol("attempt-1")
+
+			uploadOptions.onInit?.(addedFile, {}, attemptId)
+			const filesReference = store.files
+			onFileUpload.mockClear()
+			onChange.mockClear()
+
+			uploadOptions.onProgress?.(addedFile, 10.2, attemptId)
+			uploadOptions.onProgress?.(addedFile, 52.7, attemptId)
+			expect(store.files[0].progress).toBe(0)
+
+			vi.advanceTimersByTime(200)
+
+			expect(store.files).toBe(filesReference)
+			expect(store.files[0]).toMatchObject({ status: "uploading", progress: 53 })
+			expect(onFileUpload).toHaveBeenCalledTimes(1)
+			expect(onChange).toHaveBeenCalledTimes(1)
+			expect(onFileUpload.mock.calls[0][0]).not.toBe(store.files)
+		})
+
+		it("ignores progress and failures from an older upload attempt", async () => {
+			vi.useFakeTimers()
+			const [addedFile] = (await store.addFiles([
+				new File(["demo"], "demo.txt", { type: "text/plain" }),
+			])) as FileData[]
+			const uploadOptions = uploadServiceMocks.upload.mock.calls[0][0] as {
+				onInit?: (file: FileData, tools: { cancel?: () => void }, attemptId: symbol) => void
+				onProgress?: (file: FileData, progress: number, attemptId: symbol) => void
+				onFail?: (file: FileData, error: unknown, attemptId: symbol) => void
+			}
+			const firstAttempt = Symbol("attempt-1")
+			const secondAttempt = Symbol("attempt-2")
+
+			uploadOptions.onInit?.(addedFile, {}, firstAttempt)
+			uploadOptions.onProgress?.(addedFile, 80, firstAttempt)
+			uploadOptions.onInit?.(addedFile, {}, secondAttempt)
+			uploadOptions.onProgress?.(addedFile, 90, firstAttempt)
+			uploadOptions.onFail?.(addedFile, new Error("stale failure"), firstAttempt)
+			vi.advanceTimersByTime(200)
+
+			expect(store.files[0]).toMatchObject({
+				status: "uploading",
+				progress: 0,
+				error: undefined,
+			})
+
+			uploadOptions.onProgress?.(addedFile, 25, secondAttempt)
+			vi.advanceTimersByTime(200)
+			expect(store.files[0].progress).toBe(25)
 		})
 	})
 
@@ -450,6 +521,78 @@ describe("FileUploadStore", () => {
 					file_type: "directory",
 				},
 			})
+		})
+
+		it("should restore completed pasted upload mentions but ignore pending uploads", () => {
+			store.restorePastedUploadFileReferences([
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "completed-upload-1",
+						file_name: "completed.pptx",
+						file_path: "uploads/completed.pptx",
+						file_extension: "pptx",
+						file_size: 1024,
+						upload_status: "done",
+						upload_progress: 100,
+					},
+				},
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "pending-upload-1",
+						file_name: "pending.pptx",
+						file_path: "",
+						file_extension: "pptx",
+						upload_status: "uploading",
+						upload_progress: 33,
+					},
+				},
+			])
+
+			expect(store.files).toHaveLength(1)
+			expect(store.files[0]).toMatchObject({
+				id: "completed-upload-1",
+				name: "completed.pptx",
+				status: "done",
+				progress: 100,
+				isVirtualReference: true,
+				result: {
+					key: "uploads/completed.pptx",
+					name: "completed.pptx",
+					size: 1024,
+				},
+			})
+			expect(store.isCurrentSessionUploadFile("completed-upload-1")).toBe(true)
+			expect(store.getUploadMentionItems()).toHaveLength(1)
+		})
+
+		it("should only track pasted upload references accepted by the file limit", () => {
+			store.updateOptions({ maxUploadCount: 1 })
+			store.restorePastedUploadFileReferences([
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "accepted-upload",
+						file_name: "accepted.pptx",
+						file_path: "uploads/accepted.pptx",
+						upload_status: "done",
+					},
+				},
+				{
+					type: MentionItemType.UPLOAD_FILE,
+					data: {
+						file_id: "overflow-upload",
+						file_name: "overflow.pptx",
+						file_path: "uploads/overflow.pptx",
+						upload_status: "done",
+					},
+				},
+			])
+
+			expect(store.files.map((file) => file.id)).toEqual(["accepted-upload"])
+			expect(store.isCurrentSessionUploadFile("accepted-upload")).toBe(true)
+			expect(store.isCurrentSessionUploadFile("overflow-upload")).toBe(false)
 		})
 	})
 

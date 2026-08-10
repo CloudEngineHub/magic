@@ -93,7 +93,12 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 		const handleResult = useMemoizedFn((result: string, response: VoiceResult) => {
 			// Early return: abnormal data check
 			if (result.startsWith('sult":{"additions')) {
-				logger.error("Abnormal data received", response)
+				logger.error({
+					eventKey: "abnormal_data_received_failed",
+					errorKind: "unknown",
+					error: response,
+					message: "Abnormal data received",
+				})
 				return
 			}
 
@@ -125,7 +130,12 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 					})
 				})
 			} catch (error) {
-				logger.error("Voice input processing failed", error)
+				logger.error({
+					eventKey: "voice_input_processing_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Voice input processing failed",
+				})
 			}
 		})
 
@@ -175,14 +185,14 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 		function applyDeferredFallbackText(fallbackText: string) {
 			deferredSegmentsRef.current = fallbackText
 				? [
-					{
-						key: "fallback",
-						text: fallbackText,
-						start: 0,
-						end: fallbackText.length,
-						definite: true,
-					},
-				]
+						{
+							key: "fallback",
+							text: fallbackText,
+							start: 0,
+							end: fallbackText.length,
+							definite: true,
+						},
+					]
 				: []
 			emitDeferredText()
 		}
@@ -397,7 +407,7 @@ const SuperMagicVoiceInput = forwardRef<VoiceInputRef, SuperMagicVoiceInputProps
 				if (
 					scrollElement &&
 					scrollElement.scrollTop + scrollElement.clientHeight >=
-					scrollElement.scrollHeight
+						scrollElement.scrollHeight
 				) {
 					enableScrollIntoViewRef.current = true
 				}

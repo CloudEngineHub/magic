@@ -438,7 +438,6 @@ export function useProjectShareSheet({
 	const { t } = useTranslation("super")
 	const isAudioRecordingScene = isAudioProjectMode(projectMode)
 	const effectiveMode: MobileShareSheetMode = isAudioRecordingScene ? "file" : mode
-	const shareMode = effectiveMode === "file" ? ShareMode.File : ShareMode.Project
 	const recordingShareSelection = useMemo(
 		() => buildRecordingShareSelection(isAudioRecordingScene ? (fileMap ?? null) : null),
 		[fileMap, isAudioRecordingScene],
@@ -461,6 +460,9 @@ export function useProjectShareSheet({
 	const [localSelectedShare, setLocalSelectedShare] = useState<MobileShareItem | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [editResourceId, setEditResourceId] = useState<string | undefined>()
+	const [editingShareMode, setEditingShareMode] = useState<MobileShareSheetMode | null>(null)
+	const [editLoading, setEditLoading] = useState(false)
+	const [fileSelectorOpen, setFileSelectorOpen] = useState(false)
 	const [advancedOpen, setAdvancedOpen] = useState(true)
 	const [memberSelectorOpen, setMemberSelectorOpen] = useState(false)
 	const [selectedMemberNodes, setSelectedMemberNodes] = useState<TreeNode[]>([])
@@ -478,6 +480,7 @@ export function useProjectShareSheet({
 	const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
 	const [userDefaultOpenFileId, setUserDefaultOpenFileId] = useState<string | undefined>()
 	const [defaultOpenFilePickerOpen, setDefaultOpenFilePickerOpen] = useState(false)
+	const activeMode = editingShareMode || effectiveMode
 
 	const shareProject = useShareProject({
 		attachments: shareableAttachments,
@@ -488,7 +491,11 @@ export function useProjectShareSheet({
 			return selectedFileIds
 		}
 
-		if (effectiveMode === "file") {
+		if (editingShareMode || effectiveMode === "file") {
+			if (editingShareMode) {
+				return selectedFileIds
+			}
+
 			if (defaultSelectedFileIds) {
 				return defaultSelectedFileIds
 			}
@@ -508,6 +515,7 @@ export function useProjectShareSheet({
 	}, [
 		defaultSelectedFileIds,
 		effectiveMode,
+		editingShareMode,
 		initialSelectedShare,
 		isAudioRecordingScene,
 		selectedFileIds,
@@ -521,12 +529,26 @@ export function useProjectShareSheet({
 		return buildDefaultOpenFileScope({
 			attachments: shareableAttachments,
 			selectedFileIds: effectiveSelectedFileIds,
-			includeWholeTree: effectiveMode === "project",
+			// Editing follows desktop behavior: the default file can come from the full project tree.
+			includeWholeTree: activeMode === "project" || Boolean(editingShareMode),
 		})
-	}, [effectiveMode, effectiveSelectedFileIds, isAudioRecordingScene, shareableAttachments])
+	}, [
+		activeMode,
+		effectiveSelectedFileIds,
+		editingShareMode,
+		isAudioRecordingScene,
+		shareableAttachments,
+	])
 	const autoDefaultOpenFileId = useMemo(() => {
 		if (isAudioRecordingScene) {
 			return undefined
+		}
+
+		if (editingShareMode && defaultOpenFileId) {
+			const candidate = findAttachmentInTree(shareableAttachments, defaultOpenFileId)
+			if (candidate && canSetAsDefault(candidate)) {
+				return defaultOpenFileId
+			}
 		}
 
 		return resolveDefaultOpenFileId({
@@ -534,7 +556,13 @@ export function useProjectShareSheet({
 			selectedFileIds: effectiveSelectedFileIds,
 			attachments: shareableAttachments,
 		})
-	}, [defaultOpenFileId, effectiveSelectedFileIds, isAudioRecordingScene, shareableAttachments])
+	}, [
+		defaultOpenFileId,
+		editingShareMode,
+		effectiveSelectedFileIds,
+		isAudioRecordingScene,
+		shareableAttachments,
+	])
 	const effectiveDefaultOpenFileId = useMemo(() => {
 		if (isAudioRecordingScene) {
 			return undefined
@@ -590,6 +618,9 @@ export function useProjectShareSheet({
 		setSelectedShareId(initialSelectedShare?.resource_id || null)
 		setLocalSelectedShare(initialSelectedShare || null)
 		setEditResourceId(undefined)
+		setEditingShareMode(null)
+		setEditLoading(false)
+		setFileSelectorOpen(false)
 		setAdvancedOpen(true)
 		setMemberSelectorOpen(false)
 		setSelectedMemberNodes([])
@@ -598,6 +629,13 @@ export function useProjectShareSheet({
 		setSelectedShareMessage(null)
 		setUserDefaultOpenFileId(undefined)
 		setDefaultOpenFilePickerOpen(false)
+		setSelectedFileIds(
+			isAudioRecordingScene
+				? recordingShareSelection.defaultSelectedFileIds
+				: initialSelectedShare && "file_ids" in initialSelectedShare
+					? initialSelectedShare.file_ids || []
+					: defaultSelectedFileIds || [],
+		)
 		setFormState({
 			...createInitialFormState(isAudioRecordingScene),
 			shareName: initialSelectedShare
@@ -614,9 +652,6 @@ export function useProjectShareSheet({
 						t,
 					}),
 		})
-		if (isAudioRecordingScene) {
-			setSelectedFileIds(recordingShareSelection.defaultSelectedFileIds)
-		}
 		// Intentionally omit selection/mode deps so reopening does not overwrite user-edited shareName mid-session.
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when sheet open context changes
 	}, [open, projectName, initialSelectedShare])
@@ -640,10 +675,11 @@ export function useProjectShareSheet({
 	}, [fileShareList.data, projectId, projectShareList.data])
 
 	const selectedShare = useMemo(() => {
+		if (localSelectedShare?.resource_id === selectedShareId) return localSelectedShare
+
 		const remoteMatch =
 			filteredShareItems.find((item) => item.resource_id === selectedShareId) || null
 		if (remoteMatch) return remoteMatch
-		if (localSelectedShare?.resource_id === selectedShareId) return localSelectedShare
 		return null
 	}, [filteredShareItems, localSelectedShare, selectedShareId])
 	// Expose text only when it belongs to the currently selected share.
@@ -652,6 +688,11 @@ export function useProjectShareSheet({
 			? selectedShareMessage.text
 			: ""
 	const displayedSelectedFileIds = useMemo(() => {
+		// Edit mode displays the draft selection rather than the stale list-row snapshot.
+		if (editResourceId) {
+			return effectiveSelectedFileIds
+		}
+
 		// Whole-project share detail: do not use list selection or share.file_ids, to avoid showing the selected-files block incorrectly.
 		if (selectedShare && isWholeProjectShare(selectedShare)) {
 			return []
@@ -668,7 +709,7 @@ export function useProjectShareSheet({
 		}
 
 		return effectiveSelectedFileIds
-	}, [effectiveSelectedFileIds, selectedShare])
+	}, [editResourceId, effectiveSelectedFileIds, selectedShare])
 	const selectedFileItems = useMemo(
 		() => collectSelectedItems(shareableAttachments, displayedSelectedFileIds),
 		[displayedSelectedFileIds, shareableAttachments],
@@ -776,6 +817,16 @@ export function useProjectShareSheet({
 	})
 
 	const goBack = useMemoizedFn(() => {
+		if (view === "edit") {
+			setEditResourceId(undefined)
+			setEditingShareMode(null)
+			setEditLoading(false)
+			setFileSelectorOpen(false)
+			setView("linkDetail")
+			setViewStack([])
+			return
+		}
+
 		setViewStack((prev) => {
 			const nextStack = [...prev]
 			const previousView = nextStack.pop()
@@ -881,7 +932,19 @@ export function useProjectShareSheet({
 	})
 
 	const submitCreateShare = useMemoizedFn(async () => {
-		if (effectiveSelectedFileIds.length === 0) {
+		const isEditing = Boolean(editResourceId)
+		const selectedIdsForSubmission = [...effectiveSelectedFileIds]
+		// Desktop behavior keeps the selected default file in the share scope even when it was picked from elsewhere.
+		if (
+			isEditing &&
+			activeMode === "file" &&
+			effectiveDefaultOpenFileId &&
+			!selectedIdsForSubmission.includes(effectiveDefaultOpenFileId)
+		) {
+			selectedIdsForSubmission.push(effectiveDefaultOpenFileId)
+		}
+
+		if (selectedIdsForSubmission.length === 0) {
 			magicToast.warning(t("share.noShareableFiles"))
 			return
 		}
@@ -889,22 +952,26 @@ export function useProjectShareSheet({
 		// Recording shares keep the visible picker unchanged and only augment the payload
 		// so readonly/share pages always receive the bundle entry files they depend on.
 		const submittedFileIds = isAudioRecordingScene
-			? mergeRecordingShareFileIds(effectiveSelectedFileIds, recordingRequiredFileIds)
-			: effectiveSelectedFileIds
+			? mergeRecordingShareFileIds(selectedIdsForSubmission, recordingRequiredFileIds)
+			: selectedIdsForSubmission
 
 		setSaving(true)
 		try {
-			// Align with desktop FileShareModal: allocate share resource_id via snowflake API.
-			const resourceIdResponse = await SuperMagicApi.getSnowflakeIds()
-			const resourceId = resourceIdResponse?.ids?.[0]
+			// Reuse the existing resource for edits and allocate a new ID only for creation.
+			let resourceId = editResourceId
 			if (!resourceId) {
-				throw new Error("Failed to get share resource id")
+				const resourceIdResponse = await SuperMagicApi.getSnowflakeIds()
+				resourceId = resourceIdResponse?.ids?.[0]
+				if (!resourceId) {
+					throw new Error("Failed to get share resource id")
+				}
 			}
 
 			const password =
 				formState.shareType === ShareType.PasswordProtected ? formState.password : undefined
+			const currentResourceId = resourceId
 			const fallbackShareName =
-				effectiveMode === "file"
+				activeMode === "file"
 					? calculateDefaultShareName(
 							effectiveDefaultOpenFileId,
 							selectedFileItems,
@@ -942,7 +1009,7 @@ export function useProjectShareSheet({
 				default_open_file_id: isAudioRecordingScene
 					? undefined
 					: effectiveDefaultOpenFileId,
-				share_project: isAudioRecordingScene ? false : effectiveMode === "project",
+				share_project: isAudioRecordingScene ? false : activeMode === "project",
 				project_id: projectId,
 				extra: {
 					allow_copy_project_files: formState.advancedSettings.allowCopy ?? true,
@@ -954,11 +1021,12 @@ export function useProjectShareSheet({
 					show_original_info: formState.advancedSettings.showOriginalInfo ?? true,
 					allow_download_project_file:
 						formState.advancedSettings.allowDownloadProjectFile ?? true,
+					pure_mode: formState.advancedSettings.pureMode ?? false,
 				},
 			})
 
 			const createdShareForClipboard: MobileShareItem =
-				effectiveMode === "file"
+				activeMode === "file"
 					? ({
 							title: resourceName,
 							project_name: projectName || t("common.untitledProject"),
@@ -967,13 +1035,14 @@ export function useProjectShareSheet({
 							workspace_name: "",
 							resource_type: ResourceType.FileCollection,
 							share_type: formState.shareType,
-							resource_id: resourceId,
+							resource_id: currentResourceId,
 							has_password: Boolean(password),
 							password,
 							main_file_name:
 								selectedFileItems[0]?.name || selectedFileItems[0]?.file_name || "",
 							file_ids: submittedFileIds,
 							created_at: new Date().toISOString(),
+							expire_days: formState.shareExpiry ?? undefined,
 							expire_at: undefined,
 							share_project: false,
 							extend: {
@@ -988,45 +1057,174 @@ export function useProjectShareSheet({
 							workspace_name: "",
 							resource_type: ResourceType.Project,
 							share_type: formState.shareType,
-							resource_id: resourceId,
+							resource_id: currentResourceId,
 							has_password: Boolean(password),
 							password,
 							created_at: new Date().toISOString(),
+							expire_days: formState.shareExpiry ?? undefined,
 							expire_at: undefined,
+							share_project: activeMode === "project",
 							extend: {
 								file_count: submittedFileIds.length,
 							},
 						} satisfies ProjectShareItem)
 
-			try {
-				const shareMessageText = await buildShareClipboardText({
-					share: createdShareForClipboard,
-					projectName,
-					t,
-				})
-				clipboard.writeText(shareMessageText)
-			} catch (error) {
-				console.error("Failed to copy share message after create:", error)
+			if (!isEditing) {
+				try {
+					const shareMessageText = await buildShareClipboardText({
+						share: createdShareForClipboard,
+						projectName,
+						t,
+					})
+					await clipboard.writeText(shareMessageText)
+				} catch (error) {
+					console.error("Failed to copy share message after create:", error)
+				}
 			}
 
-			magicToast.success(t("share.createSuccessAndCopied"))
+			const updatedShareForDetail: MobileShareItem = selectedShare
+				? ({
+						...selectedShare,
+						...createdShareForClipboard,
+						share_scope:
+							formState.shareType === ShareType.Organization
+								? { type: formState.shareRange }
+								: undefined,
+						extra: {
+							...(
+								selectedShare as MobileShareItem & {
+									extra?: Record<string, unknown>
+								}
+							).extra,
+							pure_mode: formState.advancedSettings.pureMode ?? false,
+						},
+					} as MobileShareItem)
+				: createdShareForClipboard
+
+			magicToast.success(
+				t(isEditing ? "share.updateSuccess" : "share.createSuccessAndCopied"),
+			)
 			refreshShareList()
-			setLocalSelectedShare(createdShareForClipboard)
-			setSelectedShareId(resourceId)
+			setLocalSelectedShare(updatedShareForDetail)
+			setSelectedShareId(currentResourceId)
 			setView("linkDetail")
+			setEditResourceId(undefined)
+			setEditingShareMode(null)
+			setEditLoading(false)
+			setFileSelectorOpen(false)
 			// Clear stack so the header close button dismisses the whole sheet instead of returning to create.
 			setViewStack([])
 		} catch (error) {
-			console.error("Failed to create project share:", error)
-			magicToast.error(t("share.createFailed"))
+			console.error("Failed to save project share:", error)
+			magicToast.error(t(isEditing ? "share.updateFailed" : "share.createFailed"))
 		} finally {
 			setSaving(false)
 		}
 	})
 
+	/** Enters the new H5 edit view and hydrates it from the authoritative share settings API. */
 	const openEditSelectedShare = useMemoizedFn(() => {
 		if (!selectedShare?.resource_id) return
-		setEditResourceId(selectedShare.resource_id)
+
+		const resourceId = selectedShare.resource_id
+		const shareModeForEdit = isWholeProjectShare(selectedShare) ? "project" : "file"
+		setEditResourceId(resourceId)
+		setEditingShareMode(shareModeForEdit)
+		setEditLoading(true)
+		setFileSelectorOpen(false)
+		setViewStack(["linkDetail"])
+		setView("edit")
+
+		// Load the complete settings payload before exposing the edit form so fields cannot save stale values.
+		void Promise.all([
+			SuperMagicApi.getShareInfoByCode({ code: resourceId }),
+			selectedShare.share_type === ShareType.Organization
+				? SuperMagicApi.getShareResourceMembers({ resource_id: resourceId }).catch(() => ({
+						members: [],
+					}))
+				: Promise.resolve({ members: [] }),
+		])
+			.then(([settings, membersResponse]) => {
+				const fileIds =
+					Array.isArray(settings?.file_ids) && settings.file_ids.length > 0
+						? settings.file_ids
+						: "file_ids" in selectedShare && Array.isArray(selectedShare.file_ids)
+							? selectedShare.file_ids
+							: shareModeForEdit === "project"
+								? shareProject.defaultSelectedFileIds
+								: []
+				const defaultFileId = settings?.default_open_file_id || undefined
+				const shareType = (settings?.share_type ?? selectedShare.share_type) as ShareType
+				const shareRange = settings?.share_range === "designated" ? "designated" : "all"
+				const targetIds = settings?.target_ids || []
+				const memberNodes = targetIds.map((target) => {
+					const matched = (membersResponse.members || []).find((member) => {
+						const memberId =
+							member.type === "User" || member.dataType === NodeType.User
+								? member.user_id || member.id
+								: member.department_id || member.id
+						return memberId === target.target_id
+					})
+					if (matched) return normalizeDetailMemberNode(matched)
+					return {
+						id: target.target_id,
+						name: target.target_id,
+						type: target.target_type,
+						dataType:
+							target.target_type === "User" ? NodeType.User : NodeType.Department,
+					} as TreeNode
+				})
+
+				setFormState({
+					shareName: settings?.resource_name || selectedShare.title || "",
+					shareType,
+					shareExpiry: settings?.expire_days ?? selectedShare.expire_days ?? null,
+					password: settings?.password || "",
+					shareRange,
+					shareTargets: targetIds.map((target) => ({
+						target_type: target.target_type as "User" | "Department",
+						target_id: target.target_id,
+						name: memberNodes.find((member) => member.id === target.target_id)?.name,
+					})),
+					advancedSettings: {
+						allowCopy: settings?.extra?.allow_copy_project_files ?? true,
+						showFileList: settings?.extra?.view_file_list ?? true,
+						showOriginalInfo: settings?.extra?.show_original_info ?? true,
+						hideCreatorInfo: settings?.extra?.hide_created_by_super_magic ?? false,
+						allowDownloadProjectFile:
+							settings?.extra?.allow_download_project_file ?? true,
+						pureMode: settings?.extra?.pure_mode ?? false,
+					},
+				})
+				setSelectedFileIds(fileIds)
+				setUserDefaultOpenFileId(defaultFileId)
+				setSelectedMemberNodes(shareRange === "designated" ? memberNodes : [])
+				setAdvancedOpen(true)
+			})
+			.catch((error) => {
+				console.error("Failed to load share settings for edit:", error)
+				magicToast.error(t("share.updateFailed"))
+				setEditResourceId(undefined)
+				setEditingShareMode(null)
+				setView("linkDetail")
+				setViewStack([])
+			})
+			.finally(() => setEditLoading(false))
+	})
+
+	/** Opens the staged file-range picker for file-share edits only. */
+	const openFileSelector = useMemoizedFn(() => {
+		if (!editResourceId || activeMode !== "file") return
+		setFileSelectorOpen(true)
+	})
+
+	/** Discards staged file-range changes when the picker is closed without saving. */
+	const closeFileSelector = useMemoizedFn(() => setFileSelectorOpen(false))
+
+	/** Commits the picker selection into the edit draft without calling the share API. */
+	const confirmFileSelector = useMemoizedFn((fileIds: string[]) => {
+		setSelectedFileIds(fileIds)
+		setFileSelectorOpen(false)
 	})
 
 	const confirmCancelShare = useMemoizedFn(async () => {
@@ -1035,12 +1233,14 @@ export function useProjectShareSheet({
 		refreshShareList()
 		setSelectedShareId(null)
 		setLocalSelectedShare(null)
+		setEditResourceId(undefined)
+		setEditingShareMode(null)
 		setView("manage")
 		setViewStack([])
 	})
 
 	const toggleShareFileId = useMemoizedFn((fileId: string) => {
-		if (!isAudioRecordingScene) return
+		if (!isAudioRecordingScene && !editResourceId) return
 
 		setSelectedFileIds((current) =>
 			current.includes(fileId) ? current.filter((id) => id !== fileId) : [...current, fileId],
@@ -1049,9 +1249,9 @@ export function useProjectShareSheet({
 
 	return {
 		open,
-		mode: effectiveMode,
+		mode: activeMode,
 		projectMode,
-		shareMode,
+		shareMode: activeMode === "file" ? ShareMode.File : ShareMode.Project,
 		view,
 		viewStack,
 		projectName,
@@ -1061,7 +1261,7 @@ export function useProjectShareSheet({
 		selectedShare,
 		loading: projectShareList.loading || fileShareList.loading,
 		saving,
-		isCheckingShare: effectiveMode === "project" ? shareProject.isCheckingShare : false,
+		isCheckingShare: activeMode === "project" ? shareProject.isCheckingShare : false,
 		advancedOpen,
 		defaultSelectedFileIds: effectiveSelectedFileIds,
 		selectedFileIds,
@@ -1075,6 +1275,9 @@ export function useProjectShareSheet({
 		defaultOpenFileCandidates: defaultOpenFileScope.candidates,
 		defaultOpenFileCandidateTree: defaultOpenFileScope.tree,
 		defaultOpenFilePickerOpen,
+		isEditing: Boolean(editResourceId),
+		editLoading,
+		fileSelectorOpen,
 		memberSelectorOpen,
 		selectedMemberNodes,
 		detailMemberNodes,
@@ -1115,10 +1318,18 @@ export function useProjectShareSheet({
 		selectDefaultOpenFile,
 		submitCreateShare,
 		openEditSelectedShare,
+		openFileSelector,
+		closeFileSelector,
+		confirmFileSelector,
 		confirmCancelShare,
 		editResourceId,
 		closeEditModal: () => {
 			setEditResourceId(undefined)
+			setEditingShareMode(null)
+			setEditLoading(false)
+			setFileSelectorOpen(false)
+			setView("linkDetail")
+			setViewStack([])
 			refreshShareList()
 		},
 	}

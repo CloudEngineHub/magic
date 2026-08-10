@@ -496,9 +496,12 @@ export class PPTIncrementalUpdateService {
 						newContent,
 					)
 				} catch (error) {
-					this.logger.error("加载正在编辑的幻灯片的新内容失败", error, {
-						operation: "handleFileUpdates",
-						metadata: { fileId, index },
+					this.logger.error({
+						eventKey: "load_slide_content_failed",
+						errorKind: "render",
+						error: error,
+						message: "加载正在编辑的幻灯片的新内容失败",
+						context: { operation: "handleFileUpdates", metadata: { fileId, index } },
 					})
 				}
 			}
@@ -633,9 +636,12 @@ export class PPTIncrementalUpdateService {
 						}
 					}
 				} catch (error) {
-					this.logger.error("加载幻灯片失败", error, {
-						operation: "loadSpecificSlides",
-						slideIndex: index,
+					this.logger.error({
+						eventKey: "load_slide_failed",
+						errorKind: "render",
+						error: error,
+						message: "加载幻灯片失败",
+						context: { operation: "loadSpecificSlides", slideIndex: index },
 					})
 				}
 			}),

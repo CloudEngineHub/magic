@@ -55,6 +55,9 @@ import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
 
+const SHARE_MESSAGE_TOP_MASK_CLASS_NAME =
+	"pointer-events-none absolute inset-x-0 top-0 z-10 h-2.5 bg-white dark:bg-card"
+
 function Topic({
 	data,
 	resource_name,
@@ -1159,6 +1162,14 @@ function Topic({
 											<LoadingMessage />
 										)}
 									</ScrollArea>
+									{/* Keep scrolling rows hidden inside the viewport's top padding. */}
+									<div
+										aria-hidden
+										className={cn(
+											SHARE_MESSAGE_TOP_MASK_CLASS_NAME,
+											"max-md:h-[calc(60px+var(--safe-area-inset-top,env(safe-area-inset-top)))]",
+										)}
+									/>
 									<BackToLatestButton
 										visible={showBackToLatest}
 										onClick={scrollToBottom}

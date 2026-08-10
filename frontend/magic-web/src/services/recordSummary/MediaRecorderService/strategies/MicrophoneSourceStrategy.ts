@@ -62,10 +62,15 @@ export class MicrophoneSourceStrategy implements AudioSourceStrategy {
 			const audioTracks = this.mediaStream.getAudioTracks()
 			audioTracks.forEach((track) => {
 				track.onended = () => {
-					this.dependencies.logger.error("Microphone audio track ended unexpectedly", {
-						trackId: track.id,
-						trackLabel: track.label,
-						trackState: track.readyState,
+					this.dependencies.logger.error({
+						eventKey: "microphone_track_ended_unexpectedly",
+						errorKind: "unknown",
+						message: "Microphone audio track ended unexpectedly",
+						context: {
+							trackId: track.id,
+							trackLabel: track.label,
+							trackState: track.readyState,
+						},
 					})
 
 					// 上报监控：麦克风音频轨道意外结束（可能原因：用户撤销权限、设备断开）
@@ -130,7 +135,12 @@ export class MicrophoneSourceStrategy implements AudioSourceStrategy {
 				audioRecorder: this.audioRecorder,
 			}
 		} catch (error) {
-			this.dependencies.logger.error("Failed to initialize microphone audio source:", error)
+			this.dependencies.logger.error({
+				eventKey: "initialize_microphone_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to initialize microphone audio source:",
+			})
 			await this.cleanup()
 			throw new AudioStreamCaptureError(
 				"Failed to initialize microphone audio source",

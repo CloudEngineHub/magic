@@ -204,13 +204,23 @@ eventFactory.on(EVENTS.LOGOUT, (data: { magicId?: string }) => {
 		// 注意：不调用 reset()，让 DELETE_ACCOUNT 事件统一处理
 		logger.log("LOGOUT: 其他账号退出，已清理所有弹窗和资源")
 	} catch (error) {
-		logger.error("LOGOUT error", error)
+		logger.error({
+			eventKey: "logout_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "LOGOUT error",
+		})
 		// 确保 cleanup 被调用
 		try {
 			const modalStateManager = ModalStateManager.getInstance()
 			modalStateManager.cleanup()
 		} catch (cleanupError) {
-			logger.error("LOGOUT cleanup error", cleanupError)
+			logger.error({
+				eventKey: "logout_cleanup_failed",
+				errorKind: "lifecycle",
+				error: cleanupError,
+				message: "LOGOUT cleanup error",
+			})
 		}
 	}
 })
@@ -423,14 +433,24 @@ async function handleSwitchOrganization(data: {
 			modalStateManager.removeEventFromQueue(eventId)
 		}
 	} catch (error) {
-		logger.error("SWITCH_ORGANIZATION", error)
+		logger.error({
+			eventKey: "switch_organization_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "SWITCH_ORGANIZATION",
+		})
 		// 错误恢复：清理资源
 		try {
 			modalStateManager.destroyOrganizationModal()
 			modalStateManager.clearPendingOperation()
 			modalStateManager.removeEventFromQueue(eventId)
 		} catch (cleanupError) {
-			logger.error("SWITCH_ORGANIZATION cleanup error", cleanupError)
+			logger.error({
+				eventKey: "switch_organization_cleanup_failed",
+				errorKind: "lifecycle",
+				error: cleanupError,
+				message: "SWITCH_ORGANIZATION cleanup error",
+			})
 		}
 	}
 }
@@ -659,7 +679,12 @@ async function handleSwitchAccount(data: {
 			modalStateManager.removeEventFromQueue(eventId)
 		}
 	} catch (error) {
-		logger.error("SWITCH_ACCOUNT", error)
+		logger.error({
+			eventKey: "switch_account_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "SWITCH_ACCOUNT",
+		})
 		// 错误恢复：清理资源
 		try {
 			modalStateManager.destroyAccountModal()
@@ -667,7 +692,12 @@ async function handleSwitchAccount(data: {
 			modalStateManager.clearPendingOperation()
 			modalStateManager.removeEventFromQueue(eventId)
 		} catch (cleanupError) {
-			logger.error("SWITCH_ACCOUNT cleanup error", cleanupError)
+			logger.error({
+				eventKey: "switch_account_cleanup_failed",
+				errorKind: "lifecycle",
+				error: cleanupError,
+				message: "SWITCH_ACCOUNT cleanup error",
+			})
 		}
 	}
 }
@@ -680,7 +710,12 @@ eventFactory.on(EVENTS.UPDATE_USER_INFO, (data: { userInfo: User.UserInfo }) => 
 	try {
 		UserDispatchService.updateUserInfo(data)
 	} catch (error) {
-		logger.error("UPDATE_USER_INFO error", error)
+		logger.error({
+			eventKey: "update_user_info_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "UPDATE_USER_INFO error",
+		})
 	}
 })
 
@@ -881,12 +916,22 @@ eventFactory.on(EVENTS.ADD_ACCOUNT, async (data: { userAccount: User.UserAccount
 		// 执行原有的添加账号逻辑
 		UserDispatchService.addAccount(data)
 	} catch (error) {
-		logger.error("ADD_ACCOUNT error", error)
+		logger.error({
+			eventKey: "add_account_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "ADD_ACCOUNT error",
+		})
 		// 不中断流程，继续执行原有逻辑
 		try {
 			UserDispatchService.addAccount(data)
 		} catch (fallbackError) {
-			logger.error("ADD_ACCOUNT fallback error", fallbackError)
+			logger.error({
+				eventKey: "add_account_fallback_failed",
+				errorKind: "unknown",
+				error: fallbackError,
+				message: "ADD_ACCOUNT fallback error",
+			})
 		}
 	}
 })
@@ -898,7 +943,12 @@ eventFactory.on(
 		try {
 			UserDispatchService.updateAccount(data)
 		} catch (error) {
-			logger.error("UPDATE_ACCOUNT error", error)
+			logger.error({
+				eventKey: "update_account_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "UPDATE_ACCOUNT error",
+			})
 		}
 	},
 )
@@ -1023,19 +1073,34 @@ eventFactory.on(
 			// 执行原有的删除账号逻辑
 			UserDispatchService.deleteAccount(data)
 		} catch (error) {
-			logger.error("DELETE_ACCOUNT error", error)
+			logger.error({
+				eventKey: "delete_account_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "DELETE_ACCOUNT error",
+			})
 			// 确保资源清理
 			try {
 				const modalStateManager = ModalStateManager.getInstance()
 				modalStateManager.cleanup()
 			} catch (cleanupError) {
-				logger.error("DELETE_ACCOUNT cleanup error", cleanupError)
+				logger.error({
+					eventKey: "delete_account_cleanup_failed",
+					errorKind: "lifecycle",
+					error: cleanupError,
+					message: "DELETE_ACCOUNT cleanup error",
+				})
 			}
 			// 继续执行原有逻辑
 			try {
 				UserDispatchService.deleteAccount(data)
 			} catch (fallbackError) {
-				logger.error("DELETE_ACCOUNT fallback error", fallbackError)
+				logger.error({
+					eventKey: "delete_account_fallback_failed",
+					errorKind: "unknown",
+					error: fallbackError,
+					message: "DELETE_ACCOUNT fallback error",
+				})
 			}
 		}
 	},

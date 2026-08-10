@@ -3,9 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageMain from ".."
 
-const { mockNavigate, mockSetSelectedTopic, topicStoreMock } = vi.hoisted(() => ({
+const { mockNavigate, topicStoreMock } = vi.hoisted(() => ({
 	mockNavigate: vi.fn(),
-	mockSetSelectedTopic: vi.fn(),
 	topicStoreMock: {
 		setSelectedTopic: vi.fn(),
 		topics: [] as Topic[],
@@ -46,8 +45,16 @@ vi.mock("@/components/base-mobile/MagicPullToRefresh", () => ({
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
-	ScrollEdgeFadeContainer: ({ children }: { children: React.ReactNode }) => (
-		<div data-testid="scroll-edge-fade-container">{children}</div>
+	ScrollEdgeFadeContainer: ({
+		children,
+		scrollClassName,
+	}: {
+		children: React.ReactNode
+		scrollClassName?: string
+	}) => (
+		<div data-testid="scroll-edge-fade-container" data-scroll-class-name={scrollClassName}>
+			{children}
+		</div>
 	),
 }))
 
@@ -127,6 +134,17 @@ describe("ProjectPageMain", () => {
 		const emptyState = screen.getByTestId("project-topics-empty-state")
 		expect(emptyState).toHaveTextContent("暂无话题")
 		expect(emptyState).toHaveTextContent("在下方输入区创建新话题。")
+	})
+
+	it("keeps horizontal padding inside the scroll port so edge overlays remain full width", () => {
+		render(
+			<ProjectPageMain onTopicMore={vi.fn()} onTopicPin={vi.fn()} onTopicDelete={vi.fn()} />,
+		)
+
+		expect(screen.getByTestId("scroll-edge-fade-container")).toHaveAttribute(
+			"data-scroll-class-name",
+			"px-3",
+		)
 	})
 
 	it("renders pin swipe action and calls onTopicPin with the current topic", () => {

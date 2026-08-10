@@ -614,7 +614,12 @@ export class TabCoordinator {
 		try {
 			this.channel.postMessage(message)
 		} catch (error) {
-			logger.error("Failed to send message", error)
+			logger.error({
+				eventKey: "send_message_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to send message",
+			})
 		}
 	}
 

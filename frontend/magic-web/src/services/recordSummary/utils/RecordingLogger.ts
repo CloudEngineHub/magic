@@ -1,4 +1,5 @@
 import { logger as Logger } from "@/utils/log"
+import type { StructuredErrorInput } from "@/utils/log/errorReport"
 
 /**
  * Namespaced logger interface
@@ -7,7 +8,7 @@ import { logger as Logger } from "@/utils/log"
 export interface NamespacedLogger {
 	log(message: string, ...args: unknown[]): void
 	warn(message: string, ...args: unknown[]): void
-	error(message: string, ...args: unknown[]): void
+	error(input: StructuredErrorInput): void
 	report(
 		message: string | { namespace: string; data: Record<string, unknown> },
 		data?: unknown,
@@ -97,10 +98,19 @@ class RecordingLoggerManager {
 				})
 			},
 
-			error: (message: string, ...args: unknown[]) => {
+			error: (input: StructuredErrorInput) => {
+				// 录音模块只补充共享会话标识，业务声明的稳定 key 和原始 Error 必须保持不变。
 				Logger.error({
 					namespace: fullNamespace,
-					data: [message, this.formatData(args[0])],
+					data: [
+						{
+							...input,
+							context: {
+								...input.context,
+								session_id: this.sessionId,
+							},
+						},
+					],
 				})
 			},
 

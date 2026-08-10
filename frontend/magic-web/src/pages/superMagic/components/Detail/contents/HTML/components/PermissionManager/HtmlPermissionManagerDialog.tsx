@@ -153,11 +153,17 @@ export default function HtmlPermissionManagerDialog({
 		snapshot?.permissions.filter((item) => item.declarationStatus === "declared").length ?? 0
 	const visiblePermissions = useMemo(
 		() =>
-			snapshot?.permissions.filter((item) =>
-				snapshot.mode === "legacy"
-					? Boolean(item.grant)
-					: item.declarationStatus !== "notDeclared",
+			snapshot?.permissions.filter(
+				(item) =>
+					item.supported &&
+					(snapshot.mode === "legacy"
+						? Boolean(item.grant)
+						: item.declarationStatus === "declared"),
 			) ?? [],
+		[snapshot],
+	)
+	const visibleDiagnostics = useMemo(
+		() => snapshot?.diagnostics.filter((item) => item.code !== "scopeUnsupported") ?? [],
 		[snapshot],
 	)
 	const emptyPermissionsMessage =
@@ -265,7 +271,7 @@ export default function HtmlPermissionManagerDialog({
 									</dl>
 								</section>
 
-								{snapshot.diagnostics.length > 0 ? (
+								{visibleDiagnostics.length > 0 ? (
 									<Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
 										<AlertCircle />
 										{/* 标题和说明必须作为同一个网格项，避免被 Alert 分配到不同位置。 */}
@@ -275,15 +281,13 @@ export default function HtmlPermissionManagerDialog({
 											</AlertTitle>
 											<AlertDescription className="text-amber-800 dark:text-amber-200">
 												<ul className="list-disc space-y-1 pl-4">
-													{snapshot.diagnostics.map(
-														(diagnostic, index) => (
-															<li
-																key={`${diagnostic.code}-${diagnostic.scope || index}`}
-															>
-																{getDiagnosticText(diagnostic)}
-															</li>
-														),
-													)}
+													{visibleDiagnostics.map((diagnostic, index) => (
+														<li
+															key={`${diagnostic.code}-${diagnostic.scope || index}`}
+														>
+															{getDiagnosticText(diagnostic)}
+														</li>
+													))}
 												</ul>
 											</AlertDescription>
 										</div>

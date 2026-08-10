@@ -41,4 +41,11 @@ describe("TopicFilesCore", () => {
 		expect(source).toContain("type: DetailType.SlidesTemplate")
 		expect(source).toContain("openSlidesTemplate(item)")
 	})
+
+	it("does not require a preloaded project list for cross-project moves", async () => {
+		const source = await readTopicFilesCoreSource()
+
+		expect(source).toContain("capabilities.crossProject && !isChatProject && !isMobile")
+		expect(source).not.toContain("capabilities.crossProject && projects.length > 0")
+	})
 })

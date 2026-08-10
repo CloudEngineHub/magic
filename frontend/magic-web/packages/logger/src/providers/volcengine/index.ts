@@ -6,10 +6,11 @@ import { SPALoadPlugin } from "@apmplus/integrations"
 import { blankScreenPlugin } from "@apmplus/integrations/blankScreen"
 import { plugin as jsErrorPlugin } from "./plugins/JSErrorPlugin"
 import { plugin as pageViewPlugin } from "./plugins/PageViewPlugin"
-import { env } from "@/utils/env"
 import { cloneDeep, pickBy, pick, isNil } from "lodash-es"
 import { SensitiveMasker } from "../../SensitiveMasker"
 import { plugin as fetchErrorPlugin } from "./plugins/FetchError"
+import { normalizeVolcengineError, toVolcengineExtra } from "./error"
+import { getAppRelease } from "@/utils/log/release"
 
 /**
  * 火山引擎 APMPlus Provider 实现
@@ -32,7 +33,7 @@ export class VolcengineProvider extends BaseProvider {
 			aid: +config.appId,
 			token: config.token,
 			env: config.env || "production",
-			release: env("MAGIC_APP_VERSION") || env("MAGIC_APP_SHA"),
+			release: getAppRelease(),
 			// plugins: config.plugins || [],
 			// ...config.extra,
 			plugins: {
@@ -217,10 +218,11 @@ export class VolcengineProvider extends BaseProvider {
 		)
 	}
 
-	error(error: any): void {
+	error(...args: unknown[]): void {
 		if (!this.client) return
-		// 上报异常信息
-		this.client("captureException", error)
+
+		const normalized = normalizeVolcengineError(args)
+		this.client("captureException", normalized.error, toVolcengineExtra(normalized.attributes))
 	}
 
 	report() {

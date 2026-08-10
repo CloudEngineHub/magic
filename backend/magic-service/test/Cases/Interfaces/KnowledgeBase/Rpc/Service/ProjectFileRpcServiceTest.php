@@ -8,12 +8,12 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Interfaces\KnowledgeBase\Rpc\Service;
 
 use App\Application\Kernel\Proxy\FileParserProxy;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\Interfaces\KnowledgeBase\Rpc\Service\ProjectFileRpcService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\WorkspaceDomainService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 

@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Interfaces\Agent;
 
-use Dtyq\SuperMagic\Domain\Agent\Entity\MagicClawEntity;
-use Dtyq\SuperMagic\Interfaces\Agent\Assembler\MagicClawAssembler;
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
+use App\Interfaces\SuperMagic\Agent\Assembler\MagicClawAssembler;
 use PHPUnit\Framework\TestCase;
 
 /**

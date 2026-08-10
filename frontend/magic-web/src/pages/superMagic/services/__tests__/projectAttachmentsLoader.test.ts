@@ -154,6 +154,7 @@ describe("loadProjectAttachments scope", () => {
 			projectId: "project-id",
 			scope: "memory",
 			temporaryToken: null,
+			threshold: 1000,
 		})
 
 		expect(superMagicApiMock.getProjectAttachmentsCount).toHaveBeenCalledWith(
@@ -166,8 +167,8 @@ describe("loadProjectAttachments scope", () => {
 		)
 	})
 
-	it("forwards memory scope to every V2 page request", async () => {
-		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 1000 })
+	it("uses V2 by default and forwards memory scope to every page request", async () => {
+		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 0 })
 		superMagicApiMock.getProjectAttachmentsV2Page.mockResolvedValue({
 			list: [],
 			next_parent_ids: null,
