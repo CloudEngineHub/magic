@@ -10,6 +10,8 @@ import {
 } from "../utils/attachmentIndex"
 
 interface UseFileShortcutsOptions {
+	/** 是否启用文件加入对话快捷键。 */
+	enabled?: boolean
 	hoveredItemRef: MutableRefObject<string | null>
 	contextMenuItemId: string | null
 	treeIndex: AttachmentIndex
@@ -30,6 +32,7 @@ interface UseFileShortcutsOptions {
  * 处理文件列表相关的键盘快捷键
  */
 export function useFileShortcuts({
+	enabled = true,
 	hoveredItemRef,
 	contextMenuItemId,
 	treeIndex,
@@ -48,6 +51,8 @@ export function useFileShortcuts({
 
 	// 监听快捷键：Command+L 或 Ctrl+L 将悬浮的文件添加到当前对话
 	useEffect(() => {
+		if (!enabled) return
+
 		const handleKeyDown = async (e: KeyboardEvent) => {
 			// 检查是否按下 Command+L (Mac) 或 Ctrl+L (Windows/Linux)
 			const isShortcutPressed = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l"
@@ -103,8 +108,7 @@ export function useFileShortcuts({
 			}
 
 			// 检查是否是 PPT 入口文件
-			const isPPTFile =
-				item.display_config?.type === "slide" && item.display_config?.slides
+			const isPPTFile = item.display_config?.type === "slide" && item.display_config?.slides
 
 			let targetItem: AttachmentItem | null = null
 
@@ -134,7 +138,10 @@ export function useFileShortcuts({
 					// 查找对应的页面文件节点
 					const pageItem = findSlidePageItemByName(parentItem, pageFileName)
 					if (pageItem) {
-						console.log("✅ Found page file item:", pageItem.file_id || pageItem.file_name)
+						console.log(
+							"✅ Found page file item:",
+							pageItem.file_id || pageItem.file_name,
+						)
 						targetItem = pageItem
 					} else {
 						console.warn("⚠️ Page file not found, fallback to entry file")
@@ -172,6 +179,7 @@ export function useFileShortcuts({
 			document.removeEventListener("keydown", handleKeyDown, true)
 		}
 	}, [
+		enabled,
 		hoveredItemRef,
 		contextMenuItemId,
 		treeIndex,

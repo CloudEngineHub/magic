@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
@@ -20,6 +20,7 @@ import { AnsweredQuestionContent } from "./components/AnsweredQuestionContent"
 import { renderAskUserPendingQuestion } from "./components/InteractionQuestionRenderers"
 import { useAskUserViewModel } from "./hooks/useAskUserViewModel"
 import { superMagicStore } from "@/pages/superMagic/stores"
+import { useMessageViewState } from "../../../view-state/MessageViewStateContext"
 
 /** 题目区：卡片内次级背景（随主题 / 深浅色变化） */
 const askUserQuestionPanelClass = "mt-1.5 min-w-0 rounded-md border border-border bg-muted p-2.5"
@@ -38,7 +39,7 @@ interface AskUserQuestionListItem {
 function AskUser(props: NodeProps) {
 	const { node } = props
 	const { i18n } = useTranslation("super")
-	const [isCollapsed, setIsCollapsed] = useState(false)
+	const [isCollapsed, setIsCollapsed] = useMessageViewState("ask-user-collapsed", false)
 	const {
 		answeredQuestionCount,
 		errorState,
@@ -70,9 +71,8 @@ function AskUser(props: NodeProps) {
 		resolvedAskUser.status === ASK_USER_CARD_STATUS.answered
 			? "askUser.answersTitle"
 			: "askUser.title"
-	const messageNode = superMagicStore.getMessageNode(props?.node?.app_message_id) as
-		| { tool?: { action?: string } }
-		| undefined
+	const messageNode = superMagicStore.getMessageNode(props?.node?.super_message_id) as
+		{ tool?: { action?: string } } | undefined
 	const askUserAction = messageNode?.tool?.action
 	const askUserLocale = useMemo(
 		() => resolveAskUserLocaleFromAction(askUserAction),
@@ -178,29 +178,7 @@ function AskUser(props: NodeProps) {
 				</div>
 				<div className="shrink-0 pt-0.5" data-testid="ask-user-card-footer">
 					<div className="flex flex-wrap items-center justify-between gap-1.5">
-						<div className="flex min-w-0 items-center gap-1 text-xs font-medium leading-4 text-muted-foreground">
-							<span
-								className={cn(
-									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-								)}
-							>
-								{askUserT("askUser.status.autoSubmitIn", {
-									time: remainingText,
-								})}
-							</span>
-						</div>
 						<div className="flex shrink-0 items-center gap-1">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={shouldDisableInteraction || pendingAction !== null}
-								onClick={handleSkip}
-								data-testid="ask-user-card-skip-button"
-								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
-							>
-								{askUserT("askUser.actions.skip")}
-							</Button>
 							<Button
 								type="button"
 								size="sm"
@@ -213,6 +191,28 @@ function AskUser(props: NodeProps) {
 							>
 								{askUserT("askUser.actions.submit")}
 							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={shouldDisableInteraction || pendingAction !== null}
+								onClick={handleSkip}
+								data-testid="ask-user-card-skip-button"
+								className="h-6 rounded-md border border-border px-3 text-xs font-medium text-foreground shadow-none"
+							>
+								{askUserT("askUser.actions.skip")}
+							</Button>
+						</div>
+						<div className="ml-auto flex min-w-0 items-center gap-1 text-right text-xs font-medium leading-4 text-muted-foreground">
+							<span
+								className={cn(
+									"min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+								)}
+							>
+								{askUserT("askUser.status.autoSubmitIn", {
+									time: remainingText,
+								})}
+							</span>
 						</div>
 					</div>
 				</div>

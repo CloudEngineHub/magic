@@ -4,11 +4,14 @@
 提取自 call_subagent，供 cron 等系统级服务直接调用，不依赖 ToolContext。
 """
 import asyncio
+from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
 
 from agentlang.logger import get_logger
 from agentlang.chat_history.session_config import SessionConfig
-from app.core.models.media_model import ImageModelSpec, JsonObject, VideoModelSpec
+from app.core.models.agent_runtime import AgentLifetime, AgentTarget
+from app.core.models.agent_session import AgentSessionRef
+from app.core.models.media_model import ImageModelSpec, VideoModelSpec
 from app.core.models.model_selection_policy import ModelSelectionInput, ModelSelectionPolicy
 from app.path_manager import PathManager
 from app.tools.subagent_runtime_models import SubagentSessionState, SubagentStatus, utc_now
@@ -18,43 +21,100 @@ from app.tools.subagent_session_manager import subagent_session_manager
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
     from app.magic.agent import Agent
+    from app.service.agent_context_snapshot_service import AgentContextSnapshot
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class IsolatedAgentModelRequest:
+    """调用方为隔离 Agent 指定的模型；未指定项继续走现有会话和默认模型选择。"""
+
+    text_model_id: Optional[str] = None
+    image: ImageModelSpec = field(default_factory=ImageModelSpec.empty)
+    video: VideoModelSpec = field(default_factory=VideoModelSpec.empty)
+
+    @classmethod
+    def from_values(
+        cls,
+        *,
+        text_model_id: Optional[str] = None,
+        image_model_id: Optional[str] = None,
+        video_model_id: Optional[str] = None,
+        video_generation_config: Optional[dict[str, object]] = None,
+    ) -> "IsolatedAgentModelRequest":
+        return cls(
+            text_model_id=text_model_id,
+            image=ImageModelSpec.from_values(model_id=image_model_id),
+            video=VideoModelSpec.from_values(
+                model_id=video_model_id,
+                video_generation_config=video_generation_config,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class IsolatedAgentRunRequest:
+    """一次隔离 Agent 运行所需的身份、输入和可选上下文。
+
+    这个请求把“子 Agent 要运行什么”集中在一个对象里，避免调用方继续增加一长串
+    相互关联的参数。两种典型输入如下：
+
+        空白新 Agent:
+            snapshot=None, parent_context=None
+
+        fork 后运行:
+            snapshot=完整快照, parent_context=可选的父运行环境
+
+    `snapshot` 决定子 Agent 读哪些持久化上下文；`parent_context` 只传递 sandbox、组织和
+    subagent 层级等运行边界，不把父 Agent 的 streams、活动任务或取消状态带过去。
+    """
+
+    target: AgentTarget
+    agent_id: str
+    prompt: str
+    parent_context: Optional["AgentContext"] = None
+    models: IsolatedAgentModelRequest = field(default_factory=IsolatedAgentModelRequest)
+    snapshot: Optional["AgentContextSnapshot"] = None
 
 
 def apply_isolated_agent_model_selection(
     agent: "Agent",
     parent_context: Optional["AgentContext"] = None,
-    model_id: Optional[str] = None,
-    image_model_id: Optional[str] = None,
-    video_model_id: Optional[str] = None,
-    video_generation_config: Optional[JsonObject] = None,
+    models: Optional[IsolatedAgentModelRequest] = None,
 ) -> None:
+    """按请求、父上下文/会话文档、Agent 默认值的优先级应用模型配置。
+
+        本轮显式 model_id
+                 ↓ 没有才使用
+        父 Agent 当前模型（有 live parent）或目标 session.json（无 parent）
+                 ↓ 仍然没有才使用
+        Agent 自身配置的默认文本模型
+
+    图片和视频模型还会沿用已有能力配置。例如请求只覆盖图片模型 ID 时，尺寸配置仍
+    从父上下文或 session 文档补齐。这个选择发生在 Agent 启动后，但不会改变 fork 的
+    三份持久化文件；它只决定本次运行最终使用的模型。
+    """
+    model_request = models or IsolatedAgentModelRequest()
     current_session_config = agent.chat_history.get_current_session_config()
     last_session_config = agent.chat_history.get_last_session_config()
     parent_model_context = parent_context.model_context if parent_context is not None else None
 
-    request_image_model = ImageModelSpec.from_values(model_id=image_model_id)
-    request_video_model = VideoModelSpec.from_values(
-        model_id=video_model_id,
-        video_generation_config=video_generation_config,
-    )
-
     selection = ModelSelectionPolicy.resolve(ModelSelectionInput(
-        configured_text_model_id=agent.llm_id,
-        request_text_model_id=model_id,
+        configured_text_model_id=agent.agent_context.model_context.configured_text_model_id,
+        request_text_model_id=model_request.text_model_id,
         session_text_model_id=(
             parent_model_context.current_text_model_id
             if parent_model_context is not None
             else current_session_config.model_id or last_session_config.model_id
         ),
-        request_image_model=request_image_model,
+        request_image_model=model_request.image,
         session_image_model=(
             parent_model_context.image
             if parent_model_context is not None
             else _session_image_model(current_session_config, last_session_config)
         ),
-        request_video_model=request_video_model,
+        request_video_model=model_request.video,
         session_video_model=(
             parent_model_context.video
             if parent_model_context is not None
@@ -70,14 +130,23 @@ def apply_isolated_agent_model_selection(
 
 
 async def run_isolated_agent(
-    agent_name: str,
-    agent_id: str,
-    prompt: str,
-    parent_context: Optional["AgentContext"] = None,
-    model_id: Optional[str] = None,
-    image_model_id: Optional[str] = None,
-    video_model_id: Optional[str] = None,
-    video_generation_config: Optional[JsonObject] = None,
+    request: IsolatedAgentRunRequest,
+) -> Optional[str]:
+    """运行普通隔离 Agent。"""
+    return await _run_isolated_agent(request, capture_compact_history_result=False)
+
+
+async def run_compaction_agent(
+    request: IsolatedAgentRunRequest,
+) -> Optional[str]:
+    """运行后台压缩 Agent，捕获 compact_chat_history 结果并禁止再次压缩。"""
+    return await _run_isolated_agent(request, capture_compact_history_result=True)
+
+
+async def _run_isolated_agent(
+    request: IsolatedAgentRunRequest,
+    *,
+    capture_compact_history_result: bool,
 ) -> Optional[str]:
     """
     运行一个隔离 sub-agent，等待完成并返回结果。
@@ -86,39 +155,91 @@ async def run_isolated_agent(
     parent_context 为 None 时（cron 等系统级调用场景），
     内部创建独立的 root context，从全局配置读取必要参数，
     不继承任何运行时父 context。
+
+    普通和后台压缩入口共用本实现。压缩入口会捕获 compact_chat_history
+    的 summary，并禁止已接近阈值的 fork Agent 再次触发压缩。
+
+    启动顺序很重要：
+
+        snapshot != None
+            1. 先把快照写成目标会话的三份正式文件
+            2. 再 acquire Agent，让 Agent 从目标文件正常加载
+            3. 最后执行 prompt
+
+        snapshot == None
+            直接 acquire 一个空白或已有会话；不会凭空复制父 Agent 的历史。
+
+    因此普通子 Agent、后台压缩 Agent 和 cron Agent 都复用同一条“写文件后启动”的
+    路径；不同点只在 prompt、模型选择和压缩结果捕获方式。
     """
     from app.core.context.agent_context import AgentContext
-    from app.magic.agent import Agent
+    from app.service.agent_runtime import AgentRuntime
+    from app.service.agent_context_snapshot_service import AgentContextSnapshotService
+
+    target_session = AgentSessionRef(
+        target=request.target,
+        agent_id=request.agent_id,
+        chat_history_dir=PathManager.get_subagents_chat_history_dir(),
+    )
+    if request.snapshot is not None:
+        await AgentContextSnapshotService().materialize(request.snapshot, target_session)
 
     new_context = AgentContext(isolated=True)
-    if parent_context is not None:
-        _inherit_parent_context(new_context, parent_context, depth=parent_context.get_subagent_depth() + 1)
+    if request.parent_context is not None:
+        _inherit_parent_context(
+            new_context,
+            request.parent_context,
+            depth=request.parent_context.get_subagent_depth() + 1,
+        )
     else:
         _init_root_context(new_context)
 
-    new_context.set_chat_history_dir(str(PathManager.get_subagents_chat_history_dir()))
+    new_context.set_chat_history_dir(str(target_session.chat_history_dir))
+    if request.models.image.model_id:
+        new_context.set_dynamic_image_model_id(request.models.image.model_id)
 
     agent: Optional["Agent"] = None
     task: Optional[asyncio.Task] = None
     try:
-        agent = Agent(agent_name, agent_id=agent_id, agent_context=new_context)
+        agent = await AgentRuntime.get_instance().acquire(
+            target=request.target,
+            lifetime=AgentLifetime.TRANSIENT,
+            context=new_context,
+            agent_id=request.agent_id,
+        )
         apply_isolated_agent_model_selection(
             agent=agent,
-            parent_context=parent_context,
-            model_id=model_id,
-            image_model_id=image_model_id,
-            video_model_id=video_model_id,
-            video_generation_config=video_generation_config,
+            parent_context=request.parent_context,
+            models=request.models,
         )
-        handle = await subagent_session_manager.get_handle(agent_name, agent_id)
+        if capture_compact_history_result:
+            agent.enable_compact_history_capture()
+
+        # 后台压缩 fork 的上下文已接近阈值，不能让它再次启动压缩任务
+        if capture_compact_history_result:
+            agent.compaction_config.enable_compaction = False
+
+        handle = await subagent_session_manager.get_handle(
+            request.target.agent_name,
+            request.agent_id,
+        )
 
         async with handle.lock:
             task = asyncio.create_task(
-                _run_subagent_task(agent=agent, prompt=prompt, handle=handle)
+                _run_subagent_task(
+                    agent=agent,
+                    prompt=request.prompt,
+                    handle=handle,
+                    capture_compact_history_result=capture_compact_history_result,
+                )
             )
             handle.task = task
             handle.agent_context = new_context
             state = await task
+    except asyncio.CancelledError:
+        if agent is not None and task is None:
+            agent.close()
+        raise
     except Exception:
         if agent is not None and task is None:
             agent.close()
@@ -132,7 +253,16 @@ def _inherit_parent_context(
     parent: Optional["AgentContext"],
     depth: int,
 ) -> None:
-    """从父 Agent 继承必要配置，is_main_agent 保持 False，streaming 保持隔离。"""
+    """从父 Agent 继承必要配置，is_main_agent 保持 False，streaming 保持隔离。
+
+    继承的是“运行环境边界”，不是“父任务本身”：
+
+        继承: sandbox_id, organization_code, subagent_depth, parent_agent_name
+        不继承: streams, task_id, streaming_sinks, 当前 tool call 和取消信号
+
+    这样子 Agent 可以在同一工作区和组织权限下工作，但不会把输出写进父 Agent 的
+    流，也不会因为父 Agent 的一次取消操作而共享同一个运行句柄。
+    """
     if not parent:
         return
     if sandbox_id := parent.get_sandbox_id():
@@ -179,6 +309,7 @@ async def _run_subagent_task(
     agent: "Agent",
     prompt: str,
     handle,
+    capture_compact_history_result: bool = False,
 ) -> SubagentSessionState:
     """
     运行 sub-agent 并管理状态持久化。
@@ -195,9 +326,20 @@ async def _run_subagent_task(
 
     try:
         result = await agent.run(prompt)
-        state.status = SubagentStatus.DONE
-        state.last_result = result or ""
-        state.last_error = None
+        if capture_compact_history_result:
+            captured_summary = agent.get_captured_compact_summary()
+            if captured_summary:
+                state.status = SubagentStatus.DONE
+                state.last_result = captured_summary
+                state.last_error = None
+            else:
+                state.status = SubagentStatus.ERROR
+                state.last_result = ""
+                state.last_error = "compact_chat_history was not called with a valid summary"
+        else:
+            state.status = SubagentStatus.DONE
+            state.last_result = result or ""
+            state.last_error = None
         state.finished_at = utc_now()
         state.active_tool_call_id = None
         async with handle.state_lock:

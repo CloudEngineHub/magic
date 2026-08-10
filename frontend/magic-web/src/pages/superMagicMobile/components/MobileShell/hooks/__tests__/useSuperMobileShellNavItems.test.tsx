@@ -132,6 +132,12 @@ describe("useSuperMobileShellNavItems", () => {
 				nativeRecordingTab: undefined,
 			},
 			{
+				key: "microApps",
+				label: "label:mobile.shell.navMicroApps",
+				routeName: RouteName.MicroApps,
+				nativeRecordingTab: undefined,
+			},
+			{
 				key: "trash",
 				label: "label:mobile.shell.navTrash",
 				routeName: RouteName.RecycleBin,
@@ -181,5 +187,13 @@ describe("useSuperMobileShellNavItems", () => {
 		const { result } = renderHook(() => useSuperMobileShellNavItems())
 
 		expect(result.current.map(({ key }) => key)).not.toContain("recording")
+	})
+
+	it("hides micro apps entry in private deployment", () => {
+		envMock.isPrivateDeployment = true
+
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+
+		expect(result.current.map(({ key }) => key)).not.toContain("microApps")
 	})
 })

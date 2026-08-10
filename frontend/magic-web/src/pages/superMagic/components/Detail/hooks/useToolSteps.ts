@@ -36,6 +36,29 @@ interface UseToolStepsReturn {
 	handleNextStep: () => void
 }
 
+interface ToolNodeSnapshot {
+	id?: string
+	status?: string
+	tool?: {
+		id?: string
+		name?: string
+		action?: string
+		remark?: string
+		status?: string
+		detail?: any
+	}
+	steps?: Array<{
+		id?: string
+		name?: string
+		tool?: { name?: string; action?: string; status?: string; detail?: any }
+		action?: string
+		remark?: string
+		status?: string
+		event?: string
+		detail?: any
+	}>
+}
+
 function useToolSteps({
 	setUserSelectDetail,
 	displayDetail,
@@ -63,7 +86,8 @@ function useToolSteps({
 
 			// Extract tool steps from messages
 			messages.forEach((message) => {
-				const node = superMagicStore.getMessageNode(message?.app_message_id)
+				const node = superMagicStore.getMessageNode(message?.super_message_id) as
+					ToolNodeSnapshot | undefined
 				if (!filterClickableMessage(node)) {
 					return
 				}
@@ -78,7 +102,9 @@ function useToolSteps({
 						name: tool.name || t("playbackControl.unknownTool"),
 						action: tool.action || "",
 						remark: tool.remark || "",
-						status: tool.status || message.status || "unknown",
+						// Tool execution state belongs to the tool/node domain; the outer
+						// MessageItem.status is only the IM visibility compatibility alias.
+						status: tool.status || node?.status || message.superStatus || "unknown",
 						event: message.event,
 						detail: tool.detail,
 					})

@@ -8,6 +8,18 @@ import { interfaceStore } from "@/stores/interface"
 import { platformKey } from "@/utils/storage"
 import TopicService from "../topicService"
 
+const defaultSelectionState = vi.hoisted(() => ({
+	selection: {
+		modeIdentifier: "general" as TopicMode,
+		topicPattern: "general" as TopicMode,
+		agentCode: undefined as string | undefined,
+	},
+}))
+
+const modeServiceMock = vi.hoisted(() => ({
+	isModeValid: vi.fn(() => true),
+}))
+
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		createTopic: vi.fn(),
@@ -31,6 +43,16 @@ vi.mock("@/models/user", () => ({
 vi.mock("@/stores/interface", () => ({
 	interfaceStore: {
 		isMobile: false,
+	},
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	resolveDefaultAgentSelection: () => defaultSelectionState.selection,
+}))
+
+vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
+	default: {
+		isModeValid: modeServiceMock.isModeValid,
 	},
 }))
 
@@ -87,6 +109,11 @@ describe("TopicService interface-aware topic source", () => {
 		topicStore = new TopicStore()
 		topicService = new TopicService({ store: topicStore })
 		interfaceStore.isMobile = false
+		defaultSelectionState.selection = {
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		}
 	})
 
 	it("uses sidebar-topics for mobile fetchTopics", async () => {
@@ -167,6 +194,12 @@ describe("TopicService frontend mode patch", () => {
 		vi.useRealTimers()
 		window.sessionStorage.clear()
 		interfaceStore.isMobile = false
+		modeServiceMock.isModeValid.mockReturnValue(true)
+		defaultSelectionState.selection = {
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		}
 	})
 
 	it("creates an empty backend topic and keeps the previous employee selection in frontend state", async () => {
@@ -446,6 +479,38 @@ describe("TopicService frontend mode patch", () => {
 		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
 	})
 
+	it("drops unavailable employee patches from session storage after refresh", async () => {
+		const storageKey = platformKey("super_magic/topic_frontend_mode_patch/org-1/user-1")
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		window.sessionStorage.setItem(
+			storageKey,
+			JSON.stringify({
+				"topic-2": {
+					project_id: "project-1",
+					topic_mode: TopicMode.CustomAgent,
+					agent_code: "offline-employee",
+					createdAt: Date.now(),
+					expiresAt: Date.now() + 60_000,
+				},
+			}),
+		)
+		modeServiceMock.isModeValid.mockReturnValue(false)
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual(newTopic)
+		expect(window.sessionStorage.getItem(storageKey)).toBe("{}")
+		expect(modeServiceMock.isModeValid).toHaveBeenCalledWith(
+			TopicMode.CustomAgent,
+			"offline-employee",
+		)
+	})
+
 	it("updates the frontend employee patch when the user manually switches employee", async () => {
 		const sourceTopic = createTopic({
 			id: "topic-1",
@@ -490,6 +555,39 @@ describe("TopicService frontend mode patch", () => {
 		})
 	})
 
+	it("updates the frontend patch for a configured non-SMA default employee", async () => {
+		defaultSelectionState.selection = {
+			modeIdentifier: "configured-agent",
+			topicPattern: "configured-agent" as TopicMode,
+			agentCode: undefined,
+		}
+		const newTopic = createEmptyModeTopic("topic-2", "New Topic")
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue(newTopic)
+
+		service.syncTopicFrontendModePatch({
+			topic: newTopic,
+			mode: "configured-agent" as TopicMode,
+		})
+
+		await expect(service.getTopicDetail("topic-2")).resolves.toEqual({
+			...newTopic,
+			topic_mode: "configured-agent",
+			agent_code: undefined,
+		})
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: "configured-agent",
+			agent_code: undefined,
+		})
+	})
+
 	it("clears the frontend employee patch agent code when the user manually switches to a built-in mode", async () => {
 		const newTopic = createTopic({ id: "topic-2", topic_name: "New Topic" })
 		const mergeTopic = vi.fn()
@@ -517,6 +615,42 @@ describe("TopicService frontend mode patch", () => {
 			topic_mode: TopicMode.General,
 			agent_code: undefined,
 		})
+		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
+			topic_mode: TopicMode.General,
+			agent_code: undefined,
+		})
+	})
+
+	it("does not publish the same recovered mode to the topic store twice", () => {
+		const mergeTopic = vi.fn()
+		const service = new TopicService({
+			store: {
+				setTopics: vi.fn(),
+				setSelectedTopic: vi.fn(),
+				mergeTopic,
+			} as never,
+		})
+		const invalidTopic = createTopic({
+			id: "topic-2",
+			topic_name: "New Topic",
+			topic_mode: "ip-manager" as TopicMode,
+			agent_code: "",
+		})
+
+		service.syncTopicFrontendModePatch({
+			topic: invalidTopic,
+			mode: TopicMode.General,
+		})
+		service.syncTopicFrontendModePatch({
+			topic: {
+				...invalidTopic,
+				topic_mode: TopicMode.General,
+				agent_code: undefined,
+			},
+			mode: TopicMode.General,
+		})
+
+		expect(mergeTopic).toHaveBeenCalledTimes(1)
 		expect(mergeTopic).toHaveBeenCalledWith("topic-2", {
 			topic_mode: TopicMode.General,
 			agent_code: undefined,

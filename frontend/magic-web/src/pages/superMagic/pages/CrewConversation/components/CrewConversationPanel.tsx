@@ -325,11 +325,12 @@ function CrewConversationPanel({
 						showTopicHistory={showTopicHistory}
 					/>
 				) : null}
+				{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 				{selectedTopic ? (
 					<div
 						className={cn(
 							"flex h-full w-full flex-col",
-							isConversationPanelCollapsed && "hidden",
+							isConversationPanelCollapsed && "invisible",
 						)}
 					>
 						<MessageListProvider value={messageListProviderValue}>

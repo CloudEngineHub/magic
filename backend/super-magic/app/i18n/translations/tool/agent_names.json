@@ -1,0 +1,54 @@
+{
+    "magic": {
+        "zh_CN": "通用智能体",
+        "en_US": "General Agent"
+    },
+    "explore": {
+        "zh_CN": "探索智能体",
+        "en_US": "Explore Agent"
+    },
+    "shell": {
+        "zh_CN": "命令行智能体",
+        "en_US": "Shell Agent"
+    },
+    "search": {
+        "zh_CN": "搜索智能体",
+        "en_US": "Search Agent"
+    },
+    "data-analyst": {
+        "zh_CN": "数据分析智能体",
+        "en_US": "Data Analyst Agent"
+    },
+    "design": {
+        "zh_CN": "设计智能体",
+        "en_US": "Design Agent"
+    },
+    "audio": {
+        "zh_CN": "录音纪要智能体",
+        "en_US": "Audio Transcript Agent"
+    },
+    "audio-chat": {
+        "zh_CN": "录音纪要聊天智能体",
+        "en_US": "Audio Chat Agent"
+    },
+    "video": {
+        "zh_CN": "视频分析智能体",
+        "en_US": "Video Analysis Agent"
+    },
+    "slider": {
+        "zh_CN": "幻灯片智能体",
+        "en_US": "Slide Agent"
+    },
+    "skill-creator": {
+        "zh_CN": "技能创作智能体",
+        "en_US": "Skill Creator Agent"
+    },
+    "crew-creator": {
+        "zh_CN": "员工管理智能体",
+        "en_US": "Agent Manager"
+    },
+    "test": {
+        "zh_CN": "测试智能体",
+        "en_US": "Test Agent"
+    }
+}

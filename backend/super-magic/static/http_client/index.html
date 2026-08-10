@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=debug-file-path-preview-1">
+    <link rel="stylesheet" href="css/styles.css?v=debug-file-edit-20260806-2">
 </head>
 
 <body>
@@ -14,7 +14,8 @@
         <div class="sidebar">
             <h1>超级麦吉调试客户端</h1>
             <div style="text-align:center;margin-bottom:10px;">
-                <a href="tool_debugger.html" style="font-size:12px;color:#0066cc;text-decoration:none;padding:4px 10px;border:1px solid rgba(0,102,204,0.2);border-radius:6px;background:rgba(0,122,255,0.05);">工具调试面板</a>
+                <a href="tool_debugger.html"
+                    style="font-size:12px;color:#0066cc;text-decoration:none;padding:4px 10px;border:1px solid rgba(0,102,204,0.2);border-radius:6px;background:rgba(0,122,255,0.05);">工具调试面板</a>
             </div>
 
             <!-- 连接配置（紧凑） -->
@@ -22,6 +23,10 @@
                 <div class="form-group">
                     <label for="serverUrl">服务器地址:</label>
                     <input type="text" id="serverUrl" value="http://127.0.0.1:8002">
+                </div>
+                <div class="form-group">
+                    <label for="authToken">鉴权 Token:</label>
+                    <input type="text" id="authToken" placeholder="User-Authorization，留空则取上传配置中的 authorization">
                 </div>
                 <div class="connection-buttons">
                     <button id="subscribeBtn" class="btn secondary">建立消息订阅</button>
@@ -83,24 +88,49 @@
             <!-- 工作区文件树 -->
             <div class="filetree-panel">
                 <div class="filetree-header">
-                    <span class="filetree-title">工作区文件</span>
+                    <div class="filetree-title-group">
+                        <span class="filetree-title" id="filetreeTitle">工作区文件</span>
+                        <div class="filetree-scope-tabs" role="tablist" aria-label="文件根目录">
+                            <button type="button" class="filetree-scope-tab active" data-file-scope="workspace" role="tab"
+                                aria-selected="true">工作区</button>
+                            <button type="button" class="filetree-scope-tab" data-file-scope="memory" role="tab"
+                                aria-selected="false">长期记忆</button>
+                        </div>
+                    </div>
                     <div class="filetree-actions">
+                        <button id="expandAllTreeBtn" class="filetree-text-btn" type="button" title="展开全部目录">全展开</button>
+                        <button id="collapseAllTreeBtn" class="filetree-text-btn" type="button" title="收起全部目录">全折叠</button>
                         <button id="uploadWorkspaceBtn" class="icon-btn" title="上传文件到 .workspace 根目录" aria-label="上传文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 16V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-                                <path d="m7.5 9.5 4.5-4.5 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                                <path d="M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                <path d="M12 16V5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
+                                <path d="m7.5 9.5 4.5-4.5 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
                             </svg>
                         </button>
                         <button id="refreshTreeBtn" class="icon-btn" title="刷新" aria-label="刷新工作区文件">
                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
-                                <path d="M20 4.5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor"
+                                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                                <path d="M20 4.5v5h-5" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round" stroke-linejoin="round"></path>
+                            </svg>
+                        </button>
+                        <button id="selectWorkspaceBtn" class="icon-btn" title="选择项目根目录" aria-label="选择项目根目录">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                    d="M3.5 7.5a2 2 0 0 1 2-2h4.2l1.7 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z"
+                                    fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+                                <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8"
+                                    stroke-linecap="round"></path>
                             </svg>
                         </button>
                     </div>
                 </div>
-                <input id="workspaceUploadInput" class="workspace-upload-input" type="file" multiple aria-hidden="true" tabindex="-1">
+                <input id="workspaceUploadInput" class="workspace-upload-input" type="file" multiple aria-hidden="true"
+                    tabindex="-1">
                 <div id="filetreeContainer" class="filetree-container">
                     <div class="filetree-empty">正在加载 .workspace 文件树</div>
                 </div>
@@ -114,7 +144,14 @@
                 <div class="file-preview-tabbar">
                     <div id="filePreviewTabs" class="file-preview-tabs" role="tablist" aria-label="文件预览"></div>
                     <div class="file-preview-actions">
-                        <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览" style="display:none">渲染预览</button>
+                        <button id="filePreviewEditBtn" class="file-preview-action-btn" title="编辑文本文件"
+                            style="display:none">编辑</button>
+                        <button id="filePreviewSaveBtn" class="file-preview-action-btn file-preview-save-btn"
+                            title="保存文件" style="display:none">保存</button>
+                        <button id="filePreviewCancelBtn" class="file-preview-action-btn" title="取消编辑"
+                            style="display:none">取消</button>
+                        <button id="filePreviewRenderBtn" class="file-preview-action-btn" title="渲染 HTML 预览"
+                            style="display:none">渲染预览</button>
                         <button id="filePreviewOpenBtn" class="file-preview-action-btn" title="在新窗口打开">新窗口打开</button>
                         <button id="filePreviewClose" class="file-preview-close" title="关闭当前预览">✕</button>
                     </div>
@@ -168,6 +205,7 @@
                                 <option value="skill">skill — Skill 模式</option>
                                 <option value="crew-creator">crew-creator — Crew 管理</option>
                                 <option value="skill-creator">skill-creator — Skill 创作</option>
+                                <option value="micro-app">micro-app — 微应用开发</option>
                                 <option value="magiclaw">magiclaw — Magic Claw（需传 agent_code）</option>
                                 <option value="custom_agent">custom_agent — 自定义 Agent（需传 agent_code）</option>
                             </select>
@@ -190,8 +228,7 @@
 
                         <!-- Model ID 配置（IM 模式下隐藏） -->
                         <div class="model-config" id="modelIdGroup">
-                            <input type="text" id="modelIdInput" class="model-id-input"
-                                placeholder="Model ID (留空默认)">
+                            <input type="text" id="modelIdInput" class="model-id-input" placeholder="Model ID (留空默认)">
                             <select id="modelIdSelect" class="agent-mode-select" style="display:none">
                                 <option value="">选择文本模型（留空默认）</option>
                             </select>
@@ -290,11 +327,14 @@
                                     <button id="historyBtn" class="btn secondary small">历史消息</button>
                                 </div>
                                 <div class="input-footer-middle">
-                                    <button id="clientContextOpenBtn" class="btn secondary small client-context-footer-btn">
+                                    <button id="clientContextOpenBtn"
+                                        class="btn secondary small client-context-footer-btn">
                                         client_context
                                         <span id="clientContextCount" class="client-context-count">0字</span>
                                     </button>
-                                    <button id="clientContextClearBtn" class="btn secondary small client-context-clear-btn" style="display:none">清空</button>
+                                    <button id="clientContextClearBtn"
+                                        class="btn secondary small client-context-clear-btn"
+                                        style="display:none">清空</button>
                                     <button id="interruptBtn" class="btn danger small">中断任务</button>
                                     <button id="clearChatBtn" class="btn secondary small">清除对话</button>
                                 </div>
@@ -337,7 +377,8 @@
 
     <!-- client_context 调试弹窗 -->
     <div id="clientContextModal" class="client-context-modal-overlay" style="display:none">
-        <div class="client-context-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="clientContextModalTitle">
+        <div class="client-context-modal-dialog" role="dialog" aria-modal="true"
+            aria-labelledby="clientContextModalTitle">
             <div class="client-context-modal-header">
                 <div class="client-context-modal-title">
                     <strong id="clientContextModalTitle">client_context</strong>
@@ -356,7 +397,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
-    <script src="js/client.js?v=debug-file-path-preview-1"></script>
+    <script src="js/client.js?v=debug-file-edit-20260806-3"></script>
 </body>
 
 </html>

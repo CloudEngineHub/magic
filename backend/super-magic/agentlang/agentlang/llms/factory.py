@@ -16,7 +16,7 @@ from datetime import datetime
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agentlang.config.config import config
 from agentlang.interface.context import AgentContextInterface
@@ -46,12 +46,16 @@ class LLMClientConfig(BaseModel):
     api_base_url: Optional[str] = None
     name: str
     provider: str
+    client_type: str = "openai_chat_completions"
     temperature: float = 0.7
     max_output_tokens: int = 4 * 1024
     max_context_tokens: int = 8 * 1024
     top_p: float = 1.0
     stop: Optional[List[str]] = None
-    extra_params: Dict[str, Any] = {}
+    headers: Dict[str, str] = Field(default_factory=dict)
+    query_params: Dict[str, str] = Field(default_factory=dict)
+    extra_params: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     supports_tool_use: bool = True
     type: str = "llm"
     resolved_model_id: Optional[str] = None
@@ -65,9 +69,8 @@ class LLMFactory:
     # 初始化 token 使用跟踪器和相关服务
     token_tracker = TokenUsageTracker()
 
-    # 从配置中加载价格配置
-    models_config = config.get("models", {})
-    pricing = ModelPricing(models_config=models_config)
+    # 价格由 ModelConfigManager 从各 Provider 同步，启动时先使用默认价格表。
+    pricing = ModelPricing()
     sandbox_id = os.environ.get("SANDBOX_ID", "default")
 
     # 初始化 TokenUsageReport
@@ -86,8 +89,20 @@ class LLMFactory:
         """
         cls._configs[llm_config.model_id] = llm_config
 
+    @staticmethod
+    def _client_cache_key(llm_config: LLMClientConfig) -> tuple[str, str, str, str, str, str]:
+        """按实际连接信息缓存客户端，避免 provider 刷新后继续复用旧 endpoint/key。"""
+        return (
+            llm_config.model_id,
+            llm_config.client_type,
+            llm_config.api_base_url or "",
+            llm_config.api_key or "",
+            json.dumps(llm_config.headers, sort_keys=True, ensure_ascii=True),
+            json.dumps(llm_config.query_params, sort_keys=True, ensure_ascii=True),
+        )
+
     @classmethod
-    def get(cls, model_id: str) -> AsyncOpenAI:
+    def get(cls, model_id: str, *, allow_fallback: bool = True) -> AsyncOpenAI:
         """Get a client for the given model ID.
 
         Args:
@@ -99,27 +114,36 @@ class LLMFactory:
         Raises:
             ValueError: If the model ID is not supported.
         """
-        if model_id in cls._clients:
-            return cls._clients[model_id]
-
         # 加载模型配置
-        llm_config = cls.get_model_config(model_id, "llm")
+        llm_config = cls.get_model_config(
+            model_id,
+            expected_type="llm",
+            allow_fallback=allow_fallback,
+        )
 
-        # 检查provider支持
-        available_providers = ["openai"]
-        if llm_config.provider not in available_providers:
-            raise ValueError(f"不支持的provider: {llm_config.provider}")
+        return cls.get_for_config(llm_config)
+
+    @classmethod
+    def get_for_config(cls, llm_config: LLMClientConfig) -> AsyncOpenAI:
+        """按已解析配置获取客户端，不再重新读取模型配置。"""
+        cache_key = cls._client_cache_key(llm_config)
+        if cache_key in cls._clients:
+            return cls._clients[cache_key]
+
+        available_client_types = {"openai_chat_completions"}
+        if llm_config.client_type not in available_client_types:
+            raise ValueError(f"不支持的 client_type: {llm_config.client_type}")
 
         try:
             # 创建客户端
-            if llm_config.provider == "openai":
+            if llm_config.client_type == "openai_chat_completions":
                 client = cls._create_openai_client(llm_config)
-                cls._clients[model_id] = client
+                cls._clients[cache_key] = client
                 return client
 
         except Exception as e:
             logger.error(f"创建 LLM 客户端失败: {e}")
-            raise ValueError(f"无法为模型 {model_id} 创建客户端")
+            raise ValueError(f"无法为模型 {llm_config.model_id} 创建客户端")
 
     @classmethod
     async def call_with_tool_support(
@@ -132,6 +156,8 @@ class LLMFactory:
         processor_config: Optional[ProcessorConfig] = None,
         enable_llm_response_events: bool = False,
         extra_body: Optional[Dict[str, Any]] = None,
+        allow_fallback: bool = True,
+        llm_config: Optional[LLMClientConfig] = None,
     ) -> ChatCompletion:
         """使用工具支持调用 LLM。
 
@@ -169,12 +195,17 @@ class LLMFactory:
         if agent_context:
             agent_context.set_current_llm_request_id(request_id)
 
-        client: AsyncOpenAI = cls.get(model_id)
+        if llm_config is None:
+            llm_config = cls.get_model_config(
+                model_id,
+                expected_type="llm",
+                allow_fallback=allow_fallback,
+            )
+
+        client: AsyncOpenAI = cls.get_for_config(llm_config)
         if not client:
             raise ValueError(f"无法获取模型 ID 为 {model_id} 的客户端")
 
-        # 获取模型配置
-        llm_config = cls.get_model_config(model_id)
         display_model_id = llm_config.resolved_model_id or llm_config.model_id
 
         # Get current token count from chat history
@@ -188,16 +219,6 @@ class LLMFactory:
             "max_tokens": llm_config.max_output_tokens,
             "top_p": llm_config.top_p,
         }
-
-        # 部分模型硬编码 max_tokens 覆盖
-        if llm_config.name == "deepseek-reasoner" or llm_config.name == "deepseek-chat":
-            request_params["max_tokens"] = 16384
-
-        if llm_config.name == "doubao-seed-1.6" or llm_config.name == "doubao-seed-1.6-thinking" or llm_config.name == "doubao-seed-1.6-flash":
-            request_params["max_tokens"] = 8192
-
-        if llm_config.name == "deepseek-v3.2-exp":
-            request_params["max_tokens"] = 8192
 
         # Dynamically adjust max_tokens to fit within context window based on actual token usage
         request_params["max_tokens"] = adjust_max_tokens(
@@ -221,12 +242,17 @@ class LLMFactory:
         for key, value in llm_config.extra_params.items():
             request_params[key] = value
 
+        if llm_config.query_params:
+            request_params["extra_query"] = llm_config.query_params
+
         # 添加调用方传入的 extra_body（如禁用思考模式）
         if extra_body is not None:
             request_params["extra_body"] = extra_body
 
         # 动态设置最新的 metadata 到请求头（每次调用都获取最新值）
         extra_headers = MetadataUtil.get_llm_request_headers()
+        if llm_config.headers:
+            extra_headers = {**extra_headers, **llm_config.headers}
         if extra_headers:
             request_params["extra_headers"] = extra_headers
             logger.debug(f"[{request_id}] 动态设置请求头: {list(extra_headers.keys())}")
@@ -242,7 +268,7 @@ class LLMFactory:
                 client=client,
                 llm_config=llm_config,
                 request_params=request_params,
-                model_id=model_id,
+                model_id=llm_config.model_id,
                 processor_config=processor_config,
                 agent_context=agent_context,
                 request_id=request_id,
@@ -268,7 +294,7 @@ class LLMFactory:
             # 统一记录 token 使用情况
             cls.token_tracker.record_llm_usage(
                 response.usage,
-                model_id,
+                llm_config.model_id,
                 user_id=agent_context.get_user_id() if agent_context else None,
                 model_name=llm_config.name,
                 resolved_model_id=llm_config.resolved_model_id or None,
@@ -299,7 +325,7 @@ class LLMFactory:
             # 统一记录调试日志（内部根据环境变量决定是否记录成功请求，失败请求总是记录）
             end_timestamp = datetime.now().isoformat()
             debug_info = LLMDebugInfo(
-                model_id=model_id,
+                model_id=llm_config.model_id,
                 model_name=llm_config.name,
                 provider=llm_config.provider,
                 api_base_url=llm_config.api_base_url,
@@ -324,23 +350,23 @@ class LLMFactory:
         Returns:
             The embedding client for the given model ID.
         """
-        if model_id in cls._clients:
-            return cls._clients[model_id]
-
         # 加载模型配置
         llm_config = cls.get_model_config(model_id, "embedding")
+        cache_key = cls._client_cache_key(llm_config)
+        if cache_key in cls._clients:
+            return cls._clients[cache_key]
+
         logger.info(f"创建embedding客户端 - llm_config: {llm_config}")
 
-        # 检查provider支持
-        available_providers = ["openai"]
-        if llm_config.provider not in available_providers:
-            raise ValueError(f"不支持的provider: {llm_config.provider}")
+        available_client_types = {"openai_chat_completions"}
+        if llm_config.client_type not in available_client_types:
+            raise ValueError(f"不支持的 client_type: {llm_config.client_type}")
 
         try:
             # 创建客户端
-            if llm_config.provider == "openai":
+            if llm_config.client_type == "openai_chat_completions":
                 client = cls._create_openai_client(llm_config)
-                cls._clients[model_id] = client
+                cls._clients[cache_key] = client
                 return client
         except Exception as e:
             logger.error(f"创建 Embedding 客户端失败: {e}")
@@ -395,11 +421,17 @@ class LLMFactory:
                 api_base_url=mc.api_base_url,
                 name=mc.name,
                 provider=mc.provider,
+                client_type=mc.client_type,
                 supports_tool_use=mc.supports_tool_use,
                 max_output_tokens=mc.max_output_tokens,
                 max_context_tokens=mc.max_context_tokens,
                 temperature=mc.temperature,
                 top_p=mc.top_p,
+                stop=mc.stop,
+                headers=mc.headers,
+                query_params=mc.query_params,
+                extra_params=mc.extra_params,
+                metadata=mc.metadata,
                 type=mc.type,
                 resolved_model_id=mc.resolved_model_id,
             )
@@ -543,7 +575,8 @@ class LLMFactory:
         Returns:
             AsyncOpenAI 客户端实例。
         """
-        default_headers = cls._build_default_headers()
+        default_headers = cls._build_default_headers(llm_config.api_base_url or "")
+        default_headers.update(llm_config.headers)
 
         logger.debug(
             f"OpenAI 客户端配置 - base_url: {llm_config.api_base_url}, "
@@ -555,11 +588,12 @@ class LLMFactory:
             base_url=llm_config.api_base_url,
             timeout=DEFAULT_TIMEOUT,
             max_retries=MAX_RETRIES,
-            default_headers=default_headers
+            default_headers=default_headers,
+            default_query=llm_config.query_params,
         )
 
     @classmethod
-    def _build_default_headers(cls) -> Dict[str, str]:
+    def _build_default_headers(cls, api_base_url: str = "") -> Dict[str, str]:
         """构建 OpenAI 客户端的默认请求头。
 
         包含以下请求头（按优先级顺序添加）：
@@ -573,8 +607,9 @@ class LLMFactory:
         """
         headers: Dict[str, str] = {}
 
-        # 1-2. 添加 Magic-Authorization 与 User-Authorization
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
+        # 1-2. 仅配置允许的 magic-service 请求携带业务认证头，避免发给官方/第三方渠道。
+        if MetadataUtil.should_send_magic_authorization_headers(api_base_url):
+            MetadataUtil.add_magic_and_user_authorization_headers(headers)
 
         # 3. 添加业务元数据请求头
         headers.update(MetadataUtil.get_llm_request_headers())

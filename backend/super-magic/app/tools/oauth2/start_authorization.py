@@ -14,16 +14,14 @@ from app.tools.oauth2._base import BaseOAuth2Tool
 
 
 class OAuth2StartAuthorizationParams(BaseToolParams):
-    """发起 OAuth2 授权的参数。"""
+    """Parameters for starting OAuth2 authorization."""
 
-    app_name: str = Field(..., description="""<!--zh: 要授权的 OAuth2 app_name。-->
-OAuth2 app_name to authorize.""")
+    app_name: str = Field(..., description="Registered OAuth2 app name to authorize.")
 
 
 @tool(name="oauth2_start_authorization")
 class OAuth2StartAuthorization(BaseOAuth2Tool[OAuth2StartAuthorizationParams]):
-    """<!--zh: 为指定 OAuth2 app 生成授权 URL，并创建 pending session。-->
-    Generate an authorization URL for an OAuth2 app and create a pending session."""
+    """Generate an OAuth2 authorization URL and create a pending session."""
 
     name = "oauth2_start_authorization"
 

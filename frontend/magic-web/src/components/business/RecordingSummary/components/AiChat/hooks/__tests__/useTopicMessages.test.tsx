@@ -10,11 +10,19 @@ const mockState = vi.hoisted(() => ({
 	unsubscribeMock: vi.fn(),
 	superMagicStoreMock: {
 		messages: new Map<string, unknown[]>(),
+		topicMeta: new Map<string, { syncState?: "idle" | "syncing" }>(),
 		initializeMessages: vi.fn(),
 		enqueueMessage: vi.fn(),
 		setActiveTopicId: vi.fn(),
+		beginTopicSync: vi.fn(() => 1),
+		isTopicSyncCurrent: vi.fn(() => true),
+		completeTopicSync: vi.fn(),
+		cancelTopicSync: vi.fn(),
+		getLatestMessageSeqId: vi.fn(() => "1"),
 		getMessageNode: vi.fn(),
 	},
+	getTopicRecoveryStatusMock: vi.fn(() => ({ hasScheduled: false })),
+	resumeTopicRecoveryMock: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -28,7 +36,9 @@ vi.mock("@/pages/superMagic/stores", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services/streamRecoveryCoordinator", () => ({
+	getTopicRecoveryStatus: mockState.getTopicRecoveryStatusMock,
 	registerStreamRecoveryOwner: mockState.registerStreamRecoveryOwnerMock,
+	resumeTopicRecovery: mockState.resumeTopicRecoveryMock,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -50,6 +60,18 @@ describe("RecordingSummary useTopicMessages", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockState.superMagicStoreMock.messages = new Map()
+		mockState.superMagicStoreMock.topicMeta = new Map()
+		mockState.superMagicStoreMock.beginTopicSync.mockReset()
+		mockState.superMagicStoreMock.beginTopicSync.mockReturnValue(1)
+		mockState.superMagicStoreMock.isTopicSyncCurrent.mockReset()
+		mockState.superMagicStoreMock.isTopicSyncCurrent.mockReturnValue(true)
+		mockState.superMagicStoreMock.completeTopicSync.mockReset()
+		mockState.superMagicStoreMock.cancelTopicSync.mockReset()
+		mockState.superMagicStoreMock.getLatestMessageSeqId.mockReset()
+		mockState.superMagicStoreMock.getLatestMessageSeqId.mockReturnValue("1")
+		mockState.getTopicRecoveryStatusMock.mockReset()
+		mockState.getTopicRecoveryStatusMock.mockReturnValue({ hasScheduled: false })
+		mockState.resumeTopicRecoveryMock.mockReset()
 		mockState.registerStreamRecoveryOwnerMock.mockReturnValue(vi.fn())
 		mockState.getMessagesByConversationIdMock.mockResolvedValue({
 			items: [],
@@ -88,7 +110,12 @@ describe("RecordingSummary useTopicMessages", () => {
 		mockState.getMessagesByConversationIdMock.mockReset()
 		mockState.getMessagesByConversationIdMock
 			.mockResolvedValueOnce({ items: firstPageItems, has_more: true, page_token: "page-2" })
-			.mockResolvedValueOnce({ items: secondPageItems, has_more: false, page_token: "" })
+			.mockResolvedValueOnce({
+				items: secondPageItems,
+				has_more: false,
+				page_token: "",
+				snapshot_complete: true,
+			})
 		mockState.superMagicStoreMock.initializeMessages.mockClear()
 		await act(async () => {
 			await registration.recover({
@@ -102,8 +129,56 @@ describe("RecordingSummary useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[...firstPageItems, ...secondPageItems],
-			{ mode: "replace", syncGeneration: 31 },
+			{
+				mode: "replace",
+				syncGeneration: 31,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
+	})
+
+	it("does not replace when the server cannot prove the recovered Topic snapshot", async () => {
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic(),
+				selectedWorkspace: { id: "workspace-1" },
+				checkNowDebounced: vi.fn(),
+			}),
+		)
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+		const registration = mockState.registerStreamRecoveryOwnerMock.mock.calls[0]?.[0] as {
+			recover: (context: {
+				topicId: string
+				conversationId: string
+				correlationId: string
+				syncGeneration: number
+			}) => Promise<{ didPullSucceed: boolean }>
+		}
+
+		mockState.getMessagesByConversationIdMock.mockReset()
+		mockState.getMessagesByConversationIdMock.mockResolvedValueOnce({
+			items: [createMessageEnvelope("message-b", "2")],
+			has_more: false,
+			page_token: "",
+			snapshot_complete: false,
+		})
+		mockState.superMagicStoreMock.initializeMessages.mockClear()
+
+		let result: { didPullSucceed: boolean } | undefined
+		await act(async () => {
+			result = await registration.recover({
+				topicId: "chat-topic-1",
+				conversationId: "conversation-1",
+				correlationId: "correlation-1",
+				syncGeneration: 32,
+			})
+		})
+
+		expect(result).toEqual(expect.objectContaining({ didPullSucceed: false }))
+		expect(mockState.superMagicStoreMock.initializeMessages).not.toHaveBeenCalled()
 	})
 
 	it("does not replace with a partial recovery snapshot when a later page fails", async () => {
@@ -187,7 +262,11 @@ describe("RecordingSummary useTopicMessages", () => {
 		expect(mockState.superMagicStoreMock.initializeMessages).toHaveBeenCalledWith(
 			"chat-topic-1",
 			[],
-			{ mode: "replace", syncGeneration: undefined },
+			{
+				mode: "replace",
+				syncGeneration: undefined,
+				toolProjectionPolicy: "historical_terminal",
+			},
 		)
 		expect(mockState.superMagicStoreMock.enqueueMessage).not.toHaveBeenCalled()
 

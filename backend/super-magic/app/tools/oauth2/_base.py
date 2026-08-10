@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any, ClassVar, Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from agentlang.context.tool_context import ToolContext
 from app.core.context.agent_context import AgentContext
@@ -11,15 +11,14 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.infrastructure.oauth2.app_registry import OAuth2AppRegistry
 from app.infrastructure.oauth2.credential_store import OAuth2CredentialStore
 from app.infrastructure.oauth2.token_service import OAuth2TokenService
-from app.tools.core import BaseTool, BaseToolParams
+from app.tools.core import BaseTool, BaseToolParams, tool
 
 P = TypeVar("P", bound=BaseToolParams)
 
 
+@tool(code_mode_only=True)
 class BaseOAuth2Tool(BaseTool[P], Generic[P], ABC):
-    """仅允许从 Code Mode 调用的 OAuth2 工具基类。"""
-
-    code_mode_only: ClassVar[bool] = True
+    """Shared base for OAuth2 tools available only through Code Mode."""
 
     @staticmethod
     def resolve_subject(tool_context: ToolContext) -> str:

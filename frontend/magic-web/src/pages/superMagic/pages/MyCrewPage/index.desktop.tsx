@@ -336,8 +336,9 @@ function MyCrewPage() {
 						{/* Crew card grid */}
 						{!store.loading && store.list.length > 0 && (
 							<>
+								{/* Keep each grid item shrinkable so Safari calculates row heights independently. */}
 								<div
-									className="grid grid-cols-1 items-stretch gap-x-3 gap-y-14 pt-12 md:grid-cols-2 lg:grid-cols-4"
+									className="grid grid-cols-1 items-stretch gap-x-3 gap-y-14 md:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
 									data-testid="my-crew-card-grid"
 								>
 									{store.list.map((employee) =>

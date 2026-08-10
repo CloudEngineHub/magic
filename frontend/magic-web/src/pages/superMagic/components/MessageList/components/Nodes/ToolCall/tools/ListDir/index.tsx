@@ -14,7 +14,7 @@ import { MonitorPlay } from "lucide-react"
 
 function ListDir(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 
 	const { t } = useTranslation("super")

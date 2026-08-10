@@ -4,6 +4,7 @@ import { ChevronRight, Home, LayoutGrid, MessageCircle, UsersRound } from "lucid
 import { useTranslation } from "react-i18next"
 import { WorkspaceList } from "./WorkspaceList"
 import CollapsedWorkspaceMenu from "./CollapsedWorkspaceMenu"
+import { MicroAppsSidebarMenuItem } from "./MicroAppsSidebarMenuItem"
 import { SidebarMarketMenuItem } from "./SidebarMarketMenuItem"
 import type { SidebarContentProps } from "./types"
 import {
@@ -73,7 +74,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 
 	return (
 		<div
-			className="flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+			className="no-scrollbar flex min-h-0 w-full flex-1 touch-pan-y flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
 			data-testid="sidebar-content-root"
 		>
 			<SidebarGroup className="w-full shrink-0 p-2" data-testid="sidebar-content-apps-group">
@@ -148,6 +149,7 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 								</SidebarMenuButton>
 							</AppsSubMenu>
 						</SidebarMenuItem>
+						<MicroAppsSidebarMenuItem collapsed={collapsed} />
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>
@@ -157,31 +159,28 @@ function SidebarContent({ collapsed }: SidebarContentProps) {
 			{collapsed ? (
 				<CollapsedWorkspaceMenu />
 			) : (
-				<div className="flex min-h-40 flex-1 flex-col gap-1 overflow-hidden">
-					<WorkspaceList />
-					<SidebarGroup
-						className="w-full flex-1 shrink-0 px-2 py-0"
-						data-testid="sidebar-content-share-workspace-group"
-					>
-						<SidebarGroupContent>
-							<SidebarMenu>
-								<SidebarMenuItem>
-									<SidebarMenuButton
-										isActive={isShareWorkspaceActive}
-										onClick={() => setShareProjectsPanelOpen(true)}
-										data-testid="sidebar-content-share-workspace-button"
-										className="text-sidebar-foreground"
-									>
-										<UsersRound className="ml-6 h-4 w-4 shrink-0" />
-										<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
-											{t("super:workspace.shareWorkspaceName")}
-										</span>
-										<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
-									</SidebarMenuButton>
-								</SidebarMenuItem>
-							</SidebarMenu>
-						</SidebarGroupContent>
-					</SidebarGroup>
+				<div className="flex min-h-40 flex-1 flex-col gap-1">
+					<WorkspaceList
+						beforeItems={
+							<SidebarMenuItem
+								className="mb-1"
+								data-testid="sidebar-content-share-workspace-group"
+							>
+								<SidebarMenuButton
+									isActive={isShareWorkspaceActive}
+									onClick={() => setShareProjectsPanelOpen(true)}
+									data-testid="sidebar-content-share-workspace-button"
+									className="text-sidebar-foreground"
+								>
+									<UsersRound className="ml-6 h-4 w-4 shrink-0" />
+									<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm leading-5">
+										{t("super:workspace.shareWorkspaceName")}
+									</span>
+									<ChevronRight className="h-4 w-4 shrink-0 text-sidebar-foreground" />
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+						}
+					/>
 				</div>
 			)}
 

@@ -1,10 +1,18 @@
-from typing import Any, Callable, Dict
+from __future__ import annotations
 
-from app.core.context.agent_context import AgentContext
+from collections.abc import Awaitable, Callable, Mapping
+from typing import TYPE_CHECKING, Any
+
 from agentlang.event.event import Event, EventType
 from agentlang.logger import get_logger
 
+if TYPE_CHECKING:
+    from app.core.context.agent_context import AgentContext
+
 logger = get_logger(__name__)
+
+EventListener = Callable[[Event[Any]], Awaitable[None]]
+
 
 class BaseListenerService:
     """
@@ -14,7 +22,11 @@ class BaseListenerService:
     """
 
     @staticmethod
-    def register_event_listener(agent_context: AgentContext, event_type: EventType, listener: Callable[[Event[Any]], None]) -> None:
+    def register_event_listener(
+        agent_context: AgentContext,
+        event_type: EventType,
+        listener: EventListener,
+    ) -> None:
         """
         为代理上下文注册事件监听器
 
@@ -32,7 +44,10 @@ class BaseListenerService:
         agent_context.add_event_listener(event_type, listener)
 
     @staticmethod
-    def register_listeners(agent_context: AgentContext, event_listeners: Dict[EventType, Callable[[Event[Any]], None]]) -> None:
+    def register_listeners(
+        agent_context: AgentContext,
+        event_listeners: Mapping[EventType, EventListener],
+    ) -> None:
         """
         批量注册多个事件监听器
 

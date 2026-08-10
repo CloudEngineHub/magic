@@ -155,12 +155,14 @@ async def try_notify_main_agent() -> None:
         return
 
     from app.service.agent_dispatcher import AgentDispatcher
+    from app.service.agent_runtime import AgentRuntime
     dispatcher = AgentDispatcher.get_instance()
-    if dispatcher is None:
+    agent_context = dispatcher.agent_context
+    if agent_context is None:
         logger.debug("cron notify: AgentDispatcher not initialized, skip")
         return
 
-    if any(agent.is_agent_running() for agent in dispatcher.agents.values()):
+    if AgentRuntime.get_instance().is_context_running(agent_context.context_id):
         logger.debug("cron notify: main agent is running, skip")
         return
 

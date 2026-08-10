@@ -4,6 +4,8 @@ Magic Service SDK
 A complete SDK for interacting with Magic Service APIs.
 """
 
+# ruff: noqa: I001 - this aggregate module keeps API-surface groups readable
+
 from .magic_service import MagicService
 from .factory import (
     create_magic_service_sdk,
@@ -14,6 +16,7 @@ from .factory import (
 # API classes
 from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
+from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.share_api import ShareApi
@@ -33,10 +36,20 @@ from .parameter.message_schedule_parameter import (
 )
 from .parameter.oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .parameter.share_resource_id_parameter import ShareResourceIdParameter
-from .parameter.create_share_parameter import CreateShareParameter, TargetId
+from .parameter.create_share_parameter import CreateShareParameter, ShareExtraParameter, TargetId
 from .parameter.find_similar_share_parameter import FindSimilarShareParameter
 from .parameter.cancel_share_parameter import CancelShareParameter
+from .parameter.get_share_parameter import GetShareParameter
+from .parameter.list_share_parameter import ListShareParameter
 from .parameter.ingest_third_party_message_parameter import IngestThirdPartyMessageParameter
+from .parameter.create_magicbase_column_parameter import CreateMagicBaseColumnParameter
+from .parameter.create_magicbase_table_parameter import CreateMagicBaseTableParameter
+from .parameter.delete_magicbase_column_parameter import DeleteMagicBaseColumnParameter
+from .parameter.delete_magicbase_table_parameter import DeleteMagicBaseTableParameter
+from .parameter.get_magicbase_table_parameter import GetMagicBaseTableParameter
+from .parameter.query_magicbase_tables_parameter import QueryMagicBaseTablesParameter
+from .parameter.update_magicbase_column_parameter import UpdateMagicBaseColumnParameter
+from .parameter.update_magicbase_table_permissions_parameter import UpdateMagicBaseTablePermissionsParameter
 
 # Result classes
 from .result.ai_ability_runtime_config_result import AiAbilityRuntimeConfigItem, AiAbilityRuntimeConfigResult
@@ -57,8 +70,11 @@ from .result.share_result import (
     ShareResult,
     CancelShareResult,
     FindSimilarSharesResult,
+    ShareListResult,
 )
 from .result.ingest_third_party_message_result import IngestThirdPartyMessageResult
+from .result.magicbase_column_result import MagicBaseColumnResult
+from .result.magicbase_table_result import MagicBaseTableResult, MagicBaseTablesResult
 
 # Kernel classes
 from .kernel.magic_service_exception import (
@@ -73,7 +89,7 @@ from app.infrastructure.sdk.base import AbstractApi, AbstractParameter, Abstract
 
 __version__ = '1.0.0'
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - 分组顺序属于此聚合模块的既有结构
     # Main API class
     'MagicService',
 
@@ -85,6 +101,7 @@ __all__ = [
     # API classes
     'AiAbilityApi',
     'AgentApi',
+    'MagicBaseApi',
     'MessageScheduleApi',
     'OAuth2CallbackRelayApi',
     'ShareApi',
@@ -103,10 +120,21 @@ __all__ = [
     'OAuth2CallbackRelayParameter',
     'ShareResourceIdParameter',
     'CreateShareParameter',
+    'ShareExtraParameter',
     'TargetId',
     'FindSimilarShareParameter',
     'CancelShareParameter',
+    'GetShareParameter',
+    'ListShareParameter',
     'IngestThirdPartyMessageParameter',
+    'CreateMagicBaseColumnParameter',
+    'CreateMagicBaseTableParameter',
+    'DeleteMagicBaseColumnParameter',
+    'DeleteMagicBaseTableParameter',
+    'GetMagicBaseTableParameter',
+    'QueryMagicBaseTablesParameter',
+    'UpdateMagicBaseColumnParameter',
+    'UpdateMagicBaseTablePermissionsParameter',
 
     # Result classes
     'AiAbilityRuntimeConfigResult',
@@ -123,7 +151,11 @@ __all__ = [
     'ShareResult',
     'CancelShareResult',
     'FindSimilarSharesResult',
+    'ShareListResult',
     'IngestThirdPartyMessageResult',
+    'MagicBaseColumnResult',
+    'MagicBaseTableResult',
+    'MagicBaseTablesResult',
 
     # Kernel classes
     'MagicServiceException',

@@ -23,10 +23,16 @@ import {
 
 const TOPIC_ID = "topic-1"
 const CORRELATION_ID = "correlation-1"
+const SUPER_MESSAGE_ID = "super-message-1"
 const RENDER_SETTLE_MS = 2_000
 const RECOVERY_TIMEOUT_MS = 5_100
 
+function toSuperMessageId(correlationId: string): string {
+	return correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`
+}
+
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
+type IndexedChunkChoice = ChunkChoice & { index?: number }
 type ChunkDelta = ChunkChoice["delta"]
 type ChunkToolCall = ChunkDelta["tool_calls"][number]
 type ChunkUsage = NonNullable<SuperMagicChunkMessage["super_magic_chunk"]["usage"]>
@@ -40,7 +46,7 @@ interface ChunkOptions {
 	reasoningContent?: string
 	toolCalls?: ChunkToolCall[]
 	usage?: ChunkUsage | null
-	choices?: ChunkChoice[]
+	choices?: IndexedChunkChoice[]
 }
 
 interface ProjectedToolCall {
@@ -54,6 +60,9 @@ interface ProjectedToolCall {
 }
 
 interface ProjectedNode {
+	app_message_id?: string
+	super_message_id?: string
+	correlation_id?: string
 	content?: string | null
 	reasoning_content?: string | null
 	tool_calls?: ProjectedToolCall[] | null
@@ -67,6 +76,7 @@ interface MutableProtocolChunk {
 		i?: unknown
 		id?: string
 		choices?: Array<{
+			index?: unknown
 			finish_reason?: unknown
 			delta?: unknown
 		}>
@@ -75,6 +85,8 @@ interface MutableProtocolChunk {
 
 /**
  * @description 创建 delta
+ * @param index choice 级候选索引
+ * @param deltaIndex delta 内部兼容字段，用于证明选择规则不依赖数组位置或 delta.index
  * @param content 内容，默认空字符串
  * @param finishReason 完成原因，默认 null
  * @param reasoningContent 推理内容，默认空字符串
@@ -82,26 +94,37 @@ interface MutableProtocolChunk {
  * @returns 创建的 delta
  */
 function createChoice({
+	index = 0,
+	deltaIndex = index,
 	content = "",
 	finishReason = null,
 	reasoningContent = "",
 	toolCalls = [],
 }: {
+	index?: number
+	deltaIndex?: number
 	content?: string
 	finishReason?: FinishReason
 	reasoningContent?: string
 	toolCalls?: ChunkToolCall[]
-} = {}): ChunkChoice {
+} = {}): IndexedChunkChoice {
 	return {
+		index,
 		finish_reason: finishReason,
 		delta: {
 			content,
 			role: "assistant",
 			tool_calls: toolCalls,
 			reasoning_content: reasoningContent,
-			index: 0,
+			index: deltaIndex,
 		},
 	}
+}
+
+function createChoiceWithoutIndex(options: Parameters<typeof createChoice>[0] = {}): ChunkChoice {
+	const choice = createChoice(options)
+	delete choice.index
+	return choice
 }
 
 /**
@@ -135,6 +158,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-message-1",
 		super_magic_chunk: {
+			super_message_id: toSuperMessageId(correlationId),
+			task_id: `task-${correlationId}`,
 			i,
 			usage,
 			correlation_id: correlationId,
@@ -196,7 +221,7 @@ function createChunkWithoutDelta({
 	correlationId?: string
 } = {}): SuperMagicChunkMessage {
 	return mutateProtocolChunk(createChunk({ i, correlationId, finishReason }), (draft) => {
-		draft.super_magic_chunk.choices = [{ finish_reason: finishReason }]
+		draft.super_magic_chunk.choices = [{ index: 0, finish_reason: finishReason }]
 	})
 }
 
@@ -290,6 +315,7 @@ function createFinalEnvelope({
 	seqId = "100",
 	reasoningContent = "",
 	toolCalls = [],
+	status = "finished",
 }: {
 	content: string
 	correlationId?: string
@@ -297,6 +323,7 @@ function createFinalEnvelope({
 	seqId?: string
 	reasoningContent?: string
 	toolCalls?: ProjectedToolCall[]
+	status?: "finished" | "running"
 }): RawSuperMagicMessageEnvelope {
 	const envelope = {
 		type: SeqRecordType.seq,
@@ -321,11 +348,12 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: `node-${appMessageId}`,
+					super_message_id: toSuperMessageId(correlationId),
 					correlation_id: correlationId,
 					content,
 					reasoning_content: reasoningContent,
 					tool_calls: toolCalls,
-					status: "finished",
+					status,
 					send_timestamp: 1,
 				},
 			},
@@ -349,14 +377,14 @@ function createStore(): SuperMagicStore {
 /**
  * @description 获取投影节点
  * @param store SuperMagicStore 实例
- * @param messageId 消息 ID
+ * @param superMessageId SuperMessage ID
  * @returns 投影节点
  */
 function getProjectedNode(
 	store: SuperMagicStore,
-	messageId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(messageId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -394,7 +422,7 @@ function expectSettledContent(
 	correlationId = CORRELATION_ID,
 ): void {
 	advanceRendering()
-	expect(getProjectedNode(store, correlationId)).toMatchObject({ content })
+	expect(getProjectedNode(store, toSuperMessageId(correlationId))).toMatchObject({ content })
 	expect(store.getStreamState(TOPIC_ID, correlationId)).toBeUndefined()
 	expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 }
@@ -407,20 +435,42 @@ function expectInvalidIndexIgnored(invalidChunk: SuperMagicChunkMessage): void {
 	const store = createStore()
 	const recovery = collectRecoveryRequests(store)
 	const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+	const committedEvents: unknown[] = []
+	const streamEvents: string[] = []
+	const unsubscribeCommitted = store.subscribe("message.committed", (event) =>
+		committedEvents.push(event),
+	)
+	const unsubscribeStreamEvents = [
+		store.subscribe("message.stream.started", (event) => streamEvents.push(event.type)),
+		store.subscribe("message.stream.delta", (event) => streamEvents.push(event.type)),
+		store.subscribe("message.stream.ended", (event) => streamEvents.push(event.type)),
+	]
 
 	try {
 		store.receiveChunk(invalidChunk)
 
+		// Invalid transport input must be isolated before it can create any observable
+		// stream, canonical node, message card, or recovery side effect. The logger is
+		// intentionally only a diagnostic shield here; its private wording is not a contract.
 		expect(consoleError).toHaveBeenCalledTimes(1)
-		expect(consoleError).toHaveBeenCalledWith("chunk error")
 		expect(getProjectedNode(store)).toBeUndefined()
+		expect(store.messages.get(TOPIC_ID) ?? []).toHaveLength(0)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		expect(committedEvents).toEqual([])
+		expect(streamEvents).toEqual([])
 		expect(recovery.events).toHaveLength(0)
 
 		store.receiveChunk(createChunk({ i: 0, content: "ok", finishReason: "stop" }))
 		expectSettledContent(store, "ok")
+		expect(streamEvents).toEqual([
+			"message.stream.started",
+			"message.stream.delta",
+			"message.stream.ended",
+		])
 	} finally {
+		unsubscribeCommitted()
+		unsubscribeStreamEvents.forEach((unsubscribe) => unsubscribe())
 		recovery.unsubscribe()
 		consoleError.mockRestore()
 	}
@@ -536,6 +586,151 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 		expect(recovery.events).toHaveLength(1)
 		recovery.unsubscribe()
+	})
+
+	it("刷新已恢复 canonical Final 后，非零 Gap chunk 不得重开 reasoning loading。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+
+		// super_magic_message 即使携带 running，也已经是该消息的 canonical Final。
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+
+		expect(recovery.events).toEqual([])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+
+		const generation = store.beginTopicSync(TOPIC_ID)
+		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
+			mode: "replace",
+			assistantSnapshotPolicy: "canonical_final",
+			syncGeneration: generation,
+		})
+		expect(
+			store.completeTopicSync(TOPIC_ID, generation, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "100",
+			}),
+		).toBe(true)
+
+		expect(getProjectedNode(store)).toMatchObject({
+			content: "canonical answer",
+			reasoning_content: "canonical reasoning",
+		})
+		expect(JSON.stringify(getProjectedNode(store))).not.toContain("untrusted tail")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		recovery.unsubscribe()
+	})
+
+	it("已有同步在途时，canonical Final 后的 Gap chunk 仍不得重开旧流。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
+		const staleGeneration = store.beginTopicSync(TOPIC_ID)
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+		expect(recovery.events).toHaveLength(0)
+
+		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
+			mode: "replace",
+			assistantSnapshotPolicy: "canonical_final",
+			syncGeneration: staleGeneration,
+		})
+		store.completeTopicSync(TOPIC_ID, staleGeneration, {
+			succeeded: true,
+			taskStatus: "running",
+			latestSeqId: "100",
+		})
+
+		expect(recovery.events).toHaveLength(0)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		vi.advanceTimersByTime(0)
+		expect(recovery.events).toEqual([])
+		recovery.unsubscribe()
+	})
+
+	it("canonical Final 后的 Gap chunk 不启动 recovery，并保留权威快照。", () => {
+		const store = createStore()
+		const recoveryEvents: StreamRecoveryRequestPayload[] = []
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+		const unsubscribe = store.registerOnStreamRecoveryRequested((payload) => {
+			recoveryEvents.push(payload)
+			const generation = store.beginTopicSync(payload.topicId)
+			store.completeTopicSync(payload.topicId, generation, {
+				succeeded: false,
+				taskStatus: "running",
+			})
+		})
+
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
+		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
+		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
+		vi.advanceTimersByTime(30_000)
+
+		expect(recoveryEvents).toEqual([])
+		expect(store.getStreamRecoveryState(TOPIC_ID, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(getProjectedNode(store)).toMatchObject({
+			content: "canonical answer",
+			reasoning_content: "canonical reasoning",
+		})
+		expect(JSON.stringify(getProjectedNode(store))).not.toContain("untrusted tail")
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+		unsubscribe()
+	})
+
+	it("canonical Final 只封口自身，不能阻塞同 Topic 的其他流继续渲染。", () => {
+		const store = createStore()
+		const siblingCorrelationId = "correlation-2"
+		const runningSnapshot = createFinalEnvelope({
+			content: "canonical answer",
+			reasoningContent: "canonical reasoning",
+			status: "running",
+		})
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
+		store.receiveChunk(createChunk({ i: 0, reasoningContent: "local reasoning" }))
+		store.receiveChunk(
+			createChunk({ i: 0, correlationId: siblingCorrelationId, content: "sibling answer" }),
+		)
+		store.receiveChunk(createChunk({ i: 2, finishReason: "stop" }))
+
+		expect(store.getStreamRecoveryState(TOPIC_ID, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		expect(store.getStreamState(TOPIC_ID, siblingCorrelationId)).toBeDefined()
+
+		advanceRendering()
+		expect(getProjectedNode(store, toSuperMessageId(siblingCorrelationId))).toMatchObject({
+			content: "sibling answer",
+		})
 	})
 
 	it("工具头 chunk 丢失，但 arguments chunk 正常到达。", () => {
@@ -1099,34 +1294,348 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 	})
 
-	it("`choices` 为空数组。", () => {
+	it("`choices` 为空数组时按 heartbeat/usage chunk 推进，不创建主答案。", () => {
 		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
-		store.receiveChunk(createChunk({ choices: [] }))
-		expect(getProjectedNode(store)).toBeUndefined()
-		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+		try {
+			store.receiveChunk(
+				createChunk({
+					choices: [],
+					usage: { completion_tokens: 1, prompt_tokens: 2, total_tokens: 3 },
+				}),
+			)
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(warnSpy).not.toHaveBeenCalled()
 
-		store.receiveChunk(createChunk({ i: 1, content: "A", finishReason: "stop" }))
-		expectSettledContent(store, "A")
+			store.receiveChunk(createChunk({ i: 1, content: "A", finishReason: "stop" }))
+			expectSettledContent(store, "A")
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
-	it("`choices` 包含多个 choice，但 store 只消费第一个。", () => {
+	it("多个 choice 整包忽略，不合并正文、推理、工具或 finish_reason，并按 correlation 只告警一次。", () => {
 		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const streamEvents: string[] = []
+		const unsubscribeStreamEvents = [
+			store.subscribe("message.stream.started", (event) => streamEvents.push(event.type)),
+			store.subscribe("message.stream.delta", (event) => streamEvents.push(event.type)),
+			store.subscribe("message.stream.ended", (event) => streamEvents.push(event.type)),
+		]
 		const ignoredTool = createToolCall({ id: "ignored-tool" })
+		const secondaryCorrelationId = "correlation-secondary-choice"
 
-		store.receiveChunk(
-			createChunk({
-				choices: [
-					createChoice({ content: "A", finishReason: "stop" }),
-					createChoice({ content: "B", toolCalls: [ignoredTool] }),
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [
+						createChoice({
+							index: 0,
+							content: "ignored-A",
+							reasoningContent: "ignored-reasoning",
+							toolCalls: [ignoredTool],
+							finishReason: "stop",
+						}),
+						createChoice({ index: 1, content: "ignored-B" }),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoice({ index: 0, content: "ignored-replay" }),
+						createChoice({ index: 1, content: "ignored-alternative" }),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					correlationId: secondaryCorrelationId,
+					choices: [
+						createChoice({ index: 0, content: "ignored-secondary-primary" }),
+						createChoice({ index: 1, content: "ignored-secondary-alternative" }),
+					],
+				}),
+			)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(
+				getProjectedNode(store, toSuperMessageId(secondaryCorrelationId)),
+			).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, secondaryCorrelationId)).toBeUndefined()
+			expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
+			expect(recovery.events).toHaveLength(0)
+			expect(streamEvents).toEqual([])
+
+			store.receiveChunk(createChunk({ i: 2, content: "accepted", finishReason: "stop" }))
+			expectSettledContent(store, "accepted")
+			expect(getProjectedNode(store)?.tool_calls ?? []).not.toContainEqual(
+				expect.objectContaining({ id: "ignored-tool" }),
+			)
+
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code === "chunk-multiple-choices",
+			)
+			expect(warnings).toHaveLength(2)
+			expect(
+				warnings.map(
+					([, payload]) => (payload as { correlationId?: string }).correlationId,
+				),
+			).toEqual([CORRELATION_ID, secondaryCorrelationId])
+			expect(warnings[0]).toEqual([
+				"[SuperMagicStore] multiple choices ignored",
+				expect.objectContaining({
+					code: "chunk-multiple-choices",
+					topicId: TOPIC_ID,
+					superMessageId: SUPER_MESSAGE_ID,
+					correlationId: CORRELATION_ID,
+					choiceCount: 2,
+					choiceIndexes: [0, 1],
+					resolution: "ignore-choice-payload",
+				}),
+			])
+		} finally {
+			unsubscribeStreamEvents.forEach((unsubscribe) => unsubscribe())
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it.each([
+		{ caseName: "重复 index=0", choiceIndexes: [0, 0] },
+		{ caseName: "不存在 index=0", choiceIndexes: [1, 2] },
+	])("多 choice 且 $caseName 时整包拒绝，并请求一次权威恢复。", ({ choiceIndexes }) => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					choices: choiceIndexes.map((index) =>
+						createChoice({ index, content: `ignored-${index}` }),
+					),
+				}),
+			)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-multiple-choices",
+				),
+			).toHaveLength(1)
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("跨 chunk 固定 choice.index=0，非零候选不切换主答案、不结束文本流，并请求权威恢复。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [createChoice({ index: 0, deltaIndex: 9, content: "A" })],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoice({
+							index: 1,
+							deltaIndex: 0,
+							content: "ignored-1",
+							finishReason: "stop",
+						}),
+					],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 2,
+					choices: [createChoice({ index: 1, deltaIndex: 0, content: "ignored-2" })],
+				}),
+			)
+
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+				content: "A",
+				isFinalMessageReceived: false,
+			})
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+
+			store.receiveChunk(
+				createChunk({
+					i: 3,
+					choices: [createChoice({ index: 0, content: "C", finishReason: "stop" })],
+				}),
+			)
+			expectSettledContent(store, "AC")
+
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"chunk-choice-index-invalid",
+			)
+			expect(warnings).toEqual([
+				[
+					"[SuperMagicStore] invalid choice index",
+					expect.objectContaining({
+						code: "chunk-choice-index-invalid",
+						topicId: TOPIC_ID,
+						superMessageId: SUPER_MESSAGE_ID,
+						correlationId: CORRELATION_ID,
+						choiceIndex: 1,
+						expectedChoiceIndex: 0,
+						resolution: "ignore-choice-payload-and-recover",
+					}),
 				],
-			}),
-		)
+			])
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
 
-		expectSettledContent(store, "A")
-		expect(getProjectedNode(store)?.tool_calls ?? []).not.toContainEqual(
-			expect.objectContaining({ id: "ignored-tool" }),
-		)
+	it("字符串 choice.index='0' 不等同数值 0，候选内容和 finish_reason 均被拒绝。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const invalidChunk = mutateProtocolChunk(createChunk(), (draft) => {
+			draft.super_magic_chunk.choices = [
+				{
+					index: "0",
+					finish_reason: "stop",
+					delta: {
+						content: "ignored-string-index",
+						role: "assistant",
+						tool_calls: [],
+						reasoning_content: "ignored-reasoning",
+						index: 0,
+					},
+				},
+			]
+		})
+
+		try {
+			store.receiveChunk(invalidChunk)
+
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+			expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-choice-index-invalid",
+				),
+			).toHaveLength(1)
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("单 choice 缺失 index 时兼容回退数组首项，并按 correlation 只记录一次 warning。", () => {
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+		try {
+			store.receiveChunk(
+				createChunk({
+					i: 0,
+					choices: [createChoiceWithoutIndex({ deltaIndex: 7, content: "legacy-" })],
+				}),
+			)
+			store.receiveChunk(
+				createChunk({
+					i: 1,
+					choices: [
+						createChoiceWithoutIndex({ content: "compatible", finishReason: "stop" }),
+					],
+				}),
+			)
+
+			expectSettledContent(store, "legacy-compatible")
+			expect(recovery.events).toHaveLength(0)
+			const warnings = warnSpy.mock.calls.filter(
+				([, payload]) =>
+					(payload as { code?: string } | undefined)?.code ===
+					"chunk-choice-index-missing",
+			)
+			expect(warnings).toEqual([
+				[
+					"[SuperMagicStore] missing choice index",
+					expect.objectContaining({
+						code: "chunk-choice-index-missing",
+						topicId: TOPIC_ID,
+						superMessageId: SUPER_MESSAGE_ID,
+						correlationId: CORRELATION_ID,
+						fallbackChoiceIndex: 0,
+						resolution: "fallback-single-choice",
+					}),
+				],
+			])
+		} finally {
+			recovery.unsubscribe()
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("choice.index=0 缺少 delta 且存在其他候选时整包忽略，后续只由 canonical Final 收敛。", () => {
+		const store = createStore()
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		const invalidMultipleChoices = mutateProtocolChunk(createChunk(), (draft) => {
+			draft.super_magic_chunk.choices = [
+				{ index: 0, finish_reason: null },
+				{
+					index: 1,
+					finish_reason: "stop",
+					delta: {
+						content: "ignored-alternative",
+						role: "assistant",
+						tool_calls: [],
+						reasoning_content: "ignored-reasoning",
+						index: 1,
+					},
+				},
+			]
+		})
+
+		try {
+			store.receiveChunk(invalidMultipleChoices)
+			expect(getProjectedNode(store)).toBeUndefined()
+			expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
+
+			store.enqueueMessage(TOPIC_ID, createFinalEnvelope({ content: "canonical" }))
+			expectSettledContent(store, "canonical")
+			expect(
+				warnSpy.mock.calls.filter(
+					([, payload]) =>
+						(payload as { code?: string } | undefined)?.code ===
+						"chunk-multiple-choices",
+				),
+			).toHaveLength(1)
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
 	it("`choices[0].delta` 缺失。", () => {
@@ -1192,7 +1701,7 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		})
 		const messageCardsBeforeFinal = store.messages.get(TOPIC_ID) ?? []
 		expect(messageCardsBeforeFinal).toHaveLength(1)
-		expect(messageCardsBeforeFinal[0]?.app_message_id).toBe(CORRELATION_ID)
+		expect(messageCardsBeforeFinal[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
 
 		store.enqueueMessage(
 			TOPIC_ID,
@@ -1221,8 +1730,12 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		const messageCardsAfterFinal = store.messages.get(TOPIC_ID) ?? []
 		expect(messageCardsAfterFinal).toHaveLength(messageCardsBeforeFinal.length)
 		expect(messageCardsAfterFinal[0]?.app_message_id).toBe("final-app-1")
+		expect(messageCardsAfterFinal[0]?.super_message_id).toBe(SUPER_MESSAGE_ID)
 		expect(messageCardsAfterFinal[0]?.correlation_id).toBe(CORRELATION_ID)
-		expect(getProjectedNode(store, "final-app-1")).toEqual(getProjectedNode(store))
+		expect(getProjectedNode(store)).toMatchObject({
+			app_message_id: "final-app-1",
+			super_message_id: SUPER_MESSAGE_ID,
+		})
 	})
 
 	it("StreamState 已清理后，完整 final message 的空流式字段会清除旧内容。", () => {

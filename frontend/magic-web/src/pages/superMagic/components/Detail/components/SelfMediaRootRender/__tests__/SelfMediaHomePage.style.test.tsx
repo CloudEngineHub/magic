@@ -9,8 +9,8 @@ import type { SelfMediaAttachmentNode } from "../types"
 
 const mocks = vi.hoisted(() => ({
 	userInfo: {
-		nickname: "Jiabo",
-		real_name: "谢佳波",
+		nickname: "测试用户",
+		real_name: "测试用户",
 	},
 	chat: vi.fn(),
 }))
@@ -934,7 +934,7 @@ describe("SelfMediaHomePage styles", () => {
 					date: "2026-06-13",
 					generatedAt: "2026-06-13T09:00:00+08:00",
 					stateSignature: "cached-signature",
-					greeting: "Jiabo，今天可以看复用机会",
+					greeting: "测试用户，今天可以看复用机会",
 					summary: "链路已闭环，优先拆高互动样本。",
 					actions: [
 						{
@@ -962,7 +962,7 @@ describe("SelfMediaHomePage styles", () => {
 		expect(screen.getByText("链路已闭环，优先拆高互动样本。")).toBeInTheDocument()
 		expect(screen.getByText("链路已闭环，优先拆高互动样本。")).not.toHaveClass("line-clamp-2")
 		expect(screen.getByTestId("self-media-home-ops-insight-greeting")).toHaveTextContent(
-			"Jiabo，今天可以看复用机会",
+			"测试用户，今天可以看复用机会",
 		)
 		expect(
 			screen.getByTestId("self-media-home-ops-action-repurpose-best-post"),
@@ -1146,7 +1146,7 @@ describe("SelfMediaHomePage styles", () => {
 		mocks.chat.mockResolvedValueOnce({
 			content: JSON.stringify({
 				welcomeTitle: "今日重点：复用高互动样本",
-				greeting: "Jiabo，今天直接看复用机会",
+				greeting: "测试用户，今天直接看复用机会",
 				summary: "链路已闭环，优先拆高互动样本。",
 				actions: [
 					{

@@ -1,5 +1,4 @@
 ---
-llm: coder_llm
 tools:
   - shell_exec
   - shell_await
@@ -26,6 +25,8 @@ You are a shell execution sub-agent, invoked by a parent agent to efficiently an
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 <!--zh

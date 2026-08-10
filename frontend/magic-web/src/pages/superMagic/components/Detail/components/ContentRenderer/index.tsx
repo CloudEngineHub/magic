@@ -1,7 +1,7 @@
 import { lazy } from "react"
 import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
 import { DetailType } from "../../types"
-import { hasPPTMetadata, isFileInPPTMode } from "../../utils/file"
+import { isFileInPPTMode, shouldUsePPTRootRender } from "../../utils/file"
 import type { CodeViewerExtensionContext } from "../../contents/Code"
 import { isDesignMagicProjectFile } from "../../contents/Design/utils/isDesignMagicProjectFile"
 
@@ -64,7 +64,7 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 		case DetailType.Browser:
 			return <Browser data={data} {...commonProps} />
 		case DetailType.Html:
-			if (hasPPTMetadata(data)) {
+			if (shouldUsePPTRootRender(type, data)) {
 				return <PPTRootRender data={data} {...commonProps} />
 			}
 

@@ -8,6 +8,7 @@ import {
 	useImperativeHandle,
 	useMemo,
 	useLayoutEffect,
+	useCallback,
 } from "react"
 import { useDeepCompareEffect, useMemoizedFn } from "ahooks"
 import { filterInjectedTags, preserveOriginalTrailingNewline } from "./utils"
@@ -56,7 +57,9 @@ import { useZoomControls } from "./hooks/useZoomControls"
 import { StylePanelStoreProvider } from "./iframe-bridge/contexts/StylePanelContext"
 import { TAILWIND_Z_INDEX_CLASSES } from "./constants/z-index"
 import { DevConsolePanel } from "./components/DevConsole"
+import type { DevConsoleLayout } from "./components/DevConsole/types"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { platformKey } from "@/utils/storage"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
 import { useInspectorToolbarMode } from "./hooks/useInspectorToolbarMode"
@@ -111,11 +114,15 @@ import { useFetchInterceptionCache } from "./hooks/useFetchInterceptionCache"
 import { POST_MESSAGE_TARGET_STRATEGIES, type OnFetchIntercepted } from "./utils/fetchInterceptor"
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
+import { useIframeDatabase } from "./iframe-api/hooks/useIframeDatabase"
 import { useIframeAgent } from "./iframe-api/hooks/useIframeAgent"
 import { useIframeUserInfo } from "./iframe-api/hooks/useIframeUserInfo"
 import { useMagicFiles } from "./iframe-api/hooks/useMagicFiles"
 import { useIframeAgentActions } from "./hooks/useIframeAgentActions"
-import { useHtmlAppPermissions } from "./hooks/useHtmlAppPermissions"
+import {
+	useHtmlAppPermissions,
+	type HtmlAppPermissionController,
+} from "./hooks/useHtmlAppPermissions"
 import {
 	saveIframeFileContent,
 	createIframeFile,
@@ -128,6 +135,7 @@ import {
 
 import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
+import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
 
 interface IsolatedHTMLRendererProps {
@@ -153,6 +161,8 @@ interface IsolatedHTMLRendererProps {
 	) => Promise<void>
 	onSaveReady?: (triggerSave: () => Promise<SaveResult | undefined>) => void
 	fileId?: string
+	/** 跨多个 HTML 文件共享存储时使用的稳定标记；未传时继续按当前文件隔离。 */
+	virtualStorageMarkerId?: string
 	filePathMapping: Map<string, string>
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
@@ -185,12 +195,16 @@ interface IsolatedHTMLRendererProps {
 	onInterrupt?: () => void //新增：中断回调
 	/** 调试控制台关闭时回调（用于同步父组件状态）*/
 	onDevConsoleClose?: () => void
+	/** Parent-controlled DevTools state, kept in sync across iframe remounts. */
+	devConsoleEnabled?: boolean
 	/** AI 选取（appendToEditor）状态变化回调 */
 	onAppendPickingChange?: (picking: boolean) => void
 	/** 元素选取状态变化回调 */
 	onInspectorActiveChange?: (active: boolean) => void
 	/** Enable content-level inspector fallback for renderers without runtime support. */
 	enableInlineInspectorFallback?: boolean
+	/** Parent-owned controller used by the HTML detail toolbar and runtime. */
+	permissionController?: HtmlAppPermissionController
 }
 
 function isHtmlImagesUploadPath(path: string): boolean {
@@ -219,6 +233,32 @@ function resolveImageUploadRequestPath(path: string, fileName: string): string {
 interface MagicI18nLangSubscribeRequest {
 	type: "MAGIC_I18N_LANG_SUBSCRIBE"
 	requestId?: string
+}
+
+interface MagicContextGetRequest {
+	type: "MAGIC_CONTEXT_GET_REQUEST"
+	requestId?: string
+}
+
+interface MagicContextUser {
+	user_id: string
+	magic_id?: string
+	organization_code?: string
+	nickname?: string
+	real_name?: string
+	avatar_url?: string
+	phone?: string
+	email?: string | null
+	job_title?: string
+	path_nodes?: unknown[]
+}
+
+interface MagicContextPayload {
+	userId: string
+	userName: string
+	user: MagicContextUser
+	organizationCode: string
+	language: string
 }
 
 interface LegacyImageUploadRequestData {
@@ -289,6 +329,31 @@ const useStyles = createStyles(({ css }) => {
 
 const logger = Logger.createLogger("IsolatedHTMLRenderer")
 
+function normalizeContextUser(
+	profile: any,
+	fallback: any,
+	userId: string,
+	organizationCode: string,
+): MagicContextUser {
+	return {
+		user_id: profile?.user_id || fallback?.user_id || userId,
+		magic_id: profile?.magic_id || fallback?.magic_id,
+		organization_code:
+			profile?.organization_code || fallback?.organization_code || organizationCode,
+		nickname: profile?.nickname || fallback?.nickname,
+		real_name: profile?.real_name || fallback?.real_name,
+		avatar_url: profile?.avatar_url || fallback?.avatar,
+		phone: profile?.phone || fallback?.phone,
+		email: profile?.email || fallback?.email,
+		job_title: profile?.job_title,
+		path_nodes: profile?.path_nodes,
+	}
+}
+
+function getContextUserName(user: MagicContextUser): string {
+	return (user.real_name || user.nickname || "").trim()
+}
+
 // Internal component that uses the StylePanelStore context
 const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHTMLRendererProps>(
 	(props, ref) => {
@@ -306,6 +371,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			saveEditContent,
 			onSaveReady,
 			fileId,
+			virtualStorageMarkerId,
 			filePathMapping,
 			openNewTab,
 			htmlRelativeFolderPath,
@@ -331,9 +397,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onRenderReady,
 			onContentMetrics,
 			onDevConsoleClose,
+			devConsoleEnabled,
 			onAppendPickingChange,
 			onInspectorActiveChange,
 			enableInlineInspectorFallback = false,
+			permissionController,
 		} = props
 		const externalRenderSiteUrl = useMemo(() => env("MAGIC_HTML_SANDBOX_URL"), [])
 		const htmlSandboxShellUrl = useMemo(
@@ -613,6 +681,89 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		})
 
 		const { t, i18n } = useTranslation("super")
+		const contextCacheRef = useRef<{
+			key: string
+			value?: MagicContextPayload
+			promise?: Promise<MagicContextPayload>
+		} | null>(null)
+
+		const buildContextPayload = useMemoizedFn(async (): Promise<MagicContextPayload> => {
+			const fallbackUser = userStore.user.userInfo
+			const userId = fallbackUser?.user_id || ""
+			const organizationCode = userStore.user.organizationCode?.trim() || ""
+			const language = i18n.resolvedLanguage || i18n.language || "zh-CN"
+
+			if (!userId) {
+				throw new Error("Current user is not available")
+			}
+			if (!organizationCode) {
+				throw new Error("Current organization is not available")
+			}
+
+			const cacheKey = `${organizationCode}:${userId}:${language}`
+			const cached = contextCacheRef.current
+			if (cached?.key === cacheKey && cached.value) return cached.value
+			if (cached?.key === cacheKey && cached.promise) return cached.promise
+
+			const promise = ContactApi.getUsersInfo({
+				user_ids: [userId],
+				query_type: 2,
+				page_token: "",
+			}).then((response) => {
+				const profile = response?.items?.[0]
+				if (!profile) {
+					throw new Error("Current user profile is not available")
+				}
+
+				const user = normalizeContextUser(profile, fallbackUser, userId, organizationCode)
+				const userName = getContextUserName(user)
+				if (!userName) {
+					throw new Error("Current user display name is not available")
+				}
+
+				const runtime = {
+					userId,
+					userName,
+					user,
+					organizationCode,
+					language,
+				}
+				contextCacheRef.current = { key: cacheKey, value: runtime }
+				return runtime
+			})
+
+			contextCacheRef.current = { key: cacheKey, promise }
+			return promise
+		})
+
+		const handleContextMessage = useMemoizedFn(async (payload: MagicContextGetRequest) => {
+			const { requestId } = payload
+			if (!requestId) return
+
+			try {
+				const context = await buildContextPayload()
+				iframeRef.current?.contentWindow?.postMessage(
+					{
+						type: "MAGIC_CONTEXT_GET_RESPONSE",
+						requestId,
+						success: true,
+						content: context,
+					},
+					"*",
+				)
+			} catch (error) {
+				logger.error("获取 HTML context 失败", error)
+				iframeRef.current?.contentWindow?.postMessage(
+					{
+						type: "MAGIC_CONTEXT_GET_RESPONSE",
+						requestId,
+						success: false,
+						error: error instanceof Error ? error.message : "Failed to get context",
+					},
+					"*",
+				)
+			}
+		})
 
 		const currentHtmlFileInfo = useCurrentHtmlFileInfo({
 			attachmentList: attachmentList as ProjectAttachmentNode[] | undefined,
@@ -627,6 +778,22 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			fileId,
 			relativeFilePath: devConsoleFilePath,
 		})
+		const setDevConsoleEnabled = devConsole.setEnabled
+		const [devConsoleLayout, setDevConsoleLayout] = useState<DevConsoleLayout>(() => {
+			return localStorage.getItem(platformKey("devConsole_layout")) === "right"
+				? "right"
+				: "bottom"
+		})
+		const handleDevConsoleLayoutChange = useCallback((layout: DevConsoleLayout) => {
+			setDevConsoleLayout(layout)
+			localStorage.setItem(platformKey("devConsole_layout"), layout)
+		}, [])
+
+		useEffect(() => {
+			if (devConsoleEnabled !== undefined) {
+				setDevConsoleEnabled(devConsoleEnabled)
+			}
+		}, [devConsoleEnabled, setDevConsoleEnabled])
 
 		// Element inspector (independent, can be triggered from DevConsole or elsewhere)
 		const elementInspector = useElementInspector({ iframeRef })
@@ -798,15 +965,16 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (attachmentList?.length) flatten(attachmentList)
 			return result
 		}, [attachmentList])
-
-		const { htmlAppConfig, htmlAppConfigState, htmlAppInstanceKey, authorizeHtmlPermission } =
-			useHtmlAppPermissions({
-				content,
-				rawSourceCode,
-				relativeFilePath: htmlEntryFilePath,
-				projectId: selectedProject?.id,
-				fileList: flatFileList,
-			})
+		const fallbackPermissionController = useHtmlAppPermissions({
+			content,
+			rawSourceCode,
+			relativeFilePath: htmlEntryFilePath,
+			projectId: selectedProject?.id,
+			fileList: flatFileList,
+			enabled: !permissionController,
+		})
+		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
+			permissionController || fallbackPermissionController
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
@@ -893,6 +1061,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			authorizePermission: authorizeHtmlPermission,
 		})
 
+		const { handleDatabaseMessage } = useIframeDatabase({
+			iframeRef,
+			projectId: selectedProject?.id,
+		})
+
 		const { getAgentList, createTopicAndSend, sendMessage } = useIframeAgentActions()
 
 		const { handleAgentMessage } = useIframeAgent({
@@ -923,43 +1096,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					organization_code: info.organization_code || "",
 				}
 			}),
-			appConfig: htmlAppConfig,
-			appConfigState: htmlAppConfigState,
-			appInstanceKey: htmlAppInstanceKey,
-			authorizeUserInfo: useMemoizedFn(
-				({ appName, fields, reason, appConfigLoadError }) =>
-					new Promise<boolean>((resolve) => {
-						const fieldText = fields.join(
-							t("htmlEditor.userInfoAuthorizationConfirm.fieldSeparator"),
-						)
-						const contentKey = appConfigLoadError
-							? "htmlEditor.userInfoAuthorizationConfirm.appConfigUnavailableContent"
-							: reason
-								? "htmlEditor.userInfoAuthorizationConfirm.content"
-								: "htmlEditor.userInfoAuthorizationConfirm.contentWithoutReason"
-						const modal = MagicModal.confirm({
-							title: t("htmlEditor.userInfoAuthorizationConfirm.title"),
-							content: t(contentKey, {
-								appName,
-								fields: fieldText,
-								reason,
-								error: appConfigLoadError,
-							}),
-							okText: t("htmlEditor.userInfoAuthorizationConfirm.allow"),
-							cancelText: t("htmlEditor.userInfoAuthorizationConfirm.deny"),
-							closable: false,
-							maskClosable: false,
-							centered: true,
-							onOk: () => {
-								modal.destroy()
-								resolve(true)
-							},
-							onCancel: () => {
-								modal.destroy()
-								resolve(false)
-							},
-						})
-					}),
+			authorizeUserInfo: useMemoizedFn(({ scopes, reason }) =>
+				authorizeHtmlPermissions(scopes, {
+					reason,
+					presentation: "userInfo",
+				}),
 			),
 		})
 
@@ -1019,10 +1160,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			// 默认返回文件ID
 			return fileId
 		})
+		const getStorageMarkerId = useMemoizedFn(() => virtualStorageMarkerId || getMarkerId())
 
 		useEffect(() => {
 			let cancelled = false
-			const markerId = getMarkerId()
+			const markerId = getStorageMarkerId()
 			const namespace = buildHtmlVirtualStorageNamespace({
 				projectId: selectedProject?.id,
 				topicId: selectedProject?.current_topic_id,
@@ -1043,9 +1185,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		}, [
 			// attachmentList,
 			fileId,
-			getMarkerId,
+			getStorageMarkerId,
 			selectedProject?.current_topic_id,
 			selectedProject?.id,
+			virtualStorageMarkerId,
 		])
 
 		useEffect(() => {
@@ -1111,7 +1254,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			}
 
 			// 根据HTML文件上下文确定标记ID：如果父目录存在metadata则使用父目录ID，否则使用文件ID
-			const markerId = getMarkerId()
+			const markerId = getStorageMarkerId()
 			// 创建完整HTML内容
 			const fullContent = getFullContent(decodedContent, markerId, {
 				dynamicInterception: dynamicResourceInterceptionConfig,
@@ -1241,7 +1384,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 
 					// 根据HTML文件上下文确定标记ID
-					const markerId = getMarkerId()
+					const markerId = getStorageMarkerId()
 					if (!virtualStorageContext) return
 					// 创建完整HTML内容
 					const fullContent = getFullContent(decodedContent, markerId, {
@@ -1314,7 +1457,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				disableIframeDocumentClickBridge,
 				documentFlowFullscreen,
 				dynamicResourceInterceptionConfig,
-				getMarkerId,
+				getStorageMarkerId,
 				hideVerticalScroll,
 				injectMediaScript,
 				isEditMode,
@@ -1826,6 +1969,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data?.type?.startsWith("MAGIC_LLM_")) {
 					// 处理 window.Magic.llm.* 请求
 					await handleLLMMessage(event.data.type, event.data)
+				} else if (event.data?.type?.startsWith("MAGIC_DB_")) {
+					// 处理 window.Magic.db.* 请求
+					await handleDatabaseMessage(event.data.type, event.data)
+				} else if (event.data && event.data.type === "MAGIC_CONTEXT_GET_REQUEST") {
+					// 处理 window.Magic.getContext() 请求
+					await handleContextMessage(event.data)
 				} else if (
 					event.data?.type?.startsWith("MAGIC_GET_AGENTS_") ||
 					event.data?.type?.startsWith("MAGIC_CREATE_TOPIC_AND_SEND_") ||
@@ -2071,6 +2220,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							documentFlowFullscreen
 								? "relative w-full"
 								: "relative flex min-h-0 w-full flex-1 flex-col",
+							devConsole.enabled && devConsoleLayout === "right"
+								? "flex-row"
+								: "flex-col",
 							shouldApplyScaling && isFullscreen && "bg-black",
 							shouldApplyScaling && !isFullscreen && "bg-[#eee] dark:bg-[#1c1c1c]",
 						),
@@ -2113,8 +2265,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 									src={htmlSandboxShellUrl}
 									onLoad={handleIframeElementLoad}
 									onError={handleIframeElementError}
-									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
-									allow="fullscreen"
+									sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
+									allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
 									allowFullScreen
 									translate="no"
 									style={
@@ -2167,7 +2319,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							<div className={styles.shadowHost} translate="no" />
 						)}
 					</div>
-					{/* DevTools 调试台 - 与 iframe 上下并排 */}
+					{/* DevTools 调试台 - 根据用户选择停靠在 iframe 底部或右侧 */}
 					{sandboxType === "iframe" && devConsole.enabled && (
 						<DevConsolePanel
 							consoleEntries={devConsole.consoleEntries}
@@ -2194,8 +2346,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							consoleErrorCount={devConsole.consoleErrorCount}
 							networkErrorCount={devConsole.networkErrorCount}
 							apiCallErrorCount={devConsole.apiCallErrorCount}
+							layout={devConsoleLayout}
+							onLayoutChange={handleDevConsoleLayoutChange}
 							onClose={() => {
-								devConsole.toggle()
+								setDevConsoleEnabled(false)
 								onDevConsoleClose?.()
 							}}
 							inspectorActive={elementInspector.active}

@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import dayjs from "dayjs"
-import { CircleHelp } from "lucide-react"
-import { MagicAvatar } from "@admin-components"
+import { CircleHelp, Download } from "lucide-react"
+import { MagicAvatar, MagicButton } from "@admin-components"
 import { Table, Tabs, Tooltip } from "antd"
 import type { ColumnType, ColumnsType } from "antd/es/table"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
@@ -11,17 +11,16 @@ import {
 	AGENT_TAB_TYPE,
 	CSV_TITLE_BY_VIEW,
 	MEMBER_TAB_TYPE,
+	ORGANIZATION_TAB_TYPE,
 	TABLE_PAGE_SIZE,
 	TABLE_SCROLL_X,
 	VIEW,
 } from "../consts"
 import type { DataDashboardView } from "../consts"
-import type { DashboardT } from "../types"
-import { displayText, EMPTY_TEXT, formatNumber, safeDivide, type DashboardTabType } from "../utils"
+import type { DashboardT, DashboardTabType, DashboardRow } from "../types"
+import { displayText, EMPTY_TEXT, formatNumber, formatPercent, safeDivide } from "../utils"
 import { useTranslation } from "react-i18next"
 import { useStyles } from "../styles"
-
-type DashboardRow = DataDashboard.AgentTabRow | DataDashboard.MemberTabRow
 
 const BUSINESS_TYPE_NAMES: Record<string, string> = {
 	super_magic_task_consume: "businessTypes.superMagicTaskConsume",
@@ -31,6 +30,12 @@ const BUSINESS_TYPE_NAMES: Record<string, string> = {
 	tool_consume: "businessTypes.toolConsume",
 	flow_consume: "businessTypes.flowConsume",
 	knowledge_vector_consume: "businessTypes.knowledgeVectorConsume",
+}
+
+const DEPARTMENT_LEVEL_LABEL_MAP: Record<DataDashboard.DepartmentLevel, string> = {
+	1: "levels.level1Short",
+	2: "levels.level2Short",
+	3: "levels.level3Short",
 }
 
 interface DetailTimeRange {
@@ -45,8 +50,10 @@ interface DetailSectionProps {
 	timeRange?: DetailTimeRange | null
 	pageSize: number
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	onTabChange: (tab: DashboardTabType) => void
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }
 
 export function DetailSection({
@@ -56,8 +63,10 @@ export function DetailSection({
 	timeRange,
 	pageSize,
 	loading,
+	exportingTab,
 	onTabChange,
 	onPageChange,
+	onExport,
 }: DetailSectionProps) {
 	const isMobile = useIsMobile()
 	const { t } = useTranslation("admin/ai/dataDashboard")
@@ -77,16 +86,20 @@ export function DetailSection({
 				pageSize,
 				timeRange,
 				loading,
+				exportingTab,
 				styles,
 				t,
 				isMobile,
 				onPageChange,
+				onExport,
 			}),
 		[
 			activeTab,
 			isMobile,
 			loading,
+			exportingTab,
 			onPageChange,
+			onExport,
 			page,
 			pageSize,
 			rows,
@@ -122,10 +135,12 @@ interface getDetailTabsProps {
 	pageSize: number
 	timeRange?: DetailTimeRange | null
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	styles: Record<string, string>
 	t: DashboardT
 	isMobile: boolean
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }
 
 function getDetailTabs({
@@ -137,10 +152,12 @@ function getDetailTabs({
 	pageSize,
 	timeRange,
 	loading,
+	exportingTab,
 	styles,
 	t,
 	isMobile,
 	onPageChange,
+	onExport,
 }: getDetailTabsProps) {
 	if (view === VIEW.DigitalEmployeeAnalysis) {
 		return [
@@ -153,12 +170,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentUsageColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.Agent,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentUsage")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Call,
@@ -169,6 +188,7 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: callColumns(styles, t, isMobile, {
 					showDigitalEmployee: true,
 					showSource: true,
@@ -178,6 +198,7 @@ function getDetailTabs({
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Member,
@@ -188,12 +209,14 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentMemberColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.MemberAgent,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentMembers")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
 			}),
 			createTabItem({
 				tabType: AGENT_TAB_TYPE.Department,
@@ -204,12 +227,55 @@ function getDetailTabs({
 				page,
 				pageSize,
 				loading,
+				exportingTab,
 				columns: agentDepartmentColumns(styles, t, isMobile),
 				scrollX: TABLE_SCROLL_X.Department,
 				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.agentDepartments")}`,
 				styles,
 				t,
 				onPageChange,
+				onExport,
+			}),
+		]
+	}
+
+	if (view === VIEW.OrganizationAnalysis) {
+		return [
+			createTabItem({
+				tabType: ORGANIZATION_TAB_TYPE.Usage,
+				label: t("detail.departmentUsage"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize,
+				loading,
+				exportingTab,
+				columns: organizationDepartmentColumns(styles, t, isMobile),
+				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.departmentUsage")}`,
+				styles,
+				t,
+				onPageChange,
+				onExport,
+			}),
+			createTabItem({
+				tabType: ORGANIZATION_TAB_TYPE.LowActivation,
+				label: t("detail.lowDepartments"),
+				activeTab,
+				rows,
+				total,
+				page,
+				pageSize,
+				loading,
+				exportingTab,
+				columns: organizationDepartmentColumns(styles, t, isMobile),
+				scrollX: TABLE_SCROLL_X.OrganizationDepartment,
+				exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.lowDepartments")}`,
+				styles,
+				t,
+				onPageChange,
+				onExport,
 			}),
 		]
 	}
@@ -224,12 +290,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: memberUsageColumns(styles, t, isMobile),
 			scrollX: TABLE_SCROLL_X.Member,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.memberUsage")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Call,
@@ -240,6 +308,7 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: callColumns(styles, t, isMobile, {
 				showBusinessFields: true,
 				showDigitalEmployee: false,
@@ -250,6 +319,7 @@ function getDetailTabs({
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Agent,
@@ -260,12 +330,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: memberAgentColumns(styles, t, isMobile),
 			scrollX: TABLE_SCROLL_X.MemberAgent,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.memberAgent")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 		createTabItem({
 			tabType: MEMBER_TAB_TYPE.Silent,
@@ -276,12 +348,14 @@ function getDetailTabs({
 			page,
 			pageSize,
 			loading,
+			exportingTab,
 			columns: silentMemberColumns(styles, t, isMobile, timeRange),
 			scrollX: TABLE_SCROLL_X.SilentMembers,
 			exportTitle: `${CSV_TITLE_BY_VIEW[view]}-${t("detail.silentMembers")}`,
 			styles,
 			t,
 			onPageChange,
+			onExport,
 		}),
 	]
 }
@@ -295,12 +369,14 @@ function createTabItem({
 	page,
 	pageSize,
 	loading,
+	exportingTab,
 	columns,
 	scrollX,
 	exportTitle,
 	styles,
 	t,
 	onPageChange,
+	onExport,
 }: {
 	tabType: DashboardTabType
 	label: string
@@ -310,13 +386,18 @@ function createTabItem({
 	page: number
 	pageSize: number
 	loading: boolean
+	exportingTab: DashboardTabType | null
 	columns: ColumnsType<DashboardRow>
 	scrollX: number
 	exportTitle: string
 	styles: Record<string, string>
 	t: DashboardT
 	onPageChange: (page: number, pageSize: number) => void
+	onExport: () => void
 }) {
+	const isExporting = exportingTab === tabType
+	const exportDisabled = exportingTab !== null && !isExporting
+
 	return {
 		key: tabType,
 		label,
@@ -325,22 +406,20 @@ function createTabItem({
 				<div className={styles.detailTabContent}>
 					<div className={styles.detailTableTop}>
 						<h3 className={styles.detailSubtitle}>{label}</h3>
-						{/* <MagicButton
+						<MagicButton
+							aria-label={`${t("actions.export")} ${exportTitle}`}
 							icon={<Download size={16} />}
-							onClick={() =>
-								exportCsv(
-									exportTitle,
-									rows as unknown as Array<Record<string, unknown>>,
-								)
-							}
+							loading={isExporting}
+							disabled={exportDisabled}
+							onClick={onExport}
 						>
 							{t("actions.export")}
-						</MagicButton> */}
+						</MagicButton>
 					</div>
 					<div className={styles.detailTableWrap}>
 						<Table<DashboardRow>
 							rowKey={(row) => getRowKey(tabType, row)}
-							scroll={{ x: scrollX }}
+							scroll={{ x: scrollX, scrollToFirstRowOnChange: false }}
 							columns={columns}
 							dataSource={rows}
 							loading={loading}
@@ -660,6 +739,87 @@ function agentDepartmentColumns(
 	]
 }
 
+function organizationDepartmentColumns(
+	styles: Record<string, string>,
+	t: DashboardT,
+	isMobile: boolean,
+): ColumnsType<DashboardRow> {
+	return [
+		createDetailColumn(styles, t, {
+			titleKey: "departmentLevel",
+			dataIndex: "department_level",
+			width: 120,
+			fixed: isMobile ? undefined : "left",
+			render: (value) => renderDepartmentLevel(value, t),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "department",
+			helperKey: "organizationDepartment",
+			dataIndex: "level_1_department_name",
+			width: 180,
+			fixed: isMobile ? undefined : "left",
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "level2Department",
+			dataIndex: "level_2_department_name",
+			width: 180,
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "level3Department",
+			dataIndex: "level_3_department_name",
+			width: 200,
+			ellipsis: { showTitle: true },
+			render: displayText,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "employeeCount",
+			dataIndex: "employed_member_count",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "activeMembers",
+			dataIndex: "active_member_count",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "activationRate",
+			width: 140,
+			render: (_, row) => renderDepartmentActivationRate(row),
+			sortValue: (row) => getDepartmentActivationRate(row),
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "calls",
+			dataIndex: "call_count",
+			width: 120,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "amount",
+			dataIndex: "points",
+			width: 130,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "tokens",
+			dataIndex: "tokens",
+			width: 140,
+			render: renderNumber,
+		}),
+		createDetailColumn(styles, t, {
+			titleKey: "lastUsedAt",
+			dataIndex: "last_called_at",
+			width: 180,
+			render: displayText,
+		}),
+	]
+}
+
 function memberUsageColumns(
 	styles: Record<string, string>,
 	t: DashboardT,
@@ -937,6 +1097,16 @@ function renderNumber(value: unknown) {
 	return formatNumber(Number(value))
 }
 
+function renderDepartmentLevel(value: unknown, t: DashboardT) {
+	const level = Number(value) as DataDashboard.DepartmentLevel
+	const labelKey = DEPARTMENT_LEVEL_LABEL_MAP[level]
+	return labelKey ? t(labelKey) : displayText(value)
+}
+
+function renderDepartmentActivationRate(row: DashboardRow) {
+	return formatPercent(getDepartmentActivationRate(row))
+}
+
 function renderAverageNumber(row: DashboardRow, field: "points" | "tokens") {
 	return formatNumber(getAverageValue(row, field))
 }
@@ -955,6 +1125,14 @@ interface RowWithAverageFields {
 function getAverageValue(row: DashboardRow, field: "points" | "tokens") {
 	const item = row as RowWithAverageFields
 	return safeDivide(Number(item[field] ?? 0), Number(item.call_count ?? 0))
+}
+
+function getDepartmentActivationRate(row: DashboardRow) {
+	const item = row as Partial<DataDashboard.OrganizationDepartmentRow>
+	return safeDivide(
+		Number(item.active_member_count ?? 0),
+		Number(item.employed_member_count ?? 0),
+	)
 }
 
 function getSilentDays(row: DashboardRow, timeRange?: DetailTimeRange | null) {
@@ -1007,6 +1185,12 @@ function getRowKey(tabType: DashboardTabType, row: DashboardRow) {
 	if (tabType === MEMBER_TAB_TYPE.Agent) {
 		const item = row as DataDashboard.MemberAgentRow
 		return `${item.user_id}-${item.agent_code}`
+	}
+	if (
+		tabType === ORGANIZATION_TAB_TYPE.Usage ||
+		tabType === ORGANIZATION_TAB_TYPE.LowActivation
+	) {
+		return (row as DataDashboard.OrganizationDepartmentRow).department_id
 	}
 	return (row as DataDashboard.MemberUsageRow).user_id
 }

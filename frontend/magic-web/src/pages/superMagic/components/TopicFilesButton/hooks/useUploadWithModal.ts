@@ -6,9 +6,12 @@ import type { BatchSaveInfo } from "@/stores/folderUpload/types"
 import type { AttachmentItem } from "./types"
 import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 interface UseUploadWithModalOptions {
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	selectedProject?: any
 	selectedTopic?: any
 	attachments?: AttachmentItem[]
@@ -18,6 +21,7 @@ interface UseUploadWithModalOptions {
 
 export function useUploadWithModal({
 	projectId,
+	fileScope,
 	selectedProject,
 	selectedTopic,
 	attachments = [],
@@ -49,6 +53,7 @@ export function useUploadWithModal({
 				try {
 					await multiFolderUploadStore.createUploadTask([file], parentId, {
 						projectId: projectId || "",
+						fileScope,
 						workspaceId,
 						projectName: selectedProject?.project_name || t("common.untitledProject"),
 						topicId: selectedTopic?.id,
@@ -97,6 +102,7 @@ export function useUploadWithModal({
 			attachments,
 			onUpdateAttachments,
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,
@@ -118,6 +124,7 @@ export function useUploadWithModal({
 			try {
 				await multiFolderUploadStore.createUploadTask(files, parentId, {
 					projectId: projectId || "",
+					fileScope,
 					workspaceId,
 					projectName: selectedProject?.project_name || t("common.untitledProject"),
 					topicId: selectedTopic?.id,
@@ -153,6 +160,7 @@ export function useUploadWithModal({
 			attachments,
 			onUpdateAttachments,
 			projectId,
+			fileScope,
 			workspaceId,
 			selectedProject,
 			selectedTopic,

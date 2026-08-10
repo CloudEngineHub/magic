@@ -1350,6 +1350,42 @@ input[type="checkbox"] {
     line-height: 1.5;
 }
 
+.tool-call-detail.tool-call-detail-browser {
+    font-family: inherit;
+    word-break: normal;
+    color: #334155;
+    background: #fff;
+    max-height: 360px;
+}
+
+.browser-tool-detail-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.browser-tool-detail-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.browser-tool-detail-summary,
+.browser-tool-detail-target {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #64748b;
+}
+
+.browser-tool-detail-url {
+    overflow: hidden;
+    font-size: 11px;
+    color: #2563eb;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* 任务完成附件列表 */
 .tool-call-attachments {
     width: min(620px, 100%);
@@ -1446,6 +1482,29 @@ button.tool-call-attachment-content.is-clickable:hover {
     flex: 0 0 auto;
     color: #2471a3;
     font-size: 11px;
+}
+
+.browser-tool-detail-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 280px;
+    object-fit: contain;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.browser-tool-detail-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 96px;
+    font-size: 11px;
+    color: #94a3b8;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
 }
 
 /* ask_user 交互卡片 */
@@ -3158,9 +3217,65 @@ input[type="file"] {
     color: var(--wechat-text-dark);
 }
 
+.filetree-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.filetree-scope-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.filetree-scope-tab {
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 7px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.filetree-scope-tab:hover {
+    color: #1d4ed8;
+}
+
+.filetree-scope-tab.active {
+    background: #fff;
+    color: #1d4ed8;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
 .filetree-actions {
     display: flex;
+    align-items: center;
     gap: 4px;
+}
+
+.filetree-text-btn {
+    border: 1px solid var(--wechat-border);
+    border-radius: 4px;
+    padding: 3px 5px;
+    background: transparent;
+    color: var(--wechat-text-gray);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+.filetree-text-btn:hover {
+    background-color: #f0f0f0;
+    color: var(--wechat-text-dark);
 }
 
 .icon-btn {
@@ -3502,6 +3617,18 @@ input[type="file"] {
     color: #0066cc;
 }
 
+.file-preview-save-btn {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+}
+
+.file-preview-save-btn:hover {
+    background: #006fe6;
+    border-color: #006fe6;
+    color: #fff;
+}
+
 .file-preview-close {
     width: 28px;
     height: 28px;
@@ -3534,6 +3661,29 @@ input[type="file"] {
     padding: 16px;
     background: rgba(248, 248, 250, 0.76);
     min-height: 120px;
+}
+
+.file-preview-editor {
+    display: block;
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+    resize: none;
+    padding: 14px;
+    border: 1px solid #d1d1d6;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--wechat-text-dark);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    tab-size: 4;
+    outline: none;
+}
+
+.file-preview-editor:focus {
+    border-color: #007aff;
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.14);
 }
 
 .file-preview-empty {
@@ -4358,6 +4508,21 @@ input[type="file"] {
     background: rgba(0, 122, 255, 0.1);
     border-color: rgba(0, 122, 255, 0.18);
     color: #0066cc;
+}
+
+.file-preview-actions .file-preview-save-btn,
+.file-preview-actions .file-preview-save-btn:hover {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+}
+
+.file-preview-actions .file-preview-save-btn:disabled {
+    background: #6aaef5;
+    border-color: #6aaef5;
+    color: #fff;
+    cursor: wait;
+    opacity: 0.9;
 }
 
 /* 圆角与图标体系收敛 */

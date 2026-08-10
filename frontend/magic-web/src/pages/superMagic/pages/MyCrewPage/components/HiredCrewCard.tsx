@@ -1,5 +1,13 @@
 import { memo } from "react"
-import { CircleArrowUp, Ellipsis, MessageCircleMore, Rocket, Settings2, Trash2 } from "lucide-react"
+import {
+	CircleArrowUp,
+	Ellipsis,
+	Eye,
+	MessageCircleMore,
+	Rocket,
+	Settings2,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -14,6 +22,7 @@ import { CardFooterBadge } from "@/pages/superMagic/components/CardFooterBadge"
 import { CardFooterLabel } from "@/pages/superMagic/components/CardFooterLabel"
 import { cn } from "@/lib/utils"
 import type { MyCrewView } from "@/services/crew/CrewService"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { MyCrewCardMainSection } from "./MyCrewCardMainSection"
 import {
 	isInsideMyCrewCardInteractiveTarget,
@@ -66,6 +75,9 @@ function HiredCrewCard({
 			})
 		: null
 	const { canDelete, canEdit, canPublish } = resolveTeamSharedCrewPermissions(employee.userRole)
+	const isViewer = isReadOnlyProject(employee.userRole)
+	const actionLabel = isViewer ? t("myCrewPage.view") : t("myCrewPage.edit")
+	const ActionIcon = isViewer ? Eye : Settings2
 	const canOpenCardByRootClick = isCollaboratedCard || !isTeamSharedCard || canEdit
 	const canRenderSharedEditorActions = isTeamSharedCard && canEdit && onEdit
 	const canRenderSharedMenu =
@@ -141,8 +153,8 @@ function HiredCrewCard({
 					}}
 					data-testid="my-crew-card-edit-button"
 				>
-					<Settings2 className="size-4 shrink-0" aria-hidden />
-					{t("myCrewPage.edit")}
+					<ActionIcon className="size-4 shrink-0" aria-hidden />
+					{actionLabel}
 				</Button>
 				{canRenderSharedMenu ? (
 					<DropdownMenu>
@@ -220,16 +232,17 @@ function HiredCrewCard({
 					}}
 					data-testid="my-crew-card-edit-button"
 				>
-					<Settings2 className="size-4 shrink-0" aria-hidden />
-					{t("myCrewPage.edit")}
+					<ActionIcon className="size-4 shrink-0" aria-hidden />
+					{actionLabel}
 				</Button>
 			</div>
 		)
 	}
 
 	return (
+		// Keep the avatar offset inside each grid item; Safari can otherwise overlap adjacent rows.
 		<div
-			className="relative flex h-full min-h-0 min-w-0 flex-col text-current"
+			className="relative flex min-h-0 min-w-0 flex-col pt-12 text-current"
 			data-href={href}
 			data-testid="my-crew-card"
 			data-my-crew-card-kind={isCollaboratedCard ? "collaborated" : "hired"}
@@ -238,7 +251,7 @@ function HiredCrewCard({
 				handleCardRootClick()
 			}}
 		>
-			<div className="relative flex h-full min-h-0 min-w-0 flex-col rounded-md border border-border bg-popover shadow-sm">
+			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-md border border-border bg-popover shadow-sm">
 				<MyCrewCardMainSection
 					employee={employee}
 					footer={

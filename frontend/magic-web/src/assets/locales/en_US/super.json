@@ -405,6 +405,13 @@
 		"manage": "Invite",
 		"noPermissionCollaborationProject": "No permission",
 		"noPermissionCollaborationProjectContent": "You have no permission to view this project, please contact the project creator",
+		"organizationSwitch": {
+			"action": "Switch Team and Open Project",
+			"description": "You can access this shared project in \"{{organizationName}}\". Switch teams to continue.",
+			"failed": "Failed to switch team",
+			"switching": "Switching...",
+			"title": "Switch Team to Open Project"
+		},
 		"people": "people",
 		"remove": "Remove",
 		"removeFailed": "Failed to remove collaborator",
@@ -459,6 +466,14 @@
 		"latest": "Latest",
 		"latestVersion": "Latest Version",
 		"loading": "Loading",
+		"markdownImage": {
+			"address": "Image address",
+			"emptySource": "Image address is empty",
+			"fileMissing": "Image file does not exist",
+			"loadFailed": "Image failed to load",
+			"notImage": "This resource is not an image",
+			"urlFailed": "Failed to fetch image address"
+		},
 		"meetingMode": "Summary",
 		"more": "More",
 		"moreActions": "More",
@@ -470,6 +485,7 @@
 		"notFound": "No results found",
 		"onlineEdit": "Online Edit",
 		"onlySupportUploadImage": "Only support uploading png/jpg/gif format images",
+		"open": "Open",
 		"pinned": "Pinned",
 		"pptMode": "Slide",
 		"projectNotSelected": "Please select a project first",
@@ -634,9 +650,7 @@
 				"defaultModel": "Default model",
 				"defaultVideoModel": "Default video model",
 				"editTitle": "Edit Configuration",
-				"enableSchedule": "Enable Scheduled Execution",
-				"enableScheduleHint": "Card will auto-update at the set frequency",
-				"generate": "Generate Card",
+				"generate": "Generate Observation",
 				"imageModel": "Image Model",
 				"languageModel": "Language Model",
 				"modelSection": "Model Configuration",
@@ -649,27 +663,129 @@
 			"createDialog": {
 				"cancel": "Cancel",
 				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
-				"confirm": "Create Card",
+				"cardNamePlaceholder": "e.g., Competitor Radar, Trend Watch, Business Anomaly Watch",
+				"confirm": "Create AI Card",
 				"creating": "Creating...",
-				"description": "AI will automatically create a visual card and set up a scheduled task to fetch and update latest data periodically.",
-				"prompt": "Analysis Instructions",
-				"promptHint": "AI will periodically fetch latest data based on this instruction, analyze it, and generate an updated visual card.",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends and present with list + trend markers.",
-				"template": "Card Template",
+				"description": "Create an AI Card that continuously watches a goal, forms judgement, and renders visual results. You can still switch to a fixed plan for the classic scheduled flow.",
+				"prompt": "Observation Goal",
+				"promptHint": "Tell AI what to observe, how to judge importance, and what actions to suggest when meaningful changes appear.",
+				"promptPlaceholder": "Tell AI what to keep watching.\ne.g., Watch Competitor A's enterprise pricing, launches, and customer stories. When important changes appear, explain the impact and suggest sales actions.",
+				"template": "Display Template",
+				"templates": {
+					"collapseForm": "Collapse editing",
+					"description": "Choose a common observation scenario. The form will prefill the goal, visual template, schedule, and AI task permissions.",
+					"expandForm": "Expand editing",
+					"summary": "Selected template",
+					"summaryAutonomy": "AI task permissions",
+					"summaryGoal": "Observation goal",
+					"summaryName": "Name",
+					"summarySchedule": "Schedule",
+					"template": {
+						"brandSentiment": {
+							"description": "Watch social hot topics, user feedback, negative signals, and campaign opportunities.",
+							"scenario": "For brand, PR, marketing, and content operations teams.",
+							"title": "Brand sentiment and trend observer"
+						},
+						"businessAnomaly": {
+							"description": "Watch metric anomalies across operations, conversion, inventory, sales, or service data.",
+							"scenario": "For operations, analytics, growth, and business owners.",
+							"title": "Business anomaly observer"
+						},
+						"campaignMaterial": {
+							"description": "Watch campaign channels, ad creatives, landing pages, and conversion cost changes.",
+							"scenario": "For growth, performance marketing, campaign, and creative teams.",
+							"title": "Campaign and creative observer"
+						},
+						"competitorPricing": {
+							"description": "Watch competitor pricing, releases, customer stories, and enterprise capabilities.",
+							"scenario": "For sales, product, strategy, and market research teams.",
+							"title": "Competitor product and pricing observer"
+						},
+						"contentPerformance": {
+							"description": "Watch published content metrics, comment feedback, and redistribution opportunities.",
+							"scenario": "For self-media, content operations, and growth teams.",
+							"title": "Content performance observer"
+						},
+						"custom": {
+							"description": "Start from a blank setup and fill in the observation goal yourself.",
+							"scenario": "For custom observation tasks without a fixed scenario yet.",
+							"title": "Custom"
+						},
+						"inventoryRisk": {
+							"description": "Watch inventory levels, replenishment cycles, stockout alerts, and slow-moving items.",
+							"scenario": "For ecommerce, supply chain, retail, and merchandising teams.",
+							"title": "Inventory and supply risk observer"
+						},
+						"policyChange": {
+							"description": "Watch industry policies, platform rules, regulatory notices, and compliance changes.",
+							"scenario": "For legal, compliance, platform operations, and market research teams.",
+							"title": "Policy and compliance change observer"
+						},
+						"productReviews": {
+							"description": "Watch app store, ecommerce, community, and review content for experience feedback.",
+							"scenario": "For product, experience, growth, and user research teams.",
+							"title": "Product experience and review observer"
+						},
+						"renewalRisk": {
+							"description": "Watch customer activity, tickets, contract windows, and renewal risk signals.",
+							"scenario": "For sales, customer success, operations, and business owners.",
+							"title": "Renewal and churn risk observer"
+						},
+						"serviceQuality": {
+							"description": "Watch community, support, and after-sales issues for service quality risks.",
+							"scenario": "For support, community, operations, and service management teams.",
+							"title": "Community issue and service quality observer"
+						},
+						"talentHiring": {
+							"description": "Watch competitor hiring, team expansion, talent movement, and role requirements.",
+							"scenario": "For HR, strategy, business owners, and organization development teams.",
+							"title": "Hiring and talent movement observer"
+						},
+						"userFeedback": {
+							"description": "Watch high-frequency needs and blockers from support, surveys, communities, and reviews.",
+							"scenario": "For product, user research, support, and growth teams.",
+							"title": "User feedback and needs observer"
+						}
+					},
+					"title": "Choose an observation template"
+				},
 				"title": "Create AI Card"
 			},
 			"createMessage": {
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "All scheduling changes require confirmation",
+						"destructiveOnly": "Pausing, archiving, deleting, and external notifications require confirmation",
+						"highRisk": "High-risk, destructive, frequency-increase, and external notification changes require confirmation"
+					},
+					"approvalPolicy": "Approval policy: {{policy}}",
+					"budgetNote": "Budget: {{budget}}",
+					"guardrails": "Guardrails: {{guardrails}}",
+					"level": "Autonomy level: {{level}}",
+					"levels": {
+						"bounded": "Bounded autonomy",
+						"goalDriven": "Goal-driven",
+						"suggested": "Suggested only"
+					},
+					"limits": "Limits: up to {{maxWatchTasks}} active watch tasks, up to {{maxRunsPerDay}} runs per day"
+				},
+				"cardDomain": "Card domain: {{domain}}",
 				"cardId": "Card ID: {{cardId}}",
 				"cardLink": "Card link: {{cardLink}}",
 				"customTemplate": "Custom template: {{customTemplate}}",
 				"location": "Location: {{cardDir}}/",
+				"mode": "Mode: {{mode}}",
+				"modes": {
+					"observer": "AI Watch",
+					"scheduled": "Fixed plan"
+				},
 				"notificationChannels": {
 					"dingtalk": "DingTalk",
 					"lark": "Lark",
 					"wecom": "WeCom"
 				},
 				"notificationTargetLine": "{{channel}}: {{targetDescription}}",
+				"observerContract": "AI Watch contract: write the current observer state to state/signals.json, state/evidence.json, state/judgement.json, state/run-summary.json, state/observation-plan.json, and state/notification-log.json. The HTML output, such as state/index.html or a runs/{run_id}/ artifact, should visualize the same structured intelligence data.",
 				"schedule": {
 					"daily": "daily at {{time}}",
 					"default": "at {{time}}",
@@ -683,15 +799,19 @@
 				"sectionTitle": "━━━ {{title}} ━━━",
 				"sections": {
 					"analysisInstruction": "Analysis instructions",
+					"autonomyPolicy": "AI task permissions",
 					"cardData": "Card data",
 					"createRequirement": "Creation requirements",
 					"notificationTargets": "Notification targets"
 				},
 				"template": "Template: {{template}}",
 				"title": "Create an AI Card named \"{{cardName}}\".",
+				"titleScheduled": "Create a fixed-plan AI card named \"{{cardName}}\".",
 				"topicName": "[AI Card] {{cardName}}",
+				"topicNameScheduled": "[AI Card] {{cardName}}",
 				"update": {
 					"defaultScheduled": "Update mode: default scheduled updates",
+					"observerAutoPlan": "Schedule planning: choose the single next watch task that should run from the observation goal, then create one message_schedule task. Future runs should decide whether to add or adjust watch tasks.",
 					"once": "Update mode: one-time generation",
 					"scheduled": "Schedule: {{schedule}}{{enabledText}}"
 				}
@@ -700,21 +820,21 @@
 				"archived": "Archived",
 				"configure": "Configure",
 				"current": "Current",
-				"empty": "No card content yet, waiting for scheduled task to generate",
+				"empty": "No observation result yet. Waiting for the next run.",
 				"historyCount": "{{count}} versions",
 				"historyEmpty": "No history versions yet. Future automated updates will appear here.",
-				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full card.",
+				"historyPreviewDescription": "The dashboard shows only a summary; open it to load the full observation result.",
 				"historyPreviewTitle": "History snapshot",
 				"historySectionDescription": "Review archived versions by generation time.",
 				"historySectionTitle": "Version timeline",
 				"historyVersion": "🕰 History",
-				"latestSectionDescription": "The active card version. Open it to inspect the full result.",
+				"latestSectionDescription": "The active observation result. Open it to inspect the full result.",
 				"latestSectionTitle": "Latest version",
 				"latestVersion": "✨ Latest",
-				"loading": "Loading AI Cards...",
-				"loadingDescription": "Parsing card data",
+				"loading": "Loading AI Card...",
+				"loadingDescription": "Parsing observation data",
 				"modelSummary": "Model {{model}}",
-				"openHistoryVersion": "Open full version",
+				"openHistoryVersion": "Open full result",
 				"runNow": "Run Now",
 				"running": "Running...",
 				"scheduleCustom": "{{time}}",
@@ -739,21 +859,65 @@
 				"loadingCard": "Loading card",
 				"nextVersion": "Older version",
 				"nextVersionDisabled": "Already at earliest version",
-				"noContent": "No card content yet, waiting for next scheduled task",
+				"noContent": "No observation result yet, waiting for the next run",
 				"previousVersion": "Newer version",
 				"previousVersionDisabled": "Already at latest version"
 			},
 			"form": {
 				"advancedSettings": "Advanced Settings",
 				"aiPolish": "AI Polish",
+				"autonomy": {
+					"approvalPolicies": {
+						"allChanges": "Ask me before any change",
+						"destructiveOnly": "Ask before pause, archive, delete, or external notification",
+						"highRisk": "Ask before high-risk changes, frequency increases, deletion, or external notification"
+					},
+					"approvalPolicy": "Which changes need approval",
+					"budgetNote": "What to watch first",
+					"budgetPlaceholder": "e.g., Prioritize negative feedback and high-impact customers, up to 4 deep runs per day",
+					"description": "Set whether AI can adjust observation tasks automatically; it will ask first when a change is outside the allowed range.",
+					"guardrails": "What AI must not do automatically",
+					"guardrailsPlaceholder": "One rule per line, e.g.\nDo not auto-reply to users or close tickets\nAnonymize quoted user content\nExplain the reason and impact before escalation",
+					"levels": {
+						"bounded": {
+							"description": "Low-risk observation changes can run automatically; frequency increases and deletion ask first",
+							"title": "Auto low-risk changes"
+						},
+						"goalDriven": {
+							"description": "AI can optimize the plan toward the goal and ask first for high-impact or out-of-range changes",
+							"title": "Optimize toward goal"
+						},
+						"suggested": {
+							"description": "AI only lists suggestions and changes tasks after you confirm",
+							"title": "Suggest only, do not change"
+						}
+					},
+					"maxRunsPerDay": "Max runs per day",
+					"maxWatchTasks": "Max active watch items",
+					"title": "What AI can adjust"
+				},
 				"cardName": "Card Name",
-				"cardNamePlaceholder": "e.g., TikTok Trending, Daily Industry Digest",
+				"cardNamePlaceholder": "e.g., Competitor Radar, Trend Watch, Business Anomaly Watch",
 				"customTemplatePlaceholder": "Describe the card style and layout you want.\ne.g., Show a trend line chart on the left, a top-10 list on the right, with a dark theme.",
+				"errors": {
+					"projectRequired": "Select a valid project first."
+				},
+				"mode": "Run Mode",
+				"modes": {
+					"observer": {
+						"description": "Continuously watch signals, then generate judgement, evidence, work logs, and an observation plan",
+						"title": "AI Watch"
+					},
+					"scheduled": {
+						"description": "Update visual results on a fixed cadence, preserving the classic scheduled flow",
+						"title": "Fixed Plan"
+					}
+				},
 				"polishModel": "Polish Model",
-				"prompt": "Analysis Instructions",
-				"promptHint": "AI will periodically fetch latest data, analyze it, and update the visual card.",
-				"promptPlaceholder": "Tell AI what content to track and analyze.\ne.g., Search today's top 20 trending topics on TikTok, Weibo, and Xiaohongshu, analyze trends.",
-				"template": "Card Template",
+				"prompt": "Observation Goal",
+				"promptHint": "AI will fetch latest data around the observation goal, judge meaningful changes, and update the visual result.",
+				"promptPlaceholder": "Tell AI what to keep watching.\ne.g., Watch today's top 20 trends on TikTok, Weibo, and Xiaohongshu. Judge trend changes, opportunity windows, and suggested actions.",
+				"template": "Display Template",
 				"templateHint": "Choose a visual template, or select \"Custom\" and describe your requirements",
 				"templateOptions": {
 					"analyticsPanel": "Analytics Panel",
@@ -764,10 +928,11 @@
 				"voiceInput": "Voice Input"
 			},
 			"history": {
+				"artifactCount": "{{count}} artifacts",
 				"back": "Back",
 				"empty": "No history records",
 				"selectHint": "← Select a history version to view",
-				"title": "History"
+				"title": "{{cardName}} — History"
 			},
 			"notification": {
 				"channels": {
@@ -775,7 +940,7 @@
 					"lark": "Lark",
 					"wecom": "WeCom"
 				},
-				"description": "After a card is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
+				"description": "After an observation result is generated or updated successfully, send it to the described targets. This only stores targets, not platform credentials.",
 				"placeholders": {
 					"dingtalk": "e.g. Send to the Ops Daily group, or send to someone",
 					"lark": "e.g. Send to the Growth Daily group, or send to someone",
@@ -798,6 +963,301 @@
 				"error": "Failed to run, please try again later",
 				"success": "Task triggered successfully",
 				"successSwitched": "Task triggered, switched to the corresponding topic"
+			},
+			"scheduleDecisionMessage": {
+				"action": "Action: {{action}}",
+				"cardId": "Card ID: {{cardId}}",
+				"cardLink": "Card link: {{cardLink}}",
+				"cardName": "Card: {{cardName}}",
+				"cronDay": "Message schedule day: {{day}}",
+				"cronDeadline": "Message schedule deadline: {{deadline}}",
+				"cronEnabled": "Message schedule enabled: {{enabled}}",
+				"cronMessageContent": "Message schedule content: {{messageContent}}",
+				"cronScheduleId": "Message schedule ID: {{scheduleId}}",
+				"cronTaskName": "Message schedule task name: {{taskName}}",
+				"cronTime": "Message schedule time: {{time}}",
+				"cronType": "Message schedule type: {{type}}",
+				"decisionId": "Decision ID: {{decisionId}}",
+				"impact": "Impact: {{impact}}",
+				"instruction": "Load the ai-card-generator Skill, then call apply_ai_card_schedule_decision for this confirmed scheduleDecisions item. Execute it only once. If autonomy_config, permissions, risk, or missing parameters prevent execution, explain the skipped step, the risk, and the safest alternative.",
+				"previousCadence": "Previous cadence: {{previousCadence}}",
+				"proposedCadence": "Proposed cadence: {{proposedCadence}}",
+				"reason": "Reason: {{reason}}",
+				"scheduleCommand": "Schedule command: {{command}}",
+				"scheduleId": "Schedule ID: {{scheduleId}}",
+				"sections": {
+					"context": "Context",
+					"decision": "Schedule decision",
+					"instruction": "Instruction"
+				},
+				"targetTask": "Target task: {{targetTask}}",
+				"title": "Apply the AI Card schedule decision for \"{{cardName}}\"."
+			},
+			"signalDesk": {
+				"accepted": "Accepted",
+				"actionQueue": "Action Queue",
+				"actionTypes": {
+					"action": "Suggested action",
+					"createTask": "Create task",
+					"deepDive": "Deep dive",
+					"feedback": "Feedback",
+					"generateDoc": "Generate doc",
+					"notify": "Set notification",
+					"typeLabel": "Type: {{type}}",
+					"watch": "Keep watching"
+				},
+				"aiStrategy": "AI Strategy",
+				"autonomousLoop": "Watching continuously",
+				"autonomyLevel": "AI task permissions",
+				"autonomyLevels": {
+					"bounded": "Auto low-risk changes",
+					"configured": "Follow config",
+					"fixed": "Fixed Plan",
+					"goal_driven": "Auto-adjust toward goal",
+					"suggested": "Suggestions only"
+				},
+				"categories": {
+					"action": "Action",
+					"competitor": "Competitor",
+					"feedback": "Feedback",
+					"opportunity": "Opportunity",
+					"risk": "Risk",
+					"trend": "Trend"
+				},
+				"change": "Change",
+				"changeLabels": {
+					"disappeared": "Disappeared",
+					"new": "First seen",
+					"repeated": "Still appearing",
+					"reversed": "Reversed",
+					"updated": "Updated"
+				},
+				"confidenceLabels": {
+					"high": "High trust",
+					"low": "Low trust",
+					"medium": "Medium trust"
+				},
+				"confirmDecision": "Apply Decision",
+				"currentSignals": "New signals",
+				"decisionQueue": "Schedule Decisions",
+				"decisionSent": "Decision sent. AI will apply it within the autonomy boundary or explain why it was skipped.",
+				"defaultGoal": "Keep watching meaningful changes",
+				"defaultGuardrails": "Follow the current task config. Confirm high-risk changes in Task Overview.",
+				"defaultScope": "Pricing pages / official posts / hiring / social media / industry media",
+				"editStrategy": "Edit Strategy",
+				"empty": {
+					"actionQueue": "No actions to review",
+					"description": "Run once to generate signals, evidence, judgement, and an observation plan.",
+					"filteredSignals": "No signals match this filter",
+					"judgement": "Judgement",
+					"noSchedule": "Configure a schedule or bind a runnable task first.",
+					"notificationStrategy": "No notification strategy yet",
+					"notificationStrategyDescription": "This run has not written displayable notification rules.",
+					"observationPlan": "Observation plan",
+					"signalList": "No signals yet",
+					"signals": "Signal list",
+					"title": "No observation result yet"
+				},
+				"evidence": "Evidence",
+				"evidenceCount": "Evidence · {{count}}",
+				"evidenceDrawer": {
+					"title": "Evidence details"
+				},
+				"eyebrow": "AI Card",
+				"filtered": "Filtered",
+				"filters": {
+					"all": "All",
+					"cooling": "Less attention",
+					"new": "New",
+					"rising": "More attention"
+				},
+				"finishedAt": "Finished",
+				"goalPrefix": "Goal: ",
+				"heroDescriptionJoiner": " and ",
+				"heroDescriptionPrefix": ". Only notify ",
+				"heroDescriptionSuffix": ".",
+				"heroTitleFirst": "Let AI",
+				"heroTitleSecond": "keep watching one question",
+				"historyNarrative": "Signal History",
+				"historyRecords": "History",
+				"impact": "Impact",
+				"impactAndSuggestion": "Impact and suggestion",
+				"impactScore": "Impact Score",
+				"importance": "Importance",
+				"importantChanges": "important changes",
+				"intelCore": "Intel core",
+				"keyPoints": "Key points",
+				"lastScan": "Last scan",
+				"lowTrustWarning": "Low-trust signal. Check more sources before acting.",
+				"manualTask": {
+					"message": "Task instructions",
+					"messagePlaceholder": "Describe what this scheduled task should watch and update each time.",
+					"name": "Task name",
+					"namePlaceholder": "AI Card: Competitor hiring watch",
+					"reason": "Reason",
+					"reasonPlaceholder": "Why this watch task should exist separately.",
+					"schedule": "Schedule",
+					"submit": "Send to Agent",
+					"title": "Add watch task manually"
+				},
+				"mode": "Mode",
+				"mustKnow": "Must know",
+				"needsDecision": "Decision needed",
+				"needsHumanDecision": "Human decision needed",
+				"nextActions": "next actions",
+				"nextRun": "Next run",
+				"nextRunWithTime": "Next run: {{time}}",
+				"nextStep": "Next step",
+				"noEvidence": "No evidence",
+				"noImportantNotification": "No important change notification yet.",
+				"noJudgement": "Waiting",
+				"noKeyChanges": "No key changes yet",
+				"noLinkedEvidence": "No linked evidence",
+				"noObservationPlanSummary": "Waiting for AI to generate an observation plan summary.",
+				"noSignal": "Select signal",
+				"none": "None",
+				"notification": "Notification",
+				"notificationDelivered": "Notification delivered",
+				"notificationDeliveredDefault": "Observation result delivered",
+				"notificationLog": "Notification Log",
+				"notificationOnlyHighValue": "Only high-value updates trigger alerts.",
+				"notificationPreview": "Notification preview",
+				"notificationRule": "Rule",
+				"notificationStrategy": "Notification Strategy",
+				"observationGuardrails": "Observation limits",
+				"observationPlan": "Observation Plan",
+				"observationScope": "Scope",
+				"ongoingObservation": "Ongoing observation",
+				"openCard": "Full Result",
+				"openSource": "Open source",
+				"pendingActionCount": "{{count}} to review",
+				"pendingActions": "Suggested actions",
+				"phaseStatus": {
+					"failed": "Failed",
+					"partial": "Partial",
+					"running": "Running",
+					"success": "Done"
+				},
+				"phases": "Run Steps",
+				"publishedAt": "Published {{time}}",
+				"quietHours": "Quiet hours",
+				"ready": "Ready",
+				"recommendedActions": "Suggested actions",
+				"requiresConfirmation": "Confirm",
+				"reviewPlan": "Check Config",
+				"run": "Run",
+				"runStatus": {
+					"failed": "Run failed",
+					"running": "Observing",
+					"watching": "Watching"
+				},
+				"runSummaryDescription": "AI scanned {{scanned}} sources, used {{accepted}}, filtered {{filtered}}, and found {{signals}} signals.",
+				"runSummaryEmpty": "No run stats yet. Source handling will appear after the next observation run.",
+				"runSummarySources": "Source handling: scanned {{scanned}} · used {{accepted}} · filtered {{filtered}}",
+				"runSummaryTitle": "This run",
+				"scanProcess": "Scan process",
+				"scanned": "Scanned",
+				"scheduleSuggestionCount": "{{count}} schedule suggestions",
+				"scheduleSuggestions": "Schedule suggestions",
+				"signalMap": "Signal Map",
+				"signalMapCanvas": {
+					"fit": "Fit view",
+					"grabHint": "Drag to move · scroll to zoom",
+					"reset": "Reset view",
+					"zoomIn": "Zoom in",
+					"zoomOut": "Zoom out"
+				},
+				"signalMapCountHint": "{{count}} signals · draggable canvas · compact when zoomed out",
+				"signalMapHint": "Grouped by type, importance, and status.",
+				"signalMapViews": {
+					"list": "List",
+					"map": "Map"
+				},
+				"signals": "Signals",
+				"taskOverview": {
+					"actions": {
+						"create": "New task",
+						"delete": "Delete task",
+						"pause": "Pause task",
+						"update": "Update task"
+					},
+					"addManualTask": "Add task manually",
+					"confirm": {
+						"create": "Confirm setup",
+						"delete": "Confirm delete",
+						"pause": "Confirm pause",
+						"update": "Confirm change"
+					},
+					"currentTasks": "Current tasks",
+					"emptyPendingAdjustments": "No pending changes",
+					"emptyTasks": "No assigned tasks",
+					"expiresAt": "Expires",
+					"lastDecision": "Last decision",
+					"mainTask": "Primary watch task",
+					"mainTaskSource": "Primary task",
+					"menu": {
+						"delete": "Delete task",
+						"edit": "Edit task",
+						"records": "Run records",
+						"runNow": "Run now"
+					},
+					"nextRun": "Next run",
+					"noCadence": "No cadence set",
+					"pendingAdjustments": "Pending changes",
+					"pendingCount": "{{count}} pending",
+					"schedule": {
+						"daily": "Daily {{time}}",
+						"monthly": "Monthly day {{day}} {{time}}",
+						"weekly": "Weekly {{day}} {{time}}"
+					},
+					"status": {
+						"accelerated": "Accelerated",
+						"active": "Active",
+						"archived": "Archived",
+						"error": "Error",
+						"paused": "Paused",
+						"pending": "Pending"
+					},
+					"taskCount": "{{count}} tasks",
+					"taskId": "Task ID",
+					"title": "Task Overview"
+				},
+				"todayFocus": "TODAY'S FOCUS",
+				"todayJudgement": "Today's Judgement",
+				"trust": "Trust",
+				"unread": "Unread",
+				"velocityLabels": {
+					"cooling": "Less attention",
+					"new": "New",
+					"resolved": "Resolved",
+					"rising": "More attention",
+					"stable": "Stable"
+				},
+				"viewFullReport": "View full report",
+				"waitingImpact": "Waiting for AI to assess impact.",
+				"waitingJudgement": "Waiting for the next run to generate judgement",
+				"waitingNotificationStrategy": "Waiting for notification strategy",
+				"watchTaskCount": "{{count}} watch tasks",
+				"watchTasks": "Watch tasks",
+				"workLog": "AI Work Log"
+			},
+			"supplementInput": {
+				"file": "File",
+				"hint": "Add a question, direction, or material for the AI Card to handle",
+				"mention": "Mention",
+				"placeholder": "What else would you like to ask? Add a question, direction, or file",
+				"send": "Send",
+				"sent": "Sent to AI Card",
+				"title": "Ask a follow-up"
+			},
+			"supplementMessage": {
+				"currentGoal": "Current goal:",
+				"instruction": "Use the ai-card-generator Skill before acting. Treat the user's content as supplemental input for the current AI Card. Answer the question first. Then, within this AI card's scope, update the observation goal, scope, guardrails, watch tasks, schedules, notification strategy, current state, or generated card when the supplement justifies it. Respect autonomy_config and risk rules. Execute allowed low-risk changes directly; write scheduleDecisions for changes that require approval, exceed policy, or need user confirmation.",
+				"projectPath": "Project path: {{path}}",
+				"sections": {
+					"userInput": "User input"
+				},
+				"title": "Update the AI Card \"{{cardName}}\" with this supplemental question."
 			},
 			"tile": {
 				"history": "History",
@@ -989,7 +1449,7 @@
 			},
 			"home": {
 				"aiCard": "AI Card",
-				"aiCardCount": "{{count}} AI card(s)",
+				"aiCardCount": "{{count}} AI Cards",
 				"archivePost": "Pause publishing",
 				"archivePostSuccess": "Article paused for publishing",
 				"article": "Article",
@@ -1827,6 +2287,10 @@
 			"editorRenderError": "Markdown Render Error"
 		}
 	},
+	"export": {
+		"generatedBy": "Generated by {{platformName}}",
+		"platformFallback": "Platform"
+	},
 	"fileTree": {
 		"collapseAll": "Collapse All",
 		"empty": "No files",
@@ -2284,12 +2748,14 @@
 		},
 		"permissionAuthorizationConfirm": {
 			"allow": "Allow",
-			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} through the legacy flow. This only applies briefly in the current tab.",
+			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} under the legacy short-term authorization policy.",
 			"content": "\"{{appName}}\" requests permission to use: {{scope}}. Purpose: {{reason}}",
 			"contentWithoutReason": "\"{{appName}}\" requests permission to use: {{scope}}. This app did not provide a purpose.",
 			"deny": "Deny",
-			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}}. This only applies briefly in the current tab.",
+			"durationLabel": "Choose how long this authorization remains valid",
+			"legacyContent": "This HTML micro-app has no permission declaration and requests permission to use: {{scope}} under the legacy short-term authorization policy.",
 			"missingScope": "\"{{appName}}\" did not declare \"{{scope}}\" ({{rawScope}}) in app.json permissions.scopes. The request was denied.",
+			"scopeSeparator": ", ",
 			"scopes": {
 				"fsProjectRead": "Read project files outside the app directory",
 				"fsProjectWrite": "Modify project files outside the app directory",
@@ -2306,14 +2772,73 @@
 				"10m": "10 minutes",
 				"12h": "12 hours",
 				"15m": "15 minutes",
+				"1d": "1 day",
 				"2h": "2 hours",
+				"30d": "30 days",
 				"30m": "30 minutes",
 				"4h": "4 hours",
 				"5m": "5 minutes",
 				"60m": "1 hour",
+				"7d": "7 days",
 				"8h": "8 hours",
+				"always": "Always allow",
 				"once": "This operation"
 			}
+		},
+		"permissionManager": {
+			"alwaysValid": "Always valid",
+			"appRoot": "App directory",
+			"askWhenUsed": "Authorize now, or decide when the app uses this capability.",
+			"authorize": "Authorize",
+			"authorizeFailed": "Failed to authorize",
+			"authorizeSuccess": "Authorized",
+			"currentTab": "Saved in this browser",
+			"declared": "Declared",
+			"declaredCount": "{{count}} declared",
+			"defaultAppName": "HTML micro-app",
+			"description": "Review the permissions declared by this HTML app and the authorizations saved in this browser.",
+			"diagnostics": {
+				"manifestAbsent": "No app.json was found. This app uses the legacy short-term authorization flow.",
+				"manifestLoadError": "app.json could not be loaded. This app uses the legacy short-term authorization flow: {{error}}",
+				"scopeDuplicate": "Permission is declared more than once: {{scope}}",
+				"scopeInvalid": "permissions.scopes contains a non-string value, which was ignored.",
+				"scopeUnsupported": "This host does not support the permission: {{scope}}",
+				"scopesInvalid": "permissions.scopes must be an array of strings."
+			},
+			"diagnosticsTitle": "Permission declaration needs attention",
+			"durationLabel": "Validity from now",
+			"durationSelect": "Adjust the authorization duration for {{scope}}",
+			"entry": "Entry file",
+			"expiresAt": "Valid until {{time}} ({{remaining}})",
+			"granted": "Granted",
+			"grantedAt": "Granted at {{time}}",
+			"grantedCount": "{{count}} granted",
+			"loadFailed": "Failed to load authorization information",
+			"noActivePermissions": "There are no saved authorizations.",
+			"noDeclaredPermissions": "app.json does not declare any manageable permissions.",
+			"noReason": "The app did not provide a purpose.",
+			"notDeclared": "Not declared",
+			"notGranted": "Not granted",
+			"open": "Authorization",
+			"permissionsTitle": "Permissions",
+			"remainingDays": "{{count}} days remaining",
+			"remainingExpired": "Expired",
+			"remainingHours": "{{count}} hours remaining",
+			"remainingLessThanMinute": "Less than 1 minute remaining",
+			"remainingMinutes": "{{count}} minutes remaining",
+			"revoke": "Revoke",
+			"revokeAll": "Revoke all",
+			"revokeAllSuccess": "All authorizations for this app were revoked",
+			"revokeFailed": "Failed to revoke authorization",
+			"revokeNote": "Revocation only affects future calls. Data already read by the app and requests already in progress are not deleted or stopped automatically.",
+			"revokeNoteTitle": "What revocation changes",
+			"revokeSuccess": "Authorization revoked",
+			"title": "HTML App Authorization",
+			"unsupported": "Unsupported",
+			"updateDuration": "Update",
+			"updateDurationFailed": "Failed to update authorization duration",
+			"updateDurationSuccess": "Authorization duration updated",
+			"version": "App version"
 		},
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
@@ -2338,6 +2863,12 @@
 			"contentWithoutReason": "\"{{appName}}\" requests access to: {{fields}}. This app did not provide a purpose.",
 			"deny": "Deny",
 			"fieldSeparator": ", ",
+			"fields": {
+				"identity": "user ID and Magic ID",
+				"name": "nickname and real name",
+				"organization": "organization code"
+			},
+			"legacyContent": "This HTML micro-app has no permission declaration and requests access to: {{fields}} under the legacy short-term authorization policy.",
 			"title": "Authorize User Info Access"
 		}
 	},
@@ -2474,7 +3005,7 @@
 			"remainingTitle": "{{count}} remaining",
 			"title": "Mentions"
 		},
-		"modeNotAvailableMessage": "Current mode is not available, please create a \"New Topic\" and select an available mode to continue",
+		"modeNotAvailableMessage": "Current crew is not available, please create a \"New Topic\" and select an available crew to continue",
 		"modelSwitch": {
 			"autoModelDescription": "Auto mode automatically selects the most efficient AI model for the current task, suitable for handling most regular tasks with moderate credit consumption.",
 			"collapseDescription": "Collapse model description",
@@ -2598,6 +3129,464 @@
 	"messageRenderError": {
 		"retry": "Retry",
 		"title": "This message is temporarily unavailable"
+	},
+	"microAppPage": {
+		"conversation": {
+			"emptyDescription": "Describe it and I’ll update this micro app.",
+			"emptyTitle": "What would you like to change?"
+		},
+		"databasePanel": {
+			"accessPermissions": "Access permissions",
+			"addFilterCondition": "Add condition",
+			"applyFilters": "Apply",
+			"backToData": "Back to data",
+			"clearFilters": "Clear filters",
+			"collapseTableList": "Collapse table list",
+			"columnKey": "Column key",
+			"columnName": "Column name",
+			"columnPermission": "Column permissions",
+			"columns": "columns",
+			"contextMenu": {
+				"clearSelection": "Clear selection",
+				"columnPermission": "Set column permissions",
+				"deleteRows": "Delete selected rows",
+				"editRow": "Edit row",
+				"rowPermission": "Set row permissions",
+				"tablePermission": "Set table permissions"
+			},
+			"dataSettings": "Data settings",
+			"dataTab": "Data",
+			"dataType": "Type",
+			"description": "View and manage the data created while this micro app runs, just like a spreadsheet.",
+			"dismissIntro": "Dismiss data guide",
+			"dynamicAction": {
+				"rowDelete": "Delete rows",
+				"rowDeleteDescription": "Controls which rows a user may delete",
+				"rowEdit": "Edit rows",
+				"rowEditDescription": "Controls which rows a user may modify",
+				"rowRead": "Read rows",
+				"rowReadDescription": "Controls which rows a user may view",
+				"tableInsert": "Insert rows",
+				"tableInsertDescription": "Controls who may submit data to this table",
+				"tableRead": "Access table",
+				"tableReadDescription": "Controls who may read this table"
+			},
+			"dynamicAdminNotice": "Project editors, managers, and owners are data administrators who may read, edit, and delete all rows. Only managers and owners may change these permissions.",
+			"dynamicColumnCount": "{{total}} dynamic columns",
+			"dynamicColumnSection": "Column permissions",
+			"dynamicContinueEditing": "Continue editing",
+			"dynamicDescription": "Dynamic permissions evaluate the row creator, department, or organization at request time and form the default data boundary for ordinary users.",
+			"dynamicDiscardChanges": "Discard changes",
+			"dynamicEdit": "Edit dynamic permissions",
+			"dynamicPermissions": "Dynamic permissions",
+			"dynamicPermissionsHint": "Define default access scopes",
+			"dynamicRowSection": "Row permissions",
+			"dynamicSave": "Save configuration",
+			"dynamicSaveFailed": "Failed to save dynamic permissions",
+			"dynamicSaveSuccess": "Dynamic permissions updated",
+			"dynamicScope": {
+				"disabled": "Disabled",
+				"private_department": "Creator department",
+				"private_org": "Creator organization",
+				"private_user": "Creator only",
+				"public": "All authorized users"
+			},
+			"dynamicSystemFields": "{{total}} system fields are maintained automatically and are not configurable here.",
+			"dynamicTableSection": "Table permissions",
+			"dynamicTitle": "Dynamic permission configuration",
+			"dynamicUnsavedDescription": "The permission configuration has unsaved changes. Closing the panel will discard them.",
+			"dynamicUnsavedTitle": "Unsaved permission changes",
+			"editorTarget": "Targets: {{total}}",
+			"editorTitle": {
+				"column": "Set column permissions",
+				"row": "Set row permissions",
+				"table": "Set table permissions"
+			},
+			"expandTableList": "Expand table list",
+			"fieldSettings": "Field settings",
+			"filterCount": "{{total}} conditions",
+			"filterData": "Filter",
+			"filterField": "Choose field",
+			"filterHint": "Combine field conditions. Contains search requires at least 2 characters.",
+			"filterListValuePlaceholder": "Separate multiple values with commas",
+			"filterMatchAll": "Match all conditions",
+			"filterMatchAllSummary": "Match all",
+			"filterMatchAny": "Match any condition",
+			"filterMatchAnySummary": "Match any",
+			"filterMatchMode": "Match mode",
+			"filterOperator": "Operator",
+			"filterOperatorContains": "contains",
+			"filterOperatorEq": "equals",
+			"filterOperatorGt": "greater than",
+			"filterOperatorGte": "greater than or equal",
+			"filterOperatorIn": "is any of",
+			"filterOperatorLt": "less than",
+			"filterOperatorLte": "less than or equal",
+			"filterTitle": "Filter data",
+			"filterValue": "Filter value",
+			"filterValuePlaceholder": "Enter a value",
+			"intro": "Each data table stores one type of data, and each row is one record.",
+			"loadProgress": "{{loaded}} / {{total}} records loaded. Scroll down for more.",
+			"loadProgressUnknown": "{{loaded}} records loaded. Scroll down for more.",
+			"loadRowsFailed": "Failed to load rows",
+			"loadTableFailed": "Failed to load table schema",
+			"loadTablesFailed": "Failed to load tables",
+			"loadedAll": "All {{total}} records loaded",
+			"loadedRows": "{{total}} loaded",
+			"loading": "Loading",
+			"loadingMore": "Loading more data",
+			"loadingTable": "Loading table",
+			"next": "Next",
+			"no": "No",
+			"noColumns": "No columns",
+			"noMatchedTables": "No matching tables",
+			"noRows": "No rows",
+			"noTables": "No tables",
+			"pageInfo": "Page {{page}} / {{totalPages}}",
+			"permission": "Permission",
+			"permissionAction": {
+				"delete": "Delete",
+				"edit": "Edit",
+				"read": "Read"
+			},
+			"permissionAddSubject": "Add",
+			"permissionCurrent": "Current grants",
+			"permissionCurrentEmpty": "No user or department grants for this target",
+			"permissionDelete": "Delete permission",
+			"permissionDeleteFailed": "Failed to delete permission",
+			"permissionDeleteSuccess": "Permission deleted",
+			"permissionEmpty": "Select permissions to save",
+			"permissionEmptyList": "No static permissions",
+			"permissionExisting": "Existing static permissions",
+			"permissionGrant": "New grant",
+			"permissionGrantDescription": "Choose a subject and allowed actions",
+			"permissionLevel": {
+				"insert": "Insert",
+				"manage": "Manage",
+				"read": "Read"
+			},
+			"permissionNoDynamicColumns": "No dynamic columns in selection",
+			"permissionRemoveSubject": "Remove subject",
+			"permissionSave": "Save permissions",
+			"permissionSaveFailed": "Failed to save permissions",
+			"permissionSaveSuccess": "Permissions saved",
+			"permissionSelectSubject": "Select user/department",
+			"permissionSelectSubjectFailed": "Select a matching subject",
+			"permissionSubject": "Subject",
+			"permissionSubjectCount": "{{total}} selected",
+			"permissionSubjectEmpty": "Add users or departments to grant access",
+			"permissionSubjectRequired": "Select a subject",
+			"permissionType": {
+				"column": "Column",
+				"row": "Row",
+				"table": "Table"
+			},
+			"permissionUnknownDepartment": "Unknown department",
+			"permissionUnknownUser": "Unknown user",
+			"permissionsTab": "Access permissions",
+			"previous": "Previous",
+			"refresh": "Refresh",
+			"removeFilterCondition": "Remove filter condition",
+			"required": "Required",
+			"retry": "Retry",
+			"rowCreate": "Add data",
+			"rowCreateFailed": "Failed to create row",
+			"rowCreateSuccess": "Row created",
+			"rowCreateTitle": "Add data",
+			"rowDelete": "Delete",
+			"rowDeleteConfirm": "Delete",
+			"rowDeleteDescription": "Delete the selected {{total}} rows. This cannot be restored from this panel.",
+			"rowDeleteFailed": "Failed to delete rows",
+			"rowDeleteSuccess": "Deleted {{total}} rows",
+			"rowDeleteTitle": "Delete selected rows",
+			"rowEdit": "Edit",
+			"rowEditTitle": "Edit data",
+			"rowFieldRequired": "{{field}} is required",
+			"rowJsonInvalid": "{{field}} is not valid JSON",
+			"rowNoEditableColumns": "This table has no editable dynamic columns",
+			"rowPermission": "Row permissions",
+			"rowSave": "Save",
+			"rowUpdateFailed": "Failed to update row",
+			"rowUpdateSuccess": "Row updated",
+			"schemaField": "Schema field",
+			"searchTables": "Search tables",
+			"selectCurrentPage": "Select current page",
+			"selectRow": "Select row",
+			"selectedRows": "{{total}} selected",
+			"showSystemFields": "Show system fields",
+			"source": "Source",
+			"staticPermissions": "Static grants",
+			"staticPermissionsHint": "Add permissions for selected users or departments",
+			"status": "Status",
+			"structureTab": "Field settings",
+			"subjectAnonymous": "Anonymous visitor",
+			"subjectType": {
+				"anonymous": "Anonymous",
+				"department": "Department",
+				"organization": "Organization",
+				"user": "User"
+			},
+			"systemField": "System field",
+			"systemFieldName": {
+				"createdAt": "Created at",
+				"createdBy": "Created by",
+				"id": "Record ID",
+				"organizationCode": "Organization code",
+				"updatedAt": "Updated at"
+			},
+			"tableCount": "{{total}} tables",
+			"tableListTitle": "Data tables",
+			"tablePermission": "Table permissions",
+			"title": "App data",
+			"totalRows": "{{total}} records",
+			"yes": "Yes"
+		},
+		"edit": {
+			"button": "Edit micro app details",
+			"captureCover": "Generate page cover",
+			"captureFailed": "Failed to capture the cover. Please retry.",
+			"captureSuccess": "Cover generated from the micro app home page",
+			"capturing": "Capturing",
+			"clearCover": "Remove cover",
+			"coverDescription": "Upload or paste an image. A 16:10 landscape image works best.",
+			"coverEmpty": "No cover set",
+			"coverInvalidType": "Select an image file",
+			"coverLabel": "Micro app cover",
+			"coverPreviewAlt": "Micro app cover preview",
+			"coverTooLarge": "The cover image cannot exceed 10 MB",
+			"coverUploadFailed": "Failed to upload the cover. Please retry.",
+			"description": "Change the name and cover shown in the micro app list and share page.",
+			"failed": "Failed to save micro app details. Please retry.",
+			"loadFailed": "Failed to load micro app details. Please retry.",
+			"nameLabel": "Micro app name",
+			"namePlaceholder": "Enter a micro app name",
+			"success": "Micro app details updated",
+			"title": "Edit micro app details",
+			"uploadCover": "Upload image",
+			"uploading": "Uploading"
+		},
+		"errors": {
+			"loadDescription": "This page is temporarily unavailable. Return to the micro app list and try opening it again.",
+			"loadFailed": "Unable to load this micro app. Please try again later.",
+			"permissionDescription": "You may not have access to this project, or its sharing settings may have changed. Return to the list to view available micro apps.",
+			"permissionTitle": "You can’t access this micro app"
+		},
+		"header": {
+			"backToApps": "Back to micro apps",
+			"codeFiles": "Code files",
+			"entryLabel": "Entry",
+			"entryPlaceholder": "Select entry HTML",
+			"hideConversation": "Hide conversation",
+			"hideDatabase": "Hide database",
+			"hideFiles": "Hide files",
+			"showConversation": "Show conversation",
+			"showDatabase": "Show database",
+			"showFiles": "Show files"
+		},
+		"issuePrompts": {
+			"empty": "No matching issue found. Try another keyword.",
+			"featured": "Common issues",
+			"searchPlaceholder": "Search what you are seeing",
+			"subtitle": "Choose what you see and AI will inspect the cause and prepare a fix.",
+			"title": "Common issues",
+			"trigger": "Common issues"
+		},
+		"loading": {
+			"description": "Loading the page and project data",
+			"title": "Opening micro app"
+		},
+		"mobileConversation": {
+			"noTopics": "There are no topics available in this project.",
+			"open": "Open conversation",
+			"switchTopic": "Tap to switch topics",
+			"title": "Micro app conversation",
+			"topicCount": "{{count}} topics"
+		},
+		"mobileDatabase": {
+			"backToTables": "Back to tables",
+			"readOnlyHint": "Mobile currently supports viewing data, structure, and permission summaries. Use desktop to create or edit rows and configure permissions."
+		},
+		"mobileTabs": {
+			"ariaLabel": "Micro app page",
+			"conversation": "Chat",
+			"files": "Files",
+			"preview": "Preview"
+		},
+		"navigation": {
+			"ariaLabel": "Micro app editor",
+			"database": "Data",
+			"files": "Files",
+			"longMemory": "Long-term memory",
+			"preview": "Preview",
+			"scheduledTasks": "Scheduled tasks",
+			"shareManagement": "Share management"
+		},
+		"preview": {
+			"buildingDescription": "The preview will appear here as soon as the page is ready.",
+			"buildingTitle": "Building your micro app",
+			"emptyDescription": "Add an HTML file to the project root, or select an entry file in the header.",
+			"emptyTitle": "No entry HTML found"
+		},
+		"previewDialog": {
+			"description": "File preview dialog",
+			"title": "File preview"
+		},
+		"previewMode": {
+			"default": "Default preview",
+			"phone": "Phone preview",
+			"source": "Source preview"
+		},
+		"previewToolbar": {
+			"address": "Current preview address",
+			"aiEdit": "AI Edit",
+			"desktop": "Desktop preview",
+			"disableDebug": "Disable debugging",
+			"enableDebug": "Enable debugging",
+			"exitFullscreen": "Exit fullscreen",
+			"fullscreen": "Fullscreen preview",
+			"more": "More",
+			"noHtml": "No previewable HTML files",
+			"phone": "Mobile preview",
+			"refresh": "Refresh preview",
+			"title": "Preview"
+		},
+		"publish": {
+			"button": "Publish",
+			"buttonTooltip": "Publish for others to use",
+			"copyLink": "Copy link",
+			"copyShareText": "Copy share text",
+			"copySuccess": "Link copied",
+			"cover": "App cover",
+			"coverClear": "Clear cover",
+			"coverDescription": "Upload or paste an image. A 16:10 landscape image works best.",
+			"coverEmpty": "No cover set",
+			"coverInvalidType": "Only image files can be uploaded",
+			"coverSet": "Cover set",
+			"coverTooLarge": "Cover image must be 10 MB or smaller",
+			"coverUpload": "Upload cover",
+			"coverUploadFailed": "Cover upload failed. Please try again.",
+			"description": "After you configure access, others can use this micro app through the published link.",
+			"loadFailed": "Failed to load publish settings",
+			"password": "Access password",
+			"passwordHint": "Password must be 4-32 characters.",
+			"passwordInvalid": "Password must be 4-32 characters",
+			"projectName": "Micro app name",
+			"projectNameRequired": "Enter a micro app name",
+			"projectNameTooLong": "Micro app name cannot exceed 100 characters",
+			"publish": "Publish",
+			"published": "Published",
+			"publishedAt": "Published at: {{time}}",
+			"quickShareDescription": "Copy the link to send it directly; password-protected links include the password automatically. Share text also includes the app name, access link, and password when required.",
+			"quickShareTitle": "Quick share",
+			"resetPassword": "Reset password",
+			"saveFailed": "Failed to publish. Please retry.",
+			"saveSuccess": "Publish settings saved",
+			"settingsChanged": "Settings have changed. Save them again before copying.",
+			"shareTextAccessHint": "Open the link below to access it:",
+			"shareTextCopySuccess": "Share text copied",
+			"shareTextPassword": "Password: {{password}}",
+			"shareTextPasswordUnavailable": "Could not load the current access password. Refresh and try again, or reset the password.",
+			"shareTextTitle": "You're invited to use the micro app “{{projectName}}”",
+			"title": "Publish micro app",
+			"unpublish": "Unpublish",
+			"unpublishConfirmContent": "After unpublishing, others can no longer use this micro app through the published link.",
+			"unpublishConfirmTitle": "Unpublish this micro app?",
+			"unpublishFailed": "Failed to unpublish. Please retry.",
+			"unpublishSuccess": "Micro app unpublished",
+			"update": "Save settings"
+		}
+	},
+	"microAppShare": {
+		"errorTitle": "Micro app unavailable",
+		"login": "Log in",
+		"noEntryDescription": "The published content does not include a runnable root HTML file.",
+		"noEntryTitle": "No entry HTML found",
+		"organization": "Switch organization",
+		"passwordDescription": "Enter the access password set by the publisher.",
+		"passwordTitle": "Open micro app",
+		"safetyAppLabel": "You are about to open",
+		"safetyContinue": "I understand, continue",
+		"safetyCoverAlt": "Cover image for {{appName}}",
+		"safetyDescription": "This micro app was published by a user. The platform cannot guarantee that its content, links, or actions are safe. Continue only if you trust the source.",
+		"safetyDisclaimer": "Continuing does not mean the platform has verified this micro app as safe.",
+		"safetyEyebrow": "Safety reminder",
+		"safetyLeave": "Do not open",
+		"safetyPermissions": "Be cautious when granting camera, microphone, or location access, or when downloading and installing files.",
+		"safetySensitiveData": "Watch for fake login pages. Do not enter passwords, verification codes, or payment details.",
+		"safetyTitle": "Check this micro app carefully",
+		"safetyVerifyPublisher": "If you see payment requests, login prompts, or unexpected redirects, leave and verify with the publisher.",
+		"safetyWarningTitle": "Before you continue",
+		"title": "Micro app",
+		"user": "Signed-in user"
+	},
+	"microAppsPage": {
+		"actions": {
+			"deleteApp": "Delete app",
+			"deleteDescription": "“{{name}}” and its project will be moved to the recycle bin and can be restored within 30 days.",
+			"deleteFailed": "Failed to delete the app. Please retry.",
+			"deleteSuccess": "App moved to the recycle bin",
+			"deleteTitle": "Delete app",
+			"deleting": "Deleting...",
+			"more": "More actions",
+			"openInNewWindow": "Open in new window",
+			"rename": "Rename",
+			"renameDescription": "Change the name shown in the micro app list and detail page.",
+			"renameFailed": "Failed to rename the app. Please retry.",
+			"renamePlaceholder": "Enter an app name",
+			"renameSuccess": "App name updated",
+			"renameTitle": "Rename app",
+			"renaming": "Saving..."
+		},
+		"backToCreate": "Back to create a micro app",
+		"createProject": "New Project",
+		"createProjectFailed": "Failed to create the project. Please retry.",
+		"draftBadge": "In progress",
+		"emptyDescription": "Describe your idea above to create your first micro app.",
+		"emptyTitle": "No micro app projects",
+		"errorDescription": "Failed to load the project list. Please retry.",
+		"errorTitle": "Load failed",
+		"galleryDescription": "Continue building your projects or open apps that have been published.",
+		"galleryTitle": "App space",
+		"heroCapabilityAgent": "Agent",
+		"heroCapabilityData": "Database",
+		"heroCapabilityMcp": "MCP",
+		"heroCapabilityProduct": "Micro App",
+		"heroCapabilitySkill": "Skill",
+		"heroDescription": "Read files, use databases, and connect to more apps.",
+		"heroDescriptionMobile": "Read files, use databases, and connect to more apps.",
+		"heroPlaceholder": "For example: Build a customer follow-up dashboard for a sales team with stages, owners, and next-contact dates...",
+		"heroPromptAccept": "Accept",
+		"heroPromptApply": "Fill the input with this example",
+		"heroPromptSwitch": "Switch example",
+		"heroTitle": "Turn a single prompt into a ready-to-use Micro App",
+		"heroTitleBetween": "into a ready-to-use",
+		"heroTitlePrefix": "Turn a single prompt",
+		"heroTitleProduct": "Micro App",
+		"heroTitleProductHint": "",
+		"loadMore": "Load more",
+		"noSearchResults": "No matching micro apps",
+		"noSearchResultsDescription": "Try a different keyword.",
+		"openGallery": "View micro app list",
+		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
+		"publishedEmptyTitle": "No accessible micro apps",
+		"refresh": "Refresh",
+		"scopeAll": "All",
+		"scopeCollaborated": "Collaborated",
+		"scopeCreated": "Created by me",
+		"searchPlaceholder": "Search micro apps",
+		"shareType": {
+			"organization": "Team visible",
+			"password": "Password access",
+			"public": "Public access"
+		},
+		"statusPublished": "Published",
+		"statusUnpublished": "In progress",
+		"subtitle": "Projects in the current workspace",
+		"tabProjects": "My Projects",
+		"tabPublished": "Published Apps",
+		"title": "Micro Apps",
+		"unnamedApp": "Untitled micro app",
+		"updatedAt": "Updated {{date}}"
 	},
 	"mobile": {
 		"apps": {
@@ -2926,6 +3915,7 @@
 				"type": {
 					"file": "File",
 					"folder": "Folder",
+					"microApp": "Micro app",
 					"project": "Project",
 					"topic": "Topic",
 					"workspace": "Workspace"
@@ -2948,6 +3938,7 @@
 				"title": "Some items can't be restored"
 			},
 			"pathScopes": {
+				"microApps": "Micro Apps",
 				"workspaces": "Workspace"
 			},
 			"purge": {
@@ -3008,6 +3999,7 @@
 			"tabs": {
 				"all": "All ({{count}})",
 				"files": "Files ({{count}})",
+				"microApps": "Micro Apps ({{count}})",
 				"projects": "Projects ({{count}})",
 				"topics": "Topics ({{count}})",
 				"workspaces": "Workspaces ({{count}})"
@@ -3023,6 +4015,7 @@
 			"navApps": "Apps",
 			"navChats": "Chats",
 			"navMagiClaw": "MagiClaw",
+			"navMicroApps": "Micro Apps",
 			"navMyCrew": "My Crew",
 			"navRecording": "Recordings & summaries",
 			"navSuper": "Home",
@@ -3040,6 +4033,7 @@
 		"createNewChat": "Create New Chat",
 		"createNewTopic": "Create New Topic",
 		"emptySearchResult": "No matching crew found",
+		"hiddenCrew": "Hidden Crew",
 		"searchPlaceholder": "Search crew",
 		"selectCrew": "Select Crew",
 		"selectMode": "Select Mode"
@@ -3101,6 +4095,15 @@
 		"invalidManifest": "Invalid pet manifest",
 		"noWorkspace": "Select a workspace first",
 		"projectName": "My Codex Pet",
+		"quickAsk": {
+			"clear": "Clear",
+			"emptyResult": "No result yet",
+			"error": "Search failed. Please try again later.",
+			"loading": "Searching",
+			"placeholder": "Ask a quick question",
+			"selectModel": "Select model",
+			"send": "Send"
+		},
 		"regenerate": "Regenerate pet",
 		"resize": "Resize pet",
 		"setCurrent": "Set as pet",
@@ -3115,6 +4118,43 @@
 			"untitledTopic": "New chat",
 			"waitingForUser": "Awaiting your reply",
 			"waitingForUserHint": "Awaiting reply"
+		}
+	},
+	"plan": {
+		"actions": {
+			"approve": "Approve and start",
+			"back": "Back",
+			"cancel": "Cancel",
+			"collapse": "Collapse plan card",
+			"expand": "Expand plan card",
+			"requestRevision": "Request changes",
+			"submitRevision": "Submit changes"
+		},
+		"fields": {
+			"unnamedTable": "Unnamed table"
+		},
+		"revisionPlaceholder": "Tell the agent how you want this plan adjusted",
+		"sections": {
+			"acceptanceCriteria": "Acceptance criteria",
+			"assumptions": "Assumptions",
+			"dataModel": "Data model",
+			"files": "Files",
+			"implementationSteps": "Implementation steps",
+			"requirements": "Core requirements",
+			"userFeedback": "Your feedback"
+		},
+		"status": {
+			"approved": "Approved",
+			"cancelled": "Cancelled",
+			"generating": "Generating",
+			"pending": "Pending approval",
+			"revisionRequested": "Changes requested",
+			"submitFailed": "Failed to submit. Please try again later",
+			"timeout": "Timed out"
+		},
+		"title": "Implementation plan",
+		"validation": {
+			"revisionRequired": "Please enter the requested changes first"
 		}
 	},
 	"playbackControl": {
@@ -3813,6 +4853,7 @@
 			"type": {
 				"file": "File",
 				"folder": "Folder",
+				"microApp": "Micro app",
 				"project": "Project",
 				"topic": "Topic",
 				"workspace": "Workspace"
@@ -3894,6 +4935,7 @@
 		"tabs": {
 			"all": "All ({{count}})",
 			"files": "Files ({{count}})",
+			"microApps": "Micro Apps ({{count}})",
 			"projects": "Projects ({{count}})",
 			"topics": "Topics ({{count}})",
 			"workspaces": "Workspaces ({{count}})"
@@ -3903,25 +4945,37 @@
 	"scheduleTask": {
 		"clearSearch": "Clear search",
 		"configTask": "Task Config",
+		"contextLoading": "Loading the current micro app context…",
 		"createScheduleTask": "Create Scheduled Task",
 		"createTask": "Create Task",
+		"dailyAt": "Runs daily at {{time}}",
 		"deleteTask": "Delete",
 		"disableTask": "Disable",
+		"disabled": "Paused",
 		"editTask": "Edit",
 		"emptyDescription": "Create multiple scheduled tasks for various scenarios",
 		"emptyTitle": "No tasks configured",
 		"enableTask": "Enable",
+		"enabled": "Active",
 		"manageTasks": "Manage tasks",
+		"monthlyAt": "Runs monthly on day {{day}} · {{time}}",
+		"moreActions": "More actions",
+		"noSchedule": "No schedule configured",
 		"noTask": "No Task",
+		"onceAt": "Runs once on {{day}} · {{time}}",
 		"pauseTask": "Pause Task",
 		"playTask": "Play Task",
+		"projectScope": "Current micro app",
 		"runLogs": "Run Logs",
 		"runTask": "Run Task",
 		"runningRecord": "Running Record",
 		"searchTasks": "Search tasks",
 		"searchTasksEmpty": "No scheduled tasks match your search",
 		"searchTasksPlaceholder": "Search scheduled tasks",
-		"title": "Scheduled Tasks"
+		"title": "Scheduled Tasks",
+		"toggleTask": "Toggle task {{name}}",
+		"weeklyAt": "Runs weekly on {{day}} · {{time}}",
+		"workspaceDescription": "Automate recurring work and keep every task under control"
 	},
 	"search": {
 		"internetSearch": "Internet Search",
@@ -4052,6 +5106,7 @@
 		"disableShare": "No sharing",
 		"disableShareDescription": "Turn off the topic playback sharing function",
 		"disableTopicShareConfirm": "After closing the current topic sharing, the shared replay link will be invalid immediately",
+		"documentDependenciesAnalysisFailed": "Linked resource analysis failed. Only the current file will be processed.",
 		"done": "Done",
 		"download": {
 			"copyLink": "Copy link",
@@ -4105,9 +5160,8 @@
 		"hideCreatorInfo": "Hide \"Created by $t(common:platform.name)\"",
 		"hideCreatorInfoDescription": "When enabled, the floating watermark at the bottom right corner of the page will be hidden",
 		"hidePassword": "Hide password",
-		"htmlDependenciesAnalysisFailed": "Static-resource analysis failed. Only the HTML file will be processed.",
-		"includeHtmlDependencies": "Include {{count}} linked static resources",
-		"includeHtmlDependenciesDescription": "Without them, images, styles, or scripts in the target HTML may not load correctly.",
+		"includeDocumentDependencies": "Include {{count}} linked static resources",
+		"includeDocumentDependenciesDescription": "Without them, linked resources in the target {{type}} may not load correctly.",
 		"includedFiles": "Included Files",
 		"internetFileShare": "Internet accessible",
 		"internetFileShareDescription": "Anyone who obtains the link can access the file",
@@ -4397,6 +5451,7 @@
 		"lineBreak": "Line Break",
 		"openMCPConfig": "Open MCP Config",
 		"operation": "Operation",
+		"quickEdit": "Quick Edit",
 		"sendMessage": "Send Message",
 		"shortcutKeys": "Shortcut Keys",
 		"switchTopicDown": "Switch to Next Topic",
@@ -4443,6 +5498,9 @@
 			"agentNetworkErrorTitle": "[HTML App Network Error]",
 			"agentNetworkFixPrompt": "Please analyze the network error and fix the issue in the HTML app.",
 			"agentRuntimeErrorTitle": "[HTML App Runtime Error]",
+			"apiRequest": "Request",
+			"apiResponse": "Response",
+			"apiResultTruncated": "Response truncated for performance",
 			"clear": "Clear",
 			"consolePlaceholder": "Enter JavaScript expression…",
 			"deps": {
@@ -4463,6 +5521,9 @@
 				"total": "{{count}} total"
 			},
 			"deselectAll": "Deselect All",
+			"dockSide": "Dock side",
+			"dockToBottom": "Move panel to bottom",
+			"dockToRight": "Move panel to right",
 			"error": "Error",
 			"errorTypeConsole": "Console Error",
 			"errorTypeUncaught": "Uncaught Error",
@@ -4818,8 +5879,8 @@
 			"copyPathFailed": "Failed to copy path",
 			"copyPathSuccess": "Path copied",
 			"copyTo": "Copy to",
-			"createAICardFailed": "Failed to create AI card project",
-			"createAICardSuccess": "AI card project created successfully",
+			"createAICardFailed": "Failed to create AI Card",
+			"createAICardSuccess": "AI Card created successfully",
 			"createDesignFailed": "Failed to create design project",
 			"createDesignSuccess": "Design project created successfully",
 			"createFile": "New File",
@@ -4989,6 +6050,7 @@
 			"message": "A folder named “{{folderName}}” already exists here. Do you want to merge the contents or keep both folders?",
 			"title": "Folder Already Exists"
 		},
+		"editorGenerationLockDescription": "Please wait a moment. Editing will resume automatically when the update finishes",
 		"elementSelector": "Element Selector",
 		"elementText": "Element Text",
 		"emptyState": {
@@ -5129,6 +6191,8 @@
 		},
 		"fileLayoutCorrectionPrompt": "Then perform layout correction, please check if the layout is reasonable, if it is unreasonable, please provide suggestions and modify it.",
 		"fileModify": "\nI need to modify this element in the file",
+		"fileModifyElementPrefix": ": ",
+		"fileModifyElementSuffix": "",
 		"fileModifyElements": ":",
 		"fileReadContentPrompt": "content",
 		"fileReadPrompt": "Please read",
@@ -5288,6 +6352,7 @@
 		"preview": "Preview",
 		"processing": "Processing...",
 		"quickStart": "Quick Start",
+		"reportConversationRound": "Report Conversation",
 		"slogan": {
 			"rotatingText": {
 				"prefix": "Hire $t(common:platform.name) to",

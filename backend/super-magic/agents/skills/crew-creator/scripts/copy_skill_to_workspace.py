@@ -19,7 +19,7 @@ import shutil
 import sys
 from pathlib import Path
 
-# agents/skills/_shared/ 对所有 skill 脚本均在 parents[2] 下
+# agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _shared.bootstrap import get_project_root
 

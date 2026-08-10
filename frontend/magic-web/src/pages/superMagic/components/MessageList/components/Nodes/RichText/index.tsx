@@ -49,7 +49,7 @@ function RichText(props: NodeProps) {
 	const { onSelectDetail, onFileClick: handleFileClick } = props
 	const { projectFilesStore } = useMessageListContext()
 
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		RichTextMessageNode | undefined
 	const mentions: NonNullable<MessageRichTextProps["mentions"]> =
 		((node?.extra?.super_agent?.mentions || []) as MessageRichTextProps["mentions"]) || []
@@ -106,7 +106,7 @@ function RichText(props: NodeProps) {
 				/>
 				{/* 重新编辑按钮，只在移动端显示 */}
 				{isMobile &&
-					props?.node?.status === MessageStatus.REVOKED &&
+					(props?.node?.imStatus ?? props?.node?.status) === MessageStatus.REVOKED &&
 					!props?.isShare &&
 					props?.isFirstRevokedUserMessage && (
 						<div className="relative z-[3] flex w-full justify-end">

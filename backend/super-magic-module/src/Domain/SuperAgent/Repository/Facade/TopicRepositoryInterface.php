@@ -66,7 +66,7 @@ interface TopicRepositoryInterface
      */
     public function updateTopicWithUpdatedAt(TopicEntity $topicEntity, string $updatedAt): bool;
 
-    public function updateTopicByCondition(array $condition, array $data): bool;
+    public function updateTopicByCondition(array $condition, array $data, bool $touchUpdatedAt = true): bool;
 
     /**
      * 更新话题置顶状态.

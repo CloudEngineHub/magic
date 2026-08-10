@@ -15,8 +15,10 @@ export interface PPTSidebarProps {
 	onAddToNewChat?: (index: number) => void
 	mainFileId?: string
 	isMobile?: boolean
+	sidebarWidth?: number
 	allowEdit?: boolean
 	isCollapsed?: boolean // External control of collapsed state
+	isPreviewLoadingEnabled?: boolean // Whether the sidebar may request HTML and thumbnails
 	onCollapsedChange?: (collapsed: boolean) => void // Callback when collapsed state changes
 }
 
@@ -60,16 +62,15 @@ export interface SortableSlideItemProps {
 	onLocateFile?: () => void // Callback to locate file in file tree
 	onRefresh?: () => void // Callback to refresh slide content
 	onRegenerateScreenshot?: () => void // Callback to regenerate screenshot only
-	onVisible?: () => void // Callback when slide becomes visible
-	scrollContainerRef?: React.RefObject<HTMLElement> // Scroll container ref for Intersection Observer
 	mainFileId?: string
 	className?: string
 	isMobile?: boolean
 	allowEdit?: boolean
 	slideFileId?: string
 	slideFullRelativePath?: string
-	onSlideDragStart?: (e: React.DragEvent, index: number) => void
-	onSlideDragOver?: (e: React.DragEvent, index: number) => void
-	onSlideDrop?: (e: React.DragEvent, index: number) => void
-	onSlideDragLeave?: (e: React.DragEvent) => void
+	slideDimensions?: {
+		width: number
+		height: number
+	}
+	onSlideDragStart?: (e: React.DragEvent, slideId: string) => void
 }

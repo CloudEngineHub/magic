@@ -16,6 +16,7 @@ use App\Domain\Mode\Repository\Persistence\Model\ModeModel;
 use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\DbConnection\Db;
 
 class ModeRepository extends AbstractRepository implements ModeRepositoryInterface
 {
@@ -45,6 +46,30 @@ class ModeRepository extends AbstractRepository implements ModeRepositoryInterfa
         $model = $builder->where('is_default', 1)->first();
 
         return $model ? ModeFactory::modelToEntity($model) : null;
+    }
+
+    public function findSystemDefaultAgent(ModeDataIsolation $dataIsolation): ?ModeEntity
+    {
+        $builder = $this->createBuilder($dataIsolation, ModeModel::query());
+        $model = $builder->where('is_system_default_agent', 1)->first();
+
+        return $model ? ModeFactory::modelToEntity($model) : null;
+    }
+
+    public function setSystemDefaultAgent(ModeDataIsolation $dataIsolation, int|string $id): void
+    {
+        Db::transaction(function () use ($dataIsolation, $id): void {
+            $builder = $this->createBuilder($dataIsolation, ModeModel::query());
+            $builder->lockForUpdate()->get();
+
+            $this->createBuilder($dataIsolation, ModeModel::query())
+                ->where('is_system_default_agent', 1)
+                ->update(['is_system_default_agent' => 0]);
+
+            $this->createBuilder($dataIsolation, ModeModel::query())
+                ->where('id', $id)
+                ->update(['is_system_default_agent' => 1]);
+        });
     }
 
     /**

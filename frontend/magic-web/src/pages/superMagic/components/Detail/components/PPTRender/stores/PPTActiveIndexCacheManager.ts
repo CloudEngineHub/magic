@@ -26,6 +26,7 @@ export class PPTActiveIndexCacheManager {
 	private mainFileId?: string
 	private logger: PPTLoggerService
 	private debouncedSaveTimer?: NodeJS.Timeout
+	private configGeneration = 0
 	private disposed = false
 
 	constructor(logger: PPTLoggerService, config: PPTActiveIndexCacheConfig) {
@@ -48,6 +49,16 @@ export class PPTActiveIndexCacheManager {
 	 * 更新缓存配置
 	 */
 	updateConfig(config: PPTActiveIndexCacheConfig): void {
+		const configChanged =
+			this.organizationCode !== config.organizationCode ||
+			this.selectedProjectId !== config.selectedProjectId ||
+			this.mainFileId !== config.mainFileId
+		if (configChanged) {
+			this.configGeneration++
+			clearTimeout(this.debouncedSaveTimer)
+			this.debouncedSaveTimer = undefined
+		}
+
 		this.organizationCode = config.organizationCode
 		this.selectedProjectId = config.selectedProjectId
 		this.mainFileId = config.mainFileId
@@ -88,10 +99,12 @@ export class PPTActiveIndexCacheManager {
 
 		// Clear existing timer
 		clearTimeout(this.debouncedSaveTimer)
+		const configGeneration = this.configGeneration
 
 		// Schedule save
 		this.debouncedSaveTimer = setTimeout(() => {
-			this.saveActiveIndex(index)
+			this.debouncedSaveTimer = undefined
+			void this.saveActiveIndex(index, configGeneration)
 		}, 500)
 	}
 
@@ -99,23 +112,26 @@ export class PPTActiveIndexCacheManager {
 	 * Save activeIndex immediately
 	 * 立即保存 activeIndex
 	 */
-	private async saveActiveIndex(index: number): Promise<void> {
-		if (this.disposed) return
+	private async saveActiveIndex(index: number, configGeneration: number): Promise<void> {
+		if (this.disposed || configGeneration !== this.configGeneration || !this.canCache()) return
+		const { organizationCode, selectedProjectId, mainFileId } = this
+		if (!organizationCode || !selectedProjectId || !mainFileId) return
 
 		try {
 			this.logger.debug("Saving activeIndex to cache", {
 				operation: "saveActiveIndex",
-				metadata: { index, fileId: this.mainFileId },
+				metadata: { index, fileId: mainFileId },
 			})
 
 			const currentState = await this.projectStateRepository.getProjectState(
-				this.organizationCode!,
-				this.selectedProjectId!,
+				organizationCode,
+				selectedProjectId,
 			)
+			if (this.disposed || configGeneration !== this.configGeneration) return
 
 			const pptActiveIndexMap = {
 				...(currentState?.fileState?.pptActiveIndexMap || {}),
-				[this.mainFileId!]: index,
+				[mainFileId]: index,
 			}
 
 			const fileState = {
@@ -128,14 +144,14 @@ export class PPTActiveIndexCacheManager {
 			}
 
 			await this.projectStateRepository.updateFileState(
-				this.organizationCode!,
-				this.selectedProjectId!,
+				organizationCode,
+				selectedProjectId,
 				fileState,
 			)
 
 			this.logger.debug("💾 PPT activeIndex saved to cache", {
 				operation: "saveActiveIndex",
-				metadata: { index, fileId: this.mainFileId },
+				metadata: { index, fileId: mainFileId },
 			})
 		} catch (error) {
 			this.logger.error("Failed to save activeIndex", {
@@ -158,32 +174,39 @@ export class PPTActiveIndexCacheManager {
 			})
 			return null
 		}
+		const configGeneration = this.configGeneration
+		const { organizationCode, selectedProjectId, mainFileId } = this
+		if (!organizationCode || !selectedProjectId || !mainFileId) return null
 
 		try {
 			this.logger.debug("Restoring activeIndex from cache", {
 				operation: "restoreActiveIndex",
 				metadata: {
-					organizationCode: this.organizationCode,
-					projectId: this.selectedProjectId,
-					fileId: this.mainFileId,
+					organizationCode,
+					projectId: selectedProjectId,
+					fileId: mainFileId,
 				},
 			})
 
 			const cachedState = await this.projectStateRepository.getProjectState(
-				this.organizationCode!,
-				this.selectedProjectId!,
+				organizationCode,
+				selectedProjectId,
 			)
+			if (this.disposed || configGeneration !== this.configGeneration) return null
 
-			const cachedIndex = cachedState?.fileState?.pptActiveIndexMap?.[this.mainFileId!]
+			const cachedIndex = cachedState?.fileState?.pptActiveIndexMap?.[mainFileId]
 
 			if (typeof cachedIndex === "number" && cachedIndex >= 0) {
 				// Validate projectId is ready before restoring
-				const isValid = await this.waitForProjectIdReady(this.selectedProjectId!)
+				const isValid = await this.waitForProjectIdReady(
+					selectedProjectId,
+					configGeneration,
+				)
 
-				if (isValid) {
+				if (isValid && configGeneration === this.configGeneration) {
 					this.logger.debug("🔄 Restored cached activeIndex", {
 						operation: "restoreActiveIndex",
-						metadata: { index: cachedIndex, fileId: this.mainFileId },
+						metadata: { index: cachedIndex, fileId: mainFileId },
 					})
 					return cachedIndex
 				} else {
@@ -215,14 +238,17 @@ export class PPTActiveIndexCacheManager {
 	 * @param expectedProjectId The expected project ID to validate
 	 * @returns true if projectId is ready and matches, false otherwise
 	 */
-	private async waitForProjectIdReady(expectedProjectId: string): Promise<boolean> {
+	private async waitForProjectIdReady(
+		expectedProjectId: string,
+		configGeneration: number,
+	): Promise<boolean> {
 		return new Promise((resolve) => {
 			let retryCount = 0
 			const maxRetries = 10
 
 			const check = () => {
 				// Check if manager is disposed
-				if (this.disposed) {
+				if (this.disposed || configGeneration !== this.configGeneration) {
 					resolve(false)
 					return
 				}
@@ -293,7 +319,9 @@ export class PPTActiveIndexCacheManager {
 	 */
 	dispose(): void {
 		this.disposed = true
+		this.configGeneration++
 		clearTimeout(this.debouncedSaveTimer)
+		this.debouncedSaveTimer = undefined
 		this.logger.debug("PPTActiveIndexCacheManager disposed", {
 			operation: "dispose",
 		})

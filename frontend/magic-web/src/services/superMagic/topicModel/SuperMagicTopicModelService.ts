@@ -58,6 +58,18 @@ interface NormalizedModelsResult {
 	needsUpdate: boolean
 }
 
+interface ModelContext {
+	topicId: string
+	projectId: string
+	topicMode: TopicMode
+	agentCode?: string | null
+}
+
+interface ModelRequestGuard {
+	requestId: number
+	requestedContext: ModelContext
+}
+
 /**
  * Super Magic Topic Model Service
  * Handles model fetching, caching, and synchronization
@@ -76,9 +88,42 @@ class SuperMagicTopicModelService {
 	private reactionDisposers = new WeakMap<SuperMagicTopicModelStoreLike, () => void>()
 	private storeReferenceCounts = new WeakMap<SuperMagicTopicModelStoreLike, number>()
 	private activeReactionDisposers = new Set<() => void>()
+	private requestIds = new WeakMap<SuperMagicTopicModelStoreLike, number>()
 
 	// Register beforeunload only once
 	private isBeforeUnloadRegistered = false
+
+	private isCurrentContext(store: SuperMagicTopicModelStoreLike, context: ModelContext) {
+		return (
+			store.currentTopicId === context.topicId &&
+			store.currentProjectId === context.projectId &&
+			store.currentTopicMode === context.topicMode &&
+			store.currentAgentCode === (context.agentCode ?? "")
+		)
+	}
+
+	private createRequestGuard(
+		store: SuperMagicTopicModelStoreLike,
+		requestedContext: ModelContext,
+	): ModelRequestGuard {
+		const requestId = (this.requestIds.get(store) ?? 0) + 1
+		this.requestIds.set(store, requestId)
+
+		return {
+			requestId,
+			requestedContext,
+		}
+	}
+
+	private invalidateRequests(store: SuperMagicTopicModelStoreLike) {
+		this.requestIds.set(store, (this.requestIds.get(store) ?? 0) + 1)
+	}
+
+	private isCurrentRequest(store: SuperMagicTopicModelStoreLike, guard: ModelRequestGuard) {
+		if (this.requestIds.get(store) !== guard.requestId) return false
+
+		return this.isCurrentContext(store, guard.requestedContext)
+	}
 
 	/**
 	 * Initialize service - set up Store reaction
@@ -111,6 +156,7 @@ class SuperMagicTopicModelService {
 				agentCode: store.currentAgentCode,
 			}),
 			async ({ topicId, projectId, topicMode, agentCode }, prev) => {
+				this.invalidateRequests(store)
 				logger.report("[Context] Context changed", {
 					prevTopicId: prev?.topicId,
 					prevProjectId: prev?.projectId,
@@ -194,6 +240,7 @@ class SuperMagicTopicModelService {
 		disposer()
 		this.reactionDisposers.delete(store)
 		this.storeReferenceCounts.delete(store)
+		this.invalidateRequests(store)
 		this.activeReactionDisposers.delete(disposer)
 	}
 
@@ -360,6 +407,17 @@ class SuperMagicTopicModelService {
 		store: SuperMagicTopicModelStoreLike = topicModelStore,
 	) {
 		const agentCode = store.currentAgentCode || null
+		const context = {
+			topicId: store.currentTopicId,
+			projectId: store.currentProjectId,
+			topicMode,
+			agentCode,
+		}
+		if (!this.isCurrentContext(store, context)) return
+		const requestGuard = this.createRequestGuard(store, context)
+		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
+		store.setLoading(true)
+
 		const previousLanguageModel = store.selectedLanguageModel
 		const previousImageModel = store.selectedImageModel
 		const previousVideoModel = store.selectedVideoModel
@@ -371,73 +429,84 @@ class SuperMagicTopicModelService {
 			currentVideoModelId: previousVideoModel?.model_id,
 		})
 
-		const modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
-		const imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
-		const videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
-		const { languageModel, imageModel, videoModel, needsUpdate } =
-			await this.normalizeModelsForMode({
+		try {
+			const modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
+			const imageModelList = superMagicModeService.getImageModelListByMode(
 				topicMode,
-				languageModel: previousLanguageModel,
-				imageModel: previousImageModel,
-				videoModel: previousVideoModel,
 				agentCode,
-			})
-		if (languageModel?.model_id !== previousLanguageModel?.model_id) {
-			logger.report("[Validate] Language model invalid for mode, switching", {
-				topicMode,
-				oldModelId: previousLanguageModel?.model_id,
-				newModelId: languageModel?.model_id,
-				availableModelsCount: modelList.length,
-			})
-		}
-
-		if (imageModel?.model_id !== previousImageModel?.model_id) {
-			logger.report("[Validate] Image model invalid for mode, switching", {
-				topicMode,
-				oldModelId: previousImageModel?.model_id,
-				newModelId: imageModel?.model_id,
-				availableModelsCount: imageModelList.length,
-			})
-		}
-
-		if (videoModel?.model_id !== previousVideoModel?.model_id) {
-			logger.report("[Validate] Video model invalid for mode, switching", {
-				topicMode,
-				oldModelId: previousVideoModel?.model_id,
-				newModelId: videoModel?.model_id,
-				availableModelsCount: videoModelList.length,
-			})
-		}
-
-		// Update Store if needed
-		if (needsUpdate) {
-			store.setSelectedLanguageModel(languageModel)
-			store.setSelectedImageModel(imageModel)
-			store.setSelectedVideoModel(videoModel)
-
-			logger.report("[Validate] Models updated, saving to backend", {
-				topicMode,
-				languageModelId: languageModel?.model_id,
-				imageModelId: imageModel?.model_id,
-				videoModelId: videoModel?.model_id,
-			})
-
-			// Save to cache and backend
-			this.saveModel(
-				store.currentTopicId,
-				store.currentProjectId,
-				languageModel,
-				imageModel,
-				videoModel,
-				store,
 			)
-		} else {
-			logger.report("[Validate] Models valid for current mode, no update needed", {
+			const videoModelList = superMagicModeService.getVideoModelListByMode(
 				topicMode,
-				languageModelId: languageModel?.model_id,
-				imageModelId: imageModel?.model_id,
-				videoModelId: videoModel?.model_id,
-			})
+				agentCode,
+			)
+			const { languageModel, imageModel, videoModel, needsUpdate } =
+				await this.normalizeModelsForMode({
+					topicMode,
+					languageModel: previousLanguageModel,
+					imageModel: previousImageModel,
+					videoModel: previousVideoModel,
+					agentCode,
+				})
+			if (!isCurrentRequest()) return
+			if (languageModel?.model_id !== previousLanguageModel?.model_id) {
+				logger.report("[Validate] Language model invalid for mode, switching", {
+					topicMode,
+					oldModelId: previousLanguageModel?.model_id,
+					newModelId: languageModel?.model_id,
+					availableModelsCount: modelList.length,
+				})
+			}
+
+			if (imageModel?.model_id !== previousImageModel?.model_id) {
+				logger.report("[Validate] Image model invalid for mode, switching", {
+					topicMode,
+					oldModelId: previousImageModel?.model_id,
+					newModelId: imageModel?.model_id,
+					availableModelsCount: imageModelList.length,
+				})
+			}
+
+			if (videoModel?.model_id !== previousVideoModel?.model_id) {
+				logger.report("[Validate] Video model invalid for mode, switching", {
+					topicMode,
+					oldModelId: previousVideoModel?.model_id,
+					newModelId: videoModel?.model_id,
+					availableModelsCount: videoModelList.length,
+				})
+			}
+
+			// Update Store if needed
+			if (needsUpdate) {
+				store.setSelectedLanguageModel(languageModel)
+				store.setSelectedImageModel(imageModel)
+				store.setSelectedVideoModel(videoModel)
+
+				logger.report("[Validate] Models updated, saving to backend", {
+					topicMode,
+					languageModelId: languageModel?.model_id,
+					imageModelId: imageModel?.model_id,
+					videoModelId: videoModel?.model_id,
+				})
+
+				// Save to cache and backend
+				this.saveModel(
+					store.currentTopicId,
+					store.currentProjectId,
+					languageModel,
+					imageModel,
+					videoModel,
+					store,
+				)
+			} else {
+				logger.report("[Validate] Models valid for current mode, no update needed", {
+					topicMode,
+					languageModelId: languageModel?.model_id,
+					imageModelId: imageModel?.model_id,
+					videoModelId: videoModel?.model_id,
+				})
+			}
+		} finally {
+			if (isCurrentRequest()) store.setLoading(false)
 		}
 	}
 
@@ -776,17 +845,21 @@ class SuperMagicTopicModelService {
 		store: SuperMagicTopicModelStoreLike = topicModelStore,
 	) {
 		let hasCompletedLoading = false
+		const agentCode = store.currentAgentCode || null
+		const context = { topicId, projectId, topicMode, agentCode }
+		if (!this.isCurrentContext(store, context)) return
+		const requestGuard = this.createRequestGuard(store, context)
+		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
 
-		function completeLoading() {
+		const completeLoading = () => {
 			if (hasCompletedLoading) return
-			if (store.currentTopicId !== topicId) return
+			if (!isCurrentRequest()) return
 			store.setLoading(false)
 			hasCompletedLoading = true
 		}
 
 		store.setLoading(true)
 
-		const agentCode = store.currentAgentCode || null
 		let modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
 		let imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
 		let videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
@@ -870,7 +943,7 @@ class SuperMagicTopicModelService {
 					agentCode,
 				)
 
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 
 				if (!finalLanguageModel) finalLanguageModel = topicResult.languageModel
 				if (!finalImageModel) finalImageModel = topicResult.imageModel
@@ -923,7 +996,7 @@ class SuperMagicTopicModelService {
 					agentCode,
 				)
 
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 
 				const beforeLanguage = finalLanguageModel?.model_id
 				const beforeImage = finalImageModel?.model_id
@@ -965,7 +1038,7 @@ class SuperMagicTopicModelService {
 			)
 
 			if (shouldFetchModeDefault) {
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 				const modeDefaultKey = this.genModeDefaultKey(topicMode, agentCode)
 				logger.report("[Fallback] Level 3: Fetching ModeDefault level", {
 					topicMode,
@@ -981,7 +1054,7 @@ class SuperMagicTopicModelService {
 					agentCode,
 				)
 
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 
 				const beforeLanguage = finalLanguageModel?.model_id
 				const beforeImage = finalImageModel?.model_id
@@ -1020,7 +1093,7 @@ class SuperMagicTopicModelService {
 
 			if (shouldFetchGlobal) {
 				// 提前检查：如果 topicId 已经变了，直接返回，避免不必要的 Global 请求
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 				logger.report("[Fallback] Level 4: Fetching Global level", {})
 				globalResult = await this.fetchLevelModel(
 					DEFAULT_TOPIC_ID,
@@ -1032,7 +1105,7 @@ class SuperMagicTopicModelService {
 					agentCode,
 				)
 
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 
 				const beforeLanguage = finalLanguageModel?.model_id
 				const beforeImage = finalImageModel?.model_id
@@ -1084,7 +1157,7 @@ class SuperMagicTopicModelService {
 				})
 			}
 
-			if (store.currentTopicId !== topicId) return
+			if (!isCurrentRequest()) return
 			const sourceLevel =
 				shouldFetchTopic && topicResult.success
 					? "Topic"
@@ -1110,7 +1183,7 @@ class SuperMagicTopicModelService {
 					videoModel: finalVideoModel,
 					agentCode,
 				})
-				if (store.currentTopicId !== topicId) return
+				if (!isCurrentRequest()) return
 				finalLanguageModel = normalizedModels.languageModel
 				finalImageModel = normalizedModels.imageModel
 				finalVideoModel = normalizedModels.videoModel
@@ -1329,7 +1402,7 @@ class SuperMagicTopicModelService {
 				usedFirstUsableVideo: needFirstUsableVideo,
 			})
 		} catch (error) {
-			if (store.currentTopicId !== topicId) return
+			if (!isCurrentRequest()) return
 			logger.report("Critical error in fetchTopicModel", { topicId, error })
 			this.setFirstUsableModels(modelList, imageModelList, videoModelList, store)
 		} finally {

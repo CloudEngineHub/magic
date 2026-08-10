@@ -456,6 +456,37 @@ describe("website tabs", () => {
 		expect(addWebsiteToCommon).toHaveBeenCalledWith(websiteTab)
 	})
 
+	it("disables close actions that cannot remove protected tabs", () => {
+		const protectedTab = {
+			id: "index",
+			title: "index.html",
+			type: "file" as const,
+			active: true,
+			closeable: false,
+			fileData: { file_id: "index", file_name: "index.html" },
+		}
+		const actions = {
+			closeFileTab: vi.fn(),
+			closeOtherTabs: vi.fn(),
+			closeTabsToRight: vi.fn(),
+			clearAllTabs: vi.fn(),
+			refreshTab: vi.fn(),
+		}
+		const { result } = renderHook(() => useTabContextMenu({ tabs: [protectedTab], actions }))
+		const items = result.current.getContextMenuItems(protectedTab.id) || []
+
+		expect(items.find((item) => item?.key === "close")).toMatchObject({ disabled: true })
+		expect(items.find((item) => item?.key === "closeOthers")).toMatchObject({
+			disabled: true,
+		})
+		expect(items.find((item) => item?.key === "closeToRight")).toMatchObject({
+			disabled: true,
+		})
+		expect(items.find((item) => item?.key === "closeAll")).toMatchObject({
+			disabled: true,
+		})
+	})
+
 	it("renders website tabs through an iframe with an external-open fallback", () => {
 		render(
 			<WebsiteIframeTabContent

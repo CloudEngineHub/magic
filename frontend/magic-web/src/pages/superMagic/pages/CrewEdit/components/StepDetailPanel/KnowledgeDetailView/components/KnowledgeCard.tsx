@@ -24,6 +24,7 @@ interface KnowledgeCardProps {
 	onRefresh: () => void
 	variant?: "panel" | "sidebar"
 	index?: number
+	readOnly?: boolean
 }
 
 function KnowledgeCard({
@@ -33,6 +34,7 @@ function KnowledgeCard({
 	onRefresh,
 	variant = "panel",
 	index,
+	readOnly = false,
 }: KnowledgeCardProps) {
 	const { t } = useTranslation("crew/create")
 	const [toggling, setToggling] = useState(false)
@@ -50,6 +52,7 @@ function KnowledgeCard({
 	}, [navigate, crewCode, knowledge.code])
 
 	const handleDelete = useCallback(() => {
+		if (readOnly) return
 		MagicModal.confirm({
 			title: t("knowledgeBase.deleteTitle"),
 			content: t("knowledgeBase.deleteContent", { name: knowledge.name }),
@@ -67,13 +70,15 @@ function KnowledgeCard({
 				}
 			},
 		})
-	}, [t, knowledge.name, knowledge.code, onRefresh])
+	}, [readOnly, t, knowledge.name, knowledge.code, onRefresh])
 
 	const handleEdit = useCallback(() => {
+		if (readOnly) return
 		onEdit(knowledge)
-	}, [knowledge, onEdit])
+	}, [knowledge, onEdit, readOnly])
 
 	const handleRebind = useCallback(() => {
+		if (readOnly) return
 		// 导航到重新绑定页面
 		navigate({
 			name: RouteName.CrewEdit,
@@ -84,7 +89,7 @@ function KnowledgeCard({
 				rebind: "true", // 标记为重新绑定模式
 			},
 		})
-	}, [navigate, crewCode, knowledge.code])
+	}, [navigate, crewCode, knowledge.code, readOnly])
 
 	// 判断知识库是否支持重新绑定（仅项目文件和企业知识库类型）
 	const supportsRebind = useMemo(() => {
@@ -96,6 +101,7 @@ function KnowledgeCard({
 	}, [knowledge])
 
 	const handleToggleFromMenu = useCallback(async () => {
+		if (readOnly) return
 		setToggling(true)
 		try {
 			await KnowledgeApi.updateKnowledge({
@@ -111,7 +117,7 @@ function KnowledgeCard({
 		} finally {
 			setToggling(false)
 		}
-	}, [knowledge, t, onRefresh])
+	}, [knowledge, onRefresh, readOnly, t])
 
 	const menuItems = useMemo(() => {
 		const items: MenuProps["items"] = [
@@ -256,24 +262,30 @@ function KnowledgeCard({
 				)}
 			</div>
 
-			<div onClick={(e) => e.stopPropagation()} className="self-center" data-testid="knowledge-card">
-				<MagicDropdown menu={{ items: menuItems }} placement="bottomRight">
-					<div>
-						<Button
-							variant="ghost"
-							size="icon"
-							className={cn(
-								"shrink-0 text-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground",
-								"h-8 w-8 rounded-md hover:bg-[#F5F5F5] dark:hover:bg-neutral-800",
-							)}
-							data-testid={`crew-knowledge-item-more-${knowledge.code}`}
-						>
-							<Ellipsis className="h-4 w-4" />
-							<span className="sr-only">{t("knowledgeBase.actions")}</span>
-						</Button>
-					</div>
-				</MagicDropdown>
-			</div>
+			{readOnly ? null : (
+				<div
+					onClick={(e) => e.stopPropagation()}
+					className="self-center"
+					data-testid="knowledge-card"
+				>
+					<MagicDropdown menu={{ items: menuItems }} placement="bottomRight">
+						<div>
+							<Button
+								variant="ghost"
+								size="icon"
+								className={cn(
+									"shrink-0 text-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground",
+									"h-8 w-8 rounded-md hover:bg-[#F5F5F5] dark:hover:bg-neutral-800",
+								)}
+								data-testid={`crew-knowledge-item-more-${knowledge.code}`}
+							>
+								<Ellipsis className="h-4 w-4" />
+								<span className="sr-only">{t("knowledgeBase.actions")}</span>
+							</Button>
+						</div>
+					</MagicDropdown>
+				</div>
+			)}
 		</div>
 	)
 }

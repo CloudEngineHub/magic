@@ -158,6 +158,11 @@ window.getStreamRecords = (tableName: string) => {
 			const messages = res
 				.map((o) => o?.value)
 				.sort((a: any, b: any) => {
+					const receivedAtA = a?.__websocket_record__?.received_at
+					const receivedAtB = b?.__websocket_record__?.received_at
+					if (typeof receivedAtA === "number" && typeof receivedAtB === "number") {
+						return receivedAtA - receivedAtB
+					}
 					const aa = a?.message?.send_time || a?.send_time
 					const bb = b?.message?.send_time || b?.send_time
 					return aa - bb

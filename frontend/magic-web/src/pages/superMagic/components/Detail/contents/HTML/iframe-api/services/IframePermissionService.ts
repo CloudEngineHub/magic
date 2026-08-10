@@ -1,44 +1,67 @@
 import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../types"
-import type { HtmlPermissionGrant, HtmlPermissionGrantStore } from "./HtmlPermissionGrantStore"
+import {
+	type HtmlPermissionGrant,
+	type HtmlPermissionGrantIdentity,
+	type HtmlPermissionGrantStore,
+} from "./HtmlPermissionGrantStore"
+import {
+	analyzeHtmlPermissionDeclarations,
+	createEmptyHtmlPermissionDeclaration,
+	type HtmlPermissionDeclarationAnalysis,
+	type HtmlPermissionDiagnostic,
+} from "./htmlPermissionDeclarations"
+import {
+	getDefaultHtmlPermissionTtl,
+	getHtmlPermissionOnceTtlOption,
+	getSharedHtmlPermissionTtlOptions,
+	SUPPORTED_HTML_PERMISSION_SCOPES,
+	type HtmlPermissionMode,
+	type HtmlPermissionTtl,
+	type HtmlPermissionTtlOption,
+} from "./htmlPermissionPolicy"
 
-const MINUTE_MS = 60 * 1000
+export type { HtmlPermissionDiagnostic, HtmlPermissionTtlOption }
 
-export interface HtmlPermissionTtlOption {
-	labelKey: string
-	ttlMs: number
+export interface HtmlPermissionAuthorizeOptions {
+	reason?: string
+	presentation?: "capability" | "userInfo"
+	allowOnce?: boolean
 }
 
 export interface HtmlPermissionConfirmRequest {
 	appName: string
-	mode: "manifest" | "legacy"
+	mode: HtmlPermissionMode
 	isLegacy: boolean
 	appConfigLoadError?: string
-	scope: HtmlPermissionScope
-	scopeLabelKey: string
+	scopes: HtmlPermissionScope[]
 	reason: string
+	presentation: "capability" | "userInfo"
 	ttlOptions: HtmlPermissionTtlOption[]
-	defaultTtlMs: number
+	defaultTtlMs: HtmlPermissionTtl
 }
 
 export interface HtmlPermissionConfirmResult {
 	allowed: boolean
-	ttlMs: number
+	ttlMs: HtmlPermissionTtl
 }
 
 export interface HtmlPermissionMissingDeclarationRequest {
 	appName: string
 	scope: HtmlPermissionScope
-	scopeLabelKey: string
 	declaredScopes: HtmlPermissionScope[]
 }
 
 export interface IframePermissionAppInstance {
-	userKey: string
+	userId: string
 	projectId: string
 	appRootDir: string
 	entryPath: string
 	content: string
+	/** Stable versions of executable files belonging to this HTML app. */
+	runtimeFingerprint?: string
+	/** Remote executable resources cannot be bound to a local content version. */
+	hasUnversionedExternalRuntimeResources?: boolean
 }
 
 export type HtmlAppConfigState =
@@ -47,90 +70,39 @@ export type HtmlAppConfigState =
 	| { status: "loaded"; config: HTMLAppConfig }
 	| { status: "error"; error: string }
 
+export interface HtmlPermissionSnapshotItem {
+	scope: string
+	supported: boolean
+	declarationStatus: "declared" | "notDeclared" | "unsupported"
+	grant?: HtmlPermissionGrant
+	ttlOptions: HtmlPermissionTtlOption[]
+}
+
+export interface HtmlPermissionSnapshot {
+	configStatus: HtmlAppConfigState["status"]
+	mode: HtmlPermissionMode | null
+	app: {
+		name: string
+		version: string
+		entry: string
+		appRootDir: string
+		reason: string
+	}
+	permissions: HtmlPermissionSnapshotItem[]
+	diagnostics: HtmlPermissionDiagnostic[]
+	activeGrantCount: number
+}
+
 export interface IframePermissionServiceConfig {
 	grantStore: HtmlPermissionGrantStore
 	confirmPermission: (
 		request: HtmlPermissionConfirmRequest,
 	) => Promise<HtmlPermissionConfirmResult>
 	onMissingDeclaration?: (request: HtmlPermissionMissingDeclarationRequest) => void
+	onGrantsChanged?: () => void
 	appConfigState: HtmlAppConfigState
 	appInstance: IframePermissionAppInstance
 	getNow?: () => number
-}
-
-const SCOPE_LABEL_KEYS: Record<HtmlPermissionScope, string> = {
-	"llm.use": "htmlEditor.permissionAuthorizationConfirm.scopes.llmUse",
-	"project.message.write": "htmlEditor.permissionAuthorizationConfirm.scopes.projectMessageWrite",
-	"project.files.upload": "htmlEditor.permissionAuthorizationConfirm.scopes.projectFilesUpload",
-	"project.files.download":
-		"htmlEditor.permissionAuthorizationConfirm.scopes.projectFilesDownload",
-	"fs.project.read": "htmlEditor.permissionAuthorizationConfirm.scopes.fsProjectRead",
-	"fs.project.write": "htmlEditor.permissionAuthorizationConfirm.scopes.fsProjectWrite",
-	"user.profile.name": "htmlEditor.permissionAuthorizationConfirm.scopes.userProfileName",
-	"user.profile.identity": "htmlEditor.permissionAuthorizationConfirm.scopes.userProfileIdentity",
-	"user.profile.organization":
-		"htmlEditor.permissionAuthorizationConfirm.scopes.userProfileOrganization",
-}
-
-const MANIFEST_TTL_OPTIONS: Record<HtmlPermissionScope, HtmlPermissionTtlOption[]> = {
-	"llm.use": longTtlOptions(),
-	"project.message.write": ttlOptions([5, 10, 15, 30, 60]),
-	"project.files.upload": longTtlOptions(),
-	"project.files.download": longTtlOptions(),
-	"fs.project.read": longTtlOptions(),
-	"fs.project.write": [
-		{ labelKey: "htmlEditor.permissionAuthorizationConfirm.ttl.once", ttlMs: 0 },
-		...ttlOptions([5, 10, 30, 60]),
-		...hourOptions([2, 4, 8, 12]),
-	],
-	"user.profile.name": longTtlOptions(),
-	"user.profile.identity": longTtlOptions(),
-	"user.profile.organization": longTtlOptions(),
-}
-
-const LEGACY_TTL_OPTIONS: Record<HtmlPermissionScope, HtmlPermissionTtlOption[]> = {
-	"llm.use": ttlOptions([5, 15, 30]),
-	"project.message.write": ttlOptions([5, 15, 30]),
-	"project.files.upload": ttlOptions([5, 15, 30]),
-	"project.files.download": ttlOptions([5, 15, 30]),
-	"fs.project.read": ttlOptions([5, 15, 30]),
-	"fs.project.write": [
-		{ labelKey: "htmlEditor.permissionAuthorizationConfirm.ttl.once", ttlMs: 0 },
-		...ttlOptions([5, 10, 30]),
-	],
-	"user.profile.name": ttlOptions([5, 15, 30]),
-	"user.profile.identity": ttlOptions([5, 15, 30]),
-	"user.profile.organization": ttlOptions([5, 15, 30]),
-}
-
-const DEFAULT_TTL_BY_SCOPE: Record<HtmlPermissionScope, number> = {
-	"llm.use": 15 * MINUTE_MS,
-	"project.message.write": 10 * MINUTE_MS,
-	"project.files.upload": 15 * MINUTE_MS,
-	"project.files.download": 15 * MINUTE_MS,
-	"fs.project.read": 15 * MINUTE_MS,
-	"fs.project.write": 0,
-	"user.profile.name": 15 * MINUTE_MS,
-	"user.profile.identity": 15 * MINUTE_MS,
-	"user.profile.organization": 15 * MINUTE_MS,
-}
-
-function ttlOptions(minutes: number[]): HtmlPermissionTtlOption[] {
-	return minutes.map((minute) => ({
-		labelKey: `htmlEditor.permissionAuthorizationConfirm.ttl.${minute}m`,
-		ttlMs: minute * MINUTE_MS,
-	}))
-}
-
-function hourOptions(hours: number[]): HtmlPermissionTtlOption[] {
-	return hours.map((hour) => ({
-		labelKey: `htmlEditor.permissionAuthorizationConfirm.ttl.${hour}h`,
-		ttlMs: hour * 60 * MINUTE_MS,
-	}))
-}
-
-function longTtlOptions(): HtmlPermissionTtlOption[] {
-	return [...ttlOptions([5, 15, 30, 60]), ...hourOptions([2, 4, 8, 12])]
 }
 
 export class IframePermissionService {
@@ -140,78 +112,252 @@ export class IframePermissionService {
 		this.cfg = cfg
 	}
 
-	async authorize(scope: HtmlPermissionScope): Promise<boolean> {
-		const now = this.getNow()
-		this.cfg.grantStore.prune(now)
+	async authorize(
+		scope: HtmlPermissionScope,
+		options: HtmlPermissionAuthorizeOptions = {},
+	): Promise<boolean> {
+		return this.authorizeMany([scope], options)
+	}
 
-		const appConfigState = this.cfg.appConfigState
-		if (appConfigState.status === "loading") return false
-		const appConfigLoadError =
-			appConfigState.status === "error" ? appConfigState.error : undefined
-		if (appConfigState.status === "error") {
+	async authorizeMany(
+		scopes: HtmlPermissionScope[],
+		options: HtmlPermissionAuthorizeOptions = {},
+	): Promise<boolean> {
+		const requestedScopes = Array.from(new Set(scopes))
+		if (requestedScopes.length === 0) return true
+
+		const now = this.getNow()
+
+		const context = await this.resolveContext()
+		if (!context) return false
+
+		const { appConfig, appConfigLoadError, mode, appFingerprint, declaration } = context
+		if (appConfigLoadError) {
 			htmlMicroAppPreviewLogger.warn(
 				"Permission fallback: app.json unavailable, using legacy confirmation",
-				{
-					scope,
-					error: appConfigState.error,
-				},
+				{ scopes: requestedScopes, error: appConfigLoadError },
 			)
 		}
 
-		const appConfig = appConfigState.status === "loaded" ? appConfigState.config : null
-		const mode = appConfig ? "manifest" : "legacy"
-		const declaredScopes = this.getDeclaredScopes(appConfig)
-		const declared = declaredScopes.includes(scope)
-		if (mode === "manifest" && !declared) {
-			this.reportMissingDeclaration(scope, appConfig, declaredScopes)
-			return false
+		if (mode === "manifest") {
+			const undeclaredScopes = requestedScopes.filter(
+				(scope) => !declaration.declaredScopes.includes(scope),
+			)
+			if (undeclaredScopes.length > 0) {
+				for (const scope of undeclaredScopes) {
+					this.reportMissingDeclaration(scope, appConfig, declaration.declaredScopes)
+				}
+				return false
+			}
 		}
 
-		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
-		const match = this.buildGrantMatch(scope, mode, appFingerprint)
-		const existing = this.cfg.grantStore
-			.list()
-			.find(
-				(grant) =>
-					match.appFingerprint &&
-					this.matchesGrant(grant, match) &&
-					grant.expiresAt > now,
-			)
-		if (existing) return true
+		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		const persistenceAvailable =
+			this.canPersistGrant(identity) && (await this.cfg.grantStore.isPersistentAvailable())
+		if (options.allowOnce === false && !persistenceAvailable) return false
+		const existingScopes = new Set(
+			(await this.cfg.grantStore.getAppGrants(identity)).map((grant) => grant.scope),
+		)
+		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
+		if (missingScopes.length === 0) return true
 
-		const ttlOptions =
-			mode === "legacy" ? LEGACY_TTL_OPTIONS[scope] : MANIFEST_TTL_OPTIONS[scope]
+		const ttlOptions = persistenceAvailable
+			? getSharedHtmlPermissionTtlOptions(missingScopes, mode).filter(
+					(option) => options.allowOnce !== false || option.ttlMs !== 0,
+				)
+			: [getHtmlPermissionOnceTtlOption()]
 		const result = await this.cfg.confirmPermission({
-			appName: appConfig?.name || "HTML 微应用",
+			appName: appConfig?.name || "",
 			mode,
 			isLegacy: mode === "legacy",
 			appConfigLoadError,
-			scope,
-			scopeLabelKey: SCOPE_LABEL_KEYS[scope],
-			reason: appConfig?.permissions?.reason || "",
+			scopes: missingScopes,
+			reason:
+				options.reason ||
+				appConfig?.permissions?.reason ||
+				(options.presentation === "userInfo"
+					? appConfig?.permissions?.userInfo?.reason
+					: "") ||
+				"",
+			presentation: options.presentation || "capability",
 			ttlOptions,
-			defaultTtlMs: this.getDefaultTtl(scope, ttlOptions),
+			defaultTtlMs: getDefaultHtmlPermissionTtl(missingScopes, mode, ttlOptions),
 		})
 
 		if (!result.allowed) return false
-		if (result.ttlMs > 0 && this.canPersistGrant(match)) {
-			this.cfg.grantStore.save({
-				...match,
-				grantedAt: now,
-				expiresAt: now + result.ttlMs,
+		if (!ttlOptions.some((option) => option.ttlMs === result.ttlMs)) {
+			htmlMicroAppPreviewLogger.warn("Permission denied: selected duration is not allowed", {
+				scopes: missingScopes,
+				ttlMs: result.ttlMs,
 			})
+			return false
+		}
+		if (result.ttlMs !== 0 && persistenceAvailable) {
+			let persisted = true
+			for (const scope of missingScopes) {
+				const saved = await this.cfg.grantStore.save({
+					...identity,
+					scope,
+					grantedAt: now,
+					expiresAt: result.ttlMs === null ? null : now + result.ttlMs,
+				})
+				persisted = saved && persisted
+			}
+			if (persisted) this.cfg.onGrantsChanged?.()
+			else if (options.allowOnce === false) return false
 		}
 		return true
 	}
 
-	private getDeclaredScopes(appConfig: HTMLAppConfig | null): HtmlPermissionScope[] {
-		const scopes = appConfig?.permissions?.scopes
-		if (!Array.isArray(scopes)) return []
-		return scopes.filter(
-			(item): item is HtmlPermissionScope =>
-				typeof item === "string" &&
-				Object.prototype.hasOwnProperty.call(SCOPE_LABEL_KEYS, item),
+	async getPermissionSnapshot(): Promise<HtmlPermissionSnapshot> {
+		const configState = this.cfg.appConfigState
+		if (configState.status === "loading") {
+			return this.createSnapshot(null, null, createEmptyHtmlPermissionDeclaration(), [])
+		}
+
+		const appConfig = configState.status === "loaded" ? configState.config : null
+		const mode: HtmlPermissionMode = appConfig ? "manifest" : "legacy"
+		const declaration = analyzeHtmlPermissionDeclarations(appConfig)
+		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
+		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		const grants = await this.cfg.grantStore.getAppGrants(identity)
+
+		return this.createSnapshot(mode, appConfig, declaration, grants)
+	}
+
+	async revoke(scope: HtmlPermissionScope): Promise<HtmlPermissionSnapshot> {
+		const context = await this.resolveContext()
+		if (context) {
+			await this.cfg.grantStore.remove(
+				this.buildGrantIdentity(context.mode, context.appFingerprint),
+				scope,
+			)
+			this.cfg.onGrantsChanged?.()
+		}
+		return this.getPermissionSnapshot()
+	}
+
+	async updateGrantTtl(
+		scope: HtmlPermissionScope,
+		ttlMs: HtmlPermissionTtl,
+	): Promise<HtmlPermissionSnapshot> {
+		const now = this.getNow()
+
+		const context = await this.resolveContext()
+		if (!context) throw new Error("Permission context is not ready")
+
+		const { mode, appFingerprint, declaration } = context
+		if (mode === "manifest" && !declaration.declaredScopes.includes(scope)) {
+			throw new Error("Permission scope is not declared")
+		}
+
+		const ttlOptions = getSharedHtmlPermissionTtlOptions([scope], mode).filter(
+			(option) => option.ttlMs !== 0,
 		)
+		if (
+			(ttlMs !== null && !Number.isFinite(ttlMs)) ||
+			!ttlOptions.some((option) => option.ttlMs === ttlMs)
+		) {
+			throw new Error("Permission duration is not allowed")
+		}
+
+		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		const existingGrant = await this.cfg.grantStore.getGrant(identity, scope)
+		if (!existingGrant) throw new Error("Active permission grant was not found")
+
+		const saved = await this.cfg.grantStore.save({
+			...identity,
+			scope,
+			grantedAt: now,
+			expiresAt: ttlMs === null ? null : now + ttlMs,
+		})
+		if (!saved) throw new Error("Permission grant could not be persisted")
+		this.cfg.onGrantsChanged?.()
+		return this.getPermissionSnapshot()
+	}
+
+	async revokeAll(): Promise<HtmlPermissionSnapshot> {
+		const context = await this.resolveContext()
+		if (context) {
+			await this.cfg.grantStore.remove(
+				this.buildGrantIdentity(context.mode, context.appFingerprint),
+			)
+			this.cfg.onGrantsChanged?.()
+		}
+		return this.getPermissionSnapshot()
+	}
+
+	private createSnapshot(
+		mode: HtmlPermissionMode | null,
+		appConfig: HTMLAppConfig | null,
+		declaration: HtmlPermissionDeclarationAnalysis,
+		grants: HtmlPermissionGrant[],
+	): HtmlPermissionSnapshot {
+		const grantsByScope = new Map(grants.map((grant) => [grant.scope, grant]))
+		const declaredScopeSet = new Set(declaration.declaredScopes)
+		const diagnostics = [...declaration.diagnostics]
+		if (this.cfg.appConfigState.status === "absent") {
+			diagnostics.unshift({ code: "manifestAbsent" })
+		} else if (this.cfg.appConfigState.status === "error") {
+			diagnostics.unshift({
+				code: "manifestLoadError",
+				error: this.cfg.appConfigState.error,
+			})
+		}
+
+		return {
+			configStatus: this.cfg.appConfigState.status,
+			mode,
+			app: {
+				name: appConfig?.name || "",
+				version: appConfig?.version || "",
+				entry: appConfig?.entry || this.cfg.appInstance.entryPath.split("/").pop() || "",
+				appRootDir: this.cfg.appInstance.appRootDir,
+				reason:
+					appConfig?.permissions?.reason ||
+					appConfig?.permissions?.userInfo?.reason ||
+					"",
+			},
+			permissions: [
+				...SUPPORTED_HTML_PERMISSION_SCOPES.map((scope) => ({
+					scope,
+					supported: true,
+					declarationStatus: declaredScopeSet.has(scope)
+						? ("declared" as const)
+						: ("notDeclared" as const),
+					grant: grantsByScope.get(scope),
+					ttlOptions: mode
+						? getSharedHtmlPermissionTtlOptions([scope], mode).filter(
+								(option) => option.ttlMs !== 0,
+							)
+						: [],
+				})),
+				...declaration.unsupportedScopes.map((scope) => ({
+					scope,
+					supported: false,
+					declarationStatus: "unsupported" as const,
+					ttlOptions: [],
+				})),
+			],
+			diagnostics,
+			activeGrantCount: grants.length,
+		}
+	}
+
+	private async resolveContext() {
+		const appConfigState = this.cfg.appConfigState
+		if (appConfigState.status === "loading") return null
+
+		const appConfig = appConfigState.status === "loaded" ? appConfigState.config : null
+		const mode: HtmlPermissionMode = appConfig ? "manifest" : "legacy"
+		return {
+			appConfig,
+			mode,
+			appConfigLoadError:
+				appConfigState.status === "error" ? appConfigState.error : undefined,
+			appFingerprint: await this.getAppFingerprint(mode, appConfig),
+			declaration: analyzeHtmlPermissionDeclarations(appConfig),
+		}
 	}
 
 	private reportMissingDeclaration(
@@ -219,22 +365,17 @@ export class IframePermissionService {
 		appConfig: HTMLAppConfig | null,
 		declaredScopes: HtmlPermissionScope[],
 	) {
-		const appName = appConfig?.name || "HTML 微应用"
+		const appName = appConfig?.name || ""
 		htmlMicroAppPreviewLogger.warn("Permission blocked: scope not declared in app.json", {
 			appName,
 			declaredScopes,
 			scope,
 		})
-		this.cfg.onMissingDeclaration?.({
-			appName,
-			declaredScopes,
-			scope,
-			scopeLabelKey: SCOPE_LABEL_KEYS[scope],
-		})
+		this.cfg.onMissingDeclaration?.({ appName, declaredScopes, scope })
 	}
 
 	private async getAppFingerprint(
-		mode: "manifest" | "legacy",
+		mode: HtmlPermissionMode,
 		appConfig: HTMLAppConfig | null,
 	): Promise<string> {
 		const source =
@@ -245,51 +386,39 @@ export class IframePermissionService {
 						version: appConfig?.version || "",
 						entry: appConfig?.entry || "",
 						permissions: appConfig?.permissions || {},
+						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+						entryContent: this.cfg.appInstance.content || "",
 					})
-				: this.cfg.appInstance.content || ""
+				: stableStringify({
+						entryContent: this.cfg.appInstance.content || "",
+						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+					})
 		return shortHash(source)
 	}
 
-	private buildGrantMatch(
-		scope: HtmlPermissionScope,
-		mode: "manifest" | "legacy",
+	private buildGrantIdentity(
+		mode: HtmlPermissionMode,
 		appFingerprint: string,
-	): Omit<HtmlPermissionGrant, "grantedAt" | "expiresAt"> {
+	): HtmlPermissionGrantIdentity {
 		return {
 			mode,
-			userKey: this.cfg.appInstance.userKey,
+			userId: this.cfg.appInstance.userId,
 			projectId: this.cfg.appInstance.projectId,
 			appRootDir: this.cfg.appInstance.appRootDir,
 			entryPath: this.cfg.appInstance.entryPath,
 			appFingerprint,
-			scope,
 		}
 	}
 
-	private matchesGrant(
-		grant: HtmlPermissionGrant,
-		match: Omit<HtmlPermissionGrant, "grantedAt" | "expiresAt">,
-	): boolean {
+	private canPersistGrant(identity: HtmlPermissionGrantIdentity): boolean {
 		return (
-			grant.mode === match.mode &&
-			grant.userKey === match.userKey &&
-			grant.projectId === match.projectId &&
-			grant.appRootDir === match.appRootDir &&
-			grant.entryPath === match.entryPath &&
-			grant.appFingerprint === match.appFingerprint &&
-			grant.scope === match.scope
+			Boolean(
+				identity.userId &&
+				identity.projectId &&
+				identity.entryPath &&
+				identity.appFingerprint,
+			) && !this.cfg.appInstance.hasUnversionedExternalRuntimeResources
 		)
-	}
-
-	private canPersistGrant(match: Omit<HtmlPermissionGrant, "grantedAt" | "expiresAt">): boolean {
-		return Boolean(match.userKey && match.projectId && match.entryPath && match.appFingerprint)
-	}
-
-	private getDefaultTtl(scope: HtmlPermissionScope, ttlOptions: HtmlPermissionTtlOption[]) {
-		const configured = DEFAULT_TTL_BY_SCOPE[scope]
-		return ttlOptions.some((option) => option.ttlMs === configured)
-			? configured
-			: (ttlOptions[0]?.ttlMs ?? 0)
 	}
 
 	private getNow() {

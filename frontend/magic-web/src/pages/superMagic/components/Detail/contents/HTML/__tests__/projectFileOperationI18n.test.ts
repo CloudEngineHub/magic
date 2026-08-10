@@ -20,6 +20,10 @@ const requiredUserInfoAuthorizationKeys = [
 	"content",
 	"contentWithoutReason",
 	"fieldSeparator",
+	"fields.name",
+	"fields.identity",
+	"fields.organization",
+	"legacyContent",
 	"allow",
 	"deny",
 ]
@@ -28,8 +32,10 @@ const requiredPermissionAuthorizationKeys = [
 	"title",
 	"content",
 	"contentWithoutReason",
+	"durationLabel",
 	"legacyContent",
 	"missingScope",
+	"scopeSeparator",
 	"allow",
 	"deny",
 	"scopes.llmUse",
@@ -38,7 +44,14 @@ const requiredPermissionAuthorizationKeys = [
 	"scopes.projectFilesDownload",
 	"scopes.fsProjectRead",
 	"scopes.fsProjectWrite",
+	"scopes.userProfileName",
+	"scopes.userProfileIdentity",
+	"scopes.userProfileOrganization",
 	"ttl.once",
+	"ttl.1d",
+	"ttl.7d",
+	"ttl.30d",
+	"ttl.always",
 	"ttl.5m",
 	"ttl.10m",
 	"ttl.15m",
@@ -48,6 +61,42 @@ const requiredPermissionAuthorizationKeys = [
 	"ttl.4h",
 	"ttl.8h",
 	"ttl.12h",
+]
+
+const requiredPermissionManagerKeys = [
+	"title",
+	"description",
+	"open",
+	"defaultAppName",
+	"noDeclaredPermissions",
+	"declared",
+	"notDeclared",
+	"unsupported",
+	"granted",
+	"notGranted",
+	"askWhenUsed",
+	"authorize",
+	"authorizeFailed",
+	"authorizeSuccess",
+	"grantedAt",
+	"expiresAt",
+	"alwaysValid",
+	"durationLabel",
+	"durationSelect",
+	"revoke",
+	"revokeAll",
+	"revokeNote",
+	"revokeNoteTitle",
+	"updateDuration",
+	"updateDurationFailed",
+	"updateDurationSuccess",
+	"remainingDays",
+	"diagnostics.manifestAbsent",
+	"diagnostics.manifestLoadError",
+	"diagnostics.scopesInvalid",
+	"diagnostics.scopeInvalid",
+	"diagnostics.scopeDuplicate",
+	"diagnostics.scopeUnsupported",
 ]
 
 function getPathValue(source: unknown, path: string): unknown {
@@ -92,6 +141,19 @@ describe("HTML micro-app permission authorization confirmation i18n", () => {
 			expect(
 				getPathValue(messages, `htmlEditor.permissionAuthorizationConfirm.${key}`),
 			).toEqual(expect.any(String))
+		}
+	})
+})
+
+describe("HTML micro-app permission manager i18n", () => {
+	it.each([
+		["zh_CN", zhCN],
+		["en_US", enUS],
+	])("defines all manager copy keys for %s", (_locale, messages) => {
+		for (const key of requiredPermissionManagerKeys) {
+			expect(getPathValue(messages, `htmlEditor.permissionManager.${key}`)).toEqual(
+				expect.any(String),
+			)
 		}
 	})
 })

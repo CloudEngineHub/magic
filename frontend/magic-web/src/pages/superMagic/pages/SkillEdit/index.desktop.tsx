@@ -20,7 +20,6 @@ import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
 import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
 import { MessageHeaderTopicHistoryPanel } from "@/pages/superMagic/components/MessageHeader"
-import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
 import {
@@ -43,9 +42,12 @@ import PublishPanel, { PublishPanelStore } from "@/pages/superMagic/components/P
 import {
 	FileActionVisibilityProvider,
 	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
+	VIEWER_FILE_ACTIONS,
 } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
 import QuickActionCards from "./components/QuickActionCards"
+import SkillFilesPanel from "./components/SkillFilesPanel"
 import SkillCollaboratorsQuickAction from "./components/SkillCollaboratorsQuickAction"
 import ConversationPanel from "./components/ConversationPanel"
 import { useSkillPublishGuard } from "./hooks/useSkillPublishGuard"
@@ -161,8 +163,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const { isAllowed: canPublishSkillTeam } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillPublish,
 	)
-	const canOpenSkillPublishPanel = canCreateSkill || canPublishSkillTeam
 	const selectedProject = store.project
+	const isViewer = isReadOnlyProject(selectedProject?.user_role)
+	const canOpenSkillPublishPanel = !isViewer && (canCreateSkill || canPublishSkillTeam)
 	const topicStore = store.conversation.topicStore
 	const selectedTopic = topicStore.selectedTopic
 	const isPublishPanelVisible = activeQuickActionPanel === "publish"
@@ -415,11 +418,11 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	).run
 
 	useDeepCompareEffect(() => {
-		if (!store.project?.id) return
+		if (isViewer || !store.project?.id) return
 		if (!store.projectFilesStore.workspaceFilesList.length) return
 
 		debouncedSyncWorkspaceManifest()
-	}, [store.project?.id, store.projectFilesStore.workspaceFilesList])
+	}, [isViewer, store.project?.id, store.projectFilesStore.workspaceFilesList])
 
 	const handleFileClick = useMemoizedFn((fileItem?: unknown) => {
 		setActiveQuickActionPanel(null)
@@ -432,7 +435,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	const { shouldShowDetailPanel, handleFileClickWithPanel, handleActiveDetailTabChange } =
 		useCompositeDetailPanelController({
 			detailRef,
-			isReadOnly: false,
+			isReadOnly: isViewer,
 			activeFileId,
 			setActiveFileId,
 			handleFileClick,
@@ -448,15 +451,11 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 
 	const { onFileTabsCacheLoaded } = useDeferUntilFileTabsCacheLoaded(store.project?.id)
 
-	const {
-		isTopicHistoryPanelOpen,
-		openTopicHistoryPanel,
-		closeTopicHistoryPanel,
-		toggleTopicHistoryPanel,
-	} = useTopicHistoryLayoutState({
-		storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.skillEdit,
-		isEnabled: !isPublishPanelVisible,
-	})
+	const { isTopicHistoryPanelOpen, closeTopicHistoryPanel, toggleTopicHistoryPanel } =
+		useTopicHistoryLayoutState({
+			storageKey: TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS.skillEdit,
+			isEnabled: !isViewer && !isPublishPanelVisible,
+		})
 
 	const openPublishPanel = useMemoizedFn(() => {
 		void refreshSkillVersions()
@@ -528,6 +527,15 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 
 	useEffect(() => {
 		if (store.loading || routeState.panel !== "publish") return
+		if (isViewer) {
+			navigate({
+				name: RouteName.SkillEdit,
+				params: { code: skillCode },
+				query: buildSkillEditQuery({ search: location.search, panel: null }),
+				replace: true,
+			})
+			return
+		}
 
 		if (routeState.publishView === "create") {
 			void openPublishCreateView()
@@ -543,6 +551,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		})
 	}, [
 		handleOpenPublishPanel,
+		isViewer,
 		location.search,
 		navigate,
 		openPublishCreateView,
@@ -558,8 +567,16 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	})
 
 	const handleOpenSettingsDialog = useMemoizedFn(() => {
+		if (isViewer) return
 		setIsSettingsDialogOpen(true)
 	})
+
+	useEffect(() => {
+		if (!isViewer) return
+		setIsSettingsDialogOpen(false)
+		handlePublishIdentityDialogOpenChange(false)
+		setActiveQuickActionPanel(null)
+	}, [handlePublishIdentityDialogOpenChange, isViewer])
 
 	const handleSettingsDialogOpenChange = useMemoizedFn((open: boolean) => {
 		setIsSettingsDialogOpen(open)
@@ -598,7 +615,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 			isHistoryPanelOpen: boolean
 			onToggleHistoryPanel?: () => void
 		}) => {
-			if (isPublishPanelVisible) return null
+			if (isViewer || isPublishPanelVisible) return null
 
 			return (
 				<ConversationPanel
@@ -639,7 +656,9 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider value={HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}>
+		<FileActionVisibilityProvider
+			value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
+		>
 			<>
 				<TopicDesktopPanels
 					containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
@@ -647,7 +666,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					isDetailPanelFullscreen={isDetailPanelFullscreen}
 					keepDetailMountedWhenHidden
 					historyLayout={
-						isPublishPanelVisible
+						isViewer || isPublishPanelVisible
 							? undefined
 							: {
 									isOpen: isTopicHistoryPanelOpen,
@@ -693,6 +712,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 									type="button"
 									className="flex h-9 flex-1 items-center gap-1.5 overflow-hidden rounded-lg border border-border bg-background px-2 py-1.5 text-left shadow-xs transition-colors hover:bg-accent/30"
 									onClick={handleOpenSettingsDialog}
+									disabled={isViewer}
 									data-testid="skill-name-input"
 								>
 									<div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
@@ -716,7 +736,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 							</div>
 
 							<div className="flex-1 overflow-hidden rounded-lg border border-border bg-background pt-1">
-								<TopicFilesButton
+								<SkillFilesPanel
+									readOnly={isViewer}
 									attachments={attachments}
 									setUserSelectDetail={setUserSelectDetail}
 									onFileClick={handleFileClickWithPanel}
@@ -727,7 +748,6 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 										store.projectFilesStore.setWorkspaceFileTree
 									}
 									selectedProject={store.project}
-									isInProject
 								/>
 							</div>
 
@@ -743,6 +763,8 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 										isPublishPrepareLoading || isEnsuringSkillConfigForPublish
 									}
 									canPublish={canOpenSkillPublishPanel}
+									hideSettings={isViewer}
+									hidePublish={isViewer}
 									activeAction={
 										isSkillIdentityDialogOpen
 											? "settings"
@@ -751,10 +773,12 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 									onSettingsClick={handleOpenSettingsDialog}
 									onPublishClick={handleOpenPublishPanel}
 									extraContent={
-										<SkillCollaboratorsQuickAction
-											skillCode={skillCode}
-											userRole={store.project?.user_role}
-										/>
+										isViewer ? null : (
+											<SkillCollaboratorsQuickAction
+												skillCode={skillCode}
+												userRole={store.project?.user_role}
+											/>
+										)
 									}
 								/>
 							)}
@@ -780,14 +804,14 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 								onActiveTabChange={handleActiveDetailTabChange}
 								onFullscreenChange={setIsDetailPanelFullscreen}
 								onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-								allowEdit
+								allowEdit={!isViewer}
 								selectedProject={store.project}
 								projectId={store.project?.id}
 								showFallbackWhenEmpty
 							/>
 						)
 					}
-					isReadOnly={isPublishPanelVisible}
+					isReadOnly={isViewer || isPublishPanelVisible}
 					showProjectResizeHandle
 					shouldShowDetailPanel={shouldShowDetailPanel}
 					renderMessagePanel={renderMessagePanel}

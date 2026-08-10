@@ -14,13 +14,9 @@ from app.i18n import i18n
 from app.tools.core import BaseTool, BaseToolParams, tool
 
 
-@tool()
+@tool(code_mode_only=True)
 class GetIMChannelStatus(BaseTool[BaseToolParams]):
-    """<!--zh
-    查询企业微信、钉钉、飞书、微信的配置情况与实时连接状态。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Query configuration and live connection status for WeCom, DingTalk, Lark, and WeChat. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Get configuration and live connection status for supported IM channels."""
 
     async def execute(self, tool_context: ToolContext, params: BaseToolParams) -> ToolResult:
         config = await load_config()

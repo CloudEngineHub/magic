@@ -37,6 +37,11 @@ class TaskFileVersionDomainService
      */
     public function createFileVersion(string $projectOrganizationCode, TaskFileEntity $fileEntity, int $editType = 1): ?TaskFileVersionEntity
     {
+        // 不需要创建版本副本的文件直接跳过
+        if (! $fileEntity->shouldCreateVersionCopy()) {
+            return null;
+        }
+
         // 仅对非目录文件创建版本
         if ($fileEntity->getIsDirectory()) {
             $this->logger->info('Skipping version creation for directory file', [

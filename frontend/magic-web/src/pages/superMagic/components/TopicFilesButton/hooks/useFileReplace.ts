@@ -10,9 +10,12 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { AttachmentItem } from "./types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { SuperMagicApi } from "@/apis"
+import type { FileScope } from "@/apis/modules/fileScope"
 
 interface UseFileReplaceOptions {
 	projectId?: string
+	/** 文件上传凭证所属的特殊空间。 */
+	fileScope?: FileScope
 	selectedProject?: any
 	selectedTopic?: any
 }
@@ -22,6 +25,7 @@ interface UseFileReplaceOptions {
  */
 export function useFileReplace({
 	projectId,
+	fileScope,
 	selectedProject,
 	selectedTopic,
 }: UseFileReplaceOptions) {
@@ -51,6 +55,7 @@ export function useFileReplace({
 
 			await multiFolderUploadStore.createUploadTask(filesWithKeys, undefined, {
 				projectId: projectId || "",
+				fileScope,
 				workspaceId,
 				projectName: selectedProject?.project_name || t("common.untitledProject"),
 				topicId: selectedTopic?.id,

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-查询当前用户可用的所有员工（Agent）列表
+List all agents available to the current user.
 
-参数：
-    --name-filter   按名称模糊过滤（可选，不区分大小写）
-    --type-filter   按类型过滤：official / custom / public（可选）
+Arguments:
+    --name-filter   Filter by name substring, case-insensitive.
+    --type-filter   Filter by type: official / custom / public.
 
-输出格式：JSON
+Output format: JSON
 """
 import json
 import os
@@ -14,16 +14,16 @@ import sys
 import argparse
 from pathlib import Path
 
-# agents/skills/_shared/ 对所有 skill 脚本均在 parents[2] 下
+# agents/skills/_shared/ is under parents[2] for all skill scripts.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import _shared.bootstrap  # noqa: F401 — 触发环境初始化
+import _shared.bootstrap  # noqa: F401 — initialize runtime environment
 
 from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults
 from app.infrastructure.sdk.magic_service.parameter.list_agents_parameter import ListAgentsParameter
 
-parser = argparse.ArgumentParser(description="查询当前用户可用的员工列表")
-parser.add_argument("--name-filter", default=None, help="按名称模糊过滤（不区分大小写）")
-parser.add_argument("--type-filter", default=None, choices=["official", "custom", "public"], help="按类型过滤")
+parser = argparse.ArgumentParser(description="List agents available to the current user")
+parser.add_argument("--name-filter", default=None, help="Filter by name substring, case-insensitive")
+parser.add_argument("--type-filter", default=None, choices=["official", "custom", "public"], help="Filter by agent type")
 args = parser.parse_args()
 
 try:
@@ -33,12 +33,12 @@ try:
 
     agents = result.get_agents()
 
-    # 按名称过滤
+    # Filter by name.
     if args.name_filter:
         keyword = args.name_filter.lower()
         agents = [a for a in agents if keyword in (getattr(a, "name", None) or "").lower()]
 
-    # 按类型过滤
+    # Filter by type.
     if args.type_filter:
         agents = [a for a in agents if (getattr(a, "type", None) or "") == args.type_filter]
 

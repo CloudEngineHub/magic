@@ -9,6 +9,37 @@ from agentlang.skills.models import SkillMetadata
 logger = get_logger(__name__)
 
 
+def _build_skills_dirs(agent_name: str) -> list[Path]:
+    """按明确的 Agent 文件标识符构建 Skill 查找目录。"""
+
+    from app.core.skill_utils.skill_sources import (
+        get_agents_workspace_skills_dir,
+        get_crew_skills_dir,
+        get_home_skills_dir,
+        get_personal_skills_dir,
+        get_system_skills_dir,
+        get_workspace_skills_dir,
+    )
+
+    skills_dirs: list[Path] = []
+    normalized_agent_name = agent_name.strip()
+    if normalized_agent_name:
+        try:
+            skills_dirs.append(get_crew_skills_dir(normalized_agent_name))
+        except ValueError as e:
+            logger.warning(f"当前 agent 标识非法，跳过 crew skills 目录: {e}")
+    skills_dirs.append(get_system_skills_dir())
+    skills_dirs.extend(
+        [
+            get_workspace_skills_dir(),
+            get_personal_skills_dir(),
+            get_agents_workspace_skills_dir(),
+            get_home_skills_dir(),
+        ]
+    )
+    return skills_dirs
+
+
 class GlobalSkillManager:
     """全局 Skill 管理器（单例）
 
@@ -43,33 +74,11 @@ class GlobalSkillManager:
     def get_skills_dirs(cls) -> List[Path]:
         """获取 skills 目录列表（供 SkillManager / skill_read / find_skill 全量解析）。
 
-        与系统提示中的「展示哪些 skill」无关：system、crew、workspace 由 Agent 配置控制，
-        personal 由 prompt 生成层作为独立来源扫描，见 generate_skills_prompt。
+        与系统提示中的「展示哪些 skill」无关：`agents/skills` 下仅 `<!-- skills: ... -->` 列出的名称会进入
+        skills prompt；`skills_dir` 只影响 prompt 内是否额外合并 workspace 扫描结果，见 generate_skills_prompt。
         """
         if cls._skills_dirs is None:
-            from app.core.skill_utils.skill_sources import (
-                get_agents_workspace_skills_dir,
-                get_crew_skills_dir,
-                get_home_skills_dir,
-                get_personal_skills_dir,
-                get_system_skills_dir,
-                get_workspace_skills_dir,
-            )
-
-            skills_dirs = [get_system_skills_dir()]
-            current_agent_type = (cls._current_agent_type or "").strip()
-            if current_agent_type:
-                try:
-                    crew_skills_dir = get_crew_skills_dir(current_agent_type)
-                    if crew_skills_dir.exists():
-                        skills_dirs.append(crew_skills_dir)
-                except ValueError as e:
-                    logger.warning(f"当前 agent 标识非法，跳过 crew skills 目录: {e}")
-            skills_dirs.append(get_workspace_skills_dir())
-            skills_dirs.append(get_personal_skills_dir())
-            skills_dirs.append(get_agents_workspace_skills_dir())
-            skills_dirs.append(get_home_skills_dir())
-            cls._skills_dirs = skills_dirs
+            cls._skills_dirs = _build_skills_dirs(cls._current_agent_type or "")
             logger.info(f"初始化 skills 目录: {[str(d) for d in cls._skills_dirs]}")
         return cls._skills_dirs
 
@@ -130,10 +139,19 @@ def get_skills_dirs() -> List[Path]:
     return GlobalSkillManager.get_skills_dirs()
 
 
-async def find_skill(skill_name: str) -> Optional[SkillMetadata]:
+async def find_skill(
+    skill_name: str,
+    *,
+    agent_name: str | None = None,
+) -> Optional[SkillMetadata]:
     """大小写不敏感地查找 skill
 
-    直接委托给 SkillManager.get_skill，后者已内置大小写不敏感匹配和按需单文件加载。
+    显式传入 agent_name 时使用该 Agent 的 Crew 目录，避免并发 run 共享进程级目录状态。
+    未传时保留现有全局管理器行为。
     """
-    skill_manager = get_global_skill_manager()
+    skill_manager = (
+        get_global_skill_manager()
+        if agent_name is None
+        else SkillManager(skills_dirs=_build_skills_dirs(agent_name))
+    )
     return await skill_manager.get_skill(skill_name)

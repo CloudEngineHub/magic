@@ -968,10 +968,161 @@
     return foundMarker ? foundMarker.element.getAttribute('magic-touch-id') : null;
   }
 
-  // 暴露公共接口
+  // Agent 截图使用的短生命周期标记层，与本地持续调试模式相互独立。
+  const RENDER_HOST_ID = '__magic_use_marker_render_host__';
+  let renderHost = null;
+  let renderCleanup = null;
+  let renderLabelMap = {};
+
+  function clearRendered() {
+    if (renderCleanup) renderCleanup();
+    renderCleanup = null;
+    if (renderHost && renderHost.parentNode) renderHost.parentNode.removeChild(renderHost);
+    renderHost = null;
+    renderLabelMap = {};
+  }
+
+  function rectanglesOverlap(left, right) {
+    return !(
+      left.x + left.width <= right.x ||
+      right.x + right.width <= left.x ||
+      left.y + left.height <= right.y ||
+      right.y + right.height <= left.y
+    );
+  }
+
+  function markerColor(kind, disabled) {
+    if (disabled) return '#7A7A7A';
+    if (kind === 'fill' || kind === 'select' || kind === 'upload') return '#1565C0';
+    if (kind === 'scroll') return '#6A1B9A';
+    return '#C62828';
+  }
+
+  function chooseBadgePosition(rect, badgeSize, occupied) {
+    const width = badgeSize.width;
+    const height = badgeSize.height;
+    const elementArea = Math.max(1, rect.width * rect.height);
+    const badgeArea = width * height;
+    const preferOutside = rect.height < LABEL_OUTSIDE_HEIGHT_THRESHOLD ||
+      badgeArea / elementArea > LABEL_AREA_THRESHOLD;
+    const outside = [
+      { x: rect.x - BORDER_WIDTH, y: rect.y - height, width, height },
+      { x: rect.x + rect.width - width, y: rect.y - height, width, height },
+      { x: rect.x + rect.width, y: rect.y, width, height },
+      { x: rect.x - width, y: rect.y, width, height },
+    ];
+    const inside = [
+      { x: rect.x, y: rect.y, width, height },
+      { x: rect.x + rect.width - width, y: rect.y, width, height },
+      { x: rect.x, y: rect.y + rect.height - height, width, height },
+    ];
+    const candidates = preferOutside ? [...outside, ...inside] : [...inside, ...outside];
+    const selected = candidates.find(candidate =>
+      candidate.x >= 0 && candidate.y >= 0 &&
+      candidate.x + candidate.width <= window.innerWidth &&
+      candidate.y + candidate.height <= window.innerHeight &&
+      !occupied.some(current => rectanglesOverlap(candidate, current))
+    ) || {
+      x: Math.max(0, Math.min(window.innerWidth - width, rect.x)),
+      y: Math.max(0, Math.min(window.innerHeight - height, rect.y)),
+      width,
+      height,
+    };
+    occupied.push(selected);
+    return selected;
+  }
+
+  function render(items) {
+    clearRendered();
+    if (!Array.isArray(items) || items.length === 0) return { count: 0, labels: {} };
+
+    renderHost = document.createElement('div');
+    renderHost.id = RENDER_HOST_ID;
+    renderHost.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:2147483647',
+      'pointer-events:none',
+      'contain:strict',
+    ].join(';');
+    const renderShadow = renderHost.attachShadow({ mode: 'open' });
+    const layer = document.createElement('div');
+    layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none';
+    renderShadow.appendChild(layer);
+    document.documentElement.appendChild(renderHost);
+
+    const occupied = [];
+    items.forEach(item => {
+      if (!item || !item.ref || !item.label || !item.rect) return;
+      const rect = item.rect;
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const color = markerColor(item.kind, item.disabled === true);
+      const box = document.createElement('div');
+      box.style.cssText = [
+        'position:absolute',
+        `left:${Math.max(0, rect.x)}px`,
+        `top:${Math.max(0, rect.y)}px`,
+        `width:${Math.max(1, rect.width)}px`,
+        `height:${Math.max(1, rect.height)}px`,
+        `border:${BORDER_WIDTH + 1}px solid ${color}`,
+        'box-sizing:border-box',
+        'border-radius:3px',
+        `background:${color}18`,
+      ].join(';');
+
+      const badge = document.createElement('span');
+      badge.textContent = item.label;
+      badge.style.cssText = [
+        'position:absolute',
+        'left:-10000px',
+        'top:-10000px',
+        `background:${color}`,
+        color === '#FFFF00' || color === '#00FF00' ? 'color:#000' : 'color:#fff',
+        'font:600 12px/18px ui-monospace,SFMono-Regular,Menlo,monospace',
+        'min-width:20px',
+        'height:18px',
+        'padding:0 4px',
+        'text-align:center',
+        'border-radius:3px',
+        'box-sizing:border-box',
+        'white-space:nowrap',
+      ].join(';');
+      layer.appendChild(box);
+      layer.appendChild(badge);
+      const measured = badge.getBoundingClientRect();
+      const badgeRect = chooseBadgePosition(
+        rect,
+        { width: Math.max(20, measured.width), height: Math.max(18, measured.height) },
+        occupied,
+      );
+      badge.style.left = `${badgeRect.x}px`;
+      badge.style.top = `${badgeRect.y}px`;
+      renderLabelMap[item.label] = item.ref;
+    });
+
+    const invalidate = () => clearRendered();
+    window.addEventListener('scroll', invalidate, { once: true, capture: true });
+    window.addEventListener('resize', invalidate, { once: true });
+    renderCleanup = () => {
+      window.removeEventListener('scroll', invalidate, true);
+      window.removeEventListener('resize', invalidate);
+    };
+    return { count: Object.keys(renderLabelMap).length, labels: { ...renderLabelMap } };
+  }
+
+  function getLabelMap() {
+    return { ...renderLabelMap };
+  }
+
+  // 暴露公共接口。mark/unmark/find 保留旧版持续调试能力；render/clear 用于 Agent 截图。
   window.MagicMarker = {
     mark: mark,
     unmark: unmark,
-    find: find
+    find: find,
+    startLive: mark,
+    stopLive: unmark,
+    render: render,
+    clear: clearRendered,
+    getLabelMap: getLabelMap,
   };
 })();

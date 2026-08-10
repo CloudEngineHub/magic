@@ -14,6 +14,7 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Dtyq\SuperMagic\Application\Share\Service\ResourceShareAppService;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCancelShareRequestDTO;
+use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCopySharedFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CopyResourceFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\FindSimilarShareRequestDTO;
@@ -182,6 +183,36 @@ class ShareApi extends AbstractApi
 
         $dto = ResourceListRequestDTO::fromRequest($this->request);
         return $this->shareAppService->getShareList($userAuthorization, $dto);
+    }
+
+    /**
+     * 获取严格按请求状态筛选的分享列表。
+     *
+     * @param RequestContext $requestContext 请求上下文
+     * @return array 分享列表
+     */
+    public function getShareListByStatusFilter(RequestContext $requestContext): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $userAuthorization = $requestContext->getUserAuthorization();
+
+        $dto = ResourceListRequestDTO::fromRequest($this->request);
+        return $this->shareAppService->getShareListByStatusFilter($userAuthorization, $dto);
+    }
+
+    /**
+     * 按资源 ID 获取当前用户创建的有效分享.
+     *
+     * @param RequestContext $requestContext 请求上下文
+     * @param string $id 资源 ID
+     * @return array 分享信息
+     */
+    public function getShareByResourceId(RequestContext $requestContext, string $id): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $userAuthorization = $requestContext->getUserAuthorization();
+
+        return $this->shareAppService->getShareByResourceId($userAuthorization, $id)->toArray();
     }
 
     /**
@@ -373,5 +404,20 @@ class ShareApi extends AbstractApi
 
         // 5. 返回数组格式
         return ['files' => $files];
+    }
+
+    /**
+     * Copy files authorized by a share into an existing project.
+     */
+    public function batchCopySharedFiles(RequestContext $requestContext, string $shareCode): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        $requestDTO = BatchCopySharedFilesRequestDTO::fromRequest($this->request);
+
+        return $this->shareAppService->batchCopySharedFiles(
+            $requestContext->getUserAuthorization(),
+            $shareCode,
+            $requestDTO
+        );
     }
 }

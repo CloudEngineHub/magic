@@ -43,7 +43,7 @@ async def validate_skill(skill_path):
     except yaml.YAMLError as e:
         return False, f"Invalid YAML in frontmatter: {e}"
 
-    # Check required fields（其余 frontmatter 键可自由扩展，不校验白名单）
+    # Check required fields; other frontmatter keys are extensible and not allow-listed.
     if 'name' not in frontmatter:
         return False, "Missing 'name' in frontmatter"
     if 'description' not in frontmatter:
@@ -61,12 +61,12 @@ async def validate_skill(skill_path):
         return False, f"Name '{name}' should be kebab-case (lowercase letters, digits, and hyphens only)"
     if name.startswith('-') or name.endswith('-') or '--' in name:
         return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens"
-    # 长度限制：最短 2 字符，最长 64 字符
+    # Length limit: 2 to 64 characters.
     if len(name) < 2:
         return False, f"Name '{name}' is too short. Minimum length is 2 characters."
     if len(name) > 64:
         return False, f"Name is too long ({len(name)} characters). Maximum is 64 characters."
-    # name 必须与目录名一致
+    # The skill name must match the directory name.
     dir_name = skill_path.name
     if name != dir_name:
         return False, f"Name '{name}' in frontmatter does not match directory name '{dir_name}'"

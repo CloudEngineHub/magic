@@ -1,71 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import {
-	IframePermissionService,
-	type HtmlPermissionConfirmRequest,
-	type IframePermissionServiceConfig,
-} from "../IframePermissionService"
-import type { HtmlPermissionGrant, HtmlPermissionGrantStore } from "../HtmlPermissionGrantStore"
+import type { HtmlPermissionConfirmRequest } from "../IframePermissionService"
 import { htmlMicroAppPreviewLogger } from "../../../utils/htmlMicroAppPreviewLogger"
-
-class MemoryGrantStore implements HtmlPermissionGrantStore {
-	grants: HtmlPermissionGrant[] = []
-	save = vi.fn((grant: HtmlPermissionGrant) => {
-		this.grants = this.grants.filter(
-			(item) =>
-				!(
-					item.mode === grant.mode &&
-					item.userKey === grant.userKey &&
-					item.projectId === grant.projectId &&
-					item.appRootDir === grant.appRootDir &&
-					item.entryPath === grant.entryPath &&
-					item.appFingerprint === grant.appFingerprint &&
-					item.scope === grant.scope
-				),
-		)
-		this.grants.push(grant)
-	})
-	list = vi.fn(() => this.grants)
-	remove = vi.fn((match: Partial<HtmlPermissionGrant>) => {
-		this.grants = this.grants.filter((grant) =>
-			Object.entries(match).some(
-				([key, value]) => grant[key as keyof HtmlPermissionGrant] !== value,
-			),
-		)
-	})
-	prune = vi.fn((now: number) => {
-		this.grants = this.grants.filter((grant) => grant.expiresAt > now)
-	})
-}
-
-function createService(overrides: Partial<IframePermissionServiceConfig> = {}) {
-	const grantStore = new MemoryGrantStore()
-	const confirmPermission = vi.fn(async () => ({ allowed: true, ttlMs: 15 * 60 * 1000 }))
-	const service = new IframePermissionService({
-		grantStore,
-		confirmPermission,
-		getNow: () => 1_000_000,
-		appConfigState: {
-			status: "loaded",
-			config: {
-				name: "Manifest App",
-				entry: "index.html",
-				permissions: {
-					scopes: ["llm.use"],
-					reason: "Analyze project data",
-				},
-			},
-		},
-		appInstance: {
-			userKey: "user-1",
-			projectId: "project-1",
-			appRootDir: "app/",
-			entryPath: "app/index.html",
-			content: "<html>manifest</html>",
-		},
-		...overrides,
-	})
-	return { service, grantStore, confirmPermission }
-}
+import { createService } from "./IframePermissionService.testUtils"
 
 describe("IframePermissionService", () => {
 	beforeEach(() => {
@@ -96,7 +32,6 @@ describe("IframePermissionService", () => {
 			appName: "Manifest App",
 			declaredScopes: ["llm.use"],
 			scope: "project.message.write",
-			scopeLabelKey: "htmlEditor.permissionAuthorizationConfirm.scopes.projectMessageWrite",
 		})
 	})
 
@@ -110,7 +45,7 @@ describe("IframePermissionService", () => {
 			expect.objectContaining<Partial<HtmlPermissionConfirmRequest>>({
 				appName: "Manifest App",
 				mode: "manifest",
-				scope: "llm.use",
+				scopes: ["llm.use"],
 				reason: "Analyze project data",
 			}),
 		)
@@ -118,21 +53,19 @@ describe("IframePermissionService", () => {
 			expect.objectContaining({
 				mode: "manifest",
 				scope: "llm.use",
-				expiresAt: 1_900_000,
+				expiresAt: 87_400_000,
 			}),
 		)
 		expect(confirmPermission.mock.calls[0][0].ttlOptions.map((option) => option.ttlMs)).toEqual(
 			[
-				5 * 60 * 1000,
-				15 * 60 * 1000,
-				30 * 60 * 1000,
 				60 * 60 * 1000,
-				2 * 60 * 60 * 1000,
-				4 * 60 * 60 * 1000,
 				8 * 60 * 60 * 1000,
-				12 * 60 * 60 * 1000,
+				24 * 60 * 60 * 1000,
+				7 * 24 * 60 * 60 * 1000,
+				30 * 24 * 60 * 60 * 1000,
 			],
 		)
+		expect(confirmPermission.mock.calls[0][0].defaultTtlMs).toBe(24 * 60 * 60 * 1000)
 	})
 
 	it("does not save reusable grant when user selects current request only", async () => {
@@ -153,6 +86,28 @@ describe("IframePermissionService", () => {
 		expect(grantStore.save).not.toHaveBeenCalled()
 	})
 
+	it("persists and reuses an always-valid grant", async () => {
+		const { service, grantStore, confirmPermission } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Profile App",
+					permissions: { scopes: ["user.profile.name"] },
+				},
+			},
+			confirmPermission: vi.fn(async () => ({ allowed: true, ttlMs: null })),
+		})
+
+		await service.authorize("user.profile.name")
+		await service.authorize("user.profile.name")
+
+		expect(grantStore.grants[0]).toMatchObject({
+			scope: "user.profile.name",
+			expiresAt: null,
+		})
+		expect(confirmPermission).toHaveBeenCalledTimes(1)
+	})
+
 	it("reuses an unexpired grant without prompting", async () => {
 		const { service, grantStore, confirmPermission } = createService()
 
@@ -161,9 +116,10 @@ describe("IframePermissionService", () => {
 
 		expect(confirmPermission).toHaveBeenCalledTimes(1)
 		expect(grantStore.save).toHaveBeenCalledTimes(1)
+		expect(grantStore.getAppGrants).toHaveBeenCalled()
 	})
 
-	it("prompts legacy apps with shorter ttl options", async () => {
+	it("prompts legacy apps with bounded ttl options", async () => {
 		const { service, confirmPermission } = createService({
 			appConfigState: { status: "absent" },
 		})
@@ -174,16 +130,17 @@ describe("IframePermissionService", () => {
 		expect(confirmPermission).toHaveBeenCalledWith(
 			expect.objectContaining<Partial<HtmlPermissionConfirmRequest>>({
 				mode: "legacy",
-				scope: "project.files.download",
+				scopes: ["project.files.download"],
 				isLegacy: true,
 			}),
 		)
 		const request = confirmPermission.mock.calls[0][0]
 		expect(request.ttlOptions.map((option) => option.ttlMs)).toEqual([
-			5 * 60 * 1000,
-			15 * 60 * 1000,
-			30 * 60 * 1000,
+			60 * 60 * 1000,
+			8 * 60 * 60 * 1000,
+			24 * 60 * 60 * 1000,
 		])
+		expect(request.defaultTtlMs).toBe(60 * 60 * 1000)
 	})
 
 	it("offers longer but still bounded ttl options for manifest project writes", async () => {
@@ -200,18 +157,39 @@ describe("IframePermissionService", () => {
 		await service.authorize("fs.project.write")
 
 		expect(confirmPermission.mock.calls[0][0].ttlOptions.map((option) => option.ttlMs)).toEqual(
-			[
-				0,
-				5 * 60 * 1000,
-				10 * 60 * 1000,
-				30 * 60 * 1000,
-				60 * 60 * 1000,
-				2 * 60 * 60 * 1000,
-				4 * 60 * 60 * 1000,
-				8 * 60 * 60 * 1000,
-				12 * 60 * 60 * 1000,
-			],
+			[0, 60 * 60 * 1000, 8 * 60 * 60 * 1000, 24 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000],
 		)
+		expect(confirmPermission.mock.calls[0][0].defaultTtlMs).toBe(60 * 60 * 1000)
+	})
+
+	it("omits one-time access when permission is granted before use", async () => {
+		const { service, confirmPermission } = createService({
+			appConfigState: { status: "absent" },
+		})
+
+		expect(await service.authorize("fs.project.write", { allowOnce: false })).toBe(true)
+
+		const request = confirmPermission.mock.calls[0][0]
+		expect(request.ttlOptions.map((option) => option.ttlMs)).toEqual([
+			60 * 60 * 1000,
+			8 * 60 * 60 * 1000,
+		])
+		expect(request.defaultTtlMs).toBe(60 * 60 * 1000)
+	})
+
+	it("does not prompt for advance authorization when the grant cannot be persisted", async () => {
+		const { service, confirmPermission } = createService({
+			appInstance: {
+				userId: "",
+				projectId: "project-1",
+				appRootDir: "app/",
+				entryPath: "app/index.html",
+				content: "<html>manifest</html>",
+			},
+		})
+
+		expect(await service.authorize("llm.use", { allowOnce: false })).toBe(false)
+		expect(confirmPermission).not.toHaveBeenCalled()
 	})
 
 	it("rejects while app config is loading without prompting", async () => {
@@ -239,7 +217,7 @@ describe("IframePermissionService", () => {
 				mode: "legacy",
 				isLegacy: true,
 				appConfigLoadError: "HTTP 500",
-				scope: "llm.use",
+				scopes: ["llm.use"],
 			}),
 		)
 		expect(grantStore.save).toHaveBeenCalledWith(
@@ -251,34 +229,235 @@ describe("IframePermissionService", () => {
 		expect(htmlMicroAppPreviewLogger.warn).toHaveBeenCalledWith(
 			"Permission fallback: app.json unavailable, using legacy confirmation",
 			{
-				scope: "llm.use",
+				scopes: ["llm.use"],
 				error: "HTTP 500",
 			},
 		)
 	})
 
-	it("does not reuse grants when the app fingerprint changes", async () => {
-		const store = new MemoryGrantStore()
-		const confirmPermission = vi.fn(async () => ({ allowed: true, ttlMs: 15 * 60 * 1000 }))
-		const first = createService({ grantStore: store, confirmPermission })
-		await first.service.authorize("llm.use")
-
-		const second = createService({
-			grantStore: store,
-			confirmPermission,
+	it("authorizes user info scopes together and persists one grant per scope", async () => {
+		const { service, grantStore, confirmPermission } = createService({
 			appConfigState: {
 				status: "loaded",
 				config: {
-					name: "Manifest App",
-					entry: "index.html",
-					version: "2.0.0",
-					permissions: { scopes: ["llm.use"] },
+					name: "Profile App",
+					permissions: {
+						scopes: ["user.profile.name", "user.profile.identity"],
+					},
 				},
 			},
 		})
 
-		await second.service.authorize("llm.use")
+		const allowed = await service.authorizeMany(
+			["user.profile.name", "user.profile.identity"],
+			{ reason: "Build a profile card", presentation: "userInfo" },
+		)
 
+		expect(allowed).toBe(true)
+		expect(confirmPermission).toHaveBeenCalledWith(
+			expect.objectContaining({
+				scopes: ["user.profile.name", "user.profile.identity"],
+				reason: "Build a profile card",
+				presentation: "userInfo",
+			}),
+		)
+		expect(grantStore.save).toHaveBeenCalledTimes(2)
+	})
+
+	it("includes legacy userInfo declarations in the unified manifest scopes", async () => {
+		const { service, confirmPermission } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					permissions: {
+						userInfo: { scopes: ["user.profile.organization"] },
+					},
+				},
+			},
+		})
+
+		expect(await service.authorize("user.profile.organization")).toBe(true)
+		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
+
+	it("returns declaration diagnostics and only current app grants in snapshots", async () => {
+		const { service, grantStore } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Diagnostic App",
+					permissions: {
+						scopes: ["llm.use", "llm.use", "future.scope"] as never,
+					},
+				},
+			},
+		})
+		await service.authorize("llm.use")
+		grantStore.grants.push({
+			...grantStore.grants[0],
+			projectId: "another-project",
+			scope: "project.message.write",
+		})
+
+		const snapshot = await service.getPermissionSnapshot()
+
+		expect(snapshot.activeGrantCount).toBe(1)
+		expect(snapshot.permissions.find((item) => item.scope === "llm.use")?.grant).toBeDefined()
+		expect(snapshot.permissions.find((item) => item.scope === "future.scope")).toMatchObject({
+			supported: false,
+			declarationStatus: "unsupported",
+		})
+		expect(snapshot.diagnostics).toEqual(
+			expect.arrayContaining([
+				{ code: "scopeDuplicate", scope: "llm.use" },
+				{ code: "scopeUnsupported", scope: "future.scope" },
+			]),
+		)
+	})
+
+	it("treats malformed permissions.scopes as an empty declaration", async () => {
+		const { service, confirmPermission } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					permissions: { scopes: "llm.use" as never },
+				},
+			},
+		})
+
+		expect(await service.authorize("llm.use")).toBe(false)
+		expect(confirmPermission).not.toHaveBeenCalled()
+		expect((await service.getPermissionSnapshot()).diagnostics).toContainEqual({
+			code: "scopesInvalid",
+		})
+	})
+
+	it("prunes expired grants when reading the permission snapshot", async () => {
+		let now = 1_000_000
+		const { service, grantStore } = createService({
+			getNow: () => now,
+			confirmPermission: vi.fn(async () => ({ allowed: true, ttlMs: 60 * 60 * 1000 })),
+		})
+		await service.authorize("llm.use")
+		now += 2 * 60 * 60 * 1000
+
+		const snapshot = await service.getPermissionSnapshot()
+
+		expect(snapshot.activeGrantCount).toBe(0)
+		expect(grantStore.grants).toHaveLength(0)
+	})
+
+	it("updates an active grant duration from the current time", async () => {
+		let now = 1_000_000
+		const onGrantsChanged = vi.fn()
+		const { service, grantStore } = createService({
+			getNow: () => now,
+			onGrantsChanged,
+		})
+		await service.authorize("llm.use")
+		grantStore.grants.push({
+			...grantStore.grants[0],
+			projectId: "another-project",
+		})
+		now += 60_000
+
+		const snapshot = await service.updateGrantTtl("llm.use", 8 * 60 * 60 * 1000)
+
+		expect(grantStore.grants).toContainEqual(
+			expect.objectContaining({
+				scope: "llm.use",
+				grantedAt: now,
+				expiresAt: now + 8 * 60 * 60 * 1000,
+			}),
+		)
+		expect(
+			snapshot.permissions
+				.find((item) => item.scope === "llm.use")
+				?.ttlOptions.map((option) => option.ttlMs),
+		).toContain(8 * 60 * 60 * 1000)
+		expect(onGrantsChanged).toHaveBeenCalledTimes(2)
+		expect(grantStore.grants.some((grant) => grant.projectId === "another-project")).toBe(true)
+	})
+
+	it("updates an eligible grant to always allow and back to a finite duration", async () => {
+		let now = 1_000_000
+		const { service, grantStore } = createService({
+			getNow: () => now,
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Profile App",
+					permissions: { scopes: ["user.profile.name"] },
+				},
+			},
+			confirmPermission: vi.fn(async () => ({
+				allowed: true,
+				ttlMs: 7 * 24 * 60 * 60 * 1000,
+			})),
+		})
+		await service.authorize("user.profile.name")
+
+		await service.updateGrantTtl("user.profile.name", null)
+		expect(grantStore.grants[0].expiresAt).toBeNull()
+
+		now += 60_000
+		await service.updateGrantTtl("user.profile.name", 24 * 60 * 60 * 1000)
+		expect(grantStore.grants[0]).toMatchObject({
+			grantedAt: now,
+			expiresAt: now + 24 * 60 * 60 * 1000,
+		})
+	})
+
+	it("rejects non-persistent durations when updating an active grant", async () => {
+		const { service, grantStore } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					name: "Writer",
+					permissions: { scopes: ["fs.project.write"] },
+				},
+			},
+			confirmPermission: vi.fn(async () => ({ allowed: true, ttlMs: 60 * 60 * 1000 })),
+		})
+		await service.authorize("fs.project.write")
+
+		await expect(service.updateGrantTtl("fs.project.write", 0)).rejects.toThrow(
+			"Permission duration is not allowed",
+		)
+		expect(grantStore.grants[0].expiresAt).toBe(4_600_000)
+	})
+
+	it("revokes one scope or all scopes without removing other app grants", async () => {
+		const { service, grantStore } = createService({
+			appConfigState: {
+				status: "loaded",
+				config: {
+					permissions: { scopes: ["llm.use", "project.files.download"] },
+				},
+			},
+		})
+		await service.authorizeMany(["llm.use", "project.files.download"])
+		grantStore.grants.push({
+			...grantStore.grants[0],
+			projectId: "another-project",
+		})
+
+		let snapshot = await service.revoke("llm.use")
+		expect(snapshot.activeGrantCount).toBe(1)
+		expect(grantStore.grants.some((grant) => grant.projectId === "another-project")).toBe(true)
+
+		snapshot = await service.revokeAll()
+		expect(snapshot.activeGrantCount).toBe(0)
+		expect(grantStore.grants).toHaveLength(1)
+		expect(grantStore.grants[0].projectId).toBe("another-project")
+	})
+
+	it("prompts again after the current scope is revoked", async () => {
+		const { service, confirmPermission } = createService()
+		await service.authorize("llm.use")
+		await service.revoke("llm.use")
+
+		expect(await service.authorize("llm.use")).toBe(true)
 		expect(confirmPermission).toHaveBeenCalledTimes(2)
 	})
 })

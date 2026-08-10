@@ -1,14 +1,8 @@
-import { Flex } from "antd"
 import MagicButton from "@/components/base/MagicButton"
 import type { HTMLAttributes } from "react"
 import { useMemo } from "react"
 import type Conversation from "@/models/chat/conversation"
-import {
-	getUserDepartmentFirstPath,
-	getUserJobTitle,
-	getUserName,
-} from "@/utils/modules/chat"
-import { cx } from "antd-style"
+import { getUserDepartmentFirstPath, getUserJobTitle, getUserName } from "@/utils/modules/chat"
 import conversationStore from "@/stores/chatNew/conversation"
 import MagicIcon from "@/components/base/MagicIcon"
 import useUserInfo from "@/hooks/chat/useUserInfo"
@@ -16,18 +10,23 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { IconDots } from "@tabler/icons-react"
 import { ExtraSectionKey } from "@/pages/chatNew/types"
-import useStyles from "../styles"
 import CurrentTopic from "../CurrentTopic"
 import MagicAvatar from "@/components/base/MagicAvatar"
 import DepartmentRender from "@/components/business/DepartmentRender"
 import { observer } from "mobx-react-lite"
+import { cn } from "@/lib/utils"
+import {
+	chatHeaderClassName,
+	chatHeaderExtraSectionButtonActiveClassName,
+	chatHeaderTitleClassName,
+	chatHeaderTopicClassName,
+} from "../classNames"
 
 interface HeaderProps extends HTMLAttributes<HTMLDivElement> {
 	conversation: Conversation
 }
 
 function HeaderRaw({ conversation, className }: HeaderProps) {
-	const { styles } = useStyles()
 	const { t } = useTranslation("interface")
 
 	// const imStyle = useAppearanceStore((state) => state.imStyle)
@@ -45,27 +44,24 @@ function HeaderRaw({ conversation, className }: HeaderProps) {
 	})
 
 	return (
-		<Flex vertical>
-			<Flex
-				gap={8}
-				align="center"
-				justify="space-between"
-				className={cx(styles.header, className)}
-			>
-				<Flex gap={8} align="center" flex={1}>
+		<div className="flex flex-col">
+			<div className={cn(chatHeaderClassName, className)}>
+				<div className="flex min-w-0 flex-1 items-center gap-2">
 					<MagicAvatar src={conversationUser?.avatar_url} size={40}>
 						{getUserName(conversationUser)}
 					</MagicAvatar>
-					<Flex vertical flex={1}>
-						<span className={styles.headerTitle}>{getUserName(conversationUser)}</span>
-						<span className={styles.headerTopic}>
+					<div className="flex min-w-0 flex-1 flex-col">
+						<span className={chatHeaderTitleClassName}>
+							{getUserName(conversationUser)}
+						</span>
+						<span className={chatHeaderTopicClassName}>
 							<DepartmentRender path={departmentPath} />
 							{getUserJobTitle(conversationUser) &&
 								` | ${getUserJobTitle(conversationUser)}`}
 						</span>
-					</Flex>
-				</Flex>
-				<Flex gap={2}>
+					</div>
+				</div>
+				<div className="flex gap-0.5">
 					{/* <MagicButton
 						key={ExtraSectionKey.Topic}
 						className={cx({
@@ -85,18 +81,16 @@ function HeaderRaw({ conversation, className }: HeaderProps) {
 
 					<MagicButton
 						key={ExtraSectionKey.Setting}
-						className={cx({
-							[styles.extraSectionButtonActive]: settingOpen,
-						})}
+						className={cn(settingOpen && chatHeaderExtraSectionButtonActiveClassName)}
 						tip={t("chat.setting")}
 						type="text"
 						icon={<MagicIcon size={20} color="currentColor" component={IconDots} />}
 						onClick={onSettingClick}
 					/>
-				</Flex>
-			</Flex>
+				</div>
+			</div>
 			<CurrentTopic />
-		</Flex>
+		</div>
 	)
 }
 

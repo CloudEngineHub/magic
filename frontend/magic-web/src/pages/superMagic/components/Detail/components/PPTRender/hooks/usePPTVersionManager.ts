@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
@@ -46,6 +46,7 @@ export function usePPTVersionManager({
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	const [versionContent, setVersionContent] = useState<string | null>(null)
 	const [isLoadingVersion, setIsLoadingVersion] = useState(false)
+	const versionRequestSeqRef = useRef(0)
 
 	// 检查是否正在查看最新版本
 	const isNewestVersion = useMemo(() => {
@@ -133,15 +134,15 @@ export function usePPTVersionManager({
 		if (!fileId) return
 		if (targetVersion !== undefined && targetVersion === fileVersion) return
 
+		const requestSeq = ++versionRequestSeqRef.current
 		setFileVersion(targetVersion)
+		// Never let the previous version's HTML masquerade as the newly selected version.
+		setVersionContent(null)
 
 		// 如果切换到历史版本，获取其内容
 		if (targetVersion !== undefined) {
 			const content = await downloadVersionContent(targetVersion)
-			setVersionContent(content)
-		} else {
-			// 返回最新版本 - 清除版本内容
-			setVersionContent(null)
+			if (versionRequestSeqRef.current === requestSeq) setVersionContent(content)
 		}
 	})
 

@@ -39,6 +39,12 @@ export enum TopicMode {
 	CustomAgent = "custom_agent",
 
 	/**
+	 * 微应用开发
+	 * 用于微应用开发模式
+	 */
+	MicroApp = "micro-app",
+
+	/**
 	 * 默认模式
 	 * 用于获取默认模式模型列表
 	 */

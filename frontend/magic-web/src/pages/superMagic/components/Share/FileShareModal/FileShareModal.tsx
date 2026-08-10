@@ -40,8 +40,8 @@ import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
-import FileShareHtmlDependenciesOption from "./FileShareHtmlDependenciesOption"
-import { useFileShareHtmlDependencies } from "./hooks/useFileShareHtmlDependencies"
+import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
+import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
 interface FileShareModalProps {
 	attachments?: any[] // 可选，如果没有 resourceId 时使用（文件树）
 	attachmentList?: any[] // 可选，扁平化的文件列表
@@ -314,30 +314,32 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		return calculateActualFileCount(selectedFiles)
 	}, [selectedFiles, effectiveShareProject, attachmentList])
 	const {
-		analysisError: htmlDependencyAnalysisError,
-		dependencyFileCount: htmlDependencyFileCount,
-		fileIdsForSubmission: htmlDependencyFileIdsForSubmission,
+		analysisError: documentDependencyAnalysisError,
+		dependencyFileCount: documentDependencyFileCount,
+		dependencyFileType,
+		fileIdsForSubmission: documentDependencyFileIdsForSubmission,
 		handleFileIdsChange,
-		includeHtmlDependencies,
-		isAnalyzing: isAnalyzingHtmlDependencies,
+		includeDocumentDependencies,
+		isAnalyzing: isAnalyzingDocumentDependencies,
 		showDependencyOption,
-		setIncludeHtmlDependencies,
-	} = useFileShareHtmlDependencies({
+		setIncludeDocumentDependencies,
+	} = useFileShareDocumentDependencies({
 		selectedFileIds,
 		setSelectedFileIds,
 		attachments,
 		shareProject: effectiveShareProject,
 	})
 	const submittedFileIds = useMemo(
-		() => mergeRecordingShareFileIds(htmlDependencyFileIdsForSubmission, requiredFileIds),
-		[htmlDependencyFileIdsForSubmission, requiredFileIds],
+		() => mergeRecordingShareFileIds(documentDependencyFileIdsForSubmission, requiredFileIds),
+		[documentDependencyFileIdsForSubmission, requiredFileIds],
 	)
-	const htmlDependencyOption = (
-		<FileShareHtmlDependenciesOption
-			analysisError={htmlDependencyAnalysisError}
-			checked={includeHtmlDependencies}
-			dependencyFileCount={htmlDependencyFileCount}
-			onCheckedChange={setIncludeHtmlDependencies}
+	const documentDependencyOption = (
+		<FileShareDocumentDependenciesOption
+			analysisError={documentDependencyAnalysisError}
+			checked={includeDocumentDependencies}
+			dependencyFileCount={documentDependencyFileCount}
+			fileType={dependencyFileType}
+			onCheckedChange={setIncludeDocumentDependencies}
 			visible={showDependencyOption}
 		/>
 	)
@@ -659,8 +661,8 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			magicToast.warning(t("share.pleaseSelectFiles"))
 			return
 		}
-		if (htmlDependencyAnalysisError) {
-			magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+		if (documentDependencyAnalysisError) {
+			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 		}
 
 		setIsSaving(true)
@@ -802,7 +804,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareExpiry,
 		shareRange,
 		shareTargets,
-		htmlDependencyAnalysisError,
+		documentDependencyAnalysisError,
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
@@ -950,7 +952,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							{/* Expiry Field */}
 							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
 
-							{htmlDependencyOption}
+							{documentDependencyOption}
 
 							{/* Advanced Settings */}
 							<ShareAdvancedSettings
@@ -976,7 +978,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						onSave={handleSave}
 						onCancelShare={handleCancelShare}
 						isSaving={isSaving}
-						isDisabled={selectedFileIds.length === 0 || isAnalyzingHtmlDependencies}
+						isDisabled={selectedFileIds.length === 0 || isAnalyzingDocumentDependencies}
 						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
 				</div>
@@ -1113,7 +1115,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							{/* Expiry Field */}
 							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
 
-							{htmlDependencyOption}
+							{documentDependencyOption}
 
 							{/* Advanced Settings */}
 							<ShareAdvancedSettings
@@ -1143,7 +1145,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				isSaving={isSaving}
 				isDisabled={
 					(selectedFileIds.length === 0 && !effectiveShareProject) ||
-					isAnalyzingHtmlDependencies
+					isAnalyzingDocumentDependencies
 				}
 				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>

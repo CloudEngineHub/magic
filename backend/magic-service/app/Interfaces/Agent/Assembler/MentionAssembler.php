@@ -13,6 +13,8 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Directory
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\ProjectFileMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\UploadFileMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpMention;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\Directory\MemoryDirectoryMention;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Memory\File\MemoryFileMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionInterface;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectMention;
@@ -32,6 +34,8 @@ final class MentionAssembler
         return match ($mentionAttrType) {
             MentionType::PROJECT_FILE => new ProjectFileMention($mention),
             MentionType::PROJECT_DIRECTORY => new DirectoryMention($mention),
+            MentionType::MEMORY_FILE => new MemoryFileMention($mention),
+            MentionType::MEMORY_DIRECTORY => new MemoryDirectoryMention($mention),
             MentionType::PROJECT => new ProjectMention($mention),
             MentionType::UPLOAD_FILE => new UploadFileMention($mention),
             MentionType::AGENT => new AgentMention($mention),

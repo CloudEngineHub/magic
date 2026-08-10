@@ -14,21 +14,22 @@ import asyncio
 import json
 import time
 import traceback
-import uuid
 from typing import Any, Dict, List, Optional
 
 from agentlang.chat_history import ToolCall
 from agentlang.config.config import config
+from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.parallel import Parallel
+from pydantic import ValidationError
 
 from app.core.context.agent_context import AgentContext
+from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.core.tool_call_event_manager import ToolCallEventManager
 from app.tools.core.tool_executor import tool_executor
 
 logger = get_logger(__name__)
-
 
 class ToolCallExecutor:
     """工具调用执行器
@@ -86,6 +87,26 @@ class ToolCallExecutor:
                 tool_calls, agent_context, self.default_parallel_timeout
             )
 
+    @staticmethod
+    def _validate_forward_request(request: ToolForwardRequest) -> None:
+        target_tool_name = request.target_tool.name
+        target_params_class = request.target_tool.params_class
+        if not target_tool_name or target_params_class is None:
+            raise ValueError(
+                "Forwarded tool type does not declare a valid name and parameter model."
+            )
+        if not isinstance(request.params, target_params_class):
+            raise TypeError(
+                f"Forwarded tool '{target_tool_name}' requires "
+                f"'{target_params_class.__name__}', got '{type(request.params).__name__}'."
+            )
+
+    @staticmethod
+    def _merge_forward_warning(result: ToolResult, warning: str | None) -> None:
+        if not warning:
+            return
+        result.content = f"{warning}\n\n{result.content}" if result.content else warning
+
     async def execute_sequential(
         self,
         tool_calls: List[ToolCall],
@@ -108,6 +129,7 @@ class ToolCallExecutor:
             tool_name = "[unknown]"
             tool_context = None
             tool_arguments_dict = None
+            forward_warning: str | None = None
             # 记录工具执行开始时间
             tool_start_time = time.time()
 
@@ -122,10 +144,14 @@ class ToolCallExecutor:
             try:
                 tool_name = tool_call.function.name
                 tool_arguments_dict = self._parse_tool_arguments(tool_call, tool_name)
+                openai_tool_call_for_event = ToolCallEventManager.create_openai_tool_call(
+                    tool_call.id,
+                    tool_call.type,
+                    tool_name,
+                    tool_call.function.arguments,
+                )
 
                 try:
-                    logger.info(f"开始执行工具: {tool_name}, 参数: {tool_arguments_dict}")
-
                     # 创建工具上下文
                     tool_context = ToolCallEventManager.create_tool_context(
                         agent_context,
@@ -137,6 +163,41 @@ class ToolCallExecutor:
                     # 标记 Code Mode 来源，供工具层做第二道拦截
                     if is_code_mode:
                         tool_context.register_extension("is_code_mode", True)
+
+                    tool_instance = tool_executor.get_tool(tool_name)
+                    if tool_instance is not None:
+                        try:
+                            forward_request = await tool_instance.resolve_forwarded_tool(
+                                tool_context,
+                                tool_arguments_dict,
+                            )
+                        except ValidationError:
+                            # 保留源工具的正常参数校验和错误展示。
+                            forward_request = None
+                        if forward_request is not None:
+                            self._validate_forward_request(forward_request)
+                            tool_name = forward_request.target_tool.name
+                            tool_arguments_dict = forward_request.params.model_dump(
+                                mode="json",
+                                exclude_none=True,
+                            )
+                            forward_warning = forward_request.warning
+                            tool_context = ToolCallEventManager.create_tool_context(
+                                agent_context,
+                                tool_call.id,
+                                tool_name,
+                                tool_arguments_dict,
+                            )
+                            if is_code_mode:
+                                tool_context.register_extension("is_code_mode", True)
+
+                    openai_tool_call_for_event = ToolCallEventManager.create_openai_tool_call(
+                        tool_call.id,
+                        tool_call.type,
+                        tool_name,
+                        json.dumps(tool_arguments_dict, ensure_ascii=False),
+                    )
+                    logger.info(f"开始执行工具: {tool_name}, 参数: {tool_arguments_dict}")
 
                     # 触发工具调用前事件
                     await ToolCallEventManager.trigger_before_tool_call(
@@ -173,6 +234,7 @@ class ToolCallExecutor:
                         result,
                         result.execution_time,
                     )
+                    self._merge_forward_warning(result, forward_warning)
                 except Exception as e:
                     # 计算执行时间（即使出错）
                     execution_time = (
@@ -225,6 +287,7 @@ class ToolCallExecutor:
                         logger.error(
                             f"触发失败工具调用事件时出错: {event_error}", exc_info=True
                         )
+                    self._merge_forward_warning(result, forward_warning)
 
                 results.append(result)
             except AttributeError as attr_err:

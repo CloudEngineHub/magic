@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { HTML_CODE_BLOCK_PREVIEW_SKELETON_MIN_VISIBLE_DURATION } from "../constants"
 import type { HtmlCodeBlockPreviewMode } from "../types"
+import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 
 type HtmlCodeBlockPreviewLayout = "desktop" | "phone"
 
@@ -8,6 +9,7 @@ interface UseHtmlCodeBlockPreviewControllerOptions {
 	isStreaming: boolean
 	hasResolvedCode: boolean
 	hasVisiblePreviewContent: boolean
+	viewStateKey: string
 }
 
 interface UseHtmlCodeBlockPreviewControllerResult {
@@ -30,9 +32,20 @@ interface UseHtmlCodeBlockPreviewControllerResult {
 export function useHtmlCodeBlockPreviewController(
 	options: UseHtmlCodeBlockPreviewControllerOptions,
 ): UseHtmlCodeBlockPreviewControllerResult {
-	const { isStreaming, hasResolvedCode, hasVisiblePreviewContent } = options
-	const [viewMode, setViewMode] = useState<HtmlCodeBlockPreviewMode>("phone")
-	const [isExpanded, setIsExpanded] = useState(true)
+	const { isStreaming, hasResolvedCode, hasVisiblePreviewContent, viewStateKey } = options
+	const [viewMode, setViewMode] = useMessageViewState<HtmlCodeBlockPreviewMode>(
+		`${viewStateKey}:view-mode`,
+		"phone",
+	)
+	const [isExpanded, setIsExpanded] = useMessageViewState(`${viewStateKey}:expanded`, true)
+	const [hasUserSelectedViewMode, setHasUserSelectedViewMode] = useMessageViewState(
+		`${viewStateKey}:view-mode-user-controlled`,
+		false,
+	)
+	const [hasUserControlledExpanded, setHasUserControlledExpanded] = useMessageViewState(
+		`${viewStateKey}:expanded-user-controlled`,
+		false,
+	)
 	const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 	const [shouldAnimatePreviewCardWidth, setShouldAnimatePreviewCardWidth] = useState(false)
 	const [phonePreviewCardWidth, setPhonePreviewCardWidth] = useState<number | null>(null)
@@ -98,9 +111,11 @@ export function useHtmlCodeBlockPreviewController(
 	useEffect(() => {
 		if (isStreaming) {
 			pendingPreferPhonePreviewAfterStreamRef.current = true
-			setViewMode((currentViewMode) =>
-				currentViewMode === "code" ? currentViewMode : "phone",
-			)
+			if (!hasUserSelectedViewMode) {
+				setViewMode((currentViewMode) =>
+					currentViewMode === "code" ? currentViewMode : "phone",
+				)
+			}
 			setShouldAnimatePreviewCardWidth(false)
 			setPhonePreviewCardWidth(null)
 			setMountedPreviewLayouts({
@@ -114,16 +129,27 @@ export function useHtmlCodeBlockPreviewController(
 			setIsPreviewLoading(false)
 			clearPreviewLoadingTimer()
 		}
-	}, [clearPreviewLoadingTimer, isStreaming])
+	}, [clearPreviewLoadingTimer, hasUserSelectedViewMode, isStreaming, setViewMode])
 
 	useEffect(() => {
 		if (isStreaming || !hasResolvedCode) return
 		if (!pendingPreferPhonePreviewAfterStreamRef.current) return
 
 		pendingPreferPhonePreviewAfterStreamRef.current = false
-		setViewMode((currentViewMode) => (currentViewMode === "code" ? currentViewMode : "phone"))
-		setIsExpanded(true)
-	}, [hasResolvedCode, isStreaming])
+		if (!hasUserSelectedViewMode) {
+			setViewMode((currentViewMode) =>
+				currentViewMode === "code" ? currentViewMode : "phone",
+			)
+		}
+		if (!hasUserControlledExpanded) setIsExpanded(true)
+	}, [
+		hasResolvedCode,
+		hasUserControlledExpanded,
+		hasUserSelectedViewMode,
+		isStreaming,
+		setIsExpanded,
+		setViewMode,
+	])
 
 	useEffect(() => {
 		if (hasVisiblePreviewContent) {
@@ -141,7 +167,7 @@ export function useHtmlCodeBlockPreviewController(
 		setViewMode("code")
 		setIsExpanded(true)
 		setIsPreviewLoading(false)
-	}, [clearPreviewLoadingTimer, hasVisiblePreviewContent])
+	}, [clearPreviewLoadingTimer, hasVisiblePreviewContent, setIsExpanded, setViewMode])
 
 	useEffect(() => {
 		const wasStreaming = previousIsStreamingRef.current
@@ -273,14 +299,25 @@ export function useHtmlCodeBlockPreviewController(
 			}
 
 			setViewMode(mode)
+			setHasUserSelectedViewMode(true)
 			setIsExpanded(true)
+			setHasUserControlledExpanded(true)
 		},
-		[clearPreviewLoadingTimer, isStreaming, viewMode],
+		[
+			clearPreviewLoadingTimer,
+			isStreaming,
+			setHasUserControlledExpanded,
+			setHasUserSelectedViewMode,
+			setIsExpanded,
+			setViewMode,
+			viewMode,
+		],
 	)
 
 	const handleToggleExpanded = useCallback(() => {
+		setHasUserControlledExpanded(true)
 		setIsExpanded((currentExpanded) => !currentExpanded)
-	}, [])
+	}, [setHasUserControlledExpanded, setIsExpanded])
 
 	const shouldRenderCodeView = viewMode === "code"
 	const shouldRenderPreview = hasResolvedCode && !shouldRenderCodeView

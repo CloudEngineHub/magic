@@ -12,6 +12,7 @@ from app.infrastructure.sdk.base import SdkBase, SdkContext
 from .api.ai_ability_api import AiAbilityApi
 from .api.agent_api import AgentApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+from .api.magicbase_api import MagicBaseApi
 from .api.message_schedule_api import MessageScheduleApi
 from .api.oauth2_callback_relay_api import OAuth2CallbackRelayApi
 from .api.skill_api import SkillApi
@@ -44,6 +45,7 @@ class MagicService:
             'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
+            'magicbase': MagicBaseApi,
             'message_schedule': MessageScheduleApi,
             'oauth2_callback_relay': OAuth2CallbackRelayApi,
             'skill': SkillApi,
@@ -89,6 +91,11 @@ class MagicService:
         # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes.
         """
         return self._fetched_definitions['file']
+
+    @property
+    def magicbase(self) -> 'MagicBaseApi':
+        """Get MagicBase API instance"""
+        return self._fetched_definitions['magicbase']
 
     @property
     def message_schedule(self) -> 'MessageScheduleApi':

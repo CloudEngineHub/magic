@@ -15,53 +15,49 @@ from app.tools.oauth2._api_docs import BaseOAuth2ApiDocTool
 
 
 class OAuth2UpsertApiDocParams(BaseToolParams):
-    """新增或更新 OAuth2 接口文档的参数。"""
+    """Parameters for saving OAuth2 API documentation."""
 
-    app_name: str = Field(..., description="""<!--zh: 已注册的 OAuth2 app_name。-->
-Registered OAuth2 app name.""")
+    app_name: str = Field(..., description="Registered OAuth2 app name.")
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"] = Field(
         ...,
-        description="""<!--zh: HTTP 方法。-->
-HTTP method.""",
+        description="HTTP method.",
     )
-    path: Optional[str] = Field(None, description="""<!--zh: OpenAPI path。不传时会从 url 中解析。-->
-OpenAPI path. If omitted, it is parsed from url.""")
-    url: Optional[str] = Field(None, description="""<!--zh: 完整接口 URL，来自平台文档或已验证调用。-->
-Full API URL from provider docs or a verified request.""")
-    operation_id: Optional[str] = Field(None, description="""<!--zh: 可选 OpenAPI operationId，不传时自动生成。-->
-Optional OpenAPI operationId. Generated from method and path when omitted.""")
-    summary: Optional[str] = Field(None, description="""<!--zh: 接口摘要。-->
-Short API summary.""")
-    description: Optional[str] = Field(None, description="""<!--zh: 接口说明。-->
-API description.""")
-    tags: Optional[List[str]] = Field(None, description="""<!--zh: OpenAPI tags。-->
-OpenAPI tags.""")
-    headers: Optional[Dict[str, Any]] = Field(None, description="""<!--zh: 业务请求头说明。不要传 token、Authorization 等敏感头。-->
-Business header documentation. Do not include token or Authorization headers.""")
-    query_schema: Optional[Dict[str, Any]] = Field(None, description="""<!--zh: query 参数 schema 或说明。-->
-Query parameter schema or descriptions.""")
-    request_body_schema: Optional[Dict[str, Any]] = Field(None, description="""<!--zh: JSON 请求体 schema。-->
-JSON request body schema.""")
-    response_status_code: str = Field("200", description="""<!--zh: 主要响应状态码。-->
-Primary response status code.""")
-    response_description: Optional[str] = Field(None, description="""<!--zh: 响应说明。-->
-Response description.""")
-    response_schema: Optional[Dict[str, Any]] = Field(None, description="""<!--zh: 响应 JSON schema。不要保存真实个人数据。-->
-Response JSON schema. Do not store raw personal data.""")
-    source_refs: Optional[List[str]] = Field(None, description="""<!--zh: 文档来源链接或用户提供的来源说明。-->
-Source document links or user-provided references.""")
-    example_tool_call: Optional[Dict[str, Any]] = Field(None, description="""<!--zh: 可复用的 oauth2_request 示例参数，不要包含 access token。-->
-Reusable oauth2_request parameters. Do not include access tokens.""")
-    notes: Optional[str] = Field(None, description="""<!--zh: 调用注意事项。不要保存 token、code、secret 或原始个人响应。-->
-Usage notes. Do not store tokens, codes, secrets, or raw personal response bodies.""")
-    verified: bool = Field(True, description="""<!--zh: 是否来自已验证的成功调用。-->
-Whether this documentation came from a verified successful request.""")
+    path: Optional[str] = Field(None, description="OpenAPI path. Parsed from url when omitted.")
+    url: Optional[str] = Field(None, description="Full API URL from provider docs or a verified request.")
+    operation_id: Optional[str] = Field(
+        None,
+        description="OpenAPI operationId. Generated from method and path when omitted.",
+    )
+    summary: Optional[str] = Field(None, description="Short API summary.")
+    description: Optional[str] = Field(None, description="API description.")
+    tags: Optional[List[str]] = Field(None, description="OpenAPI tags.")
+    headers: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Business header documentation. Exclude tokens and authorization headers.",
+    )
+    query_schema: Optional[Dict[str, Any]] = Field(None, description="Query parameter schema or descriptions.")
+    request_body_schema: Optional[Dict[str, Any]] = Field(None, description="JSON request-body schema.")
+    response_status_code: str = Field("200", description="Primary response status code.")
+    response_description: Optional[str] = Field(None, description="Response description.")
+    response_schema: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Response JSON schema. Do not store raw personal data.",
+    )
+    source_refs: Optional[List[str]] = Field(None, description="Source links or user-provided references.")
+    example_tool_call: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Reusable oauth2_request parameters without access tokens.",
+    )
+    notes: Optional[str] = Field(
+        None,
+        description="Usage notes. Do not store tokens, codes, secrets, or raw personal responses.",
+    )
+    verified: bool = Field(True, description="Whether a successful request verified this documentation.")
 
 
 @tool(name="oauth2_upsert_api_doc")
 class OAuth2UpsertApiDoc(BaseOAuth2ApiDocTool[OAuth2UpsertApiDocParams]):
-    """<!--zh: 新增或更新某个 OAuth2 app 的业务接口文档。-->
-    Create or update recorded business API documentation for an OAuth2 app."""
+    """Create or update recorded API documentation for an OAuth2 app."""
 
     name = "oauth2_upsert_api_doc"
 

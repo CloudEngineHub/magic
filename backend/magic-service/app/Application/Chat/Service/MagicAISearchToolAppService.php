@@ -7,21 +7,18 @@ declare(strict_types=1);
 
 namespace App\Application\Chat\Service;
 
-use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
-use App\Application\ModelGateway\Service\ModelConfigAppService;
+use App\Application\ModelGateway\Service\AiAbilityModelAppService;
 use App\Domain\Chat\DTO\AISearch\Request\MagicChatAggregateSearchReqDTO;
 use App\Domain\Chat\DTO\AISearch\Response\MagicAggregateSearchSummaryDTO;
 use App\Domain\Chat\DTO\Message\ChatMessage\AggregateAISearchCardMessageV2;
 use App\Domain\Chat\DTO\Message\ChatMessage\Item\DeepSearch\QuestionItem;
 use App\Domain\Chat\DTO\Message\ChatMessage\Item\DeepSearch\SearchDetailItem;
-use App\Domain\Chat\Entity\ValueObject\AggregateSearch\SearchDeepLevel;
 use App\Domain\Chat\Entity\ValueObject\AISearchCommonQueryVo;
-use App\Domain\Chat\Entity\ValueObject\LLMModelEnum;
 use App\Domain\Chat\Service\MagicChatDomainService;
 use App\Domain\Chat\Service\MagicLLMDomainService;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\HTMLReader;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -45,6 +42,7 @@ class MagicAISearchToolAppService extends AbstractAppService
 
     public function __construct(
         private readonly MagicLLMDomainService $magicLLMDomainService,
+        private readonly AiAbilityModelAppService $aiAbilityModelAppService,
         private readonly IdGeneratorInterface $idGenerator,
         protected readonly MagicUserDomainService $magicUserDomainService,
         protected readonly MagicChatDomainService $magicChatDomainService,
@@ -194,12 +192,7 @@ class MagicAISearchToolAppService extends AbstractAppService
             ->setSearchKeywords($searchKeywords)
             ->setUserId($dto->getUserId())
             ->setOrganizationCode($dto->getOrganizationCode());
-        // Summary for deep search supports using other models
-        if ($dto->getSearchDeepLevel() === SearchDeepLevel::DEEP) {
-            $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId(), LLMModelEnum::DEEPSEEK_V3->value);
-        } else {
-            $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId());
-        }
+        $modelInterface = $this->getChatModel($dto->getOrganizationCode(), $dto->getUserId());
         $queryVo->setModel($modelInterface);
 
         // Use non-streaming summarization method
@@ -491,16 +484,8 @@ class MagicAISearchToolAppService extends AbstractAppService
             ->setOrganizationCode($dto->getOrganizationCode());
     }
 
-    private function getChatModel(string $orgCode, string $userId, string $modelName = LLMModelEnum::DEEPSEEK_V3->value): ModelInterface
+    private function getChatModel(string $orgCode, string $userId): ModelInterface
     {
-        // Get the model name through the fallback chain
-        $modelName = di(ModelConfigAppService::class)->getChatModelTypeByFallbackChain($orgCode, $userId, $modelName);
-        // If a valid model is still not obtained, use the default DEEPSEEK_V3 to prevent null model from causing subsequent exceptions
-        if ($modelName === '' || $modelName === null) {
-            $modelName = LLMModelEnum::DEEPSEEK_V3->value;
-        }
-        $dataIsolation = ModelGatewayDataIsolation::createByOrganizationCodeWithoutSubscription($orgCode, $userId);
-        // Get the model proxy
-        return di(ModelGatewayMapper::class)->getChatModelProxy($dataIsolation, $modelName);
+        return $this->aiAbilityModelAppService->getChatModel(AiAbilityCode::AiSearchModel, $orgCode, $userId);
     }
 }

@@ -21,24 +21,13 @@ SdkSnippetTimeoutRegistry.register("mcp_connect_server", min_timeout=600)
 class McpConnectServerParams(BaseToolParams):
     server_name: str = Field(
         ...,
-        description="""<!--zh: 要连接的 MCP 服务器名称，必须是 mcp_list_servers 返回的某个名字。-->
-Name of the MCP server to connect. Must be one of the names returned by
-mcp_list_servers.""",
+        description="MCP server name returned by mcp_list_servers.",
     )
 
 
 @tool(name="mcp_connect_server")
 class McpConnectServer(BaseMcpTool[McpConnectServerParams]):
-    """<!--zh
-    显式连接指定 MCP 服务器，并返回该服务器实际提供的工具清单。
-    仅在 mcp_list_servers 返回 status='disconnected' 时调用；status='connected'
-    时无需重复连接。
-    -->
-    Explicitly connect to the given MCP server and return the tools it
-    exposes. Only call this when mcp_list_servers reports status
-    'disconnected' for the target server. Connecting an already-connected
-    server is a no-op but still incurs latency.
-    """
+    """Connect a disconnected MCP server and return its available tools."""
 
     async def _get_action_key(self, server_name: str) -> str:
         """根据服务器类型返回 action 的 i18n key：STDIO → install_server，HTTP → connect_server。"""

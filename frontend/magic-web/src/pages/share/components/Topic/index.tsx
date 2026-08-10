@@ -21,7 +21,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MessageList from "../MessageList"
-import { MessageStatus, TaskStatus, type TaskData } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	MessageStatus,
+	TaskStatus,
+	type ProjectListItem,
+	type TaskData,
+} from "@/pages/superMagic/pages/Workspace/types"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
 import { useDownloadAll } from "@/pages/superMagic/components/TopicFilesButton/useDownloadAll"
 import { getBaseUrl } from "@/pages/superMagicMobile/utils/mobile"
@@ -128,6 +133,17 @@ function Topic({
 	const { handleDownloadAll, allLoading } = useDownloadAll({ projectId })
 
 	const { isShareRoute, isLegacy } = useShareRoute()
+	const shareSelectedProject = useMemo(
+		() =>
+			projectId
+				? ({
+						id: projectId,
+						project_name: resource_name,
+						name: resource_name,
+					} as ProjectListItem)
+				: null,
+		[projectId, resource_name],
+	)
 
 	// 判断是否是新格式文件分享（多个文件，无fileId）
 	const isNewFileShare = isFileShare && !fileId
@@ -1062,6 +1078,7 @@ function Topic({
 									onActiveFileChange={setActiveFileId}
 									topicName={resource_name}
 									projectId={projectId}
+									selectedProject={shareSelectedProject}
 									allowDownload={allowDownloadProjectFile}
 									hideTabBar={shouldRenderFullscreenFileOnly}
 									showFileHeader={
@@ -1093,7 +1110,7 @@ function Topic({
 										isEmpty(autoDetail) &&
 										isEmpty(userDetail)) ||
 										!hasStarted) &&
-										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
+										"max-md:max-w-none w-full min-w-[420px] max-w-[840px]",
 									!(
 										(!showAllProjectFiles &&
 											isEmpty(autoDetail) &&
@@ -1101,7 +1118,7 @@ function Topic({
 										!hasStarted
 									) && "w-[420px] min-w-[420px]",
 									!hasStarted &&
-										"scale-[1.7] [transform:perspective(900px)_rotateX(30deg)_translateY(150px)] max-md:scale-110 max-md:[transform:perspective(550px)_rotateX(20deg)_translateY(-20px)]",
+										"max-md:scale-110 max-md:[transform:perspective(550px)_rotateX(20deg)_translateY(-20px)] scale-[1.7] [transform:perspective(900px)_rotateX(30deg)_translateY(150px)]",
 									(isMessagePanelDragging || isMessagePanelHovering) &&
 										"select-none !transition-none",
 								)}
@@ -1123,7 +1140,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
-											topicId={data?.project_id}
+											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
 												setUserDetail(detail)
@@ -1134,8 +1151,9 @@ function Topic({
 											currentTopicStatus={
 												isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 											}
-											stickyMessageClassName="-top-[10px] pt-[10px] [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+											stickyMessageClassName="[--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 											projectFilesStore={projectFilesStore}
+											scrollContainerRef={messageContainerRef}
 										/>
 										{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 											<LoadingMessage />
@@ -1158,14 +1176,14 @@ function Topic({
 
 			{hasStarted && !isFileShare && !isNewFileShare && (
 				<div
-					className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]"
+					className="max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)]"
 					data-testid="share-playback-controls"
 				>
 					<div className="flex flex-col gap-2.5 p-2">
-						<div className="flex flex-1 flex-row items-center justify-between max-md:gap-2.5 [&_img]:h-9 [&_img]:w-auto">
+						<div className="max-md:gap-2.5 flex flex-1 flex-row items-center justify-between [&_img]:h-9 [&_img]:w-auto">
 							{isMobile && <FooterLogo />}
 							{(taskData?.process?.length || 0) > 0 && (
-								<div className="mr-[30px] min-w-0 max-w-[400px] shrink overflow-visible max-md:mr-0 max-md:flex-1">
+								<div className="max-md:mr-0 max-md:flex-1 mr-[30px] min-w-0 max-w-[400px] shrink overflow-visible">
 									<TaskList taskData={taskData} />
 								</div>
 							)}
@@ -1180,7 +1198,7 @@ function Topic({
 									</MagicTooltip>
 								</div>
 							)}
-							<div className="mr-[30px] flex-1 max-md:absolute max-md:-top-[0] max-md:left-0 max-md:right-0 max-md:z-10 max-md:mr-0 max-md:h-[26px]">
+							<div className="max-md:absolute max-md:-top-[0] max-md:left-0 max-md:right-0 max-md:z-10 max-md:mr-0 max-md:h-[26px] mr-[30px] flex-1">
 								<Slider
 									min={0}
 									max={messagesWithoutRevoked?.length || 0}
@@ -1223,7 +1241,7 @@ function Topic({
 					className="fixed bottom-0 left-0 right-0 z-10 flex h-full animate-fadeInUp flex-col items-center justify-center bg-gradient-to-b from-transparent via-[#F9F9F9] to-[#F9F9F9] px-5 pb-0 pt-[60px] transition-all duration-300 ease-in-out dark:via-background dark:to-background"
 					data-testid="share-replay-intro"
 				>
-					<div className="w-[840px] max-md:w-[335px] max-md:max-w-[335px]">
+					<div className="max-md:w-[335px] max-md:max-w-[335px] w-[840px]">
 						<div className="mb-5 flex items-center justify-start gap-2.5 rounded-lg">
 							<div className="relative h-[50px] w-[50px] shrink-0 overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300">
 								<div className="absolute -left-[30px] -top-[30px] h-[120px] w-[120px] animate-[spin_3s_linear_infinite] bg-gradient-to-r from-[#FFAFC8] via-[#E08AFF] to-[#9FC3FF] opacity-90"></div>
@@ -1236,10 +1254,10 @@ function Topic({
 								</div>
 							</div>
 							<div className="flex flex-col items-start">
-								<div className="mb-1.5 text-center text-sm font-normal leading-5 text-foreground max-md:text-sm max-md:leading-5">
+								<div className="max-md:text-sm max-md:leading-5 mb-1.5 text-center text-sm font-normal leading-5 text-foreground">
 									{t("share.viewingTask")}
 								</div>
-								<div className="bg-gradient-to-br from-[#3F8FFF] to-[#EF2FDF] bg-clip-text text-lg font-semibold leading-[1.3333em] text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent] max-md:max-h-10 max-md:text-sm max-md:leading-5">
+								<div className="max-md:max-h-10 max-md:text-sm max-md:leading-5 bg-gradient-to-br from-[#3F8FFF] to-[#EF2FDF] bg-clip-text text-lg font-semibold leading-[1.3333em] text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]">
 									{resource_name}
 								</div>
 							</div>
@@ -1247,16 +1265,16 @@ function Topic({
 						<div className="relative mx-auto flex min-h-[300px] w-full min-w-[200px] flex-col items-center justify-center gap-5 rounded-[20px] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.1)] backdrop-blur-[10px] after:absolute after:bottom-[-1px] after:left-0 after:h-full after:w-full after:rounded-b-lg after:bg-gradient-to-b after:from-transparent after:via-transparent after:to-background dark:bg-white/[0.95] dark:after:to-gray-100">
 							<div className="absolute bottom-0 left-0 right-0 top-0 z-10 flex h-full w-full items-center justify-center">
 								<div
-									className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300 max-md:h-[60px] max-md:w-[60px]"
+									className="max-md:h-[60px] max-md:w-[60px] relative h-20 w-20 cursor-pointer overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300"
 									onClick={startShowingMessages}
 									data-testid="share-replay-play-trigger"
 								>
-									<div className="absolute -left-[50px] -top-[50px] h-[150px] w-[150px] cursor-pointer bg-black/80 max-md:-left-[30px] max-md:-top-[30px] max-md:h-[120px] max-md:w-[120px]"></div>
-									<div className="absolute left-1/2 top-1/2 z-10 flex h-[50px] w-[50px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full max-md:h-10 max-md:w-10">
+									<div className="max-md:-left-[30px] max-md:-top-[30px] max-md:h-[120px] max-md:w-[120px] absolute -left-[50px] -top-[50px] h-[150px] w-[150px] cursor-pointer bg-black/80"></div>
+									<div className="max-md:h-10 max-md:w-10 absolute left-1/2 top-1/2 z-10 flex h-[50px] w-[50px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full">
 										<IconPlayerPlayFilled
 											size={50}
 											color="white"
-											className="h-[50px] w-[50px] cursor-pointer brightness-0 invert max-md:h-10 max-md:w-10"
+											className="max-md:h-10 max-md:w-10 h-[50px] w-[50px] cursor-pointer brightness-0 invert"
 										/>
 									</div>
 								</div>
@@ -1272,17 +1290,20 @@ function Topic({
 							</div>
 							<div
 								className={cn(
-									"relative h-full max-h-[500px] overflow-x-hidden overflow-y-hidden rounded-lg bg-background px-[90px] py-7 transition-all ease-in-out [mask-image:linear-gradient(to_bottom,transparent,black_28px,black_calc(100%-28px),transparent)] [transition-duration:800ms] dark:bg-card max-md:max-h-[335px] max-md:min-w-0 max-md:max-w-[calc(100%-40px)] max-md:p-0 max-md:[mask-image:none]",
+									"max-md:max-h-[335px] max-md:min-w-0 max-md:max-w-[calc(100%-40px)] max-md:p-0 max-md:[mask-image:none] relative h-full max-h-[500px] overflow-x-hidden overflow-y-hidden rounded-lg bg-background px-[90px] py-7 transition-all ease-in-out [mask-image:linear-gradient(to_bottom,transparent,black_28px,black_calc(100%-28px),transparent)] [transition-duration:800ms] dark:bg-card",
 									((!showAllProjectFiles &&
 										isEmpty(autoDetail) &&
 										isEmpty(userDetail)) ||
 										!hasStarted) &&
-										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
+										"max-md:max-w-none w-full min-w-[420px] max-w-[840px]",
 								)}
 							>
-								<div className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5">
+								<div
+									ref={messageContainerRef}
+									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
+								>
 									<MessageList
-										topicId={data?.project_id}
+										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {
 											setUserDetail(detail)
@@ -1293,8 +1314,9 @@ function Topic({
 										currentTopicStatus={
 											isLoadAll ? TaskStatus.FINISHED : TaskStatus.RUNNING
 										}
-										stickyMessageClassName="top-0 z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+										stickyMessageClassName="z-1 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)] top-0"
 										projectFilesStore={projectFilesStore}
+										scrollContainerRef={messageContainerRef}
 									/>
 									{!taskIsEnd && messageList?.length > 0 && !hasStarted && (
 										<LoadingMessage />
@@ -1304,7 +1326,7 @@ function Topic({
 						</div>
 						<div className="flex w-full flex-col items-center gap-3 text-center">
 							<div className="my-5 rounded-md backdrop-blur-[5px]">
-								<div className="text-xs font-normal leading-4 text-muted-foreground [text-shadow:0_1px_1px_rgba(255,255,255,0.6)] dark:[text-shadow:none] max-md:text-[13px] max-md:leading-[18px]">
+								<div className="max-md:text-[13px] max-md:leading-[18px] text-xs font-normal leading-4 text-muted-foreground [text-shadow:0_1px_1px_rgba(255,255,255,0.6)] dark:[text-shadow:none]">
 									{t("share.replayWillStartIn", { countdown })}
 								</div>
 							</div>

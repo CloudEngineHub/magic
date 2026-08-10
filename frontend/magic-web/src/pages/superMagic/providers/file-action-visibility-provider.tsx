@@ -7,6 +7,7 @@ export interface FileActionVisibility {
 	hideShareTopic?: boolean
 	hideCreateNewTopic?: boolean
 	hideFullscreen?: boolean
+	hideVersionHistory?: boolean
 }
 
 interface FileActionVisibilityProviderProps extends PropsWithChildren {
@@ -20,6 +21,7 @@ const defaultFileActionVisibility: Required<FileActionVisibility> = {
 	hideShareTopic: false,
 	hideCreateNewTopic: false,
 	hideFullscreen: false,
+	hideVersionHistory: false,
 }
 
 export const HIDE_COPY_MOVE_SHARE_FILE_ACTIONS: FileActionVisibility = {
@@ -38,6 +40,15 @@ export const HIDE_CLAW_FILE_ACTIONS: FileActionVisibility = {
 	hideCreateNewTopic: true,
 }
 
+/** viewer 仍可预览和下载文件，但不能修改文件或发起分享/对话。 */
+export const VIEWER_FILE_ACTIONS: FileActionVisibility = {
+	hideCopyTo: true,
+	hideMoveTo: true,
+	hideShareFile: true,
+	hideShareTopic: true,
+	hideCreateNewTopic: true,
+}
+
 const FileActionVisibilityContext = createContext(defaultFileActionVisibility)
 
 export function FileActionVisibilityProvider({
@@ -52,6 +63,7 @@ export function FileActionVisibilityProvider({
 			hideShareTopic: value?.hideShareTopic ?? false,
 			hideCreateNewTopic: value?.hideCreateNewTopic ?? false,
 			hideFullscreen: value?.hideFullscreen ?? false,
+			hideVersionHistory: value?.hideVersionHistory ?? false,
 		}),
 		[
 			value?.hideCopyTo,
@@ -60,6 +72,7 @@ export function FileActionVisibilityProvider({
 			value?.hideShareFile,
 			value?.hideShareTopic,
 			value?.hideFullscreen,
+			value?.hideVersionHistory,
 		],
 	)
 

@@ -24,6 +24,7 @@ use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\SuperMagic\Application\Chat\Service\ChatAppService;
 use Dtyq\SuperMagic\Application\Share\Factory\ShareableResourceFactory;
 use Dtyq\SuperMagic\Application\SuperAgent\Event\Publish\ProjectForkPublisher;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\FileManagementAppService;
 use Dtyq\SuperMagic\Domain\FileCollection\Service\FileCollectionDomainService;
 use Dtyq\SuperMagic\Domain\Share\Constant\ResourceType;
 use Dtyq\SuperMagic\Domain\Share\Constant\ShareAccessType;
@@ -56,9 +57,11 @@ use Dtyq\SuperMagic\Infrastructure\Utils\FileMetadataUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\FileTreeUtil;
 use Dtyq\SuperMagic\Infrastructure\Utils\PasswordCrypt;
 use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
+use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
 use Dtyq\SuperMagic\Interfaces\Share\Assembler\ShareAssembler;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCancelShareRequestDTO;
+use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\BatchCopySharedFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CopyResourceFilesRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\CreateShareRequestDTO;
 use Dtyq\SuperMagic\Interfaces\Share\DTO\Request\FindSimilarShareRequestDTO;
@@ -122,6 +125,7 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly ResourceShareCopyLogDomainService $copyLogDomainService,
         private readonly ProjectForkRepositoryInterface $projectForkRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
+        private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -146,7 +150,7 @@ class ResourceShareAppService extends AbstractShareAppService
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值
         // 只用 resource_id 查询，不校验 resource_type，避免类型转换(13↔12)时查询失败
-        $existingShare = $this->shareDomainService->getShareByResourceId($dto->resourceId);
+        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed($dto->resourceId);
 
         // 校验 file_ids 必填条件（问题2修复：使用 hasField() 判断，区分"不传"和"传空数组"）
         $isFileCollectionType = $resourceType === ResourceType::FileCollection;
@@ -309,7 +313,9 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         // 9. 获取项目ID（根据不同资源类型）
-        $projectId = $this->getProjectIdByResourceType($resourceType, $realResourceId);
+        $projectId = ($isProjectType && $dto->getProjectId() !== null && $dto->getProjectId() !== '')
+            ? $dto->getProjectId()
+            : $this->getProjectIdByResourceType($resourceType, $realResourceId);
 
         // 10. 如果是项目类型（resource_type=12），需要校验能否获取到项目ID
         if ($isProjectType) {
@@ -387,8 +393,6 @@ class ResourceShareAppService extends AbstractShareAppService
 
         if ($dto->hasField('expire_days')) {
             $attributes['expire_days'] = $dto->expireDays;
-        } else {
-            $attributes['expire_days'] = null;
         }
         $expireDaysToSave = $attributes['expire_days'] ?? null;
         // 调用 DomainService 保存分享
@@ -548,12 +552,13 @@ class ResourceShareAppService extends AbstractShareAppService
             ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
         }
 
-        // 验证分享访问权限
+        // 验证分享访问权限, 支持跨组织访问
         $this->shareDomainService->validateShareAccess(
             $shareEntity,
             $userAuthorization?->getId(),
             $userAuthorization?->getOrganizationCode(),
-            $shareCode
+            $shareCode,
+            false
         );
 
         // 记录访问日志（权限验证通过后记录，确保只统计有效访问）
@@ -563,6 +568,7 @@ class ResourceShareAppService extends AbstractShareAppService
         return [
             'has_password' => ! empty($shareEntity->getPassword()),
             'user_id' => ! is_null($userAuthorization) ? $userAuthorization->getId() : '',
+            'required_magic_organization_code' => $shareEntity->getOrganizationCode(),
         ];
     }
 
@@ -611,6 +617,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $result = [
             'resource_type' => $resourceType->value, // 使用枚举的整数值，而不是枚举对象
             'resource_name' => $shareEntity->getResourceName() ?: $factory->getResourceNameForDetail($shareEntity) ?: '', // 优先使用数据库中的 resource_name，如果为空则从资源获取
+            'project_id' => $shareEntity->getProjectId() !== null ? (string) $shareEntity->getProjectId() : null,
             'temporary_token' => AccessTokenUtil::generate((string) $shareEntity->getId(), $shareEntity->getOrganizationCode()),
             'default_open_file_id' => $shareEntity->getDefaultOpenFileId() !== null ? (string) $shareEntity->getDefaultOpenFileId() : null,
             'extra' => $extra,
@@ -649,138 +656,53 @@ class ResourceShareAppService extends AbstractShareAppService
 
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
     {
-        $conditions = [
-            'created_uid' => $userAuthorization->getId(),
-            'resource_type' => $dto->getResourceType(), // 支持单个或数组
-            'filter_type' => $dto->getFilterType(), // 过滤类型：all, active, expired, cancelled
-        ];
-        if (! empty($dto->getKeyword())) {
-            $conditions['keyword'] = $dto->getKeyword();
-        }
-        if ($dto->getProjectId() !== null) {
-            $conditions['project_id'] = $dto->getProjectId();
-        }
-        if (! empty($dto->getProjectModes())) {
-            $conditions['project_mode'] = $dto->getProjectModes();
-        }
+        $statusFilters = $dto->getResourceTypes() === [ResourceType::Topic->value]
+            ? [ShareFilterType::Active, ShareFilterType::Expired]
+            : $this->getRequestedStatusFilters($dto);
 
-        $result = $this->shareDomainService->getShareList($dto->getPage(), $dto->getPageSize(), $conditions);
+        return $this->getShareListWithStatusFilters($userAuthorization, $dto, $statusFilters);
+    }
 
-        // 确保 total 字段存在
-        $total = $result['total'] ?? 0;
-        $list = $result['list'] ?? [];
+    /**
+     * 获取严格按请求状态筛选的分享列表.
+     */
+    public function getShareListByStatusFilter(
+        MagicUserAuthorization $userAuthorization,
+        ResourceListRequestDTO $dto
+    ): array {
+        return $this->getShareListWithStatusFilters(
+            $userAuthorization,
+            $dto,
+            $this->getRequestedStatusFilters($dto)
+        );
+    }
 
-        // 如果列表为空，直接返回空列表（字段结构在 DomainService 层已保证）
-        if (empty($list)) {
-            return [
-                'total' => $total,
-                'list' => [],
-            ];
-        }
-
-        // 处理扩展信息：根据资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
-        $resourceTypes = $dto->getResourceTypes();
-
-        if (count($resourceTypes) === 1) {
-            // 单个资源类型：正常处理扩展信息
-            try {
-                $resourceType = ResourceType::from($resourceTypes[0]);
-                $factory = $this->resourceFactory->create($resourceType);
-
-                // 添加扩展信息
-                $list = $factory->getResourceExtendList($list);
-
-                // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
-                $list = $this->addResourceNamesToList($list, $resourceType);
-            } catch (RuntimeException|ValueError $e) {
-                ExceptionBuilder::throw(ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED, 'share.resource_type_not_supported', [(string) $resourceTypes[0]]);
-            }
-        } else {
-            // 多个资源类型：按资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
-            // 先按 resource_type 分组
-            $groupedList = [];
-            foreach ($list as $item) {
-                $resourceType = $item['resource_type'] ?? 0;
-                if (! isset($groupedList[$resourceType])) {
-                    $groupedList[$resourceType] = [];
-                }
-                $groupedList[$resourceType][] = $item;
-            }
-
-            // 对每个资源类型分别处理 extend 字段和 resource_name
-            $processedGroups = [];
-            foreach ($groupedList as $resourceTypeValue => $items) {
-                try {
-                    $resourceType = ResourceType::from($resourceTypeValue);
-                    $factory = $this->resourceFactory->create($resourceType);
-
-                    // 为每个资源类型添加扩展信息
-                    $processedItems = $factory->getResourceExtendList($items);
-
-                    // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
-                    $processedItems = $this->addResourceNamesToList($processedItems, $resourceType);
-
-                    $processedGroups[$resourceTypeValue] = $processedItems;
-                } catch (RuntimeException|ValueError $e) {
-                    // 如果资源类型不支持，为每个项添加空的 extend 字段
-                    foreach ($items as &$item) {
-                        if (! isset($item['extend'])) {
-                            $item['extend'] = [];
-                        }
-                    }
-                    $processedGroups[$resourceTypeValue] = $items;
-                }
-            }
-
-            // 按原有顺序合并处理后的列表（保持原有顺序）
-            $processedList = [];
-            $groupIndexMap = []; // 记录每个资源类型组内当前处理的索引
-            foreach ($list as $item) {
-                $resourceType = $item['resource_type'] ?? 0;
-                if (! isset($groupIndexMap[$resourceType])) {
-                    $groupIndexMap[$resourceType] = 0;
-                }
-                // 确保索引不越界
-                if (isset($processedGroups[$resourceType]) && $groupIndexMap[$resourceType] < count($processedGroups[$resourceType])) {
-                    $processedList[] = $processedGroups[$resourceType][$groupIndexMap[$resourceType]];
-                    ++$groupIndexMap[$resourceType];
-                } else {
-                    // 如果索引越界，使用原始项（不应该发生，但作为兜底）
-                    $processedList[] = $item;
-                }
-            }
-
-            $list = $processedList;
+    /**
+     * 按资源 ID 获取当前用户创建的有效分享（含明文密码）.
+     *
+     * @param MagicUserAuthorization $userAuthorization 当前用户
+     * @param string $resourceId 资源 ID
+     * @return ShareItemWithPasswordDTO 分享信息
+     */
+    public function getShareByResourceId(
+        MagicUserAuthorization $userAuthorization,
+        string $resourceId
+    ): ShareItemWithPasswordDTO {
+        $shareEntity = $this->shareDomainService->getValidShareByResourceId($resourceId);
+        if ($shareEntity === null) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$resourceId]);
         }
 
-        // 添加项目名称（确保所有项都有 project_name 字段）
-        $list = $this->addProjectNamesToList($list);
+        if ($shareEntity->getCreatedUid() !== $userAuthorization->getId()
+            || $shareEntity->getOrganizationCode() !== $userAuthorization->getOrganizationCode()) {
+            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$resourceId]);
+        }
 
-        // 添加 file_ids（仅 resource_type=13/15）
-        $list = $this->addFileIdsToList($list);
+        $dto = $this->shareAssembler->toDtoWithPassword($shareEntity);
+        $resourceType = ResourceType::from($shareEntity->getResourceType());
+        $dto->shareUrl = $this->buildShareBaseUrl($resourceType, $resourceId);
 
-        // 添加工作区信息（确保所有项都有 workspace_id 和 workspace_name 字段）
-        $list = $this->addWorkspaceInfoToList($list);
-
-        // 添加复制次数（确保所有项都有 copy_count 字段）
-        $list = $this->addCopyCountsToList($list);
-
-        // 根据资源类型添加特定字段
-        $list = $this->addFieldsByResourceType($list);
-
-        // 为有密码的分享项添加解密后的密码字段
-        $list = $this->addDecryptedPasswordsToList($list);
-
-        // 添加团队分享范围摘要，避免列表接口返回 target_ids 明细
-        $list = $this->addShareScopeToList($list);
-
-        // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
-        $list = $this->convertProjectTypeForShareList($list);
-
-        return [
-            'total' => $total,
-            'list' => $list,
-        ];
+        return $dto;
     }
 
     /**
@@ -900,6 +822,7 @@ class ResourceShareAppService extends AbstractShareAppService
             $projectId = (int) $shareEntity->getProjectId();
             if ($projectId === 0) {
                 return [
+                    'project_id' => null,
                     'list' => [],
                     'tree' => [],
                     'total' => 0,
@@ -1031,6 +954,116 @@ class ResourceShareAppService extends AbstractShareAppService
     }
 
     /**
+     * Copy files authorized by a valid share into an editable target project.
+     */
+    public function batchCopySharedFiles(
+        MagicUserAuthorization $userAuthorization,
+        string $shareCode,
+        BatchCopySharedFilesRequestDTO $requestDTO
+    ): array {
+        $shareEntity = $this->shareDomainService->getValidShareByCode($shareCode);
+        if (empty($shareEntity)) {
+            ExceptionBuilder::throw(ShareErrorCode::RESOURCE_NOT_FOUND, 'share.not_found', [$shareCode]);
+        }
+
+        $this->shareDomainService->validateShareAccess(
+            $shareEntity,
+            $userAuthorization->getId(),
+            $userAuthorization->getOrganizationCode(),
+            $shareCode
+        );
+
+        if (! empty($shareEntity->getPassword())
+            && $requestDTO->getPassword() !== PasswordCrypt::decrypt($shareEntity->getPassword())) {
+            ExceptionBuilder::throw(ShareErrorCode::PASSWORD_ERROR, trans('share.password_error'));
+        }
+
+        if (! $shareEntity->getExtraAttribute(CreateShareRequestDTO::EXTRA_FIELD_ALLOW_COPY_PROJECT_FILES, true)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::COPY_PROJECT_FILES_NOT_ALLOWED,
+                trans('share.copy_project_files_not_allowed')
+            );
+        }
+
+        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
+        if (! in_array($resourceType, [ResourceType::Project, ResourceType::FileCollection, ResourceType::File], true)) {
+            ExceptionBuilder::throw(
+                ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED,
+                trans('share.resource_type_not_supported_for_copy', [(string) $shareEntity->getResourceType()])
+            );
+        }
+
+        $sourceProjectId = (int) $shareEntity->getProjectId();
+        $sourceProject = $sourceProjectId > 0
+            ? $this->projectDomainService->getProjectNotUserId($sourceProjectId)
+            : null;
+        if ($sourceProject === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, trans('project.project_not_found'));
+        }
+
+        $requestedFileIds = array_map('intval', $requestDTO->getFileIds());
+        $requestedFileIds = array_filter($requestedFileIds, static fn (int $fileId): bool => $fileId > 0);
+        $requestedFileIds = array_values(array_unique($requestedFileIds));
+        if (count($requestedFileIds) !== count(array_unique($requestDTO->getFileIds()))) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $allowedFileIds = $resourceType === ResourceType::Project
+            ? null
+            : $this->resolveCollectionCopyScope($shareEntity, $sourceProjectId);
+
+        if ($allowedFileIds !== null && array_diff($requestedFileIds, $allowedFileIds) !== []) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $requestedEntities = $this->taskFileDomainService->getProjectFilesByIds(
+            $sourceProjectId,
+            array_map('strval', $requestedFileIds)
+        );
+        $resolvedRequestedIds = array_map(static fn (TaskFileEntity $entity): int => $entity->getFileId(), $requestedEntities);
+        sort($resolvedRequestedIds);
+        $expectedRequestedIds = $requestedFileIds;
+        sort($expectedRequestedIds);
+        if ($resolvedRequestedIds !== $expectedRequestedIds) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $directoryIds = array_map(
+            static fn (TaskFileEntity $entity): int => $entity->getFileId(),
+            array_filter($requestedEntities, static fn (TaskFileEntity $entity): bool => $entity->getIsDirectory())
+        );
+        $expandedFileIds = $requestedFileIds;
+        if ($directoryIds !== []) {
+            $descendantIds = $this->taskFileDomainService->getAllChildrenFileIdsByDirectoryIds(
+                $directoryIds,
+                $sourceProjectId
+            );
+            if ($allowedFileIds !== null) {
+                $descendantIds = array_values(array_intersect($descendantIds, $allowedFileIds));
+            }
+            $expandedFileIds = array_values(array_unique(array_merge($expandedFileIds, $descendantIds)));
+        }
+
+        $fileManagementAppService = di(FileManagementAppService::class);
+        $targetProject = $fileManagementAppService->getAccessibleProjectWithEditor(
+            (int) $requestDTO->getTargetProjectId(),
+            $userAuthorization->getId(),
+            $userAuthorization->getOrganizationCode()
+        );
+
+        return $fileManagementAppService->batchCopyAuthorizedFiles(
+            $userAuthorization,
+            $sourceProject,
+            $targetProject,
+            $expandedFileIds,
+            $requestDTO->getTargetParentId(),
+            $requestDTO->getPreFileId(),
+            $requestDTO->getKeepBothFileIds(),
+            $requestDTO->shouldPreserveParentPath()
+        );
+    }
+
+    /**
      * 根据文件ID列表查找文件集分享（返回所有匹配的分享）.
      *
      * 查找包含指定文件ID集合的文件集（FileCollection）或单文件（File）类型的分享记录。
@@ -1065,7 +1098,7 @@ class ResourceShareAppService extends AbstractShareAppService
         $result = $this->buildSimilarShareResponse($shareEntities, $condition, $projectFileCountMap);
 
         // 4. 丰富扩展字段
-        return $this->enrichShareListFields($result);
+        return $this->addShareUrlsToList($this->enrichShareListFields($result));
     }
 
     /**
@@ -1579,6 +1612,162 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 2. 调用Domain层批量查询,直接返回Entity数组
         return $this->shareDomainService->getFilesByIds($fileIds);
+    }
+
+    /**
+     * @param array<ShareFilterType> $statusFilters
+     */
+    private function getShareListWithStatusFilters(
+        MagicUserAuthorization $userAuthorization,
+        ResourceListRequestDTO $dto,
+        array $statusFilters
+    ): array {
+        $conditions = [
+            'created_uid' => $userAuthorization->getId(),
+            'resource_type' => $dto->getResourceType(), // 支持单个或数组
+            'status_filters' => $statusFilters,
+        ];
+        if (! empty($dto->getKeyword())) {
+            $conditions['keyword'] = $dto->getKeyword();
+        }
+        if ($dto->getProjectId() !== null) {
+            $conditions['project_id'] = $dto->getProjectId();
+        }
+        if (! empty($dto->getProjectModes())) {
+            $conditions['project_mode'] = $dto->getProjectModes();
+        }
+
+        $result = $this->shareDomainService->getShareList($dto->getPage(), $dto->getPageSize(), $conditions);
+
+        // 确保 total 字段存在
+        $total = $result['total'] ?? 0;
+        $list = $result['list'] ?? [];
+
+        // 如果列表为空，直接返回空列表（字段结构在 DomainService 层已保证）
+        if (empty($list)) {
+            return [
+                'total' => $total,
+                'list' => [],
+            ];
+        }
+
+        // 处理扩展信息：根据资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
+        $resourceTypes = $dto->getResourceTypes();
+
+        if (count($resourceTypes) === 1) {
+            // 单个资源类型：正常处理扩展信息
+            try {
+                $resourceType = ResourceType::from($resourceTypes[0]);
+                $factory = $this->resourceFactory->create($resourceType);
+
+                // 添加扩展信息
+                $list = $factory->getResourceExtendList($list);
+
+                // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
+                $list = $this->addResourceNamesToList($list, $resourceType);
+            } catch (RuntimeException|ValueError $e) {
+                ExceptionBuilder::throw(ShareErrorCode::RESOURCE_TYPE_NOT_SUPPORTED, 'share.resource_type_not_supported', [(string) $resourceTypes[0]]);
+            }
+        } else {
+            // 多个资源类型：按资源类型分组处理，确保每个资源类型都能正确设置 extend 字段
+            // 先按 resource_type 分组
+            $groupedList = [];
+            foreach ($list as $item) {
+                $resourceType = $item['resource_type'] ?? 0;
+                if (! isset($groupedList[$resourceType])) {
+                    $groupedList[$resourceType] = [];
+                }
+                $groupedList[$resourceType][] = $item;
+            }
+
+            // 对每个资源类型分别处理 extend 字段和 resource_name
+            $processedGroups = [];
+            foreach ($groupedList as $resourceTypeValue => $items) {
+                try {
+                    $resourceType = ResourceType::from($resourceTypeValue);
+                    $factory = $this->resourceFactory->create($resourceType);
+
+                    // 为每个资源类型添加扩展信息
+                    $processedItems = $factory->getResourceExtendList($items);
+
+                    // 动态设置 resource_name 和 main_file_name（FileCollection 和 File 类型）
+                    $processedItems = $this->addResourceNamesToList($processedItems, $resourceType);
+
+                    $processedGroups[$resourceTypeValue] = $processedItems;
+                } catch (RuntimeException|ValueError $e) {
+                    // 如果资源类型不支持，为每个项添加空的 extend 字段
+                    foreach ($items as &$item) {
+                        if (! isset($item['extend'])) {
+                            $item['extend'] = [];
+                        }
+                    }
+                    $processedGroups[$resourceTypeValue] = $items;
+                }
+            }
+
+            // 按原有顺序合并处理后的列表（保持原有顺序）
+            $processedList = [];
+            $groupIndexMap = []; // 记录每个资源类型组内当前处理的索引
+            foreach ($list as $item) {
+                $resourceType = $item['resource_type'] ?? 0;
+                if (! isset($groupIndexMap[$resourceType])) {
+                    $groupIndexMap[$resourceType] = 0;
+                }
+                // 确保索引不越界
+                if (isset($processedGroups[$resourceType]) && $groupIndexMap[$resourceType] < count($processedGroups[$resourceType])) {
+                    $processedList[] = $processedGroups[$resourceType][$groupIndexMap[$resourceType]];
+                    ++$groupIndexMap[$resourceType];
+                } else {
+                    // 如果索引越界，使用原始项（不应该发生，但作为兜底）
+                    $processedList[] = $item;
+                }
+            }
+
+            $list = $processedList;
+        }
+
+        // 添加项目名称（确保所有项都有 project_name 字段）
+        $list = $this->addProjectNamesToList($list);
+
+        // 添加 file_ids（仅 resource_type=13/15）
+        $list = $this->addFileIdsToList($list);
+
+        // 添加工作区信息（确保所有项都有 workspace_id 和 workspace_name 字段）
+        $list = $this->addWorkspaceInfoToList($list);
+
+        // 添加复制次数（确保所有项都有 copy_count 字段）
+        $list = $this->addCopyCountsToList($list);
+
+        // 根据资源类型添加特定字段
+        $list = $this->addFieldsByResourceType($list);
+
+        // 为有密码的分享项添加解密后的密码字段
+        $list = $this->addDecryptedPasswordsToList($list);
+
+        // 添加团队分享范围摘要，避免列表接口返回 target_ids 明细
+        $list = $this->addShareScopeToList($list);
+
+        // 类型转换：将内部类型12（Project）转换为外部类型13（FileCollection）+ share_project=true
+        $list = $this->convertProjectTypeForShareList($list);
+
+        // 分享链接始终由服务端域名配置生成，调用方不自行推导前端域名
+        $list = $this->addShareUrlsToList($list);
+
+        return [
+            'total' => $total,
+            'list' => $list,
+        ];
+    }
+
+    /**
+     * 将请求中的单个筛选值转换为领域层使用的状态集合；空集合表示不限制状态.
+     *
+     * @return array<ShareFilterType>
+     */
+    private function getRequestedStatusFilters(ResourceListRequestDTO $dto): array
+    {
+        $filterType = ShareFilterType::from($dto->getFilterType());
+        return $filterType === ShareFilterType::All ? [] : [$filterType];
     }
 
     /**
@@ -2272,7 +2461,10 @@ class ResourceShareAppService extends AbstractShareAppService
         // Build file tree structure with VS Code-style sorting (default to zh_CN for share context)
         $tree = FileTreeUtil::assembleFilesTreeByParentId($allList, 'zh_CN');
 
+        $projectId = $this->getProjectIdFromFileCollection($collectionId);
+
         return [
+            'project_id' => $projectId ?? '',
             'list' => $list,
             'tree' => $tree,
             'total' => $total,
@@ -2775,6 +2967,49 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 提取所有文件ID并返回
         return array_map(fn ($entity) => $entity->getFileId(), $allEntities);
+    }
+
+    /**
+     * Resolve the selectable and expandable file scope for File/FileCollection shares.
+     * Parent directories used only for rendering paths are intentionally excluded.
+     *
+     * @return int[]
+     */
+    private function resolveCollectionCopyScope(ResourceShareEntity $shareEntity, int $sourceProjectId): array
+    {
+        $collectionItems = $this->fileCollectionDomainService->getFilesByCollectionId(
+            (int) $shareEntity->getResourceId()
+        );
+        $originalFileIds = array_map('intval', array_map(
+            static fn ($item): string => $item->getFileId(),
+            $collectionItems
+        ));
+        $originalFileIds = array_filter($originalFileIds, static fn (int $fileId): bool => $fileId > 0);
+        $originalFileIds = array_values(array_unique($originalFileIds));
+        if ($originalFileIds === []) {
+            return [];
+        }
+
+        $originalEntities = $this->taskFileDomainService->getProjectFilesByIds(
+            $sourceProjectId,
+            array_map('strval', $originalFileIds)
+        );
+        if (count($originalEntities) !== count($originalFileIds)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, trans('file.file_permission_denied'));
+        }
+
+        $directoryIds = array_map(
+            static fn (TaskFileEntity $entity): int => $entity->getFileId(),
+            array_filter($originalEntities, static fn (TaskFileEntity $entity): bool => $entity->getIsDirectory())
+        );
+        if ($directoryIds === []) {
+            return $originalFileIds;
+        }
+
+        return array_values(array_unique(array_merge(
+            $originalFileIds,
+            $this->taskFileDomainService->getAllChildrenFileIdsByDirectoryIds($directoryIds, $sourceProjectId)
+        )));
     }
 
     /**
@@ -3946,22 +4181,7 @@ class ResourceShareAppService extends AbstractShareAppService
         ResourceShareEntity $savedEntity,
         CreateShareRequestDTO $dto
     ): ?string {
-        $frontendDomain = rtrim((string) env('MAGIC_FRONTEND_DOMAIN', ''), '/');
-        if ($frontendDomain === '') {
-            return null;
-        }
-
-        $uri = match ($resourceType) {
-            ResourceType::Topic => '/share/topic/' . $resourceId,
-            ResourceType::FileCollection, ResourceType::File, ResourceType::Project => '/share/files/' . $resourceId,
-            default => null,
-        };
-
-        if ($uri === null) {
-            return null;
-        }
-
-        $shareUrl = $frontendDomain . $uri;
+        $plainPassword = null;
 
         if (! empty($savedEntity->getPassword())) {
             // Prefer the plain-text password supplied in the current request to avoid an extra DB round-trip.
@@ -3982,11 +4202,38 @@ class ResourceShareAppService extends AbstractShareAppService
                 }
             }
 
-            if ($plainPassword !== '') {
-                $shareUrl .= '?password=' . rawurlencode($plainPassword);
-            }
+            $plainPassword = $plainPassword !== '' ? $plainPassword : null;
         }
 
-        return $shareUrl;
+        return $this->shareUrlBuilder->buildResourceShareUrl($resourceType, $resourceId, $plainPassword);
+    }
+
+    /**
+     * 为分享查询结果补充服务端生成的访问链接.
+     *
+     * @param array $list 分享列表
+     * @return array 补充分享链接后的列表
+     */
+    private function addShareUrlsToList(array $list): array
+    {
+        foreach ($list as $index => $item) {
+            $resourceId = (string) ($item['resource_id'] ?? '');
+            $resourceType = ResourceType::tryFrom((int) ($item['resource_type'] ?? 0));
+            if ($resourceId === '' || $resourceType === null) {
+                $list[$index]['share_url'] = null;
+                continue;
+            }
+            $list[$index]['share_url'] = $this->buildShareBaseUrl($resourceType, $resourceId);
+        }
+
+        return $list;
+    }
+
+    /**
+     * 根据资源类型和资源 ID 生成不携带密码的分享链接.
+     */
+    private function buildShareBaseUrl(ResourceType $resourceType, string $resourceId): ?string
+    {
+        return $this->shareUrlBuilder->buildResourceShareUrl($resourceType, $resourceId);
     }
 }

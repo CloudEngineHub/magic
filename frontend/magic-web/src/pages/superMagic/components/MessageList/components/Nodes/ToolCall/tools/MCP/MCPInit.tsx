@@ -33,7 +33,7 @@ const mcpToggleButton = cn(
 
 function MCPInitNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const plugins = (tool?.detail?.data?.server_results || []) as Array<MCPToolResult>
 
@@ -76,7 +76,11 @@ function MCPInitNode(props: NodeProps) {
 							</div>
 						)}
 					</div>
-					<div className={cn(mcpToggleButton, "mr-1.5")} onClick={toggle} data-testid="toggle">
+					<div
+						className={cn(mcpToggleButton, "mr-1.5")}
+						onClick={toggle}
+						data-testid="toggle"
+					>
 						{open ? (
 							<ChevronUp
 								size={16}

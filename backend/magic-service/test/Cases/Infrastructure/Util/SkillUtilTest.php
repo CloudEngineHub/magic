@@ -102,7 +102,7 @@ class SkillUtilTest extends TestCase
     public function testReturnNullWhenSkillMdNotFound(): void
     {
         mkdir($this->tempBaseDir . '/empty-dir', 0755, true);
-        file_put_contents($this->tempBaseDir . '/readme.md', '# Readme');
+        file_put_contents($this->tempBaseDir . '/README.md', '# Readme');
 
         $result = SkillUtil::findSkillMdDirectory($this->tempBaseDir);
 
@@ -481,7 +481,7 @@ MD;
      */
     public function testParseSkillMdThrowsWhenNotSkillMd(): void
     {
-        $filePath = $this->tempBaseDir . '/readme.md';
+        $filePath = $this->tempBaseDir . '/README.md';
         file_put_contents($filePath, 'name: test');
 
         $this->expectException(Throwable::class);

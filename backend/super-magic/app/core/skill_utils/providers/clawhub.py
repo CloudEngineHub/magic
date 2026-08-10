@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from agentlang.logger import get_logger
-from app.core.skill_utils.providers._cli_base import CliProvider
+from app.core.skill_utils.providers._cli_base import CliProvider, _terminate_process
 from app.core.skill_utils.providers.base import (
     FetchedSkill,
     SkillCandidate,
@@ -56,8 +56,9 @@ class ClawHubProvider(CliProvider):
         self._ensure_enabled()
         cmd = self.cli + ["--no-input", "search", keyword]
         logger.debug(f"[clawhub] 执行: {' '.join(cmd)}")
+        process: asyncio.subprocess.Process | None = None
         try:
-            proc = await asyncio.wait_for(
+            process = await asyncio.wait_for(
                 asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
@@ -66,13 +67,24 @@ class ClawHubProvider(CliProvider):
                 ),
                 timeout=5,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-        except asyncio.TimeoutError:
-            logger.warning("[clawhub] search 超时")
-            return []
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
+        except asyncio.CancelledError:
+            await _terminate_process(process)
+            raise
+        except asyncio.TimeoutError as e:
+            await _terminate_process(process)
+            raise TimeoutError("[clawhub] search 超时") from e
         except Exception as e:
-            logger.warning(f"[clawhub] search 执行失败: {e}")
-            return []
+            await _terminate_process(process)
+            raise RuntimeError(f"[clawhub] search 执行失败: {e}") from e
+
+        if process is None:
+            raise RuntimeError("[clawhub] search 进程未创建")
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"[clawhub] search 返回非零退出码 {process.returncode}: "
+                f"{stderr.decode(errors='replace')[:500]}"
+            )
 
         text = stdout.decode(errors="replace")
         return _parse_search_text(text, limit, self.id)
@@ -175,7 +187,11 @@ class ClawHubProvider(CliProvider):
 # ── 辅助函数 ──────────────────────────────────────────────────────────────────
 
 
-def _parse_search_text(text: str, limit: int, provider_id: SkillProviderId) -> list[SkillCandidate]:
+def _parse_search_text(
+    text: str,
+    limit: int | None,
+    provider_id: SkillProviderId,
+) -> list[SkillCandidate]:
     """解析 clawhub search 纯文本输出。
 
     每行格式：<slug>  <name>  (<score>)
@@ -207,7 +223,7 @@ def _parse_search_text(text: str, limit: int, provider_id: SkillProviderId) -> l
             description="",
             version=version,
         ))
-        if len(items) >= limit:
+        if limit is not None and len(items) >= limit:
             break
     return items
 

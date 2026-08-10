@@ -25,41 +25,10 @@ vi.mock("antd-mobile", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagicMobile/components/CommonPopup/styles", () => ({
-	useStyles: () => ({
-		styles: {
-			renderContainer: "render-container",
-			popupBody: "popup-body",
-			bottomGap: "bottom-gap",
-			immersiveRenderContainer: "immersive-render-container",
-			modalBody: "modal-body",
-			modal: "modal",
-			body: "body",
-		},
-		cx: (...classes: Array<string | false | null | undefined>) =>
-			classes.filter(Boolean).join(" "),
-	}),
-}))
-
-vi.mock("../../CommonPopup/styles", () => ({
-	useStyles: () => ({
-		styles: {
-			renderContainer: "render-container",
-			popupBody: "popup-body",
-			bottomGap: "bottom-gap",
-			immersiveRenderContainer: "immersive-render-container",
-			modalBody: "modal-body",
-			modal: "modal",
-			body: "body",
-		},
-		cx: (...classes: Array<string | false | null | undefined>) =>
-			classes.filter(Boolean).join(" "),
-	}),
-}))
-
 vi.mock("@/pages/superMagic/components/Detail/hooks/useDetailActions", () => ({
 	useDetailActions: () => ({
 		isFullscreen: false,
+		setIsFullscreen: vi.fn(),
 		isFromNode: false,
 		handlePrevious: vi.fn(),
 		handleNext: vi.fn(),

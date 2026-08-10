@@ -117,9 +117,6 @@ Rules:
 - After downloading, tell the user the workspace-relative saved paths.
 """
 
-    def is_visible_in_ui(self) -> bool:
-        return False
-
     async def get_before_tool_call_friendly_action_and_remark(
         self,
         tool_name: str,

@@ -252,6 +252,9 @@ class TopicTaskAppService extends AbstractAppService
                 // Create new message
                 $messageEntity = $this->parseMessageContent($messageDTO);
                 $messageEntity->setTopicId($topicId);
+                $tool = $messageEntity->getTool();
+                $this->fileProcessAppService->processToolDetailFileReference($tool, $taskEntity, $dataIsolation);
+                $messageEntity->setTool($tool);
                 // Special status handling: generate output content tool when task is finished
                 if ($messageEntity->getStatus() === TaskStatus::FINISHED->value) {
                     $outputTool = ToolProcessor::generateOutputContentTool($messageEntity->getAttachments());
@@ -290,8 +293,8 @@ class TopicTaskAppService extends AbstractAppService
                 );
             }
 
-            // 3.5 ask_user Human-in-the-Loop（见 tryEarlyDeliverResponseForAskUserToolCall）
-            if (($earlyDeliverResponse = $this->tryEarlyDeliverResponseForAskUserToolCall($messageDTO, $dataIsolation, $taskEntity, $messageId)) !== null) {
+            // 3.5 user tool call Human-in-the-Loop（见 tryEarlyDeliverResponseForUserToolCall）
+            if (($earlyDeliverResponse = $this->tryEarlyDeliverResponseForUserToolCall($messageDTO, $dataIsolation, $taskEntity, $messageId)) !== null) {
                 return $earlyDeliverResponse;
             }
 
@@ -397,7 +400,7 @@ class TopicTaskAppService extends AbstractAppService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文（来自 WebSocket 认证用户）
      * @param string $chatTopicId 会话 topic ID，用于定位当前任务
-     * @param string $name 工具名称（如 ask_user）
+     * @param string $name 工具名称（如 ask_user、plan）
      * @param string $toolCallId 工具调用ID（tool_call_id），对应沙盒下发的调用标识
      * @param array $detail 工具特定的回复数据，结构由各工具自行约定，直接透传给沙盒
      */
@@ -833,15 +836,15 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * ask_user Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
+     * user tool call Human-in-the-Loop：在消息已存储/推送后，补充任务状态并在必要时提前结束 deliver 流程。
      *
      * 消息存储和推送由步骤 2、3 完成；此处只补充本路径泛型步骤 4 未覆盖的状态（终态仍走步骤 4）。
      * 路由信息（task_id）由前端回答时直接携带，无需 Redis 路由键。
-     * ask_user 超时收口沿用 AFTER_TOOL_CALL 消息，不再走额外同步 API。
+     * user tool call 超时收口沿用 AFTER_TOOL_CALL 消息，不再走额外同步 API。
      *
      * @return null|array<string, mixed> 已处理并应跳过后续终态逻辑时返回响应体，否则 null
      */
-    private function tryEarlyDeliverResponseForAskUserToolCall(
+    private function tryEarlyDeliverResponseForUserToolCall(
         TopicTaskMessageDTO $messageDTO,
         DataIsolation $dataIsolation,
         TaskEntity $taskEntity,
@@ -853,7 +856,7 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         $tool = $payload->getTool();
-        if (! is_array($tool) || (($tool['name'] ?? '') !== 'ask_user')) {
+        if (! is_array($tool) || ! in_array($tool['name'] ?? '', ['ask_user', 'plan'], true)) {
             return null;
         }
 
@@ -885,7 +888,7 @@ class TopicTaskAppService extends AbstractAppService
     /**
      * 适配 super_magic_message + after_main_agent_run + waiting_for_user 格式的状态更新。
      *
-     * 沙盒在 ask_user 工具调用前通过此格式下发通知，此时需要将任务状态更新为 waiting_for_user。
+     * 沙盒在用户工具调用前通过此格式下发通知，此时需要将任务状态更新为 waiting_for_user。
      * 因 waiting_for_user 不是终态，步骤 4 的 updateTaskStatus 不会被触发，需在此处单独处理。
      *
      * @return null|array<string, mixed> 已处理时返回响应体，否则返回 null

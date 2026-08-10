@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDeepCompareEffect, useMemoizedFn, useUnmount } from "ahooks"
-import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
+import globalMentionPanelStore, {
+	type MentionPanelStore,
+} from "@/components/business/MentionPanel/builtin-store"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
-import projectFilesStore from "@/stores/projectFiles"
+import globalProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 
 interface UseAttachmentsProps {
 	interval?: number
 	projectId?: string
 	selectedProject: ProjectListItem | null
 	mode: "create" | "edit"
+	projectFilesStore?: ProjectFilesStore
+	mentionPanelStore?: MentionPanelStore
 }
 
 export function useAttachments({
@@ -19,6 +23,8 @@ export function useAttachments({
 	projectId,
 	selectedProject,
 	mode,
+	projectFilesStore = globalProjectFilesStore,
+	mentionPanelStore = globalMentionPanelStore,
 }: UseAttachmentsProps) {
 	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
 	const timerRef = useRef<NodeJS.Timeout | null>(null)

@@ -22,9 +22,56 @@ export interface PendingUserMessageEnvelope {
 	conversation_id: string
 }
 
+export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
+
+/**
+ * HTTP 消息列表本身无法表达 Assistant 是否已完成本次消息级流。
+ * 调用方必须根据请求来源明确选择：普通进度快照保留非终态流，
+ * 已由 WS/完整恢复确认的 canonical 消息则统一进入 Final 结算。
+ */
+export type HttpAssistantSnapshotPolicy = "progress_snapshot" | "canonical_final"
+
+export type LifecycleEventPolicy = "silent" | "live"
+
+export type CanonicalCommitTrigger = "websocket" | "recovery" | "polling" | "history"
+
+/**
+ * Canonical 写入来源与生命周期事件来源是两个独立维度。
+ * HTTP authoritative-tail 只有明确由 WebSocket 通知触发时才属于实时生命周期。
+ */
+export interface CanonicalCommitContext {
+	source: "im" | "http"
+	lifecycleEventPolicy: LifecycleEventPolicy
+	trigger?: CanonicalCommitTrigger
+}
+
 export interface InitializeMessagesOptions {
-	mode?: "replace" | "merge"
+	mode?: "replace" | "merge" | "replace_tail"
+	/** HTTP Assistant 的消息级 Final 准入策略；历史持久消息默认按 canonical Final 处理。 */
+	assistantSnapshotPolicy?: HttpAssistantSnapshotPolicy
+	/** 历史 HTTP 快照必须让普通 Tool 进入终态；live 增量则保留 waiting/running。 */
+	toolProjectionPolicy?: HttpToolProjectionPolicy
+	/** 冷历史只建立事件基线；实时权威尾部需要广播本次新到达的 canonical 消息。 */
+	eventPolicy?: "silent_hydration" | "live_arrival"
+	/** task.completed 等生命周期投影必须显式区分 WS 实时确认与历史/恢复/轮询。 */
+	canonicalCommitContext?: CanonicalCommitContext
+	/** HTTP 返回的完整 IM 状态观察集；可包含不参与本次 membership 替换的消息。 */
+	statusMessages?: RawSuperMagicMessageEnvelope[]
+	/** `replace_tail` 保留该 SuperMessage 及其之前的本地前缀，并权威替换其后的 membership。 */
+	anchorSuperMessageId?: string
+	/** HTTP 请求期间新产生的流不属于请求开始时的权威覆盖范围，提交时必须保留。 */
+	preserveStreamSuperMessageIds?: string[]
 	syncGeneration?: number
+}
+
+export interface ReconcileAuthoritativeMessagesInput {
+	/** 成功 HTTP 查询实际返回的全部 envelope，按 app_message_id 归属 IM 状态。 */
+	statusItems: RawSuperMagicMessageEnvelope[]
+	/** 本次 HTTP 写入要采用的 membership 快照；允许按 SuperMessage 锚点截断。 */
+	membershipItems: RawSuperMagicMessageEnvelope[]
+	writeOptions:
+		| InitializeMessagesOptions
+		| { mode: "incremental"; assistantSnapshotPolicy?: HttpAssistantSnapshotPolicy }
 }
 
 export interface ServerMessagesConfirmedPayload {
@@ -65,6 +112,8 @@ export interface SharedMessageItem {
 
 export interface MessageItem {
 	app_message_id: string
+	/** Store/UI 统一查询身份；User=app_message_id，Assistant/Tool 历史消息回退 app_message_id。 */
+	super_message_id: string
 	/** 消息相关联Id */
 	correlation_id: string
 	/** 父消息相关联Id */
@@ -81,7 +130,12 @@ export interface MessageItem {
 	/** 唯一id */
 	seq_id: string
 	/** IM 的消息状态（消息是否已读） */
+	/** @deprecated 兼容字段；仅表示 IM 状态，不能作为 SuperMessage 执行状态使用。 */
 	status: string
+	/** IM message envelope 的状态；负责撤回/可见性语义。 */
+	imStatus: string
+	/** SuperMessage node 的状态；Assistant/Tool 执行与流生命周期语义。 */
+	superStatus?: string
 	/** IM 的话题id */
 	topic_id: string
 	/** 消息类型 */
@@ -132,23 +186,58 @@ export interface StreamMessage {
 	tool_calls?: ToolCall[]
 }
 
+/** 单条 Assistant 流的视觉推进速度；消息身份与 canonical 完成状态不受其影响。 */
+export type StreamRenderPace = "live" | "settling" | "catchup"
+
 export interface StreamState {
+	/** Topic 内稳定的 Assistant 逻辑消息身份。 */
+	super_message_id: string
+	/** 协议关联字段，只作为元数据与事件/恢复路由使用。 */
+	correlation_id: string
+	/** Agent 任务身份，不参与消息去重。 */
+	task_id: string
 	stage: "reasoning_content" | "content" | "tool" | "done"
 	reasoning_content: string
 	content: string
 	currentToolIndex: number
 	tool_calls: ToolCall[]
 	isFinalMessageReceived: boolean
-	/** Final 到达后的视觉追赶截止时间；到期必须投影完整 canonical 内容。 */
+	/** 当前逻辑消息的视觉推进速度，避免 Topic 级策略泄漏到后继 SuperMessage。 */
+	renderPace: StreamRenderPace
+	/** Final/finish_reason 到达后开始温和结算的单调时钟时间。 */
+	settlingStartedAt: number | null
+	/** 检测到后继消息压力后才创建的快速追赶截止时间。 */
 	finalCatchupDeadlineAt: number | null
+	/** 快速追赶至少保留的可见帧数，防止调度停顿后单帧写入整段正文。 */
+	catchupMinimumFramesRemaining: number
 	/** 连续恢复次数；每次收到新数据后归零，用于 HTTP 恢复指数退避。 */
 	recoveryAttempts: number
 	finalMessage?: StreamMessage
 }
 
+export type StreamRecoveryTriggerReason =
+	| "stream_watchdog"
+	| "tool_response"
+	| "persistent_message"
+	| "checkpoint_rollback"
+	| "topic_terminal"
+	| "topic_activation"
+	| "network_recovered"
+
+export interface CheckpointRollbackRecoveryContext {
+	eventId: string
+	action: "start" | "undo" | "commit" | "rollback"
+}
+
 export interface StreamRecoveryRequestPayload {
 	topicId: string
 	correlationId: string
+	reason?: StreamRecoveryTriggerReason
+	requiredSeqId?: string
+	anchorAppMessageId?: string
+	anchorSeqId?: string
+	/** 检查点广播上下文；eventId 不能提升为 requiredSeqId。 */
+	checkpointRollback?: CheckpointRollbackRecoveryContext
 }
 
 export interface StreamRecoveryState {
@@ -191,6 +280,29 @@ export interface ToolResponseState {
 	[key: string]: unknown
 }
 
+/**
+ * Message 级 Tool Response 恢复 sidecar。它描述“是否需要继续找真实 role=tool”，
+ * 不是服务端消息，也不能替代 toolResponseMap 的 canonical 状态。
+ */
+export type ToolResponseRecoveryPhase =
+	| "awaiting_response"
+	| "execution_settled_pending_response"
+	| "scheduled"
+	| "in_flight"
+	| "dormant"
+
+export interface ToolResponseRecoveryState {
+	topicId: string
+	ownerSuperMessageId: string
+	ownerAppMessageId: string
+	toolId: string
+	anchorSeqId: string
+	phase: ToolResponseRecoveryPhase
+	attempt: number
+	nextRetryAt: number | null
+	lastTrigger?: StreamRecoveryTriggerReason
+}
+
 export interface TopicMetaContentEntry {
 	/** 当前流式渲染所在位置（表示文本下标） */
 	index: number
@@ -214,6 +326,9 @@ export type TopicSyncState = "idle" | "syncing"
 
 export type TopicRenderPolicy = "live" | "catchup" | "instant"
 
+/** 权威同步完成后如何恢复 UI 投影；前台恢复使用一次性无动画投影。 */
+export type TopicSyncRenderStrategy = "auto" | "foreground-instant"
+
 export interface TopicMeta {
 	/** 当前是否正在处于流式开启中 */
 	isStream: boolean
@@ -221,6 +336,8 @@ export interface TopicMeta {
 	isStreamLoading: boolean
 	/** 当前话题流式运行时定时器 */
 	timer: ReturnType<typeof window.setTimeout> | null
+	/** 当前唯一渲染 timer 所属的 SuperMessage ID，用于识别真正的后继压力。 */
+	activeRenderSuperMessageId: string | null
 	/** 当前话题等待流式恢复的 watchdog 定时器 */
 	recoveryTimer: ReturnType<typeof window.setTimeout> | null
 	/** recoveryTimer 当前关联的流式 correlationId */

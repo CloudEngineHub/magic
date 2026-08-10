@@ -14,15 +14,19 @@ const useStyles = createStyles(({ css, prefixCls, token }) => ({
     width: 100%;
 		height: 100%;
 		--${prefixCls}-image-z-index-popup: 1000 !important;
-		transition: transform 0.1s ease-out;
 		cursor: grab;
 		user-select: none;
+		touch-action: none;
 	`,
 	imageWrapper: css`
 		height: 100%;
 		width: 100%;
 		display: flex;
 		justify-content: center;
+		align-items: center;
+		transform-origin: center center;
+		will-change: transform;
+		backface-visibility: hidden;
 	`,
 	toolContainer: css`
 		position: absolute;
@@ -62,7 +66,7 @@ const useStyles = createStyles(({ css, prefixCls, token }) => ({
 		background-color: rgba(255, 255, 255, 0.3);
 	`,
 	slider: css`
-		width: 100px;
+		width: 140px;
 		--${prefixCls}-slider-track-bg: rgba(255, 255, 255, 0.5) !important;
 		--${prefixCls}-slider-track-hover-bg: rgba(255, 255, 255, 0.5) !important;
 		--${prefixCls}-slider-handle-color: ${token.colorWhite} !important;

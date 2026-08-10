@@ -85,4 +85,30 @@ describe("useTopicMode", () => {
 			mode: "SMA-agent-2",
 		})
 	})
+
+	it("recovers runtime mode without persisting the project preference", () => {
+		const selectedTopic = createTopic("topic-1")
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+
+		const { result } = renderHook(() =>
+			useTopicMode({
+				selectedTopic,
+				selectedProject,
+			}),
+		)
+
+		act(() => {
+			result.current.recoverTopicMode(TopicMode.PPT)
+		})
+
+		expect(result.current.topicMode).toBe(TopicMode.PPT)
+		expect(setProjectDefaultTopicModeMock).not.toHaveBeenCalled()
+		expect(syncTopicFrontendModePatchMock).toHaveBeenCalledWith({
+			topic: selectedTopic,
+			mode: TopicMode.PPT,
+		})
+	})
 })

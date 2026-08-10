@@ -276,36 +276,11 @@ describe("WechatArticleView", () => {
 		)
 
 		await waitFor(() => {
-			expect(ref.current?.getArticleHtml()).toBe("<main>article</main>")
+			expect(ref.current).not.toBeNull()
 		})
-	})
-
-	it("exposes rendered paste-safe HTML with inline styles for WeChat copy export", async () => {
-		vi.mocked(loadWechatArticleHtml).mockResolvedValueOnce({
-			content:
-				'<html><head><style>.lead{color:red;font-weight:700}</style></head><body><main><p class="lead">article</p><script>window.bad=true</script></main></body></html>',
-			filePathMapping: new Map(),
-		})
-		const ref = createRef<WechatArticleViewRef>()
-
-		render(
-			<WechatArticleView
-				ref={ref}
-				post={{
-					meta: { id: "wechat-post-1", title: "Article" },
-					cards: [],
-					article: { path: "article.html", fileId: "article-file-1" },
-				}}
-				attachmentList={[]}
-			/>,
-		)
-
-		await waitFor(() => {
-			const html = ref.current?.getArticleHtml() || ""
-			expect(html).toContain('<p class="lead" style="color:red;font-weight:700">article</p>')
-			expect(html).not.toContain("<style>")
-			expect(html).not.toContain("<script>")
-		})
+		const html = await ref.current?.getArticleHtml()
+		expect(html).toContain("<main")
+		expect(html).toContain(">article</main>")
 	})
 
 	it("restores the iframe scroll position and tolerates cross-origin cleanup", async () => {

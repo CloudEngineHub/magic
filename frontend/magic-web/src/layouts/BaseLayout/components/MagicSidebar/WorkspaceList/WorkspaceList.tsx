@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type CSSProperties,
+	type ReactNode,
+} from "react"
 import { observer } from "mobx-react-lite"
 import { toJS } from "mobx"
 import { useRequest } from "ahooks"
@@ -9,10 +17,13 @@ import { sidebarStore } from "@/stores/layout"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
 import superMagicService from "@/pages/superMagic/services"
 import { SuperMagicApi } from "@/apis"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	WorkspaceStatus,
+	type ProjectListItem,
+	type Workspace,
+} from "@/pages/superMagic/pages/Workspace/types"
 import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
@@ -26,7 +37,11 @@ import {
 
 const SEARCH_PAGE_SIZE = 20
 
-function WorkspaceList() {
+interface WorkspaceListProps {
+	beforeItems?: ReactNode
+}
+
+function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 	const { t } = useTranslation()
 	const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
 	const [isRefreshing, setIsRefreshing] = useState(false)
@@ -61,15 +76,40 @@ function WorkspaceList() {
 		}
 		return result
 	}, [searchState.projects])
+	const projectParentWorkspaces = useMemo(() => {
+		const knownWorkspaces = new Map(
+			[...workspaces, ...searchState.workspaces].map((workspace) => [
+				workspace.id,
+				workspace,
+			]),
+		)
+
+		return Array.from(projectsByWorkspaceId.entries()).map(([workspaceId, projects]) => {
+			const knownWorkspace = knownWorkspaces.get(workspaceId)
+			if (knownWorkspace) return knownWorkspace
+
+			const project = projects[0]
+			// Project search already returns the parent ID and name. Build a search-only
+			// projection so an unloaded paginated workspace can still contain its matches.
+			return {
+				id: workspaceId,
+				name: project.workspace_name,
+				is_archived: 0,
+				current_topic_id: project.current_topic_id || "",
+				current_project_id: project.id,
+				workspace_status: WorkspaceStatus.WAITING,
+				project_count: projects.length,
+				workspace_type: "default",
+			} satisfies Workspace
+		})
+	}, [projectsByWorkspaceId, searchState.workspaces, workspaces])
 	const displayedWorkspaces = isSearchMode
 		? Array.from(
 				new Map(
-					[
-						...searchState.workspaces,
-						...workspaces.filter((workspace) =>
-							projectsByWorkspaceId.has(workspace.id),
-						),
-					].map((workspace) => [workspace.id, workspace]),
+					[...searchState.workspaces, ...projectParentWorkspaces].map((workspace) => [
+						workspace.id,
+						workspace,
+					]),
 				).values(),
 			)
 		: workspaces
@@ -242,13 +282,14 @@ function WorkspaceList() {
 		const scrollContainer = sentinel.closest<HTMLElement>(
 			"[data-testid='sidebar-content-root']",
 		)
+		if (!scrollContainer) return
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) loadNextPage()
 			},
-			// Observe the actual sidebar scroll container. An initially visible
-			// sentinel naturally fills tall screens without manual height measurements.
+			// Observe the shared sidebar scroll container. An initially visible sentinel
+			// naturally loads enough pages to fill tall screens without manual measurements.
 			{ root: scrollContainer, threshold: 0 },
 		)
 		observer.observe(sentinel)
@@ -314,106 +355,110 @@ function WorkspaceList() {
 
 	return (
 		<SidebarGroup
-			className="flex min-h-0 w-full flex-col py-0 pl-2 pr-0"
+			className="flex w-full shrink-0 flex-col py-0 pl-2 pr-0"
 			data-testid="sidebar-workspace-list"
+			style={
+				{
+					"--workspace-list-sticky-top": isSearchMode ? "2.25rem" : "2rem",
+				} as CSSProperties
+			}
 		>
-			{isSearchMode ? (
-				<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
-					<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
-						<InputGroupAddon align="inline-start">
-							<Search size={16} />
-						</InputGroupAddon>
-						<InputGroupInput
-							className="h-6"
-							placeholder={t("super:workspace.searchWorkspace")}
-							value={searchState.value}
-							onChange={(event) => {
-								const value = event.target.value
-								updateSearchState((draft) => {
-									draft.value = value
-								})
-							}}
-							onValueChangeAfterComposition={searchWorkspaces}
-							autoFocus
-							data-testid="sidebar-workspace-list-search-input"
-						/>
-					</InputGroup>
-					<Button
-						type="button"
-						size="icon-sm"
-						className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
-						onClick={handleSearchClose}
-						aria-label={t("common.cancel")}
-						data-testid="sidebar-workspace-list-search-close"
-					>
-						<X className="size-4" />
-					</Button>
-				</div>
-			) : (
-				<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">
-					{t("sidebar:workspace.title")}
-				</SidebarGroupLabel>
-			)}
 			<div
-				className={cn(
-					"absolute right-3.5 top-1.5 z-10 flex items-center gap-0.5 opacity-70",
-					"group-data-[collapsible=icon]:hidden",
-					isSearchMode && "hidden",
-				)}
-				data-testid="sidebar-workspace-list-actions"
+				className="sticky top-0 z-20 -ml-2 bg-sidebar pl-2"
+				data-testid="sidebar-workspace-list-sticky-header"
 			>
-				<button
-					type="button"
-					aria-label={t("super:workspace.searchWorkspace")}
-					data-testid="sidebar-workspace-list-search"
-					className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
-					onClick={handleSearchOpen}
-				>
-					<Search className="h-4 w-4" />
-				</button>
-				{isInitialWorkspaceListLoading && (
-					<Loader2
-						className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
-						aria-hidden
-						data-testid="sidebar-workspace-list-loading"
-					/>
+				{isSearchMode ? (
+					<div className="flex h-9 items-center gap-1 px-2 pr-3 duration-200 animate-in fade-in">
+						<InputGroup className="h-7 flex-1 rounded-md bg-sidebar duration-300 animate-in fade-in slide-in-from-left-4 [&:has([data-slot=input-group-control]:focus-visible)]:border-sidebar-border [&:has([data-slot=input-group-control]:focus-visible)]:ring-0">
+							<InputGroupAddon align="inline-start">
+								<Search size={16} />
+							</InputGroupAddon>
+							<InputGroupInput
+								className="h-6"
+								placeholder={t("super:workspace.searchWorkspace")}
+								value={searchState.value}
+								onChange={(event) => {
+									const value = event.target.value
+									updateSearchState((draft) => {
+										draft.value = value
+									})
+								}}
+								onValueChangeAfterComposition={searchWorkspaces}
+								autoFocus
+								data-testid="sidebar-workspace-list-search-input"
+							/>
+						</InputGroup>
+						<Button
+							type="button"
+							size="icon-sm"
+							className="size-7 border bg-white text-foreground duration-300 animate-in fade-in hover:bg-accent"
+							onClick={handleSearchClose}
+							aria-label={t("common.cancel")}
+							data-testid="sidebar-workspace-list-search-close"
+						>
+							<X className="size-4" />
+						</Button>
+					</div>
+				) : (
+					<SidebarGroupLabel className="h-8 px-2 text-xs font-medium leading-4 text-[#737373] opacity-70 dark:text-[#a3a3a3] dark:opacity-100">
+						{t("sidebar:workspace.title")}
+					</SidebarGroupLabel>
 				)}
-				<button
-					type="button"
-					aria-label={t("sidebar:workspace.refresh")}
-					data-testid="sidebar-workspace-list-refresh"
-					disabled={isRefreshing}
+				<div
 					className={cn(
-						"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-						"after:absolute after:-inset-2 md:after:hidden",
+						"absolute right-3.5 top-1.5 z-10 flex items-center gap-0.5 opacity-70",
+						"group-data-[collapsible=icon]:hidden",
+						isSearchMode && "hidden",
 					)}
-					onClick={() => void handleRefresh()}
+					data-testid="sidebar-workspace-list-actions"
 				>
-					<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-				</button>
-				<button
-					type="button"
-					aria-label={t("sidebar:workspace.add")}
-					data-testid="sidebar-workspace-list-add"
-					className={cn(
-						"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
-						"after:absolute after:-inset-2 md:after:hidden",
-					)}
-					onClick={handleStartCreateWorkspace}
-				>
-					<Plus className="h-4 w-4" />
-				</button>
-			</div>
-			<SidebarGroupContent className="flex min-h-0">
-				<SidebarMenu className="h-full min-h-0">
-					<ScrollArea
-						className={cn(
-							"h-full min-h-0 w-full scroll-smooth [&_[data-slot='scroll-area-scrollbar']]:bg-transparent",
-							"[&_[data-slot='scroll-area-viewport']>div]:!block",
-							"pr-3",
-						)}
-						viewportClassName="overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
+					<button
+						type="button"
+						aria-label={t("super:workspace.searchWorkspace")}
+						data-testid="sidebar-workspace-list-search"
+						className="outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4"
+						onClick={handleSearchOpen}
 					>
+						<Search className="h-4 w-4" />
+					</button>
+					{isInitialWorkspaceListLoading && (
+						<Loader2
+							className="h-4 w-4 shrink-0 animate-spin text-[rgb(var(--muted-foreground-rgb))] opacity-70"
+							aria-hidden
+							data-testid="sidebar-workspace-list-loading"
+						/>
+					)}
+					<button
+						type="button"
+						aria-label={t("sidebar:workspace.refresh")}
+						data-testid="sidebar-workspace-list-refresh"
+						disabled={isRefreshing}
+						className={cn(
+							"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+							"after:absolute after:-inset-2 md:after:hidden",
+						)}
+						onClick={() => void handleRefresh()}
+					>
+						<RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+					</button>
+					<button
+						type="button"
+						aria-label={t("sidebar:workspace.add")}
+						data-testid="sidebar-workspace-list-add"
+						className={cn(
+							"outline-hidden relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4",
+							"after:absolute after:-inset-2 md:after:hidden",
+						)}
+						onClick={handleStartCreateWorkspace}
+					>
+						<Plus className="h-4 w-4" />
+					</button>
+				</div>
+			</div>
+			<SidebarGroupContent>
+				<SidebarMenu>
+					<div className="w-full pr-3">
+						{beforeItems}
 						<div ref={workspaceListRef}>
 							{isCreatingWorkspace && (
 								<div className="w-full duration-150 animate-in fade-in slide-in-from-top-2">
@@ -450,7 +495,7 @@ function WorkspaceList() {
 							)}
 							<div ref={loadMoreSentinelRef} className="h-px" aria-hidden="true" />
 						</div>
-					</ScrollArea>
+					</div>
 				</SidebarMenu>
 			</SidebarGroupContent>
 		</SidebarGroup>

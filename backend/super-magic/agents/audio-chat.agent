@@ -1,5 +1,4 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - image_search
@@ -11,7 +10,6 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
-  - run_python_snippet
   - write_file
   - edit_file
   - edit_file_range
@@ -20,11 +18,11 @@ tools:
   - delete_files
   - generate_images
   - read_webpages_as_markdown
-  - download_from_urls
   - ask_user
 skills:
   system_skills:
     - name: skill-vetter
+    - name: download
     - name: using-mcp
   workspace_skills: "*"
 ---
@@ -193,6 +191,8 @@ Recommended: "The time you just sent me a message is..."
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 {{ @include(path="./prompts/general_agent_base_instructions.prompt") }}

@@ -240,52 +240,7 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
             $query->where('magic_resource_shares.project_id', $queryVO->getProjectId());
         }
         $this->applyProjectModeFilter($query, $queryVO);
-
-        // 话题类型特殊处理：不返回已取消的分享
-        $resourceTypes = $queryVO->getResourceTypes();
-        $isOnlyTopicType = ! empty($resourceTypes)
-            && count($resourceTypes) === 1
-            && $resourceTypes[0] === ResourceType::Topic->value;
-
-        if ($isOnlyTopicType) {
-            // 话题类型：不返回已取消的分享，一次性返回全部未取消的记录（active + expired）
-            $query->whereNull('magic_resource_shares.deleted_at');
-        } else {
-            // 其他资源类型的原有逻辑
-            $filterType = $queryVO->getFilterType();
-            switch ($filterType) {
-                case ShareFilterType::Active->value:  // 分享中
-                    $query->where('magic_resource_shares.is_enabled', 1)  // 显式使用整数
-                        ->whereNull('magic_resource_shares.deleted_at')
-                        ->where(function ($q) {
-                            $q->whereNull('magic_resource_shares.expire_at')
-                                ->orWhere('magic_resource_shares.expire_at', '>', date('Y-m-d H:i:s'));
-                        });
-                    break;
-                case ShareFilterType::Expired->value:  // 已失效（包括被禁用或已过期）
-                    $query->whereNull('magic_resource_shares.deleted_at')
-                        ->where(function ($q) {
-                            // 条件1: 未启用（被禁用） - 显式使用整数 0
-                            $q->where('magic_resource_shares.is_enabled', 0)
-                              // 条件2: 已过期
-                                ->orWhere(function ($q2) {
-                                    $q2->whereNotNull('magic_resource_shares.expire_at')
-                                        ->where('magic_resource_shares.expire_at', '<=', date('Y-m-d H:i:s'));
-                                });
-                        });
-                    break;
-                case ShareFilterType::Cancelled->value:  // 已取消
-                    /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
-                    $query->withTrashed()  // 移除 SoftDeletes 的全局作用域
-                        ->whereNotNull('magic_resource_shares.deleted_at');
-                    break;
-                case ShareFilterType::All->value:  // 全部 - 包含软删除的记录
-                default:
-                    /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
-                    $query->withTrashed();
-                    break;
-            }
-        }
+        $this->applyStatusFilters($query, $queryVO->getStatusFilters());
 
         // 处理 keyword 搜索（根据资源类型）
         if ($queryVO->hasKeyword() && $queryVO->getResourceType() !== null) {
@@ -436,12 +391,6 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
 
         // 按创建时间倒序排序
         $query->orderBy('magic_resource_shares.id', 'desc');
-
-        // 注意：如果 filter_type 是 ShareFilterType::All，已经通过 withTrashed() 包含软删除记录
-        // 如果 filter_type 不是 ShareFilterType::All 且不是 ShareFilterType::Cancelled，需要添加 whereNull('deleted_at')
-        if ($queryVO->getFilterType() !== ShareFilterType::All->value && $queryVO->getFilterType() !== ShareFilterType::Cancelled->value) {
-            // 已经在上面的 switch 中处理了，这里无需额外操作
-        }
 
         // 对于使用了关键词搜索的查询，需要特殊处理 count
         if ($queryVO->hasKeyword() && $queryVO->getResourceType() !== null) {
@@ -753,53 +702,8 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
             $countQuery->where('magic_resource_shares.project_id', $queryVO->getProjectId());
         }
         $this->applyProjectModeFilter($countQuery, $queryVO);
-
-        // 话题类型特殊处理：不返回已取消的分享
         $resourceTypes = $queryVO->getResourceTypes();
-        $isOnlyTopicType = ! empty($resourceTypes)
-            && count($resourceTypes) === 1
-            && $resourceTypes[0] === ResourceType::Topic->value;
-
-        if ($isOnlyTopicType) {
-            // 话题类型没有筛选，无论是否传递 filter_type，都一次性返回全部未取消的记录（active + expired）
-            // 话题类型不返回已取消的分享
-            $countQuery->whereNull('magic_resource_shares.deleted_at');
-        } else {
-            // 其他资源类型的原有逻辑
-            $filterType = $queryVO->getFilterType();
-            switch ($filterType) {
-                case ShareFilterType::Active->value:  // 分享中
-                    $countQuery->where('magic_resource_shares.is_enabled', 1)  // 显式使用整数
-                        ->whereNull('magic_resource_shares.deleted_at')
-                        ->where(function ($q) {
-                            $q->whereNull('magic_resource_shares.expire_at')
-                                ->orWhere('magic_resource_shares.expire_at', '>', date('Y-m-d H:i:s'));
-                        });
-                    break;
-                case ShareFilterType::Expired->value:  // 已失效（包括被禁用或已过期）
-                    $countQuery->whereNull('magic_resource_shares.deleted_at')
-                        ->where(function ($q) {
-                            // 条件1: 未启用（被禁用） - 显式使用整数 0
-                            $q->where('magic_resource_shares.is_enabled', 0)
-                              // 条件2: 已过期
-                                ->orWhere(function ($q2) {
-                                    $q2->whereNotNull('magic_resource_shares.expire_at')
-                                        ->where('magic_resource_shares.expire_at', '<=', date('Y-m-d H:i:s'));
-                                });
-                        });
-                    break;
-                case ShareFilterType::Cancelled->value:  // 已取消
-                    /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
-                    $countQuery->withTrashed()  // 移除 SoftDeletes 的全局作用域
-                        ->whereNotNull('magic_resource_shares.deleted_at');
-                    break;
-                case ShareFilterType::All->value:  // 全部 - 包含软删除的记录
-                default:
-                    /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
-                    $countQuery->withTrashed();
-                    break;
-            }
-        }
+        $this->applyStatusFilters($countQuery, $queryVO->getStatusFilters());
 
         // 应用关键词搜索
         $keyword = $queryVO->getKeyword();
@@ -888,6 +792,74 @@ class ResourceShareRepository extends AbstractRepository implements ResourceShar
                     }
                 }
             });
+        }
+    }
+
+    /**
+     * 根据明确的状态集合筛选分享；空集合表示包含全部状态.
+     *
+     * @param array<ShareFilterType> $statusFilters
+     */
+    private function applyStatusFilters(Builder $query, array $statusFilters): void
+    {
+        /* @phpstan-ignore-next-line - ResourceShareModel uses SoftDeletes trait which provides withTrashed() */
+        $query->withTrashed();
+        if (empty($statusFilters)) {
+            return;
+        }
+
+        if (count($statusFilters) === 2
+            && in_array(ShareFilterType::Active, $statusFilters, true)
+            && in_array(ShareFilterType::Expired, $statusFilters, true)) {
+            $query->whereNull('magic_resource_shares.deleted_at');
+            return;
+        }
+
+        $currentTime = date('Y-m-d H:i:s');
+        $query->where(function (Builder $statusQuery) use ($statusFilters, $currentTime) {
+            foreach ($statusFilters as $index => $statusFilter) {
+                $condition = function (Builder $conditionQuery) use ($statusFilter, $currentTime) {
+                    $this->applyStatusCondition($conditionQuery, $statusFilter, $currentTime);
+                };
+
+                if ($index === 0) {
+                    $statusQuery->where($condition);
+                } else {
+                    $statusQuery->orWhere($condition);
+                }
+            }
+        });
+    }
+
+    private function applyStatusCondition(
+        Builder $query,
+        ShareFilterType $statusFilter,
+        string $currentTime
+    ): void {
+        switch ($statusFilter) {
+            case ShareFilterType::Active:
+                $query->where('magic_resource_shares.is_enabled', 1)
+                    ->whereNull('magic_resource_shares.deleted_at')
+                    ->where(function (Builder $activeQuery) use ($currentTime) {
+                        $activeQuery->whereNull('magic_resource_shares.expire_at')
+                            ->orWhere('magic_resource_shares.expire_at', '>', $currentTime);
+                    });
+                return;
+            case ShareFilterType::Expired:
+                $query->whereNull('magic_resource_shares.deleted_at')
+                    ->where(function (Builder $expiredQuery) use ($currentTime) {
+                        $expiredQuery->where('magic_resource_shares.is_enabled', 0)
+                            ->orWhere(function (Builder $timeQuery) use ($currentTime) {
+                                $timeQuery->whereNotNull('magic_resource_shares.expire_at')
+                                    ->where('magic_resource_shares.expire_at', '<=', $currentTime);
+                            });
+                    });
+                return;
+            case ShareFilterType::Cancelled:
+                $query->whereNotNull('magic_resource_shares.deleted_at');
+                return;
+            case ShareFilterType::All:
+                return;
         }
     }
 

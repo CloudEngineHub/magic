@@ -33,7 +33,6 @@ import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void
-	organizationFilter?: (org: User.UserOrganization) => boolean
 }
 
 interface OrganizationOption {
@@ -41,10 +40,7 @@ interface OrganizationOption {
 	magicOrganization?: User.MagicOrganization
 }
 
-const getOrganizationOptions = (
-	account: User.UserAccount,
-	organizationFilter?: (org: User.UserOrganization) => boolean,
-): OrganizationOption[] => {
+const getOrganizationOptions = (account: User.UserAccount): OrganizationOption[] => {
 	const organizationMap = keyBy(account.organizations, "third_platform_organization_code")
 	return Object.values(organizationMap).map((o) => {
 		return {
@@ -55,7 +51,7 @@ const getOrganizationOptions = (
 }
 
 function OrganizationList(props: OrganizationListItemProps) {
-	const { onClose, organizationFilter } = props
+	const { onClose } = props
 	const { t: tSuper } = useTranslation("super", {
 		i18n: i18nStore.i18n.instance,
 	})
@@ -298,10 +294,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 										className="w-full [&_[data-slot='scroll-area-scrollbar']]:bg-transparent"
 										viewportClassName="max-h-[50vh] pr-3 scroll-smooth [&>div]:!block"
 									>
-										{getOrganizationOptions(
-											currentAccount,
-											organizationFilter,
-										).map((option) =>
+										{getOrganizationOptions(currentAccount).map((option) =>
 											renderOrganizationItem(currentAccount, option, false),
 										)}
 									</ScrollArea>
@@ -314,7 +307,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 						<>
 							{renderSectionLabel(tSidebar("organizationSwitch.otherAccount"))}
 							{otherAccounts.map((account) => {
-								const options = getOrganizationOptions(account, organizationFilter)
+								const options = getOrganizationOptions(account)
 								const accountIdSegment = toTestIdSegment(account.magic_id)
 								const otherAccountTestId = `user-menus-other-account-${accountIdSegment}`
 								const otherAccountMenuTestId = `user-menus-other-account-menu-${accountIdSegment}`

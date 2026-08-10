@@ -17,31 +17,20 @@ from app.tools.mcp._base import BaseMcpTool
 class McpGetToolSchemaParams(BaseToolParams):
     server_name: str = Field(
         ...,
-        description="""<!--zh: MCP 服务器名称-->
-MCP server name.""",
+        description="MCP server name.",
     )
     tool_name: Union[str, List[str]] = Field(
         ...,
-        description="""<!--zh
-        要查询的工具名，需与 mcp_list_tools 返回的 name 完全一致。
-        可传单个字符串，也可传字符串列表一次拿多个工具的 input schema。
-        -->
-        Tool name(s) to query. Must match the `name` returned by
-        mcp_list_tools exactly. Accepts either a single string or a list of
-        strings to fetch multiple schemas at once.""",
+        description=(
+            "Tool name or names returned by mcp_list_tools. Pass a string or a "
+            "string list to fetch one or more input schemas."
+        ),
     )
 
 
 @tool(name="mcp_get_tool_schema")
 class McpGetToolSchema(BaseMcpTool[McpGetToolSchemaParams]):
-    """<!--zh
-    获取指定 MCP 工具的输入参数 schema，用于在调用前确认参数结构。
-    若服务器尚未连接，会按需先建连再查询。
-    -->
-    Fetch the input schema(s) of one or more MCP tools, so the caller can
-    validate parameters before mcp_call_tool. Connects the target server on
-    demand if it is not yet connected.
-    """
+    """Fetch input schemas for MCP tools, connecting the server when needed."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None

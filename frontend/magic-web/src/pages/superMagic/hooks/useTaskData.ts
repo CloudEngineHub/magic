@@ -18,7 +18,9 @@ export function useTaskData({ selectedTopic }: UseTaskDataParams) {
 					// 从后往前遍历找到第一个符合条件的消息
 					let foundTaskData = false
 					for (let i = topicMessage.length - 1; i >= 0; i -= 1) {
-						const node = superMagicStore.getMessageNode(topicMessage[i]?.app_message_id)
+						const node = superMagicStore.getMessageNode(
+							topicMessage[i]?.super_message_id,
+						)
 						if (node?.steps && node?.steps?.length > 0) {
 							// 设置为当前任务数据
 							setTaskData({

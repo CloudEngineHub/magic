@@ -119,7 +119,7 @@ describe("self-media home daily insight", () => {
 
 		const result = await resolveSelfMediaHomeDailyInsight({
 			overview: createOverview(),
-			displayName: "Jiabo",
+			displayName: "测试用户",
 			storage,
 			now: new Date("2026-06-13T10:30:00+08:00"),
 			generate,
@@ -141,7 +141,7 @@ describe("self-media home daily insight", () => {
 
 		const result = await resolveSelfMediaHomeDailyInsight({
 			overview: createOverview(),
-			displayName: "Jiabo",
+			displayName: "测试用户",
 			storage,
 			now: new Date("2026-06-13T10:30:00+08:00"),
 			model: "first-available-model",
@@ -153,7 +153,7 @@ describe("self-media home daily insight", () => {
 		expect(generate).toHaveBeenCalledWith(
 			expect.objectContaining({
 				overview: createOverview(),
-				displayName: "Jiabo",
+				displayName: "测试用户",
 				date: "2026-06-13",
 				model: "first-available-model",
 			}),
@@ -171,7 +171,7 @@ describe("self-media home daily insight", () => {
 
 		const result = await resolveSelfMediaHomeDailyInsight({
 			overview: createOverview(),
-			displayName: "Jiabo",
+			displayName: "测试用户",
 			storage,
 			now: new Date("2026-06-13T10:30:00+08:00"),
 			model: "first-available-model",
@@ -194,7 +194,7 @@ describe("self-media home daily insight", () => {
 		aiMocks.chat.mockResolvedValueOnce({
 			content: JSON.stringify({
 				welcomeTitle: "今日重点：复用高互动样本",
-				greeting: "Jiabo，今天看复用机会",
+				greeting: "测试用户，今天看复用机会",
 				summary: "链路已闭环，优先拆高互动样本。",
 				actions: [
 					{
@@ -212,7 +212,7 @@ describe("self-media home daily insight", () => {
 
 		const result = await generateSelfMediaHomeDailyInsight({
 			overview: createOverview(),
-			displayName: "Jiabo",
+			displayName: "测试用户",
 			date: "2026-06-13",
 			model: "first-available-model",
 		})
@@ -239,7 +239,7 @@ describe("self-media home daily insight", () => {
 		aiMocks.chat.mockResolvedValueOnce({
 			content: JSON.stringify({
 				welcomeTitle: "今日重点：复用高互动样本",
-				greeting: "Jiabo，今天看复用机会",
+				greeting: "测试用户，今天看复用机会",
 				summary: "链路已闭环，优先拆高互动样本。",
 				actions: [
 					{
@@ -277,7 +277,7 @@ describe("self-media home daily insight", () => {
 					},
 				],
 			},
-			displayName: "Jiabo",
+			displayName: "测试用户",
 			date: "2026-06-13",
 			model: "first-available-model",
 		})

@@ -470,8 +470,7 @@ export class CropRenderer {
 		if (!this.overlayGroup || !this.elementBounds) return
 
 		const group = this.overlayGroup.findOne(`.${CROP_OVERFLOW_OVERLAY_NAME}`) as
-			| Konva.Group
-			| undefined
+			Konva.Group | undefined
 		if (!group) return
 
 		this.updateSegmentOverlay(
@@ -534,8 +533,7 @@ export class CropRenderer {
 		const cropBox = this.overlayGroup.findOne(`.${CROP_BOX_NAME}`) as Konva.Rect
 		const cropArea = this.overlayGroup.findOne(`.${CROP_AREA_NAME}`) as Konva.Rect
 		const cropAreaHitProxy = this.overlayGroup.findOne(`.${CROP_AREA_HIT_PROXY_NAME}`) as
-			| Konva.Rect
-			| undefined
+			Konva.Rect | undefined
 
 		if (cropBox && cropArea) {
 			cropBox.position({ x: data.tempCrop.x, y: data.tempCrop.y })

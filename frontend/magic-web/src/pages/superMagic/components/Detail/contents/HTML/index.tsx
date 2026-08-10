@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isConvertibleFile } from "../../utils/file"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererContentMetrics,
@@ -60,7 +60,7 @@ import {
 	downloadFileContent,
 } from "@/pages/superMagic/utils/api"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, Crosshair, Terminal } from "lucide-react"
+import { AlertTriangle, Crosshair, ShieldCheck, Terminal } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { env } from "@/utils/env"
@@ -79,10 +79,20 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
+import {
+	shouldShowHtmlPermissionManager,
+	useHtmlAppPermissions,
+} from "./hooks/useHtmlAppPermissions"
+import { useHtmlDevConsoleState } from "./hooks/useHtmlDevConsoleState"
+import {
+	type HtmlPermissionManagerHandle,
+	useHtmlPermissionManagerBridge,
+} from "./hooks/useHtmlPermissionManagerBridge"
 
-/** 跨组件重挂载持久化调试面板开关状态（按文件 ID 存储） */
-const devConsoleStateMap = new Map<string, boolean>()
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
+const HtmlPermissionManagerDialog = lazy(
+	() => import("./components/PermissionManager/HtmlPermissionManagerDialog"),
+)
 
 interface HTMLProps {
 	data: string | any
@@ -143,12 +153,20 @@ interface HTMLProps {
 	isTabActive?: boolean
 	showFooter?: boolean
 	onRefreshFile?: () => void
+	onRegisterAIEdit?: (handler: (() => void) | null) => void
+	onAIEditActiveChange?: (active: boolean) => void
+	onRegisterDevConsoleToggle?: (handler: (() => void) | null) => void
+	onDevConsoleActiveChange?: (active: boolean) => void
+	/** 向无文件头的外部页面注册当前 HTML 的授权管理入口。 */
+	onHtmlPermissionManagerChange?: (manager: HtmlPermissionManagerHandle | null) => void
 	isPlaybackMode?: boolean
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	isInPPTMode?: boolean
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
 	projectId?: string
+	/** 跨多个 HTML 文件共享虚拟存储时使用的稳定标记。 */
+	virtualStorageMarkerId?: string
 }
 
 interface HtmlExportActionProps {
@@ -236,10 +254,16 @@ export default memo(function HTML(props: HTMLProps) {
 		isTabActive,
 		showFooter,
 		onRefreshFile,
+		onRegisterAIEdit,
+		onAIEditActiveChange,
+		onRegisterDevConsoleToggle,
+		onDevConsoleActiveChange,
+		onHtmlPermissionManagerChange,
 		isPlaybackMode = false,
 		onRegisterSaveHandler,
 		isInPPTMode = false,
 		allowDownload,
+		virtualStorageMarkerId,
 	} = props
 
 	const displayConfig = displayData?.display_config || externalDisplayConfig
@@ -364,11 +388,6 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
-	const handleDevConsoleToggle = useMemoizedFn(() => {
-		htmlRendererRef.current?.toggleDevConsole()
-		setDevConsoleEnabled((prev) => !prev)
-	})
-
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Super_Magic_Detail_Refresh, handleDetailHeaderRefresh)
 		return () => {
@@ -380,6 +399,40 @@ export default memo(function HTML(props: HTMLProps) {
 		attachmentList: allAttachmentItems,
 		fileId: displayData?.file_id,
 		fallbackFileName: data?.file_name || displayData?.file_name,
+	})
+	const htmlPermissionController = useHtmlAppPermissions({
+		content: processedContent,
+		rawSourceCode: data?.content,
+		relativeFilePath: currentHtmlFileInfo.relativeFilePath,
+		projectId: selectedProject?.id,
+		fileList: flattenedAttachmentList,
+		enabled: !isDataAnalysis && !htmlIsDeleted,
+	})
+	const {
+		hasHtmlPermissionDeclarations,
+		activeHtmlPermissionGrantCount,
+		getPermissionSnapshot,
+		preauthorizeHtmlPermission,
+		revokeHtmlPermission,
+		updateHtmlPermissionTtl,
+		revokeAllHtmlPermissions,
+		permissionRevision,
+	} = htmlPermissionController
+	const canManageHtmlPermissions = Boolean(
+		!isDataAnalysis &&
+		!htmlIsDeleted &&
+		shouldShowHtmlPermissionManager(
+			hasHtmlPermissionDeclarations,
+			activeHtmlPermissionGrantCount,
+		),
+	)
+	const {
+		open: permissionManagerOpen,
+		setOpen: setPermissionManagerOpen,
+		openManager: handleOpenHtmlPermissionManager,
+	} = useHtmlPermissionManagerBridge({
+		available: canManageHtmlPermissions,
+		onManagerChange: onHtmlPermissionManagerChange,
 	})
 
 	/**
@@ -442,22 +495,31 @@ export default memo(function HTML(props: HTMLProps) {
 	const htmlRendererRef = useRef<IsolatedHTMLRendererRef>(null)
 	const fileId = displayData?.file_id as string | undefined
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
-	// 从模块级 Map 恢复上次的调试面板状态（组件重挂载后仍能保持开启）
-	const [devConsoleEnabled, setDevConsoleEnabled] = useState(() =>
-		fileId ? (devConsoleStateMap.get(fileId) ?? false) : false,
-	)
-	// 当 devConsoleEnabled 变化时同步到模块级 Map
-	useEffect(() => {
-		if (fileId) devConsoleStateMap.set(fileId, devConsoleEnabled)
-	}, [fileId, devConsoleEnabled])
-	// 组件挂载后，若调试面板应处于开启状态，则通知 IsolatedHTMLRenderer 开启
-	useEffect(() => {
-		if (devConsoleEnabled) {
-			htmlRendererRef.current?.toggleDevConsole()
+	const handleAIEdit = useMemoizedFn(() => {
+		if (isAppendPicking) {
+			htmlRendererRef.current?.stopInspector()
+		} else {
+			htmlRendererRef.current?.startInspectorAppend()
 		}
-		// 仅在首次挂载时执行
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [])
+	})
+
+	useEffect(() => {
+		onRegisterAIEdit?.(handleAIEdit)
+		return () => onRegisterAIEdit?.(null)
+	}, [handleAIEdit, onRegisterAIEdit])
+
+	useEffect(() => {
+		onAIEditActiveChange?.(isAppendPicking)
+	}, [isAppendPicking, onAIEditActiveChange])
+	const {
+		enabled: devConsoleEnabled,
+		setEnabled: updateDevConsoleEnabled,
+		toggle: handleDevConsoleToggle,
+	} = useHtmlDevConsoleState({
+		fileId,
+		onRegisterToggle: onRegisterDevConsoleToggle,
+		onEnabledChange: onDevConsoleActiveChange,
+	})
 
 	const getCurrentEditingContent = useMemoizedFn(async () => {
 		if (viewMode === "code") return editingCodeContent || data?.content || ""
@@ -1284,6 +1346,22 @@ export default memo(function HTML(props: HTMLProps) {
 					),
 				},
 				{
+					key: "html-permission-manager",
+					zone: "secondary",
+					before: "refresh",
+					visible: () => canManageHtmlPermissions,
+					render: (context) => (
+						<ActionButton
+							icon={<ShieldCheck size={16} />}
+							onClick={handleOpenHtmlPermissionManager}
+							title={t("htmlEditor.permissionManager.open")}
+							text={t("htmlEditor.permissionManager.open")}
+							showText={context.showButtonText}
+							data-testid="html-permission-manager-button"
+						/>
+					),
+				},
+				{
 					key: "html-export-dropdown",
 					zone: "secondary",
 					after: "download",
@@ -1330,6 +1408,11 @@ export default memo(function HTML(props: HTMLProps) {
 			showExportButton,
 			showFileEditButton,
 			isAppendPicking,
+			canManageHtmlPermissions,
+			handleOpenHtmlPermissionManager,
+			isDataAnalysis,
+			htmlIsDeleted,
+			hasHtmlPermissionDeclarations,
 			t,
 		],
 	)
@@ -1476,12 +1559,15 @@ export default memo(function HTML(props: HTMLProps) {
 									saveEditContent={saveEditContent}
 									onSaveReady={onSaveReady}
 									fileId={displayData?.file_id}
+									virtualStorageMarkerId={virtualStorageMarkerId}
 									filePathMapping={filePathMapping}
 									openNewTab={openNewTab}
 									htmlRelativeFolderPath={
 										currentHtmlFileInfo.htmlRelativeFolderPath
 									}
 									selectedProject={selectedProject}
+									devConsoleEnabled={devConsoleEnabled}
+									permissionController={htmlPermissionController}
 									attachmentList={attachmentList}
 									isPlaybackMode={isPlaybackMode}
 									onRenderReady={handlePreviewRenderReady}
@@ -1498,7 +1584,7 @@ export default memo(function HTML(props: HTMLProps) {
 												: nextHeight,
 										)
 									}}
-									onDevConsoleClose={() => setDevConsoleEnabled(false)}
+									onDevConsoleClose={() => updateDevConsoleEnabled(false)}
 									onAppendPickingChange={setIsAppendPicking}
 								/>
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
@@ -1537,6 +1623,20 @@ export default memo(function HTML(props: HTMLProps) {
 					radius: 8,
 				}}
 			/>
+			{permissionManagerOpen && canManageHtmlPermissions ? (
+				<Suspense fallback={null}>
+					<HtmlPermissionManagerDialog
+						open={permissionManagerOpen}
+						onOpenChange={setPermissionManagerOpen}
+						permissionRevision={permissionRevision}
+						getPermissionSnapshot={getPermissionSnapshot}
+						onAuthorize={preauthorizeHtmlPermission}
+						onRevoke={revokeHtmlPermission}
+						onUpdateTtl={updateHtmlPermissionTtl}
+						onRevokeAll={revokeAllHtmlPermissions}
+					/>
+				</Suspense>
+			) : null}
 			<AlertDialog
 				open={showSaveWithUpdateConfirmDialog}
 				onOpenChange={handleSaveConflictDialogChange}

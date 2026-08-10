@@ -42,7 +42,7 @@ import SuperMagicService from "@/pages/superMagic/services"
 import recordSummaryStore from "@/stores/recordingSummary"
 import ModeTag from "@/pages/superMagicMobile/components/HierarchicalWorkspacePopup/components/ModeTag"
 import type { Topic } from "../../../pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import StatusIcon from "./StatusIcon"
 import { useTopicHistoryGroupedViewModel } from "./useTopicHistoryGroupedViewModel"
 import { resolveTopicTaskStatus } from "@/pages/superMagic/utils/topicHistory"
@@ -627,7 +627,9 @@ function TopicHistoryPanelContentInner({
 								<div className="flex min-w-0 items-center gap-2">
 									{!hideTopicListModeIcon ? (
 										<ModeTag
-											mode={topic.topic_mode || TopicMode.General}
+											mode={
+												topic.topic_mode || getFallbackTopicModeIdentifier()
+											}
 											agentCode={topic.agent_code}
 										/>
 									) : null}

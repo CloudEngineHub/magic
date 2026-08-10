@@ -58,7 +58,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	const workspaceHeaderRef = useRef<HTMLDivElement>(null)
 	const collapseScrollAnchorRef = useRef<{
-		viewport: HTMLElement
+		scrollContainer: HTMLElement
 		anchorTop: number
 	} | null>(null)
 
@@ -70,7 +70,7 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		const topAfter = workspaceHeaderRef.current.getBoundingClientRect().top
 		const delta = topAfter - pending.anchorTop
 		if (Math.abs(delta) < 0.5) return
-		pending.viewport.scrollTop += delta
+		pending.scrollContainer.scrollTop += delta
 	}, [isExpanded])
 
 	/**
@@ -119,12 +119,12 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		e.preventDefault()
 		e.stopPropagation()
 		if (isExpanded && workspaceHeaderRef.current) {
-			const viewport = workspaceHeaderRef.current.closest<HTMLElement>(
-				'[data-slot="scroll-area-viewport"]',
+			const scrollContainer = workspaceHeaderRef.current.closest<HTMLElement>(
+				"[data-testid='sidebar-content-root']",
 			)
-			if (viewport) {
+			if (scrollContainer) {
 				collapseScrollAnchorRef.current = {
-					viewport,
+					scrollContainer,
 					anchorTop: workspaceHeaderRef.current.getBoundingClientRect().top,
 				}
 			}
@@ -152,7 +152,10 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		>
 			{/* Section wraps header + projects so sticky releases when whole block scrolls out */}
 			<div className="flex w-full min-w-0 flex-col">
-				<div ref={workspaceHeaderRef} className="sticky top-0 z-10 w-full bg-sidebar">
+				<div
+					ref={workspaceHeaderRef}
+					className="sticky top-[var(--workspace-list-sticky-top)] z-10 w-full bg-sidebar"
+				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}

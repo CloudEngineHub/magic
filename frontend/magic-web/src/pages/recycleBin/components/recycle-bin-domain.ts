@@ -1,20 +1,6 @@
 import type { TFunction } from "i18next"
 import type { RecycleBin } from "@/apis/modules/recycle-bin"
 
-const CATEGORY_TO_TYPE_KEY: Record<RecycleBinItem["category"], string> = {
-	workspaces: "workspace",
-	projects: "project",
-	topics: "topic",
-	files: "file",
-}
-
-const CATEGORY_TO_FALLBACK_TITLE_KEY: Record<RecycleBinItem["category"], string> = {
-	workspaces: "workspace.unnamedWorkspace",
-	projects: "common.untitledProject",
-	topics: "common.untitledTopic",
-	files: "common.untitledFile",
-}
-
 const MAX_CONFLICT_NAME_PREVIEW_COUNT = 5
 
 export const RESOURCE_TYPE = {
@@ -22,6 +8,7 @@ export const RESOURCE_TYPE = {
 	PROJECT: 2,
 	TOPIC: 3,
 	FILE: 4,
+	MICRO_APP: 5,
 } as const
 
 export type ResourceType = (typeof RESOURCE_TYPE)[keyof typeof RESOURCE_TYPE]
@@ -39,7 +26,7 @@ export interface RecycleBinItem {
 	id: string
 	resourceId: string
 	resourceType: ResourceType
-	category: "workspaces" | "projects" | "topics" | "files"
+	category: "workspaces" | "projects" | "topics" | "files" | "microApps"
 	fileKind?: "file" | "folder"
 	title: string
 	path: string
@@ -136,19 +123,28 @@ export function getCategoryLabel(
 	fileKind?: RecycleBinItem["fileKind"],
 ) {
 	if (category === "files" && fileKind === "folder") return t("recycleBin.item.type.folder")
-	return t(`recycleBin.item.type.${CATEGORY_TO_TYPE_KEY[category]}`)
+	if (category === "workspaces") return t("recycleBin.item.type.workspace")
+	if (category === "projects") return t("recycleBin.item.type.project")
+	if (category === "topics") return t("recycleBin.item.type.topic")
+	if (category === "microApps") return t("recycleBin.item.type.microApp")
+	return t("recycleBin.item.type.file")
 }
 
 export function getDisplayTitle(item: RecycleBinItem, t: TFunction) {
 	const title = item.title.trim()
 	if (title) return title
-	return t(CATEGORY_TO_FALLBACK_TITLE_KEY[item.category])
+	if (item.category === "workspaces") return t("workspace.unnamedWorkspace")
+	if (item.category === "projects") return t("common.untitledProject")
+	if (item.category === "topics") return t("common.untitledTopic")
+	if (item.category === "microApps") return t("microAppsPage.unnamedApp")
+	return t("common.untitledFile")
 }
 
 export function toResourceType(value?: number): ResourceType {
 	if (value === RESOURCE_TYPE.WORKSPACE) return RESOURCE_TYPE.WORKSPACE
 	if (value === RESOURCE_TYPE.PROJECT) return RESOURCE_TYPE.PROJECT
 	if (value === RESOURCE_TYPE.TOPIC) return RESOURCE_TYPE.TOPIC
+	if (value === RESOURCE_TYPE.MICRO_APP) return RESOURCE_TYPE.MICRO_APP
 	return RESOURCE_TYPE.FILE
 }
 
@@ -159,13 +155,16 @@ export function mapRecycleBinItem(item: RecycleBinListItemDto, t: TFunction): Re
 	const projectName =
 		parentInfo?.project_name?.trim() || item.extra_data?.project_name?.trim() || ""
 	const relativeFilePath = item.extra_data?.relative_file_path?.trim() || ""
-	const path = buildRecycleBinItemPath({
-		workspaceName,
-		projectName,
-		relativeFilePath,
-		resourceName: item.resource_name,
-	})
 	const resourceType = toResourceType(item.resource_type)
+	const path =
+		resourceType === RESOURCE_TYPE.MICRO_APP
+			? t("microAppsPage.title")
+			: buildRecycleBinItemPath({
+					workspaceName,
+					projectName,
+					relativeFilePath,
+					resourceName: item.resource_name,
+				})
 	const fileKind =
 		resourceType === RESOURCE_TYPE.FILE
 			? item.extra_data?.is_directory
@@ -193,6 +192,7 @@ export function getCategoryByResourceType(resourceType?: ResourceType): RecycleB
 	if (resourceType === RESOURCE_TYPE.WORKSPACE) return "workspaces"
 	if (resourceType === RESOURCE_TYPE.PROJECT) return "projects"
 	if (resourceType === RESOURCE_TYPE.TOPIC) return "topics"
+	if (resourceType === RESOURCE_TYPE.MICRO_APP) return "microApps"
 	return "files"
 }
 
@@ -208,6 +208,7 @@ export function getRecycleBinItemTitle(props: {
 	if (resourceType === RESOURCE_TYPE.PROJECT) return t("common.untitledProject")
 	if (resourceType === RESOURCE_TYPE.TOPIC) return t("common.untitledTopic")
 	if (resourceType === RESOURCE_TYPE.FILE) return t("common.untitledFile")
+	if (resourceType === RESOURCE_TYPE.MICRO_APP) return t("microAppsPage.unnamedApp")
 	return trimmedName
 }
 
@@ -322,6 +323,9 @@ export function buildRecycleBinPathLabel(props: {
 	resourceName?: string
 	t: TFunction
 }) {
+	if (props.resourceType === RESOURCE_TYPE.MICRO_APP) {
+		return props.t("mobile.recycleBin.pathScopes.microApps")
+	}
 	const head = props.t("mobile.recycleBin.pathScopes.workspaces")
 	const parts = buildRecycleBinPathParts({
 		resourceType: props.resourceType,
@@ -342,6 +346,7 @@ const RECYCLE_BIN_RESOURCE_TYPE_BY_TAB_ID: Record<string, ResourceType> = {
 	projects: RESOURCE_TYPE.PROJECT,
 	topics: RESOURCE_TYPE.TOPIC,
 	files: RESOURCE_TYPE.FILE,
+	microApps: RESOURCE_TYPE.MICRO_APP,
 }
 
 const RECYCLE_BIN_TAB_ID_BY_RESOURCE_TYPE: Record<ResourceType, string> = {
@@ -349,6 +354,7 @@ const RECYCLE_BIN_TAB_ID_BY_RESOURCE_TYPE: Record<ResourceType, string> = {
 	[RESOURCE_TYPE.PROJECT]: "projects",
 	[RESOURCE_TYPE.TOPIC]: "topics",
 	[RESOURCE_TYPE.FILE]: "files",
+	[RESOURCE_TYPE.MICRO_APP]: "microApps",
 }
 
 const RECYCLE_BIN_TAB_ID_BY_CATEGORY: Record<RecycleBinItem["category"], string> = {
@@ -356,6 +362,7 @@ const RECYCLE_BIN_TAB_ID_BY_CATEGORY: Record<RecycleBinItem["category"], string>
 	projects: "projects",
 	topics: "topics",
 	files: "files",
+	microApps: "microApps",
 }
 
 export function updateTabCounts({ items, onTabCountChange }: UpdateTabCountsPayload) {
@@ -534,7 +541,10 @@ export function getRestoreStatusMessage(
 		return terminalConflictMessages.join("\n")
 	}
 
-	if (result.itemsNeedMove.length > 0) {
+	if (
+		result.itemsNeedMove.length > 0 &&
+		!shouldRestoreMicroAppWithoutMove(resourceType, result.itemsNeedMove)
+	) {
 		if (target?.kind !== "selection") return getMissingParentMessage(target, t)
 		const selectionResourceType = getRestoreTargetResourceType({ target, items })
 		return getNeedMoveStatusMessage(
@@ -548,6 +558,14 @@ export function getRestoreStatusMessage(
 	const typeLabel = getRestoreTargetTypeLabel(target, t, items)
 	const name = getRestoreTargetName(target, t)
 	return t("recycleBin.restoreCheck.confirmMessage", { type: typeLabel, name })
+}
+
+/** 微应用使用系统隐藏工作区，不向用户暴露项目式的目标工作区选择。 */
+export function shouldRestoreMicroAppWithoutMove(
+	resourceType: ResourceType | undefined,
+	needMoveIds: string[],
+): resourceType is typeof RESOURCE_TYPE.MICRO_APP {
+	return resourceType === RESOURCE_TYPE.MICRO_APP && needMoveIds.length > 0
 }
 
 export function getRestoreTargetName(target: RestoreTarget | null, t: TFunction) {
@@ -571,6 +589,7 @@ export function getRestoreTargetTypeLabel(
 	if (resourceType === RESOURCE_TYPE.PROJECT) return t("recycleBin.item.type.project")
 	if (resourceType === RESOURCE_TYPE.TOPIC) return t("recycleBin.item.type.topic")
 	if (resourceType === RESOURCE_TYPE.FILE) return t("recycleBin.item.type.file")
+	if (resourceType === RESOURCE_TYPE.MICRO_APP) return t("recycleBin.item.type.microApp")
 	return t("recycleBin.item.type.file")
 }
 
@@ -695,7 +714,8 @@ export function isRestorableResourceType(
 		resourceType === RESOURCE_TYPE.WORKSPACE ||
 		resourceType === RESOURCE_TYPE.PROJECT ||
 		resourceType === RESOURCE_TYPE.TOPIC ||
-		resourceType === RESOURCE_TYPE.FILE
+		resourceType === RESOURCE_TYPE.FILE ||
+		resourceType === RESOURCE_TYPE.MICRO_APP
 	)
 }
 

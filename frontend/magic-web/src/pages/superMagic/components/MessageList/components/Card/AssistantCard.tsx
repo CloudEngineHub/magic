@@ -46,7 +46,7 @@ export function withAssistantCard<
 >(WrapperComponent: ComponentType<T>) {
 	const targetComponent = observer((props: T) => {
 		const { node, selectedTopic, classNames, checkIsLastMessage } = props
-		const messageNode = superMagicStore.getMessageNode(node?.app_message_id)
+		const messageNode = superMagicStore.getMessageNode(node?.super_message_id)
 		const { t } = useTranslation("super")
 		const { isShareRoute, isMagicShareRoute } = useShareRoute()
 		const {
@@ -90,7 +90,7 @@ export function withAssistantCard<
 			let userNode: any = null
 			for (let i = currentIdx - 1; i >= 0; i--) {
 				if (messages[i].role === "user") {
-					userNode = superMagicStore.getMessageNode(messages[i].app_message_id)
+					userNode = superMagicStore.getMessageNode(messages[i].super_message_id)
 					break
 				}
 			}
@@ -106,8 +106,7 @@ export function withAssistantCard<
 
 			const resolveModel = (
 				modelData:
-					| { model_id?: string; model_name?: string; model_icon?: string }
-					| undefined,
+					{ model_id?: string; model_name?: string; model_icon?: string } | undefined,
 				getModelList: () => ModelItem[],
 			) => {
 				if (!modelData?.model_id) return
@@ -234,7 +233,7 @@ export function withAssistantCard<
 			}
 		})
 
-		const reportConversationRound = useMemoizedFn(() => {
+		const reportConversationRound = useMemoizedFn(async () => {
 			const topicId = selectedTopic?.chat_topic_id
 			const currentMessageId = node?.app_message_id
 			if (!topicId || !currentMessageId) return
@@ -243,26 +242,35 @@ export function withAssistantCard<
 			const roundMessages = getCurrentConversationRound(topicMessages, currentMessageId)
 			if (roundMessages.length === 0) return
 
-			// Use the latest message-map nodes while retaining the topic sequence fields;
-			// this keeps streamed/final metadata in the report instead of stale list snapshots.
-			const messages = toJS(roundMessages).map((message: any) => ({
-				...message,
-				debug: toJS(
-					superMagicStore.getMessageNode(message.app_message_id) || message.debug,
-				),
-			}))
+			try {
+				await superMagicStore.flushMessagePersistenceForReport(topicId)
+				// IndexedDB/report codec stays outside the MessageList bundle until the user reports.
+				const {
+					queryConversationRoundLogs,
+					compressConversationRoundLogs,
+					getConversationRoundReportWriterId,
+				} = await import("@/pages/superMagic/stores/conversation-round-report")
+				const records = await queryConversationRoundLogs(topicId)
+				const messages = compressConversationRoundLogs({
+					records,
+					roundMessages: toJS(roundMessages),
+					preferredWriterId: getConversationRoundReportWriterId(),
+				})
 
-			logger.report("messages", {
-				topic_id: selectedTopic?.id,
-				chat_topic_id: topicId,
-				message_id: currentMessageId,
-				messages,
-			})
+				logger.report("messages", {
+					topic_id: selectedTopic?.id,
+					chat_topic_id: topicId,
+					message_id: currentMessageId,
+					messages,
+				})
+			} catch (error) {
+				logger.error("Failed to prepare conversation round report", error)
+			}
 		})
 
 		const onMenuClick = useMemoizedFn(({ key }: { key: string }) => {
 			if (key === MenuKey.ReportConversationRound) {
-				reportConversationRound()
+				void reportConversationRound()
 			}
 		})
 
@@ -324,9 +332,14 @@ export function withAssistantCard<
 				{statusList.has(messageNode?.status) && (
 					<>
 						{messageNode?.role === "tool" && messageNode?.content && (
-							<div className="mb-1 text-muted-foreground">{messageNode?.content}</div>
+							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>
 						)}
-						<StatusBadge status={messageNode?.status} />
+						<div
+							className="ml-[var(--message-status-offset,0px)] w-fit"
+							data-testid="message-list-status-badge"
+						>
+							<StatusBadge status={messageNode?.status} />
+						</div>
 						{messageNode?.status === "finished" && (
 							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
 								<div className="flex items-center gap-1"></div>
