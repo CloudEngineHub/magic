@@ -178,7 +178,7 @@ class RecycleBinAppService extends AbstractAppService
 
                 $parentExists = false;
 
-                if ($resourceType === RecycleBinResourceType::Project) {
+                if ($resourceType === RecycleBinResourceType::Project || $resourceType === RecycleBinResourceType::MicroApp) {
                     $workspace = $this->workspaceDomainService->getWorkspaceDetail($parentId);
                     $parentExists = $workspace !== null;
                 } elseif ($resourceType === RecycleBinResourceType::Topic) {

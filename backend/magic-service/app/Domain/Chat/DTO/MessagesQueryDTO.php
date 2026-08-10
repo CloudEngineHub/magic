@@ -29,6 +29,13 @@ class MessagesQueryDTO extends AbstractEntity
 
     protected Order $order = Order::Desc;
 
+    /** Topic message pagination metadata recorded by the repository after mapping lookup. */
+    protected ?bool $resultHasMore = null;
+
+    protected ?string $resultPageToken = null;
+
+    protected ?bool $resultSnapshotComplete = null;
+
     public function getConversationIds(): array
     {
         return $this->conversationIds;
@@ -114,6 +121,39 @@ class MessagesQueryDTO extends AbstractEntity
     public function setOrder(Order $order): self
     {
         $this->order = $order;
+        return $this;
+    }
+
+    public function getResultHasMore(): ?bool
+    {
+        return $this->resultHasMore;
+    }
+
+    public function setResultHasMore(?bool $resultHasMore): self
+    {
+        $this->resultHasMore = $resultHasMore;
+        return $this;
+    }
+
+    public function getResultPageToken(): ?string
+    {
+        return $this->resultPageToken;
+    }
+
+    public function setResultPageToken(?string $resultPageToken): self
+    {
+        $this->resultPageToken = $resultPageToken;
+        return $this;
+    }
+
+    public function getResultSnapshotComplete(): ?bool
+    {
+        return $this->resultSnapshotComplete;
+    }
+
+    public function setResultSnapshotComplete(?bool $resultSnapshotComplete): self
+    {
+        $this->resultSnapshotComplete = $resultSnapshotComplete;
         return $this;
     }
 }

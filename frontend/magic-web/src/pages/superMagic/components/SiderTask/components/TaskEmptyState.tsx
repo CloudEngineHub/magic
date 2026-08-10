@@ -10,7 +10,10 @@ export default function TaskEmptyState({ onCreateTask }: TaskEmptyStateProps) {
 	const { t } = useTranslation("super")
 
 	return (
-		<div className="scrollbar-y-thin scrollbar-thumb-border scrollbar-track-transparent flex h-full w-full flex-col items-center justify-center gap-6 overflow-auto rounded-lg border border-dashed border-border p-6">
+		<div
+			className="scrollbar-y-thin scrollbar-thumb-border scrollbar-track-transparent flex h-full w-full flex-col items-center justify-center gap-6 overflow-auto rounded-lg border border-dashed border-border p-6"
+			data-slot="project-panel-empty"
+		>
 			{/* Icon container */}
 			<div className="flex size-12 items-center justify-center rounded-lg border border-border bg-background p-2 shadow-sm">
 				<Timer className="size-6 text-foreground" />

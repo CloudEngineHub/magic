@@ -12,6 +12,7 @@ use App\Application\ModelGateway\Event\ModelUsageEvent;
 use App\Application\ModelGateway\Event\WebSearchUsageEvent;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\OdinModel;
+use App\Application\ModelGateway\Support\InvocationDetailInfo;
 use App\Domain\Chat\DTO\ImageConvertHigh\Request\MagicChatImageConvertHighReqDTO;
 use App\Domain\Chat\Entity\ValueObject\AIImage\AIImageGenerateParamsVO;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
@@ -1348,6 +1349,10 @@ class LLMAppService extends AbstractLLMAppService
                     $businessParams['provider_name'] = $modelAttributes->getProviderName();
                 }
                 $businessParams['failure_reason'] = $throwable->getMessage();
+                $previousExceptions = InvocationDetailInfo::extractPreviousExceptions($throwable);
+                if ($previousExceptions !== []) {
+                    $businessParams['previous_exceptions'] = $previousExceptions;
+                }
                 $chatUsageEvent = new ModelUsageEvent(
                     modelType: $proxyModelRequest->getType(),
                     modelId: $proxyModelRequest->getModel(),

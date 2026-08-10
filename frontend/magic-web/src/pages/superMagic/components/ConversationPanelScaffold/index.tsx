@@ -7,6 +7,7 @@ import type { SuperMagicMessageItem } from "@/pages/superMagic/components/Messag
 import type { SendMessageOptions } from "@/pages/superMagic/components/MessagePanel/types"
 import type { SceneEditorNodes } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import type { TaskStatus, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
 import {
 	cloneElement,
 	isValidElement,
@@ -28,6 +29,7 @@ interface ConversationPanelScaffoldProps {
 	messageListProviderValue: MessageListContextState
 	messages: Array<SuperMagicMessageItem>
 	selectedTopic: Topic | null
+	setSelectedDetail?: (detail: unknown) => void
 	isConversationPanelCollapsed?: boolean
 	detailPanelVisible?: boolean
 	showLoading?: boolean
@@ -51,6 +53,8 @@ interface ConversationPanelScaffoldProps {
 	messageListBottomFadeClassName?: string
 	/** Pass-through to MessageList BackToLatestButton (e.g. offset above fade) */
 	backToLatestButtonClassName?: string
+	enableRevokedUserMessageReedit?: boolean
+	revokedEditorContext?: RevokedMessageEditorContext
 	/** Task list + message queue above editor (e.g. Topic message queue) */
 	editorNodes?: SceneEditorNodes
 }
@@ -86,6 +90,7 @@ function ConversationPanelScaffold({
 	messageListProviderValue,
 	messages,
 	selectedTopic,
+	setSelectedDetail,
 	isConversationPanelCollapsed = false,
 	detailPanelVisible = true,
 	showLoading,
@@ -102,6 +107,8 @@ function ConversationPanelScaffold({
 	messageListBottomFade = false,
 	messageListBottomFadeClassName,
 	backToLatestButtonClassName,
+	enableRevokedUserMessageReedit,
+	revokedEditorContext,
 	editorNodes,
 }: ConversationPanelScaffoldProps) {
 	/** 与全局移动端判定一致，用于在窄屏下去掉根容器多余底边距，避免与全屏输入区叠出双份留白 */
@@ -291,10 +298,11 @@ function ConversationPanelScaffold({
 			data-testid={rootTestId || `${scope}-panel`}
 		>
 			{header}
+			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			<div
 				className={cn(
 					"relative min-h-0 w-full flex-1 overflow-hidden",
-					isConversationPanelCollapsed && "hidden",
+					isConversationPanelCollapsed && "invisible",
 				)}
 				ref={bodyRef}
 				data-testid={`${scope}-body`}
@@ -356,6 +364,7 @@ function ConversationPanelScaffold({
 						<MessageList
 							data={messages}
 							selectedTopic={selectedTopic}
+							setSelectedDetail={setSelectedDetail}
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							currentTopicStatus={currentTopicStatus}
@@ -370,6 +379,8 @@ function ConversationPanelScaffold({
 							}
 							stickyMessageClassName={stickyMessageClassName}
 							backToLatestButtonClassName={backToLatestButtonClassName}
+							enableRevokedUserMessageReedit={enableRevokedUserMessageReedit}
+							revokedEditorContext={revokedEditorContext}
 						/>
 					</MessageListProvider>
 				</div>

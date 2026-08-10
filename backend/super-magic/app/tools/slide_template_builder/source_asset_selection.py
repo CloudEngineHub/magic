@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -117,7 +117,7 @@ def _resolve_source_asset(template_dir: Path, relative_path: str) -> Path:
     return resolved
 
 
-@tool(name="select_slide_template_source_assets")
+@tool(name="select_slide_template_source_assets", code_mode_only=True)
 class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAssetsParams]):
     """<!--zh
     审核 PPT 原素材，只把高质量且会在最终模板中使用的图片和插画复制到 images/source-assets/。
@@ -126,7 +126,6 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
     """
 
     name = "select_slide_template_source_assets"
-    code_mode_only: ClassVar[bool] = True
 
     async def execute(self, tool_context: ToolContext, params: SelectSlideTemplateSourceAssetsParams) -> ToolResult:
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)

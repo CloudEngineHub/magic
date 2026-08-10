@@ -16,8 +16,9 @@ import {
 	getMemberId,
 	isAgentTab,
 	isMemberTab,
-	type DashboardTabType,
+	isOrganizationTab,
 } from "../utils"
+import type { DashboardTabType } from "../types"
 
 interface DashboardState {
 	view: DataDashboardView
@@ -45,7 +46,9 @@ type DashboardAction =
 const getDefaultTab = (view: DataDashboardView): DashboardTabType =>
 	view === VIEW.DigitalEmployeeAnalysis
 		? DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
-		: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis]
+		: view === VIEW.OrganizationAnalysis
+			? DEFAULT_TAB_BY_VIEW[VIEW.OrganizationAnalysis]
+			: DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis]
 
 const createDashboardState = (view: DataDashboardView, timeRangeLabel: string): DashboardState => ({
 	view,
@@ -132,6 +135,16 @@ export function useDataDashboardActions({
 		[agentSource, baseQuery],
 	)
 	const memberQuery: DataDashboard.MemberSummaryQuery = baseQuery
+	const organizationQuery = useMemo<DataDashboard.OrganizationSummaryQuery>(() => {
+		const { agent_code, department_id, end_date, start_date } = baseQuery
+		return {
+			agent_code,
+			department_id,
+			end_date,
+			start_date,
+		}
+	}, [baseQuery])
+	const consumptionQuery: DataDashboard.ConsumptionAnalysisQuery = organizationQuery
 
 	const currentTab = useMemo<DashboardTabType>(() => {
 		if (stateView === VIEW.DigitalEmployeeAnalysis) {
@@ -140,8 +153,27 @@ export function useDataDashboardActions({
 				: DEFAULT_TAB_BY_VIEW[VIEW.DigitalEmployeeAnalysis]
 		}
 
+		if (stateView === VIEW.OrganizationAnalysis) {
+			return isOrganizationTab(activeTab)
+				? activeTab
+				: DEFAULT_TAB_BY_VIEW[VIEW.OrganizationAnalysis]
+		}
+
 		return isMemberTab(activeTab) ? activeTab : DEFAULT_TAB_BY_VIEW[VIEW.MemberAnalysis]
 	}, [activeTab, stateView])
+
+	const metricSkeletonCount = useMemo(() => {
+		switch (stateView) {
+			case VIEW.ConsumptionAnalysis:
+				return 12
+			case VIEW.DigitalEmployeeAnalysis:
+				return 10
+			case VIEW.OrganizationAnalysis:
+				return 11
+			default:
+				return 8
+		}
+	}, [stateView])
 
 	const handleReset = () => {
 		dispatch({ type: "reset", timeRangeLabel })
@@ -191,6 +223,9 @@ export function useDataDashboardActions({
 		currentTab,
 		agentQuery,
 		memberQuery,
+		organizationQuery,
+		consumptionQuery,
+		metricSkeletonCount,
 		handleReset,
 		handleTimeRangeChange,
 		handleDepartmentChange,

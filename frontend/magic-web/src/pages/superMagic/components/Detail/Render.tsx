@@ -37,6 +37,20 @@ import {
 	documentExportService,
 	type DocumentExport,
 } from "@/pages/superMagic/services/documentExport"
+import { useDownloadProgress } from "@/pages/superMagic/hooks/useDownloadProgress"
+import {
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
+import {
+	isEditingPresenceEnabled,
+	isFileShareAllowed,
+	isFileVersionHistoryAllowed,
+} from "./components/FilesViewer/hooks/previewPolicy"
+import {
+	FileActionVisibilityProvider,
+	useFileActionVisibility,
+} from "@/pages/superMagic/providers/file-action-visibility-provider"
 
 export default function Render(props: any) {
 	const {
@@ -88,6 +102,7 @@ export default function Render(props: any) {
 		onRegisterCheckBeforeClose,
 		onUnregisterCheckBeforeClose,
 		projectId,
+		browserAttachments,
 		allowDownload,
 		mdToolbarContainer,
 	} = props
@@ -98,6 +113,21 @@ export default function Render(props: any) {
 			(data?.display_config?.type === "slide" ||
 				isFileInSlideCanvasMode(data?.file_id, attachmentList ?? [])),
 		[attachmentList, data?.display_config?.type, data?.file_id, type],
+	)
+	const downloadProgress = useDownloadProgress()
+	const effectiveDisplayConfig = displayConfig || data?.display_config
+	const editingPresenceEnabled = isEditingPresenceEnabled(effectiveDisplayConfig)
+	const fileShareAllowed = isFileShareAllowed(effectiveDisplayConfig)
+	const fileVersionHistoryAllowed = isFileVersionHistoryAllowed(effectiveDisplayConfig)
+	const inheritedFileActionVisibility = useFileActionVisibility()
+	const fileActionVisibility = useMemo(
+		() => ({
+			...inheritedFileActionVisibility,
+			hideShareFile: inheritedFileActionVisibility.hideShareFile || !fileShareAllowed,
+			hideVersionHistory:
+				inheritedFileActionVisibility.hideVersionHistory || !fileVersionHistoryAllowed,
+		}),
+		[inheritedFileActionVisibility, fileShareAllowed, fileVersionHistoryAllowed],
 	)
 	const isPptRenderer =
 		type === DetailType.PowerPoint ||
@@ -112,6 +142,7 @@ export default function Render(props: any) {
 	const { isEditMode, setIsEditMode, checkBeforeClose } = useEditMode({
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
+		editingPresenceEnabled,
 	})
 
 	// Use hook to manage save handler registration and wrapped checkBeforeClose
@@ -172,6 +203,16 @@ export default function Render(props: any) {
 		shouldExitEditMode: boolean = false,
 	) => {
 		const targetFileId = fileId || data.file_id
+		if (!editingPresenceEnabled) {
+			await doSave(
+				targetFileId,
+				newContent,
+				enable_shadow,
+				fetchFileVersions,
+				shouldExitEditMode,
+			)
+			return
+		}
 		const { editing_user_count } = await SuperMagicApi.getFileEditCount(targetFileId)
 		const threshold = isPPTEditMode || isEditMode ? 1 : 0
 		if (editing_user_count > threshold) {
@@ -232,7 +273,13 @@ export default function Render(props: any) {
 			}
 
 			const fileKey = data?.file_key
-			const projectIdValue = selectedProject?.id || projectId
+			const projectIdValue =
+				data?.project_id !== undefined && data?.project_id !== null
+					? String(data.project_id)
+					: selectedProject?.id || projectId
+			const fileScope =
+				data?.display_config?.previewPolicy?.fileScope ||
+				effectiveDisplayConfig?.previewPolicy?.fileScope
 			const contentStr =
 				typeof newContent === "string" ? newContent : JSON.stringify(newContent)
 			const uploadContent =
@@ -250,6 +297,7 @@ export default function Render(props: any) {
 					fileKey,
 					projectIdValue,
 					data?.file_name || "content.html",
+					fileScope,
 				)
 
 				await SuperMagicApi.replaceFile({
@@ -290,6 +338,34 @@ export default function Render(props: any) {
 	}
 
 	const exportFile = async (fileId: string, fileVersion?: number) => {
+		try {
+			const dependencyResult = await resolveSingleDocumentStaticDependencies({
+				fileIds: [fileId],
+				attachments: attachmentList || attachments || [],
+			})
+			const effectiveFileIds = mergeStaticDependencyFileIds(
+				[fileId],
+				dependencyResult.dependencyFileIds,
+				true,
+			)
+
+			if (effectiveFileIds.length > 1) {
+				await downloadProgress.startDownload({
+					projectId: selectedProject?.id || projectId,
+					fileIds: effectiveFileIds,
+					token: (window as unknown as { temporary_token?: string }).temporary_token,
+					label: t("topicFiles.downloading"),
+					onSuccess: () => magicToast.success(t("topicFiles.downloadSuccess")),
+					onError: () => magicToast.error(t("topicFiles.downloadFailed")),
+					onCancel: () => magicToast.info(t("topicFiles.downloadAbort")),
+				})
+				return
+			}
+		} catch (error) {
+			console.error("Failed to resolve document dependencies before export:", error)
+			magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
+		}
+
 		getTemporaryDownloadUrl({
 			file_ids: [fileId],
 			file_versions: fileVersion ? { [fileId]: fileVersion } : undefined,
@@ -722,7 +798,7 @@ export default function Render(props: any) {
 		updatedAt,
 		detailMode,
 		// display_config: display_config || data?.display_config,
-		displayConfig: displayConfig || data?.display_config,
+		displayConfig: effectiveDisplayConfig,
 		openFileTab,
 		exportFile,
 		exportPdf,
@@ -746,6 +822,7 @@ export default function Render(props: any) {
 		isTabActive: props.isTabActive,
 		allowDownload,
 		projectId,
+		browserAttachments,
 	}
 
 	return (
@@ -779,7 +856,9 @@ export default function Render(props: any) {
 						)
 					}
 				>
-					<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					<FileActionVisibilityProvider value={fileActionVisibility}>
+						<ContentRenderer type={type} data={data} commonProps={commonProps} />
+					</FileActionVisibilityProvider>
 				</Suspense>
 			</div>
 

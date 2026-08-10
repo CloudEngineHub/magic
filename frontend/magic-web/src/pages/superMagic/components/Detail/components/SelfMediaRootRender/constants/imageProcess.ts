@@ -1,5 +1,9 @@
 import type { ImageProcessOptions } from "@/utils/image-processing"
 
+export const WECHAT_ARTICLE_IMAGE_PROCESS: ImageProcessOptions = {
+	format: "webp",
+}
+
 /** Card content images use a 2x source for the 1080px-wide final card output. */
 export const CARD_IMAGE_PROCESS: ImageProcessOptions = {
 	resize: { w: 2160, m: "lfit" },

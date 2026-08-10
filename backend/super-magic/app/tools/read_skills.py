@@ -9,11 +9,16 @@ from pydantic import Field, field_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.skill_manager import find_skill
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
+from app.tools.read_skills_hooks import (
+    SkillLoadedHookContext,
+    notify_skill_loaded,
+)
 
 logger = get_logger(__name__)
 
@@ -45,7 +50,7 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
         return value
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class ReadSkills(BaseTool[ReadSkillsParams]):
     """<!--zh
     批量读取可用 skills 的完整内容工具
@@ -59,7 +64,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
     Strongly recommended to use this tool for batch reading multiple skills at once, rather than calling tools multiple times individually, which will greatly improve task efficiency
     """
 
-    async def execute(self, tool_context: ToolContext, params: ReadSkillsParams) -> ToolResult:
+    async def execute(self, tool_context: ToolContext | None, params: ReadSkillsParams) -> ToolResult:
         """执行批量读取工具逻辑
 
         Args:
@@ -74,10 +79,21 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
             return ToolResult(ok=False, content=error_msg)
 
         # 获取当前 agent 的 excluded_skills，确保被禁用的 skill 无法通过任何方式加载
-        excluded_skills: set = set()
-        agent_context = tool_context.get_extension("agent_context")
-        if agent_context and hasattr(agent_context, "get_excluded_skills"):
-            excluded_skills = set(agent_context.get_excluded_skills())
+        agent_context = (
+            tool_context.get_extension_typed("agent_context", AgentContext)
+            if tool_context is not None
+            else None
+        )
+        agent_name = agent_context.agent_name if agent_context is not None else None
+        excluded_skills = {
+            value.strip().casefold()
+            for value in (
+                agent_context.get_excluded_skills()
+                if agent_context is not None
+                else []
+            )
+            if value.strip()
+        }
 
         try:
             # 批量读取所有 skills
@@ -88,20 +104,30 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             for skill_name in params.skill_names:
                 # 被禁用的 skill 直接拒绝，不尝试查找或读取
-                if skill_name in excluded_skills:
+                if skill_name.strip().casefold() in excluded_skills:
                     results.append({"skill_name": skill_name, "success": False, "error": f"Skill '{skill_name}' is disabled for the current agent and cannot be loaded."})
                     failure_count += 1
                     failed_skills.append(skill_name)
                     logger.info(f"拒绝读取被禁用的 skill: {skill_name}")
                     continue
                 try:
-                    skill = await find_skill(skill_name)
+                    skill = await find_skill(skill_name, agent_name=agent_name)
 
                     # s3 挂载有延迟，首次找不到时等待 2s 后重试一次
                     if not skill:
                         logger.warning(f"Skill 未找到，2s 后重试: {skill_name}")
                         await asyncio.sleep(2)
-                        skill = await find_skill(skill_name)
+                        skill = await find_skill(skill_name, agent_name=agent_name)
+
+                    if (
+                        skill is not None
+                        and skill.name.strip().casefold() in excluded_skills
+                    ):
+                        results.append({"skill_name": skill_name, "success": False, "error": f"Skill '{skill_name}' is disabled for the current agent and cannot be loaded."})
+                        failure_count += 1
+                        failed_skills.append(skill_name)
+                        logger.info(f"拒绝读取被禁用的 skill: {skill_name}")
+                        continue
 
                     if not skill:
                         error_msg = f"未找到名为 '{skill_name}' 的 skill"
@@ -134,6 +160,16 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                     actual_skill_dir = skill.skill_dir or (
                         Path(skill.skill_file).parent if skill.skill_file else None
                     )
+                    await notify_skill_loaded(
+                        SkillLoadedHookContext(
+                            requested_skill_name=skill_name,
+                            resolved_skill_name=skill.name,
+                            location=str(location) if location else None,
+                            skill_dir=Path(actual_skill_dir) if actual_skill_dir else None,
+                            tool_context=tool_context,
+                            agent_context=agent_context,
+                        )
+                    )
                     results.append({
                         "skill_name": skill_name,
                         "success": True,
@@ -158,7 +194,7 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             # 并发检查版本更新，有更新时推送 horizon 通知
             # 若调用方明确传入 check_updates=False（用户已忽略或拒绝更新），则跳过检查
-            if params.check_updates:
+            if params.check_updates and tool_context is not None:
                 skill_update_targets: List[Tuple[str, Path]] = [
                     (r["skill_name"], r["skill_dir_path"])
                     for r in results

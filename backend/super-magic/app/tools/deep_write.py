@@ -116,7 +116,7 @@ class DeepWrite(BaseTool[DeepWriteParams]):
             model_id = get_ability_config(
                 AIAbility.DEEP_WRITE,
                 "model_id",
-                default="deepseek-reasoner"
+                default="deepseek-v4-flash"
             )
             temperature = get_ability_config(
                 AIAbility.DEEP_WRITE,
@@ -162,8 +162,7 @@ class DeepWrite(BaseTool[DeepWriteParams]):
 
             full_query = "".join(query_parts) # 将所有部分连接起来
 
-            # 构建深度写作消息
-            # 注意: deepseek-reasoner 模型不支持系统提示词，所有提示内容必须放在用户消息中
+            # 构建深度写作消息：统一把角色说明放进用户消息，兼容不支持 system prompt 的模型。
             messages = [
                 {
                     "role": "user",
@@ -196,7 +195,7 @@ class DeepWrite(BaseTool[DeepWriteParams]):
             # 第二轮：检查内容真实性
             logger.info("开始第二轮反思...")
 
-            # 注意: deepseek-reasoner 模型不支持系统提示词，因此将系统角色描述放在用户提示开头
+            # 继续沿用用户消息承载角色说明，避免不同模型对 system prompt 支持不一致。
             system_content = "你是一个严格的事实核查员，你的任务是确保内容完全基于参考资料，不含任何虚构内容。"
 
             reflection_query = f"""{system_content}

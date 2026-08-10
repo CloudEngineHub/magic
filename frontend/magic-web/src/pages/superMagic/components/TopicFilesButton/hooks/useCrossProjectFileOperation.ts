@@ -19,9 +19,9 @@ import {
 	type CanvasProjectOperationRisk,
 } from "../utils/canvasProjectOperationRisk"
 import {
-	mergeHtmlStaticDependencyFileIds,
-	resolveSingleHtmlStaticDependencies,
-} from "@/pages/superMagic/utils/htmlStaticDependencies"
+	mergeStaticDependencyFileIds,
+	resolveSingleDocumentStaticDependencies,
+} from "@/pages/superMagic/utils/staticDependencies"
 
 interface UseCrossProjectFileOperationOptions {
 	projectId?: string
@@ -39,42 +39,42 @@ interface EffectiveOperationFileIdsResult {
 async function resolveEffectiveOperationFileIds({
 	fileIds,
 	sourceAttachments,
-	includeHtmlDependencies = true,
-	htmlDependencyFileIds,
+	includeDocumentDependencies = true,
+	documentDependencyFileIds,
 }: {
 	fileIds: string[]
 	sourceAttachments: AttachmentItem[]
-	includeHtmlDependencies?: boolean
-	htmlDependencyFileIds?: string[]
+	includeDocumentDependencies?: boolean
+	documentDependencyFileIds?: string[]
 }): Promise<EffectiveOperationFileIdsResult> {
-	if (!includeHtmlDependencies) {
+	if (!includeDocumentDependencies) {
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			fileIds: mergeStaticDependencyFileIds(fileIds, [], false),
 			dependencyAnalysisFailed: false,
 		}
 	}
 
-	if (htmlDependencyFileIds !== undefined) {
+	if (documentDependencyFileIds !== undefined) {
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, htmlDependencyFileIds, true),
+			fileIds: mergeStaticDependencyFileIds(fileIds, documentDependencyFileIds, true),
 			dependencyAnalysisFailed: false,
 		}
 	}
 
 	try {
-		const { dependencyTransferFileIds } = await resolveSingleHtmlStaticDependencies({
+		const { dependencyTransferFileIds } = await resolveSingleDocumentStaticDependencies({
 			fileIds,
 			attachments: sourceAttachments,
 		})
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
+			fileIds: mergeStaticDependencyFileIds(fileIds, dependencyTransferFileIds, true),
 			dependencyAnalysisFailed: false,
 		}
 	} catch (error) {
 		// Dependency enrichment must not turn an existing file operation into a hard failure.
-		console.error("Failed to resolve HTML static dependencies for file operation:", error)
+		console.error("Failed to resolve document static dependencies for file operation:", error)
 		return {
-			fileIds: mergeHtmlStaticDependencyFileIds(fileIds, [], false),
+			fileIds: mergeStaticDependencyFileIds(fileIds, [], false),
 			dependencyAnalysisFailed: true,
 		}
 	}
@@ -211,18 +211,18 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
-			includeHtmlDependencies?: boolean
-			htmlDependencyFileIds?: string[]
+			includeDocumentDependencies?: boolean
+			documentDependencyFileIds?: string[]
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds || fileIds,
 					sourceAttachments: data.sourceAttachments,
-					includeHtmlDependencies: data.includeHtmlDependencies,
-					htmlDependencyFileIds: data.htmlDependencyFileIds,
+					includeDocumentDependencies: data.includeDocumentDependencies,
+					documentDependencyFileIds: data.documentDependencyFileIds,
 				})
 			if (dependencyAnalysisFailed) {
-				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
 
@@ -361,18 +361,18 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			targetAttachments: AttachmentItem[]
 			sourceAttachments: AttachmentItem[]
 			fileIds?: string[]
-			includeHtmlDependencies?: boolean
-			htmlDependencyFileIds?: string[]
+			includeDocumentDependencies?: boolean
+			documentDependencyFileIds?: string[]
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
 					fileIds: data.fileIds ?? fileIds,
 					sourceAttachments: data.sourceAttachments,
-					includeHtmlDependencies: data.includeHtmlDependencies,
-					htmlDependencyFileIds: data.htmlDependencyFileIds,
+					includeDocumentDependencies: data.includeDocumentDependencies,
+					documentDependencyFileIds: data.documentDependencyFileIds,
 				})
 			if (dependencyAnalysisFailed) {
-				magicToast.warning(t("share.htmlDependenciesAnalysisFailed"))
+				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
 

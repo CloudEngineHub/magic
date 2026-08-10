@@ -1,10 +1,23 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Plus, PanelLeftClose } from "lucide-react"
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual"
 import SortableSlideItem from "./SortableSlideItem"
 import DropIndicator from "./DropIndicator"
 import type { PPTSidebarProps, SlideItem } from "./types"
+import {
+	getEdgeAutoScrollDelta,
+	moveItemToGap,
+	resolveSlideGapTarget,
+	type SlideGapTarget,
+} from "./utils/dragSort"
+import {
+	estimateDesktopSlideRowSize,
+	PPT_SIDEBAR_THUMBNAIL_DIMENSIONS,
+	prioritizeVirtualItems,
+} from "./utils/virtualization"
+import { getPPTPreviewOverscan } from "./utils/devicePerformance"
 import { observer } from "mobx-react-lite"
 import {
 	TooltipProvider,
@@ -20,25 +33,9 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { usePPTStore } from "../hooks"
 import { TAILWIND_Z_INDEX_CLASSES } from "../../../contents/HTML/constants/z-index"
 
-type DropTarget = {
-	index: number
-	position: "before" | "after"
-}
-
-function normalizeDropTarget(
-	index: number,
-	position: "before" | "after",
-	itemCount: number,
-): DropTarget {
-	if (position === "after" && index < itemCount - 1) {
-		return {
-			index: index + 1,
-			position: "before",
-		}
-	}
-
-	return { index, position }
-}
+const MOBILE_ROW_ESTIMATE = 140
+const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
+const DRAG_AUTO_SCROLL_MAX_SPEED = 20
 
 function PPTSidebar({
 	onSlideClick,
@@ -53,11 +50,15 @@ function PPTSidebar({
 	mainFileId,
 	allowEdit = false,
 	isMobile = false,
+	sidebarWidth = 200,
 	isCollapsed: externalIsCollapsed,
+	isPreviewLoadingEnabled = true,
 	onCollapsedChange,
 }: PPTSidebarProps) {
 	const { t } = useTranslation("super")
 	const store = usePPTStore()
+	// Resolve once per sidebar mount so network changes cannot resize the loading window mid-scroll.
+	const [virtualOverscan] = useState(() => getPPTPreviewOverscan())
 
 	const slides = store.slides
 	const activeIndex = store.activeIndex
@@ -75,170 +76,273 @@ function PPTSidebar({
 
 	// Convert slides to sortable items
 	const [items, setItems] = useState<SlideItem[]>(slides)
+	const itemsRef = useRef(items)
+	itemsRef.current = items
+	const latestSlidesRef = useRef(slides)
+	latestSlidesRef.current = slides
+	const activeIndexRef = useRef(activeIndex)
+	activeIndexRef.current = activeIndex
 
-	// Ref to track if sort change should be notified
-	const shouldNotifySortChange = useRef(false)
+	const scrollContainerRef = useRef<HTMLDivElement>(null)
+	const [draggedId, setDraggedId] = useState<string | null>(null)
+	const draggedIdRef = useRef<string | null>(null)
+	const [dropTarget, setDropTarget] = useState<SlideGapTarget | null>(null)
+	const dropTargetRef = useRef<SlideGapTarget | null>(null)
+	const lastPointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
+	const autoScrollFrameRef = useRef<number | null>(null)
+	const dragStartItemIdsRef = useRef<string[]>([])
+	const dragStartSlidesRef = useRef<SlideItem[] | null>(null)
 
-	// Update items when slides change (but not during drag)
+	// Store updates must not replace the local ordering while the native drag source is active.
 	useEffect(() => {
+		if (draggedId) return
+		itemsRef.current = slides
 		setItems(slides)
-	}, [slides])
+	}, [draggedId, slides])
 
-	// Notify parent of sort change when items change from drag operation
+	const desktopRowEstimate = useMemo(
+		() => estimateDesktopSlideRowSize(sidebarWidth),
+		[sidebarWidth],
+	)
+
+	const draggedIndex = useMemo(
+		() => (draggedId ? items.findIndex((item) => item.id === draggedId) : -1),
+		[draggedId, items],
+	)
+
+	const rangeExtractor = useCallback(
+		(range: Parameters<typeof defaultRangeExtractor>[0]) => {
+			const indexes = defaultRangeExtractor(range)
+			if (draggedIndex < 0 || indexes.includes(draggedIndex)) return indexes
+
+			// Native HTML drag relies on the source DOM node staying mounted while auto-scrolling.
+			return [...indexes, draggedIndex].sort((a, b) => a - b)
+		},
+		[draggedIndex],
+	)
+	const getItemKey = useCallback((index: number) => items[index]?.id ?? index, [items])
+	const estimateRowSize = useCallback(
+		() => (isMobile ? MOBILE_ROW_ESTIMATE : desktopRowEstimate),
+		[desktopRowEstimate, isMobile],
+	)
+
+	const rowVirtualizer = useVirtualizer({
+		count: items.length,
+		getScrollElement: () => scrollContainerRef.current,
+		estimateSize: estimateRowSize,
+		getItemKey,
+		horizontal: isMobile,
+		overscan: virtualOverscan,
+		paddingStart: 8,
+		paddingEnd: 8,
+		gap: isMobile ? 8 : 0,
+		rangeExtractor,
+	})
+	const virtualItems = rowVirtualizer.getVirtualItems()
+
 	useEffect(() => {
-		if (shouldNotifySortChange.current && onSortChange) {
-			shouldNotifySortChange.current = false
-			onSortChange(items)
-		}
-	}, [items, onSortChange])
-
-	// Convert slides to screenshot format for backward compatibility
-	const getScreenshot = useMemo(() => {
-		return (index: number) => {
-			const slide = slides[index]
-			if (!slide) return undefined
-
-			return {
-				index,
-				thumbnailUrl: slide.thumbnailUrl || "",
-				isLoading: slide.thumbnailLoading || false,
-				error: slide.thumbnailError,
+		// Desktop rows have a deterministic size derived from sidebar width. Rebuild the fixed-size
+		// layout after resizing settles so off-screen rows use the new estimate as well.
+		const timer = window.setTimeout(() => {
+			rowVirtualizer.measure()
+			const currentActiveIndex = activeIndexRef.current
+			if (isPreviewLoadingEnabled && !draggedIdRef.current && currentActiveIndex >= 0) {
+				rowVirtualizer.scrollToIndex(currentActiveIndex, { align: "auto" })
 			}
-		}
-	}, [slides])
+		}, 80)
 
-	// Manual Drag & Drop State
-	const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-	const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+		return () => window.clearTimeout(timer)
+	}, [desktopRowEstimate, isMobile, isPreviewLoadingEnabled, rowVirtualizer])
 
-	const handleSlideDragStart = (e: React.DragEvent, index: number) => {
-		setDraggedIndex(index)
-		// Set drag effect
-		e.dataTransfer.effectAllowed = "copyMove"
-	}
+	const visibleScreenshotKey = virtualItems
+		.map(({ index }) => {
+			const item = items[index]
+			return item
+				? `${item.id}:${item.loadingState ?? "idle"}:${item.thumbnailUrl ? "ready" : "empty"}`
+				: `missing:${index}`
+		})
+		.join("|")
 
-	const handleSlideDragOver = (e: React.DragEvent, index: number) => {
-		// Prevent default to allow drop
-		e.preventDefault()
-
-		if (draggedIndex === null || draggedIndex === index) {
-			setDropTarget(null)
+	// The virtual range is the single source of truth for thumbnail preloading.
+	useEffect(() => {
+		if (!isPreviewLoadingEnabled) {
+			store.updateVisibleSlidePreviews([])
 			return
 		}
 
-		// Calculate drop position based on mouse position
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-		const midY = rect.top + rect.height / 2
-		const midX = rect.left + rect.width / 2
+		const visibleIndices = prioritizeVirtualItems(
+			rowVirtualizer.getVirtualItems(),
+			rowVirtualizer.range,
+		)
+			.map(({ index }) => itemsRef.current[index]?.index)
+			.filter((index): index is number => index !== undefined)
+		store.updateVisibleSlidePreviews(visibleIndices)
 
-		// For mobile (horizontal) vs desktop (vertical)
-		let position: "before" | "after"
-		if (isMobile) {
-			position = e.clientX < midX ? "before" : "after"
-		} else {
-			position = e.clientY < midY ? "before" : "after"
-		}
+		return () => store.updateVisibleSlidePreviews([])
+	}, [isPreviewLoadingEnabled, rowVirtualizer, store, visibleScreenshotKey])
 
-		const normalizedTarget = normalizeDropTarget(index, position, items.length)
-		if (normalizedTarget.index === draggedIndex) {
-			setDropTarget(null)
+	useEffect(() => {
+		if (!isPreviewLoadingEnabled || draggedId || hasNoSlides || activeIndex < 0) return
+		rowVirtualizer.scrollToIndex(activeIndex, { align: "auto" })
+	}, [activeIndex, draggedId, hasNoSlides, isMobile, isPreviewLoadingEnabled, rowVirtualizer])
+
+	const updateDropTarget = useCallback((target: SlideGapTarget | null) => {
+		const currentTarget = dropTargetRef.current
+		if (
+			currentTarget?.gapIndex === target?.gapIndex &&
+			currentTarget?.offset === target?.offset
+		) {
 			return
 		}
 
-		setDropTarget(normalizedTarget)
-	}
+		dropTargetRef.current = target
+		setDropTarget(target)
+	}, [])
 
-	const handleSlideDragLeave = () => {
-		// keeping this simple, might need debounce if flickering
-	}
-
-	const commitSlideDrop = (
-		targetIndex: number,
-		targetPosition: "before" | "after" | undefined,
-	) => {
-		if (draggedIndex === null || draggedIndex === targetIndex) {
-			setDraggedIndex(null)
-			setDropTarget(null)
-			return
+	const stopAutoScroll = useCallback(() => {
+		if (autoScrollFrameRef.current !== null) {
+			cancelAnimationFrame(autoScrollFrameRef.current)
+			autoScrollFrameRef.current = null
 		}
+	}, [])
 
-		setItems((currentItems) => {
-			const itemToMove = currentItems[draggedIndex]
-			const newItemsWithout = currentItems.filter((_, i) => i !== draggedIndex)
+	const clearDragState = useCallback(() => {
+		stopAutoScroll()
+		draggedIdRef.current = null
+		dragStartItemIdsRef.current = []
+		dragStartSlidesRef.current = null
+		lastPointerRef.current = null
+		setDraggedId(null)
+		updateDropTarget(null)
+	}, [stopAutoScroll, updateDropTarget])
 
-			// Calculate insertion index in the *new* array
-			let insertAt = targetIndex
+	const resolvePointerDropTarget = useMemoizedFn((clientX: number, clientY: number) => {
+		const viewport = scrollContainerRef.current
+		if (!viewport || !draggedIdRef.current) return
 
-			// Correction because indices shifted if dragged was before target
-			if (draggedIndex < targetIndex) {
-				insertAt = targetIndex - 1 // removed one before, so target shifted left
-			}
+		const rect = viewport.getBoundingClientRect()
+		const localPointerOffset = isMobile ? clientX - rect.left : clientY - rect.top
+		const viewportSize = isMobile ? rect.width : rect.height
+		const clampedPointerOffset = Math.max(0, Math.min(localPointerOffset, viewportSize))
+		const scrollOffset = isMobile ? viewport.scrollLeft : viewport.scrollTop
+		const target = resolveSlideGapTarget(
+			rowVirtualizer.getVirtualItems(),
+			scrollOffset + clampedPointerOffset,
+			itemsRef.current.length,
+		)
 
-			if (targetPosition === "after") {
-				insertAt = insertAt + 1
-			}
+		updateDropTarget(target)
+	})
 
-			// Clamp
-			insertAt = Math.max(0, Math.min(insertAt, newItemsWithout.length))
+	const runAutoScroll = useMemoizedFn(() => {
+		autoScrollFrameRef.current = null
+		const viewport = scrollContainerRef.current
+		const pointer = lastPointerRef.current
+		if (!viewport || !pointer || !draggedIdRef.current) return
 
-			newItemsWithout.splice(insertAt, 0, itemToMove)
-
-			// Update indices
-			const updatedItems = newItemsWithout.map((item, idx) => ({
-				...item,
-				index: idx,
-			}))
-
-			shouldNotifySortChange.current = true
-			return updatedItems
+		const rect = viewport.getBoundingClientRect()
+		const delta = getEdgeAutoScrollDelta({
+			pointerPosition: isMobile ? pointer.clientX : pointer.clientY,
+			containerStart: isMobile ? rect.left : rect.top,
+			containerEnd: isMobile ? rect.right : rect.bottom,
+			edgeSize: DRAG_AUTO_SCROLL_EDGE_SIZE,
+			maxSpeed: DRAG_AUTO_SCROLL_MAX_SPEED,
 		})
 
-		setDraggedIndex(null)
-		setDropTarget(null)
-	}
+		if (delta === 0) return
 
-	const handleSlideDrop = (e: React.DragEvent, index: number) => {
+		const previousOffset = isMobile ? viewport.scrollLeft : viewport.scrollTop
+		if (isMobile) viewport.scrollLeft += delta
+		else viewport.scrollTop += delta
+
+		const nextOffset = isMobile ? viewport.scrollLeft : viewport.scrollTop
+		if (nextOffset === previousOffset) return
+
+		resolvePointerDropTarget(pointer.clientX, pointer.clientY)
+		autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll)
+	})
+
+	const handleSlideDragStart = useMemoizedFn((e: React.DragEvent, slideId: string) => {
+		draggedIdRef.current = slideId
+		dragStartItemIdsRef.current = itemsRef.current.map((item) => item.id)
+		dragStartSlidesRef.current = latestSlidesRef.current
+		setDraggedId(slideId)
+		updateDropTarget(null)
+		e.dataTransfer.effectAllowed = "copyMove"
+	})
+
+	const handleSlidesListDragOver = useMemoizedFn((e: React.DragEvent) => {
+		if (!draggedIdRef.current) return
+
+		e.preventDefault()
+		e.dataTransfer.dropEffect = "move"
+		lastPointerRef.current = { clientX: e.clientX, clientY: e.clientY }
+		resolvePointerDropTarget(e.clientX, e.clientY)
+
+		if (autoScrollFrameRef.current === null) {
+			autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll)
+		}
+	})
+
+	const handleSlidesListDragLeave = useMemoizedFn((e: React.DragEvent) => {
+		const nextTarget = e.relatedTarget
+		if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) return
+
+		stopAutoScroll()
+		lastPointerRef.current = null
+		updateDropTarget(null)
+	})
+
+	const handleSlidesListDrop = useMemoizedFn((e: React.DragEvent) => {
+		const currentDraggedId = draggedIdRef.current
+		const currentDropTarget = dropTargetRef.current
+		if (!currentDraggedId) return
+
 		e.preventDefault()
 		e.stopPropagation()
-
-		commitSlideDrop(dropTarget?.index ?? index, dropTarget?.position)
-	}
-
-	const handleSlidesListDrop = (e: React.DragEvent) => {
-		e.preventDefault()
-		if (!dropTarget) {
-			setDraggedIndex(null)
+		if (!currentDropTarget) {
+			clearDragState()
 			return
 		}
 
-		commitSlideDrop(dropTarget.index, dropTarget.position)
-	}
-
-	const handleSlidesListDragOver = (e: React.DragEvent) => {
-		if (draggedIndex !== null) {
-			e.preventDefault()
+		const currentStoreSlides = latestSlidesRef.current
+		const dragStartItemIds = dragStartItemIdsRef.current
+		const storeStructureIsUnchanged =
+			currentStoreSlides === dragStartSlidesRef.current &&
+			currentStoreSlides.length === dragStartItemIds.length &&
+			currentStoreSlides.every((slide, index) => slide.id === dragStartItemIds[index])
+		if (!storeStructureIsUnchanged) {
+			// Avoid overwriting a concurrent insert/delete/reorder with the frozen drag snapshot.
+			itemsRef.current = currentStoreSlides
+			setItems(currentStoreSlides)
+			clearDragState()
+			return
 		}
-	}
 
-	// Reset drag state on global drag end or drop
+		const currentItems = itemsRef.current
+		const nextItems = moveItemToGap(currentItems, currentDraggedId, currentDropTarget.gapIndex)
+		if (nextItems !== currentItems) {
+			itemsRef.current = nextItems
+			setItems(nextItems)
+			onSortChange?.(nextItems)
+		}
+		clearDragState()
+	})
+
+	// Native drops outside the sidebar still need to clear the pinned source and auto-scroll loop.
 	useEffect(() => {
-		const handleGlobalDragEnd = () => {
-			// small delay to allow drop handler to fire first
-			setTimeout(() => {
-				setDraggedIndex(null)
-				setDropTarget(null)
-			}, 50)
-		}
+		const handleGlobalDragEnd = () => clearDragState()
+		const handleGlobalDrop = () => window.setTimeout(clearDragState, 0)
 
 		window.addEventListener("dragend", handleGlobalDragEnd)
-		// Also listen for drop on window to clear state if dropped outside valid targets
-		window.addEventListener("drop", handleGlobalDragEnd)
+		window.addEventListener("drop", handleGlobalDrop)
 
 		return () => {
 			window.removeEventListener("dragend", handleGlobalDragEnd)
-			window.removeEventListener("drop", handleGlobalDragEnd)
+			window.removeEventListener("drop", handleGlobalDrop)
+			stopAutoScroll()
 		}
-	}, [])
+	}, [clearDragState, stopAutoScroll])
 
 	// Handle insert slide
 	function handleInsertSlide(position: number, direction: "before" | "after") {
@@ -289,52 +393,6 @@ function PPTSidebar({
 			setInternalIsCollapsed(newCollapsed)
 		}
 	}
-
-	// Ref for scroll container (used by Intersection Observer)
-	const scrollContainerRef = useRef<HTMLDivElement>(null)
-
-	// Track if initial visibility check has been performed
-	const hasPerformedInitialCheck = useRef(false)
-
-	// Trigger initial visibility check for all slides when scroll container is ready
-	useEffect(() => {
-		if (!scrollContainerRef.current || hasPerformedInitialCheck.current) return
-		if (items.length === 0) return
-
-		const container = scrollContainerRef.current
-
-		// Check which slides are initially visible
-		const checkInitialVisibleSlides = () => {
-			if (!container || hasPerformedInitialCheck.current) return
-
-			hasPerformedInitialCheck.current = true
-
-			const containerRect = container.getBoundingClientRect()
-			const slideElements = container.querySelectorAll('[data-dnd-sortable="true"]')
-
-			slideElements.forEach((element, idx) => {
-				const elementRect = element.getBoundingClientRect()
-
-				// Check if element is visible (with 200px preload margin)
-				const isVisible =
-					elementRect.top < containerRect.bottom + 200 &&
-					elementRect.bottom > containerRect.top - 200
-
-				if (isVisible && items[idx]) {
-					// Trigger visibility callback for this slide
-					store.ensureSlideScreenshot(items[idx].index)
-				}
-			})
-		}
-
-		// Check after a short delay to ensure DOM is fully rendered
-		const timeoutId = setTimeout(checkInitialVisibleSlides, 150)
-
-		return () => {
-			clearTimeout(timeoutId)
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [items.length])
 
 	const handleLocateFile = useMemoizedFn((index: number) => {
 		const currentFileId = store.getFileIdByPath(items[index].path)
@@ -415,22 +473,26 @@ function PPTSidebar({
 				{/* Slides list */}
 				<ScrollArea
 					data-testid="ppt-sidebar-slides-list"
+					viewportRef={scrollContainerRef}
+					scrollbarOrientation={isMobile ? "horizontal" : "vertical"}
 					onDragOver={handleSlidesListDragOver}
+					onDragLeave={handleSlidesListDragLeave}
 					onDrop={handleSlidesListDrop}
 					className={cn(
-						"flex-1 p-2 [&_[data-slot='scroll-area-viewport']>div]:!flex [&_[data-slot='scroll-area-viewport']>div]:min-h-full",
+						"min-h-0 flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block",
+						isMobile && "w-full",
+					)}
+					viewportClassName={cn(
 						isMobile
-							? // Mobile: horizontal scroll with gap spacing
-								"w-full [&_[data-slot='scroll-area-viewport']>div]:flex-row [&_[data-slot='scroll-area-viewport']>div]:gap-2 [&_[data-slot='scroll-area-viewport']>div]:overflow-x-auto"
-							: // Desktop: vertical scroll with column direction
-								"overflow-y-auto pr-3 [&_[data-slot='scroll-area-viewport']>div]:flex-col",
+							? "overflow-x-auto overflow-y-hidden"
+							: "overflow-y-auto overflow-x-hidden pr-3",
 					)}
 				>
-					{hasNoSlides && (
+					{hasNoSlides ? (
 						<div
 							data-testid="ppt-sidebar-empty"
 							className={cn(
-								"flex flex-1 flex-col items-center justify-center gap-2 text-center",
+								"flex size-full min-h-32 flex-col items-center justify-center gap-2 text-center",
 								isMobile ? "px-4" : "",
 							)}
 						>
@@ -438,90 +500,104 @@ function PPTSidebar({
 								{t("fileViewer.noSlidesTitle")}
 							</p>
 						</div>
-					)}
-					{items.map((item, idx) => {
-						// Determine if we should show drop indicator
-						const isDropTarget = dropTarget?.index === idx
-						const showTopIndicator = isDropTarget && dropTarget?.position === "before"
-						const showBottomIndicator = isDropTarget && dropTarget?.position === "after"
+					) : (
+						<div
+							data-testid="ppt-sidebar-virtual-content"
+							className={cn("relative", isMobile ? "h-full" : "w-full")}
+							style={
+								isMobile
+									? { width: rowVirtualizer.getTotalSize(), height: "100%" }
+									: { height: rowVirtualizer.getTotalSize(), width: "100%" }
+							}
+						>
+							{virtualItems.map((virtualItem) => {
+								const item = items[virtualItem.index]
+								if (!item) return null
 
-						// If dragging this item, maybe fade it out
-						const isDragging = draggedIndex === idx
-
-						return (
-							<div key={item.id} className="relative">
-								{/* Show drop indicator */}
-								{showTopIndicator && (
+								return (
 									<div
-										data-testid="ppt-sidebar-drop-indicator"
-										data-drop-target={`${idx}-before`}
+										key={virtualItem.key}
+										data-index={virtualItem.index}
+										className={cn(
+											"absolute top-0",
+											isMobile
+												? "left-0 h-full w-[140px]"
+												: "left-2 right-2 py-1",
+										)}
+										style={{
+											transform: isMobile
+												? `translate3d(${virtualItem.start}px, 0, 0)`
+												: `translate3d(0, ${virtualItem.start}px, 0)`,
+										}}
 									>
-										<DropIndicator position={isMobile ? "left" : "top"} />
+										<SortableSlideItem
+											item={item}
+											isActive={item.index === activeIndex}
+											onClick={() => onSlideClick(item.index)}
+											totalSlides={items.length}
+											mainFileId={mainFileId}
+											slideFileId={store.getFileIdByPath(item.path)}
+											slideFullRelativePath={store.getFullRelativePath(
+												item.path,
+											)}
+											slideDimensions={PPT_SIDEBAR_THUMBNAIL_DIMENSIONS}
+											onInsertAbove={() =>
+												handleInsertSlide(item.index, "before")
+											}
+											onInsertBelow={() =>
+												handleInsertSlide(item.index, "after")
+											}
+											onDelete={() => handleDeleteSlide(item.index)}
+											onRename={(newFileName) =>
+												handleRenameSlide(item.index, newFileName)
+											}
+											onRefresh={() => handleRefreshSlide(item.index)}
+											onRegenerateScreenshot={() =>
+												handleRegenerateScreenshot(item.index)
+											}
+											onAddToCurrentChat={
+												onAddToCurrentChat
+													? () => onAddToCurrentChat(item.index)
+													: undefined
+											}
+											onAddToNewChat={
+												onAddToNewChat
+													? () => onAddToNewChat(item.index)
+													: undefined
+											}
+											onLocateFile={() => handleLocateFile(item.index)}
+											isMobile={isMobile}
+											className={cn(
+												isMobile ? "h-full" : "min-h-[120px]",
+												draggedId === item.id && "opacity-50",
+											)}
+											allowEdit={allowEdit}
+											onSlideDragStart={handleSlideDragStart}
+										/>
 									</div>
-								)}
+								)
+							})}
 
-								<SortableSlideItem
-									item={item}
-									isActive={item.index === activeIndex}
-									onClick={() => onSlideClick(item.index)}
-									screenshot={getScreenshot(item.index)}
-									totalSlides={items.length}
-									mainFileId={mainFileId}
-									slideFileId={store.getFileIdByPath(item.path)}
-									slideFullRelativePath={store.getFullRelativePath(item.path)}
-									scrollContainerRef={scrollContainerRef}
-									onInsertAbove={() => handleInsertSlide(item.index, "before")}
-									onInsertBelow={() => handleInsertSlide(item.index, "after")}
-									onDelete={() => handleDeleteSlide(item.index)}
-									onRename={(newFileName) =>
-										handleRenameSlide(item.index, newFileName)
-									}
-									onRefresh={() => handleRefreshSlide(item.index)}
-									onRegenerateScreenshot={() =>
-										handleRegenerateScreenshot(item.index)
-									}
-									onAddToCurrentChat={
-										onAddToCurrentChat
-											? () => onAddToCurrentChat(item.index)
-											: undefined
-									}
-									onAddToNewChat={
-										onAddToNewChat
-											? () => onAddToNewChat(item.index)
-											: undefined
-									}
-									onVisible={() => store.ensureSlideScreenshot(item.index)}
-									onLocateFile={() => handleLocateFile(item.index)}
-									isMobile={isMobile}
+							{dropTarget && (
+								<div
+									data-testid="ppt-sidebar-drop-indicator"
+									data-drop-target={dropTarget.gapIndex}
+									data-gap-index={dropTarget.gapIndex}
 									className={cn(
-										isMobile
-											? // Mobile: horizontal spacing (gap handled by parent)
-												"h-full"
-											: // Desktop: vertical spacing
-												"my-1 min-h-[120px]",
-										idx === items.length - 1 && !isMobile && "mb-0",
-										isDragging && "opacity-50",
+										"pointer-events-none absolute top-0 z-20",
+										isMobile ? "left-0 h-full w-3" : "left-2 right-2",
 									)}
-									allowEdit={allowEdit}
-									// Pass drag handlers
-									onSlideDragStart={handleSlideDragStart}
-									onSlideDragOver={handleSlideDragOver}
-									onSlideDrop={handleSlideDrop}
-									onSlideDragLeave={handleSlideDragLeave}
-								/>
-
-								{/* Show drop indicator */}
-								{showBottomIndicator && (
-									<div
-										data-testid="ppt-sidebar-drop-indicator"
-										data-drop-target={`${idx}-after`}
-									>
-										<DropIndicator position={isMobile ? "right" : "bottom"} />
-									</div>
-								)}
-							</div>
-						)
-					})}
+									style={{
+										transform: isMobile
+											? `translate3d(${dropTarget.offset}px, 0, 0)`
+											: `translate3d(0, ${dropTarget.offset}px, 0)`,
+									}}
+								>
+									<DropIndicator position={isMobile ? "left" : "top"} />
+								</div>
+							)}
+						</div>
+					)}
 				</ScrollArea>
 			</div>
 		</TooltipProvider>

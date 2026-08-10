@@ -65,6 +65,12 @@ function getSvgFitScale(svg: SVGSVGElement) {
 	})
 }
 
+/**
+ * Returns the current fit scale when the content has enough intrinsic/layout
+ * dimensions to be measured. `undefined` means that the content is still
+ * loading (or temporarily absent), so callers can keep the last known value
+ * instead of treating the transient state as a real 100% scale.
+ */
 function measureContentFitScale(container: HTMLElement) {
 	const loadedImages = Array.from(container.querySelectorAll("img")).filter(
 		(image) => image.naturalWidth > 0 && image.naturalHeight > 0,
@@ -88,7 +94,7 @@ function measureContentFitScale(container: HTMLElement) {
 			(viewBox.height || svg.height.baseVal.value)
 		)
 	})
-	if (svgs.length === 0) return DEFAULT_FIT_SCALE
+	if (svgs.length === 0) return undefined
 
 	const sourceSvg = svgs.reduce((largest, svg) => {
 		const size = svg.viewBox.baseVal
@@ -111,6 +117,7 @@ const useContentFitScale = (contentRef: RefObject<HTMLElement>) => {
 			if (rafId !== undefined) cancelAnimationFrame(rafId)
 			rafId = requestAnimationFrame(() => {
 				const nextScale = measureContentFitScale(container)
+				if (nextScale === undefined) return
 				setFitScale((currentScale) =>
 					Math.abs(currentScale - nextScale) > 0.0001 ? nextScale : currentScale,
 				)
@@ -121,19 +128,23 @@ const useContentFitScale = (contentRef: RefObject<HTMLElement>) => {
 		container.addEventListener("load", measure, true)
 
 		const resizeObserver = new ResizeObserver(measure)
+		const observeMediaElements = () => {
+			container.querySelectorAll("img, svg").forEach((element) => {
+				resizeObserver.observe(element)
+			})
+		}
+
 		resizeObserver.observe(container)
-		container.querySelectorAll("img, svg").forEach((element) => resizeObserver.observe(element))
+		observeMediaElements()
 
 		const mutationObserver = new MutationObserver(() => {
-			resizeObserver.disconnect()
-			resizeObserver.observe(container)
-			container
-				.querySelectorAll("img, svg")
-				.forEach((element) => resizeObserver.observe(element))
+			// Only child insertion/removal needs this rescan. Attribute mutations
+			// include the transform style updated during zoom/drag and would cause
+			// a layout read + observer churn on every interaction frame.
+			observeMediaElements()
 			measure()
 		})
 		mutationObserver.observe(container, {
-			attributes: true,
 			childList: true,
 			subtree: true,
 		})

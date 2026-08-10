@@ -17,7 +17,10 @@ import {
 
 const TOPIC_ID = "topic-reasoning"
 const CORRELATION_ID = "correlation-reasoning"
+const SUPER_MESSAGE_ID = "super-message-reasoning"
 const RENDER_SETTLE_MS = 2_000
+const FINAL_SETTLING_OBSERVATION_MS = 1_600
+const FINAL_SETTLING_SAFETY_MS = 3_600
 const RECOVERY_TIMEOUT_MS = 5_100
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -64,6 +67,7 @@ function createChoice({
 	toolCalls = [],
 }: Omit<ChunkOptions, "i" | "choices"> = {}): ChunkChoice {
 	return {
+		...({ index: 0 } as const),
 		finish_reason: finishReason,
 		delta: {
 			content,
@@ -92,6 +96,8 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: "completion-reasoning",
 		super_magic_chunk: {
+			super_message_id: SUPER_MESSAGE_ID,
+			task_id: "task-reasoning",
 			i,
 			usage: null,
 			correlation_id: CORRELATION_ID,
@@ -151,6 +157,7 @@ function createFinalEnvelope({
 					role: "assistant",
 					topic_id: TOPIC_ID,
 					message_id: "node-final-reasoning",
+					super_message_id: SUPER_MESSAGE_ID,
 					correlation_id: CORRELATION_ID,
 					content,
 					...(includeReasoning ? { reasoning_content: reasoningContent } : {}),
@@ -187,7 +194,7 @@ function createStore(): SuperMagicStore {
 }
 
 function getProjectedNode(store: SuperMagicStore): ProjectedNode | undefined {
-	const node = store.getMessageNode(CORRELATION_ID)
+	const node = store.getMessageNode(SUPER_MESSAGE_ID)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
@@ -256,7 +263,8 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(getProjectedNode(store)?.reasoning_content ?? "").not.toContain("C")
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 
-		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
+		// Gap Final 已结束 transport，但缺失片段使本地结果不完整；应立即请求
+		// canonical Final 对账，而不是再等待普通 inactivity watchdog。
 		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
 		recovery.unsubscribe()
 	})
@@ -466,7 +474,7 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expectSettledNode(store, { content: markup })
 	})
 
-	it("非 Final 保持打字机展示，Final 对超大正文在 2 秒内有界追平。", () => {
+	it("非 Final 保持打字机展示，Final 单独到达时先温和结算并在安全预算内完成。", () => {
 		const store = createStore()
 		const largeContent = "大段正文".repeat(16_384)
 
@@ -476,26 +484,47 @@ describe("SuperMagicStore / Reasoning 和正文内容", () => {
 		expect(liveContent.length).toBeLessThan(largeContent.length)
 
 		store.receiveChunk(createChunk({ i: 1, finishReason: "stop" }))
-		advanceRendering(RENDER_SETTLE_MS)
+		advanceRendering(FINAL_SETTLING_OBSERVATION_MS)
+
+		const settlingContent = getProjectedNode(store)?.content ?? ""
+		expect(settlingContent.length).toBeGreaterThan(liveContent.length)
+		expect(settlingContent.length).toBeLessThan(largeContent.length)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			renderPace: "settling",
+		})
+
+		advanceRendering(FINAL_SETTLING_SAFETY_MS)
 
 		expect(getProjectedNode(store)?.content).toBe(largeContent)
 		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(false)
 	})
 
-	it("正文已经追平，但 final 长时间不到达。", () => {
+	it("开放流在未收到 finish_reason 时保持非终态，并在 inactivity 后请求 recovery。", () => {
 		const store = createStore()
 		const recovery = collectRecoveryRequests(store)
+		const streamedContent = "已经完整展示的正文"
 
-		store.receiveChunk(createChunk({ content: "已经完整展示的正文" }))
+		// This fixture deliberately has no finish_reason: a fully rendered draft is
+		// still an open stream until a terminal chunk or canonical Final arrives.
+		store.receiveChunk(createChunk({ content: streamedContent }))
 		advanceRendering(RENDER_SETTLE_MS)
 
-		expect(getProjectedNode(store)?.content).toBe("已经完整展示的正文")
-		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toBeDefined()
+		expect(getProjectedNode(store)?.content).toBe(streamedContent)
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			content: streamedContent,
+			stage: "content",
+			isFinalMessageReceived: false,
+		})
 		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 
+		expect(recovery.events).toHaveLength(0)
 		vi.advanceTimersByTime(RECOVERY_TIMEOUT_MS)
 		expect(recovery.events).toEqual([{ topicId: TOPIC_ID, correlationId: CORRELATION_ID }])
+		expect(store.getStreamState(TOPIC_ID, CORRELATION_ID)).toMatchObject({
+			isFinalMessageReceived: false,
+		})
+		expect(store.isTopicStreaming(TOPIC_ID)).toBe(true)
 		recovery.unsubscribe()
 	})
 })

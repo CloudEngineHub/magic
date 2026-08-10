@@ -22,17 +22,13 @@ class CliManagerListParams(BaseToolParams):
     with_validation: bool = Field(
         False,
         alias="validate",
-        description="""<!--zh: 是否顺带检查 shim 和目标命令是否存在。-->
-是否顺带检查 shim 和目标命令是否存在。""",
+        description="Whether to also verify that each shim and target command exists.",
     )
 
 
-@tool(name="cli_manager_list")
+@tool(name="cli_manager_list", code_mode_only=True)
 class CliManagerList(BaseTool[CliManagerListParams], CliManagerToolMixin):
-    """<!--zh: 查看用户持久化的第三方 CLI。-->
-    查看用户持久化的第三方 CLI。运行时预置 CLI 不在此注册表中。"""
-
-    code_mode_only = True
+    """List persisted third-party CLIs."""
 
     async def execute(self, tool_context: ToolContext, params: CliManagerListParams) -> ToolResult:
         """列出用户持久化 CLI 的注册表记录。"""

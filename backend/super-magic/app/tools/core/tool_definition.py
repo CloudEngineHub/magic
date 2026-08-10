@@ -13,6 +13,7 @@ from pathlib import Path
 import aiofiles
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.tools.core.tool_decorator import AutoMount
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,7 @@ class ToolDefinition:
     created_at: Optional[str] = None
     version: str = "1.0"
     code_mode_only: bool = False
+    auto_mount: Optional[AutoMount] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -44,7 +46,10 @@ class ToolDefinition:
         unknown_fields = set(data) - fields
         if unknown_fields:
             raise ValueError(f"unknown fields: {sorted(unknown_fields)}")
-        return cls(**data)
+        normalized = dict(data)
+        if normalized.get("auto_mount") is not None:
+            normalized["auto_mount"] = AutoMount(normalized["auto_mount"])
+        return cls(**normalized)
 
     def is_valid(self) -> bool:
         """检查定义是否有效"""
@@ -159,6 +164,8 @@ class ToolDefinitionManager:
             try:
                 if "code_mode_only" not in tool_data:
                     raise ValueError("missing required field: code_mode_only")
+                if "auto_mount" not in tool_data:
+                    raise ValueError("missing required field: auto_mount")
                 definition = ToolDefinition.from_dict(tool_data)
                 self._definitions[tool_name] = definition
             except Exception as e:

@@ -52,6 +52,7 @@ vi.mock("../../PPTRender", () => ({
 		attachments,
 		attachmentList,
 		mainFileId,
+		isFullscreen,
 		onSortSave,
 		openNewTab,
 		slideStructureAdapter,
@@ -60,6 +61,7 @@ vi.mock("../../PPTRender", () => ({
 		attachments?: Array<{ file_id?: string; relative_file_path?: string }>
 		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
+		isFullscreen?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
 		slideStructureAdapter?: unknown
@@ -75,6 +77,7 @@ vi.mock("../../PPTRender", () => ({
 				attachmentList?.map((item) => item.file_id) || [],
 			)}
 			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
+			data-is-fullscreen={String(Boolean(isFullscreen))}
 		>
 			<button
 				type="button"
@@ -114,7 +117,11 @@ function createDeckFiles(magicUpdatedAt: string) {
 	]
 }
 
-function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
+function renderRoot(
+	magicUpdatedAt: string,
+	slides = ["slides/slide-1.html"],
+	options: { isFullscreen?: boolean } = {},
+) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
 	return render(
@@ -129,6 +136,7 @@ function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
 				type: "slide",
 				slides,
 			}}
+			isFullscreen={options.isFullscreen}
 			activeFileId="index-file"
 		/>,
 	)
@@ -145,6 +153,17 @@ describe("PPTRootRender", () => {
 			originalSlidesPaths: ["slides/slide-1.html"],
 		})
 		mockState.getFileContentById.mockReset()
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
+		)
+	})
+
+	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+		})
 	})
 
 	it("keeps PPTRender mounted while magic.project.js reloads in the background", async () => {

@@ -115,6 +115,21 @@ abstract class AbstractModeAppService extends AbstractKernelAppService
         return $this->createModeDataIsolation($authorization);
     }
 
+    protected function isSystemDefaultAgent(string $identifier): bool
+    {
+        return $this->modeDomainService->isSystemDefaultAgent(
+            $this->createSystemDefaultAgentModeDataIsolation(),
+            $identifier
+        );
+    }
+
+    protected function createSystemDefaultAgentModeDataIsolation(): ModeDataIsolation
+    {
+        $dataIsolation = new ModeDataIsolation(OfficialOrganizationUtil::getOfficialOrganizationCode());
+        $dataIsolation->setOnlyOfficialOrganization(true);
+        return $dataIsolation;
+    }
+
     /**
      * 更新 Agent 图标 URL.
      *

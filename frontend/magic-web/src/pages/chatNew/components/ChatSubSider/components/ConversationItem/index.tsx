@@ -24,8 +24,12 @@ const SkeletonItem = (
 	/>
 )
 
-const ConversationItem = (props: ConversationItemProps) => {
-	const { conversationId, onClick, enableMenu = true, domIdPrefix } = props
+const ConversationItem = ({
+	conversationId,
+	onClick,
+	enableMenu = true,
+	domIdPrefix,
+}: ConversationItemProps) => {
 	const conversation = conversationStore.conversations?.[conversationId]
 
 	if (!conversation) {

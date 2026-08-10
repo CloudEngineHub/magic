@@ -11,6 +11,7 @@ import { useSlidesTemplateStatistics } from "@/pages/superMagic/hooks/useSlidesT
 import { useAnimatedNumberPulse } from "@/pages/superMagic/hooks/useAnimatedNumber"
 import { useElementVisibility } from "@/pages/superMagic/hooks/useElementVisibility"
 import { AnimatedNumberText } from "@/pages/superMagic/components/AnimatedNumberText"
+import { isPrivateDeployment } from "@/utils/env"
 import {
 	SLIDES_TEMPLATE_RANDOM_DRAG_END_EVENT,
 	SLIDES_TEMPLATE_RANDOM_DRAG_START_EVENT,
@@ -48,7 +49,9 @@ export default function PptModeSwitcherCard({
 	const isExpanded = isSelected || isHovered || isFocused
 	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")
-	const deliveredText = t("pptEmployee.delivered", { count: DELIVERED_COUNT_MARKER })
+	const deliveredText = isPrivateDeployment()
+		? t("pptEmployee.deliveredPrivate", { count: DELIVERED_COUNT_MARKER })
+		: t("pptEmployee.delivered", { count: DELIVERED_COUNT_MARKER })
 	const deliveredMarkerIndex = deliveredText.indexOf(DELIVERED_COUNT_MARKER)
 	const deliveredPrefix =
 		deliveredMarkerIndex >= 0 ? deliveredText.slice(0, deliveredMarkerIndex).trim() : ""

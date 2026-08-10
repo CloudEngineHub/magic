@@ -11,8 +11,18 @@ import PptModeSwitcherCard from "../PptModeSwitcherCard"
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, values?: { count?: string }) =>
-			key === "pptEmployee.delivered" ? `已制作 ${values?.count} 页` : key,
+			key === "pptEmployee.delivered"
+				? `已制作 ${values?.count} 页`
+				: key === "pptEmployee.deliveredPrivate"
+					? `已制作 ${values?.count} 套`
+					: key,
 	}),
+}))
+
+const isPrivateDeploymentMock = vi.hoisted(() => vi.fn(() => false))
+
+vi.mock("@/utils/env", () => ({
+	isPrivateDeployment: isPrivateDeploymentMock,
 }))
 
 vi.mock("../../../ModeAvatar", () => ({
@@ -51,6 +61,7 @@ const modeItem = {
 
 describe("PptModeSwitcherCard", () => {
 	beforeEach(() => {
+		isPrivateDeploymentMock.mockReturnValue(false)
 		useElementVisibilityMock.mockReturnValue(true)
 		useSlidesTemplateStatisticsMock.mockReturnValue({
 			templateTotal: 101582,
@@ -159,6 +170,15 @@ describe("PptModeSwitcherCard", () => {
 		const deliveredCount = screen.getByTestId("ppt-mode-switcher-delivered-count")
 		expect(deliveredCount).toHaveTextContent("已制作7,293页")
 		expect(deliveredCount).toHaveClass("text-background/70")
+	})
+
+	it("uses decks as the delivered count unit in private deployments", () => {
+		isPrivateDeploymentMock.mockReturnValue(true)
+		render(<PptModeSwitcherCard modeItem={modeItem} isSelected onSelect={vi.fn()} />)
+
+		expect(screen.getByTestId("ppt-mode-switcher-delivered-count")).toHaveTextContent(
+			"已制作7,293套",
+		)
 	})
 
 	it("does not render the delivered count before the backend returns the new field", () => {

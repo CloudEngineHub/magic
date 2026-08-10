@@ -1,7 +1,7 @@
 """Validate a semantic slide template and generate local preview assets."""
 
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import Field, field_validator
 
@@ -44,7 +44,7 @@ Template directory inside the workspace, for example SLIDE-navy-quarterly-review
         return value
 
 
-@tool(name="finalize_slide_template")
+@tool(name="finalize_slide_template", code_mode_only=True)
 class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
     """<!--zh
     校验最终模板 HTML，并在同一模板目录的 previews/ 下生成缩略图、拼图和逐页预览图。不创建 ZIP，也不上传后台。
@@ -53,7 +53,6 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
     """
 
     name = "finalize_slide_template"
-    code_mode_only: ClassVar[bool] = True
 
     async def execute(self, tool_context: ToolContext, params: FinalizeSlideTemplateParams) -> ToolResult:
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)

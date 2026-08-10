@@ -18,22 +18,13 @@ logger = get_logger(__name__)
 class McpRemoveServerParams(BaseToolParams):
     server_name: str = Field(
         ...,
-        description="""<!--zh: 要移除的 MCP 服务器名称，必须是 mcp_list_servers 返回的某个名字。-->
-Name of the MCP server to remove. Must be one of the names returned by
-mcp_list_servers.""",
+        description="MCP server name returned by mcp_list_servers.",
     )
 
 
 @tool(name="mcp_remove_server")
 class McpRemoveServer(BaseMcpTool[McpRemoveServerParams]):
-    """<!--zh
-    移除指定的 MCP 服务器：断开连接、清理工具注册、从持久化配置中删除。
-    移除后该服务器将不再出现在 mcp_list_servers 列表中；如需恢复需重新 mcp_add_server。
-    -->
-    Remove the specified MCP server: disconnect, unregister its tools, and
-    delete its persisted configuration. After removal the server will no
-    longer appear in mcp_list_servers; re-add via mcp_add_server if needed.
-    """
+    """Disconnect an MCP server and delete its tools and persisted configuration."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None

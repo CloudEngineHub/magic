@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { useMagicFiles } from "../useMagicFiles"
 import magicToast from "@/components/base/MagicToaster/utils"
 
+const defaultAgentSelectionMock = vi.hoisted(() => ({
+	modeIdentifier: "general",
+	isAvailable: true,
+}))
+
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock("react-i18next", () => ({
@@ -22,6 +27,18 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils/fileConverter", () =>
 	base64ToFile: vi.fn((base64: string, filename: string) =>
 		Promise.resolve(new File([base64], filename)),
 	),
+}))
+
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	getFallbackTopicModeIdentifier: () => defaultAgentSelectionMock.modeIdentifier,
+	resolveAgentSelection: (modeIdentifier?: string) => {
+		const resolvedMode = modeIdentifier || defaultAgentSelectionMock.modeIdentifier
+		return {
+			modeIdentifier: resolvedMode,
+			topicPattern: resolvedMode,
+		}
+	},
+	isAgentSelectionAvailable: () => defaultAgentSelectionMock.isAvailable,
 }))
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/file-utils", () => ({
@@ -104,6 +121,8 @@ describe("useMagicFiles", () => {
 
 	beforeEach(async () => {
 		vi.clearAllMocks()
+		defaultAgentSelectionMock.modeIdentifier = "general"
+		defaultAgentSelectionMock.isAvailable = true
 		iframePostMessage = vi.fn()
 		iframeRef = makeIframeRef(iframePostMessage)
 		uploadImageFileToProject = vi.fn()
@@ -439,6 +458,71 @@ describe("useMagicFiles", () => {
 					requestId: "req-6",
 					success: false,
 					error: "No files found",
+				}),
+				targetOrigin,
+			)
+		})
+
+		it("未指定 agentMode 时使用配置的默认员工创建 topic", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			defaultAgentSelectionMock.modeIdentifier = "agent-default"
+			vi.mocked(SuperMagicApi.createTopic).mockResolvedValueOnce(null as any)
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-default-agent",
+					filePaths: ["a.csv"],
+				})
+			})
+
+			expect(SuperMagicApi.createTopic).toHaveBeenCalledWith({
+				project_id: "proj-1",
+				topic_name: "",
+				project_mode: "agent-default",
+			})
+		})
+
+		it("员工不可用时拒绝创建 topic", async () => {
+			const { SuperMagicApi } = await import("@/apis")
+			defaultAgentSelectionMock.isAvailable = false
+
+			const { result } = renderHook(() =>
+				useMagicFiles({
+					iframeRef,
+					targetOrigin,
+					selectedProject: { id: "proj-1", workspace_id: "ws-1" },
+					attachmentList: [{ relative_file_path: "a.csv", file_id: "f-1" }],
+					uploadImageFileToProject,
+				}),
+			)
+
+			await act(async () => {
+				await result.current.handleMagicAddFilesToMessage({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_REQUEST",
+					requestId: "req-invalid-agent",
+					filePaths: ["a.csv"],
+					agentMode: "general",
+				})
+			})
+
+			expect(SuperMagicApi.createTopic).not.toHaveBeenCalled()
+			expect(iframePostMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					type: "MAGIC_ADD_FILES_TO_MESSAGE_RESPONSE",
+					requestId: "req-invalid-agent",
+					success: false,
+					error: "Invalid agentMode: general",
 				}),
 				targetOrigin,
 			)

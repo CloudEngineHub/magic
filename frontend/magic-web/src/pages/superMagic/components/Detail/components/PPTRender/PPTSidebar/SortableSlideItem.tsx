@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
 	Image,
 	Loader2,
@@ -57,14 +57,13 @@ function SortableSlideItem({
 	onLocateFile,
 	onRefresh,
 	onRegenerateScreenshot,
-	onVisible,
-	scrollContainerRef,
 	mainFileId,
 	className,
 	isMobile = false,
 	allowEdit = false,
 	slideFileId,
 	slideFullRelativePath,
+	slideDimensions: providedSlideDimensions,
 	...props
 }: SortableSlideItemProps) {
 	const { t } = useTranslation("super")
@@ -80,25 +79,33 @@ function SortableSlideItem({
 			key: "L",
 		}
 	}, [])
-	const visibilityRef = useRef<HTMLDivElement>(null)
-	const hasTriggeredVisibility = useRef(false)
-	// Track previous loading state to detect when content becomes loaded
-	const prevLoadingStateRef = useRef<string | undefined>(item.loadingState)
+	const resolvedScreenshot = useMemo(
+		() =>
+			screenshot ?? {
+				index: item.index,
+				thumbnailUrl: item.thumbnailUrl || "",
+				isLoading: item.thumbnailLoading || false,
+				error: item.thumbnailError,
+			},
+		[item.index, item.thumbnailError, item.thumbnailLoading, item.thumbnailUrl, screenshot],
+	)
 	const slideDimensions = useMemo(
-		() => resolvePptScaleContentDimensions(item.content, item.rawContent),
-		[item.content, item.rawContent],
+		() =>
+			providedSlideDimensions ??
+			resolvePptScaleContentDimensions(item.content, item.rawContent),
+		[item.content, item.rawContent, providedSlideDimensions],
 	)
 
 	// Reset image load error when thumbnail URL changes
 	useEffect(() => {
 		setImageLoadError(false)
-	}, [screenshot?.thumbnailUrl])
+	}, [resolvedScreenshot.thumbnailUrl])
 
 	// Auto-retry mechanism for image loading failure
 	const imageLoadRetry = useScreenshotRetry({
 		hasError: imageLoadError,
-		isLoading: !!screenshot?.isLoading,
-		hasThumbnail: !!screenshot?.thumbnailUrl && !imageLoadError,
+		isLoading: resolvedScreenshot.isLoading,
+		hasThumbnail: !!resolvedScreenshot.thumbnailUrl && !imageLoadError,
 		onRetry: () => {
 			// For image load error, need to clear cache and regenerate with new URL
 			setImageLoadError(false)
@@ -114,84 +121,7 @@ function SortableSlideItem({
 		imageLoadRetry.manualRetry()
 	}
 
-	const { onSlideDragStart, onSlideDragOver, onSlideDrop, onSlideDragLeave } = props
-
-	// Combine refs and visibility ref
-	// We no longer use sortable setNodeRef, just ref for visibility
-	const setRefs = (node: HTMLDivElement | null) => {
-		// @ts-expect-error - Setting ref.current directly
-		visibilityRef.current = node
-	}
-
-	// Intersection Observer to detect visibility and trigger screenshot generation
-	useEffect(() => {
-		if (!visibilityRef.current || !onVisible) return
-
-		const currentElement = visibilityRef.current
-		let observer: IntersectionObserver | null = null
-
-		// Setup observer with retry logic for scroll container
-		const setupObserver = () => {
-			const scrollContainer = scrollContainerRef?.current
-
-			observer = new IntersectionObserver(
-				(entries) => {
-					entries.forEach((entry) => {
-						if (entry.isIntersecting && !hasTriggeredVisibility.current) {
-							hasTriggeredVisibility.current = true
-							onVisible()
-						}
-					})
-				},
-				{
-					root: scrollContainer,
-					rootMargin: "200px",
-					threshold: 0.01,
-				},
-			)
-
-			observer.observe(currentElement)
-		}
-
-		// Delay to allow scroll container to be ready
-		const timeoutId = setTimeout(setupObserver, 50)
-
-		return () => {
-			clearTimeout(timeoutId)
-			observer?.disconnect()
-		}
-	}, [onVisible, scrollContainerRef])
-
-	// Reset visibility flag when screenshot is generated
-	useEffect(() => {
-		if (screenshot?.thumbnailUrl && hasTriggeredVisibility.current) {
-			// Screenshot loaded, allow re-triggering if needed
-			hasTriggeredVisibility.current = false
-		}
-	}, [screenshot?.thumbnailUrl])
-
-	// Re-trigger visibility when slide content becomes loaded after initial visibility check
-	// This handles cases where slide was visible but content wasn't loaded yet
-	useEffect(() => {
-		const prevLoadingState = prevLoadingStateRef.current
-		const currentLoadingState = item.loadingState
-
-		// Update previous loading state ref
-		prevLoadingStateRef.current = currentLoadingState
-
-		// If visibility was triggered before, content just became loaded, and no thumbnail yet
-		if (
-			hasTriggeredVisibility.current &&
-			prevLoadingState !== "loaded" &&
-			currentLoadingState === "loaded" &&
-			!screenshot?.thumbnailUrl &&
-			onVisible
-		) {
-			// Reset flag to allow re-triggering
-			hasTriggeredVisibility.current = false
-			onVisible()
-		}
-	}, [item.loadingState, screenshot?.thumbnailUrl, onVisible, item.index, item.id])
+	const { onSlideDragStart } = props
 
 	// Build current file info for this slide (each slide is an HTML file)
 	const currentFile = useMemo(() => {
@@ -215,10 +145,10 @@ function SortableSlideItem({
 
 	// Render thumbnail based on screenshot state
 	const renderThumbnail = () => {
-		const hasError = screenshot?.error || imageLoadError
+		const hasError = resolvedScreenshot.error || imageLoadError
 
 		// Show loading state when: 1) actively loading, or 2) has error but still retrying
-		if (screenshot?.isLoading || (hasError && canRetry)) {
+		if (resolvedScreenshot.isLoading || (hasError && canRetry)) {
 			return (
 				<div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
 					<Loader2 className="size-4 animate-spin" />
@@ -242,11 +172,11 @@ function SortableSlideItem({
 			)
 		}
 
-		if (screenshot?.thumbnailUrl) {
+		if (resolvedScreenshot.thumbnailUrl) {
 			return (
 				<div className="h-full w-full rounded-sm border-[1px] border-border">
 					<img
-						src={screenshot.thumbnailUrl}
+						src={resolvedScreenshot.thumbnailUrl}
 						alt={`Slide ${item.index + 1}`}
 						className="h-full w-full rounded-sm object-contain"
 						draggable={false}
@@ -308,10 +238,11 @@ function SortableSlideItem({
 
 	const main = (
 		<div
-			ref={setRefs}
 			data-testid={`ppt-sidebar-slide-item-${item.id}`}
+			data-slide-id={item.id}
+			data-slide-index={item.index}
 			className={cn(
-				"group relative rounded transition-all",
+				"group relative rounded transition-[background-color,box-shadow]",
 				isMobile
 					? // Mobile: vertical layout with thumbnail first, no drag cursor
 						"flex h-full w-[140px] shrink-0 cursor-pointer !flex-col gap-1.5"
@@ -334,19 +265,8 @@ function SortableSlideItem({
 						slide_title: item.title,
 					})
 				}
-				// 2. Trigger internal sort start
-				onSlideDragStart?.(e, item.index)
-			}}
-			onDragOver={(e) => {
-				e.preventDefault() // Allow drop
-				onSlideDragOver?.(e, item.index)
-			}}
-			onDrop={(e) => {
-				e.preventDefault()
-				onSlideDrop?.(e, item.index)
-			}}
-			onDragLeave={(e) => {
-				onSlideDragLeave?.(e)
+				// 2. Trigger internal sort start without replacing the native DataTransfer flow.
+				onSlideDragStart?.(e, item.id)
 			}}
 		>
 			{/* Slide info: number and title below thumbnail */}

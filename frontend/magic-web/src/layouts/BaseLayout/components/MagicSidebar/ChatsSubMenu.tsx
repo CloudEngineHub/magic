@@ -10,7 +10,7 @@ import { roleStore } from "@/pages/superMagic/stores"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { RouteName } from "@/routes/constants"
 import { routesPathMatch } from "@/routes/history/helpers"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { resolveProjectModeForCreate } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useChatWorkspace } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useChatConversationList } from "@/pages/superMagicMobile/pages/ChatsPage/hooks/useChatConversationList"
@@ -146,7 +146,7 @@ function ChatsSubMenu({ children, visible = true }: ChatsSubMenuProps) {
 
 		try {
 			const createdProject = await createProjectInChatWorkspace({
-				projectMode: currentRole || TopicMode.General,
+				projectMode: resolveProjectModeForCreate(currentRole),
 			})
 
 			if (!createdProject?.project || !createdProject.topic) {

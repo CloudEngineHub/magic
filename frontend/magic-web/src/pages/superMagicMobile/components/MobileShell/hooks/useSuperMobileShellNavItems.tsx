@@ -24,6 +24,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 		return BASE_SUPER_MOBILE_SHELL_NAV_ITEMS.filter((item) => {
 			if (item.key === "apps" && !shouldShowAppsEntry) return false
 			if (item.key === "recording" && isPrivateDeploymentEnv) return false
+			if (item.key === "microApps" && isPrivateDeploymentEnv) return false
 			if (item.requiredPermissionCode === FUNCTION_PERMISSION_CODE.MagicClawAccess) {
 				// Keep permission-gated entries fail-closed while loading to match desktop and legacy mobile entry policy.
 				return !isMagicClawAccessLoading && canAccessMagicClaw

@@ -1,0 +1,424 @@
+{
+	"examples": [
+		{
+			"id": "sales",
+			"text": {
+				"en_US": "Build a customer follow-up dashboard for a sales team with stages, owners, expected revenue, and next-contact dates.",
+				"zh_CN": "做一个适合销售团队使用的客户跟进看板，可以记录客户阶段、负责人、预计金额和下次联系时间。"
+			}
+		},
+		{
+			"id": "event",
+			"text": {
+				"en_US": "Build an event registration tool with forms, capacity tracking, check-in statuses, and attendee exports.",
+				"zh_CN": "做一个活动报名管理工具，支持报名表、名额统计、签到状态和名单导出。"
+			}
+		},
+		{
+			"id": "project",
+			"text": {
+				"en_US": "Build a team project board with task owners, due dates, progress tracking, and risk management.",
+				"zh_CN": "做一个团队项目管理看板，可以分配负责人、设置截止时间、跟踪进度和风险。"
+			}
+		},
+		{
+			"id": "content",
+			"text": {
+				"en_US": "Build a content calendar to manage topics, channels, owners, publishing times, and statuses.",
+				"zh_CN": "做一个内容运营日历，可以管理选题、渠道、负责人、发布时间和发布状态。"
+			}
+		},
+		{
+			"id": "inventory",
+			"text": {
+				"en_US": "Build an inventory and order dashboard with stock levels, low-stock alerts, order statuses, and sales trends.",
+				"zh_CN": "做一个库存与订单看板，可以查看商品库存、低库存提醒、订单状态和销售趋势。"
+			}
+		},
+		{
+			"id": "knowledge",
+			"text": {
+				"en_US": "Build an internal team knowledge base with categories, search, bookmarks, recent updates, and FAQs.",
+				"zh_CN": "做一个团队内部知识库，支持分类检索、文档收藏、最近更新和常见问题。"
+			}
+		},
+		{
+			"id": "saas-landing",
+			"text": {
+				"en_US": "Build an AI SaaS landing page with features, customer stories, pricing plans, and a free trial CTA.",
+				"zh_CN": "做一个 AI SaaS 产品落地页，包含功能介绍、客户案例、价格方案和免费试用入口。"
+			}
+		},
+		{
+			"id": "portfolio",
+			"text": {
+				"en_US": "Build a designer portfolio site with projects, services, work history, and a contact form.",
+				"zh_CN": "做一个设计师个人作品集网站，展示项目、服务、工作经历和联系表单。"
+			}
+		},
+		{
+			"id": "restaurant",
+			"text": {
+				"en_US": "Build a restaurant website with the menu, signature dishes, opening hours, locations, and reservations.",
+				"zh_CN": "做一个餐厅官网，展示菜单、招牌菜、营业时间、门店地址和在线预约。"
+			}
+		},
+		{
+			"id": "course-landing",
+			"text": {
+				"en_US": "Build an online course landing page with the syllabus, instructor bio, student reviews, and enrollment CTA.",
+				"zh_CN": "做一个在线课程落地页，包含课程大纲、讲师介绍、学员评价和报名按钮。"
+			}
+		},
+		{
+			"id": "product-launch",
+			"text": {
+				"en_US": "Build a product launch page highlighting benefits, specifications, a comparison table, and a preorder form.",
+				"zh_CN": "做一个新品发布页面，突出产品卖点、规格参数、对比表和预购表单。"
+			}
+		},
+		{
+			"id": "newsletter",
+			"text": {
+				"en_US": "Build a newsletter signup page with past issues, an author profile, and an email subscription form.",
+				"zh_CN": "做一个 newsletter 订阅页，展示往期内容、作者介绍和邮件订阅表单。"
+			}
+		},
+		{
+			"id": "donation",
+			"text": {
+				"en_US": "Build a charity project page with progress, donation usage, beneficiary stories, and a donate CTA.",
+				"zh_CN": "做一个公益项目介绍页，展示项目进展、捐款用途、受助故事和捐赠入口。"
+			}
+		},
+		{
+			"id": "rental",
+			"text": {
+				"en_US": "Build a rental listing page with floor plans, amenities, rent, location, and viewing requests.",
+				"zh_CN": "做一个房源展示落地页，支持查看户型、配套、租金、地理位置和预约看房。"
+			}
+		},
+		{
+			"id": "job-board",
+			"text": {
+				"en_US": "Build a company careers page with job openings, culture, benefits, and an application form.",
+				"zh_CN": "做一个公司招聘页面，展示职位列表、团队文化、福利和在线投递表单。"
+			}
+		},
+		{
+			"id": "agency",
+			"text": {
+				"en_US": "Build a digital agency website with services, client work, team members, and a consultation CTA.",
+				"zh_CN": "做一个数字营销 agency 官网，展示服务能力、客户案例、团队成员和咨询入口。"
+			}
+		},
+		{
+			"id": "conference",
+			"text": {
+				"en_US": "Build a tech conference site with the schedule, speakers, venue details, tickets, and registration.",
+				"zh_CN": "做一个技术大会官网，包含议程、演讲嘉宾、会场信息、门票和报名入口。"
+			}
+		},
+		{
+			"id": "travel",
+			"text": {
+				"en_US": "Build a travel itinerary planner for daily attractions, transport, hotels, and budget tracking.",
+				"zh_CN": "做一个旅行行程规划工具，可以按天安排景点、交通、酒店和预算。"
+			}
+		},
+		{
+			"id": "wedding",
+			"text": {
+				"en_US": "Build a wedding invitation site with the schedule, venue, photo wall, RSVP form, and travel details.",
+				"zh_CN": "做一个婚礼邀请网站，展示日程、地点、照片墙、 RSVP 表单和交通说明。"
+			}
+		},
+		{
+			"id": "waitlist",
+			"text": {
+				"en_US": "Build a product waitlist page with highlights, launch timing, and email signup progress.",
+				"zh_CN": "做一个新产品候补名单页面，展示产品亮点、上线时间和邮箱登记进度。"
+			}
+		},
+		{
+			"id": "qr-menu",
+			"text": {
+				"en_US": "Build a mobile QR menu with categories, dish details, allergen information, and recommendations.",
+				"zh_CN": "做一个适合手机扫码打开的餐厅菜单，支持分类、菜品详情、过敏原和推荐菜。"
+			}
+		},
+		{
+			"id": "resume",
+			"text": {
+				"en_US": "Build a resume generator with experience fields, templates, live preview, and PDF export.",
+				"zh_CN": "做一个简历生成器，支持填写经历、选择模板、实时预览和导出 PDF。"
+			}
+		},
+		{
+			"id": "invoice",
+			"text": {
+				"en_US": "Build an invoice generator for customers, items, tax rates, totals, and print-ready export.",
+				"zh_CN": "做一个发票生成小工具，可以填写客户、商品、税率、金额并导出打印版。"
+			}
+		},
+		{
+			"id": "quote",
+			"text": {
+				"en_US": "Build a project quote calculator using hours, staffing, costs, and discounts to produce a quote.",
+				"zh_CN": "做一个项目报价计算器，根据工时、人员、成本和折扣生成报价单。"
+			}
+		},
+		{
+			"id": "unit-converter",
+			"text": {
+				"en_US": "Build a unit converter for length, weight, temperature, area, and currency conversion.",
+				"zh_CN": "做一个单位换算工具，支持长度、重量、温度、面积和汇率换算。"
+			}
+		},
+		{
+			"id": "pomodoro",
+			"text": {
+				"en_US": "Build a Pomodoro focus timer with work breaks, task notes, and daily focus statistics.",
+				"zh_CN": "做一个番茄钟专注工具，支持工作、休息、任务记录和今日专注统计。"
+			}
+		},
+		{
+			"id": "habit",
+			"text": {
+				"en_US": "Build a habit tracker with custom habits, streaks, calendar view, and reminder status.",
+				"zh_CN": "做一个习惯打卡工具，支持自定义习惯、连续天数、日历视图和提醒状态。"
+			}
+		},
+		{
+			"id": "markdown",
+			"text": {
+				"en_US": "Build a Markdown editor with live preview, document list, shortcuts, and export.",
+				"zh_CN": "做一个 Markdown 编辑器，支持实时预览、文档列表、快捷键和导出。"
+			}
+		},
+		{
+			"id": "color-palette",
+			"text": {
+				"en_US": "Build a color palette tool that generates combinations, copies values, saves favorites, and checks contrast.",
+				"zh_CN": "做一个配色板工具，可以生成颜色组合、复制色值、保存收藏并检查对比度。"
+			}
+		},
+		{
+			"id": "image-compressor",
+			"text": {
+				"en_US": "Build an image compressor with drag-and-drop upload, quality control, before-and-after preview, and batch download.",
+				"zh_CN": "做一个图片压缩工具，支持拖拽上传、质量调节、前后对比和批量下载。"
+			}
+		},
+		{
+			"id": "file-renamer",
+			"text": {
+				"en_US": "Build a batch file renamer with prefixes, numbering, find-and-replace, and rename preview.",
+				"zh_CN": "做一个批量文件重命名工具，支持前缀、序号、查找替换和命名预览。"
+			}
+		},
+		{
+			"id": "json-formatter",
+			"text": {
+				"en_US": "Build a JSON formatter with validation, folding, minification, copy, and error highlighting.",
+				"zh_CN": "做一个 JSON 格式化工具，支持校验、折叠、压缩、复制和错误定位。"
+			}
+		},
+		{
+			"id": "regex-tester",
+			"text": {
+				"en_US": "Build a regex tester that highlights matches and shows capture groups for a pattern and sample text.",
+				"zh_CN": "做一个正则表达式测试工具，输入规则和文本后高亮匹配结果并展示捕获组。"
+			}
+		},
+		{
+			"id": "password-generator",
+			"text": {
+				"en_US": "Build a password generator with length, character types, strength score, and batch copy.",
+				"zh_CN": "做一个密码生成器，支持长度、字符类型、强度评分和批量复制。"
+			}
+		},
+		{
+			"id": "timezone",
+			"text": {
+				"en_US": "Build a timezone converter for multiple cities, time differences, and recommended meeting times.",
+				"zh_CN": "做一个全球时区转换工具，支持多个城市、时间差对比和会议时间推荐。"
+			}
+		},
+		{
+			"id": "expense-split",
+			"text": {
+				"en_US": "Build a group expense splitter with items, participants, tips, and settlement results.",
+				"zh_CN": "做一个多人账单分摊工具，支持添加消费、指定参与人、小费和结算结果。"
+			}
+		},
+		{
+			"id": "tip-calculator",
+			"text": {
+				"en_US": "Build a tip calculator with group splitting, service rating, tax, and multiple currencies.",
+				"zh_CN": "做一个小费计算器，支持多人分摊、服务评分、税费和不同货币。"
+			}
+		},
+		{
+			"id": "bmi",
+			"text": {
+				"en_US": "Build a BMI calculator with results, range guidance, and historical trend tracking.",
+				"zh_CN": "做一个 BMI 健康计算器，输入身高体重后展示结果、区间说明和趋势记录。"
+			}
+		},
+		{
+			"id": "countdown",
+			"text": {
+				"en_US": "Build a countdown tool with multiple target dates, titles, and shareable countdown pages.",
+				"zh_CN": "做一个倒计时工具，可以创建多个目标日期、设置标题并分享倒计时页面。"
+			}
+		},
+		{
+			"id": "memory-game",
+			"text": {
+				"en_US": "Build a memory card game with difficulty levels, timer, move count, and best scores.",
+				"zh_CN": "做一个记忆翻牌小游戏，包含不同难度、计时、步数和最佳成绩。"
+			}
+		},
+		{
+			"id": "snake",
+			"text": {
+				"en_US": "Build a Snake game with keyboard controls, scoring, speed changes, and a leaderboard.",
+				"zh_CN": "做一个贪吃蛇小游戏，支持键盘操作、得分、速度变化和排行榜。"
+			}
+		},
+		{
+			"id": "tic-tac-toe",
+			"text": {
+				"en_US": "Build a tic-tac-toe game with local multiplayer, computer opponent, win stats, and restart.",
+				"zh_CN": "做一个井字棋小游戏，支持双人对战、电脑对手、胜负统计和重新开始。"
+			}
+		},
+		{
+			"id": "wordle",
+			"text": {
+				"en_US": "Build a word guessing game with a daily word, keyboard input, color hints, and score sharing.",
+				"zh_CN": "做一个猜词小游戏，支持每日词语、键盘输入、颜色提示和分享成绩。"
+			}
+		},
+		{
+			"id": "quiz",
+			"text": {
+				"en_US": "Build a quiz game with categories, countdown timer, scoring, and answer explanations.",
+				"zh_CN": "做一个知识问答小游戏，支持题目分类、倒计时、分数和答案解析。"
+			}
+		},
+		{
+			"id": "typing-speed",
+			"text": {
+				"en_US": "Build a typing speed test with WPM, accuracy, error characters, and score history.",
+				"zh_CN": "做一个打字速度测试工具，展示速度、准确率、错误字符和历史成绩。"
+			}
+		},
+		{
+			"id": "flashcards",
+			"text": {
+				"en_US": "Build a vocabulary flashcard tool with decks, flip cards, mastery status, and review progress.",
+				"zh_CN": "做一个单词闪卡学习工具，支持卡片分类、翻面、掌握状态和复习进度。"
+			}
+		},
+		{
+			"id": "kanban-admin",
+			"text": {
+				"en_US": "Build a lightweight task admin with lists, filters, owners, priorities, and bulk actions.",
+				"zh_CN": "做一个轻量任务管理后台，支持任务列表、筛选、负责人、优先级和批量操作。"
+			}
+		},
+		{
+			"id": "employee-directory",
+			"text": {
+				"en_US": "Build an employee directory admin with department filters, search, profiles, and contact details.",
+				"zh_CN": "做一个员工通讯录后台，支持部门筛选、搜索、个人资料和联系方式查看。"
+			}
+		},
+		{
+			"id": "leave-management",
+			"text": {
+				"en_US": "Build a leave management admin with requests, approval flow, balances, calendar, and export.",
+				"zh_CN": "做一个请假审批后台，支持申请、审批流、余额统计、日历和导出。"
+			}
+		},
+		{
+			"id": "asset-admin",
+			"text": {
+				"en_US": "Build a company asset admin tracking devices, assignees, locations, status, and repair history.",
+				"zh_CN": "做一个公司资产管理后台，记录设备、领用人、位置、状态和维修历史。"
+			}
+		},
+		{
+			"id": "helpdesk",
+			"text": {
+				"en_US": "Build an internal helpdesk with issue submission, assignees, priorities, statuses, and SLA stats.",
+				"zh_CN": "做一个内部工单后台，支持提交问题、分配处理人、优先级、状态和 SLA 统计。"
+			}
+		},
+		{
+			"id": "crm-leads",
+			"text": {
+				"en_US": "Build a sales lead admin with sources, stages, owners, follow-up notes, and conversion rates.",
+				"zh_CN": "做一个销售线索管理后台，支持线索来源、阶段、负责人、跟进记录和转化率。"
+			}
+		},
+		{
+			"id": "purchase-approval",
+			"text": {
+				"en_US": "Build a purchase approval admin with requests, budgets, approvers, statuses, and monthly stats.",
+				"zh_CN": "做一个采购申请审批后台，支持申请单、预算、审批人、状态和月度统计。"
+			}
+		},
+		{
+			"id": "moderation",
+			"text": {
+				"en_US": "Build a content moderation admin with review queue, risk labels, decisions, bulk review, and stats.",
+				"zh_CN": "做一个内容审核后台，支持待审核列表、风险标签、处理结果、批量审核和统计。"
+			}
+		},
+		{
+			"id": "survey-results",
+			"text": {
+				"en_US": "Build a survey results admin with responses, key metrics, charts, and downloadable reports.",
+				"zh_CN": "做一个问卷结果分析后台，展示回答列表、关键指标、图表和可下载报告。"
+			}
+		},
+		{
+			"id": "kpi-dashboard",
+			"text": {
+				"en_US": "Build a business KPI dashboard for revenue, orders, users, conversion, and year-over-year trends.",
+				"zh_CN": "做一个经营指标 dashboard，汇总收入、订单、用户、转化率和同比趋势。"
+			}
+		},
+		{
+			"id": "course-admin",
+			"text": {
+				"en_US": "Build a course operations admin for courses, chapters, learners, assignments, and completion rates.",
+				"zh_CN": "做一个课程运营后台，管理课程、章节、学员、作业和学习完成率。"
+			}
+		},
+		{
+			"id": "clinic",
+			"text": {
+				"en_US": "Build a clinic appointment admin with doctor schedules, patient bookings, visit statuses, and reminders.",
+				"zh_CN": "做一个诊所预约后台，支持医生排班、患者预约、就诊状态和提醒。"
+			}
+		},
+		{
+			"id": "warehouse",
+			"text": {
+				"en_US": "Build a warehouse operations admin for inbound, outbound, locations, picking tasks, and exceptions.",
+				"zh_CN": "做一个仓库运营后台，查看入库、出库、库位、拣货任务和异常记录。"
+			}
+		},
+		{
+			"id": "permissions",
+			"text": {
+				"en_US": "Build a team permissions admin for members, roles, resource access, and audit logs.",
+				"zh_CN": "做一个团队权限管理后台，支持成员、角色、资源权限和操作日志。"
+			}
+		}
+	]
+}

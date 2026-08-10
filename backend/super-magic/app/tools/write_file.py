@@ -18,6 +18,7 @@ from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists
+from app.service.html_app_memory_service import is_html_app_memory_path
 
 logger = get_logger(__name__)
 
@@ -109,6 +110,9 @@ class WriteFile(AbstractFileTool[WriteFileParams], WorkspaceTool[WriteFileParams
         try:
             # 使用父类方法获取安全的文件路径
             file_path = self.resolve_path(params.file_path)
+            if is_html_app_memory_path(file_path):
+                return ToolResult.error("MICRO-APP.md is managed by update_html_app_memory. Use that tool instead of write_file so MagicBase data model records are not overwritten.")
+
             initial_file_exists = await async_exists(file_path)
 
             content_to_write, auto_repaired_json, original_syntax_errors = await self._prepare_content_for_write(

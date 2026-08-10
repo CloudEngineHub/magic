@@ -9,7 +9,6 @@ export const useStyles = createStyles(
 			background: ${token.magicColorUsages.bg[1]};
 		`,
 		inner: css`
-			max-width: 1536px;
 			margin: 0 auto;
 			display: flex;
 			flex-direction: column;
@@ -216,6 +215,10 @@ export const useStyles = createStyles(
 			justify-content: space-between;
 			gap: 12px;
 			margin-bottom: 24px;
+
+			@media (max-width: 640px) {
+				flex-direction: column;
+			}
 		`,
 		cardTitle: css`
 			margin: 0;
@@ -231,9 +234,23 @@ export const useStyles = createStyles(
 			font-size: 13px;
 			line-height: 18px;
 		`,
+		chartMetricSelector: css`
+			display: flex;
+			flex-shrink: 0;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			gap: 8px 16px;
+
+			.ant-checkbox-wrapper + .ant-checkbox-wrapper {
+				margin-inline-start: 0;
+			}
+
+			@media (max-width: 640px) {
+				justify-content: flex-start;
+			}
+		`,
 		chartBox: css`
-			height: ${isMobile ? "248px" : "272px"};
-			padding: 12px 20px 14px 12px;
+			height: ${isMobile ? "248px" : "240px"};
 		`,
 		rankingList: css`
 			display: flex;
@@ -244,7 +261,6 @@ export const useStyles = createStyles(
 		rankingItem: css`
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) auto;
-			gap: 8px;
 			align-items: start;
 		`,
 		rankingName: css`
@@ -284,6 +300,108 @@ export const useStyles = createStyles(
 			grid-column: 1 / -1;
 			.${prefixCls}-progress-inner {
 				height: 8px;
+			}
+		`,
+		levelSegmented: css`
+			flex: 0 0 auto;
+
+			@media (max-width: 640px) {
+				width: 100%;
+			}
+		`,
+		departmentPenetrationContent: css`
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		`,
+		departmentPenetrationList: css`
+			display: flex;
+			width: 100%;
+			max-height: 240px;
+			flex-direction: column;
+			gap: 12px;
+			overflow-x: hidden;
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			padding-right: 4px;
+			scrollbar-gutter: stable;
+		`,
+		departmentPenetrationItem: css`
+			display: grid;
+			flex: 0 0 auto;
+			grid-template-columns: 26px minmax(0, 1fr) auto;
+			column-gap: 8px;
+			align-items: center;
+		`,
+		departmentRank: css`
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 26px;
+			height: 26px;
+			color: var(--department-rank-color);
+			background: var(--department-rank-bg);
+			border-radius: 8px;
+			font-size: 12px;
+			font-variant-numeric: tabular-nums;
+			line-height: 1;
+		`,
+		departmentNameLine: css`
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			min-width: 0;
+		`,
+		departmentName: css`
+			min-width: 0;
+			overflow: hidden;
+			color: ${token.colorText};
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 20px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
+		departmentLevelTag: css`
+			display: inline-flex;
+			min-width: 0;
+			flex: 0 1 auto;
+			align-items: center;
+			min-height: 22px;
+			height: auto;
+			padding: 0 8px;
+			color: ${token.colorTextTertiary};
+			background: ${token.colorFillTertiary};
+			border-radius: 999px;
+			font-size: 12px;
+			line-height: 18px;
+			white-space: normal;
+			word-break: break-all;
+		`,
+		departmentRate: css`
+			color: ${token.colorText};
+			font-size: 14px;
+			font-variant-numeric: tabular-nums;
+			font-weight: 500;
+			line-height: 22px;
+			white-space: nowrap;
+		`,
+		departmentMeta: css`
+			grid-column: 1 / -1;
+			margin-top: 2px;
+			overflow: hidden;
+			color: ${token.colorTextTertiary};
+			font-size: 12px;
+			line-height: 18px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`,
+		departmentProgress: css`
+			grid-column: 1 / -1;
+			line-height: 1;
+
+			.${prefixCls}-progress-inner, .${prefixCls}-progress-bg {
+				height: 6px !important;
 			}
 		`,
 		detailPanel: css`
@@ -328,7 +446,7 @@ export const useStyles = createStyles(
 			overflow-anchor: none;
 
 			.${prefixCls}-table-placeholder {
-				height: ${isMobile ? "360px" : "560px"};
+				height: ${isMobile ? "360px" : "660px"};
 
 				.${prefixCls}-table-cell {
 					height: 100%;

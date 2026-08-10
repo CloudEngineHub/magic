@@ -138,9 +138,6 @@ Rules:
   explicitly asks for it.
 """
 
-    def is_visible_in_ui(self) -> bool:
-        return False
-
     async def get_before_tool_call_friendly_action_and_remark(
         self,
         tool_name: str,

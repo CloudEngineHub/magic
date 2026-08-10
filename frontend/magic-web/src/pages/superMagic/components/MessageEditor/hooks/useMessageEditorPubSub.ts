@@ -29,6 +29,7 @@ interface AddContentPayload {
 	content?: JSONContent
 	extraData?: {
 		hasInput?: boolean
+		focusAtEnd?: boolean
 	}
 }
 
@@ -123,6 +124,10 @@ function useMessageEditorPubSub({
 		if (extraData?.hasInput) {
 			runActiveEditor(activeEditorRef.current, (activeEditor) => {
 				activeEditor.commands.focusFirstSuperPlaceholder?.()
+			})
+		} else if (extraData?.focusAtEnd) {
+			runActiveEditor(activeEditorRef.current, (activeEditor) => {
+				activeEditor.commands.focus("end")
 			})
 		} else {
 			safeEditorFocus(activeEditorRef.current)

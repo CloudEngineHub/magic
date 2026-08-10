@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useLayoutEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { History, Check, RotateCcw, ChevronDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -43,6 +43,10 @@ export function VersionHistorySelector({
 }: VersionHistorySelectorProps) {
 	const { t } = useTranslation("super")
 	const [dropdownOpen, setDropdownOpen] = useState(false)
+
+	useLayoutEffect(() => {
+		setDropdownOpen(false)
+	}, [fileId])
 
 	const hasHistoryVersion = fileVersionsList && fileVersionsList.length > 0
 

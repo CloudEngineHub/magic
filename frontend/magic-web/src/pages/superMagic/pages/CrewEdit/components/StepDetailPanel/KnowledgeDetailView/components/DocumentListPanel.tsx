@@ -17,6 +17,7 @@ import { DocumentSyncStatusBadge } from "./DocumentSyncStatusBadge"
 import { useDocumentListPolling } from "../hooks/useDocumentListPolling"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
 import { RouteName } from "@/routes/constants"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 // 文档类型常量
 const DOCUMENT_TYPES = {
@@ -31,7 +32,8 @@ function DocumentListPanel() {
 	const navigate = useNavigate()
 	const { id: crewId } = useParams<{ id: string }>()
 	const [searchParams] = useSearchParams()
-	const { knowledge } = useCrewEditStore()
+	const { knowledge, conversation } = useCrewEditStore()
+	const readOnly = isReadOnlyProject(conversation.selectedProject?.user_role)
 	const [documentSearchQuery, setDocumentSearchQuery] = useState("")
 	const [isSearchPending, setIsSearchPending] = useState(false)
 	const latestSearchRequestIdRef = useRef(0)
@@ -53,6 +55,7 @@ function DocumentListPanel() {
 	 * 导航到重新绑定模式
 	 */
 	const navigateToRebindMode = useCallback(() => {
+		if (readOnly) return
 		navigate({
 			name: RouteName.CrewEdit,
 			params: { id: crewId },
@@ -62,13 +65,14 @@ function DocumentListPanel() {
 				rebind: "true",
 			},
 		})
-	}, [navigate, crewId, knowledgeCode])
+	}, [navigate, crewId, knowledgeCode, readOnly])
 
 	/**
 	 * 导航到文档创建模式
 	 */
 	const navigateToDocumentCreate = useCallback(
 		(type: string) => {
+			if (readOnly) return
 			navigate({
 				name: RouteName.CrewEdit,
 				params: { id: crewId },
@@ -80,7 +84,7 @@ function DocumentListPanel() {
 				},
 			})
 		},
-		[navigate, crewId, knowledgeCode],
+		[navigate, crewId, knowledgeCode, readOnly],
 	)
 
 	/**
@@ -133,6 +137,7 @@ function DocumentListPanel() {
 	 * 根据知识库类型和是否已有文档决定是直接跳转还是显示菜单
 	 */
 	const handleAddButtonClick = useCallback(() => {
+		if (readOnly) return
 		if (!sourceType) return
 
 		const hasExistingDocuments = docCount > 0
@@ -163,7 +168,7 @@ function DocumentListPanel() {
 
 		// 类型 1：Documents - 显示菜单（通过 dropdown 处理）
 		// 不需要额外处理，由 DocumentAddDropdown 组件控制
-	}, [sourceType, docCount, navigateToRebindMode, navigateToDocumentCreate])
+	}, [sourceType, docCount, navigateToRebindMode, navigateToDocumentCreate, readOnly])
 
 	/**
 	 * 判断是否需要显示下拉菜单
@@ -237,6 +242,7 @@ function DocumentListPanel() {
 
 	// 渲染新增按钮
 	const renderAddButton = (buttonElement: React.ReactNode) => {
+		if (readOnly) return null
 		if (shouldShowDropdown) {
 			// 类型 1：显示下拉菜单
 			return (
@@ -381,24 +387,26 @@ function DocumentListPanel() {
 											text={doc.name}
 										/>
 									</div>
-									<DocumentSyncStatusBadge
-										syncStatus={doc.sync_status}
-										documentCode={doc.code}
-										knowledgeBaseCode={knowledgeCode}
-										onRetrySuccess={async () => {
-											if (!knowledgeCode) return
-											await knowledge.fetchDocumentList(
-												knowledgeCode,
-												documentSearchQuery || undefined,
-												false,
-												true,
-												true,
-												true,
-											)
-											startPolling()
-										}}
-										className="shrink-0"
-									/>
+									{readOnly ? null : (
+										<DocumentSyncStatusBadge
+											syncStatus={doc.sync_status}
+											documentCode={doc.code}
+											knowledgeBaseCode={knowledgeCode}
+											onRetrySuccess={async () => {
+												if (!knowledgeCode) return
+												await knowledge.fetchDocumentList(
+													knowledgeCode,
+													documentSearchQuery || undefined,
+													false,
+													true,
+													true,
+													true,
+												)
+												startPolling()
+											}}
+											className="shrink-0"
+										/>
+									)}
 								</div>
 							</div>
 						)}

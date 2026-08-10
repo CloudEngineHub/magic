@@ -18,6 +18,8 @@ import type {
 	ToolMentionData,
 	ProjectMentionData,
 	DirectoryMentionData,
+	MemoryDirectoryMentionData,
+	MemoryFileMentionData,
 	CanvasMarkerMentionData,
 	DataService,
 	MentionSelectContext,
@@ -164,6 +166,14 @@ export function getMentionUniqueId(attrs: TiptapMentionAttributes | null | undef
 			return `project:${(data as ProjectFileMentionData)?.file_id || ""}/${
 				(data as ProjectFileMentionData)?.file_path || ""
 			}`
+		case MentionItemType.MEMORY_FILE:
+			return `memory-file:${(data as MemoryFileMentionData)?.file_id || ""}/${
+				(data as MemoryFileMentionData)?.file_path || ""
+			}`
+		case MentionItemType.MEMORY_DIRECTORY:
+			return `memory-directory:${(data as MemoryDirectoryMentionData)?.directory_id || ""}/${
+				(data as MemoryDirectoryMentionData)?.directory_path || ""
+			}`
 		case MentionItemType.FOLDER:
 			return `folder:${(data as DirectoryMentionData)?.directory_path || ""}`
 		case MentionItemType.UPLOAD_FILE:
@@ -215,6 +225,9 @@ export function getMentionDisplayName(
 	if (!data) return ""
 
 	const t = i18n.t
+	const memoryPrefix = i18n.t("super/longMemory:mentionPrefix", {
+		defaultValue: "Memory",
+	})
 
 	switch (attrs.type) {
 		case MentionItemType.MCP:
@@ -229,6 +242,10 @@ export function getMentionDisplayName(
 				? `${getProjectDisplayName(data, language)}/${fileName}`
 				: fileName
 		}
+		case MentionItemType.MEMORY_FILE:
+			return `${memoryPrefix}:${(data?.file_name as string) || "File"}`
+		case MentionItemType.MEMORY_DIRECTORY:
+			return `${memoryPrefix}:${(data?.directory_name as string) || "Folder"}`
 		case MentionItemType.UPLOAD_FILE:
 			return (data?.file_name as string) || "File"
 		case MentionItemType.CLOUD_FILE:
@@ -267,8 +284,10 @@ export function getMentionDescription(attrs: TiptapMentionAttributes | null | un
 			return (data?.description as string) || ""
 		case MentionItemType.PROJECT_FILE:
 		case MentionItemType.UPLOAD_FILE:
+		case MentionItemType.MEMORY_FILE:
 			return (data?.file_path as string) || ""
 		case MentionItemType.FOLDER:
+		case MentionItemType.MEMORY_DIRECTORY:
 			return (data?.directory_path as string) || ""
 		case MentionItemType.TOOL:
 			return (data?.description as string) || ""
@@ -299,9 +318,13 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return (data as SkillMentionData)?.icon as string
 		case MentionItemType.PROJECT_FILE:
 		case MentionItemType.UPLOAD_FILE:
+		case MentionItemType.MEMORY_FILE:
 			return (
-				(data as ProjectFileMentionData | UploadFileMentionData)?.file_extension ||
-				(data as ProjectFileMentionData | UploadFileMentionData)?.file_name
+				(data as ProjectFileMentionData | UploadFileMentionData | MemoryFileMentionData)
+					?.file_extension ||
+				(
+					data as ProjectFileMentionData | UploadFileMentionData | MemoryFileMentionData
+				)?.file_name
 					?.split(".")
 					.pop() ||
 				"ts-attachment"
@@ -312,6 +335,7 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 			return "ts-cloud-doc"
 		case MentionItemType.PROJECT:
 		case MentionItemType.FOLDER:
+		case MentionItemType.MEMORY_DIRECTORY:
 			return "ts-folder"
 		default:
 			return "ts-attachment"

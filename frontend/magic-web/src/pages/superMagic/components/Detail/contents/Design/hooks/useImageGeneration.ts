@@ -31,7 +31,6 @@ import {
 	syncFileInfoAfterGenerationComplete,
 	syncFileInfosAfterGenerationComplete,
 } from "../utils/syncFileInfoAfterGenerationComplete"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const IMAGE_MODEL_LIST_TTL_MS = 60_000
 const imageModelListCacheByKey = new Map<string, { models: ImageModelItem[]; fetchedAt: number }>()
@@ -146,6 +145,7 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 		}
 
 		await superMagicModeService.fetchModeList({ force: false })
+		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllImageModelGroups() || []
 		const officialModels: ImageModelItem[] = officialGroups.flatMap(
 			(groupItem: {

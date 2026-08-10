@@ -11,6 +11,7 @@ use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\TargetType;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\AgentSourceType;
 use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 
 class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
@@ -32,10 +33,15 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
         $foundAgentCodes = $this->findExistingAgentCodes($organizationCode, $userId, $agentCodes);
         $dataIsolation = SuperMagicAgentDataIsolation::create($organizationCode, $userId);
         $officialAgentCodes = array_values(array_intersect($agentCodes, $this->getOfficialAgentCodes($dataIsolation)));
-        $ownerships = $foundAgentCodes === []
-            ? []
-            : $this->userAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $foundAgentCodes);
-        $usableLookup = array_fill_keys(array_merge(array_keys($ownerships), $officialAgentCodes), true);
+        $ownerships = $this->userAgentDomainService->findUserAgentOwnershipsByCodes($dataIsolation, $agentCodes);
+        $ownedAgentCodes = [];
+        foreach ($ownerships as $agentCode => $ownership) {
+            if (! in_array($ownership->getSourceType(), [AgentSourceType::LOCAL_CREATE, AgentSourceType::MARKET], true)) {
+                continue;
+            }
+            $ownedAgentCodes[] = $agentCode;
+        }
+        $usableLookup = array_fill_keys(array_merge($ownedAgentCodes, $officialAgentCodes), true);
 
         $usableAgentCodes = [];
         foreach ($agentCodes as $agentCode) {
@@ -49,8 +55,44 @@ class SuperMagicAgentAccessAppService extends AbstractSuperMagicAppService
             'usable_codes' => $usableAgentCodes,
             'missing_codes' => $this->collectMissingCodes(
                 $agentCodes,
-                array_values(array_unique(array_merge($foundAgentCodes, $officialAgentCodes)))
+                array_values(array_unique(array_merge($foundAgentCodes, $ownedAgentCodes, $officialAgentCodes)))
             ),
+        ];
+    }
+
+    /**
+     * @return array{code: string, exists: bool, can_use: bool}
+     */
+    public function checkUsableAgentCode(string $organizationCode, string $userId, string $agentCode): array
+    {
+        $normalizedCode = $this->normalizeAgentCodes([$agentCode])[0] ?? '';
+        if ($normalizedCode === '') {
+            return [
+                'code' => '',
+                'exists' => false,
+                'can_use' => false,
+            ];
+        }
+
+        $result = $this->listUsableAgentCodes($organizationCode, $userId, [$normalizedCode]);
+        $canUse = in_array($normalizedCode, $result['usable_codes'], true);
+        $exists = ! in_array($normalizedCode, $result['missing_codes'], true);
+
+        if (! $exists) {
+            $market = $this->marketEligibilityDomainService->getPublishedByAgentCode($normalizedCode);
+            if ($market !== null) {
+                $exists = $this->marketEligibilityDomainService->isMarketDiscoverableForUser(
+                    PermissionDataIsolation::create($organizationCode, $userId),
+                    $market,
+                    $userId
+                );
+            }
+        }
+
+        return [
+            'code' => $normalizedCode,
+            'exists' => $exists,
+            'can_use' => $canUse,
         ];
     }
 

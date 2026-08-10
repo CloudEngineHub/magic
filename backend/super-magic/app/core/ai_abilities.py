@@ -5,7 +5,7 @@ This module defines the specific AI abilities used in the Super Magic applicatio
 and their default configurations.
 """
 from enum import Enum
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class AIAbility(str, Enum):
@@ -31,6 +31,8 @@ class AIAbility(str, Enum):
 
     # v1.3 implementations
     SKILL_RERANK = "skill_rerank"
+    MEMORY = "memory"
+    AGENT_RERANK = "agent_rerank"
 
 
 # Default configurations for each AI ability
@@ -56,7 +58,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Smart Filename Ability (v1.1)
     # Used for generating smart filenames from webpage titles
     AIAbility.SMART_FILENAME: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "timeout": 60,
         "enabled": True,
     },
@@ -64,7 +66,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Purify Ability (v1.1)
     # Used for content purification and cleaning
     AIAbility.PURIFY: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "max_tokens": 24000,
         "enabled": True,
     },
@@ -72,7 +74,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Deep Write Ability (v1.1)
     # Used for deep content writing with references
     AIAbility.DEEP_WRITE: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "temperature": 0.7,
         "min_reference_files": 3,
         "enabled": True,
@@ -81,16 +83,15 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Analysis Slide Ability (v1.1)
     # Used for analyzing webpage/slide content
     AIAbility.ANALYSIS_SLIDE: {
-        "model_id": "deepseek-v3.2",
+        "model_id": "deepseek-v4-flash",
         "timeout": 60,
         "enabled": True,
     },
 
     # Compact Ability (v1.2)
     # 上下文压缩专属模型，不配置（或配置为空）时使用主 Agent 模型
-    # 默认配置为 qwen3.5-plus；若模型配置不可用，运行时仍会回退到主 Agent 模型
     AIAbility.COMPACT: {
-        "model_id": "qwen3.5-plus",
+        "model_id": "deepseek-v4-flash",
         "enabled": True,
         # TODO: compact 当前未消费 enabled 开关，后续可接入统一的能力启停控制
     },
@@ -113,7 +114,19 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Skill Rerank Ability (v1.3)
     # 用于 find_skills 工具的 LLM 重排驱动，使用轻量快速模型降低延迟
     AIAbility.SKILL_RERANK: {
-        "model_id": "qwen3.5-flash",
+        "model_id": "deepseek-v4-flash",
+    },
+
+    # Agent Rerank Ability (v1.3)
+    # 用于 Agent 搜索结果的轻量模型排序
+    AIAbility.AGENT_RERANK: {
+        "model_id": "deepseek-v4-flash",
+    },
+
+    # 记忆提取能力 (v1.3)
+    # 为后续回合记忆提取保留独立的轻量模型能力
+    AIAbility.MEMORY: {
+        "model_id": "deepseek-v4-flash",
         "enabled": True,
     },
 }
@@ -180,7 +193,7 @@ def get_smart_filename_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.SMART_FILENAME, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.SMART_FILENAME, "model_id", default="deepseek-v4-flash")
 
 
 def get_purify_model_id() -> str:
@@ -189,7 +202,7 @@ def get_purify_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.PURIFY, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.PURIFY, "model_id", default="deepseek-v4-flash")
 
 
 def get_deep_write_model_id() -> str:
@@ -198,7 +211,7 @@ def get_deep_write_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.DEEP_WRITE, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.DEEP_WRITE, "model_id", default="deepseek-v4-flash")
 
 
 def get_analysis_slide_model_id() -> str:
@@ -207,7 +220,7 @@ def get_analysis_slide_model_id() -> str:
     Returns:
         str: 模型ID
     """
-    return get_ability_config(AIAbility.ANALYSIS_SLIDE, "model_id", default="deepseek-v3.2")
+    return get_ability_config(AIAbility.ANALYSIS_SLIDE, "model_id", default="deepseek-v4-flash")
 
 
 def get_analysis_audio_model_id() -> str:
@@ -237,6 +250,16 @@ def get_video_understanding_timeout() -> int:
     return int(get_ability_config(AIAbility.VIDEO_UNDERSTANDING, "timeout", default=600))
 
 
+def get_memory_model_id() -> str:
+    """获取后续回合记忆提取使用的模型 ID。
+
+    Returns:
+        str: 记忆提取能力使用的模型 ID。
+    """
+    model_id = get_ability_config(AIAbility.MEMORY, "model_id", default="deepseek-v4-flash")
+    return str(model_id).strip() or "deepseek-v4-flash"
+
+
 def get_compact_model_id() -> str | None:
     """获取上下文压缩能力使用的模型ID
 
@@ -246,18 +269,47 @@ def get_compact_model_id() -> str | None:
     Returns:
         Optional[str]: 模型ID，未配置或配置不可用时返回 None
     """
+    from agentlang.config.ai_ability_manager import ai_ability_manager
     from agentlang.logger import get_logger
-    from agentlang.llms.factory import LLMFactory
 
     logger = get_logger(__name__)
 
-    model_id = get_ability_config(AIAbility.COMPACT, "model_id", default=None)
+    model_id = ai_ability_manager.get(AIAbility.COMPACT.value, "model_id", default=None)
     if not model_id or not model_id.strip():
         return None
 
     try:
-        LLMFactory.get(model_id)
+        from agentlang.llms.factory import LLMFactory
+        LLMFactory.get_model_config(model_id, expected_type="llm", allow_fallback=False)
         return model_id
     except Exception as e:
-        logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用主 Agent 默认模型: {e}")
+        logger.warning(f"compact 专属模型 '{model_id}' 配置不可用，将使用当前运行时模型: {e}")
         return None
+
+
+def _get_required_ability_model_id(ability: AIAbility) -> str:
+    """返回能力配置模型；未配置或配置为空时使用代码默认模型。"""
+    defaults = AI_ABILITY_DEFAULTS.get(ability, {})
+    default_model_id = str(defaults.get("model_id") or "").strip()
+    if not default_model_id:
+        raise RuntimeError(f"AI ability '{ability.value}' has no default model_id")
+
+    configured_model_id = str(
+        get_ability_config(
+            ability,
+            "model_id",
+            default=default_model_id,
+        )
+        or ""
+    ).strip()
+    return configured_model_id or default_model_id
+
+
+def get_skill_rerank_model_id() -> str:
+    """返回 Skill Candidate 选择模型。"""
+    return _get_required_ability_model_id(AIAbility.SKILL_RERANK)
+
+
+def get_agent_rerank_model_id() -> str:
+    """返回 Agent Candidate 排序模型。"""
+    return _get_required_ability_model_id(AIAbility.AGENT_RERANK)

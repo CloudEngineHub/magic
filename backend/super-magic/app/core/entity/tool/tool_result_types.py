@@ -123,7 +123,7 @@ class WebpageToolResult(ToolResult):
 
 
 class DeepWriteToolResult(ToolResult):
-    """深度写作工具的结构化结果，对应 deepseek-reasoner 模型输出"""
+    """深度写作工具的结构化结果，对应深度写作模型输出"""
     reasoning_content: Optional[str] = Field(default=None, description="详细的写作思考过程内容")
 
     def set_reasoning_content(self, reasoning_content: str) -> None:

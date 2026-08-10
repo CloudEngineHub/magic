@@ -28,7 +28,7 @@ function getProgressLabel({
 
 function ToolProgressNode(props: NodeProps) {
 	const { onMouseEnter, onMouseLeave, checkIsLastMessage } = props
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id)
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id)
 	const tool = node?.tool
 	const detailData = tool?.detail?.data || {}
 	const progress = getProgressValue(detailData?.progress)

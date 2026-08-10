@@ -8,6 +8,8 @@ import ConditionalTooltip from "./ConditionalTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface FileEditButtonsProps {
+	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
+	interactionDisabled?: boolean
 	/** 是否处于编辑模式 */
 	isEditMode?: boolean
 	/** 是否正在保存 */
@@ -25,6 +27,7 @@ interface FileEditButtonsProps {
 }
 
 function FileEditButtons({
+	interactionDisabled = false,
 	isEditMode = false,
 	isSaving = false,
 	showButtonText = false,
@@ -40,33 +43,33 @@ function FileEditButtons({
 	const isMobile = useIsMobile()
 
 	const handleSave = useCallback(async () => {
-		if (isSaving || isSavingLocal || !onSave) return
+		if (interactionDisabled || isSaving || isSavingLocal || !onSave) return
 		setIsSavingLocal(true)
 		try {
 			await onSave()
 		} finally {
 			setIsSavingLocal(false)
 		}
-	}, [onSave, isSaving, isSavingLocal])
+	}, [interactionDisabled, onSave, isSaving, isSavingLocal])
 
 	const handleSaveAndExit = useCallback(async () => {
-		if (isSaving || isSavingLocal || !onSaveAndExit) return
+		if (interactionDisabled || isSaving || isSavingLocal || !onSaveAndExit) return
 		setIsSavingLocal(true)
 		try {
 			await onSaveAndExit()
 		} finally {
 			setIsSavingLocal(false)
 		}
-	}, [onSaveAndExit, isSaving, isSavingLocal])
+	}, [interactionDisabled, onSaveAndExit, isSaving, isSavingLocal])
 
 	const handleCancel = useCallback(() => {
-		if (onCancel) {
+		if (!interactionDisabled && onCancel) {
 			onCancel()
 		}
-	}, [onCancel])
+	}, [interactionDisabled, onCancel])
 
 	useEffect(() => {
-		if (!isEditMode) return
+		if (!isEditMode || interactionDisabled) return
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
@@ -93,7 +96,7 @@ function FileEditButtons({
 		return () => {
 			document.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
+	}, [interactionDisabled, isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
 
 	const showSaving = isSaving || isSavingLocal
 
@@ -105,6 +108,7 @@ function FileEditButtons({
 						variant="outline"
 						size="sm"
 						onClick={onEdit}
+						disabled={interactionDisabled}
 						className={outlineActionButtonClassName}
 					>
 						<FilePenLine size={16} />
@@ -121,7 +125,7 @@ function FileEditButtons({
 							variant="default"
 							size="sm"
 							onClick={handleSave}
-							disabled={showSaving}
+							disabled={interactionDisabled || showSaving}
 							className={primaryActionButtonClassName}
 						>
 							{showSaving ? (
@@ -153,7 +157,7 @@ function FileEditButtons({
 								variant="outline"
 								size="sm"
 								onClick={handleSaveAndExit}
-								disabled={showSaving}
+								disabled={interactionDisabled || showSaving}
 								className={outlineActionButtonClassName}
 							>
 								{showButtonText && <span>{t("fileViewer.saveAndExit")}</span>}
@@ -176,7 +180,7 @@ function FileEditButtons({
 							variant="outline"
 							size="sm"
 							onClick={handleCancel}
-							disabled={showSaving}
+							disabled={interactionDisabled || showSaving}
 							className={outlineActionButtonClassName}
 						>
 							{showButtonText ? (

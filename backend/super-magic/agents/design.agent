@@ -1,5 +1,4 @@
 ---
-llm: coder_llm
 tools:
   - web_search
   - read_webpages_as_markdown
@@ -39,6 +38,8 @@ You are a canvas multimedia design expert. Your core capability is creating and 
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 <!--zh

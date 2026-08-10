@@ -2,6 +2,7 @@
 @import "@/styles/_keyframe-animations.scss";
 @import "@/styles/lucide.css";
 @import "@/styles/tabler-icon.css";
+@import "@/layout/styles/layout-density.css";
 
 /**
  * Import order controls CSS specificity (first has lowest priority):

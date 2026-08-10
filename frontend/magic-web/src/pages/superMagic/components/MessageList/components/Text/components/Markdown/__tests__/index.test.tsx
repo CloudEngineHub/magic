@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MarkdownComponent from "../index"
@@ -16,6 +16,10 @@ import {
 	injectHtmlPreviewScrollbarGutterStyle,
 	resolveStreamingHtmlPreviewMarkup,
 } from "../components/HtmlCodeBlockPreview/preview-document"
+import {
+	MessageViewStateProvider,
+	MessageViewStateScopeProvider,
+} from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -275,6 +279,26 @@ vi.mock(
 )
 
 let mockPreviewAvailableWidth = 482
+
+function VirtualizedMarkdownHarness() {
+	const [mounted, setMounted] = useState(true)
+	return (
+		<MessageViewStateProvider topicKey="topic-1">
+			<button type="button" onClick={() => setMounted((value) => !value)}>
+				toggle-message-row
+			</button>
+			{mounted ? (
+				<MessageViewStateScopeProvider messageKey="message-1">
+					<MarkdownComponent
+						content={
+							"```html\n<!DOCTYPE html><html><body><h1>Hello</h1></body></html>\n```"
+						}
+					/>
+				</MessageViewStateScopeProvider>
+			) : null}
+		</MessageViewStateProvider>
+	)
+}
 
 describe("MessageList Markdown HTML preview", () => {
 	beforeEach(() => {
@@ -626,6 +650,33 @@ describe("MessageList Markdown HTML preview", () => {
 		expect(screen.getByTestId("html-code-block-preview-tab-phone")).toHaveAttribute(
 			"aria-selected",
 			"true",
+		)
+	})
+
+	it("restores the selected HTML preview mode after a virtual row remount", async () => {
+		render(<VirtualizedMarkdownHarness />)
+
+		await waitFor(() =>
+			expect(screen.getByTestId("html-code-block-preview-tab-phone")).toHaveAttribute(
+				"aria-selected",
+				"true",
+			),
+		)
+		fireEvent.click(screen.getByTestId("html-code-block-preview-tab-desktop"))
+		expect(screen.getByTestId("html-code-block-preview-tab-desktop")).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "toggle-message-row" }))
+		expect(screen.queryByTestId("html-code-block-preview")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByRole("button", { name: "toggle-message-row" }))
+		await waitFor(() =>
+			expect(screen.getByTestId("html-code-block-preview-tab-desktop")).toHaveAttribute(
+				"aria-selected",
+				"true",
+			),
 		)
 	})
 

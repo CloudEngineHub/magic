@@ -13,6 +13,15 @@ class AttachmentTag(str, Enum):
     FINAL = "final"  # 最终产物
 
 
+class AttachmentStorageType(str, Enum):
+    """附件生命周期所属的存储类型，与 Magic Service StorageType 保持一致。"""
+
+    WORKSPACE = "workspace"
+    TOPIC = "topic"
+    SNAPSHOT = "snapshot"
+    OBJECT_STORAGE = "object_storage"
+
+
 class Attachment(BaseModel):
     """附件模型
 
@@ -31,3 +40,4 @@ class Attachment(BaseModel):
     file_url: Optional[str] = None  # 文件访问URL，可选
     source: int = Field(default=3, description="文件来源: 3=容器生成, 5=AI图片生成")
     timestamp: int = Field(description="时间戳")
+    storage_type: Optional[AttachmentStorageType] = None  # 文件生命周期所属的存储类型

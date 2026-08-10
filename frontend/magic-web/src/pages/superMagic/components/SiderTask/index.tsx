@@ -17,6 +17,7 @@ import { ScheduledTask } from "@/types/scheduledTask"
 import { useScheduleTask } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduleTask"
 import { useUpdateEffect } from "ahooks"
 import { useRef } from "react"
+import { cn } from "@/lib/utils"
 
 type TaskItemData = ScheduledTask.Task
 
@@ -24,12 +25,14 @@ interface SiderTaskProps {
 	selectWorkspaceId?: string
 	selectProjectId?: string
 	selectTopicId?: string
+	className?: string
 }
 
 export default function SiderTask({
 	selectWorkspaceId,
 	selectProjectId,
 	selectTopicId,
+	className,
 }: SiderTaskProps) {
 	const { t } = useTranslation("super")
 	const siderTaskRef = useRef<HTMLDivElement>(null)
@@ -95,12 +98,14 @@ export default function SiderTask({
 	const { dropdownContent, delegateProps } = useSuperMagicDropdown<TaskItemData>({
 		width: 180,
 		getMenuItems: (taskItem) => {
-			const menuItems = [{
-				key: "run",
-				label: t("scheduleTask.runTask"),
-				icon: <MagicIcon component={IconPlayerRecord} stroke={2} size={18} />,
-				onClick: () => runNow(taskItem),
-			}]
+			const menuItems = [
+				{
+					key: "run",
+					label: t("scheduleTask.runTask"),
+					icon: <MagicIcon component={IconPlayerRecord} stroke={2} size={18} />,
+					onClick: () => runNow(taskItem),
+				},
+			]
 
 			if (taskItem.enabled === 1) {
 				menuItems.push({
@@ -156,38 +161,47 @@ export default function SiderTask({
 	})
 
 	return (
-		<div className="flex h-full flex-col gap-0.5">
-			<div className="flex h-8 shrink-0 items-center justify-between border-gray-200 py-1.5 pl-4 pr-2">
-				<p className="text-xs font-semibold leading-4 text-foreground">
+		<div className={cn("flex h-full flex-col gap-0.5", className)}>
+			<div
+				className="flex h-8 shrink-0 items-center justify-between border-gray-200 py-1.5 pl-4 pr-2"
+				data-slot="project-panel-header"
+			>
+				<p
+					className="text-xs font-semibold leading-4 text-foreground"
+					data-slot="project-panel-title"
+				>
 					{t("scheduleTask.title")}
 				</p>
-				<ActionButton
-					onClick={() =>
-						openCreateModal(onSaveTask, {
-							workspace_id: selectWorkspaceId,
-							project_id: selectProjectId,
-							topic_id: selectTopicId,
-						})
-					}
-					icon={<IconPlus size={16} />}
-					className="rounded stroke-gray-500"
-					textClassName="text-gray-700"
-					// text={t("topicFiles.createMenu")}
-					title={t("topicFiles.createMenu")}
-					stroke={2}
-					gap={2}
-					style={{
-						height: "18px",
-						borderRadius: "4px",
-						padding: "1px 4px",
-					}}
-				/>
+				<div data-slot="project-panel-actions">
+					<ActionButton
+						onClick={() =>
+							openCreateModal(onSaveTask, {
+								workspace_id: selectWorkspaceId,
+								project_id: selectProjectId,
+								topic_id: selectTopicId,
+							})
+						}
+						icon={<IconPlus size={16} />}
+						className="rounded stroke-gray-500"
+						textClassName="text-gray-700"
+						// text={t("topicFiles.createMenu")}
+						title={t("topicFiles.createMenu")}
+						stroke={2}
+						gap={2}
+						style={{
+							height: "18px",
+							borderRadius: "4px",
+							padding: "1px 4px",
+						}}
+					/>
+				</div>
 			</div>
 			<div
 				className="flex h-[calc(100%-32px)] flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 pb-2"
 				onScroll={onScroll}
 				ref={siderTaskRef}
 				data-testid="on-scroll"
+				data-slot="project-panel-content"
 			>
 				{tasks.length ? (
 					tasks.map((item) => (

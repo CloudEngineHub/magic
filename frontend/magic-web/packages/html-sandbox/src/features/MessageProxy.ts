@@ -33,7 +33,8 @@ export class MessageProxy {
 	private enabled = false
 	private entries: MessageEntry[] = []
 	private listener: MessageEntryListener | null = null
-	private originalPostMessage: typeof window.parent.postMessage | null = null
+	private originalParentDescriptor: PropertyDescriptor | undefined
+	private parentPatched = false
 	private incomingHandler: ((event: MessageEvent) => void) | null = null
 
 	enable(): void {
@@ -73,31 +74,12 @@ export class MessageProxy {
 		// Only patch if we're in an iframe
 		if (window === window.parent) return
 
-		// In cross-origin iframes we cannot access window.parent.postMessage
-		// directly. Instead, wrap the *iframe's own* postMessage so that any
-		// call from user code to `window.parent.postMessage(...)` still goes
-		// through the real API, but we intercept calls that the iframe itself
-		// makes (which is the pattern used by iframe code:
-		// `window.parent.postMessage(msg, "*")`).
-		//
-		// Strategy: patch `window.postMessage` on the *current* window (the
-		// iframe) to detect when the iframe calls `postMessage` targeting
-		// its parent by wrapping the native method. We ALSO install a thin
-		// proxy-based wrapper around `window.parent` so that property access
-		// to `window.parent.postMessage(...)` can be intercepted safely.
-
-		const nativePostMessage = window.postMessage.bind(window)
 		const recordMessage = this.recordMessage.bind(this)
 
-		// 1. Wrap window.postMessage — user code that calls
-		//    `window.parent.postMessage(msg, origin)` from inside the same
-		//    origin will actually resolve `window.parent` first, which in a
-		//    cross-origin scenario throws. Most generated iframe code uses
-		//    `parent.postMessage(...)` or `window.parent.postMessage(...)`.
-		//    We therefore create a Proxy for `window.parent` that intercepts
-		//    the `postMessage` property.
-
 		try {
+			// Preserve an existing sandbox bridge instead of assuming `window.parent`
+			// is the browser-native descriptor. Inspector messages depend on that bridge.
+			const originalParentDescriptor = Object.getOwnPropertyDescriptor(window, "parent")
 			const realParent = window.parent
 			const parentProxy = new Proxy(realParent, {
 				get(target, prop, receiver) {
@@ -135,9 +117,8 @@ export class MessageProxy {
 				configurable: true,
 			})
 
-			// Store restore info
-			this.originalPostMessage =
-				nativePostMessage as unknown as typeof window.parent.postMessage
+			this.originalParentDescriptor = originalParentDescriptor
+			this.parentPatched = true
 		} catch {
 			// If Proxy or defineProperty fails (very restrictive env), skip
 			// outgoing interception silently.
@@ -145,16 +126,22 @@ export class MessageProxy {
 	}
 
 	private restoreOutgoing(): void {
-		if (this.originalPostMessage) {
-			// Remove our proxy by deleting the overridden getter, which
-			// restores the native `window.parent` property.
-			try {
+		if (!this.parentPatched) return
+
+		try {
+			if (this.originalParentDescriptor) {
+				Object.defineProperty(window, "parent", this.originalParentDescriptor)
+			} else {
+				// No original own descriptor: remove the temporary override so the
+				// browser-provided inherited `window.parent` property becomes visible again.
 				// biome-ignore lint/performance/noDelete: need to restore native descriptor
 				delete (window as { parent?: Window["parent"] }).parent
-			} catch {
-				// If we can't delete, the environment is restrictive; leave as-is.
 			}
-			this.originalPostMessage = null
+		} catch {
+			// If restoration fails, leave the current bridge untouched.
+		} finally {
+			this.originalParentDescriptor = undefined
+			this.parentPatched = false
 		}
 	}
 

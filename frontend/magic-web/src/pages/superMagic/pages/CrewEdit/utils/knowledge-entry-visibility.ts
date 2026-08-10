@@ -1,6 +1,6 @@
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"
-import { isOwner } from "@/pages/superMagic/utils/permission"
+import { isOwner, isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 export function shouldShowCrewKnowledgeBaseEntry(role?: CollaboratorPermission) {
-	return isOwner(role)
+	return isOwner(role) || isReadOnlyProject(role)
 }

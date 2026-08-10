@@ -28,6 +28,7 @@ import {
 } from "@/apis/modules/crew"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
+import { cn } from "@/lib/utils"
 import { crewService } from "@/services/crew/CrewService"
 import { useCrewEditStore } from "../../context"
 import { RoleIcon } from "../common/RoleIcon"
@@ -57,6 +58,7 @@ interface EditCrewDialogProps {
 	onSuccess?: () => void | Promise<void>
 	isPrePublishMode?: boolean
 	defaultNameRequiredMessage?: string
+	readOnly?: boolean
 }
 
 function createEmptyLocaleFieldDraft(): LocaleFieldDraft {
@@ -140,6 +142,7 @@ function EditCrewDialog({
 	onSuccess,
 	isPrePublishMode = false,
 	defaultNameRequiredMessage,
+	readOnly = false,
 }: EditCrewDialogProps) {
 	const { t: marketT } = useTranslation("crew/market")
 	const { t: createT, i18n } = useTranslation("crew/create")
@@ -151,6 +154,9 @@ function EditCrewDialog({
 	const [localeExpanded, setLocaleExpanded] = useState(false)
 	const [showDefaultNameError, setShowDefaultNameError] = useState(false)
 	const { upload } = useUpload({ storageType: "public" })
+	const readOnlyFieldClassName = readOnly
+		? "cursor-default bg-muted/40 focus-visible:ring-0"
+		: undefined
 
 	const sortedLocales = useMemo(() => {
 		const current = i18n.language as SupportedLocale
@@ -206,11 +212,12 @@ function EditCrewDialog({
 	}, [isSubmitting, onOpenChange])
 
 	function handleAvatarSelect() {
-		if (isSubmitting) return
+		if (readOnly || isSubmitting) return
 		avatarInputRef.current?.click()
 	}
 
 	function updateField(field: LocalizeField, value: string) {
+		if (readOnly) return
 		if (field === "name" && showDefaultNameError && value.trim()) setShowDefaultNameError(false)
 
 		setDraft((prev) => ({
@@ -227,6 +234,7 @@ function EditCrewDialog({
 		locale: keyof LocaleFieldDraft,
 		value: string,
 	) {
+		if (readOnly) return
 		setDraft((prev) => ({
 			...prev,
 			[field]: {
@@ -237,6 +245,7 @@ function EditCrewDialog({
 	}
 
 	function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+		if (readOnly) return
 		const file = event.target.files?.[0]
 		if (!file) return
 
@@ -252,6 +261,7 @@ function EditCrewDialog({
 	}
 
 	async function handleConfirm() {
+		if (readOnly) return
 		if (!store.crewCode) return
 		if (isPrePublishMode && !draft.name.default.trim()) {
 			setShowDefaultNameError(true)
@@ -314,20 +324,22 @@ function EditCrewDialog({
 						<DialogTitle className="text-base font-semibold">
 							{isPrePublishMode
 								? createT("publishNameDialog.title")
-								: marketT("editCrew.title")}
+								: marketT(readOnly ? "editCrew.viewTitle" : "editCrew.title")}
 						</DialogTitle>
 					</DialogHeader>
 
 					<ScrollArea className="max-h-[70vh] p-4">
 						<div className="flex flex-col gap-4" data-testid="edit-crew-form">
-							<input
-								ref={avatarInputRef}
-								type="file"
-								accept="image/*"
-								className="hidden"
-								onChange={handleAvatarChange}
-								data-testid="edit-crew-avatar-input"
-							/>
+							{readOnly ? null : (
+								<input
+									ref={avatarInputRef}
+									type="file"
+									accept="image/*"
+									className="hidden"
+									onChange={handleAvatarChange}
+									data-testid="edit-crew-avatar-input"
+								/>
+							)}
 
 							<div className="flex items-start gap-2">
 								<div className="flex h-9 flex-1 items-center">
@@ -353,17 +365,19 @@ function EditCrewDialog({
 											</div>
 										)}
 									</div>
-									<Button
-										variant="outline"
-										size="sm"
-										className="gap-1.5"
-										onClick={handleAvatarSelect}
-										data-testid="edit-crew-avatar-upload-button"
-										disabled={isSubmitting}
-									>
-										<Upload className="size-4" />
-										{marketT("editCrew.actions.upload")}
-									</Button>
+									{readOnly ? null : (
+										<Button
+											variant="outline"
+											size="sm"
+											className="gap-1.5"
+											onClick={handleAvatarSelect}
+											data-testid="edit-crew-avatar-upload-button"
+											disabled={isSubmitting}
+										>
+											<Upload className="size-4" />
+											{marketT("editCrew.actions.upload")}
+										</Button>
+									)}
 								</div>
 							</div>
 
@@ -390,9 +404,11 @@ function EditCrewDialog({
 										onChange={(event) =>
 											updateField("name", event.target.value)
 										}
-										placeholder={createT("card.enterName")}
+										placeholder={readOnly ? "—" : createT("card.enterName")}
+										className={readOnlyFieldClassName}
 										data-testid="edit-crew-name-input"
 										disabled={isSubmitting}
+										readOnly={readOnly}
 										aria-invalid={showDefaultNameError}
 									/>
 									{showDefaultNameError ? (
@@ -422,9 +438,11 @@ function EditCrewDialog({
 										onChange={(event) =>
 											updateField("role", event.target.value)
 										}
-										placeholder={createT("card.enterRole")}
+										placeholder={readOnly ? "—" : createT("card.enterRole")}
+										className={readOnlyFieldClassName}
 										data-testid="edit-crew-role-input"
 										disabled={isSubmitting}
+										readOnly={readOnly}
 									/>
 								</div>
 							</div>
@@ -444,10 +462,16 @@ function EditCrewDialog({
 										onChange={(event) =>
 											updateField("description", event.target.value)
 										}
-										placeholder={createT("card.enterDescription")}
-										className="min-h-[96px] resize-none"
+										placeholder={
+											readOnly ? "—" : createT("card.enterDescription")
+										}
+										className={cn(
+											"min-h-[96px] resize-none",
+											readOnlyFieldClassName,
+										)}
 										data-testid="edit-crew-description-input"
 										disabled={isSubmitting}
+										readOnly={readOnly}
 									/>
 								</div>
 							</div>
@@ -511,10 +535,16 @@ function EditCrewDialog({
 																				.default,
 																		},
 																	)
-																: createT("card.enterName")
+																: readOnly
+																	? "—"
+																	: createT("card.enterName")
 														}
-														className="w-[320px] shrink-0"
+														className={cn(
+															"w-[320px] shrink-0",
+															readOnlyFieldClassName,
+														)}
 														disabled={isSubmitting}
+														readOnly={readOnly}
 														data-testid={`edit-crew-locale-name-${locale}`}
 													/>
 												</div>
@@ -542,10 +572,16 @@ function EditCrewDialog({
 																				.default,
 																		},
 																	)
-																: createT("card.enterRole")
+																: readOnly
+																	? "—"
+																	: createT("card.enterRole")
 														}
-														className="w-[320px] shrink-0"
+														className={cn(
+															"w-[320px] shrink-0",
+															readOnlyFieldClassName,
+														)}
 														disabled={isSubmitting}
+														readOnly={readOnly}
 														data-testid={`edit-crew-locale-role-${locale}`}
 													/>
 												</div>
@@ -575,10 +611,18 @@ function EditCrewDialog({
 																				.default,
 																		},
 																	)
-																: createT("card.enterDescription")
+																: readOnly
+																	? "—"
+																	: createT(
+																			"card.enterDescription",
+																		)
 														}
-														className="min-h-[96px] w-[320px] shrink-0 resize-none"
+														className={cn(
+															"min-h-[96px] w-[320px] shrink-0 resize-none",
+															readOnlyFieldClassName,
+														)}
 														disabled={isSubmitting}
+														readOnly={readOnly}
 														data-testid={`edit-crew-locale-description-${locale}`}
 													/>
 												</div>
@@ -598,23 +642,29 @@ function EditCrewDialog({
 					<DialogFooter className="border-t border-border px-3 py-3">
 						<div className="flex items-center gap-1.5">
 							<Button
-								variant="outline"
+								variant={readOnly ? "default" : "outline"}
 								size="sm"
 								onClick={handleClose}
 								data-testid="edit-crew-cancel-button"
 								disabled={isSubmitting}
 							>
-								{marketT("editCrew.buttons.cancel")}
+								{marketT(
+									readOnly ? "editCrew.buttons.close" : "editCrew.buttons.cancel",
+								)}
 							</Button>
-							<Button
-								size="sm"
-								disabled={isSubmitting}
-								onClick={handleConfirm}
-								data-testid="edit-crew-confirm-button"
-							>
-								{isSubmitting && <Loader2 className="mr-1.5 size-4 animate-spin" />}
-								{marketT("editCrew.buttons.confirm")}
-							</Button>
+							{readOnly ? null : (
+								<Button
+									size="sm"
+									disabled={isSubmitting}
+									onClick={handleConfirm}
+									data-testid="edit-crew-confirm-button"
+								>
+									{isSubmitting && (
+										<Loader2 className="mr-1.5 size-4 animate-spin" />
+									)}
+									{marketT("editCrew.buttons.confirm")}
+								</Button>
+							)}
 						</div>
 					</DialogFooter>
 				</DialogContent>

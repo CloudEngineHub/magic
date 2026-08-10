@@ -225,7 +225,7 @@ class TopicApi extends AbstractApi
 
         $sandboxId = $this->agentAppService->ensureSandboxInitialized($dataIsolation, (int) $topicId, skipInitMessages: true);
 
-        $result = $this->agentAppService->rollbackCheckpoint($dataIsolation, $sandboxId, $targetMessageId);
+        $result = $this->agentAppService->rollbackCheckpoint($dataIsolation, (int) $topicId, $sandboxId, $targetMessageId);
 
         if (! $result->isSuccess()) {
             ExceptionBuilder::throw(AgentErrorCode::SANDBOX_NOT_FOUND, $result->getMessage());

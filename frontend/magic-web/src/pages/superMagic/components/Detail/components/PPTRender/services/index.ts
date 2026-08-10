@@ -4,6 +4,7 @@ export {
 	SlideScreenshotService,
 	getScreenshotService,
 	createScreenshotService,
+	type SlideScreenshotRequestKind,
 } from "./SlideScreenshotService"
 export {
 	PPTLoggerService,
@@ -18,3 +19,4 @@ export {
 	type IncrementalUpdateContext,
 } from "./PPTIncrementalUpdateService"
 export { PPTSyncManager } from "./PPTSyncManager"
+export { PPTSlideContentScheduler, type PPTSlideContentPriority } from "./PPTSlideContentScheduler"

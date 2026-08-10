@@ -7,24 +7,27 @@ import {
 import { genAppMessageId } from "@/utils/random"
 import type { AskUserActionDetail } from "@/pages/superMagic/components/MessageList/utils/askUser"
 
-export interface SendAskUserToolReplyParams {
+export type UserToolCallReplyDetail = AskUserActionDetail | Record<string, unknown>
+
+export interface SendUserToolCallReplyParams {
 	conversationId: string
 	topicId: string
 	toolName: string
 	toolCallId: string
-	/** 协议见 ask-user API 文档 §5.2：tool_reply.detail 是对象，不是字符串 */
-	detail: AskUserActionDetail
-	isAnswered: boolean
+	/** user_tool_call.detail 是对象，不是字符串 */
+	detail: UserToolCallReplyDetail
+	isAnswered?: boolean
 }
 
-export async function sendAskUserToolReply({
+export type SendAskUserToolReplyParams = SendUserToolCallReplyParams
+
+export async function sendUserToolCallReply({
 	conversationId,
 	topicId,
 	toolName,
 	toolCallId,
 	detail,
-	isAnswered,
-}: SendAskUserToolReplyParams) {
+}: SendUserToolCallReplyParams) {
 	/**
 	 * IMPORTANT:
 	 * 后端按 TipTap 文档解析 rich_text.content。
@@ -54,4 +57,8 @@ export async function sendAskUserToolReply({
 		conversation_id: conversationId,
 		message,
 	})
+}
+
+export async function sendAskUserToolReply(params: SendAskUserToolReplyParams) {
+	return sendUserToolCallReply(params)
 }

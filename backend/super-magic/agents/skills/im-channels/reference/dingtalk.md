@@ -1,36 +1,36 @@
-# 钉钉 AI 机器人
+# DingTalk AI Bot
 
-通过钉钉 Stream 模式接入，支持流式打字效果。
+Connects via DingTalk Stream mode with streaming typing support.
 
-## 前置条件
+## Prerequisites
 
-在钉钉开放平台创建机器人应用，获取：
-- **Client ID**：应用的 AppKey
-- **Client Secret**：应用的 AppSecret
+Create a bot application on the DingTalk Open Platform and obtain:
+- **Client ID**: The application's AppKey
+- **Client Secret**: The application's AppSecret
 
-同时需要在钉钉开放平台开启机器人的 **Stream 模式**。
+Also enable **Stream mode** for the bot on the DingTalk Open Platform.
 
-## 凭据收集
+## Credential Collection
 
-依次询问用户：
-1. 「请提供钉钉机器人应用的 Client ID（AppKey）」
-2. 「请提供对应的 Client Secret（AppSecret）」
+Ask the user in sequence:
+1. "Please provide the DingTalk bot's Client ID (AppKey)"
+2. "Please provide the corresponding Client Secret (AppSecret)"
 
-## 建立连接
+## Establish Connection
 
-（用 run_sdk_snippet 工具，python_code 参数为：）
+(Use run_sdk_snippet tool, python_code parameter:)
 
 ```
 from sdk.tool import tool
 
 result = tool.call("connect_dingtalk_bot", {
-    "client_id": "<用户提供的 Client ID>",
-    "client_secret": "<用户提供的 Client Secret>",
+    "client_id": "<Client ID provided by user>",
+    "client_secret": "<Client Secret provided by user>",
 })
 print(result.content)
 ```
 
-## 结果处理
+## Result Handling
 
-- 成功：「钉钉机器人已成功连接，现在可以在钉钉中与我对话了，支持流式打字效果」
-- 失败：告知错误，建议检查 Client ID 和 Client Secret 是否正确，以及是否已在开放平台开通 Stream 模式
+- Success: "DingTalk bot connected successfully. You can now chat with me in DingTalk with streaming typing support."
+- Failure: Report the error, suggest checking whether Client ID and Client Secret are correct, and whether Stream mode has been enabled on the Open Platform

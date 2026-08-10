@@ -1,9 +1,4 @@
 import { ProjectListItem, CollaborationProjectListItem } from "../pages/Workspace/types"
-import {
-	SHARE_WORKSPACE_ID,
-	isOtherCollaborationProject,
-	isWorkspaceShortcutProject,
-} from "../constants"
 import { env } from "@/utils/env"
 import { convertSearchParams, getRoutePath } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
@@ -48,16 +43,25 @@ export const genProjectTopicUrl = (
 }
 
 export const generateCollaborationProjectUrl = (
-	project: CollaborationProjectListItem | ProjectListItem,
+	project: (CollaborationProjectListItem | ProjectListItem) & { app_id?: string },
 ) => {
 	const url = new URL(window.location.href)
-	const path = getRoutePath({
-		name: RouteName.SuperWorkspaceProjectState,
-		params: {
-			projectId: project.id,
-		},
-		query: convertSearchParams(url.searchParams),
-	})
+	const query = convertSearchParams(url.searchParams)
+	const path = project.app_id
+		? getRoutePath({
+				name: RouteName.MicroApp,
+				params: {
+					appId: encodeURIComponent(project.app_id),
+				},
+				query,
+			})
+		: getRoutePath({
+				name: RouteName.SuperWorkspaceProjectState,
+				params: {
+					projectId: project.id,
+				},
+				query,
+			})
 	const domain = env("MAGIC_WEB_URL") || window.location.origin
 	return `${domain}${path}`
 }

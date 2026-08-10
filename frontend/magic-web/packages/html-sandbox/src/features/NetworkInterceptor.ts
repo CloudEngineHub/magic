@@ -68,16 +68,18 @@ export class NetworkInterceptor {
 
 		window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 			const startTime = Date.now()
-			const method = (init?.method ?? "GET").toUpperCase()
+			const inputRequest = input instanceof Request ? input : null
+			const method = (init?.method ?? inputRequest?.method ?? "GET").toUpperCase()
 			const url =
 				typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-			const requestHeaders = this.extractHeaders(init?.headers)
-			const requestBody = this.bodyToString(init?.body)
+			const requestHeaders = this.extractHeaders(init?.headers ?? inputRequest?.headers)
+			const requestBodyPromise = this.extractFetchBody(inputRequest, init)
 			const id = `n_${startTime}_${Math.random().toString(36).slice(2, 8)}`
 
 			try {
 				const response = await this.originalFetch!(input, init)
 				const endTime = Date.now()
+				const requestBody = await requestBodyPromise
 
 				// Clone response so we can read the body without consuming it
 				const clone = response.clone()
@@ -108,6 +110,7 @@ export class NetworkInterceptor {
 				return response
 			} catch (err) {
 				const endTime = Date.now()
+				const requestBody = await requestBodyPromise
 				const entry: NetworkEntry = {
 					id,
 					method,
@@ -250,12 +253,12 @@ export class NetworkInterceptor {
 	private extractHeaders(headers?: HeadersInit): Record<string, string> {
 		const result: Record<string, string> = {}
 		if (!headers) return result
-		if (headers instanceof Headers) {
-			headers.forEach((value, key) => {
+		if (Array.isArray(headers)) {
+			headers.forEach(([key, value]) => {
 				result[key] = value
 			})
-		} else if (Array.isArray(headers)) {
-			headers.forEach(([key, value]) => {
+		} else if (typeof (headers as Headers).forEach === "function") {
+			;(headers as Headers).forEach((value, key) => {
 				result[key] = value
 			})
 		} else {
@@ -272,6 +275,24 @@ export class NetworkInterceptor {
 			result[key] = value
 		})
 		return result
+	}
+
+	private async extractFetchBody(
+		inputRequest: Request | null,
+		init?: RequestInit,
+	): Promise<string | null> {
+		if (init && "body" in init) {
+			return this.bodyToString(init.body)
+		}
+		if (!inputRequest || inputRequest.body === null) {
+			return null
+		}
+
+		try {
+			return this.truncate(await inputRequest.clone().text())
+		} catch {
+			return "[Failed to read request body]"
+		}
 	}
 
 	private bodyToString(body: unknown): string | null {

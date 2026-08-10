@@ -19,6 +19,8 @@ export const enum IntermediateMessageType {
 	SuperMagicMessageQueueChange = "super_magic_message_queue_change",
 	/** 超级麦吉工程文件变更 */
 	SuperMagicFileChange = "super_magic_file_change",
+	/** 超级麦吉检查点撤销、恢复与提交后的权威刷新通知 */
+	SuperMagicCheckpointRollback = "super_magic_checkpoint_rollback",
 }
 
 /**
@@ -89,6 +91,10 @@ export interface SuperMagicChunkMessage extends SeqMessageBase {
 	chat_topic_id: string
 	message_id: string
 	super_magic_chunk: {
+		/** 同一逻辑消息的稳定 ID；后端保证至少在 Topic 内唯一 */
+		super_message_id: string
+		/** 当前流式消息所属任务 ID */
+		task_id: string
 		/** 当前流式块索引 */
 		i: number
 		/** 使用统计 */
@@ -144,6 +150,26 @@ export interface SuperMagicFileChangeMessage extends Partial<SeqMessageBase> {
 	refresh_parent_ids?: string[]
 }
 
+export type SuperMagicCheckpointRollbackAction = "start" | "undo" | "commit" | "rollback"
+
+/**
+ * 检查点变更只携带刷新路由与影响范围，不是普通 IM 消息，不能继承 SeqMessageBase。
+ * 外层 seq_id 是领域事件 ID，不代表消息列表已经持久化到该水位。
+ */
+export interface SuperMagicCheckpointRollbackMessage {
+	type: IntermediateMessageType.SuperMagicCheckpointRollback
+	action: SuperMagicCheckpointRollbackAction
+	project_id: string
+	topic_id: string
+	chat_topic_id: string
+	target_seq_id: string | null
+	affected_seq_ids: string[]
+	affected_count: number
+	truncated: boolean
+	refresh_required: true
+	timestamp: string
+}
+
 /**
  * 即时消息
  */
@@ -153,4 +179,5 @@ export type IntermediateMessage =
 	| RawMessage
 	| SuperMagicMessageQueueMessage
 	| SuperMagicFileChangeMessage
+	| SuperMagicCheckpointRollbackMessage
 	| SuperMagicChunkMessage

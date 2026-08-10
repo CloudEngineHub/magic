@@ -7,7 +7,9 @@ function createUserMessage(appMessageId = "user-message", status?: string): Supe
 		type: "rich_text",
 		role: "user",
 		app_message_id: appMessageId,
+		super_message_id: appMessageId,
 		status,
+		imStatus: status,
 	} as SuperMagicMessageItem
 }
 
@@ -16,6 +18,7 @@ function createAssistantMessage(appMessageId = "assistant-message"): SuperMagicM
 		type: "agent_reply",
 		role: "assistant",
 		app_message_id: appMessageId,
+		super_message_id: appMessageId,
 	} as SuperMagicMessageItem
 }
 
@@ -69,13 +72,16 @@ describe("resolveTopicConversationLoadingState", () => {
 		const state = resolveTopicConversationLoadingState({
 			topicMessages: [
 				createAssistantMessage("old-running-assistant"),
-				createUserMessage("active-revoked-user", "revoked"),
+				{
+					...createUserMessage("active-revoked-user", "read"),
+					imStatus: "revoked",
+				},
 			],
 			getMessageNode,
 			getOptimisticStatus: () => undefined,
 		})
 
 		expect(state.isLoading).toBe(false)
-		expect(state.lastMessage?.status).toBe("revoked")
+		expect(state.lastMessage?.imStatus).toBe("revoked")
 	})
 })

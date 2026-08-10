@@ -76,4 +76,6 @@ return [
     'page_size_min' => '每页数量必须大于等于1',
     'page_size_max' => '每页数量不能超过100',
     'keyword_max' => '关键词不能超过100个字符',
+    'system_default_agent_invalid' => '系统默认数字员工配置无效',
+    'system_default_agent_protected' => '系统默认数字员工不允许执行该操作',
 ];

@@ -40,6 +40,7 @@
         "firebase/php-jwt": "^7.0",
         "giggsey/libphonenumber-for-php": "8.13.29",
         "google/protobuf": "^4.28",
+        "guzzlehttp/guzzle": "7.15.2",
         "hyperf/amqp": "^3.1",
         "hyperf/cache": "^3.1",
         "hyperf/constants": "~3.1",
@@ -80,7 +81,8 @@
         "volcengine/volc-sdk-php": "^1.0",
         "w7corp/easywechat": "^6.17",
         "wyndow/fuzzywuzzy": "^0.6.0",
-        "hyperf/tracer": "^3.1"
+        "hyperf/tracer": "^3.1",
+            "mongodb/mongodb": "2.2.*"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "v3.86.0",
@@ -99,7 +101,8 @@
     },
     "autoload": {
         "psr-4": {
-            "App\\": "app/"
+            "App\\": "app/",
+            "MagicBase\\": "magicbase/"
         },
         "files": [
             "app/Infrastructure/Util/Functions/functions.php"
@@ -107,7 +110,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "HyperfTest\\": "test/"
+            "HyperfTest\\": "test/",
+            "MagicBaseTest\\": "magicbase/tests/"
         },
         "files": [
             "app/Infrastructure/Util/Functions/functions.php"

@@ -1,5 +1,6 @@
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { userStore } from "@/models/user"
+import { getHtmlPermissionGrantStore } from "@/pages/superMagic/components/Detail/contents/HTML/iframe-api/services/IndexedDbHtmlPermissionGrantStore"
 import type { User } from "@/types/user"
 import { logger as Logger } from "@/utils/log"
 import { BroadcastChannelSender } from "@/broadcastChannel"
@@ -139,6 +140,14 @@ export class AccountService {
 	 */
 	deleteAccount = async (unionId?: string) => {
 		logger.report("deleteAccount", new Error())
+		// Account removal is a security lifecycle event. Clear the shared consent cache even
+		// when another cached account remains, because stored grants intentionally have no plaintext owner ID.
+		try {
+			await getHtmlPermissionGrantStore().clear()
+		} catch (error) {
+			// Permission storage cleanup is best effort and must not prevent token removal or logout.
+			logger.error("Failed to clear HTML permission grants during account removal", error)
+		}
 		const allClean = async () => {
 			MessageService.destroy()
 

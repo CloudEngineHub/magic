@@ -6,41 +6,51 @@ import SuperMagicService from "../../../services"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useCreateTopicListener } from "../useCreateTopicListener"
 
-const { selectedTopic, latestTopic, topicStoreMock, mockTopicServiceCreateTopic } = vi.hoisted(() => ({
-	selectedTopic: {
-		id: "topic-1",
-		user_id: "user-1",
-		chat_topic_id: "chat-topic-1",
-		chat_conversation_id: "conversation-topic-1",
-		topic_name: "Existing Topic",
-		task_status: "finished",
-		task_mode: "chat",
-		project_id: "project-1",
-		topic_mode: "custom_agent",
-		agent_code: "employee-code-1",
-		updated_at: "2026-04-08T00:00:00Z",
-		workspace_id: "workspace-1",
-		token_used: null,
-	} as Topic,
-	latestTopic: {
-		id: "topic-latest",
-		user_id: "user-1",
-		chat_topic_id: "chat-topic-latest",
-		chat_conversation_id: "conversation-topic-latest",
-		topic_name: "Latest Topic",
-		task_status: "finished",
-		task_mode: "chat",
-		project_id: "project-1",
-		topic_mode: "custom_agent",
-		agent_code: "employee-code-latest",
-		updated_at: "2026-04-08T00:00:00Z",
-		workspace_id: "workspace-1",
-		token_used: null,
-	} as Topic,
-	topicStoreMock: {
-		selectedTopic: null as Topic | null,
+const { selectedTopic, latestTopic, topicStoreMock, mockTopicServiceCreateTopic } = vi.hoisted(
+	() => ({
+		selectedTopic: {
+			id: "topic-1",
+			user_id: "user-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-topic-1",
+			topic_name: "Existing Topic",
+			task_status: "finished",
+			task_mode: "chat",
+			project_id: "project-1",
+			topic_mode: "custom_agent",
+			agent_code: "employee-code-1",
+			updated_at: "2026-04-08T00:00:00Z",
+			workspace_id: "workspace-1",
+			token_used: null,
+		} as Topic,
+		latestTopic: {
+			id: "topic-latest",
+			user_id: "user-1",
+			chat_topic_id: "chat-topic-latest",
+			chat_conversation_id: "conversation-topic-latest",
+			topic_name: "Latest Topic",
+			task_status: "finished",
+			task_mode: "chat",
+			project_id: "project-1",
+			topic_mode: "custom_agent",
+			agent_code: "employee-code-latest",
+			updated_at: "2026-04-08T00:00:00Z",
+			workspace_id: "workspace-1",
+			token_used: null,
+		} as Topic,
+		topicStoreMock: {
+			selectedTopic: null as Topic | null,
+		},
+		mockTopicServiceCreateTopic: vi.fn(),
+	}),
+)
+
+const defaultSelectionState = vi.hoisted(() => ({
+	selection: {
+		modeIdentifier: "general" as TopicMode,
+		topicPattern: "general" as TopicMode,
+		agentCode: undefined as string | undefined,
 	},
-	mockTopicServiceCreateTopic: vi.fn(),
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -84,9 +94,18 @@ vi.mock("../../../services/topicService", () => ({
 	})),
 }))
 
+vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
+	resolveDefaultAgentSelection: () => defaultSelectionState.selection,
+}))
+
 describe("useCreateTopicListener", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		defaultSelectionState.selection = {
+			modeIdentifier: TopicMode.General,
+			topicPattern: TopicMode.General,
+			agentCode: undefined,
+		}
 		topicStoreMock.selectedTopic = null
 		mockTopicServiceCreateTopic.mockResolvedValue({ ...latestTopic, id: "topic-new" })
 	})
@@ -96,8 +115,7 @@ describe("useCreateTopicListener", () => {
 		renderHook(() => useCreateTopicListener())
 
 		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
-			| ((payload?: { topicMode?: TopicMode }) => void)
-			| undefined
+			((payload?: { topicMode?: TopicMode }) => void) | undefined
 		expect(handler).toBeTypeOf("function")
 
 		topicStoreMock.selectedTopic = latestTopic
@@ -116,8 +134,7 @@ describe("useCreateTopicListener", () => {
 		renderHook(() => useCreateTopicListener())
 
 		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
-			| ((payload?: { topicMode?: TopicMode }) => void)
-			| undefined
+			((payload?: { topicMode?: TopicMode }) => void) | undefined
 		expect(handler).toBeTypeOf("function")
 
 		handler?.({ topicMode: "SMA-employee-code-2" as TopicMode })
@@ -128,6 +145,30 @@ describe("useCreateTopicListener", () => {
 				...latestTopic,
 				topic_mode: TopicMode.CustomAgent,
 				agent_code: "SMA-employee-code-2",
+			},
+			onNavigated: undefined,
+		})
+	})
+
+	it("uses a configured non-SMA default employee as plain topic_mode", () => {
+		defaultSelectionState.selection = {
+			modeIdentifier: "configured-agent",
+			topicPattern: "configured-agent" as TopicMode,
+			agentCode: undefined,
+		}
+		topicStoreMock.selectedTopic = latestTopic
+		renderHook(() => useCreateTopicListener())
+
+		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
+			((payload?: { topicMode?: TopicMode }) => void) | undefined
+		handler?.({ topicMode: "configured-agent" as TopicMode })
+
+		expect(SuperMagicService.handleCreateTopic).toHaveBeenCalledWith({
+			selectedProject: { id: "project-1" },
+			sourceTopic: {
+				...latestTopic,
+				topic_mode: "configured-agent",
+				agent_code: undefined,
 			},
 			onNavigated: undefined,
 		})
@@ -193,8 +234,7 @@ describe("useCreateTopicListener", () => {
 		renderHook(() => useCreateTopicListener({ topicStore: topicStoreMock as any }))
 
 		const handler = vi.mocked(pubsub.subscribe).mock.calls[0]?.[1] as
-			| ((payload?: { topicMode?: TopicMode }) => void)
-			| undefined
+			((payload?: { topicMode?: TopicMode }) => void) | undefined
 		expect(handler).toBeTypeOf("function")
 
 		handler?.({ topicMode: "ip-manager" as TopicMode })

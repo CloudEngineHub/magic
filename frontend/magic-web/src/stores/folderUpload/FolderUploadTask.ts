@@ -549,6 +549,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 					// 处理单文件完成的实时保存
 					this.handleFileCompleted(fileId, result)
 				},
+				this.options.fileScope,
 			)
 		})
 

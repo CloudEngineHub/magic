@@ -62,7 +62,11 @@ export {
 	TimePresetKey,
 } from "./TimeFilterPanel"
 export { getSyncedTimeFilterValue } from "./TimeFilterPanel"
-export type { TimeFilterHistoryItem, TimeRangeValue } from "./TimeFilterPanel"
+export type {
+	TimeFilterHistoryItem,
+	TimeFilterPrecisionValue,
+	TimeRangeValue,
+} from "./TimeFilterPanel"
 
 export { default as MagicCard } from "./MagicCard"
 export type { MagicCardProps } from "./MagicCard"

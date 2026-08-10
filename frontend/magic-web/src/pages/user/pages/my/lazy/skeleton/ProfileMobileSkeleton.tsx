@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/base/Skeleton"
  *   - ProfileActionEntry: profile action entry
  *   - AccountDetailsSection: 账户明细 (积分明细 + 消费订单)
  *   - AccountManagementSection: 账户管理 (个人信息 + 账户安全 + 登录设备)
- *   - SystemSettingsSection: 系统设置 (设置 + 关于我们 + 问题反馈)
+ *   - SystemSettingsSection: 系统设置 (设置 + 关于我们)
  *   - LogoutButton: 退出登录按钮
  */
 export default function ProfileMobileSkeleton() {
@@ -134,7 +134,7 @@ export default function ProfileMobileSkeleton() {
 							<Skeleton.Title animated style={{ width: 60, height: 16 }} />
 						</div>
 						<div className="overflow-hidden rounded-xl bg-fill">
-							{Array.from({ length: 3 }).map((_, index) => (
+							{Array.from({ length: 2 }).map((_, index) => (
 								<div key={index} className="flex h-11 items-center gap-2 px-3 py-2">
 									<Skeleton.Title
 										animated

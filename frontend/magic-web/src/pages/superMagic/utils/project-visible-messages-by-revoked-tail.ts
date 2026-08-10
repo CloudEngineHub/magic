@@ -2,10 +2,15 @@ import { MessageStatus } from "@/pages/superMagic/pages/Workspace/types"
 
 interface RevokedProjectionMessage {
 	status?: string
+	imStatus?: string
 	role?: string
 	seq_id?: string
 	app_message_id?: string
 	message_id?: string
+}
+
+function getImStatus(message: RevokedProjectionMessage) {
+	return message.imStatus ?? message.status
 }
 
 export interface RevokedMessageBranchProjection<T> {
@@ -31,8 +36,10 @@ function projectLegacyStatusTail<T extends RevokedProjectionMessage>(
 		}
 	}
 
-	if (messages[messages.length - 1]?.status !== MessageStatus.REVOKED) {
-		const mainMessages = messages.filter((message) => message.status !== MessageStatus.REVOKED)
+	if (getImStatus(messages[messages.length - 1]) !== MessageStatus.REVOKED) {
+		const mainMessages = messages.filter(
+			(message) => getImStatus(message) !== MessageStatus.REVOKED,
+		)
 		return {
 			mainMessages,
 			revokedBranchMessages: [],
@@ -44,14 +51,14 @@ function projectLegacyStatusTail<T extends RevokedProjectionMessage>(
 	let activeRevokedSegmentStart = messages.length - 1
 	while (
 		activeRevokedSegmentStart > 0 &&
-		messages[activeRevokedSegmentStart - 1]?.status === MessageStatus.REVOKED
+		getImStatus(messages[activeRevokedSegmentStart - 1]) === MessageStatus.REVOKED
 	) {
 		activeRevokedSegmentStart -= 1
 	}
 
 	const mainMessages = messages
 		.slice(0, activeRevokedSegmentStart)
-		.filter((message) => message.status !== MessageStatus.REVOKED)
+		.filter((message) => getImStatus(message) !== MessageStatus.REVOKED)
 	const revokedBranchMessages = messages.slice(activeRevokedSegmentStart)
 
 	return {
@@ -99,13 +106,13 @@ export function projectRevokedMessageBranches<T extends RevokedProjectionMessage
 	if (activeRevokedAnchorIndex < 0) {
 		const lastUserAnchorOffset = userAnchorIndexes.length - 1
 		const lastUserAnchorIndex = userAnchorIndexes[lastUserAnchorOffset]
-		if (messages[lastUserAnchorIndex]?.status === MessageStatus.REVOKED) {
+		if (getImStatus(messages[lastUserAnchorIndex]) === MessageStatus.REVOKED) {
 			activeRevokedAnchorIndex = lastUserAnchorIndex
 			// One undo can revoke several trailing turns. Walk User anchors rather than
 			// individual messages because Assistant/Tool statuses may remain read/running.
 			for (let offset = lastUserAnchorOffset - 1; offset >= 0; offset -= 1) {
 				const previousUserAnchorIndex = userAnchorIndexes[offset]
-				if (messages[previousUserAnchorIndex]?.status !== MessageStatus.REVOKED) break
+				if (getImStatus(messages[previousUserAnchorIndex]) !== MessageStatus.REVOKED) break
 				activeRevokedAnchorIndex = previousUserAnchorIndex
 			}
 		}
@@ -122,7 +129,7 @@ export function projectRevokedMessageBranches<T extends RevokedProjectionMessage
 		}
 
 		if (message.role === "user") {
-			isHistoricalRevokedTurn = message.status === MessageStatus.REVOKED
+			isHistoricalRevokedTurn = getImStatus(message) === MessageStatus.REVOKED
 		}
 		if (!isHistoricalRevokedTurn) mainMessages.push(message)
 	})

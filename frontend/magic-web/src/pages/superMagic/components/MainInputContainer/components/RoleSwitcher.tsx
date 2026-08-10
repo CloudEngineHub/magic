@@ -17,6 +17,7 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import PptModeSwitcherCard from "./PptModeSwitcherCard"
+import { isModeVisibleToCurrentUser } from "../../TopicMode/modeVisibility"
 
 interface ModeSwitcherProps {
 	role: TopicMode
@@ -69,7 +70,7 @@ function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollCon
 }
 
 function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
-	const modeList = superMagicModeService.modeList
+	const modeList = superMagicModeService.modeList.filter(isModeVisibleToCurrentUser)
 	const isModeListLoading = superMagicModeService.isModeListLoading
 	const { scrollContainerRef, setItemRef } = useCenteredHorizontalScroll({
 		activeKey: role,

@@ -113,7 +113,7 @@ export function useScopedTopicReadProgress({
 					app_message_id: message.appMessageId,
 				})
 				handleArrivedTopicStatusChange({
-					nextStatus: message.status as TaskStatus | undefined,
+					nextStatus: message.superStatus as TaskStatus | undefined,
 					topicId: selectedTopic.id,
 					lastReadAt: readProgressPayload.lastReadAt,
 					lastReadMessageId: readProgressPayload.lastReadMessageId,

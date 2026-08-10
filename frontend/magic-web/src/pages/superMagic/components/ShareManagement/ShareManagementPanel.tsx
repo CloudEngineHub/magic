@@ -11,12 +11,14 @@ import { getSearchPlaceholder } from "./utils/searchPlaceholder"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/shadcn-ui/select"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
+import { cn } from "@/lib/utils"
 
 interface ShareManagementPanelProps {
 	projectId?: string
+	className?: string
 }
 
-function ShareManagementPanel({ projectId }: ShareManagementPanelProps) {
+function ShareManagementPanel({ projectId, className }: ShareManagementPanelProps) {
 	const { t } = useTranslation("super")
 	const [activeTab, setActiveTab] = useState<SharedResourceType>(SharedResourceType.File)
 	const [filterStatus, setFilterStatus] = useState<SharedTopicFilterStatus>(
@@ -71,17 +73,28 @@ function ShareManagementPanel({ projectId }: ShareManagementPanelProps) {
 	const searchPlaceholder = getSearchPlaceholder(activeTab, t)
 
 	return (
-		<div className="flex h-full flex-col gap-0.5">
+		<div className={cn("flex h-full flex-col gap-0.5", className)}>
 			{/* Header */}
-			<div className="flex items-center justify-between px-2">
-				<span className="text-sm font-semibold leading-[1.333] text-foreground">
+			<div
+				className="flex items-center justify-between px-2"
+				data-slot="project-panel-header"
+			>
+				<span
+					className="text-sm font-semibold leading-[1.333] text-foreground"
+					data-slot="project-panel-title"
+				>
 					{t("shareManagement.title")}
 				</span>
-				<ShareManagementTabs value={activeTab} onChange={handleTabChange} />
+				<div data-slot="project-panel-tabs">
+					<ShareManagementTabs value={activeTab} onChange={handleTabChange} />
+				</div>
 			</div>
 
 			{/* Filter */}
-			<div className="flex h-9 items-center gap-1 px-2 py-1.5">
+			<div
+				className="flex h-9 items-center gap-1 px-2 py-1.5"
+				data-slot="project-panel-toolbar"
+			>
 				{showStatusFilter && (
 					<Select
 						value={filterStatus}
@@ -120,7 +133,11 @@ function ShareManagementPanel({ projectId }: ShareManagementPanelProps) {
 			</div>
 
 			{/* Content */}
-			<div className="flex-1 overflow-hidden">
+			<div
+				className="flex-1 overflow-hidden"
+				data-layout="share-management-content"
+				data-slot="project-panel-content"
+			>
 				{activeTab === SharedResourceType.Project && (
 					<MobileProjectShareList
 						key={`project-${projectRefreshTrigger}`}

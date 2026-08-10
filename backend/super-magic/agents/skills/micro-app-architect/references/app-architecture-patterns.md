@@ -77,12 +77,12 @@ generateBtn.addEventListener("click", async () => {
     content: [{
       type: "paragraph",
       content: [
-        { type: "text", text: "请阅读以下技能文件并按照其中的指引执行任务：" },
+        { type: "text", text: "Read the following skill file and follow its instructions: " },
         { type: "mention", attrs: {
           type: "project_file",
           data: { file_id: "skill_ref", file_name: "SKILL.md", file_path: ".magic/skills/report_writer/SKILL.md", file_extension: "md" }
         }},
-        { type: "text", text: "\n\n用户任务：分析 data/input.json 中的数据，生成报告写入 data/report.json" }
+        { type: "text", text: "\n\nUser task: analyze the data in data/input.json and write the report to data/report.json" }
       ]
     }]
   }, { agentId, model });
@@ -210,13 +210,13 @@ function waitForFile(path) {
 
 | User Request | Pattern | Key APIs Used |
 |--------------|---------|---------------|
-| "做一个计算器" | Simple | (pure JS, no Magic API) |
-| "做一个 todolist" | Simple | `fs.listDir`, `fs.watchDir`, `fs.readFile`, `fs.writeFile`, `fs.renameFile`, `fs.deleteFile` |
-| "做一个 AI 聊天界面" | Simple | `llm.stream`, `llm.getModels` |
-| "做一个数据分析工具" | Medium | `fs.*`, `createTopicAndSend` + @file skill |
-| "做一个自动化报告生成器" | Medium | `fs.*`, `createTopicAndSend`, companion skill |
-| "做一个多人协作的内容工作台" | Complex | `createTopicAndSend`, `getAgents`, `watchFile` |
-| "做一个项目管理系统，自动分配任务给不同员工" | Complex | Full API suite + multiple companion skills |
+| "Make a calculator" | Simple | (pure JS, no Magic API) |
+| "Make a todo list" | Simple | `fs.listDir`, `fs.watchDir`, `fs.readFile`, `fs.writeFile`, `fs.renameFile`, `fs.deleteFile` |
+| "Make an AI chat interface" | Simple | `llm.stream`, `llm.getModels` |
+| "Make a data analysis tool" | Medium | `fs.*`, `createTopicAndSend` + @file skill |
+| "Make an automated report generator" | Medium | `fs.*`, `createTopicAndSend`, companion skill |
+| "Make a multi-person collaboration content workspace" | Complex | `createTopicAndSend`, `getAgents`, `watchFile` |
+| "Make a project management system that automatically assigns tasks to different agents" | Complex | Full API suite + multiple companion skills |
 
 ---
 

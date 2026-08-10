@@ -115,7 +115,6 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		isFromNode,
 		onClose,
 		hasUserSelectDetail,
-		isFullscreen,
 		attachmentList,
 		allowEdit,
 		saveEditContent,

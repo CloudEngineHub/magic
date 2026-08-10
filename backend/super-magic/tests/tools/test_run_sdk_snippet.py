@@ -22,6 +22,12 @@ class _FakeAgentContext:
     def get_interruption_event(self):
         return None
 
+    def get_workspace_dir(self):
+        """返回当前测试通过 PathManager 注入的工作区目录。"""
+        from app.path_manager import PathManager
+
+        return PathManager.get_project_root()
+
 
 class _FakeToolContext:
     def __init__(self, context_id: str = "ctx_test_123", current_model_id: str | None = None) -> None:
@@ -35,26 +41,9 @@ class _FakeToolContext:
             return self._agent_context
         return None
 
-
-@pytest.mark.asyncio
-async def test_run_sdk_snippet_uses_long_timeout_for_video_tools(tmp_path):
-    tool = RunSdkSnippet()
-
-    with patch("app.tools.run_sdk_snippet.PathManager.get_project_root", return_value=tmp_path), \
-         patch("app.tools.run_sdk_snippet.ProcessExecutor.execute_command", new_callable=AsyncMock) as mock_execute:
-        mock_execute.return_value = TerminalToolResult(ok=True, content="ok")
-
-        result = await tool.execute(
-            tool_context=_FakeToolContext(),
-            params=RunSdkSnippetParams(
-                python_code="from sdk.tool import tool\nresult = tool.call('generate_video', {'prompt': 'demo'})",
-                timeout=60,
-            ),
-        )
-
-    assert result.ok is True
-    assert mock_execute.await_args.kwargs["timeout"] == 3600
-    assert mock_execute.await_args.kwargs["extra_env"]["SUPER_MAGIC_AGENT_CONTEXT_ID"] == "ctx_test_123"
+    def get_extension_typed(self, name: str, _extension_type):
+        """按类型扩展接口返回测试使用的 AgentContext。"""
+        return self.get_extension(name)
 
 
 @pytest.mark.asyncio

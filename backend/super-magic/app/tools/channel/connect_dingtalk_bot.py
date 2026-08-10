@@ -21,23 +21,17 @@ logger = get_logger(__name__)
 class ConnectDingTalkBotParams(BaseToolParams):
     client_id: str = Field(
         ...,
-        description="""<!--zh: 钉钉开放平台应用的 Client ID (AppKey)-->
-The DingTalk app Client ID (AppKey).""",
+        description="DingTalk app Client ID (AppKey).",
     )
     client_secret: str = Field(
         ...,
-        description="""<!--zh: 钉钉开放平台应用的 Client Secret (AppSecret)-->
-The DingTalk app Client Secret (AppSecret).""",
+        description="DingTalk app Client Secret (AppSecret).",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class ConnectDingTalkBot(BaseTool[ConnectDingTalkBotParams]):
-    """<!--zh
-    建立钉钉 Stream 模式 AI Bot 长连接。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Start the DingTalk stream-mode AI bot connection. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Start the DingTalk stream-mode AI bot connection from an SDK snippet."""
 
     async def execute(self, tool_context: ToolContext, params: ConnectDingTalkBotParams) -> ToolResult:
         try:

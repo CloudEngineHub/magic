@@ -5,10 +5,10 @@
 
 文件格式：
     ---
-    llm: main_llm
     tools:
       - tool_a
       - tool_b
+    code_execution: false
     skills:
       system_skills:
         - name: skill-creator
@@ -29,6 +29,7 @@ from .models import AgentDefine, SkillPreloadEntry, SkillsConfig, SystemSkillEnt
 logger = get_logger(__name__)
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
+_DEPRECATED_FRONTMATTER_FIELDS = {"llm"}
 
 
 def parse_agent_file(content: str) -> Tuple[AgentDefine, str]:
@@ -38,7 +39,7 @@ def parse_agent_file(content: str) -> Tuple[AgentDefine, str]:
     动态语法（{{ ... }}）由上层 loader 统一处理，此处不干预。
 
     Raises:
-        ValueError: YAML frontmatter 缺失或必填字段（tools / llm）不存在
+        ValueError: YAML frontmatter 缺失或必填字段 tools 不存在
     """
     match = _FRONTMATTER_RE.match(content)
     if not match:
@@ -54,10 +55,12 @@ def parse_agent_file(content: str) -> Tuple[AgentDefine, str]:
     except yaml.YAMLError as e:
         raise ValueError(f"Agent 文件 YAML frontmatter 解析失败: {e}") from e
 
+    _warn_deprecated_fields(data)
+
     agent_define = AgentDefine(
-        model_id=_parse_llm(data),
         tools_config=_parse_tools(data),
         skills_config=_parse_skills(data),
+        code_execution=_parse_code_execution(data),
     )
 
     prompt = remove_developer_annotations(prompt_raw).strip()
@@ -68,17 +71,16 @@ def parse_agent_file(content: str) -> Tuple[AgentDefine, str]:
 # ── 各字段解析 ──────────────────────────────────────────────────────────────
 
 
-def _parse_llm(data: Dict[str, Any]) -> str:
-    from agentlang.config import config
+def _warn_deprecated_fields(data: Dict[str, Any]) -> None:
+    deprecated_fields = sorted(field for field in _DEPRECATED_FRONTMATTER_FIELDS if field in data)
+    if not deprecated_fields:
+        return
 
-    raw = data.get("llm", "")
-    if not raw:
-        logger.warning("agent 文件 YAML frontmatter 中未找到 llm 字段")
-        return ""
-    model_str = str(raw).strip()
-    resolved = config.resolve_model_alias(model_str)
-    logger.debug(f"解析 llm: '{model_str}' -> '{resolved}'")
-    return resolved
+    fields = ", ".join(deprecated_fields)
+    logger.warning(
+        f"Agent 文件字段 {fields} 已废弃，将被忽略；"
+        "请删除该字段，模型由运行时 model_id 或 auto 决定"
+    )
 
 
 def _parse_tools(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,6 +98,16 @@ def _parse_tools(data: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.debug(f"解析 tools: {list(tools.keys())}")
     return tools
+
+
+def _parse_code_execution(data: Dict[str, Any]) -> bool:
+    """解析代码执行能力开关；未声明时默认开启。"""
+    raw = data.get("code_execution", True)
+    if not isinstance(raw, bool):
+        raise ValueError(
+            f"code_execution 字段格式不合法，期望布尔值，实际: {type(raw)}"
+        )
+    return raw
 
 
 def _parse_skills(data: Dict[str, Any]) -> Optional[SkillsConfig]:
@@ -246,5 +258,3 @@ def _parse_skill_source(raw: Any, field_name: str) -> Union[str, List[SystemSkil
     if isinstance(raw, list):
         return _parse_system_skills(raw)
     raise ValueError(f"{field_name} 字段格式不合法，期望字符串或列表，实际: {type(raw)}")
-
-

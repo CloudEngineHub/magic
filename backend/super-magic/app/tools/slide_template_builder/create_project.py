@@ -1,7 +1,7 @@
 """Create a standard semantic slide template workspace project."""
 
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import Field
 
@@ -59,7 +59,7 @@ Exact tag codes from the bundled slide template taxonomy. Provide at least one u
     )
 
 
-@tool(name="create_slide_template_project")
+@tool(name="create_slide_template_project", code_mode_only=True)
 class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]):
     """<!--zh
     在工作区根目录创建标准的语义 HTML 幻灯片模板结构。必须在写入模板内容前调用。
@@ -68,7 +68,6 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
     """
 
     name = "create_slide_template_project"
-    code_mode_only: ClassVar[bool] = True
 
     async def execute(self, tool_context: ToolContext, params: CreateSlideTemplateProjectParams) -> ToolResult:
         try:

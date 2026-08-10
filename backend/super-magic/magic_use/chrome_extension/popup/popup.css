@@ -1,0 +1,21 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; width: 360px; }
+main { display: grid; gap: 14px; padding: 16px; }
+header, .section-title, .tab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+h1, h2, p { margin: 0; }
+h1 { font-size: 17px; }
+h2 { font-size: 14px; }
+section { display: grid; gap: 9px; }
+label { display: grid; gap: 4px; font-size: 12px; }
+input, select { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid #9997; border-radius: 7px; }
+button { padding: 8px 10px; border: 0; border-radius: 7px; background: #246bfd; color: white; cursor: pointer; }
+button.secondary { background: #7772; color: inherit; }
+button.danger { background: #c73535; }
+.status { padding: 4px 7px; border-radius: 999px; background: #7772; font-size: 11px; text-transform: capitalize; }
+.list { display: grid; gap: 7px; max-height: 230px; overflow: auto; }
+.tab { padding: 8px; border: 1px solid #9994; border-radius: 8px; }
+.tab-copy { min-width: 0; }
+.tab-title, .tab-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-title { font-size: 12px; font-weight: 600; }
+.tab-url { font-size: 10px; opacity: .7; }
+.error { color: #d33; font-size: 12px; }

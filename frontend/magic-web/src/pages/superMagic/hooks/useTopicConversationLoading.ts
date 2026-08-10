@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { reaction } from "mobx"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
-import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import { projectVisibleMessagesByRevokedTail } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
@@ -33,6 +33,7 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	selectedTopic,
 }: UseTopicConversationLoadingParams<TStatus>) {
 	const currentTopicId = selectedTopic?.chat_topic_id || ""
+	const selectedTopicStatus = selectedTopic?.task_status || selectedTopic?.status
 	const [showLoading, setShowLoading] = useState(false)
 	const [messageState, setMessageState] = useState<{
 		topicId: string
@@ -56,11 +57,16 @@ export function useTopicConversationLoading<TStatus = unknown>({
 	})
 
 	const handleTopicMessagesChange = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
-		const { isLoading, lastMessage, lastMessageNode } = resolveTopicConversationLoadingState({
+		const resolvedState = resolveTopicConversationLoadingState({
 			topicMessages,
-			getMessageNode: (appMessageId) => superMagicStore.getMessageNode(appMessageId),
+			getMessageNode: (superMessageId) => superMagicStore.getMessageNode(superMessageId),
 			getOptimisticStatus: getOptimisticMessageStatus,
 		})
+		const { lastMessage, lastMessageNode } = resolvedState
+		// waiting_for_user 表示 Topic 已把控制权交还用户；即使最后一条消息仍保留
+		// running/waiting 的历史节点状态，也不能继续维持全局对话 Loading。
+		const isLoading =
+			selectedTopicStatus === TaskStatus.WAITING_FOR_USER ? false : resolvedState.isLoading
 
 		setShowLoading(isLoading)
 
@@ -88,7 +94,7 @@ export function useTopicConversationLoading<TStatus = unknown>({
 			messages: currentTopicMessages,
 		})
 		handleTopicMessagesChange(currentTopicMessages)
-	}, [handleTopicMessagesChange, currentTopicId])
+	}, [handleTopicMessagesChange, currentTopicId, selectedTopicStatus])
 
 	useEffect(() => {
 		return reaction(

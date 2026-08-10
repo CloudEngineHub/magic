@@ -50,6 +50,7 @@ from sdk.tool import tool
 result = tool.call('tool_name', {"param1": "value1"})
 ```
 工具的参数 schema 和使用说明在 skill 文档（SKILL.md）中。
+将自然连续、相互依赖的调用放在同一个代码片段中，不要每调用一个工具就单独执行一次 run_sdk_snippet。独立调用是否并行由任务依赖和工具成本决定。
 -->
 ## Call tools
 **This SDK pattern is only for use inside Python code executed via `run_sdk_snippet` — it is NOT a direct agent tool invocation.**
@@ -59,15 +60,22 @@ from sdk.tool import tool
 result = tool.call('tool_name', {"param1": "value1"})
 ```
 Tool parameter schemas and usage instructions are in skill documentation (SKILL.md).
+Group naturally sequential, dependent calls in one snippet instead of running one `run_sdk_snippet` per tool call. Parallelize independent calls only when task dependencies and tool cost make it appropriate.
 
 <!--zh
 ## 工具调用结果
-Result 对象字段：`content`（人类可读结果）、`ok`（是否成功）、`data`（给程序使用的结构化数据）
-优先使用 `result.content` 进行推理和回答。只有已加载的 skill 明确给出 schema 且需要程序化串联时，才读取 `result.data`。
+Result 对象字段：`content`（给模型阅读的语义结果）、`ok`（工具业务操作是否成功）、`data`（给程序使用的结构化数据）。
+- 默认打印并阅读 `result.content`，用它进行推理、验证和回答；不要在 content 已经说明结果时从 data 重建另一份摘要。
+- 仅在传递精确 ID、路径或句柄，处理大型结构化结果，或连接同一代码管线的中间步骤时读取 `result.data`。从 data 取得的句柄必须原样复用，不要猜测或重建。
+- 不要把完整的大型 data、原始 payload、二进制或 Base64 输出到模型上下文；先在代码中筛选、聚合或校验，只打印相关结论和必要证据。
+- `ok=False` 不表示整个代码片段必须立即终止。根据后续步骤是否依赖该结果，决定重试、改用其它路径、继续独立步骤或终止管线；无论如何都要保留或输出 content。
 -->
 ## Tool results
-Result object fields: `content` (human-readable result), `ok` (success status), `data` (structured data for programmatic use).
-Prefer `result.content` for reasoning and final answers. Use `result.data` only when the loaded skill explicitly defines the schema and requires programmatic chaining.
+Result fields are `content` (the model-readable semantic result), `ok` (whether the tool's business operation succeeded), and `data` (structured data for programmatic use).
+- Print and read `result.content` by default for reasoning, verification, and final answers. Do not reconstruct another summary from `data` when `content` already explains the result.
+- Read `result.data` only to pass exact IDs, paths, or handles, process a large structured result, or connect intermediate steps in the same code pipeline. Reuse handles from `data` exactly; never guess or reconstruct them.
+- Do not print complete large `data` objects, raw payloads, binary content, or Base64 into model context. Filter, aggregate, or validate in code, then print only the relevant conclusion and necessary evidence.
+- `ok=False` does not require the whole snippet to stop immediately. Based on downstream dependencies, retry, choose another path, continue independent work, or stop the pipeline; always preserve or print `content`.
 
 <!--zh
 ## Skill 目录

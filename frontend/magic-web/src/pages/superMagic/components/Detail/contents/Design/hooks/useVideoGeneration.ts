@@ -70,6 +70,8 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const { t } = useTranslation("super")
 
 	const getVideoModelList = useCallback(async (): Promise<VideoModelItem[]> => {
+		await superMagicModeService.fetchModeList({ force: false })
+		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllVideoModelGroups()
 		const result = officialGroups.flatMap((groupItem) =>
 			(groupItem.models || []).map(

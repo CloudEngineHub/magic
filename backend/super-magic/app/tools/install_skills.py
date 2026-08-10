@@ -19,7 +19,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.core.skill_utils.installer import InstallBatchResult, InstallResult, InstallService, SkillRef
 from app.core.skill_utils.skill_sources import get_personal_skills_dir, get_workspace_skills_dir
 from app.i18n import i18n
-from app.tools.core import BaseTool, BaseToolParams, tool
+from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
 from app.utils.async_file_utils import async_exists, async_is_dir, async_iterdir
 
 logger = get_logger(__name__)
@@ -127,7 +127,7 @@ class InstallSkillsParams(BaseToolParams):
         return self
 
 
-@tool()
+@tool(auto_mount=AutoMount.SKILLS)
 class InstallSkillsTool(BaseTool[InstallSkillsParams]):
     """<!--zh
     批量安装或升级 skill 的**唯一入口**。
@@ -137,10 +137,13 @@ class InstallSkillsTool(BaseTool[InstallSkillsParams]):
     mode=install：同版本已存在时跳过；mode=upgrade：升级到最新或指定版本。
     各条独立成败，不因单条失败而中止整批。
     -->
-    Batch install or upgrade skills — the ONLY entry point for skill installation.
-    Supported sources: my_library, market, skillhub, clawhub, npx, github.
-    Each item can use scope=workspace for the current project or scope=personal for the user's personal directory.
-    mode=install: skip if same version exists; mode=upgrade: update to latest.
+    Batch install or upgrade Skills through the only supported installation entry point.
+    Obtain explicit user confirmation before installing or upgrading any external Skill. A direct
+    user request to install or upgrade counts as confirmation; an Agent selecting a search result
+    does not. Load system built-ins directly with read_skills and never pass them to this tool.
+    Supported sources: my_library, market, skillhub, clawhub, npx, and github. Each item may use
+    scope=workspace for the current project or scope=personal for the user's personal directory.
+    mode=install skips an existing identical version; mode=upgrade updates to the latest version.
     Items succeed or fail independently; one failure does not abort the batch.
     """
 

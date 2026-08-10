@@ -9,6 +9,7 @@ return [
     'file_exist' => '文件已存在',
     'illegal_file_key' => '非法的文件键',
     'target_parent_not_directory' => '目标父级不是目录',
+    'preserve_parent_path_conflict' => '目标路径与已有文件冲突：:path',
     'cannot_move_to_subdirectory' => '不能将目录移动到其子目录',
     'file_move_failed' => '移动文件失败',
     'file_copy_failed' => '复制文件失败',

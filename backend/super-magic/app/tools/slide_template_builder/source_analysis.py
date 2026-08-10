@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, Dict, Optional
 
 from PIL import Image, ImageDraw, ImageOps
 from pydantic import Field, field_validator
@@ -214,7 +214,7 @@ def _source_asset_metadata(data: bytes) -> dict[str, Any]:
         }
 
 
-@tool(name="prepare_slide_template_source")
+@tool(name="prepare_slide_template_source", code_mode_only=True)
 class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]):
     """<!--zh
     为模板视觉重建准备高分辨率整页图、重叠局部裁剪、联系表和可选的 PPTX 只读结构数据。不会生成 HTML。
@@ -223,7 +223,6 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
     """
 
     name = "prepare_slide_template_source"
-    code_mode_only: ClassVar[bool] = True
 
     async def execute(self, tool_context: ToolContext, params: PrepareSlideTemplateSourceParams) -> ToolResult:
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)

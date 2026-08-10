@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef } from "react"
+import { forwardRef, useImperativeHandle, useRef, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { useStyles } from "./style"
@@ -12,6 +12,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { mySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
+import type { TopicFilesSpaceConfig } from "./file-space"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -23,6 +24,8 @@ export type {
 export interface TopicFilesButtonProps {
 	className?: string
 	title?: string
+	/** 是否显示文件树内部标题。 */
+	showTitle?: boolean
 	attachments?: AttachmentItem[]
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
@@ -42,7 +45,7 @@ export interface TopicFilesButtonProps {
 	onMultiSelectModeChange?: (isMultiSelectMode: boolean) => void
 	showMobileActions?: boolean
 	// 自定义菜单项过滤器
-	filterMenuItems?: (menuItems: any[]) => any[]
+	filterMenuItems?: (menuItems: any[], item?: AttachmentItem) => any[]
 	// 自定义批量下载菜单过滤器
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
@@ -52,6 +55,13 @@ export interface TopicFilesButtonProps {
 	refreshAttachments?: () => Promise<void> | void
 	onSaveSlidesTemplate?: (item: AttachmentItem) => void | Promise<void>
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
+	headerTrailingAction?: ReactNode
+	/** 文件树所属空间及其能力配置。 */
+	spaceConfig?: TopicFilesSpaceConfig
+	/** 判断节点是否允许参与移动和多选等变更操作。 */
+	isItemSelectable?: (item: AttachmentItem) => boolean
+	/** 特殊文件空间允许操作的固定根目录。 */
+	operationRoot?: AttachmentItem
 }
 
 export interface TopicFilesButtonRef {
@@ -67,6 +77,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 		{
 			className,
 			title,
+			showTitle = true,
 			attachments = [],
 			setUserSelectDetail,
 			onFileClick,
@@ -90,6 +101,10 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			refreshAttachments,
 			onSaveSlidesTemplate,
 			onConvertToSlidesTemplate,
+			headerTrailingAction,
+			spaceConfig,
+			isItemSelectable,
+			operationRoot,
 		},
 		ref,
 	) {
@@ -162,6 +177,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					ref={panelRef}
 					className={className}
 					title={title}
+					showTitle={showTitle}
 					attachments={attachments}
 					setUserSelectDetail={setUserSelectDetail}
 					onFileClick={onFileClick}
@@ -185,6 +201,10 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					refreshAttachments={refreshAttachments}
 					onSaveSlidesTemplate={handleSaveSlidesTemplate}
 					onConvertToSlidesTemplate={handleConvertToSlidesTemplate}
+					headerTrailingAction={headerTrailingAction}
+					spaceConfig={spaceConfig}
+					isItemSelectable={isItemSelectable}
+					operationRoot={operationRoot}
 				/>
 			</div>
 		)

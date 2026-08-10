@@ -29,4 +29,15 @@ describe("buildLoginRedirectSearchParams", () => {
 		expect(params.get(LoginValueKey.REDIRECT_URL)).toBe(redirectTarget)
 		expect(params.get(LOGIN_STRATEGY_QUERY_KEY)).toBe("email")
 	})
+
+	it("preserves the complete file share URL for redirecting after login", () => {
+		const shareUrl = "https://magic.example.com/share/files/943197067324579840?password=MFHLL2"
+
+		const params = buildLoginRedirectSearchParams({
+			currentHref: shareUrl,
+			redirectTarget: shareUrl,
+		})
+
+		expect(params.get(LoginValueKey.REDIRECT_URL)).toBe(shareUrl)
+	})
 })

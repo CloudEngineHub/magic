@@ -14,6 +14,7 @@ use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\AgentContext;
 use Dtyq\SuperMagic\Domain\SuperAgent\Event\CheckpointRollbackFilesChangedEvent;
+use Dtyq\SuperMagic\Domain\SuperAgent\Event\CheckpointRollbackMessagesChangedEvent;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Service\SandboxVersionDomainService;
@@ -66,6 +67,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
 
     public function testRollbackCheckpointStartDispatchesFileChangeEventForAffectedFileIdsOnly(): void
     {
+        $dispatchedEvents = [];
         $agentDomainService = $this->createMock(AgentDomainService::class);
         $projectDomainService = $this->createMock(ProjectDomainService::class);
         $topicDomainService = $this->createMock(TopicDomainService::class);
@@ -120,23 +122,14 @@ class AgentAppServiceVersionCheckTest extends TestCase
             ]));
         $topicDomainService->expects(self::once())
             ->method('rollbackMessagesStart')
-            ->with('seq-100');
-        $eventDispatcher->expects(self::once())
+            ->with('seq-100')
+            ->willReturn(['seq-100', 'seq-101']);
+        $eventDispatcher->expects(self::exactly(2))
             ->method('dispatch')
-            ->with($this->callback(function (object $event): bool {
-                return $event instanceof CheckpointRollbackFilesChangedEvent
-                    && $event->getProjectId() === 88
-                    && $event->getTopicId() === 920
-                    && $event->getUserId() === 'user-1'
-                    && $event->getOrganizationCode() === 'DT001'
-                    && $event->getFileChanges()[0]['file_id'] === '1001'
-                    && $event->getFileChanges()[0]['operation'] === 'update'
-                    && $event->getFileChanges()[0]['file_path'] === 'docs/a.txt'
-                    && $event->getFileChanges()[1]['file_id'] === '1002'
-                    && $event->getFileChanges()[1]['operation'] === 'delete'
-                    && $event->getFileChanges()[1]['file_path'] === 'nested/b.md';
-            }))
-            ->willReturnArgument(0);
+            ->willReturnCallback(function (object $event) use (&$dispatchedEvents): object {
+                $dispatchedEvents[] = $event;
+                return $event;
+            });
 
         $service = new AgentAppService(
             $loggerFactory,
@@ -152,10 +145,18 @@ class AgentAppServiceVersionCheckTest extends TestCase
             'Sandbox and messages rollback started successfully',
             $service->rollbackCheckpointStart($dataIsolation, 920, 'seq-100')
         );
+
+        $messageEvent = $this->findMessageRollbackEvent($dispatchedEvents);
+        self::assertSame('start', $messageEvent->getAction());
+        self::assertSame(['seq-100', 'seq-101'], $messageEvent->getAffectedSeqIds());
+        self::assertSame('seq-100', $messageEvent->getTargetSeqId());
+        $this->assertRollbackEventTopicContext($messageEvent);
+        self::assertCount(1, array_filter($dispatchedEvents, static fn (object $event): bool => $event instanceof CheckpointRollbackFilesChangedEvent));
     }
 
     public function testRollbackCheckpointUndoDispatchesFileChangeEventForAffectedFilesOnly(): void
     {
+        $dispatchedEvents = [];
         $agentDomainService = $this->createMock(AgentDomainService::class);
         $projectDomainService = $this->createMock(ProjectDomainService::class);
         $topicDomainService = $this->createMock(TopicDomainService::class);
@@ -211,20 +212,14 @@ class AgentAppServiceVersionCheckTest extends TestCase
             ]));
         $topicDomainService->expects(self::once())
             ->method('rollbackMessagesUndo')
-            ->with(920, 'user-1');
-        $eventDispatcher->expects(self::once())
+            ->with(920, 'user-1')
+            ->willReturn(['seq-100', 'seq-101']);
+        $eventDispatcher->expects(self::exactly(2))
             ->method('dispatch')
-            ->with($this->callback(function (object $event): bool {
-                return $event instanceof CheckpointRollbackFilesChangedEvent
-                    && $event->getProjectId() === 88
-                    && $event->getTopicId() === 920
-                    && $event->getUserId() === 'user-1'
-                    && $event->getOrganizationCode() === 'DT001'
-                    && $event->getFileChanges()[0]['file_id'] === '1001'
-                    && $event->getFileChanges()[0]['operation'] === 'update'
-                    && $event->getFileChanges()[0]['file_path'] === 'docs/a.txt';
-            }))
-            ->willReturnArgument(0);
+            ->willReturnCallback(function (object $event) use (&$dispatchedEvents): object {
+                $dispatchedEvents[] = $event;
+                return $event;
+            });
 
         $service = new AgentAppService(
             $loggerFactory,
@@ -240,6 +235,148 @@ class AgentAppServiceVersionCheckTest extends TestCase
             'Sandbox and messages rollback undone successfully',
             $service->rollbackCheckpointUndo($dataIsolation, 920)
         );
+
+        $messageEvent = $this->findMessageRollbackEvent($dispatchedEvents);
+        self::assertSame('undo', $messageEvent->getAction());
+        self::assertSame(['seq-100', 'seq-101'], $messageEvent->getAffectedSeqIds());
+        self::assertNull($messageEvent->getTargetSeqId());
+        $this->assertRollbackEventTopicContext($messageEvent);
+        self::assertCount(1, array_filter($dispatchedEvents, static fn (object $event): bool => $event instanceof CheckpointRollbackFilesChangedEvent));
+    }
+
+    public function testRollbackCheckpointCommitDispatchesMessageRollbackEvent(): void
+    {
+        $agentDomainService = $this->createMock(AgentDomainService::class);
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $taskDomainService = $this->createMock(TaskDomainService::class);
+        $eventDispatcher = $this->createMock(EventDispatcherInterface::class);
+        $cache = $this->createMock(CacheInterface::class);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->with('sandbox')->willReturn($this->createMock(LoggerInterface::class));
+        $sandboxVersionDomainService = new SandboxVersionDomainService($topicDomainService, $agentDomainService, $cache, $loggerFactory);
+        $dataIsolation = new DataIsolation([
+            'current_user_id' => 'user-1',
+            'current_organization_code' => 'DT001',
+        ]);
+        $topic = $this->makeTopic();
+        $project = $this->makeProject();
+        $task = new TaskEntity();
+
+        $topicDomainService->expects(self::exactly(2))->method('getTopicById')->with(920)->willReturn($topic);
+        $projectDomainService->method('getProjectNotUserId')->with(88)->willReturn($project);
+        $taskDomainService->method('initDefaultTask')->with($dataIsolation, $topic)->willReturn($task);
+        $agentDomainService->method('buildInitAgentContext')->willReturn(new AgentContext('920', 'auth-token', $project, $topic, $task));
+        $agentDomainService->method('ensureSandboxInitialized')->with($dataIsolation, self::isInstanceOf(AgentContext::class))->willReturn('920');
+        $agentDomainService->method('rollbackCheckpointCommit')->with($dataIsolation, '920')->willReturn($this->makeSuccessAgentResponse());
+        $topicDomainService->expects(self::once())->method('rollbackMessagesCommit')->with(920, 'user-1')->willReturn(['seq-100', 'seq-101']);
+        $eventDispatcher->expects(self::once())
+            ->method('dispatch')
+            ->with($this->callback(function (object $event): bool {
+                return $event instanceof CheckpointRollbackMessagesChangedEvent
+                    && $event->getAction() === 'commit'
+                    && $event->getAffectedSeqIds() === ['seq-100', 'seq-101']
+                    && $event->getTargetSeqId() === null;
+            }))
+            ->willReturnArgument(0);
+
+        $service = new AgentAppService(
+            $loggerFactory,
+            $agentDomainService,
+            $projectDomainService,
+            $topicDomainService,
+            $taskDomainService,
+            $sandboxVersionDomainService,
+            $eventDispatcher
+        );
+
+        self::assertSame('Sandbox and messages rollback committed successfully', $service->rollbackCheckpointCommit($dataIsolation, 920));
+    }
+
+    public function testDirectRollbackDispatchesMessageRollbackEvent(): void
+    {
+        $agentDomainService = $this->createMock(AgentDomainService::class);
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $taskDomainService = $this->createMock(TaskDomainService::class);
+        $eventDispatcher = $this->createMock(EventDispatcherInterface::class);
+        $cache = $this->createMock(CacheInterface::class);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->with('sandbox')->willReturn($this->createMock(LoggerInterface::class));
+        $sandboxVersionDomainService = new SandboxVersionDomainService($topicDomainService, $agentDomainService, $cache, $loggerFactory);
+        $dataIsolation = new DataIsolation([
+            'current_user_id' => 'user-1',
+            'current_organization_code' => 'DT001',
+        ]);
+
+        $topicDomainService->expects(self::once())->method('getTopicById')->with(920)->willReturn($this->makeTopic());
+        $agentDomainService->expects(self::once())
+            ->method('rollbackCheckpoint')
+            ->with($dataIsolation, '920', 'seq-100')
+            ->willReturn($this->makeSuccessAgentResponse());
+        $topicDomainService->expects(self::once())->method('rollbackMessages')->with('seq-100')->willReturn(['seq-100', 'seq-101']);
+        $eventDispatcher->expects(self::once())
+            ->method('dispatch')
+            ->with($this->callback(function (object $event): bool {
+                return $event instanceof CheckpointRollbackMessagesChangedEvent
+                    && $event->getAction() === 'rollback'
+                    && $event->getAffectedSeqIds() === ['seq-100', 'seq-101']
+                    && $event->getTargetSeqId() === 'seq-100';
+            }))
+            ->willReturnArgument(0);
+
+        $service = new AgentAppService(
+            $loggerFactory,
+            $agentDomainService,
+            $projectDomainService,
+            $topicDomainService,
+            $taskDomainService,
+            $sandboxVersionDomainService,
+            $eventDispatcher
+        );
+
+        self::assertTrue($service->rollbackCheckpoint($dataIsolation, 920, '920', 'seq-100')->isSuccess());
+    }
+
+    public function testRollbackCheckpointUndoDoesNotDispatchWhenNoMessagesOrFilesAreAffected(): void
+    {
+        $agentDomainService = $this->createMock(AgentDomainService::class);
+        $projectDomainService = $this->createMock(ProjectDomainService::class);
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $taskDomainService = $this->createMock(TaskDomainService::class);
+        $eventDispatcher = $this->createMock(EventDispatcherInterface::class);
+        $cache = $this->createMock(CacheInterface::class);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->with('sandbox')->willReturn($this->createMock(LoggerInterface::class));
+        $sandboxVersionDomainService = new SandboxVersionDomainService($topicDomainService, $agentDomainService, $cache, $loggerFactory);
+        $dataIsolation = new DataIsolation([
+            'current_user_id' => 'user-1',
+            'current_organization_code' => 'DT001',
+        ]);
+        $topic = $this->makeTopic();
+        $project = $this->makeProject();
+        $task = new TaskEntity();
+
+        $topicDomainService->expects(self::exactly(2))->method('getTopicById')->with(920)->willReturn($topic);
+        $projectDomainService->method('getProjectNotUserId')->willReturn($project);
+        $taskDomainService->method('initDefaultTask')->willReturn($task);
+        $agentDomainService->method('buildInitAgentContext')->willReturn(new AgentContext('920', 'auth-token', $project, $topic, $task));
+        $agentDomainService->method('ensureSandboxInitialized')->willReturn('920');
+        $agentDomainService->method('rollbackCheckpointUndo')->willReturn($this->makeSuccessAgentResponse());
+        $topicDomainService->method('rollbackMessagesUndo')->willReturn([]);
+        $eventDispatcher->expects(self::never())->method('dispatch');
+
+        $service = new AgentAppService(
+            $loggerFactory,
+            $agentDomainService,
+            $projectDomainService,
+            $topicDomainService,
+            $taskDomainService,
+            $sandboxVersionDomainService,
+            $eventDispatcher
+        );
+
+        self::assertSame('Sandbox and messages rollback undone successfully', $service->rollbackCheckpointUndo($dataIsolation, 920));
     }
 
     public function testCheckSandboxVersionViaDomainService(): void
@@ -361,7 +498,33 @@ class AgentAppServiceVersionCheckTest extends TestCase
         return (new TopicEntity())
             ->setId(920)
             ->setProjectId(88)
-            ->setUserId('user-1');
+            ->setUserId('user-1')
+            ->setUserOrganizationCode('DT001')
+            ->setChatTopicId('chat-topic-920')
+            ->setChatConversationId('conversation-920');
+    }
+
+    /**
+     * @param object[] $events
+     */
+    private function findMessageRollbackEvent(array $events): CheckpointRollbackMessagesChangedEvent
+    {
+        $matches = array_values(array_filter(
+            $events,
+            static fn (object $event): bool => $event instanceof CheckpointRollbackMessagesChangedEvent
+        ));
+        self::assertCount(1, $matches);
+        return $matches[0];
+    }
+
+    private function assertRollbackEventTopicContext(CheckpointRollbackMessagesChangedEvent $event): void
+    {
+        self::assertSame(920, $event->getTopicId());
+        self::assertSame('chat-topic-920', $event->getChatTopicId());
+        self::assertSame(88, $event->getProjectId());
+        self::assertSame('user-1', $event->getUserId());
+        self::assertSame('DT001', $event->getOrganizationCode());
+        self::assertSame('conversation-920', $event->getConversationId());
     }
 
     private function makeProject(): ProjectEntity

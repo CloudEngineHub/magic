@@ -41,7 +41,7 @@ const nodeEntryVariantMap: Partial<Record<SuperMagicMessageType, EntryAnimationV
 }
 
 function NodeContent(props: WithNodeProps) {
-	const node = superMagicStore.getMessageNode(props?.node?.app_message_id) as
+	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
 		| Record<string, unknown>
 		| undefined
 	const textContent = typeof node?.content === "string" ? node.content : undefined
