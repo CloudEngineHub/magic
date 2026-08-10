@@ -12,8 +12,8 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\ImageExpandRequestDTO;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
  * 设计侧「扩图」.

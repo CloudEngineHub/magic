@@ -11,13 +11,13 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use Dtyq\CloudFile\Kernel\Utils\RemoteDownloadSecurityConfig;
 use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 

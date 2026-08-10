@@ -1,0 +1,1057 @@
+{
+    "phase": "after",
+    "frozen_head": "1cab7dc3b9ca659180f852c5b964a621bea29f62",
+    "priority_di": {
+        "App\\Domain\\Chat\\Event\\Agent\\AgentExecuteInterface": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\SuperAgentMessageSubscriberV2",
+        "App\\Domain\\Chat\\DTO\\Message\\ChatMessage\\SuperAgentMessageInterface": "App\\Domain\\SuperMagic\\Message\\Chat\\DTO\\Message\\ChatMessage\\SuperAgentMessage"
+    },
+    "provider_dependencies": {
+        "App\\Application\\SuperMagic\\Common\\Contract\\DeploymentIdInterface": "App\\Application\\SuperMagic\\Common\\Contract\\DefaultDeploymentId",
+        "App\\Application\\SuperMagic\\Common\\Contract\\PromptContentValidatorInterface": "App\\Application\\SuperMagic\\Common\\Contract\\AllowAllPromptContentValidator",
+        "App\\Application\\SuperMagic\\Common\\Contract\\UserAiWatermarkPolicyInterface": "App\\Application\\SuperMagic\\Common\\Contract\\DefaultUserAiWatermarkPolicy",
+        "App\\Application\\SuperMagic\\Common\\Share\\Adapter\\SingleFileShareableResource": "App\\Application\\SuperMagic\\Common\\Share\\Adapter\\SingleFileShareableResource",
+        "App\\Application\\SuperMagic\\Common\\Share\\Adapter\\TopicShareableResource": "App\\Application\\SuperMagic\\Common\\Share\\Adapter\\TopicShareableResource",
+        "App\\Application\\SuperMagic\\Common\\Share\\Factory\\ShareableResourceFactory": "App\\Application\\SuperMagic\\Common\\Share\\Factory\\ShareableResourceFactory",
+        "App\\Application\\SuperMagic\\Common\\Share\\Service\\ResourceShareAppService": "App\\Application\\SuperMagic\\Common\\Share\\Service\\ResourceShareAppService",
+        "App\\Application\\SuperMagic\\File\\Service\\FileProcessAppService": "App\\Application\\SuperMagic\\File\\Service\\FileProcessAppService",
+        "App\\Application\\SuperMagic\\Message\\Service\\HandleAgentMessageAppService": "App\\Application\\SuperMagic\\Message\\Service\\HandleAgentMessageAppService",
+        "App\\Application\\SuperMagic\\Message\\Service\\MessageQueueAppService": "App\\Application\\SuperMagic\\Message\\Service\\MessageQueueAppService",
+        "App\\Application\\SuperMagic\\Message\\Service\\MessageScheduleAppService": "App\\Application\\SuperMagic\\Message\\Service\\MessageScheduleAppService",
+        "App\\Application\\SuperMagic\\Task\\Service\\AgentAppService": "App\\Application\\SuperMagic\\Task\\Service\\AgentAppService",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentCategoryRelationRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentCategoryRelationRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentCategoryRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentCategoryRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentMarketRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentMarketRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentPlaybookRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentPlaybookRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentSkillRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentSkillRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\AgentVersionRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\AgentVersionRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\MagicClawRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\MagicClawRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\SuperMagicAgentRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\SuperMagicAgentRepository",
+        "App\\Domain\\SuperMagic\\Agent\\Repository\\Facade\\UserAgentRepositoryInterface": "App\\Domain\\SuperMagic\\Agent\\Repository\\Persistence\\UserAgentRepository",
+        "App\\Domain\\SuperMagic\\Common\\RecycleBin\\Repository\\Facade\\RecycleBinRepositoryInterface": "App\\Domain\\SuperMagic\\Common\\RecycleBin\\Repository\\Persistence\\RecycleBinRepository",
+        "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Facade\\ResourceShareAccessLogRepositoryInterface": "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Persistence\\ResourceShareAccessLogRepository",
+        "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Facade\\ResourceShareCopyLogRepositoryInterface": "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Persistence\\ResourceShareCopyLogRepository",
+        "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Facade\\ResourceShareRepositoryInterface": "App\\Domain\\SuperMagic\\Common\\Share\\Repository\\Persistence\\ResourceShareRepository",
+        "App\\Domain\\SuperMagic\\Common\\Share\\Service\\ResourceShareAccessLogDomainService": "App\\Domain\\SuperMagic\\Common\\Share\\Service\\ResourceShareAccessLogDomainService",
+        "App\\Domain\\SuperMagic\\Common\\Share\\Service\\ResourceShareCopyLogDomainService": "App\\Domain\\SuperMagic\\Common\\Share\\Service\\ResourceShareCopyLogDomainService",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\FileCollectionItemRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\FileCollectionItemRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\FileCollectionRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\FileCollectionRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\AudioMarkerRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\AudioMarkerRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\AudioProjectRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\AudioProjectRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\BatchDownloadPackRepositoryInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\BatchDownloadPack\\BatchDownloadPackRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\TaskFileRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\TaskFileRepository",
+        "App\\Domain\\SuperMagic\\File\\Repository\\Facade\\TaskFileVersionRepositoryInterface": "App\\Domain\\SuperMagic\\File\\Repository\\Persistence\\TaskFileVersionRepository",
+        "App\\Domain\\SuperMagic\\File\\Service\\TaskFileVersionDomainService": "App\\Domain\\SuperMagic\\File\\Service\\TaskFileVersionDomainService",
+        "App\\Domain\\SuperMagic\\Message\\Repository\\Facade\\MessageQueueRepositoryInterface": "App\\Domain\\SuperMagic\\Message\\Repository\\Persistence\\MessageQueueRepository",
+        "App\\Domain\\SuperMagic\\Message\\Repository\\Facade\\MessageScheduleLogRepositoryInterface": "App\\Domain\\SuperMagic\\Message\\Repository\\Persistence\\MessageScheduleLogRepository",
+        "App\\Domain\\SuperMagic\\Message\\Repository\\Facade\\MessageScheduleRepositoryInterface": "App\\Domain\\SuperMagic\\Message\\Repository\\Persistence\\MessageScheduleRepository",
+        "App\\Domain\\SuperMagic\\Message\\Repository\\Facade\\TaskMessageRepositoryInterface": "App\\Domain\\SuperMagic\\Message\\Repository\\Persistence\\TaskMessageRepository",
+        "App\\Domain\\SuperMagic\\Message\\Repository\\Facade\\TokenUsageRecordRepositoryInterface": "App\\Domain\\SuperMagic\\Message\\Repository\\Persistence\\TokenUsageRecordRepository",
+        "App\\Domain\\SuperMagic\\Message\\Service\\MessageScheduleDomainService": "App\\Domain\\SuperMagic\\Message\\Service\\MessageScheduleDomainService",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\MicroAppRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\MicroAppRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\ProjectForkRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\ProjectForkRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\ProjectMemberRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\ProjectMemberRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\ProjectMemberSettingRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\ProjectMemberSettingRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\ProjectOperationLogRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\ProjectOperationLogRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\ProjectRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\ProjectRepository",
+        "App\\Domain\\SuperMagic\\Project\\Repository\\Facade\\TransferLogRepositoryInterface": "App\\Domain\\SuperMagic\\Project\\Repository\\Persistence\\TransferLogRepository",
+        "App\\Domain\\SuperMagic\\Project\\Service\\ProjectOperationLogDomainService": "App\\Domain\\SuperMagic\\Project\\Service\\ProjectOperationLogDomainService",
+        "App\\Domain\\SuperMagic\\Skill\\Repository\\Facade\\SkillCategoryRepositoryInterface": "App\\Domain\\SuperMagic\\Skill\\Repository\\Persistence\\SkillCategoryRepository",
+        "App\\Domain\\SuperMagic\\Skill\\Repository\\Facade\\SkillMarketRepositoryInterface": "App\\Domain\\SuperMagic\\Skill\\Repository\\Persistence\\SkillMarketRepository",
+        "App\\Domain\\SuperMagic\\Skill\\Repository\\Facade\\SkillRepositoryInterface": "App\\Domain\\SuperMagic\\Skill\\Repository\\Persistence\\SkillRepository",
+        "App\\Domain\\SuperMagic\\Skill\\Repository\\Facade\\SkillVersionRepositoryInterface": "App\\Domain\\SuperMagic\\Skill\\Repository\\Persistence\\SkillVersionRepository",
+        "App\\Domain\\SuperMagic\\Skill\\Repository\\Facade\\UserSkillRepositoryInterface": "App\\Domain\\SuperMagic\\Skill\\Repository\\Persistence\\UserSkillRepository",
+        "App\\Domain\\SuperMagic\\Task\\Repository\\Facade\\SandboxKeepAliveRepositoryInterface": "App\\Domain\\SuperMagic\\Task\\Repository\\Persistence\\SandboxKeepAliveRepository",
+        "App\\Domain\\SuperMagic\\Task\\Repository\\Facade\\TaskRepositoryInterface": "App\\Domain\\SuperMagic\\Task\\Repository\\Persistence\\TaskRepository",
+        "App\\Domain\\SuperMagic\\Task\\Repository\\Facade\\WarmPoolSandboxRepositoryInterface": "App\\Domain\\SuperMagic\\Task\\Repository\\Persistence\\WarmPoolSandboxRepository",
+        "App\\Domain\\SuperMagic\\Topic\\Repository\\Facade\\TopicRepositoryInterface": "App\\Domain\\SuperMagic\\Topic\\Repository\\Persistence\\TopicRepository",
+        "App\\Domain\\SuperMagic\\Workspace\\Repository\\Facade\\WorkspaceRepositoryInterface": "App\\Domain\\SuperMagic\\Workspace\\Repository\\Persistence\\WorkspaceRepository",
+        "App\\Domain\\SuperMagic\\Workspace\\Repository\\Facade\\WorkspaceVersionRepositoryInterface": "App\\Domain\\SuperMagic\\Workspace\\Repository\\Persistence\\WorkspaceVersionRepository",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Agent\\SandboxAgentInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Agent\\SandboxAgentService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\AsrRecorder\\AsrRecorderInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\AsrRecorder\\AsrRecorderService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\FileConverter\\FileConverterInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\FileConverter\\FileConverterService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Gateway\\SandboxGatewayInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Gateway\\SandboxGatewayService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Workspace\\WorkspaceExporterInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Workspace\\WorkspaceExporterService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Workspace\\WorkspaceImporterInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\SandboxOS\\Workspace\\WorkspaceImporterService",
+        "App\\Infrastructure\\SuperMagic\\ExternalAPI\\Sandbox\\SandboxInterface": "App\\Infrastructure\\SuperMagic\\ExternalAPI\\Sandbox\\Volcengine\\SandboxService"
+    },
+    "provider_listeners": [],
+    "error_code_mapper": {
+        "App\\ErrorCode\\SuperMagic\\SuperAgentErrorCode": [
+            51000,
+            51299
+        ],
+        "App\\ErrorCode\\SuperMagic\\MagicFSErrorCode": [
+            51300,
+            51399
+        ],
+        "App\\ErrorCode\\SuperMagic\\ShareErrorCode": [
+            51300,
+            51400
+        ],
+        "App\\ErrorCode\\SuperMagic\\SkillErrorCode": [
+            51239,
+            51338
+        ],
+        "App\\ErrorCode\\SuperMagic\\SuperMagicErrorCode": [
+            60000,
+            60999
+        ]
+    },
+    "route_files": [
+        {
+            "file": "config/routes-v1/super-magic-admin.php",
+            "route_declarations": 18,
+            "sha256": "d8b2e8a8cbbe6028e1e3abbb463ab25816695d69821dd0dd456b51aee3a92010"
+        },
+        {
+            "file": "config/routes-v1/super-magic-agent.php",
+            "route_declarations": 62,
+            "sha256": "347d7149495f909c0617132c3b65be6e2fd3e38179ca4f95f4bccfff7e871c0f"
+        },
+        {
+            "file": "config/routes-v1/super-magic-common.php",
+            "route_declarations": 1,
+            "sha256": "e1bd30abc7cb93bb88f9bb82fc6942fe2815ce89f02501874d29158fbf47aa58"
+        },
+        {
+            "file": "config/routes-v1/super-magic-internal.php",
+            "route_declarations": 1,
+            "sha256": "8cc3b818eb64ef271c89fc76bb2cf1cd5b0084a53ec8bade19f3c9198a6c7bf2"
+        },
+        {
+            "file": "config/routes-v1/super-magic-magicfs.php",
+            "route_declarations": 10,
+            "sha256": "d3473f32a7dbf14905bef962a4054c08e1567d80ca1331ba306f4fe9c6d1bc0d"
+        },
+        {
+            "file": "config/routes-v1/super-magic-open-api.php",
+            "route_declarations": 63,
+            "sha256": "cad121b0f8681195d1f83e321e669e94910a8de18206e3efc10819130120fff3"
+        },
+        {
+            "file": "config/routes-v1/super-magic-organization-admin.php",
+            "route_declarations": 4,
+            "sha256": "81c565dd7a20dcd4b6fea2f09f42cdbdd95a7bf9db9b16b9f18c87b48e017c2e"
+        },
+        {
+            "file": "config/routes-v1/super-magic-recycle-bin.php",
+            "route_declarations": 9,
+            "sha256": "bc7029ce639de45b1f4f1de9dfc0c594d39bd6a494b6c5c5c664717206284ebf"
+        },
+        {
+            "file": "config/routes-v1/super-magic-share.php",
+            "route_declarations": 18,
+            "sha256": "a2f5fa15ba5296ebcdd33d4d86d9dd8587448f0ca044eca3ab6384bfb68a2974"
+        },
+        {
+            "file": "config/routes-v1/super-magic-skill.php",
+            "route_declarations": 23,
+            "sha256": "fd64810510bdd8b294f75ff23f21380742610263308b1b96f0f577140c90affd"
+        },
+        {
+            "file": "config/routes-v1/super-magic.php",
+            "route_declarations": 148,
+            "sha256": "92036bba2eb7311c36d13270d157f93c9df119fa8a0f369586f9a6fc93751148"
+        }
+    ],
+    "annotation_registrations": {
+        "listener": [
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Event\\Subscribe\\AgentSkillsAddedEventSubscriber",
+                "source": "app/Application/SuperMagic/Agent/Event/Subscribe/AgentSkillsAddedEventSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Event\\Subscribe\\AgentSkillsRemovedEventSubscriber",
+                "source": "app/Application/SuperMagic/Agent/Event/Subscribe/AgentSkillsRemovedEventSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Event\\Subscribe\\ImageModelVersionListAddDynamicConfigSubscriber",
+                "source": "app/Application/SuperMagic/Common/Event/Subscribe/ImageModelVersionListAddDynamicConfigSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Service\\FileRecycleBinSubscriber",
+                "source": "app/Application/SuperMagic/Common/RecycleBin/Service/FileRecycleBinSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\AttachmentsProcessedEventSubscriber",
+                "source": "app/Application/SuperMagic/File/Event/Subscribe/AttachmentsProcessedEventSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileChangeNotificationSubscriber",
+                "source": "app/Application/SuperMagic/File/Event/Subscribe/FileChangeNotificationSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\CheckpointRollbackMessageNotificationSubscriber",
+                "source": "app/Application/SuperMagic/Message/Event/Subscribe/CheckpointRollbackMessageNotificationSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\MessageQueueNotificationSubscriber",
+                "source": "app/Application/SuperMagic/Message/Event/Subscribe/MessageQueueNotificationSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\MessageQueueProcessSubscriber",
+                "source": "app/Application/SuperMagic/Message/Event/Subscribe/MessageQueueProcessSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectAssetUpdatedAtSubscriber",
+                "source": "app/Application/SuperMagic/Project/Event/Subscribe/ProjectAssetUpdatedAtSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectOperatorLogSubscriber",
+                "source": "app/Application/SuperMagic/Project/Event/Subscribe/ProjectOperatorLogSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\UngroupedProjectCountCacheSubscriber",
+                "source": "app/Application/SuperMagic/Project/Event/Subscribe/UngroupedProjectCountCacheSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Skill\\Event\\Subscribe\\SkillImportedEventSubscriber",
+                "source": "app/Application/SuperMagic/Skill/Event/Subscribe/SkillImportedEventSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\CustomAiAbilitySubscriber",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/CustomAiAbilitySubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\InvalidateWarmPoolSandboxesOnSandboxImageChangeSubscriber",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/InvalidateWarmPoolSandboxesOnSandboxImageChangeSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\RunTaskCallbackEventSubscriber",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/RunTaskCallbackEventSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\SandboxKeepAliveCleanupSubscriber",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/SandboxKeepAliveCleanupSubscriber.php"
+            }
+        ],
+        "consumer": [
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileBatchCopySubscriber",
+                "source": "app/Application/SuperMagic/File/Event/Subscribe/FileBatchCopySubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileBatchMoveSubscriber",
+                "source": "app/Application/SuperMagic/File/Event/Subscribe/FileBatchMoveSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\InitAccountMessageSubscriber",
+                "source": "app/Application/SuperMagic/Message/Event/Subscribe/InitAccountMessageSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\TopicMessageProcessSubscriber",
+                "source": "app/Application/SuperMagic/Message/Event/Subscribe/TopicMessageProcessSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectForkSubscriber",
+                "source": "app/Application/SuperMagic/Project/Event/Subscribe/ProjectForkSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\StopRunningTaskSubscriber",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/StopRunningTaskSubscriber.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\TaskInitializationConsumer",
+                "source": "app/Application/SuperMagic/Task/Event/Subscribe/TaskInitializationConsumer.php"
+            }
+        ],
+        "crontab": [
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Crontab\\RecycleBinCleanupCrontab",
+                "source": "app/Application/SuperMagic/Common/RecycleBin/Crontab/RecycleBinCleanupCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Crontab\\MessageCompensationCrontab",
+                "source": "app/Application/SuperMagic/Message/Crontab/MessageCompensationCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Crontab\\MessageQueueCompensationCrontab",
+                "source": "app/Application/SuperMagic/Message/Crontab/MessageQueueCompensationCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\CheckTaskStatusTask",
+                "source": "app/Application/SuperMagic/Task/Crontab/CheckTaskStatusTask.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolEvictCrontab",
+                "source": "app/Application/SuperMagic/Task/Crontab/WarmPoolEvictCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolImageShiftCrontab",
+                "source": "app/Application/SuperMagic/Task/Crontab/WarmPoolImageShiftCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolReconcileCrontab",
+                "source": "app/Application/SuperMagic/Task/Crontab/WarmPoolReconcileCrontab.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolRefillCrontab",
+                "source": "app/Application/SuperMagic/Task/Crontab/WarmPoolRefillCrontab.php"
+            }
+        ],
+        "command": [
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\CreateOfficialAgentsCommand",
+                "source": "app/Application/SuperMagic/Agent/Command/CreateOfficialAgentsCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\ExportAgentsForMigrationCommand",
+                "source": "app/Application/SuperMagic/Agent/Command/ExportAgentsForMigrationCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\ImportAgentsForMigrationCommand",
+                "source": "app/Application/SuperMagic/Agent/Command/ImportAgentsForMigrationCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\PublishPrivateAgentsCommand",
+                "source": "app/Application/SuperMagic/Agent/Command/PublishPrivateAgentsCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\RestartAllMagicClawSandboxCommand",
+                "source": "app/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Command\\RecycleBinCleanupCommand",
+                "source": "app/Application/SuperMagic/Common/RecycleBin/Command/RecycleBinCleanupCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Share\\Command\\MigrateOrganizationSharedAgentsCommand",
+                "source": "app/Application/SuperMagic/Common/Share/Command/MigrateOrganizationSharedAgentsCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Share\\Command\\MigrateShareTypeDataCommand",
+                "source": "app/Application/SuperMagic/Common/Share/Command/MigrateShareTypeDataCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\BackfillFileParentIdCommand",
+                "source": "app/Application/SuperMagic/File/Command/BackfillFileParentIdCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\FixMagicHiddenFilesCommand",
+                "source": "app/Application/SuperMagic/File/Command/FixMagicHiddenFilesCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\InitAgentProjectFilesCommand",
+                "source": "app/Application/SuperMagic/File/Command/InitAgentProjectFilesCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\MigrateFileTypeDataCommand",
+                "source": "app/Application/SuperMagic/File/Command/MigrateFileTypeDataCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Command\\MessageQueueCompensationCommand",
+                "source": "app/Application/SuperMagic/Message/Command/MessageQueueCompensationCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Command\\RunMessageCompensationCommand",
+                "source": "app/Application/SuperMagic/Message/Command/RunMessageCompensationCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolAcquireCommand",
+                "source": "app/Application/SuperMagic/Task/Command/RunWarmPoolAcquireCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolDrainCommand",
+                "source": "app/Application/SuperMagic/Task/Command/RunWarmPoolDrainCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolEvictCommand",
+                "source": "app/Application/SuperMagic/Task/Command/RunWarmPoolEvictCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolImageShiftCommand",
+                "source": "app/Application/SuperMagic/Task/Command/RunWarmPoolImageShiftCommand.php"
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolRefillCommand",
+                "source": "app/Application/SuperMagic/Task/Command/RunWarmPoolRefillCommand.php"
+            }
+        ],
+        "rpc": []
+    },
+    "migration_paths": [
+        "migrations"
+    ],
+    "effective_annotations": {
+        "listener": [
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Event\\Subscribe\\AgentSkillsAddedEventSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Agent\\Event\\AgentSkillsAddedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Event\\Subscribe\\AgentSkillsRemovedEventSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Agent\\Event\\AgentSkillsRemovedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Event\\Subscribe\\ImageModelVersionListAddDynamicConfigSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Task\\Event\\RunTaskBeforeEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Service\\FileRecycleBinSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\DirectoryDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FilesBatchDeletedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\AttachmentsProcessedEventSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\File\\Event\\AttachmentsProcessedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileUploadedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileContentSavedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileReplacedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileMovedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileChangeNotificationSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileUploadedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\DirectoryDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FilesBatchDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileRenamedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileMovedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileBatchMoveCompletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileContentSavedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileReplacedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\CheckpointRollbackFilesChangedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\CheckpointRollbackMessageNotificationSubscriber",
+                "annotation": {
+                    "priority": -100
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Message\\Event\\CheckpointRollbackMessagesChangedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\MessageQueueNotificationSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Message\\Event\\MessageQueueCreatedEvent",
+                    "App\\Domain\\SuperMagic\\Message\\Event\\MessageQueueUpdatedEvent",
+                    "App\\Domain\\SuperMagic\\Message\\Event\\MessageQueueDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Message\\Event\\MessageQueueConsumedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\MessageQueueProcessSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Task\\Event\\RunTaskCallbackEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectAssetUpdatedAtSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileUploadedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileContentSavedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\DirectoryDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FilesBatchDeletedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectOperatorLogSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectCreatedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectUpdatedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectsBatchDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Topic\\Event\\TopicCreatedEvent",
+                    "App\\Domain\\SuperMagic\\Topic\\Event\\TopicUpdatedEvent",
+                    "App\\Domain\\SuperMagic\\Topic\\Event\\TopicDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Topic\\Event\\TopicRenamedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileUploadedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileRenamedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileMovedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileContentSavedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileReplacedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\DirectoryDeletedEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FileBatchMoveEvent",
+                    "App\\Domain\\SuperMagic\\File\\Event\\FilesBatchDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectMembersUpdatedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectShortcutSetEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectShortcutCancelledEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\UngroupedProjectCountCacheSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectCreatedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectHiddenStatusUpdatedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectMovedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectsBatchDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectsBatchMovedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Skill\\Event\\Subscribe\\SkillImportedEventSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Skill\\Event\\SkillImportedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\CustomAiAbilitySubscriber",
+                "annotation": {
+                    "priority": 2
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Task\\Event\\RunTaskBeforeEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\InvalidateWarmPoolSandboxesOnSandboxImageChangeSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Task\\Event\\SandboxImageChangedEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\RunTaskCallbackEventSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Task\\Event\\RunTaskCallbackEvent"
+                ]
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\SandboxKeepAliveCleanupSubscriber",
+                "annotation": {
+                    "priority": 0
+                },
+                "events": [
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Project\\Event\\ProjectsBatchDeletedEvent",
+                    "App\\Domain\\SuperMagic\\Topic\\Event\\TopicDeletedEvent"
+                ]
+            }
+        ],
+        "consumer": [
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileBatchCopySubscriber",
+                "annotation": {
+                    "exchange": "super_magic_file_batch_copy",
+                    "routingKey": "super_magic_file_batch_copy",
+                    "queue": "super_magic_file_batch_copy",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Event\\Subscribe\\FileBatchMoveSubscriber",
+                "annotation": {
+                    "exchange": "super_magic_file_batch_move",
+                    "routingKey": "super_magic_file_batch_move",
+                    "queue": "super_magic_file_batch_move",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\InitAccountMessageSubscriber",
+                "annotation": {
+                    "exchange": "organization_created_message",
+                    "routingKey": "organization_created_message",
+                    "queue": "organization_created_message",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Event\\Subscribe\\TopicMessageProcessSubscriber",
+                "annotation": {
+                    "exchange": "super_magic_topic_message_process",
+                    "routingKey": "super_magic_topic_message_process",
+                    "queue": "super_magic_topic_message_process",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Project\\Event\\Subscribe\\ProjectForkSubscriber",
+                "annotation": {
+                    "exchange": "super_magic_project_fork",
+                    "routingKey": "super_magic_project_fork",
+                    "queue": "super_magic_project_fork",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\StopRunningTaskSubscriber",
+                "annotation": {
+                    "exchange": "super_magic_stop_task",
+                    "routingKey": "super_magic_stop_task",
+                    "queue": "super_magic_stop_task",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Event\\Subscribe\\TaskInitializationConsumer",
+                "annotation": {
+                    "exchange": "super-magic",
+                    "routingKey": "task.initialization",
+                    "queue": "task.initialization",
+                    "name": "Consumer",
+                    "nums": 1,
+                    "enable": null,
+                    "maxConsumption": 0,
+                    "pool": null
+                }
+            }
+        ],
+        "crontab": [
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Crontab\\RecycleBinCleanupCrontab",
+                "annotation": {
+                    "rule": "0 3 * * *",
+                    "name": "RecycleBinCleanupCrontab",
+                    "type": "callback",
+                    "singleton": true,
+                    "mutexPool": null,
+                    "mutexExpires": 3600,
+                    "onOneServer": true,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Common\\RecycleBin\\Crontab\\RecycleBinCleanupCrontab",
+                        "execute"
+                    ],
+                    "memo": "回收站过期记录清理定时任务",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Crontab\\MessageCompensationCrontab",
+                "annotation": {
+                    "rule": "*/5 * * * * *",
+                    "name": "MessageCompensationCrontab",
+                    "type": "callback",
+                    "singleton": true,
+                    "mutexPool": null,
+                    "mutexExpires": 60,
+                    "onOneServer": true,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Message\\Crontab\\MessageCompensationCrontab",
+                        "execute"
+                    ],
+                    "memo": "Message compensation scheduled task for handling missed messages",
+                    "enable": false,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Crontab\\MessageQueueCompensationCrontab",
+                "annotation": {
+                    "rule": "*/30 * * * * *",
+                    "name": "MessageQueueCompensationCrontab",
+                    "type": "callback",
+                    "singleton": true,
+                    "mutexPool": null,
+                    "mutexExpires": 60,
+                    "onOneServer": true,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Message\\Crontab\\MessageQueueCompensationCrontab",
+                        "execute"
+                    ],
+                    "memo": "Message queue compensation scheduled task for handling missed message queues",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\CheckTaskStatusTask",
+                "annotation": {
+                    "rule": "*/10 * * * *",
+                    "name": "CheckTaskStatus",
+                    "type": "callback",
+                    "singleton": true,
+                    "mutexPool": null,
+                    "mutexExpires": null,
+                    "onOneServer": true,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Task\\Crontab\\CheckTaskStatusTask",
+                        "execute"
+                    ],
+                    "memo": "每10分钟检查开始时间超过2分钟且状态为running/waiting的任务，根据沙箱状态更新任务和话题状态",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolEvictCrontab",
+                "annotation": {
+                    "rule": "*/5 * * * * *",
+                    "name": "WarmPoolEvictCrontab",
+                    "type": "callback",
+                    "singleton": null,
+                    "mutexPool": null,
+                    "mutexExpires": null,
+                    "onOneServer": null,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolEvictCrontab",
+                        "execute"
+                    ],
+                    "memo": "每 5 秒清理 warm-pool 过期记录",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolImageShiftCrontab",
+                "annotation": {
+                    "rule": "* * * * * *",
+                    "name": "WarmPoolImageShiftCrontab",
+                    "type": "callback",
+                    "singleton": null,
+                    "mutexPool": null,
+                    "mutexExpires": null,
+                    "onOneServer": null,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolImageShiftCrontab",
+                        "execute"
+                    ],
+                    "memo": "每秒检测 warm-pool agent 镜像漂移",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolReconcileCrontab",
+                "annotation": {
+                    "rule": "*/30 * * * * *",
+                    "name": "WarmPoolReconcileCrontab",
+                    "type": "callback",
+                    "singleton": null,
+                    "mutexPool": null,
+                    "mutexExpires": null,
+                    "onOneServer": null,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolReconcileCrontab",
+                        "execute"
+                    ],
+                    "memo": "每 30 秒对账 warm-pool ready 行（死沙箱立刻 retire 让 refill 补齐），对账 claimed 孤儿行（Pod 已不在 k8s 的仅删 DB 记录），并按 TTL 硬清理超期 claimed 墓碑行（常驻沙箱仅删 DB 记录，不动 Pod）",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolRefillCrontab",
+                "annotation": {
+                    "rule": "* * * * * *",
+                    "name": "WarmPoolRefillCrontab",
+                    "type": "callback",
+                    "singleton": null,
+                    "mutexPool": null,
+                    "mutexExpires": null,
+                    "onOneServer": null,
+                    "callback": [
+                        "App\\Application\\SuperMagic\\Task\\Crontab\\WarmPoolRefillCrontab",
+                        "execute"
+                    ],
+                    "memo": "每秒补齐 warm-pool 至 target_size",
+                    "enable": true,
+                    "timezone": null,
+                    "environments": [],
+                    "options": []
+                }
+            }
+        ],
+        "command": [
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\CreateOfficialAgentsCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\ExportAgentsForMigrationCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\ImportAgentsForMigrationCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\PublishPrivateAgentsCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Agent\\Command\\RestartAllMagicClawSandboxCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\RecycleBin\\Command\\RecycleBinCleanupCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Share\\Command\\MigrateOrganizationSharedAgentsCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Common\\Share\\Command\\MigrateShareTypeDataCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\BackfillFileParentIdCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\FixMagicHiddenFilesCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\InitAgentProjectFilesCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\File\\Command\\MigrateFileTypeDataCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Command\\MessageQueueCompensationCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Message\\Command\\RunMessageCompensationCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolAcquireCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolDrainCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolEvictCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolImageShiftCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            },
+            {
+                "class": "App\\Application\\SuperMagic\\Task\\Command\\RunWarmPoolRefillCommand",
+                "annotation": {
+                    "name": "",
+                    "arguments": [],
+                    "options": [],
+                    "description": "",
+                    "aliases": [],
+                    "signature": null
+                }
+            }
+        ],
+        "rpc": []
+    },
+    "duplicate_consumer_queues": [],
+    "duplicate_crontab_names": []
+}

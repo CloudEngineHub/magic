@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace App\Application\MCP\SupperMagicMCP;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskContext;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 
 interface SupperMagicAgentSkillInterface
 {
