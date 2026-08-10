@@ -222,4 +222,69 @@ describe("VideoPollingManager", () => {
 			data: { elementId: element.id },
 		})
 	})
+
+	it("keeps polling an appended Content after the user switches back to an older version", async () => {
+		const element: VideoElement = {
+			id: "video-element-versions",
+			type: ElementTypeEnum.Video,
+			activeContentId: "completed",
+			mainContentId: "completed",
+			contents: [
+				{
+					contentId: "completed",
+					src: "./videos/original.mp4",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "pending",
+					status: GenerationStatus.Processing,
+					generateVideoRequest: {
+						video_id: "video-task-pending",
+						model_id: "model-1",
+						prompt: "new version",
+					},
+				},
+			],
+		}
+		const update = vi.fn((elementId: string, updates: Partial<VideoElement>) => {
+			if (elementId === element.id) Object.assign(element, updates)
+		})
+		const canvas = {
+			magicConfigManager: {
+				config: {
+					methods: {
+						resolveResourceReference,
+						getVideoGenerationResult: vi.fn().mockResolvedValue({
+							video_id: "video-task-pending",
+							status: GenerationStatus.Completed,
+							error_message: null,
+							file_dir: "/画布A/videos/",
+							file_name: "regenerated.mp4",
+						}),
+					},
+				},
+			},
+			elementManager: { hasElement: vi.fn(() => true), update },
+			eventEmitter: { emit: vi.fn() },
+		}
+		const manager = new VideoPollingManager({
+			elementId: element.id,
+			canvas: canvas as never,
+			contentId: "pending",
+			getElementData: () => element,
+		})
+
+		manager.start()
+
+		await vi.waitFor(() => expect(update).toHaveBeenCalled())
+		expect(element.activeContentId).toBe("completed")
+		expect(element.contents[0]?.src).toBe("./videos/original.mp4")
+		expect(element.contents[1]).toEqual(
+			expect.objectContaining({
+				contentId: "pending",
+				src: "./videos/regenerated.mp4",
+				status: GenerationStatus.Completed,
+			}),
+		)
+	})
 })

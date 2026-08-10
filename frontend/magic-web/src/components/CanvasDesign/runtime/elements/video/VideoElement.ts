@@ -4,8 +4,16 @@ import type {
 	VideoElementContent,
 	LayerElement,
 } from "../../document/types"
+import { ElementTypeEnum } from "../../document/types"
 import { GenerationStatus } from "../../../public/magic-types"
-import { getActiveContent } from "../../document/elementContent"
+import {
+	appendContent,
+	createContentId,
+	getActiveContent,
+	getContentById,
+	getPendingVideoGenerationContent,
+	hasPendingVideoGenerationContent,
+} from "../../document/elementContent"
 import type {
 	GenerateVideoRequest,
 	StoredVideoModeDraftsMap,
@@ -15,6 +23,7 @@ import { BaseElement } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { generateUUID, type Rect } from "../../shared/ids"
 import { BorderDecorator } from "../decorators/BorderDecorator"
+import { ImageContentControlsDecorator } from "../decorators/ImageContentControlsDecorator"
 import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
@@ -63,6 +72,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
+	private contentControlsDecorator?: ImageContentControlsDecorator
 	public isGenerating = false
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
@@ -106,12 +116,14 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			},
 		)
 
+		const pollingContent = getPendingVideoGenerationContent(this.data) ?? this.getVideoContent()
 		this.pollingManager = new VideoPollingManager({
 			elementId: this.data.id,
 			canvas: this.canvas,
-			contentId: this.getVideoContent()?.contentId,
+			contentId: pollingContent?.contentId,
 			getElementData: () => this.data,
-			onPollingIssue: () => {
+			onPollingIssue: (contentId) => {
+				if (contentId && contentId !== this.getVideoContent()?.contentId) return
 				this.handlePollingIssue()
 			},
 		})
@@ -137,7 +149,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			}
 		}
 
-		if (!this.getVideoSrc() && this.getVideoContent()?.generateVideoRequest?.video_id) {
+		if (!pollingContent?.src && pollingContent?.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
 	}
@@ -157,6 +169,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
+		this.contentControlsDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
@@ -173,6 +186,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
+		this.contentControlsDecorator?.destroy()
+		this.contentControlsDecorator = undefined
 		return super.rerender()
 	}
 
@@ -181,7 +196,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
 			!generateVideo ||
-			this.isGenerating ||
+			this.hasPendingVideoGeneration() ||
 			!request.model_id ||
 			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
@@ -232,6 +247,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
+				this.isGenerating = false
 				return false
 			}
 			this.isGenerating = false
@@ -269,6 +285,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			if (
 				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
 			) {
+				this.isGenerating = false
 				return false
 			}
 			this.isGenerating = false
@@ -279,6 +296,136 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			return false
 		}
+	}
+
+	/**
+	 * 在当前视频元素内追加一次生成 Content，供结果态的重新编辑/再次生成使用。
+	 * 生成请求确认前只登记运行时 attempt，避免失败时把空任务写入 DSL。
+	 */
+	public async submitContentGeneration(request: GenerateVideoRequest): Promise<boolean> {
+		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
+		if (
+			!generateVideo ||
+			this.hasPendingVideoGeneration() ||
+			!request.model_id ||
+			!hasVideoGenerationRequestSubmitIntent(request)
+		) {
+			this.canvas.eventEmitter.emit({
+				type: "element:video:generate-submit-failed",
+				data: { elementId: this.data.id },
+			})
+			return false
+		}
+
+		const contentId = createContentId("content")
+		const requestWithId: GenerateVideoRequest = {
+			...request,
+			prompt: request.prompt?.trim(),
+			// 追加 Content 必须对应全新的服务端任务，不能复用旧版本的 video_id。
+			video_id: generateUUID(),
+		}
+		this.isGenerating = true
+		this.isErrorState = false
+		this.isRetryEditing = false
+		const attemptId = this.canvas.generationRuntimeManager.beginAttempt({
+			operation: "video-generate",
+			originElementId: this.data.id,
+			targets: [
+				{
+					elementId: this.data.id,
+					contentId,
+					generateVideoRequest: requestWithId,
+				},
+			],
+			failurePolicy: "restore-existing",
+		})
+		this.rerender()
+		this.canvas.eventEmitter.emit({
+			type: "element:video:generate-submit-started",
+			data: { elementId: this.data.id },
+		})
+
+		try {
+			await generateVideo(requestWithId)
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
+				this.isGenerating = false
+				return false
+			}
+
+			const current = this.canvas.elementManager.getElementData(this.data.id)
+			if (!current || current.type !== ElementTypeEnum.Video) {
+				this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+				this.isGenerating = false
+				return false
+			}
+
+			const next = appendContent<VideoElementData>(current, {
+				contentId,
+				generateVideoRequest: requestWithId,
+			})
+			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+				{
+					elementId: this.data.id,
+					contentId,
+					persistedPatch: {
+						contents: next.contents,
+						activeContentId: contentId,
+						mainContentId: next.mainContentId,
+					},
+				},
+			])
+			if (!confirmed) {
+				this.isGenerating = false
+				return false
+			}
+
+			this.isGenerating = false
+			this.isErrorState = false
+			this.clearTempGenerateVideoRequest()
+			this.pollingManager.setContentId(contentId)
+			this.pollingManager.start()
+			this.rerender()
+			return true
+		} catch {
+			if (
+				!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id, contentId)
+			) {
+				this.isGenerating = false
+				return false
+			}
+			this.isGenerating = false
+			this.canvas.eventEmitter.emit({
+				type: "element:video:generate-submit-failed",
+				data: { elementId: this.data.id },
+			})
+			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			return false
+		}
+	}
+
+	public switchActiveContent(contentId: string): boolean {
+		if (!getContentById(this.data, contentId)) return false
+		if (this.data.activeContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ activeContentId: contentId },
+			{ silent: false },
+		)
+		return true
+	}
+
+	public setMainContent(contentId: string): boolean {
+		const target = getContentById(this.data, contentId)
+		if (!target?.src || target.status !== GenerationStatus.Completed) return false
+		if (this.data.mainContentId === contentId) return true
+		this.canvas.elementManager.update(
+			this.data.id,
+			{ mainContentId: contentId },
+			{ silent: false },
+		)
+		return true
 	}
 
 	private async loadPreviewFromPath(
@@ -694,6 +841,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
+		this.contentControlsDecorator?.refreshLayout()
 		if (!(this.node instanceof Konva.Group) || !this.data.width || !this.data.height) {
 			return
 		}
@@ -706,6 +854,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	update(newData: VideoElementData): boolean {
+		const currentActiveContentId = this.data.activeContentId
 		const previousContent = this.getVideoContent()
 		const nextContent = getActiveContent<VideoElementContent>(newData)
 		const srcChanged = previousContent?.src !== nextContent?.src
@@ -714,7 +863,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			!!nextContent?.src ||
 			newStatus === GenerationStatus.Completed ||
 			newStatus === GenerationStatus.Failed
+		const contentControlsChanged =
+			this.data.contents.length !== newData.contents.length ||
+			this.data.mainContentId !== newData.mainContentId
 		const needsRerender =
+			contentControlsChanged ||
+			currentActiveContentId !== newData.activeContentId ||
 			previousContent?.generateVideoRequest?.video_id !==
 				nextContent?.generateVideoRequest?.video_id ||
 			previousContent?.src !== nextContent?.src ||
@@ -784,6 +938,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
+		this.createContentControls(group, width, height, { reserveFullscreen: true })
 		this.setupContentUpdateListener(group)
 	}
 
@@ -844,6 +999,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
+				this.createContentControls(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -862,6 +1018,44 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+	}
+
+	private createContentControls(
+		group: Konva.Group,
+		width: number,
+		height: number,
+		options?: { reserveFullscreen?: boolean },
+	): void {
+		if (this.data.contents.length <= 1) return
+		this.contentControlsDecorator = new ImageContentControlsDecorator(group, {
+			elementId: this.data.id,
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+			namePrefix: "video",
+			bottomRightReservedScreenWidth: options?.reserveFullscreen
+				? VIDEO_CONFIG.CONTROL_BUTTON_SIZE
+				: 0,
+			onPrevious: () => {
+				const index = this.data.contents.findIndex(
+					(content) => content.contentId === this.data.activeContentId,
+				)
+				const previous = this.data.contents[index - 1]
+				if (previous) this.switchActiveContent(previous.contentId)
+			},
+			onNext: () => {
+				const index = this.data.contents.findIndex(
+					(content) => content.contentId === this.data.activeContentId,
+				)
+				const next = this.data.contents[index + 1]
+				if (next) this.switchActiveContent(next.contentId)
+			},
+			onSetMain: () => {
+				if (this.data.activeContentId) this.setMainContent(this.data.activeContentId)
+			},
+		})
+		this.contentControlsDecorator.create()
 	}
 
 	private setupRetryEditingListeners(): void {
@@ -1143,6 +1337,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.contentControlsDecorator?.updateConfig({ width, height, data: this.data })
 		this.node.getLayer()?.batchDraw()
 	}
 
@@ -1260,6 +1455,14 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 	private getVideoContent(): VideoElementContent | undefined {
 		return this.getActiveContent<VideoElementContent>()
+	}
+
+	private hasPendingVideoGeneration(): boolean {
+		return (
+			this.isGenerating ||
+			Boolean(this.canvas.generationRuntimeManager.getTargetState(this.data.id)) ||
+			hasPendingVideoGenerationContent(this.data)
+		)
 	}
 
 	private getVideoSrc(): string | undefined {

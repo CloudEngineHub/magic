@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useState } from "react"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
@@ -14,9 +14,7 @@ import { MediaResultActionBar } from "../../canvas-editor/media-result-action-ba
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import styles from "./index.module.css"
-import { createAndSubmitVideoGeneration } from "./submit/createAndSubmitVideoGeneration"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
-import { resolveVideoGenerationSelection } from "./generation/video-editor-config.generation"
 import { buildVideoPointsEstimateSignature } from "./points/video-points-estimate.utils"
 import { collectPendingVideoGenerationRequestResourcePaths } from "./points/video-points-estimate.resources"
 import { resolveVideoPointsEstimateGate } from "./points/video-points-estimate.policy"
@@ -66,27 +64,19 @@ async function waitForPendingVideoGenerationResources(
 	})
 }
 
-/**
- * 视频成片后的结果态：仅提供「重新生成」，展开后与主生成编辑器一致，且仅按 generateVideoRequest 恢复。
- */
+/** 视频成片结果态：重新编辑可调整已保存请求，再次生成则直接追加同配置 Content。 */
 export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
-	const { videoModelList, methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } =
-		useMagic()
+	const { methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
 	const videoContent = getActiveContent(videoElement)
+	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
 	const confirmVideoGeneration = useVideoPointsConfirm()
-	const estimateRequest = videoContent?.generateVideoRequest ?? null
-	const generateAgainElementSize = useMemo(() => {
-		if (!estimateRequest?.generation) return null
-		const model = videoModelList.find((item) => item.model_id === estimateRequest.model_id)
-		return resolveVideoGenerationSelection(model, estimateRequest.generation).size
-	}, [estimateRequest, videoModelList])
 
 	const { containerRef: positionRef } = useElementPositionEffect({
 		position: "bottom",
@@ -110,16 +100,16 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	)
 
 	const handleStartRegenerate = useCallback(() => {
-		if (!canvas || !videoContent?.generateVideoRequest) return
+		if (!canvas || !savedGenerateVideoRequest) return
 		const inst = canvas.elementManager.getElementInstance(videoElement.id)
 		if (inst instanceof VideoElementClass) {
 			inst.clearTempGenerateVideoRequest()
 		}
 		setIsEditing(true)
-	}, [canvas, videoElement.id, videoContent?.generateVideoRequest])
+	}, [canvas, savedGenerateVideoRequest, videoElement.id])
 
 	const handleGenerateAgain = useCallback(async () => {
-		const generateVideoRequest = videoContent?.generateVideoRequest
+		const generateVideoRequest = savedGenerateVideoRequest
 		if (!canvas || !generateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
 			return
 
@@ -174,14 +164,13 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			onConfirm: async () => {
 				setIsGeneratingAgain(true)
 				try {
-					await createAndSubmitVideoGeneration({
-						canvas,
-						sourceVideoElement: videoElement,
-						newElementSize: generateAgainElementSize,
-						request: {
-							...generateVideoRequest,
-							video_id: generateUUID(),
-						},
+					const elementInstance = canvas.elementManager.getElementInstance(
+						videoElement.id,
+					)
+					if (!(elementInstance instanceof VideoElementClass)) return
+					await elementInstance.submitContentGeneration({
+						...generateVideoRequest,
+						video_id: generateUUID(),
 					})
 				} finally {
 					setIsGeneratingAgain(false)
@@ -191,16 +180,16 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	}, [
 		canvas,
 		confirmVideoGeneration,
-		generateAgainElementSize,
 		getCachedVideoPointsEstimate,
 		getVideoPointsEstimate,
 		isGeneratingAgain,
 		isPreparingGenerateAgain,
 		methods?.estimateVideoPoints,
+		savedGenerateVideoRequest,
 		videoElement,
 	])
 
-	const canRestore = Boolean(videoContent?.generateVideoRequest?.model_id)
+	const canRestore = Boolean(savedGenerateVideoRequest?.model_id)
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
 
 	if (!isEditing) {
@@ -250,7 +239,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			videoElement={videoElement}
 			autoFocus
 			restoreOnMount="originalRequestOnly"
-			submitTarget="new-element"
+			submitTarget="current-content"
 			syncElementSize={false}
 			onPreviewMediaResource={props.onPreviewMediaResource}
 			isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}

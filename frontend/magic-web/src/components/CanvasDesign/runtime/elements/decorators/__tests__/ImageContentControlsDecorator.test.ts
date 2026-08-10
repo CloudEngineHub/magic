@@ -73,7 +73,7 @@ function createHarness(
 			getSelectionCount: vi.fn(() => selectionCount),
 		},
 		t: (_key: string, options?: { defaultValue?: string }) =>
-			options?.defaultValue ?? "设为主内容",
+			options?.defaultValue ?? "设为主版本",
 	}
 	const onPrevious = vi.fn()
 	const onNext = vi.fn()
@@ -194,7 +194,7 @@ describe("ImageContentControlsDecorator", () => {
 		expect(tag?.listening()).toBe(false)
 		expect(tag?.height()).toBe(24)
 		expect(background?.fill()).toBe(COLORS.BUTTON_BG)
-		expect(label?.text()).toBe("主内容")
+		expect(label?.text()).toBe("主版本")
 		expect(label?.fill()).toBe("#FFFFFF")
 		expect(label?.fontSize()).toBe(12)
 

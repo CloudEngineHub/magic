@@ -1,6 +1,6 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
-import type { ImageElement } from "../../document/types"
+import type { ImageElement, VideoElement } from "../../document/types"
 import {
 	COLORS,
 	IMAGE_CONFIG,
@@ -13,7 +13,9 @@ interface ImageContentControlsDecoratorConfig {
 	canvas: Canvas
 	width: number
 	height: number
-	data: ImageElement
+	data: ImageElement | VideoElement
+	/** 节点命名前缀；默认保持图片既有命名，视频复用时使用 video。 */
+	namePrefix?: "image" | "video"
 	bottomRightReservedScreenWidth?: number
 	onPrevious: () => void
 	onNext: () => void
@@ -70,7 +72,7 @@ export class ImageContentControlsDecorator {
 		if (currentIndex < 0) return
 
 		const root = new Konva.Group({
-			name: "image-content-controls",
+			name: `${this.config.namePrefix ?? "image"}-content-controls`,
 			listening: true,
 		})
 		const active = this.config.data.contents[currentIndex]
@@ -85,7 +87,7 @@ export class ImageContentControlsDecorator {
 		const panelWidth = BUTTON_WIDTH * 2 + INDEX_WIDTH + PANEL_PADDING * 2
 		this.navigationScreenWidth = panelWidth
 		const panel = new Konva.Group({
-			name: "image-content-navigation",
+			name: `${this.config.namePrefix ?? "image"}-content-navigation`,
 			listening: true,
 		})
 
@@ -136,8 +138,8 @@ export class ImageContentControlsDecorator {
 
 		if (canSetMain) {
 			const label = this.config.canvas.t
-				? this.config.canvas.t("image.content.setMain", { defaultValue: "设为主内容" })
-				: "设为主内容"
+				? this.config.canvas.t("image.content.setMain", { defaultValue: "设为主版本" })
+				: "设为主版本"
 			const labelProbe = new Konva.Text({
 				text: label,
 				fontSize: LAYOUT.TEXT_FONT_SIZE,
@@ -213,8 +215,8 @@ export class ImageContentControlsDecorator {
 
 	private createMainTag(): Konva.Group {
 		const label = this.config.canvas.t
-			? this.config.canvas.t("image.content.main", { defaultValue: "主内容" })
-			: "主内容"
+			? this.config.canvas.t("image.content.main", { defaultValue: "主版本" })
+			: "主版本"
 		const labelProbe = new Konva.Text({
 			text: label,
 			fontSize: LAYOUT.TEXT_FONT_SIZE,
@@ -226,7 +228,7 @@ export class ImageContentControlsDecorator {
 		const tag = new Konva.Group({
 			width,
 			height: CONTROL_HEIGHT,
-			name: "image-content-main-tag",
+			name: `${this.config.namePrefix ?? "image"}-content-main-tag`,
 			listening: false,
 		})
 		tag.add(
@@ -236,7 +238,7 @@ export class ImageContentControlsDecorator {
 				cornerRadius: IMAGE_CONFIG.CORNER_RADIUS,
 				fill: COLORS.BUTTON_BG,
 				listening: false,
-				name: "image-content-main-tag-background",
+				name: `${this.config.namePrefix ?? "image"}-content-main-tag-background`,
 			}),
 			new Konva.Text({
 				width,
@@ -248,7 +250,7 @@ export class ImageContentControlsDecorator {
 				verticalAlign: "middle",
 				fill: BUTTON_TEXT_COLOR,
 				listening: false,
-				name: "image-content-main-tag-label",
+				name: `${this.config.namePrefix ?? "image"}-content-main-tag-label`,
 			}),
 		)
 		return tag
@@ -270,14 +272,14 @@ export class ImageContentControlsDecorator {
 			x: options.x,
 			width,
 			height: CONTROL_HEIGHT,
-			name: `image-content-button-${options.key}`,
+			name: `${this.config.namePrefix ?? "image"}-content-button-${options.key}`,
 			listening: true,
 		})
 		const visual = new Konva.Group({
 			x: width / 2,
 			y: CONTROL_HEIGHT / 2,
 			listening: false,
-			name: `image-content-button-${options.key}-visual`,
+			name: `${this.config.namePrefix ?? "image"}-content-button-${options.key}-visual`,
 		})
 		const background = new Konva.Rect({
 			x: -width / 2,
@@ -309,7 +311,7 @@ export class ImageContentControlsDecorator {
 			height: CONTROL_HEIGHT,
 			fill: "rgba(0,0,0,0.001)",
 			listening: true,
-			name: `image-content-button-${options.key}-hit`,
+			name: `${this.config.namePrefix ?? "image"}-content-button-${options.key}-hit`,
 		})
 
 		visual.add(background, content)
@@ -349,7 +351,7 @@ export class ImageContentControlsDecorator {
 				context.strokeShape(shape)
 			},
 			listening: false,
-			name: `image-content-button-${key}-chevron`,
+			name: `${this.config.namePrefix ?? "image"}-content-button-${key}-chevron`,
 		})
 	}
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { ImageElement, ImageElementContent } from "../types"
+import type { ImageElement, ImageElementContent, VideoElement } from "../types"
 import {
 	appendContent,
 	createContentId,
@@ -7,6 +7,8 @@ import {
 	getActiveContent,
 	getContentById,
 	getMainContent,
+	getPendingVideoGenerationContent,
+	hasPendingVideoGenerationContent,
 	setMainContent,
 	switchActiveContent,
 	updateContent,
@@ -79,5 +81,28 @@ describe("elementContent", () => {
 
 	it("creates namespaced Content IDs", () => {
 		expect(createContentId("image-content")).toMatch(/^image-content-/)
+	})
+
+	it("finds a pending video Content even when another version is active", () => {
+		const element: VideoElement = {
+			id: "video-1",
+			type: "video",
+			activeContentId: "completed",
+			mainContentId: "completed",
+			contents: [
+				{ contentId: "completed", src: "./videos/completed.mp4", status: "completed" },
+				{
+					contentId: "pending",
+					generateVideoRequest: {
+						video_id: "video-task-1",
+						model_id: "video-model",
+						prompt: "new version",
+					},
+				},
+			],
+		}
+
+		expect(getPendingVideoGenerationContent(element)?.contentId).toBe("pending")
+		expect(hasPendingVideoGenerationContent(element)).toBe(true)
 	})
 })

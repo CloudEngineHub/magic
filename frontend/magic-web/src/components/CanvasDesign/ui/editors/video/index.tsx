@@ -3,7 +3,10 @@ import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import { GenerationStatus } from "../../../public/magic-types"
-import { getActiveContent } from "../../../runtime/document/elementContent"
+import {
+	getActiveContent,
+	hasPendingVideoGenerationContent,
+} from "../../../runtime/document/elementContent"
 import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
@@ -102,17 +105,14 @@ function ActiveVideoGenerateEditor({
 	const videoContent = getActiveContent(videoElement)
 
 	const hasSrc = !!videoContent?.src
-	const hasTerminalVideoGenerationState =
-		hasSrc ||
-		videoContent?.status === GenerationStatus.Completed ||
-		videoContent?.status === GenerationStatus.Failed
+	const hasPendingVideoContent = hasPendingVideoGenerationContent(videoElement)
 
 	const isGenerating = useMemo(() => {
-		if (!canvas || hasTerminalVideoGenerationState) return false
+		if (!canvas) return false
 		const videoInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(videoInstance instanceof VideoElementClass)) return false
-		return !!videoInstance.isGenerating || Boolean(generationRuntime)
-	}, [canvas, videoElement.id, hasTerminalVideoGenerationState, generationRuntime])
+		return !!videoInstance.isGenerating || Boolean(generationRuntime) || hasPendingVideoContent
+	}, [canvas, generationRuntime, hasPendingVideoContent, videoElement.id])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -187,6 +187,7 @@ function ActiveVideoGenerateEditor({
 			autoFocus={isRetryEditing}
 			autoFocusAtDocumentEnd={isRetryEditing}
 			onGenerateSubmitSucceeded={handleGenerateSubmitSucceeded}
+			submitTarget={isRetryEditing ? "current-content" : "current-element"}
 			onPreviewMediaResource={onPreviewMediaResource}
 			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 		/>

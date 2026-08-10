@@ -580,6 +580,58 @@ describe("ImageElement mounted image node sync", () => {
 		expect(shouldRerender).toBe(true)
 	})
 
+	it("rerenders video Content controls when active, main, or version count changes", () => {
+		const createElement = () => {
+			const element = Object.create(VideoElement.prototype) as VideoElement & {
+				data: VideoElementData
+				isGenerating: boolean
+			}
+			element.data = {
+				id: "video-versions",
+				type: ElementTypeEnum.Video,
+				width: 100,
+				height: 100,
+				activeContentId: "v1",
+				mainContentId: "v1",
+				contents: [
+					{
+						contentId: "v1",
+						src: "./videos/shared.mp4",
+						status: GenerationStatus.Completed,
+					},
+					{
+						contentId: "v2",
+						src: "./videos/shared.mp4",
+						status: GenerationStatus.Completed,
+					},
+				],
+			}
+			element.isGenerating = false
+			return element
+		}
+
+		const activeChanged = createElement()
+		expect(activeChanged.update({ ...activeChanged.data, activeContentId: "v2" })).toBe(true)
+
+		const mainChanged = createElement()
+		expect(mainChanged.update({ ...mainChanged.data, mainContentId: "v2" })).toBe(true)
+
+		const contentsChanged = createElement()
+		expect(
+			contentsChanged.update({
+				...contentsChanged.data,
+				contents: [
+					...contentsChanged.data.contents,
+					{
+						contentId: "v3",
+						src: "./videos/third.mp4",
+						status: GenerationStatus.Completed,
+					},
+				],
+			}),
+		).toBe(true)
+	})
+
 	it("resizes mounted image layout during node-only transform resize", () => {
 		const imageNode = new Konva.Image({
 			image: new Image(),
@@ -1576,5 +1628,107 @@ describe("ImageElement mounted image node sync", () => {
 				}),
 			}),
 		])
+	})
+
+	it("appends a new video Content for result-state regeneration", async () => {
+		const deferred = createDeferred()
+		const generateVideo = vi.fn(() => deferred.promise)
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const data: VideoElementData = {
+			id: "video-content-1",
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+			activeContentId: "video-v1",
+			mainContentId: "video-v1",
+			contents: [
+				{
+					contentId: "video-v1",
+					src: "./videos/original.mp4",
+					status: GenerationStatus.Completed,
+					generateVideoRequest: {
+						video_id: "old-video-id",
+						model_id: "video-model",
+						prompt: "original prompt",
+					},
+				},
+			],
+		}
+		const commitGenerationTargets = vi.fn(
+			(targets: Array<{ persistedPatch: Partial<VideoElementData> }>) => {
+				Object.assign(data, targets[0]?.persistedPatch)
+			},
+		)
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: VideoElementData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: {
+				magicConfigManager: { config: { methods: { generateVideo: typeof generateVideo } } }
+				generationRuntimeManager: GenerationRuntimeManager
+				generationAttemptCoordinator: GenerationAttemptCoordinator
+				elementManager: {
+					getElementData: () => VideoElementData
+					commitGenerationTargets: typeof commitGenerationTargets
+				}
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			pollingManager: {
+				setContentId: ReturnType<typeof vi.fn>
+				start: ReturnType<typeof vi.fn>
+			}
+			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = data
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
+			elementManager: {
+				getElementData: () => data,
+				commitGenerationTargets,
+			},
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas as typeof element.canvas
+		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
+		element.clearTempGenerateVideoRequest = vi.fn()
+		element.rerender = vi.fn()
+
+		const resultPromise = element.submitContentGeneration({
+			model_id: "video-model",
+			prompt: "  edited prompt  ",
+			video_id: "old-video-id",
+		})
+		await Promise.resolve()
+
+		expect(data.contents).toHaveLength(1)
+		expect(generationRuntimeManager.getTargetState(data.id)?.contentId).toMatch(/^content-/)
+
+		deferred.resolve()
+		await expect(resultPromise).resolves.toBe(true)
+
+		expect(data.contents).toHaveLength(2)
+		expect(data.activeContentId).toBe(data.contents[1]?.contentId)
+		expect(data.mainContentId).toBe("video-v1")
+		expect(data.contents[1]).toEqual(
+			expect.objectContaining({
+				generateVideoRequest: expect.objectContaining({
+					model_id: "video-model",
+					prompt: "edited prompt",
+					video_id: expect.any(String),
+				}),
+			}),
+		)
+		expect(data.contents[1]?.generateVideoRequest?.video_id).not.toBe("old-video-id")
+		expect(element.pollingManager.setContentId).toHaveBeenCalledWith(
+			data.contents[1]?.contentId,
+		)
+		expect(element.pollingManager.start).toHaveBeenCalledTimes(1)
 	})
 })

@@ -99,7 +99,7 @@
 			"placeholder": "字重"
 		},
 		"imageContentDelete": {
-			"title": "删除当前内容"
+			"title": "删除当前版本"
 		},
 		"imageConvertHight": {
 			"exitHint": "退出",
@@ -186,8 +186,8 @@
 	"image": {
 		"batchUploadFailed": "有 {{failed}}/{{total}} 个文件上传失败",
 		"content": {
-			"main": "主内容",
-			"setMain": "设为主内容"
+			"main": "主版本",
+			"setMain": "设为主版本"
 		},
 		"defaultName": "图片生成器",
 		"empty": "请发送生成图像的指令",

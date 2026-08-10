@@ -24,7 +24,7 @@ export interface VideoPollingManagerConfig {
 	/** 轮询提交时捕获的目标 Content；异步结果不得写入其他 Content。 */
 	contentId?: string
 	/** 轮询同步出现临时异常时通知视图层自行处理展示态 */
-	onPollingIssue?: () => void
+	onPollingIssue?: (contentId?: string) => void
 }
 
 /**
@@ -37,6 +37,11 @@ export class VideoPollingManager {
 
 	constructor(config: VideoPollingManagerConfig) {
 		this.config = config
+	}
+
+	/** 追加新 Content 后，将轮询明确绑定到本次提交的 Content，避免异步结果串写。 */
+	public setContentId(contentId?: string): void {
+		this.config.contentId = contentId
 	}
 
 	/** 开始轮询（若已在轮询则忽略） */
@@ -232,7 +237,7 @@ export class VideoPollingManager {
 			return
 		}
 
-		this.config.onPollingIssue?.()
+		this.config.onPollingIssue?.(this.config.contentId)
 		this.scheduleNextPoll()
 	}
 

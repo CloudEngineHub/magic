@@ -28,7 +28,7 @@ export default function ImageContentDeleteButton() {
 		>
 			<Trash2 size={16} />
 			<span className={styles.buttonText}>
-				{t("elementTools.imageContentDelete.title", "删除当前内容")}
+				{t("elementTools.imageContentDelete.title", "删除当前版本")}
 			</span>
 		</IconButton>
 	)

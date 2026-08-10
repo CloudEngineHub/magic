@@ -7,6 +7,8 @@ import type {
 	ImageElement,
 	ImageElementContent,
 	LayerElement,
+	VideoElement,
+	VideoElementContent,
 } from "./types"
 
 export type ContentElement = ContentElementProps<ElementContentBase>
@@ -322,6 +324,23 @@ export function getActiveImageContentId(element: ImageElement): string | undefin
 
 export function hasProcessingImageContent(element: ImageElement): boolean {
 	return getImageContents(element).some((content) => content.status === "processing")
+}
+
+/** 未完成视频任务可能不是 active（用户可切回旧版本），轮询与提交互斥必须遍历 Contents。 */
+export function getPendingVideoGenerationContent(
+	element: VideoElement,
+): VideoElementContent | undefined {
+	return getContents(element).find(
+		(content) =>
+			Boolean(content.generateVideoRequest?.video_id) &&
+			!content.src &&
+			content.status !== "completed" &&
+			content.status !== "failed",
+	)
+}
+
+export function hasPendingVideoGenerationContent(element: VideoElement): boolean {
+	return Boolean(getPendingVideoGenerationContent(element))
 }
 
 export function createImageContentId(): string {

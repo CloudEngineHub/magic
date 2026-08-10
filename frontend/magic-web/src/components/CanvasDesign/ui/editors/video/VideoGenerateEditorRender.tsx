@@ -111,7 +111,8 @@ interface VideoGenerateEditorRenderProps {
 	onGenerateSubmitSucceeded?: () => void
 	/** 成片后重新进入编辑器时仅按 generateVideoRequest 恢复，不合并临时草稿 */
 	restoreOnMount?: UseVideoEditorConfigOptions["restoreOnMount"]
-	submitTarget?: "current-element" | "new-element"
+	/** current-content 在当前视频元素中追加一个 Content；new-element 保留独立结果节点能力。 */
+	submitTarget?: "current-element" | "current-content" | "new-element"
 	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
@@ -691,10 +692,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								request: requestParams,
 								newElementSize: config.ratioOption,
 							})
-						: await (async () => {
-								handlers.saveDraftRequest(options?.draftRequest ?? requestParams)
-								return elementInstance.generateVideo(requestParams)
-							})()
+						: submitTarget === "current-content"
+							? await elementInstance.submitContentGeneration(requestParams)
+							: await (async () => {
+									handlers.saveDraftRequest(
+										options?.draftRequest ?? requestParams,
+									)
+									return elementInstance.generateVideo(requestParams)
+								})()
 				if (submitted) onGenerateSubmitSucceeded?.()
 			} finally {
 				sendingRef.current = false
