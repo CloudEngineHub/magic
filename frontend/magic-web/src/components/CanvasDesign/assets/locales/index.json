@@ -127,6 +127,20 @@
 		"imageReplace": {
 			"title": "替换图片"
 		},
+		"mediaDownload": {
+			"title": "下载"
+		},
+		"mediaReplace": {
+			"audio": "替换音频",
+			"image": "替换图片",
+			"replacing": "替换中",
+			"title": "替换媒体",
+			"upload": "上传媒体",
+			"uploadAudio": "上传音频",
+			"uploadImage": "上传图片",
+			"uploadVideo": "上传视频",
+			"video": "替换视频"
+		},
 		"shapeStyle": {
 			"advanced": "高级",
 			"cornerRadius": "圆角",

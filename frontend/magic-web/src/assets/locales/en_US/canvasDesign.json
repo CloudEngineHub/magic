@@ -126,6 +126,20 @@
 		"imageReplace": {
 			"title": "Replace Image"
 		},
+		"mediaDownload": {
+			"title": "Download"
+		},
+		"mediaReplace": {
+			"audio": "Replace Audio",
+			"image": "Replace Image",
+			"replacing": "Replacing",
+			"title": "Replace Media",
+			"upload": "Upload Media",
+			"uploadAudio": "Upload Audio",
+			"uploadImage": "Upload Image",
+			"uploadVideo": "Upload Video",
+			"video": "Replace Video"
+		},
 		"shapeStyle": {
 			"advanced": "Advanced",
 			"cornerRadius": "Corner Radius",

@@ -31,6 +31,10 @@ export default function ElementTools() {
 		firstSelectedElement?.type === ElementTypeEnum.Audio
 			? getActiveContent(firstSelectedElement)?.src
 			: undefined
+	const videoSrc =
+		firstSelectedElement?.type === ElementTypeEnum.Video
+			? getActiveContent(firstSelectedElement)?.src
+			: undefined
 
 	const showVideoOriginalSizeButton = useShowVideoOriginalSizeButton({
 		canvas,
@@ -123,7 +127,10 @@ export default function ElementTools() {
 					})
 					imageElementTools.push(Divider)
 					imageElementTools.push({
-						type: ElementToolTypeEnum.ImageReplaceButton,
+						type: ElementToolTypeEnum.MediaReplaceButton,
+					})
+					imageElementTools.push({
+						type: ElementToolTypeEnum.MediaDownloadButton,
 					})
 					if (hasMultipleImageContents) {
 						imageElementTools.push({
@@ -133,18 +140,22 @@ export default function ElementTools() {
 					return imageElementTools
 
 				case ElementTypeEnum.Video:
-					return showVideoOriginalSizeButton
-						? [{ type: ElementToolTypeEnum.VideoOriginalSizeButton }]
-						: []
+					if (!videoSrc) return []
+					return [
+						...(showVideoOriginalSizeButton
+							? [{ type: ElementToolTypeEnum.VideoOriginalSizeButton }, Divider]
+							: []),
+						{ type: ElementToolTypeEnum.MediaReplaceButton },
+						{ type: ElementToolTypeEnum.MediaDownloadButton },
+					]
 
 				case ElementTypeEnum.Audio:
 					return audioSrc
 						? [
-								{ type: ElementToolTypeEnum.AudioReplaceButton },
-								Divider,
-								{ type: ElementToolTypeEnum.AudioDownloadButton },
+								{ type: ElementToolTypeEnum.MediaReplaceButton },
+								{ type: ElementToolTypeEnum.MediaDownloadButton },
 							]
-						: [{ type: ElementToolTypeEnum.AudioReplaceButton }]
+						: [{ type: ElementToolTypeEnum.MediaReplaceButton }]
 
 				default:
 					break
@@ -167,9 +178,10 @@ export default function ElementTools() {
 		return []
 	}, [
 		convertHightConfig?.supported,
-		firstSelectedElement?.type,
+		firstSelectedElement,
 		audioSrc,
 		imageSrc,
+		videoSrc,
 		isDragging,
 		isSelecting,
 		isSingleElement,

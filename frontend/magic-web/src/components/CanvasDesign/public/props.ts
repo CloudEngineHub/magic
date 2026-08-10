@@ -295,6 +295,8 @@ export const ElementToolTypeEnum = {
 	ElementDistribute: "element-distribute", // 元素分布
 	ShapeStyle: "shape-style", // 图形样式配置
 	DownloadButton: "download-button", // 下载按钮
+	MediaReplaceButton: "media-replace-button", // 统一替换图片、视频、音频资源按钮
+	MediaDownloadButton: "media-download-button", // 统一下载图片、视频、音频资源按钮
 	AudioReplaceButton: "audio-replace-button", // 替换/上传音频按钮
 	AudioDownloadButton: "audio-download-button", // 下载音频按钮
 	RichTextAdvancedButton: "rich-text-advanced-button", // 富文本高级按钮

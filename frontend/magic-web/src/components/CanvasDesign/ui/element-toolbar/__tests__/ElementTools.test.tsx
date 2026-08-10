@@ -92,7 +92,7 @@ describe("ElementTools image replacement ordering", () => {
 		expect(labels).toEqual([ElementToolTypeEnum.ImageContentDeleteButton])
 	})
 
-	it("places replace immediately before delete for a multi-Content image", () => {
+	it("places the common download and replace tools before image Content deletion", () => {
 		mocks.selectedElements = [
 			{
 				id: "image-1",
@@ -115,9 +115,10 @@ describe("ElementTools image replacement ordering", () => {
 			(node) => node.textContent,
 		)
 
-		expect(labels.slice(-3)).toEqual([
+		expect(labels.slice(-4)).toEqual([
 			"Divider",
-			ElementToolTypeEnum.ImageReplaceButton,
+			ElementToolTypeEnum.MediaReplaceButton,
+			ElementToolTypeEnum.MediaDownloadButton,
 			ElementToolTypeEnum.ImageContentDeleteButton,
 		])
 	})
@@ -163,9 +164,34 @@ describe("ElementTools image replacement ordering", () => {
 		)
 
 		expect(labels).toEqual([
-			ElementToolTypeEnum.AudioReplaceButton,
-			"Divider",
-			ElementToolTypeEnum.AudioDownloadButton,
+			ElementToolTypeEnum.MediaReplaceButton,
+			ElementToolTypeEnum.MediaDownloadButton,
+		])
+	})
+
+	it("shows the common download and replace tools for a video", () => {
+		mocks.selectedElements = [
+			{
+				id: "video-1",
+				type: ElementTypeEnum.Video,
+				x: 0,
+				y: 0,
+				width: 640,
+				height: 360,
+				contents: [{ contentId: "video-content", src: "./videos/demo.mp4" }],
+				activeContentId: "video-content",
+				mainContentId: "video-content",
+			},
+		]
+
+		render(<ElementTools />)
+		const labels = Array.from(screen.getByTestId("element-tools").children).map(
+			(node) => node.textContent,
+		)
+
+		expect(labels).toEqual([
+			ElementToolTypeEnum.MediaReplaceButton,
+			ElementToolTypeEnum.MediaDownloadButton,
 		])
 	})
 
@@ -189,6 +215,6 @@ describe("ElementTools image replacement ordering", () => {
 			(node) => node.textContent,
 		)
 
-		expect(labels).toEqual([ElementToolTypeEnum.AudioReplaceButton])
+		expect(labels).toEqual([ElementToolTypeEnum.MediaReplaceButton])
 	})
 })

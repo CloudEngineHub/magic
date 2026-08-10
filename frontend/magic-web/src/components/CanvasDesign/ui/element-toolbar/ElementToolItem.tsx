@@ -12,6 +12,8 @@ import ElementAlign from "./layout/ElementAlign/index"
 import ElementDistribute from "./layout/ElementDistribute/index"
 import ShapeStyle from "./shape/ShapeStyle/index"
 import DownloadButton from "./download/DownloadButton/index"
+import MediaDownloadButton from "./media/MediaDownloadButton/index"
+import MediaReplaceButton from "./media/MediaReplaceButton/index"
 import AudioReplaceButton from "./audio/AudioReplaceButton/index"
 import AudioDownloadButton from "./audio/AudioDownloadButton/index"
 import RichTextAdvancedButton from "./text/RichTextAdvancedButton/index"
@@ -59,6 +61,10 @@ export default function ElementToolItem({ type }: { type: ElementToolType }) {
 			return <ShapeStyle />
 		case ElementToolTypeEnum.DownloadButton:
 			return <DownloadButton />
+		case ElementToolTypeEnum.MediaDownloadButton:
+			return <MediaDownloadButton />
+		case ElementToolTypeEnum.MediaReplaceButton:
+			return <MediaReplaceButton />
 		case ElementToolTypeEnum.AudioReplaceButton:
 			return <AudioReplaceButton />
 		case ElementToolTypeEnum.AudioDownloadButton:
