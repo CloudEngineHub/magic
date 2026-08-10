@@ -141,9 +141,6 @@ export function useHtmlAppPermissions({
 					}))
 					.sort((a, b) => a.path.localeCompare(b.path)),
 			),
-			hasUnversionedExternalRuntimeResources: hasUnversionedExternalRuntimeResources(
-				rawSourceCode || content || "",
-			),
 		}
 	}, [appRootDir, cleanedEntryPath, content, fileList, projectId, rawSourceCode, userId])
 
@@ -486,16 +483,6 @@ function isFileInsideHtmlApp(path: string, appRootDir: string): boolean {
 function isHtmlOrJavaScriptFile(path: string): boolean {
 	// 只有会执行 Magic API 的 HTML/JS 文件影响运行时指纹，资源、配置和数据文件变化不应使授权失效。
 	return /\.(?:html?|(?:c|m)?js)$/i.test(path.split(/[?#]/, 1)[0])
-}
-
-function hasUnversionedExternalRuntimeResources(content: string): boolean {
-	return (
-		/<script\b[^>]*\bsrc\s*=\s*["'](?:https?:)?\/\//i.test(content) ||
-		/<link\b(?=[^>]*\b(?:rel\s*=\s*["'][^"']*stylesheet|as\s*=\s*["']script))(?=[^>]*\bhref\s*=\s*["'](?:https?:)?\/\/)[^>]*>/i.test(
-			content,
-		) ||
-		/(?:import\s*\(|new\s+(?:Worker|SharedWorker)\s*\()\s*["'](?:https?:)?\/\//i.test(content)
-	)
 }
 
 export type HtmlAppPermissionController = ReturnType<typeof useHtmlAppPermissions>

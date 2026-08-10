@@ -18,6 +18,7 @@ import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import PptModeSwitcherCard from "./PptModeSwitcherCard"
 import { isModeVisibleToCurrentUser } from "../../TopicMode/modeVisibility"
+import styles from "./RoleSwitcher.module.css"
 
 interface ModeSwitcherProps {
 	role: TopicMode
@@ -37,16 +38,22 @@ function RoleSwitcherScrollControl({ direction, onClick }: RoleSwitcherScrollCon
 	return (
 		<div
 			className={cn(
-				"pointer-events-none absolute w-20 overflow-hidden",
+				"pointer-events-none absolute w-14 overflow-hidden",
 				isLeft ? "left-0" : "right-0",
 			)}
 		>
 			<div
 				className={cn(
-					"absolute inset-0",
+					styles.scrollControlCornerCover,
 					isLeft
-						? "bg-[linear-gradient(to_right,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]"
-						: "bg-[linear-gradient(to_left,_rgb(var(--background-rgb))_0%,_rgb(var(--background-rgb))_70%,_transparent_100%)]",
+						? styles.scrollControlCornerCoverLeft
+						: styles.scrollControlCornerCoverRight,
+				)}
+			/>
+			<div
+				className={cn(
+					styles.scrollControlFade,
+					isLeft ? styles.scrollControlFadeLeft : styles.scrollControlFadeRight,
 				)}
 			/>
 			<div
@@ -104,7 +111,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 			data-testid="role-switcher"
 		>
 			<HeadlessHorizontalScroll
-				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-[20px] [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-11"
+				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-none [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-10"
 				data-testid="role-switcher-mode-selector"
 				scrollContainerClassName="no-scrollbar flex h-full min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden"
 				scrollContainerRef={scrollContainerRef}
@@ -127,6 +134,7 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 								<PptModeSwitcherCard
 									modeItem={modeItem}
 									isSelected={isSelected}
+									scrollContainerRef={scrollContainerRef}
 									onSelect={() =>
 										onActionClick?.(modeItem.mode.identifier as TopicMode)
 									}

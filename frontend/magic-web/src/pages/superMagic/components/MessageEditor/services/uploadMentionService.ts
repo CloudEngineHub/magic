@@ -97,51 +97,6 @@ export function insertUploadMentionNodes({
 	})
 }
 
-export function updateUploadMentionProgress({
-	editor,
-	fileId,
-	progress,
-	status,
-	error,
-}: {
-	editor: Editor | null
-	fileId: string
-	progress: number
-	status: FileData["status"]
-	error?: string
-}) {
-	if (!isEditorReady(editor)) return
-
-	const { state, dispatch } = editor.view
-	const { tr } = state
-
-	state.doc.descendants((node, pos) => {
-		if (node.type.name !== "mention") return true
-
-		const attrs = node.attrs as TiptapMentionAttributes
-		if (attrs.type !== MentionItemType.UPLOAD_FILE) return true
-
-		const uploadData = attrs.data as UploadFileMentionData
-		if (uploadData.file_id !== fileId) return true
-
-		tr.setNodeMarkup(pos, undefined, {
-			type: MentionItemType.UPLOAD_FILE,
-			data: {
-				...uploadData,
-				upload_progress: progress,
-				upload_status: status,
-				upload_error: error,
-			},
-		})
-
-		return true
-	})
-
-	if (tr.steps.length > 0) {
-		dispatch(tr)
-	}
-}
-
 export function replaceUploadMentionNode({
 	editor,
 	fileId,
@@ -189,9 +144,9 @@ export function replaceUploadMentionNode({
 					file: uploadData.file,
 					relative_file_path: uploadData.relative_file_path,
 					is_hidden: uploadData.is_hidden,
-					upload_progress: uploadData.upload_progress,
-					upload_status: uploadData.upload_status,
-					upload_error: uploadData.upload_error,
+					upload_progress: 100,
+					upload_status: "done",
+					upload_error: undefined,
 				},
 			})
 		}

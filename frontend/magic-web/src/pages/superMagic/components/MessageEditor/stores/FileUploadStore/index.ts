@@ -1,11 +1,7 @@
 import { makeAutoObservable } from "mobx"
 import { t } from "i18next"
 import { logger as Logger } from "@/utils/log"
-import {
-	type DirectoryMentionData,
-	MentionItemType,
-	type ProjectFileMentionData,
-} from "@/components/business/MentionPanel/types"
+import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import type { UploadMentionItem } from "@/components/business/MentionPanel/runtime/builtin/domains/upload-files"
 import projectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
@@ -17,7 +13,6 @@ import { superMagicUploadTokenService } from "../../services/UploadTokenService"
 import { UploadService } from "../../services/UploadService"
 import type { FileData } from "../../types"
 import { UploadSource } from "../../types"
-import { isPendingProjectFileMention } from "../../utils/mention"
 import {
 	validateDuplicateFiles,
 	validateFileCount,
@@ -25,6 +20,10 @@ import {
 	validateEmptyFiles,
 } from "./validators"
 import { createUploadHandlers } from "./uploadHandlers"
+import {
+	createPastedProjectFileReferences,
+	createPastedUploadFileReferences,
+} from "./pastedFileReferences"
 
 const TEMP_UPLOAD_DIR_NAME = ".tmp"
 const MAX_TEMP_DIRECTORY_ATTACHMENT_PAGES = 100
@@ -103,7 +102,10 @@ export class FileUploadStore {
 		this.projectFilesStore = options.projectFilesStore ?? projectFilesStore
 		makeAutoObservable(
 			this,
-			{},
+			{
+				// Node views call this during render and must track the observable file fields.
+				getFileById: false,
+			},
 			{
 				autoBind: true,
 			},
@@ -114,8 +116,13 @@ export class FileUploadStore {
 			getStorageType: () => this.storageType,
 			getSource: () => this.source,
 			getProjectFilesStore: () => this.projectFilesStore,
+			getFiles: () => this.files,
 			trackSavedProjectFileId: (fileId) => this.trackSavedProjectFileId(fileId),
 			setFilesWithLimit: (updater) => this.setFilesWithLimit(updater),
+			onProgressFilesChanged: (files) => {
+				this.onFileUpload?.(files)
+				this.onChange?.(files)
+			},
 			onFileProgressUpdate: (...args) => this.onFileProgressUpdate?.(...args),
 			onFileCompleted: (...args) => this.onFileCompleted?.(...args),
 		})
@@ -154,6 +161,10 @@ export class FileUploadStore {
 		return this.projectFilesStore
 	}
 
+	getFileById(fileId: string): FileData | undefined {
+		return this.files.find((file) => file.id === fileId)
+	}
+
 	isCurrentSessionUploadFile(fileId: string) {
 		return this.sessionUploadFileIds.has(fileId)
 	}
@@ -164,11 +175,11 @@ export class FileUploadStore {
 
 	getUploadMentionItems(): UploadMentionItem[] {
 		return this.files.flatMap((file) => {
-			const filePath = file.reportResult?.file_key
+			const filePath = file.reportResult?.file_key ?? file.result?.key
 			if (!filePath) return []
 
 			const fileId = file.reportResult?.file_id || file.id
-			const fileName = file.reportResult?.file_name || file.name
+			const fileName = file.reportResult?.file_name || file.result?.name || file.name
 			const fileExtension = fileName.split(".").pop() ?? ""
 
 			return [
@@ -184,7 +195,8 @@ export class FileUploadStore {
 						file_name: fileName,
 						file_path: filePath,
 						file_extension: fileExtension,
-						file_size: file.reportResult?.file_size ?? file.file.size,
+						file_size:
+							file.reportResult?.file_size ?? file.result?.size ?? file.file.size,
 						file: file.file,
 						upload_progress: file.progress,
 						upload_status: file.status,
@@ -570,9 +582,6 @@ export class FileUploadStore {
 	}
 
 	addPendingProjectFileReferences(items: TiptapMentionAttributes[]) {
-		const pendingProjectFiles = items.filter(isPendingProjectFileMention)
-		if (pendingProjectFiles.length === 0) return
-
 		const existingFileIds = new Set(
 			this.files.flatMap((file) =>
 				[file.id, file.reportResult?.file_id, file.saveResult?.file_id].filter(
@@ -580,54 +589,32 @@ export class FileUploadStore {
 				),
 			),
 		)
-		const pastedFiles = pendingProjectFiles
-			.map((item): FileData | null => {
-				const data = item.data as ProjectFileMentionData | DirectoryMentionData
-				const isDirectory = item.type === MentionItemType.FOLDER
-				const fileId = isDirectory
-					? (data as DirectoryMentionData).source_directory_id ||
-						(data as DirectoryMentionData).directory_id
-					: (data as ProjectFileMentionData).source_file_id ||
-						(data as ProjectFileMentionData).file_id
-				if (!fileId || existingFileIds.has(fileId)) return null
-
-				existingFileIds.add(fileId)
-				this.sessionSavedProjectFileIds.add(fileId)
-				const name = isDirectory
-					? (data as DirectoryMentionData).directory_name
-					: (data as ProjectFileMentionData).file_name
-				const path = isDirectory
-					? (data as DirectoryMentionData).directory_path
-					: (data as ProjectFileMentionData).file_path
-
-				return {
-					id: fileId,
-					name,
-					file: new File([], name),
-					status: "done",
-					isVirtualReference: true,
-					progress: 100,
-					saveResult: {
-						file_id: fileId,
-						file_key: path,
-						file_name: name,
-						file_size: isDirectory
-							? 0
-							: ((data as ProjectFileMentionData).file_size ?? 0),
-						file_type: isDirectory ? "directory" : "user_upload",
-						project_id: data.project_id ?? data.source_project_id ?? "",
-						topic_id: "",
-						task_id: "",
-						created_at: "",
-						relative_file_path: path,
-					},
-				}
-			})
-			.filter((file): file is FileData => Boolean(file))
+		const pastedFiles = createPastedProjectFileReferences(items, existingFileIds)
 
 		if (pastedFiles.length === 0) return
-
+		const availableSlots = Math.max(this.maxUploadCount - this.files.length, 0)
+		pastedFiles.slice(0, availableSlots).forEach((file) => {
+			this.sessionSavedProjectFileIds.add(file.id)
+		})
 		this.setFilesWithLimit((prev) => [...prev, ...pastedFiles])
+	}
+
+	restorePastedUploadFileReferences(items: TiptapMentionAttributes[]) {
+		const existingFileIds = new Set(
+			this.files.flatMap((file) =>
+				[file.id, file.reportResult?.file_id, file.saveResult?.file_id].filter(
+					(fileId): fileId is string => Boolean(fileId),
+				),
+			),
+		)
+		const restoredFiles = createPastedUploadFileReferences(items, existingFileIds)
+
+		if (restoredFiles.length === 0) return
+		const availableSlots = Math.max(this.maxUploadCount - this.files.length, 0)
+		restoredFiles.slice(0, availableSlots).forEach((file) => {
+			this.sessionUploadFileIds.add(file.id)
+		})
+		this.setFilesWithLimit((prev) => [...prev, ...restoredFiles])
 	}
 
 	async handleRetry(fileId: string) {
@@ -653,6 +640,11 @@ export class FileUploadStore {
 		const targetWithSaveResult = this.files.find((f) => f.saveResult?.file_id === id)
 
 		if (!target && !targetWithReportResult && !targetWithSaveResult) return
+		this.uploadHandlers.removeProgress(
+			target?.id,
+			targetWithReportResult?.id,
+			targetWithSaveResult?.id,
+		)
 
 		if (target?.cancel) target.cancel()
 		if (targetWithReportResult?.cancel) targetWithReportResult.cancel()
@@ -673,6 +665,15 @@ export class FileUploadStore {
 	}
 
 	removeUploadedFile(fileId: string) {
+		this.uploadHandlers.removeProgress(
+			...this.files
+				.filter(
+					(file) =>
+						file.reportResult?.file_id === fileId ||
+						file.saveResult?.file_id === fileId,
+				)
+				.map((file) => file.id),
+		)
 		this.clearTrackedFileIdsByProjectFileId(fileId)
 		this.setFilesWithLimit((prev) => {
 			return prev.filter(
@@ -682,6 +683,7 @@ export class FileUploadStore {
 	}
 
 	private clearFilesState() {
+		this.uploadHandlers.clearProgress()
 		this.files = []
 		this.onFileUpload?.([])
 		this.onChange?.([])
