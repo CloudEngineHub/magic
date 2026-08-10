@@ -109,20 +109,17 @@ const CopyMessageExtension = Extension.create({
 							return false
 						}
 
-						// 处理mentions
-						if (metadata.mentions && Array.isArray(metadata.mentions)) {
-							this.options.onMentionsInsert?.(
-								prepareMentionItems(
-									metadata.mentions,
-									metadata,
-									this.options.dataService ?? null,
-								),
-							)
-						}
-
 						// 处理富文本内容
 						if (metadata.richText) {
 							try {
+								const mentionItems =
+									metadata.mentions && Array.isArray(metadata.mentions)
+										? prepareMentionItems(
+												metadata.mentions,
+												metadata,
+												this.options.dataService ?? null,
+											)
+										: []
 								const content = prepareRichTextContent(
 									JSON.parse(metadata.richText),
 									metadata,
@@ -133,7 +130,9 @@ const CopyMessageExtension = Extension.create({
 									runActiveEditor(
 										this.editor,
 										(editor) => {
-											editor.commands.insertContent(editorContent)
+											if (!editor.commands.insertContent(editorContent))
+												return false
+											this.options.onMentionsInsert?.(mentionItems)
 											return true
 										},
 										false,

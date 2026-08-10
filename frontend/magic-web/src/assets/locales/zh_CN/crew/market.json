@@ -322,8 +322,8 @@
 	"noMoreData": "没有更多数据。",
 	"noResults": "暂无结果。",
 	"pptEmployee": {
-		"delivered": "已制作 {{count}} 页",
-		"deliveredPrivate": "已制作 {{count}} 套"
+		"delivered": "已制作 {{marker}} 页",
+		"deliveredPrivate": "已制作 {{marker}} 套"
 	},
 	"skillDetailDialog": {
 		"collapse": "收起",
