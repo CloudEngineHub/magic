@@ -8,6 +8,7 @@ Use only `generate_canvas_videos` for canvas video requests; do not substitute a
 - **Confirmation is a hard gate for the first video generation attempt:** regardless of whether you first prepare a canvas, images, or other reference materials, once the video prompt is ready call `action="estimate_points"` and then show the final prompt, main parameters, and estimated points. End the current turn and wait for a new user message; never call `action="generate"` in that same turn. Call `action="generate"` only after a later user confirmation. The only exception is a first-turn request that explicitly says to generate immediately, generate directly, or skip confirmation.
 - **Whenever the user must choose between two or more actions, directions, or confirmations, you must directly call `ask_user` before presenting those choices.** For any IP, real-person, sexual, political, violent, or similar risk—including when multiple viable directions exist or the choice would change the final result—you must directly call `ask_user` under this rule. Do not list choices only in ordinary text or ask a plain-text question. Prefer a `select` question with at least two choices, such as the original request and a risk-reduced alternative where relevant; briefly explain the concern, let the user decide, and wait for the user's selection before continuing. This also covers unclear requirements, video prompt confirmation, point-estimation results, and generation failures. If no user decision is needed, respond normally without `ask_user`.
 - If estimation or generation fails, briefly explain the reason and suggested change, then use `ask_user` to offer continuing or revising as the available next-step choices; do not retry automatically, and note that failure does not deduct points.
+- **Preserve requested audio:** when the user asks for narration, voice-over, dialogue, music, or sound effects, treat it as required prompt content. For every user-provided narration or dialogue line, copy the original wording verbatim into the final prompt; identify the speaker, audio type, language or voice characteristics when known, and the timing or order of each line. Do not summarize, omit, or replace requested speech with visual actions such as “the character appears to speak.” Do not generate a silent or incomplete version first and suggest adding audio afterward. If narration is requested without a script, draft one and show it for confirmation before estimation.
 
 ## Timeout
 
@@ -49,7 +50,7 @@ Treat the prompt as a concise creative brief, not a list of keywords. Use this o
 ```text
 [video goal or type] + [subject and key traits] + [main action or change]
 + [scene/environment] + [composition/viewpoint] + [camera movement]
-+ [lighting/style/mood] + [time/pace] + [sound/dialogue/constraints, optional]
++ [lighting/style/mood] + [time/pace] + [sound/narration/dialogue/constraints, required when requested]
 ```
 
 The core should normally include **subject, action, scene, and camera**. Keep one clear scene and one main action unless the user explicitly asks for a sequence. Use concrete, observable, positive language; do not invent details or pad the prompt with keywords.
@@ -59,7 +60,7 @@ The core should normally include **subject, action, scene, and camera**. Keep on
 - **Content:** video goal/type, subject and key traits, scene and environment.
 - **Style:** composition, viewpoint, shot size, lighting, color, visual style, and mood.
 - **Dynamics:** subject action, environmental motion, camera movement, timing, and pace.
-- **Optional controls:** duration, aspect ratio, sound, dialogue, and continuity constraints.
+- **Optional controls:** duration, aspect ratio, and continuity constraints. Sound, narration, dialogue, and sound effects become required prompt content whenever the user requests them.
 - **Text-to-video:** describe the complete intended shot, including what is visible and how it moves.
 - **Image-to-video:** use the reference for appearance, composition, and style; describe only the desired subject motion, environmental motion, camera movement, and changes over time. Preserve the reference subject and visual identity unless the user requests otherwise.
 - **Reference materials:** place each reference token next to the subject, action, or visual element it controls; do not repeat details already clear in the reference.
@@ -69,6 +70,7 @@ The core should normally include **subject, action, scene, and camera**. Keep on
 - Product ad: `A matte white skincare bottle on a marble table, water droplets sliding down the bottle as the cap slowly opens, close-up push-in, soft side light, clean premium commercial style.`
 - Human action: `A person in a yellow raincoat walks through a neon-lit city street at night, medium rear tracking shot, reflections on the wet pavement, realistic cinematic mood.`
 - Animal/nature: `An orange cat calmly swims across a clear pond, low-angle medium shot following its movement, gentle ripples on the water, warm afternoon natural light, realistic documentary style.`
+- Narrated scene: `A small boat crosses a misty lake at dawn, slow aerial tracking shot, soft blue light, calm cinematic style. Chinese female voice-over: “清晨的湖面，像一面尚未醒来的镜子。” Begin at 1 second, gentle and clear, with light ambient water sounds.`
 
 ## Required Parameters
 - `project_path`: design project path
