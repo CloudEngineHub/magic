@@ -448,10 +448,12 @@ export class SelfMediaStore {
 			} catch (err) {
 				if (token !== this._syncToken || this._disposed) return
 				const code = normalizeSelfMediaError(err)
-				log.error("❌ Store 初始化异常", {
-					folderFileId: args.folderFileId,
-					code,
+				log.error({
+					eventKey: "store_initialize_failed",
+					errorKind: "render",
 					error: err,
+					message: "❌ Store 初始化异常",
+					context: { folderFileId: args.folderFileId, code },
 				})
 				runInAction(() => {
 					this.error = code
@@ -490,10 +492,12 @@ export class SelfMediaStore {
 		} catch (err) {
 			if (token !== this._syncToken || this._disposed) return
 			const code = normalizeSelfMediaError(err)
-			log.error("❌ Store reconcile 异常", {
-				folderFileId: args.folderFileId,
-				code,
+			log.error({
+				eventKey: "store_reconcile_failed",
+				errorKind: "render",
 				error: err,
+				message: "❌ Store reconcile 异常",
+				context: { folderFileId: args.folderFileId, code },
 			})
 			runInAction(() => {
 				this.error = code
@@ -776,11 +780,12 @@ export class SelfMediaStore {
 		} catch (err) {
 			if (this._disposed) return
 			const code = normalizeSelfMediaError(err)
-			log.error("❌ 按需加载文章失败", {
-				platform,
-				postId: entry.id,
-				code,
+			log.error({
+				eventKey: "load_failed",
+				errorKind: "render",
 				error: err,
+				message: "❌ 按需加载文章失败",
+				context: { platform, postId: entry.id, code },
 			})
 			runInAction(() => {
 				this.error = code

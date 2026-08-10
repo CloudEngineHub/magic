@@ -38,8 +38,11 @@ export class RecordingPersistence {
 				chunkIndex: session.currentChunkIndex,
 			})
 		} catch (error) {
-			logger.error("保存会话失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "save_session_failed",
+				errorKind: "storage",
+				error: error,
+				message: "保存会话失败",
 			})
 			throw new Error("Failed to save recording session")
 		}
@@ -74,8 +77,11 @@ export class RecordingPersistence {
 
 			return isValid ? session : null
 		} catch (error) {
-			logger.error("加载会话失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "load_session_failed",
+				errorKind: "storage",
+				error: error,
+				message: "加载会话失败",
 			})
 			return null
 		}
@@ -132,8 +138,11 @@ export class RecordingPersistence {
 				keysCleared: keysCleared.length,
 			})
 		} catch (error) {
-			logger.error("清除数据失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "clear_failed",
+				errorKind: "storage",
+				error: error,
+				message: "清除数据失败",
 			})
 		}
 	}
@@ -159,8 +168,11 @@ export class RecordingPersistence {
 				this.clearAll()
 			}
 		} catch (error) {
-			logger.error("清理旧数据失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "cleanup_failed",
+				errorKind: "storage",
+				error: error,
+				message: "清理旧数据失败",
 			})
 		}
 	}
@@ -182,8 +194,11 @@ export class RecordingPersistence {
 
 			return hasRecoverable
 		} catch (error) {
-			logger.error("检查可恢复数据失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "check_restore_failed",
+				errorKind: "storage",
+				error: error,
+				message: "检查可恢复数据失败",
 			})
 			return false
 		}
