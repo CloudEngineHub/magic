@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import type { ModelItem } from "../../types"
-import { resolveMessageSendModels } from "../messageSendModelFallback"
+import { MessageSendModelWaitError, resolveMessageSendModels } from "../messageSendModelFallback"
 
 describe("resolveMessageSendModels", () => {
 	const languageModel: ModelItem = {
@@ -32,6 +32,10 @@ describe("resolveMessageSendModels", () => {
 
 	beforeEach(() => {
 		topicModelStore = createSuperMagicTopicModelStore()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
 	})
 
 	it("waits for all topic models before resolving", async () => {
@@ -91,5 +95,41 @@ describe("resolveMessageSendModels", () => {
 			selectedImageModel: imageModel,
 			selectedVideoModel: videoModel,
 		})
+	})
+
+	it("rejects with a recognizable error when model loading times out", async () => {
+		vi.useFakeTimers()
+		topicModelStore.setLoading(true)
+		const resultPromise = resolveMessageSendModels({
+			topicModelStore,
+			waitTimeoutMs: 1_000,
+		})
+		const assertion = expect(resultPromise).rejects.toEqual(
+			expect.objectContaining<MessageSendModelWaitError>({
+				name: "MessageSendModelWaitError",
+				reason: "timeout",
+			}),
+		)
+
+		await vi.advanceTimersByTimeAsync(1_000)
+		await assertion
+	})
+
+	it("rejects with an aborted error when the caller cancels waiting", async () => {
+		topicModelStore.setLoading(true)
+		const controller = new AbortController()
+		const resultPromise = resolveMessageSendModels({
+			topicModelStore,
+			signal: controller.signal,
+		})
+		const assertion = expect(resultPromise).rejects.toEqual(
+			expect.objectContaining<MessageSendModelWaitError>({
+				name: "MessageSendModelWaitError",
+				reason: "aborted",
+			}),
+		)
+
+		controller.abort()
+		await assertion
 	})
 })

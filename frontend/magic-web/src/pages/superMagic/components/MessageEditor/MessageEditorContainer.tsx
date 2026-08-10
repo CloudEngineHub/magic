@@ -66,7 +66,11 @@ import {
 } from "./utils/pastedTextAttachment"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { isAllowedMention as defaultIsAllowedMention } from "./utils/mention"
-import { resolveMessageSendModels } from "./utils/messageSendModelFallback"
+import {
+	MessageSendModelWaitError,
+	resolveMessageSendModels,
+	type ResolvedMessageSendModels,
+} from "./utils/messageSendModelFallback"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -174,6 +178,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const isMountedRef = useRef(true)
+			const modelWaitAbortControllerRef = useRef<AbortController | null>(null)
 			const isProjectContext = Boolean(selectedProject?.id)
 
 			useSyncEditorStoreState({
@@ -406,8 +411,16 @@ export const MessageEditorContainer = observer(
 			}, [tiptapEditor, store.editorStore])
 
 			useEffect(() => {
+				isMountedRef.current = true
+				const controller = new AbortController()
+				modelWaitAbortControllerRef.current = controller
+
 				return () => {
 					isMountedRef.current = false
+					controller.abort()
+					if (modelWaitAbortControllerRef.current === controller) {
+						modelWaitAbortControllerRef.current = null
+					}
 				}
 			}, [])
 
@@ -417,12 +430,25 @@ export const MessageEditorContainer = observer(
 
 			const handleSendMessageByContent = useMemoizedFn(
 				async (data: SendMessageByContentPayload) => {
-					const models = await resolveMessageSendModels({
-						topicModelStore: store.topicModelStore,
-						selectedModel: data.selectedModel,
-						selectedImageModel: data.selectedImageModel,
-						selectedVideoModel: data.selectedVideoModel,
-					})
+					let models: ResolvedMessageSendModels | null
+					try {
+						models = await resolveMessageSendModels({
+							topicModelStore: store.topicModelStore,
+							selectedModel: data.selectedModel,
+							selectedImageModel: data.selectedImageModel,
+							selectedVideoModel: data.selectedVideoModel,
+							signal: modelWaitAbortControllerRef.current?.signal,
+						})
+					} catch (error) {
+						if (
+							error instanceof MessageSendModelWaitError &&
+							error.reason === "aborted"
+						) {
+							return
+						}
+						magicToast.error(t("messageEditor.modelLoadFailed"))
+						return
+					}
 					if (!models) {
 						magicToast.error(t("messageEditor.pleaseSelectModel"))
 						return

@@ -4,11 +4,22 @@ import type { ModelItem } from "../types"
 
 type TopicModelStore = ReturnType<typeof createSuperMagicTopicModelStore>
 
+export const MESSAGE_SEND_MODEL_WAIT_TIMEOUT_MS = 15_000
+
+export class MessageSendModelWaitError extends Error {
+	constructor(public readonly reason: "timeout" | "aborted" | "failed") {
+		super(`Message send model wait ${reason}`)
+		this.name = "MessageSendModelWaitError"
+	}
+}
+
 interface ResolveMessageSendModelsParams {
 	topicModelStore: TopicModelStore
 	selectedModel?: ModelItem | null
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null
+	waitTimeoutMs?: number
+	signal?: AbortSignal
 }
 
 export interface ResolvedMessageSendModels {
@@ -22,9 +33,25 @@ export async function resolveMessageSendModels({
 	selectedModel,
 	selectedImageModel,
 	selectedVideoModel,
+	waitTimeoutMs = MESSAGE_SEND_MODEL_WAIT_TIMEOUT_MS,
+	signal,
 }: ResolveMessageSendModelsParams): Promise<ResolvedMessageSendModels | null> {
 	if (topicModelStore.isLoading) {
-		await when(() => !topicModelStore.isLoading)
+		try {
+			await when(() => !topicModelStore.isLoading, {
+				timeout: waitTimeoutMs,
+				signal,
+			})
+		} catch (error) {
+			const message = error instanceof Error ? error.message : ""
+			if (message === "WHEN_ABORTED") {
+				throw new MessageSendModelWaitError("aborted")
+			}
+			if (message === "WHEN_TIMEOUT") {
+				throw new MessageSendModelWaitError("timeout")
+			}
+			throw new MessageSendModelWaitError("failed")
+		}
 	}
 
 	if (!topicModelStore.isLanguageModelReady) return null
