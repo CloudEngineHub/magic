@@ -2017,13 +2017,14 @@ textarea:focus {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    height: 27px;
-    min-width: 44px;
-    padding: 3px 6px;
+    flex-shrink: 0;
+    gap: 5px;
+    height: 36px;
+    min-width: 50px;
+    padding: 5px 8px;
     border: 1px solid var(--wechat-border);
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
     color: var(--wechat-text-dark);
     cursor: pointer;
     transition: background-color 0.14s ease, transform 0.14s ease, border-color 0.14s ease;
@@ -2045,7 +2046,7 @@ textarea:focus {
 
 .token-context-preview-usage {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 10px;
+    font-size: 11px;
     line-height: 14px;
     color: currentColor;
     white-space: nowrap;

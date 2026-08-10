@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=debug-file-path-preview-1">
+    <link rel="stylesheet" href="css/styles.css?v=token-context-position-1">
     <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
@@ -154,6 +154,17 @@
                                 placeholder="agent_user_id (留空用默认)">
                         </div>
 
+                        <!-- Token 上下文用量 -->
+                        <button id="tokenContextPreview" class="token-context-preview" type="button"
+                            aria-label="上下文用量" aria-expanded="false" aria-controls="tokenContextPopover"
+                            title="上下文用量" style="display:none">
+                            <span id="tokenContextUsage" class="token-context-preview-usage">0%</span>
+                            <svg class="token-context-ring" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                <circle class="token-context-ring-track" cx="8" cy="8" r="6.75"></circle>
+                                <circle id="tokenContextRing" class="token-context-ring-value" cx="8" cy="8" r="6.75"></circle>
+                            </svg>
+                        </button>
+
                         <!-- Agent模式选择（IM 模式下隐藏） -->
                         <div class="mode-switch" id="agentModeGroup">
                             <select id="agentModeSelect" class="agent-mode-select">
@@ -301,15 +312,6 @@
                                     <button id="historyBtn" class="btn secondary small">历史消息</button>
                                 </div>
                                 <div class="input-footer-middle">
-                                    <button id="tokenContextPreview" class="token-context-preview" type="button"
-                                        aria-label="上下文用量" aria-expanded="false" aria-controls="tokenContextPopover"
-                                        title="上下文用量" style="display:none">
-                                        <span id="tokenContextUsage" class="token-context-preview-usage">0%</span>
-                                        <svg class="token-context-ring" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                                            <circle class="token-context-ring-track" cx="8" cy="8" r="6.75"></circle>
-                                            <circle id="tokenContextRing" class="token-context-ring-value" cx="8" cy="8" r="6.75"></circle>
-                                        </svg>
-                                    </button>
                                     <button id="clientContextOpenBtn" class="btn secondary small client-context-footer-btn">
                                         client_context
                                         <span id="clientContextCount" class="client-context-count">0字</span>
