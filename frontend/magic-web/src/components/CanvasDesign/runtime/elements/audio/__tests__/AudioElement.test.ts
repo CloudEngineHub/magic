@@ -66,7 +66,6 @@ function createAudioElementHarness(options?: {
 	snapshot?: AudioPlaybackSnapshot
 	readonly?: boolean
 	src?: string
-	replaceLabel?: string
 	coarsePointer?: boolean
 	temporary?: boolean
 	empty?: boolean
@@ -80,9 +79,6 @@ function createAudioElementHarness(options?: {
 	let playbackSnapshot = options?.snapshot ?? READY_PLAYBACK_SNAPSHOT
 	let playbackListener: ((snapshot: AudioPlaybackSnapshot) => void) | undefined
 	let waveformListener: ((snapshot: AudioWaveformSnapshot) => void) | undefined
-	let replaceStateListener:
-		| ((event: { data: { elementId: string; status: "idle" | "uploading" | "error" } }) => void)
-		| undefined
 	const viewportScaleListeners = new Set<() => void>()
 	const deviceChangeListeners = new Set<() => void>()
 	const seek = vi.fn()
@@ -125,12 +121,9 @@ function createAudioElementHarness(options?: {
 		audioResourceManager: { getFailureReason: vi.fn(() => null) },
 		eventEmitter: {
 			emit,
-			on: vi.fn((eventType: string, listener: (...args: never[]) => void) => {
+			on: vi.fn((eventType: string, listener: () => void) => {
 				if (eventType === "viewport:scale") viewportScaleListeners.add(listener)
 				if (eventType === "canvas:devicechange") deviceChangeListeners.add(listener)
-				if (eventType === "element:audio:replaceStateChanged") {
-					replaceStateListener = listener as typeof replaceStateListener
-				}
 				return () => {
 					viewportScaleListeners.delete(listener)
 					deviceChangeListeners.delete(listener)
@@ -153,9 +146,7 @@ function createAudioElementHarness(options?: {
 		hoverManager: { getHoveredElementId: vi.fn(() => null) },
 		permissionManager: { canUseSelectionToolAffordance: vi.fn(() => true) },
 		cursorManager: { setTemporary, restoreToolCursor },
-		t: vi.fn((key: string, fallback: string) =>
-			key === "audio.replace" && options?.replaceLabel ? options.replaceLabel : fallback,
-		),
+		t: vi.fn((_key: string, fallback: string) => fallback),
 		readonly: options?.readonly ?? false,
 		elementManager: {
 			canDragElement: vi.fn(() => true),
@@ -195,9 +186,6 @@ function createAudioElementHarness(options?: {
 		},
 		emitWaveform(snapshot: AudioWaveformSnapshot) {
 			waveformListener?.(snapshot)
-		},
-		emitReplaceState(status: "idle" | "uploading" | "error") {
-			replaceStateListener?.({ data: { elementId: "audio-1", status } })
 		},
 		emitViewportScale() {
 			viewportScaleListeners.forEach((listener) => listener())
@@ -339,21 +327,6 @@ describe("AudioElement", () => {
 		expect(group.findOne(".audio-operation-group")).toBeUndefined()
 		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
 		expect(harness.requestImmediateAudioLoad).not.toHaveBeenCalled()
-	})
-
-	it("keeps the empty placeholder without a corner action while adding changes state", () => {
-		mockCanvasRenderingContext()
-		const harness = createAudioElementHarness({ empty: true })
-		const group = harness.element.render()
-		vi.spyOn(group, "getStage").mockReturnValue(createStageMock(1))
-		harness.element.onMounted()
-
-		harness.emitReplaceState("uploading")
-		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
-
-		harness.emitReplaceState("error")
-		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
-		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe("暂无音频内容")
 	})
 
 	it("renders a runtime-only uploading placeholder without player controls", () => {
@@ -512,83 +485,6 @@ describe("AudioElement", () => {
 			)
 		},
 	)
-
-	// 暂时保留右上角入口的几何回归用例，待入口重新启用时恢复执行。
-	it.skip.each([0.5, 1, 2])(
-		"keeps the replace button pinned to the element top-right at viewport scale %s",
-		(viewportScale) => {
-			mockCanvasRenderingContext()
-			const { element } = createAudioElementHarness()
-			const group = element.render()
-			vi.spyOn(group, "getStage").mockReturnValue(createStageMock(viewportScale))
-
-			element.onMounted()
-
-			const replaceButton = group.findOne(".decorator-corner-action-replace") as Konva.Group
-			const replaceVisual = group.findOne(
-				".decorator-corner-action-replace-visual",
-			) as Konva.Group
-			const replaceBackground = group.findOne(
-				".decorator-corner-action-replace-button",
-			) as Konva.Rect
-			const visualScaleX = viewportScale * group.scaleX() * replaceButton.scaleX()
-			const visualScaleY = viewportScale * group.scaleY() * replaceButton.scaleY()
-			const visualRightEdge =
-				(replaceButton.x() +
-					(replaceVisual.x() + replaceBackground.x() + replaceBackground.width()) *
-						replaceButton.scaleX()) *
-				viewportScale
-			const visualTopEdge =
-				(replaceButton.y() +
-					(replaceVisual.y() + replaceBackground.y()) * replaceButton.scaleY()) *
-				viewportScale
-			const expectedScreenOffset = Math.max(4, Math.min(8, 8 * viewportScale))
-
-			expect(replaceButton.width() * visualScaleX).toBeCloseTo(40)
-			expect(replaceButton.height() * visualScaleY).toBeCloseTo(24)
-			expect(replaceBackground.width() * visualScaleX).toBeCloseTo(40)
-			expect(replaceBackground.height() * visualScaleY).toBeCloseTo(24)
-			expect(group.width() * viewportScale - visualRightEdge).toBeCloseTo(
-				expectedScreenOffset,
-			)
-			expect(visualTopEdge).toBeCloseTo(expectedScreenOffset)
-			if (viewportScale === 1) {
-				expect(replaceButton.position()).toEqual({ x: 1232, y: 8 })
-			}
-		},
-	)
-
-	// 暂时保留右上角入口的尺寸阈值回归用例，待入口重新启用时恢复执行。
-	it.skip("hides the replace button below the image info-button screen-size threshold", () => {
-		mockCanvasRenderingContext()
-		const { element } = createAudioElementHarness()
-		const group = element.render()
-		vi.spyOn(group, "getStage").mockReturnValue(createStageMock(0.08))
-		element.onMounted()
-
-		group.fire("mouseenter")
-
-		expect(group.findOne(".decorator-corner-actions")?.visible()).toBe(false)
-	})
-
-	// 暂时保留右上角入口的文案宽度回归用例，待入口重新启用时恢复执行。
-	it.skip("expands the compact visual width for a longer localized replace label", () => {
-		mockCanvasRenderingContext()
-		const { element } = createAudioElementHarness({ replaceLabel: "Replace" })
-		const group = element.render()
-		const replaceButton = group.findOne(".decorator-corner-action-replace") as Konva.Group
-		const replaceHit = group.findOne(".decorator-corner-action-replace-hit") as Konva.Rect
-		const replaceBackground = group.findOne(
-			".decorator-corner-action-replace-button",
-		) as Konva.Rect
-
-		expect(replaceBackground.width()).toBeGreaterThan(40)
-		expect(replaceBackground.height()).toBe(24)
-		expect(replaceButton.width()).toBe(replaceBackground.width())
-		expect(replaceButton.height()).toBe(24)
-		expect(replaceHit.width()).toBe(replaceBackground.width() + 16)
-		expect(replaceHit.height()).toBe(44)
-	})
 
 	it("does not relayout controls for a temporary node transform", () => {
 		mockCanvasRenderingContext()
@@ -1482,70 +1378,6 @@ describe("AudioElement", () => {
 		expect(restoreToolCursor).toHaveBeenCalled()
 	})
 
-	// 暂时保留右上角入口的交互回归用例，待入口重新启用时恢复执行。
-	it.skip("makes the replace button clickable with mouse and touch feedback", () => {
-		mockCanvasRenderingContext()
-		const writableHarness = createAudioElementHarness()
-		const writableGroup = writableHarness.element.render()
-		const replaceRoot = writableGroup.findOne(".decorator-corner-actions") as Konva.Group
-		const replaceHit = writableGroup.findOne(
-			".decorator-corner-action-replace-hit",
-		) as Konva.Rect
-		const replaceBackground = writableGroup.findOne(
-			".decorator-corner-action-replace-button",
-		) as Konva.Rect
-		const replaceVisual = writableGroup.findOne(
-			".decorator-corner-action-replace-visual",
-		) as Konva.Group
-		expect(replaceRoot.visible()).toBe(false)
-		expect(replaceHit.size()).toEqual({ width: 56, height: 44 })
-		expect(replaceBackground.size()).toEqual({ width: 40, height: 24 })
-		expect(replaceBackground.cornerRadius()).toBe(8)
-		expect(replaceBackground.fill()).toBe("rgba(0, 0, 0, 0.70)")
-		expect(replaceHit.listening()).toBe(true)
-
-		writableGroup.fire("mouseenter")
-		expect(replaceRoot.visible()).toBe(true)
-
-		replaceHit.fire("mouseenter")
-		expect(writableHarness.setTemporary).toHaveBeenCalledWith("pointer")
-		expect(replaceBackground.fill()).toBe("rgba(0, 0, 0, 0.85)")
-		replaceHit.fire("mousedown", { evt: new Event("mousedown") })
-		expect(replaceBackground.fill()).toBe("rgba(0, 0, 0, 0.95)")
-		expect(replaceVisual.scaleX()).toBeCloseTo(0.94)
-		replaceHit.fire("mouseup", { evt: new Event("mouseup") })
-		expect(replaceBackground.fill()).toBe("rgba(0, 0, 0, 0.85)")
-		expect(replaceVisual.scaleX()).toBe(1)
-		replaceHit.fire("mouseleave")
-		expect(replaceBackground.fill()).toBe("rgba(0, 0, 0, 0.70)")
-		expect(writableHarness.restoreToolCursor).toHaveBeenCalled()
-		replaceHit.fire("click", { evt: { stopPropagation: vi.fn() } })
-		expect(writableHarness.emit).toHaveBeenCalledTimes(1)
-
-		replaceHit.fire("touchstart", {
-			evt: { stopPropagation: vi.fn(), preventDefault: vi.fn() },
-		})
-		expect(replaceVisual.scaleX()).toBeCloseTo(0.94)
-		replaceHit.fire("touchcancel", { evt: { stopPropagation: vi.fn() } })
-		expect(replaceVisual.scaleX()).toBe(1)
-		replaceHit.fire("tap", { evt: { stopPropagation: vi.fn() } })
-		replaceHit.fire("click", { evt: { stopPropagation: vi.fn() } })
-		expect(writableHarness.emit).toHaveBeenCalledWith({
-			type: "element:audio:replaceClick",
-			data: { elementId: "audio-1" },
-		})
-		expect(writableHarness.emit).toHaveBeenCalledTimes(2)
-		writableGroup.fire("mouseleave")
-		expect(replaceRoot.visible()).toBe(false)
-
-		const readonlyHarness = createAudioElementHarness({ readonly: true })
-		const readonlyGroup = readonlyHarness.element.render()
-		readonlyGroup.fire("mouseenter")
-		expect(
-			(readonlyGroup.findOne(".decorator-corner-action-replace") as Konva.Group).visible(),
-		).toBe(false)
-	})
-
 	it("does not render the corner replace action because the toolbar owns it", () => {
 		mockCanvasRenderingContext()
 		const harness = createAudioElementHarness()
@@ -1647,6 +1479,6 @@ describe("AudioElement", () => {
 		element.destroy()
 		expect(unregisterAudioElement).toHaveBeenCalledWith("audio-1")
 		expect(unregisterPlayback).toHaveBeenCalledTimes(1)
-		expect(unregisterFailure).toHaveBeenCalledTimes(2)
+		expect(unregisterFailure).toHaveBeenCalledTimes(1)
 	})
 })

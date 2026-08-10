@@ -17,10 +17,6 @@ import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackM
 import type { AudioWaveformSnapshot } from "../../resources/audio/AudioWaveformManager"
 import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
-import {
-	ElementCornerActionsDecorator,
-	type ElementCornerActionConfig,
-} from "../decorators/ElementCornerActionsDecorator"
 import { AUDIO_CONFIG } from "./AudioElement.config"
 import {
 	AUDIO_PLAYER_DESIGN,
@@ -181,11 +177,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private playbackUnsubscribe: () => void
 	private waveformUnsubscribe: () => void = () => undefined
 	private resourceFailureUnsubscribe: () => void
-	private replaceStateUnsubscribe: () => void
 	private resourceError = false
-	private replaceStatus: "idle" | "uploading" | "error" = "idle"
 	private interactionEventUnsubscribers: Array<() => void> = []
-	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private lastTouchActionAt = 0
 	private lastProgressTouchActionAt = 0
 	private controlInteractionMode: AudioControlInteractionMode = "full"
@@ -229,14 +222,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				this.retryingPreparation = false
 				this.resourceError = true
 				this.syncRenderState()
-			},
-		)
-		this.replaceStateUnsubscribe = canvas.eventEmitter.on(
-			"element:audio:replaceStateChanged",
-			({ data: eventData }) => {
-				if (eventData.elementId !== this.data.id) return
-				this.replaceStatus = eventData.status
-				this.cornerActionsDecorator?.refresh()
 			},
 		)
 	}
@@ -313,8 +298,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.renderedState = renderState
 		if (renderState !== "ready") {
 			this.renderStatusPlaceholder(group, renderState)
-			// 暂时由元素工具栏承载替换/上传入口，保留右上角实现供后续恢复。
-			// if (renderState !== "uploading") this.createCornerActions(group, width, height)
 			this.finalizeNode(group)
 			this.syncRenderLayout(width, height)
 			return group
@@ -341,9 +324,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				listening: false,
 			}),
 		)
-		// 暂时由元素工具栏承载替换/上传入口，保留右上角实现供后续恢复。
-		// this.createCornerActions(group, width, height)
-
 		this.finalizeNode(group)
 		this.syncRenderLayout(width, height)
 		this.syncPlaybackNodes()
@@ -469,7 +449,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		if (this.node instanceof Konva.Group) {
 			this.syncRenderLayout(this.node.width(), this.node.height())
 			this.syncInteractionHitTargets()
-			this.cornerActionsDecorator?.refresh()
 		}
 		this.startStatusSpinnerAnimation()
 		const src = this.getAudioSrc()
@@ -495,7 +474,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.playbackSnapshot = this.canvas.audioPlaybackManager.getSnapshot(this.data.id)
 			this.resourceError = false
 			this.retryingPreparation = false
-			this.replaceStatus = "idle"
 			this.subscribeWaveform(nextContent?.src)
 			if (nextContent?.src) {
 				this.canvas.visibilityManager.updateAudioElement(this.data.id, nextContent.src)
@@ -606,19 +584,10 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.playbackUnsubscribe()
 		this.waveformUnsubscribe()
 		this.resourceFailureUnsubscribe()
-		this.replaceStateUnsubscribe()
-		this.cornerActionsDecorator?.destroy()
-		this.cornerActionsDecorator = undefined
 		this.backButtonStateSync = undefined
 		this.forwardButtonStateSync = undefined
 		if (this.node) this.cleanupNodeListeners(this.node)
 		super.destroy()
-	}
-
-	public override rerender(): Konva.Node | null {
-		this.cornerActionsDecorator?.destroy()
-		this.cornerActionsDecorator = undefined
-		return super.rerender()
 	}
 
 	protected override setupNodeListeners(node: Konva.Node): void {
@@ -911,48 +880,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.forwardButtonStateSync = forwardButton.syncState
 		operationGroup.add(backButton.button, playButton, forwardButton.button)
 		group.add(operationGroup)
-	}
-
-	private createCornerActions(group: Konva.Group, width: number, height: number): void {
-		const hasSource = Boolean(this.getAudioSrc())
-		const replaceAction: ElementCornerActionConfig = {
-			key: "replace",
-			placement: "top-right",
-			label: () => {
-				if (this.replaceStatus === "uploading") {
-					return hasSource
-						? this.getText("audio.replacing", "替换中")
-						: this.getText("audio.adding", "添加中")
-				}
-				return hasSource
-					? this.getText("audio.replace", "替换")
-					: this.getText("audio.add", "添加音频")
-			},
-			minWidth: 40,
-			isVisible: () => !this.canvas.readonly,
-			isEnabled: () => !this.canvas.readonly && this.replaceStatus !== "uploading",
-			disabledCursor: "not-allowed",
-			onClick: ({ clientX, clientY }) => {
-				this.canvas.eventEmitter.emit({
-					type: "element:audio:replaceClick",
-					data: {
-						elementId: this.data.id,
-						...(clientX !== undefined ? { clientX } : undefined),
-						...(clientY !== undefined ? { clientY } : undefined),
-					},
-				})
-			},
-		}
-
-		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
-			elementId: this.data.id,
-			canvas: this.canvas,
-			width,
-			height,
-			actions: [replaceAction],
-			showOnSelection: true,
-		})
-		this.cornerActionsDecorator.create()
 	}
 
 	private createPlayButton(): Konva.Group {
@@ -1453,7 +1380,6 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			})
 		})
 
-		this.cornerActionsDecorator?.updateConfig({ width, height })
 		this.syncInteractionHitTargets()
 		this.syncPlaybackNodes()
 		group.getLayer()?.batchDraw()
