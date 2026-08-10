@@ -382,7 +382,7 @@ export default function Tools() {
 
 				return (
 					<Tooltip key={item.value}>
-						<TooltipTrigger>
+						<TooltipTrigger className={styles.toolTrigger}>
 							<IconButton
 								className={styles.toolItem}
 								selected={item.value === activeTool}

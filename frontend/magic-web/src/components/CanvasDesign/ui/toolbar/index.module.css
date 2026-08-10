@@ -29,6 +29,12 @@
 	border-radius: 50%;
 }
 
+.tool-trigger:focus,
+.tool-trigger:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+
 .divider {
 	width: 24px;
 	height: 1px;

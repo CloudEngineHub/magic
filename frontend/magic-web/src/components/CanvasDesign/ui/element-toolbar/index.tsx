@@ -80,7 +80,6 @@ export default function ElementTools() {
 						{ type: ElementToolTypeEnum.FrameRemoveButton },
 						Divider,
 						{ type: ElementToolTypeEnum.SizeEditButton },
-						Divider,
 						{ type: ElementToolTypeEnum.FrameDownloadButton },
 						Divider,
 						{ type: ElementToolTypeEnum.ElementAlign },

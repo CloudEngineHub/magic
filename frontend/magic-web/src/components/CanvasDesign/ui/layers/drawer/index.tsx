@@ -567,7 +567,7 @@ export default function LayersDrawer() {
 			</div>
 			<div className={styles.layersDrawerFooter}>
 				<Tooltip>
-					<TooltipTrigger>
+					<TooltipTrigger className={styles.layersDrawerCollapseTrigger}>
 						<IconButton
 							className={styles.layersDrawerCollapseButton}
 							onClick={() => setCollapsed(true)}

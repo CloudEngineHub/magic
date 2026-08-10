@@ -214,7 +214,7 @@ export default function ShapeStyle() {
 
 	return (
 		<Popover>
-			<PopoverTrigger>
+			<PopoverTrigger className={styles.trigger}>
 				<div>
 					<IconButton className={styles.triggerButton}>
 						<SplinePointer size={16} />

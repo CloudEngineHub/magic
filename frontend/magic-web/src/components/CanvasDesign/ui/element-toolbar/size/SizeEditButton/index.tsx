@@ -88,7 +88,7 @@ export default function SizeEditButton() {
 
 	return (
 		<Popover open={open} onOpenChange={handleOpenChange}>
-			<PopoverTrigger>
+			<PopoverTrigger className={styles.sizeEditTrigger}>
 				<div>
 					<IconButton className={styles.sizeEditButton}>
 						<Scaling size={16} />

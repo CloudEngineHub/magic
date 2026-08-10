@@ -10,6 +10,12 @@
 	border-radius: var(--border-radius-rounded-sm, 6px);
 }
 
+.size-edit-trigger:focus,
+.size-edit-trigger:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+
 .button-text {
 	line-height: 32px;
 	vertical-align: middle;
