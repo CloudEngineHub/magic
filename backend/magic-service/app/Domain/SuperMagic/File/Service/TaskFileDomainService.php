@@ -3012,11 +3012,7 @@ class TaskFileDomainService
         $dirEntity->setIsDirectory(true);
         $dirEntity->setParentId($parentId);
         $dirEntity->setSource($source);
-        if (WorkFileUtil::isSnapshotFile($fileKey)) {
-            $dirEntity->setStorageType(StorageType::SNAPSHOT);
-        } else {
-            $dirEntity->setStorageType(StorageType::WORKSPACE);
-        }
+        $dirEntity->setStorageType(StorageType::WORKSPACE);
         $dirEntity->setIsHidden($this->determineIsHidden($dirName, $parentId, $projectId));
         $dirEntity->setSort(0);
 
@@ -3408,12 +3404,7 @@ class TaskFileDomainService
             $fileEntity->setFileSize(! empty($taskFileEntity->getFileSize()) ? $taskFileEntity->getFileSize() : 0);
 
             if ($dto->getStorageTypeOverride() === '') {
-                $incomingStorageType = $taskFileEntity->getStorageType();
-                if ($incomingStorageType->value === StorageType::WORKSPACE->value && WorkFileUtil::isSnapshotFile($fileKey)) {
-                    $fileEntity->setStorageType(StorageType::SNAPSHOT);
-                } else {
-                    $fileEntity->setStorageType($incomingStorageType);
-                }
+                $fileEntity->setStorageType($taskFileEntity->getStorageType());
             } else {
                 $fileEntity->setStorageType($dto->getStorageTypeOverride());
             }

@@ -153,36 +153,6 @@ class WorkFileUtil
         return 'download';
     }
 
-    /**
-     * Check if a file path is a snapshot file.
-     * Snapshot files are located in the existing Workspace snapshot directory.
-     *
-     * @param string $filePath File path to check
-     * @return bool True if the file is a snapshot file, false otherwise
-     */
-    public static function isSnapshotFile(string $filePath): bool
-    {
-        // Check if file path is empty
-        if (empty(trim($filePath))) {
-            return false;
-        }
-
-        // Normalize path separators and trim
-        $normalizedPath = str_replace('\\', '/', trim($filePath));
-
-        // Split path into components
-        $components = explode('/', $normalizedPath);
-
-        // Check if any component is the existing Workspace snapshot directory
-        foreach ($components as $component) {
-            if ($component === '.visual') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static function sanitizeFileNameCandidate(string $fileName): string
     {
         $fileName = trim($fileName);
