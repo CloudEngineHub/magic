@@ -14,6 +14,7 @@ import {
 	type ElementDetailsDoc,
 	buildUserElementDetailsDoc,
 	emptyElementDetailsDoc,
+	hasUnsupportedElementDetailsStructure,
 	normalizeElementDetailsDoc,
 	rehydrateHeavyFields,
 } from "./elementDetailsStore"
@@ -91,29 +92,44 @@ function findSiblingFile(
 	return { fileItem: null, parentId }
 }
 
-async function readElementDetailsByFile(fileItem: FileItem | null): Promise<ElementDetailsDoc> {
-	if (!fileItem?.file_id) return emptyElementDetailsDoc()
+interface ReadElementDetailsResult {
+	doc: ElementDetailsDoc
+	exists: boolean
+	unsupported: boolean
+}
+
+async function readElementDetailsByFile(
+	fileItem: FileItem | null,
+): Promise<ReadElementDetailsResult> {
+	if (!fileItem?.file_id)
+		return { doc: emptyElementDetailsDoc(), exists: false, unsupported: false }
 	try {
 		const content = (await getFileContentById(fileItem.file_id, {
 			responseType: "text",
 		})) as string | null
-		if (!content || !content.trim()) return emptyElementDetailsDoc()
-		return normalizeElementDetailsDoc(JSON.parse(content))
+		if (!content || !content.trim())
+			return { doc: emptyElementDetailsDoc(), exists: true, unsupported: false }
+		const raw = JSON.parse(content)
+		return {
+			doc: normalizeElementDetailsDoc(raw),
+			exists: true,
+			unsupported: hasUnsupportedElementDetailsStructure(raw),
+		}
 	} catch {
-		return emptyElementDetailsDoc()
+		return { doc: emptyElementDetailsDoc(), exists: true, unsupported: false }
 	}
 }
 
 async function readComparableElementDetailsByFile(
 	fileItem: FileItem | null,
-): Promise<ElementDetailsDoc | null> {
+): Promise<unknown | null> {
 	if (!fileItem?.file_id) return emptyElementDetailsDoc()
 	try {
 		const content = (await getFileContentById(fileItem.file_id, {
 			responseType: "text",
 		})) as string | null
 		if (!content || !content.trim()) return emptyElementDetailsDoc()
-		return normalizeElementDetailsDoc(JSON.parse(content))
+		return JSON.parse(content)
 	} catch {
 		return null
 	}
@@ -126,6 +142,34 @@ export interface ElementDetailsContext {
 	projectId?: string
 }
 
+export interface HydrateElementDetailsResult {
+	provenance: ElementDetailsProvenance
+	status: "loaded" | "missing" | "unsupported"
+}
+
+export async function getElementDetailsSidecarStatus(
+	ctx: ElementDetailsContext,
+): Promise<"loaded" | "missing" | "unsupported"> {
+	const agentLookup = findSiblingFile(
+		ctx.attachments,
+		ctx.flatAttachments,
+		ctx.mainFileId,
+		ELEMENT_DETAILS_FILENAME,
+	)
+	const userLookup = findSiblingFile(
+		ctx.attachments,
+		ctx.flatAttachments,
+		ctx.mainFileId,
+		ELEMENT_DETAILS_USER_FILENAME,
+	)
+	const [agentResult, userResult] = await Promise.all([
+		readElementDetailsByFile(agentLookup.fileItem),
+		readElementDetailsByFile(userLookup.fileItem),
+	])
+	if (agentResult.unsupported || userResult.unsupported) return "unsupported"
+	return agentResult.exists || userResult.exists ? "loaded" : "missing"
+}
+
 /**
  * v3 项目：把两个 sidecar 的重字段回填到 Content 上（原地）。
  * 非 v3 数据由主数据 codec 先升级后再进入这里。
@@ -133,17 +177,13 @@ export interface ElementDetailsContext {
 export async function hydrateDesignDataDetails(
 	designData: DesignData | null,
 	ctx: ElementDetailsContext,
-): Promise<ElementDetailsProvenance> {
-	if (!designData) return {}
+): Promise<HydrateElementDetailsResult> {
+	if (!designData) return { provenance: {}, status: "missing" }
 	const elements = designData.canvas?.elements
-	if (!elements?.length) {
-		setHydratedElementDetailsProvenance(designData, {})
-		return {}
-	}
 	if (!isContentDesignData(designData)) {
-		const inlineProvenance = buildInlineElementDetailsProvenance(elements)
+		const inlineProvenance = buildInlineElementDetailsProvenance(elements ?? [])
 		setHydratedElementDetailsProvenance(designData, inlineProvenance)
-		return inlineProvenance
+		return { provenance: inlineProvenance, status: "missing" }
 	}
 
 	const agentLookup = findSiblingFile(
@@ -159,15 +199,29 @@ export async function hydrateDesignDataDetails(
 		ELEMENT_DETAILS_USER_FILENAME,
 	)
 
-	const [agentDoc, userDoc] = await Promise.all([
+	const [agentResult, userResult] = await Promise.all([
 		readElementDetailsByFile(agentLookup.fileItem),
 		readElementDetailsByFile(userLookup.fileItem),
 	])
+	if (agentResult.unsupported || userResult.unsupported) {
+		setHydratedElementDetailsProvenance(designData, {})
+		return { provenance: {}, status: "unsupported" }
+	}
+	if (!elements?.length) {
+		setHydratedElementDetailsProvenance(designData, {})
+		return {
+			provenance: {},
+			status: agentResult.exists || userResult.exists ? "loaded" : "missing",
+		}
+	}
 
-	const provenance = rehydrateHeavyFields(elements, userDoc, agentDoc)
+	const provenance = rehydrateHeavyFields(elements, userResult.doc, agentResult.doc)
 	validateV3CanvasDocument(designData.canvas)
 	setHydratedElementDetailsProvenance(designData, provenance)
-	return provenance
+	return {
+		provenance,
+		status: agentResult.exists || userResult.exists ? "loaded" : "missing",
+	}
 }
 
 /**
@@ -177,8 +231,8 @@ export async function hydrateDesignDataDetails(
 export async function writeUserElementDetails(
 	designData: DesignData,
 	ctx: ElementDetailsContext,
-): Promise<boolean> {
-	if (!isContentDesignData(designData) || !ctx.mainFileId) return true
+): Promise<"persisted" | "unchanged" | "skipped" | "blocked-unsupported" | "failed"> {
+	if (!isContentDesignData(designData) || !ctx.mainFileId) return "skipped"
 
 	const agentLookup = findSiblingFile(
 		ctx.attachments,
@@ -186,7 +240,9 @@ export async function writeUserElementDetails(
 		ctx.mainFileId,
 		ELEMENT_DETAILS_FILENAME,
 	)
-	const agentBaseline = await readElementDetailsByFile(agentLookup.fileItem)
+	const agentBaselineResult = await readElementDetailsByFile(agentLookup.fileItem)
+	if (agentBaselineResult.unsupported) return "blocked-unsupported"
+	const agentBaseline = agentBaselineResult.doc
 
 	const userDoc = buildUserElementDetailsDoc(designData.canvas?.elements, agentBaseline)
 	const hasEntries = Object.keys(userDoc.elements).length > 0
@@ -201,16 +257,19 @@ export async function writeUserElementDetails(
 	let userFileId = userLookup.fileItem?.file_id ?? null
 
 	// 用户文件不存在且当前没有任何用户重字段，无需创建空文件
-	if (!userFileId && !hasEntries) return true
+	if (!userFileId && !hasEntries) return "skipped"
 
 	if (userFileId) {
-		const currentUserDoc = await readComparableElementDetailsByFile(userLookup.fileItem)
-		if (currentUserDoc && isElementDetailsContentEqual(currentUserDoc, userDoc)) return true
+		const currentUserRaw = await readComparableElementDetailsByFile(userLookup.fileItem)
+		if (currentUserRaw === null) return "failed"
+		if (hasUnsupportedElementDetailsStructure(currentUserRaw)) return "blocked-unsupported"
+		const currentUserDoc = normalizeElementDetailsDoc(currentUserRaw)
+		if (isElementDetailsContentEqual(currentUserDoc, userDoc)) return "unchanged"
 	}
 
 	if (!userFileId) {
 		const parentId = userLookup.parentId ?? agentLookup.parentId
-		if (!ctx.projectId || !parentId) return false
+		if (!ctx.projectId || !parentId) return "failed"
 		try {
 			const created = await SuperMagicApi.createFile({
 				project_id: ctx.projectId,
@@ -221,18 +280,17 @@ export async function writeUserElementDetails(
 			})
 			userFileId = (created as { file_id?: string })?.file_id ?? null
 		} catch {
-			return false
+			return "failed"
 		}
 	}
 
-	if (!userFileId) return false
+	if (!userFileId) return "failed"
 
 	const content = JSON.stringify(userDoc, null, 2)
 	try {
 		await SuperMagicApi.saveFileContent([{ file_id: userFileId, content, enable_shadow: true }])
-		return true
+		return "persisted"
 	} catch {
-		// 用户 sidecar 写失败不影响主文件保存
-		return false
+		return "failed"
 	}
 }

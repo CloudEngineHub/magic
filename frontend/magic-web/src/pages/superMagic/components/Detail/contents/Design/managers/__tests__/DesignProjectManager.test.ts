@@ -19,6 +19,10 @@ import {
 	type DesignDraftEntry,
 } from "../../utils/designDraftStorage"
 import { hashDesignDataComparable } from "../../utils/designContentHash"
+import {
+	clearPendingDesignUpgrade,
+	writePendingDesignUpgrade,
+} from "../../utils/designUpgradeStorage"
 
 vi.mock("../../utils/designDraftStorage", () => ({
 	getDesignDraftWriteDebounceMs: vi.fn(() => 0),
@@ -211,6 +215,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 		const data = createDesignData("legacy-upgraded")
 		const { manager, stateBag, getState } = createManager(data)
 		stateBag.setters.setPendingDesignUpgrade?.({
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
 			fileId: "file-1",
 			sourceVersion: "2.0.0",
 			targetVersion: "3.0.0",
@@ -245,6 +251,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 		const data = createDesignData("legacy-upgraded")
 		const { manager, stateBag, getState } = createManager(data)
 		const pendingUpgrade: PendingDesignUpgrade = {
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
 			fileId: "file-1",
 			sourceVersion: "1.0.0",
 			targetVersion: "3.0.0",
@@ -268,13 +276,18 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		await expect(manager.persistPendingDesignUpgrade()).resolves.toBe(false)
 
-		expect(getState().pendingDesignUpgrade).toEqual(pendingUpgrade)
+		expect(getState().pendingDesignUpgrade).toMatchObject({
+			...pendingUpgrade,
+			reason: "sidecar-retry",
+		})
 	})
 
 	it("does not persist a pending DSL upgrade while the canvas is read-only", async () => {
 		const data = createDesignData("legacy-upgraded")
 		const { manager, stateBag } = createManager(data)
 		stateBag.setters.setPendingDesignUpgrade?.({
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
 			fileId: "file-1",
 			sourceVersion: "2.0.0",
 			targetVersion: "3.0.0",
@@ -324,6 +337,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("publishes a pending DSL upgrade after the remote load lifecycle completes", async () => {
 		const { manager, getState } = createManager()
 		const pendingUpgrade: PendingDesignUpgrade = {
+			reason: "legacy-dsl",
+			createdAt: Date.now(),
 			fileId: "file-1",
 			sourceVersion: "2.0.0",
 			targetVersion: "3.0.0",
@@ -341,6 +356,45 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		expect(getState().pendingDesignUpgrade).toEqual(pendingUpgrade)
 		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).toHaveBeenCalledTimes(1)
+	})
+
+	it("restores a persisted sidecar retry after a v3 remote reload", async () => {
+		const { manager, getState } = createManager()
+		const identity = {
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+		}
+		await clearPendingDesignUpgrade(identity)
+		await writePendingDesignUpgrade(identity, {
+			reason: "sidecar-retry",
+			fileId: "file-1",
+			sourceVersion: "2.0.0",
+			targetVersion: "3.0.0",
+			createdAt: 1,
+		})
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<{
+					pendingUpgrade: PendingDesignUpgrade | null
+					sidecarStatus: "loaded"
+				}>
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockResolvedValue({
+			pendingUpgrade: null,
+			sidecarStatus: "loaded",
+		})
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		await manager.loadFromRemote()
+
+		expect(getState().pendingDesignUpgrade).toMatchObject({
+			reason: "sidecar-retry",
+			fileId: "file-1",
+		})
+		await clearPendingDesignUpgrade(identity)
 	})
 
 	it("force reloads remote data while discarding local drafts for data source switches", async () => {

@@ -26,10 +26,17 @@ import {
 	type DesignSaveResult,
 } from "./DesignSaveManager"
 import { DesignVersionManager } from "./DesignVersionManager"
+import type { DesignVersionLoadResult } from "./DesignVersionManager"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
-import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import { DesignLoadError, loadDesignDataToRuntime } from "../utils/designDataLoader"
+import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
+import {
+	clearPendingDesignUpgrade,
+	readPendingDesignUpgrade,
+	writePendingDesignUpgrade,
+} from "../utils/designUpgradeStorage"
 import {
 	deleteDesignDraft,
 	getDesignDraftWriteDebounceMs,
@@ -116,7 +123,7 @@ export interface DesignProjectManagerAPI {
 	generateContent: (data?: DesignData) => string
 
 	loadWithVersion: (version: number) => Promise<DesignData | null>
-	loadLatest: () => Promise<{ data: DesignData | null; version: number | null }>
+	loadLatest: () => Promise<DesignVersionLoadResult>
 
 	checkRemoteUpdate: () => Promise<{
 		hasUpdate: boolean
@@ -196,6 +203,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		baseSnapshot: LocalDraftBaseSnapshot
 	} | null = null
 	private hasShownLocalDraftUnavailableToast = false
+	private remoteLoadMetadata = new WeakMap<object, LoadDesignDataToRuntimeResult>()
 
 	private stateBag: DesignProjectStateBag
 	private options: DesignProjectManagerOptions
@@ -274,21 +282,27 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const fetchRemoteDesignDataWithVersion = async (): Promise<{
 			data: DesignData
 			version: number | null
+			loadResult: LoadDesignDataToRuntimeResult
 		} | null> => {
 			const fid = this.stateBag.getMagicProjectJsFileId()
 			if (!fid) return null
 
 			try {
-				const { data, version } = await this.versionManager.loadLatest()
+				const { data, version, loadResult } = await this.versionManager.loadLatest()
 				if (!data) return null
 
 				const clonedData = cloneDeep(data) as DesignData
 				transferHydratedElementDetailsProvenance(data, clonedData)
+				if (loadResult) this.remoteLoadMetadata.set(clonedData, loadResult)
 				return {
 					data: clonedData,
 					version,
+					loadResult,
 				}
-			} catch {
+			} catch (error) {
+				if (error instanceof DesignLoadError) {
+					this.stateBag.setters.setDesignLoadIssue?.(error.issue)
+				}
 				return null
 			}
 		}
@@ -303,7 +317,11 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			updateType: "message" | "revoke" | "restore",
 			applyOptions,
 		) => {
-			return this.applyRemoteDesignDataSafely(newData, updateType, applyOptions)
+			const loadResult =
+				applyOptions?.loadResult ?? this.remoteLoadMetadata.get(newData as object)
+			const applied = this.applyRemoteDesignDataSafely(newData, updateType, applyOptions)
+			if (applied) this.applyLoadMetadata(loadResult)
+			return applied
 		}
 
 		const loadAndApplyRemote: LoadAndApplyRemoteFn = async (
@@ -315,6 +333,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			if (!remote) return false
 			return applyRemoteDesignData(remote.data, updateType, {
 				remoteVersion: remote.version,
+				loadResult: remote.loadResult,
 			})
 		}
 
@@ -363,6 +382,69 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			getLocalVersion: () => this.stateBag.getMagicProjectJsVersion(),
 			updateLocalVersion: (version) => this.updateLocalVersionIfNewer(version),
 		})
+	}
+
+	private getUpgradeIdentity() {
+		return {
+			projectId: this.options.projectId,
+			designProjectId: this.options.designProjectId,
+			magicProjectJsFileId: this.stateBag.getMagicProjectJsFileId(),
+		}
+	}
+
+	private buildPendingUpgrade(
+		loadResult: LoadDesignDataToRuntimeResult,
+		reason: PendingDesignUpgrade["reason"] = "legacy-dsl",
+	): PendingDesignUpgrade | null {
+		const fileId = this.stateBag.getMagicProjectJsFileId()
+		if (!fileId) return null
+		return {
+			reason,
+			fileId,
+			sourceVersion: loadResult.sourceVersion,
+			targetVersion: MAGIC_PROJECT_VERSION_V3,
+			createdAt: Date.now(),
+		}
+	}
+
+	private applyLoadMetadata(loadResult: LoadDesignDataToRuntimeResult | undefined): void {
+		if (!loadResult) return
+		this.stateBag.setters.setSidecarStatus?.(loadResult.sidecarStatus)
+		this.stateBag.setters.setDesignLoadIssue?.(loadResult.issue)
+		if (loadResult.sidecarStatus === "unsupported") {
+			this.stateBag.setters.setPendingDesignUpgrade?.(null)
+			this.stateBag.setters.setIsReadOnly(true)
+			return
+		}
+
+		if (loadResult.needsPersist) {
+			const pending = this.buildPendingUpgrade(loadResult)
+			if (pending) {
+				this.stateBag.setters.setPendingDesignUpgrade?.(pending)
+				void writePendingDesignUpgrade(this.getUpgradeIdentity(), pending)
+			}
+		}
+	}
+
+	private async restoreStoredPendingUpgrade(): Promise<void> {
+		if (this.stateBag.getSidecarStatus?.() === "unsupported") return
+		if (this.stateBag.getPendingDesignUpgrade?.()) return
+		const stored = await readPendingDesignUpgrade(this.getUpgradeIdentity())
+		if (!stored || stored.fileId !== this.stateBag.getMagicProjectJsFileId()) return
+		const pending: PendingDesignUpgrade = {
+			...stored,
+			reason: "sidecar-retry",
+			createdAt: stored.createdAt || Date.now(),
+		}
+		this.stateBag.setters.setPendingDesignUpgrade?.(pending)
+		this.stateBag.setters.setDesignLoadIssue?.({
+			kind: "sidecar-persist-failed",
+			stage: "hydrate-sidecar",
+			message: "Canvas element details are waiting to be persisted",
+			sourceVersion: pending.sourceVersion,
+			fileId: pending.fileId,
+		})
+		this.stateBag.setters.setIsReadOnly(true)
 	}
 
 	private updateLocalVersionIfNewer(version: number): void {
@@ -1288,6 +1370,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return false
 		}
 		const applied = this.applyRemoteDesignDataNow(pending.data, pending.updateType)
+		if (applied) this.applyLoadMetadata(this.remoteLoadMetadata.get(pending.data as object))
 		if (applied && pending.remoteVersion !== null) {
 			this.updateLocalVersionIfNewer(pending.remoteVersion)
 		}
@@ -1627,7 +1710,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 					attachmentIndex: this.options.attachmentIndex,
 				},
 			})
-			if (!loadedDraft) return
 			const draftData = loadedDraft.data
 			const loadedDraftBase = draft.baseRemoteData
 				? await loadDesignDataToRuntime({
@@ -1679,7 +1761,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				attachmentIndex: this.options.attachmentIndex,
 			},
 		})
-		if (!loadedDraft) return
 		const restoredData = loadedDraft.data
 
 		const oldData = this.stateBag.getDesignData()
@@ -1712,7 +1793,8 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (saveResult.reason !== "remote-updated") return false
 
 		try {
-			const { data, version } = await this.versionManager.loadLatest()
+			const { data, version, loadResult } = await this.versionManager.loadLatest()
+			this.applyLoadMetadata(loadResult)
 			if (!data) return false
 			const remoteVersion = saveResult.remoteVersion ?? version
 			if (
@@ -1773,7 +1855,30 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	private handleSuccessfulSaveResult(saveResult: DesignSaveResult): void {
-		if (!saveResult.ok || !saveResult.fullyPersisted) return
+		if (!saveResult.ok) return
+		if (!saveResult.fullyPersisted) {
+			const fileId = this.stateBag.getMagicProjectJsFileId()
+			if (!fileId) return
+			const currentPending = this.stateBag.getPendingDesignUpgrade?.()
+			const retry: PendingDesignUpgrade = {
+				reason: "sidecar-retry",
+				fileId,
+				sourceVersion: currentPending?.sourceVersion ?? MAGIC_PROJECT_VERSION_V3,
+				targetVersion: MAGIC_PROJECT_VERSION_V3,
+				createdAt: Date.now(),
+			}
+			this.stateBag.setters.setPendingDesignUpgrade?.(retry)
+			this.stateBag.setters.setDesignLoadIssue?.({
+				kind: "sidecar-persist-failed",
+				stage: "hydrate-sidecar",
+				message: "Canvas was saved, but element details still require persistence",
+				sourceVersion: retry.sourceVersion,
+				fileId,
+			})
+			this.stateBag.setters.setIsReadOnly(true)
+			void writePendingDesignUpgrade(this.getUpgradeIdentity(), retry)
+			return
+		}
 
 		const savedRemoteData = saveResult.savedDesignData
 		if (!savedRemoteData) {
@@ -1851,26 +1956,55 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	}
 
 	private applyPendingUpgradeFromLoad(
-		loadResult: { pendingUpgrade: PendingDesignUpgrade | null } | undefined,
+		loadResult:
+			| {
+					pendingUpgrade: PendingDesignUpgrade | null
+					issue?: import("../utils/designDataLoader").DesignLoadIssue
+					sidecarStatus: import("../utils/designDataLoader").DesignSidecarStatus
+			  }
+			| undefined,
 	): void {
 		if (!loadResult) return
+		this.stateBag.setters.setDesignLoadIssue?.(loadResult.issue)
+		this.stateBag.setters.setSidecarStatus?.(loadResult.sidecarStatus)
 		this.stateBag.setters.setPendingDesignUpgrade?.(loadResult.pendingUpgrade)
+		if (loadResult.pendingUpgrade) {
+			void writePendingDesignUpgrade(this.getUpgradeIdentity(), loadResult.pendingUpgrade)
+		}
 	}
 
 	async loadFromRemote(): Promise<void> {
 		this.clearPendingRemoteDesignData()
 		const loadResult = await this.loadManager.loadFromRemote()
 		this.syncBaseDesignDataFromCurrent()
-		await this.tryRestoreLocalDraftAfterRemoteLoad()
+		let draftLoadIssue: DesignLoadError["issue"] | undefined
+		try {
+			await this.tryRestoreLocalDraftAfterRemoteLoad()
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				draftLoadIssue = error.issue
+			}
+		}
 		this.applyPendingUpgradeFromLoad(loadResult)
+		if (draftLoadIssue) this.stateBag.setters.setDesignLoadIssue?.(draftLoadIssue)
+		await this.restoreStoredPendingUpgrade()
 	}
 
 	async reloadPreservingLocalDraft(): Promise<void> {
 		this.clearPendingRemoteDesignData()
 		const loadResult = await this.loadManager.resetAndReload()
 		this.syncBaseDesignDataFromCurrent()
-		await this.tryRestoreLocalDraftAfterRemoteLoad()
+		let draftLoadIssue: DesignLoadError["issue"] | undefined
+		try {
+			await this.tryRestoreLocalDraftAfterRemoteLoad()
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				draftLoadIssue = error.issue
+			}
+		}
 		this.applyPendingUpgradeFromLoad(loadResult)
+		if (draftLoadIssue) this.stateBag.setters.setDesignLoadIssue?.(draftLoadIssue)
+		await this.restoreStoredPendingUpgrade()
 	}
 
 	async reloadDiscardingLocalDraft(): Promise<void> {
@@ -1879,6 +2013,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const loadResult = await this.loadManager.resetAndReload()
 		this.syncBaseDesignDataFromCurrent()
 		this.applyPendingUpgradeFromLoad(loadResult)
+		await this.restoreStoredPendingUpgrade()
 	}
 
 	async persistPendingDesignUpgrade(): Promise<boolean> {
@@ -1887,7 +2022,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		if (pendingUpgrade.fileId !== this.stateBag.getMagicProjectJsFileId()) return false
 		if (pendingUpgrade.targetVersion !== MAGIC_PROJECT_VERSION_V3) return false
 		if (this.stateBag.getDesignData().version !== MAGIC_PROJECT_VERSION_V3) return false
-		if (this.isVersionDataSourceLocked() || this.getIsReadOnly()) return false
+		const isBaseReadOnly =
+			!this.options.allowEdit ||
+			this.options.isPlaybackMode ||
+			this.options.isShareRoute ||
+			this.options.isMobile
+		if (this.isVersionDataSourceLocked() || isBaseReadOnly) return false
+		if (this.getIsReadOnly() && pendingUpgrade.reason !== "sidecar-retry") return false
 		if (this.hasBlockingConflict() || this.hasUnresolvedMergeConflicts()) return false
 
 		this.saveManager.cancelAutoSave()
@@ -1896,21 +2037,53 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			designData: this.stateBag.getDesignData(),
 			updateCurrentDesignData: true,
 			source: "dsl-upgrade",
+			...(pendingUpgrade.reason === "sidecar-retry" ? { allowReadOnlyRetry: true } : {}),
 		})
 		if (!saveResult.ok) {
+			if (saveResult.reason === "unsupported-sidecar") {
+				this.stateBag.setters.setDesignLoadIssue?.({
+					kind: "unsupported-sidecar",
+					stage: "hydrate-sidecar",
+					message: "Unsupported element details sidecar structure",
+					sourceVersion: pendingUpgrade.sourceVersion,
+					fileId: pendingUpgrade.fileId,
+				})
+				this.stateBag.setters.setSidecarStatus?.("unsupported")
+				this.stateBag.setters.setIsReadOnly(true)
+			}
 			await this.handleSaveResultConflict(saveResult)
 			this.tryApplyPendingRemoteDesignData()
 			return false
 		}
 
 		this.handleSuccessfulSaveResult(saveResult)
-		if (!saveResult.fullyPersisted) return false
+		if (!saveResult.fullyPersisted) {
+			const retry: PendingDesignUpgrade = {
+				...pendingUpgrade,
+				reason: "sidecar-retry",
+				createdAt: Date.now(),
+			}
+			this.stateBag.setters.setPendingDesignUpgrade?.(retry)
+			this.stateBag.setters.setDesignLoadIssue?.({
+				kind: "sidecar-persist-failed",
+				stage: "hydrate-sidecar",
+				message: "Canvas was saved, but element details still require persistence",
+				sourceVersion: retry.sourceVersion,
+				fileId: retry.fileId,
+			})
+			this.stateBag.setters.setIsReadOnly(true)
+			await writePendingDesignUpgrade(this.getUpgradeIdentity(), retry)
+			return false
+		}
 
 		if (!this.hasUnresolvedMergeConflicts()) {
 			this.clearLocalDraftAfterFullyPersistedSave()
 		}
 		this.pendingRemoteDesignData = null
 		this.stateBag.setters.setPendingDesignUpgrade?.(null)
+		this.stateBag.setters.setDesignLoadIssue?.(undefined)
+		await clearPendingDesignUpgrade(this.getUpgradeIdentity())
+		this.stateBag.setters.setIsReadOnly(isBaseReadOnly)
 		return true
 	}
 
@@ -1971,7 +2144,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return this.versionManager.loadWithVersion(version)
 	}
 
-	loadLatest(): Promise<{ data: DesignData | null; version: number | null }> {
+	loadLatest(): Promise<DesignVersionLoadResult> {
 		return this.versionManager.loadLatest()
 	}
 
@@ -2003,6 +2176,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			this.saveManager.cancelAutoSave()
 			await this.versionManager.handleChangeFileVersion(version, isNewestVersion)
 			this.syncBaseDesignDataFromCurrent()
+			if (isNewestVersion) await this.restoreStoredPendingUpgrade()
 		} finally {
 			unlockVersionDataSource()
 		}

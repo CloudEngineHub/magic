@@ -266,9 +266,7 @@ export function parseMagicProjectJsContentWithDiagnostics(
 		const elements = canvasObj.elements as LayerElement[]
 		const connections = getConnectionsFromCanvasObject(canvasObj)
 		return {
-			data: upgradeDesignDataToV3(
-				buildDesignDataFromMagicProjectConfig(config, elements, connections),
-			),
+			data: buildDesignDataFromMagicProjectConfig(config, elements, connections),
 			canvasStatus: elements.length > 0 ? "valid-non-empty" : "valid-empty",
 			sourceVersion: normalizedSourceVersion,
 		}
@@ -298,8 +296,6 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			return null
 		}
 
-		// 保持普通加载链路的历史兼容：缺失或异常 canvas 仍按空画布兜底。
-		// 严格区分 missing/invalid/decompress-failed 的逻辑只给 upgrade diagnostics 使用。
 		const canvasField = (config as { canvas?: unknown }).canvas
 		let elements: LayerElement[] = []
 		let connections: CanvasConnection[] = []

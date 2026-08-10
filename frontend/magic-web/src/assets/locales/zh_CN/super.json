@@ -644,8 +644,13 @@
 			"failed": "升级失败，请稍后重试",
 			"failedSubtitle": "请检查网络状态后重试，升级完成前暂不可编辑画布",
 			"failedTitle": "画布升级失败",
+			"loadFailedSubtitle": "失败阶段：{{stage}}；原因：{{reason}}",
+			"loadFailedTitle": "画布数据加载失败",
+			"reload": "重新加载",
 			"retry": "重试升级",
-			"success": "升级成功"
+			"success": "升级成功",
+			"unsupportedSidecarDescription": "检测到未发布的图片版本数据。为避免覆盖原数据，当前画布仅支持只读查看。",
+			"unsupportedSidecarTitle": "画布附加数据暂不兼容"
 		}
 	},
 	"detail": {

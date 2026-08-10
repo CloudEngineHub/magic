@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
-import { writeUserElementDetails } from "../elementDetailsIo"
+import { hydrateDesignDataDetails, writeUserElementDetails } from "../elementDetailsIo"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -139,5 +139,67 @@ describe("writeUserElementDetails", () => {
 				enable_shadow: true,
 			},
 		])
+	})
+
+	it("blocks unsupported imageVersionDetails without overwriting the sidecar", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			JSON.stringify({
+				version: "1.1.0",
+				elements: {
+					"image-1": {
+						imageVersionDetails: {
+							"version-1": { generateImageRequest: { prompt: "legacy" } },
+						},
+						source: "user",
+					},
+				},
+			}) as never,
+		)
+
+		const result = await writeUserElementDetails(designData(), {
+			mainFileId: "main",
+			flatAttachments: [
+				file("main", "magic.project.js", "dir"),
+				file("user-details", "element-details-user.json", "dir"),
+			] as never,
+			projectId: "project-1",
+		})
+
+		expect(result).toBe("blocked-unsupported")
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
+	})
+
+	it("marks imageVersionDetails as unsupported while keeping the main DSL loadable", async () => {
+		vi.mocked(getFileContentById).mockResolvedValue(
+			JSON.stringify({
+				version: "1.1.0",
+				elements: {
+					"image-1": {
+						imageVersionDetails: {
+							"version-1": { generateImageRequest: { prompt: "legacy" } },
+						},
+					},
+				},
+			}) as never,
+		)
+		const data = designData([
+			{
+				id: "image-1",
+				type: "image",
+				activeContentId: "image-1-content-1",
+				mainContentId: "image-1-content-1",
+				contents: [{ contentId: "image-1-content-1", src: "./images/a.png" }],
+			} as LayerElement,
+		])
+
+		await expect(
+			hydrateDesignDataDetails(data, {
+				mainFileId: "main",
+				flatAttachments: [
+					file("main", "magic.project.js", "dir"),
+					file("user-details", "element-details-user.json", "dir"),
+				] as never,
+			}),
+		).resolves.toMatchObject({ status: "unsupported", provenance: {} })
 	})
 })

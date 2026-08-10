@@ -31,6 +31,7 @@ import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
 import { SuperMagicApi } from "@/apis"
 import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -177,7 +178,10 @@ export type FetchRemoteDesignDataFn = () => Promise<DesignData | null>
 export type ApplyRemoteDesignDataFn = (
 	data: DesignData,
 	updateType: "message" | "revoke" | "restore",
-	options?: { remoteVersion?: number | null },
+	options?: {
+		remoteVersion?: number | null
+		loadResult?: LoadDesignDataToRuntimeResult
+	},
 ) => boolean
 
 export type CheckRemoteUpdateFn = () => Promise<{
@@ -660,13 +664,17 @@ export class DesignRemoteListener {
 	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
-	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignData | null> {
+	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<{
+		data: DesignData
+		loadResult: LoadDesignDataToRuntimeResult
+	} | null> {
 		const fid = this.options.getMagicProjectJsFileId()
 		if (!fid) return null
 
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 
 		let parsed: DesignData | null = null
+		let parsedLoadResult: LoadDesignDataToRuntimeResult | null = null
 		try {
 			const content = await loadMagicProjectJsContent(fid)
 			const loaded = await loadDesignDataToRuntime({
@@ -682,13 +690,15 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					attachmentIndex: this.options.attachmentIndex,
 				},
+				fileId: fid,
 			})
-			parsed = loaded?.data ?? null
+			parsed = loaded.data
+			parsedLoadResult = loaded
 		} catch {
 			return null
 		}
 
-		if (!parsed) return null
+		if (!parsed || !parsedLoadResult) return null
 
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
@@ -702,16 +712,18 @@ export class DesignRemoteListener {
 		)
 		const hasPendingGenerationWithoutInfo =
 			designDataHasPendingMediaWithoutGenerationRequest(parsed)
-		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return parsed
+		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo)
+			return { data: parsed, loadResult: parsedLoadResult }
 
 		const projectId = this.options.projectId
-		if (!projectId) return hasMissingMedia ? null : parsed
+		if (!projectId)
+			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
 
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
 		} catch {
 			// 生成配置同步超时不应阻塞占位符展示；媒体缺失仍沿用原有失败策略。
-			return hasMissingMedia ? null : parsed
+			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
 		}
 
 		try {
@@ -729,8 +741,9 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					attachmentIndex: this.options.attachmentIndex,
 				},
+				fileId: fid,
 			})
-			return loaded?.data ?? null
+			return { data: loaded.data, loadResult: loaded }
 		} catch {
 			return null
 		}
@@ -873,9 +886,22 @@ export class DesignRemoteListener {
 					const preloaded = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
 					if (!isLatestApply()) return
 					if (preloaded) {
-						const applied = this.options.applyRemoteDesignData(preloaded, "message", {
-							remoteVersion: resolvedFileVersion,
-						})
+						const preloadedData =
+							"data" in preloaded
+								? preloaded.data
+								: (preloaded as unknown as DesignData)
+						const preloadedLoadResult =
+							"loadResult" in preloaded ? preloaded.loadResult : undefined
+						const applied = this.options.applyRemoteDesignData(
+							preloadedData,
+							"message",
+							preloadedLoadResult
+								? {
+										remoteVersion: resolvedFileVersion,
+										loadResult: preloadedLoadResult,
+									}
+								: { remoteVersion: resolvedFileVersion },
+						)
 						if (applied) {
 							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
 							await this.markRemoteVersionApplied(resolvedFileVersion)

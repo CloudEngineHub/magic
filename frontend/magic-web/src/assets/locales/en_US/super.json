@@ -643,8 +643,13 @@
 			"failed": "Upgrade failed, please try again later",
 			"failedSubtitle": "Check your network and try again. Canvas editing is unavailable until the upgrade completes.",
 			"failedTitle": "Canvas upgrade failed",
+			"loadFailedSubtitle": "Stage: {{stage}}; reason: {{reason}}",
+			"loadFailedTitle": "Canvas data failed to load",
+			"reload": "Reload",
 			"retry": "Retry Upgrade",
-			"success": "Upgrade successful"
+			"success": "Upgrade successful",
+			"unsupportedSidecarDescription": "Unreleased image-version data was detected. The canvas is read-only to avoid overwriting the original data.",
+			"unsupportedSidecarTitle": "Canvas sidecar data is unsupported"
 		}
 	},
 	"detail": {

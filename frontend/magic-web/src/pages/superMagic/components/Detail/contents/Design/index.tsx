@@ -471,6 +471,9 @@ function DesignViewer(props: DesignViewerProps) {
 		magicProjectJsFileId,
 		isInitialLoading,
 		pendingDesignUpgrade,
+		designLoadIssue,
+		sidecarStatus,
+		clearDesignLoadIssue,
 		persistPendingDesignUpgrade,
 		// isSaving - 迁移后不再用于头部保存状态指示器，暂时注释掉，如需使用可取消注释
 		loadFromRemote,
@@ -525,7 +528,8 @@ function DesignViewer(props: DesignViewerProps) {
 		!isShareRoute &&
 		!isMobile &&
 		isNewestVersion &&
-		!isReadOnlyState &&
+		(!isReadOnlyState || pendingDesignUpgrade.reason === "sidecar-retry") &&
+		sidecarStatus !== "unsupported" &&
 		!conflictState
 
 	const automaticUpgradeKey = useMemo(() => {
@@ -605,6 +609,23 @@ function DesignViewer(props: DesignViewerProps) {
 		isUpgrading || (shouldAutoUpgrade && !isOffline && !autoUpgradeFailed)
 	const shouldShowUpgradeFailed =
 		shouldAutoUpgrade && !isOffline && autoUpgradeFailed && !isUpgrading
+	const isBlockingDesignLoadIssue =
+		!!designLoadIssue &&
+		designLoadIssue.kind !== "unsupported-sidecar" &&
+		designLoadIssue.kind !== "sidecar-persist-failed"
+	const shouldShowUnsupportedSidecarNotice =
+		designLoadIssue?.kind === "unsupported-sidecar" || sidecarStatus === "unsupported"
+	const [isReloadingDesignIssue, setIsReloadingDesignIssue] = useState(false)
+	const handleReloadDesignIssue = useCallback(async () => {
+		if (isReloadingDesignIssue) return
+		setIsReloadingDesignIssue(true)
+		clearDesignLoadIssue()
+		try {
+			await reloadPreservingLocalDraft()
+		} finally {
+			setIsReloadingDesignIssue(false)
+		}
+	}, [clearDesignLoadIssue, isReloadingDesignIssue, reloadPreservingLocalDraft])
 
 	// 当 designProjectBasePath 变化（目录改名）时，重新从远端加载 DSL（修复旧路径引用），再重挂载画布
 	useEffect(() => {
@@ -1619,6 +1640,42 @@ function DesignViewer(props: DesignViewerProps) {
 									</div>
 								</div>
 							)}
+							{shouldShowUnsupportedSidecarNotice && (
+								<div
+									className={styles.conflictNotice}
+									style={
+										shouldShowCanvasConflictNotice
+											? { top: "104px" }
+											: undefined
+									}
+									role="status"
+									aria-live="polite"
+								>
+									<AlertTriangle className={styles.conflictIcon} size={20} />
+									<div className={styles.conflictContent}>
+										<div className={styles.conflictTitle}>
+											{t("design.upgrade.unsupportedSidecarTitle")}
+										</div>
+										<div className={styles.conflictDescription}>
+											{t("design.upgrade.unsupportedSidecarDescription")}
+										</div>
+									</div>
+								</div>
+							)}
+							{isBlockingDesignLoadIssue && (
+								<CanvasUpgradeOverlay
+									percent={0}
+									status="error"
+									title={t("design.upgrade.loadFailedTitle")}
+									subtitle={t("design.upgrade.loadFailedSubtitle", {
+										stage: designLoadIssue.stage,
+										reason: designLoadIssue.message,
+									})}
+									actionLabel={t("design.upgrade.reload")}
+									actionDisabled={isReloadingDesignIssue}
+									onAction={() => void handleReloadDesignIssue()}
+								/>
+							)}
 							{shouldShowUpgradeProgress && (
 								<CanvasUpgradeOverlay
 									percent={upgradeProgress}
@@ -1645,6 +1702,7 @@ function DesignViewer(props: DesignViewerProps) {
 									readonly={
 										isReadOnlyState ||
 										isUpgradeBlockingCanvas ||
+										isBlockingDesignLoadIssue ||
 										shouldBlockCanvasForConflict
 									}
 									magic={{

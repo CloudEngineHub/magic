@@ -29,6 +29,21 @@ export interface ElementDetailsDoc {
 	elements: Record<string, ElementDetailEntry>
 }
 
+/** 未发布图片版本 sidecar，不属于当前 v3 contentDetails 协议。 */
+export function hasUnsupportedElementDetailsStructure(raw: unknown): boolean {
+	if (!raw || typeof raw !== "object") return false
+	const record = raw as Record<string, unknown>
+	if (record.imageVersionDetails !== undefined) return true
+	const elements = record.elements
+	if (!elements || typeof elements !== "object" || Array.isArray(elements)) return false
+	return Object.values(elements as Record<string, unknown>).some(
+		(entry) =>
+			!!entry &&
+			typeof entry === "object" &&
+			(entry as Record<string, unknown>).imageVersionDetails !== undefined,
+	)
+}
+
 export function emptyElementDetailsDoc(): ElementDetailsDoc {
 	return { version: ELEMENT_DETAILS_VERSION, elements: {} }
 }

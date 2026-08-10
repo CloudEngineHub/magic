@@ -6,7 +6,7 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { writeUserElementDetails } from "../utils/elementDetailsIo"
+import { getElementDetailsSidecarStatus, writeUserElementDetails } from "../utils/elementDetailsIo"
 import { isContentProjectVersion } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -36,6 +36,8 @@ export type DesignSaveFailureReason =
 	| "remote-check-unreliable"
 	| "empty-content"
 	| "unsafe-empty-canvas"
+	| "unsupported-sidecar"
+	| "sidecar-persist-failed"
 	| "error"
 
 export type DesignSaveSource =
@@ -279,6 +281,7 @@ export class DesignSaveManager {
 
 	async commitSave(options?: {
 		allowRemoteConflict?: boolean
+		allowReadOnlyRetry?: boolean
 		designData?: DesignData
 		updateCurrentDesignData?: boolean
 		skipRemoteUpdateCheck?: boolean
@@ -290,7 +293,7 @@ export class DesignSaveManager {
 		fromDraft?: boolean
 	}): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
-		if (this.stateBag.getIsReadOnly()) {
+		if (this.stateBag.getIsReadOnly() && !options?.allowReadOnlyRetry) {
 			this.stateBag.setters.setIsSaving(false)
 			return { ok: false, reason: "readonly" }
 		}
@@ -353,6 +356,20 @@ export class DesignSaveManager {
 				return { ok: false, reason: "empty-content" }
 			}
 
+			const sidecarContext = {
+				attachments: this.options.attachments,
+				flatAttachments: this.options.flatAttachments,
+				mainFileId: magicProjectJsFileId,
+				projectId: this.options.projectId,
+			}
+			if (isContentProjectVersion(designDataToSave.version)) {
+				const sidecarStatus = await getElementDetailsSidecarStatus(sidecarContext)
+				if (sidecarStatus === "unsupported") {
+					this.stateBag.setters.setIsSaving(false)
+					return { ok: false, reason: "unsupported-sidecar" }
+				}
+			}
+
 			const saveResponse = await SuperMagicApi.saveFileContent([
 				{ file_id: magicProjectJsFileId, content, enable_shadow: true },
 			])
@@ -362,12 +379,18 @@ export class DesignSaveManager {
 			// v3：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
 			let didPersistDetails = true
 			if (isContentProjectVersion(designDataToSave.version)) {
-				didPersistDetails = await writeUserElementDetails(designDataToSave, {
-					attachments: this.options.attachments,
-					flatAttachments: this.options.flatAttachments,
-					mainFileId: magicProjectJsFileId,
-					projectId: this.options.projectId,
-				})
+				const sidecarResult = await writeUserElementDetails(
+					designDataToSave,
+					sidecarContext,
+				)
+				didPersistDetails =
+					sidecarResult === "persisted" ||
+					sidecarResult === "unchanged" ||
+					sidecarResult === "skipped"
+				if (sidecarResult === "blocked-unsupported") {
+					this.stateBag.setters.setIsSaving(false)
+					return { ok: false, reason: "unsupported-sidecar" }
+				}
 			}
 			this.lastSaveFullyPersisted = didPersistDetails
 			const shouldUpdateCurrentDesignData = options?.updateCurrentDesignData ?? true

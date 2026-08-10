@@ -11,11 +11,18 @@ import type {
 	DesignProjectManagerOptions,
 	PendingDesignUpgrade,
 } from "./types"
-import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import {
+	DesignLoadError,
+	loadDesignDataToRuntime,
+	type DesignLoadIssue,
+	type DesignSidecarStatus,
+} from "../utils/designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 
 export interface DesignLoadResult {
 	pendingUpgrade: PendingDesignUpgrade | null
+	issue?: DesignLoadIssue
+	sidecarStatus: DesignSidecarStatus
 }
 
 export class DesignLoadManager {
@@ -59,7 +66,7 @@ export class DesignLoadManager {
 
 		if (!actualCurrentFileId || !actualCurrentFileName || !attachments) {
 			this.stateBag.setters.setIsInitialLoading(false)
-			return { pendingUpgrade: null }
+			return { pendingUpgrade: null, sidecarStatus: "missing" }
 		}
 
 		const currentProjectId = projectId ?? null
@@ -79,6 +86,8 @@ export class DesignLoadManager {
 		if (this.lastLoadedFileId === actualCurrentFileId && !hasProjectChanged) return undefined
 
 		let pendingUpgrade: PendingDesignUpgrade | null = null
+		let sidecarStatus: DesignSidecarStatus = "missing"
+		let loadIssue: DesignLoadIssue | undefined
 
 		try {
 			this.isLoading = true
@@ -94,7 +103,7 @@ export class DesignLoadManager {
 				this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
 
 				let didApplyDesignData = false
-				if (result.content) {
+				if (result.content !== undefined && result.content !== null) {
 					const directoryName = resolveDesignDirectoryNameFromAttachments({
 						currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
 						flatAttachments,
@@ -123,11 +132,18 @@ export class DesignLoadManager {
 							flatAttachments,
 							attachmentIndex: this.options.attachmentIndex,
 						},
+						fileId: result.fileId,
 					})
-					if (loaded) {
+					{
 						const parsedData = loaded.data
-						if (loaded.needsPersist) {
+						sidecarStatus = loaded.sidecarStatus
+						loadIssue = loaded.issue
+						this.stateBag.setters.setSidecarStatus?.(sidecarStatus)
+						this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+						if (loaded.needsPersist && sidecarStatus !== "unsupported") {
 							pendingUpgrade = {
+								reason: "legacy-dsl",
+								createdAt: Date.now(),
 								fileId: result.fileId,
 								sourceVersion: loaded.sourceVersion,
 								targetVersion: MAGIC_PROJECT_VERSION_V3,
@@ -142,6 +158,13 @@ export class DesignLoadManager {
 						)
 						didApplyDesignData = true
 						this.lastLoadedFileId = actualCurrentFileId
+						this.stateBag.setters.setIsReadOnly(
+							sidecarStatus === "unsupported" ||
+								!allowEdit ||
+								isPlaybackMode ||
+								isShareRoute ||
+								isMobile,
+						)
 					}
 				}
 
@@ -158,14 +181,23 @@ export class DesignLoadManager {
 					}
 				}
 			}
-		} catch {
-			// ignore
+		} catch (error) {
+			loadIssue =
+				error instanceof DesignLoadError
+					? error.issue
+					: {
+							kind: "invalid-envelope",
+							stage: "parse-envelope",
+							message: error instanceof Error ? error.message : String(error),
+						}
+			this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+			return { pendingUpgrade: null, issue: loadIssue, sidecarStatus }
 		} finally {
 			this.isLoading = false
 			this.stateBag.setters.setIsInitialLoading(false)
 		}
 
-		return { pendingUpgrade }
+		return { pendingUpgrade, sidecarStatus, issue: loadIssue }
 	}
 
 	async resetAndReload(): Promise<DesignLoadResult | undefined> {

@@ -10,7 +10,18 @@ import { getHydratedElementDetailsProvenance } from "../utils/elementDetailsIo"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
 import type { DesignData } from "../types"
 import type { DesignSaveManager } from "./DesignSaveManager"
-import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import {
+	DesignLoadError,
+	loadDesignDataToRuntime,
+	type LoadDesignDataToRuntimeResult,
+} from "../utils/designDataLoader"
+import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+
+export interface DesignVersionLoadResult {
+	data: DesignData | null
+	version: number | null
+	loadResult?: LoadDesignDataToRuntimeResult
+}
 
 export class DesignVersionManager {
 	private stateBag: DesignProjectStateBag
@@ -42,32 +53,48 @@ export class DesignVersionManager {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) return null
 
-		const content = await loadMagicProjectJsContent(magicProjectJsFileId, {
-			file_versions: { [magicProjectJsFileId]: version },
-		})
+		let content: string
+		try {
+			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
+				file_versions: { [magicProjectJsFileId]: version },
+			})
+		} catch (error) {
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: error instanceof Error ? error.message : String(error),
+				fileId: magicProjectJsFileId,
+			})
+		}
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 		const loaded = await loadDesignDataToRuntime({
 			content,
-			elementDetailsContext: {
-				attachments: this.options.attachments,
-				flatAttachments: this.options.flatAttachments,
-				mainFileId: magicProjectJsFileId,
-				projectId: this.options.projectId,
-			},
+			sidecarMode: "none",
+			fileId: magicProjectJsFileId,
 			pathContext: {
 				projectBasePath: dslBase,
 				flatAttachments: this.options.flatAttachments,
 				attachmentIndex: this.options.attachmentIndex,
 			},
 		})
-		return loaded?.data ?? null
+		return loaded.data
 	}
 
-	async loadLatest(): Promise<{ data: DesignData | null; version: number | null }> {
+	async loadLatest(): Promise<DesignVersionLoadResult> {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) return { data: null, version: null }
 
-		const content = await loadMagicProjectJsContent(magicProjectJsFileId)
+		let content: string
+		try {
+			content = await loadMagicProjectJsContent(magicProjectJsFileId)
+		} catch (error) {
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: error instanceof Error ? error.message : String(error),
+				fileId: magicProjectJsFileId,
+			})
+		}
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
 		const loaded = await loadDesignDataToRuntime({
 			content,
@@ -82,8 +109,9 @@ export class DesignVersionManager {
 				flatAttachments: this.options.flatAttachments,
 				attachmentIndex: this.options.attachmentIndex,
 			},
+			fileId: magicProjectJsFileId,
 		})
-		const data = loaded?.data ?? null
+		const data = loaded.data
 
 		let version: number | null = null
 		if (!this.options.isShareRoute) {
@@ -99,7 +127,7 @@ export class DesignVersionManager {
 			}
 		}
 
-		return { data, version }
+		return { data, version, loadResult: loaded }
 	}
 
 	async fetchFileVersions(): Promise<FileHistoryVersion[]> {
@@ -128,6 +156,11 @@ export class DesignVersionManager {
 			getHydratedElementDetailsProvenance(parsedDesignData) ?? {},
 		)
 		this.stateBag.setters.setDesignData(parsedDesignData)
+		if (isViewingHistory) {
+			this.stateBag.setters.setPendingDesignUpgrade?.(null)
+			this.stateBag.setters.setDesignLoadIssue?.(undefined)
+			this.stateBag.setters.setSidecarStatus?.("skipped-history")
+		}
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))
 		this.stateBag.setters.setIsReadOnly(
 			!this.options.allowEdit ||
@@ -154,6 +187,19 @@ export class DesignVersionManager {
 				const result = await this.loadLatest()
 				parsedDesignData = result.data
 				latestVersion = result.version
+				this.stateBag.setters.setDesignLoadIssue?.(result.loadResult?.issue)
+				this.stateBag.setters.setSidecarStatus?.(
+					result.loadResult?.sidecarStatus ?? "missing",
+				)
+				if (result.loadResult?.needsPersist) {
+					this.stateBag.setters.setPendingDesignUpgrade?.({
+						reason: "legacy-dsl",
+						fileId: magicProjectJsFileId,
+						sourceVersion: result.loadResult.sourceVersion,
+						targetVersion: MAGIC_PROJECT_VERSION_V3,
+						createdAt: Date.now(),
+					})
+				}
 			} else {
 				parsedDesignData = await this.loadWithVersion(version)
 			}
@@ -165,8 +211,10 @@ export class DesignVersionManager {
 					this.stateBag.setMagicProjectJsVersion(latestVersion)
 				}
 			}
-		} catch {
-			// ignore
+		} catch (error) {
+			if (error instanceof DesignLoadError) {
+				this.stateBag.setters.setDesignLoadIssue?.(error.issue)
+			}
 		}
 	}
 
@@ -191,7 +239,9 @@ export class DesignVersionManager {
 			if (res) {
 				await this.fetchFileVersions()
 				this.stateBag.setters.setFileVersion(undefined)
-				const { data, version: latestVersion } = await this.loadLatest()
+				const { data, version: latestVersion, loadResult } = await this.loadLatest()
+				this.stateBag.setters.setDesignLoadIssue?.(loadResult?.issue)
+				this.stateBag.setters.setSidecarStatus?.(loadResult?.sidecarStatus ?? "missing")
 				if (data) {
 					this.applyVersionData(data, false)
 					if (latestVersion !== null) {

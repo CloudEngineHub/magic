@@ -4,8 +4,29 @@ import { loadDesignDataToRuntime } from "../designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../magicProjectCompression"
 
 describe("loadDesignDataToRuntime", () => {
-	it("returns null for empty envelope content", async () => {
-		await expect(loadDesignDataToRuntime({ content: "" })).resolves.toBeNull()
+	it("rejects empty envelope content with a structured issue", async () => {
+		await expect(loadDesignDataToRuntime({ content: "" })).rejects.toMatchObject({
+			issue: {
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+			},
+		})
+	})
+
+	it("does not convert a missing canvas into an editable empty v3 document", async () => {
+		const content = `window.magicProjectConfig = ${JSON.stringify({
+			version: "2.0.0",
+			type: "design",
+			name: "missing-canvas",
+		})};`
+
+		await expect(loadDesignDataToRuntime({ content })).rejects.toMatchObject({
+			issue: {
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				sourceVersion: "2.0.0",
+			},
+		})
 	})
 
 	it("parses envelope content, upgrades it to v3, and applies the runtime name", async () => {
@@ -95,6 +116,23 @@ describe("loadDesignDataToRuntime", () => {
 			sourceVersion: "2.0.0",
 			didUpgrade: true,
 			needsPersist: false,
+		})
+	})
+
+	it("rejects an in-memory Draft without a valid canvas", async () => {
+		await expect(
+			loadDesignDataToRuntime({
+				designData: {
+					version: "2.0.0",
+					type: "design",
+					name: "broken-draft",
+				} as never,
+			}),
+		).rejects.toMatchObject({
+			issue: {
+				kind: "validation-failed",
+				stage: "validate-v3",
+			},
 		})
 	})
 })

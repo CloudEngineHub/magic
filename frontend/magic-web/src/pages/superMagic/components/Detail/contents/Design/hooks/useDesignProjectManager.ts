@@ -16,6 +16,8 @@ import {
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import type { DesignDraftReason } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
+import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
+import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -33,6 +35,9 @@ export interface UseDesignProjectManagerReturn {
 	isInitialLoading: boolean
 	isSaving: boolean
 	pendingDesignUpgrade: PendingDesignUpgrade | null
+	designLoadIssue: DesignLoadIssue | undefined
+	sidecarStatus: DesignSidecarStatus
+	clearDesignLoadIssue: () => void
 
 	scheduleAutoSave: (metadata?: DesignSaveMetadata) => void
 	cancelAutoSave: () => void
@@ -52,7 +57,7 @@ export interface UseDesignProjectManagerReturn {
 	generateContent: (data?: DesignData) => string
 
 	loadWithVersion: (version: number) => Promise<DesignData | null>
-	loadLatest: () => Promise<{ data: DesignData | null; version: number | null }>
+	loadLatest: () => Promise<DesignVersionLoadResult>
 
 	checkRemoteUpdate: () => Promise<{
 		hasUpdate: boolean
@@ -117,6 +122,8 @@ export function useDesignProjectManager(
 	const [pendingDesignUpgrade, setPendingDesignUpgrade] = useState<PendingDesignUpgrade | null>(
 		null,
 	)
+	const [designLoadIssue, setDesignLoadIssueState] = useState<DesignLoadIssue | undefined>()
+	const [sidecarStatus, setSidecarStatusState] = useState<DesignSidecarStatus>("missing")
 	const [fileVersionsList, setFileVersionsList] = useState<FileHistoryVersion[]>([])
 	const [fileVersion, setFileVersion] = useState<number | undefined>(undefined)
 	const [isProcessingRevoke, setIsProcessingRevoke] = useState(false)
@@ -126,6 +133,8 @@ export function useDesignProjectManager(
 	const designDataRef = useRef(designData)
 	const elementDetailsProvenanceRef = useRef(elementDetailsProvenance)
 	const pendingDesignUpgradeRef = useRef<PendingDesignUpgrade | null>(pendingDesignUpgrade)
+	const designLoadIssueRef = useRef<DesignLoadIssue | undefined>(designLoadIssue)
+	const sidecarStatusRef = useRef<DesignSidecarStatus>(sidecarStatus)
 	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const isReadOnlyRef = useRef(isReadOnly)
@@ -137,6 +146,8 @@ export function useDesignProjectManager(
 	designDataRef.current = designData
 	elementDetailsProvenanceRef.current = elementDetailsProvenance
 	pendingDesignUpgradeRef.current = pendingDesignUpgrade
+	designLoadIssueRef.current = designLoadIssue
+	sidecarStatusRef.current = sidecarStatus
 	conflictStateRef.current = conflictState
 	magicProjectJsFileIdRef.current = magicProjectJsFileId
 	isReadOnlyRef.current = isReadOnly
@@ -157,6 +168,8 @@ export function useDesignProjectManager(
 			getDesignData: () => designDataRef.current,
 			getElementDetailsProvenance: () => elementDetailsProvenanceRef.current,
 			getPendingDesignUpgrade: () => pendingDesignUpgradeRef.current,
+			getDesignLoadIssue: () => designLoadIssueRef.current,
+			getSidecarStatus: () => sidecarStatusRef.current,
 			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
 			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
@@ -181,6 +194,14 @@ export function useDesignProjectManager(
 				setPendingDesignUpgrade: (upgrade) => {
 					pendingDesignUpgradeRef.current = upgrade
 					setPendingDesignUpgrade(upgrade)
+				},
+				setDesignLoadIssue: (issue) => {
+					designLoadIssueRef.current = issue
+					setDesignLoadIssueState(issue)
+				},
+				setSidecarStatus: (status) => {
+					sidecarStatusRef.current = status
+					setSidecarStatusState(status)
 				},
 				setIsInitialLoading,
 				setIsSaving,
@@ -270,6 +291,12 @@ export function useDesignProjectManager(
 		isInitialLoading,
 		isSaving,
 		pendingDesignUpgrade,
+		designLoadIssue,
+		sidecarStatus,
+		clearDesignLoadIssue: () => {
+			designLoadIssueRef.current = undefined
+			setDesignLoadIssueState(undefined)
+		},
 
 		scheduleAutoSave: (metadata) => manager.scheduleAutoSave(metadata),
 		cancelAutoSave: () => manager.cancelAutoSave(),
