@@ -203,25 +203,53 @@
         "zh_CN": "文档格式转换",
         "en_US": "Document Format Conversion"
     },
-    "convert_pptx_to_slide_template.before": {
-        "zh_CN": "正在将 {{file_name}} 转换为幻灯片模板",
-        "en_US": "Converting {{file_name}} to a slide template"
+    "create_slide_template_project.before": {
+        "zh_CN": "正在创建模板结构 {{template_id}}",
+        "en_US": "Creating template structure {{template_id}}"
     },
-    "convert_pptx_to_slide_template.after_success": {
-        "zh_CN": "已生成模板草稿 {{template_id}}（{{slide_count}} 页）",
-        "en_US": "Generated template draft {{template_id}} ({{slide_count}} slides)"
+    "create_slide_template_project.after_success": {
+        "zh_CN": "已创建模板结构 {{template_id}}",
+        "en_US": "Created template structure {{template_id}}"
     },
-    "convert_pptx_to_slide_template.error": {
-        "zh_CN": "PPTX 转幻灯片模板失败：{{error}}",
-        "en_US": "PPTX to slide template conversion failed: {{error}}"
+    "create_slide_template_project.after_failed": {
+        "zh_CN": "模板结构 {{template_id}} 创建失败",
+        "en_US": "Failed to create template structure {{template_id}}"
     },
-    "convert_pptx_to_slide_template.detail_title": {
-        "zh_CN": "PPTX 转幻灯片模板",
-        "en_US": "PPTX to Slide Template"
+    "finalize_slide_template.before": {
+        "zh_CN": "正在渲染模板预览 {{template_dir}}",
+        "en_US": "Rendering template previews {{template_dir}}"
     },
-    "convert_pptx_to_slide_template.detail_error_title": {
-        "zh_CN": "PPTX 转幻灯片模板失败",
-        "en_US": "PPTX to Slide Template Failed"
+    "finalize_slide_template.after_success": {
+        "zh_CN": "已生成模板预览 {{template_id}}",
+        "en_US": "Generated template previews {{template_id}}"
+    },
+    "finalize_slide_template.after_failed": {
+        "zh_CN": "模板预览 {{template_id}} 生成失败",
+        "en_US": "Failed to generate template previews {{template_id}}"
+    },
+    "prepare_slide_template_source.before": {
+        "zh_CN": "正在准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Preparing reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_success": {
+        "zh_CN": "已准备模板视觉重建素材 {{template_dir}}",
+        "en_US": "Prepared reconstruction source {{template_dir}}"
+    },
+    "prepare_slide_template_source.after_failed": {
+        "zh_CN": "模板视觉重建素材 {{template_dir}} 准备失败",
+        "en_US": "Failed to prepare reconstruction source {{template_dir}}"
+    },
+    "select_slide_template_source_assets.before": {
+        "zh_CN": "正在审核并筛选模板原始素材 {{template_dir}}",
+        "en_US": "Reviewing and selecting source assets {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_success": {
+        "zh_CN": "已完成模板原始素材筛选 {{template_dir}}",
+        "en_US": "Selected source assets for {{template_dir}}"
+    },
+    "select_slide_template_source_assets.after_failed": {
+        "zh_CN": "模板原始素材筛选失败 {{template_dir}}",
+        "en_US": "Failed to select source assets for {{template_dir}}"
     },
     "install_slides_template.before": {
         "zh_CN": "正在安装模板 {{template_code}}",

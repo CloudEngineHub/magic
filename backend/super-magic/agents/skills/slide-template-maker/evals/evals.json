@@ -1,0 +1,65 @@
+{
+  "skill_name": "slide-template-maker",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我上传了一个 brand-template.pptx，帮我转成可复用的 PPT 模板。",
+      "expected_output": "Load slide-template-maker. Do not call convert_pptx_to_slide_template, pptx-to-html, or any legacy template converter. Query the bundled taxonomy, select one exact active category_code and non-empty tag_codes, then use document-converter to render every reference page, call create_slide_template_project, and call prepare_slide_template_source with the page images and source OOXML when available. Analyze every page at full-page and crop scales, complete source-analysis.json, and author a clean semantic template directory at <template-id>/ with template.json, visual-spec.md, theme.css, images/, and semantic slides/*.html. Finally call finalize_slide_template to validate the completed analysis and taxonomy selection, create previews/ and template-assets.json in the same directory, remove the temporary working directory, and create no ZIP or slide-templates/ prefix."
+    },
+    {
+      "id": 2,
+      "prompt": "把这个旧版 .ppt 文件做成模板，尽量保留它的水墨风格。",
+      "expected_output": "Load slide-template-maker. Convert the legacy presentation only into renderable visual references through document-converter, create the project, call prepare_slide_template_source with the rendered pages, inspect every page and its detail crops, reconstruct the ink visual system from scratch, set source.kind=derived and source.method=visual-reconstruction, and avoid converter HTML or full-slide screenshots."
+    },
+    {
+      "id": 3,
+      "prompt": "参考这三张截图，制作一套医疗培训 PPT 模板。",
+      "expected_output": "Load slide-template-maker and the image workflow. Analyze palette, typography, layout language, components, density, and image treatment with visual_understanding, classify as healthcare when appropriate, and create an original semantic template without treating screenshots as reusable slide images."
+    },
+    {
+      "id": 4,
+      "prompt": "做一套黑金、杂志排版、大标题压迫感的公司战略模板。",
+      "expected_output": "Load slide-template-maker and the text-brief workflow. Create a scene-specific 8-15 page inventory, call create_slide_template_project, keep temporary material under its working_directory, then author visual-spec.md, theme.css, and varied semantic slides. Call finalize_slide_template to create previews/ and template-assets.json and remove the temporary working directory. Output only <template-id>/ and no ZIP."
+    },
+    {
+      "id": 5,
+      "prompt": "把这个 HTML 演示页面整理成可复用的模板。",
+      "expected_output": "Load slide-template-maker and the HTML workflow. Inspect source HTML/CSS/assets and representative rendered pages, extract reusable visual rules and layout families, remove source-specific content and runtime noise, and rebuild independent 1920x1080 semantic template pages."
+    },
+    {
+      "id": 6,
+      "prompt": "从这个包含 magic.project.js 的幻灯片项目中提取模板。",
+      "expected_output": "Load slide-template-maker and project-template-workflow. Do not modify the source project. Group repeated layouts, select reusable representatives, sanitize content, and create a standalone <template-id>/ directory without magic.project.js, index.html, slide-bridge.js, or ZIP."
+    },
+    {
+      "id": 7,
+      "prompt": "源 PPT 里有客户 Logo、真人照片、二维码和内部后台截图，做模板时都保留。",
+      "expected_output": "Load slide-template-maker. Use ask_user before keeping ambiguous sensitive assets, recommend neutral replacement, and keep originals only after explicit confirmation. Unanswered items must not be retained."
+    },
+    {
+      "id": 8,
+      "prompt": "输出目录已经有同名模板了，直接覆盖。",
+      "expected_output": "Load slide-template-maker. Do not overwrite automatically. Ask whether the user intends an update to the existing template or wants a new semantic template ID, then follow the chosen path."
+    },
+    {
+      "id": 9,
+      "prompt": "先给我看看平台里有哪些 PPT 模板可以选。",
+      "expected_output": "Do not use slide-template-maker. Load slide-template for platform template browsing, selection, installation, and application."
+    },
+    {
+      "id": 10,
+      "prompt": "模板做好后帮我直接打成 ZIP。",
+      "expected_output": "Load slide-template-maker and follow its no-ZIP project contract. Keep source files, previews/, and template-assets.json under the same <template-id>/ directory; remove .template-work/ after finalization; explain that the skill does not create a ZIP."
+    },
+    {
+      "id": 11,
+      "prompt": "做一套中文读书分享模板，页面文件名也使用中文。",
+      "expected_output": "Load slide-template-maker. Use concise Chinese semantic slide filenames such as slides/封面.html and slides/目录.html when appropriate, while keeping template.json slides[].layout values in stable lowercase kebab-case."
+    },
+    {
+      "id": 12,
+      "prompt": "源 PPT 里有几张插画和照片，其中一张低清、两张与版式无关。尽量保留有价值的原始素材，但不要把没用到的图片放进模板。",
+      "expected_output": "Load slide-template-maker. Prepare the rendered pages and PPTX structure, inspect every asset candidate in asset_analysis_batches, classify asset_type and quality, and call select_slide_template_source_assets with a complete reuse/discard decision for every candidate. Reuse only high-quality or acceptable assets that materially preserve the source visual identity and are referenced by final HTML/CSS; discard low-quality, irrelevant, redundant, sensitive, or layout-damaging assets. Finalize only after the selected files are actually used and no extra files remain under images/source-assets/."
+    }
+  ]
+}

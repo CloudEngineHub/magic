@@ -1,0 +1,217 @@
+"""Create a standard semantic slide template workspace project."""
+
+from pathlib import Path
+from typing import Any, ClassVar, Dict, Optional
+
+from pydantic import Field
+
+from agentlang.context.tool_context import ToolContext
+from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
+from app.tools.core import BaseToolParams, tool
+from app.tools.slide_template_builder.common import (
+    SCAFFOLD_MARKER,
+    SlideTemplateBuilderError,
+    WORK_DIR_NAME,
+    resolve_workspace_template_dir,
+    safe_slide_path,
+    validate_taxonomy_selection,
+    validate_template_id,
+)
+from app.tools.slide_template_builder.models import (
+    BACKEND_CATEGORY_CODE_PATTERN,
+    TemplateDescriptionText,
+    TemplateLabelText,
+    TemplateSlideParams,
+    TemplateSourceParams,
+)
+from app.tools.workspace_tool import WorkspaceTool
+from app.utils.async_file_utils import async_exists, async_mkdir, async_write_json, async_write_text
+
+
+class CreateSlideTemplateProjectParams(BaseToolParams):
+    template_id: str = Field(
+        ...,
+        description="""<!--zh: 后台兼容的模板 ID，使用 SLIDE- 加小写 kebab-case，例如 SLIDE-navy-quarterly-review。-->
+Backend-compatible template ID using SLIDE- plus alphanumeric kebab-case segments. Prefer lowercase semantic IDs, for example SLIDE-navy-quarterly-review.""",
+    )
+    category_code: str = Field(
+        ...,
+        pattern=BACKEND_CATEGORY_CODE_PATTERN,
+        description="""<!--zh: 内置模板分类表中的有效分类 code。必须使用准确的现有值，不能只按格式编造。-->
+Exact active category code from the bundled slide template taxonomy. Do not invent a code that only matches the format.""",
+    )
+    label: TemplateLabelText = Field(..., description="Template display names in Simplified Chinese and English.")
+    description: TemplateDescriptionText = Field(..., description="Reusable template descriptions in Simplified Chinese and English.")
+    tag_codes: list[str] = Field(
+        ...,
+        min_length=1,
+        description="""<!--zh: 内置模板标签表中的有效标签 code，至少一个，不重复。不要自动添加 featured。-->
+Exact tag codes from the bundled slide template taxonomy. Provide at least one unique code and never add featured automatically.""",
+    )
+    source: TemplateSourceParams = Field(..., description="Template source classification and source basename.")
+    slides: list[TemplateSlideParams] = Field(
+        ...,
+        min_length=1,
+        description="Planned semantic slide files in their default order. Each file must be under slides/.",
+    )
+
+
+@tool(name="create_slide_template_project")
+class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]):
+    """<!--zh
+    在工作区根目录创建标准的语义 HTML 幻灯片模板结构。必须在写入模板内容前调用。
+    -->
+    Create the standard semantic HTML slide template structure at the workspace root. Call it before authoring template content.
+    """
+
+    name = "create_slide_template_project"
+    code_mode_only: ClassVar[bool] = True
+
+    async def execute(self, tool_context: ToolContext, params: CreateSlideTemplateProjectParams) -> ToolResult:
+        try:
+            template_id = validate_template_id(params.template_id)
+            category_code, tag_codes = validate_taxonomy_selection(params.category_code, params.tag_codes)
+            template_dir = resolve_workspace_template_dir(Path(self.base_dir), template_id)
+            if await async_exists(template_dir):
+                return ToolResult.error(f"Template directory already exists: {template_id}")
+
+            slide_files = [item.file for item in params.slides]
+            if len(slide_files) != len(set(slide_files)):
+                return ToolResult.error("Slide file paths must be unique.")
+
+            await async_mkdir(template_dir, parents=True, exist_ok=False)
+            await async_mkdir(template_dir / "images", parents=True, exist_ok=False)
+            await async_mkdir(template_dir / "slides", parents=True, exist_ok=False)
+            await async_mkdir(template_dir / WORK_DIR_NAME, parents=True, exist_ok=False)
+
+            metadata = {
+                "schema_version": "1.0",
+                "template_id": template_id,
+                "category_code": category_code,
+                "tag_codes": tag_codes,
+                "label": params.label.model_dump(),
+                "description": params.description.model_dump(),
+                "files": {
+                    "visual_spec": "visual-spec.md",
+                    "theme_css": "theme.css",
+                    "slides_dir": "slides",
+                    "images_dir": "images",
+                },
+                "slides": [item.model_dump() for item in params.slides],
+                "source": {
+                    **params.source.model_dump(),
+                    "canvas": {"width": 1920, "height": 1080},
+                },
+                "warnings": [],
+            }
+            await async_write_json(template_dir / "template.json", metadata, ensure_ascii=False, indent=2)
+            await async_write_text(
+                template_dir / "visual-spec.md",
+                f"<!-- {SCAFFOLD_MARKER} -->\n# Visual Specification\n\nReplace this scaffold with the complete design system.\n",
+            )
+            await async_write_text(
+                template_dir / "theme.css",
+                f"/* {SCAFFOLD_MARKER} */\n/* Replace this scaffold with the complete shared template theme. */\n",
+            )
+            for slide in params.slides:
+                slide_path = safe_slide_path(template_dir, slide.file)
+                await async_mkdir(slide_path.parent, parents=True, exist_ok=True)
+                await async_write_text(slide_path, self._slide_scaffold(slide.title, slide.layout))
+
+            data = {
+                "template_id": template_id,
+                "category_code": category_code,
+                "tag_codes": tag_codes,
+                "template_directory": str(template_dir),
+                "template_json": str(template_dir / "template.json"),
+                "visual_spec": str(template_dir / "visual-spec.md"),
+                "theme_css": str(template_dir / "theme.css"),
+                "images_directory": str(template_dir / "images"),
+                "slides_directory": str(template_dir / "slides"),
+                "working_directory": str(template_dir / WORK_DIR_NAME),
+                "slide_count": len(params.slides),
+            }
+            return ToolResult(
+                content=(
+                    f"Slide template project created at `{template_dir}` with {len(params.slides)} planned slides. "
+                    f"Put all reference renders, extracted candidates, and QA scratch files under `{template_dir / WORK_DIR_NAME}`. "
+                    "Replace every scaffold file, then call finalize_slide_template; it removes the working directory after success."
+                ),
+                data=data,
+                extra_info=data,
+            )
+        except SlideTemplateBuilderError as exc:
+            return ToolResult.error(str(exc))
+        except Exception as exc:
+            return ToolResult.error(f"Failed to create slide template project: {exc}")
+
+    @staticmethod
+    def _slide_scaffold(title: str, layout: str) -> str:
+        return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>{title}</title>
+  <link rel="stylesheet" href="../theme.css">
+  <!-- {SCAFFOLD_MARKER} -->
+</head>
+<body>
+  <main class="slide" data-layout="{layout}"></main>
+</body>
+</html>
+"""
+
+    async def get_before_tool_call_friendly_action_and_remark(
+        self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] | None = None
+    ) -> Dict:
+        template_id = str((arguments or {}).get("template_id") or "-")
+        return {
+            "tool_name": tool_name,
+            "action": i18n.translate("create_slide_template_project", category="tool.actions"),
+            "remark": i18n.translate(
+                "create_slide_template_project.before",
+                category="tool.messages",
+                template_id=template_id,
+            ),
+        }
+
+    async def get_after_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        result: ToolResult,
+        execution_time: float,
+        arguments: Dict[str, Any] | None = None,
+    ) -> Dict:
+        template_id = str((result.data or {}).get("template_id") or (arguments or {}).get("template_id") or "-")
+        key = "create_slide_template_project.after_success" if result.ok else "create_slide_template_project.after_failed"
+        return {
+            "tool_name": tool_name,
+            "action": i18n.translate("create_slide_template_project", category="tool.actions"),
+            "remark": i18n.translate(key, category="tool.messages", template_id=template_id),
+        }
+
+    async def get_tool_detail(
+        self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] | None = None
+    ) -> Optional[ToolDetail]:
+        data = result.data if isinstance(result.data, dict) else {}
+        if result.ok:
+            content = "\n".join([
+                "# Slide template project",
+                "",
+                f"- Template ID: `{data.get('template_id', '')}`",
+                f"- Category: `{data.get('category_code', '')}`",
+                f"- Tags: {', '.join(data.get('tag_codes', []))}",
+                f"- Directory: `{data.get('template_directory', '')}`",
+                f"- Temporary working directory: `{data.get('working_directory', '')}`",
+                f"- Planned slides: {data.get('slide_count', 0)}",
+            ])
+        else:
+            content = f"# Slide template project creation failed\n\n{result.content}"
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(file_name="slide_template_project.md", content=content),
+        )

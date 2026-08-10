@@ -1,0 +1,67 @@
+# Template JSON Specification
+
+`template.json` is the only metadata entry point for a generated template.
+
+## Required Shape
+
+```json
+{
+  "schema_version": "1.0",
+  "template_id": "SLIDE-navy-quarterly-review",
+  "category_code": "PPT-CATE-business-report",
+  "tag_codes": [
+    "purpose-quarterly-review",
+    "style-business",
+    "color-navy",
+    "layout-dashboard",
+    "mood-professional",
+    "language-english"
+  ],
+  "label": {
+    "zh_CN": "深蓝季度经营复盘",
+    "en_US": "Navy Quarterly Review"
+  },
+  "description": {
+    "zh_CN": "适合经营复盘、指标分析和管理层决策的深蓝商务模板。",
+    "en_US": "A navy business template for operating reviews, metric analysis, and executive decisions."
+  },
+  "files": {
+    "visual_spec": "visual-spec.md",
+    "theme_css": "theme.css",
+    "slides_dir": "slides",
+    "images_dir": "images"
+  },
+  "slides": [
+    {
+      "file": "slides/cover.html",
+      "title": "Quarterly Business Review",
+      "layout": "cover",
+      "description": "Opening cover with a strong visual field, report title, period, and presenter metadata."
+    }
+  ],
+  "source": {
+    "kind": "derived",
+    "method": "visual-reconstruction",
+    "file": "source-deck.pptx",
+    "canvas": { "width": 1920, "height": 1080 }
+  },
+  "warnings": []
+}
+```
+
+## Rules
+
+- `schema_version` is always `"1.0"`.
+- `template_id` must match the backend rule `^SLIDE-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`; this skill emits `SLIDE-` IDs and recommends lowercase semantic kebab-case words such as `SLIDE-navy-quarterly-review`.
+- `category_code` is required and must be an active exact code in the bundled taxonomy. Do not invent a code that only matches the backend pattern.
+- `tag_codes` is a required non-empty array of unique exact codes in the bundled taxonomy. Use `scripts/template_taxonomy.py` as described in `template-taxonomy.md`; never invent tags or add `featured` automatically.
+- Bilingual labels and descriptions are required and describe the reusable template, not the production process.
+- `files.visual_spec`, `files.theme_css`, `files.slides_dir`, and `files.images_dir` are required.
+- `slides` contains only `file`, `title`, `layout`, and `description`; array order is the default page order.
+- English-context slide filenames use semantic lowercase kebab-case. Chinese-context templates may use Chinese semantic filenames such as `slides/封面.html`, `slides/目录.html`, and `slides/数据看板.html`. Keep `layout` as a stable lowercase kebab-case identifier in every language.
+- `source.kind` is `original` or `derived` for newly generated templates.
+- `source.method` is one of `manual`, `brief-generator`, `image-rebuild`, `html-import`, `visual-reconstruction`, or `project-extract`.
+- `source.file` contains a source basename or an empty string, never an absolute path.
+- `source.canvas` is always 1920x1080.
+
+Do not write `name`, `template_dir`, `package_type`, `created_at`, `updated_at`, `taxonomy`, `review_status`, `copyright_notice`, `publish_options`, `files.package_zip`, `slides[].slots`, `slides[].source_slide`, `slides[].best_for`, or `slides[].risks`.
