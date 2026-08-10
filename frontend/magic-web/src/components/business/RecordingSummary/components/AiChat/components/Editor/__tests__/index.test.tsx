@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import Editor from "../index"
 
 const mocks = vi.hoisted(() => ({
+	isMobile: vi.fn(() => true),
 	modeSelector: vi.fn(),
 	mobileInput: vi.fn(),
 	topicModelStore: { selectedLanguageModel: null },
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	// Force the active-recording mobile rendering path under test.
-	useIsMobile: () => true,
+	useIsMobile: () => mocks.isMobile(),
 }))
 
 vi.mock("@/stores/superMagic/topicModelStore", () => ({
@@ -107,6 +108,7 @@ vi.mock(
 
 describe("RecordingSummary AiChat Editor", () => {
 	beforeEach(() => {
+		mocks.isMobile.mockReturnValue(true)
 		mocks.modeSelector.mockClear()
 		mocks.mobileInput.mockClear()
 	})
@@ -144,5 +146,28 @@ describe("RecordingSummary AiChat Editor", () => {
 				}),
 			}),
 		)
+	})
+
+	it("keeps the desktop editor inside the panel when it has outer margins", () => {
+		mocks.isMobile.mockReturnValue(false)
+
+		render(
+			<Editor
+				messages={[]}
+				attachments={[]}
+				selectedWorkspace={null}
+				selectedProject={{ id: "mock-project-id" } as never}
+				selectedTopic={{ id: "mock-topic-id" } as never}
+				mentionPanelStore={{} as never}
+				projectFilesStore={{} as never}
+				isShowLoadingInit={false}
+				showLoading={false}
+			/>,
+		)
+
+		const editorWrapper = screen.getByTestId("desktop-editor").parentElement
+
+		expect(editorWrapper).toHaveClass("m-2", "shrink-0")
+		expect(editorWrapper).not.toHaveClass("w-full")
 	})
 })

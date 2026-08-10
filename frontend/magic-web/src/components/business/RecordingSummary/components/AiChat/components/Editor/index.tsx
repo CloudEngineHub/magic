@@ -183,7 +183,8 @@ const Editor: FC<EditorProps> = ({
 
 	return (
 		<MessageEditorProvider config={messageEditorProviderConfig}>
-			<div className={cn("w-full shrink-0 rounded-xl", isMobile ? "border-0 !p-0" : "m-2")}>
+			{/* Let flexbox account for the desktop margins so the editor stays within the panel width. */}
+			<div className={cn("shrink-0 rounded-xl", isMobile ? "border-0 !p-0" : "m-2")}>
 				{taskDataNode}
 				{messageQueueNode}
 				{isMobile ? (
