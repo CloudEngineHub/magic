@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
     <link rel="stylesheet" href="css/styles.css?v=debug-file-path-preview-1">
+    <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
 <body>
@@ -188,8 +189,18 @@
                             <datalist id="localCrewAgentOptions"></datalist>
                         </div>
 
-                        <!-- Model ID 配置（IM 模式下隐藏） -->
-                        <div class="model-config" id="modelIdGroup">
+                        <!-- 统一模型选择器（IM 模式下隐藏） -->
+                        <div class="model-config unified-model-group" id="unifiedModelGroup">
+                            <button id="unifiedModelTrigger" class="unified-model-trigger" type="button"
+                                aria-expanded="false" aria-controls="unifiedModelPanel">
+                                <span class="unified-model-trigger-label">模型</span>
+                                <span id="unifiedModelSummary" class="unified-model-summary">默认文本 · 无图片 · 无视频</span>
+                                <span class="unified-model-trigger-arrow" aria-hidden="true">▾</span>
+                            </button>
+                        </div>
+
+                        <!-- 以下原生选择器保留为消息组装的数据源，由统一模型选择器驱动 -->
+                        <div class="model-config model-source-field" id="modelIdGroup" style="display:none">
                             <input type="text" id="modelIdInput" class="model-id-input"
                                 placeholder="Model ID (留空默认)">
                             <select id="modelIdSelect" class="agent-mode-select" style="display:none">
@@ -198,14 +209,14 @@
                         </div>
 
                         <!-- 图片模型配置（加载模型列表后显示，IM 模式下隐藏） -->
-                        <div class="model-config" id="imageModelGroup" style="display:none">
+                        <div class="model-config model-source-field" id="imageModelGroup" style="display:none">
                             <select id="imageModelSelect" class="agent-mode-select">
                                 <option value="">不指定图片模型</option>
                             </select>
                         </div>
 
                         <!-- 视频模型配置（加载模型列表后显示，IM 模式下隐藏） -->
-                        <div class="model-config" id="videoModelGroup" style="display:none">
+                        <div class="model-config model-source-field" id="videoModelGroup" style="display:none">
                             <select id="videoModelSelect" class="agent-mode-select">
                                 <option value="">不指定视频模型</option>
                             </select>
@@ -290,6 +301,15 @@
                                     <button id="historyBtn" class="btn secondary small">历史消息</button>
                                 </div>
                                 <div class="input-footer-middle">
+                                    <button id="tokenContextPreview" class="token-context-preview" type="button"
+                                        aria-label="上下文用量" aria-expanded="false" aria-controls="tokenContextPopover"
+                                        title="上下文用量" style="display:none">
+                                        <span id="tokenContextUsage" class="token-context-preview-usage">0%</span>
+                                        <svg class="token-context-ring" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                            <circle class="token-context-ring-track" cx="8" cy="8" r="6.75"></circle>
+                                            <circle id="tokenContextRing" class="token-context-ring-value" cx="8" cy="8" r="6.75"></circle>
+                                        </svg>
+                                    </button>
                                     <button id="clientContextOpenBtn" class="btn secondary small client-context-footer-btn">
                                         client_context
                                         <span id="clientContextCount" class="client-context-count">0字</span>
@@ -308,9 +328,99 @@
                                 </button>
                             </div>
                         </div>
+                        <div id="tokenContextPopover" class="token-context-popover" role="dialog"
+                            aria-label="上下文用量详情" style="display:none">
+                            <div class="token-context-popover-section">
+                                <div class="token-context-popover-header">
+                                    <span>上下文用量</span>
+                                    <strong id="tokenContextPopoverPercentage">0%</strong>
+                                </div>
+                                <div class="token-context-popover-description">
+                                    对话记忆用量。进度条满时，AI 可能会遗忘较早的内容。
+                                </div>
+                                <div class="token-context-popover-progress" aria-hidden="true">
+                                    <span id="tokenContextPopoverProgress"></span>
+                                </div>
+                                <div id="tokenContextPopoverCount" class="token-context-popover-count">0 / 200K Tokens</div>
+                            </div>
+                            <div class="token-context-popover-divider"></div>
+                            <div class="token-context-popover-section token-context-popover-detail">
+                                <div id="tokenContextPopoverBreakdown"></div>
+                                <div id="tokenContextWarning" class="token-context-warning" style="display:none">
+                                    上下文长度较高，可能会显著增加每次响应的成本。
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统一模型选择器弹层 -->
+    <div id="unifiedModelPanel" class="unified-model-panel" role="dialog"
+        aria-label="选择模型" style="display:none">
+        <div class="unified-model-panel-header">
+            <div>
+                <strong>选择模型</strong>
+                <span>文本、图片和视频模型分别生效</span>
+            </div>
+            <button id="unifiedModelPanelClose" class="unified-model-panel-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="unified-model-panel-body">
+            <div id="unifiedModelColumns" class="unified-model-columns">
+                <section class="unified-model-column" data-model-type="text">
+                    <div class="unified-model-column-header">
+                        <div class="unified-model-column-title">
+                            <span class="unified-model-column-icon is-text" aria-hidden="true">文</span>
+                            <div>
+                                <strong>文本模型</strong>
+                                <span id="unifiedModelSelectedText">默认文本模型</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="unified-model-column-search-wrap">
+                        <input id="unifiedModelSearchText" class="unified-model-column-search" type="search"
+                            placeholder="搜索文本模型" aria-label="搜索文本模型">
+                    </div>
+                    <div id="unifiedModelListText" class="unified-model-column-list"></div>
+                </section>
+                <section class="unified-model-column" data-model-type="image">
+                    <div class="unified-model-column-header">
+                        <div class="unified-model-column-title">
+                            <span class="unified-model-column-icon is-image" aria-hidden="true">图</span>
+                            <div>
+                                <strong>图片模型</strong>
+                                <span id="unifiedModelSelectedImage">不指定图片模型</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="unified-model-column-search-wrap">
+                        <input id="unifiedModelSearchImage" class="unified-model-column-search" type="search"
+                            placeholder="搜索图片模型" aria-label="搜索图片模型">
+                    </div>
+                    <div id="unifiedModelListImage" class="unified-model-column-list"></div>
+                </section>
+                <section class="unified-model-column" data-model-type="video">
+                    <div class="unified-model-column-header">
+                        <div class="unified-model-column-title">
+                            <span class="unified-model-column-icon is-video" aria-hidden="true">视</span>
+                            <div>
+                                <strong>视频模型</strong>
+                                <span id="unifiedModelSelectedVideo">不指定视频模型</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="unified-model-column-search-wrap">
+                        <input id="unifiedModelSearchVideo" class="unified-model-column-search" type="search"
+                            placeholder="搜索视频模型" aria-label="搜索视频模型">
+                    </div>
+                    <div id="unifiedModelListVideo" class="unified-model-column-list"></div>
+                </section>
+            </div>
+            <div id="unifiedModelPreview" class="unified-model-preview">
+                <div class="unified-model-preview-empty">将鼠标移到模型上查看详情</div>
             </div>
         </div>
     </div>
@@ -356,7 +466,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
-    <script src="js/client.js?v=debug-file-path-preview-1"></script>
+    <script src="js/model_picker.js?v=unified-model-picker-4"></script>
+    <script src="js/client.js?v=token-context-stability-1"></script>
 </body>
 
 </html>
