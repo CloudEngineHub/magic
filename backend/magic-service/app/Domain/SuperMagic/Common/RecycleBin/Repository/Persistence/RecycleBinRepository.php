@@ -169,6 +169,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
 
         $entities = [];
         foreach ($models as $model) {
+            /** @var RecycleBinModel $model */
             $entities[] = $this->modelToEntity($model);
         }
 
