@@ -137,7 +137,12 @@ export class DraftManager {
 						continue
 					}
 				} catch (error) {
-					logger.error("Failed to save draft:", error)
+					logger.error({
+						eventKey: "save_draft_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "Failed to save draft:",
+					})
 					// continue loop to try pending saves if any
 				}
 			}
@@ -174,7 +179,12 @@ export class DraftManager {
 
 			await this.storage.deleteDraftVersions(draftKey)
 		} catch (error) {
-			logger.error("Failed to clear draft:", error)
+			logger.error({
+				eventKey: "clear_draft_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to clear draft:",
+			})
 		}
 	}
 

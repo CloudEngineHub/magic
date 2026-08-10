@@ -73,7 +73,12 @@ export class SystemAudioSourceStrategy implements AudioSourceStrategy {
 				audioRecorder: this.audioRecorder,
 			}
 		} catch (error) {
-			this.dependencies.logger.error("Failed to initialize system audio source:", error)
+			this.dependencies.logger.error({
+				eventKey: "initialize_system_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to initialize system audio source:",
+			})
 			await this.cleanup()
 			throw new AudioStreamCaptureError(
 				"Failed to initialize system audio source",
@@ -125,10 +130,15 @@ export class SystemAudioSourceStrategy implements AudioSourceStrategy {
 			// Add track monitoring
 			audioTracks.forEach((track) => {
 				track.onended = () => {
-					this.dependencies.logger.error("System audio track ended unexpectedly", {
-						trackId: track.id,
-						trackLabel: track.label,
-						trackState: track.readyState,
+					this.dependencies.logger.error({
+						eventKey: "system_audio_track_ended_unexpectedly",
+						errorKind: "unknown",
+						message: "System audio track ended unexpectedly",
+						context: {
+							trackId: track.id,
+							trackLabel: track.label,
+							trackState: track.readyState,
+						},
 					})
 
 					// 上报监控：系统音频轨道意外结束（可能原因：用户停止共享、关闭窗口）
@@ -162,7 +172,12 @@ export class SystemAudioSourceStrategy implements AudioSourceStrategy {
 
 			return displayMedia
 		} catch (error) {
-			this.dependencies.logger.error("Failed to capture system audio:", error)
+			this.dependencies.logger.error({
+				eventKey: "capture_system_audio_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to capture system audio:",
+			})
 
 			// 上报监控：系统音频捕获失败（可能原因：用户拒绝、浏览器不支持、选择无音频窗口）
 			// Report: System audio capture failed (permission denied, browser not supported, or no audio window selected)
@@ -239,7 +254,12 @@ export class SystemAudioSourceStrategy implements AudioSourceStrategy {
 				this.dependencies.logger.log("Manual audio processing set up successfully")
 				resolve()
 			} catch (error) {
-				this.dependencies.logger.error("Failed to set up manual audio processing:", error)
+				this.dependencies.logger.error({
+					eventKey: "system_audio_manual_processing_setup_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to set up manual audio processing:",
+				})
 				reject(error)
 			}
 		})

@@ -1,19 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
+const projectLoggerMocks = vi.hoisted(() => ({
+	warn: vi.fn(),
+	error: vi.fn(),
+}))
+
+vi.mock("@/utils/log", () => ({
+	logger: {
+		createLogger: () => projectLoggerMocks,
+	},
+}))
+
 import { PPTLoggerService, createPPTLogger } from "../PPTLoggerService"
 
 describe("PPTLoggerService", () => {
 	let logger: PPTLoggerService
 	let consoleDebugSpy: any
 	let consoleInfoSpy: any
-	let consoleWarnSpy: any
-	let consoleErrorSpy: any
 
 	beforeEach(() => {
 		// Spy on console methods
 		consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {})
 		consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
-		consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
-		consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+		projectLoggerMocks.warn.mockClear()
+		projectLoggerMocks.error.mockClear()
 
 		logger = new PPTLoggerService({
 			enabled: true,
@@ -39,13 +49,19 @@ describe("PPTLoggerService", () => {
 
 		it("should log warn messages", () => {
 			logger.warn("测试警告消息")
-			expect(consoleWarnSpy).toHaveBeenCalledWith("[PPTTest] 测试警告消息")
+			expect(projectLoggerMocks.warn).toHaveBeenCalledWith("[PPTTest] 测试警告消息")
 		})
 
 		it("should log error messages", () => {
 			const error = new Error("测试错误")
-			logger.error("测试错误消息", error)
-			expect(consoleErrorSpy).toHaveBeenCalledWith("[PPTTest] 测试错误消息", error)
+			const input = {
+				eventKey: "ppt_test_failed",
+				errorKind: "unknown" as const,
+				error,
+				message: "测试错误消息",
+			}
+			logger.error(input)
+			expect(projectLoggerMocks.error).toHaveBeenCalledWith(input)
 		})
 	})
 
@@ -95,12 +111,16 @@ describe("PPTLoggerService", () => {
 			logger.debug("不应显示")
 			logger.info("不应显示")
 			logger.warn("不应显示")
-			logger.error("应该显示")
+			logger.error({
+				eventKey: "ppt_test_failed",
+				errorKind: "unknown",
+				message: "应该显示",
+			})
 
 			expect(consoleDebugSpy).not.toHaveBeenCalled()
 			expect(consoleInfoSpy).not.toHaveBeenCalled()
-			expect(consoleWarnSpy).not.toHaveBeenCalled()
-			expect(consoleErrorSpy).toHaveBeenCalled()
+			expect(projectLoggerMocks.warn).not.toHaveBeenCalled()
+			expect(projectLoggerMocks.error).toHaveBeenCalled()
 		})
 	})
 
@@ -110,12 +130,16 @@ describe("PPTLoggerService", () => {
 			logger.debug("不应显示")
 			logger.info("不应显示")
 			logger.warn("不应显示")
-			logger.error("不应显示")
+			logger.error({
+				eventKey: "ppt_test_failed",
+				errorKind: "unknown",
+				message: "不应显示",
+			})
 
 			expect(consoleDebugSpy).not.toHaveBeenCalled()
 			expect(consoleInfoSpy).not.toHaveBeenCalled()
-			expect(consoleWarnSpy).not.toHaveBeenCalled()
-			expect(consoleErrorSpy).not.toHaveBeenCalled()
+			expect(projectLoggerMocks.warn).not.toHaveBeenCalled()
+			expect(projectLoggerMocks.error).not.toHaveBeenCalled()
 		})
 	})
 
@@ -131,7 +155,7 @@ describe("PPTLoggerService", () => {
 
 		it("should warn when ending timing without start", () => {
 			logger.endTiming("nonexistentOp")
-			expect(consoleWarnSpy).toHaveBeenCalled()
+			expect(projectLoggerMocks.warn).toHaveBeenCalled()
 		})
 
 		it("should clear all timings", () => {
@@ -140,7 +164,7 @@ describe("PPTLoggerService", () => {
 			logger.clearTimings()
 
 			logger.endTiming("op1")
-			expect(consoleWarnSpy).toHaveBeenCalled()
+			expect(projectLoggerMocks.warn).toHaveBeenCalled()
 		})
 	})
 
@@ -156,10 +180,7 @@ describe("PPTLoggerService", () => {
 			logger.logOperationStart("testOperation")
 			logger.logOperationSuccess("testOperation")
 
-			expect(consoleInfoSpy).toHaveBeenCalledWith(
-				expect.stringContaining("[testOperation]"),
-				expect.anything(),
-			)
+			expect(consoleInfoSpy).toHaveBeenCalledWith(expect.stringContaining("[testOperation]"))
 		})
 
 		it("should log operation error", () => {
@@ -167,11 +188,13 @@ describe("PPTLoggerService", () => {
 			logger.logOperationStart("testOperation")
 			logger.logOperationError("testOperation", error)
 
-			expect(consoleErrorSpy).toHaveBeenCalledWith(
-				expect.stringContaining("[testOperation]"),
-				expect.anything(),
+			expect(projectLoggerMocks.error).toHaveBeenCalledWith({
+				eventKey: "ppt_operation_failed",
+				errorKind: "unknown",
 				error,
-			)
+				message: "PPT operation failed",
+				context: { operation: "testOperation" },
+			})
 		})
 	})
 

@@ -137,7 +137,12 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 
 			return true
 		} catch (error) {
-			logger.error("validateProjectState error", error)
+			logger.error({
+				eventKey: "validate_project_state_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "validateProjectState error",
+			})
 			return false
 		}
 	}
@@ -166,7 +171,12 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 				logger.warn("getProjectState: Invalid cached data detected, removing", cacheKey)
 				// 删除损坏的数据
 				this.delete(cacheKey).catch((err) =>
-					logger.error("Failed to delete corrupted cache", err),
+					logger.error({
+						eventKey: "delete_corrupted_cache_failed",
+						errorKind: "storage",
+						error: err,
+						message: "Failed to delete corrupted cache",
+					}),
 				)
 				return undefined
 			}
@@ -180,12 +190,20 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 				error?.name === "NotFoundError"
 
 			if (isTableNotExistError) {
-				logger.error(
-					"getProjectState: Table not found, database may need upgrade",
-					ProjectStateRepository.tableName,
-				)
+				logger.error({
+					eventKey: "project_state_table_not_found",
+					errorKind: "storage",
+					message: "getProjectState: Table not found, database may need upgrade",
+					context: { tableName: ProjectStateRepository.tableName },
+				})
 			} else {
-				logger.error("getProjectStateError", ProjectStateRepository.tableName, error)
+				logger.error({
+					eventKey: "get_project_state_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "getProjectStateError",
+					context: { tableName: ProjectStateRepository.tableName },
+				})
 			}
 
 			// 尝试从内存缓存获取
@@ -197,7 +215,12 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 					return fallbackState
 				}
 			} catch (fallbackError) {
-				logger.error("getProjectState: Fallback also failed", fallbackError)
+				logger.error({
+					eventKey: "project_state_fallback_read_failed",
+					errorKind: "unknown",
+					error: fallbackError,
+					message: "getProjectState: Fallback also failed",
+				})
 			}
 
 			return undefined
@@ -239,7 +262,13 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 
 			// 保存前验证
 			if (!this.validateProjectState(stateToSave)) {
-				logger.error("saveProjectState: Invalid state data", stateToSave)
+				logger.error({
+					eventKey: "project_state_validation_failed",
+					errorKind: "invalid_state",
+					message: "saveProjectState: Invalid state data",
+					// 项目状态可能包含完整内容和附件，只保留缓存键用于定位损坏记录。
+					context: { stateToSave },
+				})
 				return
 			}
 
@@ -254,12 +283,20 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 				error?.name === "NotFoundError"
 
 			if (isTableNotExistError) {
-				logger.error(
-					"saveProjectState: Table not found, falling back to memory cache only",
-					ProjectStateRepository.tableName,
-				)
+				logger.error({
+					eventKey: "project_state_storage_fallback",
+					errorKind: "storage",
+					message: "saveProjectState: Table not found, falling back to memory cache only",
+					context: { tableName: ProjectStateRepository.tableName },
+				})
 			} else {
-				logger.error("saveProjectStateError", ProjectStateRepository.tableName, error)
+				logger.error({
+					eventKey: "save_project_state_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "saveProjectStateError",
+					context: { tableName: ProjectStateRepository.tableName },
+				})
 			}
 		} finally {
 			// 同时保存到内存缓存（即使主保存失败）
@@ -282,7 +319,12 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 					Storage.set(`${ProjectStateRepository.tableName}:${cacheKey}`, fallbackState)
 				}
 			} catch (fallbackError) {
-				logger.error("saveProjectState: Fallback save failed", fallbackError)
+				logger.error({
+					eventKey: "project_state_fallback_save_failed",
+					errorKind: "unknown",
+					error: fallbackError,
+					message: "saveProjectState: Fallback save failed",
+				})
 			}
 		}
 	}
@@ -374,7 +416,13 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 			const cacheKey = this.getCacheKey(organizationCode, projectId)
 			await this.delete(cacheKey)
 		} catch (error) {
-			logger.error("deleteProjectStateError", ProjectStateRepository.tableName, error)
+			logger.error({
+				eventKey: "delete_project_state_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "deleteProjectStateError",
+				context: { tableName: ProjectStateRepository.tableName },
+			})
 		} finally {
 			// 同时删除内存缓存
 			const cacheKey = this.getCacheKey(organizationCode, projectId)
@@ -389,7 +437,13 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 		try {
 			return await this.getAll()
 		} catch (error) {
-			logger.error("getAllProjectStatesError", ProjectStateRepository.tableName, error)
+			logger.error({
+				eventKey: "get_all_project_states_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getAllProjectStatesError",
+				context: { tableName: ProjectStateRepository.tableName },
+			})
 			return Storage.getAll<ProjectState>(`${ProjectStateRepository.tableName}:`)
 		}
 	}
@@ -581,7 +635,13 @@ export class ProjectStateRepository extends GlobalBaseRepository<ProjectState> {
 
 			console.log(`🧹 Cleaned ${expiredStates.length} expired project state caches`)
 		} catch (error) {
-			logger.error("cleanExpiredCacheError", ProjectStateRepository.tableName, error)
+			logger.error({
+				eventKey: "clean_expired_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "cleanExpiredCacheError",
+				context: { tableName: ProjectStateRepository.tableName },
+			})
 		}
 	}
 }

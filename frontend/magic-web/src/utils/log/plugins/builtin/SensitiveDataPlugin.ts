@@ -65,6 +65,10 @@ export class SensitiveDataPlugin implements LoggerPlugin {
 			...context,
 			data: sanitizedArgs, // 同时更新处理后的数据
 			url: sanitizedUrl,
+			// 结构化 context/error 也必须经过与 legacy data 相同的脱敏链路。
+			errorReport: context.errorReport
+				? SensitiveMasker.sanitize(context.errorReport)
+				: undefined,
 			// info: sanitizedInfo,
 			// metadata: {
 			// 	...context.metadata,

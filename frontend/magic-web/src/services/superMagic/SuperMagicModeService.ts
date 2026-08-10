@@ -364,7 +364,12 @@ class SuperMagicModeService {
 				this.resetModeList()
 			}
 		} catch (error) {
-			logger.error("Failed to load mode list from localStorage fallback", error)
+			logger.error({
+				eventKey: "mode_list_fallback_load_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to load mode list from localStorage fallback",
+			})
 			this.resetModeList()
 		}
 	}
@@ -415,7 +420,12 @@ class SuperMagicModeService {
 				target: "localStorage",
 			})
 		} catch (error) {
-			logger.error("Failed to persist mode list to localStorage fallback", error)
+			logger.error({
+				eventKey: "mode_list_fallback_persist_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to persist mode list to localStorage fallback",
+			})
 		}
 	}
 
@@ -529,7 +539,12 @@ class SuperMagicModeService {
 				removed,
 			})
 		})().catch((error) => {
-			logger.error("Legacy mode list migration crashed", error)
+			logger.error({
+				eventKey: "legacy_mode_list_migration_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Legacy mode list migration crashed",
+			})
 			// Allow a retry in future lifecycles instead of latching the failure.
 			this._legacyMigrationPromise = null
 		})
@@ -1094,7 +1109,12 @@ class SuperMagicModeService {
 				return nextModeList
 			})
 			.catch((err) => {
-				logger.error("fetchModeList error", err)
+				logger.error({
+					eventKey: "fetch_mode_list_failed",
+					errorKind: "network",
+					error: err,
+					message: "fetchModeList error",
+				})
 				if (requestContext.contextKey !== this.currentContextKey) {
 					logger.log("Ignore stale mode list error", {
 						requestContextKey: requestContext.contextKey,
