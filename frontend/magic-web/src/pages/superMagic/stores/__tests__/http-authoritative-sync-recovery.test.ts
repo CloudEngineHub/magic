@@ -468,6 +468,26 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		recovery.unsubscribe()
 	})
 
+	it("页面 hidden 时 watchdog 只保留等待态，不发布 HTTP recovery。", () => {
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden",
+		})
+		const store = createStore()
+		const recovery = collectRecoveryRequests(store)
+
+		store.receiveChunk(createChunk({ content: "hidden-incomplete" }))
+		vi.advanceTimersByTime(INITIAL_RECOVERY_OBSERVATION_MS * 2)
+
+		expect(recovery.events).toHaveLength(0)
+		expect(getStreamRecoveryState(store)?.status).toBe("waiting")
+		recovery.unsubscribe()
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible",
+		})
+	})
+
 	it("同一 correlation 的 recovery 开始同步后必须合并后续 watchdog。", () => {
 		const store = createStore()
 		const events: StreamRecoveryRequestPayload[] = []
@@ -2230,22 +2250,157 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
 
-	it("HTTP Final 即使 Topic status=running 也必须结束对应 StreamState。", () => {
+	it("HTTP terminal Assistant 即使 Topic status=running 也必须结束对应 StreamState。", () => {
 		const store = createStore()
 		store.receiveChunk(createChunk({ reasoningContent: "local reasoning" }))
 
-		store.initializeMessages(TOPIC_A, [
-			createEnvelope({
-				seqId: "200",
-				nodeStatus: "running",
-				content: "canonical answer",
-			}),
-		])
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "finished",
+					content: "canonical answer",
+				}),
+			],
+			{ assistantSnapshotPolicy: "progress_snapshot" },
+		)
+
+		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
+			status: "finished",
+			content: "canonical answer",
+		})
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("HTTP running Assistant 只推进本地 StreamState，不建立 Final barrier。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ content: "local prefix" }))
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "running",
+					content: "local prefix from HTTP snapshot",
+				}),
+			],
+			{ assistantSnapshotPolicy: "progress_snapshot" },
+		)
+
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)?.content).toBe(
+			"local prefix from HTTP snapshot",
+		)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("HTTP running Assistant 与本地流式前缀分叉时保留本地内容。", () => {
+		const store = createStore()
+		store.receiveChunk(createChunk({ content: "local stable prefix" }))
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "running",
+					content: "different server branch with more characters",
+				}),
+			],
+			{ assistantSnapshotPolicy: "progress_snapshot" },
+		)
+
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)?.content).toBe("local stable prefix")
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+	})
+
+	it("HTTP running Assistant 没有本地 StreamState 时只建立 canonical 节点。", () => {
+		const store = createStore()
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "running",
+					content: "server progress without local stream",
+				}),
+			],
+			{ assistantSnapshotPolicy: "progress_snapshot" },
+		)
 
 		expect(getNode(store, SUPER_MESSAGE_ID)).toMatchObject({
 			status: "running",
-			content: "canonical answer",
+			content: "server progress without local stream",
 		})
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+	})
+
+	it("前台 HTTP 先返回 running 再返回终态时保留锚点前缀并只在终态结算流。", () => {
+		const store = createStore()
+		const anchorAppMessageId = "foreground-anchor-user"
+		const anchorEnvelope = createEnvelope({
+			appMessageId: anchorAppMessageId,
+			role: "user",
+			seqId: "100",
+		})
+		store.initializeMessages(TOPIC_A, [anchorEnvelope])
+		store.receiveChunk(createChunk({ content: "local prefix" }))
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "200",
+					nodeStatus: "running",
+					content: "local prefix plus server progress",
+				}),
+				anchorEnvelope,
+			],
+			{
+				mode: "replace_tail",
+				assistantSnapshotPolicy: "progress_snapshot",
+				anchorSuperMessageId: anchorAppMessageId,
+				preserveStreamSuperMessageIds: [SUPER_MESSAGE_ID],
+				toolProjectionPolicy: "preserve_live",
+			},
+		)
+
+		expect(getMessageRecords(store).map((message) => message.super_message_id)).toEqual([
+			anchorAppMessageId,
+			SUPER_MESSAGE_ID,
+		])
+		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)?.content).toBe(
+			"local prefix plus server progress",
+		)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(true)
+
+		store.initializeMessages(
+			TOPIC_A,
+			[
+				createEnvelope({
+					seqId: "201",
+					nodeStatus: "finished",
+					content: "canonical final",
+				}),
+				anchorEnvelope,
+			],
+			{
+				mode: "replace_tail",
+				assistantSnapshotPolicy: "progress_snapshot",
+				anchorSuperMessageId: anchorAppMessageId,
+				preserveStreamSuperMessageIds: [SUPER_MESSAGE_ID],
+			},
+		)
+
+		expect(getMessageRecords(store).map((message) => message.super_message_id)).toEqual([
+			anchorAppMessageId,
+			SUPER_MESSAGE_ID,
+		])
+		expect(getNode(store, SUPER_MESSAGE_ID)?.content).toBe("canonical final")
 		expect(store.getStreamState(TOPIC_A, SUPER_MESSAGE_ID)).toBeUndefined()
 		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
 	})
@@ -2264,7 +2419,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			createEnvelope({
 				superMessageId,
 				seqId: "200",
-				nodeStatus: "running",
+				nodeStatus: "finished",
 				toolCalls: [
 					createToolCall({
 						id: "http-tool",
@@ -2317,7 +2472,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				createEnvelope({
 					superMessageId,
 					seqId: "200",
-					nodeStatus: "running",
+					nodeStatus: "finished",
 					...envelopeOptions,
 				}),
 			])
@@ -2352,7 +2507,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 				createEnvelope({
 					superMessageId,
 					seqId: "200",
-					nodeStatus: "running",
+					nodeStatus: "finished",
 					...envelopeOptions,
 				}),
 			])
@@ -2384,7 +2539,7 @@ describe("SuperMagicStore / HTTP 权威同步与恢复", () => {
 			createEnvelope({
 				superMessageId,
 				seqId: "200",
-				nodeStatus: "running",
+				nodeStatus: "finished",
 				toolCalls: [
 					createToolCall({
 						id: "shared-tool",

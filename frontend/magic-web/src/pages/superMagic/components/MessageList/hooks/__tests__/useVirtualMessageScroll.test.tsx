@@ -223,6 +223,49 @@ describe("useVirtualMessageScroll", () => {
 		expect(viewport.scrollTop).toBe(850)
 	})
 
+	it("does not request history when authoritative reconciliation shrinks the list", async () => {
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
+		const virtualizer = createVirtualizer(viewport, {
+			startIndex: 8,
+			starts: Array.from({ length: 12 }, (_, index) => index * 100),
+			totalSize: 1200,
+		})
+		const onPullMore = vi.fn()
+		const initialItems = Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` }))
+		const containerRef = { current: viewport }
+		const virtualizerRef = {
+			current: virtualizer,
+		} as MutableRefObject<Virtualizer<HTMLDivElement, HTMLDivElement> | null>
+		const { rerender } = renderHook(
+			({ items }) =>
+				useVirtualMessageScroll({
+					containerRef,
+					virtualizerRef,
+					items,
+					topicKey: "topic-1",
+					onPullMore,
+				}),
+			{ initialProps: { items: initialItems } },
+		)
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.scrollTop = 100
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		const scrollCallCountBeforeShrink = vi.mocked(virtualizer.scrollToOffset).mock.calls.length
+
+		// A visible-tab HTTP replace can remove local rows. The resulting scrollTop clamp is
+		// a layout side effect, not a request to load older history.
+		rerender({ items: initialItems.slice(0, 4) })
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+
+		expect(onPullMore).not.toHaveBeenCalled()
+		expect(virtualizer.scrollToOffset).toHaveBeenCalledTimes(scrollCallCountBeforeShrink)
+	})
+
 	it("cancels a pending history anchor when the user explicitly returns to latest", async () => {
 		const viewport = createViewport({ scrollTop: 450, clientHeight: 300 })
 		const virtualizer = createVirtualizer(viewport, {

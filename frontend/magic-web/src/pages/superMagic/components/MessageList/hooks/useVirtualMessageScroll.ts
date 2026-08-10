@@ -83,6 +83,7 @@ export function useVirtualMessageScroll({
 	const historyGenerationRef = useRef(0)
 	const historyAnchorRef = useRef<HistoryAnchorSnapshot | null>(null)
 	const prevTopicKeyRef = useRef(topicKey)
+	const previousItemCountRef = useRef(items.length)
 
 	const clearGuard = useCallback(() => {
 		if (guardTimerRef.current === null) return
@@ -156,6 +157,7 @@ export function useVirtualMessageScroll({
 		lastTotalSizeRef.current = 0
 		historyAnchorRef.current = null
 		historyGenerationRef.current += 1
+		previousItemCountRef.current = items.length
 	}
 
 	useEffect(() => {
@@ -165,6 +167,18 @@ export function useVirtualMessageScroll({
 	}, [clearGuard, scrollToBottom, topicKey])
 
 	useLayoutEffect(() => {
+		const previousItemCount = previousItemCountRef.current
+		previousItemCountRef.current = items.length
+		if (items.length < previousItemCount) {
+			// Authoritative replace/replace_tail can legitimately remove rows. The browser may
+			// clamp scrollTop as the canvas shrinks; that layout correction must never be treated
+			// as a user's upward gesture and must not start another history-page request.
+			userHistoryIntentRef.current = false
+			historyAnchorRef.current = null
+			historyGenerationRef.current += 1
+			suppressUntilRef.current = Date.now() + 300
+		}
+
 		const snapshot = historyAnchorRef.current
 		const viewport = containerRef.current
 		const virtualizer = virtualizerRef.current

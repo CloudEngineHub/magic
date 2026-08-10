@@ -1,6 +1,6 @@
 import { userStore } from "@/models/user"
 import { RequestMethod as OpenSourceRequestMethod } from "@/apis/constant"
-import { env, isCommercial } from "@/utils/env"
+import { env } from "@/utils/env"
 import { genRequestUrl } from "@/utils/http"
 import { Upload, UploadConfig } from "@dtyq/upload-sdk"
 import { useMemoizedFn } from "ahooks"
@@ -16,7 +16,6 @@ import magicToast from "@/components/base/MagicToaster/utils"
 // Todo（2025-04-16）:
 // CommercialRequestUrl 与 OpenSourceRequestUrl 待合并
 // CommercialRequestMethod 与 OpenSourceRequestMethod 待合并
-// 后续针对请求的 api 不应该再依赖 isCommercial 的判断
 
 /**
  * 文件上传 Hook
@@ -123,11 +122,7 @@ export const useUpload = <F extends FileUploadData>({
 					const uploadUrl = `${
 						url ??
 						env("MAGIC_SERVICE_BASE_URL") +
-							genRequestUrl(
-								isCommercial()
-									? "/api/v1/file/temporary-credential"
-									: "/api/v1/file/temporary-credential",
-							)
+							genRequestUrl("/api/v1/file/temporary-credential")
 					}?organization_code=${organizationCode}`
 
 					const file = new File([fileData.file], "file", {
@@ -222,8 +217,7 @@ export const useUpload = <F extends FileUploadData>({
 					files: rejectedData
 						.map((r) => {
 							const reason = (r as PromiseRejectedResult).reason as
-								| { uploadFile?: { name?: string } }
-								| undefined
+								{ uploadFile?: { name?: string } } | undefined
 							return reason?.uploadFile?.name
 						})
 						.filter(Boolean),

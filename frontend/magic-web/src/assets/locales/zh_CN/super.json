@@ -467,6 +467,14 @@
 		"latest": "最新",
 		"latestVersion": "最新版本",
 		"loading": "加载中",
+		"markdownImage": {
+			"address": "图片地址",
+			"emptySource": "图片地址为空",
+			"fileMissing": "图片文件不存在",
+			"loadFailed": "图片加载失败",
+			"notImage": "该资源不是图片",
+			"urlFailed": "图片地址获取失败"
+		},
 		"meetingMode": "录音总结",
 		"more": "更多模式",
 		"moreActions": "更多",

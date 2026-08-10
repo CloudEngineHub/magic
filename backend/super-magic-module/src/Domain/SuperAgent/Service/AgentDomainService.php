@@ -183,7 +183,7 @@ class AgentDomainService
             skipInitMessages: $skipInitMessage
         );
         $agentInitContext->setMetadata($metadata->toArray());
-        // 设置 agent_mode （待废弃）
+        // INIT 的沙箱运行模式，接收端据此初始化对应的生命周期。
         $agentInitContext->setAgentMode($topicEntity->getTopicMode());
         // 设置 magic_service_host
         $agentInitContext->setMagicServiceHost(config('super-magic.sandbox.callback_host', ''));
