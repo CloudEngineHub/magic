@@ -242,13 +242,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
-	const selectionEnabled = shouldEnableTopicFileSelection({
-		isSelectMode,
-		allowEdit,
-		allowDownload,
-		hasLogin,
-		allowReadonlySelection,
-	})
+	const selectionEnabled =
+		capabilities.multiSelect &&
+		shouldEnableTopicFileSelection({
+			isSelectMode,
+			allowEdit,
+			allowDownload,
+			hasLogin,
+			allowReadonlySelection,
+		})
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const canUseDesktopCrossProjectMove = capabilities.crossProject && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()

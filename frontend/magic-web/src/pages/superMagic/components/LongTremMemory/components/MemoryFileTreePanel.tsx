@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -14,6 +15,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import memoryFilesStore from "@/stores/memoryFiles"
 import { MEMORY_SCOPE } from "../services/memoryFileService"
 import { MemoryTreeNodeIcon } from "./MemoryTreeNodeIcon"
 import {
@@ -47,18 +49,6 @@ const MEMORY_SPACE_CAPABILITIES: NonNullable<TopicFilesSpaceConfig["capabilities
 	multiSelect: false,
 	projectContentCreation: false,
 	share: false,
-}
-
-/**
- * 文件列表 Tab 切换时组件会被卸载/重新挂载，因此把最近一次成功结果
- * 放在模块级缓存中，重新进入时先复用旧列表，再静默拉取最新数据。
- */
-const memoryFileTreeCache: {
-	attachments: AttachmentItem[]
-	hasLoaded: boolean
-} = {
-	attachments: [],
-	hasLoaded: false,
 }
 
 /** 判断节点是否为用户记忆空间的固定根目录。 */
@@ -116,7 +106,7 @@ function filterMemoryMenuItems(
 }
 
 /** 项目侧用户记忆文件树，复用项目文件的完整交互能力。 */
-export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
+export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 	selectedProject,
 	selectedWorkspace,
 	activeFileId,
@@ -124,58 +114,40 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	showTitle = true,
 }: MemoryFileTreePanelProps) {
 	const { t } = useTranslation("super/longMemory")
-	const [attachments, setAttachments] = useState<AttachmentItem[]>(
-		() => memoryFileTreeCache.attachments,
-	)
-	const [loading, setLoading] = useState(() => !memoryFileTreeCache.hasLoaded)
-	const [loadError, setLoadError] = useState(false)
+	const identityKey = memoryFilesStore.currentIdentityKey
+	const { attachments, loadError } = memoryFilesStore.getSnapshot()
 
 	/** 重新加载当前用户的完整记忆文件树。 */
 	const refreshMemoryFiles = useCallback(
 		async (signal?: AbortSignal, options?: { silent?: boolean }) => {
-			const silent = options?.silent ?? false
-			if (!silent) setLoading(true)
-			setLoadError(false)
-			try {
+			await memoryFilesStore.load(async (publishAttachments) => {
 				const result = await loadProjectAttachments({
 					projectId: MEMORY_PROJECT_ID,
 					scope: MEMORY_SCOPE,
 					temporaryToken: null,
 					signal,
 					onBatchSnapshot: (snapshot) => {
-						memoryFileTreeCache.attachments = snapshot.tree
-						memoryFileTreeCache.hasLoaded = true
-						setAttachments(snapshot.tree)
+						if (!signal?.aborted) publishAttachments(snapshot.tree)
 					},
 				})
-				if (signal?.aborted) return
-				memoryFileTreeCache.attachments = result.tree
-				memoryFileTreeCache.hasLoaded = true
-				setAttachments(result.tree)
-			} catch (error) {
-				if ((error as { name?: string })?.name === "AbortError") return
-				console.error("加载记忆文件树失败", error)
-				setLoadError(true)
-				throw error
-			} finally {
-				if (!signal?.aborted && !silent) setLoading(false)
-			}
+				return result.tree
+			}, options)
 		},
 		[],
 	)
 
 	useEffect(() => {
 		const controller = new AbortController()
-		void refreshMemoryFiles(controller.signal, {
-			silent: memoryFileTreeCache.hasLoaded,
-		}).catch(() => undefined)
+		void refreshMemoryFiles(controller.signal).catch((error) => {
+			if ((error as { name?: string })?.name !== "AbortError") {
+				console.error("加载记忆文件树失败", error)
+			}
+		})
 		return () => controller.abort()
-	}, [refreshMemoryFiles])
+	}, [identityKey, refreshMemoryFiles])
 
 	const handleAttachmentsChange = useCallback((nextAttachments: AttachmentItem[]) => {
-		memoryFileTreeCache.attachments = nextAttachments
-		memoryFileTreeCache.hasLoaded = true
-		setAttachments(nextAttachments)
+		memoryFilesStore.setAttachments(nextAttachments)
 	}, [])
 
 	const memoryNodePathIndex = useMemo(
@@ -273,7 +245,7 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	/** 手动刷新失败时保留当前文件树并提示用户。 */
 	const handleRefresh = useCallback(async () => {
 		try {
-			await refreshMemoryFiles()
+			await refreshMemoryFiles(undefined, { silent: false })
 		} catch {
 			magicToast.error(t("fileTree.loadFailed"))
 		}
@@ -316,11 +288,10 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 			projectId={MEMORY_PROJECT_ID}
 			selectedProject={memoryProject}
 			activeFileId={activeFileId}
-			allowEdit={hasMemoryRoot && !loadError && !loading}
+			allowEdit={hasMemoryRoot && !loadError}
 			allowDownload
 			isInProject
 			showMobileActions
-			refreshLoading={loading}
 			refreshAttachments={handleRefresh}
 			onAttachmentsChange={handleAttachmentsChange}
 			onFileClick={handleMemoryFileClick}
