@@ -354,11 +354,14 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
       };
     }
 
-    function postContentMetrics(phase) {
+    function postContentMetrics(phase, contentVersion) {
       try {
         var metrics = measureContentMetrics();
         window.parent.postMessage({
           type: "contentMetrics",
+          contentVersion: typeof contentVersion === "number"
+            ? contentVersion
+            : getPreviewState().contentVersion,
           phase: phase,
           contentWidth: metrics.contentWidth,
           contentHeight: metrics.contentHeight,
@@ -385,8 +388,11 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
       }
     }
 
-    function scheduleContentMetrics(phase) {
+    function scheduleContentMetrics(phase, contentVersion) {
       var previewState = getPreviewState();
+      var metricsVersion = typeof contentVersion === "number"
+        ? contentVersion
+        : previewState.contentVersion;
       cancelScheduledContentMetrics();
 
       previewState.contentMetricsFrameId = requestAnimationFrame(function() {
@@ -394,7 +400,7 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
 
         previewState.contentMetricsNestedFrameId = requestAnimationFrame(function() {
           previewState.contentMetricsNestedFrameId = null;
-          postContentMetrics(phase);
+          postContentMetrics(phase, metricsVersion);
         });
       });
     }
@@ -426,12 +432,15 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
         previewState.settledTimeoutId = null;
 
         try {
-          window.parent.postMessage({ type: "pageFullyLoaded" }, "*");
+          window.parent.postMessage({
+            type: "pageFullyLoaded",
+            contentVersion: version
+          }, "*");
         } catch (error) {
           console.error("发送流式预览 fully-loaded 消息时出错:", error);
         }
 
-        scheduleContentMetrics("settled");
+        scheduleContentMetrics("settled", version);
       }, 160);
     }
 
@@ -456,10 +465,13 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
       scheduleSettledSignals(version);
     }
 
-    function waitForRenderComplete() {
+    function waitForRenderComplete(contentVersion) {
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
-          window.parent.postMessage({ type: "renderComplete" }, "*");
+          window.parent.postMessage({
+            type: "renderComplete",
+            contentVersion: contentVersion
+          }, "*");
         });
       });
     }
@@ -468,14 +480,17 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
       var previewState = getPreviewState();
 
       try {
-        window.parent.postMessage({ type: "contentLoaded" }, "*");
+        window.parent.postMessage({
+          type: "contentLoaded",
+          contentVersion: previewState.contentVersion
+        }, "*");
         window.parent.postMessage({ type: "domReady" }, "*");
       } catch (error) {
         console.error("发送流式预览 ready 消息时出错:", error);
       }
 
-      waitForRenderComplete();
-      scheduleContentMetrics("initial");
+      waitForRenderComplete(previewState.contentVersion);
+      scheduleContentMetrics("initial", previewState.contentVersion);
       ensureSettledObserver(previewState.contentVersion);
     }
 
@@ -487,7 +502,7 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
           } catch (error) {
             console.error("发送 DOM ready 消息时出错:", error);
           }
-          waitForRenderComplete();
+          waitForRenderComplete(getPreviewState().contentVersion);
         });
       } else {
         try {
@@ -495,7 +510,7 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
         } catch (error) {
           console.error("发送 DOM ready 消息时出错:", error);
         }
-        waitForRenderComplete();
+        waitForRenderComplete(getPreviewState().contentVersion);
       }
 
       if (document.readyState === "complete") {
@@ -550,7 +565,10 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
         var scrollPosition = previewState.hasWrittenContentOnce
           ? captureScrollPosition()
           : null;
-        previewState.contentVersion += 1;
+        var incomingContentVersion = Number(event.data.contentVersion);
+        previewState.contentVersion = Number.isInteger(incomingContentVersion)
+          ? incomingContentVersion
+          : previewState.contentVersion + 1;
         var parsedDocument = parseIncomingDocument(event.data.content);
         var nextHeadHTML =
           parsedDocument && parsedDocument.head
@@ -581,10 +599,23 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
         setupDOMLoadListeners();
         markExecutedBodyScripts(document.body);
         scheduleScrollRestore(scrollPosition);
-        window.parent.postMessage({ type: "contentLoaded" }, "*");
-        scheduleContentMetrics("initial");
+        window.parent.postMessage({
+          type: "contentLoaded",
+          contentVersion: previewState.contentVersion
+        }, "*");
+        scheduleContentMetrics("initial", previewState.contentVersion);
       } catch (error) {
         console.error("处理流式预览消息时出错:", error);
+        var errorMessage = error && error.message ? String(error.message) : "Unknown streaming preview error";
+        try {
+          window.parent.postMessage({
+            type: "streamingPreviewError",
+            contentVersion: getPreviewState().contentVersion,
+            message: errorMessage
+          }, "*");
+        } catch (postError) {
+          console.error("发送流式预览错误消息时出错:", postError);
+        }
       }
     }
 
@@ -618,8 +649,13 @@ function injectStreamingPreviewScrollStyle(html: string): string {
 		return html
 	}
 
-	if (html.includes("</head>")) {
-		return html.replace("</head>", `${STREAMING_HTML_PREVIEW_SCROLL_STYLE}</head>`)
+	// Inject after the real head opening tag. Replacing the first `</head>` is unsafe:
+	// getFullContent also embeds user/runtime scripts that may contain the literal
+	// `</head>` in a JavaScript string, and inserting CSS there breaks that script.
+	if (/<head\b[^>]*>/i.test(html)) {
+		return html.replace(/<head\b[^>]*>/i, (headTag) => {
+			return `${headTag}${STREAMING_HTML_PREVIEW_SCROLL_STYLE}`
+		})
 	}
 
 	return `${html}${STREAMING_HTML_PREVIEW_SCROLL_STYLE}`
@@ -632,10 +668,14 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 		onMetrics,
 		containIframeOverscroll = false,
 		hideVerticalScroll = false,
+		onContentCommitted,
 	} = props
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const isIframeReadyRef = useRef(false)
 	const lastPostedContentRef = useRef("")
+	const contentVersionRef = useRef(0)
+	const postedContentByVersionRef = useRef(new Map<number, string>())
+	const lastAcknowledgedContentVersionRef = useRef(0)
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
@@ -662,15 +702,20 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 		if (!iframeRef.current?.contentWindow) return
 		if (lastPostedContentRef.current === fullContent) return
 
+		const contentVersion = contentVersionRef.current + 1
+		contentVersionRef.current = contentVersion
+		postedContentByVersionRef.current.set(contentVersion, content)
+
 		iframeRef.current.contentWindow.postMessage(
 			{
 				type: "setContent",
 				content: fullContent,
+				contentVersion,
 			},
 			"*",
 		)
 		lastPostedContentRef.current = fullContent
-	}, [fullContent])
+	}, [content, fullContent])
 
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
@@ -689,11 +734,42 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 			}
 
 			if (event.data?.type === "renderComplete" || event.data?.type === "pageFullyLoaded") {
-				onReady()
+				const contentVersion = Number(event.data?.contentVersion)
+				const committedContent = postedContentByVersionRef.current.get(contentVersion)
+				if (
+					Number.isInteger(contentVersion) &&
+					contentVersion > lastAcknowledgedContentVersionRef.current &&
+					committedContent !== undefined
+				) {
+					// 只有 iframe 明确确认过的版本才能成为暂停时的冻结内容，也才能解除首次 Loading。
+					lastAcknowledgedContentVersionRef.current = contentVersion
+					onContentCommitted?.(committedContent)
+					postedContentByVersionRef.current.forEach((_, version) => {
+						if (version <= contentVersion) {
+							postedContentByVersionRef.current.delete(version)
+						}
+					})
+					onReady()
+				}
+				return
+			}
+
+			if (event.data?.type === "streamingPreviewError") {
+				const contentVersion = Number(event.data?.contentVersion)
+				if (Number.isInteger(contentVersion)) {
+					postedContentByVersionRef.current.delete(contentVersion)
+				}
 				return
 			}
 
 			if (event.data?.type !== "contentMetrics") return
+			const metricsContentVersion = Number(event.data?.contentVersion)
+			if (
+				!Number.isInteger(metricsContentVersion) ||
+				metricsContentVersion !== contentVersionRef.current
+			) {
+				return
+			}
 
 			const contentWidth = Number(event.data?.contentWidth)
 			const contentHeight = Number(event.data?.contentHeight)
@@ -717,7 +793,7 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 		return () => {
 			window.removeEventListener("message", handleMessage)
 		}
-	}, [onMetrics, onReady, postContent])
+	}, [onContentCommitted, onMetrics, onReady, postContent])
 
 	useEffect(() => {
 		postContent()
@@ -729,7 +805,7 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 			className="h-full w-full border-none bg-transparent"
 			title="Streaming HTML Preview"
 			sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock"
-			allow="fullscreen pointer-lock"
+			allow="fullscreen; pointer-lock"
 			allowFullScreen
 			srcDoc={STREAMING_HTML_PREVIEW_RUNTIME}
 			scrolling="yes"

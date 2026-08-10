@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { HTML_CODE_BLOCK_PREVIEW_SKELETON_MIN_VISIBLE_DURATION } from "../constants"
+import { resolveStreamingHtmlCommitContent } from "../streaming-html-commit"
 
 const HTML_CODE_BLOCK_STREAMING_PREVIEW_MIN_LOADING_DURATION = Math.max(
 	HTML_CODE_BLOCK_PREVIEW_SKELETON_MIN_VISIBLE_DURATION,
@@ -10,14 +11,15 @@ const HTML_CODE_BLOCK_STREAMING_PREVIEW_COMMIT_INTERVAL = 96
 interface UseStreamingHtmlPreviewStateProps {
 	content: string
 	isSuspended?: boolean
-	onCommittedContentChange?: (nextContent: string) => void
 }
 
 export function useStreamingHtmlPreviewState(props: UseStreamingHtmlPreviewStateProps) {
-	const { content, isSuspended = false, onCommittedContentChange } = props
+	const { content, isSuspended = false } = props
 	const [hasPreviewRenderedOnce, setHasPreviewRenderedOnce] = useState(false)
 	const [hasMinLoadingDurationElapsed, setHasMinLoadingDurationElapsed] = useState(false)
-	const [committedContent, setCommittedContent] = useState(content)
+	const [committedContent, setCommittedContent] = useState(() =>
+		resolveStreamingHtmlCommitContent(content),
+	)
 	const loadingTimerRef = useRef<number | null>(null)
 	const readyFrameRef = useRef<number | null>(null)
 	const commitTimerRef = useRef<number | null>(null)
@@ -31,10 +33,6 @@ export function useStreamingHtmlPreviewState(props: UseStreamingHtmlPreviewState
 	useEffect(() => {
 		latestContentRef.current = content
 	}, [content])
-
-	useEffect(() => {
-		onCommittedContentChange?.(committedContent)
-	}, [committedContent, onCommittedContentChange])
 
 	useEffect(() => {
 		suspendedRef.current = isSuspended
@@ -65,21 +63,19 @@ export function useStreamingHtmlPreviewState(props: UseStreamingHtmlPreviewState
 	useEffect(() => {
 		if (isSuspended) return
 
-		const nextContent = content
 		const shouldResetCommittedContent =
-			nextContent.length < committedContent.length ||
-			!nextContent.startsWith(committedContent)
+			content.length < committedContent.length || !content.startsWith(committedContent)
 
 		if (shouldResetCommittedContent) {
 			if (commitTimerRef.current) {
 				window.clearTimeout(commitTimerRef.current)
 				commitTimerRef.current = null
 			}
-			setCommittedContent(nextContent)
+			setCommittedContent(resolveStreamingHtmlCommitContent(content))
 			return
 		}
 
-		if (nextContent === committedContent) {
+		if (content === committedContent) {
 			return
 		}
 
@@ -91,7 +87,8 @@ export function useStreamingHtmlPreviewState(props: UseStreamingHtmlPreviewState
 				return
 			}
 			commitTimerRef.current = null
-			setCommittedContent(latestContentRef.current)
+			// 脚本完整性扫描跟随 96ms 的 iframe 提交节奏执行，避免每个 token 都扫描整段 HTML。
+			setCommittedContent(resolveStreamingHtmlCommitContent(latestContentRef.current))
 		}, HTML_CODE_BLOCK_STREAMING_PREVIEW_COMMIT_INTERVAL)
 	}, [committedContent, content, isSuspended])
 

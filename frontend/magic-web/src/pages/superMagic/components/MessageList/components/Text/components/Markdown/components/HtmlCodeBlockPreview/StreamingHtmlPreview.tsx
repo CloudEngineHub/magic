@@ -21,13 +21,14 @@ export function StreamingHtmlPreview(props: StreamingHtmlPreviewProps) {
 		onSuggestedCardWidthChange,
 	} = props
 	const { committedContent, handlePreviewRenderReady, isPreviewLoading } =
-		useStreamingHtmlPreviewState({ content, isSuspended, onCommittedContentChange })
+		useStreamingHtmlPreviewState({ content, isSuspended })
 
 	return (
 		<HtmlCodeBlockDesktopPreview
 			resolvedCode={committedContent}
 			isPreviewLoading={isPreviewLoading}
 			onPreviewRenderReady={handlePreviewRenderReady}
+			onPreviewContentCommitted={onCommittedContentChange}
 			availableWidth={availableWidth}
 			onSuggestedCardWidthChange={onSuggestedCardWidthChange}
 			previewLayout={previewLayout}

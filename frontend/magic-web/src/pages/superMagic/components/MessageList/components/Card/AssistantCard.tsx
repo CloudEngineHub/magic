@@ -290,7 +290,7 @@ export function withAssistantCard<
 							<StatusBadge status={messageNode?.status} />
 						</div>
 						{messageNode?.status === "finished" && (
-							<div className="mt-[6px] flex items-center justify-between gap-[4px]">
+							<div className="mt-[6px] mb-[6px] flex items-center justify-between gap-[4px]">
 								<div className="flex items-center gap-1"></div>
 
 								<div className="flex items-center gap-1">

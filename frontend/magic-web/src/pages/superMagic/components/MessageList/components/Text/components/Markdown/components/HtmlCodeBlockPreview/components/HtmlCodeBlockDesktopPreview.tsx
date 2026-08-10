@@ -41,6 +41,7 @@ interface HtmlCodeBlockDesktopPreviewProps {
 	resetMetricsOnCodeChange?: boolean
 	containIframeOverscroll?: boolean
 	hideVerticalScroll?: boolean
+	onPreviewContentCommitted?: (content: string) => void
 	PreviewRendererComponent?: ComponentType<HtmlPreviewRendererProps>
 }
 
@@ -56,13 +57,13 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 		resetMetricsOnCodeChange = true,
 		containIframeOverscroll = true,
 		hideVerticalScroll = true,
+		onPreviewContentCommitted,
 		PreviewRendererComponent = HtmlPreviewRenderer,
 	} = props
 	const [desktopContentMetrics, setDesktopContentMetrics] =
 		useState<HtmlCodeBlockPreviewContentMetrics | null>(null)
 	const [phoneContentMetrics, setPhoneContentMetrics] =
 		useState<HtmlCodeBlockPreviewContentMetrics | null>(null)
-	const [phoneRuntimeContentWidth, setPhoneRuntimeContentWidth] = useState<number | null>(null)
 	const [isLayoutTransitioning, setIsLayoutTransitioning] = useState(false)
 	const hasInitialDesktopViewportWidth =
 		typeof initialDesktopViewportWidth === "number" && initialDesktopViewportWidth > 0
@@ -129,7 +130,9 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 		intrinsicContentWidthHint ?? 0,
 		HTML_CODE_BLOCK_PREVIEW_PHONE_VIEWPORT_WIDTH,
 	)
-	const phoneLogicalContentWidth = phoneRuntimeContentWidth ?? phoneBaseContentWidth
+	// 手机画布只能由源码里的固有宽度线索决定。iframe 上报的 scrollWidth 可能包含
+	// 百分比伪元素等随 viewport 同步增长的视觉溢出，反向采纳会形成尺寸自激反馈环。
+	const phoneLogicalContentWidth = phoneBaseContentWidth
 	// 只有当确实有垂直溢出且滚动条宽度大于0时，才计算滚动条补偿宽度，
 	// 避免在 overlay scrollbar 等场景里平白把容器再撑宽一截。
 	const phoneScrollbarCompensationWidth =
@@ -153,7 +156,6 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 		if (!resetMetricsOnCodeChange) return
 		setDesktopContentMetrics(null)
 		setPhoneContentMetrics(null)
-		setPhoneRuntimeContentWidth(null)
 		desktopInitialAvailableWidthRef.current = null
 		setShouldUseInitialDesktopViewportWidth(
 			previewLayout === "desktop" && hasInitialDesktopViewportWidth,
@@ -203,24 +205,6 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 			setShouldUseInitialDesktopViewportWidth(false)
 		}
 	}, [availableWidth, previewLayout, shouldUseInitialDesktopViewportWidth])
-
-	useEffect(() => {
-		const nextContentWidth =
-			typeof phoneContentMetrics?.contentWidth === "number" &&
-			phoneContentMetrics.contentWidth > 0
-				? phoneContentMetrics.contentWidth
-				: null
-
-		if (!nextContentWidth || nextContentWidth <= phoneBaseContentWidth) return
-
-		setPhoneRuntimeContentWidth((previousWidth) => {
-			const nextStableWidth = Math.max(
-				previousWidth ?? phoneBaseContentWidth,
-				nextContentWidth,
-			)
-			return previousWidth === nextStableWidth ? previousWidth : nextStableWidth
-		})
-	}, [phoneBaseContentWidth, phoneContentMetrics?.contentWidth])
 
 	const commitLayoutMetrics = useCallback(
 		(
@@ -410,6 +394,7 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 								key={previewLayout}
 								content={resolvedCode}
 								onReady={onPreviewRenderReady}
+								onContentCommitted={onPreviewContentCommitted}
 								onMetrics={
 									previewLayout === "phone"
 										? handlePhoneContentMetrics
