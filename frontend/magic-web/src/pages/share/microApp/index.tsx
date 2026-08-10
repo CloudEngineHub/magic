@@ -316,6 +316,8 @@ export default function MicroAppSharePage() {
 		shareData,
 		resourceId,
 		coverUrl,
+		fullScreen,
+		displayModeResolved,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,
@@ -394,11 +396,13 @@ export default function MicroAppSharePage() {
 			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
 			data-testid="micro-app-share-page"
 		>
-			<MicroAppShareHeader
-				appName={displayAppName}
-				showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
-				onOpenPermissionManager={handleOpenPermissionManager}
-			/>
+			{displayModeResolved && !fullScreen ? (
+				<MicroAppShareHeader
+					appName={displayAppName}
+					showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
+					onOpenPermissionManager={handleOpenPermissionManager}
+				/>
+			) : null}
 			<main className="min-h-0 flex-1 overflow-hidden">
 				{loading ? (
 					<div

@@ -9,12 +9,13 @@ namespace Dtyq\SuperMagic\Tests\Unit\Application\SuperAgent\Service;
 
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
-use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
-use App\Domain\File\Service\FileDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Infrastructure\Util\Context\RequestContext;
 use Dtyq\SuperMagic\Application\Share\Service\ResourceShareAppService;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\MicroAppProjectAppService;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\MicroAppProjectResponseFormatter;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\MicroAppShareConfig;
+use Dtyq\SuperMagic\Application\SuperAgent\Service\PublishedMicroAppResolver;
 use Dtyq\SuperMagic\Application\SuperAgent\Service\ProjectAppService;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MicroAppEntity;
@@ -74,8 +75,10 @@ class MicroAppProjectAppServiceTest extends TestCase
                 $this->createMock(MagicDepartmentUserRepositoryInterface::class)
             ),
             $this->createMock(PackageFilterInterface::class),
-            new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)),
             $this->createMock(EventDispatcherInterface::class),
+            $this->createMock(PublishedMicroAppResolver::class),
+            $this->createMock(MicroAppProjectResponseFormatter::class),
+            new MicroAppShareConfig(),
         );
 
         self::assertSame([

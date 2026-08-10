@@ -113,6 +113,8 @@ export interface PublishMicroAppProjectBody {
 	target_ids?: MicroAppPublishTarget[]
 	password?: string
 	cover_file_key?: string | null
+	/** 发布访问页是否使用全屏显示（后端映射为分享配置 pure_mode）。 */
+	pure_mode?: boolean
 }
 
 export interface PublishedMicroAppProjectItem {
@@ -131,6 +133,7 @@ export interface PublishedMicroAppProjectItem {
 	password?: string
 	cover_file_key?: string | null
 	cover_url?: string
+	pure_mode?: boolean
 	publish_status?: "published" | "unpublished" | string
 }
 
@@ -3201,6 +3204,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			resource_id: string
 			share_code: string
 			cover_url?: string
+			pure_mode?: boolean
 		}>(genRequestUrl("/api/v1/share/micro-apps/${appId}", { appId }), {
 			parseJsonLargeIntAsString: true,
 		})

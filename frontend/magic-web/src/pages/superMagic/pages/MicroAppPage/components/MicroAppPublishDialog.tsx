@@ -110,20 +110,31 @@ function MicroAppPublishDialog({
 				if (ignore) return
 
 				let nextItem = detail.publish || null
-				if (nextItem?.share_type === ShareType.PasswordProtected && nextItem.share_code) {
+				const shareCode = nextItem?.share_code
+				const needsShareSettings = Boolean(
+					shareCode &&
+					(nextItem.share_type === ShareType.PasswordProtected ||
+						nextItem.pure_mode === undefined),
+				)
+				if (needsShareSettings && shareCode && nextItem) {
 					try {
-						// 微应用详情不返回明文密码，沿用分享设置接口补充创建者可见的密码。
+						// 微应用详情不返回分享页显示配置和明文密码，沿用分享设置接口补充创建者可见的设置。
 						const settingsResponse = await SuperMagicApi.getShareInfoByCode({
-							code: nextItem.share_code,
+							code: shareCode,
 						})
 						if (ignore) return
 						const password =
 							typeof settingsResponse?.password === "string"
 								? settingsResponse.password.trim()
 								: ""
-						if (password) nextItem = { ...nextItem, password }
+						nextItem = {
+							...nextItem,
+							...(password ? { password } : {}),
+							pure_mode:
+								settingsResponse?.extra?.pure_mode ?? nextItem.pure_mode ?? false,
+						}
 					} catch (error) {
-						console.error("Failed to load micro app share password:", error)
+						console.error("Failed to load micro app share settings:", error)
 					}
 				}
 				const nextFormState = createFormStateFromPublishedItem(
@@ -237,6 +248,10 @@ function MicroAppPublishDialog({
 		setFormState((prev) => ({ ...prev, password: generateSharePassword() }))
 	}, [])
 
+	const handleFullScreenChange = useCallback((fullScreen: boolean) => {
+		setFormState((prev) => ({ ...prev, fullScreen }))
+	}, [])
+
 	const resolvePublishedPasswordForCopy = useCallback((): string | null => {
 		if (publishedItem?.share_type !== ShareType.PasswordProtected) return ""
 
@@ -318,6 +333,7 @@ function MicroAppPublishDialog({
 				app_name: savedAppName,
 				cover_file_key: savedCoverFileKey,
 				cover_url: savedCoverUrl,
+				pure_mode: formState.fullScreen,
 				share_type: savedShareType,
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
@@ -403,6 +419,7 @@ function MicroAppPublishDialog({
 			onCoverChange={handleCoverChange}
 			onCoverFile={handleCoverFile}
 			onClearCover={handleClearCover}
+			onFullScreenChange={handleFullScreenChange}
 			onShareTypeChange={handleShareTypeChange}
 			onShareRangeChange={handleShareRangeChange}
 			onTargetsChange={handleTargetsChange}

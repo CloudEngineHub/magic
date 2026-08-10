@@ -23,7 +23,11 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
 
     public ?string $coverFileKey = null;
 
+    public bool $pureMode = false;
+
     private bool $coverFileKeyProvided = false;
+
+    private bool $pureModeProvided = false;
 
     public function getProjectName(): string
     {
@@ -92,6 +96,22 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
         return $this->coverFileKeyProvided;
     }
 
+    public function setPureMode(bool|int|string|null $pureMode): void
+    {
+        $this->pureModeProvided = true;
+        $this->pureMode = filter_var($pureMode, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    public function isPureMode(): bool
+    {
+        return $this->pureMode;
+    }
+
+    public function hasPureMode(): bool
+    {
+        return $this->pureModeProvided;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -103,6 +123,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
             'target_ids.*.target_id' => 'required_with:target_ids|string|max:64',
             'password' => 'required_if:share_type,5|nullable|string|min:4|max:32',
             'cover_file_key' => 'nullable|string|max:512',
+            'pure_mode' => 'nullable|boolean',
         ];
     }
 

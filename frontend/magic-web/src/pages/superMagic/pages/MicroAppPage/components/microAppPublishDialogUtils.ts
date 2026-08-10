@@ -16,6 +16,7 @@ export interface MicroAppPublishFormState {
 	password: string
 	coverFileKey?: string | null
 	coverUrl: string
+	fullScreen: boolean
 }
 
 export type MicroAppPublishValidationError =
@@ -47,6 +48,7 @@ export function createDefaultMicroAppPublishFormState(
 		password: generateSharePassword(),
 		coverFileKey: undefined,
 		coverUrl: "",
+		fullScreen: false,
 	}
 }
 
@@ -63,6 +65,7 @@ export function buildMicroAppPublishPayload(
 	if (formState.coverFileKey !== undefined) {
 		payload.cover_file_key = formState.coverFileKey
 	}
+	payload.pure_mode = formState.fullScreen
 
 	if (shareType === ShareType.Organization) {
 		payload.share_range = formState.shareRange
@@ -121,6 +124,7 @@ export function createFormStateFromPublishedItem(
 			item?.password || (item?.publish_status === "published" ? "" : generateSharePassword()),
 		coverFileKey: item?.cover_file_key ?? undefined,
 		coverUrl: item?.cover_url || "",
+		fullScreen: item?.pure_mode === true,
 	}
 }
 
@@ -139,6 +143,7 @@ export function hasMicroAppPublishFormChanged(
 	if (formState.shareType !== publishedFormState.shareType) return true
 	if ((formState.coverFileKey ?? null) !== (publishedFormState.coverFileKey ?? null)) return true
 	if (formState.coverUrl.trim() !== publishedFormState.coverUrl.trim()) return true
+	if (formState.fullScreen !== publishedFormState.fullScreen) return true
 
 	if (formState.shareType === ShareType.Organization) {
 		if (formState.shareRange !== publishedFormState.shareRange) return true
