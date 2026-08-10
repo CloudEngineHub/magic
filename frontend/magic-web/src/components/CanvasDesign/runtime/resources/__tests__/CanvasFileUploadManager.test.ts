@@ -9,7 +9,7 @@ import {
 } from "../../../public/magic-types"
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
-import { ElementTypeEnum, type LayerElement } from "../../document/types"
+import { ElementTypeEnum, type LayerElement, type VideoElement } from "../../document/types"
 import { ImageElement } from "../../elements/image/ImageElement"
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
@@ -259,6 +259,152 @@ describe("CanvasFileUploadManager image replacement", () => {
 	})
 })
 
+describe("CanvasFileUploadManager video replacement", () => {
+	it("writes an uploaded video to the Content captured before the async upload", async () => {
+		let current: VideoElement = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			x: 0,
+			y: 0,
+			width: 640,
+			height: 360,
+			contents: [
+				{
+					contentId: "video-content-1",
+					src: "./videos/old-1.mp4",
+					status: GenerationStatus.Completed,
+				},
+				{
+					contentId: "video-content-2",
+					src: "./videos/old-2.mp4",
+					status: GenerationStatus.Completed,
+				},
+			],
+			activeContentId: "video-content-1",
+			mainContentId: "video-content-1",
+		}
+		const update = vi.fn((_elementId: string, patch: Partial<VideoElement>) => {
+			current = { ...current, ...patch }
+		})
+		const primeCache = vi.fn()
+		const disable = vi.fn()
+		const enable = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		let resolveUpload: ((results: UploadFileResponse[]) => void) | undefined
+		const uploadDirect = vi.fn(
+			() =>
+				new Promise<UploadFileResponse[]>((resolve) => {
+					resolveUpload = resolve
+				}),
+		)
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: { disable, enable, recordHistoryImmediate },
+				videoResourceManager: { primeCache },
+			},
+			uploadDirect,
+		})
+		const uploadResult: UploadFileResponse = {
+			path: "./videos/new.mp4",
+			src: "https://example.test/new.mp4",
+			fileName: "new.mp4",
+		}
+
+		const replacement = manager.replaceVideoElement({
+			elementId: "video-1",
+			file: new File(["new"], "new.mp4", { type: "video/mp4" }),
+			contentId: "video-content-1",
+		})
+		current = { ...current, activeContentId: "video-content-2" }
+		resolveUpload?.([uploadResult])
+
+		await expect(replacement).resolves.toBe(true)
+		expect(update).toHaveBeenCalledWith(
+			"video-1",
+			{
+				contents: [
+					{
+						contentId: "video-content-1",
+						src: "./videos/new.mp4",
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					},
+					{
+						contentId: "video-content-2",
+						src: "./videos/old-2.mp4",
+						status: GenerationStatus.Completed,
+					},
+				],
+			},
+			{ silent: false },
+		)
+		expect(primeCache).toHaveBeenCalledWith("./videos/new.mp4", uploadResult)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("replaces video from a supported project path and rejects non-video paths", () => {
+		const current = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			contents: [
+				{
+					contentId: "video-content-1",
+					src: "./videos/old.mp4",
+					status: GenerationStatus.Failed,
+					errorMessage: "failed",
+				},
+			],
+			activeContentId: "video-content-1",
+			mainContentId: "video-content-1",
+		}
+		const update = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+			},
+		})
+
+		expect(
+			manager.replaceVideoElementFromProject({
+				elementId: "video-1",
+				path: "/videos/project.webm",
+				contentId: "video-content-1",
+			}),
+		).toBe(true)
+		expect(update).toHaveBeenCalledWith(
+			"video-1",
+			{
+				contents: [
+					{
+						contentId: "video-content-1",
+						src: "/videos/project.webm",
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					},
+				],
+			},
+			{ silent: false },
+		)
+		expect(() =>
+			manager.replaceVideoElementFromProject({
+				elementId: "video-1",
+				path: "/images/not-video.png",
+				contentId: "video-content-1",
+			}),
+		).toThrow("不支持的视频格式")
+	})
+})
+
 describe("CanvasFileUploadManager audio element uploads", () => {
 	it("creates a temporary audio placeholder before upload and converts it after success", async () => {
 		let uploadContext:
@@ -494,7 +640,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(update).toHaveBeenCalledWith(
 			"audio-1",
-			{ src: "./audios/new.mp3" },
+			{
+				contents: [{ contentId: "content-1", src: "./audios/new.mp3" }],
+			},
 			{ silent: false },
 		)
 		expect(primeCache).toHaveBeenCalledWith("./audios/new.mp3", uploadResult)
@@ -549,7 +697,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(update).toHaveBeenCalledWith(
 			"audio-empty",
-			{ src: "./audios/voice.mp3" },
+			{
+				contents: [{ contentId: "content-1", src: "./audios/voice.mp3" }],
+			},
 			{ silent: false },
 		)
 		expect(primeCache).toHaveBeenCalledWith("./audios/voice.mp3", uploadResult)
@@ -636,7 +786,9 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(update).toHaveBeenCalledWith(
 			"audio-1",
-			{ src: "/audios/project.m4a" },
+			{
+				contents: [{ contentId: "content-1", src: "/audios/project.m4a" }],
+			},
 			{ silent: false },
 		)
 		expect(release).toHaveBeenCalledWith("audio-1")
@@ -683,13 +835,67 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 
 		expect(update).toHaveBeenCalledWith(
 			"audio-empty",
-			{ src: "/audios/project.m4a" },
+			{
+				contents: [{ contentId: "content-1", src: "/audios/project.m4a" }],
+			},
 			{ silent: false },
 		)
 		expect(release).not.toHaveBeenCalled()
 		expect(invalidatePath).not.toHaveBeenCalled()
 		expect(invalidateAudioLoadRequest).not.toHaveBeenCalled()
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("replaces the captured audio Content without retargeting the active Content", () => {
+		const current = {
+			id: "audio-1",
+			type: ElementTypeEnum.Audio,
+			contents: [
+				{ contentId: "audio-content-1", src: "./audios/old-1.mp3" },
+				{ contentId: "audio-content-2", src: "./audios/old-2.mp3" },
+			],
+			activeContentId: "audio-content-2",
+			mainContentId: "audio-content-1",
+		}
+		const update = vi.fn()
+		const release = vi.fn()
+		const invalidatePath = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+				audioResourceManager: {},
+				audioPlaybackManager: { release },
+				audioWaveformManager: { invalidatePath },
+				visibilityManager: { invalidateAudioLoadRequest: vi.fn() },
+			},
+		})
+
+		expect(
+			manager.replaceAudioElementFromProject({
+				elementId: "audio-1",
+				path: "/audios/project.mp3",
+				contentId: "audio-content-1",
+			}),
+		).toBe(true)
+		expect(update).toHaveBeenCalledWith(
+			"audio-1",
+			{
+				contents: [
+					{ contentId: "audio-content-1", src: "/audios/project.mp3" },
+					{ contentId: "audio-content-2", src: "./audios/old-2.mp3" },
+				],
+			},
+			{ silent: false },
+		)
+		expect(release).not.toHaveBeenCalled()
+		expect(invalidatePath).not.toHaveBeenCalled()
 	})
 
 	it("rejects a non-audio project path before changing the element", () => {

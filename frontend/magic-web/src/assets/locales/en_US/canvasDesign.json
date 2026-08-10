@@ -558,6 +558,8 @@
 		"generating": "Generating...",
 		"loadError": "Failed to load video",
 		"loading": "Loading...",
+		"replaceFailed": "Failed to replace video. Please try again.",
+		"replaceUnsupported": "Unsupported video format",
 		"retryEditing": "Please edit your video generation request again",
 		"uploading": "Uploading..."
 	},

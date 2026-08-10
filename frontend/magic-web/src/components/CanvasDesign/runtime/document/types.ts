@@ -141,6 +141,10 @@ export const ElementTypeEnum = {
 /** 元素类型 */
 export type ElementType = (typeof ElementTypeEnum)[keyof typeof ElementTypeEnum]
 
+/** 可直接替换资源的画布媒体元素类型。 */
+export type MediaElementType =
+	typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video | typeof ElementTypeEnum.Audio
+
 /** 边框位置类型 */
 export type StrokePosition = "inside" | "center" | "outside"
 

@@ -5,12 +5,14 @@ import {
 	type UploadFileResponse,
 	type UploadFile,
 } from "../../../public/magic-types"
-import type {
-	AudioElement as AudioElementData,
-	ImageElement as ImageElementData,
-	VideoElement as VideoElementData,
+import {
+	ElementTypeEnum,
+	type AudioElement as AudioElementData,
+	type CanvasFileElement,
+	type ImageElement as ImageElementData,
+	type MediaElementType,
+	type VideoElement as VideoElementData,
 } from "../../document/types"
-import { ElementTypeEnum } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import {
 	generateElementId,
@@ -21,6 +23,7 @@ import {
 	isAudioFile,
 	SUPPORTED_IMAGE_EXTENSIONS,
 	SUPPORTED_AUDIO_EXTENSIONS,
+	SUPPORTED_VIDEO_EXTENSIONS,
 	validateFile,
 } from "../../shared/ids"
 import {
@@ -30,6 +33,7 @@ import {
 } from "../../shared/path/canvasResourcePath"
 import {
 	getActiveContent,
+	getContentById,
 	isImageElementContent,
 	updateContent,
 	updateImageContent,
@@ -93,6 +97,13 @@ export interface UploadFileElementOptions {
 export interface ReplaceAudioElementOptions {
 	elementId: string
 	file: File
+	contentId?: string | null
+}
+
+export interface ReplaceVideoElementOptions {
+	elementId: string
+	file: File
+	contentId?: string | null
 }
 
 export interface ReplaceImageElementOptions {
@@ -110,6 +121,27 @@ export interface ReplaceImageElementFromProjectOptions {
 export interface ReplaceAudioElementFromProjectOptions {
 	elementId: string
 	path: string
+	contentId?: string | null
+}
+
+export interface ReplaceVideoElementFromProjectOptions {
+	elementId: string
+	path: string
+	contentId?: string | null
+}
+
+export interface ReplaceMediaElementOptions {
+	elementId: string
+	mediaType: MediaElementType
+	file: File
+	contentId: string | null
+}
+
+export interface ReplaceMediaElementFromProjectOptions {
+	elementId: string
+	mediaType: MediaElementType
+	path: string
+	contentId: string | null
 }
 
 /**
@@ -1013,6 +1045,30 @@ export class CanvasFileUploadManager {
 		return isImageElementContent(data) && data.activeContentId === targetContentId
 	}
 
+	/** 统一媒体替换入口，避免工具栏按媒体类型分叉上传流程。 */
+	public replaceMediaElement(options: ReplaceMediaElementOptions): Promise<boolean> {
+		switch (options.mediaType) {
+			case ElementTypeEnum.Image:
+				return this.replaceImageElement(options)
+			case ElementTypeEnum.Video:
+				return this.replaceVideoElement(options)
+			case ElementTypeEnum.Audio:
+				return this.replaceAudioElement(options)
+		}
+	}
+
+	/** 统一项目文件替换入口，供来源菜单复用。 */
+	public replaceMediaElementFromProject(options: ReplaceMediaElementFromProjectOptions): boolean {
+		switch (options.mediaType) {
+			case ElementTypeEnum.Image:
+				return this.replaceImageElementFromProject(options)
+			case ElementTypeEnum.Video:
+				return this.replaceVideoElementFromProject(options)
+			case ElementTypeEnum.Audio:
+				return this.replaceAudioElementFromProject(options)
+		}
+	}
+
 	public async replaceAudioElement(options: ReplaceAudioElementOptions): Promise<boolean> {
 		const validation = validateFile(options.file)
 		if (!validation.valid || !isAudioFile(options.file)) {
@@ -1023,13 +1079,21 @@ export class CanvasFileUploadManager {
 			)
 		}
 
-		const current = this.canvas.elementManager.getElementData(options.elementId)
-		if (!current || current.type !== ElementTypeEnum.Audio) return false
+		const target = this.getReplaceableMediaTarget(
+			options.elementId,
+			ElementTypeEnum.Audio,
+			options.contentId ?? null,
+		)
+		if (!target) return false
 		const [uploadResult] = await this.uploadDirect([options.file])
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
 
 		this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
-		return this.applyAudioElementSourceReplacement(options.elementId, uploadResult.path)
+		return this.applyAudioElementSourceReplacement(
+			options.elementId,
+			uploadResult.path,
+			target.contentId,
+		)
 	}
 
 	public replaceAudioElementFromProject(options: ReplaceAudioElementFromProjectOptions): boolean {
@@ -1040,14 +1104,69 @@ export class CanvasFileUploadManager {
 					"不支持的音频格式",
 			)
 		}
-		return this.applyAudioElementSourceReplacement(options.elementId, options.path)
+		return this.applyAudioElementSourceReplacement(
+			options.elementId,
+			options.path,
+			options.contentId ?? null,
+		)
 	}
 
-	private applyAudioElementSourceReplacement(elementId: string, nextPath: string): boolean {
-		const latest = this.canvas.elementManager.getElementData(elementId)
-		if (!latest || latest.type !== ElementTypeEnum.Audio) return false
-		const previousPath = getActiveContent(latest)?.src
-		if (previousPath) {
+	public async replaceVideoElement(options: ReplaceVideoElementOptions): Promise<boolean> {
+		const validation = validateFile(options.file)
+		if (!validation.valid || !isVideoFile(options.file)) {
+			throw new Error(
+				validation.error ||
+					(this.canvas.t?.("video.replaceUnsupported", "不支持的视频格式") ??
+						"不支持的视频格式"),
+			)
+		}
+
+		const target = this.getReplaceableMediaTarget(
+			options.elementId,
+			ElementTypeEnum.Video,
+			options.contentId ?? null,
+		)
+		if (!target) return false
+		const [uploadResult] = await this.uploadDirect([options.file])
+		if (!uploadResult) throw new Error("Upload failed: no result returned")
+
+		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
+		return this.applyVideoElementSourceReplacement(
+			options.elementId,
+			uploadResult.path,
+			target.contentId,
+		)
+	}
+
+	public replaceVideoElementFromProject(options: ReplaceVideoElementFromProjectOptions): boolean {
+		const lowerPath = options.path.toLowerCase().split(/[?#]/, 1)[0] ?? ""
+		if (!SUPPORTED_VIDEO_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))) {
+			throw new Error(
+				this.canvas.t?.("video.replaceUnsupported", "不支持的视频格式") ??
+					"不支持的视频格式",
+			)
+		}
+		return this.applyVideoElementSourceReplacement(
+			options.elementId,
+			options.path,
+			options.contentId ?? null,
+		)
+	}
+
+	private applyAudioElementSourceReplacement(
+		elementId: string,
+		nextPath: string,
+		targetContentId: string | null,
+	): boolean {
+		const target = this.getReplaceableMediaTarget(
+			elementId,
+			ElementTypeEnum.Audio,
+			targetContentId,
+		)
+		if (!target) return false
+
+		const previousPath = target.previousPath
+		if (previousPath && target.isActive) {
 			if (
 				this.canvas.audioResourceManager.getResourceIdentity(previousPath) ===
 				this.canvas.audioResourceManager.getResourceIdentity(nextPath)
@@ -1067,15 +1186,93 @@ export class CanvasFileUploadManager {
 		const historyManager = this.canvas.historyManager
 		historyManager.disable()
 		try {
-			// ElementManager routes Content business fields into the active Content.
-			// Keep the replacement as a narrow patch so element identity and unrelated
-			// element fields remain owned by the runtime document layer.
-			this.canvas.elementManager.update(elementId, { src: nextPath }, { silent: false })
+			const next = updateContent(target.data as never, target.contentId, {
+				src: nextPath,
+			} as never) as CanvasFileElement
+			if (next === target.data) return false
+			// 直接提交完整 contents，确保异步替换仍写入点击时捕获的 Content。
+			this.canvas.elementManager.update(
+				elementId,
+				{ contents: next.contents },
+				{ silent: false },
+			)
 		} finally {
 			historyManager.enable()
 		}
 		historyManager.recordHistoryImmediate()
 		return true
+	}
+
+	private applyVideoElementSourceReplacement(
+		elementId: string,
+		nextPath: string,
+		targetContentId: string | null,
+	): boolean {
+		const target = this.getReplaceableMediaTarget(
+			elementId,
+			ElementTypeEnum.Video,
+			targetContentId,
+		)
+		if (!target) return false
+
+		const historyManager = this.canvas.historyManager
+		historyManager.disable()
+		try {
+			const next = updateContent(target.data as never, target.contentId, {
+				src: nextPath,
+				status: GenerationStatus.Completed,
+				errorMessage: undefined,
+			} as never) as CanvasFileElement
+			if (next === target.data) return false
+			this.canvas.elementManager.update(
+				elementId,
+				{ contents: next.contents },
+				{ silent: false },
+			)
+		} finally {
+			historyManager.enable()
+		}
+		historyManager.recordHistoryImmediate()
+		return true
+	}
+
+	private getReplaceableMediaTarget(
+		elementId: string,
+		mediaType: MediaElementType,
+		targetContentId: string | null,
+	): {
+		data: CanvasFileElement
+		contentId: string
+		isActive: boolean
+		previousPath?: string
+	} | null {
+		const data = this.canvas.elementManager.getElementData(elementId)
+		if (
+			!data ||
+			(data.type !== ElementTypeEnum.Image &&
+				data.type !== ElementTypeEnum.Video &&
+				data.type !== ElementTypeEnum.Audio) ||
+			data.type !== mediaType
+		) {
+			return null
+		}
+
+		const contentId = targetContentId ?? getActiveContent(data)?.contentId
+		if (!contentId) return null
+		const content = getContentById(data, contentId)
+		if (!content) return null
+		const status = "status" in content ? content.status : undefined
+		if (status === GenerationStatus.Pending || status === GenerationStatus.Processing) {
+			return null
+		}
+
+		return {
+			data,
+			contentId,
+			isActive: getActiveContent(data)?.contentId === contentId,
+			previousPath:
+				"src" in content && typeof content.src === "string" ? content.src : undefined,
+		}
 	}
 
 	public async uploadRemoteFileElement(

@@ -172,6 +172,21 @@ export interface CanvasEventMap {
 		elementId: string
 		status: "idle" | "uploading" | "error"
 	}
+	/** 媒体元素统一替换入口；contentId 在点击时捕获，避免异步上传误写其他 Content。 */
+	"element:media:replaceClick": {
+		elementId: string
+		mediaType: "image" | "video" | "audio"
+		contentId: string | null
+		anchorElement?: HTMLElement
+		anchorRect?: { left: number; top: number; width: number; height: number }
+		clientX?: number
+		clientY?: number
+	}
+	"element:media:replaceStateChanged": {
+		elementId: string
+		mediaType: "image" | "video" | "audio"
+		status: "idle" | "uploading" | "error"
+	}
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件
