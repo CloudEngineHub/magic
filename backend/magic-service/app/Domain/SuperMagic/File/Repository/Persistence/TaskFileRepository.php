@@ -415,7 +415,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     ): array {
         $query = $this->model::query()
             ->select([
-                'file_id', 'task_id', 'project_id', 'topic_id', 'parent_id',
+                'file_id', 'user_id', 'organization_code', 'space_type',
+                'task_id', 'project_id', 'topic_id', 'parent_id',
                 'file_type', 'file_name', 'file_extension', 'file_key', 'file_size',
                 'is_hidden', 'is_directory', 'sort', 'source',
                 'updated_at', 'display_config', 'metadata',
