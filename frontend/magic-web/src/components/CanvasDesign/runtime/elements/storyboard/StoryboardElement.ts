@@ -44,6 +44,10 @@ interface StoryboardControlMetadata {
 
 type CreatedStoryboardElementData = StoryboardElementData
 
+/** 与图片元素“再次生成”按钮使用的 Lucide `RotateCcw` 图标保持一致。 */
+const LUCIDE_ROTATE_CCW_PATH_D = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5"
+const LUCIDE_ICON_VIEWBOX_SIZE = 24
+
 function formatModelName(modelId?: string): string {
 	if (!modelId) return "-"
 	return modelId
@@ -565,11 +569,11 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			...controls.durationRect,
 			fill: STORYBOARD_CONFIG.BACKGROUND,
 			stroke: STORYBOARD_CONFIG.BORDER,
-			strokeWidth: Math.max(1, controls.scale),
+			strokeWidth: layout.strokeWidth,
 			cornerRadius: 8 * controls.scale,
 			listening: false,
 			perfectDrawEnabled: false,
-			name: "storyboard-control-background",
+			name: "storyboard-duration-background storyboard-control-background",
 		})
 		durationVisual.add(
 			durationBackground,
@@ -596,6 +600,24 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		})
 
 		const generateVisual = new Konva.Group({ listening: false })
+		const generateText = generated
+			? this.getText("storyboard.regenerate", "再次生成")
+			: this.getText("storyboard.generate", "生成")
+		const generateFontSize = 16 * controls.scale
+		const generateTextNode = new Konva.Text({
+			x: controls.generateRect.x,
+			y: controls.generateRect.y,
+			text: generateText,
+			align: "center",
+			verticalAlign: "middle",
+			fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
+			fontSize: generateFontSize,
+			fontStyle: "bold",
+			fill: STORYBOARD_CONFIG.DISABLED_TEXT,
+			listening: false,
+			perfectDrawEnabled: false,
+			name: "storyboard-control-text",
+		})
 		generateVisual.add(
 			new Konva.Rect({
 				...controls.generateRect,
@@ -605,25 +627,45 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				perfectDrawEnabled: false,
 				name: "storyboard-control-background",
 			}),
-			new Konva.Text({
-				...controls.generateRect,
-				text: generated
-					? `↻ ${this.getText("storyboard.regenerate", "重新生成")}`
-					: this.getText("storyboard.generate", "生成"),
-				align: "center",
-				verticalAlign: "middle",
-				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: 16 * controls.scale,
-				fontStyle: "bold",
-				fill: STORYBOARD_CONFIG.DISABLED_TEXT,
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-text",
-			}),
 		)
+		if (generated) {
+			const iconSize = 14 * controls.scale
+			const iconGap = 6 * controls.scale
+			const contentWidth = iconSize + iconGap + generateTextNode.width()
+			const contentX =
+				controls.generateRect.x + (controls.generateRect.width - contentWidth) / 2
+			generateTextNode.setAttrs({
+				x: contentX + iconSize + iconGap,
+				width: generateTextNode.width(),
+				height: controls.generateRect.height,
+			})
+			generateVisual.add(
+				new Konva.Path({
+					x: contentX,
+					y: controls.generateRect.y + (controls.generateRect.height - iconSize) / 2,
+					data: LUCIDE_ROTATE_CCW_PATH_D,
+					scaleX: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
+					scaleY: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
+					stroke: STORYBOARD_CONFIG.DISABLED_TEXT,
+					strokeWidth: 2,
+					lineCap: "round",
+					lineJoin: "round",
+					fillEnabled: false,
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-generate-again-icon",
+				}),
+			)
+		} else {
+			generateTextNode.setAttrs({
+				width: controls.generateRect.width,
+				height: controls.generateRect.height,
+			})
+		}
+		generateVisual.add(generateTextNode)
 		group.add(generateVisual)
 		this.addControlHit(group, {
-			action: { type: "generate-shot", shotId: shot.id, disabled: true },
+			action: { type: "generate-shot", shotId: shot.id },
 			kind: "generate",
 			visualNode: generateVisual,
 			baseBounds: controls.generateRect,
@@ -816,7 +858,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				cornerRadius: footer.cornerRadius,
 				listening: false,
 				perfectDrawEnabled: false,
-				name: "storyboard-generate-all",
+				name: "storyboard-generate-all storyboard-control-background",
 			}),
 			new Konva.Text({
 				...footer.generateAllRect,
@@ -890,6 +932,8 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			Konva.Text | undefined
 		const suffix = metadata.visualNode.findOne(".storyboard-control-suffix") as
 			Konva.Shape | undefined
+		const generateAgainIcon = metadata.visualNode.findOne(".storyboard-generate-again-icon") as
+			Konva.Path | undefined
 		if (!background) return
 
 		switch (metadata.kind) {
@@ -980,9 +1024,13 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				)
 				break
 			case "generate":
-				if ("disabled" in metadata.action && metadata.action.disabled) {
+				if (
+					state === "disabled" ||
+					("disabled" in metadata.action && metadata.action.disabled)
+				) {
 					background.fill(STORYBOARD_CONFIG.DISABLED_BACKGROUND)
 					text?.fill(STORYBOARD_CONFIG.DISABLED_TEXT)
+					generateAgainIcon?.stroke(STORYBOARD_CONFIG.DISABLED_TEXT)
 					break
 				}
 				background.fill(
@@ -993,6 +1041,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 							: STORYBOARD_CONFIG.ACCENT,
 				)
 				text?.fill("#FFFFFF")
+				generateAgainIcon?.stroke("#FFFFFF")
 				break
 		}
 	}

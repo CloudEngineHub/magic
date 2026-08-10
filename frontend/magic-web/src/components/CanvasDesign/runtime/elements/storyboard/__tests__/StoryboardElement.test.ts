@@ -146,8 +146,16 @@ describe("StoryboardElement", () => {
 		)
 
 		const group = element.render()
+		const layout = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+		)
 		const texts = group.find("Text").map((node) => (node as Konva.Text).text())
 		const generateAll = group.findOne(".storyboard-generate-all") as Konva.Rect
+		const shotBackground = group.findOne(".storyboard-shot-shot-1") as Konva.Rect
+		const durationBackground = group.findOne(".storyboard-duration-background") as Konva.Rect
+		const generateAgainIcon = group.findOne(".storyboard-generate-again-icon") as Konva.Path
 		const modelHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
 				{ action?: { type?: string } } | undefined
@@ -163,6 +171,8 @@ describe("StoryboardElement", () => {
 		expect(group.clipFunc()).toEqual(expect.any(Function))
 		expect(group.findOne(".hit-area")).toBeTruthy()
 		expect(group.findOne(".storyboard-shot-shot-1")).toBeTruthy()
+		expect(shotBackground.strokeWidth()).toBe(Math.max(1, layout.scale))
+		expect(durationBackground.strokeWidth()).toBe(shotBackground.strokeWidth())
 		expect(group.find(".storyboard-control-hit").length).toBeGreaterThanOrEqual(8)
 		expect(group.find(".storyboard-control-hit").every((node) => node.listening())).toBe(true)
 		expect(texts).toEqual(
@@ -172,9 +182,14 @@ describe("StoryboardElement", () => {
 				"1K",
 				"分镜 1",
 				"已生成",
+				"再次生成",
 				"4  秒",
 				"雨后的森林小路，人物穿橙色冲锋衣进入画面。",
 			]),
+		)
+		expect(generateAgainIcon).toBeTruthy()
+		expect(generateAgainIcon.data()).toBe(
+			"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5",
 		)
 		expect(group.find(".storyboard-control-suffix")).toHaveLength(3)
 		expect(group.findOne(".storyboard-points-cost")).toBeUndefined()
@@ -188,6 +203,9 @@ describe("StoryboardElement", () => {
 			modelIconGap: 8,
 		})
 		expect(generateAll.listening()).toBe(false)
+		expect(generateAll.name().split(" ")).toEqual(
+			expect.arrayContaining(["storyboard-control-background"]),
+		)
 		expect(generateAll.fill()).toBe(STORYBOARD_CONFIG.ACCENT)
 	})
 

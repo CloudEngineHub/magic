@@ -46,11 +46,13 @@ export type StoryboardFieldOverlayMountOptions = {
 	| {
 			kind: "textarea"
 			placeholder?: string
+			onInput?: (value: string) => void
 	  }
 	| {
 			kind: "number"
 			step?: string
 			min?: string
+			onInput?: (value: string) => void
 	  }
 )
 
@@ -215,6 +217,7 @@ export class StoryboardFieldOverlayHost {
 				this.commit()
 			}
 		})
+		control.addEventListener("input", () => options.onInput?.(control.value))
 		control.addEventListener("blur", () => this.commit())
 		return control
 	}

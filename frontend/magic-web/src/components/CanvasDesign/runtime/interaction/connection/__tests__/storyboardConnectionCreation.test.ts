@@ -39,21 +39,22 @@ function createImageModel(): ImageModelItem {
 
 function createCanvasMock(options?: {
 	originType?: LayerElement["type"]
+	originChildren?: LayerElement[]
 	connectionStatus?: "created" | "invalid"
 	storedConfig?: Record<string, unknown>
 }) {
-	const elements = new Map<string, LayerElement>([
-		[
-			"image-1",
-			{
-				id: "image-1",
-				type: options?.originType ?? ElementTypeEnum.Image,
-				contents: [{ contentId: "image-1-content" }],
-				activeContentId: "image-1-content",
-				mainContentId: "image-1-content",
-			} as LayerElement,
-		],
-	])
+	const originType = options?.originType ?? ElementTypeEnum.Image
+	const originElement = {
+		id: "image-1",
+		type: originType,
+		contents: [{ contentId: "image-1-content" }],
+		activeContentId: "image-1-content",
+		mainContentId: "image-1-content",
+		...(originType === ElementTypeEnum.Frame
+			? { children: options?.originChildren ?? [] }
+			: {}),
+	} as LayerElement
+	const elements = new Map<string, LayerElement>([[originElement.id, originElement]])
 	const create = vi.fn((element: LayerElement) => elements.set(element.id, element))
 	const remove = vi.fn((elementId: string) => elements.delete(elementId))
 	const connectElements = vi.fn(() =>
@@ -96,7 +97,7 @@ describe("storyboard connection creation", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("is available only from the right handle of an image element", () => {
+	it("is available from the right handle of an image or usable Frame", () => {
 		const { canvas } = createCanvasMock()
 
 		expect(
@@ -116,6 +117,30 @@ describe("storyboard connection creation", () => {
 				originElementId: "image-1",
 				originSide: "right",
 			}),
+		).toBe(false)
+		expect(
+			canCreateStoryboardFromConnection(
+				createCanvasMock({
+					originType: ElementTypeEnum.Frame,
+					originChildren: [
+						{
+							id: "frame-image",
+							type: ElementTypeEnum.Image,
+							visible: true,
+							contents: [{ contentId: "frame-image-content" }],
+							activeContentId: "frame-image-content",
+							mainContentId: "frame-image-content",
+						} as LayerElement,
+					],
+				}).canvas,
+				{ originElementId: "image-1", originSide: "right" },
+			),
+		).toBe(true)
+		expect(
+			canCreateStoryboardFromConnection(
+				createCanvasMock({ originType: ElementTypeEnum.Frame }).canvas,
+				{ originElementId: "image-1", originSide: "right" },
+			),
 		).toBe(false)
 	})
 

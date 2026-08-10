@@ -9,7 +9,7 @@ import {
 	type StoryboardGenerationConfig,
 	type StoryboardShot,
 } from "../../document/types"
-import { getActiveContent } from "../../document/elementContent"
+import { getActiveContent, hasProcessingImageContent } from "../../document/elementContent"
 import { STORYBOARD_CONFIG } from "../../elements/storyboard/StoryboardElement.config"
 import { generateUUID } from "../../shared/ids"
 import {
@@ -30,6 +30,7 @@ import {
 } from "./StoryboardFieldOverlayHost"
 import { StoryboardGenerationController } from "./StoryboardGenerationController"
 import { resolveStoryboardRequiredHeight } from "../../elements/storyboard/StoryboardElement.layout"
+import { ImageElement } from "../../elements/image/ImageElement"
 
 export type StoryboardControlState = "idle" | "hover" | "pressed" | "disabled" | "editing"
 
@@ -41,7 +42,7 @@ export type StoryboardControlAction =
 	| { type: "edit-duration"; shotId: string }
 	| { type: "add-shot" }
 	| { type: "delete-shot"; shotId: string }
-	| { type: "generate-shot"; shotId: string; disabled: true }
+	| { type: "generate-shot"; shotId: string; disabled?: boolean }
 	| { type: "generate-all"; disabled?: boolean }
 
 export interface StoryboardSelectPresentation {
@@ -67,6 +68,12 @@ interface StoryboardControlBinding extends StoryboardControlBindingOptions {
 	hovered: boolean
 	activationPending: boolean
 	lastActivationAt: number
+}
+
+interface StoryboardDescriptionDraft {
+	elementId: string
+	shotId: string
+	value: string
 }
 
 const ACTIVATION_DEDUPLICATION_MS = 320
@@ -104,6 +111,7 @@ export class StoryboardInteractionManager {
 	private readonly bindings = new Set<StoryboardControlBinding>()
 	private activeBinding: StoryboardControlBinding | null = null
 	private editingBinding: StoryboardControlBinding | null = null
+	private descriptionDraft: StoryboardDescriptionDraft | null = null
 	private imageModels: ImageModelItem[] | null = null
 	private imageModelsPromise: Promise<ImageModelItem[]> | null = null
 	private eventUnsubscribers: Array<() => void> = []
@@ -171,6 +179,11 @@ export class StoryboardInteractionManager {
 			if (!this.canActivate(binding) || this.isMultiTouchEvent(event)) {
 				binding.activationPending = false
 				return
+			}
+			if (this.editingBinding && this.isGenerationAction(binding.action)) {
+				const nativeEvent = event.evt as Event & { pointerType?: string }
+				const isTouch = event.type.includes("touch") || nativeEvent.pointerType === "touch"
+				if (!isTouch) nativeEvent.preventDefault()
 			}
 
 			stopKonvaEvent(event)
@@ -275,6 +288,14 @@ export class StoryboardInteractionManager {
 				{ silent: true },
 			)
 		}
+		const handleElementUpdated = (payload: {
+			data: { elementId: string; data: LayerElement }
+		}) => {
+			normalizeUpdatedStoryboard(payload)
+			if (payload.data.data.type === ElementTypeEnum.Image) {
+				this.rerenderStoryboardElements()
+			}
+		}
 		const handleElementDeleted = ({ data }: { data: { elementId: string } }) => {
 			if (this.editingBinding?.elementId === data.elementId) cancelEditor()
 			this.rerenderStoryboardElements()
@@ -292,7 +313,13 @@ export class StoryboardInteractionManager {
 				if (data.active) cancelEditor()
 			}),
 			this.canvas.eventEmitter.on("element:deleted", handleElementDeleted),
-			this.canvas.eventEmitter.on("element:updated", normalizeUpdatedStoryboard),
+			this.canvas.eventEmitter.on("element:updated", handleElementUpdated),
+			this.canvas.eventEmitter.on("element:image:generate-submit-started", () => {
+				this.rerenderStoryboardElements()
+			}),
+			this.canvas.eventEmitter.on("element:image:generate-submit-failed", () => {
+				this.rerenderStoryboardElements()
+			}),
 			this.canvas.eventEmitter.on("element:batchdeleted", cancelEditor),
 			this.canvas.eventEmitter.on("canvas:clear", cancelEditor),
 			this.canvas.eventEmitter.on("document:loaded", normalizeDocument),
@@ -301,6 +328,7 @@ export class StoryboardInteractionManager {
 	}
 
 	private activate(binding: StoryboardControlBinding): void {
+		if (this.isGenerationAction(binding.action)) this.overlayHost.commit()
 		switch (binding.action.type) {
 			case "select-model":
 				this.openModelSelect(binding)
@@ -324,9 +352,21 @@ export class StoryboardInteractionManager {
 				this.deleteShot(binding.elementId, binding.action.shotId)
 				break
 			case "generate-shot":
+				{
+					const generation = this.generationController.generateShot(
+						binding.elementId,
+						binding.action.shotId,
+					)
+					this.rerenderStoryboardElements()
+					void generation.finally(() => this.rerenderStoryboardElements())
+				}
 				break
 			case "generate-all":
-				void this.generationController.generateAll(binding.elementId)
+				{
+					const generation = this.generationController.generateAll(binding.elementId)
+					this.rerenderStoryboardElements()
+					void generation.finally(() => this.rerenderStoryboardElements())
+				}
 				break
 		}
 	}
@@ -440,15 +480,22 @@ export class StoryboardInteractionManager {
 			placeholder: this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述"),
 			fontSize: 15,
 			borderRadius: 9,
+			onInput: (value) => this.updateDescriptionDraft(element.id, shotId, value),
 			onCommit: (value) => {
 				this.finishEditing(binding)
 				this.updateShot(element.id, shotId, (current) => ({
 					...current,
 					description: value,
 				}))
+				this.clearDescriptionDraft(element.id, shotId)
 			},
-			onCancel: () => this.finishEditing(binding),
+			onCancel: () => {
+				this.clearDescriptionDraft(element.id, shotId)
+				this.finishEditing(binding)
+			},
 		})
+		this.descriptionDraft = { elementId: element.id, shotId, value: shot.description }
+		this.refreshGenerationControlStates(element.id)
 	}
 
 	private openDurationEditor(binding: StoryboardControlBinding, shotId: string): void {
@@ -893,6 +940,12 @@ export class StoryboardInteractionManager {
 
 	private isDisabled(binding: StoryboardControlBinding): boolean {
 		if ("disabled" in binding.action && binding.action.disabled === true) return true
+		if (binding.action.type === "generate-shot") {
+			return this.isShotGenerationDisabled(binding.elementId, binding.action.shotId)
+		}
+		if (binding.action.type === "generate-all") {
+			return this.isAllGenerationDisabled(binding.elementId)
+		}
 
 		if (
 			binding.action.type !== "select-aspect-ratio" &&
@@ -902,6 +955,90 @@ export class StoryboardInteractionManager {
 		}
 
 		return this.isImageParameterUnavailable(binding.elementId, binding.action.type)
+	}
+
+	private isShotGenerationDisabled(elementId: string, shotId: string): boolean {
+		const element = this.getStoryboardElement(elementId)
+		const content = element ? getActiveContent<StoryboardElementContent>(element) : undefined
+		const shot = content?.shots?.find((item) => item.id === shotId)
+		if (!element || !shot || !this.getShotDescription(elementId, shot).trim()) return true
+		if (!this.canvas.magicConfigManager.config?.methods?.generateImage) return true
+		if (!this.imageModels || this.imageModels.length === 0) return true
+		if (!this.findSelectedModel(this.imageModels, element)?.model_id) return true
+		if (this.generationController.isShotGenerating(elementId, shotId)) return true
+
+		if (shot.outputImageElementId) {
+			const outputElement = this.canvas.elementManager.getElementData(
+				shot.outputImageElementId,
+			)
+			if (outputElement?.type === ElementTypeEnum.Image) {
+				if (hasProcessingImageContent(outputElement)) return true
+				const outputInstance = this.canvas.elementManager.getElementInstance(
+					shot.outputImageElementId,
+				)
+				if (outputInstance instanceof ImageElement && outputInstance.isImageGenerating()) {
+					return true
+				}
+			}
+		}
+
+		return false
+	}
+
+	private isAllGenerationDisabled(elementId: string): boolean {
+		const element = this.getStoryboardElement(elementId)
+		const shots = element
+			? (getActiveContent<StoryboardElementContent>(element)?.shots ?? [])
+			: []
+		if (shots.length === 0 || this.generationController.isAnyGenerating(elementId)) return true
+		return shots.some((shot) => this.isShotGenerationDisabled(elementId, shot.id))
+	}
+
+	private getShotDescription(elementId: string, shot: StoryboardShot): string {
+		if (
+			this.descriptionDraft?.elementId === elementId &&
+			this.descriptionDraft.shotId === shot.id
+		) {
+			return this.descriptionDraft.value
+		}
+		return shot.description
+	}
+
+	private updateDescriptionDraft(elementId: string, shotId: string, value: string): void {
+		this.descriptionDraft = { elementId, shotId, value }
+		this.refreshGenerationControlStates(elementId)
+	}
+
+	private clearDescriptionDraft(elementId: string, shotId: string): void {
+		if (
+			this.descriptionDraft?.elementId !== elementId ||
+			this.descriptionDraft.shotId !== shotId
+		) {
+			return
+		}
+		this.descriptionDraft = null
+		this.refreshGenerationControlStates(elementId)
+	}
+
+	private refreshGenerationControlStates(elementId: string): void {
+		this.bindings.forEach((binding) => {
+			if (binding.elementId !== elementId || this.editingBinding === binding) return
+			if (binding.action.type !== "generate-shot" && binding.action.type !== "generate-all") {
+				return
+			}
+			binding.applyState(
+				this.isDisabled(binding)
+					? "disabled"
+					: binding.hovered && this.canvas.deviceInfo.input.hover
+						? "hover"
+						: "idle",
+			)
+		})
+		this.canvas.contentLayer.batchDraw()
+	}
+
+	private isGenerationAction(action: StoryboardControlAction): boolean {
+		return action.type === "generate-shot" || action.type === "generate-all"
 	}
 
 	/**

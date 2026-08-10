@@ -79,6 +79,34 @@ describe("StoryboardFieldOverlayHost", () => {
 		expect(host.isMounted()).toBe(false)
 	})
 
+	it("reports text drafts immediately without committing them", () => {
+		const harness = createHarness()
+		const onInput = vi.fn()
+		const onCommit = vi.fn()
+		const host = new StoryboardFieldOverlayHost({ canvas: harness.canvas })
+		host.mount({
+			kind: "textarea",
+			anchorNode: harness.anchorNode,
+			ariaLabel: "分镜画面描述",
+			value: "初始描述",
+			fontSize: 15,
+			borderRadius: 9,
+			onInput,
+			onCommit,
+		})
+
+		const textarea = harness.container.querySelector<HTMLTextAreaElement>("textarea")
+		if (!textarea) throw new Error("Expected textarea overlay")
+		textarea.value = "输入中的描述"
+		textarea.dispatchEvent(new Event("input", { bubbles: true }))
+
+		expect(onInput).toHaveBeenCalledWith("输入中的描述")
+		expect(onCommit).not.toHaveBeenCalled()
+
+		textarea.dispatchEvent(new FocusEvent("blur"))
+		expect(onCommit).toHaveBeenCalledWith("输入中的描述")
+	})
+
 	it("cancels without committing when the anchor leaves the stage", () => {
 		const harness = createHarness()
 		const onCommit = vi.fn()

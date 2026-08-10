@@ -4,13 +4,14 @@ import { ElementTypeEnum, type StoryboardGenerationConfig } from "../../document
 import { StoryboardElement } from "../../elements/storyboard/StoryboardElement"
 import { generateElementId } from "../../shared/ids"
 import type { ConnectionHandleSide } from "./ConnectionHandleRenderer"
+import { collectConnectedFrameSourceElements } from "./connectedInputSources"
 
 export interface StoryboardConnectionOrigin {
 	originElementId?: string
 	originSide?: ConnectionHandleSide
 }
 
-interface CreateStoryboardFromImageConnectionOptions extends StoryboardConnectionOrigin {
+interface CreateStoryboardFromConnectionOptions extends StoryboardConnectionOrigin {
 	x: number
 	y: number
 	imageModelList: ImageModelItem[]
@@ -54,9 +55,12 @@ export function canCreateStoryboardFromConnection(
 		return false
 	}
 
-	return (
-		canvas.elementManager.getElementData(context.originElementId)?.type ===
-		ElementTypeEnum.Image
+	const originElement = canvas.elementManager.getElementData(context.originElementId)
+	if (originElement?.type === ElementTypeEnum.Image) return true
+	if (originElement?.type !== ElementTypeEnum.Frame) return false
+
+	return collectConnectedFrameSourceElements(originElement.id, originElement).some(
+		({ element }) => element.type === ElementTypeEnum.Image,
 	)
 }
 
@@ -85,9 +89,9 @@ export function resolveStoryboardConnectionGenerationConfig(
 	}
 }
 
-export function createStoryboardFromImageConnection(
+export function createStoryboardFromConnection(
 	canvas: Canvas,
-	options: CreateStoryboardFromImageConnectionOptions,
+	options: CreateStoryboardFromConnectionOptions,
 ): string | null {
 	if (!canCreateStoryboardFromConnection(canvas, options)) return null
 	const originElementId = options.originElementId
@@ -127,3 +131,6 @@ export function createStoryboardFromImageConnection(
 
 	return elementId
 }
+
+/** @deprecated Use createStoryboardFromConnection. */
+export const createStoryboardFromImageConnection = createStoryboardFromConnection

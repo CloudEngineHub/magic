@@ -17,7 +17,7 @@ import { ImageElement } from "../../elements/image/ImageElement"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
 import { buildReferenceImageOptions } from "../../resources/image/imageCropUtils"
-import { mergeLinkedMediaReferences } from "../../shared/linkedMedia"
+import { resolveConnectedImageReferences } from "../connection/connectedMediaInputs"
 import {
 	buildDefaultImageGenerationConfig,
 	getDefaultResolutionForModel,
@@ -30,6 +30,7 @@ import { resolveConnectionCreateGapForElement } from "../../shared/placement/con
 
 const FRAME_PADDING = 100
 const FRAME_GAP = 50
+const STORYBOARD_OUTPUT_FRAME_NAME = "分镜图片组合"
 
 interface StoryboardReferenceImage {
 	path: string
@@ -47,6 +48,12 @@ interface EnsureOutputsResult {
 	frameId?: string
 }
 
+interface StoryboardGenerationContext {
+	model: ImageModelItem | undefined
+	modelId: string
+	references: StoryboardReferenceImage[]
+}
+
 /**
  * 分镜批量生成控制器。
  *
@@ -54,6 +61,8 @@ interface EnsureOutputsResult {
  * 这样解除 Frame 后仍能复用已有图片，删除 Frame 后也能按缺失映射重建。
  */
 export class StoryboardGenerationController {
+	private readonly activeShotIds = new Map<string, Set<string>>()
+
 	constructor(
 		private readonly canvas: Canvas,
 		private readonly loadImageModels?: () => Promise<ImageModelItem[]>,
@@ -66,33 +75,93 @@ export class StoryboardGenerationController {
 		if (!storyboardContent) return
 
 		const shots = storyboardContent.shots ?? []
-		if (shots.length === 0) {
-			toast.error(
-				this.canvas.t?.("storyboard.empty", "暂无可生成的分镜") ?? "暂无可生成的分镜",
-			)
+		const shotIndexes = shots.map((_shot, index) => index)
+		if (shots.length === 0 || this.hasAnyActiveShot(elementId, shots)) {
+			if (shots.length === 0) {
+				toast.error(
+					this.canvas.t?.("storyboard.empty", "暂无可生成的分镜") ?? "暂无可生成的分镜",
+				)
+			}
 			return
 		}
 
-		const emptyShotIndex = shots.findIndex((shot) => !shot.description.trim())
-		if (emptyShotIndex >= 0) {
+		this.markShotsActive(elementId, shots)
+		try {
+			const context = await this.resolveGenerationContext(
+				elementId,
+				storyboardContent,
+				shots,
+				shotIndexes,
+			)
+			if (!context) return
+			await this.submitShots(storyboard, storyboardContent, shots, shotIndexes, context)
+		} finally {
+			this.unmarkShotsActive(elementId, shots)
+		}
+	}
+
+	public async generateShot(elementId: string, shotId: string): Promise<void> {
+		const storyboard = this.getStoryboard(elementId)
+		if (!storyboard) return
+		const storyboardContent = getActiveContent<StoryboardElementContent>(storyboard)
+		const shots = storyboardContent?.shots ?? []
+		const shotIndex = shots.findIndex((shot) => shot.id === shotId)
+		if (!storyboardContent || shotIndex < 0 || this.isShotGenerating(elementId, shotId)) return
+
+		const shot = shots[shotIndex]
+		this.markShotsActive(elementId, [shot])
+		try {
+			const context = await this.resolveGenerationContext(
+				elementId,
+				storyboardContent,
+				shots,
+				[shotIndex],
+			)
+			if (!context) return
+			await this.submitShots(storyboard, storyboardContent, shots, [shotIndex], context)
+		} finally {
+			this.unmarkShotsActive(elementId, [shot])
+		}
+	}
+
+	public isShotGenerating(elementId: string, shotId: string): boolean {
+		return this.activeShotIds.get(elementId)?.has(shotId) ?? false
+	}
+
+	public isAnyGenerating(elementId: string): boolean {
+		return (this.activeShotIds.get(elementId)?.size ?? 0) > 0
+	}
+
+	public destroy(): void {
+		this.activeShotIds.clear()
+	}
+
+	private async resolveGenerationContext(
+		elementId: string,
+		storyboardContent: StoryboardElementContent,
+		shots: StoryboardShot[],
+		shotIndexes: number[],
+	): Promise<StoryboardGenerationContext | null> {
+		const emptyShotIndex = shotIndexes.find((index) => !shots[index]?.description.trim())
+		if (emptyShotIndex !== undefined) {
 			const message =
 				this.canvas.t?.(
 					"storyboard.emptyDescription",
 					"请先填写分镜 {{index}} 的画面描述",
 				) ?? "请先填写分镜 {{index}} 的画面描述"
 			toast.error(message.replace("{{index}}", String(emptyShotIndex + 1)))
-			return
+			return null
 		}
 
 		const models = await this.getImageModels()
 		const model = this.resolveModel(storyboardContent.generationConfig, models)
-		const modelId = storyboardContent.generationConfig?.model_id ?? model?.model_id
+		const modelId = model?.model_id
 		if (!modelId) {
 			toast.error(
 				this.canvas.t?.("storyboard.modelUnavailable", "当前没有可用的图片模型") ??
 					"当前没有可用的图片模型",
 			)
-			return
+			return null
 		}
 
 		const references = this.collectReferenceImages(elementId)
@@ -104,12 +173,33 @@ export class StoryboardGenerationController {
 					"当前模型最多支持 {{count}} 张参考图，请减少左侧连接图片",
 				) ?? "当前模型最多支持 {{count}} 张参考图，请减少左侧连接图片"
 			toast.error(message.replace("{{count}}", String(maxReferences)))
-			return
+			return null
 		}
 
-		const outputs = this.ensureOutputStructure(storyboard, storyboardContent, shots)
-		const requests = shots.map((shot) =>
-			this.buildRequest(shot, storyboardContent.generationConfig, modelId, model, references),
+		return { model, modelId, references }
+	}
+
+	private async submitShots(
+		storyboard: StoryboardElement,
+		storyboardContent: StoryboardElementContent,
+		shots: StoryboardShot[],
+		shotIndexes: number[],
+		context: StoryboardGenerationContext,
+	): Promise<void> {
+		const outputs = this.ensureOutputStructure(
+			storyboard,
+			storyboardContent,
+			shots,
+			shotIndexes,
+		)
+		const requests = shotIndexes.map((index) =>
+			this.buildRequest(
+				shots[index],
+				storyboardContent.generationConfig,
+				context.modelId,
+				context.model,
+				context.references,
+			),
 		)
 
 		await Promise.allSettled(
@@ -121,10 +211,6 @@ export class StoryboardGenerationController {
 		)
 
 		this.canvas.contentLayer.batchDraw()
-	}
-
-	public destroy(): void {
-		// 当前控制器没有持久化状态订阅，保留销毁入口以维持 Canvas 生命周期契约。
 	}
 
 	private getStoryboard(elementId: string): StoryboardElement | undefined {
@@ -154,37 +240,17 @@ export class StoryboardGenerationController {
 
 	private collectReferenceImages(targetElementId: string): StoryboardReferenceImage[] {
 		const resolver = this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
-		const references: StoryboardReferenceImage[] = this.canvas.connectionManager
-			.getUpstreamConnections(targetElementId)
-			.map((connection) =>
-				this.canvas.elementManager.getElementInstance(connection.sourceElementId),
-			)
-			.filter((element): element is ImageElement => element instanceof ImageElement)
-			.flatMap((element) => {
-				const associatedContent = element.getAssociatedContentData()
-				return associatedContent.src
-					? [
-							{
-								path: associatedContent.src,
-								crop: associatedContent.crop,
-								sourceContentId: associatedContent.contentId,
-							},
-						]
-					: []
-			})
+		const { references } = resolveConnectedImageReferences(this.canvas, targetElementId, {
+			resolveResourceReference: resolver,
+			resolveImageContent: (element) => {
+				const instance = this.canvas.elementManager.getElementInstance(element.id)
+				return instance instanceof ImageElement
+					? instance.getAssociatedContentData()
+					: undefined
+			},
+		})
 
-		const merged = mergeLinkedMediaReferences(
-			[],
-			references.map((reference) => ({
-				kind: "image" as const,
-				path: reference.path,
-				sourceCrop: reference.crop,
-				sourceContentId: reference.sourceContentId,
-			})),
-			resolver,
-		)
-
-		return merged.map((reference) => ({
+		return references.map((reference) => ({
 			path: reference.path,
 			crop: reference.sourceCrop,
 			sourceContentId: reference.sourceContentId,
@@ -247,7 +313,9 @@ export class StoryboardGenerationController {
 		storyboard: StoryboardElement,
 		storyboardContent: StoryboardElementContent,
 		shots: StoryboardShot[],
+		requestedShotIndexes = shots.map((_shot, index) => index),
 	): EnsureOutputsResult {
+		const requestedShotIndexSet = new Set(requestedShotIndexes)
 		const resolvedImageIds = shots.map((shot) =>
 			shot.outputImageElementId &&
 			this.canvas.elementManager.getElementData(shot.outputImageElementId)?.type ===
@@ -261,7 +329,9 @@ export class StoryboardGenerationController {
 		const frameOffsetX = resolveConnectionCreateGapForElement(storyboard, "right")
 		const frameHeight = this.getFrameHeight(layout.heights)
 		const frameOrigin = this.resolveOutputFrameOrigin(storyboard, frameOffsetX, frameHeight)
-		const missingIndexes = resolvedImageIds.flatMap((id, index) => (id ? [] : [index]))
+		const missingIndexes = resolvedImageIds.flatMap((id, index) =>
+			!id && requestedShotIndexSet.has(index) ? [index] : [],
+		)
 		const needsConnectionMutation = existingOutputIds.some(
 			(imageId) =>
 				!this.canvas.connectionManager
@@ -277,41 +347,57 @@ export class StoryboardGenerationController {
 
 		try {
 			if (!existingFrame && existingOutputIds.length === 0) {
-				const imageChildren = shots.map((_shot, index) =>
+				const requestedHeights = requestedShotIndexes.map(
+					(index) =>
+						layout.heights[index] ?? layout.heights[0] ?? IMAGE_CONFIG.DEFAULT_HEIGHT,
+				)
+				const requestedFrameHeight = this.getFrameHeight(requestedHeights)
+				const requestedFrameOrigin = this.resolveOutputFrameOrigin(
+					storyboard,
+					frameOffsetX,
+					requestedFrameHeight,
+				)
+				const imageChildren = requestedShotIndexes.map((shotIndex) =>
 					this.createImageData(
 						generateElementId(),
 						storyboard.x ?? 0,
 						storyboard.y ?? 0,
 						layout.width,
-						layout.heights[index],
-						index,
+						layout.heights[shotIndex] ?? IMAGE_CONFIG.DEFAULT_HEIGHT,
+						shotIndex,
 					),
 				)
-				imageChildren.forEach((child, index) => {
-					resolvedImageIds[index] = child.id
+				imageChildren.forEach((child, childIndex) => {
+					resolvedImageIds[requestedShotIndexes[childIndex]] = child.id
 				})
 				const frameId = generateElementId()
 				const frameChildren = imageChildren.map((child, index) => ({
 					...child,
 					x: FRAME_PADDING,
-					y: FRAME_PADDING + this.getChildrenOffset(layout.heights, index),
+					y: FRAME_PADDING + this.getChildrenOffset(requestedHeights, index),
 					zIndex: imageChildren.length - index,
 				}))
 				const frameData: FrameElement = {
 					...FrameElementClass.createElementData(
 						frameId,
-						frameOrigin.x,
-						frameOrigin.y,
+						requestedFrameOrigin.x,
+						requestedFrameOrigin.y,
 						layout.width + FRAME_PADDING * 2,
-						frameHeight,
+						this.getFrameHeight(requestedHeights),
 						this.canvas.elementManager.getNextZIndexInLevel(),
 					),
+					name: STORYBOARD_OUTPUT_FRAME_NAME,
 					children: frameChildren,
 				}
 				this.canvas.elementManager.create(frameData, { silent: true })
-				const imageElementIds = resolvedImageIds.filter((id): id is string => Boolean(id))
-				this.ensureConnections(storyboard.id, imageElementIds)
-				this.commitShotOutputIds(storyboard, storyboardContent, shots, imageElementIds)
+				const imageElementIds = requestedShotIndexes.flatMap((index) =>
+					resolvedImageIds[index] ? [resolvedImageIds[index] as string] : [],
+				)
+				this.ensureConnections(
+					storyboard.id,
+					resolvedImageIds.filter((id): id is string => Boolean(id)),
+				)
+				this.commitShotOutputIds(storyboard, storyboardContent, shots, resolvedImageIds)
 				return { imageElementIds, frameId }
 			}
 
@@ -356,11 +442,16 @@ export class StoryboardGenerationController {
 					})
 				})
 
-				this.layoutFrameChildren(existingFrame.id, imageElementIds, layout, shots.length)
+				this.layoutFrameChildren(existingFrame.id, resolvedImageIds, layout, shots.length)
 			}
 			this.ensureConnections(storyboard.id, imageElementIds)
-			this.commitShotOutputIds(storyboard, storyboardContent, shots, imageElementIds)
-			return { imageElementIds, frameId: existingFrame?.id }
+			this.commitShotOutputIds(storyboard, storyboardContent, shots, resolvedImageIds)
+			return {
+				imageElementIds: requestedShotIndexes.flatMap((index) =>
+					resolvedImageIds[index] ? [resolvedImageIds[index] as string] : [],
+				),
+				frameId: existingFrame?.id,
+			}
 		} finally {
 			if (needsMutation) {
 				history?.enable()
@@ -412,11 +503,12 @@ export class StoryboardGenerationController {
 
 	private layoutFrameChildren(
 		frameId: string,
-		imageIds: string[],
+		imageIds: Array<string | undefined>,
 		layout: OutputLayout,
 		shotCount: number,
 	): void {
 		imageIds.forEach((imageId, index) => {
+			if (!imageId) return
 			if (this.canvas.elementManager.findParentIdForElement(imageId) !== frameId) return
 			const image = this.canvas.elementManager.getElementData(imageId)
 			if (image?.type !== ElementTypeEnum.Image) return
@@ -446,7 +538,7 @@ export class StoryboardGenerationController {
 		storyboard: StoryboardElement,
 		storyboardContent: StoryboardElementContent,
 		shots: StoryboardShot[],
-		imageIds: string[],
+		imageIds: Array<string | undefined>,
 	): void {
 		const nextShots = shots.map((shot, index) => ({
 			...shot,
@@ -461,6 +553,23 @@ export class StoryboardGenerationController {
 			{ contents: nextStoryboard.contents },
 			{ silent: false },
 		)
+	}
+
+	private hasAnyActiveShot(elementId: string, shots: StoryboardShot[]): boolean {
+		return shots.some((shot) => this.isShotGenerating(elementId, shot.id))
+	}
+
+	private markShotsActive(elementId: string, shots: StoryboardShot[]): void {
+		const activeShotIds = this.activeShotIds.get(elementId) ?? new Set<string>()
+		shots.forEach((shot) => activeShotIds.add(shot.id))
+		this.activeShotIds.set(elementId, activeShotIds)
+	}
+
+	private unmarkShotsActive(elementId: string, shots: StoryboardShot[]): void {
+		const activeShotIds = this.activeShotIds.get(elementId)
+		if (!activeShotIds) return
+		shots.forEach((shot) => activeShotIds.delete(shot.id))
+		if (activeShotIds.size === 0) this.activeShotIds.delete(elementId)
 	}
 
 	private findOutputFrame(imageIds: string[]): FrameElement | undefined {

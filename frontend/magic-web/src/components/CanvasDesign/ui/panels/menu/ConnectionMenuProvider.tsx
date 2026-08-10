@@ -14,7 +14,7 @@ import { MenuItemRenderer } from "./MenuItemRenderer"
 import type { MenuItem } from "./types"
 import {
 	canCreateStoryboardFromConnection,
-	createStoryboardFromImageConnection,
+	createStoryboardFromConnection,
 	getStoryboardConnectionCreateSize,
 } from "../../../runtime/interaction/connection/storyboardConnectionCreation"
 import {
@@ -188,7 +188,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			} else if (kind === "storyboard") {
 				const size = getStoryboardConnectionCreateSize()
 				point = resolveCreateTopLeftPoint(context, size)
-				createStoryboardFromImageConnection(canvas, {
+				createStoryboardFromConnection(canvas, {
 					originElementId: context.originElementId,
 					originSide: context.originSide,
 					x: point.x,

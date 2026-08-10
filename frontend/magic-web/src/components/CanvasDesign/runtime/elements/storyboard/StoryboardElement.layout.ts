@@ -397,7 +397,7 @@ function resolveShotLayout(options: {
 			deleteRect,
 		},
 		cornerRadius: 14 * rootScale,
-		strokeWidth: Math.max(1, 1.2 * rootScale),
+		strokeWidth: Math.max(1, rootScale),
 	}
 }
 

@@ -298,6 +298,143 @@ describe("StoryboardInteractionManager", () => {
 		manager.destroy()
 	})
 
+	it("uses image send prerequisites for the single-shot generate control", async () => {
+		const data = createStoryboardData()
+		getStoryboardContent(data).shots![0].description = "a city at night"
+		const harness = createCanvasMock(data)
+		harness.selected.value = true
+		const methods = harness.canvas.magicConfigManager.config?.methods
+		if (!methods) throw new Error("Expected canvas methods")
+		methods.generateImage = vi.fn()
+		vi.mocked(methods.getImageModelList).mockResolvedValue([
+			{
+				id: "model-1",
+				group_id: "official",
+				model_id: "model-1",
+				model_name: "测试模型",
+				provider_model_id: "provider-model-1",
+				model_description: "",
+				model_icon: "",
+				model_status: "normal",
+				sort: 1,
+			} as ImageModelItem,
+		])
+
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		await vi.waitFor(() => expect(harness.rerender).toHaveBeenCalled())
+		const hit = new Konva.Rect({ width: 100, height: 40 })
+		const states: string[] = []
+		manager.bindControl({
+			elementId: data.id,
+			node: hit,
+			action: { type: "generate-shot", shotId: "shot-1" },
+			applyState: (state) => states.push(state),
+		})
+
+		hit.fire("mouseenter", { evt: new MouseEvent("mouseenter") })
+		expect(states.at(-1)).toBe("hover")
+
+		getStoryboardContent(data).shots![0].description = ""
+		hit.fire("mouseleave", { evt: new MouseEvent("mouseleave") })
+		hit.fire("mouseenter", { evt: new MouseEvent("mouseenter") })
+		expect(states.at(-1)).toBe("disabled")
+		manager.destroy()
+	})
+
+	it("enables generation from the live description draft and commits before the first click", async () => {
+		const data = createStoryboardData()
+		const harness = createCanvasMock(data)
+		harness.selected.value = true
+		const methods = harness.canvas.magicConfigManager.config?.methods
+		if (!methods) throw new Error("Expected canvas methods")
+		methods.generateImage = vi.fn()
+		vi.mocked(methods.getImageModelList).mockResolvedValue([
+			{
+				id: "model-1",
+				group_id: "official",
+				model_id: "model-1",
+				model_name: "测试模型",
+				provider_model_id: "provider-model-1",
+				model_description: "",
+				model_icon: "",
+				model_status: "normal",
+				sort: 1,
+			} as ImageModelItem,
+		])
+
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		await vi.waitFor(() => expect(harness.rerender).toHaveBeenCalled())
+
+		const descriptionHit = new Konva.Rect({ width: 240, height: 80 })
+		const generateHit = new Konva.Rect({ width: 100, height: 40 })
+		const anchorNode = {
+			getStage: () => ({}),
+			getAbsoluteTransform: () => ({ getMatrix: () => [1, 0, 0, 1, 10, 20] }),
+			width: () => 240,
+			height: () => 80,
+		} as unknown as Konva.Node
+		const descriptionStates: string[] = []
+		const generateStates: string[] = []
+		manager.bindControl({
+			elementId: data.id,
+			node: descriptionHit,
+			overlayAnchorNode: anchorNode,
+			action: { type: "edit-description", shotId: "shot-1" },
+			applyState: (state) => descriptionStates.push(state),
+		})
+		manager.bindControl({
+			elementId: data.id,
+			node: generateHit,
+			action: { type: "generate-shot", shotId: "shot-1" },
+			applyState: (state) => generateStates.push(state),
+		})
+
+		descriptionHit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		descriptionHit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		descriptionHit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+		const textarea = harness.container.querySelector<HTMLTextAreaElement>("textarea")
+		if (!textarea) throw new Error("Expected storyboard description editor")
+
+		expect(generateStates.at(-1)).toBe("disabled")
+		textarea.value = "实时输入的描述"
+		textarea.dispatchEvent(new Event("input", { bubbles: true }))
+		expect(generateStates.at(-1)).toBe("idle")
+
+		const generateShot = vi
+			.spyOn(
+				(
+					manager as unknown as {
+						generationController: {
+							generateShot: (elementId: string, shotId: string) => Promise<void>
+						}
+					}
+				).generationController,
+				"generateShot",
+			)
+			.mockResolvedValue(undefined)
+		const mousedown = new MouseEvent("mousedown", {
+			button: 0,
+			bubbles: true,
+			cancelable: true,
+		})
+		generateHit.fire("mousedown", { evt: mousedown })
+		expect(mousedown.defaultPrevented).toBe(true)
+		expect(harness.updates).toHaveLength(0)
+
+		generateHit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		generateHit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+
+		await vi.waitFor(() => expect(generateShot).toHaveBeenCalledWith(data.id, "shot-1"))
+		expect(harness.updates).toContainEqual({
+			id: data.id,
+			patch: {
+				shots: [{ id: "shot-1", durationSeconds: 3, description: "实时输入的描述" }],
+			},
+		})
+		expect(descriptionStates).toContain("editing")
+		manager.destroy()
+	})
+
 	it("normalizes an oversized storyboard height from its shot count", () => {
 		const data = createStoryboardData()
 		getStoryboardContent(data).shots = Array.from({ length: 20 }, (_, index) => ({

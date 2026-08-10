@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { EventEmitter } from "../../../core/EventEmitter"
 import {
 	ElementTypeEnum,
+	type FrameElement,
 	type ImageElement as ImageElementData,
 	type StoryboardElement,
 } from "../../../document/types"
@@ -70,6 +71,7 @@ function createHarness(options?: {
 	storyboard?: StoryboardElement
 	model?: ImageModelItem
 	inputImage?: ImageElementData
+	inputFrame?: FrameElement
 	failInitialSubmissionIndex?: number
 }) {
 	const elements = new Map<string, any>()
@@ -154,6 +156,9 @@ function createHarness(options?: {
 	if (options?.inputImage) {
 		registerImage(options.inputImage)
 	}
+	if (options?.inputFrame) {
+		register(options.inputFrame)
+	}
 
 	const frameCount = () =>
 		Array.from(elements.values()).filter((element) => element.type === ElementTypeEnum.Frame)
@@ -212,11 +217,18 @@ function createHarness(options?: {
 			findParentIdForElement: vi.fn((id: string) => parents.get(id)),
 		},
 		connectionManager: {
-			getUpstreamConnections: vi.fn((id: string) =>
-				id === storyboard.id && options?.inputImage
-					? [{ sourceElementId: options.inputImage.id, targetElementId: id }]
-					: [],
-			),
+			getUpstreamConnections: vi.fn((id: string) => {
+				const inputElement = options?.inputImage ?? options?.inputFrame
+				return id === storyboard.id && inputElement
+					? [
+							{
+								id: "input-connection",
+								sourceElementId: inputElement.id,
+								targetElementId: id,
+							},
+						]
+					: []
+			}),
 			getDownstreamConnections: vi.fn((id: string) =>
 				connections.filter((connection) => connection.sourceElementId === id),
 			),
@@ -263,6 +275,7 @@ describe("StoryboardGenerationController", () => {
 			(element) => element.type === ElementTypeEnum.Frame,
 		)
 		expect(isValidElementData(outputFrame)).toBe(true)
+		expect(outputFrame?.name).toBe("分镜图片组合")
 		expect(
 			outputFrame?.children?.every((child: Record<string, unknown>) =>
 				["draggable", "listening", "perfectDrawEnabled"].every(
@@ -288,6 +301,45 @@ describe("StoryboardGenerationController", () => {
 				),
 			).size,
 		).toBe(2)
+		controller.destroy()
+	})
+
+	it("generates only the requested shot and keeps its output connection locked", async () => {
+		const harness = createHarness()
+		const controller = new StoryboardGenerationController(harness.canvas, async () => [
+			harness.model,
+		])
+
+		await controller.generateShot(harness.storyboard.id, "shot-2")
+
+		expect(harness.submissions).toHaveLength(1)
+		expect(harness.submissions[0]?.request).toEqual(
+			expect.objectContaining({ prompt: "close up", model_id: "model-1" }),
+		)
+		expect(harness.frameCount()).toBe(1)
+		expect(
+			getStoryboardContent(harness.storyboard).shots?.[0]?.outputImageElementId,
+		).toBeUndefined()
+		expect(getStoryboardContent(harness.storyboard).shots?.[1]?.outputImageElementId).toEqual(
+			expect.any(String),
+		)
+		expect(harness.connections).toHaveLength(1)
+		expect(harness.connections[0]?.locked).toBe(true)
+		controller.destroy()
+	})
+
+	it("uses the fallback model id when the configured model is unavailable", async () => {
+		const fallbackModel = { ...createModel(), model_id: "model-2", id: "model-2" }
+		const harness = createHarness({ model: fallbackModel })
+		const controller = new StoryboardGenerationController(harness.canvas, async () => [
+			fallbackModel,
+		])
+
+		await controller.generateShot(harness.storyboard.id, "shot-1")
+
+		expect(harness.submissions[0]?.request).toEqual(
+			expect.objectContaining({ model_id: "model-2" }),
+		)
 		controller.destroy()
 	})
 
@@ -327,6 +379,96 @@ describe("StoryboardGenerationController", () => {
 
 		expect(harness.submissions).toEqual([])
 		expect(harness.frameCount()).toBe(0)
+		controller.destroy()
+	})
+
+	it("expands a connected Frame into visible image references for every shot", async () => {
+		const frameContentId = "reference-frame-content"
+		const frame: FrameElement = {
+			id: "reference-frame",
+			type: ElementTypeEnum.Frame,
+			x: 0,
+			y: 0,
+			width: 1200,
+			height: 800,
+			activeContentId: frameContentId,
+			mainContentId: frameContentId,
+			contents: [{ contentId: frameContentId }],
+			children: [
+				{
+					id: "frame-image-a",
+					type: ElementTypeEnum.Image,
+					zIndex: 1,
+					x: 0,
+					y: 0,
+					width: 512,
+					height: 512,
+					activeContentId: "frame-image-a-content",
+					mainContentId: "frame-image-a-content",
+					contents: [
+						{
+							contentId: "frame-image-a-content",
+							src: "./images/frame-a.png",
+							crop: { x: 1, y: 2, width: 100, height: 80 },
+						},
+					],
+				},
+				{
+					id: "frame-image-b",
+					type: ElementTypeEnum.Image,
+					zIndex: 2,
+					x: 520,
+					y: 0,
+					width: 512,
+					height: 512,
+					activeContentId: "frame-image-b-content",
+					mainContentId: "frame-image-b-content",
+					contents: [
+						{
+							contentId: "frame-image-b-content",
+							src: "./images/frame-b.png",
+						},
+					],
+				},
+				{
+					id: "frame-hidden-image",
+					type: ElementTypeEnum.Image,
+					zIndex: 3,
+					visible: false,
+					activeContentId: "frame-hidden-image-content",
+					mainContentId: "frame-hidden-image-content",
+					contents: [
+						{
+							contentId: "frame-hidden-image-content",
+							src: "./images/hidden.png",
+						},
+					],
+				},
+			],
+		}
+		const harness = createHarness({ inputFrame: frame })
+		const controller = new StoryboardGenerationController(harness.canvas, async () => [
+			harness.model,
+		])
+
+		await controller.generateAll(harness.storyboard.id)
+
+		expect(harness.submissions[0]?.request).toEqual(
+			expect.objectContaining({
+				reference_images: ["./images/frame-a.png", "./images/frame-b.png"],
+				reference_image_options: [
+					{
+						path: "./images/frame-a.png",
+						crop: { x: 1, y: 2, width: 100, height: 80 },
+					},
+				],
+			}),
+		)
+		expect(harness.submissions[1]?.request).toEqual(
+			expect.objectContaining({
+				reference_images: ["./images/frame-a.png", "./images/frame-b.png"],
+			}),
+		)
 		controller.destroy()
 	})
 
