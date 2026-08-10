@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
@@ -16,6 +16,7 @@ import { resolveVideoPointsEstimateGate } from "./points/video-points-estimate.p
 import type { GenerateVideoRequest } from "../../../public/magic-types"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { getActiveContent } from "../../../runtime/document/elementContent"
+import { useIsMediaReplacing } from "../../../app/hooks/canvas"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -68,12 +69,14 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const [isEditing, setIsEditing] = useState(false)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
+	const isReplacing = useIsMediaReplacing(videoElement.id)
 	const videoContent = getActiveContent(videoElement)
 	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
 	const confirmVideoGeneration = useVideoPointsConfirm()
 
 	const handleStartRegenerate = useCallback(() => {
 		if (!canvas || !savedGenerateVideoRequest) return
+		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 		const inst = canvas.elementManager.getElementInstance(videoElement.id)
 		if (inst instanceof VideoElementClass) {
 			inst.clearTempGenerateVideoRequest()
@@ -85,6 +88,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		const generateVideoRequest = savedGenerateVideoRequest
 		if (!canvas || !generateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
 			return
+		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 
 		setIsPreparingGenerateAgain(true)
 		let estimatedPoints: number | null = null
@@ -135,6 +139,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		await confirmVideoGeneration({
 			points: estimatedPoints,
 			onConfirm: async () => {
+				if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 				setIsGeneratingAgain(true)
 				try {
 					const elementInstance = canvas.elementManager.getElementInstance(
@@ -164,13 +169,18 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 
 	const canRestore = Boolean(savedGenerateVideoRequest?.model_id)
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
+
+	useEffect(() => {
+		if (isReplacing) setIsEditing(false)
+	}, [isReplacing])
+
 	const resultActionSection = useMemo(
 		() => ({
 			id: "video-result-actions",
 			elementId: videoElement.id,
 			order: 10,
 			group: "result-actions",
-			visible: !isEditing && canRestore,
+			visible: !isEditing && !isReplacing && canRestore,
 			items: [
 				{
 					id: "re-edit",
@@ -200,11 +210,14 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			handleGenerateAgain,
 			handleStartRegenerate,
 			isEditing,
+			isReplacing,
 			t,
 			videoElement.id,
 		],
 	)
 	useElementBottomToolbarSection(resultActionSection)
+
+	if (isReplacing) return null
 
 	if (!isEditing) {
 		if (!canRestore) {

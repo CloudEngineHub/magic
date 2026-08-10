@@ -1,14 +1,15 @@
-import { toast } from "sonner"
 import type { Canvas } from "../../core/Canvas"
-import { isAudioFile, validateFile } from "../../shared/ids"
+import { getActiveContent } from "../../document/elementContent"
+import { ElementTypeEnum } from "../../document/types"
 
-const AUDIO_ACCEPT = "audio/*,.mp3,.wav,.ogg,.m4a,.aac"
-
-/** 管理音频元素右上角“替换”按钮对应的原生文件选择与上传流程。 */
+/**
+ * 音频替换旧入口的兼容代理。
+ *
+ * 真正的运行时状态和上传生命周期统一由 MediaReplaceController 管理；
+ * 该类只保留旧组件仍在调用的 API，避免形成第二份替换状态。
+ */
 export class AudioReplaceController {
 	private readonly canvas: Canvas
-	private input?: HTMLInputElement
-	private replacingElementId: string | null = null
 	private destroyed = false
 
 	constructor(options: { canvas: Canvas }) {
@@ -16,104 +17,39 @@ export class AudioReplaceController {
 	}
 
 	public destroy(): void {
-		if (this.destroyed) return
 		this.destroyed = true
-		if (this.input) {
-			this.input.removeEventListener("change", this.handleInputChange)
-			this.input.remove()
-			this.input = undefined
-		}
 	}
 
 	public openLocalFilePicker(elementId: string): void {
-		if (this.destroyed || this.canvas.readonly || this.replacingElementId) return
-		const input = this.ensureInput()
-		input.value = ""
-		input.dataset.elementId = elementId
-		input.click()
+		if (this.destroyed || this.canvas.readonly) return
+		const element = this.canvas.elementManager.getElementData(elementId)
+		const contentId =
+			element?.type === ElementTypeEnum.Audio
+				? (getActiveContent(element)?.contentId ?? null)
+				: null
+		this.canvas.mediaReplaceController?.openLocalFilePicker({
+			elementId,
+			mediaType: ElementTypeEnum.Audio,
+			contentId,
+		})
 	}
 
 	public replaceWithProjectFile(elementId: string, path: string): Promise<boolean> {
-		return this.performReplacement(elementId, () =>
-			this.canvas.canvasFileUploadManager.replaceAudioElementFromProject({
+		if (this.destroyed || this.canvas.readonly) return Promise.resolve(false)
+		return (
+			this.canvas.mediaReplaceController?.replaceWithProjectFile({
 				elementId,
+				mediaType: ElementTypeEnum.Audio,
+				contentId: this.getActiveContentId(elementId),
 				path,
-			}),
+			}) ?? Promise.resolve(false)
 		)
 	}
 
-	private readonly handleInputChange = (): void => {
-		const input = this.input
-		const file = input?.files?.[0]
-		const elementId = input?.dataset.elementId
-		if (!input || !file || !elementId || this.destroyed) return
-
-		const validation = validateFile(file)
-		if (!validation.valid || !isAudioFile(file)) {
-			toast.error(
-				validation.error ||
-					(this.canvas.t?.("audio.replaceUnsupported", "不支持的音频格式") ??
-						"不支持的音频格式"),
-			)
-			return
-		}
-
-		void this.performReplacement(elementId, () =>
-			this.canvas.canvasFileUploadManager.replaceAudioElement({ elementId, file }),
-		).finally(() => {
-			input.value = ""
-		})
-	}
-
-	private async performReplacement(
-		elementId: string,
-		replace: () => boolean | Promise<boolean>,
-	): Promise<boolean> {
-		if (this.destroyed || this.canvas.readonly || this.replacingElementId) return false
-
-		this.replacingElementId = elementId
-		this.emitState(elementId, "uploading")
-		try {
-			const success = await replace()
-			if (!success) {
-				throw new Error(
-					this.canvas.t?.("audio.replaceFailed", "音频替换失败，请重试") ??
-						"音频替换失败，请重试",
-				)
-			}
-			this.emitState(elementId, "idle")
-			return true
-		} catch (error) {
-			this.emitState(elementId, "error")
-			toast.error(
-				error instanceof Error && error.message
-					? error.message
-					: (this.canvas.t?.("audio.replaceFailed", "音频替换失败，请重试") ??
-							"音频替换失败，请重试"),
-			)
-			return false
-		} finally {
-			this.replacingElementId = null
-		}
-	}
-
-	private ensureInput(): HTMLInputElement {
-		if (this.input) return this.input
-		const input = document.createElement("input")
-		input.type = "file"
-		input.accept = AUDIO_ACCEPT
-		input.multiple = false
-		input.style.display = "none"
-		input.addEventListener("change", this.handleInputChange)
-		this.canvas.container.appendChild(input)
-		this.input = input
-		return input
-	}
-
-	private emitState(elementId: string, status: "idle" | "uploading" | "error"): void {
-		this.canvas.eventEmitter.emit({
-			type: "element:audio:replaceStateChanged",
-			data: { elementId, status },
-		})
+	private getActiveContentId(elementId: string): string | null {
+		const element = this.canvas.elementManager.getElementData(elementId)
+		return element?.type === ElementTypeEnum.Audio
+			? (getActiveContent(element)?.contentId ?? null)
+			: null
 	}
 }

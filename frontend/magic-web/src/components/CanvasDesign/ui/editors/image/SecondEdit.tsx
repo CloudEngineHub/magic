@@ -30,6 +30,7 @@ import {
 	hasProcessingImageContent,
 } from "../../../runtime/document/elementContent"
 import { isEditorInteractiveKeyboardTarget } from "../keyboard"
+import { useIsMediaReplacing } from "../../../app/hooks/canvas"
 
 type SecondEditIntent = "quick-edit" | "re-edit" | "generate-again"
 
@@ -70,6 +71,7 @@ export default function SecondEdit(props: SecondEditProps) {
 	const [isVisible, setIsVisible] = useState<boolean>(true)
 	const [isSending, setIsSending] = useState(false)
 	const sendingRef = useRef(false)
+	const isReplacing = useIsMediaReplacing(props.imageElement.id)
 	const canRegenerate = Boolean(activeContent.generateImageRequest?.model_id)
 	const directGenerateRequest = activeContent.generateImageRequest
 	const hasProcessingContent = hasProcessingImageContent(props.imageElement)
@@ -86,6 +88,9 @@ export default function SecondEdit(props: SecondEditProps) {
 		) => {
 			if (sendingRef.current) return false
 			if (!canvas || !request.prompt?.trim() || !request.model_id) {
+				return false
+			}
+			if (canvas.mediaReplaceController?.isReplacing?.(props.imageElement.id)) {
 				return false
 			}
 
@@ -298,26 +303,37 @@ export default function SecondEdit(props: SecondEditProps) {
 	}, [createAndSubmitImageGeneration, directGenerateRequest])
 
 	const openEditor = useCallback(() => {
+		if (canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id)) return
 		// 先隐藏
 		setIsVisible(false)
 		// 设置编辑状态
 		setIsEditing(true)
 		// 延迟 50ms 后显示并聚焦
 		setTimeout(() => {
+			if (canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id)) return
 			setIsVisible(true)
 		}, 50)
-	}, [])
+	}, [canvas, props.imageElement.id])
 
 	// 处理进入编辑状态的函数
 	const handleStartEditing = useCallback(() => {
+		if (canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id)) return
 		setPendingOpenMode("quick-edit")
-	}, [])
+	}, [canvas, props.imageElement.id])
 
 	/** 按已保存的 generateImageRequest 完整回填后进入编辑态（与快捷编辑仅对齐模型/尺寸不同） */
 	const handleRegenerateFromSavedConfig = useCallback(() => {
+		if (canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id)) return
 		if (!activeContent.generateImageRequest?.model_id) return
 		setPendingOpenMode("regenerate")
-	}, [activeContent.generateImageRequest])
+	}, [activeContent.generateImageRequest, canvas, props.imageElement.id])
+
+	useEffect(() => {
+		if (!isReplacing) return
+		setPendingOpenMode(null)
+		setIsEditing(false)
+		setIsVisible(false)
+	}, [isReplacing])
 
 	useEffect(() => {
 		if (!pendingOpenMode) return
@@ -355,6 +371,7 @@ export default function SecondEdit(props: SecondEditProps) {
 	useEventListener(
 		"keydown",
 		(e: KeyboardEvent) => {
+			if (canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id)) return
 			// 只在未处于编辑状态时监听
 			if (isEditingRef.current) {
 				return
@@ -388,7 +405,7 @@ export default function SecondEdit(props: SecondEditProps) {
 			elementId: props.imageElement.id,
 			order: 10,
 			group: "result-actions",
-			visible: !isEditing,
+			visible: !isEditing && !isReplacing,
 			items: [
 				{
 					id: "quick-edit",
@@ -432,12 +449,15 @@ export default function SecondEdit(props: SecondEditProps) {
 			handleStartEditing,
 			hasProcessingContent,
 			isEditing,
+			isReplacing,
 			isSending,
 			props.imageElement.id,
 			t,
 		],
 	)
 	useElementBottomToolbarSection(resultActionSection)
+
+	if (isReplacing) return null
 
 	if (isEditing) {
 		return (
@@ -446,6 +466,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				config={config}
 				editorRef={editorRef}
 				shouldShow={() =>
+					!canvas?.mediaReplaceController?.isReplacing?.(props.imageElement.id) &&
 					selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
 				}
 				floatingId="second-edit"

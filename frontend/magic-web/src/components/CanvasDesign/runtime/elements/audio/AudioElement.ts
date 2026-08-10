@@ -184,6 +184,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private playbackUnsubscribe: () => void
 	private waveformUnsubscribe: () => void = () => undefined
 	private resourceFailureUnsubscribe: () => void
+	private mediaReplaceStateUnsubscribe: () => void
 	private resourceError = false
 	private interactionEventUnsubscribers: Array<() => void> = []
 	private lastTouchActionAt = 0
@@ -228,6 +229,13 @@ export class AudioElement extends BaseElement<AudioElementData> {
 				}
 				this.retryingPreparation = false
 				this.resourceError = true
+				this.syncRenderState()
+			},
+		)
+		this.mediaReplaceStateUnsubscribe = canvas.eventEmitter.on(
+			"element:media:replaceStateChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId !== normalizedData.id) return
 				this.syncRenderState()
 			},
 		)
@@ -380,7 +388,16 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	private isUploadingPlaceholder(): boolean {
-		return !this.getAudioSrc() && this.canvas.elementManager.isTemporary(this.data.id)
+		const activeContentId = getActiveContent<AudioElementContent>(this.data)?.contentId ?? null
+		const replacementState = this.canvas.mediaReplaceController?.getReplacementState?.(
+			this.data.id,
+		)
+		return (
+			(replacementState?.source === "local-upload" &&
+				replacementState.phase === "uploading" &&
+				replacementState.contentId === activeContentId) ||
+			(!this.getAudioSrc() && this.canvas.elementManager.isTemporary(this.data.id))
+		)
 	}
 
 	private resolveRenderState(): AudioRenderState {
@@ -632,6 +649,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 		this.playbackUnsubscribe()
 		this.waveformUnsubscribe()
 		this.resourceFailureUnsubscribe()
+		this.mediaReplaceStateUnsubscribe()
 		this.backButtonStateSync = undefined
 		this.forwardButtonStateSync = undefined
 		if (this.node) this.cleanupNodeListeners(this.node)

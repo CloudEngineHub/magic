@@ -1,11 +1,12 @@
 import { Divider, ElementToolTypeEnum } from "../../public/props"
 import ElementToolsRender from "./ElementToolsRender"
-import { useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { ElementToolOptionType } from "./types"
 import { ElementTypeEnum } from "../../runtime/document/types"
 import { useCanvasSelectionUI } from "../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../app/providers/MagicProvider"
 import { useCanvas } from "../../app/providers/CanvasProvider"
+import { useCanvasEvent } from "../../app/hooks/canvas"
 import useShowVideoOriginalSizeButton from "./hooks/useShowVideoOriginalSizeButton"
 import { getActiveContent, getActiveImageContent } from "../../runtime/document/elementContent"
 
@@ -14,6 +15,28 @@ export default function ElementTools() {
 	const { canvas } = useCanvas()
 
 	const { selectedElements, isDragging, isSelecting, subElementTooltip } = useCanvasSelectionUI()
+	const [replacingMediaElementId, setReplacingMediaElementId] = useState<string | null>(
+		() => canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null,
+	)
+
+	useEffect(() => {
+		setReplacingMediaElementId(
+			canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null,
+		)
+	}, [canvas])
+
+	useCanvasEvent(
+		"element:media:replaceStateChanged",
+		useCallback(({ data }) => {
+			setReplacingMediaElementId((current) => {
+				if (data.status === "uploading" || data.status === "applying") {
+					return data.elementId
+				}
+				return current === data.elementId ? null : current
+			})
+		}, []),
+		[],
+	)
 
 	const [firstSelectedElement] = selectedElements
 
@@ -51,6 +74,16 @@ export default function ElementTools() {
 		if (!selectedElements.length || hideToolsWhileTransform || isSelecting) return []
 
 		if (selectedElements.some((el) => el.locked === true)) return []
+
+		if (
+			isSingleElement &&
+			(firstSelectedElement?.type === ElementTypeEnum.Image ||
+				firstSelectedElement?.type === ElementTypeEnum.Video ||
+				firstSelectedElement?.type === ElementTypeEnum.Audio) &&
+			replacingMediaElementId === firstSelectedElement.id
+		) {
+			return []
+		}
 
 		if (subElementTooltip) {
 			return [{ type: subElementTooltip }]
@@ -171,6 +204,7 @@ export default function ElementTools() {
 		isSingleElement,
 		selectedElements,
 		showVideoOriginalSizeButton,
+		replacingMediaElementId,
 		subElementTooltip,
 	])
 

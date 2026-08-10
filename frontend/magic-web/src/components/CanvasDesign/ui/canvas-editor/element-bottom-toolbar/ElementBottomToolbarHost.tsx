@@ -17,6 +17,7 @@ import ElementVersionControls from "./ElementVersionControls"
 import { ElementBottomToolbar } from "./ElementBottomToolbar"
 import { useElementBottomToolbarSections } from "./ElementBottomToolbarContext"
 import { isContentVersionOperations } from "../../../runtime/elements/core/ContentVersionOperations"
+import { useIsMediaReplacing } from "../../../app/hooks/canvas"
 
 type VersionElement = ImageElement | VideoElement | AudioElement
 
@@ -38,6 +39,7 @@ export default function ElementBottomToolbarHost() {
 	const { t } = useCanvasDesignI18n()
 	const selectedElement = selectedElements.length === 1 ? selectedElements[0] : null
 	const element = selectedElement && isVersionElement(selectedElement) ? selectedElement : null
+	const isReplacing = useIsMediaReplacing(element?.id)
 	const sections = useElementBottomToolbarSections(element?.id ?? null)
 	const versionSection = useMemo(() => {
 		if (!element || getContents(element).length <= 1) return null
@@ -53,10 +55,12 @@ export default function ElementBottomToolbarHost() {
 	}, [canvas, element])
 	const allSections = useMemo(
 		() =>
-			(versionSection ? [...sections, versionSection] : sections).sort(
-				(left, right) => (left.order ?? 0) - (right.order ?? 0),
-			),
-		[sections, versionSection],
+			isReplacing
+				? []
+				: (versionSection ? [...sections, versionSection] : sections).sort(
+						(left, right) => (left.order ?? 0) - (right.order ?? 0),
+					),
+		[isReplacing, sections, versionSection],
 	)
 	const shouldShow = Boolean(
 		element &&
@@ -68,6 +72,7 @@ export default function ElementBottomToolbarHost() {
 		!extendingElementId &&
 		!erasingElementId &&
 		!fullscreenMediaElement &&
+		!isReplacing &&
 		!element.locked,
 	)
 

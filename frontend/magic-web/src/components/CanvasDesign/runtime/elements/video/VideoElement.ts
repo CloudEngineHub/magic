@@ -102,6 +102,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}) => void
 	private isRetryEditing = false
 	private generationRuntimeUnsubscribe?: () => void
+	private mediaReplaceStateUnsubscribe?: () => void
 
 	constructor(data: VideoElementData, canvas: Canvas) {
 		super(data, canvas)
@@ -111,6 +112,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.generationRuntimeUnsubscribe = this.canvas.generationRuntimeManager.subscribeElement(
 			this.data.id,
 			() => {
+				this.rerenderWhenTransformIdle()
+			},
+		)
+		this.mediaReplaceStateUnsubscribe = this.canvas.eventEmitter.on(
+			"element:media:replaceStateChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId !== this.data.id) return
 				this.rerenderWhenTransformIdle()
 			},
 		)
@@ -174,6 +182,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.removeVideoResourceLoadFailedListener()
 		this.generationRuntimeUnsubscribe?.()
 		this.generationRuntimeUnsubscribe = undefined
+		this.mediaReplaceStateUnsubscribe?.()
+		this.mediaReplaceStateUnsubscribe = undefined
 		super.destroy()
 	}
 
@@ -990,6 +1000,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			showRetryButton: shouldShowRetryButton,
 			onRetry: shouldShowRetryButton
 				? () => {
+						if (this.canvas.mediaReplaceController?.isReplacing?.(this.data.id)) return
 						this.isRetryEditing = true
 						this.canvas.selectionManager.select(this.data.id, false, false)
 						this.rerender()
@@ -1149,6 +1160,21 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private resolveRenderState(): VideoRenderState {
+		const replacementState = this.canvas.mediaReplaceController?.getReplacementState?.(
+			this.data.id,
+		)
+		if (
+			replacementState?.source === "local-upload" &&
+			replacementState.phase === "uploading" &&
+			replacementState.contentId === this.getVideoContent()?.contentId
+		) {
+			return {
+				stage: "uploading",
+				placeholderMode: "loading",
+				text: this.getText("video.uploading", "正在上传中..."),
+			}
+		}
+
 		const src = this.getVideoSrc()
 		const hasSrc = !!src
 		const status = this.getVideoStatus()
@@ -1484,6 +1510,17 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.renderer.pause()
+	}
+
+	/** 替换开始时暂停内联与全屏 consumer，但不销毁现有资源。 */
+	public pauseForReplacement(): void {
+		this.pausePreview()
+		this.canvas.videoPlaybackManager
+			.getVideoElement(this.getInlinePlaybackConsumerId())
+			?.pause()
+		this.canvas.videoPlaybackManager
+			.getVideoElement(this.getFullscreenPlaybackConsumerId())
+			?.pause()
 	}
 
 	/** 播放/暂停切换（受 canTogglePlayback 约束） */

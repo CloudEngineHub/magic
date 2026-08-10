@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 				mediaReplaceController: {
 					openLocalFilePicker: ReturnType<typeof vi.fn>
 					replaceWithProjectFile: ReturnType<typeof vi.fn>
+					getReplacementState: ReturnType<typeof vi.fn>
 				}
 		  }
 		| undefined,
@@ -103,6 +104,7 @@ describe("MediaReplaceMenuProvider", () => {
 			mediaReplaceController: {
 				openLocalFilePicker: vi.fn(),
 				replaceWithProjectFile: vi.fn(async () => true),
+				getReplacementState: vi.fn((): unknown => null),
 			},
 		}
 		mocks.handlers = {}
@@ -240,5 +242,50 @@ describe("MediaReplaceMenuProvider", () => {
 		unmount()
 		expect(cancelAnimationFrame).toHaveBeenCalled()
 		anchorElement.remove()
+	})
+
+	it("does not open or keep a source menu while another replacement is active", () => {
+		render(
+			<MediaReplaceMenuProvider>
+				<div>canvas</div>
+			</MediaReplaceMenuProvider>,
+		)
+
+		mocks.canvas?.mediaReplaceController.getReplacementState.mockReturnValue({
+			elementId: "audio-1",
+		})
+		act(() => {
+			mocks.handlers["element:media:replaceClick"]?.({
+				data: {
+					elementId: "image-1",
+					mediaType: ElementTypeEnum.Image,
+					contentId: "image-content-1",
+					clientX: 100,
+					clientY: 100,
+				},
+			})
+		})
+		expect(screen.queryByTestId("media-replace-popover")).toBeNull()
+
+		mocks.canvas?.mediaReplaceController.getReplacementState.mockReturnValue(null)
+		act(() => {
+			mocks.handlers["element:media:replaceClick"]?.({
+				data: {
+					elementId: "image-1",
+					mediaType: ElementTypeEnum.Image,
+					contentId: "image-content-1",
+					clientX: 100,
+					clientY: 100,
+				},
+			})
+		})
+		expect(screen.getByTestId("media-replace-popover")).toBeInTheDocument()
+
+		act(() => {
+			mocks.handlers["element:media:replaceStateChanged"]?.({
+				data: { elementId: "image-1", status: "uploading" },
+			})
+		})
+		expect(screen.queryByTestId("media-replace-popover")).toBeNull()
 	})
 })

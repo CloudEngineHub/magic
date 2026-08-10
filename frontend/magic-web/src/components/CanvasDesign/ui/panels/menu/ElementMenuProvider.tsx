@@ -100,6 +100,23 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		[],
 	)
 
+	// 替换开始后，右键菜单中的下载/定位等项目可能已经是旧快照；
+	// 关闭菜单，让下一次打开时重新按 UserAction.canExecute 计算。
+	useCanvasEvent(
+		"element:media:replaceStateChanged",
+		({ data }) => {
+			if (data.status !== "uploading" && data.status !== "applying") return
+			setMenuKey((previous) => previous + 1)
+			setIsMenuOpen(false)
+			setCurrentElementId(null)
+			setIsCanvasMenu(false)
+			setCanvasMenuPosition(null)
+			setIsClickEnabled(false)
+			menuSource.current = null
+		},
+		[],
+	)
+
 	// 监听菜单打开/关闭状态，控制 pan 和缩放
 	// 只有当菜单是从画布打开时，才禁用 pan 和缩放
 	useUpdateEffect(() => {

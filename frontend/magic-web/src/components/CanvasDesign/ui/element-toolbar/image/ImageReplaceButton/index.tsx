@@ -1,4 +1,4 @@
-import { useCallback, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import { RefreshCw } from "lucide-react"
 import { useCanvasEvent } from "../../../../app/hooks/canvas"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
@@ -17,7 +17,9 @@ export default function ImageReplaceButton() {
 	const { canvas } = useCanvas()
 	const { selectedElements } = useCanvasUI()
 	const { t } = useCanvasDesignI18n()
-	const [replacingElementId, setReplacingElementId] = useState<string | null>(null)
+	const [replacingElementId, setReplacingElementId] = useState<string | null>(
+		() => canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null,
+	)
 	const selected = selectedElements[0]
 	const selectedImage = selected?.type === ElementTypeEnum.Image ? selected : undefined
 	const activeContent = selectedImage ? getActiveImageContent(selectedImage) : undefined
@@ -25,12 +27,19 @@ export default function ImageReplaceButton() {
 		activeContent?.status === GenerationStatus.Pending ||
 		activeContent?.status === GenerationStatus.Processing
 	const isReplacing = replacingElementId === selectedImage?.id
+	const isReplacementBusy = replacingElementId !== null
+
+	useEffect(() => {
+		setReplacingElementId(canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null)
+	}, [canvas])
 
 	useCanvasEvent(
 		"element:image:replaceStateChanged",
 		useCallback(({ data }) => {
 			setReplacingElementId((current) => {
-				if (data.status === "uploading") return data.elementId
+				if (data.status === "uploading" || data.status === "applying") {
+					return data.elementId
+				}
 				return current === data.elementId ? null : current
 			})
 		}, []),
@@ -38,7 +47,7 @@ export default function ImageReplaceButton() {
 	)
 
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
-		if (!canvas || canvas.readonly || !selectedImage || activeIsProcessing || isReplacing)
+		if (!canvas || canvas.readonly || !selectedImage || activeIsProcessing || isReplacementBusy)
 			return
 		canvas.eventEmitter.emit({
 			type: "element:image:replaceClick",
@@ -57,7 +66,11 @@ export default function ImageReplaceButton() {
 		<IconButton
 			onClick={handleReplace}
 			disabled={
-				!canvas || canvas.readonly || !selectedImage || activeIsProcessing || isReplacing
+				!canvas ||
+				canvas.readonly ||
+				!selectedImage ||
+				activeIsProcessing ||
+				isReplacementBusy
 			}
 			className={styles.imageCropButton}
 		>

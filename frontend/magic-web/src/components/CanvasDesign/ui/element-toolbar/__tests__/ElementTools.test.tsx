@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ElementToolTypeEnum } from "../../../public/props"
 import { ElementTypeEnum } from "../../../runtime/document/types"
@@ -6,6 +6,13 @@ import ElementTools from "../index"
 
 const mocks = vi.hoisted(() => ({
 	selectedElements: [] as Array<Record<string, unknown>>,
+	canvas: undefined as
+		{ mediaReplaceController: { getReplacingElementId: () => string | null } } | undefined,
+	mediaReplaceStateHandler: undefined as
+		| ((event: {
+				data: { elementId: string; status: "idle" | "uploading" | "applying" | "error" }
+		  }) => void)
+		| undefined,
 }))
 
 vi.mock("../ElementToolsRender", () => ({
@@ -34,7 +41,25 @@ vi.mock("../../../app/providers/MagicProvider", () => ({
 }))
 
 vi.mock("../../../app/providers/CanvasProvider", () => ({
-	useCanvas: () => ({ canvas: undefined }),
+	useCanvas: () => ({ canvas: mocks.canvas }),
+}))
+
+vi.mock("../../../app/hooks/canvas", () => ({
+	useCanvasEvent: vi.fn(
+		(
+			event: string,
+			handler: (event: {
+				data: {
+					elementId: string
+					status: "idle" | "uploading" | "applying" | "error"
+				}
+			}) => void,
+		) => {
+			if (event === "element:media:replaceStateChanged") {
+				mocks.mediaReplaceStateHandler = handler
+			}
+		},
+	),
 }))
 
 vi.mock("../hooks/useShowVideoOriginalSizeButton", () => ({
@@ -44,6 +69,8 @@ vi.mock("../hooks/useShowVideoOriginalSizeButton", () => ({
 describe("ElementTools image replacement ordering", () => {
 	beforeEach(() => {
 		mocks.selectedElements = []
+		mocks.canvas = undefined
+		mocks.mediaReplaceStateHandler = undefined
 	})
 
 	it("does not show replace for a new empty image node", () => {
@@ -211,5 +238,114 @@ describe("ElementTools image replacement ordering", () => {
 		)
 
 		expect(labels).toEqual([ElementToolTypeEnum.MediaReplaceButton])
+	})
+
+	it("hides the audio toolbar while the selected empty node uploads", () => {
+		mocks.selectedElements = [
+			{
+				id: "audio-empty",
+				type: ElementTypeEnum.Audio,
+				x: 0,
+				y: 0,
+				width: 320,
+				height: 96,
+				contents: [{ contentId: "audio-content" }],
+				activeContentId: "audio-content",
+				mainContentId: "audio-content",
+			},
+		]
+
+		render(<ElementTools />)
+		expect(screen.getByTestId("element-tools")).toBeInTheDocument()
+
+		act(() => {
+			mocks.mediaReplaceStateHandler?.({
+				data: { elementId: "audio-empty", status: "uploading" },
+			})
+		})
+		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
+
+		act(() => {
+			mocks.mediaReplaceStateHandler?.({
+				data: { elementId: "audio-empty", status: "idle" },
+			})
+		})
+		expect(screen.getByTestId("element-tools")).toBeInTheDocument()
+	})
+
+	it("hides the entire media toolbar during replacement", () => {
+		mocks.selectedElements = [
+			{
+				id: "audio-1",
+				type: ElementTypeEnum.Audio,
+				x: 0,
+				y: 0,
+				width: 320,
+				height: 96,
+				contents: [{ contentId: "audio-content", src: "./audios/voice.mp3" }],
+				activeContentId: "audio-content",
+				mainContentId: "audio-content",
+			},
+		]
+
+		render(<ElementTools />)
+		act(() => {
+			mocks.mediaReplaceStateHandler?.({
+				data: { elementId: "audio-1", status: "uploading" },
+			})
+		})
+
+		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
+	})
+
+	it.each([ElementTypeEnum.Image, ElementTypeEnum.Video] as const)(
+		"hides the %s toolbar while replacement is active",
+		(type) => {
+			mocks.selectedElements = [
+				{
+					id: `${type}-1`,
+					type,
+					x: 0,
+					y: 0,
+					width: 320,
+					height: 180,
+					contents: [{ contentId: `${type}-content`, src: `./${type}/demo` }],
+					activeContentId: `${type}-content`,
+					mainContentId: `${type}-content`,
+				},
+			]
+
+			render(<ElementTools />)
+			act(() => {
+				mocks.mediaReplaceStateHandler?.({
+					data: { elementId: `${type}-1`, status: "applying" },
+				})
+			})
+
+			expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
+		},
+	)
+
+	it("restores replacement state when a video is reselected", () => {
+		mocks.canvas = {
+			mediaReplaceController: { getReplacingElementId: () => "video-1" },
+		}
+		mocks.selectedElements = [
+			{
+				id: "video-1",
+				type: ElementTypeEnum.Video,
+				x: 0,
+				y: 0,
+				width: 320,
+				height: 180,
+				contents: [{ contentId: "video-content", src: "./videos/demo.mp4" }],
+				activeContentId: "video-content",
+				mainContentId: "video-content",
+			},
+		]
+
+		render(<ElementTools />)
+
+		expect(screen.queryByTestId("element-tools")).not.toBeInTheDocument()
 	})
 })

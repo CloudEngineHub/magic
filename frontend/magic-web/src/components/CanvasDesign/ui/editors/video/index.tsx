@@ -7,7 +7,11 @@ import {
 	getActiveContent,
 	hasPendingVideoGenerationContent,
 } from "../../../runtime/document/elementContent"
-import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
+import {
+	useCanvasEvent,
+	useGenerationRuntime,
+	useIsMediaReplacing,
+} from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
@@ -19,6 +23,7 @@ import { VideoElement as VideoElementClass } from "../../../runtime/elements/vid
  * 单选非临时视频元素且可编辑时挂载生成编辑器；上传中、生成中、已有成片等状态不展示
  */
 export default function VideoGenerateEditor() {
+	const { canvas } = useCanvas()
 	const { selectedElements, isSelecting, isDragging } = useCanvasSelectionUI()
 	const [previewingMediaResource, setPreviewingMediaResource] =
 		useState<MediaResourceFullscreenPreviewItem | null>(null)
@@ -28,9 +33,10 @@ export default function VideoGenerateEditor() {
 	useCanvasEvent(
 		"element:video:retryClick",
 		({ data }) => {
+			if (canvas?.mediaReplaceController?.isReplacing?.(data.elementId)) return
 			setRetryEditingElementId(data.elementId)
 		},
-		[],
+		[canvas],
 	)
 
 	const [targetElement] = selectedElements
@@ -38,6 +44,11 @@ export default function VideoGenerateEditor() {
 		selectedElements.length === 1 && targetElement?.type === ElementTypeEnum.Video
 			? targetElement
 			: null
+	const isReplacing = useIsMediaReplacing(videoElement?.id)
+
+	useEffect(() => {
+		if (isReplacing) setRetryEditingElementId(null)
+	}, [isReplacing])
 
 	useEffect(() => {
 		const selectedId = videoElement?.id
@@ -54,7 +65,12 @@ export default function VideoGenerateEditor() {
 		setPreviewingMediaResource(null)
 	}, [])
 
-	const editorEligible = videoElement != null && !isSelecting && !videoElement.locked
+	useEffect(() => {
+		if (isReplacing) setPreviewingMediaResource(null)
+	}, [isReplacing])
+
+	const editorEligible =
+		videoElement != null && !isSelecting && !videoElement.locked && !isReplacing
 
 	if (!editorEligible && !previewingMediaResource) {
 		return null

@@ -155,6 +155,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private deselectHandler?: (event: { data: { elementIds?: string[] } | undefined }) => void
 	private isRetryEditing = false
 	private generationRuntimeUnsubscribe?: () => void
+	private mediaReplaceStateUnsubscribe?: () => void
 
 	constructor(data: ImageElementData, canvas: Canvas) {
 		super(data, canvas)
@@ -165,6 +166,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.generationRuntimeUnsubscribe = this.canvas.generationRuntimeManager.subscribeElement(
 			this.data.id,
 			() => {
+				this.rerenderWhenTransformIdle()
+			},
+		)
+		this.mediaReplaceStateUnsubscribe = this.canvas.eventEmitter.on(
+			"element:media:replaceStateChanged",
+			({ data: eventData }) => {
+				if (eventData.elementId !== this.data.id) return
 				this.rerenderWhenTransformIdle()
 			},
 		)
@@ -414,6 +422,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.removeRetryEditingListeners()
 		this.generationRuntimeUnsubscribe?.()
 		this.generationRuntimeUnsubscribe = undefined
+		this.mediaReplaceStateUnsubscribe?.()
+		this.mediaReplaceStateUnsubscribe = undefined
 		this.pollingManager.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
@@ -2084,7 +2094,22 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 	}
 
+	private isReplacementUploadingActiveContent(): boolean {
+		const replacementState = this.canvas?.mediaReplaceController?.getReplacementState?.(
+			this.data.id,
+		)
+		return (
+			replacementState?.source === "local-upload" &&
+			replacementState.phase === "uploading" &&
+			replacementState.contentId === getActiveImageContentId(this.data)
+		)
+	}
+
 	render(): Konva.Group | null {
+		if (this.isReplacementUploadingActiveContent()) {
+			return this.renderGeneratingPlaceholder()
+		}
+
 		// 检查是否有生成请求（生图或高清图）
 		const hasRequest =
 			!!this.getActiveGenerateImageRequest() || !!this.getActiveImageGenerationTaskMeta()
@@ -2566,6 +2591,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				isErrorState: true,
 				t: this.canvas.t,
 				onRetry: () => {
+					if (this.canvas.mediaReplaceController?.isReplacing?.(this.data.id)) return
 					this.isRetryEditing = true
 					this.canvas.selectionManager.select(this.data.id, false, false)
 					this.rerender()

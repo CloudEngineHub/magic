@@ -6,6 +6,7 @@ import MediaReplaceButton from "../index"
 const mocks = vi.hoisted(() => ({
 	selectedElements: [] as Array<Record<string, unknown>>,
 	emit: vi.fn(),
+	replacingElementId: null as string | null,
 }))
 
 vi.mock("../../../../../app/hooks/canvas", () => ({
@@ -17,6 +18,9 @@ vi.mock("../../../../../app/providers/CanvasProvider", () => ({
 		canvas: {
 			readonly: false,
 			eventEmitter: { emit: mocks.emit },
+			mediaReplaceController: {
+				getReplacingElementId: () => mocks.replacingElementId,
+			},
 		},
 	}),
 }))
@@ -49,6 +53,7 @@ describe("MediaReplaceButton labels", () => {
 	beforeEach(() => {
 		mocks.selectedElements = []
 		mocks.emit.mockReset()
+		mocks.replacingElementId = null
 	})
 
 	it.each([
@@ -71,6 +76,20 @@ describe("MediaReplaceButton labels", () => {
 		expect(screen.getByText("上传音频")).toBeInTheDocument()
 	})
 
+	it.each([ElementTypeEnum.Image, ElementTypeEnum.Video, ElementTypeEnum.Audio] as const)(
+		"restores replacing state from the Canvas controller for %s",
+		(type) => {
+			mocks.selectedElements = [createMediaElement(type, `/media/${type}`)]
+			mocks.replacingElementId = `${type}-1`
+
+			render(<MediaReplaceButton />)
+
+			expect(screen.getByText("替换中")).toBeInTheDocument()
+			fireEvent.click(screen.getByText("替换中"))
+			expect(mocks.emit).not.toHaveBeenCalled()
+		},
+	)
+
 	it("emits the replacement button element as the menu anchor", () => {
 		mocks.selectedElements = [createMediaElement(ElementTypeEnum.Image, "/media/image")]
 		render(<MediaReplaceButton />)
@@ -88,5 +107,17 @@ describe("MediaReplaceButton labels", () => {
 				anchorElement: button,
 			},
 		})
+	})
+
+	it("disables replacing another media element while the Canvas is busy", () => {
+		mocks.selectedElements = [createMediaElement(ElementTypeEnum.Image, "/media/image")]
+		mocks.replacingElementId = "audio-2"
+
+		render(<MediaReplaceButton />)
+
+		const button = screen.getByText("替换图片").parentElement
+		expect(button?.className).toContain("disabled")
+		fireEvent.click(screen.getByText("替换图片"))
+		expect(mocks.emit).not.toHaveBeenCalled()
 	})
 })

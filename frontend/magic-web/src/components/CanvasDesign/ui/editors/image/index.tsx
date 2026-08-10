@@ -5,7 +5,11 @@ import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/ty
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { GenerationStatus } from "../../../public/magic-types"
 import { useImageOssSrc } from "../../../app/hooks/resources/useImageOssSrc"
-import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
+import {
+	useCanvasEvent,
+	useGenerationRuntime,
+	useIsMediaReplacing,
+} from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
@@ -14,6 +18,7 @@ import SecondEdit from "./SecondEdit"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 
 export default function ImageMessageEditor() {
+	const { canvas } = useCanvas()
 	const { selectedElements, isSelecting, isDragging, subElementTooltip } = useCanvasSelectionUI()
 	const { croppingElementId, extendingElementId, erasingElementId } = useCanvasModeUI()
 	const [retryEditingElementId, setRetryEditingElementId] = useState<string | null>(null)
@@ -25,15 +30,21 @@ export default function ImageMessageEditor() {
 		selectedElements.length === 1 && targetElement?.type === ElementTypeEnum.Image
 			? targetElement
 			: null
+	const isReplacing = useIsMediaReplacing(imageElement?.id)
 
 	// 必须在父级订阅：useCanvasEvent 在 useEffect 注册，未选中时 ActiveImageMessageEditor 未挂载会漏掉同一次点击内的 emit
 	useCanvasEvent(
 		"element:image:retryClick",
 		({ data }) => {
+			if (canvas?.mediaReplaceController?.isReplacing?.(data.elementId)) return
 			setRetryEditingElementId(data.elementId)
 		},
-		[],
+		[canvas],
 	)
+
+	useEffect(() => {
+		if (isReplacing) setRetryEditingElementId(null)
+	}, [isReplacing])
 
 	useEffect(() => {
 		const selectedId = imageElement?.id
@@ -53,11 +64,16 @@ export default function ImageMessageEditor() {
 		!croppingElementId &&
 		!extendingElementId &&
 		!erasingElementId &&
+		!isReplacing &&
 		!subElementTooltip
 
 	const handleCloseMediaResourcePreview = useCallback(() => {
 		setPreviewingMediaResource(null)
 	}, [])
+
+	useEffect(() => {
+		if (isReplacing) setPreviewingMediaResource(null)
+	}, [isReplacing])
 
 	if (!editorEligible && !previewingMediaResource) {
 		return null

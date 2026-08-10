@@ -161,7 +161,10 @@ export interface CanvasEventMap {
 	}
 	"element:image:replaceStateChanged": {
 		elementId: string
-		status: "idle" | "uploading" | "error"
+		status: "idle" | "uploading" | "applying" | "error"
+		source?: "local-upload" | "project-file"
+		contentId?: string | null
+		phase?: "uploading" | "applying"
 	}
 	"element:audio:replaceClick": {
 		elementId: string
@@ -170,7 +173,10 @@ export interface CanvasEventMap {
 	}
 	"element:audio:replaceStateChanged": {
 		elementId: string
-		status: "idle" | "uploading" | "error"
+		status: "idle" | "uploading" | "applying" | "error"
+		source?: "local-upload" | "project-file"
+		contentId?: string | null
+		phase?: "uploading" | "applying"
 	}
 	/** 媒体元素统一替换入口；contentId 在点击时捕获，避免异步上传误写其他 Content。 */
 	"element:media:replaceClick": {
@@ -185,7 +191,10 @@ export interface CanvasEventMap {
 	"element:media:replaceStateChanged": {
 		elementId: string
 		mediaType: "image" | "video" | "audio"
-		status: "idle" | "uploading" | "error"
+		contentId: string | null
+		status: "idle" | "uploading" | "applying" | "error"
+		source: "local-upload" | "project-file"
+		phase?: "uploading" | "applying"
 	}
 	"element:image:resultUpdated": { elementId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件

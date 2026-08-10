@@ -1,4 +1,4 @@
-import { useCallback, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import { RefreshCw } from "lucide-react"
 import { useCanvasEvent } from "../../../../app/hooks/canvas"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
@@ -26,7 +26,9 @@ export default function MediaReplaceButton() {
 	const { canvas } = useCanvas()
 	const { selectedElements } = useCanvasUI()
 	const { t } = useCanvasDesignI18n()
-	const [replacingElementId, setReplacingElementId] = useState<string | null>(null)
+	const [replacingElementId, setReplacingElementId] = useState<string | null>(
+		() => canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null,
+	)
 	const selected = selectedElements[0]
 	const selectedMedia = isMediaElement(selected) ? selected : undefined
 	const activeContent = selectedMedia ? getActiveContent(selectedMedia) : undefined
@@ -35,13 +37,20 @@ export default function MediaReplaceButton() {
 	const activeIsProcessing =
 		activeStatus === GenerationStatus.Pending || activeStatus === GenerationStatus.Processing
 	const isReplacing = replacingElementId === selectedMedia?.id
+	const isReplacementBusy = replacingElementId !== null
 	const hasSource = Boolean(activeContent?.src)
+
+	useEffect(() => {
+		setReplacingElementId(canvas?.mediaReplaceController?.getReplacingElementId?.() ?? null)
+	}, [canvas])
 
 	useCanvasEvent(
 		"element:media:replaceStateChanged",
 		useCallback(({ data }) => {
 			setReplacingElementId((current) => {
-				if (data.status === "uploading") return data.elementId
+				if (data.status === "uploading" || data.status === "applying") {
+					return data.elementId
+				}
 				return current === data.elementId ? null : current
 			})
 		}, []),
@@ -49,7 +58,7 @@ export default function MediaReplaceButton() {
 	)
 
 	const handleReplace = (event: MouseEvent<HTMLDivElement>) => {
-		if (!canvas || canvas.readonly || !selectedMedia || activeIsProcessing || isReplacing)
+		if (!canvas || canvas.readonly || !selectedMedia || activeIsProcessing || isReplacementBusy)
 			return
 		canvas.eventEmitter.emit({
 			type: "element:media:replaceClick",
@@ -88,7 +97,11 @@ export default function MediaReplaceButton() {
 			className={styles.downloadButton}
 			title={label}
 			disabled={
-				!canvas || canvas.readonly || !selectedMedia || activeIsProcessing || isReplacing
+				!canvas ||
+				canvas.readonly ||
+				!selectedMedia ||
+				activeIsProcessing ||
+				isReplacementBusy
 			}
 		>
 			<RefreshCw size={16} />

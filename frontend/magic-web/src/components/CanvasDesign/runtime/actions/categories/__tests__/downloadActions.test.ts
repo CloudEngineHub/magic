@@ -6,6 +6,7 @@ function createCanvas(options?: {
 	allowFileDownload?: boolean
 	selectedIds?: string[]
 	elements?: Array<[string, object]>
+	replacingIds?: string[]
 }) {
 	const imageContent = (id: string, src: string) => ({
 		contentId: `${id}-content`,
@@ -54,6 +55,10 @@ function createCanvas(options?: {
 					permissions: { allowFileDownload: options?.allowFileDownload },
 					methods: { downloadFiles },
 				},
+			},
+			mediaReplaceController: {
+				isReplacing: (elementId: string) =>
+					options?.replacingIds?.includes(elementId) ?? false,
 			},
 		} as never,
 		downloadFiles,
@@ -192,6 +197,53 @@ describe("Canvas download actions", () => {
 		const { canvas, downloadFiles } = createCanvas({ selectedIds: ["generating-image"] })
 		const action = downloadActions.find((item) => item.id === "download.image") as
 			UserAction<"download.image"> | undefined
+
+		expect(action?.canExecute(canvas)).toBe(false)
+		await action?.execute(canvas, { downloadMode: "default" })
+		expect(downloadFiles).not.toHaveBeenCalled()
+	})
+
+	it("blocks selected media download while replacement is uploading", async () => {
+		const { canvas, downloadFiles } = createCanvas({
+			selectedIds: ["image"],
+			replacingIds: ["image"],
+		})
+		const action = downloadActions.find((item) => item.id === "download.image") as
+			UserAction<"download.image"> | undefined
+
+		expect(action?.canExecute(canvas)).toBe(false)
+		await action?.execute(canvas, { downloadMode: "default" })
+		const noWatermarkAction = downloadActions.find(
+			(item) => item.id === "download.image-no-watermark",
+		) as UserAction<"download.image-no-watermark"> | undefined
+		expect(noWatermarkAction?.canExecute(canvas)).toBe(false)
+		await noWatermarkAction?.execute(canvas)
+		expect(downloadFiles).not.toHaveBeenCalled()
+	})
+
+	it("blocks frame download when a nested media element is replacing", async () => {
+		const framedImage = {
+			id: "framed-image",
+			type: "image",
+			contents: [{ contentId: "framed-image-content", src: "images/framed.png" }],
+			activeContentId: "framed-image-content",
+			mainContentId: "framed-image-content",
+		}
+		const frame = {
+			id: "frame",
+			type: "frame",
+			contents: [{ contentId: "frame-content" }],
+			activeContentId: "frame-content",
+			mainContentId: "frame-content",
+			children: [framedImage],
+		}
+		const { canvas, downloadFiles } = createCanvas({
+			selectedIds: ["frame"],
+			elements: [["frame", frame]],
+			replacingIds: ["framed-image"],
+		})
+		const action = downloadActions.find((item) => item.id === "download.frame") as
+			UserAction<"download.frame"> | undefined
 
 		expect(action?.canExecute(canvas)).toBe(false)
 		await action?.execute(canvas, { downloadMode: "default" })

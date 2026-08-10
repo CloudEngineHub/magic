@@ -98,18 +98,21 @@ export interface ReplaceAudioElementOptions {
 	elementId: string
 	file: File
 	contentId?: string | null
+	onUploadComplete?: () => void
 }
 
 export interface ReplaceVideoElementOptions {
 	elementId: string
 	file: File
 	contentId?: string | null
+	onUploadComplete?: () => void
 }
 
 export interface ReplaceImageElementOptions {
 	elementId: string
 	file: File
 	contentId: string | null
+	onUploadComplete?: () => void
 }
 
 export interface ReplaceImageElementFromProjectOptions {
@@ -135,6 +138,7 @@ export interface ReplaceMediaElementOptions {
 	mediaType: MediaElementType
 	file: File
 	contentId: string | null
+	onUploadComplete?: () => void
 }
 
 export interface ReplaceMediaElementFromProjectOptions {
@@ -951,6 +955,7 @@ export class CanvasFileUploadManager {
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
 
 		this.canvas.imageResourceManager.primeCache(uploadResult.path, uploadResult)
+		options.onUploadComplete?.()
 		const success = this.applyImageElementSourceReplacement(
 			options.elementId,
 			uploadResult.path,
@@ -1089,6 +1094,7 @@ export class CanvasFileUploadManager {
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
 
 		this.canvas.audioResourceManager.primeCache(uploadResult.path, uploadResult)
+		options.onUploadComplete?.()
 		return this.applyAudioElementSourceReplacement(
 			options.elementId,
 			uploadResult.path,
@@ -1131,6 +1137,7 @@ export class CanvasFileUploadManager {
 		if (!uploadResult) throw new Error("Upload failed: no result returned")
 
 		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
+		options.onUploadComplete?.()
 		return this.applyVideoElementSourceReplacement(
 			options.elementId,
 			uploadResult.path,

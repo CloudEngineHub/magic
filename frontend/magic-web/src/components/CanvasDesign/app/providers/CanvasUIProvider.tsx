@@ -188,6 +188,23 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		[],
 	)
 
+	// 替换会改变媒体资源身份；关闭旧资源的全屏预览、历史和编辑模式，
+	// 避免替换完成后恢复到已经过期的媒体操作界面。
+	useCanvasEvent(
+		"element:media:replaceStateChanged",
+		({ data }) => {
+			if (data.status !== "uploading" && data.status !== "applying") return
+			setMessageHistoryElementId((current) => (current === data.elementId ? null : current))
+			setFullscreenMediaElement((current) =>
+				current?.elementId === data.elementId ? null : current,
+			)
+			setCroppingElementId((current) => (current === data.elementId ? null : current))
+			setExtendingElementId((current) => (current === data.elementId ? null : current))
+			setErasingElementId((current) => (current === data.elementId ? null : current))
+		},
+		[],
+	)
+
 	// 监听进入裁剪模式事件
 	useCanvasEvent("crop:enter", ({ data }) => {
 		setCroppingElementId(data.elementId)

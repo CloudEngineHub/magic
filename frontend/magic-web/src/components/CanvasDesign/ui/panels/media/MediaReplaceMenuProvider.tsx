@@ -39,6 +39,7 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 			clientY?: number
 		}) => {
 			if (!canvas || canvas.readonly) return
+			if (canvas.mediaReplaceController.getReplacementState()) return
 			const bounds = canvas.container.getBoundingClientRect()
 			const anchorRect = options.anchorElement?.getBoundingClientRect() ?? options.anchorRect
 			const anchorX = anchorRect
@@ -122,6 +123,16 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 		[canvas, openMenu],
 	)
 
+	useCanvasEvent(
+		"element:media:replaceStateChanged",
+		useCallback(({ data }) => {
+			if (data.status === "uploading" || data.status === "applying") {
+				setMenu(null)
+			}
+		}, []),
+		[],
+	)
+
 	const handleOpenChange = useCallback((open: boolean) => {
 		if (!open) setMenu(null)
 	}, [])
@@ -129,6 +140,10 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
 			if (!canvas || !menu || source !== REFERENCE_RESOURCE_SOURCE_TYPES.localUpload) return
+			if (canvas.mediaReplaceController.getReplacementState()) {
+				setMenu(null)
+				return
+			}
 			const target = {
 				elementId: menu.elementId,
 				mediaType: menu.mediaType,
@@ -143,6 +158,10 @@ export function MediaReplaceMenuProvider({ children }: PropsWithChildren<unknown
 	const handleProjectSelect = useCallback(
 		(item: ReferenceResourcePanelItem, context?: ReferenceResourcePanelSelectContext) => {
 			if (!canvas || !menu) return
+			if (canvas.mediaReplaceController.getReplacementState()) {
+				setMenu(null)
+				return
+			}
 			const target = {
 				elementId: menu.elementId,
 				mediaType: menu.mediaType,

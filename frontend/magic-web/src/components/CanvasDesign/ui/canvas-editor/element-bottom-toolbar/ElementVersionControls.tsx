@@ -11,6 +11,7 @@ import { GenerationStatus } from "../../../public/magic-types"
 import { isContentVersionOperations } from "../../../runtime/elements/core/ContentVersionOperations"
 import type { AudioElement, ImageElement, VideoElement } from "../../../runtime/document/types"
 import styles from "./ElementVersionControls.module.css"
+import { useIsMediaReplacing } from "../../../app/hooks/canvas"
 
 type VersionElement = ImageElement | VideoElement | AudioElement
 
@@ -39,35 +40,38 @@ export default function ElementVersionControls({ element }: ElementVersionContro
 	const mainContent = getMainContent(element)
 	const instance = canvas?.elementManager.getElementInstance(element.id)
 	const operations = isContentVersionOperations(instance) ? instance : null
+	const isReplacing = useIsMediaReplacing(element.id)
 
 	const isActivePending =
 		element.type !== "audio" &&
 		"status" in (activeContent ?? {}) &&
 		(activeContent.status === GenerationStatus.Pending ||
 			activeContent.status === GenerationStatus.Processing)
-	const canDelete = contents.length > 1 && !isActivePending && Boolean(operations)
+	const canDelete = contents.length > 1 && !isActivePending && !isReplacing && Boolean(operations)
 	const canSetMain =
 		Boolean(operations) &&
+		!isReplacing &&
 		Boolean(activeContent) &&
 		canUseAsMain(element, activeContent) &&
 		activeContent?.contentId !== mainContent?.contentId
 
 	const switchActive = useCallback(
 		(contentId: string) => {
+			if (isReplacing) return
 			operations?.switchActiveContent(contentId)
 		},
-		[operations],
+		[isReplacing, operations],
 	)
 
 	const handleSetMain = useCallback(() => {
-		if (!activeContent) return
+		if (isReplacing || !activeContent) return
 		operations?.setMainContent(activeContent.contentId)
-	}, [activeContent, operations])
+	}, [activeContent, isReplacing, operations])
 
 	const handleDelete = useCallback(() => {
-		if (!canDelete || !operations) return
+		if (isReplacing || !canDelete || !operations) return
 		void Promise.resolve(operations.deleteActiveContent())
-	}, [canDelete, operations])
+	}, [canDelete, isReplacing, operations])
 
 	const label = useMemo(
 		() =>
@@ -86,7 +90,7 @@ export default function ElementVersionControls({ element }: ElementVersionContro
 			<button
 				type="button"
 				className={styles.iconButton}
-				disabled={activeIndex <= 0}
+				disabled={isReplacing || activeIndex <= 0}
 				aria-label={t("elementBottomToolbar.previousVersion", "上一个版本")}
 				onClick={() => switchActive(contents[activeIndex - 1].contentId)}
 			>
@@ -98,7 +102,7 @@ export default function ElementVersionControls({ element }: ElementVersionContro
 			<button
 				type="button"
 				className={styles.iconButton}
-				disabled={activeIndex >= contents.length - 1}
+				disabled={isReplacing || activeIndex >= contents.length - 1}
 				aria-label={t("elementBottomToolbar.nextVersion", "下一个版本")}
 				onClick={() => switchActive(contents[activeIndex + 1].contentId)}
 			>

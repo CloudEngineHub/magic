@@ -80,8 +80,15 @@ function createAudioElementHarness(options?: {
 	let playbackSnapshot = options?.snapshot ?? READY_PLAYBACK_SNAPSHOT
 	let playbackListener: ((snapshot: AudioPlaybackSnapshot) => void) | undefined
 	let waveformListener: ((snapshot: AudioWaveformSnapshot) => void) | undefined
-	const viewportScaleListeners = new Set<() => void>()
-	const deviceChangeListeners = new Set<() => void>()
+	const viewportScaleListeners = new Set<(event?: unknown) => void>()
+	const deviceChangeListeners = new Set<(event?: unknown) => void>()
+	const audioReplaceStateListeners = new Set<(event: unknown) => void>()
+	let replacementState: {
+		elementId: string
+		contentId: string | null
+		source: "local-upload" | "project-file"
+		phase: "uploading" | "applying"
+	} | null = null
 	const seek = vi.fn()
 	const seekBy = vi.fn(async () => true)
 	const toggle = vi.fn(async () => true)
@@ -122,12 +129,18 @@ function createAudioElementHarness(options?: {
 		audioResourceManager: { getFailureReason: vi.fn(() => null) },
 		eventEmitter: {
 			emit,
-			on: vi.fn((eventType: string, listener: () => void) => {
+			on: vi.fn((eventType: string, listener: (event: unknown) => void) => {
 				if (eventType === "viewport:scale") viewportScaleListeners.add(listener)
 				if (eventType === "canvas:devicechange") deviceChangeListeners.add(listener)
+				if (
+					eventType === "element:audio:replaceStateChanged" ||
+					eventType === "element:media:replaceStateChanged"
+				)
+					audioReplaceStateListeners.add(listener)
 				return () => {
 					viewportScaleListeners.delete(listener)
 					deviceChangeListeners.delete(listener)
+					audioReplaceStateListeners.delete(listener)
 				}
 			}),
 			off: vi.fn(),
@@ -153,6 +166,9 @@ function createAudioElementHarness(options?: {
 			canDragElement: vi.fn(() => true),
 			canListenElement: vi.fn(() => true),
 			isTemporary: vi.fn(() => options?.temporary ?? false),
+		},
+		mediaReplaceController: {
+			getReplacementState: vi.fn(() => replacementState),
 		},
 		runtimeScheduler: { requestLayerDraw: vi.fn() },
 		transformManager: {
@@ -194,6 +210,31 @@ function createAudioElementHarness(options?: {
 		},
 		emitDeviceChange() {
 			deviceChangeListeners.forEach((listener) => listener())
+		},
+		emitAudioReplaceState(
+			status: "idle" | "uploading" | "applying" | "error",
+			source: "local-upload" | "project-file" = "local-upload",
+		) {
+			replacementState =
+				status === "uploading" || status === "applying"
+					? {
+							elementId: "audio-1",
+							contentId: "audio-1-content-1",
+							source,
+							phase: status,
+						}
+					: null
+			audioReplaceStateListeners.forEach((listener) =>
+				listener({
+					data: {
+						elementId: "audio-1",
+						contentId: "audio-1-content-1",
+						status,
+						source,
+						phase: status === "uploading" || status === "applying" ? status : undefined,
+					},
+				}),
+			)
 		},
 	}
 }
@@ -357,6 +398,61 @@ describe("AudioElement", () => {
 		expect(group.findOne(".audio-progress-track")).toBeUndefined()
 		expect(group.findOne(".audio-operation-group")).toBeUndefined()
 		expect(group.findOne(".decorator-corner-action-replace")).toBeUndefined()
+	})
+
+	it("renders an uploading placeholder while adding audio to an empty persistent node", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness({ empty: true })
+		const group = harness.element.render()
+
+		expect((group.findOne(".audio-status-text") as Konva.Text).text()).toBe("暂无音频内容")
+
+		harness.emitAudioReplaceState("uploading")
+		const uploadingGroup = harness.element.getNode() as Konva.Group
+		expect((uploadingGroup.findOne(".audio-status-text") as Konva.Text).text()).toBe(
+			"正在上传中...",
+		)
+		expect(uploadingGroup.findOne(".audio-status-spinner")).toBeTruthy()
+		expect(uploadingGroup.findOne(".audio-operation-group")).toBeUndefined()
+
+		harness.emitAudioReplaceState("idle")
+		const emptyGroup = harness.element.getNode() as Konva.Group
+		expect((emptyGroup.findOne(".audio-status-text") as Konva.Text).text()).toBe("暂无音频内容")
+	})
+
+	it("shows the uploading placeholder while a populated node uploads a replacement", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness()
+		const group = harness.element.render()
+
+		expect(group.findOne(".audio-waveform-shape")).toBeTruthy()
+		harness.emitAudioReplaceState("uploading")
+
+		const replacingGroup = harness.element.getNode() as Konva.Group
+		expect((replacingGroup.findOne(".audio-status-text") as Konva.Text).text()).toBe(
+			"正在上传中...",
+		)
+		expect(replacingGroup.findOne(".audio-status-spinner")).toBeTruthy()
+		expect(replacingGroup.findOne(".audio-waveform-shape")).toBeUndefined()
+		expect(replacingGroup.findOne(".audio-operation-group")).toBeUndefined()
+
+		harness.emitAudioReplaceState("error")
+		const restoredGroup = harness.element.getNode() as Konva.Group
+		expect(restoredGroup.findOne(".audio-waveform-shape")).toBeTruthy()
+		expect(restoredGroup.findOne(".audio-status-placeholder")).toBeUndefined()
+	})
+
+	it("keeps the existing player visible for a project-file replacement", () => {
+		mockCanvasRenderingContext()
+		const harness = createAudioElementHarness()
+		const group = harness.element.render()
+
+		expect(group.findOne(".audio-waveform-shape")).toBeTruthy()
+		harness.emitAudioReplaceState("uploading", "project-file")
+
+		const replacingGroup = harness.element.getNode() as Konva.Group
+		expect(replacingGroup.findOne(".audio-waveform-shape")).toBeTruthy()
+		expect(replacingGroup.findOne(".audio-status-placeholder")).toBeUndefined()
 	})
 
 	it("animates the upload spinner while the placeholder is mounted", () => {
@@ -1454,6 +1550,7 @@ describe("AudioElement", () => {
 	it("does not create an audio node until visibility admits the mounted element", () => {
 		const unregisterPlayback = vi.fn()
 		const unregisterFailure = vi.fn()
+		const unregisterReplaceState = vi.fn()
 		const registerAudioElement = vi.fn()
 		const unregisterAudioElement = vi.fn()
 		const createElement = vi.spyOn(document, "createElement")
@@ -1471,7 +1568,11 @@ describe("AudioElement", () => {
 				subscribe: vi.fn(() => unregisterPlayback),
 			},
 			eventEmitter: {
-				on: vi.fn(() => unregisterFailure),
+				on: vi.fn((eventType: string) =>
+					eventType === "resource:audio:load-failed"
+						? unregisterFailure
+						: unregisterReplaceState,
+				),
 			},
 			visibilityManager: {
 				registerAudioElement,
@@ -1497,5 +1598,6 @@ describe("AudioElement", () => {
 		expect(unregisterAudioElement).toHaveBeenCalledWith("audio-1")
 		expect(unregisterPlayback).toHaveBeenCalledTimes(1)
 		expect(unregisterFailure).toHaveBeenCalledTimes(1)
+		expect(unregisterReplaceState).toHaveBeenCalledTimes(1)
 	})
 })

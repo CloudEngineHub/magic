@@ -4,6 +4,7 @@ import type { DownloadImageOptions, CanvasImageSourceDimensions } from "../../..
 import { getActiveImageContent, getActiveContent } from "../../document/elementContent"
 import { ElementTypeEnum, type CanvasFileElement, type LayerElement } from "../../document/types"
 import { getCanvasElementChildren } from "../../document/elementIndex"
+import { containsReplacingMedia } from "../mediaReplacementGuards"
 
 function hasReadyMediaSource(fileElements: ReturnType<typeof getSelectedFileElements>): boolean {
 	return fileElements.some((element) => {
@@ -91,6 +92,7 @@ export const downloadActions: UserAction[] = [
 		canExecute: (canvas) => {
 			const fileElements = getSelectedFileElements(canvas)
 			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
 				return false
 			const methods = canvas.magicConfigManager.config?.methods
@@ -99,6 +101,7 @@ export const downloadActions: UserAction[] = [
 		execute: async (canvas, actionOptions?: DownloadActionOptions) => {
 			const fileElements = getSelectedFileElements(canvas)
 			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return
+			if (containsReplacingMedia(canvas, fileElements)) return
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const methods = canvas.magicConfigManager.config?.methods
 			if (!methods?.downloadFiles) return
@@ -115,6 +118,7 @@ export const downloadActions: UserAction[] = [
 		canExecute: (canvas) => {
 			const fileElements = getSelectedFileElements(canvas)
 			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
 				return false
 			const imageElements = getSelectedImageElements(canvas)
@@ -125,6 +129,7 @@ export const downloadActions: UserAction[] = [
 		execute: async (canvas) => {
 			const imageElements = getSelectedImageElements(canvas)
 			if (imageElements.length === 0 || !hasReadyMediaSource(imageElements)) return
+			if (containsReplacingMedia(canvas, imageElements)) return
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const fileElements = getSelectedFileElements(canvas)
 			if (imageElements.length !== fileElements.length) return
@@ -140,6 +145,7 @@ export const downloadActions: UserAction[] = [
 		canExecute: (canvas) => {
 			const fileElements = getFrameFileElements(canvas)
 			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return false
+			if (containsReplacingMedia(canvas, fileElements)) return false
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false)
 				return false
 			const methods = canvas.magicConfigManager.config?.methods
@@ -148,6 +154,7 @@ export const downloadActions: UserAction[] = [
 		execute: async (canvas, actionOptions?: DownloadActionOptions) => {
 			const fileElements = getFrameFileElements(canvas)
 			if (fileElements.length === 0 || !hasReadyMediaSource(fileElements)) return
+			if (containsReplacingMedia(canvas, fileElements)) return
 			if (canvas.magicConfigManager.config?.permissions?.allowFileDownload === false) return
 			const methods = canvas.magicConfigManager.config?.methods
 			if (!methods?.downloadFiles) return
