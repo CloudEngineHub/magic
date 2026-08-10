@@ -63,8 +63,8 @@ export class IframeUserInfoService {
 					scope !== USER_INFO_SCOPES.DISPLAY,
 			)
 			if (sensitiveScopes.length > 0) {
-				const userKeyBeforeAuthorization = this.getCurrentUserKey(userInfo)
-				if (!userKeyBeforeAuthorization) {
+				const userIdBeforeAuthorization = this.getCurrentUserId(userInfo)
+				if (!userIdBeforeAuthorization) {
 					this.respondError(req.requestId, "User identity is not available")
 					return
 				}
@@ -86,7 +86,7 @@ export class IframeUserInfoService {
 					this.respondError(req.requestId, "User info is not available")
 					return
 				}
-				if (this.getCurrentUserKey(latestUserInfo) !== userKeyBeforeAuthorization) {
+				if (this.getCurrentUserId(latestUserInfo) !== userIdBeforeAuthorization) {
 					this.respondError(req.requestId, "User identity changed during authorization")
 					return
 				}
@@ -123,14 +123,9 @@ export class IframeUserInfoService {
 		})
 	}
 
-	private getCurrentUserKey(userInfo: UserInfo): string | null {
-		const magicId = userInfo.magic_id?.trim()
-		if (magicId) return `magic_id:${magicId}`
-
+	private getCurrentUserId(userInfo: UserInfo): string | null {
 		const userId = userInfo.user_id?.trim()
-		if (userId) return `user_id:${userId}`
-
-		return null
+		return userId || null
 	}
 
 	private normalizeScopes(rawScopes: unknown): UserInfoScope[] | null {

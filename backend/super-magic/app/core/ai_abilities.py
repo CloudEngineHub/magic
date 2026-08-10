@@ -126,7 +126,7 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # 记忆提取能力 (v1.3)
     # 为后续回合记忆提取保留独立的轻量模型能力
     AIAbility.MEMORY: {
-        "model_id": "qwen3.5-flash",
+        "model_id": "deepseek-v4-flash",
         "enabled": True,
     },
 }
@@ -256,8 +256,8 @@ def get_memory_model_id() -> str:
     Returns:
         str: 记忆提取能力使用的模型 ID。
     """
-    model_id = get_ability_config(AIAbility.MEMORY, "model_id", default="qwen3.5-flash")
-    return str(model_id).strip() or "qwen3.5-flash"
+    model_id = get_ability_config(AIAbility.MEMORY, "model_id", default="deepseek-v4-flash")
+    return str(model_id).strip() or "deepseek-v4-flash"
 
 
 def get_compact_model_id() -> str | None:

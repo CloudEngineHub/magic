@@ -24,8 +24,9 @@ router = APIRouter(prefix="/v1/debug/workspace-files", tags=["调试面板工作
 logger = get_logger(__name__)
 
 
-def _workspace_file_service() -> DebugWorkspaceFileService:
-    return DebugWorkspaceFileService()
+def _workspace_file_service(scope: str = "workspace") -> DebugWorkspaceFileService:
+    """根据受控 scope 创建调试文件服务。"""
+    return DebugWorkspaceFileService(scope=scope)
 
 
 def _workspace_error_response(message: str, exc: Exception, log_level: str = "warning") -> BaseResponse:
@@ -45,10 +46,10 @@ def _download_content_disposition(filename: str) -> str:
     return f"attachment; filename*=UTF-8''{quoted}"
 
 
-def _get_workspace_raw_file_response(path: str):
-    """根据工作区相对路径构造原始文件响应。"""
+def _get_workspace_raw_file_response(path: str, scope: str = "workspace"):
+    """根据受控根目录下的相对路径构造原始文件响应。"""
     try:
-        service = _workspace_file_service()
+        service = _workspace_file_service(scope)
         target = service.resolve_path(path)
         if not target.exists():
             raise FileNotFoundError(f"文件不存在: {path}")
@@ -63,10 +64,11 @@ def _get_workspace_raw_file_response(path: str):
 async def get_workspace_file_tree(
     path: str = Query("", description="Relative directory path under workspace root"),
     depth: int = Query(2, ge=0, le=8, description="Recursive depth"),
+    scope: str = Query("workspace", description="Debug file root scope"),
 ) -> BaseResponse:
     """List files under local .workspace for the debug client."""
     try:
-        data = _workspace_file_service().list_tree(path, depth)
+        data = _workspace_file_service(scope).list_tree(path, depth)
         return create_success_response(message="获取调试工作区文件树成功", data=data)
     except (FileNotFoundError, ValueError) as exc:
         return _workspace_error_response("获取调试工作区文件树失败", exc)
@@ -77,10 +79,10 @@ async def get_workspace_file_tree(
 
 
 @router.post("/content", response_model=BaseResponse)
-async def read_workspace_file(request: WorkspaceFileContentRequest) -> BaseResponse:
+async def read_workspace_file(request: WorkspaceFileContentRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Read a UTF-8 text file from local .workspace."""
     try:
-        data = _workspace_file_service().read_file(request.path)
+        data = _workspace_file_service(scope).read_file(request.path)
         return create_success_response(message="读取调试工作区文件成功", data=data)
     except FileNotFoundError as exc:
         return _workspace_error_response("读取调试工作区文件失败", exc, log_level="debug")
@@ -95,24 +97,26 @@ async def read_workspace_file(request: WorkspaceFileContentRequest) -> BaseRespo
 @router.get("/raw")
 async def get_workspace_raw_file(
     path: str = Query(..., description="Relative file path under workspace root"),
+    scope: str = Query("workspace", description="Debug file root scope"),
 ):
     """通过查询参数返回工作区原始文件，兼容既有调用方。"""
-    return _get_workspace_raw_file_response(path)
+    return _get_workspace_raw_file_response(path, scope)
 
 
 @router.get("/raw/{path:path}")
-async def get_workspace_raw_file_by_path(path: str):
+async def get_workspace_raw_file_by_path(path: str, scope: str = Query("workspace")):
     """通过路径参数返回工作区原始文件，以支持 HTML 相对资源解析。"""
-    return _get_workspace_raw_file_response(path)
+    return _get_workspace_raw_file_response(path, scope)
 
 
 @router.get("/download")
 async def download_workspace_path(
     path: str = Query(..., description="Relative file or directory path under workspace root"),
+    scope: str = Query("workspace", description="Debug file root scope"),
 ):
     """Download a workspace file, or a directory as a zip archive."""
     try:
-        service = _workspace_file_service()
+        service = _workspace_file_service(scope)
         target = service.resolve_path(path)
         if not target.exists():
             raise FileNotFoundError(f"路径不存在: {path}")
@@ -133,10 +137,10 @@ async def download_workspace_path(
 
 
 @router.put("/content", response_model=BaseResponse)
-async def write_workspace_file(request: WorkspaceFileWriteRequest) -> BaseResponse:
+async def write_workspace_file(request: WorkspaceFileWriteRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Write a UTF-8 text file into local .workspace."""
     try:
-        data = _workspace_file_service().write_file(
+        data = _workspace_file_service(scope).write_file(
             request.path,
             request.content,
             create_parent_dirs=request.create_parent_dirs,
@@ -152,10 +156,10 @@ async def write_workspace_file(request: WorkspaceFileWriteRequest) -> BaseRespon
 
 
 @router.post("/directory", response_model=BaseResponse)
-async def create_workspace_directory(request: WorkspaceDirectoryCreateRequest) -> BaseResponse:
+async def create_workspace_directory(request: WorkspaceDirectoryCreateRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Create a directory under local .workspace."""
     try:
-        data = _workspace_file_service().create_directory(request.path)
+        data = _workspace_file_service(scope).create_directory(request.path)
         return create_success_response(message="创建调试工作区目录成功", data=data)
     except ValueError as exc:
         return _workspace_error_response("创建调试工作区目录失败", exc)
@@ -166,10 +170,10 @@ async def create_workspace_directory(request: WorkspaceDirectoryCreateRequest) -
 
 
 @router.delete("", response_model=BaseResponse)
-async def delete_workspace_file(request: WorkspaceFileDeleteRequest) -> BaseResponse:
+async def delete_workspace_file(request: WorkspaceFileDeleteRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Delete a file or directory under local .workspace."""
     try:
-        data = _workspace_file_service().delete_path(request.path, recursive=request.recursive)
+        data = _workspace_file_service(scope).delete_path(request.path, recursive=request.recursive)
         return create_success_response(message="删除调试工作区路径成功", data=data)
     except (FileNotFoundError, OSError, ValueError) as exc:
         return _workspace_error_response("删除调试工作区路径失败", exc)
@@ -180,10 +184,10 @@ async def delete_workspace_file(request: WorkspaceFileDeleteRequest) -> BaseResp
 
 
 @router.post("/move", response_model=BaseResponse)
-async def move_workspace_file(request: WorkspaceFileMoveRequest) -> BaseResponse:
+async def move_workspace_file(request: WorkspaceFileMoveRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Move or rename a file or directory under local .workspace."""
     try:
-        data = _workspace_file_service().move_path(
+        data = _workspace_file_service(scope).move_path(
             request.source_path,
             request.target_path,
             overwrite=request.overwrite,
@@ -198,11 +202,11 @@ async def move_workspace_file(request: WorkspaceFileMoveRequest) -> BaseResponse
 
 
 @router.post("/upload", response_model=BaseResponse)
-async def upload_workspace_file(request: WorkspaceFileUploadRequest) -> BaseResponse:
+async def upload_workspace_file(request: WorkspaceFileUploadRequest, scope: str = Query("workspace")) -> BaseResponse:
     """Upload one base64 encoded file into local .workspace for debug-client file management."""
     try:
         content = b64decode(request.content_base64, validate=True)
-        data = _workspace_file_service().upload_file(
+        data = _workspace_file_service(scope).upload_file(
             target_dir=request.target_dir,
             filename=request.filename,
             file_obj=BytesIO(content),

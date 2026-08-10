@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useSize } from "ahooks"
 
 import Detail from "@/pages/superMagic/components/Detail"
+import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
 import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
@@ -13,8 +14,6 @@ import {
 	TOPIC_HISTORY_PANEL_OPEN_STORAGE_KEYS,
 	useTopicHistoryLayoutState,
 } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicHistoryLayoutState"
-import { RouteName } from "@/routes/constants"
-import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/lib/utils"
 import PreviewDetailPopup, {
 	type PreviewDetail,
@@ -25,11 +24,13 @@ import MicroAppDesktopConversationPanels from "./components/MicroAppDesktopConve
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
+import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
 import MicroAppPreviewToolbar from "./components/MicroAppPreviewToolbar"
 import MicroAppProjectPanels from "./components/MicroAppProjectPanels"
 import MicroAppWorkspaceNav, { type MicroAppWorkspaceView } from "./components/MicroAppWorkspaceNav"
+import { useLongMemoryPreview } from "./hooks/useLongMemoryPreview"
 import { useMicroAppMessageFileOpen } from "./hooks/useMicroAppMessageFileOpen"
 import { useMicroAppPageController } from "./hooks/useMicroAppPageController"
 import { useMicroAppPreviewFiles } from "./hooks/useMicroAppPreviewFiles"
@@ -47,7 +48,6 @@ function MicroAppPageInner({
 	onPublishStatusChange: (published: boolean) => void
 }) {
 	const { t } = useTranslation("super")
-	const navigate = useNavigate()
 	const [activeView, setActiveView] = useState<MicroAppWorkspaceView>("preview")
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
@@ -178,10 +178,16 @@ function MicroAppPageInner({
 		if (!detail || typeof detail !== "object") return
 		previewDetailPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
+	// 文件工具已通过 Open_File_Tab 切换到附件预览区，这里只处理工具详情。
+	const handleConversationSelectDetail = useMemoizedFn((detail: unknown) => {
+		if (getToolDetailSelectionTarget(detail) !== "file") setPreviewDetail(detail)
+	})
 	const setLinkPreviewDetail = useMemoizedFn((detail: unknown) => {
 		if (!detail || typeof detail !== "object") return
 		linkPreviewPopupRef.current?.open(detail as PreviewDetail, attachments, attachmentList)
 	})
+	const { activeLongMemoryFileId, handleLongMemoryFileClick, resetLongMemoryFile } =
+		useLongMemoryPreview({ openPreview: setPreviewDetail })
 
 	useMicroAppMessageFileOpen({
 		attachmentList,
@@ -202,7 +208,8 @@ function MicroAppPageInner({
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-	}, [projectId, setIsMessagePanelCollapsed, setPreviewEntryFile])
+		resetLongMemoryFile()
+	}, [projectId, resetLongMemoryFile, setIsMessagePanelCollapsed, setPreviewEntryFile])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -249,18 +256,7 @@ function MicroAppPageInner({
 	}
 
 	if (store.initError) {
-		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
-				<p className="text-sm text-destructive">{store.initError}</p>
-				<button
-					type="button"
-					className="text-sm text-primary hover:underline"
-					onClick={() => navigate({ name: RouteName.Super })}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
-		)
+		return <MicroAppFallbackState variant="load" onBack={handleBackToMicroApps} />
 	}
 
 	return (
@@ -424,6 +420,8 @@ function MicroAppPageInner({
 							workspaceName={selectedProject?.workspace_name}
 							projectName={selectedProject?.project_name}
 							topicId={selectedTopic?.id}
+							activeLongMemoryFileId={activeLongMemoryFileId}
+							onLongMemoryFileClick={handleLongMemoryFileClick}
 						/>
 					</main>
 
@@ -443,7 +441,7 @@ function MicroAppPageInner({
 						onExpandConversationPanel={() => setIsMessagePanelCollapsed(false)}
 						onToggleHistoryPanel={toggleTopicHistoryPanel}
 						onCloseHistoryPanel={closeTopicHistoryPanel}
-						onSelectDetail={setPreviewDetail}
+						onSelectDetail={handleConversationSelectDetail}
 						onExpandCollapsedPanel={toggleMessagePanelCollapse}
 						showConversationLabel={t("microAppPage.header.showConversation")}
 					/>

@@ -1,4 +1,4 @@
-import type { ChangeEventHandler, RefObject } from "react"
+import type { ChangeEventHandler, ClipboardEventHandler, RefObject } from "react"
 import { ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -25,6 +25,7 @@ import MicroAppPublishedSection from "./MicroAppPublishedSection"
 
 interface MicroAppPublishDialogContentProps {
 	mobile: boolean
+	isPersonalOrganization: boolean
 	appId?: string
 	formState: MicroAppPublishFormState
 	publishedItem: PublishedMicroAppProjectItem | null
@@ -42,6 +43,7 @@ interface MicroAppPublishDialogContentProps {
 	coverInputRef: RefObject<HTMLInputElement | null>
 	onAppNameChange: ChangeEventHandler<HTMLInputElement>
 	onCoverChange: ChangeEventHandler<HTMLInputElement>
+	onCoverFile: (file: File) => void
 	onClearCover: () => void
 	onShareTypeChange: (shareType: ShareType) => void
 	onShareRangeChange: (shareRange: ShareRange) => void
@@ -60,10 +62,14 @@ const MICRO_APP_PUBLISH_TYPES = [
 	ShareType.Public,
 	ShareType.PasswordProtected,
 ]
+const PERSONAL_MICRO_APP_PUBLISH_TYPES = MICRO_APP_PUBLISH_TYPES.filter(
+	(type) => type !== ShareType.Organization,
+)
 
 /** 发布表单展示层，桌面弹窗和移动端底部弹窗共用同一份字段与操作。 */
 export default function MicroAppPublishDialogContent({
 	mobile,
+	isPersonalOrganization,
 	appId,
 	formState,
 	publishedItem,
@@ -81,6 +87,7 @@ export default function MicroAppPublishDialogContent({
 	coverInputRef,
 	onAppNameChange,
 	onCoverChange,
+	onCoverFile,
 	onClearCover,
 	onShareTypeChange,
 	onShareRangeChange,
@@ -95,23 +102,47 @@ export default function MicroAppPublishDialogContent({
 }: MicroAppPublishDialogContentProps) {
 	const { t } = useTranslation("super")
 	const isBusy = saving || unpublishing || coverUploading
+	const handleCoverPaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
+		if (loading || isBusy) return
+		const target = event.target
+		// 输入区域优先保留原生粘贴行为，避免图文剪贴板内容被误识别为封面上传。
+		if (
+			target instanceof HTMLElement &&
+			(target.isContentEditable ||
+				target.tagName === "INPUT" ||
+				target.tagName === "TEXTAREA")
+		) {
+			return
+		}
+		const clipboardFiles = Array.from(event.clipboardData.files ?? [])
+		const imageFile =
+			clipboardFiles.find((file) => file.type.startsWith("image/")) ??
+			Array.from(event.clipboardData.items ?? [])
+				.find((item) => item.kind === "file" && item.type.startsWith("image/"))
+				?.getAsFile()
+
+		if (!imageFile) return
+		event.preventDefault()
+		onCoverFile(imageFile)
+	}
 
 	return (
 		<div
 			className={cn(
 				mobile
 					? "flex min-h-0 flex-1 flex-col overflow-hidden"
-					: "grid max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] gap-4",
+					: "grid max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto]",
 			)}
 			data-testid="micro-app-publish-dialog"
 			data-mobile={mobile ? "true" : undefined}
+			onPaste={handleCoverPaste}
 		>
 			<ScrollArea
-				className={cn("min-h-0", mobile ? "flex-1 px-4" : "-mr-5")}
+				className={cn("min-h-0", mobile ? "flex-1 px-4" : "")}
 				viewportClassName="touch-pan-y [&>div]:!block"
 				data-testid="micro-app-publish-scroll-area"
 			>
-				<div className={cn("flex flex-col gap-4", mobile ? "pb-5 pt-1" : "pr-5")}>
+				<div className={cn("flex flex-col gap-4", mobile ? "pb-5 pt-1" : "p-5")}>
 					{!loading && hasPublished ? (
 						<MicroAppPublishedSection
 							mobile={mobile}
@@ -225,10 +256,15 @@ export default function MicroAppPublishDialogContent({
 							<ShareTypeField
 								value={formState.shareType as ShareType}
 								onChange={onShareTypeChange}
-								availableTypes={MICRO_APP_PUBLISH_TYPES}
+								availableTypes={
+									isPersonalOrganization
+										? PERSONAL_MICRO_APP_PUBLISH_TYPES
+										: MICRO_APP_PUBLISH_TYPES
+								}
 							/>
 
-							{formState.shareType === ShareType.Organization ? (
+							{!isPersonalOrganization &&
+							formState.shareType === ShareType.Organization ? (
 								<ShareRangeField
 									value={formState.shareRange}
 									onChange={onShareRangeChange}
@@ -279,19 +315,21 @@ export default function MicroAppPublishDialogContent({
 
 			<div
 				className={cn(
-					"flex gap-3",
+					"flex gap-3 p-2",
 					mobile
-						? "shrink-0 flex-col items-stretch px-4 pb-4 pt-3"
+						? "shrink-0 flex-col items-stretch pt-3"
 						: "items-center justify-between",
 				)}
 			>
 				{hasPublished ? (
 					<Button
 						type="button"
-						variant="ghost"
+						variant={mobile ? "destructive" : "ghost"}
 						className={cn(
-							"gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive",
-							mobile && "h-9 self-start px-0",
+							"gap-2",
+							mobile
+								? "w-full px-0"
+								: "text-destructive hover:bg-destructive/10 hover:text-destructive",
 						)}
 						onClick={onUnpublish}
 						disabled={loading || isBusy || coverUploadError}
@@ -342,7 +380,9 @@ export default function MicroAppPublishDialogContent({
 								loading ||
 								isBusy ||
 								coverUploadError ||
-								Boolean(validationError)
+								Boolean(validationError) ||
+								// 如果已发布且没有未保存的变更，则禁用保存按钮
+								(hasPublished && !hasUnsavedPublishedChanges)
 							}
 							data-testid="micro-app-publish-save"
 						>
