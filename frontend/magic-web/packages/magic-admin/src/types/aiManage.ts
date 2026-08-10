@@ -496,6 +496,17 @@ export namespace AiManage {
 		nickname?: string
 	}
 
+	export interface PublishTargetItem {
+		id?: string
+		name?: string
+		nickname?: string
+	}
+
+	export interface PublishTargetValue {
+		users?: PublishTargetItem[]
+		departments?: PublishTargetItem[]
+	}
+
 	export interface OrganizationAgentVersionReview {
 		id: string
 		organization?: OrganizationInfo
@@ -508,6 +519,7 @@ export namespace AiManage {
 		review_status: ReviewStatus
 		review_remark?: string | null
 		publish_target_type: PublishTargetType
+		publish_target_value?: PublishTargetValue | null
 		type: number
 		is_current_version: boolean
 		publisher?: PublisherInfo
@@ -527,6 +539,7 @@ export namespace AiManage {
 		review_status: ReviewStatus
 		review_remark?: string | null
 		publish_target_type: PublishTargetType
+		publish_target_value?: PublishTargetValue | null
 		source_type?: string
 		publisher?: PublisherInfo
 		created_at: string
