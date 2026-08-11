@@ -27,12 +27,11 @@ Canvas Manager - 画布实时 IO 事务入口
 
 import asyncio
 import inspect
-import random
-import time
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from agentlang.logger import get_logger
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.manager.canvas_lock_manager import canvas_lock_manager
 from app.tools.design.manager.canvas_manager_protocol import CanvasManagerProtocol
 from app.tools.design.utils.magic_project_design_parser import (
@@ -593,10 +592,25 @@ class CanvasManager(CanvasManagerProtocol):
     ) -> bool:
         return await self.update_element(element_id, {"locked": locked}, config=config)
 
-    def generate_element_id(self, prefix: str = "element") -> str:
-        timestamp = int(time.time() * 1000)
-        random_suffix = random.randint(10000, 99999)
-        return f"{prefix}-{timestamp}{random_suffix}"
+    def generate_element_id(self) -> str:
+        """生成与前端约定一致的 Element ID。"""
+        return CanvasIdGenerator.generate_element_id()
+
+    def generate_initial_content_id(self, element_id: str) -> str:
+        """生成与前端约定一致的首个 Content ID。"""
+        return CanvasIdGenerator.generate_initial_content_id(element_id)
+
+    def generate_content_id(
+        self,
+        element_id: str,
+        existing_content_ids: Sequence[str],
+    ) -> str:
+        """生成与前端约定一致的顺序 Content ID。"""
+        return CanvasIdGenerator.generate_content_id(element_id, existing_content_ids)
+
+    def generate_connection_id(self) -> str:
+        """生成与前端约定一致的 Connection ID。"""
+        return CanvasIdGenerator.generate_connection_id()
 
     async def element_exists(
         self,

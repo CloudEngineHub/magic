@@ -277,9 +277,7 @@ class ComposeCanvasVideo(BaseVideoProductionTool[ComposeCanvasVideoParams]):
             "remark": VideoProductionMarkdownPresenter.message(
                 "compose_canvas_video.before",
                 name=result_name,
-                video_edit_element_id=VideoProductionMarkdownPresenter.code(
-                    values.get("video_edit_element_id")
-                ),
+                video_edit_element_id=values.get("video_edit_element_id"),
             ),
         }
 
@@ -297,7 +295,7 @@ class ComposeCanvasVideo(BaseVideoProductionTool[ComposeCanvasVideoParams]):
         if result.ok:
             remark = VideoProductionMarkdownPresenter.message(
                 "compose_canvas_video.after_success",
-                src=VideoProductionMarkdownPresenter.code(data.get("src")),
+                src=data.get("src"),
                 duration=f"{float(data.get('duration_seconds') or 0):.2f}",
             )
         else:

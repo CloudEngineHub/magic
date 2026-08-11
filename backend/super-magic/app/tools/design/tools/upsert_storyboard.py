@@ -1,7 +1,6 @@
 """创建或更新视频分镜工具。"""
 
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,6 +10,7 @@ from app.core.entity.message.server_message import ToolDetail
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
 from app.tools.design.domain.content import ElementContent
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
 from app.tools.design.domain.services.element_layout_service import ElementLayoutService
@@ -21,6 +21,9 @@ from app.tools.design.tools.video_production_presentation import (
 from app.tools.design.video_production.service.storyboard_generation_config_service import (
     StoryboardGenerationConfig,
     StoryboardGenerationConfigService,
+)
+from app.tools.design.video_production.service.video_production_layout_service import (
+    VideoProductionLayoutService,
 )
 
 
@@ -77,6 +80,21 @@ class UpsertStoryboardParams(BaseToolParams):
             "omit when updating an existing Storyboard to preserve its current configuration."
         ),
     )
+    visual_anchor_element_ids: Optional[List[str]] = Field(
+        default=None,
+        max_length=20,
+        description=(
+            "Confirmed visual anchor Image Element IDs that the storyboard should follow. "
+            "Omit on update to preserve the current anchors; pass an empty list to clear them."
+        ),
+    )
+    replace_all_shots: bool = Field(
+        default=False,
+        description=(
+            "Replace the complete shot list instead of merging the supplied shots by ID. "
+            "Use only when the confirmed storyboard intentionally removes or reorders shots."
+        ),
+    )
     element_id: Optional[str] = Field(
         default=None,
         description="Existing Storyboard Element ID. Omit to create a new Element.",
@@ -122,6 +140,7 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
         def mutate(config: Any) -> Dict[str, Any]:
             """创建或更新 Storyboard 及其锁定输出连接。"""
             element = config.canvas.get_element(params.element_id) if params.element_id else None
+            creating_element = element is None
             if params.element_id and element is None:
                 raise ValueError(f"Storyboard Element does not exist: {params.element_id}")
 
@@ -154,25 +173,26 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
             if effective_generation_config is None:
                 raise ValueError("Storyboard image generation config is unavailable")
 
+            incoming_shots = [self._serialize_shot(shot) for shot in params.shots]
+            existing_shots = (
+                existing_content.fields.get("shots", [])
+                if existing_content is not None
+                else []
+            )
+            effective_shots = self._merge_shots(
+                existing_shots,
+                params.shots,
+                replace_all=params.replace_all_shots or creating_element,
+            )
             fields: Dict[str, Any] = {
-                "shots": [
-                    {
-                        "id": shot.id,
-                        "durationSeconds": shot.duration_seconds,
-                        "description": shot.description,
-                        **(
-                            {"outputImageElementId": shot.output_image_element_id}
-                            if shot.output_image_element_id
-                            else {}
-                        ),
-                    }
-                    for shot in params.shots
-                ],
+                "shots": effective_shots or incoming_shots,
                 "generationConfig": effective_generation_config.to_storage(),
             }
             if element is None:
-                element_id = params.element_id or f"storyboard-{uuid4()}"
-                content_id = params.content_id or f"{element_id}-content-{uuid4().hex[:8]}"
+                element_id = params.element_id or CanvasIdGenerator.generate_element_id()
+                content_id = params.content_id or CanvasIdGenerator.generate_initial_content_id(
+                    element_id
+                )
                 element = CanvasElementV3(
                     id=element_id,
                     type="storyboard",
@@ -192,7 +212,10 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                     ContentService.switch_active_content(element, params.content_id)
                     content_id = params.content_id
                 else:
-                    content_id = f"{element.id}-content-{uuid4().hex[:8]}"
+                    content_id = CanvasIdGenerator.generate_content_id(
+                        element.id,
+                        [content.content_id for content in element.contents],
+                    )
                     ContentService.append_content(
                         element,
                         ElementContent(content_id=content_id, fields=fields),
@@ -200,34 +223,77 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                         set_main_when_empty=True,
                     )
 
-            desired_connections: Dict[str, CanvasConnection] = {}
-            for shot in params.shots:
-                if not shot.output_image_element_id:
+            desired_output_connections: Dict[str, CanvasConnection] = {}
+            for shot in fields["shots"]:
+                output_image_element_id = shot.get("outputImageElementId")
+                if not output_image_element_id:
                     continue
-                output_element = config.canvas.get_element(shot.output_image_element_id)
+                output_element = config.canvas.get_element(output_image_element_id)
                 if output_element is None or output_element.type != "image":
                     raise ValueError(
-                        f"Storyboard output must reference an Image Element: {shot.output_image_element_id}"
+                        f"Storyboard output must reference an Image Element: {output_image_element_id}"
                     )
-                desired_connections[output_element.id] = CanvasConnection(
-                    id=f"storyboard-connection-{uuid4()}",
+                desired_output_connections[output_element.id] = CanvasConnection(
+                    id=CanvasIdGenerator.generate_connection_id(),
                     source_element_id=element.id,
                     target_element_id=output_element.id,
                     locked=True,
                 )
-            connections = ConnectionService.reconcile_locked_connections(
+            output_connections = ConnectionService.reconcile_locked_connections(
                 config.canvas,
-                desired_connections.values(),
+                desired_output_connections.values(),
                 owner_element_id=element.id,
                 direction="outgoing",
                 counterpart_types={"image"},
             )
-            connection_ids = [connection.id for connection in connections]
+
+            should_update_anchors = creating_element or params.visual_anchor_element_ids is not None
+            if should_update_anchors:
+                visual_anchor_ids = list(dict.fromkeys(params.visual_anchor_element_ids or []))
+                desired_anchor_connections: List[CanvasConnection] = []
+                for visual_anchor_id in visual_anchor_ids:
+                    visual_anchor = config.canvas.get_element(visual_anchor_id)
+                    if visual_anchor is None or visual_anchor.type != "image":
+                        raise ValueError(
+                            f"Storyboard visual anchor must reference an Image Element: {visual_anchor_id}"
+                        )
+                    desired_anchor_connections.append(
+                        CanvasConnection(
+                            id=CanvasIdGenerator.generate_connection_id(),
+                            source_element_id=visual_anchor.id,
+                            target_element_id=element.id,
+                            locked=True,
+                        )
+                    )
+                anchor_connections = ConnectionService.reconcile_locked_connections(
+                    config.canvas,
+                    desired_anchor_connections,
+                    owner_element_id=element.id,
+                    direction="incoming",
+                    counterpart_types={"image"},
+                )
+            else:
+                anchor_connections = []
+                for connection in config.canvas.connections:
+                    if not connection.locked or connection.target_element_id != element.id:
+                        continue
+                    source = config.canvas.get_element(connection.source_element_id)
+                    if source is not None and source.type == "image":
+                        anchor_connections.append(connection)
+            if creating_element:
+                VideoProductionLayoutService.layout_new_elements(
+                    config.canvas,
+                    [element.id],
+                )
+            connection_ids = [
+                connection.id
+                for connection in [*output_connections, *anchor_connections]
+            ]
             return {
                 "element_id": element.id,
                 "content_id": content_id,
                 "connection_ids": connection_ids,
-                "shot_count": len(params.shots),
+                "shot_count": len(fields["shots"]),
                 "generation_config": effective_generation_config.to_result_data(),
             }
 
@@ -249,6 +315,61 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                 f"Storyboard update failed: {error}",
                 extra_info={"error_type": "design.storyboard_update_failed"},
             )
+
+    @staticmethod
+    def _serialize_shot(shot: StoryboardShotInput) -> Dict[str, Any]:
+        """把单个镜头输入转换为画布存储字段。"""
+        value: Dict[str, Any] = {
+            "id": shot.id,
+            "durationSeconds": shot.duration_seconds,
+            "description": shot.description,
+        }
+        if shot.output_image_element_id:
+            value["outputImageElementId"] = shot.output_image_element_id
+        return value
+
+    @classmethod
+    def _merge_shots(
+        cls,
+        existing_shots: Any,
+        incoming_shots: List[StoryboardShotInput],
+        *,
+        replace_all: bool,
+    ) -> List[Dict[str, Any]]:
+        """按镜头 ID 合并局部更新，显式全量替换时使用输入顺序。"""
+        if replace_all or not isinstance(existing_shots, list):
+            return [cls._serialize_shot(shot) for shot in incoming_shots]
+
+        incoming_by_id = {shot.id: shot for shot in incoming_shots}
+        merged: List[Dict[str, Any]] = []
+        existing_ids: set[str] = set()
+        for raw_shot in existing_shots:
+            if not isinstance(raw_shot, dict) or not isinstance(raw_shot.get("id"), str):
+                raise ValueError("Stored storyboard shot must be an object with an ID")
+            shot_id = raw_shot["id"]
+            existing_ids.add(shot_id)
+            incoming = incoming_by_id.get(shot_id)
+            if incoming is None:
+                merged.append(dict(raw_shot))
+                continue
+            updated = {
+                **raw_shot,
+                "durationSeconds": incoming.duration_seconds,
+                "description": incoming.description,
+            }
+            if "output_image_element_id" in incoming.model_fields_set:
+                if incoming.output_image_element_id:
+                    updated["outputImageElementId"] = incoming.output_image_element_id
+                else:
+                    updated.pop("outputImageElementId", None)
+            merged.append(updated)
+
+        merged.extend(
+            cls._serialize_shot(shot)
+            for shot in incoming_shots
+            if shot.id not in existing_ids
+        )
+        return merged
 
     @staticmethod
     def _build_result_content(name: str, result: Dict[str, Any]) -> str:

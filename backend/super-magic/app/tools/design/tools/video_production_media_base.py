@@ -20,7 +20,7 @@ ParamsT = TypeVar("ParamsT", bound=BaseToolParams)
 
 
 class BaseVideoProductionMediaTool(BaseVideoProductionTool[ParamsT], Generic[ParamsT]):
-    """封装参考素材解析、内部关系写入和生成结果合并。"""
+    """封装参考素材解析和生成结果整理。"""
 
     async def _prepare_source_references(
         self,
@@ -29,7 +29,7 @@ class BaseVideoProductionMediaTool(BaseVideoProductionTool[ParamsT], Generic[Par
         tool_context: ToolContext,
         source_inputs: Sequence[MediaSourceInput],
     ) -> list[PreparedMediaSource]:
-        """准备可供生成使用、并可在最终事务中登记的来源素材。"""
+        """准备可供生成使用的参考素材路径，不自动创建来源关系。"""
         return await MediaGenerationService.prepare_source_references(
             manager,
             project_path,
@@ -42,6 +42,6 @@ class BaseVideoProductionMediaTool(BaseVideoProductionTool[ParamsT], Generic[Par
         result: ToolResult,
         connections: list[dict[str, str]],
     ) -> ToolResult:
-        """把内部关系数据合并到结构化结果，不向模型暴露维护细节。"""
+        """把内部业务关系摘要合并到结构化结果，不向模型暴露维护细节。"""
         result.data = {**(result.data or {}), "connections": connections}
         return result

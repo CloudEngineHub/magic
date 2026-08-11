@@ -151,12 +151,12 @@ from app.tools.design.tools import (
     GenerateCanvasVideos,
     GenerateVideoProductionImages,
     GenerateVideoProductionVideos,
+    ImportCanvasAssets,
     PromoteCanvasContent,
     QueryCanvasElements,
     RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
-    UpsertCanvasAudio,
     UpsertStoryboard,
 )
 
@@ -389,12 +389,12 @@ __all__ = [
     "GenerateCanvasVideos",
     "GenerateVideoProductionImages",
     "GenerateVideoProductionVideos",
+    "ImportCanvasAssets",
     "PromoteCanvasContent",
     "QueryCanvasElements",
     "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
-    "UpsertCanvasAudio",
     "UpsertStoryboard",
 
     # MCP 工具集

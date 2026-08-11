@@ -1259,13 +1259,13 @@
         "zh_CN": "视频成片配置失败，请检查输入顺序",
         "en_US": "Final video configuration failed; check the input sequence"
     },
-    "upsert_canvas_audio.success": {
-        "zh_CN": "画布音频添加完成",
-        "en_US": "Canvas audio added"
+    "import_canvas_assets.success": {
+        "zh_CN": "画布素材导入完成",
+        "en_US": "Canvas assets imported"
     },
-    "upsert_canvas_audio.exception": {
-        "zh_CN": "画布音频添加失败，请检查音频文件",
-        "en_US": "Canvas audio update failed; check the audio file"
+    "import_canvas_assets.exception": {
+        "zh_CN": "画布素材导入失败，请检查素材文件",
+        "en_US": "Canvas asset import failed; check the media files"
     },
     "compose_canvas_video.success": {
         "zh_CN": "最终 MP4 合成完成",
@@ -1296,20 +1296,20 @@
         "en_US": ", "
     },
     "query_canvas_elements.before": {
-        "zh_CN": "正在读取 **{{count}} 个**指定画布节点",
-        "en_US": "Reading **{{count}}** specified canvas Element(s)"
+        "zh_CN": "正在读取 {{count}} 个指定画布节点",
+        "en_US": "Reading {{count}} specified canvas Element(s)"
     },
     "query_canvas_elements.after_success": {
-        "zh_CN": "已读取 **{{found_count}} 个**节点",
-        "en_US": "Read **{{found_count}}** Element(s)"
+        "zh_CN": "已读取 {{found_count}} 个节点",
+        "en_US": "Read {{found_count}} Element(s)"
     },
     "query_canvas_elements.after_success_with_missing": {
-        "zh_CN": "已读取 **{{found_count}} 个**节点，另有 **{{missing_count}} 个**节点未找到",
-        "en_US": "Read **{{found_count}}** Element(s); **{{missing_count}}** Element(s) were not found"
+        "zh_CN": "已读取 {{found_count}} 个节点，另有 {{missing_count}} 个节点未找到",
+        "en_US": "Read {{found_count}} Element(s); {{missing_count}} Element(s) were not found"
     },
     "query_canvas_elements.after_failure": {
-        "zh_CN": "**查询失败**：{{failure}}",
-        "en_US": "**Query failed**: {{failure}}"
+        "zh_CN": "查询失败：{{failure}}",
+        "en_US": "Query failed: {{failure}}"
     },
     "query_canvas_elements.detail_title": {
         "zh_CN": "画布节点查询结果",
@@ -1364,8 +1364,8 @@
         "en_US": "Set {{content_id}} as the main Content"
     },
     "promote_canvas_content.after_failure": {
-        "zh_CN": "**确认失败**：{{failure}}",
-        "en_US": "**Confirmation failed**: {{failure}}"
+        "zh_CN": "确认失败：{{failure}}",
+        "en_US": "Confirmation failed: {{failure}}"
     },
     "promote_canvas_content.detail_title": {
         "zh_CN": "画布内容确认结果",
@@ -1392,16 +1392,16 @@
         "en_US": "Unnamed storyboard"
     },
     "upsert_storyboard.before": {
-        "zh_CN": "正在保存 **{{name}}**，共 **{{shot_count}} 个**镜头",
-        "en_US": "Saving **{{name}}** with **{{shot_count}}** shot(s)"
+        "zh_CN": "正在保存 {{name}}，共 {{shot_count}} 个镜头",
+        "en_US": "Saving {{name}} with {{shot_count}} shot(s)"
     },
     "upsert_storyboard.after_success": {
-        "zh_CN": "已保存 **{{shot_count}} 个**镜头",
-        "en_US": "Saved **{{shot_count}}** shot(s)"
+        "zh_CN": "已保存 {{shot_count}} 个镜头",
+        "en_US": "Saved {{shot_count}} shot(s)"
     },
     "upsert_storyboard.after_failure": {
-        "zh_CN": "**保存失败**：{{failure}}",
-        "en_US": "**Save failed**: {{failure}}"
+        "zh_CN": "保存失败：{{failure}}",
+        "en_US": "Save failed: {{failure}}"
     },
     "upsert_storyboard.detail_title": {
         "zh_CN": "视频分镜保存结果",
@@ -1444,16 +1444,16 @@
         "en_US": "Not specified"
     },
     "configure_video_edit.before": {
-        "zh_CN": "正在配置 **{{name}}**：**{{video_count}} 段**视频，**{{audio_count}} 条**音频",
-        "en_US": "Configuring **{{name}}**: **{{video_count}}** video segment(s), **{{audio_count}}** audio track(s)"
+        "zh_CN": "正在配置 {{name}}：{{video_count}} 段视频，{{audio_count}} 条音频",
+        "en_US": "Configuring {{name}}: {{video_count}} video segment(s), {{audio_count}} audio track(s)"
     },
     "configure_video_edit.after_success": {
-        "zh_CN": "已配置 **{{video_count}} 段**视频和 **{{audio_count}} 条**音频",
-        "en_US": "Configured **{{video_count}}** video segment(s) and **{{audio_count}}** audio track(s)"
+        "zh_CN": "已配置 {{video_count}} 段视频和 {{audio_count}} 条音频",
+        "en_US": "Configured {{video_count}} video segment(s) and {{audio_count}} audio track(s)"
     },
     "configure_video_edit.after_failure": {
-        "zh_CN": "**配置失败**：{{failure}}",
-        "en_US": "**Configuration failed**: {{failure}}"
+        "zh_CN": "配置失败：{{failure}}",
+        "en_US": "Configuration failed: {{failure}}"
     },
     "configure_video_edit.detail_title": {
         "zh_CN": "视频成片配置结果",
@@ -1499,47 +1499,51 @@
         "zh_CN": "- 结果：**{{failure}}**",
         "en_US": "- Result: **{{failure}}**"
     },
-    "upsert_canvas_audio.unnamed": {
-        "zh_CN": "未命名音频",
-        "en_US": "Unnamed audio"
+    "import_canvas_assets.empty": {
+        "zh_CN": "0 个素材",
+        "en_US": "0 assets"
     },
-    "upsert_canvas_audio.before": {
-        "zh_CN": "正在添加音频 **{{name}}**：{{src}}",
-        "en_US": "Adding audio **{{name}}**: {{src}}"
+    "import_canvas_assets.before": {
+        "zh_CN": "正在导入 {{summary}}",
+        "en_US": "Importing {{summary}}"
     },
-    "upsert_canvas_audio.after_success": {
-        "zh_CN": "音频已添加：{{src}}",
-        "en_US": "Audio added: {{src}}"
+    "import_canvas_assets.before_more": {
+        "zh_CN": "{{summary}}等 {{count}} 个",
+        "en_US": "{{summary}} and {{count}} assets"
     },
-    "upsert_canvas_audio.after_failure": {
-        "zh_CN": "**添加失败**：{{failure}}",
-        "en_US": "**Add failed**: {{failure}}"
+    "import_canvas_assets.after_success": {
+        "zh_CN": "已导入 {{imported_count}} 个素材，复用 {{reused_count}} 个已有素材",
+        "en_US": "Imported {{imported_count}} asset(s) and reused {{reused_count}} existing asset(s)"
     },
-    "upsert_canvas_audio.detail_title": {
-        "zh_CN": "画布音频添加结果",
-        "en_US": "Canvas Audio Add Results"
+    "import_canvas_assets.after_failure": {
+        "zh_CN": "导入失败：{{failure}}",
+        "en_US": "Import failed: {{failure}}"
     },
-    "upsert_canvas_audio.detail_name": {
-        "zh_CN": "- 音频名称：**{{name}}**",
-        "en_US": "- Audio name: **{{name}}**"
+    "import_canvas_assets.detail_title": {
+        "zh_CN": "画布素材导入结果",
+        "en_US": "Canvas Asset Import Results"
     },
-    "upsert_canvas_audio.detail_project": {
+    "import_canvas_assets.detail_project": {
         "zh_CN": "- 项目：{{project}}",
         "en_US": "- Project: {{project}}"
     },
-    "upsert_canvas_audio.detail_src": {
-        "zh_CN": "- 音频文件：{{src}}",
-        "en_US": "- Audio file: {{src}}"
+    "import_canvas_assets.detail_imported": {
+        "zh_CN": "- 新增素材：**{{count}} 个**",
+        "en_US": "- New assets: **{{count}}**"
     },
-    "upsert_canvas_audio.detail_element_id": {
-        "zh_CN": "- Element ID：{{element_id}}",
-        "en_US": "- Element ID: {{element_id}}"
+    "import_canvas_assets.detail_reused": {
+        "zh_CN": "- 复用素材：**{{count}} 个**",
+        "en_US": "- Reused assets: **{{count}}**"
     },
-    "upsert_canvas_audio.detail_content_id": {
-        "zh_CN": "- Content ID：{{content_id}}",
-        "en_US": "- Content ID: {{content_id}}"
+    "import_canvas_assets.detail_assets_heading": {
+        "zh_CN": "## 素材结果",
+        "en_US": "## Asset Results"
     },
-    "upsert_canvas_audio.detail_failure": {
+    "import_canvas_assets.detail_asset": {
+        "zh_CN": "- **{{name}}**：类型 {{media_type}}，文件 {{media_path}}，Element {{element_id}}，Content {{content_id}}",
+        "en_US": "- **{{name}}**: type {{media_type}}, file {{media_path}}, Element {{element_id}}, Content {{content_id}}"
+    },
+    "import_canvas_assets.detail_failure": {
         "zh_CN": "- 结果：**{{failure}}**",
         "en_US": "- Result: **{{failure}}**"
     },
@@ -1556,16 +1560,16 @@
         "en_US": "No"
     },
     "compose_canvas_video.before": {
-        "zh_CN": "正在合成最终视频 **{{name}}**，编辑方案 {{video_edit_element_id}}",
-        "en_US": "Composing final video **{{name}}** from edit {{video_edit_element_id}}"
+        "zh_CN": "正在合成最终视频 {{name}}，编辑方案 {{video_edit_element_id}}",
+        "en_US": "Composing final video {{name}} from edit {{video_edit_element_id}}"
     },
     "compose_canvas_video.after_success": {
-        "zh_CN": "最终视频已生成：{{src}}，时长 **{{duration}} 秒**",
-        "en_US": "Final video generated: {{src}}, duration **{{duration}} seconds**"
+        "zh_CN": "最终视频已生成：{{src}}，时长 {{duration}} 秒",
+        "en_US": "Final video generated: {{src}}, duration {{duration}} seconds"
     },
     "compose_canvas_video.after_failure": {
-        "zh_CN": "**合成失败**：{{failure}}",
-        "en_US": "**Composition failed**: {{failure}}"
+        "zh_CN": "合成失败：{{failure}}",
+        "en_US": "Composition failed: {{failure}}"
     },
     "compose_canvas_video.detail_title": {
         "zh_CN": "最终视频合成结果",
@@ -1616,24 +1620,24 @@
         "en_US": "Unnamed image"
     },
     "generate_video_production_images.empty": {
-        "zh_CN": "**0 张**图片",
-        "en_US": "**0** images"
+        "zh_CN": "0 张图片",
+        "en_US": "0 images"
     },
     "generate_video_production_images.before": {
         "zh_CN": "正在生成 {{summary}}",
         "en_US": "Generating {{summary}}"
     },
     "generate_video_production_images.before_more": {
-        "zh_CN": "{{summary}}等 **{{count}} 张**",
-        "en_US": "{{summary}} and **{{count}}** images"
+        "zh_CN": "{{summary}}等 {{count}} 张",
+        "en_US": "{{summary}} and {{count}} images"
     },
     "generate_video_production_images.after_success": {
-        "zh_CN": "已生成 **{{succeeded_count}} 张**图片，失败 **{{failed_count}} 张**，建立 **{{connection_count}} 条**素材关联",
-        "en_US": "Generated **{{succeeded_count}}** image(s), **{{failed_count}}** failed, and created **{{connection_count}}** source relation(s)"
+        "zh_CN": "已生成 {{succeeded_count}} 张图片，失败 {{failed_count}} 张，画布结果已更新",
+        "en_US": "Generated {{succeeded_count}} image(s), {{failed_count}} failed, and updated the canvas results"
     },
     "generate_video_production_images.after_failure": {
-        "zh_CN": "**生成失败**：{{failure}}",
-        "en_US": "**Generation failed**: {{failure}}"
+        "zh_CN": "生成失败：{{failure}}",
+        "en_US": "Generation failed: {{failure}}"
     },
     "generate_video_production_images.detail_title": {
         "zh_CN": "视频素材图片生成结果",
@@ -1656,8 +1660,8 @@
         "en_US": "- Failed: **{{count}}**"
     },
     "generate_video_production_images.detail_connections": {
-        "zh_CN": "- 素材关联：**{{count}} 条**",
-        "en_US": "- Source relations: **{{count}}**"
+        "zh_CN": "- 分镜结果绑定：**{{count}} 个**",
+        "en_US": "- Storyboard result bindings: **{{count}}**"
     },
     "generate_video_production_images.detail_results_heading": {
         "zh_CN": "## 生成结果",
@@ -1676,24 +1680,24 @@
         "en_US": "Unnamed shot"
     },
     "generate_video_production_videos.empty": {
-        "zh_CN": "**0 个**镜头",
-        "en_US": "**0** shots"
+        "zh_CN": "0 个镜头",
+        "en_US": "0 shots"
     },
     "generate_video_production_videos.before": {
         "zh_CN": "正在生成 {{summary}}",
         "en_US": "Generating {{summary}}"
     },
     "generate_video_production_videos.before_more": {
-        "zh_CN": "{{summary}}等 **{{count}} 个**",
-        "en_US": "{{summary}} and **{{count}}** shots"
+        "zh_CN": "{{summary}}等 {{count}} 个",
+        "en_US": "{{summary}} and {{count}} shots"
     },
     "generate_video_production_videos.after_success": {
-        "zh_CN": "已提交 **{{succeeded_count}} 个**镜头任务，失败 **{{failed_count}} 个**，建立 **{{connection_count}} 条**素材关联",
-        "en_US": "Submitted **{{succeeded_count}}** shot task(s), **{{failed_count}}** failed, and created **{{connection_count}}** source relation(s)"
+        "zh_CN": "已提交 {{succeeded_count}} 个镜头任务，失败 {{failed_count}} 个，画布结果已更新",
+        "en_US": "Submitted {{succeeded_count}} shot task(s), {{failed_count}} failed, and updated the canvas results"
     },
     "generate_video_production_videos.after_failure": {
-        "zh_CN": "**生成失败**：{{failure}}",
-        "en_US": "**Generation failed**: {{failure}}"
+        "zh_CN": "生成失败：{{failure}}",
+        "en_US": "Generation failed: {{failure}}"
     },
     "generate_video_production_videos.detail_title": {
         "zh_CN": "视频镜头生成结果",
@@ -1716,8 +1720,8 @@
         "en_US": "- Failed: **{{count}}**"
     },
     "generate_video_production_videos.detail_connections": {
-        "zh_CN": "- 素材关联：**{{count}} 条**",
-        "en_US": "- Source relations: **{{count}}**"
+        "zh_CN": "- 业务结果绑定：**{{count}} 个**",
+        "en_US": "- Business result bindings: **{{count}}**"
     },
     "generate_video_production_videos.detail_results_heading": {
         "zh_CN": "## 镜头结果",

@@ -1,7 +1,6 @@
 """创建或配置视频编辑计划工具。"""
 
 from typing import Any, Dict, List, Literal, Optional
-from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -11,12 +10,16 @@ from app.core.entity.message.server_message import ToolDetail
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
 from app.tools.design.domain.content import ElementContent
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
 from app.tools.design.domain.services.element_layout_service import ElementLayoutService
 from app.tools.design.tools.video_production_base import BaseVideoProductionTool
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
+)
+from app.tools.design.video_production.service.video_production_layout_service import (
+    VideoProductionLayoutService,
 )
 
 
@@ -107,11 +110,14 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                 "output": output,
             }
             element = config.canvas.get_element(params.element_id) if params.element_id else None
+            creating_element = element is None
             if params.element_id and element is None:
                 raise ValueError(f"Video Edit Element does not exist: {params.element_id}")
             if element is None:
-                element_id = params.element_id or f"video-edit-{uuid4()}"
-                content_id = params.content_id or f"{element_id}-content-{uuid4().hex[:8]}"
+                element_id = params.element_id or CanvasIdGenerator.generate_element_id()
+                content_id = params.content_id or CanvasIdGenerator.generate_initial_content_id(
+                    element_id
+                )
                 element = CanvasElementV3(
                     id=element_id,
                     type="video-edit",
@@ -131,7 +137,10 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                     ContentService.switch_active_content(element, params.content_id)
                     content_id = params.content_id
                 else:
-                    content_id = f"{element.id}-content-{uuid4().hex[:8]}"
+                    content_id = CanvasIdGenerator.generate_content_id(
+                        element.id,
+                        [content.content_id for content in element.contents],
+                    )
                     ContentService.append_content(
                         element,
                         ElementContent(content_id=content_id, fields=fields),
@@ -142,7 +151,7 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
             desired_connections: Dict[str, CanvasConnection] = {}
             for input_element_id in [*params.video_sequence, *params.audio_sequence]:
                 desired_connections[input_element_id] = CanvasConnection(
-                    id=f"video-edit-connection-{uuid4()}",
+                    id=CanvasIdGenerator.generate_connection_id(),
                     source_element_id=input_element_id,
                     target_element_id=element.id,
                     locked=True,
@@ -154,6 +163,11 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                 direction="incoming",
                 counterpart_types={"video", "audio"},
             )
+            if creating_element:
+                VideoProductionLayoutService.layout_new_elements(
+                    config.canvas,
+                    [element.id],
+                )
             connection_ids = [connection.id for connection in connections]
             return {
                 "element_id": element.id,

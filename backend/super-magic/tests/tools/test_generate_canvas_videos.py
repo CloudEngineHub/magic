@@ -496,6 +496,7 @@ def test_generate_canvas_videos_extra_info_uses_video_names():
                 metadata={
                     "is_processing": True,
                     "element_id": "element-1",
+                    "content_id": "content-1",
                     "element_name": "后台托管视频",
                     "video_id": "video-test-1",
                     "pending_status": "running",
@@ -507,6 +508,7 @@ def test_generate_canvas_videos_extra_info_uses_video_names():
     assert extra_info["pending_videos"] == [
         {
             "element_id": "element-1",
+            "content_id": "content-1",
             "element_name": "后台托管视频",
             "video_id": "video-test-1",
             "status": "running",

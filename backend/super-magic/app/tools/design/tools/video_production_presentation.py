@@ -14,9 +14,8 @@ class VideoProductionMarkdownPresenter:
 
     @staticmethod
     def action(action_key: str) -> str:
-        """把本地化动作名称转换为 Markdown 强调文本。"""
-        action = i18n.translate(action_key, category="tool.actions")
-        return f"**{action}**"
+        """读取普通文本格式的本地化动作名称。"""
+        return i18n.translate(action_key, category="tool.actions")
 
     @staticmethod
     def message(message_key: str, **kwargs: Any) -> str:

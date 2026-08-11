@@ -49,8 +49,15 @@ def test_video_production_agent_uses_code_mode_for_business_tools():
             "compose_canvas_video",
         }
     )
-    assert {"list_dir", "grep_search", "read_files", "write_file", "edit_file"} <= direct_tool_names
-    assert {"multi_edit_file", "shell_exec"}.isdisjoint(direct_tool_names)
+    assert {
+        "list_dir",
+        "grep_search",
+        "read_files",
+        "write_file",
+        "edit_file",
+        "shell_exec",
+        "shell_await",
+    } <= direct_tool_names
 
 
 def test_video_production_skill_uses_plain_markdown_plans():
@@ -66,16 +73,29 @@ def test_video_production_skill_uses_plain_markdown_plans():
     assert "expected_revision" not in content
 
 
-def test_video_production_skill_uses_dedicated_media_tools():
-    """视频制作 Skill 只能调用封装后的媒体工具，不直接维护 Canvas 关系。"""
+def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
+    """视频制作所需的画布和媒体工具必须保留可复制的调用示例。"""
     content = (SKILLS_DIR / "video-production" / "SKILL.md").read_text(encoding="utf-8")
 
-    assert 'tool.call("generate_video_production_images"' in content
-    assert 'tool.call("generate_video_production_videos"' in content
+    for documented_tool_name in (
+        "import_canvas_assets",
+        "query_canvas_elements",
+        "promote_canvas_content",
+        "generate_video_production_images",
+        "generate_video_production_videos",
+        "upsert_storyboard",
+        "configure_video_edit",
+        "compose_canvas_video",
+    ):
+        assert f'tool.call("{documented_tool_name}"' in content
+    assert 'tool.call("create_canvas"' not in content
+    assert 'tool.call("upsert_canvas_audio"' not in content
     assert 'tool.call("generate_canvas_images"' not in content
     assert 'tool.call("generate_canvas_videos"' not in content
     assert "source_element_id" not in content
     assert "target_element_id" not in content
+    assert "projects/" not in content
+    assert "assets/" not in content
 
 
 def test_video_production_agent_mode_routes_to_new_agent():

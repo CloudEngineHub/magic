@@ -150,9 +150,13 @@ def test_composition_service_uses_sequences_and_writes_result_lifecycle():
     result_content = result_element.get_content(preparation.result_content_id)
     assert result_content.fields["status"] == "completed"
     assert result_content.fields["src"] == "./videos/final.mp4"
-    assert result_element.properties["x"] == 0.0
-    assert result_element.properties["y"] == 380.0
+    assert result_element.properties["x"] == 880.0
+    assert result_element.properties["y"] == 0.0
     assert result_element.properties["zIndex"] == 2
+    assert (config.canvas.get_element("video-edit-1").x, config.canvas.get_element("video-edit-1").y) == (
+        0.0,
+        0.0,
+    )
     assert any(
         connection.source_element_id == "video-edit-1"
         and connection.target_element_id == result_element.id

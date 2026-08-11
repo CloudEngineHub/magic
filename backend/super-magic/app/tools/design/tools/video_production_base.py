@@ -22,6 +22,26 @@ logger = get_logger(__name__)
 class BaseVideoProductionTool(BaseDesignTool[ParamsT], Generic[ParamsT]):
     """统一视频制作工具的画布事务入口，并约束具体工具实现独立展示。"""
 
+    VIDEO_PRODUCTION_AGENT_NAMES = frozenset(
+        {"video-production", "video_production", "视频制作专家"}
+    )
+
+    @classmethod
+    def _is_video_production_agent(cls, tool_context: Optional[ToolContext]) -> bool:
+        """判断当前工具调用是否来自视频制作专家 Agent。"""
+        if tool_context is None:
+            return False
+        agent_context = tool_context.get_extension("agent_context")
+        agent_name = getattr(agent_context, "agent_name", None)
+        if not isinstance(agent_name, str) and agent_context is not None:
+            get_agent_name = getattr(agent_context, "get_agent_name", None)
+            agent_name = get_agent_name() if callable(get_agent_name) else None
+        if not isinstance(agent_name, str):
+            agent_name = tool_context.get_metadata("agent_name")
+        return isinstance(agent_name, str) and agent_name.strip().casefold() in {
+            value.casefold() for value in cls.VIDEO_PRODUCTION_AGENT_NAMES
+        }
+
     async def _get_canvas_manager(
         self,
         project_path: str,

@@ -2,8 +2,7 @@
 
 import inspect
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar
-from uuid import uuid4
+from typing import Any, Awaitable, Callable, Dict, Optional, Sequence, TypeVar
 
 from app.tools.design.codec.v3_codec import (
     COMMON_CONTENT_FIELDS,
@@ -17,6 +16,7 @@ from app.tools.design.domain.canvas_document import (
     MagicProjectConfigV3,
 )
 from app.tools.design.domain.content import ElementContent
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.element_layout_service import ElementLayoutService
 from app.tools.design.manager.canvas_lock_manager import canvas_lock_manager
@@ -234,9 +234,27 @@ class CanvasManagerV3(CanvasManagerProtocol):
         return True
 
     @staticmethod
-    def generate_element_id(prefix: str = "element") -> str:
-        """生成稳定且不依赖布局的 Element ID。"""
-        return f"{prefix}-{uuid4()}"
+    def generate_element_id() -> str:
+        """生成与前端约定一致的 Element ID。"""
+        return CanvasIdGenerator.generate_element_id()
+
+    @staticmethod
+    def generate_initial_content_id(element_id: str) -> str:
+        """生成与前端约定一致的首个 Content ID。"""
+        return CanvasIdGenerator.generate_initial_content_id(element_id)
+
+    @staticmethod
+    def generate_content_id(
+        element_id: str,
+        existing_content_ids: Sequence[str],
+    ) -> str:
+        """生成与前端约定一致的顺序 Content ID。"""
+        return CanvasIdGenerator.generate_content_id(element_id, existing_content_ids)
+
+    @staticmethod
+    def generate_connection_id() -> str:
+        """生成与前端约定一致的 Connection ID。"""
+        return CanvasIdGenerator.generate_connection_id()
 
     @staticmethod
     def _coerce_element(element: Any) -> CanvasElementV3:
@@ -274,7 +292,7 @@ class CanvasManagerV3(CanvasManagerProtocol):
             value = getattr(element, field_name, None)
             if value is not None:
                 content_fields[field_name] = value
-        content_id = f"{element_id}-content-1"
+        content_id = CanvasIdGenerator.generate_initial_content_id(element_id)
         return CanvasElementV3(
             id=element_id,
             type=element_type,

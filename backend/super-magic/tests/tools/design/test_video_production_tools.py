@@ -22,12 +22,10 @@ from app.tools.design.domain.canvas_document import (
     MagicProjectConfigV3,
 )
 from app.tools.design.domain.content import ElementContent
-from app.tools.design.domain.generation_finalizer import (
-    CanvasGenerationFinalizationContext,
-)
 from app.tools.design.domain.services.canvas_query_service import CanvasQueryService
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.manager.canvas_manager_v3 import CanvasManagerV3, write_magic_project_js_v3
+from app.tools.design.tools.base_generate_canvas_elements import TaskExecutionResult
 from app.tools.design.tools.compose_canvas_video import ComposeCanvasVideo
 from app.tools.design.tools.configure_video_edit import (
     ConfigureVideoEdit,
@@ -37,6 +35,7 @@ from app.tools.design.tools.configure_video_edit import (
 from app.tools.design.tools.generate_canvas_images import (
     GenerateCanvasImages,
     GenerateCanvasImagesParams,
+    ImagePlaceholderUpdate,
     ImageTaskSpec,
 )
 from app.tools.design.tools.generate_video_production_images import (
@@ -49,15 +48,15 @@ from app.tools.design.tools.generate_video_production_videos import (
     GenerateVideoProductionVideosParams,
     VideoProductionVideoTask,
 )
+from app.tools.design.tools.import_canvas_assets import (
+    ImportCanvasAssets,
+    ImportCanvasAssetsParams,
+)
 from app.tools.design.tools.promote_canvas_content import (
     PromoteCanvasContent,
     PromoteCanvasContentParams,
 )
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements, QueryCanvasElementsParams
-from app.tools.design.tools.upsert_canvas_audio import (
-    UpsertCanvasAudio,
-    UpsertCanvasAudioParams,
-)
 from app.tools.design.tools.upsert_storyboard import (
     StoryboardGenerationConfigInput,
     StoryboardShotInput,
@@ -70,13 +69,6 @@ from app.tools.design.utils.magic_project_design_parser import (
     MagicProjectConfig,
     write_magic_project_js,
     write_magic_project_js_v2,
-)
-from app.tools.design.video_production.service.media_generation_service import (
-    MediaSourceType,
-    PreparedMediaSource,
-)
-from app.tools.design.video_production.service.source_connection_finalizer import (
-    SourceConnectionGenerationFinalizer,
 )
 from app.utils.async_file_utils import async_mkdir, async_write_bytes
 
@@ -395,11 +387,6 @@ async def test_query_canvas_elements_content_contains_reusable_content_fields(wo
             {"element_id": "image-1", "content_id": "content-2"},
         ),
         (
-            UpsertCanvasAudio,
-            {"project_path": "mock-project", "name": "模拟旁白", "src": "audio/mock.mp3"},
-            {"element_id": "audio-1", "content_id": "audio-content-1", "src": "./audio/mock.mp3"},
-        ),
-        (
             ConfigureVideoEdit,
             {
                 "project_path": "mock-project",
@@ -413,6 +400,26 @@ async def test_query_canvas_elements_content_contains_reusable_content_fields(wo
                 "video_sequence": ["video-1"],
                 "audio_sequence": [],
                 "output": {"format": "mp4"},
+            },
+        ),
+        (
+            ImportCanvasAssets,
+            {
+                "project_path": "mock-project",
+                "assets": [{"path": ".tmp/mock.png", "name": "模拟素材"}],
+            },
+            {
+                "imported_count": 1,
+                "reused_count": 0,
+                "assets": [
+                    {
+                        "name": "模拟素材",
+                        "media_type": "image",
+                        "media_path": "./images/mock.png",
+                        "element_id": "image-1",
+                        "content_id": "image-content-1",
+                    }
+                ],
             },
         ),
         (
@@ -434,12 +441,12 @@ async def test_query_canvas_elements_content_contains_reusable_content_fields(wo
         ),
     ],
 )
-async def test_video_production_tools_define_independent_markdown_presentations(
+async def test_video_production_tools_use_plain_actions_and_remarks(
     tool_class,
     arguments: dict,
     result_data: dict,
 ):
-    """每个视频制作工具都必须独立提供面向用户的 Markdown 展示。"""
+    """视频制作工具的动作和备注使用纯文本，详情继续使用 Markdown。"""
     for method_name in (
         "get_before_tool_call_friendly_action_and_remark",
         "get_after_tool_call_friendly_action_and_remark",
@@ -463,9 +470,12 @@ async def test_video_production_tools_define_independent_markdown_presentations(
     )
     detail = await tool.get_tool_detail(None, result, arguments)
 
-    assert "**" in before["action"]
-    assert any(marker in before["remark"] for marker in ("**", "`", "\n-"))
-    assert "**" in after["action"]
+    for friendly_result in (before, after):
+        assert friendly_result["action"]
+        assert friendly_result["remark"]
+        for markdown_marker in ("**", "`", "# ", "\n- ", "]("):
+            assert markdown_marker not in friendly_result["action"]
+            assert markdown_marker not in friendly_result["remark"]
     assert result.use_custom_remark
     assert detail.type == DisplayType.MD
     assert detail.data.content.startswith("# ")
@@ -554,9 +564,12 @@ async def test_upsert_storyboard_creates_content_and_locked_image_connection(wor
     assert 'aspect_ratio: "16:9"' in result.content
     assert 'resolution: "1K"' in result.content
     assert 'size: "1280x720"' in result.content
-    assert storyboard.properties["x"] == 520.0
+    assert storyboard.properties["x"] == -1520.0
     assert storyboard.properties["y"] == 0.0
     assert storyboard.properties["zIndex"] == 2
+    shot_image = config.canvas.get_element("shot-image-1")
+    assert shot_image is not None
+    assert (shot_image.x, shot_image.y, shot_image.zIndex) == (0.0, 0.0, 1)
     connection = next(item for item in config.canvas.connections if item.id == result.data["connection_ids"][0])
     assert connection.source_element_id == storyboard.id
     assert connection.target_element_id == "shot-image-1"
@@ -617,12 +630,14 @@ async def test_upsert_storyboard_reconciles_replaced_removed_and_manual_connecti
             project_path=project_name,
             name="分镜",
             element_id=storyboard_id,
+            replace_all_shots=True,
             shots=[
                 StoryboardShotInput(id="S02", duration_seconds=3, description="二替换", output_image_element_id="shot-image-2"),
             ],
         ),
     )
     assert replaced.ok
+    assert replaced.data["content_id"] == f"{storyboard_id}-content-2"
     config = await manager.read_current_canvas()
     storyboard_connections = [
         connection
@@ -640,10 +655,18 @@ async def test_upsert_storyboard_reconciles_replaced_removed_and_manual_connecti
             project_path=project_name,
             name="分镜",
             element_id=storyboard_id,
-            shots=[StoryboardShotInput(id="S02", duration_seconds=3, description="无输出")],
+            shots=[
+                StoryboardShotInput(
+                    id="S02",
+                    duration_seconds=3,
+                    description="无输出",
+                    output_image_element_id=None,
+                )
+            ],
         ),
     )
     assert removed.ok
+    assert removed.data["content_id"] == f"{storyboard_id}-content-3"
     config = await manager.read_current_canvas()
     storyboard_connections = [
         connection
@@ -653,6 +676,86 @@ async def test_upsert_storyboard_reconciles_replaced_removed_and_manual_connecti
     assert [(item.target_element_id, item.locked) for item in storyboard_connections] == [
         ("manual-note", False)
     ]
+
+
+@pytest.mark.asyncio
+async def test_upsert_storyboard_merges_partial_shot_updates_by_default(workspace: Path):
+    """分批补充镜头提示词时保留未传镜头及其已有输出。"""
+    project_name = "storyboard-partial-shot-update-project"
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    await write_magic_project_js_v3(
+        project_name,
+        _v3_config(
+            _content_element(
+                "shot-image-1",
+                "image",
+                name="首帧一",
+                fields={"status": "completed"},
+            ),
+        ),
+    )
+    tool = UpsertStoryboard(base_dir=str(workspace))
+    created = await tool.execute(
+        _image_generation_tool_context(),
+        UpsertStoryboardParams(
+            project_path=project_name,
+            name="分镜",
+            generation_config=StoryboardGenerationConfigInput(
+                aspect_ratio="16:9",
+                resolution="1K",
+            ),
+            shots=[
+                StoryboardShotInput(
+                    id="S01",
+                    duration_seconds=3,
+                    description="开场",
+                    output_image_element_id="shot-image-1",
+                ),
+                StoryboardShotInput(
+                    id="S02",
+                    duration_seconds=3,
+                    description="发展",
+                ),
+            ],
+        ),
+    )
+    assert created.ok
+
+    updated = await tool.execute(
+        _image_generation_tool_context(),
+        UpsertStoryboardParams(
+            project_path=project_name,
+            name="分镜",
+            element_id=created.data["element_id"],
+            content_id=created.data["content_id"],
+            shots=[
+                StoryboardShotInput(
+                    id="S02",
+                    duration_seconds=4,
+                    description="发展\nFirst-frame prompt: 模拟确认提示词",
+                )
+            ],
+        ),
+    )
+
+    assert updated.ok
+    assert updated.data["shot_count"] == 2
+    manager = await get_canvas_manager(str(workspace / project_name))
+    config = await manager.read_current_canvas()
+    storyboard = config.canvas.get_element(created.data["element_id"])
+    shots = storyboard.get_active_content().fields["shots"]
+    assert [shot["id"] for shot in shots] == ["S01", "S02"]
+    assert shots[0]["outputImageElementId"] == "shot-image-1"
+    assert shots[1]["durationSeconds"] == 4
+    assert len(
+        [
+            connection
+            for connection in config.canvas.connections
+            if connection.source_element_id == storyboard.id
+            and connection.target_element_id == "shot-image-1"
+            and connection.locked
+        ]
+    ) == 1
 
 
 @pytest.mark.asyncio
@@ -720,6 +823,7 @@ async def test_video_production_images_reads_latest_user_edited_storyboard_confi
                 VideoProductionImageTask(
                     prompt="竖屏城市开场",
                     name="开场首帧",
+                    shot_id="S01",
                     reference_images=[],
                 )
             ],
@@ -888,53 +992,13 @@ async def test_configure_video_edit_reconciles_replaced_removed_and_appended_inp
 
 
 @pytest.mark.asyncio
-async def test_upsert_canvas_audio_rejects_unsafe_path_and_accepts_project_file(workspace: Path):
-    """Audio 工具拒绝越界路径，只接受项目内已存在的模拟音频文件。"""
-    project_name = "audio-project"
-    project_dir = workspace / project_name
-    await async_mkdir(project_dir / "audio", parents=True, exist_ok=True)
-    await write_magic_project_js_v3(project_name, _v3_config())
-    await async_write_bytes(project_dir / "audio" / "narration.mp3", b"mock-audio")
-    tool = UpsertCanvasAudio(base_dir=str(workspace))
-
-    unsafe_result = await tool.execute(
-        None,
-        UpsertCanvasAudioParams(
-            project_path=project_name,
-            name="越界音频",
-            src="../outside.mp3",
-        ),
-    )
-    valid_result = await tool.execute(
-        None,
-        UpsertCanvasAudioParams(
-            project_path=project_name,
-            name="模拟旁白",
-            src="./audio/narration.mp3",
-        ),
-    )
-
-    assert not unsafe_result.ok
-    assert "safe project-relative path" in unsafe_result.content
-    assert valid_result.ok
-    assert valid_result.data["src"] == "./audio/narration.mp3"
-    manager = (await tool._get_canvas_manager(project_name))[1]
-    config = await manager.read_current_canvas()
-    audio = config.canvas.get_element(valid_result.data["element_id"])
-    assert audio is not None
-    assert audio.properties["x"] == 0.0
-    assert audio.properties["y"] == 0.0
-    assert audio.properties["zIndex"] == 1
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("set_as_main", [False, True])
-async def test_existing_image_appends_content_and_controls_main_pointer(
+async def test_existing_image_element_id_appends_content_and_controls_main_pointer(
     workspace: Path,
     monkeypatch,
     set_as_main: bool,
 ):
-    """复用已有 V3 图片时追加 Content，并按参数控制 main 指针。"""
+    """只传 Element ID 时追加系统生成的 Content，并按参数控制主内容。"""
     monkeypatch.setenv("ENABLE_MOCK_IMAGE_GENERATION", "true")
     project_name = "append-image-content-project"
     existing = _content_element(
@@ -943,6 +1007,7 @@ async def test_existing_image_appends_content_and_controls_main_pointer(
         name="候选图片",
         fields={"src": "./images/old.png", "status": "completed"},
     )
+    original_content_id = existing.active_content_id
     await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
     await write_magic_project_js_v3(project_name, _v3_config(existing))
 
@@ -957,7 +1022,6 @@ async def test_existing_image_appends_content_and_controls_main_pointer(
                     size="640x360",
                     reference_images=[],
                     element_id="image-1",
-                    content_id="image-1-candidate",
                     set_as_main=set_as_main,
                 )
             ],
@@ -970,18 +1034,19 @@ async def test_existing_image_appends_content_and_controls_main_pointer(
     image = config.canvas.get_element("image-1")
     assert image is not None
     assert len(image.contents) == 2
-    assert image.active_content_id != image.main_content_id if not set_as_main else image.active_content_id == image.main_content_id
+    assert image.active_content_id == "image-1-content-2"
+    assert image.main_content_id == (image.active_content_id if set_as_main else original_content_id)
     assert result.data["created_elements"][0]["content_id"] == image.active_content_id
 
 
 @pytest.mark.asyncio
-async def test_existing_image_element_id_without_content_id_keeps_original_behavior(
+async def test_existing_image_content_id_updates_exact_content_without_append(
     workspace: Path,
     monkeypatch,
 ):
-    """只传 element_id 时仍更新原 active Content，不追加版本。"""
+    """只传已有 Content ID 时更新确定内容，不追加新的 Content。"""
     monkeypatch.setenv("ENABLE_MOCK_IMAGE_GENERATION", "true")
-    project_name = "reuse-image-content-project"
+    project_name = "update-image-content-project"
     existing = _content_element(
         "image-1",
         "image",
@@ -1002,7 +1067,7 @@ async def test_existing_image_element_id_without_content_id_keeps_original_behav
                     name="候选图片",
                     size="640x360",
                     reference_images=[],
-                    element_id="image-1",
+                    content_id=original_content_id,
                 )
             ],
         ),
@@ -1015,6 +1080,99 @@ async def test_existing_image_element_id_without_content_id_keeps_original_behav
     assert image is not None
     assert len(image.contents) == 1
     assert image.active_content_id == original_content_id
+    assert image.main_content_id == original_content_id
+    assert result.data["created_elements"][0]["content_id"] == original_content_id
+
+
+@pytest.mark.asyncio
+async def test_existing_image_rejects_missing_content_id(
+    workspace: Path,
+    monkeypatch,
+):
+    """不存在的 Content ID 必须报错，且不能创建 Element 或 Content。"""
+    monkeypatch.setenv("ENABLE_MOCK_IMAGE_GENERATION", "true")
+    project_name = "missing-image-content-project"
+    existing = _content_element(
+        "image-1",
+        "image",
+        name="候选图片",
+        fields={"src": "./images/old.png", "status": "completed"},
+    )
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    await write_magic_project_js_v3(project_name, _v3_config(existing))
+
+    result = await GenerateCanvasImages(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        GenerateCanvasImagesParams(
+            project_path=project_name,
+            tasks=[
+                ImageTaskSpec(
+                    prompt="更新不存在的候选图片",
+                    name="候选图片",
+                    size="640x360",
+                    reference_images=[],
+                    content_id="missing-content",
+                )
+            ],
+        ),
+    )
+
+    assert not result.ok
+    assert 'Content does not exist: "missing-content"' in result.content
+    manager = await get_canvas_manager(str(workspace / project_name))
+    config = await manager.read_current_canvas()
+    image = config.canvas.get_element("image-1")
+    assert image is not None
+    assert len(image.contents) == 1
+
+
+@pytest.mark.asyncio
+async def test_existing_image_rejects_content_from_another_element(
+    workspace: Path,
+    monkeypatch,
+):
+    """Element 与 Content 归属不一致时必须报错且不能修改画布。"""
+    monkeypatch.setenv("ENABLE_MOCK_IMAGE_GENERATION", "true")
+    project_name = "mismatched-image-content-project"
+    first = _content_element(
+        "image-1",
+        "image",
+        name="候选图片一",
+        fields={"src": "./images/first.png", "status": "completed"},
+    )
+    second = _content_element(
+        "image-2",
+        "image",
+        name="候选图片二",
+        fields={"src": "./images/second.png", "status": "completed"},
+    )
+    foreign_content_id = second.active_content_id
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    await write_magic_project_js_v3(project_name, _v3_config(first, second))
+
+    result = await GenerateCanvasImages(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        GenerateCanvasImagesParams(
+            project_path=project_name,
+            tasks=[
+                ImageTaskSpec(
+                    prompt="错误更新其他节点的候选图片",
+                    name="候选图片一",
+                    size="640x360",
+                    reference_images=[],
+                    element_id="image-1",
+                    content_id=foreign_content_id,
+                )
+            ],
+        ),
+    )
+
+    assert not result.ok
+    assert f'Content does not exist in Element "image-1": "{foreign_content_id}"' in result.content
+    manager = await get_canvas_manager(str(workspace / project_name))
+    config = await manager.read_current_canvas()
+    assert len(config.canvas.get_element("image-1").contents) == 1
+    assert len(config.canvas.get_element("image-2").contents) == 1
 
 
 @pytest.mark.asyncio
@@ -1073,11 +1231,11 @@ async def test_promote_canvas_content_requires_eligible_image_content(workspace:
 
 
 @pytest.mark.asyncio
-async def test_video_production_image_tool_connects_reference_internally(
+async def test_video_production_image_tool_keeps_reference_in_request_without_connection(
     workspace: Path,
     monkeypatch,
 ):
-    """视频图片工具只接收参考路径，并在内部建立来源到结果的关系。"""
+    """参考图只参与生成请求，processing 占位位置在完成前已经固定。"""
     project_name = "production-image-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
@@ -1099,7 +1257,9 @@ async def test_video_production_image_tool_connects_reference_internally(
         _resolve_mock_reference_images_to_urls,
     )
     transaction_count = 0
+    processing_snapshot: dict[str, object] = {}
     original_transaction = CanvasManagerV3.run_write_transaction
+    original_execute_item = GenerateCanvasImages._execute_task_item
 
     async def count_transaction(self, *args, **kwargs):
         """统计专用生成流程对画布执行的真实写事务次数。"""
@@ -1107,7 +1267,33 @@ async def test_video_production_image_tool_connects_reference_internally(
         transaction_count += 1
         return await original_transaction(self, *args, **kwargs)
 
+    async def inspect_processing_canvas(self, idx, task, placeholder, *args, **kwargs):
+        """在耗时生成开始前读取已经提交的 processing 画布状态。"""
+        manager = await get_canvas_manager(str(project_dir))
+        config = await manager.read_current_canvas()
+        target = config.canvas.get_element(placeholder.id)
+        processing_snapshot.update(
+            {
+                "position": (target.x, target.y, target.zIndex),
+                "status": target.get_active_content().fields["status"],
+                "connected": any(
+                    connection.source_element_id == "source-image"
+                    and connection.target_element_id == placeholder.id
+                    for connection in config.canvas.connections
+                ),
+            }
+        )
+        return await original_execute_item(
+            self,
+            idx,
+            task,
+            placeholder,
+            *args,
+            **kwargs,
+        )
+
     monkeypatch.setattr(CanvasManagerV3, "run_write_transaction", count_transaction)
+    monkeypatch.setattr(GenerateCanvasImages, "_execute_task_item", inspect_processing_canvas)
 
     result = await GenerateVideoProductionImages(base_dir=str(workspace)).execute(
         _image_generation_tool_context(),
@@ -1127,9 +1313,8 @@ async def test_video_production_image_tool_connects_reference_internally(
     assert result.ok
     assert "connection" not in VideoProductionImageTask.model_fields
     assert transaction_count == 2
-    assert result.data["connections"][0]["source_element_id"] == "source-image"
     target_element_id = result.data["created_elements"][0]["id"]
-    assert result.data["connections"][0]["target_element_id"] == target_element_id
+    assert result.data["connections"] == []
     created_content_id = result.data["created_elements"][0]["content_id"]
     created_src = result.data["created_elements"][0]["src"]
     assert f'element_id="{target_element_id}"' in result.content
@@ -1142,7 +1327,12 @@ async def test_video_production_image_tool_connects_reference_internally(
     target = config.canvas.get_element(target_element_id)
     assert target is not None
     assert target.get_active_content().fields["status"] == "completed"
-    assert any(
+    assert processing_snapshot == {
+        "position": (target.x, target.y, target.zIndex),
+        "status": "processing",
+        "connected": False,
+    }
+    assert not any(
         connection.source_element_id == "source-image"
         and connection.target_element_id == target_element_id
         for connection in config.canvas.connections
@@ -1150,11 +1340,368 @@ async def test_video_production_image_tool_connects_reference_internally(
 
 
 @pytest.mark.asyncio
-async def test_video_production_image_tool_registers_project_asset_source(
+async def test_storyboard_image_generation_binds_shot_and_layouts_after_storyboard(
     workspace: Path,
     monkeypatch,
 ):
-    """项目素材尚未进入画布时，在生成结果最终事务中自动登记来源。"""
+    """分镜图片在 processing 阶段完成绑定和布局，完成后位置保持不变。"""
+    project_name = "storyboard-image-binding-project"
+    project_dir = workspace / project_name
+    await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
+    Image.new("RGB", (64, 36), color="green").save(project_dir / "images" / "anchor.png")
+    await write_magic_project_js_v3(
+        project_name,
+        _v3_config(
+            _content_element(
+                "visual-anchor",
+                "image",
+                name="视觉锚点",
+                fields={"src": "./images/anchor.png", "status": "completed"},
+            ),
+        ),
+    )
+    monkeypatch.setenv("ENABLE_MOCK_IMAGE_GENERATION", "true")
+    monkeypatch.setattr(
+        "app.tools.generate_images.resolve_reference_images_to_urls",
+        _resolve_mock_reference_images_to_urls,
+    )
+
+    storyboard_result = await UpsertStoryboard(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        UpsertStoryboardParams(
+            project_path=project_name,
+            name="模拟分镜",
+            visual_anchor_element_ids=["visual-anchor"],
+            generation_config=StoryboardGenerationConfigInput(
+                aspect_ratio="16:9",
+                resolution="1K",
+            ),
+            shots=[
+                StoryboardShotInput(
+                    id="S01",
+                    duration_seconds=4,
+                    description="模拟开场镜头",
+                ),
+                StoryboardShotInput(
+                    id="S02",
+                    duration_seconds=3,
+                    description="模拟收尾镜头",
+                ),
+            ],
+        ),
+    )
+    assert storyboard_result.ok
+
+    processing_snapshots: dict[str, dict[str, object]] = {}
+    original_execute_item = GenerateCanvasImages._execute_task_item
+
+    async def inspect_storyboard_processing(self, idx, task, placeholder, *args, **kwargs):
+        """在媒体生成开始前检查分镜占位关系和稳定坐标。"""
+        shot_id = ("S01", "S02")[idx]
+        manager = await get_canvas_manager(str(project_dir))
+        config = await manager.read_current_canvas()
+        storyboard = config.canvas.get_element(storyboard_result.data["element_id"])
+        target = config.canvas.get_element(placeholder.id)
+        shot = next(
+            item
+            for item in storyboard.get_active_content().fields["shots"]
+            if item["id"] == shot_id
+        )
+        processing_snapshots[shot_id] = {
+            "position": (target.x, target.y, target.zIndex),
+            "status": target.get_active_content().fields["status"],
+            "output_element_id": shot.get("outputImageElementId"),
+            "storyboard_connected": any(
+                connection.source_element_id == storyboard.id
+                and connection.target_element_id == target.id
+                and connection.locked
+                for connection in config.canvas.connections
+            ),
+            "reference_connected": any(
+                connection.source_element_id == "visual-anchor"
+                and connection.target_element_id == target.id
+                for connection in config.canvas.connections
+            ),
+        }
+        return await original_execute_item(
+            self,
+            idx,
+            task,
+            placeholder,
+            *args,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(
+        GenerateCanvasImages,
+        "_execute_task_item",
+        inspect_storyboard_processing,
+    )
+
+    image_result = await GenerateVideoProductionImages(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        GenerateVideoProductionImagesParams(
+            project_path=project_name,
+            storyboard_element_id=storyboard_result.data["element_id"],
+            tasks=[
+                VideoProductionImageTask(
+                    prompt="模拟分镜首帧",
+                    name="S01 首帧",
+                    shot_id="S01",
+                    reference_images=["images/anchor.png"],
+                ),
+                VideoProductionImageTask(
+                    prompt="模拟分镜收尾帧",
+                    name="S02 首帧",
+                    shot_id="S02",
+                    reference_images=["images/anchor.png"],
+                ),
+            ],
+        ),
+    )
+
+    assert image_result.ok
+    target_element_ids = [
+        element["id"] for element in image_result.data["created_elements"]
+    ]
+    manager = await get_canvas_manager(str(project_dir))
+    config = await manager.read_current_canvas()
+    storyboard = config.canvas.get_element(storyboard_result.data["element_id"])
+    targets = [config.canvas.get_element(element_id) for element_id in target_element_ids]
+    anchor = config.canvas.get_element("visual-anchor")
+    shots = storyboard.get_active_content().fields["shots"]
+    assert [shot["outputImageElementId"] for shot in shots] == target_element_ids
+    assert any(
+        connection.source_element_id == "visual-anchor"
+        and connection.target_element_id == storyboard.id
+        and connection.locked
+        for connection in config.canvas.connections
+    )
+    assert any(
+        connection.source_element_id == storyboard.id
+        and connection.target_element_id == target_element_ids[0]
+        and connection.locked
+        for connection in config.canvas.connections
+    )
+    assert any(
+        connection.source_element_id == storyboard.id
+        and connection.target_element_id == target_element_ids[1]
+        and connection.locked
+        for connection in config.canvas.connections
+    )
+    assert anchor.x < storyboard.x < targets[0].x
+    assert targets[0].x == targets[1].x
+    assert targets[0].y < targets[1].y
+    for shot_id, target in zip(("S01", "S02"), targets, strict=True):
+        assert processing_snapshots[shot_id] == {
+            "position": (target.x, target.y, target.zIndex),
+            "status": "processing",
+            "output_element_id": target.id,
+            "storyboard_connected": True,
+            "reference_connected": False,
+        }
+    assert 'shot_ids: "S01, S02"' in image_result.content
+
+
+@pytest.mark.asyncio
+async def test_storyboard_image_failure_preserves_processing_relationship_and_layout(
+    workspace: Path,
+    monkeypatch,
+):
+    """生成失败时保留预占图片、分镜关系和已经确定的位置。"""
+    project_name = "storyboard-image-failure-project"
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    await write_magic_project_js_v3(project_name, _v3_config())
+    storyboard_result = await UpsertStoryboard(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        UpsertStoryboardParams(
+            project_path=project_name,
+            name="模拟分镜",
+            generation_config=StoryboardGenerationConfigInput(
+                aspect_ratio="16:9",
+                resolution="1K",
+            ),
+            shots=[
+                StoryboardShotInput(
+                    id="S01",
+                    duration_seconds=4,
+                    description="模拟失败镜头",
+                )
+            ],
+        ),
+    )
+    assert storyboard_result.ok
+
+    async def fail_generation(self, idx, task, placeholder, *args, **kwargs):
+        """返回确定的模拟失败结果，避免调用真实媒体服务。"""
+        return TaskExecutionResult(
+            index=idx,
+            success=False,
+            placeholder_update=ImagePlaceholderUpdate(status="failed"),
+            error_message="mock image generation failure",
+        )
+
+    monkeypatch.setattr(GenerateCanvasImages, "_execute_task_item", fail_generation)
+    result = await GenerateVideoProductionImages(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        GenerateVideoProductionImagesParams(
+            project_path=project_name,
+            storyboard_element_id=storyboard_result.data["element_id"],
+            tasks=[
+                VideoProductionImageTask(
+                    prompt="模拟失败",
+                    name="S01 首帧",
+                    shot_id="S01",
+                    reference_images=[],
+                )
+            ],
+        ),
+    )
+
+    assert not result.ok
+    manager = await get_canvas_manager(str(workspace / project_name))
+    config = await manager.read_current_canvas()
+    storyboard = config.canvas.get_element(storyboard_result.data["element_id"])
+    shot = storyboard.get_active_content().fields["shots"][0]
+    target = config.canvas.get_element(shot["outputImageElementId"])
+    assert target.get_active_content().fields["status"] == "failed"
+    assert target.x is not None
+    assert target.y is not None
+    assert target.zIndex is not None
+    assert any(
+        connection.source_element_id == storyboard.id
+        and connection.target_element_id == target.id
+        and connection.locked
+        for connection in config.canvas.connections
+    )
+
+
+@pytest.mark.asyncio
+async def test_import_canvas_assets_imports_and_reuses_uploaded_media(
+    workspace: Path,
+):
+    """素材导入工具一次登记图片和音频，并在重复调用时复用节点。"""
+    project_name = "import-canvas-assets-project"
+    project_dir = workspace / project_name
+    await async_mkdir(project_dir, parents=True, exist_ok=True)
+    await async_mkdir(workspace / ".tmp", parents=True, exist_ok=True)
+    Image.new("RGB", (96, 54), color="cyan").save(workspace / ".tmp" / "product.webp")
+    await async_write_bytes(workspace / ".tmp" / "narration.mp3", b"mock-audio")
+    await write_magic_project_js_v3(project_name, _v3_config())
+
+    tool = ImportCanvasAssets(base_dir=str(workspace))
+    params = ImportCanvasAssetsParams(
+        project_path=project_name,
+        assets=[
+            {"path": ".tmp/product.webp", "name": "模拟产品图"},
+            {"path": ".tmp/narration.mp3", "name": "模拟旁白"},
+        ],
+    )
+    first_result = await tool.execute(_image_generation_tool_context(), params)
+    manager = await get_canvas_manager(str(project_dir))
+    first_config = await manager.read_current_canvas()
+    first_positions = {
+        element.id: (element.x, element.y, element.zIndex)
+        for element in first_config.canvas.elements
+    }
+    second_result = await tool.execute(_image_generation_tool_context(), params)
+
+    assert first_result.ok
+    assert second_result.ok
+    assert first_result.data["imported_count"] == 2
+    assert first_result.data["reused_count"] == 0
+    assert second_result.data["imported_count"] == 0
+    assert second_result.data["reused_count"] == 2
+    assert {asset["media_type"] for asset in first_result.data["assets"]} == {"image", "audio"}
+    assert all(asset["media_path"].startswith("./") for asset in first_result.data["assets"])
+
+    config = await manager.read_current_canvas()
+    assert len(config.canvas.elements) == 2
+    assert {
+        element.id: (element.x, element.y, element.zIndex)
+        for element in config.canvas.elements
+    } == first_positions
+    assert (project_dir / "images").is_dir()
+    assert (project_dir / "audio").is_dir()
+    assert all(element.x is not None for element in config.canvas.elements)
+    assert all(element.y is not None for element in config.canvas.elements)
+    assert all(element.zIndex is not None for element in config.canvas.elements)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("project_name", "writer"),
+    [
+        ("import-canvas-assets-v1", write_magic_project_js),
+        ("import-canvas-assets-v2", write_magic_project_js_v2),
+    ],
+)
+async def test_import_canvas_assets_supports_legacy_canvas_formats(
+    workspace: Path,
+    project_name: str,
+    writer,
+):
+    """旧格式导入图片时补齐布局，并用 Element ID 兼容表示 Content ID。"""
+    project_dir = workspace / project_name
+    await async_mkdir(project_dir, parents=True, exist_ok=True)
+    await async_mkdir(workspace / ".tmp", parents=True, exist_ok=True)
+    Image.new("RGB", (640, 360), color="magenta").save(workspace / ".tmp" / "legacy.png")
+    version = "1.0.0" if "v1" in project_name else "2.0.0"
+    await writer(project_name, _legacy_config(version, project_name))
+
+    result = await ImportCanvasAssets(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        ImportCanvasAssetsParams(
+            project_path=project_name,
+            assets=[{"path": ".tmp/legacy.png", "name": "Legacy Reference"}],
+        ),
+    )
+
+    assert result.ok
+    asset = result.data["assets"][0]
+    assert asset["media_type"] == "image"
+    assert asset["content_id"] == asset["element_id"]
+    assert asset["media_path"].startswith("./images/")
+
+    manager = await get_canvas_manager(str(project_dir))
+    config = await manager.read_current_canvas()
+    imported = await manager.get_element_by_id(asset["element_id"], config=config)
+    assert imported is not None
+    assert imported.x is not None
+    assert imported.y is not None
+    assert imported.zIndex is not None
+
+
+@pytest.mark.asyncio
+async def test_import_canvas_assets_rejects_audio_on_legacy_canvas(workspace: Path):
+    """旧格式不支持音频节点时应在写入前明确拒绝。"""
+    project_name = "import-canvas-assets-legacy-audio"
+    project_dir = workspace / project_name
+    await async_mkdir(project_dir, parents=True, exist_ok=True)
+    await async_mkdir(workspace / ".tmp", parents=True, exist_ok=True)
+    await async_write_bytes(workspace / ".tmp" / "legacy.mp3", b"mock-audio")
+    await write_magic_project_js(project_name, _legacy_config("1.0.0", project_name))
+
+    result = await ImportCanvasAssets(base_dir=str(workspace)).execute(
+        _image_generation_tool_context(),
+        ImportCanvasAssetsParams(
+            project_path=project_name,
+            assets=[{"path": ".tmp/legacy.mp3", "name": "Legacy Audio"}],
+        ),
+    )
+
+    assert not result.ok
+    assert "does not support Audio assets" in result.content
+    config = await (await get_canvas_manager(str(project_dir))).read_current_canvas()
+    assert len(config.canvas.elements) == 1
+
+
+@pytest.mark.asyncio
+async def test_video_production_image_tool_keeps_project_asset_as_request_only(
+    workspace: Path,
+    monkeypatch,
+):
+    """项目参考素材只写入生成请求，不自动创建来源 Element 或关系。"""
     project_name = "production-image-unregistered-source-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "assets", parents=True, exist_ok=True)
@@ -1182,17 +1729,14 @@ async def test_video_production_image_tool_registers_project_asset_source(
     )
 
     assert result.ok
-    connection = result.data["connections"][0]
+    assert result.data["connections"] == []
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    source = config.canvas.get_element(connection["source_element_id"])
-    assert source is not None
-    assert source.type == "image"
-    assert source.src == "./assets/reference.png"
-    assert source.x is not None
-    assert source.y is not None
-    assert source.zIndex is not None
-    assert connection["target_element_id"] == result.data["created_elements"][0]["id"]
+    assert len(config.canvas.elements) == 1
+    target = config.canvas.get_element(result.data["created_elements"][0]["id"])
+    assert target.get_active_content().fields["generateImageRequest"]["reference_images"] == [
+        f"{project_name}/assets/reference.png"
+    ]
 
 
 @pytest.mark.asyncio
@@ -1200,7 +1744,7 @@ async def test_video_production_image_tool_materializes_uploaded_source(
     workspace: Path,
     monkeypatch,
 ):
-    """项目外上传素材由后端复制进项目后再登记为来源。"""
+    """项目外上传素材复制进项目后只作为生成请求路径使用。"""
     project_name = "production-image-uploaded-source-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir, parents=True, exist_ok=True)
@@ -1229,22 +1773,25 @@ async def test_video_production_image_tool_materializes_uploaded_source(
     )
 
     assert result.ok
-    connection = result.data["connections"][0]
+    assert result.data["connections"] == []
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    source = config.canvas.get_element(connection["source_element_id"])
-    assert source is not None
-    assert source.src.startswith("./assets/upload-")
-    assert source.src.endswith(".png")
-    assert (project_dir / source.src.removeprefix("./")).is_file()
+    assert len(config.canvas.elements) == 1
+    target = config.canvas.get_element(result.data["created_elements"][0]["id"])
+    reference_path = target.get_active_content().fields["generateImageRequest"][
+        "reference_images"
+    ][0]
+    assert reference_path.startswith(f"{project_name}/images/upload-")
+    assert reference_path.endswith(".png")
+    assert (workspace / reference_path).is_file()
 
 
 @pytest.mark.asyncio
-async def test_video_production_image_marks_result_failed_when_source_is_deleted(
+async def test_video_production_image_honors_reference_element_deletion_during_generation(
     workspace: Path,
     monkeypatch,
 ):
-    """来源在生成期间被删除时，不提交 completed 状态或残缺 Connection。"""
+    """参考 Element 被用户删除不影响已经开始的文件路径生成任务。"""
     project_name = "production-image-source-deleted-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
@@ -1296,76 +1843,21 @@ async def test_video_production_image_marks_result_failed_when_source_is_deleted
         ),
     )
 
-    assert not result.ok
+    assert result.ok
     assert result.data["connections"] == []
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
     generated = next(element for element in config.canvas.elements if element.type == "image")
-    assert generated.get_active_content().fields["status"] == "failed"
+    assert generated.get_active_content().fields["status"] == "completed"
     assert config.canvas.connections == []
 
 
 @pytest.mark.asyncio
-async def test_source_connection_finalizer_is_idempotent(workspace: Path):
-    """同一来源和结果重复提交时只保留一条 Connection。"""
-    project_name = "source-connection-finalizer-idempotent-project"
-    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
-    await write_magic_project_js_v3(
-        project_name,
-        _v3_config(
-            _content_element(
-                "source-image",
-                "image",
-                name="来源",
-                fields={"src": "./images/source.png", "status": "completed"},
-            ),
-            _content_element("target-image", "image", name="结果", fields={"status": "completed"}),
-        ),
-    )
-    manager = await get_canvas_manager(str(workspace / project_name))
-    finalizer = SourceConnectionGenerationFinalizer(
-        manager,
-        [[
-            PreparedMediaSource(
-                element_id="source-image",
-                content_id="source-image-content-1",
-                media_type=MediaSourceType.IMAGE,
-                name="来源",
-                src="./images/source.png",
-                generation_path=f"{project_name}/images/source.png",
-                file_path=workspace / project_name / "images" / "source.png",
-                width=320,
-                height=180,
-                register_if_missing=False,
-            )
-        ]],
-        enabled=True,
-    )
-    context = CanvasGenerationFinalizationContext(
-        task_index=0,
-        element_id="target-image",
-        content_id="target-image-content-1",
-    )
-
-    async def apply_finalizer(config: MagicProjectConfigV3) -> None:
-        """在测试事务中执行一次来源关系提交。"""
-        await finalizer.apply(config, context)
-
-    await manager.run_write_transaction(apply_finalizer)
-    await manager.run_write_transaction(apply_finalizer)
-
-    config = await manager.read_current_canvas()
-    assert len(config.canvas.connections) == 1
-    assert config.canvas.connections[0].source_element_id == "source-image"
-    assert config.canvas.connections[0].target_element_id == "target-image"
-
-
-@pytest.mark.asyncio
-async def test_video_production_video_tool_connects_first_frame_internally(
+async def test_video_production_video_tool_keeps_first_frame_in_request_only(
     workspace: Path,
     monkeypatch,
 ):
-    """视频镜头工具根据首帧路径自动建立首帧到视频的关系。"""
+    """视频参考帧只保存在生成请求中，不自动创建 Canvas 关系。"""
     project_name = "production-video-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
@@ -1401,20 +1893,23 @@ async def test_video_production_video_tool_connects_first_frame_internally(
     assert result.ok
     assert "connection" not in VideoProductionVideoTask.model_fields
     assert transaction_count == 2
-    assert len(result.data["connections"]) == 1
-    source_element_id = result.data["connections"][0]["source_element_id"]
+    assert result.data["connections"] == []
     target_element_id = result.data["created_elements"][0]["element_id"]
-    assert result.data["connections"][0]["target_element_id"] == target_element_id
     created_content_id = result.data["created_elements"][0]["content_id"]
     assert f'element_id="{target_element_id}"' in result.content
     assert f'content_id="{created_content_id}"' in result.content
     assert "Internal Canvas relations" not in result.content
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    source = config.canvas.get_element(source_element_id)
-    assert source is not None
-    assert source.type == "image"
-    assert source.src == "./images/first-frame.png"
+    assert config.canvas.connections == []
+    assert len(config.canvas.elements) == 1
     target = config.canvas.get_element(target_element_id)
     assert target is not None
     assert target.get_active_content().fields["status"] in {"completed", "processing"}
+    generate_request = target.get_active_content().fields["generateVideoRequest"]
+    assert generate_request["inputs"]["frames"] == [
+        {
+            "role": "start",
+            "uri": f"/{project_name}/images/first-frame.png",
+        }
+    ]

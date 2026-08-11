@@ -241,13 +241,13 @@ Video quality/resolution tier, optional. The parameter name must be resolution. 
     )
     element_id: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选。已有画布 Element ID。传入时复用该节点；也可仅传 content_id 定位。-->
-Optional existing canvas Element ID. Reuses this node; content_id may also be used alone to locate it."""
+        description="""<!--zh: 可选。已有画布 Element ID。只传该字段时在节点中追加新的 Content；也可仅传 content_id 定位已有 Content。-->
+Optional existing canvas Element ID. Passing it alone appends a new Content to the Element; content_id may also locate an existing Content."""
     )
     content_id: Optional[str] = Field(
         default=None,
-        description="""<!--zh: 可选。要更新或继续使用的 Content ID。可与 element_id 一起传入，工具会校验它们是否属于同一节点。-->
-Optional Content ID to update or continue using. May be supplied with element_id so the tool can validate that both belong to the same Element.""",
+        description="""<!--zh: 可选。要重试或更新的已有 Content ID。Content 必须存在；与 element_id 同时传入时还会校验归属关系。-->
+Optional existing Content ID to retry or update. It must exist; when supplied with element_id, the tool also validates that it belongs to that Element.""",
     )
     set_as_main: bool = Field(
         default=False,

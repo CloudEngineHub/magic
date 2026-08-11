@@ -23,12 +23,15 @@ from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceInput,
     MediaSourceType,
 )
-from app.tools.design.video_production.service.source_connection_finalizer import (
-    SourceConnectionGenerationFinalizer,
-)
 from app.tools.design.video_production.service.storyboard_generation_config_service import (
     StoryboardGenerationConfig,
     StoryboardGenerationConfigService,
+)
+from app.tools.design.video_production.service.storyboard_image_generation_initializer import (
+    StoryboardImageGenerationInitializer,
+)
+from app.tools.design.video_production.service.video_production_generation_initializer import (
+    VideoProductionGenerationInitializer,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 
@@ -47,10 +50,20 @@ class VideoProductionImageTask(BaseModel):
         default_factory=list,
         description="Reference image paths from project files, uploads, or earlier tool results.",
     )
-    element_id: Optional[str] = Field(default=None, description="Existing canvas Element ID to reuse.")
+    shot_id: Optional[str] = Field(
+        default=None,
+        description="Storyboard shot ID that this image represents. Use it for storyboard first frames.",
+    )
+    element_id: Optional[str] = Field(
+        default=None,
+        description="Existing canvas Element ID. Passing it alone appends a new Content to that Element.",
+    )
     content_id: Optional[str] = Field(
         default=None,
-        description="Content ID to update or continue using. May be supplied together with element_id.",
+        description=(
+            "Existing Content ID to retry or update. It must exist and, when element_id is also supplied, "
+            "must belong to that Element."
+        ),
     )
     set_as_main: bool = Field(
         default=False,
@@ -82,11 +95,27 @@ class GenerateVideoProductionImagesParams(BaseToolParams):
     )
     tasks: list[VideoProductionImageTask] = Field(..., min_length=1, max_length=6)
 
+    @model_validator(mode="after")
+    def validate_storyboard_shots(self) -> "GenerateVideoProductionImagesParams":
+        """确保分镜图片任务具有明确且不重复的镜头归属。"""
+        shot_ids = [task.shot_id for task in self.tasks]
+        if self.storyboard_element_id:
+            if any(not shot_id for shot_id in shot_ids):
+                raise ValueError(
+                    "shot_id is required for every task when storyboard_element_id is provided"
+                )
+            normalized_shot_ids = [str(shot_id) for shot_id in shot_ids]
+            if len(set(normalized_shot_ids)) != len(normalized_shot_ids):
+                raise ValueError("shot_id must be unique within one storyboard image call")
+        elif any(shot_id for shot_id in shot_ids):
+            raise ValueError("storyboard_element_id is required when shot_id is provided")
+        return self
+
 
 # 完整的模型侧使用规范位于 agents/skills/video-production/SKILL.md。
 @tool(code_mode_only=True)
 class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoProductionImagesParams]):
-    """生成视频制作图片，并内部维护参考素材到结果的 Canvas 关系。"""
+    """生成视频制作图片，并在分镜场景中绑定镜头输出。"""
 
     action_key = "generate_video_production_images"
     success_message_key = "generate_video_production_images.success"
@@ -97,7 +126,7 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
         tool_context: ToolContext,
         params: GenerateVideoProductionImagesParams,
     ) -> ToolResult:
-        """解析参考来源、委托通用图片生成并在成功后建立内部连接。"""
+        """解析参考路径、预占画布目标并委托通用图片生成。"""
         try:
             resolved_project_path, manager, error_result = await self._get_canvas_manager(
                 params.project_path,
@@ -107,12 +136,20 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                 return error_result or ToolResult.error("Canvas project validation failed.")
 
             storyboard_generation_config: Optional[StoryboardGenerationConfig] = None
+            prepared_storyboard_shots = None
             if params.storyboard_element_id:
                 current_config = await manager.read_current_canvas()
                 storyboard_generation_config = StoryboardGenerationConfigService.read_from_storyboard(
                     current_config.canvas,
                     params.storyboard_element_id,
                     tool_context,
+                )
+                prepared_storyboard_shots = (
+                    StoryboardImageGenerationInitializer.prepare_storyboard_shots(
+                        current_config.canvas,
+                        params.storyboard_element_id,
+                        [str(task.shot_id) for task in params.tasks],
+                    )
                 )
 
             prepared_sources_by_task = []
@@ -134,7 +171,7 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                 tasks=[
                     ImageTaskSpec(
                         **{
-                            **task.model_dump(exclude={"reference_images"}),
+                            **task.model_dump(exclude={"reference_images", "shot_id"}),
                             "reference_images": [
                                 source.generation_path
                                 for source in prepared_sources_by_task[index]
@@ -149,13 +186,14 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                     for index, task in enumerate(params.tasks)
                 ],
             )
-            finalizer = SourceConnectionGenerationFinalizer(
-                manager,
-                prepared_sources_by_task,
-                enabled=manager.supports_connections,
-            )
+            if prepared_storyboard_shots is not None:
+                initializer = StoryboardImageGenerationInitializer(
+                    prepared_storyboard_shots,
+                )
+            else:
+                initializer = VideoProductionGenerationInitializer()
             result = await GenerateCanvasImages(
-                generation_finalizer=finalizer,
+                generation_initializer=initializer,
                 image_model_id=(
                     storyboard_generation_config.image_model_id
                     if storyboard_generation_config is not None
@@ -163,7 +201,7 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                 ),
                 base_dir=self.base_dir,
             ).execute(tool_context, inner_params)
-            result = self._merge_connections(result, finalizer.get_connections())
+            result = self._merge_connections(result, initializer.get_connections())
             if storyboard_generation_config is not None:
                 result.data = {
                     **(result.data or {}),
@@ -174,6 +212,7 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                     result.content,
                     params.storyboard_element_id,
                     storyboard_generation_config,
+                    [str(task.shot_id) for task in params.tasks],
                 )
             return result
         except Exception as error:
@@ -187,11 +226,13 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
         content: str,
         storyboard_element_id: Optional[str],
         config: StoryboardGenerationConfig,
+        shot_ids: list[str],
     ) -> str:
-        """把本次实际采用的分镜图片设置追加到模型结果。"""
+        """把本次实际采用的分镜图片设置和镜头归属追加到模型结果。"""
         return (
             f"{content}\n\nApplied Storyboard Image Settings:\n"
             f'- storyboard_element_id: "{storyboard_element_id}"\n'
+            f'- shot_ids: "{", ".join(shot_ids)}"\n'
             f'- model_id: "{config.image_model_id}"\n'
             f'- aspect_ratio: "{config.aspect_ratio}"\n'
             f'- resolution: "{config.resolution}"\n'
@@ -218,7 +259,7 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
         separator = VideoProductionMarkdownPresenter.message(
             "video_production.list_separator"
         )
-        summary = separator.join(f"**{name}**" for name in names[:3])
+        summary = separator.join(names[:3])
         if len(names) > 3:
             summary = VideoProductionMarkdownPresenter.message(
                 "generate_video_production_images.before_more",

@@ -24,8 +24,8 @@ from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceType,
     PreparedMediaSource,
 )
-from app.tools.design.video_production.service.source_connection_finalizer import (
-    SourceConnectionGenerationFinalizer,
+from app.tools.design.video_production.service.video_production_generation_initializer import (
+    VideoProductionGenerationInitializer,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 
@@ -68,10 +68,16 @@ class VideoProductionVideoTask(BaseModel):
     seed: Optional[int] = Field(default=None, description="Random seed.")
     watermark: Optional[bool] = Field(default=None, description="Whether to keep watermark.")
     extensions: dict[str, Any] = Field(default_factory=dict, description="Model extension parameters.")
-    element_id: Optional[str] = Field(default=None, description="Existing canvas Element ID to reuse.")
+    element_id: Optional[str] = Field(
+        default=None,
+        description="Existing canvas Element ID. Passing it alone appends a new Content to that Element.",
+    )
     content_id: Optional[str] = Field(
         default=None,
-        description="Content ID to update or continue using. May be supplied together with element_id.",
+        description=(
+            "Existing Content ID to retry or update. It must exist and, when element_id is also supplied, "
+            "must belong to that Element."
+        ),
     )
     set_as_main: bool = Field(
         default=False,
@@ -92,7 +98,7 @@ class GenerateVideoProductionVideosParams(BaseToolParams):
 # 完整的模型侧使用规范位于 agents/skills/video-production/SKILL.md。
 @tool(code_mode_only=True)
 class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoProductionVideosParams]):
-    """生成视频制作镜头，并内部维护参考素材到结果的 Canvas 关系。"""
+    """生成视频制作镜头，并固定新增视频节点布局。"""
 
     action_key = "generate_video_production_videos"
     success_message_key = "generate_video_production_videos.success"
@@ -103,7 +109,7 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
         tool_context: ToolContext,
         params: GenerateVideoProductionVideosParams,
     ) -> ToolResult:
-        """解析所有参考媒体、委托通用视频生成并在成功后建立内部连接。"""
+        """解析参考路径、预占画布目标并委托通用视频生成。"""
         try:
             resolved_project_path, manager, error_result = await self._get_canvas_manager(
                 params.project_path,
@@ -159,16 +165,12 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
                 model_id=params.model_id,
                 tasks=normalized_tasks,
             )
-            finalizer = SourceConnectionGenerationFinalizer(
-                manager,
-                prepared_sources_by_task,
-                enabled=manager.supports_connections,
-            )
+            initializer = VideoProductionGenerationInitializer()
             result = await GenerateCanvasVideos(
-                generation_finalizer=finalizer,
+                generation_initializer=initializer,
                 base_dir=self.base_dir,
             ).execute(tool_context, inner_params)
-            return self._merge_connections(result, finalizer.get_connections())
+            return self._merge_connections(result, initializer.get_connections())
         except Exception as error:
             return ToolResult.error(
                 f"Video production video generation failed: {error}",
@@ -231,7 +233,7 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
         separator = VideoProductionMarkdownPresenter.message(
             "video_production.list_separator"
         )
-        summary = separator.join(f"**{name}**" for name in names[:3])
+        summary = separator.join(names[:3])
         if len(names) > 3:
             summary = VideoProductionMarkdownPresenter.message(
                 "generate_video_production_videos.before_more",

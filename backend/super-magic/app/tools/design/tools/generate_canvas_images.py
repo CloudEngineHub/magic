@@ -153,13 +153,13 @@ Reference image paths. Pass [] for text-only generation. Reference images serve 
     )
     element_id: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选。已有画布 Element ID。传入时复用该节点；不传时可通过 content_id 定位，二者都不传则新建。-->
-Optional existing canvas Element ID. Reuses this node when provided; otherwise content_id may locate the target, and omitting both creates a new node."""
+        description="""<!--zh: 可选。已有画布 Element ID。只传该字段时在节点中追加新的 Content；不传时可通过 content_id 定位，二者都不传则新建节点。-->
+Optional existing canvas Element ID. Passing it alone appends a new Content to the Element; content_id may locate an existing Content, and omitting both creates a new Element."""
     )
     content_id: Optional[str] = Field(
         default=None,
-        description="""<!--zh: 可选。要更新或继续使用的 Content ID。可与 element_id 一起传入，工具会校验它们是否属于同一节点。-->
-Optional Content ID to update or continue using. May be supplied with element_id so the tool can validate that both belong to the same Element.""",
+        description="""<!--zh: 可选。要重试或更新的已有 Content ID。Content 必须存在；与 element_id 同时传入时还会校验归属关系。-->
+Optional existing Content ID to retry or update. It must exist; when supplied with element_id, the tool also validates that it belongs to that Element.""",
     )
     set_as_main: bool = Field(
         default=False,
@@ -271,7 +271,7 @@ class GenerateCanvasImages(BaseGenerateCanvasElements[GenerateCanvasImagesParams
 用户明确指定时填入；未指定时：reference_images 非空则省略 size（系统自动从面积最大的参考图读取尺寸），reference_images 为空则必须填写，否则报错。
 
 【element_id、content_id 与重试】
-element_id 保持原有语义：复用已有 Element。需要追加或指定一个候选内容时，再传 content_id；content_id 不存在则追加，存在则更新。不传 content_id 时继续写入原有默认内容。set_as_main 默认 false，通常由用户在页面确认后再设为主内容。
+只传 element_id 时复用已有 Element，并由系统自动生成 Content ID、追加新的候选内容。传入 content_id 表示重试或更新这个确定且已经存在的 Content；content_id 不存在时会报错。element_id 与 content_id 同时传入时还会校验归属关系。set_as_main 默认 false；仅在用户已经明确确认本次结果应成为主内容时传 true。
 
 【prompt 质量】
 将用户的简短描述扩写为包含主体、风格、构图、光线、色调的完整描述。描述越模糊，生成结果越随机。
@@ -288,7 +288,7 @@ Both cases require explicit reference_images — never omit it.
 Fill in size when the user explicitly states one. Otherwise: if reference_images is non-empty, omit size — the system automatically reads the largest reference image's dimensions. If reference_images is empty, size is required; omitting it will cause an error.
 
 [element_id, content_id, and retry]
-element_id keeps its original meaning: reuse an existing Element. Pass content_id only when a specific candidate should be updated or appended; a missing content_id is appended and an existing one is updated. Omitting content_id preserves the default content behavior. set_as_main defaults to false; normally let the user confirm the candidate in the UI before making it the main Content.
+Passing only element_id reuses the existing Element and appends a new candidate Content with a backend-generated ID. Passing content_id retries or updates that exact existing Content; a missing Content is rejected. Supplying both IDs also validates their ownership. set_as_main defaults to false; pass true only when the user has explicitly confirmed that this result should become the main Content.
 
 [Prompt quality]
 Expand brief user descriptions into full prompts covering subject, style, composition, lighting, and color tone. Vague inputs produce vague outputs.

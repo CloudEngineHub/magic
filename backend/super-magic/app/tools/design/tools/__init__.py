@@ -11,12 +11,12 @@ from app.tools.design.tools.generate_canvas_images import GenerateCanvasImages
 from app.tools.design.tools.generate_canvas_videos import GenerateCanvasVideos
 from app.tools.design.tools.generate_video_production_images import GenerateVideoProductionImages
 from app.tools.design.tools.generate_video_production_videos import GenerateVideoProductionVideos
+from app.tools.design.tools.import_canvas_assets import ImportCanvasAssets
 from app.tools.design.tools.promote_canvas_content import PromoteCanvasContent
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements
 from app.tools.design.tools.restore_canvas_media import RestoreCanvasMedia
 from app.tools.design.tools.search_canvas_images import SearchCanvasImages
 from app.tools.design.tools.search_image_prompts import SearchImagePrompts
-from app.tools.design.tools.upsert_canvas_audio import UpsertCanvasAudio
 from app.tools.design.tools.upsert_storyboard import UpsertStoryboard
 
 __all__ = [
@@ -28,11 +28,11 @@ __all__ = [
     "GenerateCanvasVideos",
     "GenerateVideoProductionImages",
     "GenerateVideoProductionVideos",
+    "ImportCanvasAssets",
     "PromoteCanvasContent",
     "QueryCanvasElements",
     "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
-    "UpsertCanvasAudio",
     "UpsertStoryboard",
 ]

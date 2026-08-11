@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from app.tools.design.domain.canvas_document import (
     CanvasConnection,
@@ -11,9 +10,13 @@ from app.tools.design.domain.canvas_document import (
     CanvasElementV3,
 )
 from app.tools.design.domain.content import ElementContent
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
 from app.tools.design.domain.services.element_layout_service import ElementLayoutService
+from app.tools.design.video_production.service.video_production_layout_service import (
+    VideoProductionLayoutService,
+)
 
 
 @dataclass(frozen=True)
@@ -130,11 +133,12 @@ class VideoCompositionService:
         """重新校验输入并创建独立 processing Video Content。"""
         input_spec = self.inspect_inputs(canvas, video_edit_element_id)
         element = canvas.get_element(result_element_id) if result_element_id else None
+        creating_element = element is None
         if result_element_id and element is None:
             raise ValueError(f"Result Video Element does not exist: {result_element_id}")
         if element is None:
-            element_id = result_element_id or f"final-video-{uuid4()}"
-            content_id = f"{element_id}-content-{uuid4().hex[:8]}"
+            element_id = result_element_id or CanvasIdGenerator.generate_element_id()
+            content_id = CanvasIdGenerator.generate_initial_content_id(element_id)
             element = CanvasElementV3(
                 id=element_id,
                 type="video",
@@ -154,7 +158,10 @@ class VideoCompositionService:
             if element.type != "video":
                 raise ValueError(f"Result Element is not a Video Element: {element.id}")
             element.properties["name"] = result_name
-            content_id = f"{element.id}-content-{uuid4().hex[:8]}"
+            content_id = CanvasIdGenerator.generate_content_id(
+                element.id,
+                [content.content_id for content in element.contents],
+            )
             ContentService.append_content(
                 element,
                 ElementContent(content_id=content_id, fields={"status": "processing"}),
@@ -164,12 +171,17 @@ class VideoCompositionService:
         ConnectionService.ensure_connection(
             canvas,
             CanvasConnection(
-                id=f"connection-{uuid4()}",
+                id=CanvasIdGenerator.generate_connection_id(),
                 source_element_id=video_edit_element_id,
                 target_element_id=element.id,
                 locked=True,
             ),
         )
+        if creating_element:
+            VideoProductionLayoutService.layout_new_elements(
+                canvas,
+                [element.id],
+            )
         return CompositionPreparation(
             result_element_id=element.id,
             result_content_id=content_id,

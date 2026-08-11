@@ -110,13 +110,12 @@ class PromoteCanvasContent(BaseVideoProductionTool[PromoteCanvasContentParams]):
         target_value = values.get("content_id") or VideoProductionMarkdownPresenter.message(
             "promote_canvas_content.active_content"
         )
-        target = VideoProductionMarkdownPresenter.code(target_value)
         return {
             "action": VideoProductionMarkdownPresenter.action(self.action_key),
             "remark": VideoProductionMarkdownPresenter.message(
                 "promote_canvas_content.before",
-                element_id=VideoProductionMarkdownPresenter.code(values.get("element_id")),
-                content_id=target,
+                element_id=values.get("element_id"),
+                content_id=target_value,
             ),
         }
 
@@ -134,7 +133,7 @@ class PromoteCanvasContent(BaseVideoProductionTool[PromoteCanvasContentParams]):
         remark = (
             VideoProductionMarkdownPresenter.message(
                 "promote_canvas_content.after_success",
-                content_id=VideoProductionMarkdownPresenter.code(data.get("content_id")),
+                content_id=data.get("content_id"),
             )
             if result.ok
             else VideoProductionMarkdownPresenter.message(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Awaitable, Callable, Dict, Optional, Protocol, TypeVar
+from typing import Any, Awaitable, Callable, Dict, Optional, Protocol, Sequence, TypeVar, overload
 
 TransactionResultT = TypeVar("TransactionResultT")
 
@@ -26,6 +26,28 @@ class CanvasManagerProtocol(Protocol):
     async def read_current_canvas(self, *, use_lock: bool = True) -> Any:
         """读取当前画布快照。"""
 
+    @overload
+    async def run_write_transaction(
+        self,
+        mutator: Callable[[Any], Awaitable[TransactionResultT]],
+        verify_content: Optional[Callable[[Any, TransactionResultT], bool]] = None,
+        before_write: Optional[Callable[[], Any | Awaitable[Any]]] = None,
+        after_write: Optional[Callable[[TransactionResultT], Any | Awaitable[Any]]] = None,
+    ) -> TransactionResultT:
+        """执行使用异步修改器的统一读、改、写事务。"""
+        ...
+
+    @overload
+    async def run_write_transaction(
+        self,
+        mutator: Callable[[Any], TransactionResultT],
+        verify_content: Optional[Callable[[Any, TransactionResultT], bool]] = None,
+        before_write: Optional[Callable[[], Any | Awaitable[Any]]] = None,
+        after_write: Optional[Callable[[TransactionResultT], Any | Awaitable[Any]]] = None,
+    ) -> TransactionResultT:
+        """执行使用同步修改器的统一读、改、写事务。"""
+        ...
+
     @abstractmethod
     async def run_write_transaction(
         self,
@@ -34,7 +56,7 @@ class CanvasManagerProtocol(Protocol):
         before_write: Optional[Callable[[], Any | Awaitable[Any]]] = None,
         after_write: Optional[Callable[[TransactionResultT], Any | Awaitable[Any]]] = None,
     ) -> TransactionResultT:
-        """执行统一的读、改、写事务。"""
+        """执行统一的读、改、写事务，并兼容同步和异步修改器。"""
 
     @abstractmethod
     async def get_element_by_id(self, element_id: str, config: Optional[Any] = None) -> Any:
@@ -67,5 +89,21 @@ class CanvasManagerProtocol(Protocol):
         """删除 Element。"""
 
     @abstractmethod
-    def generate_element_id(self, prefix: str = "element") -> str:
+    def generate_element_id(self) -> str:
         """生成新的 Element ID。"""
+
+    @abstractmethod
+    def generate_initial_content_id(self, element_id: str) -> str:
+        """生成指定 Element 的首个 Content ID。"""
+
+    @abstractmethod
+    def generate_content_id(
+        self,
+        element_id: str,
+        existing_content_ids: Sequence[str],
+    ) -> str:
+        """生成指定 Element 下一个可用的 Content ID。"""
+
+    @abstractmethod
+    def generate_connection_id(self) -> str:
+        """生成新的 Connection ID。"""

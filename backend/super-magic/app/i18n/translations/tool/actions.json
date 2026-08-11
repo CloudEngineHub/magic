@@ -319,9 +319,9 @@
         "zh_CN": "配置视频成片",
         "en_US": "Configure final video"
     },
-    "upsert_canvas_audio": {
-        "zh_CN": "添加画布音频",
-        "en_US": "Add canvas audio"
+    "import_canvas_assets": {
+        "zh_CN": "导入画布素材",
+        "en_US": "Import canvas assets"
     },
     "compose_canvas_video": {
         "zh_CN": "合成最终视频",

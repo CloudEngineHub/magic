@@ -1,4 +1,4 @@
-"""视频制作媒体生成后的来源解析与 Element 关系维护。"""
+"""视频制作参考媒体的路径解析与画布素材登记。"""
 
 from __future__ import annotations
 
@@ -6,16 +6,20 @@ from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Iterable, Sequence
-from uuid import uuid4
+from typing import Any, Sequence
 
 from app.tools.design.constants import DEFAULT_ELEMENT_HEIGHT, DEFAULT_ELEMENT_WIDTH
-from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
+from app.tools.design.domain.canvas_document import CanvasElementV3
 from app.tools.design.domain.content import ElementContent
-from app.tools.design.domain.services.connection_service import ConnectionService
+from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
 from app.tools.design.manager.canvas_manager_protocol import CanvasManagerProtocol
 from app.tools.design.utils.canvas_image_utils import get_image_dimensions
-from app.tools.design.utils.magic_project_design_parser import ImageElement, VideoElement
+from app.tools.design.utils.canvas_layout_utils import calculate_next_element_position
+from app.tools.design.utils.magic_project_design_parser import (
+    ImageElement,
+    VideoElement,
+    flatten_all_elements,
+)
 from app.utils.async_file_utils import (
     async_copy2,
     async_exists,
@@ -33,12 +37,23 @@ class MediaSourceType(StrEnum):
     AUDIO = "audio"
 
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
+MEDIA_DIRECTORY_BY_TYPE = {
+    MediaSourceType.IMAGE: "images",
+    MediaSourceType.VIDEO: "videos",
+    MediaSourceType.AUDIO: "audio",
+}
+
+
 @dataclass(frozen=True)
 class MediaSourceInput:
     """模型参数中的单个参考素材路径及类型。"""
 
     path: str
     media_type: MediaSourceType
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,8 +81,45 @@ class PreparedMediaSource:
     register_if_missing: bool
 
 
+@dataclass(frozen=True)
+class CanvasAssetRegistration:
+    """已经登记到画布、可供后续工具串联的素材结果。"""
+
+    element_id: str
+    content_id: str
+    media_type: MediaSourceType
+    name: str
+    src: str
+    generation_path: str
+    created: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为工具结果使用的稳定字典。"""
+        return {
+            "element_id": self.element_id,
+            "content_id": self.content_id,
+            "media_type": self.media_type.value,
+            "name": self.name,
+            "media_path": self.src,
+            "generation_path": self.generation_path,
+            "created": self.created,
+        }
+
+
 class MediaGenerationService:
-    """准备参考媒体来源，并在最终事务中登记节点和建立关系。"""
+    """准备参考媒体路径，并支持显式素材导入工具登记节点。"""
+
+    @staticmethod
+    def infer_media_type(path: str) -> MediaSourceType:
+        """根据素材扩展名推断稳定媒体类型。"""
+        extension = Path(str(path or "").strip()).suffix.lower()
+        if extension in IMAGE_EXTENSIONS:
+            return MediaSourceType.IMAGE
+        if extension in VIDEO_EXTENSIONS:
+            return MediaSourceType.VIDEO
+        if extension in AUDIO_EXTENSIONS:
+            return MediaSourceType.AUDIO
+        raise ValueError(f"Unsupported canvas asset file type: {path}")
 
     @classmethod
     async def prepare_source_references(
@@ -84,9 +136,11 @@ class MediaGenerationService:
         config = await manager.read_current_canvas()
         elements = cls._iter_elements(config)
         prepared: list[PreparedMediaSource] = []
+        generated_source_ids: dict[tuple[MediaSourceType, str], tuple[str, str]] = {}
         for source_input in source_inputs:
             materialized = await cls._materialize_media_path(
                 source_input.path,
+                source_input.media_type,
                 project_path,
                 workspace_root,
             )
@@ -110,7 +164,9 @@ class MediaGenerationService:
                         element_id=element.id,
                         content_id=content_id,
                         media_type=source_input.media_type,
-                        name=getattr(element, "name", None) or materialized.file_path.stem,
+                        name=getattr(element, "name", None)
+                        or source_input.name
+                        or materialized.file_path.stem,
                         src=materialized.canvas_src,
                         generation_path=materialized.generation_path,
                         file_path=materialized.file_path,
@@ -125,13 +181,25 @@ class MediaGenerationService:
                 materialized.file_path,
                 source_input.media_type,
             )
-            element_id = cls._source_element_id(source_input.media_type, materialized.canvas_src)
+            source_key = (
+                source_input.media_type,
+                cls._normalize_canvas_path(materialized.canvas_src),
+            )
+            generated_ids = generated_source_ids.get(source_key)
+            if generated_ids is None:
+                element_id = CanvasIdGenerator.generate_element_id()
+                generated_ids = (
+                    element_id,
+                    CanvasIdGenerator.generate_initial_content_id(element_id),
+                )
+                generated_source_ids[source_key] = generated_ids
+            element_id, content_id = generated_ids
             prepared.append(
                 PreparedMediaSource(
                     element_id=element_id,
-                    content_id=cls._source_content_id(element_id, materialized.canvas_src),
+                    content_id=content_id,
                     media_type=source_input.media_type,
-                    name=materialized.file_path.stem,
+                    name=source_input.name or materialized.file_path.stem,
                     src=materialized.canvas_src,
                     generation_path=materialized.generation_path,
                     file_path=materialized.file_path,
@@ -143,13 +211,13 @@ class MediaGenerationService:
         return prepared
 
     @classmethod
-    async def ensure_source_elements(
+    async def ensure_canvas_assets(
         cls,
         manager: CanvasManagerProtocol,
         config: Any,
         sources: Sequence[PreparedMediaSource],
-    ) -> list[str]:
-        """在最终事务快照中复用已有来源，或登记尚未进入 Canvas 的素材。"""
+    ) -> list[CanvasAssetRegistration]:
+        """在同一事务快照中幂等登记素材并返回后续工具所需信息。"""
         unique_sources = list(
             {
                 (
@@ -180,53 +248,47 @@ class MediaGenerationService:
                 cls._validate_source_element(element, source)
             resolved.append((source, element))
 
-        resolved_ids: list[str] = []
+        registrations: list[CanvasAssetRegistration] = []
         for source, element in resolved:
+            created = element is None
             if element is None:
                 await manager.add_element(
-                    cls._build_source_element(manager, source),
+                    cls._build_source_element(manager, config, source),
                     config=config,
                 )
                 element = await manager.get_element_by_id(source.element_id, config=config)
             if element is None:
                 raise ValueError(f"Unable to register reference media source: {source.src}")
-            if element.id not in resolved_ids:
-                resolved_ids.append(element.id)
-        return resolved_ids
-
-    @staticmethod
-    def apply_source_connections(
-        config: Any,
-        pairs: Iterable[tuple[str, str]],
-    ) -> list[dict[str, str]]:
-        """在已有 Canvas 配置快照中幂等建立来源连接。"""
-        unique_pairs = list(dict.fromkeys(pairs))
-        MediaGenerationService._validate_source_connection_pairs(config, unique_pairs)
-        result: list[dict[str, str]] = []
-        for source_element_id, target_element_id in unique_pairs:
-            connection = ConnectionService.ensure_connection(
-                config.canvas,
-                CanvasConnection(
-                    id=f"connection-{uuid4()}",
-                    source_element_id=source_element_id,
-                    target_element_id=target_element_id,
-                ),
+            matches = cls._find_element_content_matches(
+                [element],
+                source.media_type,
+                source.src,
             )
-            result.append({
-                "connection_id": connection.id,
-                "source_element_id": connection.source_element_id,
-                "target_element_id": connection.target_element_id,
-            })
-        return result
+            if not matches:
+                raise ValueError(f"Unable to resolve registered media Content: {source.src}")
+            _, content_id = cls._select_content_match(matches)
+            registrations.append(
+                CanvasAssetRegistration(
+                    element_id=element.id,
+                    content_id=content_id,
+                    media_type=source.media_type,
+                    name=getattr(element, "name", None) or source.name,
+                    src=source.src,
+                    generation_path=source.generation_path,
+                    created=created,
+                )
+            )
+        return registrations
 
     @classmethod
     async def _materialize_media_path(
         cls,
         value: str,
+        media_type: MediaSourceType,
         project_path: Path,
         workspace_root: Path,
     ) -> MaterializedMediaPath:
-        """解析工作区路径，必要时复制到当前项目的 assets 目录。"""
+        """解析工作区路径，必要时复制到项目的对应媒体目录。"""
         workspace_real = await async_realpath(workspace_root)
         project_real = await async_realpath(project_path)
         source_path = await cls._resolve_workspace_file(
@@ -238,8 +300,9 @@ class MediaGenerationService:
             source_path.relative_to(project_real)
             persistent_path = source_path
         except ValueError:
-            persistent_path = await cls._copy_to_project_assets(
+            persistent_path = await cls._copy_to_project_media(
                 source_path,
+                media_type,
                 project_real,
                 workspace_real,
             )
@@ -289,12 +352,13 @@ class MediaGenerationService:
         return resolved
 
     @staticmethod
-    async def _copy_to_project_assets(
+    async def _copy_to_project_media(
         source_path: Path,
+        media_type: MediaSourceType,
         project_path: Path,
         workspace_root: Path,
     ) -> Path:
-        """把项目外的工作区素材复制为稳定且不覆盖的项目资产。"""
+        """把项目外素材复制到类型对应目录，并避免覆盖已有文件。"""
         source_stat = await async_stat(source_path)
         source_relative = source_path.relative_to(workspace_root).as_posix()
         fingerprint = sha256(
@@ -302,7 +366,7 @@ class MediaGenerationService:
         ).hexdigest()[:10]
         destination = (
             project_path
-            / "assets"
+            / MEDIA_DIRECTORY_BY_TYPE[media_type]
             / f"{source_path.stem}-{fingerprint}{source_path.suffix.lower()}"
         )
         if not await async_exists(destination):
@@ -343,6 +407,7 @@ class MediaGenerationService:
     @staticmethod
     def _build_source_element(
         manager: CanvasManagerProtocol,
+        config: Any,
         source: PreparedMediaSource,
     ) -> Any:
         """根据当前 Manager 能力构造对应格式的来源媒体 Element。"""
@@ -365,11 +430,28 @@ class MediaGenerationService:
                 main_content_id=source.content_id,
             )
 
+        x, y = calculate_next_element_position(
+            config,
+            source.width,
+            source.height,
+            max_elements_per_row=6 if source.media_type == MediaSourceType.IMAGE else 4,
+        )
+        z_index = max(
+            (
+                element.zIndex
+                for element in flatten_all_elements(config)
+                if element.zIndex is not None
+            ),
+            default=0,
+        ) + 1
         common = {
             "id": source.element_id,
             "name": source.name,
+            "x": x,
+            "y": y,
             "width": source.width,
             "height": source.height,
+            "zIndex": z_index,
             "visible": True,
             "locked": False,
             "src": source.src,
@@ -455,33 +537,6 @@ class MediaGenerationService:
         return matches[0]
 
     @staticmethod
-    def _validate_source_connection_pairs(
-        config: Any,
-        pairs: Sequence[tuple[str, str]],
-    ) -> None:
-        """在修改事务快照前完整校验来源关系，避免部分写入内存。"""
-        canvas = config.canvas
-        for source_element_id, target_element_id in pairs:
-            if source_element_id == target_element_id:
-                raise ValueError("A generated media Element cannot connect to itself")
-            if canvas.get_element(source_element_id) is None:
-                raise ValueError(f"Connection source does not exist: {source_element_id}")
-            if canvas.get_element(target_element_id) is None:
-                raise ValueError(f"Connection target does not exist: {target_element_id}")
-            reverse_exists = any(
-                connection.source_element_id == target_element_id
-                and connection.target_element_id == source_element_id
-                for connection in canvas.connections
-            )
-            same_direction_exists = any(
-                connection.source_element_id == source_element_id
-                and connection.target_element_id == target_element_id
-                for connection in canvas.connections
-            )
-            if reverse_exists and not same_direction_exists:
-                raise ValueError("Duplicate or reverse duplicate Connection is not allowed")
-
-    @staticmethod
     def _normalize_canvas_path(value: str) -> str:
         """将 Canvas 中允许的相对路径写法统一为稳定比较值。"""
         normalized = str(value or "").strip().replace("\\", "/")
@@ -490,15 +545,3 @@ class MediaGenerationService:
         while normalized.startswith("./"):
             normalized = normalized[2:]
         return normalized.casefold()
-
-    @staticmethod
-    def _source_element_id(media_type: MediaSourceType, src: str) -> str:
-        """根据稳定项目路径生成可幂等复用的来源 Element ID。"""
-        digest = sha256(src.casefold().encode("utf-8")).hexdigest()[:16]
-        return f"source-{media_type.value}-{digest}"
-
-    @staticmethod
-    def _source_content_id(element_id: str, src: str) -> str:
-        """根据来源路径生成稳定 Content ID。"""
-        digest = sha256(src.casefold().encode("utf-8")).hexdigest()[:12]
-        return f"{element_id}-content-{digest}"

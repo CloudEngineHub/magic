@@ -6166,6 +6166,7 @@ const filePreviewMeta = document.getElementById('filePreviewMeta');
 const filePreviewClose = document.getElementById('filePreviewClose');
 const filePreviewOpenBtn = document.getElementById('filePreviewOpenBtn');
 const filePreviewRenderBtn = document.getElementById('filePreviewRenderBtn');
+const filePreviewCanvasDataToggleBtn = document.getElementById('filePreviewCanvasDataToggleBtn');
 const filePreviewEditBtn = document.getElementById('filePreviewEditBtn');
 const filePreviewSaveBtn = document.getElementById('filePreviewSaveBtn');
 const filePreviewCancelBtn = document.getElementById('filePreviewCancelBtn');
@@ -6185,6 +6186,10 @@ let currentPreviewEditable = false;
 let filePreviewEditMode = false;
 let filePreviewEditDirty = false;
 let filePreviewEditContent = '';
+let currentCanvasProjectRawText = '';
+let currentCanvasProjectDecompressedText = '';
+let currentCanvasProjectViewMode = 'decompressed';
+let currentCanvasPreviewResizeObserver = null;
 const filePreviewTabs = new Map();
 let activeFilePreviewPath = '';
 let filePreviewScrollPositions = {};
@@ -7129,7 +7134,7 @@ function initFirstOpenFilePreviewPlaceholder() {
 function saveFilePreviewState() {
     if (isRestoringFilePreviewState) return;
     const tabs = [...filePreviewTabs.values()]
-        .filter(tab => tab.type !== 'micro-app')
+        .filter(tab => tab.type !== 'micro-app' && tab.type !== 'canvas-project')
         .map(tab => tab.path);
     const visible = filePreviewWorkbench ? !filePreviewWorkbench.hidden : false;
     if (!tabs.length && !visible) {
@@ -7345,18 +7350,31 @@ function resetActivePreviewSurface(options = {}) {
     }
     revokeFilePreviewObjectUrl();
     revokeCanvasBlobUrls();
+    if (currentCanvasPreviewResizeObserver) {
+        currentCanvasPreviewResizeObserver.disconnect();
+        currentCanvasPreviewResizeObserver = null;
+    }
     const canvasPanel = document.getElementById('canvasRightPanel');
     if (canvasPanel) canvasPanel.remove();
     const canvasModal = document.getElementById('canvasMediaModal');
     if (canvasModal) canvasModal.remove();
     filePreviewMain?.classList.remove('has-canvas-panel');
+    filePreviewWorkbench?.classList.remove('file-preview-workbench-canvas-project');
     if (filePreviewBody) {
         filePreviewBody.innerHTML = '';
-        filePreviewBody.classList.remove('file-preview-body-markdown', 'file-preview-body-tool-detail');
+        filePreviewBody.classList.remove(
+            'file-preview-body-markdown',
+            'file-preview-body-tool-detail',
+            'file-preview-body-canvas-project',
+        );
     }
     if (filePreviewMeta) filePreviewMeta.innerHTML = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = '';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
+    if (filePreviewCanvasDataToggleBtn) filePreviewCanvasDataToggleBtn.style.display = 'none';
+    currentCanvasProjectRawText = '';
+    currentCanvasProjectDecompressedText = '';
+    currentCanvasProjectViewMode = 'decompressed';
     currentPreviewCopyText = options.preserveEditState ? preservedCopyText : '';
     currentPreviewEditable = options.preserveEditState ? preservedEditable : false;
     if (!options.preserveEditState) {
@@ -7778,6 +7796,8 @@ async function activateFilePreviewTab(filePath, options = {}) {
         renderToolDetailPreviewTab(tab);
     } else if (tab.type === 'micro-app') {
         await renderMicroAppPreviewTab(tab);
+    } else if (tab.type === 'canvas-project') {
+        await renderApiCanvasProjectPreviewTab(tab);
     } else if (tab.type === 'api-file') {
         await renderApiFilePreviewTab(tab);
     } else {
@@ -7792,6 +7812,11 @@ async function activateFilePreviewTab(filePath, options = {}) {
 
 let workspaceDirHandle = null;
 let filetreeRefreshTimer = null;
+let filetreeRefreshInFlight = false;
+let currentFileTreeFingerprint = '';
+let previewAutoRefreshTimer = null;
+let previewAutoRefreshInFlight = false;
+let previewAutoRefreshPending = false;
 let selectBtnState = 'default'; // 'default' | 'active' | 'need-auth'
 const expandedDirs = new Set();
 const filetreeExpansionInitializedScopes = new Set();
@@ -7950,6 +7975,168 @@ async function readApiMicroAppConfig(dirPath) {
 function hasApiMicroAppConfigFile(entry) {
     if (!entry || entry.type !== 'directory' || !Array.isArray(entry.children)) return false;
     return entry.children.some(child => child && child.type === 'file' && child.name === 'app.json');
+}
+
+/** 判断 API 文件树目录是否包含画布项目入口文件。 */
+function hasApiCanvasProjectFile(entry) {
+    if (!entry || entry.type !== 'directory' || !Array.isArray(entry.children)) return false;
+    return entry.children.some(child => child && child.type === 'file' && child.name === 'magic.project.js');
+}
+
+/** 只读取顶层信封，避免文件树渲染时提前解压整个画布。 */
+async function isApiCanvasDesignProject(entry, dirPath) {
+    if (!hasApiCanvasProjectFile(entry)) return false;
+    try {
+        const projectPath = dirPath ? `${dirPath}/magic.project.js` : 'magic.project.js';
+        const data = await debugWorkspaceApi.readFile(projectPath);
+        const match = String(data.content || '').match(/window\.magicProjectConfig\s*=\s*(\{[\s\S]*\})/);
+        if (!match) return false;
+        return JSON.parse(match[1])?.type === 'design';
+    } catch (_) {
+        return false;
+    }
+}
+
+/** 读取并校验目录下的 design 类型 magic.project.js。 */
+async function readApiCanvasProjectConfig(dirPath) {
+    const projectPath = dirPath ? `${dirPath}/magic.project.js` : 'magic.project.js';
+    const data = await debugWorkspaceApi.readFile(projectPath);
+    const config = await parseMagicProjectConfig(data.content || '');
+    if (!config || config.type !== 'design' || !config.canvas) {
+        throw new Error('目录中的 magic.project.js 不是 design 画布项目');
+    }
+    return { config, projectPath, data };
+}
+
+/** 打开只读画布项目预览标签页。 */
+async function openApiCanvasProjectPreviewTab(dirPath, entry = null) {
+    try {
+        const { config, projectPath, data } = await readApiCanvasProjectConfig(dirPath);
+        const tabPath = `${String(dirPath || '').replace(/\/+$/, '')}/`;
+        filePreviewTabs.set(tabPath, {
+            type: 'canvas-project',
+            path: tabPath,
+            title: config.name || getWorkspaceFileBaseName(dirPath) || '画布项目',
+            projectPath,
+            projectConfig: config,
+            projectEntry: entry,
+            projectSize: data.size || 0,
+        });
+        await activateFilePreviewTab(tabPath, { resetScroll: true });
+    } catch (error) {
+        console.error('打开画布项目预览失败', error);
+        showSystemMessage(`打开画布项目失败：${error.message || error}`);
+    }
+}
+
+/** 创建只读画布的缩放工具栏，并暴露控制器绑定入口。 */
+function createCanvasPreviewZoomToolbar() {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'canvas-preview-zoom-toolbar';
+
+    const zoomOutButton = document.createElement('button');
+    zoomOutButton.type = 'button';
+    zoomOutButton.className = 'canvas-preview-zoom-button';
+    zoomOutButton.textContent = '−';
+    zoomOutButton.title = '缩小画布';
+
+    const scaleLabel = document.createElement('span');
+    scaleLabel.className = 'canvas-preview-zoom-label';
+    scaleLabel.textContent = '100%';
+
+    const zoomInButton = document.createElement('button');
+    zoomInButton.type = 'button';
+    zoomInButton.className = 'canvas-preview-zoom-button';
+    zoomInButton.textContent = '+';
+    zoomInButton.title = '放大画布';
+
+    const actualSizeButton = document.createElement('button');
+    actualSizeButton.type = 'button';
+    actualSizeButton.className = 'canvas-preview-zoom-text-button';
+    actualSizeButton.textContent = '100%';
+    actualSizeButton.title = '按真实尺寸展示';
+
+    const fitAllButton = document.createElement('button');
+    fitAllButton.type = 'button';
+    fitAllButton.className = 'canvas-preview-zoom-text-button';
+    fitAllButton.textContent = '显示全部';
+    fitAllButton.title = '缩放并居中展示全部元素';
+
+    const resetViewButton = document.createElement('button');
+    resetViewButton.type = 'button';
+    resetViewButton.className = 'canvas-preview-zoom-text-button';
+    resetViewButton.textContent = '复位';
+    resetViewButton.title = '清除画布移动并恢复居中显示全部元素';
+
+    toolbar.append(
+        zoomOutButton,
+        scaleLabel,
+        zoomInButton,
+        actualSizeButton,
+        fitAllButton,
+        resetViewButton,
+    );
+    return {
+        element: toolbar,
+        /** 绑定画布缩放控制器，工具栏只改变视图而不修改项目数据。 */
+        bind(controller) {
+            zoomOutButton.addEventListener('click', controller.zoomOut);
+            zoomInButton.addEventListener('click', controller.zoomIn);
+            actualSizeButton.addEventListener('click', controller.resetToActualSize);
+            fitAllButton.addEventListener('click', controller.fitAll);
+            resetViewButton.addEventListener('click', controller.resetView);
+        },
+        /** 同步当前缩放比例文本。 */
+        updateScale(scale) {
+            scaleLabel.textContent = `${Math.round(scale * 100)}%`;
+        },
+    };
+}
+
+/** 渲染只读画布项目页面，不提供编辑、拖拽或选择逻辑。 */
+async function renderApiCanvasProjectPreviewTab(tab) {
+    if (!filePreviewBody || !filePreviewWorkbench) return;
+    resetActivePreviewSurface();
+    currentPreviewFile = null;
+    currentPreviewPath = tab.projectPath || tab.path;
+    currentPreviewCopyText = '';
+    currentPreviewEditable = false;
+    if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
+    renderFilePreviewMetaRows(filePreviewMeta, [
+        { label: '文件名', value: tab.title || '画布项目' },
+        { label: '路径', value: tab.path },
+        { label: '预览类型', value: '只读画布' },
+        { label: '版本', value: tab.projectConfig?.version || '—' },
+        { label: '元素数', value: String(tab.projectConfig?.canvas?.elements?.length || 0) },
+        { label: '连接数', value: String(tab.projectConfig?.canvas?.connections?.length || 0) },
+    ]);
+
+    filePreviewWorkbench.classList.add('file-preview-workbench-canvas-project');
+    filePreviewBody.classList.add('file-preview-body-canvas-project');
+    const shell = document.createElement('div');
+    shell.className = 'canvas-project-shell';
+    const viewport = document.createElement('div');
+    viewport.className = 'canvas-project-viewport';
+    const zoomToolbar = createCanvasPreviewZoomToolbar();
+    shell.append(viewport, zoomToolbar.element);
+    filePreviewBody.appendChild(shell);
+    const projectDirPath = String(tab.projectPath || '').split('/').filter(Boolean).slice(0, -1).join('/');
+    const resolveMediaUrl = async relPath => appendPreviewRefreshToken(
+        debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath)),
+    );
+    const zoomController = await renderCanvasView(
+        normalizeMagicProjectForPreview(tab.projectConfig),
+        resolveMediaUrl,
+        viewport,
+        {
+            showLabels: false,
+            preserveCanvasOrigin: false,
+            fitMode: 'contain',
+            onScaleChange: scale => zoomToolbar.updateScale(scale),
+        },
+    );
+    if (zoomController) zoomToolbar.bind(zoomController);
+    setFilePreviewWorkbenchVisible(true);
 }
 
 async function openApiMicroAppPreviewTab(dirPath, appConfig) {
@@ -8288,6 +8475,7 @@ async function switchFiletreeScope(scope) {
     expandedDirs.clear();
     filetreeExpansionInitializedScopes.delete(activeFiletreeScope);
     currentFileTreeEntries = [];
+    currentFileTreeFingerprint = '';
     updateFiletreeScopeUi();
     if (filetreeContainer) {
         filetreeContainer.innerHTML = `<div class="filetree-empty">正在加载${getActiveFiletreeScopeConfig().title}</div>`;
@@ -8526,11 +8714,148 @@ if (filePreviewRenderBtn) {
     filePreviewRenderBtn.addEventListener('click', renderCurrentPreviewAsHtml);
 }
 
-// 自动刷新（每 3 秒）
+if (filePreviewCanvasDataToggleBtn) {
+    filePreviewCanvasDataToggleBtn.addEventListener('click', toggleMagicProjectDataView);
+}
+
+/** 为媒体和 iframe 预览 URL 增加刷新标识，避免浏览器继续使用旧缓存。 */
+function appendPreviewRefreshToken(url) {
+    const value = String(url || '');
+    if (!value) return value;
+    return `${value}${value.includes('?') ? '&' : '?'}preview_refresh=${Date.now()}`;
+}
+
+/** 为文件树生成稳定指纹，用于识别新增、修改、删除和重命名。 */
+function buildFileTreeFingerprint(entries) {
+    const records = [];
+    const collect = items => {
+        for (const entry of Array.isArray(items) ? items : []) {
+            records.push([
+                entry?.path || entry?.name || '',
+                entry?.type || '',
+                Number(entry?.size) || 0,
+                entry?.updated_at || '',
+            ].join('|'));
+            if (entry?.type === 'directory') collect(entry.children);
+        }
+    };
+    collect(entries);
+    return records.sort().join('\n');
+}
+
+/** 按路径递归查找最新文件树节点。 */
+function findFileTreeEntryByPath(entries, targetPath) {
+    const normalizedTarget = String(targetPath || '').replace(/^\/+|\/+$/g, '');
+    for (const entry of Array.isArray(entries) ? entries : []) {
+        const normalizedEntry = String(entry?.path || '').replace(/^\/+|\/+$/g, '');
+        if (normalizedEntry === normalizedTarget) return entry;
+        if (entry?.type === 'directory') {
+            const nested = findFileTreeEntryByPath(entry.children, normalizedTarget);
+            if (nested) return nested;
+        }
+    }
+    return null;
+}
+
+/** 展示当前预览目标已被删除或移动的只读状态。 */
+function renderMissingActiveFilePreview(tab) {
+    resetActivePreviewSurface();
+    currentPreviewFile = null;
+    currentPreviewPath = tab?.path || '';
+    currentPreviewCopyText = '';
+    currentPreviewEditable = false;
+    if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = 'none';
+    renderFilePreviewMetaRows(filePreviewMeta, [
+        { label: '文件名', value: tab?.title || getWorkspaceFileBaseName(tab?.path) || '未知文件' },
+        { label: '路径', value: tab?.path || '—' },
+        { label: '状态', value: '文件已删除或移动' },
+    ]);
+    appendPreviewMessage(filePreviewBody, '当前预览目标已被删除或移动。');
+    setFilePreviewWorkbenchVisible(true);
+}
+
+/** 根据最新文件状态重新加载当前预览标签，不改变标签页集合。 */
+async function refreshActiveFilePreview() {
+    if (previewAutoRefreshInFlight) {
+        previewAutoRefreshPending = true;
+        return;
+    }
+    if (!filePreviewWorkbench || filePreviewWorkbench.hidden || filePreviewEditMode) return;
+    const previewPath = activeFilePreviewPath;
+    const tab = filePreviewTabs.get(previewPath);
+    if (!tab || tab.type === 'tool-detail' || hasUnsavedFilePreviewEdits()) return;
+
+    previewAutoRefreshInFlight = true;
+    persistActiveFilePreviewScroll();
+    try {
+        if (tab.type === 'canvas-project') {
+            const latestProjectEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.projectPath);
+            if (!latestProjectEntry) {
+                renderMissingActiveFilePreview(tab);
+                return;
+            }
+            const dirPath = String(tab.path || '').replace(/\/+$/, '');
+            const latest = await readApiCanvasProjectConfig(dirPath);
+            if (activeFilePreviewPath !== previewPath) return;
+            Object.assign(tab, {
+                projectPath: latest.projectPath,
+                projectConfig: latest.config,
+                projectSize: latest.data.size || 0,
+                title: latest.config.name || tab.title,
+            });
+            await renderApiCanvasProjectPreviewTab(tab);
+        } else if (tab.type === 'micro-app') {
+            const latestConfig = tab.workspaceApi
+                ? await readApiMicroAppConfig(tab.appRootPath)
+                : await readMicroAppConfig(tab.appRootHandle);
+            if (activeFilePreviewPath !== previewPath) return;
+            if (latestConfig) tab.appConfig = latestConfig;
+            await renderMicroAppPreviewTab(tab);
+        } else if (tab.type === 'api-file') {
+            const latestEntry = findFileTreeEntryByPath(currentFileTreeEntries, tab.path);
+            if (!latestEntry) {
+                renderMissingActiveFilePreview(tab);
+                return;
+            }
+            if (activeFilePreviewPath !== previewPath) return;
+            tab.entry = latestEntry;
+            await renderApiFilePreviewTab(tab);
+        } else if (tab.handle) {
+            if (activeFilePreviewPath !== previewPath) return;
+            await previewFile(tab.handle, tab.path);
+        }
+        restoreFilePreviewScroll(previewPath);
+    } catch (error) {
+        console.warn('自动刷新当前文件预览失败', error);
+    } finally {
+        previewAutoRefreshInFlight = false;
+        if (previewAutoRefreshPending) {
+            previewAutoRefreshPending = false;
+            scheduleActiveFilePreviewRefresh();
+        }
+    }
+}
+
+/** 防抖触发当前预览刷新，把一次批量写文件合并为一次重渲染。 */
+function scheduleActiveFilePreviewRefresh() {
+    if (previewAutoRefreshTimer) clearTimeout(previewAutoRefreshTimer);
+    previewAutoRefreshTimer = setTimeout(() => {
+        previewAutoRefreshTimer = null;
+        void refreshActiveFilePreview();
+    }, 250);
+}
+
+// 自动刷新文件树，并在检测到任意文件变化时重载当前预览。
 function startFiletreeAutoRefresh() {
     if (filetreeRefreshTimer) clearInterval(filetreeRefreshTimer);
     filetreeRefreshTimer = setInterval(async () => {
-        await renderFileTree();
+        if (filetreeRefreshInFlight) return;
+        filetreeRefreshInFlight = true;
+        try {
+            await renderFileTree();
+        } finally {
+            filetreeRefreshInFlight = false;
+        }
     }, 3000);
 }
 
@@ -8561,9 +8886,9 @@ async function renderApiFilePreviewTab(tab) {
     const filePath = entry.path || tab.path;
     const kindProbe = buildApiFilePreviewDescriptor(entry, '');
     const kind = isHtmlPreviewable(filePath, kindProbe) ? 'html' : getWorkspacePreviewKind(filePath, kindProbe);
-    const rawUrl = kind === 'html'
+    const rawUrl = appendPreviewRefreshToken(kind === 'html'
         ? debugWorkspaceApi.rawPathUrl(filePath)
-        : debugWorkspaceApi.rawUrl(filePath);
+        : debugWorkspaceApi.rawUrl(filePath));
     resetActivePreviewSurface();
     currentPreviewFile = null;
     currentPreviewPath = filePath;
@@ -8649,32 +8974,42 @@ async function renderApiFilePreviewTab(tab) {
             const data = await debugWorkspaceApi.readFile(filePath);
             const text = data.content || '';
             const lineCount = text.split(/\r\n|\r|\n/).length;
-            currentPreviewCopyText = text;
-            currentPreviewEditable = true;
-            updateFilePreviewEditActions();
-            setMeta(kind, [
-                { label: '行数', value: String(lineCount) },
-                { label: '字符数', value: String(text.length) },
-            ]);
-            if (isMarkdownPreviewFile(filePath) && window.marked) {
+            const isCanvasProjectFile = isMagicProjectJs(filePath);
+            const canvasConfig = isCanvasProjectFile ? await parseMagicProjectConfig(text) : null;
+            if (isCanvasProjectFile && canvasConfig?.type === 'design' && canvasConfig.canvas) {
+                setMeta('canvas', [
+                    { label: '数据视图', value: '解压后 JSON' },
+                    { label: '原始行数', value: String(lineCount) },
+                    { label: '原始字符数', value: String(text.length) },
+                ]);
+                renderMagicProjectCodePreview(text, canvasConfig, filePath);
+                setMeta('canvas', [
+                    { label: '数据视图', value: '解压后 JSON' },
+                    { label: '原始行数', value: String(lineCount) },
+                    { label: '原始字符数', value: String(text.length) },
+                ]);
+                updateFilePreviewEditActions();
+            } else {
+                currentPreviewCopyText = text;
+                currentPreviewEditable = true;
+                updateFilePreviewEditActions();
+                setMeta(kind, [
+                    { label: '行数', value: String(lineCount) },
+                    { label: '字符数', value: String(text.length) },
+                ]);
+            }
+            if (!isCanvasProjectFile && isMarkdownPreviewFile(filePath) && window.marked) {
                 filePreviewBody.classList.add('file-preview-body-markdown');
                 const article = document.createElement('article');
                 article.className = 'file-preview-markdown ai-markdown';
                 article.innerHTML = marked.parse(text);
                 enhanceFilePreviewMarkdownImages(article);
                 filePreviewBody.appendChild(article);
-            } else {
+            } else if (!isCanvasProjectFile) {
                 const pre = document.createElement('pre');
                 pre.className = 'file-preview-content';
                 pre.textContent = text;
                 filePreviewBody.appendChild(pre);
-            }
-
-            if (isMagicProjectJs(filePath)) {
-                const config = await parseMagicProjectConfig(text);
-                if (config?.canvas) {
-                    await addApiCanvasRightPanel(config, filePath);
-                }
             }
         }
         setFilePreviewWorkbenchVisible(true);
@@ -8687,25 +9022,35 @@ async function renderApiFilePreviewTab(tab) {
 
 // 读取并渲染文件树
 async function renderFileTree() {
-    if (!filetreeContainer) return;
+    if (!filetreeContainer) return { changed: false };
     try {
         const data = await debugWorkspaceApi.listTree('', 8);
-        currentFileTreeEntries = data.entries || [];
+        const nextEntries = data.entries || [];
+        const nextFingerprint = buildFileTreeFingerprint(nextEntries);
+        const changed = Boolean(
+            currentFileTreeFingerprint
+            && currentFileTreeFingerprint !== nextFingerprint
+        );
+        currentFileTreeFingerprint = nextFingerprint;
+        currentFileTreeEntries = nextEntries;
         initializeDefaultExpandedDirectories(currentFileTreeEntries);
         const frag = document.createDocumentFragment();
-        await buildApiTreeNodes(data.entries || [], frag, 0);
+        await buildApiTreeNodes(nextEntries, frag, 0);
         filetreeContainer.innerHTML = '';
         filetreeContainer.appendChild(frag);
         if (!filetreeContainer.hasChildNodes() || filetreeContainer.children.length === 0) {
             filetreeContainer.innerHTML = '<div class="filetree-empty">目录为空</div>';
         }
         updateSelectBtn('active');
+        if (changed) scheduleActiveFilePreviewRefresh();
+        return { changed };
     } catch (e) {
         console.error('渲染文件树失败', e);
         updateSelectBtn('need-auth');
         if (filetreeContainer) {
             filetreeContainer.innerHTML = `<div class="filetree-empty">无法加载${getActiveFiletreeScopeConfig().title}，请确认 super-magic 后端已启动。</div>`;
         }
+        return { changed: false, error: e };
     }
 }
 
@@ -8719,9 +9064,12 @@ async function buildApiTreeNodes(entries, container, depth) {
         const microAppConfig = getActiveFiletreeScope() === 'workspace' && isDir && hasApiMicroAppConfigFile(entry)
             ? await readApiMicroAppConfig(fullPath)
             : null;
+        const canvasProject = getActiveFiletreeScope() === 'workspace' && isDir
+            ? await isApiCanvasDesignProject(entry, fullPath)
+            : false;
 
         const node = document.createElement('div');
-        node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}`;
+        node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}${canvasProject ? ' ft-canvas-project' : ''}`;
         node.style.paddingLeft = `${8 + depth * 14}px`;
         node.dataset.path = fullPath;
         node.dataset.type = isDir ? 'directory' : 'file';
@@ -8731,7 +9079,11 @@ async function buildApiTreeNodes(entries, container, depth) {
         const name = document.createElement('span');
         name.className = 'ft-name';
         name.textContent = entry.name;
-        name.title = microAppConfig ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开` : fullPath;
+        name.title = microAppConfig
+            ? `微应用: ${microAppConfig.name || entry.name}，单击展开/收起，双击打开`
+            : canvasProject
+                ? '画布项目：单击展开/收起，双击打开只读预览'
+                : fullPath;
 
         node.appendChild(icon);
         node.appendChild(name);
@@ -8772,6 +9124,13 @@ async function buildApiTreeNodes(entries, container, depth) {
                     await openApiMicroAppPreviewTab(fullPath, microAppConfig);
                 });
             }
+            if (canvasProject) {
+                node.addEventListener('dblclick', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await openApiCanvasProjectPreviewTab(fullPath, entry);
+                });
+            }
             node.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -8792,6 +9151,12 @@ async function buildApiTreeNodes(entries, container, depth) {
                             }
                             await renderFileTree();
                         },
+                    });
+                }
+                if (canvasProject) {
+                    menuItems.push({
+                        label: '打开画布预览',
+                        onSelect: () => openApiCanvasProjectPreviewTab(fullPath, entry),
                     });
                 }
                 menuItems.push({
@@ -9044,16 +9409,106 @@ async function parseMagicProjectConfig(text) {
     }
 }
 
+/** 将画布配置转换为默认展示的可读 JSON 文本，保留 magic.project.js 的上下文。 */
+function formatMagicProjectDecompressedText(config) {
+    return `window.magicProjectConfig = ${JSON.stringify(config, null, 2)};`;
+}
+
+/** 为 magic.project.js 创建只读代码预览，并维护原始/解压视图切换状态。 */
+function renderMagicProjectCodePreview(rawText, config, filePath) {
+    if (!filePreviewBody) return;
+    currentCanvasProjectRawText = rawText;
+    currentCanvasProjectDecompressedText = formatMagicProjectDecompressedText(config);
+    currentCanvasProjectViewMode = 'decompressed';
+    currentPreviewCopyText = currentCanvasProjectDecompressedText;
+    currentPreviewEditable = false;
+
+    const pre = document.createElement('pre');
+    pre.className = 'file-preview-content file-preview-canvas-source';
+    pre.textContent = currentCanvasProjectDecompressedText;
+    pre.dataset.path = filePath;
+    filePreviewBody.appendChild(pre);
+
+    const isCompressed = /"canvas"\s*:\s*"MAGICPROJECTDESIGNDATA:\/\//.test(rawText);
+    if (filePreviewCanvasDataToggleBtn && isCompressed) {
+        filePreviewCanvasDataToggleBtn.style.display = '';
+        filePreviewCanvasDataToggleBtn.textContent = '显示原始压缩数据';
+        filePreviewCanvasDataToggleBtn.title = '当前默认显示解压后的 JSON，点击切换为原始压缩数据';
+    }
+}
+
+/** 在原始压缩数据和解压 JSON 之间切换，不修改工作区文件。 */
+function toggleMagicProjectDataView() {
+    if (!currentCanvasProjectRawText || !filePreviewBody) return;
+    const source = filePreviewBody.querySelector('.file-preview-canvas-source');
+    if (!source) return;
+    const showRaw = currentCanvasProjectViewMode === 'decompressed';
+    currentCanvasProjectViewMode = showRaw ? 'raw' : 'decompressed';
+    currentPreviewCopyText = showRaw
+        ? currentCanvasProjectRawText
+        : currentCanvasProjectDecompressedText;
+    source.textContent = currentPreviewCopyText;
+    if (filePreviewCanvasDataToggleBtn) {
+        filePreviewCanvasDataToggleBtn.textContent = showRaw ? '显示解压后 JSON' : '显示原始压缩数据';
+        filePreviewCanvasDataToggleBtn.title = showRaw
+            ? '当前显示原始压缩数据，点击切换为解压后的 JSON'
+            : '当前默认显示解压后的 JSON，点击切换为原始压缩数据';
+    }
+    const viewChip = [...(filePreviewMeta?.querySelectorAll('.file-preview-meta-chip') || [])]
+        .find(chip => chip.querySelector('.file-preview-meta-label')?.textContent === '数据视图:');
+    const viewValue = viewChip?.querySelector('.file-preview-meta-value');
+    if (viewValue) viewValue.textContent = showRaw ? '原始压缩串' : '解压后 JSON';
+}
+
 /**
  * 选择 V3 Element 当前用于调试预览的 Content。
  * 优先展示 active Content，再回退 main Content 和第一个 Content。
  */
-function selectCanvasPreviewContent(element) {
+function selectCanvasPreviewContent(element, preferredContentId = null) {
     const contents = Array.isArray(element?.contents) ? element.contents : [];
-    return contents.find(content => content?.contentId === element.activeContentId)
+    return contents.find(content => content?.contentId === preferredContentId)
+        || contents.find(content => content?.contentId === element.activeContentId)
         || contents.find(content => content?.contentId === element.mainContentId)
         || contents[0]
         || {};
+}
+
+/** 读取一个 Content 对当前只读节点正文产生影响的字段。 */
+function resolveCanvasPreviewContentFields(element, content) {
+    return {
+        fill: content?.fill ?? element?.fill ?? null,
+        stroke: content?.stroke ?? element?.stroke ?? null,
+        strokeWidth: Number.isFinite(content?.strokeWidth)
+            ? content.strokeWidth
+            : Number.isFinite(element?.strokeWidth) ? element.strokeWidth : 0,
+        cornerRadius: Number.isFinite(content?.cornerRadius)
+            ? content.cornerRadius
+            : Number.isFinite(element?.cornerRadius) ? element.cornerRadius : 0,
+        content: content?.content ?? element?.content ?? null,
+        defaultStyle: content?.defaultStyle ?? element?.defaultStyle ?? null,
+        src: content?.src ?? element?.src ?? null,
+        poster: content?.poster ?? element?.poster ?? null,
+        status: content?.status ?? element?.status ?? null,
+        errorMessage: content?.errorMessage ?? element?.errorMessage ?? null,
+        shots: Array.isArray(content?.shots ?? element?.shots) ? (content?.shots ?? element?.shots) : [],
+        generationConfig: content?.generationConfig ?? element?.generationConfig ?? {},
+        videoSequence: Array.isArray(content?.videoSequence ?? element?.videoSequence)
+            ? (content?.videoSequence ?? element?.videoSequence)
+            : [],
+        audioSequence: Array.isArray(content?.audioSequence ?? element?.audioSequence)
+            ? (content?.audioSequence ?? element?.audioSequence)
+            : [],
+        output: content?.output ?? element?.output ?? {},
+    };
+}
+
+/** 切换归一化节点当前预览的 Content，不修改原始项目数据。 */
+function applyCanvasPreviewContent(element, content) {
+    Object.assign(
+        element,
+        resolveCanvasPreviewContentFields(element.rawElement, content),
+        { selectedContentId: content?.contentId ?? null },
+    );
 }
 
 /**
@@ -9063,10 +9518,13 @@ function selectCanvasPreviewContent(element) {
 function normalizeCanvasPreviewElement(element, version, index, parentOffset = { x: 0, y: 0 }) {
     const isV3 = version === MAGIC_PROJECT_VERSION_V3;
     const content = isV3 ? selectCanvasPreviewContent(element) : {};
+    const previewContents = isV3 && Array.isArray(element?.contents) ? element.contents : [];
     const rawX = Number.isFinite(element?.x) ? element.x + parentOffset.x : null;
     const rawY = Number.isFinite(element?.y) ? element.y + parentOffset.y : null;
-    const width = Number.isFinite(element?.width) && element.width > 0 ? element.width : null;
-    const height = Number.isFinite(element?.height) && element.height > 0 ? element.height : null;
+    const scaleX = Number.isFinite(element?.scaleX) ? element.scaleX : 1;
+    const scaleY = Number.isFinite(element?.scaleY) ? element.scaleY : 1;
+    const width = Number.isFinite(element?.width) && element.width > 0 ? element.width * scaleX : null;
+    const height = Number.isFinite(element?.height) && element.height > 0 ? element.height * scaleY : null;
     return {
         id: String(element?.id || `preview-element-${index + 1}`),
         type: String(element?.type || 'unknown'),
@@ -9078,21 +9536,14 @@ function normalizeCanvasPreviewElement(element, version, index, parentOffset = {
         zIndex: Number.isFinite(element?.zIndex) ? element.zIndex : index,
         visible: element?.visible !== false,
         locked: element?.locked === true,
-        src: content?.src ?? element?.src ?? null,
-        poster: content?.poster ?? element?.poster ?? null,
-        status: content?.status ?? element?.status ?? null,
-        errorMessage: content?.errorMessage ?? element?.errorMessage ?? null,
-        shots: Array.isArray(content?.shots ?? element?.shots) ? (content?.shots ?? element?.shots) : [],
-        videoSequence: Array.isArray(content?.videoSequence ?? element?.videoSequence)
-            ? (content?.videoSequence ?? element?.videoSequence)
-            : [],
-        audioSequence: Array.isArray(content?.audioSequence ?? element?.audioSequence)
-            ? (content?.audioSequence ?? element?.audioSequence)
-            : [],
-        output: content?.output ?? element?.output ?? {},
+        opacity: Number.isFinite(element?.opacity) ? element.opacity : 1,
+        rotation: Number.isFinite(element?.rotation) ? element.rotation : 0,
+        ...resolveCanvasPreviewContentFields(element, content),
         activeContentId: isV3 ? element?.activeContentId ?? null : null,
         mainContentId: isV3 ? element?.mainContentId ?? null : null,
-        contentCount: isV3 && Array.isArray(element?.contents) ? element.contents.length : 1,
+        selectedContentId: isV3 ? content?.contentId ?? null : null,
+        previewContents,
+        contentCount: isV3 ? previewContents.length : 1,
         rawElement: element,
     };
 }
@@ -9115,30 +9566,51 @@ function flattenCanvasPreviewElements(elements, version, parentOffset = { x: 0, 
     return result;
 }
 
+/** 读取 CanvasDesign 对应节点缺省尺寸，避免业务节点被压缩成调试卡片。 */
+function resolveCanvasPreviewDefaultSize(elementType) {
+    return {
+        image: [240, 160],
+        video: [240, 160],
+        audio: [360, 140],
+        text: [320, 120],
+        rectangle: [220, 140],
+        ellipse: [180, 180],
+        triangle: [180, 180],
+        star: [180, 180],
+        frame: [640, 480],
+        group: [320, 240],
+        storyboard: [960, 1360],
+        'video-edit': [520, 360],
+    }[elementType] || [220, 140];
+}
+
 /**
- * 为没有完整坐标的项目生成确定性调试布局。
- * 布局只服务预览，不依据 Connection 推导业务拓扑，也不会写回画布文件。
+ * 只为缺失的坐标或尺寸补齐确定性预览布局。
+ * 已持久化的真实坐标和尺寸保持不变，补齐结果也不会写回画布文件。
  */
 function applyDeterministicCanvasPreviewLayout(elements) {
-    const columnCount = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(elements.length))));
-    const cellWidth = 320;
-    const cellHeight = 230;
-    return elements.map((element, index) => {
-        const typeSize = {
-            image: [240, 160],
-            video: [240, 160],
-            audio: [260, 118],
-            storyboard: [280, 180],
-            'video-edit': [280, 170],
-        }[element.type] || [220, 140];
+    const resolvedElements = elements.map(element => {
+        const [defaultWidth, defaultHeight] = resolveCanvasPreviewDefaultSize(element.type);
         return {
             ...element,
-            x: (index % columnCount) * cellWidth,
-            y: Math.floor(index / columnCount) * cellHeight,
-            width: typeSize[0],
-            height: typeSize[1],
-            zIndex: index,
+            width: Number.isFinite(element.width) && element.width > 0 ? element.width : defaultWidth,
+            height: Number.isFinite(element.height) && element.height > 0 ? element.height : defaultHeight,
         };
+    });
+    let fallbackY = resolvedElements.reduce((maxBottom, element) => {
+        if (!Number.isFinite(element.x) || !Number.isFinite(element.y)) return maxBottom;
+        return Math.max(maxBottom, element.y + element.height);
+    }, -80) + 80;
+    return resolvedElements.map((element, index) => {
+        if (Number.isFinite(element.x) && Number.isFinite(element.y)) return element;
+        const positioned = {
+            ...element,
+            x: 0,
+            y: fallbackY,
+            zIndex: Number.isFinite(element.zIndex) ? element.zIndex : index,
+        };
+        fallbackY += positioned.height + 80;
+        return positioned;
     });
 }
 
@@ -9155,14 +9627,12 @@ function normalizeMagicProjectForPreview(config) {
         && Number.isFinite(element.width)
         && Number.isFinite(element.height)
     ));
-    if (!hasCompleteLayout) {
-        elements = applyDeterministicCanvasPreviewLayout(elements);
-    }
+    elements = applyDeterministicCanvasPreviewLayout(elements);
     const connections = Array.isArray(config?.canvas?.connections)
         ? config.canvas.connections.map((connection, index) => ({
             id: String(connection?.id || `preview-connection-${index + 1}`),
-            sourceElementId: String(connection?.sourceElementId || ''),
-            targetElementId: String(connection?.targetElementId || ''),
+            sourceElementId: String(connection?.sourceElementId || connection?.source_element_id || ''),
+            targetElementId: String(connection?.targetElementId || connection?.target_element_id || ''),
             locked: connection?.locked === true,
         }))
         : [];
@@ -9352,6 +9822,108 @@ function createCanvasPreviewText(text, className = 'canvas-el-label') {
     return element;
 }
 
+/** 在图片元素上方创建名称和展示尺寸信息。 */
+function createCanvasImageTopMetadata(element) {
+    const metadata = document.createElement('div');
+    metadata.className = 'canvas-el-image-top-metadata';
+    const name = createCanvasPreviewText(element.name, 'canvas-el-image-external-name');
+    name.title = element.name;
+    const dimensions = createCanvasPreviewText(
+        `${Math.round(element.width)} × ${Math.round(element.height)}`,
+        'canvas-el-image-dimensions',
+    );
+    metadata.append(name, dimensions);
+    return metadata;
+}
+
+/**
+ * 为多 Content 节点创建只读版本切换器。
+ * 切换只影响浏览器中的归一化节点，不会修改 activeContentId 或 mainContentId。
+ */
+function createCanvasContentVersionSwitcher(element, onSelect, options = {}) {
+    const contents = Array.isArray(element.previewContents) ? element.previewContents : [];
+    const { external = false } = options;
+    if (!contents.length || (!external && contents.length <= 1)) return null;
+
+    let selectedIndex = Math.max(
+        0,
+        contents.findIndex(content => content?.contentId === element.selectedContentId),
+    );
+    let busy = false;
+    const switcher = document.createElement('div');
+    switcher.className = 'canvas-el-version-switcher';
+    if (external) switcher.classList.add('is-external');
+
+    const previousButton = document.createElement('button');
+    previousButton.type = 'button';
+    previousButton.className = 'canvas-el-version-button';
+    previousButton.textContent = '‹';
+    previousButton.title = '预览上一个版本';
+    previousButton.setAttribute('aria-label', '预览上一个版本');
+
+    const versionLabel = document.createElement('span');
+    versionLabel.className = 'canvas-el-version-label';
+
+    const mainVersionLabel = document.createElement('span');
+    mainVersionLabel.className = 'canvas-el-main-version-label';
+
+    const nextButton = document.createElement('button');
+    nextButton.type = 'button';
+    nextButton.className = 'canvas-el-version-button';
+    nextButton.textContent = '›';
+    nextButton.title = '预览下一个版本';
+    nextButton.setAttribute('aria-label', '预览下一个版本');
+
+    /** 更新当前版本提示及两侧按钮状态。 */
+    const updateState = () => {
+        const selectedContent = contents[selectedIndex] || {};
+        const labels = [];
+        if (selectedContent.contentId === element.activeContentId) labels.push('当前');
+        if (selectedContent.contentId === element.mainContentId) labels.push('主版本');
+        versionLabel.textContent = external
+            ? `当前版本 ${selectedIndex + 1} / ${contents.length}`
+            : `${selectedIndex + 1} / ${contents.length}`;
+        versionLabel.title = [selectedContent.contentId, ...labels].filter(Boolean).join(' · ');
+        const isMainVersion = selectedContent.contentId === element.mainContentId;
+        mainVersionLabel.textContent = isMainVersion ? '主版本' : '非主版本';
+        mainVersionLabel.classList.toggle('is-main', isMainVersion);
+        previousButton.disabled = busy || selectedIndex === 0;
+        nextButton.disabled = busy || selectedIndex === contents.length - 1;
+    };
+
+    /** 切换到指定序号，并通知节点重新渲染正文。 */
+    const selectIndex = async nextIndex => {
+        const boundedIndex = Math.max(0, Math.min(contents.length - 1, nextIndex));
+        if (busy || boundedIndex === selectedIndex) return;
+        selectedIndex = boundedIndex;
+        busy = true;
+        updateState();
+        try {
+            await onSelect(contents[selectedIndex]);
+        } finally {
+            busy = false;
+            updateState();
+        }
+    };
+
+    previousButton.addEventListener('click', event => {
+        event.stopPropagation();
+        void selectIndex(selectedIndex - 1);
+    });
+    nextButton.addEventListener('click', event => {
+        event.stopPropagation();
+        void selectIndex(selectedIndex + 1);
+    });
+    switcher.addEventListener('click', event => event.stopPropagation());
+    if (external) {
+        switcher.append(previousButton, versionLabel, mainVersionLabel, nextButton);
+    } else {
+        switcher.append(previousButton, versionLabel, nextButton);
+    }
+    updateState();
+    return switcher;
+}
+
 /**
  * 在画布空间底层绘制 Element 级 Connection。
  */
@@ -9406,39 +9978,193 @@ function renderCanvasConnections(space, connections, elementById, minX, minY, ca
     space.appendChild(svg);
 }
 
-/**
- * 创建结构化业务节点卡片。
- */
+/** 解析分镜节点当前使用的画面比例。 */
+function resolveCanvasStoryboardAspectRatio(generationConfig) {
+    const configuredRatio = generationConfig?.image_generation_config?.aspect_ratio;
+    if (configuredRatio) return configuredRatio;
+    const sizeMatch = String(generationConfig?.size || '').match(/^(\d+)x(\d+)$/i);
+    if (!sizeMatch) return '未设置';
+    const width = Number(sizeMatch[1]);
+    const height = Number(sizeMatch[2]);
+    if (!width || !height) return '未设置';
+    let left = width;
+    let right = height;
+    while (right !== 0) {
+        const remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    const divisor = left;
+    return `${width / divisor}:${height / divisor}`;
+}
+
+/** 创建分镜节点的只读参数和镜头列表。 */
+function createCanvasStoryboardCard(element) {
+    const card = document.createElement('div');
+    card.className = 'canvas-el-storyboard-card';
+
+    const generationConfig = element.generationConfig && typeof element.generationConfig === 'object'
+        ? element.generationConfig
+        : {};
+    const header = document.createElement('div');
+    header.className = 'canvas-el-storyboard-header';
+    header.appendChild(createCanvasPreviewText(element.name || '分镜生成', 'canvas-el-card-title'));
+    header.appendChild(createCanvasPreviewText(`${element.shots.length} 个镜头`, 'canvas-el-card-meta'));
+    card.appendChild(header);
+
+    const parameters = document.createElement('div');
+    parameters.className = 'canvas-el-storyboard-parameters';
+    [
+        ['模型', generationConfig.model_id || '未设置'],
+        ['画面比例', resolveCanvasStoryboardAspectRatio(generationConfig)],
+        ['分辨率', generationConfig.resolution || generationConfig.size || '未设置'],
+    ].forEach(([label, value]) => {
+        const parameter = document.createElement('div');
+        parameter.className = 'canvas-el-storyboard-parameter';
+        parameter.appendChild(createCanvasPreviewText(label, 'canvas-el-storyboard-parameter-label'));
+        parameter.appendChild(createCanvasPreviewText(value, 'canvas-el-storyboard-parameter-value'));
+        parameters.appendChild(parameter);
+    });
+    card.appendChild(parameters);
+
+    card.appendChild(createCanvasPreviewText('分镜列表', 'canvas-el-storyboard-list-title'));
+
+    const list = document.createElement('ol');
+    list.className = 'canvas-el-storyboard-shot-list';
+    element.shots.forEach((shot, index) => {
+        const item = document.createElement('li');
+        item.className = 'canvas-el-storyboard-shot';
+        const shotHeader = document.createElement('div');
+        shotHeader.className = 'canvas-el-storyboard-shot-header';
+        shotHeader.appendChild(createCanvasPreviewText(`镜头 ${index + 1}`, 'canvas-el-storyboard-shot-title'));
+        shotHeader.appendChild(createCanvasPreviewText(
+            Number.isFinite(shot?.durationSeconds) ? `${shot.durationSeconds} 秒` : '时长未设置',
+            'canvas-el-storyboard-shot-duration',
+        ));
+        item.appendChild(shotHeader);
+        item.appendChild(createCanvasPreviewText(
+            shot?.description || shot?.id || '暂无画面描述',
+            'canvas-el-storyboard-shot-description',
+        ));
+        list.appendChild(item);
+    });
+    if (!element.shots.length) {
+        list.appendChild(createCanvasPreviewText('暂无分镜', 'canvas-el-card-detail'));
+    }
+    card.appendChild(list);
+    return card;
+}
+
+/** 创建视频编辑节点的只读输入轨道和输出规格。 */
+function createCanvasVideoEditCard(element) {
+    const card = document.createElement('div');
+    card.className = 'canvas-el-video-edit-card';
+    card.appendChild(createCanvasPreviewText(element.name || '视频编辑', 'canvas-el-card-title'));
+
+    const surface = document.createElement('div');
+    surface.className = 'canvas-el-video-edit-surface';
+    [
+        ['视频片段', element.videoSequence.length, 'video'],
+        ['音频轨道', element.audioSequence.length, 'audio'],
+    ].forEach(([label, count, type]) => {
+        const track = document.createElement('div');
+        track.className = `canvas-el-video-edit-track canvas-el-video-edit-track-${type}`;
+        track.appendChild(createCanvasPreviewText(label, 'canvas-el-video-edit-track-label'));
+        const clips = document.createElement('div');
+        clips.className = 'canvas-el-video-edit-clips';
+        const visibleCount = Math.min(Math.max(Number(count), 1), 6);
+        for (let index = 0; index < visibleCount; index += 1) {
+            const clip = document.createElement('span');
+            clip.className = 'canvas-el-video-edit-clip';
+            if (!count) clip.classList.add('is-empty');
+            clips.appendChild(clip);
+        }
+        track.appendChild(clips);
+        track.appendChild(createCanvasPreviewText(`${count} 个`, 'canvas-el-video-edit-track-count'));
+        surface.appendChild(track);
+    });
+    card.appendChild(surface);
+
+    const output = element.output && typeof element.output === 'object' ? element.output : {};
+    card.appendChild(createCanvasPreviewText(
+        `输出规格  ${[output.aspectRatio, output.resolution, output.format].filter(Boolean).join(' · ') || '待设置'}`,
+        'canvas-el-video-edit-output',
+    ));
+    return card;
+}
+
+/** 创建音频节点的只读波形摘要。 */
+function createCanvasAudioCard(element, available) {
+    const card = document.createElement('div');
+    card.className = 'canvas-el-audio-card';
+    const waveform = document.createElement('div');
+    waveform.className = 'canvas-el-audio-waveform';
+    const heights = [34, 58, 42, 76, 52, 88, 46, 70, 38, 62, 82, 44, 66, 50, 74, 36];
+    heights.forEach(height => {
+        const bar = document.createElement('span');
+        bar.style.height = `${height}%`;
+        waveform.appendChild(bar);
+    });
+    card.appendChild(waveform);
+    card.appendChild(createCanvasPreviewText(element.name, 'canvas-el-card-title'));
+    card.appendChild(createCanvasPreviewText(
+        available ? '音频资源已就绪，点击可播放' : '音频文件不可用',
+        'canvas-el-card-detail',
+    ));
+    return card;
+}
+
+/** 创建未提供专用渲染器的结构化业务节点卡片。 */
 function createCanvasStructuredCard(element) {
     const card = document.createElement('div');
     card.className = `canvas-el-structured-card canvas-el-${element.type}`;
-    const title = createCanvasPreviewText(element.name, 'canvas-el-card-title');
-    card.appendChild(title);
-
-    if (element.type === 'storyboard') {
-        card.appendChild(createCanvasPreviewText(`${element.shots.length} 个镜头`, 'canvas-el-card-meta'));
-        const list = document.createElement('ol');
-        list.className = 'canvas-el-shot-list';
-        element.shots.slice(0, 3).forEach((shot, index) => {
-            const item = document.createElement('li');
-            item.textContent = `${index + 1}. ${shot?.description || shot?.id || '未命名镜头'}`;
-            list.appendChild(item);
-        });
-        card.appendChild(list);
-    } else if (element.type === 'video-edit') {
-        card.appendChild(createCanvasPreviewText(
-            `${element.videoSequence.length} 段视频 · ${element.audioSequence.length} 条音频`,
-            'canvas-el-card-meta',
-        ));
-        const output = element.output && typeof element.output === 'object' ? element.output : {};
-        card.appendChild(createCanvasPreviewText(
-            [output.aspectRatio, output.resolution, output.format].filter(Boolean).join(' · ') || 'MP4 合成配置',
-            'canvas-el-card-detail',
-        ));
-    } else {
-        card.appendChild(createCanvasPreviewText(element.type, 'canvas-el-card-meta'));
-    }
+    card.appendChild(createCanvasPreviewText(element.name, 'canvas-el-card-title'));
+    card.appendChild(createCanvasPreviewText(element.type, 'canvas-el-card-meta'));
     return card;
+}
+
+/** 按 V3 富文本段落和文本节点创建只读内容。 */
+function createCanvasRichTextContent(element) {
+    const root = document.createElement('div');
+    root.className = 'canvas-el-text-content';
+    const paragraphs = Array.isArray(element.content) ? element.content : [];
+    const defaultStyle = element.defaultStyle || {};
+    const sourceParagraphs = paragraphs.length ? paragraphs : [{ children: [{ text: element.name || '' }] }];
+    sourceParagraphs.forEach(paragraph => {
+        const paragraphNode = document.createElement('div');
+        paragraphNode.className = 'canvas-el-text-paragraph';
+        paragraphNode.style.textAlign = paragraph?.style?.textAlign || 'left';
+        if (Number.isFinite(paragraph?.style?.lineHeight)) {
+            paragraphNode.style.lineHeight = String(paragraph.style.lineHeight);
+        }
+        if (Number.isFinite(paragraph?.style?.paragraphSpacing)) {
+            paragraphNode.style.marginBottom = `${paragraph.style.paragraphSpacing}px`;
+        }
+        const children = Array.isArray(paragraph?.children)
+            ? paragraph.children
+            : [{ text: paragraph?.text || '' }];
+        children.forEach(child => {
+            const textNode = document.createElement('span');
+            const style = { ...defaultStyle, ...(child?.style || {}) };
+            textNode.textContent = child?.text || '';
+            textNode.style.fontSize = `${Number(style.fontSize) || 16}px`;
+            textNode.style.fontFamily = style.fontFamily || 'system-ui, -apple-system, sans-serif';
+            textNode.style.fontWeight = style.fontWeight || (style.bold ? '700' : '400');
+            textNode.style.fontStyle = style.italic ? 'italic' : 'normal';
+            textNode.style.color = style.color || '#111827';
+            textNode.style.backgroundColor = style.backgroundColor || 'transparent';
+            textNode.style.letterSpacing = Number.isFinite(style.letterSpacing)
+                ? `${style.letterSpacing}px`
+                : 'normal';
+            const decorations = [];
+            if (style.underline) decorations.push('underline');
+            if (style.strikethrough) decorations.push('line-through');
+            textNode.style.textDecoration = decorations.join(' ') || 'none';
+            paragraphNode.appendChild(textNode);
+        });
+        root.appendChild(paragraphNode);
+    });
+    return root;
 }
 
 /**
@@ -9480,14 +10206,14 @@ function createCanvasVideoCard(posterBlobUrl, name) {
  * 渲染单个归一化节点正文，并为媒体节点绑定预览交互。
  */
 async function renderCanvasElementBody(element, resolveMediaUrl, body) {
-    if (element.status === 'processing') {
+    if (element.status === 'pending' || element.status === 'processing') {
         body.classList.add('canvas-el-state', element.type === 'video' ? 'canvas-el-video-processing' : 'canvas-el-processing');
         if (element.type === 'video') {
             const loading = document.createElement('span');
             loading.className = 'canvas-el-video-loading-icon';
             body.appendChild(loading);
         }
-        body.appendChild(createCanvasPreviewText('处理中'));
+        body.appendChild(createCanvasPreviewText(element.status === 'pending' ? '等待处理' : '处理中'));
         return;
     }
     if (element.status === 'failed') {
@@ -9535,13 +10261,43 @@ async function renderCanvasElementBody(element, resolveMediaUrl, body) {
     }
     if (element.type === 'audio') {
         const audioBlobUrl = element.src ? await resolveMediaUrl(element.src) : null;
-        const card = createCanvasStructuredCard(element);
-        card.appendChild(createCanvasPreviewText(audioBlobUrl ? '点击播放音频' : '音频文件不可用', 'canvas-el-card-detail'));
-        body.appendChild(card);
+        body.appendChild(createCanvasAudioCard(element, Boolean(audioBlobUrl)));
         if (audioBlobUrl) {
             body.closest('.canvas-preview-element').classList.add('is-interactive');
             body.addEventListener('click', () => openCanvasMediaModal('audio', audioBlobUrl, null, element.name));
         }
+        return;
+    }
+    if (element.type === 'text') {
+        body.classList.add('canvas-el-text');
+        body.appendChild(createCanvasRichTextContent(element));
+        return;
+    }
+    if (element.type === 'storyboard') {
+        body.appendChild(createCanvasStoryboardCard(element));
+        return;
+    }
+    if (element.type === 'video-edit') {
+        body.appendChild(createCanvasVideoEditCard(element));
+        return;
+    }
+    if (['rectangle', 'ellipse', 'triangle', 'star', 'frame', 'group'].includes(element.type)) {
+        const shape = document.createElement('div');
+        shape.className = `canvas-el-shape canvas-el-shape-${element.type}`;
+        shape.style.background = element.fill || (element.type === 'frame' ? '#fff' : 'transparent');
+        shape.style.border = element.strokeWidth && element.stroke
+            ? `${element.strokeWidth}px solid ${element.stroke}`
+            : element.type === 'frame' ? '1px solid rgba(17, 24, 39, 0.14)' : 'none';
+        shape.style.borderRadius = element.type === 'ellipse'
+            ? '50%'
+            : `${element.cornerRadius || 0}px`;
+        if (element.type === 'triangle') {
+            shape.style.clipPath = 'polygon(50% 0, 100% 100%, 0 100%)';
+        }
+        if (element.type === 'star') {
+            shape.style.clipPath = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+        }
+        body.appendChild(shape);
         return;
     }
     body.appendChild(createCanvasStructuredCard(element));
@@ -9550,15 +10306,21 @@ async function renderCanvasElementBody(element, resolveMediaUrl, body) {
 /**
  * 在 containerEl 内渲染已归一化的三版本画布预览。
  */
-async function renderCanvasView(preview, resolveMediaUrl, containerEl) {
+async function renderCanvasView(preview, resolveMediaUrl, containerEl, options = {}) {
+    const {
+        showLabels = true,
+        preserveCanvasOrigin = false,
+        fitMode = 'contain',
+        onScaleChange = null,
+    } = options;
     const elements = preview?.elements ?? [];
     if (!elements.length) {
         appendPreviewMessage(containerEl, '画布中没有元素。');
         return;
     }
 
-    let minX = Infinity;
-    let minY = Infinity;
+    let minX = preserveCanvasOrigin ? 0 : Infinity;
+    let minY = preserveCanvasOrigin ? 0 : Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
     for (const element of elements) {
@@ -9606,37 +10368,264 @@ async function renderCanvasView(preview, resolveMediaUrl, containerEl) {
         if (!element.visible) elementNode.classList.add('is-hidden');
         if (element.locked) elementNode.classList.add('is-locked');
 
-        const body = document.createElement('div');
+        let body = document.createElement('div');
         body.className = 'canvas-el-body';
         elementNode.appendChild(body);
 
-        const footer = document.createElement('div');
-        footer.className = 'canvas-el-footer';
-        const identity = document.createElement('div');
-        identity.className = 'canvas-el-identity';
-        identity.appendChild(createCanvasPreviewText(element.type, 'canvas-el-type'));
-        identity.appendChild(createCanvasPreviewText(element.name, 'canvas-el-name'));
-        footer.appendChild(identity);
-        if (element.contentCount > 1) {
-            footer.appendChild(createCanvasPreviewText(`${element.contentCount} 个版本`, 'canvas-el-version-count'));
+        /** 使用当前或指定 Content 重新渲染节点正文。 */
+        const renderSelectedContent = async selectedContent => {
+            if (selectedContent) applyCanvasPreviewContent(element, selectedContent);
+            elementNode.classList.remove('is-interactive');
+            const nextBody = document.createElement('div');
+            nextBody.className = 'canvas-el-body';
+            body.replaceWith(nextBody);
+            body = nextBody;
+            await renderCanvasElementBody(element, resolveMediaUrl, body);
+        };
+
+        if (showLabels) {
+            const footer = document.createElement('div');
+            footer.className = 'canvas-el-footer';
+            const identity = document.createElement('div');
+            identity.className = 'canvas-el-identity';
+            identity.appendChild(createCanvasPreviewText(element.type, 'canvas-el-type'));
+            identity.appendChild(createCanvasPreviewText(element.name, 'canvas-el-name'));
+            footer.appendChild(identity);
+            if (element.contentCount > 1) {
+                footer.appendChild(createCanvasPreviewText(`${element.contentCount} 个版本`, 'canvas-el-version-count'));
+            }
+            elementNode.appendChild(footer);
+        } else {
+            elementNode.classList.add('canvas-preview-element-readonly');
         }
-        elementNode.appendChild(footer);
+        if (element.type === 'image') {
+            elementNode.classList.add('canvas-preview-image-with-metadata');
+            elementNode.appendChild(createCanvasImageTopMetadata(element));
+        }
+        const versionSwitcher = createCanvasContentVersionSwitcher(
+            element,
+            selectedContent => renderSelectedContent(selectedContent),
+            { external: element.type === 'image' },
+        );
+        if (versionSwitcher) elementNode.appendChild(versionSwitcher);
+        elementNode.style.opacity = String(element.opacity);
+        if (element.rotation) elementNode.style.transform = `rotate(${element.rotation}deg)`;
         space.appendChild(elementNode);
-        await renderCanvasElementBody(element, resolveMediaUrl, body);
+        await renderSelectedContent(null);
     }));
 
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const padding = 24;
-    const availableWidth = Math.max(1, containerEl.clientWidth - padding);
-    const availableHeight = Math.max(1, containerEl.clientHeight - padding);
-    const scale = Math.max(0.08, Math.min(1, availableWidth / canvasW, availableHeight / canvasH));
-    scaleWrap.style.width = `${Math.ceil(canvasW * scale) + padding}px`;
-    scaleWrap.style.height = `${Math.ceil(canvasH * scale) + padding}px`;
-    space.style.position = 'absolute';
-    space.style.left = `${padding / 2}px`;
-    space.style.top = `${padding / 2}px`;
-    space.style.transformOrigin = 'top left';
-    space.style.transform = `scale(${scale})`;
+    const minimumScale = 0.04;
+    const maximumScale = 2;
+    let currentScale = null;
+    let currentFitMode = fitMode;
+    let panX = 0;
+    let panY = 0;
+    let baseSpaceLeft = 0;
+    let baseSpaceTop = 0;
+
+    /** 使用独立平移偏移更新画布位置，即使视口没有滚动条也可以移动。 */
+    const applyCanvasPan = () => {
+        space.style.left = `${baseSpaceLeft + panX}px`;
+        space.style.top = `${baseSpaceTop + panY}px`;
+    };
+
+    /** 把缩放后的内容中心定位到当前只读视口中心。 */
+    const centerViewport = (wrapWidth, wrapHeight) => {
+        requestAnimationFrame(() => {
+            containerEl.scrollLeft = Math.max(0, (wrapWidth - containerEl.clientWidth) / 2);
+            containerEl.scrollTop = Math.max(0, (wrapHeight - containerEl.clientHeight) / 2);
+        });
+    };
+
+    /** 按当前视口或手工比例重新计算画布缩放，不改变文档中的真实坐标和尺寸。 */
+    const applyViewportScale = (shouldCenter = false) => {
+        const viewportPadding = 24;
+        const availableWidth = Math.max(1, containerEl.clientWidth - viewportPadding);
+        const availableHeight = Math.max(1, containerEl.clientHeight - viewportPadding);
+        const widthScale = availableWidth / canvasW;
+        const heightScale = availableHeight / canvasH;
+        const containScale = Math.min(widthScale, heightScale);
+        const requestedScale = currentFitMode === 'manual' && Number.isFinite(currentScale)
+            ? currentScale
+            : currentFitMode === 'width'
+            ? widthScale
+            : currentFitMode === 'cover' ? Math.max(widthScale, heightScale) : containScale;
+        const scale = Math.max(minimumScale, Math.min(maximumScale, requestedScale));
+        currentScale = scale;
+        const scaledWidth = Math.ceil(canvasW * scale);
+        const scaledHeight = Math.ceil(canvasH * scale);
+        const metadataGutter = Math.ceil(40 * scale);
+        const wrapPadding = viewportPadding + metadataGutter * 2;
+        const wrapWidth = Math.max(containerEl.clientWidth, scaledWidth + wrapPadding);
+        const wrapHeight = Math.max(containerEl.clientHeight, scaledHeight + wrapPadding);
+        scaleWrap.style.width = `${wrapWidth}px`;
+        scaleWrap.style.height = `${wrapHeight}px`;
+        space.style.position = 'absolute';
+        baseSpaceLeft = Math.max(
+            viewportPadding / 2 + metadataGutter,
+            (wrapWidth - scaledWidth) / 2,
+        );
+        baseSpaceTop = Math.max(
+            viewportPadding / 2 + metadataGutter,
+            (wrapHeight - scaledHeight) / 2,
+        );
+        applyCanvasPan();
+        space.style.transformOrigin = 'top left';
+        space.style.transform = `scale(${scale})`;
+        if (typeof onScaleChange === 'function') onScaleChange(scale);
+        if (shouldCenter) centerViewport(wrapWidth, wrapHeight);
+    };
+    applyViewportScale(true);
+
+    /** 切换到手工缩放，同时保持当前视口中心对应的画布位置不变。 */
+    const applyManualScale = nextScale => {
+        const previousScale = currentScale || 1;
+        const previousLeft = Number.parseFloat(space.style.left) || 0;
+        const previousTop = Number.parseFloat(space.style.top) || 0;
+        const focalX = (containerEl.scrollLeft + containerEl.clientWidth / 2 - previousLeft) / previousScale;
+        const focalY = (containerEl.scrollTop + containerEl.clientHeight / 2 - previousTop) / previousScale;
+        currentFitMode = 'manual';
+        currentScale = Math.max(minimumScale, Math.min(maximumScale, nextScale));
+        applyViewportScale(false);
+        requestAnimationFrame(() => {
+            const nextLeft = Number.parseFloat(space.style.left) || 0;
+            const nextTop = Number.parseFloat(space.style.top) || 0;
+            containerEl.scrollLeft = Math.max(
+                0,
+                nextLeft + focalX * currentScale - containerEl.clientWidth / 2,
+            );
+            containerEl.scrollTop = Math.max(
+                0,
+                nextTop + focalY * currentScale - containerEl.clientHeight / 2,
+            );
+        });
+    };
+
+    const zoomController = {
+        /** 按固定步长放大画布视图。 */
+        zoomIn() {
+            applyManualScale((currentScale || 1) * 1.2);
+        },
+        /** 按固定步长缩小画布视图。 */
+        zoomOut() {
+            applyManualScale((currentScale || 1) / 1.2);
+        },
+        /** 恢复为画布元素的真实尺寸。 */
+        resetToActualSize() {
+            applyManualScale(1);
+        },
+        /** 重新适配并居中展示全部元素。 */
+        fitAll() {
+            currentFitMode = 'contain';
+            currentScale = null;
+            panX = 0;
+            panY = 0;
+            applyViewportScale(true);
+        },
+        /** 清除所有视图偏移，并恢复默认的居中全览状态。 */
+        resetView() {
+            currentFitMode = 'contain';
+            currentScale = null;
+            panX = 0;
+            panY = 0;
+            containerEl.scrollLeft = 0;
+            containerEl.scrollTop = 0;
+            applyViewportScale(true);
+        },
+    };
+
+    /** 使用 Command/Ctrl 与滚轮缩放只读画布，普通滚轮仍用于视口滚动。 */
+    const handleCanvasZoomWheel = event => {
+        if (!event.metaKey && !event.ctrlKey) return;
+        event.preventDefault();
+        if (event.deltaY < 0) zoomController.zoomIn();
+        else if (event.deltaY > 0) zoomController.zoomOut();
+    };
+    containerEl.addEventListener('wheel', handleCanvasZoomWheel, { passive: false });
+
+    let panSession = null;
+    let suppressClickUntil = 0;
+    containerEl.classList.add('canvas-preview-pan-enabled');
+
+    /** 判断目标是否是应保留自身交互、不能触发画布拖动的控件。 */
+    const isCanvasPanControl = target => target instanceof Element && Boolean(target.closest(
+        'button, a, input, textarea, select, audio, video, .canvas-el-version-switcher',
+    ));
+
+    /** 开始记录指针位置，实际移动超过阈值后才视为拖动画布。 */
+    const handleCanvasPanStart = event => {
+        if ((event.pointerType === 'mouse' && event.button !== 0) || isCanvasPanControl(event.target)) return;
+        panSession = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startPanX: panX,
+            startPanY: panY,
+            moved: false,
+            captured: false,
+        };
+    };
+
+    /** 根据指针位移平移画布，不依赖容器是否存在滚动范围。 */
+    const handleCanvasPanMove = event => {
+        if (!panSession || panSession.pointerId !== event.pointerId) return;
+        const deltaX = event.clientX - panSession.startX;
+        const deltaY = event.clientY - panSession.startY;
+        if (!panSession.moved && Math.hypot(deltaX, deltaY) < 4) return;
+        if (!panSession.moved) {
+            panSession.moved = true;
+            try {
+                containerEl.setPointerCapture?.(event.pointerId);
+                panSession.captured = true;
+            } catch (_) {
+                panSession.captured = false;
+            }
+        }
+        panX = panSession.startPanX + deltaX;
+        panY = panSession.startPanY + deltaY;
+        applyCanvasPan();
+        containerEl.classList.add('is-canvas-panning');
+        event.preventDefault();
+    };
+
+    /** 结束拖动，并短暂拦截拖动结束后浏览器合成的 click 事件。 */
+    const handleCanvasPanEnd = event => {
+        if (!panSession || panSession.pointerId !== event.pointerId) return;
+        if (panSession.moved) suppressClickUntil = performance.now() + 250;
+        const shouldReleasePointer = panSession.captured;
+        panSession = null;
+        containerEl.classList.remove('is-canvas-panning');
+        if (shouldReleasePointer) {
+            try {
+                containerEl.releasePointerCapture?.(event.pointerId);
+            } catch (_) {
+                // 指针取消时浏览器可能已经自动释放捕获，无需额外处理。
+            }
+        }
+    };
+
+    containerEl.addEventListener('pointerdown', handleCanvasPanStart);
+    containerEl.addEventListener('pointermove', handleCanvasPanMove);
+    containerEl.addEventListener('pointerup', handleCanvasPanEnd);
+    containerEl.addEventListener('pointercancel', handleCanvasPanEnd);
+    containerEl.addEventListener('click', event => {
+        if (performance.now() >= suppressClickUntil) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }, true);
+    containerEl.addEventListener('dragstart', event => {
+        if (event.target instanceof Element && event.target.closest('img')) event.preventDefault();
+    });
+
+    if (typeof ResizeObserver !== 'undefined') {
+        currentCanvasPreviewResizeObserver?.disconnect();
+        currentCanvasPreviewResizeObserver = new ResizeObserver(() => {
+            applyViewportScale(currentFitMode !== 'manual');
+        });
+        currentCanvasPreviewResizeObserver.observe(containerEl);
+    }
+    return zoomController;
 }
 
 /**
@@ -9701,7 +10690,9 @@ async function addApiCanvasRightPanel(config, filePath) {
     if (!panelState) return;
 
     const projectDirPath = String(filePath || '').split('/').filter(Boolean).slice(0, -1).join('/');
-    const resolveMediaUrl = async (relPath) => debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath));
+    const resolveMediaUrl = async relPath => appendPreviewRefreshToken(
+        debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath)),
+    );
     await renderCanvasView(panelState.preview, resolveMediaUrl, panelState.viewport);
 }
 
@@ -9819,16 +10810,28 @@ async function previewFile(fileHandle, filePath) {
             if (file.size > MAX_SIZE) {
                 textExtras.push({ label: '说明', value: '正文仅预览前 512KB；行数/字符数为截断后统计' });
             }
-            currentPreviewCopyText = text;
-            setFilePreviewMeta(file, filePath, kind, textExtras);
-            if (isMarkdownPreviewFile(filePath) && window.marked) {
+            const isCanvasProjectFile = isMagicProjectJs(filePath);
+            const canvasConfig = isCanvasProjectFile ? await parseMagicProjectConfig(text) : null;
+            if (isCanvasProjectFile && canvasConfig?.type === 'design' && canvasConfig.canvas) {
+                renderMagicProjectCodePreview(text, canvasConfig, filePath);
+                setFilePreviewMeta(file, filePath, 'canvas', [
+                    { label: '数据视图', value: '解压后 JSON' },
+                    { label: '原始行数', value: String(lineCount) },
+                    { label: '原始字符数', value: String(text.length) },
+                ]);
+                updateFilePreviewEditActions();
+            } else {
+                currentPreviewCopyText = text;
+                setFilePreviewMeta(file, filePath, kind, textExtras);
+            }
+            if (!isCanvasProjectFile && isMarkdownPreviewFile(filePath) && window.marked) {
                 filePreviewBody.classList.add('file-preview-body-markdown');
                 const article = document.createElement('article');
                 article.className = 'file-preview-markdown ai-markdown';
                 article.innerHTML = marked.parse(text);
                 enhanceFilePreviewMarkdownImages(article);
                 filePreviewBody.appendChild(article);
-            } else {
+            } else if (!isCanvasProjectFile) {
                 const pre = document.createElement('pre');
                 pre.className = 'file-preview-content';
                 pre.textContent = text;
@@ -9836,12 +10839,6 @@ async function previewFile(fileHandle, filePath) {
             }
 
             // magic.project.js：按顶层版本解析后，在右侧使用统一模型预览 V1/V2/V3。
-            if (isMagicProjectJs(filePath)) {
-                const config = await parseMagicProjectConfig(text);
-                if (config?.canvas) {
-                    addCanvasRightPanel(config, filePath);
-                }
-            }
         }
 
         setFilePreviewWorkbenchVisible(true);
