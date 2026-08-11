@@ -406,7 +406,7 @@
 	background: #000;
 }
 
-.reference-media-tooltip-image-chrome {
+.reference-media-tooltip-header {
 	position: absolute;
 	top: 0;
 	right: 0;
@@ -416,22 +416,42 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 8px;
-	background: linear-gradient(180deg, rgb(0 0 0 / 55%) 0%, rgb(0 0 0 / 0%) 100%);
+	padding: 6px 10px;
+	background: linear-gradient(
+		180deg,
+		rgb(0 0 0 / 78%) 0%,
+		rgb(0 0 0 / 32%) 72%,
+		rgb(0 0 0 / 0%) 100%
+	);
 	pointer-events: none;
 }
 
-.reference-media-tooltip-image-file-name {
+.reference-media-tooltip-file-name {
 	min-width: 0;
 	overflow: hidden;
 	color: #fff;
+	font-weight: 500;
 	font-size: 12px;
 	line-height: 16px;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+	text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
 }
 
-.reference-media-tooltip-image-close {
+.reference-media-tooltip-header .reference-media-tooltip-file-name {
+	flex: 1;
+}
+
+.reference-media-tooltip-audio-viewport {
+	position: relative;
+	width: min(320px, 70vw);
+	min-width: 260px;
+	padding-top: 36px;
+	overflow: hidden;
+	background: #000;
+}
+
+.reference-media-tooltip-close {
 	display: inline-flex;
 	flex: none;
 	align-items: center;
@@ -447,7 +467,7 @@
 	transition: background-color 0.2s ease;
 }
 
-.reference-media-tooltip-image-close:hover {
+.reference-media-tooltip-close:hover {
 	background: rgb(255 255 255 / 24%);
 }
 
@@ -463,18 +483,6 @@
 	display: flex;
 	flex-direction: column;
 	min-width: 220px;
-}
-
-.reference-media-tooltip-file-name {
-	max-width: 400px;
-	padding: 6px 8px;
-	overflow: hidden;
-	color: #fff;
-	font-size: 12px;
-	line-height: 16px;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-	background: rgb(0 0 0 / 72%);
 }
 
 .reference-media-tooltip-loading,
@@ -506,10 +514,129 @@
 	inset: 0;
 }
 
-.reference-media-tooltip-audio {
-	display: block;
-	width: min(250px, 70vw);
-	margin: 8px;
+.reference-media-tooltip-audio-element {
+	display: none;
+}
+
+/* 可见控件由业务层统一渲染，避免浏览器原生音量与更多菜单造成样式差异。 */
+.reference-media-tooltip-audio-player {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 8px 10px 12px;
+}
+
+.reference-media-tooltip-audio-play-button {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	color: #fff;
+	background: rgb(255 255 255 / 12%);
+	border: 1px solid rgb(255 255 255 / 18%);
+	border-radius: 9999px;
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
+	cursor: pointer;
+	transition:
+		background-color 0.18s ease,
+		border-color 0.18s ease,
+		transform 0.18s ease;
+}
+
+.reference-media-tooltip-audio-play-button:hover {
+	background: rgb(255 255 255 / 20%);
+	border-color: rgb(255 255 255 / 28%);
+}
+
+.reference-media-tooltip-audio-play-button svg {
+	flex: none;
+}
+
+.reference-media-tooltip-audio-play-icon {
+	transform: translateX(1px);
+}
+
+.reference-media-tooltip-audio-play-button:active {
+	transform: scale(0.94);
+}
+
+.reference-media-tooltip-audio-play-button:focus-visible {
+	outline: 2px solid rgb(255 255 255 / 72%);
+	outline-offset: 2px;
+}
+
+.reference-media-tooltip-audio-time {
+	flex: none;
+	color: rgb(255 255 255 / 86%);
+	font-size: 12px;
+	line-height: 16px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.reference-media-tooltip-audio-progress {
+	--progress-fill: rgb(255 255 255 / 92%);
+	--progress-track: rgb(255 255 255 / 26%);
+
+	flex: 1;
+	min-width: 72px;
+	height: 16px;
+	margin: 0;
+	padding: 0;
+	background: transparent;
+	cursor: pointer;
+	appearance: none;
+}
+
+.reference-media-tooltip-audio-progress::-webkit-slider-runnable-track {
+	height: 3px;
+	background: linear-gradient(
+		to right,
+		var(--progress-fill) 0%,
+		var(--progress-fill) var(--progress, 0%),
+		var(--progress-track) var(--progress, 0%),
+		var(--progress-track) 100%
+	);
+	border-radius: 9999px;
+}
+
+.reference-media-tooltip-audio-progress::-webkit-slider-thumb {
+	width: 10px;
+	height: 10px;
+	margin-top: -3.5px;
+	background: var(--progress-fill);
+	border-radius: 9999px;
+	-webkit-appearance: none;
+}
+
+.reference-media-tooltip-audio-progress::-moz-range-track {
+	height: 3px;
+	background: var(--progress-track);
+	border-radius: 9999px;
+}
+
+.reference-media-tooltip-audio-progress::-moz-range-progress {
+	height: 3px;
+	background: var(--progress-fill);
+	border-radius: 9999px;
+}
+
+.reference-media-tooltip-audio-progress::-moz-range-thumb {
+	width: 10px;
+	height: 10px;
+	background: var(--progress-fill);
+	border: 0;
+	border-radius: 9999px;
+}
+
+.reference-media-tooltip-audio-progress:focus-visible {
+	outline: 2px solid rgb(255 255 255 / 72%);
+	outline-offset: 2px;
 }
 
 .reference-image-tooltip-preview {

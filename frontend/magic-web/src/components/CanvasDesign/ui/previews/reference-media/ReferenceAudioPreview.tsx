@@ -9,6 +9,8 @@ import { ReferenceSlotAudioIcon } from "../../primitives/icons/index"
 import { useReferenceAudioSrc } from "./useReferenceAudioSrc"
 import { useTouchTooltipTrigger } from "./useTouchTooltipTrigger"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { ReferenceMediaTooltipHeader } from "./ReferenceMediaTooltipHeader"
+import { ReferenceAudioTooltipPlayer } from "./ReferenceAudioTooltipPlayer"
 
 interface ReferenceAudioPreviewProps {
 	fileName: string
@@ -85,29 +87,27 @@ export function ReferenceAudioPreview(props: ReferenceAudioPreviewProps) {
 					className={styles.referenceMediaTooltip}
 				>
 					<div className={styles.referenceMediaTooltipBody}>
-						{isLoading ? (
-							<div className={styles.referenceMediaTooltipLoading}>
-								<LoaderCircle size={16} className={styles.loadingIcon} />
-							</div>
-						) : hasError || !src ? (
-							<div className={styles.referenceMediaTooltipError}>
-								{t(
-									"mediaResourceFullscreenPreview.audioLoadFailed",
-									"音频加载失败",
-								)}
-							</div>
-						) : (
-							<audio
-								ref={audioRef}
-								controls
-								preload="metadata"
-								src={src}
-								aria-label={fileName}
-								className={styles.referenceMediaTooltipAudio}
-							/>
-						)}
-						<div className={styles.referenceMediaTooltipFileName} title={fileName}>
-							{fileName}
+						<div className={styles.referenceMediaTooltipAudioViewport}>
+							<ReferenceMediaTooltipHeader fileName={fileName} />
+							{isLoading ? (
+								<div className={styles.referenceMediaTooltipLoading}>
+									<LoaderCircle size={16} className={styles.loadingIcon} />
+								</div>
+							) : hasError || !src ? (
+								<div className={styles.referenceMediaTooltipError}>
+									{t(
+										"mediaResourceFullscreenPreview.audioLoadFailed",
+										"音频加载失败",
+									)}
+								</div>
+							) : (
+								<ReferenceAudioTooltipPlayer
+									audioRef={audioRef}
+									src={src}
+									fileName={fileName}
+									autoPlay={open}
+								/>
+							)}
 						</div>
 					</div>
 				</TooltipContent>

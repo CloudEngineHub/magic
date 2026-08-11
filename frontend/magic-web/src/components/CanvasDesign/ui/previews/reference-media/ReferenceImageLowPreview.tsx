@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
 import { useReferenceImageUrls } from "../../../app/hooks/resources/useReferenceImageUrls"
-import { ImagePlus, LoaderCircle, X } from "lucide-react"
+import { ImagePlus, LoaderCircle } from "lucide-react"
 import {
 	TOOLTIP_PREVIEW_MIN_SIZE,
 	calculateTooltipBoundedPreviewSize,
@@ -19,6 +19,7 @@ import { useObserveBoxSize } from "./useObserveBoxSize"
 import { useTouchTooltipTrigger } from "./useTouchTooltipTrigger"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
+import { ReferenceMediaTooltipHeader } from "./ReferenceMediaTooltipHeader"
 
 export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 	const {
@@ -203,25 +204,11 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 						className={styles.referenceMediaTooltipImageViewport}
 						style={{ width: tooltipW, height: tooltipH }}
 					>
-						<div className={styles.referenceMediaTooltipImageChrome}>
-							<span
-								className={styles.referenceMediaTooltipImageFileName}
-								title={fileName}
-							>
-								{fileName}
-							</span>
-							<button
-								type="button"
-								className={styles.referenceMediaTooltipImageClose}
-								aria-label={t("mediaResourceFullscreenPreview.close", "关闭预览")}
-								onClick={(event) => {
-									event.stopPropagation()
-									handleTooltipClose()
-								}}
-							>
-								<X size={16} aria-hidden />
-							</button>
-						</div>
+						<ReferenceMediaTooltipHeader
+							fileName={fileName}
+							onClose={handleTooltipClose}
+							closeAriaLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
+						/>
 						{isFullUrlLoading ? (
 							<div className={styles.referenceMediaTooltipLoading}>
 								<LoaderCircle size={16} className={styles.loadingIcon} />

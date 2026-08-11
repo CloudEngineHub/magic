@@ -10,6 +10,7 @@ import { usePortalContainer } from "../../primitives/custom/PortalContainerConte
 import { calculateTooltipBoundedPreviewSize } from "../../../runtime/resources/image/imagePreviewUtils"
 import { useTouchTooltipTrigger } from "./useTouchTooltipTrigger"
 import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
+import { ReferenceMediaTooltipHeader } from "./ReferenceMediaTooltipHeader"
 
 export interface ReferenceVideoPosterPreviewProps {
 	fileName: string
@@ -131,6 +132,7 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 							className={styles.referenceMediaTooltipVideoViewport}
 							style={{ width: tooltipWidth, height: tooltipHeight }}
 						>
+							<ReferenceMediaTooltipHeader fileName={fileName} />
 							{ossSrc ? (
 								<video
 									ref={tooltipVideoRef}
@@ -159,9 +161,6 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 									aria-label={fileName}
 								/>
 							) : null}
-						</div>
-						<div className={styles.referenceMediaTooltipFileName} title={fileName}>
-							{fileName}
 						</div>
 					</div>
 				</TooltipContent>
