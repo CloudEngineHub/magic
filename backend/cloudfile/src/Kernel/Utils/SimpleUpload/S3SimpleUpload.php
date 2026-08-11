@@ -320,20 +320,16 @@ class S3SimpleUpload extends SimpleUpload
             $commandParams['ResponseContentType'] = $options['content_type'];
         }
 
-        // Map response-content-disposition to ResponseContentDisposition
+        // 映射自定义响应内容处置参数
         if (isset($options['custom_query']['response-content-disposition'])) {
             $commandParams['ResponseContentDisposition'] = $options['custom_query']['response-content-disposition'];
         }
 
-        // Handle filename for Content-Disposition if provided
-        if (isset($options['filename']) && ! isset($commandParams['ResponseContentDisposition'])) {
-            $filename = $options['filename'];
-            $disposition = $options['custom_query']['response-content-disposition'] ?? 'attachment';
-            if ($disposition === 'inline') {
-                $commandParams['ResponseContentDisposition'] = 'inline; filename="' . addslashes($filename) . '"';
-            } else {
-                $commandParams['ResponseContentDisposition'] = 'attachment; filename="' . addslashes($filename) . '"';
-            }
+        // filename 是统一入口，显式覆盖底层自定义参数以保证三种存储行为一致
+        if (isset($options['filename'])) {
+            $filename = (string) $options['filename'];
+            $download = (bool) ($options['download'] ?? true);
+            $commandParams['ResponseContentDisposition'] = $this->buildContentDisposition($filename, $download);
         }
 
         $command = $client->getCommand($s3Operation, $commandParams);

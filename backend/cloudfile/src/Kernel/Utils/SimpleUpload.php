@@ -75,12 +75,12 @@ abstract class SimpleUpload
     abstract public function createObjectByCredential(array $credential, string $objectKey, array $options = []): void;
 
     /**
-     * Generate pre-signed URL by credential.
+     * 使用临时凭证生成预签名 URL.
      *
-     * @param array $credential Credential information
-     * @param string $objectKey Object key to generate URL for
-     * @param array $options Additional options (method, expires, filename, etc.)
-     * @return string Pre-signed URL
+     * @param array $credential 临时凭证信息
+     * @param string $objectKey 对象键
+     * @param array $options 额外选项，包括 method、expires、filename、download 等
+     * @return string 预签名 URL
      */
     abstract public function getPreSignedUrlByCredential(array $credential, string $objectKey, array $options = []): string;
 
@@ -117,5 +117,19 @@ abstract class SimpleUpload
         throw ChunkUploadException::createInitFailed(
             'Chunk upload not implemented for ' . static::class
         );
+    }
+
+    /**
+     * 构建预签名下载链接的响应内容处置方式.
+     *
+     * @param string $filename 响应文件名
+     * @param bool $download 是否以附件形式下载，默认为 true 以保持原有行为
+     */
+    protected function buildContentDisposition(string $filename, bool $download = true): string
+    {
+        $disposition = $download ? 'attachment' : 'inline';
+        $safeFilename = str_replace(["\r", "\n"], '', $filename);
+
+        return $disposition . '; filename="' . addcslashes($safeFilename, '\"') . '"';
     }
 }
