@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.infrastructure.magic_service.exceptions import ApiError
+from app.tools.get_video import GetVideo, GetVideoParams
 from app.tools.generate_video import GenerateVideo, GenerateVideoParams
 
 
@@ -74,6 +75,8 @@ def test_prompt_hint_keeps_video_and_audio_requirements():
     assert "If estimation fails, do not generate directly" in hint
     assert "lip sync" in hint
     assert "matching actions" in hint
+    assert "get_video" in hint
+    assert 'action="query"' not in hint
 
 
 def test_prompt_hint_is_structured_and_preserves_user_language():
@@ -98,7 +101,6 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
     for field_name in (
         "action",
         "prompt",
-        "operation_id",
         "video_name",
         "output_path",
         "input_mode",
@@ -113,7 +115,6 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
         assert description.rstrip().endswith(".")
 
     assert "生成时" in properties["prompt"]["description"]
-    assert "查询时必填" in properties["operation_id"]["description"]
     assert "用户未明确指定时省略" in properties["input_mode"]["description"]
     assert "通常省略" in properties["output_path"]["description"]
     assert "默认 videos" in properties["output_path"]["description"]
@@ -127,6 +128,14 @@ def test_video_params_support_estimate_points_action():
     )
 
     assert params.action == "estimate_points"
+
+
+def test_video_params_do_not_expose_internal_polling_controls():
+    properties = GenerateVideoParams.model_json_schema()["properties"]
+
+    assert "poll_interval_seconds" not in properties
+    assert "poll_timeout_seconds" not in properties
+    assert "operation_id" not in properties
 
 
 def test_tool_is_only_declared_by_general_agent():
@@ -243,15 +252,6 @@ def test_text_input_mode_aliases_are_normalized_to_standard(input_mode):
     assert params.input_mode == "standard"
 
 
-def test_mention_guidance_respects_explicitly_ignored_attachments():
-    root = Path(__file__).parents[2]
-    guidance = (root / "agents/prompts/mention_mechanism.prompt").read_text()
-
-    assert "明确要求忽略附件或引用素材" in guidance
-    assert "不得调用 visual_understanding" in guidance
-    assert "explicitly asks to ignore attachments or referenced media" in guidance
-
-
 def test_model_id_match_is_case_insensitive_and_keeps_context_config():
     model_id, config = GenerateVideo._resolve_model_config(_ToolContext(), "minimax-h3")
 
@@ -260,7 +260,7 @@ def test_model_id_match_is_case_insensitive_and_keeps_context_config():
 
 
 @pytest.mark.asyncio
-async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch, tmp_path):
+async def test_generate_creates_task_without_querying_or_downloading(monkeypatch, tmp_path):
     tool = GenerateVideo(base_dir=tmp_path)
     requests = []
 
@@ -270,17 +270,10 @@ async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch
             return {"id": "op-1", "status": "queued"}
 
         async def get_video_operation(self, operation_id, request_id=""):
-            requests.append(("get", operation_id, request_id))
-            return {"id": "op-1", "status": "succeeded", "output": {"video_url": "https://cdn/video.mp4"}}
-
-    async def fake_download(_tool_context, url, output_path, video_name, override):
-        assert url == "https://cdn/video.mp4"
-        return str(tmp_path / output_path / f"{video_name}.mp4"), f"{output_path}/{video_name}.mp4"
+            raise AssertionError("generate must not query the created task")
 
     tool._magic_service_client = FakeMagicServiceClient()
-    monkeypatch.setattr(tool, "_download_video", fake_download)
     monkeypatch.setattr(tool, "_business_params", lambda: {})
-    monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
     result = await tool.execute_purely(
         _ToolContext(),
@@ -289,13 +282,24 @@ async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch
             duration_seconds=5,
             aspect_ratio="16:9",
             video_name="cat",
-            poll_interval_seconds=1,
         ),
     )
 
     assert result.ok is True
-    assert result.videos == [str(tmp_path / "videos/cat.mp4")]
-    assert result.video_url == str(tmp_path / "videos/cat.mp4")
+    assert result.videos == []
+    assert result.content == (
+        'Video task created successfully. Task ID: op-1. Current status: queued. '
+        'Continue with get_video using this task ID.'
+    )
+    assert result.data == {
+        "operation": {"id": "op-1", "status": "queued"},
+        "operation_id": "op-1",
+        "status": "queued",
+    }
+    assert result.extra_info == {
+        "operation_id": "op-1",
+        "status": "queued",
+    }
     assert requests[0][:2] == (
         "create",
         {
@@ -312,7 +316,7 @@ async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch
         },
     )
     assert requests[0][2]
-    assert requests[1] == ("get", "op-1", requests[0][2])
+    assert len(requests) == 1
 
 
 @pytest.mark.asyncio
@@ -375,81 +379,126 @@ async def test_estimate_failure_requires_user_choice_before_generation(tmp_path)
 
     assert result.ok is False
     assert "Point estimation failed" in result.content
-    assert "Do not call action=generate in this turn" in result.content
     assert "ask_user" in result.content
-    assert "continue without an estimate" in result.content
-    assert "revise or cancel" in result.content
+    assert "continuing without an estimate" in result.content
+    assert "revising or canceling" in result.content
+    assert "do not generate yet" in result.content
+    assert result.data["error_code"] == "estimate_failed"
+    assert result.data["points_deducted"] is False
+    assert result.extra_info["error_code"] == "estimate_failed"
+    assert result.extra_info["points_deducted"] is False
 
 
 @pytest.mark.asyncio
-async def test_query_existing_operation_does_not_create_new_task(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
+async def test_query_existing_operation_does_not_create_new_task(tmp_path):
+    tool = GetVideo(base_dir=tmp_path)
     requests = []
 
     class FakeMagicServiceClient:
         async def get_video_operation(self, operation_id, request_id=""):
             requests.append((operation_id, request_id))
-            return {"id": "op-existing", "status": "failed", "error": {"message": "blocked"}}
+            return {
+                "id": "op-existing",
+                "status": "failed",
+                "error": {"code": "content_policy", "message": "blocked"},
+            }
 
     tool._magic_service_client = FakeMagicServiceClient()
 
     result = await tool.execute_purely(
         None,
-        GenerateVideoParams(action="query", operation_id="op-existing"),
+        GetVideoParams(operation_id="op-existing", wait_mode="once"),
     )
 
     assert result.ok is False
     assert result.extra_info["operation_id"] == "op-existing"
-    assert "blocked" in result.content
+    assert result.extra_info["error_code"] == "content_policy"
+    assert result.extra_info["points_deducted"] is False
+    assert result.data["operation"]["status"] == "failed"
+    assert "ask_user" in result.content
+    assert "Failure does not deduct points" in result.content
     assert requests[0][0] == "op-existing"
     assert requests[0][1]
 
 
 @pytest.mark.asyncio
-async def test_generate_timeout_returns_operation_id(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
+@pytest.mark.parametrize(
+    ("status", "expected_content"),
+    [
+        ("failed", "Video generation failed: provider error; Failure does not deduct points."),
+        ("canceled", "Video generation was canceled; Failure does not deduct points."),
+    ],
+)
+async def test_query_terminal_failure_has_consistent_structure(
+    tmp_path, status, expected_content
+):
+    tool = GetVideo(base_dir=tmp_path)
 
     class FakeMagicServiceClient:
-        async def create_video(self, payload, request_id=""):
-            return {"id": "op-timeout", "status": "processing"}
-
         async def get_video_operation(self, operation_id, request_id=""):
-            return {"id": operation_id, "status": "processing"}
+            return {
+                "id": operation_id,
+                "status": status,
+                "error": {"code": "provider_error", "message": "provider error"},
+            }
 
     tool._magic_service_client = FakeMagicServiceClient()
-    monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
     result = await tool.execute_purely(
-        _ToolContext(),
-        GenerateVideoParams(
-            prompt="海边日落",
-            poll_interval_seconds=1,
-            poll_timeout_seconds=1,
-        ),
+        None,
+        GetVideoParams(operation_id="op-terminal", wait_mode="once"),
     )
 
-    assert result.ok is True
-    assert result.extra_info == {
-        "operation_id": "op-timeout",
-        "status": "processing",
-        "timed_out": True,
-    }
+    assert result.ok is False
+    assert result.content == expected_content
+    assert result.data["operation_id"] == "op-terminal"
+    assert result.data["status"] == status
+    assert result.data["error_code"] == "provider_error"
+    assert result.data["points_deducted"] is False
+    assert result.extra_info["operation_id"] == "op-terminal"
+    assert result.extra_info["status"] == status
+    assert result.extra_info["error_code"] == "provider_error"
+    assert result.extra_info["points_deducted"] is False
 
 
 @pytest.mark.asyncio
-async def test_poll_continues_after_transient_server_error(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
+async def test_query_processing_returns_immediately_and_keeps_operation_id(tmp_path):
+    tool = GetVideo(base_dir=tmp_path)
     requests = []
 
     class FakeMagicServiceClient:
-        async def create_video(self, payload, request_id=""):
-            requests.append(("create", request_id))
-            return {"id": "op-transient", "status": "processing"}
-
         async def get_video_operation(self, operation_id, request_id=""):
-            requests.append(("get", request_id))
-            if len(requests) == 2:
-                raise ApiError("temporary provider query failure", status_code=500)
+            requests.append((operation_id, request_id))
+            return {"id": operation_id, "status": "processing"}
+
+    tool._magic_service_client = FakeMagicServiceClient()
+
+    result = await tool.execute_purely(
+        None,
+        GetVideoParams(operation_id="op-processing", wait_mode="once"),
+    )
+
+    assert result.ok is True
+    assert result.content == (
+        'Video task is still processing. Task ID: op-processing. Current status: processing. '
+        "Call get_video again later."
+    )
+    assert result.data == {
+        "operation": {"id": "op-processing", "status": "processing"},
+        "operation_id": "op-processing",
+        "status": "processing",
+    }
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_query_succeeded_downloads_video_once(monkeypatch, tmp_path):
+    tool = GetVideo(base_dir=tmp_path)
+    requests = []
+
+    class FakeMagicServiceClient:
+        async def get_video_operation(self, operation_id, request_id=""):
+            requests.append((operation_id, request_id))
             return {
                 "id": operation_id,
                 "status": "succeeded",
@@ -461,21 +510,75 @@ async def test_poll_continues_after_transient_server_error(monkeypatch, tmp_path
 
     tool._magic_service_client = FakeMagicServiceClient()
     monkeypatch.setattr(tool, "_download_video", fake_download)
-    monkeypatch.setattr(tool, "_business_params", lambda: {})
-    monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
     result = await tool.execute_purely(
         _ToolContext(),
-        GenerateVideoParams(
-            prompt="小猫游泳",
-            poll_interval_seconds=1,
-            poll_timeout_seconds=3,
+        GetVideoParams(
+            operation_id="op-succeeded",
+            wait_mode="once",
+            video_name="cat",
         ),
     )
 
     assert result.ok is True
-    assert [request[0] for request in requests] == ["create", "get", "get"]
-    assert len({request[1] for request in requests}) == 1
+    assert result.content == "Video generated successfully. Saved to: videos/video.mp4."
+    assert result.videos == [str(tmp_path / "videos/video.mp4")]
+    assert result.data["operation_id"] == "op-succeeded"
+    assert result.data["status"] == "succeeded"
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_query_succeeded_without_video_url_returns_structured_failure(tmp_path):
+    tool = GetVideo(base_dir=tmp_path)
+
+    class FakeMagicServiceClient:
+        async def get_video_operation(self, operation_id, request_id=""):
+            return {"id": operation_id, "status": "succeeded", "output": {}}
+
+    tool._magic_service_client = FakeMagicServiceClient()
+
+    result = await tool.execute_purely(
+        None,
+        GetVideoParams(operation_id="op-no-url", wait_mode="once"),
+    )
+
+    assert result.ok is False
+    assert result.content == (
+        "Video request is invalid: Video task succeeded but output.video_url is missing."
+    )
+    assert result.data["operation_id"] == "op-no-url"
+    assert result.data["status"] == "succeeded"
+    assert result.data["error_code"] == "invalid_request"
+    assert result.data["points_deducted"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_missing_operation_id_returns_structured_failure(
+    monkeypatch, tmp_path
+):
+    tool = GenerateVideo(base_dir=tmp_path)
+
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
+            return {"status": "queued"}
+
+    tool._magic_service_client = FakeMagicServiceClient()
+    monkeypatch.setattr(tool, "_business_params", lambda: {})
+
+    result = await tool.execute_purely(
+        _ToolContext(),
+        GenerateVideoParams(prompt="小猫游泳"),
+    )
+
+    assert result.ok is False
+    assert result.content == (
+        "Video request is invalid: Video API response is missing operation_id."
+    )
+    assert result.data["operation_id"] is None
+    assert result.data["status"] == "unknown"
+    assert result.data["error_code"] == "invalid_request"
+    assert result.data["points_deducted"] is False
 
 
 @pytest.mark.asyncio
@@ -522,7 +625,7 @@ async def test_payload_includes_all_supported_inputs_and_generation_fields(monke
 async def test_missing_model_fails_explicitly(tmp_path):
     result = await GenerateVideo(base_dir=tmp_path).execute_purely(
         None,
-        GenerateVideoParams(prompt="小猫游泳", poll_timeout_seconds=0),
+        GenerateVideoParams(prompt="小猫游泳"),
     )
 
     assert result.ok is False
@@ -530,27 +633,53 @@ async def test_missing_model_fails_explicitly(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_poll_error_preserves_operation_id(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
+async def test_query_error_preserves_operation_id(tmp_path):
+    tool = GetVideo(base_dir=tmp_path)
 
     class FakeMagicServiceClient:
-        async def create_video(self, payload, request_id=""):
-            return {"id": "op-error", "status": "processing"}
-
         async def get_video_operation(self, operation_id, request_id=""):
-            raise RuntimeError("poll failed")
+            raise ApiError("missing", status_code=404)
 
     tool._magic_service_client = FakeMagicServiceClient()
-    monkeypatch.setattr(tool, "_business_params", lambda: {})
-    monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
     result = await tool.execute_purely(
-        _ToolContext(),
-        GenerateVideoParams(prompt="小猫游泳", poll_interval_seconds=1),
+        None,
+        GetVideoParams(operation_id="op-error", wait_mode="once"),
     )
 
     assert result.ok is False
     assert result.extra_info["operation_id"] == "op-error"
+    assert result.extra_info["error_code"] == "not_found"
+    assert result.extra_info["points_deducted"] is False
+    assert result.content == "Video task was not found. Check the task ID before querying again."
+
+
+@pytest.mark.asyncio
+async def test_generate_content_restriction_guides_agent_to_ask_user(tmp_path):
+    tool = GenerateVideo(base_dir=tmp_path)
+
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
+            raise ApiError(
+                "request blocked",
+                status_code=400,
+                response_data={
+                    "error": {"code": "content_policy", "message": "blocked"}
+                },
+            )
+
+    tool._magic_service_client = FakeMagicServiceClient()
+
+    result = await tool.execute_purely(
+        _ToolContext(),
+        GenerateVideoParams(prompt="测试视频"),
+    )
+
+    assert result.ok is False
+    assert result.extra_info["error_code"] == "content_policy"
+    assert result.extra_info["points_deducted"] is False
+    assert "ask_user" in result.content
+    assert "risk-reduced adjustment" in result.content
 
 
 @pytest.mark.asyncio
@@ -608,7 +737,3 @@ class _FakeSession:
 
     def get(self, *_args, **_kwargs):
         return _FakeResponse(self.chunks)
-
-
-async def _completed():
-    return None

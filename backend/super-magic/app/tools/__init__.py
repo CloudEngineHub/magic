@@ -31,6 +31,7 @@ from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
 from app.tools.generate_video import GenerateVideo
+from app.tools.get_video import GetVideo
 from app.tools.image_search import ImageSearch
 from app.tools.list_dir import ListDir
 from app.tools.purify import Purify

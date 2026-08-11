@@ -1,11 +1,10 @@
 """通用模式视频生成工具。
 
-画布视频由 ``generate_canvas_videos`` 负责；本工具只负责创建和查询普通视频任务。
+画布视频由 ``generate_canvas_videos`` 负责；本工具只负责创建普通视频任务。
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -16,7 +15,6 @@ from pydantic import Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.path_manager import PathManager
-from agentlang.utils.file import generate_safe_filename
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.tool.tool_result import VideoToolResult
 from app.infrastructure.magic_service.client import MagicServiceClient
@@ -28,15 +26,14 @@ from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_mkdir, async_replace, async_unlink
 
 DEFAULT_OUTPUT_PATH = "videos"
-TERMINAL_STATUSES = {"succeeded", "failed", "canceled"}
 MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
 
 
 class GenerateVideoParams(BaseToolParams):
-    action: Literal["estimate_points", "generate", "query"] = Field(
+    action: Literal["estimate_points", "generate"] = Field(
         "generate",
-        description="""<!--zh: 操作类型：estimate_points 仅预估积分，generate 创建视频，query 查询已有任务。-->
-Action: estimate_points only estimates points, generate creates a video, and query checks an existing task.""",
+        description="""<!--zh: 操作类型：estimate_points 仅预估积分，generate 创建视频。-->
+Action: estimate_points only estimates points, and generate creates a video task.""",
     )
     prompt: str = Field(
         "",
@@ -47,11 +44,6 @@ Required for generation. Clearly describe the visuals, motion, camera, and audio
         "",
         description="""<!--zh: 视频模型 ID；用户未明确指定时省略，使用当前会话模型。-->
 Video model ID. Omit unless explicitly requested; the current session model is used.""",
-    )
-    operation_id: str = Field(
-        "",
-        description="""<!--zh: 查询时必填的任务 ID；创建视频时省略。-->
-Required for query. Omit when creating a video.""",
     )
     video_name: str = Field(
         "",
@@ -143,19 +135,6 @@ Extension settings passed through to the video API. Provide only when needed."""
         description="""<!--zh: 是否覆盖同名视频文件；默认不覆盖。-->
 Whether to overwrite an existing video with the same name. Defaults to false.""",
     )
-    poll_interval_seconds: float = Field(
-        5,
-        gt=0,
-        description="""<!--zh: 查询任务状态的轮询间隔（秒）；通常保留默认值。-->
-Polling interval in seconds. Usually keep the default.""",
-    )
-    poll_timeout_seconds: float = Field(
-        300,
-        ge=0,
-        description="""<!--zh: 等待任务完成的最长时间（秒）；通常保留默认值。-->
-Maximum time in seconds to wait for completion. Usually keep the default.""",
-    )
-
     @model_validator(mode="before")
     @classmethod
     def normalize_aliases(cls, values: Any) -> Any:
@@ -209,14 +188,12 @@ Maximum time in seconds to wait for completion. Usually keep the default.""",
     def validate_action_fields(self):
         if self.action in {"estimate_points", "generate"} and not self.prompt.strip():
             raise ValueError(f"The {self.action} action requires prompt")
-        if self.action == "query" and not self.operation_id.strip():
-            raise ValueError("The query action requires operation_id")
         return self
 
 
 @tool(name="generate_video")
 class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[GenerateVideoParams]):
-    """通用模式生成视频并保存到工作区。"""
+    """Create regular video generation tasks in general mode."""
 
     def __init__(self, **data: Any):
         data.setdefault("base_dir", PathManager.get_workspace_dir())
@@ -250,6 +227,10 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 **失败处理**
 - 生成失败不得改用生图或其他工具替代，也不自动重试
 
+**异步任务**
+- action="generate" 只创建一次任务；必须保留返回的 operation_id，之后调用 get_video 等待或查询同一任务，不得再次 generate
+- get_video 被用户中断后，可继续使用同一个 operation_id 再次调用
+
 **语言规则**
 - prompt、video_name 使用用户所用的语言
 -->
@@ -277,6 +258,10 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 **Failure handling**
 - Do not substitute image generation or another tool, and do not retry automatically
 
+**Asynchronous tasks**
+- action="generate" creates the task once. Preserve the returned operation_id and call get_video to wait for or query that task; never call generate again
+- If get_video is interrupted by the user, call it again later with the same operation_id
+
 **Language rules**
 - Write prompt and video_name in the same language the user is using
 """
@@ -286,7 +271,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 
     async def execute_purely(self, tool_context: ToolContext, params: GenerateVideoParams) -> VideoToolResult:
         try:
-            operation_id = params.operation_id.strip()
+            operation_id = ""
             request_id = str(uuid.uuid4())
             if params.action == "estimate_points":
                 payload = await self._build_payload(tool_context, params)
@@ -317,80 +302,65 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                     videos=[],
                     data=data,
                 )
-            if params.action == "query":
-                if not operation_id:
-                    raise ValueError("The query action requires operation_id")
-                operation = await self._get_magic_service_client().get_video_operation(
-                    operation_id,
-                    request_id=request_id,
-                )
-            else:
-                payload = await self._build_payload(tool_context, params)
-                created = await self._get_magic_service_client().create_video(
-                    payload,
-                    request_id=request_id,
-                )
-                operation_id = str(created.get("id") or created.get("operation_id") or "").strip()
-                if not operation_id:
-                    raise ValueError("Video API response is missing operation_id")
-                operation = created
-
-            operation = await self._poll(
-                operation_id,
-                operation,
-                params,
-                request_id,
+            payload = await self._build_payload(tool_context, params)
+            created = await self._get_magic_service_client().create_video(
+                payload,
+                request_id=request_id,
             )
-            status = self._status(operation)
-            extra = {"operation_id": operation_id, "status": status}
-            if operation.get("timed_out"):
-                extra["timed_out"] = True
-                return VideoToolResult(ok=True, content=f"Video task is still processing, operation_id={operation_id}", videos=[], extra_info=extra)
-            if status != "succeeded":
-                message = self._error_message(operation) or f"Video generation failed, status: {status or 'unknown'}"
-                return VideoToolResult(
-                    ok=False,
-                    content=self._failure_content(message),
-                    videos=[],
-                    extra_info=extra,
-                )
-
-            video_url = ((operation.get("output") or {}).get("video_url"))
-            if not video_url:
-                raise ValueError("Video task succeeded but output.video_url is missing")
-            stem = generate_safe_filename(params.video_name or params.prompt) or operation_id
-            saved_path, relative = await self._download_video(
-                tool_context, video_url, params.output_path, stem, params.override
-            )
-            extra["saved_video_relative_path"] = relative
-            result = VideoToolResult(
+            operation_id = str(
+                created.get("id") or created.get("operation_id") or ""
+            ).strip()
+            if not operation_id:
+                raise ValueError("Video API response is missing operation_id")
+            status = self._status(created) or "unknown"
+            data = self._operation_data(created, operation_id, status)
+            return VideoToolResult(
                 ok=True,
-                content=f"Video generated: {relative}",
-                videos=[saved_path],
-                extra_info=extra,
+                content=(
+                    f"Video task created successfully. Task ID: {operation_id}. "
+                    f"Current status: {status}. Continue with get_video using this task ID."
+                ),
+                videos=[],
+                data=data,
+                extra_info={"operation_id": operation_id, "status": status},
             )
-            result.video_url = saved_path
-            return result
         except Exception as exc:
             extra = {"error": str(exc)}
             if operation_id:
                 extra["operation_id"] = operation_id
             if params.action == "estimate_points":
+                estimate_error = {
+                    "error_code": "estimate_failed",
+                    "points_deducted": False,
+                }
+                extra.update(estimate_error)
                 return VideoToolResult(
                     ok=False,
                     content=(
-                        f"Point estimation failed: {exc}. "
-                        "Do not call action=generate in this turn. Use ask_user to "
-                        "offer two choices: continue without an estimate, or revise or "
-                        "cancel. End this turn and wait for the user's choice."
+                        f"Point estimation failed: {exc}; use ask_user to offer continuing "
+                        "without an estimate or revising or canceling, and do not generate yet."
                     ),
                     videos=[],
+                    data=estimate_error,
                     extra_info=extra,
                 )
+            content, error_code = self._exception_content(exc, params.action)
+            extra["error_code"] = error_code
+            extra["points_deducted"] = False
+            status = "unknown"
+            data = {
+                "operation": None,
+                "operation_id": operation_id or None,
+                "status": status,
+                "error_code": error_code,
+                "points_deducted": False,
+            }
+            extra["status"] = status
             return VideoToolResult(
                 ok=False,
-                content=self._failure_content(str(exc)),
+                content=content,
                 videos=[],
+                data=data,
                 extra_info=extra,
             )
 
@@ -607,34 +577,6 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         if value is not None and isinstance(choices, list) and choices and value not in choices:
             raise ValueError(f"The current video model does not support {name} {value}; valid values: {', '.join(map(str, choices))}")
 
-    async def _poll(
-        self,
-        operation_id: str,
-        operation: Dict[str, Any],
-        params: GenerateVideoParams,
-        request_id: str,
-    ) -> Dict[str, Any]:
-        status = self._status(operation)
-        elapsed = 0.0
-        while status not in TERMINAL_STATUSES and elapsed < params.poll_timeout_seconds:
-            interval = min(params.poll_interval_seconds, params.poll_timeout_seconds - elapsed)
-            await asyncio.sleep(interval)
-            elapsed += interval
-            try:
-                operation = await self._get_magic_service_client().get_video_operation(
-                    operation_id,
-                    request_id=request_id,
-                )
-            except ApiError as exc:
-                if exc.status_code is None or exc.status_code < 500:
-                    raise
-                continue
-            status = self._status(operation)
-        if status not in TERMINAL_STATUSES:
-            operation = dict(operation)
-            operation["timed_out"] = True
-        return operation
-
     def _get_magic_service_client(self) -> MagicServiceClient:
         if self._magic_service_client is None:
             self._magic_service_client = MagicServiceClient()
@@ -706,9 +648,101 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         return str(error or operation.get("message") or "") if isinstance(operation, dict) else ""
 
     @staticmethod
+    def _operation_data(
+        operation: Dict[str, Any], operation_id: str, status: str
+    ) -> Dict[str, Any]:
+        return {
+            "operation": operation,
+            "operation_id": operation_id,
+            "status": status,
+        }
+
+    @classmethod
+    def _operation_failure_result(
+        cls, operation: Dict[str, Any], operation_id: str, status: str
+    ) -> VideoToolResult:
+        error_code = cls._error_code(operation) or status
+        reason = cls._error_message(operation)
+        restricted = cls._is_content_restricted(error_code, reason)
+        if restricted:
+            content = (
+                "Video generation was restricted by content policy; use ask_user to offer "
+                "the original request or a risk-reduced adjustment; Failure does not deduct points."
+            )
+        elif status == "canceled":
+            content = "Video generation was canceled; Failure does not deduct points."
+        else:
+            detail = f": {reason}" if reason else ""
+            content = f"Video generation failed{detail}; Failure does not deduct points."
+        data = cls._operation_data(operation, operation_id, status)
+        data.update({"error_code": error_code, "points_deducted": False})
+        extra = {
+            "operation_id": operation_id,
+            "status": status,
+            "error_code": error_code,
+            "points_deducted": False,
+        }
+        return VideoToolResult(
+            ok=False,
+            content=content,
+            videos=[],
+            data=data,
+            extra_info=extra,
+        )
+
+    @staticmethod
+    def _error_code(operation: Dict[str, Any]) -> str:
+        error = operation.get("error") if isinstance(operation, dict) else None
+        if isinstance(error, dict):
+            return str(error.get("code") or "").strip()
+        return ""
+
+    @staticmethod
+    def _is_content_restricted(error_code: str, message: str) -> bool:
+        text = f"{error_code} {message}".casefold()
+        return any(word in text for word in ("content", "policy", "blocked", "safety"))
+
+    @staticmethod
+    def _exception_content(exc: Exception, action: str) -> tuple[str, str]:
+        if isinstance(exc, ApiError):
+            error_code, message = GenerateVideo._api_error_details(exc)
+            if GenerateVideo._is_content_restricted(error_code, message):
+                return (
+                    "Video generation was restricted by content policy; use ask_user "
+                    "to offer the original request or a risk-reduced adjustment; "
+                    "Failure does not deduct points.",
+                    error_code or "content_restricted",
+                )
+            if exc.status_code == 404 and action == "query":
+                return (
+                    "Video task was not found. Check the task ID before querying again.",
+                    "not_found",
+                )
+            if exc.status_code is not None and exc.status_code >= 500:
+                return (
+                    "Video service is temporarily unavailable; try again later without automatically retrying.",
+                    "service_unavailable",
+                )
+        if isinstance(exc, ValueError):
+            return f"Video request is invalid: {exc}.", "invalid_request"
+        return "Video request failed because the service returned an unexpected error.", "service_error"
+
+    @staticmethod
+    def _api_error_details(exc: ApiError) -> tuple[str, str]:
+        body = exc.response_data if isinstance(exc.response_data, dict) else {}
+        error = body.get("error")
+        if isinstance(error, dict):
+            return (
+                str(error.get("code") or body.get("code") or "").strip(),
+                str(error.get("message") or error.get("detail") or exc.message),
+            )
+        return str(body.get("code") or "").strip(), str(
+            error or body.get("message") or exc.message
+        )
+
+    @staticmethod
     def _failure_content(reason: str) -> str:
         return (
-            f"Generation failed: {reason}\n"
-            "Failure does not deduct points. Explain the reason and offer two options: revise the prompt and retry, or end this generation; "
-            "do not call generate_images or another tool, and do not retry automatically."
+            f"Generation failed: {reason}; Failure does not deduct points; do not call "
+            "generate_images or another tool, and do not retry automatically."
         )
