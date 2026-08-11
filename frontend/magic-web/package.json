@@ -93,7 +93,7 @@
 		"@dtyq/es6-template-strings": "~0.0.4",
 		"@dtyq/html-sandbox": "workspace:*",
 		"@dtyq/magic-admin": "workspace:*",
-		"@dtyq/magic-flow": "~0.0.14",
+		"@dtyq/magic-flow": "~0.0.15",
 		"@dtyq/timezone": "^0.0.2",
 		"@dtyq/upload-sdk": "~0.0.9",
 		"@dtyq/user-selector": "^0.1.14",

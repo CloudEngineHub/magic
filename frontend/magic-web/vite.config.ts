@@ -154,6 +154,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				"react-router-dom",
 				"i18next",
 				"react-i18next",
+				"lucide-react",
+				"@tabler/icons-react"
 			],
 			alias: [
 				{
