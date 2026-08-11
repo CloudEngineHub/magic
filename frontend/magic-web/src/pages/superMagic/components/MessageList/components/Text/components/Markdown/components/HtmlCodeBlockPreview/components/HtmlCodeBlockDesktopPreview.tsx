@@ -42,6 +42,7 @@ interface HtmlCodeBlockDesktopPreviewProps {
 	containIframeOverscroll?: boolean
 	hideVerticalScroll?: boolean
 	onPreviewContentCommitted?: (content: string) => void
+	isPreviewActive?: boolean
 	PreviewRendererComponent?: ComponentType<HtmlPreviewRendererProps>
 }
 
@@ -58,6 +59,7 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 		containIframeOverscroll = true,
 		hideVerticalScroll = true,
 		onPreviewContentCommitted,
+		isPreviewActive = true,
 		PreviewRendererComponent = HtmlPreviewRenderer,
 	} = props
 	const [desktopContentMetrics, setDesktopContentMetrics] =
@@ -395,6 +397,7 @@ export function HtmlCodeBlockDesktopPreview(props: HtmlCodeBlockDesktopPreviewPr
 								content={resolvedCode}
 								onReady={onPreviewRenderReady}
 								onContentCommitted={onPreviewContentCommitted}
+								isPreviewActive={isPreviewActive}
 								onMetrics={
 									previewLayout === "phone"
 										? handlePhoneContentMetrics

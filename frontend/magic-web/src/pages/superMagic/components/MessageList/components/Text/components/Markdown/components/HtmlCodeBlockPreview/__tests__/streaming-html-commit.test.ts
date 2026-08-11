@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
 	findIncompleteStreamingScriptStart,
 	resolveStreamingHtmlCommitContent,
+	resolveStreamingHtmlCommitContentIncrementally,
 } from "../streaming-html-commit"
 
 describe("streaming html commit", () => {
@@ -64,5 +65,47 @@ describe("streaming html commit", () => {
 
 		expect(findIncompleteStreamingScriptStart(content)).toBeNull()
 		expect(resolveStreamingHtmlCommitContent(content)).toBe(content)
+	})
+})
+
+describe("streaming html incremental scanner", () => {
+	it("keeps partial script opening tags out of the committed prefix", () => {
+		const partialOpening = resolveStreamingHtmlCommitContentIncrementally(
+			undefined,
+			"<main>ok</main><scr",
+		)
+		expect(partialOpening.content).toBe("<main>ok</main>")
+
+		const scriptContent = resolveStreamingHtmlCommitContentIncrementally(
+			partialOpening.state,
+			"<main>ok</main><script>const chart = 1",
+		)
+		expect(scriptContent.content).toBe("<main>ok</main>")
+	})
+
+	it("handles split closing script tags and comments", () => {
+		const prefix = "<main>ok</main><script>const chart = 1"
+		let result = resolveStreamingHtmlCommitContentIncrementally(undefined, `${prefix}</scr`)
+		result = resolveStreamingHtmlCommitContentIncrementally(
+			result.state,
+			`${prefix}</script><p>done</p>`,
+		)
+
+		expect(result.content).toBe(`${prefix}</script><p>done</p>`)
+		expect(resolveStreamingHtmlCommitContent("<!-- <script>")).toBe("<!-- <script>")
+	})
+
+	it("falls back to a full rescan when the source is replaced", () => {
+		const first = resolveStreamingHtmlCommitContentIncrementally(
+			undefined,
+			"<main>first</main>",
+		)
+		const replaced = resolveStreamingHtmlCommitContentIncrementally(
+			first.state,
+			"<script>broken",
+		)
+
+		expect(replaced.content).toBe("")
+		expect(replaced.content).toBe(resolveStreamingHtmlCommitContent("<script>broken"))
 	})
 })

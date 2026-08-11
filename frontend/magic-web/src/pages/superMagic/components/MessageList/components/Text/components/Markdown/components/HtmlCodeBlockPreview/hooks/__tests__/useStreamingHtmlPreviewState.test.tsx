@@ -26,7 +26,7 @@ describe("useStreamingHtmlPreviewState", () => {
 
 		rerender({ content: `${safePrefix}<script>const chart = createChart({ title: "EIC"` })
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(120)
+			await vi.advanceTimersByTimeAsync(480)
 		})
 
 		expect(result.current.committedContent).toBe(safePrefix)
@@ -34,7 +34,7 @@ describe("useStreamingHtmlPreviewState", () => {
 		const completeContent = `${safePrefix}<script>const chart = createChart({ title: "EIC" })</script></body></html>`
 		rerender({ content: completeContent })
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(120)
+			await vi.advanceTimersByTimeAsync(480)
 		})
 
 		expect(result.current.committedContent).toBe(completeContent)
@@ -50,7 +50,7 @@ describe("useStreamingHtmlPreviewState", () => {
 		expect(result.current.committedContent).toBe("<main>First</main>")
 
 		await act(async () => {
-			await vi.advanceTimersByTimeAsync(120)
+			await vi.advanceTimersByTimeAsync(480)
 		})
 
 		expect(result.current.committedContent).toBe("<main>First</main><section>Second</section>")

@@ -1389,6 +1389,11 @@ describe("MessageList Markdown HTML preview", () => {
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(120)
 		})
+		expect(screen.getByTestId("isolated-html-renderer")).not.toHaveTextContent("Second")
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(360)
+		})
 
 		expect(screen.getByTestId("isolated-html-renderer")).toHaveTextContent("Second")
 	})

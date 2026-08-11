@@ -16,6 +16,7 @@ import { useHtmlCodeBlockPreviewController } from "./hooks/useHtmlCodeBlockPrevi
 import { useHtmlCodeBlockPreviewCopy } from "./hooks/useHtmlCodeBlockPreviewCopy"
 import { useHtmlCodeBlockPreviewExpandAutoScroll } from "./hooks/useHtmlCodeBlockPreviewExpandAutoScroll"
 import { useHtmlCodeBlockPreviewStreamingScroll } from "./hooks/useHtmlCodeBlockPreviewStreamingScroll"
+import { useHtmlCodeBlockPreviewActivity } from "./hooks/useHtmlCodeBlockPreviewActivity"
 import { hasVisibleHtmlPreviewContent } from "./shared"
 import type { HtmlCodeBlockPreviewProps } from "./types"
 import { resolveHtmlPreviewIntrinsicWidthHint } from "./preview-width"
@@ -97,6 +98,17 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 		hasVisiblePreviewContent,
 		viewStateKey,
 	})
+	const effectiveIsExpanded = hasVisiblePreviewContent || viewMode === "code" ? isExpanded : false
+	const { setPreviewActivityElement, isPreviewActive } = useHtmlCodeBlockPreviewActivity({
+		enabled: isStreaming && effectiveIsExpanded && shouldRenderPreview,
+	})
+	const setPreviewRootElement = useCallback(
+		(element: HTMLDivElement | null) => {
+			setPreviewLayoutElement(element)
+			setPreviewActivityElement(element)
+		},
+		[setPreviewActivityElement, setPreviewLayoutElement],
+	)
 	const getScrollTargetElement = useCallback(() => {
 		if (viewMode === "desktop") return desktopPreviewSurfaceElementRef.current
 		if (viewMode === "phone") return phonePreviewSurfaceElementRef.current
@@ -121,8 +133,6 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	const shouldRenderFullscreenButton = !isStreaming && hasResolvedCode && hasVisiblePreviewContent
 	const shouldRenderViewModeSwitcher = hasResolvedCode && hasVisiblePreviewContent
 	// 非渲染标签场景下默认只保留 header；只有用户明确展开源码时，才展示下方内容区。
-	const effectiveIsExpanded = hasVisiblePreviewContent || viewMode === "code" ? isExpanded : false
-
 	async function handleCopy() {
 		await copyHtmlCode(effectiveResolvedCode)
 	}
@@ -207,7 +217,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 
 	return (
 		<div
-			ref={setPreviewLayoutElement}
+			ref={setPreviewRootElement}
 			className="my-3 w-full min-w-0 self-stretch"
 			data-testid="html-code-block-preview"
 		>
@@ -287,6 +297,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 										key={previewRenderKey}
 										isStreaming
 										isSuspended={isSuspended}
+										isPreviewActive={isPreviewActive}
 										resolvedCode={effectiveResolvedCode}
 										isPreviewLoading={isPreviewLoading}
 										onPreviewRenderReady={() =>

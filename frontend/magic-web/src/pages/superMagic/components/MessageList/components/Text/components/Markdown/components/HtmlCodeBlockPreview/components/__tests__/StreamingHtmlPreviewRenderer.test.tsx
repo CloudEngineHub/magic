@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { StreamingHtmlPreviewRenderer } from "../StreamingHtmlPreviewRenderer"
 
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils", () => ({
@@ -12,6 +12,10 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/full-content",
 }))
 
 describe("StreamingHtmlPreviewRenderer", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
 	it("preserves the iframe scroll position across streaming updates", () => {
 		render(
 			<StreamingHtmlPreviewRenderer
@@ -143,5 +147,155 @@ describe("StreamingHtmlPreviewRenderer", () => {
 			"<script>var nestedDocument = '</style></head><body>';</script>",
 		)
 		expect(postedContent.match(/data-streaming-preview-scroll-lock/g)).toHaveLength(1)
+	})
+
+	it("keeps one in-flight update and replaces pending content with the latest version", () => {
+		const { rerender } = render(
+			<StreamingHtmlPreviewRenderer
+				content="<main>one</main>"
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+		const iframe = screen.getByTestId("streaming-html-preview-renderer") as HTMLIFrameElement
+		const iframeWindow = iframe.contentWindow as Window
+		const postMessageMock = vi.spyOn(iframeWindow, "postMessage")
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframeWindow,
+					data: { type: "iframeReady" },
+				}),
+			)
+		})
+		rerender(
+			<StreamingHtmlPreviewRenderer
+				content="<main>two</main>"
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+		rerender(
+			<StreamingHtmlPreviewRenderer
+				content="<main>three</main>"
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+
+		const getContentMessages = () =>
+			postMessageMock.mock.calls
+				.map(
+					([payload]) =>
+						payload as { type?: string; content?: string; contentVersion?: number },
+				)
+				.filter((payload) => payload.type === "setContent")
+		expect(getContentMessages()).toHaveLength(1)
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframeWindow,
+					data: { type: "renderComplete", contentVersion: 1 },
+				}),
+			)
+		})
+
+		expect(getContentMessages()).toHaveLength(2)
+		expect(getContentMessages()[1]).toMatchObject({
+			content: expect.stringContaining("<main>three</main>"),
+			contentVersion: 2,
+		})
+	})
+
+	it("holds the latest content while inactive and catches up after resume", () => {
+		const { rerender } = render(
+			<StreamingHtmlPreviewRenderer
+				content="<main>one</main>"
+				isPreviewActive={false}
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+		const iframe = screen.getByTestId("streaming-html-preview-renderer") as HTMLIFrameElement
+		const iframeWindow = iframe.contentWindow as Window
+		const postMessageMock = vi.spyOn(iframeWindow, "postMessage")
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframeWindow,
+					data: { type: "iframeReady" },
+				}),
+			)
+		})
+		rerender(
+			<StreamingHtmlPreviewRenderer
+				content="<main>latest</main>"
+				isPreviewActive={false}
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+
+		expect(
+			postMessageMock.mock.calls.filter(
+				([payload]) => (payload as { type?: string }).type === "setContent",
+			),
+		).toHaveLength(0)
+
+		rerender(
+			<StreamingHtmlPreviewRenderer
+				content="<main>latest</main>"
+				isPreviewActive
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+		const contentMessages = postMessageMock.mock.calls
+			.map(([payload]) => payload as { type?: string; content?: string })
+			.filter((payload) => payload.type === "setContent")
+		expect(contentMessages).toHaveLength(1)
+		expect(contentMessages[0]?.content).toContain("<main>latest</main>")
+	})
+
+	it("releases a stalled in-flight version and sends the pending latest content", async () => {
+		vi.useFakeTimers()
+		const { rerender } = render(
+			<StreamingHtmlPreviewRenderer
+				content="<main>one</main>"
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+		const iframe = screen.getByTestId("streaming-html-preview-renderer") as HTMLIFrameElement
+		const iframeWindow = iframe.contentWindow as Window
+		const postMessageMock = vi.spyOn(iframeWindow, "postMessage")
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframeWindow,
+					data: { type: "iframeReady" },
+				}),
+			)
+		})
+		rerender(
+			<StreamingHtmlPreviewRenderer
+				content="<main>latest</main>"
+				onReady={vi.fn()}
+				onMetrics={vi.fn()}
+			/>,
+		)
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(800)
+		})
+
+		const contentMessages = postMessageMock.mock.calls
+			.map(([payload]) => payload as { type?: string; content?: string })
+			.filter((payload) => payload.type === "setContent")
+		expect(contentMessages).toHaveLength(2)
+		expect(contentMessages[1]?.content).toContain("<main>latest</main>")
 	})
 })

@@ -80,7 +80,8 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
           contentMetricsFrameId: null,
           contentMetricsNestedFrameId: null,
           scrollRestoreFrameId: null,
-          scrollRestoreNestedFrameId: null
+          scrollRestoreNestedFrameId: null,
+          isActive: true
         };
       }
 
@@ -355,6 +356,9 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
     }
 
     function postContentMetrics(phase, contentVersion) {
+      if (!getPreviewState().isActive) {
+        return;
+      }
       try {
         var metrics = measureContentMetrics();
         window.parent.postMessage({
@@ -423,6 +427,9 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
 
     function scheduleSettledSignals(version) {
       var previewState = getPreviewState();
+      if (!previewState.isActive) {
+        return;
+      }
       clearSettledTimeout();
       previewState.settledTimeoutId = window.setTimeout(function() {
         if (getPreviewState().contentVersion !== version) {
@@ -446,6 +453,12 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
 
     function ensureSettledObserver(version) {
       var previewState = getPreviewState();
+
+      if (!previewState.isActive) {
+        disconnectSettledObserver();
+        clearSettledTimeout();
+        return;
+      }
 
       if (typeof ResizeObserver !== "function" || !document.documentElement || !document.body) {
         scheduleSettledSignals(version);
@@ -555,13 +568,31 @@ const STREAMING_HTML_PREVIEW_RUNTIME = `<!DOCTYPE html>
 
         if (
           !event.data ||
-          event.data.type !== "setContent" ||
-          typeof event.data.content !== "string"
+          (event.data.type !== "setContent" && event.data.type !== "setActive")
         ) {
           return;
         }
 
         var previewState = getPreviewState();
+        if (event.data.type === "setActive") {
+          previewState.isActive = event.data.isActive !== false;
+          if (!previewState.isActive) {
+            cancelScheduledContentMetrics();
+            clearSettledTimeout();
+            disconnectSettledObserver();
+            return;
+          }
+
+          if (previewState.hasWrittenContentOnce) {
+            scheduleContentMetrics("initial", previewState.contentVersion);
+            ensureSettledObserver(previewState.contentVersion);
+          }
+          return;
+        }
+
+        if (typeof event.data.content !== "string") {
+          return;
+        }
         var scrollPosition = previewState.hasWrittenContentOnce
           ? captureScrollPosition()
           : null;
@@ -669,13 +700,23 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 		containIframeOverscroll = false,
 		hideVerticalScroll = false,
 		onContentCommitted,
+		isPreviewActive = true,
 	} = props
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const isIframeReadyRef = useRef(false)
-	const lastPostedContentRef = useRef("")
 	const contentVersionRef = useRef(0)
-	const postedContentByVersionRef = useRef(new Map<number, string>())
-	const lastAcknowledgedContentVersionRef = useRef(0)
+	const latestSentVersionRef = useRef(0)
+	const lastAcknowledgedFullContentRef = useRef("")
+	const lastPostedActivityRef = useRef<boolean | null>(null)
+	const acknowledgeTimeoutRef = useRef<number | null>(null)
+	const latestPayloadRef = useRef<{ fullContent: string; committedContent: string }>({
+		fullContent: "",
+		committedContent: "",
+	})
+	const mailboxRef = useRef<{
+		inFlight: { version: number; fullContent: string; committedContent: string } | null
+		pending: { fullContent: string; committedContent: string } | null
+	}>({ inFlight: null, pending: null })
 	useEffect(() => {
 		const iframe = iframeRef.current
 		if (!iframe) return
@@ -696,26 +737,76 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 
 		return injectStreamingPreviewScrollStyle(previewDocument)
 	}, [containIframeOverscroll, hideVerticalScroll, previewContent])
+	// Keep the high-frequency payload in a ref so ACK/timeout handlers always flush
+	// the newest version instead of the render that originally created the timer.
+	latestPayloadRef.current = { fullContent, committedContent: content }
 
-	const postContent = useCallback(() => {
-		if (!isIframeReadyRef.current) return
-		if (!iframeRef.current?.contentWindow) return
-		if (lastPostedContentRef.current === fullContent) return
+	const clearAcknowledgeTimeout = useCallback(() => {
+		if (acknowledgeTimeoutRef.current !== null) {
+			window.clearTimeout(acknowledgeTimeoutRef.current)
+			acknowledgeTimeoutRef.current = null
+		}
+	}, [])
+
+	const postActivityState = useCallback(() => {
+		if (!isIframeReadyRef.current || !iframeRef.current?.contentWindow) return
+		if (isPreviewActive && lastPostedActivityRef.current === null) return
+		if (lastPostedActivityRef.current === isPreviewActive) return
+		iframeRef.current.contentWindow.postMessage(
+			{ type: "setActive", isActive: isPreviewActive },
+			"*",
+		)
+		lastPostedActivityRef.current = isPreviewActive
+	}, [isPreviewActive])
+
+	const postLatestContent = useCallback(() => {
+		const latestPayload = latestPayloadRef.current
+		const mailbox = mailboxRef.current
+
+		if (!isIframeReadyRef.current || !iframeRef.current?.contentWindow) {
+			mailbox.pending = latestPayload
+			return
+		}
+
+		if (!isPreviewActive) {
+			mailbox.pending = latestPayload
+			return
+		}
+
+		if (mailbox.inFlight) {
+			if (mailbox.inFlight.fullContent !== latestPayload.fullContent) {
+				mailbox.pending = latestPayload
+			}
+			return
+		}
+
+		if (latestPayload.fullContent === mailbox.pending?.fullContent) {
+			mailbox.pending = null
+		}
+		if (!latestPayload.fullContent) return
+		if (latestPayload.fullContent === lastAcknowledgedFullContentRef.current) return
 
 		const contentVersion = contentVersionRef.current + 1
 		contentVersionRef.current = contentVersion
-		postedContentByVersionRef.current.set(contentVersion, content)
+		latestSentVersionRef.current = contentVersion
+		mailbox.inFlight = { version: contentVersion, ...latestPayload }
+		mailbox.pending = null
 
 		iframeRef.current.contentWindow.postMessage(
-			{
-				type: "setContent",
-				content: fullContent,
-				contentVersion,
-			},
+			{ type: "setContent", content: latestPayload.fullContent, contentVersion },
 			"*",
 		)
-		lastPostedContentRef.current = fullContent
-	}, [content, fullContent])
+
+		clearAcknowledgeTimeout()
+		acknowledgeTimeoutRef.current = window.setTimeout(() => {
+			const currentFlight = mailboxRef.current.inFlight
+			if (!currentFlight || currentFlight.version !== contentVersion) return
+			const hasPendingContent = mailboxRef.current.pending !== null
+			mailboxRef.current.inFlight = null
+			acknowledgeTimeoutRef.current = null
+			if (hasPendingContent) postLatestContent()
+		}, 800)
+	}, [clearAcknowledgeTimeout, isPreviewActive])
 
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
@@ -728,36 +819,35 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 
 			if (event.data?.type === "iframeReady") {
 				isIframeReadyRef.current = true
-				lastPostedContentRef.current = ""
-				postContent()
+				postActivityState()
+				postLatestContent()
 				return
 			}
 
 			if (event.data?.type === "renderComplete" || event.data?.type === "pageFullyLoaded") {
 				const contentVersion = Number(event.data?.contentVersion)
-				const committedContent = postedContentByVersionRef.current.get(contentVersion)
-				if (
-					Number.isInteger(contentVersion) &&
-					contentVersion > lastAcknowledgedContentVersionRef.current &&
-					committedContent !== undefined
-				) {
-					// 只有 iframe 明确确认过的版本才能成为暂停时的冻结内容，也才能解除首次 Loading。
-					lastAcknowledgedContentVersionRef.current = contentVersion
-					onContentCommitted?.(committedContent)
-					postedContentByVersionRef.current.forEach((_, version) => {
-						if (version <= contentVersion) {
-							postedContentByVersionRef.current.delete(version)
-						}
-					})
-					onReady()
-				}
+				const currentFlight = mailboxRef.current.inFlight
+				if (!Number.isInteger(contentVersion) || !currentFlight) return
+				if (contentVersion !== currentFlight.version) return
+
+				// 只有当前 in-flight 版本得到 iframe ACK，才解除 loading 并冻结可恢复内容。
+				clearAcknowledgeTimeout()
+				mailboxRef.current.inFlight = null
+				lastAcknowledgedFullContentRef.current = currentFlight.fullContent
+				onContentCommitted?.(currentFlight.committedContent)
+				onReady()
+				postLatestContent()
 				return
 			}
 
 			if (event.data?.type === "streamingPreviewError") {
 				const contentVersion = Number(event.data?.contentVersion)
-				if (Number.isInteger(contentVersion)) {
-					postedContentByVersionRef.current.delete(contentVersion)
+				const currentFlight = mailboxRef.current.inFlight
+				if (Number.isInteger(contentVersion) && currentFlight?.version === contentVersion) {
+					const hasPendingContent = mailboxRef.current.pending !== null
+					clearAcknowledgeTimeout()
+					mailboxRef.current.inFlight = null
+					if (hasPendingContent) postLatestContent()
 				}
 				return
 			}
@@ -766,7 +856,8 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 			const metricsContentVersion = Number(event.data?.contentVersion)
 			if (
 				!Number.isInteger(metricsContentVersion) ||
-				metricsContentVersion !== contentVersionRef.current
+				metricsContentVersion !== latestSentVersionRef.current ||
+				!isPreviewActive
 			) {
 				return
 			}
@@ -793,11 +884,26 @@ export function StreamingHtmlPreviewRenderer(props: HtmlPreviewRendererProps) {
 		return () => {
 			window.removeEventListener("message", handleMessage)
 		}
-	}, [onContentCommitted, onMetrics, onReady, postContent])
+	}, [
+		clearAcknowledgeTimeout,
+		isPreviewActive,
+		onContentCommitted,
+		onMetrics,
+		onReady,
+		postActivityState,
+		postLatestContent,
+	])
 
 	useEffect(() => {
-		postContent()
-	}, [postContent])
+		postActivityState()
+		postLatestContent()
+	}, [content, fullContent, postActivityState, postLatestContent])
+
+	useEffect(() => {
+		return () => {
+			clearAcknowledgeTimeout()
+		}
+	}, [clearAcknowledgeTimeout])
 
 	return (
 		<iframe
