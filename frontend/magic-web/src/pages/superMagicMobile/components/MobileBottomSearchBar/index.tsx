@@ -123,7 +123,7 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 						aria-label={closeAriaLabel}
 						data-testid={`${testIdPrefix}-close`}
 					>
-						<X className="size-[18px] text-foreground" strokeWidth={2.5} />
+						<X className="size-[18px] text-foreground" style={{ strokeWidth: 2 }} />
 					</button>
 
 					<div
@@ -172,7 +172,7 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 						aria-label={previousAriaLabel}
 						data-testid={`${testIdPrefix}-previous`}
 					>
-						<ChevronUp className="size-[18px]" strokeWidth={2.25} />
+						<ChevronUp className="size-[18px]" style={{ strokeWidth: 2 }} />
 					</button>
 					<button
 						type="button"
@@ -182,7 +182,7 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 						aria-label={nextAriaLabel}
 						data-testid={`${testIdPrefix}-next`}
 					>
-						<ChevronDown className="size-[18px]" strokeWidth={2.25} />
+						<ChevronDown className="size-[18px]" style={{ strokeWidth: 2 }} />
 					</button>
 				</div>
 			</div>

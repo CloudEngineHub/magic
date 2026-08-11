@@ -136,6 +136,16 @@ describe("MobileBottomSearchBar", () => {
 		)
 
 		expect(screen.getByTestId("recording-search-result-count")).toHaveTextContent("2/6")
+		// Inline styles must win over page-level SVG rules used by rendered recording content.
+		expect(screen.getByTestId("recording-search-close").querySelector("svg")).toHaveStyle({
+			strokeWidth: 2,
+		})
+		expect(screen.getByTestId("recording-search-previous").querySelector("svg")).toHaveStyle({
+			strokeWidth: 2,
+		})
+		expect(screen.getByTestId("recording-search-next").querySelector("svg")).toHaveStyle({
+			strokeWidth: 2,
+		})
 		fireEvent.click(screen.getByLabelText("Close content search"))
 		fireEvent.click(screen.getByLabelText("Previous match"))
 		fireEvent.click(screen.getByLabelText("Next match"))
