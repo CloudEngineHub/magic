@@ -34,7 +34,9 @@ export interface UseSelfMediaInspectorOptions {
 	 * Resolves file info for the iframe that was selected, used to generate
 	 * an @file mention in the appended prompt content.
 	 */
-	getFileInfoForIframe?: (iframe: HTMLIFrameElement) => { fileId: string; fileName: string; filePath: string } | undefined
+	getFileInfoForIframe?: (
+		iframe: HTMLIFrameElement,
+	) => { fileId: string; fileName: string; filePath: string } | undefined
 }
 
 export interface UseSelfMediaInspectorReturn {
@@ -237,7 +239,11 @@ export function useSelfMediaInspector({
 
 		const iframe = activeIframeRef.current
 		const fileInfo = iframe ? getFileInfoRef.current?.(iframe) : undefined
-		const content = buildAgentPromptContent(selectedElement, t, fileInfo)
+		const content = buildAgentPromptContent(
+			selectedElement,
+			t("stylePanel.inspector.agentPromptTitle"),
+			fileInfo,
+		)
 		setSelectedElement(null)
 
 		// Append to current editor without replacing existing content
