@@ -5,10 +5,82 @@ import {
 	extractFileName,
 	parseImageSize,
 	normalizeImagePath,
+	escapeDangerousInvisibleHtmlTags,
 	type AttachmentFile,
 } from "../utils"
 
 describe("Markdown Utils", () => {
+	describe("escapeDangerousInvisibleHtmlTags", () => {
+		it("escapes invisible or executable HTML tags", () => {
+			expect(escapeDangerousInvisibleHtmlTags("before <script>alert(1)</script> after")).toBe(
+				"before <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> after",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("<style>body { color: red }</style>")).toBe(
+				"<pre><code>&lt;style&gt;body { color: red }&lt;/style&gt;</code></pre>",
+			)
+		})
+
+		it("renders complete multiline HTML blocks as code", () => {
+			const markdown = '<script>\n# heading\nconst html = "<div>example</div>"\n</script>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				'<pre><code>&lt;script&gt;\n# heading\nconst html = "&lt;div&gt;example&lt;/div&gt;"\n&lt;/script&gt;</code></pre>',
+			)
+		})
+
+		it("does not alter fenced code blocks", () => {
+			const markdown = "```html\n<script>alert(1)</script>\n```"
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+		})
+
+		it("leaves ordinary HTML untouched", () => {
+			expect(escapeDangerousInvisibleHtmlTags("<div>visible</div>")).toBe(
+				"<div>visible</div>",
+			)
+		})
+
+		it("does not alter inline or indented code", () => {
+			expect(escapeDangerousInvisibleHtmlTags("`<script>alert(1)</script>`")).toBe(
+				"`<script>alert(1)</script>`",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("    <script>alert(1)</script>")).toBe(
+				"    <script>alert(1)</script>",
+			)
+		})
+
+		it("uses markdown-it semantics for unmatched backticks and invalid fences", () => {
+			expect(escapeDangerousInvisibleHtmlTags("unclosed `\n<script>x</script>")).toBe(
+				"unclosed `\n<pre><code>&lt;script&gt;x&lt;/script&gt;</code></pre>",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("```bad```\n<script>x</script>")).toBe(
+				"```bad```\n<pre><code>&lt;script&gt;x&lt;/script&gt;</code></pre>",
+			)
+		})
+
+		it("preserves blockquote and list prefixes around dangerous HTML blocks", () => {
+			expect(escapeDangerousInvisibleHtmlTags("> <script>\n> # x\n> </script>")).toBe(
+				"> <pre><code>&lt;script&gt;\n> # x\n> &lt;/script&gt;</code></pre>",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("- <style>\n  # x\n  </style>")).toBe(
+				"- <pre><code>&lt;style&gt;\n  # x\n  &lt;/style&gt;</code></pre>",
+			)
+		})
+
+		it("renders raw HTML with executable attributes or protocols as code", () => {
+			expect(escapeDangerousInvisibleHtmlTags('<div onclick="run()">text</div>')).toBe(
+				'<pre><code>&lt;div onclick="run()"&gt;text&lt;/div&gt;</code></pre>',
+			)
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'before <a href="javascript:alert(1)">click</a> after',
+				),
+			).toBe('before <code>&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;</code> after')
+		})
+
+		it("leaves safe raw HTML links untouched", () => {
+			const markdown = '<a href="https://example.com">example</a>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+		})
+	})
 	describe("findFileByName", () => {
 		it("should find file in flat array", () => {
 			const files: AttachmentFile[] = [

@@ -23,6 +23,7 @@ import {
 	extractImagePaths,
 	isExternalUrl,
 	resolveRelativePath,
+	escapeDangerousInvisibleHtmlTags,
 } from "./utils"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -388,7 +389,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			const imagePaths = extractImagePaths(currentContent)
 
 			if (imagePaths.length === 0) {
-				setProcessedContent(currentContent)
+				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 				setIsLoading(false)
 				return
 			}
@@ -446,16 +447,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					const resolvedMap = buildImageUrlMapEntries(downloadUrls, fileIdToPaths)
 
 					setImageUrlMap(resolvedMap)
-					setProcessedContent(currentContent)
+					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 					setIsLoading(false)
 				} catch (error) {
 					console.error("Error fetching download URLs:", error)
-					setProcessedContent(currentContent)
+					setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 					setImageUrlMap(new Map())
 					setIsLoading(false)
 				}
 			} else {
-				setProcessedContent(currentContent)
+				setProcessedContent(escapeDangerousInvisibleHtmlTags(currentContent))
 				setImageUrlMap(new Map())
 				setIsLoading(false)
 			}
