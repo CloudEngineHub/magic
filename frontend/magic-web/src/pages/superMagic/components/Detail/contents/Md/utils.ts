@@ -62,6 +62,75 @@ const protectedHtmlTags = new Set([
 	"base",
 ])
 
+// Raw HTML is only retained for the small set of presentational tags that the
+// Markdown preview actually needs. SVG/MathML and interactive/embed elements
+// are deliberately excluded so SMIL, namespace, and browser-specific vectors
+// are handled as code instead of becoming another blacklist to maintain.
+const allowedRawHtmlTags = new Set([
+	"a",
+	"abbr",
+	"b",
+	"bdi",
+	"bdo",
+	"blockquote",
+	"br",
+	"caption",
+	"cite",
+	"code",
+	"col",
+	"colgroup",
+	"data",
+	"dd",
+	"del",
+	"details",
+	"dfn",
+	"div",
+	"dl",
+	"dt",
+	"em",
+	"figcaption",
+	"figure",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"hr",
+	"i",
+	"img",
+	"kbd",
+	"li",
+	"mark",
+	"ol",
+	"p",
+	"pre",
+	"q",
+	"rp",
+	"rt",
+	"ruby",
+	"s",
+	"samp",
+	"small",
+	"span",
+	"strong",
+	"sub",
+	"summary",
+	"sup",
+	"table",
+	"tbody",
+	"td",
+	"tfoot",
+	"th",
+	"thead",
+	"time",
+	"tr",
+	"u",
+	"ul",
+	"var",
+	"wbr",
+])
+
 const voidHtmlTags = new Set([
 	"area",
 	"base",
@@ -93,6 +162,8 @@ const urlAttributeNames = new Set([
 ])
 const multiUrlAttributeNames = new Set(["srcset", "ping"])
 const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
+const MAX_PROBE_CANDIDATES = 2048
+const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
 const htmlRiskAttributePresencePattern =
 	/\s+(?:on[a-z][\w:-]*|srcdoc|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)\s*=/i
 
@@ -194,7 +265,7 @@ function shouldRenderHtmlAsCode(html: string): boolean {
 	)
 
 	return (
-		tagNames.some((tagName) => protectedHtmlTags.has(tagName)) ||
+		tagNames.some((tagName) => !allowedRawHtmlTags.has(tagName)) ||
 		hasDangerousHtmlAttributes(html)
 	)
 }
@@ -256,29 +327,49 @@ function createHtmlProbe(html: string, probeIndex: number): string {
 	const selfClosingSlashIndex = html.slice(0, closingBracketIndex).search(/\/\s*$/)
 	const insertionIndex =
 		selfClosingSlashIndex === -1 ? closingBracketIndex : selfClosingSlashIndex
-	const probeWhitespace = `\t ${"\t ".repeat(probeIndex + 3)}`
+	// Encode the candidate index into a fixed-width whitespace marker. HTML
+	// permits whitespace here for both opening and closing tags, and fixed
+	// width prevents probe memory from growing with the number of candidates.
+	const probeBits = (probeIndex >>> 0).toString(2).padStart(24, "0").slice(-24)
+	const probeWhitespace = Array.from(probeBits, (bit) => (bit === "1" ? "\t" : " ")).join("")
 
 	return `${html.slice(0, insertionIndex)}${probeWhitespace}${html.slice(insertionIndex)}`
 }
 
-function locateHtmlInlineRanges(markdown: string, tokens: MarkdownToken[]): HtmlSourceRange[] {
-	const htmlContents = collectRelevantHtmlInlineContents(tokens)
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function locateHtmlInlineRanges(
+	markdown: string,
+	tokens: MarkdownToken[],
+): HtmlSourceRange[] | null {
+	const htmlContents = [...new Set(collectRelevantHtmlInlineContents(tokens))]
 	if (htmlContents.length === 0) return []
+	if (htmlContents.length > MAX_PROBE_CANDIDATES) return null
 
 	const candidates: Array<{ start: number; end: number; probe: string; content: string }> = []
 	const seenCandidates = new Set<string>()
-	for (const [contentIndex, content] of htmlContents.entries()) {
-		let candidateStart = markdown.indexOf(content)
-		while (candidateStart !== -1) {
-			const candidateEnd = candidateStart + content.length
-			const key = `${candidateStart}:${candidateEnd}`
-			if (!seenCandidates.has(key)) {
-				const probe = createHtmlProbe(content, candidates.length + contentIndex)
-				candidates.push({ start: candidateStart, end: candidateEnd, probe, content })
-				seenCandidates.add(key)
-			}
-			candidateStart = markdown.indexOf(content, candidateStart + 1)
+	const contentPattern = new RegExp(
+		htmlContents
+			.slice()
+			.sort((left, right) => right.length - left.length)
+			.map(escapeRegExp)
+			.join("|"),
+		"g",
+	)
+	let match: RegExpExecArray | null
+	while ((match = contentPattern.exec(markdown))) {
+		const content = match[0]
+		const candidateStart = match.index
+		const candidateEnd = candidateStart + content.length
+		const key = `${candidateStart}:${candidateEnd}`
+		if (!seenCandidates.has(key)) {
+			const probe = createHtmlProbe(content, candidates.length)
+			candidates.push({ start: candidateStart, end: candidateEnd, probe, content })
+			seenCandidates.add(key)
 		}
+		if (candidates.length > MAX_PROBE_CANDIDATES) return null
 	}
 
 	const nonOverlappingCandidates = candidates
@@ -286,14 +377,14 @@ function locateHtmlInlineRanges(markdown: string, tokens: MarkdownToken[]): Html
 		.filter(
 			(candidate, index, sorted) => index === 0 || candidate.start >= sorted[index - 1].end,
 		)
-	const probedMarkdown = nonOverlappingCandidates
-		.slice()
-		.sort((left, right) => right.start - left.start)
-		.reduce(
-			(result, candidate) =>
-				`${result.slice(0, candidate.start)}${candidate.probe}${result.slice(candidate.end)}`,
-			markdown,
-		)
+	const probedParts: string[] = []
+	let sourceCursor = 0
+	for (const candidate of nonOverlappingCandidates) {
+		probedParts.push(markdown.slice(sourceCursor, candidate.start), candidate.probe)
+		sourceCursor = candidate.end
+	}
+	probedParts.push(markdown.slice(sourceCursor))
+	const probedMarkdown = probedParts.join("")
 	const recognizedProbes = new Set(
 		collectHtmlInlineContents(markdownParser.parse(probedMarkdown, {}) as MarkdownToken[]),
 	)
@@ -398,6 +489,26 @@ function mergeSourceRanges(ranges: SourceRange[]): SourceRange[] {
 	return merged
 }
 
+function applySourceReplacements(
+	markdown: string,
+	replacements: Array<{ range: SourceRange; replacement: string }>,
+): string {
+	const sortedReplacements = [...replacements].sort(
+		(left, right) => left.range.start - right.range.start,
+	)
+	const parts: string[] = []
+	let sourceCursor = 0
+
+	for (const { range, replacement } of sortedReplacements) {
+		if (range.start < sourceCursor) continue
+		parts.push(markdown.slice(sourceCursor, range.start), replacement)
+		sourceCursor = range.end
+	}
+
+	parts.push(markdown.slice(sourceCursor))
+	return parts.join("")
+}
+
 /**
  * Convert HTML elements that are either invisible or can execute content into
  * literal code text when a Markdown parser is configured with raw HTML support.
@@ -408,6 +519,9 @@ function mergeSourceRanges(ranges: SourceRange[]): SourceRange[] {
  */
 export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 	if (!markdown) return markdown
+	if (markdown.length > MAX_PROBE_MARKDOWN_LENGTH) {
+		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+	}
 
 	const tokens = markdownParser.parse(markdown, {}) as MarkdownToken[]
 	const lineOffsets = getLineOffsets(markdown)
@@ -416,7 +530,12 @@ export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 		.map((token) => createHtmlBlockReplacement(markdown, token, lineOffsets))
 		.filter((replacement): replacement is NonNullable<typeof replacement> => !!replacement)
 
-	const inlineRanges = createInlineCodeRanges(locateHtmlInlineRanges(markdown, tokens))
+	const locatedInlineRanges = locateHtmlInlineRanges(markdown, tokens)
+	if (locatedInlineRanges === null) {
+		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+	}
+
+	const inlineRanges = createInlineCodeRanges(locatedInlineRanges)
 	for (const range of mergeSourceRanges(inlineRanges)) {
 		replacements.push({
 			range,
@@ -424,13 +543,7 @@ export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 		})
 	}
 
-	return replacements
-		.sort((left, right) => right.range.start - left.range.start)
-		.reduce(
-			(result, { range, replacement }) =>
-				`${result.slice(0, range.start)}${replacement}${result.slice(range.end)}`,
-			markdown,
-		)
+	return applySourceReplacements(markdown, replacements)
 }
 
 /**

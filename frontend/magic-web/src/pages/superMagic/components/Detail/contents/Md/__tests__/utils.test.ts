@@ -107,6 +107,31 @@ describe("Markdown Utils", () => {
 				expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
 			}
 		})
+
+		it("renders SVG SMIL and MathML as code instead of allowing raw namespaces", () => {
+			const svg =
+				'<svg><a><animate attributeName="href" values="javascript:alert(1)" /></a><text>click</text></svg>'
+			expect(escapeDangerousInvisibleHtmlTags(svg)).toBe(
+				`<code>${svg
+					.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;")}</code>`,
+			)
+			expect(escapeDangerousInvisibleHtmlTags("<math><mi>x</mi></math>")).toBe(
+				"<code>&lt;math&gt;&lt;mi&gt;x&lt;/mi&gt;&lt;/math&gt;</code>",
+			)
+		})
+
+		it("falls back to one bounded code block for excessive repeated raw HTML", () => {
+			const markdown = Array.from(
+				{ length: 1100 },
+				() => '<a href="javascript:alert(1)">x</a>',
+			).join(" ")
+			const result = escapeDangerousInvisibleHtmlTags(markdown)
+
+			expect(result.startsWith("<pre><code>")).toBe(true)
+			expect(result).not.toContain('<a href="javascript:alert(1)">')
+		})
 	})
 	describe("findFileByName", () => {
 		it("should find file in flat array", () => {
