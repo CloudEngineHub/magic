@@ -21,9 +21,14 @@ import { exportMermaidSvgToPngBlob } from "@/utils/mermaidExport"
 import { downloadBlobFile } from "@/utils/file"
 import { clipboard } from "@/utils/clipboard-helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
 
 // Lazy load Mermaid component for better performance
 const Mermaid = lazy(() => import("../Mermaid").then((module) => ({ default: module.Mermaid })))
+
+// Mobile file previews can occupy z-index 1101. Keep the nested diagram preview
+// above that baseline while still participating in the shared overlay stack.
+const MERMAID_PREVIEW_MIN_Z_INDEX = 1200
 
 const mermaidConfig = {
 	mermaid: {
@@ -59,6 +64,11 @@ const MagicMermaid = memo(
 
 		const [type, setType] = useState<MagicMermaidType>(options[0].value)
 		const [previewSvg, setPreviewSvg] = useState<string>()
+		const previewOpen = Boolean(previewSvg)
+		const previewOverlayLayer = useOverlayZIndex({
+			open: previewOpen,
+			zIndex: MERMAID_PREVIEW_MIN_Z_INDEX,
+		})
 		const { styles, cx } = useStyles({ type })
 		const mermaidFileBaseName = t("imagePreview.mermaid.fileName", {
 			ns: "interface",
@@ -94,6 +104,15 @@ const MagicMermaid = memo(
 		const closePreview = useMemoizedFn(() => {
 			setPreviewSvg(undefined)
 		})
+
+		const handlePreviewAnimationEnd = useMemoizedFn(
+			(event: React.AnimationEvent<HTMLDivElement>) => {
+				if (event.target !== event.currentTarget) return
+				if (event.currentTarget.dataset.state === "closed") {
+					previewOverlayLayer.releaseOverlayZIndex()
+				}
+			},
+		)
 
 		const handleCopySvg = useMemoizedFn(async () => {
 			if (!previewSvg) return
@@ -178,8 +197,12 @@ const MagicMermaid = memo(
 					</div>
 					<MagicCode className={styles.code} data={fixedData} copyText={copyText} />
 				</div>
-				<Dialog open={!!previewSvg} onOpenChange={(open) => !open && closePreview()}>
-					<DialogContent className="grid h-[80vh] max-h-[80vh] !max-w-[90vw] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
+				<Dialog open={previewOpen} onOpenChange={(open) => !open && closePreview()}>
+					<DialogContent
+						className="grid h-[80vh] max-h-[80vh] !max-w-[90vw] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0"
+						style={{ zIndex: previewOverlayLayer.contentZIndex }}
+						onAnimationEnd={handlePreviewAnimationEnd}
+					>
 						<DialogHeader className="shrink-0 border-b border-border px-3 py-3">
 							<DialogTitle className="text-base font-semibold">
 								{t("interface:chat.markdown.graph")}
@@ -188,7 +211,10 @@ const MagicMermaid = memo(
 						<ContextMenu>
 							<ContextMenuTrigger asChild>
 								<div className={styles.previewCanvas}>
-									<MagicImagePreview rootClassName={styles.previewRoot}>
+									<MagicImagePreview
+										rootClassName={styles.previewRoot}
+										contentType="vector"
+									>
 										<div
 											className={styles.previewSvg}
 											dangerouslySetInnerHTML={{ __html: previewSvg || "" }}

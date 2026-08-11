@@ -12,6 +12,7 @@
 | nextDisabled      | boolean                         | false  | 是否禁用下一张按钮           |
 | prevDisabled      | boolean                         | false  | 是否禁用上一张按钮           |
 | rootClassName     | string                          | -      | 根容器的自定义类名           |
+| contentType       | `raster \| vector`              | raster | 矢量模式按实际尺寸重绘 SVG   |
 | hasCompare        | boolean                         | false  | 是否启用图片对比功能         |
 | viewType          | CompareViewType                 | -      | 对比视图类型                 |
 | onChangeViewType  | (type: CompareViewType) => void | -      | 对比视图类型变更回调         |
