@@ -45,13 +45,19 @@ from app.tools.media_generator import (
     HANDLER_MAGIC_SERVICE,
     GeneratedImage,
     ImageGenerationRequest,
-    ImageGenerationResponse,
     ImageGeneratorDispatcher,
     get_image_generator,
 )
 from app.tools.media_generator.base import ImageGenerationProviderError
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_copy2, async_exists, async_mkdir, async_stat, async_unlink, get_file_id_from_xattr
+from app.utils.async_file_utils import (
+    async_copy2,
+    async_exists,
+    async_mkdir,
+    async_stat,
+    async_unlink,
+    get_file_id_from_xattr,
+)
 
 logger = get_logger(__name__)
 
@@ -248,18 +254,32 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         await super()._dispatch_file_event(tool_context, filepath, event_type, is_screenshot=False, source=AI_IMAGE_GENERATION_SOURCE)
 
     async def execute_purely(
-        self, tool_context: ToolContext, params: GenerateImagesParams
+        self,
+        tool_context: ToolContext,
+        params: GenerateImagesParams,
+        *,
+        model_id: Optional[str] = None,
     ) -> ImageToolResult:
-        """供其他工具内部调用的纯执行入口，等价于 execute。"""
-        return await self.execute(tool_context, params)
+        """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。"""
+        return await self._execute_with_model(tool_context, params, model_id=model_id)
 
     async def execute(
         self, tool_context: ToolContext, params: GenerateImagesParams
     ) -> ImageToolResult:
         """并发执行所有生成任务，汇总结果。"""
+        return await self._execute_with_model(tool_context, params)
+
+    async def _execute_with_model(
+        self,
+        tool_context: ToolContext,
+        params: GenerateImagesParams,
+        *,
+        model_id: Optional[str] = None,
+    ) -> ImageToolResult:
+        """使用显式模型或当前用户图片模型执行批量生成。"""
         try:
             image_dispatcher = get_image_generator()
-            model = await resolve_image_model(tool_context)
+            model = model_id.strip() if model_id and model_id.strip() else await resolve_image_model(tool_context)
 
             workspace_root = Path(str(self.base_dir))
             await self._normalize_tasks(params.tasks, workspace_root)

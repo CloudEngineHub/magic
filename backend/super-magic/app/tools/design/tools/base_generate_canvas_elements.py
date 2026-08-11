@@ -2,7 +2,7 @@
 
 提供「执行上下文准备 → 占位符准备 → 并发执行任务 → 更新占位符」通用流程（Template Method 模式）。
 子类只需实现 _get_task_placeholder_info 和 _execute_task_item 两个抽象方法。
-占位符的创建/更新直接通过 CanvasManager 完成，水平排列布局由 base 内部实现。
+占位符的创建/更新直接通过 CanvasManager 完成，布局由后端内部统一处理。
 """
 
 from __future__ import annotations
@@ -20,8 +20,14 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.tools.core import BaseToolParams
+from app.tools.design.codec.v3_codec import COMMON_CONTENT_FIELDS, CONTENT_FIELDS_BY_TYPE
 from app.tools.design.constants import DEFAULT_ELEMENT_SPACING
-from app.tools.design.manager.canvas_manager import CanvasManager
+from app.tools.design.domain.content import ElementContent
+from app.tools.design.domain.generation_finalizer import (
+    CanvasGenerationFinalizationContext,
+    CanvasGenerationFinalizer,
+)
+from app.tools.design.domain.services.content_service import ContentService
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.tools.base_design_tool import BaseDesignTool
 from app.tools.design.utils.magic_project_design_parser import (
@@ -69,6 +75,7 @@ class ElementDetail:
         y: Y 坐标，复用已有元素时可能为 None
         width: 宽度，复用已有元素时可能为 None
         height: 高度，复用已有元素时可能为 None
+        content_id: 本次生成写入的 Content ID
         retry_count: 从画布元素读取的当前已失败次数（新建占位符默认为 0）
     """
 
@@ -79,6 +86,7 @@ class ElementDetail:
     y: Optional[float]
     width: Optional[float]
     height: Optional[float]
+    content_id: Optional[str] = None
     retry_count: int = 0
 
 
@@ -166,9 +174,41 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
     # 单个 canvas 元素最多总尝试次数（初始 1 次 + 最多 2 次重试）
     MAX_GENERATION_ATTEMPTS: int = 3
 
+    def __init__(
+        self,
+        generation_finalizer: Optional[CanvasGenerationFinalizer] = None,
+        **data: Any,
+    ) -> None:
+        """初始化生成工具，并注入可选的最终事务扩展实现。"""
+        super().__init__(**data)
+        self._generation_finalizer = generation_finalizer
+
     # ------------------------------------------------------------------
     # 抽象接口
     # ------------------------------------------------------------------
+
+    async def _resolve_task_target(
+        self,
+        manager: Any,
+        task: Any,
+        config: Any = None,
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """按兼容规则解析任务的 Element/Content 双 ID。"""
+        element_id = getattr(task, "element_id", None)
+        content_id = getattr(task, "content_id", None)
+        if element_id:
+            element = await manager.get_element_by_id(str(element_id), config=config)
+            if element is None:
+                return None
+            if manager.supports_content_versions():
+                resolved_content_id = str(content_id) if content_id else element.active_content_id
+                if resolved_content_id and element.get_content(resolved_content_id) is None:
+                    return None
+                return str(element_id), resolved_content_id
+            return str(element_id), str(content_id or element_id)
+        if content_id:
+            return await manager.resolve_content_target(str(content_id), config=config)
+        return None
 
     @abstractmethod
     def _get_task_placeholder_info(self, task: Any, idx: int) -> TaskPlaceholderInfo:
@@ -277,14 +317,14 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             for r in success_results:
                 p = placeholders[r.index]
                 pos = f" at ({p.x:.0f}, {p.y:.0f})" if p.x is not None and p.y is not None else ""
-                result += f"\n- {p.name} (id: {p.id}){pos}"
+                result += f"\n- {p.name} (element_id: \"{p.id}\", content_id: \"{p.content_id}\"){pos}"
 
         failed_results = [r for r in task_results if r.is_failed]
         if failed_results:
-            result += "\n\nFailed Elements (pass element_id to retry in place):"
+            result += "\n\nFailed Elements (pass element_id and/or content_id to retry in place):"
             for r in failed_results:
                 p = placeholders[r.index]
-                result += f'\n- {p.name} (element_id: "{p.id}")'
+                result += f'\n- {p.name} (element_id: "{p.id}", content_id: "{p.content_id}")'
 
         return result
 
@@ -313,7 +353,9 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             tasks: 任务列表，元素类型由子类决定
         """
         project_path, error_result = await self._ensure_project_ready(
-            project_path_str, require_magic_project_js=True
+            project_path_str,
+            require_magic_project_js=True,
+            tool_context=tool_context,
         )
         if error_result:
             return error_result
@@ -356,7 +398,6 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             for r in task_results
             for elem in r.updated_elements
         ]
-
         logger.info(f"流程完成: 成功={succeeded_count}, 失败={failed_count}")
 
         # 失败的任务：递增内存中的重试计数，同步更新 placeholder.retry_count（供错误信息使用）
@@ -376,11 +417,14 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                 # p.retry_count 此时已是递增后的新值
                 can_retry = p.retry_count < self.MAX_GENERATION_ATTEMPTS
                 if can_retry:
-                    line = f'- name="{p.name or p.id}", element_id="{p.id}"'
+                    line = (
+                        f'- name="{p.name or p.id}", '
+                        f'element_id="{p.id}", content_id="{p.content_id}"'
+                    )
                 else:
                     line = f'- name="{p.name or p.id}" [max attempts reached, do not retry]'
                 if r.error_message:
-                    # 截取错误前 200 字符，避免长串 JSON 干扰 LLM 理解 element_id
+                    # 截取错误前 200 字符，避免长串 JSON 干扰模型理解 content_id
                     short_error = r.error_message[:200]
                     if len(r.error_message) > 200:
                         short_error += "..."
@@ -393,7 +437,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             )
             retry_hint = (
                 "To retry a failed task in place (even if changing the prompt), "
-                "pass its element_id in the next call:\n"
+                "pass its element_id and/or content_id in the next call:\n"
                 if has_retryable
                 else "Image generation service may be unavailable, "
                      "please contact the administrator:\n"
@@ -446,30 +490,47 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
     ) -> Tuple[Optional[List[ElementDetail]], Optional[ToolResult]]:
         """Phase 1：新建或复用占位符，返回 (all_placeholders, error_result)。
 
-        - 有 element_id 的任务：复用已有元素，重置 status 为 processing（单次写事务）
+        - 有 element_id 的任务：保持原有复用逻辑；若同时提供 content_id，定位或创建该 Content
         - 无 element_id 的任务：按水平布局新建占位符（单次写事务）
 
         Returns:
             成功时 (List[ElementDetail], None)；失败时 (None, ToolResult.error)
         """
-        new_task_indices = [idx for idx, t in enumerate(tasks) if not getattr(t, "element_id", None)]
-        existing_task_indices = [idx for idx, t in enumerate(tasks) if getattr(t, "element_id", None)]
+        new_task_indices = [
+            idx for idx, t in enumerate(tasks)
+            if not (getattr(t, "element_id", None) or getattr(t, "content_id", None))
+        ]
+        existing_task_indices = [
+            idx for idx, t in enumerate(tasks)
+            if getattr(t, "element_id", None) or getattr(t, "content_id", None)
+        ]
 
         task_placeholders: Dict[int, ElementDetail] = {}
         manager = await get_canvas_manager(str(project_path))
         config_file = self._get_magic_project_js_path(project_path)
 
-        # 复用已有占位符：校验重试次数上限，再批量重置为 processing
+        # 复用已有 Element：校验重试次数上限，再批量准备新的生成目标
         if existing_task_indices:
             exceeded_desc: List[str] = []
             for idx in existing_task_indices:
                 task = tasks[idx]
-                current_retry = _get_element_retry_count(task.element_id)
+                requested_target_id = str(getattr(task, "element_id", None) or task.content_id)
+                target = await self._resolve_task_target(manager, task)
+                if target is None:
+                    exceeded_desc.append(
+                        f'- "{getattr(task, "name", requested_target_id)}" '
+                        f'(element_id="{getattr(task, "element_id", None)}", content_id="{getattr(task, "content_id", None)}") '
+                        "does not exist; omit element_id/content_id to create a new element."
+                    )
+                    continue
+                element_id, _ = target
+                current_retry = _get_element_retry_count(element_id)
                 if current_retry >= self.MAX_GENERATION_ATTEMPTS:
                     exceeded_desc.append(
-                        f'- "{getattr(task, "name", task.element_id)}" (element_id="{task.element_id}") '
+                        f'- "{getattr(task, "name", requested_target_id)}" '
+                        f'(element_id="{getattr(task, "element_id", None)}", content_id="{getattr(task, "content_id", None)}") '
                         f'has already reached the maximum of {self.MAX_GENERATION_ATTEMPTS} attempts. '
-                        f'Remove element_id to create a new placeholder instead.'
+                        f'Remove element_id/content_id to create a new placeholder instead.'
                     )
 
             if exceeded_desc:
@@ -481,18 +542,80 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                     extra_info={"error_type": "design.error_unexpected"},
                 )
 
-            existing_ids = [tasks[idx].element_id for idx in existing_task_indices]
+            existing_ids = [
+                str(getattr(tasks[idx], "element_id", None) or tasks[idx].content_id)
+                for idx in existing_task_indices
+            ]
 
-            async def reset_to_processing(config: Any) -> None:
-                for idx, element_id in zip(existing_task_indices, existing_ids):
+            async def prepare_existing_targets(config: Any) -> List[ElementDetail]:
+                """为已有 Element 准备本轮生成目标，保留 element_id 原有语义。"""
+                prepared: List[ElementDetail] = []
+                for idx, requested_target_id in zip(existing_task_indices, existing_ids):
+                    task = tasks[idx]
+                    target = await self._resolve_task_target(manager, task, config=config)
+                    if target is None:
+                        raise ValueError(
+                            f"Canvas target does not exist: {requested_target_id}; "
+                            "omit element_id/content_id to create a new element"
+                        )
+                    element_id, resolved_content_id = target
                     update = {
                         "status": "processing",
-                        **self._build_initial_placeholder_update(tasks[idx], idx, element_id),
+                        **self._build_initial_placeholder_update(task, idx, element_id),
                     }
-                    await manager.update_element(element_id, update, config=config)
+                    element = await manager.get_element_by_id(element_id, config=config)
+                    if element is None:
+                        raise ValueError(f"Element does not exist: {element_id}")
 
-            await manager.run_write_transaction(
-                reset_to_processing,
+                    requested_content_id = getattr(task, "content_id", None)
+                    content_id: Optional[str] = requested_content_id
+                    if manager.supports_content_versions():
+                        expected_type = self._get_task_placeholder_info(task, idx).element_type
+                        if element.type != expected_type:
+                            raise ValueError(
+                                f"Element type mismatch: expected {expected_type}, got {element.type}"
+                            )
+                        content_id = resolved_content_id or requested_content_id or element.active_content_id
+                        existing_content = element.get_content(content_id)
+                        if existing_content is None:
+                            content_fields = {
+                                key: value
+                                for key, value in update.items()
+                                if key in COMMON_CONTENT_FIELDS | CONTENT_FIELDS_BY_TYPE[element.type]
+                            }
+                            ContentService.append_content(
+                                element,
+                                ElementContent(content_id=content_id, fields=content_fields),
+                                activate=True,
+                                set_main_when_empty=True,
+                            )
+                        else:
+                            ContentService.switch_active_content(element, content_id)
+                            await manager.update_element(
+                                element_id,
+                                update,
+                                config=config,
+                                content_id=content_id,
+                            )
+                    else:
+                        content_id = content_id or element_id
+                        await manager.update_element(element_id, update, config=config)
+
+                    prepared.append(ElementDetail(
+                        id=element_id,
+                        type=getattr(element, "type", ""),
+                        name=getattr(element, "name", None) or getattr(task, "name", ""),
+                        x=getattr(element, "x", None),
+                        y=getattr(element, "y", None),
+                        width=getattr(element, "width", None),
+                        height=getattr(element, "height", None),
+                        content_id=content_id,
+                        retry_count=_get_element_retry_count(element_id),
+                    ))
+                return prepared
+
+            prepared_existing = await manager.run_write_transaction(
+                prepare_existing_targets,
                 before_write=lambda: self._dispatch_file_event(
                     tool_context, str(config_file), EventType.BEFORE_FILE_UPDATED
                 ),
@@ -501,20 +624,10 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                 ),
             )
 
-            for idx in existing_task_indices:
-                task = tasks[idx]
-                task_placeholders[idx] = ElementDetail(
-                    id=task.element_id,
-                    type="",
-                    name=getattr(task, "name", ""),
-                    x=None,
-                    y=None,
-                    width=None,
-                    height=None,
-                    retry_count=_get_element_retry_count(task.element_id),
-                )
+            for idx, placeholder in zip(existing_task_indices, prepared_existing):
+                task_placeholders[idx] = placeholder
 
-            logger.info(f"复用占位符：重置 {len(existing_task_indices)} 个为 processing")
+            logger.info(f"复用 Element：准备 {len(existing_task_indices)} 个新生成 Content")
 
         # 新建占位符：水平排列，一次事务批量创建
         if new_task_indices:
@@ -524,9 +637,53 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             ]
 
             async def create_placeholders(config: Any) -> List[ElementDetail]:
-                all_elements = flatten_all_elements(config) if (
-                    config.canvas and config.canvas.elements
-                ) else []
+                supports_content_versions = manager.supports_content_versions()
+                if supports_content_versions:
+                    created: List[ElementDetail] = []
+                    for task_idx, info in indexed_infos:
+                        element_id = manager.generate_element_id()
+                        element = self._make_placeholder_element(
+                            element_id,
+                            info,
+                            None,
+                            None,
+                            None,
+                        )
+                        for key, value in self._build_initial_placeholder_update(
+                            tasks[task_idx],
+                            task_idx,
+                            element_id,
+                        ).items():
+                            if hasattr(element, key):
+                                setattr(element, key, value)
+                        await manager.add_element(element, config=config)
+                        created_element = await manager.get_element_by_id(element_id, config=config)
+                        if created_element is None:
+                            continue
+                        requested_content_id = getattr(tasks[task_idx], "content_id", None)
+                        if requested_content_id:
+                            active_content = created_element.get_active_content()
+                            if active_content is not None:
+                                active_content.content_id = requested_content_id
+                                created_element.active_content_id = requested_content_id
+                                created_element.main_content_id = requested_content_id
+                        created.append(ElementDetail(
+                            id=element_id,
+                            type=info.element_type,
+                            name=info.name,
+                            x=created_element.x,
+                            y=created_element.y,
+                            width=info.width,
+                            height=info.height,
+                            content_id=created_element.active_content_id,
+                        ))
+                    return created
+
+                all_elements = (
+                    flatten_all_elements(config)
+                    if config.canvas and config.canvas.elements
+                    else []
+                )
 
                 # 计算起始坐标及初始列偏移：无论新增几个占位符，都走同一套行填充逻辑
                 col_start = 0
@@ -596,6 +753,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                         y=row_y,
                         width=info.width,
                         height=info.height,
+                        content_id=element_id,
                     ))
                     x += info.width + DEFAULT_ELEMENT_SPACING
                     row_height = max(row_height, info.height)
@@ -640,9 +798,9 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         self,
         element_id: str,
         info: TaskPlaceholderInfo,
-        x: float,
-        y: float,
-        z_index: int,
+        x: Optional[float],
+        y: Optional[float],
+        z_index: Optional[int],
     ) -> Any:
         """根据 TaskPlaceholderInfo 创建对应类型的占位符元素对象。"""
         common = dict(
@@ -672,7 +830,9 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         Subclasses can override to customize fields (e.g. add src, remove x/y).
         Default serializes the placeholder dataclass as-is.
         """
-        return dataclasses.asdict(placeholder)
+        value = dataclasses.asdict(placeholder)
+        # 同时返回 Element/Content 双 ID，供后续工具精确定位生成结果。
+        return value
 
     # ------------------------------------------------------------------
     # Phase 2 辅助
@@ -692,7 +852,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             idx, task, placeholder, tool_context, project_path, **kwargs
         )
         updated_elements = await self._update_placeholder(
-            result, placeholder, tool_context, project_path
+            result, task, placeholder, tool_context, project_path
         )
         result.updated_elements = updated_elements
         return result
@@ -700,6 +860,7 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
     async def _update_placeholder(
         self,
         result: TaskExecutionResult,
+        task: Any,
         placeholder: ElementDetail,
         tool_context: ToolContext,
         project_path: Path,
@@ -711,15 +872,19 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         update_dict = result.placeholder_update.to_dict()
 
         async def do_update(config: Any) -> List[ElementDetail]:
-            success = await manager.update_element(element_id, update_dict, config=config)
-            if not success:
-                # 元素不存在，可能在生成任务执行期间被外部改写 magic.project.js 覆盖
-                # 若有完整的位置与尺寸信息（Phase 1 新建的占位符），则按原位置重建并直接写入最终状态
-                can_recreate = (
-                    placeholder.x is not None
-                    and placeholder.y is not None
-                    and placeholder.width
+            """在同一事务内完成目标恢复、附加业务变更和最终状态写回。"""
+            supports_content_versions = manager.supports_content_versions()
+            target_content_id = placeholder.content_id if supports_content_versions else None
+            element = await manager.get_element_by_id(element_id, config=config)
+            if element is None:
+                # 元素可能在媒体生成期间被外部删除；具备必要布局信息时先恢复 processing 占位符。
+                can_recreate = bool(
+                    placeholder.width
                     and placeholder.height
+                    and (
+                        supports_content_versions
+                        or (placeholder.x is not None and placeholder.y is not None)
+                    )
                 )
                 if not can_recreate:
                     logger.warning(
@@ -744,24 +909,91 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
                     element_type=placeholder.type or "image",
                 )
                 recreated = self._make_placeholder_element(
-                    element_id, info, placeholder.x, placeholder.y, z_index
+                    element_id,
+                    info,
+                    placeholder.x or 0.0,
+                    placeholder.y or 0.0,
+                    z_index,
                 )
                 for key, value in update_dict.items():
-                    if hasattr(recreated, key):
+                    if key in {"name", "width", "height"} and hasattr(recreated, key):
                         setattr(recreated, key, value)
                 await manager.add_element(recreated, config=config)
+                element = await manager.get_element_by_id(element_id, config=config)
+                if (
+                    supports_content_versions
+                    and element is not None
+                    and target_content_id
+                    and element.get_content(target_content_id) is None
+                ):
+                    active_content = element.get_active_content()
+                    if active_content is not None:
+                        active_content.content_id = target_content_id
+                        element.active_content_id = target_content_id
+                        element.main_content_id = target_content_id
+            if element is None:
+                return []
+
+            final_update = update_dict
+            if result.is_success and self._generation_finalizer is not None:
+                try:
+                    finalization_data = await self._generation_finalizer.apply(
+                        config,
+                        CanvasGenerationFinalizationContext(
+                            task_index=result.index,
+                            element_id=element_id,
+                            content_id=target_content_id,
+                        ),
+                    )
+                    result.metadata["canvas_finalization"] = finalization_data
+                except Exception as error:
+                    error_message = f"Canvas finalization failed: {error}"
+                    logger.warning(
+                        "媒体生成最终事务扩展失败: element_id=%s, error=%s",
+                        element_id,
+                        error,
+                    )
+                    result.success = False
+                    result.error_message = error_message
+                    final_update = {
+                        "status": "failed",
+                        "errorMessage": error_message,
+                    }
+
+            success = await manager.update_element(
+                element_id,
+                final_update,
+                config=config,
+                **({"content_id": target_content_id} if target_content_id else {}),
+            )
+            if not success:
+                raise ValueError(f"Element does not exist during final update: {element_id}")
 
             element = await manager.get_element_by_id(element_id, config=config)
             if element is None:
                 return []
+            if supports_content_versions:
+                target_content_id = target_content_id or element.active_content_id
+                if result.is_success and bool(getattr(task, "set_as_main", False)):
+                    target_content = element.get_content(target_content_id)
+                    if (
+                        target_content is not None
+                        and target_content.fields.get("status") == "completed"
+                        and target_content.fields.get("src")
+                    ):
+                        ContentService.set_main_content(element, target_content_id)
+                        result.metadata["main_content_updated"] = True
+                    else:
+                        result.metadata["main_content_updated"] = False
             return [ElementDetail(
                 id=element.id,
                 type=getattr(element, "type", ""),
-                name=element.name,
+                name=element.name or "",
                 x=element.x,
                 y=element.y,
                 width=element.width,
                 height=element.height,
+                content_id=target_content_id,
             )]
 
         try:
@@ -776,4 +1008,8 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             )
         except Exception as e:
             logger.error(f"更新占位符异常 (id={element_id}): {e}", exc_info=True)
+            if self._generation_finalizer is not None:
+                self._generation_finalizer.discard(result.index)
+            result.success = False
+            result.error_message = f"Canvas final update failed: {e}"
             return []

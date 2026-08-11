@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,16 +7,17 @@ from agentlang.context.tool_context import ToolContext
 from app.core.models.agent_model_context import AgentModelContext
 from app.core.models.agent_model_selection import AgentModelSelection
 from app.core.models.media_model import VideoModelSpec
-from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.exceptions import ApiError
+from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
 from app.tools.design.tools.generate_canvas_videos import (
     GenerateCanvasVideos,
     GenerateCanvasVideosParams,
     VideoPlaceholderUpdate,
     VideoTaskSpec,
 )
-from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
+from app.tools.media_generator.video_base import VideoGenerationResponse
 
 
 class _FakeMagicServiceResponse:
@@ -39,12 +42,13 @@ class _FakeMagicServiceSession:
         self.response = response
         self.requests = []
 
-    def request(self, method, url, json=None, headers=None):
+    def request(self, method, url, json=None, headers=None, params=None):
         self.requests.append({
             "method": method,
             "url": url,
             "json": json,
             "headers": headers or {},
+            "params": params,
         })
         return self.response
 
@@ -376,11 +380,7 @@ async def test_execute_video_task_carries_error_message_to_result(tmp_path):
     tool = GenerateCanvasVideos()
     tool._model_id = "mock-video-model"
 
-    class FakeMagicServiceClient:
-        async def generate_design_video(self, payload):
-            raise ApiError(explicit_error)
-
-    tool._magic_service_client = FakeMagicServiceClient()
+    tool._video_generator.generate = AsyncMock(side_effect=ApiError(explicit_error))
     task = VideoTaskSpec(
         prompt="森林中的小路。",
         name="错误信息测试",
@@ -419,16 +419,11 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
     tool._model_id = "mock-video-model"
     submitted_payloads = []
 
-    class FakeMagicServiceClient:
-        async def generate_design_video(self, payload):
-            submitted_payloads.append(payload)
-            return {
-                "project_id": payload["project_id"],
-                "video_id": payload["video_id"],
-                "status": "running",
-            }
+    async def generate_video(_handler_name, request):
+        submitted_payloads.append(request.payload)
+        return VideoGenerationResponse(status="running", completed=False)
 
-    tool._magic_service_client = FakeMagicServiceClient()
+    tool._video_generator.generate = generate_video
     monkeypatch.setattr(tool, "_generate_design_video_id", lambda: "video-test-1", raising=False)
 
     task = VideoTaskSpec(

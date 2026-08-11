@@ -7,9 +7,11 @@ from app.tools.design.manager.canvas_manager import (
     ElementQuery,
     CanvasStatistics
 )
+from app.tools.design.manager.canvas_manager_protocol import CanvasManagerProtocol
 
 __all__ = [
     "CanvasManager",
     "ElementQuery",
-    "CanvasStatistics"
+    "CanvasStatistics",
+    "CanvasManagerProtocol",
 ]

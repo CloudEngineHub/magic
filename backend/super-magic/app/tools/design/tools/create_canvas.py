@@ -3,9 +3,8 @@
 此工具用于创建完整的设计项目结构和画布配置。
 """
 
-from app.i18n import i18n
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import Field
 
@@ -13,18 +12,14 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import ToolDetail, DisplayType, FileContent
+from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
+from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.tools.base_design_tool import BaseDesignTool
-from app.tools.design.utils.magic_project_design_parser import (
-    MAGIC_PROJECT_VERSION_V2,
-    CanvasConfig,
-    MagicProjectConfig,
-    write_magic_project_js_v2,
-)
 from app.utils.async_file_utils import (
-    async_mkdir,
     async_exists,
+    async_mkdir,
 )
 
 logger = get_logger(__name__)
@@ -92,7 +87,10 @@ class CreateCanvas(BaseDesignTool[CreateCanvasParams]):
         """
         try:
             # 使用基类方法获取安全的项目路径
-            project_path, error = await self._get_project_path(params.project_path)
+            project_path, error = await self._get_project_path(
+                params.project_path,
+                tool_context,
+            )
             if error:
                 return ToolResult.error(
                     error,
@@ -127,28 +125,20 @@ class CreateCanvas(BaseDesignTool[CreateCanvasParams]):
             if config_file_exists:
                 logger.info(f"Project config file already exists, skipping write: {project_js_path}")
             else:
-                # 新建画布使用 v2 格式（信封 version=2.0.0 + canvas 压缩），空 elements
-                initial_config = MagicProjectConfig(
-                    version=MAGIC_PROJECT_VERSION_V2,
-                    type="design",
-                    name=project_name,
-                    canvas=CanvasConfig(elements=[]),
-                )
-
-                # 写入 magic.project.js 配置文件（异步）
+                # 通过统一 Manager 初始化项目，具体格式由内部数据层决定。
                 try:
                     await self._dispatch_file_event(tool_context, str(project_js_path), EventType.BEFORE_FILE_CREATED)
 
-                    # 写入 v2 压缩格式并校验（write_magic_project_js_v2 内部带重试，适应 TOS 同步延迟）
-                    await write_magic_project_js_v2(params.project_path, initial_config)
+                    manager = await get_canvas_manager(str(project_path))
+                    await manager.initialize_project(project_name, "design")
 
                     await self._dispatch_file_event(tool_context, str(project_js_path), EventType.FILE_CREATED)
 
-                    logger.info(f"Created project config file (v2): {project_js_path}")
+                    logger.info(f"Created project data: {project_js_path}")
                 except Exception as e:
                     logger.error(f"Failed to create magic.project.js file: {e}")
                     return ToolResult.error(
-                        f"Failed to create magic.project.js file: {e}",
+                        f"Failed to initialize canvas project: {e}",
                         extra_info={"error_type": "design.error_unexpected"}
                     )
 
@@ -189,7 +179,7 @@ class CreateCanvas(BaseDesignTool[CreateCanvasParams]):
         """
         status_note = "Note: project already existed, no changes were made." if already_exists else ""
         result = f"""Project structure:
-{params.project_path}/
+{project_path}/
 └── magic.project.js  # Canvas project identifier (auto-managed)
 
 Project: {project_name} (canvas project){chr(10) + status_note if status_note else ""}"""

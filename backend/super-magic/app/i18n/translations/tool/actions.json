@@ -303,6 +303,38 @@
         "zh_CN": "恢复画布媒体",
         "en_US": "Restore canvas media"
     },
+    "query_canvas_elements": {
+        "zh_CN": "查询画布节点",
+        "en_US": "Query canvas elements"
+    },
+    "promote_canvas_content": {
+        "zh_CN": "确认画布内容",
+        "en_US": "Confirm canvas content"
+    },
+    "upsert_storyboard": {
+        "zh_CN": "保存视频分镜",
+        "en_US": "Save video storyboard"
+    },
+    "configure_video_edit": {
+        "zh_CN": "配置视频成片",
+        "en_US": "Configure final video"
+    },
+    "upsert_canvas_audio": {
+        "zh_CN": "添加画布音频",
+        "en_US": "Add canvas audio"
+    },
+    "compose_canvas_video": {
+        "zh_CN": "合成最终视频",
+        "en_US": "Compose final video"
+    },
+    "generate_video_production_images": {
+        "zh_CN": "生成视频素材图片",
+        "en_US": "Generate video production images"
+    },
+    "generate_video_production_videos": {
+        "zh_CN": "生成视频镜头",
+        "en_US": "Generate video production shots"
+    },
     "thinking": {
         "zh_CN": "深度思考",
         "en_US": "Thinking process"

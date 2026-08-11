@@ -144,12 +144,20 @@ import app.tools.design.manager  # pyright: ignore[reportUnusedImport]
 import app.tools.design.utils  # pyright: ignore[reportUnusedImport]
 import app.tools.design  # pyright: ignore[reportUnusedImport]
 from app.tools.design.tools import (
+    ComposeCanvasVideo,
+    ConfigureVideoEdit,
     CreateCanvas,
     GenerateCanvasImages,
     GenerateCanvasVideos,
+    GenerateVideoProductionImages,
+    GenerateVideoProductionVideos,
+    PromoteCanvasContent,
+    QueryCanvasElements,
     RestoreCanvasMedia,
     SearchCanvasImages,
     SearchImagePrompts,
+    UpsertCanvasAudio,
+    UpsertStoryboard,
 )
 
 # 用户信息工具
@@ -374,12 +382,20 @@ __all__ = [
     "UploadSkill",
 
     # 设计模式工具
+    "ComposeCanvasVideo",
+    "ConfigureVideoEdit",
     "CreateCanvas",
     "GenerateCanvasImages",
     "GenerateCanvasVideos",
+    "GenerateVideoProductionImages",
+    "GenerateVideoProductionVideos",
+    "PromoteCanvasContent",
+    "QueryCanvasElements",
     "RestoreCanvasMedia",
     "SearchCanvasImages",
     "SearchImagePrompts",
+    "UpsertCanvasAudio",
+    "UpsertStoryboard",
 
     # MCP 工具集
     "McpAddServer",

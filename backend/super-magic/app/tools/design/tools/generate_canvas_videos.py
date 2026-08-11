@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from dataclasses import dataclass
@@ -18,9 +19,8 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.message.server_message import DisplayType, ToolDetail
-from app.infrastructure.magic_service.client import MagicServiceClient
-from app.infrastructure.magic_service.exceptions import ApiError
 from app.i18n import i18n
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
@@ -29,6 +29,9 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
+from app.tools.media_generator.factory import get_video_generator
+from app.tools.media_generator.video_base import VideoGenerationRequest
+from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
 from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
@@ -140,8 +143,9 @@ class VideoPlaceholderUpdate(PlaceholderUpdate):
 
     src: Optional[str] = None
     poster: Optional[str] = None
-    generateVideoRequest: Optional[Dict[str, Any]] = None
-    errorMessage: Optional[str] = None
+    # 保持既有 Canvas DSL 驼峰字段名，避免写回结构变化。
+    generateVideoRequest: Optional[Dict[str, Any]] = None  # noqa: N815
+    errorMessage: Optional[str] = None  # noqa: N815
     width: Optional[float] = None
     height: Optional[float] = None
 
@@ -237,10 +241,19 @@ Video quality/resolution tier, optional. The parameter name must be resolution. 
     )
     element_id: Optional[str] = Field(
         None,
-        description="""<!--zh: 可选。传入时复用画布上已有的元素（如上次生成失败的占位符），工具直接在该元素上重新生成并更新，不新建占位符。不传时新建占位符。-->
-Optional. When provided, the tool reuses an existing canvas element (e.g. a failed placeholder from a previous attempt) and regenerates in place without creating a new placeholder. Omit to create a new element."""
+        description="""<!--zh: 可选。已有画布 Element ID。传入时复用该节点；也可仅传 content_id 定位。-->
+Optional existing canvas Element ID. Reuses this node; content_id may also be used alone to locate it."""
     )
-
+    content_id: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 可选。要更新或继续使用的 Content ID。可与 element_id 一起传入，工具会校验它们是否属于同一节点。-->
+Optional Content ID to update or continue using. May be supplied with element_id so the tool can validate that both belong to the same Element.""",
+    )
+    set_as_main: bool = Field(
+        default=False,
+        description="""<!--zh: 是否在生成完成后立即把新 Content 设为主内容，默认 false。异步视频未完成时不会提前成为主内容，通常由用户在页面确认后再设置。-->
+Whether to make the newly completed Content the main Content immediately. Defaults to false. An asynchronous video is never selected as main before completion; normally let the user confirm it in the UI.""",
+    )
     @model_validator(mode="before")
     @classmethod
     def normalize_common_parameter_aliases(cls, value: Any) -> Any:
@@ -388,7 +401,7 @@ Video generation task list. Each task produces one video. Maximum 4 tasks per ca
                 "generate_canvas_videos 的 tasks 中存在未定义参数。"
                 "请只使用 task schema 里的精确字段名：prompt, name, aspect_ratio, duration_seconds, resolution, input_mode, task, "
                 "reference_image_paths, reference_video_paths, reference_audio_paths, frame_start_path, "
-                "frame_end_path, fps, seed, watermark, extensions, element_id。"
+                "frame_end_path, fps, seed, watermark, extensions, element_id, content_id, set_as_main。"
                 "常见改名：duration -> duration_seconds；images/image/reference_images -> reference_image_paths；"
                 "videos/video/reference_videos -> reference_video_paths；start_frame -> frame_start_path；"
                 "end_frame -> frame_end_path。"
@@ -421,7 +434,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._magic_service_client: Optional[MagicServiceClient] = None
+        self._video_generator = get_video_generator()
         self._task_video_ids: Dict[int, str] = {}
         # 全局参数缓存，在 execute() 中写入，供 _prepare_task_kwargs / _execute_task_item 读取
         self._model_id: str = ""
@@ -435,7 +448,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             # 缓存全局参数（单事件循环语义下安全）
             self._model_id = params.model_id
             self._task_video_ids = {}
-            workspace_root = Path(self.base_dir)
+            workspace_root = self._get_runtime_workspace_dir(tool_context)
             project_prefix = params.project_path.strip("/")
             await self._normalize_reference_paths(params.tasks, workspace_root, project_prefix)
             return await self._run_generate_flow(tool_context, params.project_path, params.tasks)
@@ -476,11 +489,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         project_id = str(kwargs.get("project_id") or "").strip()
         design_file_dir = str(kwargs.get("design_file_dir") or "").strip()
-        if not project_id:
-            raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
-        if not design_file_dir:
-            raise ValueError("缺少 file_dir，无法创建后台托管的视频任务")
-
         video_id = self._ensure_task_video_id(idx)
         try:
             model_id = self._resolve_video_model(self._model_id, tool_context)
@@ -492,8 +500,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 file_dir=design_file_dir,
                 relative_project_path=_relative_project_path,
             )
+            width, height = task.canvas_dimensions
+            file_name = f"{self._sanitize_filename(task.name, max_length=120)}-{video_id}.mp4"
+            relative_output_path = f"./videos/{file_name}"
             logger.info(
-                f"设计视频子任务提交后台托管任务: index={idx} name={task.name} "
+                f"设计视频子任务提交生成调度器: index={idx} name={task.name} "
                 f"project_id={project_id} video_id={video_id} file_dir={design_file_dir} "
                 f"reference_image_count={len(payload.get('inputs', {}).get('reference_images', []))} "
                 f"reference_video_count={len(payload.get('inputs', {}).get('reference_videos', []))} "
@@ -503,8 +514,19 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"resolution={payload.get('generation', {}).get('resolution') or ''} "
                 f"duration_seconds={payload.get('generation', {}).get('duration_seconds') or ''}"
             )
-            response = await self._get_magic_service_client().generate_design_video(payload)
-        except (ApiError, ValueError) as error:
+            response = await self._video_generator.generate(
+                HANDLER_MAGIC_SERVICE,
+                VideoGenerationRequest(
+                    payload=payload,
+                    output_path=project_path / "videos" / file_name,
+                    relative_output_path=relative_output_path,
+                    width=width,
+                    height=height,
+                    duration_seconds=float(task.duration_seconds or 4),
+                    interruption_event=self._get_interruption_event(tool_context),
+                ),
+            )
+        except (ApiError, OSError, RuntimeError, ValueError) as error:
             error_message = str(error)
             payload = self._build_initial_design_video_request(task, video_id)
             logger.warning(
@@ -523,7 +545,23 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 error_message=error_message,
             )
 
-        status = str(response.get("status") or "running")
+        if response.completed:
+            completed_payload = {**payload, **response.metadata}
+            return TaskExecutionResult(
+                index=idx,
+                success=True,
+                placeholder_update=VideoPlaceholderUpdate(
+                    status="completed",
+                    src=response.src,
+                    width=float(response.width or width),
+                    height=float(response.height or height),
+                    generateVideoRequest=completed_payload,
+                    errorMessage=None,
+                ),
+                metadata=dict(response.metadata),
+            )
+
+        status = response.status
         logger.info(
             f"设计视频子任务已提交后台托管: index={idx} name={task.name} "
             f"video_id={video_id} status={status}"
@@ -541,6 +579,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             metadata={
                 "is_processing": True,
                 "element_id": placeholder.id,
+                "content_id": placeholder.content_id,
                 "element_name": task.name,
                 "video_id": video_id,
                 "pending_status": status,
@@ -557,11 +596,12 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         task_result: TaskExecutionResult,
     ) -> Dict[str, Any]:
         d: Dict[str, Any] = {
-            "id": placeholder.id,
+            "element_id": placeholder.id,
             "type": placeholder.type,
             "name": placeholder.name,
             "width": placeholder.width,
             "height": placeholder.height,
+            "content_id": placeholder.content_id,
         }
         if task_result.is_success:
             update = task_result.placeholder_update
@@ -593,11 +633,14 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         tool_context: ToolContext,
         project_path: Path,
     ) -> Dict[str, Any]:
-        workspace_path = Path(self.base_dir)
+        workspace_path = self._get_runtime_workspace_dir(tool_context)
         relative_project_path = project_path.relative_to(workspace_path)
-        design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
-        project_id = self._resolve_project_id()
         await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
+        design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
+        try:
+            project_id = self._resolve_project_id()
+        except ValueError:
+            project_id = ""
         return {
             "design_file_dir": design_file_dir,
             "project_id": project_id,
@@ -678,7 +721,18 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             lines.append("Completed Elements:")
             for r in completed_results:
                 p = placeholders[r.index]
-                lines.append(f"- {p.name} (id: {p.id})")
+                content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                update = r.placeholder_update
+                media_suffix = ""
+                if isinstance(update, VideoPlaceholderUpdate):
+                    if update.src:
+                        media_suffix += f', media_path="{update.src}"'
+                    if update.width is not None and update.height is not None:
+                        media_suffix += f', dimensions="{int(update.width)}x{int(update.height)}"'
+                lines.append(
+                    f'- {p.name} (element_id="{p.id}"{content_suffix}, '
+                    f'status="completed"{media_suffix})'
+                )
 
         if pending_results:
             lines.extend([
@@ -690,17 +744,24 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             for r in pending_results:
                 m = r.metadata
                 lines.append(
-                    f"- {m['element_name']} (element_id: {m['element_id']}), "
-                    f"video_id: {m['video_id']}, "
-                    f"status: {m['pending_status']}"
+                    f'- {m["element_name"]} (element_id="{m["element_id"]}", '
+                    f'content_id="{m["content_id"]}", video_id="{m["video_id"]}", '
+                    f'status="{m["pending_status"]}")'
                 )
 
         if failed_results:
             lines.append("")
-            lines.append("Failed Elements (pass element_id to retry in place):")
+            lines.append("Failed Elements (pass element_id and/or content_id to retry in place):")
             for r in failed_results:
                 p = placeholders[r.index]
-                lines.append(f'- {p.name} (element_id: "{p.id}")')
+                content_suffix = f', content_id="{p.content_id}"' if p.content_id else ""
+                line = f'- {p.name} (element_id="{p.id}"{content_suffix}, status="failed")'
+                if r.error_message:
+                    short_error = r.error_message[:200]
+                    if len(r.error_message) > 200:
+                        short_error += "..."
+                    line += f" Reason: {short_error}"
+                lines.append(line)
 
         return "\n".join(lines)
 
@@ -713,6 +774,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         pending_videos = [
             {
                 "element_id": r.metadata["element_id"],
+                "content_id": r.metadata["content_id"],
                 "element_name": r.metadata["element_name"],
                 "video_id": r.metadata["video_id"],
                 "status": r.metadata["pending_status"],
@@ -733,11 +795,6 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
     # ------------------------------------------------------------------
     # 私有辅助
     # ------------------------------------------------------------------
-
-    def _get_magic_service_client(self) -> MagicServiceClient:
-        if self._magic_service_client is None:
-            self._magic_service_client = MagicServiceClient()
-        return self._magic_service_client
 
     def _ensure_task_video_id(self, idx: int) -> str:
         video_id = self._task_video_ids.get(idx)
@@ -760,6 +817,16 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if isinstance(project_id, (str, int)) and str(project_id).strip():
             return str(project_id).strip()
         raise ValueError("缺少 project_id，无法创建后台托管的视频任务")
+
+    @staticmethod
+    def _get_interruption_event(
+        tool_context: Optional[ToolContext],
+    ) -> Optional[asyncio.Event]:
+        """从工具上下文读取当前任务的中断事件。"""
+        if tool_context is None:
+            return None
+        agent_context = tool_context.get_extension("agent_context")
+        return agent_context.get_interruption_event() if agent_context is not None else None
 
     @staticmethod
     def _resolve_video_model(requested_model: str, tool_context: Optional[ToolContext] = None) -> str:
@@ -814,7 +881,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             "prompt": task.prompt,
             "input_mode": input_mode,
             "task": task.task or "generate",
-            "file_dir": self._format_design_file_dir(file_dir),
+            "file_dir": self._format_design_file_dir(file_dir) if file_dir else None,
         }
 
         payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)

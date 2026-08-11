@@ -4,7 +4,6 @@ import pytest
 
 from agentlang.agent.define.parser import parse_agent_file
 
-
 AGENTS_DIR = Path(__file__).resolve().parents[2] / "agents"
 
 

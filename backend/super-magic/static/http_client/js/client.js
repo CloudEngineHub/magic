@@ -819,6 +819,7 @@ const AgentMode = {
     SUMMARY_CHAT: "summary-chat",
     SUMMARY_VIDEO: "summary-video",
     DESIGN: "design",
+    VIDEO_PRODUCTION: "video-production",
     TEST: "test",
     SKILL: "skill",
     AGENT_MASTER: "agent-master",
@@ -8990,8 +8991,16 @@ function isMagicProjectJs(filePath) {
     return getWorkspaceFileBaseName(filePath) === 'magic.project.js';
 }
 
-// v2 画布压缩协议：canvas 字段被压成 MAGICPROJECTDESIGNDATA:// 字符串
+// V2/V3 画布压缩协议：canvas 字段被压成 MAGICPROJECTDESIGNDATA:// 字符串
 const MAGIC_PROJECT_DESIGN_DATA_PREFIX = 'MAGICPROJECTDESIGNDATA://';
+const MAGIC_PROJECT_VERSION_V1 = '1.0.0';
+const MAGIC_PROJECT_VERSION_V2 = '2.0.0';
+const MAGIC_PROJECT_VERSION_V3 = '3.0.0';
+const SUPPORTED_MAGIC_PROJECT_VERSIONS = new Set([
+    MAGIC_PROJECT_VERSION_V1,
+    MAGIC_PROJECT_VERSION_V2,
+    MAGIC_PROJECT_VERSION_V3,
+]);
 
 function isCompressedCanvas(value) {
     return typeof value === 'string' && value.startsWith(MAGIC_PROJECT_DESIGN_DATA_PREFIX);
@@ -9008,13 +9017,24 @@ async function decompressCanvasData(encoded) {
     return JSON.parse(new TextDecoder('utf-8').decode(buf));
 }
 
-// 解析 magic.project.js：兼容 v1（canvas 为对象）与 v2（canvas 为压缩字符串）
+// 解析 magic.project.js：只按顶层 version 选择 V1 明文或 V2/V3 压缩协议。
 async function parseMagicProjectConfig(text) {
     try {
         const m = text.match(/window\.magicProjectConfig\s*=\s*(\{[\s\S]*\})/);
         if (!m) return null;
         const config = JSON.parse(m[1]);
-        if (config && isCompressedCanvas(config.canvas)) {
+        const version = config?.version;
+        if (!SUPPORTED_MAGIC_PROJECT_VERSIONS.has(version)) {
+            throw new Error(`不支持的画布版本: ${version || 'missing'}`);
+        }
+        if (version === MAGIC_PROJECT_VERSION_V1) {
+            if (!config.canvas || typeof config.canvas !== 'object' || Array.isArray(config.canvas)) {
+                throw new Error('V1 画布必须使用明文对象');
+            }
+        } else {
+            if (!isCompressedCanvas(config.canvas)) {
+                throw new Error(`${version} 画布必须使用压缩字符串`);
+            }
             config.canvas = await decompressCanvasData(config.canvas);
         }
         return config;
@@ -9022,6 +9042,137 @@ async function parseMagicProjectConfig(text) {
         console.error('解析 magic.project.js 失败', e);
         return null;
     }
+}
+
+/**
+ * 选择 V3 Element 当前用于调试预览的 Content。
+ * 优先展示 active Content，再回退 main Content 和第一个 Content。
+ */
+function selectCanvasPreviewContent(element) {
+    const contents = Array.isArray(element?.contents) ? element.contents : [];
+    return contents.find(content => content?.contentId === element.activeContentId)
+        || contents.find(content => content?.contentId === element.mainContentId)
+        || contents[0]
+        || {};
+}
+
+/**
+ * 把 V1/V2/V3 Element 归一化为调试面板唯一预览模型。
+ * 该模型只存在于浏览器内，不会写回 magic.project.js。
+ */
+function normalizeCanvasPreviewElement(element, version, index, parentOffset = { x: 0, y: 0 }) {
+    const isV3 = version === MAGIC_PROJECT_VERSION_V3;
+    const content = isV3 ? selectCanvasPreviewContent(element) : {};
+    const rawX = Number.isFinite(element?.x) ? element.x + parentOffset.x : null;
+    const rawY = Number.isFinite(element?.y) ? element.y + parentOffset.y : null;
+    const width = Number.isFinite(element?.width) && element.width > 0 ? element.width : null;
+    const height = Number.isFinite(element?.height) && element.height > 0 ? element.height : null;
+    return {
+        id: String(element?.id || `preview-element-${index + 1}`),
+        type: String(element?.type || 'unknown'),
+        name: String(element?.name || element?.id || `未命名节点 ${index + 1}`),
+        x: rawX,
+        y: rawY,
+        width,
+        height,
+        zIndex: Number.isFinite(element?.zIndex) ? element.zIndex : index,
+        visible: element?.visible !== false,
+        locked: element?.locked === true,
+        src: content?.src ?? element?.src ?? null,
+        poster: content?.poster ?? element?.poster ?? null,
+        status: content?.status ?? element?.status ?? null,
+        errorMessage: content?.errorMessage ?? element?.errorMessage ?? null,
+        shots: Array.isArray(content?.shots ?? element?.shots) ? (content?.shots ?? element?.shots) : [],
+        videoSequence: Array.isArray(content?.videoSequence ?? element?.videoSequence)
+            ? (content?.videoSequence ?? element?.videoSequence)
+            : [],
+        audioSequence: Array.isArray(content?.audioSequence ?? element?.audioSequence)
+            ? (content?.audioSequence ?? element?.audioSequence)
+            : [],
+        output: content?.output ?? element?.output ?? {},
+        activeContentId: isV3 ? element?.activeContentId ?? null : null,
+        mainContentId: isV3 ? element?.mainContentId ?? null : null,
+        contentCount: isV3 && Array.isArray(element?.contents) ? element.contents.length : 1,
+        rawElement: element,
+    };
+}
+
+/**
+ * 递归展开已有 Frame/Group 子节点，仅用于兼容预览，不赋予后端容器语义。
+ */
+function flattenCanvasPreviewElements(elements, version, parentOffset = { x: 0, y: 0 }, result = []) {
+    for (const element of Array.isArray(elements) ? elements : []) {
+        const normalized = normalizeCanvasPreviewElement(element, version, result.length, parentOffset);
+        result.push(normalized);
+        const nextOffset = {
+            x: normalized.x ?? parentOffset.x,
+            y: normalized.y ?? parentOffset.y,
+        };
+        if (Array.isArray(element?.children)) {
+            flattenCanvasPreviewElements(element.children, version, nextOffset, result);
+        }
+    }
+    return result;
+}
+
+/**
+ * 为没有完整坐标的项目生成确定性调试布局。
+ * 布局只服务预览，不依据 Connection 推导业务拓扑，也不会写回画布文件。
+ */
+function applyDeterministicCanvasPreviewLayout(elements) {
+    const columnCount = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(elements.length))));
+    const cellWidth = 320;
+    const cellHeight = 230;
+    return elements.map((element, index) => {
+        const typeSize = {
+            image: [240, 160],
+            video: [240, 160],
+            audio: [260, 118],
+            storyboard: [280, 180],
+            'video-edit': [280, 170],
+        }[element.type] || [220, 140];
+        return {
+            ...element,
+            x: (index % columnCount) * cellWidth,
+            y: Math.floor(index / columnCount) * cellHeight,
+            width: typeSize[0],
+            height: typeSize[1],
+            zIndex: index,
+        };
+    });
+}
+
+/**
+ * 把三种持久化结构转换为统一画布预览文档。
+ */
+function normalizeMagicProjectForPreview(config) {
+    const version = config?.version;
+    const rawElements = config?.canvas?.elements ?? [];
+    let elements = flattenCanvasPreviewElements(rawElements, version);
+    const hasCompleteLayout = elements.length > 0 && elements.every(element => (
+        Number.isFinite(element.x)
+        && Number.isFinite(element.y)
+        && Number.isFinite(element.width)
+        && Number.isFinite(element.height)
+    ));
+    if (!hasCompleteLayout) {
+        elements = applyDeterministicCanvasPreviewLayout(elements);
+    }
+    const connections = Array.isArray(config?.canvas?.connections)
+        ? config.canvas.connections.map((connection, index) => ({
+            id: String(connection?.id || `preview-connection-${index + 1}`),
+            sourceElementId: String(connection?.sourceElementId || ''),
+            targetElementId: String(connection?.targetElementId || ''),
+            locked: connection?.locked === true,
+        }))
+        : [];
+    return {
+        version,
+        name: config?.name || '',
+        elements,
+        connections,
+        usesPreviewLayout: !hasCompleteLayout,
+    };
 }
 
 async function getProjectDirHandle(filePath) {
@@ -9094,9 +9245,9 @@ function captureVideoFrame(videoBlobUrl) {
 }
 
 /**
- * 弹出画布媒体 modal：图片展示原图，视频展示播放器。
- * @param {'image'|'video'} type
- * @param {string|null} blobUrl  - 视频/图片的 blob URL
+ * 弹出画布媒体 modal：图片展示原图，视频和音频展示播放器。
+ * @param {'image'|'video'|'audio'} type
+ * @param {string|null} blobUrl  - 媒体文件的 blob URL
  * @param {string|null} posterBlobUrl - 视频封面的 blob URL（可选）
  * @param {string} name - 元素名称（用于 aria-label）
  */
@@ -9141,6 +9292,13 @@ function openCanvasMediaModal(type, blobUrl, posterBlobUrl, name) {
         img.alt = name;
         img.style.cssText = 'max-width:100%;max-height:100%;display:block;object-fit:contain;';
         mediaWrap.appendChild(img);
+    } else if (type === 'audio' && blobUrl) {
+        const audio = document.createElement('audio');
+        audio.src = blobUrl;
+        audio.controls = true;
+        audio.autoplay = true;
+        audio.style.cssText = 'width:min(560px,80vw);display:block;margin:48px 24px;';
+        mediaWrap.appendChild(audio);
     } else if (type === 'image' && blobUrl) {
         const img = document.createElement('img');
         img.src = blobUrl;
@@ -9172,245 +9330,379 @@ function openCanvasMediaModal(type, blobUrl, posterBlobUrl, name) {
     };
     document.addEventListener('keydown', onKey);
 
-    // modal 移除时停止视频播放
+    // modal 移除时停止媒体播放
     new MutationObserver(() => {
         if (!document.getElementById('canvasMediaModal')) {
-            const v = overlay.querySelector('video');
-            if (v) { v.pause(); v.src = ''; }
+            overlay.querySelectorAll('video,audio').forEach(media => {
+                media.pause();
+                media.src = '';
+            });
             document.removeEventListener('keydown', onKey);
         }
     }).observe(document.body, { childList: true });
 }
 
 /**
- * 在 containerEl 内渲染画布内容。
- * containerEl 本身需具备 overflow:auto + 固定高度（来自 CSS），函数不修改其样式。
+ * 创建节点正文中的普通文字行。
  */
-async function renderCanvasView(config, resolveMediaUrl, containerEl) {
-    const elements = config?.canvas?.elements ?? [];
+function createCanvasPreviewText(text, className = 'canvas-el-label') {
+    const element = document.createElement('span');
+    element.className = className;
+    element.textContent = text;
+    return element;
+}
+
+/**
+ * 在画布空间底层绘制 Element 级 Connection。
+ */
+function renderCanvasConnections(space, connections, elementById, minX, minY, canvasW, canvasH) {
+    if (!connections.length) return;
+    const namespace = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(namespace, 'svg');
+    svg.classList.add('canvas-preview-connections');
+    svg.setAttribute('viewBox', `0 0 ${canvasW} ${canvasH}`);
+    svg.setAttribute('width', String(canvasW));
+    svg.setAttribute('height', String(canvasH));
+
+    const defs = document.createElementNS(namespace, 'defs');
+    const marker = document.createElementNS(namespace, 'marker');
+    marker.setAttribute('id', 'canvas-preview-connection-arrow');
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('refX', '9');
+    marker.setAttribute('refY', '5');
+    marker.setAttribute('markerWidth', '7');
+    marker.setAttribute('markerHeight', '7');
+    marker.setAttribute('orient', 'auto-start-reverse');
+    const arrow = document.createElementNS(namespace, 'path');
+    arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    for (const connection of connections) {
+        const source = elementById.get(connection.sourceElementId);
+        const target = elementById.get(connection.targetElementId);
+        if (!source || !target || source.id === target.id) continue;
+        const sourceX = source.x - minX + source.width;
+        const sourceY = source.y - minY + source.height / 2;
+        const targetX = target.x - minX;
+        const targetY = target.y - minY + target.height / 2;
+        const bend = Math.max(48, Math.abs(targetX - sourceX) * 0.45);
+        const direction = targetX >= sourceX ? 1 : -1;
+        const path = document.createElementNS(namespace, 'path');
+        path.classList.add('canvas-preview-connection');
+        if (connection.locked) path.classList.add('is-locked');
+        path.setAttribute(
+            'd',
+            `M ${sourceX} ${sourceY} C ${sourceX + bend * direction} ${sourceY}, `
+                + `${targetX - bend * direction} ${targetY}, ${targetX} ${targetY}`,
+        );
+        path.setAttribute('marker-end', 'url(#canvas-preview-connection-arrow)');
+        const title = document.createElementNS(namespace, 'title');
+        title.textContent = `${connection.sourceElementId} → ${connection.targetElementId}`;
+        path.appendChild(title);
+        svg.appendChild(path);
+    }
+    space.appendChild(svg);
+}
+
+/**
+ * 创建结构化业务节点卡片。
+ */
+function createCanvasStructuredCard(element) {
+    const card = document.createElement('div');
+    card.className = `canvas-el-structured-card canvas-el-${element.type}`;
+    const title = createCanvasPreviewText(element.name, 'canvas-el-card-title');
+    card.appendChild(title);
+
+    if (element.type === 'storyboard') {
+        card.appendChild(createCanvasPreviewText(`${element.shots.length} 个镜头`, 'canvas-el-card-meta'));
+        const list = document.createElement('ol');
+        list.className = 'canvas-el-shot-list';
+        element.shots.slice(0, 3).forEach((shot, index) => {
+            const item = document.createElement('li');
+            item.textContent = `${index + 1}. ${shot?.description || shot?.id || '未命名镜头'}`;
+            list.appendChild(item);
+        });
+        card.appendChild(list);
+    } else if (element.type === 'video-edit') {
+        card.appendChild(createCanvasPreviewText(
+            `${element.videoSequence.length} 段视频 · ${element.audioSequence.length} 条音频`,
+            'canvas-el-card-meta',
+        ));
+        const output = element.output && typeof element.output === 'object' ? element.output : {};
+        card.appendChild(createCanvasPreviewText(
+            [output.aspectRatio, output.resolution, output.format].filter(Boolean).join(' · ') || 'MP4 合成配置',
+            'canvas-el-card-detail',
+        ));
+    } else {
+        card.appendChild(createCanvasPreviewText(element.type, 'canvas-el-card-meta'));
+    }
+    return card;
+}
+
+/**
+ * 创建视频节点的可播放封面卡片。
+ */
+function createCanvasVideoCard(posterBlobUrl, name) {
+    const card = document.createElement('div');
+    card.className = 'canvas-el-video-card';
+    if (posterBlobUrl) {
+        const image = document.createElement('img');
+        image.src = posterBlobUrl;
+        image.alt = name || '';
+        card.appendChild(image);
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'canvas-el-video-overlay';
+    const playIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    playIcon.setAttribute('viewBox', '0 0 24 24');
+    playIcon.className = 'canvas-el-video-play-icon';
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '12');
+    circle.setAttribute('fill', 'rgba(0,0,0,0.5)');
+    const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    triangle.setAttribute('points', '9.5,7 18,12 9.5,17');
+    triangle.setAttribute('fill', 'white');
+    playIcon.appendChild(circle);
+    playIcon.appendChild(triangle);
+    overlay.appendChild(playIcon);
+    if (!posterBlobUrl) {
+        overlay.appendChild(createCanvasPreviewText(name, 'canvas-el-video-name'));
+    }
+    card.appendChild(overlay);
+    return card;
+}
+
+/**
+ * 渲染单个归一化节点正文，并为媒体节点绑定预览交互。
+ */
+async function renderCanvasElementBody(element, resolveMediaUrl, body) {
+    if (element.status === 'processing') {
+        body.classList.add('canvas-el-state', element.type === 'video' ? 'canvas-el-video-processing' : 'canvas-el-processing');
+        if (element.type === 'video') {
+            const loading = document.createElement('span');
+            loading.className = 'canvas-el-video-loading-icon';
+            body.appendChild(loading);
+        }
+        body.appendChild(createCanvasPreviewText('处理中'));
+        return;
+    }
+    if (element.status === 'failed') {
+        body.classList.add('canvas-el-state', 'canvas-el-failed');
+        body.appendChild(createCanvasPreviewText(element.errorMessage || '生成失败'));
+        return;
+    }
+    if (element.type === 'video') {
+        const posterBlobUrl = element.poster ? await resolveMediaUrl(element.poster) : null;
+        const videoBlobUrl = element.src ? await resolveMediaUrl(element.src) : null;
+        let thumbnailUrl = posterBlobUrl;
+        if (!thumbnailUrl && videoBlobUrl) thumbnailUrl = await captureVideoFrame(videoBlobUrl);
+        body.appendChild(createCanvasVideoCard(thumbnailUrl, element.name));
+        if (videoBlobUrl || thumbnailUrl) {
+            body.closest('.canvas-preview-element').classList.add('is-interactive');
+            body.addEventListener('click', () => openCanvasMediaModal(
+                'video',
+                videoBlobUrl,
+                thumbnailUrl,
+                element.name,
+            ));
+        }
+        return;
+    }
+    if (element.type === 'image') {
+        const imageBlobUrl = element.src ? await resolveMediaUrl(element.src) : null;
+        if (imageBlobUrl) {
+            const image = document.createElement('img');
+            image.className = 'canvas-el-image';
+            image.src = imageBlobUrl;
+            image.alt = element.name;
+            image.addEventListener('error', () => {
+                body.innerHTML = '';
+                body.classList.add('canvas-el-state', 'canvas-el-missing');
+                body.appendChild(createCanvasPreviewText('图片文件不可用'));
+            });
+            body.appendChild(image);
+            body.closest('.canvas-preview-element').classList.add('is-interactive');
+            body.addEventListener('click', () => openCanvasMediaModal('image', imageBlobUrl, null, element.name));
+        } else {
+            body.classList.add('canvas-el-state', 'canvas-el-missing');
+            body.appendChild(createCanvasPreviewText('图片文件不可用'));
+        }
+        return;
+    }
+    if (element.type === 'audio') {
+        const audioBlobUrl = element.src ? await resolveMediaUrl(element.src) : null;
+        const card = createCanvasStructuredCard(element);
+        card.appendChild(createCanvasPreviewText(audioBlobUrl ? '点击播放音频' : '音频文件不可用', 'canvas-el-card-detail'));
+        body.appendChild(card);
+        if (audioBlobUrl) {
+            body.closest('.canvas-preview-element').classList.add('is-interactive');
+            body.addEventListener('click', () => openCanvasMediaModal('audio', audioBlobUrl, null, element.name));
+        }
+        return;
+    }
+    body.appendChild(createCanvasStructuredCard(element));
+}
+
+/**
+ * 在 containerEl 内渲染已归一化的三版本画布预览。
+ */
+async function renderCanvasView(preview, resolveMediaUrl, containerEl) {
+    const elements = preview?.elements ?? [];
     if (!elements.length) {
         appendPreviewMessage(containerEl, '画布中没有元素。');
         return;
     }
 
-    // 计算所有元素的边界框
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const el of elements) {
-        const x = el.x ?? 0, y = el.y ?? 0, w = el.width ?? 0, h = el.height ?? 0;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x + w > maxX) maxX = x + w;
-        if (y + h > maxY) maxY = y + h;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const element of elements) {
+        minX = Math.min(minX, element.x);
+        minY = Math.min(minY, element.y);
+        maxX = Math.max(maxX, element.x + element.width);
+        maxY = Math.max(maxY, element.y + element.height);
     }
-    const canvasW = maxX - minX || 1;
-    const canvasH = maxY - minY || 1;
+    const canvasW = Math.max(1, maxX - minX);
+    const canvasH = Math.max(1, maxY - minY);
 
-    // scaleWrap：根据 scale 后尺寸撑开 containerEl 的滚动区域
     const scaleWrap = document.createElement('div');
     scaleWrap.className = 'canvas-preview-scale-wrap';
     containerEl.appendChild(scaleWrap);
 
-    // space：按画布原始坐标定位元素，通过 CSS transform 缩放
     const space = document.createElement('div');
     space.className = 'canvas-preview-space';
     space.style.width = `${canvasW}px`;
     space.style.height = `${canvasH}px`;
     scaleWrap.appendChild(space);
 
-    // 等两帧渲染完成后用 containerEl 的实际尺寸计算 scale
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const pad = 24;
-    const availW = containerEl.clientWidth - pad;
-    const availH = containerEl.clientHeight - pad;
-    const scale = Math.min(1, Math.min(availW / canvasW, availH / canvasH));
+    const elementById = new Map(elements.map(element => [element.id, element]));
+    renderCanvasConnections(
+        space,
+        preview.connections,
+        elementById,
+        minX,
+        minY,
+        canvasW,
+        canvasH,
+    );
 
-    scaleWrap.style.width  = `${Math.ceil(canvasW * scale) + pad}px`;
-    scaleWrap.style.height = `${Math.ceil(canvasH * scale) + pad}px`;
-    space.style.position      = 'absolute';
-    space.style.left          = `${pad / 2}px`;
-    space.style.top           = `${pad / 2}px`;
-    space.style.transformOrigin = 'top left';
-    space.style.transform     = `scale(${scale})`;
+    const sorted = [...elements].sort((left, right) => left.zIndex - right.zIndex);
+    await Promise.all(sorted.map(async (element) => {
+        const elementNode = document.createElement('div');
+        elementNode.className = 'canvas-preview-element';
+        elementNode.dataset.elementId = element.id;
+        elementNode.dataset.elementType = element.type;
+        elementNode.style.left = `${element.x - minX}px`;
+        elementNode.style.top = `${element.y - minY}px`;
+        elementNode.style.width = `${element.width}px`;
+        elementNode.style.height = `${element.height}px`;
+        elementNode.style.zIndex = String(element.zIndex + 1);
+        elementNode.title = `${element.name}\n${element.id}`;
+        if (!element.visible) elementNode.classList.add('is-hidden');
+        if (element.locked) elementNode.classList.add('is-locked');
 
-    // 按 zIndex 从低到高渲染元素
-    const sorted = [...elements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-    await Promise.all(sorted.map(async (el) => {
-        const elDiv = document.createElement('div');
-        elDiv.className = 'canvas-preview-element';
-        elDiv.style.left = `${(el.x ?? 0) - minX}px`;
-        elDiv.style.top = `${(el.y ?? 0) - minY}px`;
-        elDiv.style.width = `${el.width ?? 100}px`;
-        elDiv.style.height = `${el.height ?? 100}px`;
-        elDiv.title = el.name || el.id || '';
+        const body = document.createElement('div');
+        body.className = 'canvas-el-body';
+        elementNode.appendChild(body);
 
-        const makeLabel = (text) => {
-            const span = document.createElement('span');
-            span.className = 'canvas-el-label';
-            span.textContent = text;
-            return span;
-        };
-
-        // 视频类型专用：暗色卡片（封面图优先，无封面则显示图标+名称）
-        const renderVideoCard = (posterBlobUrl, name) => {
-            const card = document.createElement('div');
-            card.className = 'canvas-el-video-card';
-
-            if (posterBlobUrl) {
-                const img = document.createElement('img');
-                img.src = posterBlobUrl;
-                img.alt = name || '';
-                img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0;';
-                card.appendChild(img);
-            }
-
-            const overlay = document.createElement('div');
-            overlay.className = 'canvas-el-video-overlay';
-            const playIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            playIcon.setAttribute('viewBox', '0 0 24 24');
-            playIcon.className = 'canvas-el-video-play-icon';
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '12');
-            circle.setAttribute('fill', 'rgba(0,0,0,0.5)');
-            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            poly.setAttribute('points', '9.5,7 18,12 9.5,17');
-            poly.setAttribute('fill', 'white');
-            playIcon.appendChild(circle);
-            playIcon.appendChild(poly);
-            overlay.appendChild(playIcon);
-
-            if (!posterBlobUrl && name) {
-                const nameEl = document.createElement('span');
-                nameEl.className = 'canvas-el-video-name';
-                nameEl.textContent = name;
-                overlay.appendChild(nameEl);
-            }
-            card.appendChild(overlay);
-            return card;
-        };
-
-        if (el.status === 'processing') {
-            if (el.type === 'video') {
-                elDiv.classList.add('canvas-el-state', 'canvas-el-video-processing');
-                const icon = document.createElement('span');
-                icon.className = 'canvas-el-video-loading-icon';
-                elDiv.appendChild(icon);
-                elDiv.appendChild(makeLabel(el.name || ''));
-            } else {
-                elDiv.classList.add('canvas-el-state', 'canvas-el-processing');
-                elDiv.appendChild(makeLabel(el.name || ''));
-            }
-        } else if (el.status === 'failed') {
-            elDiv.classList.add('canvas-el-state', 'canvas-el-failed');
-            elDiv.appendChild(makeLabel(el.name || ''));
-        } else if (el.type === 'video') {
-            // 视频：封面优先，无封面则从视频抓第一帧；点击弹窗播放
-            const posterBlobUrl = el.poster ? await resolveMediaUrl(el.poster) : null;
-            const videoBlobUrl = el.src ? await resolveMediaUrl(el.src) : null;
-            // 没有 poster 时从视频文件抓帧作为封面
-            let thumbnailUrl = posterBlobUrl;
-            if (!thumbnailUrl && videoBlobUrl) {
-                thumbnailUrl = await captureVideoFrame(videoBlobUrl);
-            }
-            elDiv.appendChild(renderVideoCard(thumbnailUrl, el.name || ''));
-            if (videoBlobUrl || posterBlobUrl) {
-                elDiv.style.cursor = 'pointer';
-                elDiv.addEventListener('click', () => openCanvasMediaModal('video', videoBlobUrl, thumbnailUrl, el.name || ''));
-            }
-        } else if (el.src) {
-            const blobUrl = await resolveMediaUrl(el.src);
-            if (blobUrl) {
-                const img = document.createElement('img');
-                img.src = blobUrl;
-                img.alt = el.name || '';
-                img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;';
-                elDiv.appendChild(img);
-                elDiv.style.cursor = 'pointer';
-                elDiv.addEventListener('click', () => openCanvasMediaModal('image', blobUrl, null, el.name || ''));
-            } else {
-                elDiv.classList.add('canvas-el-state', 'canvas-el-missing');
-                elDiv.appendChild(makeLabel(el.name || ''));
-            }
-        } else {
-            elDiv.classList.add('canvas-el-state', 'canvas-el-empty');
-            elDiv.appendChild(makeLabel(el.name || el.id || ''));
+        const footer = document.createElement('div');
+        footer.className = 'canvas-el-footer';
+        const identity = document.createElement('div');
+        identity.className = 'canvas-el-identity';
+        identity.appendChild(createCanvasPreviewText(element.type, 'canvas-el-type'));
+        identity.appendChild(createCanvasPreviewText(element.name, 'canvas-el-name'));
+        footer.appendChild(identity);
+        if (element.contentCount > 1) {
+            footer.appendChild(createCanvasPreviewText(`${element.contentCount} 个版本`, 'canvas-el-version-count'));
         }
-
-        space.appendChild(elDiv);
+        elementNode.appendChild(footer);
+        space.appendChild(elementNode);
+        await renderCanvasElementBody(element, resolveMediaUrl, body);
     }));
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const padding = 24;
+    const availableWidth = Math.max(1, containerEl.clientWidth - padding);
+    const availableHeight = Math.max(1, containerEl.clientHeight - padding);
+    const scale = Math.max(0.08, Math.min(1, availableWidth / canvasW, availableHeight / canvasH));
+    scaleWrap.style.width = `${Math.ceil(canvasW * scale) + padding}px`;
+    scaleWrap.style.height = `${Math.ceil(canvasH * scale) + padding}px`;
+    space.style.position = 'absolute';
+    space.style.left = `${padding / 2}px`;
+    space.style.top = `${padding / 2}px`;
+    space.style.transformOrigin = 'top left';
+    space.style.transform = `scale(${scale})`;
 }
 
-async function addCanvasRightPanel(config, filePath) {
-    if (!filePreviewMain) return;
+/**
+ * 创建画布右侧面板外壳，并返回统一预览文档和视口。
+ */
+function createCanvasRightPanel(config, filePath) {
+    if (!filePreviewMain) return null;
     filePreviewMain.classList.add('has-canvas-panel');
-
     const oldPanel = document.getElementById('canvasRightPanel');
     if (oldPanel) oldPanel.remove();
+
+    const preview = normalizeMagicProjectForPreview(config);
 
     const panel = document.createElement('div');
     panel.id = 'canvasRightPanel';
     panel.className = 'canvas-right-panel';
-
-    // 面板顶部信息栏
     const panelHeader = document.createElement('div');
     panelHeader.className = 'canvas-panel-header';
+    const heading = document.createElement('div');
+    heading.className = 'canvas-panel-heading';
     const titleEl = document.createElement('span');
     titleEl.className = 'canvas-panel-title';
     titleEl.textContent = config.name || filePath;
-    const countEl = document.createElement('span');
-    countEl.className = 'canvas-panel-count';
-    countEl.textContent = `${config.canvas?.elements?.length ?? 0} 个元素`;
-    panelHeader.appendChild(titleEl);
-    panelHeader.appendChild(countEl);
+    const versionEl = document.createElement('span');
+    versionEl.className = 'canvas-panel-version';
+    versionEl.textContent = `V${String(preview.version || '').split('.')[0] || '?'}`;
+    heading.appendChild(titleEl);
+    heading.appendChild(versionEl);
+    const summaryEl = document.createElement('span');
+    summaryEl.className = 'canvas-panel-count';
+    summaryEl.textContent = [
+        `${preview.elements.length} 个节点`,
+        `${preview.connections.length} 条连线`,
+        preview.usesPreviewLayout ? '调试布局' : '原始布局',
+    ].join(' · ');
+    panelHeader.appendChild(heading);
+    panelHeader.appendChild(summaryEl);
     panel.appendChild(panelHeader);
-
-    // 画布视口（overflow: auto 由 CSS 控制）
     const viewport = document.createElement('div');
     viewport.className = 'canvas-right-viewport';
     panel.appendChild(viewport);
-
     filePreviewMain.appendChild(panel);
+    return { preview, viewport };
+}
+
+async function addCanvasRightPanel(config, filePath) {
+    const panelState = createCanvasRightPanel(config, filePath);
+    if (!panelState) return;
 
     // 获取项目目录并渲染画布
     const projectDirHandle = await getProjectDirHandle(filePath);
     if (!projectDirHandle) {
-        appendPreviewMessage(viewport, '无法访问项目目录，请检查文件系统权限。');
+        appendPreviewMessage(panelState.viewport, '无法访问项目目录，请检查文件系统权限。');
         return;
     }
     const resolveMediaUrl = (relPath) => resolveCanvasFileBlobUrl(projectDirHandle, relPath);
-    await renderCanvasView(config, resolveMediaUrl, viewport);
+    await renderCanvasView(panelState.preview, resolveMediaUrl, panelState.viewport);
 }
 
 async function addApiCanvasRightPanel(config, filePath) {
-    if (!filePreviewMain) return;
-    filePreviewMain.classList.add('has-canvas-panel');
-
-    const oldPanel = document.getElementById('canvasRightPanel');
-    if (oldPanel) oldPanel.remove();
-
-    const panel = document.createElement('div');
-    panel.id = 'canvasRightPanel';
-    panel.className = 'canvas-right-panel';
-
-    const panelHeader = document.createElement('div');
-    panelHeader.className = 'canvas-panel-header';
-    const titleEl = document.createElement('span');
-    titleEl.className = 'canvas-panel-title';
-    titleEl.textContent = config.name || filePath;
-    const countEl = document.createElement('span');
-    countEl.className = 'canvas-panel-count';
-    countEl.textContent = `${config.canvas?.elements?.length ?? 0} 个元素`;
-    panelHeader.appendChild(titleEl);
-    panelHeader.appendChild(countEl);
-    panel.appendChild(panelHeader);
-
-    const viewport = document.createElement('div');
-    viewport.className = 'canvas-right-viewport';
-    panel.appendChild(viewport);
-    filePreviewMain.appendChild(panel);
+    const panelState = createCanvasRightPanel(config, filePath);
+    if (!panelState) return;
 
     const projectDirPath = String(filePath || '').split('/').filter(Boolean).slice(0, -1).join('/');
     const resolveMediaUrl = async (relPath) => debugWorkspaceApi.rawUrl(joinWorkspacePath(projectDirPath, relPath));
-    await renderCanvasView(config, resolveMediaUrl, viewport);
+    await renderCanvasView(panelState.preview, resolveMediaUrl, panelState.viewport);
 }
 
 // 预览文件内容：图片/音视频/PDF 用 blob URL，文本读入 pre，其余提示不可预览
@@ -9543,7 +9835,7 @@ async function previewFile(fileHandle, filePath) {
                 filePreviewBody.appendChild(pre);
             }
 
-            // magic.project.js：解析画布配置后在右侧自动展开画布面板（兼容 v1/v2）
+            // magic.project.js：按顶层版本解析后，在右侧使用统一模型预览 V1/V2/V3。
             if (isMagicProjectJs(filePath)) {
                 const config = await parseMagicProjectConfig(text);
                 if (config?.canvas) {
