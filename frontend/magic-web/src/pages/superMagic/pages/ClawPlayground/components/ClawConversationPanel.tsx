@@ -344,6 +344,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
 			handlePullMoreMessage={handlePullMoreMessage}
+			historyLoadThresholdPx={30}
 			showLoading={showLoading}
 			currentTopicStatus={selectedTopic?.task_status}
 			handleSendMsg={handleSendMsg}

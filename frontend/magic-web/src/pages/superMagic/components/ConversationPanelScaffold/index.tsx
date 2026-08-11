@@ -36,7 +36,12 @@ interface ConversationPanelScaffoldProps {
 	currentTopicStatus?: TaskStatus
 	isMessagesLoading?: boolean
 	emptyHint?: ReactNode
-	handlePullMoreMessage?: (selectedTopic: Topic | null, callback?: () => void) => void
+	handlePullMoreMessage?: (
+		selectedTopic: Topic | null,
+		callback?: () => void,
+	) => void | Promise<unknown>
+	/** Distance from the top at which a fresh upward gesture may load one history page. */
+	historyLoadThresholdPx?: number
 	handleSendMsg?: (content: string, options?: SendMessageOptions) => void
 	rootTestId?: string
 	editorTestId?: string
@@ -107,6 +112,7 @@ function ConversationPanelScaffold({
 	messageListBottomFade = false,
 	messageListBottomFadeClassName,
 	backToLatestButtonClassName,
+	historyLoadThresholdPx,
 	enableRevokedUserMessageReedit,
 	revokedEditorContext,
 	editorNodes,
@@ -370,6 +376,7 @@ function ConversationPanelScaffold({
 							currentTopicStatus={currentTopicStatus}
 							handleSendMsg={handleSendMsg}
 							isMessagesLoading={isMessagesLoading}
+							historyLoadThresholdPx={historyLoadThresholdPx}
 							fallbackRender={
 								shouldRenderCompactFallback ? (
 									emptyCompact
