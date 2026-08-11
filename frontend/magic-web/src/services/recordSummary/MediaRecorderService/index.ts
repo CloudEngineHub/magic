@@ -253,8 +253,11 @@ export class MediaRecorderService {
 			})
 		} catch (error) {
 			// Ensure cleanup on any error
-			logger.error("录音启动失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "recording_start_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "录音启动失败",
 			})
 			this.cleanup()
 			throw new Error(`Failed to start recording: ${error}`)
@@ -283,16 +286,22 @@ export class MediaRecorderService {
 						resolve()
 					})
 					.catch((error) => {
-						logger.error("停止录音失败", {
-							error: error instanceof Error ? error.message : String(error),
+						logger.error({
+							eventKey: "stop_recording_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "停止录音失败",
 						})
 						const err = new Error(`Failed to stop recorder: ${error}`)
 						this.events.onRecordingError?.(err)
 						reject(err)
 					})
 			} catch (error) {
-				logger.error("停止录音异常", {
-					error: error instanceof Error ? error.message : String(error),
+				logger.error({
+					eventKey: "stop_recording_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "停止录音异常",
 				})
 				this.cleanup()
 				reject(new Error(`Failed to stop recorder: ${error}`))
@@ -362,9 +371,12 @@ export class MediaRecorderService {
 			// RecorderAdapter has already attempted rollback
 			// If rollback succeeded, it won't throw error
 			// If we reach here, both switch and rollback failed
-			logger.error("音频源切换失败", {
-				newSource,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "audio_source_switch_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "音频源切换失败",
+				context: { newSource },
 			})
 			throw error
 		}
@@ -405,9 +417,12 @@ export class MediaRecorderService {
 			await this.recorderAdapter.switchMicrophoneDevice(deviceId)
 			logger.log("Microphone device switched successfully", { deviceId })
 		} catch (error) {
-			logger.error("Microphone device switch failed", {
-				deviceId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "microphone_device_switch_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Microphone device switch failed",
+				context: { deviceId },
 			})
 			throw error
 		}
@@ -481,8 +496,11 @@ export class MediaRecorderService {
 	 * 处理录音错误
 	 */
 	private handleRecorderError(error: Error): void {
-		logger.error("录音错误", {
-			error: error.message,
+		logger.error({
+			eventKey: "recording_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "录音错误",
 		})
 		this.events.onRecordingError?.(error)
 	}
@@ -500,10 +518,11 @@ export class MediaRecorderService {
 	 * 处理音频流中断事件
 	 */
 	private handleStreamInterrupted(reason: string, trackId: string, trackLabel: string): void {
-		logger.error("录音流中断", {
-			reason,
-			trackId,
-			trackLabel,
+		logger.error({
+			eventKey: "recording_stream_failed",
+			errorKind: "unknown",
+			message: "录音流中断",
+			context: { reason, trackId, trackLabel },
 		})
 
 		const audioSource = this.config.audioSource?.source || "unknown"
@@ -562,8 +581,11 @@ export class MediaRecorderService {
 			this.isRecording = false
 			logger.log("MediaRecorderService清理完成")
 		} catch (error) {
-			logger.error("清理过程出错", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "清理过程出错",
 			})
 		}
 	}

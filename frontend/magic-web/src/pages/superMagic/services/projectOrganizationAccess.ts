@@ -63,8 +63,7 @@ function isProjectOrganizationAccessCheckSuppressed() {
 		const matchesCurrentRoute =
 			suppression.pathname === window.location.pathname && suppression.expiresAt > Date.now()
 		const navigationEntry = performance.getEntriesByType?.("navigation")[0] as
-			| PerformanceNavigationTiming
-			| undefined
+			PerformanceNavigationTiming | undefined
 		const isOrganizationSwitchTransition = interfaceStore.isSwitchingOrganization
 		const isOrganizationSwitchReload = navigationEntry?.type === "reload"
 		const shouldSuppress =

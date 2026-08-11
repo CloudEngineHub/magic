@@ -4,6 +4,7 @@ const compressionMiddleware = require("../middleware/compressionMiddleware")
 const serviceWorkerMiddleware = require("../middleware/serviceWorkerMiddleware")
 const staticResourceMiddleware = require("../middleware/staticResourceMiddleware")
 const { setStaticAssetCacheHeaders } = require("../middleware/staticAssetCacheHeaders")
+const sourceMapAccessMiddleware = require("../middleware/sourceMapAccessMiddleware")
 const { defaultSEOMiddleware, generateSeoRoutes } = require("../middleware/seoMiddleware")
 const { getHtmlTemplate } = require("../middleware/seoMiddleware/getHtmlTemplate")
 const k8sOnlyMiddleware = require("../middleware/k8sOnlyMiddleware")
@@ -17,7 +18,9 @@ const path = require("node:path")
 const cors = require("cors")
 const { rootPath } = require("../config")
 
-const hasLoginPopupTemplate = fs.existsSync(path.join(rootPath, "../dist/login-popup-callback.html"))
+const hasLoginPopupTemplate = fs.existsSync(
+	path.join(rootPath, "../dist/login-popup-callback.html"),
+)
 
 const configRoutes = new ConfigRoutes()
 const logsRoutes = new LogsRoutes()
@@ -51,6 +54,8 @@ const configureRoutes = (app) => {
 	/**
 	 * ======================== 静态资源缓存配置 ========================
 	 */
+	// Source maps remain inside the image for offline symbolication and must never be served publicly.
+	app.use(sourceMapAccessMiddleware)
 	// CDN资源防盗链
 	app.use("/packages", staticResourceMiddleware)
 	// 静态资源缓存配置

@@ -11,21 +11,21 @@ use App\Application\Mode\Assembler\ModeAssembler;
 use App\Application\Mode\DTO\ModeAggregateDTO;
 use App\Application\Mode\DTO\ModeGroupAggregateDTO;
 use App\Application\Permission\Service\UserModelAccessAppService;
+use App\Application\SuperMagic\Agent\Service\Old\SuperMagicAgentOldAppService;
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use App\Domain\Mode\Entity\ModeAggregate;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
+use App\Domain\SuperMagic\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 use App\ErrorCode\ModeErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use Dtyq\SuperMagic\Application\Agent\Service\Old\SuperMagicAgentOldAppService;
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAppService;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
-use Dtyq\SuperMagic\Domain\Agent\Entity\ValueObject\Query\SuperMagicAgentQuery;
 
 /**
  * 前台模式 app service。

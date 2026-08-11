@@ -47,7 +47,7 @@ class SuperAgentExtra extends AbstractDTO
     /**
      * 视频模型配置。
      *
-     * 这里和 imageModel 保持同一层级，供 super-magic-module 在消息 extra 中
+     * 这里和 imageModel 保持同一层级，供 Super Magic 在消息 extra 中
      * 存取 video_model，再在发送聊天消息时桥接到 dynamic_config.video_model。
      */
     protected ?array $videoModel = null;

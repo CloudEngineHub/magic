@@ -123,7 +123,12 @@ export class ImageMigrationService {
 
 			return resultMarkdown
 		} catch (error) {
-			logger.error("Failed to migrate storage images", error)
+			logger.error({
+				eventKey: "migrate_storage_images_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to migrate storage images",
+			})
 			// Return original content on error
 			return markdownContent
 		} finally {
@@ -359,7 +364,7 @@ export class ImageMigrationService {
 				// Ensure path starts with "./" when no documentPath is provided
 				finalPath =
 					result.relative_file_path.startsWith("./") ||
-						result.relative_file_path.startsWith("../")
+					result.relative_file_path.startsWith("../")
 						? result.relative_file_path
 						: `./${result.relative_file_path}`
 			} else {
@@ -378,9 +383,12 @@ export class ImageMigrationService {
 				},
 			}
 		} catch (error) {
-			logger.error(`Failed to convert storage image ${imageId}`, {
-				projectId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "convert_storage_image_failed",
+				errorKind: "storage",
+				error: error,
+				message: `Failed to convert storage image ${imageId}`,
+				context: { projectId },
 			})
 			return null // Keep original storage image on error
 		}

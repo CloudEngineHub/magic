@@ -121,7 +121,7 @@ export class AudioProcessor {
 	): () => void {
 		const onceWrapper = ((...args: unknown[]) => {
 			this.off(event, onceWrapper as AudioProcessorEvents[K])
-				; (callback as (...args: unknown[]) => void)(...args)
+			;(callback as (...args: unknown[]) => void)(...args)
 		}) as AudioProcessorEvents[K]
 
 		return this.on(event, onceWrapper)
@@ -163,16 +163,18 @@ export class AudioProcessor {
 			const listenersCopy = Array.from(listeners)
 			for (const callback of listenersCopy) {
 				try {
-					; (
+					;(
 						callback as unknown as (
 							...args: Parameters<NonNullable<AudioProcessorEvents[K]>>
 						) => void
 					)(...args)
 				} catch (error) {
-					logger.error(
-						`❌ [AudioProcessor] Error in event listener for '${String(event)}':`,
-						error,
-					)
+					logger.error({
+						eventKey: "audio_processor_event_listener_failed",
+						errorKind: "unknown",
+						error: error,
+						message: `❌ [AudioProcessor] Error in event listener for '${String(event)}':`,
+					})
 				}
 			}
 		}
@@ -539,7 +541,8 @@ export class AudioProcessor {
 					logger.log(
 						`🐌 [AudioProcessor] Processing delay: ${processingTime.toFixed(
 							2,
-						)}ms (threshold: ${performanceThreshold.toFixed(2)}ms), data size: ${message.data.byteLength
+						)}ms (threshold: ${performanceThreshold.toFixed(2)}ms), data size: ${
+							message.data.byteLength
 						} bytes`,
 					)
 				}
@@ -577,7 +580,8 @@ export class AudioProcessor {
 				const avgProcessTime =
 					this.processingTimes.reduce((a, b) => a + b, 0) / this.processingTimes.length
 				logger.log(
-					`📊 [AudioProcessor] 统计 - 已处理: ${this.stats.packetsProcessed
+					`📊 [AudioProcessor] 统计 - 已处理: ${
+						this.stats.packetsProcessed
 					}个包, 平均处理时间: ${avgProcessTime.toFixed(
 						2,
 					)}ms, 当前延迟: ${this.stats.averageLatency.toFixed(2)}ms`,
@@ -680,7 +684,12 @@ export class AudioProcessor {
 		try {
 			await this.cleanupResources()
 		} catch (error) {
-			logger.error("资源清理过程中出现错误:", error)
+			logger.error({
+				eventKey: "cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "资源清理过程中出现错误:",
+			})
 		}
 
 		this.state = "idle"
@@ -693,7 +702,12 @@ export class AudioProcessor {
 			try {
 				this.sourceNode.disconnect(this.workletNode)
 			} catch (error) {
-				logger.error("断开sourceNode连接时出错:", error)
+				logger.error({
+					eventKey: "disconnect_source_node_connect_failed",
+					errorKind: "network",
+					error: error,
+					message: "断开sourceNode连接时出错:",
+				})
 			}
 		}
 
@@ -708,7 +722,12 @@ export class AudioProcessor {
 				// 3. 关闭端口
 				this.workletNode.port.close()
 			} catch (error) {
-				logger.error("清理AudioWorkletNode时出错:", error)
+				logger.error({
+					eventKey: "cleanup_audio_worklet_node_failed",
+					errorKind: "worker",
+					error: error,
+					message: "清理AudioWorkletNode时出错:",
+				})
 			}
 			this.workletNode = null
 		}
@@ -718,7 +737,12 @@ export class AudioProcessor {
 			try {
 				this.sourceNode.disconnect()
 			} catch (error) {
-				logger.error("清理sourceNode时出错:", error)
+				logger.error({
+					eventKey: "cleanup_source_node_failed",
+					errorKind: "lifecycle",
+					error: error,
+					message: "清理sourceNode时出错:",
+				})
 			}
 			this.sourceNode = null
 		}
@@ -732,7 +756,12 @@ export class AudioProcessor {
 					}
 				})
 			} catch (error) {
-				logger.error("停止音频轨道时出错:", error)
+				logger.error({
+					eventKey: "stop_audio_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "停止音频轨道时出错:",
+				})
 			}
 			this.audioStream = null
 		}
@@ -749,7 +778,12 @@ export class AudioProcessor {
 				])
 				logger.log("AudioContext已成功关闭")
 			} catch (error) {
-				logger.error("关闭AudioContext时出错:", error)
+				logger.error({
+					eventKey: "close_audio_context_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "关闭AudioContext时出错:",
+				})
 				// 即使关闭失败也要清理引用
 			}
 			this.audioContext = null
@@ -760,7 +794,12 @@ export class AudioProcessor {
 			try {
 				URL.revokeObjectURL(this.processorUrl)
 			} catch (error) {
-				logger.error("释放Blob URL时出错:", error)
+				logger.error({
+					eventKey: "blob_url_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "释放Blob URL时出错:",
+				})
 			}
 			this.processorUrl = null
 		}
@@ -786,13 +825,19 @@ export class AudioProcessor {
 			// Stop recording and cleanup resources (awaiting for complete cleanup)
 			await this.stop()
 		} catch (error) {
-			logger.error("dispose过程中停止音频处理失败:", error)
+			logger.error({
+				eventKey: "dispose_stop_audio_process_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "dispose过程中停止音频处理失败:",
+			})
 		}
 
 		// Clear all event listeners after audio processing has stopped
 		if (this.eventListeners.size > 0) {
 			logger.log(
-				`🧹 [AudioProcessor] Clearing ${this.eventListeners.size
+				`🧹 [AudioProcessor] Clearing ${
+					this.eventListeners.size
 				} event type(s) with total ${Array.from(this.eventListeners.values()).reduce(
 					(sum, set) => sum + set.size,
 					0,

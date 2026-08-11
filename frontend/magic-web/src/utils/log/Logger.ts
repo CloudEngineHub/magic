@@ -4,6 +4,13 @@ import { LoggerPluginManager, LogType } from "./plugins"
 import type { LogContext, LogData, LoggerPlugin, LoggerEnableConfig } from "./plugins"
 import { configStore } from "@/models/config"
 import { trackLogger } from "./trackLogger"
+import { getAppRelease } from "./release"
+import {
+	createErrorReport,
+	createProviderErrorInput,
+	ErrorCaptureSource,
+	parseErrorCall,
+} from "./errorReport"
 
 /**
  * Logger 配置选项
@@ -13,6 +20,11 @@ interface LoggerOptions extends LoggerEnableConfig {
 	enableConfig?: LoggerEnableConfig | boolean
 	/** 自定义插件列表 */
 	plugins?: LoggerPlugin[]
+}
+
+/** Logger 内部捕获器使用的派发选项，不对业务日志调用暴露协议字段。 */
+interface ErrorDispatchOptions {
+	captureSource?: ErrorCaptureSource
 }
 
 class Logger {
@@ -98,11 +110,58 @@ class Logger {
 	 * @description 异常上报
 	 * @param {LogData} arg
 	 * @param {LoggerEnableConfig} options
+	 * @param {ErrorDispatchOptions} dispatchOptions Logger 内部捕获来源
 	 */
-	error(arg: LogData, options?: LoggerEnableConfig): void {
+	error(
+		arg: LogData,
+		options?: LoggerEnableConfig,
+		dispatchOptions: ErrorDispatchOptions = {},
+	): void {
 		if (options?.error || this.enableConfig?.error) {
-			trackLogger?.error?.(arg)
-			this.processLog(LogType.ERROR, arg)
+			const parsed = parseErrorCall(arg.data)
+			if (parsed.kind === "invalid-structured") {
+				// 命中保留字段却缺少核心键时直接拒绝，避免生成无法稳定归类的问题记录。
+				console.error(
+					"[Logger] Invalid structured error input: eventKey and errorKind must be non-empty strings",
+				)
+				return
+			}
+
+			const namespace = arg.namespace || "global"
+			const eventId = v4()
+			const release = getAppRelease()
+			const captureSource = dispatchOptions.captureSource ?? ErrorCaptureSource.MANUAL
+			// 同一 eventId/release 同时传给 APM 与自建链路，便于跨平台关联同一次上报。
+			const providerInput = createProviderErrorInput(
+				parsed,
+				namespace,
+				eventId,
+				release,
+				captureSource,
+			)
+
+			try {
+				trackLogger?.error?.(providerInput)
+			} catch (error) {
+				// APM Provider 失败不能阻断独立的自建日志插件链。
+				console.error("[Logger] APM error reporting failed", error)
+			}
+
+			void this.processLog(LogType.ERROR, arg, {
+				release,
+				errorReport:
+					parsed.kind === "structured"
+						? createErrorReport(
+								parsed.input,
+								namespace,
+								eventId,
+								release,
+								captureSource,
+							)
+						: undefined,
+				originalError:
+					providerInput.value instanceof Error ? providerInput.value : undefined,
+			})
 		}
 	}
 
@@ -135,13 +194,20 @@ class Logger {
 	/**
 	 * 核心日志处理方法
 	 */
-	private async processLog(logType: LogType, logData: LogData): Promise<void> {
+	private async processLog(
+		logType: LogType,
+		logData: LogData,
+		extra: Pick<LogContext, "release" | "errorReport" | "originalError"> = {
+			release: getAppRelease(),
+		},
+	): Promise<void> {
 		try {
 			// 构建日志上下文
 			const context: LogContext = {
 				logType,
 				namespace: logData.namespace || "global",
 				traceId: this.traceId,
+				release: extra.release,
 				data: logData?.data,
 				url: window?.location?.href,
 				info: {
@@ -152,6 +218,8 @@ class Logger {
 				},
 				timestamp: Date.now(),
 				metadata: { ...this.metadata, ...(logData?.metadata || {}) },
+				errorReport: extra.errorReport,
+				originalError: extra.originalError,
 			}
 
 			// 使用插件系统处理

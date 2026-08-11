@@ -37,6 +37,7 @@ import knowledgeBaseVisualUnderstanding from "@admin/assets/logos/knowledge-base
 import PageLoading from "../components/PageLoading"
 import { useStyles } from "../components/ServiceProviderList/styles"
 import CommonList from "../components/CommonList"
+import { stripSuperMagicBrand } from "./displayName"
 
 export const AiPowerLogoMap = {
 	[PlatformPackage.PowerCode.OCR]: ocr,
@@ -89,6 +90,8 @@ function AIPowerPage() {
 			setData(
 				res.map((item) => ({
 					...item,
+					name: stripSuperMagicBrand(item.name),
+					description: stripSuperMagicBrand(item.description),
 					icon: hasLogoMap.includes(item.code as keyof typeof AiPowerLogoMap)
 						? AiPowerLogoMap[item.code as keyof typeof AiPowerLogoMap]
 						: "",

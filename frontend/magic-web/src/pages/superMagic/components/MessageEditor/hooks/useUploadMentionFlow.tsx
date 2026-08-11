@@ -27,7 +27,6 @@ import {
 	insertUploadMentionNodes as insertUploadMentionNodesService,
 	removeUploadMentionNodes as removeUploadMentionNodesService,
 	replaceUploadMentionNode as replaceUploadMentionNodeService,
-	updateUploadMentionProgress as updateUploadMentionProgressService,
 } from "../services/uploadMentionService"
 import { isPendingProjectFileMention } from "../utils/mention"
 
@@ -72,18 +71,6 @@ export default function useUploadMentionFlow({
 	const insertUploadMentionNodes = useMemoizedFn((fileDatas: FileData[]) => {
 		insertUploadMentionNodesService({ editor: getEditor(), fileDatas })
 	})
-
-	const updateUploadMentionProgress = useMemoizedFn(
-		(fileId: string, progress: number, status: FileData["status"], error?: string) => {
-			updateUploadMentionProgressService({
-				editor: getEditor(),
-				fileId,
-				progress,
-				status,
-				error,
-			})
-		},
-	)
 
 	const replaceUploadMentionNode = useMemoizedFn(
 		(
@@ -148,6 +135,18 @@ export default function useUploadMentionFlow({
 		return ""
 	})
 
+	const isAllowedUploadMention = useMemoizedFn((mentionAttrs: TiptapMentionAttributes) => {
+		if (mentionAttrs.type !== MentionItemType.UPLOAD_FILE) return true
+
+		const uploadData = mentionAttrs.data as UploadFileMentionData
+		const isPendingUpload =
+			uploadData.upload_status === "init" || uploadData.upload_status === "uploading"
+
+		if (!isPendingUpload) return true
+
+		return fileUploadStore.isCurrentSessionUploadFile(uploadData.file_id)
+	})
+
 	const createMentionAttrsFromFile = useMemoizedFn(
 		(file: FileData): TiptapMentionAttributes | null => {
 			if (file.isVirtualReference && file.saveResult?.file_type === "directory") {
@@ -187,7 +186,7 @@ export default function useUploadMentionFlow({
 					upload_progress: file.progress,
 					upload_status: file.status,
 					upload_error: file.error,
-					file_path: file.reportResult?.file_key ?? "",
+					file_path: file.reportResult?.file_key ?? file.result?.key ?? "",
 				},
 			}
 		},
@@ -306,7 +305,6 @@ export default function useUploadMentionFlow({
 			maxUploadSize: 1024 * 1024 * 500,
 			onFileUpload,
 			onFileAdded: insertUploadMentionNodes,
-			onFileProgressUpdate: updateUploadMentionProgress,
 			onFileCompleted: replaceUploadMentionNode,
 			onFileRemoved: (fileId) => {
 				const target = fileUploadStore.files.find((file) => file.id === fileId)
@@ -327,7 +325,6 @@ export default function useUploadMentionFlow({
 		replaceUploadMentionNode,
 		selectedProjectId,
 		selectedTopicId,
-		updateUploadMentionProgress,
 	])
 
 	useEffect(() => {
@@ -474,6 +471,7 @@ export default function useUploadMentionFlow({
 		handleRemoveFile,
 		handleRemoveUploadedFile,
 		handleMentionRemoveItems,
+		isAllowedUploadMention,
 		shouldRestoreRemovedMention,
 	}
 }

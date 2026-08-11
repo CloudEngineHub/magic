@@ -111,14 +111,9 @@ function MicroAppPublishDialog({
 
 				let nextItem = detail.publish || null
 				const shareCode = nextItem?.share_code
-				const needsShareSettings = Boolean(
-					shareCode &&
-					(nextItem.share_type === ShareType.PasswordProtected ||
-						nextItem.extra?.pure_mode === undefined),
-				)
-				if (needsShareSettings && shareCode && nextItem) {
+				if (nextItem?.share_type === ShareType.PasswordProtected && shareCode) {
 					try {
-						// 微应用详情不返回分享页显示配置和明文密码，沿用分享设置接口补充创建者可见的设置。
+						// 微应用详情不返回明文密码，沿用分享设置接口补充创建者可见的密码。
 						const settingsResponse = await SuperMagicApi.getShareInfoByCode({
 							code: shareCode,
 						})
@@ -127,19 +122,9 @@ function MicroAppPublishDialog({
 							typeof settingsResponse?.password === "string"
 								? settingsResponse.password.trim()
 								: ""
-						nextItem = {
-							...nextItem,
-							...(password ? { password } : {}),
-							extra: {
-								...nextItem.extra,
-								pure_mode:
-									settingsResponse?.extra?.pure_mode ??
-									nextItem.extra?.pure_mode ??
-									false,
-							},
-						}
+						if (password) nextItem = { ...nextItem, password }
 					} catch (error) {
-						console.error("Failed to load micro app share settings:", error)
+						console.error("Failed to load micro app share password:", error)
 					}
 				}
 				const nextFormState = createFormStateFromPublishedItem(

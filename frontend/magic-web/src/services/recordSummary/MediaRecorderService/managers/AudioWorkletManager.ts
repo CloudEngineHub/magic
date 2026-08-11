@@ -64,7 +64,7 @@ export class AudioWorkletManager {
 	constructor(
 		private readonly logger: LoggerInterface,
 		private readonly workletPath?: string,
-	) { }
+	) {}
 
 	/**
 	 * Load AudioWorklet module
@@ -90,7 +90,12 @@ export class AudioWorkletManager {
 			this.isWorkletLoaded = true
 			this.logger.log("AudioWorklet loaded successfully")
 		} catch (error) {
-			this.logger.error("Failed to load AudioWorklet:", error)
+			this.logger.error({
+				eventKey: "load_audio_worklet_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to load AudioWorklet:",
+			})
 			throw new RecorderError(
 				"Failed to load AudioWorklet module",
 				"WORKLET_LOAD_FAILED",
@@ -126,7 +131,12 @@ export class AudioWorkletManager {
 
 			return this.workletNode
 		} catch (error) {
-			this.logger.error("Failed to create AudioWorkletNode:", error)
+			this.logger.error({
+				eventKey: "create_audio_worklet_node_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to create AudioWorkletNode:",
+			})
 			throw new RecorderError(
 				"Failed to create AudioWorkletNode",
 				"WORKLET_NODE_CREATE_FAILED",
@@ -157,7 +167,12 @@ export class AudioWorkletManager {
 							const buffer = new Int16Array(message.data, 0, message.length)
 							onAudioData(buffer)
 						} catch (error) {
-							this.logger.error("Failed to process audio data:", error)
+							this.logger.error({
+								eventKey: "process_audio_data_failed",
+								errorKind: "worker",
+								error: error,
+								message: "Failed to process audio data:",
+							})
 							onError?.(
 								new RecorderError(
 									"Failed to process audio data from worklet",
@@ -170,7 +185,12 @@ export class AudioWorkletManager {
 					break
 
 				case "error":
-					this.logger.error("Error from AudioWorklet:", message.error)
+					this.logger.error({
+						eventKey: "audio_worklet_failed",
+						errorKind: "worker",
+						error: message.error,
+						message: "Error from AudioWorklet:",
+					})
 					onError?.(
 						new RecorderError(
 							`AudioWorklet error: ${message.error}`,
@@ -201,7 +221,13 @@ export class AudioWorkletManager {
 		// Handle message channel errors
 		// 处理消息通道错误
 		node.port.onmessageerror = (event) => {
-			this.logger.error("Message error from AudioWorklet:", event)
+			this.logger.error({
+				eventKey: "audio_worklet_message_failed",
+				errorKind: "worker",
+				error: event,
+				message: "Message error from AudioWorklet:",
+				context: { eventType: event.type },
+			})
 			onError?.(new RecorderError("AudioWorklet message error", "WORKLET_MESSAGE_ERROR"))
 		}
 
@@ -225,7 +251,12 @@ export class AudioWorkletManager {
 			})
 			this.logger.log("State sent to worklet:", state)
 		} catch (error) {
-			this.logger.error("Failed to send state to worklet:", error)
+			this.logger.error({
+				eventKey: "send_state_worklet_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to send state to worklet:",
+			})
 		}
 	}
 
@@ -249,7 +280,12 @@ export class AudioWorkletManager {
 			// 注意：我们不重置 isWorkletLoaded，因为模块
 			// 仍然加载在 AudioContext 中以供重用
 		} catch (error) {
-			this.logger.error("Error during AudioWorklet cleanup:", error)
+			this.logger.error({
+				eventKey: "audio_worklet_cleanup_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Error during AudioWorklet cleanup:",
+			})
 		}
 	}
 

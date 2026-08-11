@@ -3006,6 +3006,7 @@
 			"title": "Mentions"
 		},
 		"modeNotAvailableMessage": "Current crew is not available, please create a \"New Topic\" and select an available crew to continue",
+		"modelLoadFailed": "Failed to load models. Please try again.",
 		"modelSwitch": {
 			"autoModelDescription": "Auto mode automatically selects the most efficient AI model for the current task, suitable for handling most regular tasks with moderate credit consumption.",
 			"collapseDescription": "Collapse model description",

@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use Dtyq\SuperMagic\Domain\Share\Repository\Model\ResourceShareModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TopicModel;
+use App\Domain\SuperMagic\Common\Share\Repository\Model\ResourceShareModel;
+use App\Domain\SuperMagic\Topic\Repository\Model\TopicModel;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\DbConnection\Db;

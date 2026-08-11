@@ -5,17 +5,6 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
-    /*
-    |--------------------------------------------------------------------------
-    | Validation Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | The following language lines contain the default error messages used by
-    | the validator class. Some of these rules have multiple versions such
-    | as the size rules. Feel free to tweak each of these messages here.
-    |
-    */
-
     'accepted' => ':attribute 必须接受',
     'active_url' => ':attribute 必须是一个合法的 URL',
     'after' => ':attribute 必须是 :date 之后的一个日期',
@@ -143,38 +132,76 @@ return [
         'string' => '当 :other 为 :value 时 :attribute 必须介于 :min - :max 个字符之间',
         'array' => '当 :other 为 :value 时 :attribute 必须只有 :min - :max 个单元',
     ],
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | Here you may specify custom validation messages for attributes using the
-    | convention "attribute.rule" to name the lines. This makes it quick to
-    | specify a specific custom language line for a given attribute rule.
-    |
-    */
-
     'custom' => [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Attributes
-    |--------------------------------------------------------------------------
-    |
-    | The following language lines are used to swap attribute place-holders
-    | with something more reader friendly such as E-Mail Address instead
-    | of "email". This simply helps us make messages a little cleaner.
-    |
-    */
-
-    'attributes' => [],
+    'attributes' => [
+    ],
     'phone_number' => ':attribute 必须为一个有效的电话号码',
     'telephone_number' => ':attribute 必须为一个有效的手机号码',
-
     'chinese_word' => ':attribute 必须包含以下有效字符 (中文/英文，数字, 下划线)',
     'sequential_array' => ':attribute 必须是一个有序数组',
+    'file_key_required' => '文件键不能为空',
+    'file_name_required' => '文件名不能为空',
+    'file_size_required' => '文件大小不能为空',
+    'project' => [
+        'id' => [
+            'required' => '项目ID不能为空',
+            'string' => '项目ID必须是字符串',
+        ],
+        'members' => [
+            'required' => '成员列表不能为空',
+            'array' => '成员列表必须是数组格式',
+            'min' => '至少需要添加一个成员',
+            'max' => '成员数量不能超过:max个',
+        ],
+        'target_type' => [
+            'required' => '成员类型不能为空',
+            'string' => '成员类型必须是字符串',
+            'in' => '成员类型只能是User或Department',
+        ],
+        'target_id' => [
+            'required' => '成员ID不能为空',
+            'string' => '成员ID必须是字符串',
+            'max' => '成员ID长度不能超过:max个字符',
+        ],
+    ],
+    'schedule_time' => [
+        'no_repeat' => [
+            'day_required' => '不重复类型的定时任务必须指定日期',
+            'time_required' => '不重复类型的定时任务必须指定时间',
+            'must_be_future' => '定时任务的执行时间必须是未来时间',
+            'must_be_at_least_5_minutes' => '定时任务的执行时间必须至少在当前时间 5 分钟之后',
+            'invalid_date_time_format' => '日期或时间格式无效',
+        ],
+        'daily_repeat' => [
+            'time_required' => '每天重复类型的定时任务必须指定时间',
+        ],
+        'weekly_repeat' => [
+            'day_required' => '每周重复类型的定时任务必须指定日期',
+            'time_required' => '每周重复类型的定时任务必须指定时间',
+            'day_range' => '每周重复类型的日期必须在 0-6 之间',
+        ],
+        'monthly_repeat' => [
+            'day_required' => '每月重复类型的定时任务必须指定日期',
+            'time_required' => '每月重复类型的定时任务必须指定时间',
+            'day_range' => '每月重复类型的日期必须在 1-31 之间',
+        ],
+        'annually_repeat' => [
+            'day_required' => '每年重复类型的定时任务必须指定日期',
+            'time_required' => '每年重复类型的定时任务必须指定时间',
+        ],
+        'weekday_repeat' => [
+            'time_required' => '工作日重复类型的定时任务必须指定时间',
+        ],
+        'custom_repeat' => [
+            'day_required' => '自定义重复类型的定时任务必须指定日期',
+            'time_required' => '自定义重复类型的定时任务必须指定时间',
+            'unit_required' => '自定义重复类型的定时任务必须指定单位',
+            'interval_required' => '自定义重复类型的定时任务必须指定间隔',
+            'values_required' => '自定义重复类型的周和月单位必须指定值',
+        ],
+    ],
 ];

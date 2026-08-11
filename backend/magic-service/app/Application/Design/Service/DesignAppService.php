@@ -11,14 +11,14 @@ use App\Application\Kernel\AbstractKernelAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Design\Entity\DesignDataIsolation;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\ErrorCode\DesignErrorCode;
+use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectMemberDomainService;
-use Dtyq\SuperMagic\ErrorCode\SuperAgentErrorCode;
 use Qbhy\HyperfAuth\Authenticatable;
 
 abstract class DesignAppService extends AbstractKernelAppService

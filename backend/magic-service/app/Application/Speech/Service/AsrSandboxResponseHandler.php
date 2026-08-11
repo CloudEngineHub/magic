@@ -8,15 +8,15 @@ declare(strict_types=1);
 namespace App\Application\Speech\Service;
 
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
+use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Constants\AsrConfig;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
-use Dtyq\SuperMagic\Infrastructure\Utils\RelativeFilePathUtil;
+use App\Infrastructure\SuperMagic\Utils\RelativeFilePathUtil;
 use Throwable;
 
 /**

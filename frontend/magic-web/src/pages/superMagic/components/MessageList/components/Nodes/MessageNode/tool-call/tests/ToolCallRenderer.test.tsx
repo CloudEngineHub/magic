@@ -23,7 +23,7 @@ vi.mock("../tools/AskUser", () => ({
 	default: () => <div data-testid="ask-user-tool" />,
 }))
 
-vi.mock("../../tools/microAppPlan", () => ({
+vi.mock("../tools/MicroAppPlan", () => ({
 	default: () => <div data-testid="micro-app-plan-tool" />,
 }))
 

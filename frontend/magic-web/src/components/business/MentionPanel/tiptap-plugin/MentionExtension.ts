@@ -744,7 +744,12 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 								}
 							})
 						} catch (e) {
-							logger.error("ghost node recovery failed", e)
+							logger.error({
+								eventKey: "ghost_node_recovery_failed",
+								errorKind: "unknown",
+								error: e,
+								message: "ghost node recovery failed",
+							})
 						}
 					}
 

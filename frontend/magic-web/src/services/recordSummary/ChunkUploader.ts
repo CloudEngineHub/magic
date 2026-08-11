@@ -347,7 +347,11 @@ export class ChunkUploader {
 			// Get chunk from IndexedDB
 			const chunk = await this.audioChunkDB.get(chunkId)
 			if (!chunk) {
-				logger.error(`在 IndexedDB 中找不到分片 ${chunkId}`)
+				logger.error({
+					eventKey: "indexed_db_chunk_failed",
+					errorKind: "storage",
+					message: `在 IndexedDB 中找不到分片 ${chunkId}`,
+				})
 				// Clear session active status to unblock this session
 				this.activeUploadIds.delete(chunkId)
 				this.sessionActiveUploads.delete(sessionId)
@@ -490,7 +494,12 @@ export class ChunkUploader {
 		try {
 			await this.audioChunkDB.updateChunkUploadStatus(chunk.id, "uploaded")
 		} catch (error) {
-			logger.error(`Failed to update chunk status ${chunk.id}:`, error)
+			logger.error({
+				eventKey: "update_chunk_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `Failed to update chunk status ${chunk.id}:`,
+			})
 		}
 
 		// Remove from active uploads
@@ -580,11 +589,12 @@ export class ChunkUploader {
 
 		const retryCount = this.getRetryCount(chunkId)
 
-		logger.error("分片上传失败", {
-			chunkId,
-			chunkIndex: chunk?.index,
-			retryCount,
-			error: error.message,
+		logger.error({
+			eventKey: "chunk_upload_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "分片上传失败",
+			context: { chunkId, chunkIndex: chunk?.index, retryCount },
 		})
 
 		// Check if error is task end error (code 43200)
@@ -610,8 +620,11 @@ export class ChunkUploader {
 		}
 
 		if (!chunk) {
-			logger.error("错误处理过程中找不到分片", {
-				chunkId,
+			logger.error({
+				eventKey: "process_chunk_failed",
+				errorKind: "unknown",
+				message: "错误处理过程中找不到分片",
+				context: { chunkId },
 			})
 			this.activeUploads.delete(chunkId)
 			this.activeUploadIds.delete(chunkId)
@@ -630,9 +643,11 @@ export class ChunkUploader {
 
 		// Check if max retries exceeded
 		if (this.hasExceededMaxRetries(chunkId)) {
-			logger.error(`分片 ${chunkId} 已达到最大重试次数 ${this.config.maxRetryCount}`, {
-				chunkIndex: chunk.index,
-				sessionId: chunk.sessionId,
+			logger.error({
+				eventKey: "chunk_retry_failed",
+				errorKind: "unknown",
+				message: `分片 ${chunkId} 已达到最大重试次数 ${this.config.maxRetryCount}`,
+				context: { chunkIndex: chunk.index, sessionId: chunk.sessionId },
 			})
 
 			// Remove from active uploads
@@ -643,7 +658,12 @@ export class ChunkUploader {
 			try {
 				await this.audioChunkDB.updateChunkUploadStatus(chunkId, "failed")
 			} catch (error) {
-				logger.error(`Failed to mark chunk ${chunkId} as failed:`, error)
+				logger.error({
+					eventKey: "mark_chunk_as_failed",
+					errorKind: "unknown",
+					error: error,
+					message: `Failed to mark chunk ${chunkId} as failed:`,
+				})
 			}
 
 			// Clear session active status
@@ -670,10 +690,20 @@ export class ChunkUploader {
 					})
 				})
 				.catch((refreshError) => {
-					logger.error(`认证错误后刷新令牌失败：`, refreshError)
+					logger.error({
+						eventKey: "refresh_token_failed",
+						errorKind: "permission",
+						error: refreshError,
+						message: `认证错误后刷新令牌失败：`,
+					})
 				})
 		} else {
-			logger.error(`不是认证错误，分片 ${chunkId} 上传失败，错误：`, error)
+			logger.error({
+				eventKey: "chunk_upload_failed",
+				errorKind: "permission",
+				error: error,
+				message: `不是认证错误，分片 ${chunkId} 上传失败，错误：`,
+			})
 		}
 
 		// Increment retry count
@@ -758,7 +788,12 @@ export class ChunkUploader {
 			return await this.tokenManager.getToken(sessionId, topicId)
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
-			logger.error(`获取会话 ${sessionId} 上传凭证失败：`, error)
+			logger.error({
+				eventKey: "get_session_upload_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `获取会话 ${sessionId} 上传凭证失败：`,
+			})
 			throw new Error(`Failed to get upload credentials: ${errorMessage}`)
 		}
 	}
@@ -827,7 +862,12 @@ export class ChunkUploader {
 						resolve(true)
 					}
 				} catch (error) {
-					logger.error(`检查上传进度时出错：`, error)
+					logger.error({
+						eventKey: "check_upload_failed",
+						errorKind: "unknown",
+						error: error,
+						message: `检查上传进度时出错：`,
+					})
 					cleanup()
 					reject(error)
 				}
@@ -867,7 +907,12 @@ export class ChunkUploader {
 						resolve(progress)
 					}
 				} catch (error) {
-					logger.error(`检查上传终态进度时出错：`, error)
+					logger.error({
+						eventKey: "check_upload_failed",
+						errorKind: "unknown",
+						error: error,
+						message: `检查上传终态进度时出错：`,
+					})
 					cleanup()
 					reject(error)
 				}
@@ -1220,7 +1265,12 @@ export class ChunkUploader {
 		try {
 			await this.tokenManager.forceRefreshToken(sessionId)
 		} catch (error) {
-			logger.error(`刷新会话 ${sessionId} 令牌失败：`, error)
+			logger.error({
+				eventKey: "refresh_session_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: `刷新会话 ${sessionId} 令牌失败：`,
+			})
 			throw error
 		}
 	}

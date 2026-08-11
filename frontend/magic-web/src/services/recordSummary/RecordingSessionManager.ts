@@ -36,8 +36,11 @@ export class RecordingSessionManager {
 		this.clearHistoryDebounce()
 		const clone: RecordingSession = JSON.parse(JSON.stringify(snapshot))
 		this.historyDB.upsert(clone).catch((error) => {
-			logger.error("写入会话历史失败", {
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "write_session_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "写入会话历史失败",
 			})
 		})
 	}

@@ -15,7 +15,6 @@ import {
 	getShareTypeVisualMeta,
 } from "../utils/shareTypeVisual"
 import SelectedFilesHierarchySection from "./SelectedFilesHierarchySection"
-import { ProjectShareScrollSpacer } from "./ProjectShareFloatingActionBar"
 
 interface ProjectShareLinkDetailViewProps {
 	controller: ProjectShareSheetController
@@ -191,11 +190,6 @@ export default function ProjectShareLinkDetailView({
 					/>
 				</section>
 			) : null}
-
-			<ProjectShareScrollSpacer
-				variant={controller.canNativeShare ? "triple" : "dual"}
-				testId="project-share-sheet-detail-floating-bar"
-			/>
 		</div>
 	)
 }

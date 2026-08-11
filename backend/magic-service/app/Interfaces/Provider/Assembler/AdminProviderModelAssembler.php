@@ -69,9 +69,9 @@ class AdminProviderModelAssembler
                 modelId: $model->getModelId(),
                 name: $model->getLocalizedName($locale),
                 modelVersion: $model->getModelVersion(),
-                category: $model->getCategory()?->value ?? '',
+                category: $model->getCategory()->value,
                 modelType: $model->getModelType()->value,
-                status: $model->getStatus()?->value ?? Status::Disabled->value,
+                status: $model->getStatus()->value,
                 icon: $model->getIcon(),
                 provider: self::buildProviderItem($model, $providerContext, $locale),
             );
@@ -107,7 +107,7 @@ class AdminProviderModelAssembler
             $list[] = new ProviderModelGroupDTO(
                 modelId: (string) $modelId,
                 name: $model->getLocalizedName($locale),
-                category: $model->getCategory()?->value ?? '',
+                category: $model->getCategory()->value,
                 modelType: $model->getModelType()->value,
                 icon: $model->getIcon(),
                 providerCount: count($providers),
@@ -201,13 +201,13 @@ class AdminProviderModelAssembler
 
         return new ProviderModelProviderDTO(
             serviceProviderConfigId: (string) $configId,
-            providerCode: $config?->getProviderCode()?->value ?? $provider?->getProviderCode()->value ?? '',
+            providerCode: $config?->getProviderCode()->value ?? $provider?->getProviderCode()->value ?? '',
             name: $providerName,
             alias: $providerAlias,
             status: $config?->getStatus()->value ?? Status::Disabled->value,
             icon: $provider?->getIcon() ?? '',
             modelRecordId: $withModelRecord ? (string) $model->getId() : null,
-            modelStatus: $withModelRecord ? ($model->getStatus()?->value ?? Status::Disabled->value) : null,
+            modelStatus: $withModelRecord ? $model->getStatus()->value : null,
         );
     }
 }

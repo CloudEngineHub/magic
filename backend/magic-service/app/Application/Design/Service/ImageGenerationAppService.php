@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\Design\Service;
 
+use App\Application\SuperMagic\Common\Contract\UserAiWatermarkPolicyInterface;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationStatus;
 use App\Domain\Design\Entity\ValueObject\ImageGenerationType;
@@ -16,13 +17,12 @@ use App\Domain\File\Service\FileDomainService;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Service\AiAbilityDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\SizeManager;
-use Dtyq\SuperMagic\Application\Contract\UserAiWatermarkPolicyInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Qbhy\HyperfAuth\Authenticatable;
 
 /**
