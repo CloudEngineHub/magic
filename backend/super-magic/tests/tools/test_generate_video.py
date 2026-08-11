@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.i18n import i18n
 from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.get_video import GetVideo, GetVideoParams
 from app.tools.generate_video import GenerateVideo, GenerateVideoParams
@@ -41,6 +42,26 @@ class _AgentContext:
 class _ToolContext:
     def get_extension(self, name):
         return _AgentContext() if name == "agent_context" else None
+
+
+@pytest.mark.asyncio
+async def test_tool_action_is_localized_for_ui():
+    tool = GenerateVideo()
+    try:
+        i18n.set_language("zh_CN")
+        zh_detail = await tool.get_before_tool_call_friendly_action_and_remark(
+            "generate_video", None, {}
+        )
+        i18n.set_language("en_US")
+        en_detail = await tool.get_before_tool_call_friendly_action_and_remark(
+            "generate_video", None, {}
+        )
+
+        assert zh_detail["action"] == "生成视频"
+        assert zh_detail["tool_name"] == "generate_video"
+        assert en_detail["action"] == "Generate video"
+    finally:
+        i18n.reset_language()
 
 
 def test_prompt_hint_keeps_video_and_audio_requirements():

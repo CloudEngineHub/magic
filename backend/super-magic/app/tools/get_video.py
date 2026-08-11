@@ -63,6 +63,7 @@ Whether to overwrite an existing video.
 class GetVideo(GenerateVideo):
     """Query and download a regular video generation task."""
 
+    name = "get_video"
     params_class = GetVideoParams
     MAX_WAIT_SECONDS = 1800
     POLL_INTERVAL_SECONDS = 10

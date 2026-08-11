@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
+from app.i18n import i18n
 from app.tools.get_video import GetVideo, GetVideoParams
 
 
@@ -87,6 +88,27 @@ async def test_until_complete_polls_and_downloads_video(monkeypatch, tmp_path):
 
 def test_wait_mode_defaults_to_until_complete():
     assert GetVideoParams(operation_id="op-1").wait_mode == "until_complete"
+
+
+@pytest.mark.asyncio
+async def test_tool_name_is_get_video_in_ui_events():
+    tool = GetVideo()
+    try:
+        i18n.set_language("zh_CN")
+        zh_detail = await tool.get_before_tool_call_friendly_action_and_remark(
+            "get_video", None, {}
+        )
+        i18n.set_language("en_US")
+        en_detail = await tool.get_before_tool_call_friendly_action_and_remark(
+            "get_video", None, {}
+        )
+
+        assert tool.name == "get_video"
+        assert zh_detail["action"] == "获取视频"
+        assert zh_detail["tool_name"] == "get_video"
+        assert en_detail["action"] == "Get video"
+    finally:
+        i18n.reset_language()
 
 
 def test_prompt_hint_explains_create_then_reuse_workflow():
