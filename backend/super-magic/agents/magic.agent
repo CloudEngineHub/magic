@@ -6,8 +6,6 @@ tools:
   - video_understanding
   - image_search
   - generate_images
-  - generate_video
-  - get_video
   - list_dir
   - file_search
   - read_files
