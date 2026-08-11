@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
 	findFileByName,
 	findFileByPath,
@@ -142,6 +142,38 @@ describe("Markdown Utils", () => {
 
 			expect(result.startsWith("<pre><code>")).toBe(true)
 			expect(result).not.toContain('<a href="javascript:alert(1)">')
+		})
+
+		it("checks raw HTML workload limits before DOM risk analysis", () => {
+			const parseSpy = vi.spyOn(DOMParser.prototype, "parseFromString")
+			try {
+				const markdown = Array.from(
+					{ length: 10000 },
+					() => '<span style="color:red">x</span>',
+				).join(" ")
+				const result = escapeDangerousInvisibleHtmlTags(markdown)
+
+				expect(markdown.length).toBeLessThan(4 * 1024 * 1024)
+				expect(result.startsWith("<pre><code>")).toBe(true)
+				expect(parseSpy).not.toHaveBeenCalled()
+			} finally {
+				parseSpy.mockRestore()
+			}
+		})
+
+		it("caches repeated raw HTML risk decisions", () => {
+			const parseSpy = vi.spyOn(DOMParser.prototype, "parseFromString")
+			try {
+				const markdown = Array.from(
+					{ length: 100 },
+					() => '<span style="color:red">x</span>',
+				).join(" ")
+				escapeDangerousInvisibleHtmlTags(markdown)
+
+				expect(parseSpy).toHaveBeenCalledTimes(1)
+			} finally {
+				parseSpy.mockRestore()
+			}
 		})
 	})
 	describe("findFileByName", () => {

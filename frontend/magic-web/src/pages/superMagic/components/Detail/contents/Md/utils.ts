@@ -41,6 +41,11 @@ interface HtmlSourceRange extends SourceRange {
 	content: string
 }
 
+interface RawHtmlWorkload {
+	inlineContents: string[]
+	blockTokens: MarkdownToken[]
+}
+
 const markdownParser = new MarkdownIt({
 	html: true,
 	linkify: true,
@@ -164,6 +169,8 @@ const multiUrlAttributeNames = new Set(["srcset", "ping"])
 const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
 const MAX_PROBE_CANDIDATES = 2048
 const MAX_PROBE_MARKDOWN_LENGTH = 4 * 1024 * 1024
+const MAX_RAW_HTML_TOKEN_COUNT = 4096
+const MAX_RAW_HTML_TOTAL_BYTES = 512 * 1024
 const htmlRiskAttributePresencePattern =
 	/\s+(?:on[a-z][\w:-]*|srcdoc|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)\s*=/i
 
@@ -256,6 +263,54 @@ function shouldRenderHtmlAsCode(html: string): boolean {
 	)
 }
 
+function shouldRenderHtmlAsCodeCached(html: string, cache: Map<string, boolean>): boolean {
+	const cached = cache.get(html)
+	if (cached !== undefined) return cached
+
+	const result = shouldRenderHtmlAsCode(html)
+	cache.set(html, result)
+	return result
+}
+
+function addUtf8ByteLength(value: string, currentBytes: number): number {
+	let bytes = currentBytes
+	for (const character of value) {
+		const codePoint = character.codePointAt(0) ?? 0
+		bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4
+		if (bytes > MAX_RAW_HTML_TOTAL_BYTES) return bytes
+	}
+	return bytes
+}
+
+function collectRawHtmlWorkload(tokens: MarkdownToken[]): RawHtmlWorkload | null {
+	const inlineContents: string[] = []
+	const blockTokens: MarkdownToken[] = []
+	let tokenCount = 0
+	let totalBytes = 0
+
+	const addContent = (content: string): boolean => {
+		tokenCount += 1
+		if (tokenCount > MAX_RAW_HTML_TOKEN_COUNT) return false
+		totalBytes = addUtf8ByteLength(content, totalBytes)
+		return totalBytes <= MAX_RAW_HTML_TOTAL_BYTES
+	}
+
+	for (const token of tokens) {
+		if (token.type === "html_block") {
+			if (!addContent(token.content)) return null
+			blockTokens.push(token)
+		}
+
+		for (const child of token.children ?? []) {
+			if (child.type !== "html_inline") continue
+			if (!addContent(child.content)) return null
+			inlineContents.push(child.content)
+		}
+	}
+
+	return { inlineContents, blockTokens }
+}
+
 function collectHtmlInlineContents(tokens: MarkdownToken[]): string[] {
 	const contents: string[] = []
 	for (const token of tokens) {
@@ -266,8 +321,10 @@ function collectHtmlInlineContents(tokens: MarkdownToken[]): string[] {
 	return contents
 }
 
-function collectRelevantHtmlInlineContents(tokens: MarkdownToken[]): string[] {
-	const htmlContents = collectHtmlInlineContents(tokens)
+function collectRelevantHtmlInlineContents(
+	htmlContents: string[],
+	riskCache: Map<string, boolean>,
+): string[] {
 	const selectedIndexes = new Set<number>()
 	const openTags = new Map<string, Array<{ index: number; dangerous: boolean }>>()
 
@@ -275,7 +332,6 @@ function collectRelevantHtmlInlineContents(tokens: MarkdownToken[]): string[] {
 		const descriptor = getHtmlTagDescriptor(content)
 		if (!descriptor) continue
 
-		const dangerous = shouldRenderHtmlAsCode(content)
 		const isVoid = descriptor.isSelfClosing || voidHtmlTags.has(descriptor.name)
 
 		if (descriptor.isClosing) {
@@ -286,6 +342,8 @@ function collectRelevantHtmlInlineContents(tokens: MarkdownToken[]): string[] {
 			}
 			continue
 		}
+
+		const dangerous = shouldRenderHtmlAsCodeCached(content, riskCache)
 
 		if (isVoid) {
 			if (dangerous) selectedIndexes.add(index)
@@ -328,9 +386,12 @@ function escapeRegExp(value: string): string {
 
 function locateHtmlInlineRanges(
 	markdown: string,
-	tokens: MarkdownToken[],
+	htmlInlineContents: string[],
+	riskCache: Map<string, boolean>,
 ): HtmlSourceRange[] | null {
-	const htmlContents = [...new Set(collectRelevantHtmlInlineContents(tokens))]
+	const htmlContents = [
+		...new Set(collectRelevantHtmlInlineContents(htmlInlineContents, riskCache)),
+	]
 	if (htmlContents.length === 0) return []
 	if (htmlContents.length > MAX_PROBE_CANDIDATES) return null
 
@@ -393,8 +454,9 @@ function createHtmlBlockReplacement(
 	markdown: string,
 	token: MarkdownToken,
 	lineOffsets: number[],
+	riskCache: Map<string, boolean>,
 ): { range: SourceRange; replacement: string } | null {
-	if (!token.map || !shouldRenderHtmlAsCode(token.content)) return null
+	if (!token.map || !shouldRenderHtmlAsCodeCached(token.content, riskCache)) return null
 
 	const [startLine, endLine] = token.map
 	const start = lineOffsets[startLine]
@@ -417,7 +479,10 @@ function createHtmlBlockReplacement(
 	}
 }
 
-function createInlineCodeRanges(ranges: HtmlSourceRange[]): SourceRange[] {
+function createInlineCodeRanges(
+	ranges: HtmlSourceRange[],
+	riskCache: Map<string, boolean>,
+): SourceRange[] {
 	const result: SourceRange[] = []
 	const openTags = new Map<string, Array<HtmlSourceRange & { dangerous: boolean }>>()
 
@@ -425,7 +490,6 @@ function createInlineCodeRanges(ranges: HtmlSourceRange[]): SourceRange[] {
 		const descriptor = getHtmlTagDescriptor(range.content)
 		if (!descriptor) continue
 
-		const dangerous = shouldRenderHtmlAsCode(range.content)
 		const isVoid = descriptor.isSelfClosing || voidHtmlTags.has(descriptor.name)
 
 		if (descriptor.isClosing) {
@@ -439,6 +503,8 @@ function createInlineCodeRanges(ranges: HtmlSourceRange[]): SourceRange[] {
 			}
 			continue
 		}
+
+		const dangerous = shouldRenderHtmlAsCodeCached(range.content, riskCache)
 
 		if (isVoid) {
 			if (dangerous) result.push(range)
@@ -510,18 +576,28 @@ export function escapeDangerousInvisibleHtmlTags(markdown: string): string {
 	}
 
 	const tokens = markdownParser.parse(markdown, {}) as MarkdownToken[]
-	const lineOffsets = getLineOffsets(markdown)
-	const replacements: Array<{ range: SourceRange; replacement: string }> = tokens
-		.filter((token) => token.type === "html_block")
-		.map((token) => createHtmlBlockReplacement(markdown, token, lineOffsets))
-		.filter((replacement): replacement is NonNullable<typeof replacement> => !!replacement)
+	const rawHtmlWorkload = collectRawHtmlWorkload(tokens)
+	if (!rawHtmlWorkload) {
+		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
+	}
 
-	const locatedInlineRanges = locateHtmlInlineRanges(markdown, tokens)
+	const riskCache = new Map<string, boolean>()
+	const lineOffsets = getLineOffsets(markdown)
+	const replacements: Array<{ range: SourceRange; replacement: string }> =
+		rawHtmlWorkload.blockTokens
+			.map((token) => createHtmlBlockReplacement(markdown, token, lineOffsets, riskCache))
+			.filter((replacement): replacement is NonNullable<typeof replacement> => !!replacement)
+
+	const locatedInlineRanges = locateHtmlInlineRanges(
+		markdown,
+		rawHtmlWorkload.inlineContents,
+		riskCache,
+	)
 	if (locatedInlineRanges === null) {
 		return `<pre><code>${escapeHtml(markdown)}</code></pre>`
 	}
 
-	const inlineRanges = createInlineCodeRanges(locatedInlineRanges)
+	const inlineRanges = createInlineCodeRanges(locatedInlineRanges, riskCache)
 	for (const range of mergeSourceRanges(inlineRanges)) {
 		replacements.push({
 			range,
