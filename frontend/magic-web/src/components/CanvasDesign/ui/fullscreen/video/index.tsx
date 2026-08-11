@@ -94,11 +94,8 @@ export default function VideoFullscreenOverlay(props: VideoFullscreenOverlayProp
 				}
 
 				if (isCancelled) {
-					if (usedHandoff) {
-						elementInstance.handoffPlaybackFromFullscreen()
-					} else {
-						elementInstance.releaseFullscreenPlayback()
-					}
+					// Cleanup already released this effect's session. A shared consumer ID may
+					// now belong to a newer StrictMode replay acquire, so do not release again.
 					return
 				}
 
