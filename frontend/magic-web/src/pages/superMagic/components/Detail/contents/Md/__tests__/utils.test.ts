@@ -76,9 +76,36 @@ describe("Markdown Utils", () => {
 			).toBe('before <code>&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;</code> after')
 		})
 
+		it.each([
+			"java&#x73;cript:alert(1)",
+			"jav&#97;script:alert(1)",
+			"java&#10;script:alert(1)",
+			"javascript&#58;alert(1)",
+			"JaVaScRiPt:alert(1)",
+			"vb&#x73;cript:msgbox(1)",
+			"data&#58;text/html,<script>alert(1)</script>",
+		])("decodes and blocks dangerous raw HTML URL %s", (href) => {
+			const markdown = `before <a href="${href}">click</a> after`
+			const escapedHref = href
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;")
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				`before <code>&lt;a href="${escapedHref}"&gt;click&lt;/a&gt;</code> after`,
+			)
+		})
+
 		it("leaves safe raw HTML links untouched", () => {
-			const markdown = '<a href="https://example.com">example</a>'
-			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+			for (const href of [
+				"https://example.com",
+				"http://example.com",
+				"/docs/page.md",
+				"../page.md#section",
+				"mailto:user@example.com",
+			]) {
+				const markdown = `<a href="${href}">example</a>`
+				expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+			}
 		})
 	})
 	describe("findFileByName", () => {

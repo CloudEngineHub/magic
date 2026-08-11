@@ -79,12 +79,22 @@ const voidHtmlTags = new Set([
 	"wbr",
 ])
 
-const htmlEventAttributePattern = /\s+on[a-z][\w:-]*\s*=/i
-const dangerousUrlAttributePattern =
-	/\s+(?:href|src|xlink:href|action|formaction|poster)\s*=\s*(?:["']\s*)?(?:javascript|vbscript|data\s*:\s*text\/html)\s*:/i
-const dangerousStyleAttributePattern =
-	/\s+style\s*=\s*(?:["'][^"']*(?:expression\s*\(|url\s*\(\s*["']?\s*(?:javascript|vbscript)\s*:))/i
-const srcDocAttributePattern = /\s+srcdoc\s*=/i
+const urlAttributeNames = new Set([
+	"href",
+	"src",
+	"xlink:href",
+	"action",
+	"formaction",
+	"poster",
+	"background",
+	"cite",
+	"manifest",
+	"usemap",
+])
+const multiUrlAttributeNames = new Set(["srcset", "ping"])
+const safeUrlProtocols = new Set(["http", "https", "mailto", "tel"])
+const htmlRiskAttributePresencePattern =
+	/\s+(?:on[a-z][\w:-]*|srcdoc|style|href|src|xlink:href|action|formaction|poster|background|cite|manifest|usemap|srcset|ping)\s*=/i
 
 function escapeHtml(value: string): string {
 	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -105,6 +115,79 @@ function getHtmlTagDescriptor(html: string): {
 	}
 }
 
+function removeProtocolWhitespaceAndControls(value: string): string {
+	return Array.from(value)
+		.filter((character) => {
+			const codePoint = character.codePointAt(0) ?? 0
+			return codePoint > 0x20 && (codePoint < 0x7f || codePoint > 0x9f)
+		})
+		.join("")
+}
+
+function isSafeUrlAttribute(attributeName: string, value: string): boolean {
+	const normalizedValue = removeProtocolWhitespaceAndControls(value)
+	if (!normalizedValue) return true
+
+	const protocolMatch = normalizedValue.match(/^([a-z][a-z0-9+.-]*):/i)
+	if (!protocolMatch) return true
+
+	const protocol = protocolMatch[1].toLowerCase()
+	if (safeUrlProtocols.has(protocol)) return true
+
+	return (
+		protocol === "data" &&
+		(attributeName === "src" || attributeName === "poster") &&
+		/^data:image\/(?:avif|gif|jpe?g|png|webp);base64,/i.test(normalizedValue)
+	)
+}
+
+function hasDangerousStyleValue(styleValue: string): boolean {
+	const normalizedStyle = removeProtocolWhitespaceAndControls(styleValue)
+	if (/expression\s*\(/i.test(normalizedStyle)) return true
+
+	for (const match of normalizedStyle.matchAll(/url\s*\(\s*(["']?)(.*?)\1\s*\)/gi)) {
+		const urlValue = match[2]
+		if (urlValue.includes("\\") || !isSafeUrlAttribute("style", urlValue)) return true
+	}
+
+	return false
+}
+
+function hasDangerousHtmlAttributes(html: string): boolean {
+	if (typeof DOMParser === "undefined") {
+		// Rendering without a DOM parser is uncommon for this client-only flow.
+		// Fall back conservatively rather than allowing an encoded value through.
+		return htmlRiskAttributePresencePattern.test(html)
+	}
+
+	const document = new DOMParser().parseFromString(html, "text/html")
+	let inspectedRiskAttribute = false
+
+	for (const element of Array.from(document.querySelectorAll("*"))) {
+		for (const attribute of Array.from(element.attributes)) {
+			const attributeName = attribute.name.toLowerCase()
+			if (attributeName.startsWith("on") || attributeName === "srcdoc") return true
+
+			if (attributeName === "style") {
+				inspectedRiskAttribute = true
+				if (hasDangerousStyleValue(attribute.value)) return true
+				continue
+			}
+
+			if (multiUrlAttributeNames.has(attributeName)) return true
+
+			if (urlAttributeNames.has(attributeName)) {
+				inspectedRiskAttribute = true
+				if (!isSafeUrlAttribute(attributeName, attribute.value)) return true
+			}
+		}
+	}
+
+	// If malformed/container-sensitive HTML prevented DOMParser from exposing a
+	// risky attribute, prefer rendering it as code instead of trusting raw text.
+	return !inspectedRiskAttribute && htmlRiskAttributePresencePattern.test(html)
+}
+
 function shouldRenderHtmlAsCode(html: string): boolean {
 	const tagNames = Array.from(html.matchAll(/<\s*\/?\s*([a-z][\w:-]*)\b/gi)).map((match) =>
 		match[1].toLowerCase(),
@@ -112,10 +195,7 @@ function shouldRenderHtmlAsCode(html: string): boolean {
 
 	return (
 		tagNames.some((tagName) => protectedHtmlTags.has(tagName)) ||
-		htmlEventAttributePattern.test(html) ||
-		dangerousUrlAttributePattern.test(html) ||
-		dangerousStyleAttributePattern.test(html) ||
-		srcDocAttributePattern.test(html)
+		hasDangerousHtmlAttributes(html)
 	)
 }
 
@@ -203,7 +283,9 @@ function locateHtmlInlineRanges(markdown: string, tokens: MarkdownToken[]): Html
 
 	const nonOverlappingCandidates = candidates
 		.sort((left, right) => left.start - right.start || right.end - left.end)
-		.filter((candidate, index, sorted) => index === 0 || candidate.start >= sorted[index - 1].end)
+		.filter(
+			(candidate, index, sorted) => index === 0 || candidate.start >= sorted[index - 1].end,
+		)
 	const probedMarkdown = nonOverlappingCandidates
 		.slice()
 		.sort((left, right) => right.start - left.start)
