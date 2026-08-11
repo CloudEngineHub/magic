@@ -175,6 +175,9 @@
 		"summaryNotDone": "未总结",
 		"summaryStatus": "总结状态"
 	},
+	"import": {
+		"doNotRefreshTip": "导入完成前请勿刷新页面，切换到其他页面不影响导入"
+	},
 	"listCount": "录音 · {{count}}",
 	"loading": "加载中...",
 	"loadingMore": "加载更多...",

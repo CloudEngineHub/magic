@@ -55,6 +55,8 @@ export interface AiChatProps {
 	useRecordingSync?: boolean
 	/** Reuses the full project-detail message/editor surface inside recording detail. */
 	projectDetailMode?: boolean
+	/** Controls whether the project-detail conversation can switch into recording mode. */
+	allowRecordingMode?: boolean
 	topicStore?: TopicStore
 	topicActions?: MessageHeaderTopicActions
 	historyTriggerMode?: "dropdown" | "layout"
@@ -81,6 +83,7 @@ export function AiChat(props: AiChatProps) {
 		setSelectedWorkspace = recordingSummaryStore.setWorkspace,
 		useRecordingSync = true,
 		projectDetailMode = false,
+		allowRecordingMode = true,
 		topicStore,
 		topicActions,
 		historyTriggerMode,
@@ -350,6 +353,7 @@ export function AiChat(props: AiChatProps) {
 					topicStore={topicStore}
 					projectFilesStore={projectFilesStore}
 					mentionPanelStore={recordSummaryFileStore}
+					allowRecordingMode={allowRecordingMode}
 					historyTriggerMode={historyTriggerMode ?? "layout"}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}

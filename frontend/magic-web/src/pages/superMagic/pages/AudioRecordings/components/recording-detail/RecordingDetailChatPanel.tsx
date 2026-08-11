@@ -11,6 +11,7 @@ import type { MentionPanelStore } from "@/components/business/MentionPanel/built
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { RECORDING_CHAT_HISTORY_WIDTH } from "./recording-detail-layout"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
+import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 
 export interface RecordingDetailChatPanelProps {
 	isConversationPanelCollapsed: boolean
@@ -59,6 +60,12 @@ export default function RecordingDetailChatPanel({
 		topicStore,
 	})
 
+	// Refresh the isolated topic snapshot after a live task completes so the header status follows the server state.
+	useRefreshTopicDetailOnTaskComplete({
+		selectedTopic,
+		onTopicDetailLoaded: topicStore.updateTopic,
+	})
+
 	return (
 		<div
 			className="flex h-full min-h-0 min-w-0 overflow-hidden bg-sidebar"
@@ -82,6 +89,7 @@ export default function RecordingDetailChatPanel({
 							setSelectedTopic={setSelectedTopic}
 							useRecordingSync={false}
 							projectDetailMode
+							allowRecordingMode={false}
 							topicStore={topicStore}
 							topicActions={topicActions}
 							historyTriggerMode="layout"

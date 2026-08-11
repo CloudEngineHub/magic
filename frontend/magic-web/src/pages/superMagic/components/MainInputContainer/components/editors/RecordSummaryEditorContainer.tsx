@@ -39,27 +39,35 @@ export default function RecordSummaryEditorContainer({
 
 	useSharedProjectMode({ setTopicMode: effectiveSetTopicMode })
 
-	const { editorMode, setEditorMode } = useRecordingSummaryEditorMode({
+	const { editorMode: savedEditorMode, setEditorMode } = useRecordingSummaryEditorMode({
 		selectedTopic,
 		hasMessage: (editorContext?.messagesLength ?? 0) > 0,
 	})
+	// Detail conversations stay in text-editing mode regardless of the persisted recording preference.
+	const editorMode =
+		editorContext?.allowRecordingMode === false
+			? RecordingSummaryEditorMode.Editing
+			: savedEditorMode
 
 	const editorSize = editorContext?.size ?? "default"
 
+	// Hiding the switch also removes the only inline entry that could start a new recording.
 	const editorModeSwitch =
-		editorContext?.editorModeSwitch ??
-		(({ disabled }: { disabled: boolean }) => (
-			<RecordingSummaryEditorModeSwitch
-				className={getButtonPaddingClass(editorSize)}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				selectedWorkspace={selectedWorkspace}
-				iconSize={EDITOR_ICON_SIZE_MAP[editorSize]}
-				editorMode={editorMode}
-				setEditorMode={setEditorMode}
-				disabled={disabled}
-			/>
-		))
+		editorContext?.allowRecordingMode === false
+			? undefined
+			: (editorContext?.editorModeSwitch ??
+				(({ disabled }: { disabled: boolean }) => (
+					<RecordingSummaryEditorModeSwitch
+						className={getButtonPaddingClass(editorSize)}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						selectedWorkspace={selectedWorkspace}
+						iconSize={EDITOR_ICON_SIZE_MAP[editorSize]}
+						editorMode={editorMode}
+						setEditorMode={setEditorMode}
+						disabled={disabled}
+					/>
+				)))
 
 	const tiptapEditorRef = useRef<MessageEditorRef | null>(null)
 

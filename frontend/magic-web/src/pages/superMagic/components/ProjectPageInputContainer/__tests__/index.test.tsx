@@ -135,6 +135,8 @@ vi.mock("@/pages/superMagic/components/MainInputContainer/stores", () => ({
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 	default: {
 		getModeConfigWithLegacy: () => ({ mode: { playbooks: [] } }),
+		// Treat synthetic project modes as valid so the test only exercises context forwarding.
+		isModeValid: () => true,
 	},
 }))
 
@@ -193,5 +195,12 @@ describe("ProjectPageInputContainer scoped topic store", () => {
 
 		expect(screen.getByTestId("desktop-input-container")).toBeInTheDocument()
 		expect(testState.desktopEditorContext?.topicStore).toBeUndefined()
+	})
+
+	it("forwards the recording-mode restriction into the scene editor context", () => {
+		render(<ProjectPageInputContainer {...createProps({ allowRecordingMode: false })} />)
+
+		expect(screen.getByTestId("desktop-input-container")).toBeInTheDocument()
+		expect(testState.desktopEditorContext?.allowRecordingMode).toBe(false)
 	})
 })

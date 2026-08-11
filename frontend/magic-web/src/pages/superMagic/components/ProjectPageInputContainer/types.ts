@@ -40,6 +40,8 @@ export interface ProjectPageInputContainerProps {
 	mentionPanelStore?: MentionPanelStore
 	/** Keeps send-time topic mutations inside the caller's isolated topic scope. */
 	topicStore?: TopicStore
+	/** Prevents detail-only conversations from switching back into recording mode. */
+	allowRecordingMode?: SceneEditorContext["allowRecordingMode"]
 	/**
 	 * 话题模式逻辑，用于控制话题模式的选择和切换
 	 */

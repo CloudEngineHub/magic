@@ -118,6 +118,8 @@ interface TopicMessagePanelProps {
 	topicStore?: typeof topicStore
 	projectFilesStore?: typeof projectFilesStore
 	mentionPanelStore?: MentionPanelStore
+	/** Controls whether the recording-summary editor can expose recording controls. */
+	allowRecordingMode?: boolean
 }
 
 function TopicMessagePanel({
@@ -148,6 +150,7 @@ function TopicMessagePanel({
 	topicStore: topicStoreProp,
 	projectFilesStore: projectFilesStoreProp,
 	mentionPanelStore,
+	allowRecordingMode,
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
@@ -366,6 +369,7 @@ function TopicMessagePanel({
 						attachments={attachments}
 						mentionPanelStore={mentionPanelStore}
 						topicStore={scopedTopicStore}
+						allowRecordingMode={allowRecordingMode}
 						isShowLoadingInit={isShowLoadingInit}
 						topicModeLogic={{
 							topicMode,

@@ -175,6 +175,9 @@
 		"summaryNotDone": "Not summarized",
 		"summaryStatus": "Summary status"
 	},
+	"import": {
+		"doNotRefreshTip": "Please don't refresh until the import finishes. Switching to other pages won't interrupt it."
+	},
 	"listCount": "Recordings · {{count}}",
 	"loading": "Loading...",
 	"loadingMore": "Loading more...",

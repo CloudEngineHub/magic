@@ -56,6 +56,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	isShowLoadingInit = false,
 	mentionPanelStore = GlobalMentionPanelStore,
 	topicStore,
+	allowRecordingMode,
 	topicModeLogic: topicModeLogicProps,
 	modelTopicMode,
 	size = "small",
@@ -232,6 +233,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			mentionPanelStore,
 			// Recording detail injects its isolated store so send-time renames never fall back globally.
 			topicStore,
+			allowRecordingMode,
 			onFileClick,
 			onEditorFocus: () => {
 				setIsFocused(true)
@@ -279,6 +281,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		attachments,
 		mentionPanelStore,
 		topicStore,
+		allowRecordingMode,
 		onFileClick,
 		onMessageSendReady,
 		messageQueue.editingQueueItem,
