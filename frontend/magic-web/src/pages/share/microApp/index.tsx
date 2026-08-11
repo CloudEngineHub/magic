@@ -32,6 +32,7 @@ import { history } from "@/routes/history"
 import GlobalSidebarStore from "@/stores/display/GlobalSidebarStore"
 import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
+import useMicroAppSafetyNoticeConfirmation from "./hooks/useMicroAppSafetyNoticeConfirmation"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
@@ -309,9 +310,10 @@ export default function MicroAppSharePage() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
-	const [confirmedSafetyAppId, setConfirmedSafetyAppId] = useState<string | null>(null)
 	// 分享页隐藏了 HTML 文件头，通过管理句柄复用预览内部的同一个授权面板。
 	const [permissionManager, setPermissionManager] = useState<{ open: () => void } | null>(null)
+	const { hasConfirmedSafetyNotice, confirmSafetyNotice } =
+		useMicroAppSafetyNoticeConfirmation(appId)
 	const {
 		shareData,
 		resourceId,
@@ -339,10 +341,7 @@ export default function MicroAppSharePage() {
 		[attachmentList],
 	)
 	const displayAppName = shareMeta.projectName
-	// 将确认绑定到 appId，切换分享路由时不会短暂复用上一应用的确认状态。
-	const hasConfirmedSafetyNotice = confirmedSafetyAppId === appId
 	useEffect(() => {
-		setConfirmedSafetyAppId(null)
 		setPermissionManager(null)
 	}, [appId])
 	const previewFile = useMemo(
@@ -447,9 +446,10 @@ export default function MicroAppSharePage() {
 
 				{!loading && !error && previewFile && !hasConfirmedSafetyNotice ? (
 					<MicroAppSafetyNotice
+						key={appId}
 						appName={displayAppName}
 						coverUrl={coverUrl}
-						onConfirm={() => setConfirmedSafetyAppId(appId)}
+						onConfirm={confirmSafetyNotice}
 						onLeave={handleLeave}
 					/>
 				) : null}

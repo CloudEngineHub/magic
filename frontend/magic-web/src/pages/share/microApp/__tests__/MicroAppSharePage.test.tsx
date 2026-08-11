@@ -56,6 +56,73 @@ describe("MicroAppSharePage", () => {
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
 
+	it("remembers the safety confirmation for the current micro app when selected", async () => {
+		const firstRender = renderPage()
+
+		const doNotRemind = await screen.findByRole("checkbox", {
+			name: "microAppShare.safetyDoNotRemind",
+		})
+		expect(doNotRemind).not.toBeChecked()
+
+		fireEvent.click(doNotRemind)
+		fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+		expect(await screen.findByTestId("mock-html-preview")).toBeInTheDocument()
+
+		firstRender.unmount()
+		renderPage()
+
+		expect(await screen.findByTestId("mock-html-preview")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
+	})
+
+	it("shows the safety reminder again when the checkbox is not selected", async () => {
+		const firstRender = renderPage()
+
+		await confirmSafetyNotice()
+		firstRender.unmount()
+		renderPage()
+
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+
+	it("keeps the safety reminder scoped to the confirmed micro app", async () => {
+		renderPage()
+
+		fireEvent.click(
+			await screen.findByRole("checkbox", {
+				name: "microAppShare.safetyDoNotRemind",
+			}),
+		)
+		fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+		await screen.findByTestId("mock-html-preview")
+
+		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
+
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
+	})
+
+	it("still confirms the current visit when browser storage is unavailable", async () => {
+		const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+			throw new Error("storage unavailable")
+		})
+
+		try {
+			renderPage()
+			fireEvent.click(
+				await screen.findByRole("checkbox", {
+					name: "microAppShare.safetyDoNotRemind",
+				}),
+			)
+			fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+
+			expect(await screen.findByTestId("mock-html-preview")).toBeInTheDocument()
+		} finally {
+			setItem.mockRestore()
+		}
+	})
+
 	it("shows permission management beside the user only after access confirmation", async () => {
 		mocks.authorization.current = "token-1"
 		mocks.hasHtmlPermissionDeclarations.current = true

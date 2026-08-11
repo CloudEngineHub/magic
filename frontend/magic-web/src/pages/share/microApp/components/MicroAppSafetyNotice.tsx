@@ -2,11 +2,12 @@ import { useEffect, useState } from "react"
 import { AlertTriangle, ArrowLeft, Check, ShieldAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 
 interface MicroAppSafetyNoticeProps {
 	appName?: string
 	coverUrl?: string
-	onConfirm: () => void
+	onConfirm: (doNotRemind: boolean) => void
 	onLeave: () => void
 }
 
@@ -20,6 +21,7 @@ export default function MicroAppSafetyNotice({
 	const displayAppName = appName?.trim() || t("microAppShare.title")
 	const normalizedCoverUrl = coverUrl?.trim() || ""
 	const [coverLoadFailed, setCoverLoadFailed] = useState(false)
+	const [doNotRemind, setDoNotRemind] = useState(false)
 
 	useEffect(() => {
 		setCoverLoadFailed(false)
@@ -110,6 +112,15 @@ export default function MicroAppSafetyNotice({
 						<p className="text-xs leading-5 text-muted-foreground">
 							{t("microAppShare.safetyDisclaimer")}
 						</p>
+
+						<label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-1 text-sm font-medium text-foreground hover:bg-muted/40">
+							<Checkbox
+								checked={doNotRemind}
+								onCheckedChange={(checked) => setDoNotRemind(checked === true)}
+								data-testid="micro-app-share-safety-do-not-remind"
+							/>
+							<span>{t("microAppShare.safetyDoNotRemind")}</span>
+						</label>
 					</div>
 
 					<div className="flex flex-col-reverse gap-3 border-t border-border/70 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end sm:px-8">
@@ -127,7 +138,7 @@ export default function MicroAppSafetyNotice({
 							type="button"
 							size="lg"
 							className="rounded-lg px-5 font-semibold"
-							onClick={onConfirm}
+							onClick={() => onConfirm(doNotRemind)}
 							data-testid="micro-app-share-safety-confirm"
 						>
 							{t("microAppShare.safetyContinue")}
