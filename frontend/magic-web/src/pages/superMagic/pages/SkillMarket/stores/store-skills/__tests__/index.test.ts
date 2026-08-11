@@ -159,4 +159,61 @@ describe("StoreSkillsStore", () => {
 		expect(store.list[0]?.status).toBe("added")
 		expect(store.list[0]?.userSkillCode).toBeUndefined()
 	})
+
+	it("deduplicates concurrent add requests for the same skill", async () => {
+		const store = new StoreSkillsStore()
+		store.list = [
+			{
+				id: "store-skill-1",
+				storeSkillId: "store-skill-1",
+				skillCode: "skill.alpha",
+				name: "Alpha Skill",
+				description: "before install",
+				isFeatured: false,
+				status: "not-added",
+				publisherType: "USER",
+				needUpgrade: false,
+				updatedAt: "2026-03-21 10:00:00",
+			},
+		]
+		const deferred = createDeferred<[]>()
+		vi.mocked(skillsService.addSkillFromStore).mockReturnValueOnce(deferred.promise)
+
+		const firstRequest = store.addSkill("store-skill-1")
+		await Promise.resolve()
+		await store.addSkill("store-skill-1")
+
+		expect(skillsService.addSkillFromStore).toHaveBeenCalledTimes(1)
+		expect(store.isAddingSkill("store-skill-1")).toBe(true)
+
+		deferred.resolve([])
+		await firstRequest
+
+		expect(store.isAddingSkill("store-skill-1")).toBe(false)
+		expect(store.list[0]?.status).toBe("added")
+	})
+
+	it("clears the pending add state when installation fails", async () => {
+		const store = new StoreSkillsStore()
+		store.list = [
+			{
+				id: "store-skill-1",
+				storeSkillId: "store-skill-1",
+				skillCode: "skill.alpha",
+				name: "Alpha Skill",
+				description: "before install",
+				isFeatured: false,
+				status: "not-added",
+				publisherType: "USER",
+				needUpgrade: false,
+				updatedAt: "2026-03-21 10:00:00",
+			},
+		]
+		vi.mocked(skillsService.addSkillFromStore).mockRejectedValueOnce(new Error("failed"))
+
+		await expect(store.addSkill("store-skill-1")).rejects.toThrow("failed")
+
+		expect(store.isAddingSkill("store-skill-1")).toBe(false)
+		expect(store.list[0]?.status).toBe("not-added")
+	})
 })

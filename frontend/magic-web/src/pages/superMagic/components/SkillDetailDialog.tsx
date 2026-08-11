@@ -42,6 +42,8 @@ import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor
 interface SkillDetailDialogAction {
 	label: string
 	onClick: () => Promise<void> | void
+	/** Called when the action fails; the dialog remains open so the user can retry. */
+	onError?: (error: unknown) => void
 	variant?: VariantProps<typeof buttonVariants>["variant"]
 	/** Merged with base full-width styles (e.g. destructive tint for uninstall). */
 	className?: string
@@ -315,6 +317,8 @@ export const SkillDetailDialog = observer(function SkillDetailDialog({
 		try {
 			await primaryAction.onClick()
 			onOpenChange(false)
+		} catch (error) {
+			primaryAction.onError?.(error)
 		} finally {
 			setIsActionLoading(false)
 		}

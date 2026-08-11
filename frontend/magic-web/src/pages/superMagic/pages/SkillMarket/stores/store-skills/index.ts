@@ -20,6 +20,7 @@ export class StoreSkillsStore {
 	keyword = ""
 	loading = false
 	loadingMore = false
+	addingSkillIds = new Set<string>()
 	private fetchRequestId = 0
 
 	constructor() {
@@ -32,6 +33,10 @@ export class StoreSkillsStore {
 
 	get isEmpty() {
 		return !this.loading && this.list.length === 0
+	}
+
+	isAddingSkill(id: string) {
+		return this.addingSkillIds.has(id)
 	}
 
 	async fetchSkills(params: GetStoreSkillsParams = {}) {
@@ -50,6 +55,7 @@ export class StoreSkillsStore {
 
 		if (page === 1) {
 			this.list = []
+			this.total = 0
 			this.page = 1
 			// Align loadMore with in-flight search before response returns
 			this.keyword = keyword
@@ -112,12 +118,19 @@ export class StoreSkillsStore {
 
 	async addSkill(id: string) {
 		const target = this.list.find((item) => item.id === id)
-		if (!target || target.status === "added") return
+		if (!target || target.status === "added" || this.isAddingSkill(id)) return
 
-		await skillsService.addSkillFromStore(target.storeSkillId)
-		runInAction(() => {
-			target.status = "added"
-		})
+		this.addingSkillIds.add(id)
+		try {
+			await skillsService.addSkillFromStore(target.storeSkillId)
+			runInAction(() => {
+				target.status = "added"
+			})
+		} finally {
+			runInAction(() => {
+				this.addingSkillIds.delete(id)
+			})
+		}
 	}
 
 	async upgradeSkill(id: string) {
@@ -146,6 +159,7 @@ export class StoreSkillsStore {
 		this.keyword = ""
 		this.loading = false
 		this.loadingMore = false
+		this.addingSkillIds.clear()
 		this.fetchRequestId = 0
 	}
 }

@@ -13,7 +13,7 @@ vi.mock("react-i18next", () => ({
 	}),
 	initReactI18next: {
 		type: "3rdParty",
-		init: () => {},
+		init: () => undefined,
 	},
 }))
 
@@ -168,10 +168,9 @@ describe("SkillsLibraryMobile pagination", () => {
 		expect(screen.getByTestId("skills-library-mobile-scroll-sentinel")).toBeInTheDocument()
 
 		const viewport = screen.getByTestId("mock-scroll-viewport")
-		expect(intersectionObserver.mock.calls[0]?.[1]).toMatchObject({
-			root: viewport,
-			rootMargin: "160px 0px",
-		})
+		const observerOptions = intersectionObserver.mock.calls[0]?.[1]
+		expect(observerOptions?.root).toBe(viewport)
+		expect(observerOptions?.rootMargin).toBe("160px 0px")
 
 		const callback = intersectionObserver.mock.calls[0]?.[0] as IntersectionObserverCallback
 
