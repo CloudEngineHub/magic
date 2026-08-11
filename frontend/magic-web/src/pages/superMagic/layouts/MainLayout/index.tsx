@@ -1,11 +1,10 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { lazy, Suspense, useEffect } from "react"
+import { lazy, Suspense } from "react"
 import { useMemoizedFn } from "ahooks"
 import SuperMagicService from "../../services"
 import { resolveSuperPopRefreshParams } from "../../utils/resolve-super-pop-refresh-params"
 import GuideTourWrapper from "../../components/LazyGuideTour"
 import { useProjectTitle } from "../../hooks/useTopicTitle"
-import { baseHistory } from "@/routes/history"
 import { useInterFont } from "@/styles/font"
 import { isPrivateDeployment } from "@/utils/env"
 import SketchWithoutLayout from "@/layouts/BaseLayout/components/Sketch/withoutLayout"
@@ -13,6 +12,7 @@ import { useFeaturedModeListRefreshOnDocumentVisible } from "../../hooks/useFeat
 import EditionActivityModal from "@/components/business/EditionActivity/Modal"
 import { MobileImagePreviewProvider } from "@/pages/superMagic/components/MessageEditor/components/AtItem/components/MobileImagePreview"
 import { projectStore, topicStore, workspaceStore } from "../../stores/core"
+import ProjectOrganizationAccessBoundary from "../../components/ProjectOrganizationAccessBoundary"
 
 const MainLayoutDesktop = lazy(() => import("./index.desktop"))
 const MainLayoutMobile = lazy(() => import("@/pages/superMagicMobile/layout/MainLayout"))
@@ -63,26 +63,10 @@ function MainLayout() {
 	// 	})
 	// })
 
-	// Listen to browser back/forward navigation
-	useEffect(() => {
-		restoreStateFromPathname(baseHistory.location.pathname)
-
-		const unsubscribe = baseHistory.listen(({ action, location }) => {
-			// Only handle POP action (browser back/forward)
-			if (action === "POP") {
-				restoreStateFromPathname(location.pathname)
-			}
-		})
-
-		return () => {
-			unsubscribe()
-		}
-	}, [isMobile, restoreStateFromPathname])
-
 	const Content = isMobile ? MainLayoutMobile : MainLayoutDesktop
 
 	return (
-		<>
+		<ProjectOrganizationAccessBoundary restoreStateFromPathname={restoreStateFromPathname}>
 			<Suspense fallback={<SketchWithoutLayout />}>
 				<Content />
 			</Suspense>
@@ -91,7 +75,7 @@ function MainLayout() {
 			<GuideTourWrapper isMobile={isMobile} />
 			{/* 私有化部署不显示活动弹窗 */}
 			{!isPrivateDeployment() && <EditionActivityModal />}
-		</>
+		</ProjectOrganizationAccessBoundary>
 	)
 }
 

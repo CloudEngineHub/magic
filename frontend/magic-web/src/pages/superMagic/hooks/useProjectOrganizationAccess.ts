@@ -15,14 +15,18 @@ import {
 	resolveRequiredProjectOrganizationCode,
 	suppressProjectOrganizationAccessCheckForCurrentRoute,
 } from "../services/projectOrganizationAccess"
-
-type ProjectOrganizationAccessStatus = "loading" | "ready" | "switch-required" | "switching"
+import type {
+	ProjectOrganizationAccessContextValue,
+	ProjectOrganizationAccessStatus,
+} from "../contexts/ProjectOrganizationAccessContext"
 
 /**
  * Gates normal project routes before their project/topic loaders mount. The accessibility endpoint is
  * intentionally fail-open so a transient lookup error retains the established project-route behavior.
  */
-export function useProjectOrganizationAccess(projectId?: string) {
+export function useProjectOrganizationAccess(
+	projectId?: string,
+): ProjectOrganizationAccessContextValue {
 	const { t } = useTranslation("super")
 	const { accounts } = useAccount()
 	const { organizationCode, organizationListReady } = useOrganization()
@@ -30,6 +34,7 @@ export function useProjectOrganizationAccess(projectId?: string) {
 	const [appInitReady, setAppInitReady] = useState(false)
 	const [requiredOrganizationCode, setRequiredOrganizationCode] = useState<string | null>(null)
 	const [isCheckingAccessibility, setIsCheckingAccessibility] = useState(true)
+	const [checkedAccessKey, setCheckedAccessKey] = useState<string | null>(null)
 	const [isSwitching, setIsSwitching] = useState(false)
 	const [targetUserInfo, setTargetUserInfo] = useState<User.UserInfo | null>(null)
 
@@ -58,9 +63,11 @@ export function useProjectOrganizationAccess(projectId?: string) {
 
 	useEffect(() => {
 		if (!appInitReady) return
+		const accessKey = `${organizationCode || ""}:${projectId || ""}`
 		if (!projectId) {
 			setRequiredOrganizationCode(null)
 			setIsCheckingAccessibility(false)
+			setCheckedAccessKey(accessKey)
 			return
 		}
 
@@ -77,13 +84,18 @@ export function useProjectOrganizationAccess(projectId?: string) {
 				setRequiredOrganizationCode(requiredCode)
 			})
 			.finally(() => {
-				if (isActive) setIsCheckingAccessibility(false)
+				if (isActive) {
+					setCheckedAccessKey(accessKey)
+					setIsCheckingAccessibility(false)
+				}
 			})
 
 		return () => {
 			isActive = false
 		}
 	}, [appInitReady, organizationCode, projectId])
+
+	const currentAccessKey = `${organizationCode || ""}:${projectId || ""}`
 
 	const target = useMemo(
 		() =>
@@ -136,16 +148,22 @@ export function useProjectOrganizationAccess(projectId?: string) {
 	})
 
 	const status: ProjectOrganizationAccessStatus = useMemo(() => {
-		if (!appInitReady || isCheckingAccessibility) return "loading"
+		if (!projectId) return "ready"
+		if (!appInitReady || checkedAccessKey !== currentAccessKey || isCheckingAccessibility) {
+			return "loading"
+		}
 		if (!requiredOrganizationCode) return "ready"
 		if (isSwitching) return "switching"
 		if (!target && !organizationListReady) return "loading"
 		return target ? "switch-required" : "ready"
 	}, [
 		appInitReady,
+		checkedAccessKey,
+		currentAccessKey,
 		isCheckingAccessibility,
 		isSwitching,
 		organizationListReady,
+		projectId,
 		requiredOrganizationCode,
 		target,
 	])
