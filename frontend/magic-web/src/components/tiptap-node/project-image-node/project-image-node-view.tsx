@@ -207,8 +207,6 @@ export function ProjectImageNodeView(props: ProjectImageNodeViewProps) {
 		)
 	}
 
-	console.log("error", error)
-
 	return (
 		<>
 			<NodeViewWrapper
