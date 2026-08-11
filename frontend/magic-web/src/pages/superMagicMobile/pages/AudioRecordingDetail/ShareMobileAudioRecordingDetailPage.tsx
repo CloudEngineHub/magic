@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { MoreHorizontal } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -12,13 +12,17 @@ import { MobileRecordingSourcePanel } from "./components/MobileRecordingSourcePa
 import { MobileRecordingSummaryPanel } from "./components/MobileRecordingSummaryPanel"
 import { MobileRecordingShareExportSheet } from "./components/MobileRecordingShareExportSheet"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
-import type { MobileRecordingTopTab } from "./types"
+import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
+import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
+import { useMobileRecordingContentSearch } from "./hooks/useMobileRecordingContentSearch"
 
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
 const FLOATING_PLAYER_BOTTOM = 12
 const SHARE_PAGE_BOTTOM_READABLE_GAP = 24
+const SHARE_SEARCH_BAR_HEIGHT = 72
+const SHARE_SEARCH_WATERMARK_GAP = 44
 
 interface ShareMobileAudioRecordingDetailPageProps {
 	projectId: string
@@ -57,6 +61,11 @@ export default function ShareMobileAudioRecordingDetailPage({
 	const [playerExpanded, setPlayerExpanded] = useState(false)
 	const [shareExportSheetOpen, setShareExportSheetOpen] = useState(false)
 	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
+	const [contentSearchOpen, setContentSearchOpen] = useState(false)
+	const [contentSearchQuery, setContentSearchQuery] = useState("")
+	const [sourceSubtab, setSourceSubtab] = useState<MobileRecordingSourceTab>("transcript")
+	const [summaryType, setSummaryType] = useState("")
+	const searchScopeRef = useRef<HTMLDivElement | null>(null)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
 	const displayTitle = title || resourceName || t("detail.untitled")
 	const summaryContent = useMemo(
@@ -82,12 +91,23 @@ export default function ShareMobileAudioRecordingDetailPage({
 		() => normalizeSpeakerSelection(transcriptSpeakerIds, selectedSpeakerIds),
 		[selectedSpeakerIds, transcriptSpeakerIds],
 	)
-	const scrollPaddingBottom =
-		FLOATING_PLAYER_BOTTOM +
-		(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
-		20 +
-		// Reserve extra reading room for the share footer so the last lines stay above the floating player.
-		SHARE_PAGE_BOTTOM_READABLE_GAP
+	const searchSupported = !(activeTab === "summary" && summaryType === "metrics")
+	const contentSearch = useMobileRecordingContentSearch(contentSearchQuery, {
+		scopeRef: searchScopeRef,
+		enabled: contentSearchOpen && searchSupported,
+		contentKey: `${projectId}:${activeTab}:${sourceSubtab}:${summaryType}:${selectedSpeakerIds.join(",")}:${texts.transcript?.content?.length ?? 0}:${Object.values(
+			texts.summary,
+		)
+			.map((file) => file?.content?.length ?? 0)
+			.join(",")}`,
+	})
+	const scrollPaddingBottom = contentSearchOpen
+		? SHARE_SEARCH_BAR_HEIGHT + SHARE_SEARCH_WATERMARK_GAP + SHARE_PAGE_BOTTOM_READABLE_GAP
+		: FLOATING_PLAYER_BOTTOM +
+			(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
+			20 +
+			// Reserve extra reading room for the share footer so the last lines stay above the floating player.
+			SHARE_PAGE_BOTTOM_READABLE_GAP
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
 	/** Keeps readonly share filtering session-local while still allowing transcript inspection controls. */
@@ -100,12 +120,29 @@ export default function ShareMobileAudioRecordingDetailPage({
 		player.playSegment({ start, end })
 	}
 
-	/** Opens the export sheet only when the share permission still allows file downloads. */
+	/** Opens the readonly action sheet even when download permission is disabled. */
 	function openShareExportSheet() {
-		if (!allowDownloadProjectFile) return
 		setShareExportSheetOpen(true)
 		setPlayerExpanded(false)
 	}
+
+	/** Opens readonly content search while preserving the current audio playback session. */
+	const openContentSearch = useCallback(() => {
+		if (!searchSupported) return
+		setContentSearchOpen(true)
+		setPlayerExpanded(false)
+	}, [searchSupported])
+
+	/** Exits readonly content search and clears its session-local query. */
+	const closeContentSearch = useCallback(() => {
+		setContentSearchOpen(false)
+		setContentSearchQuery("")
+		setPlayerExpanded(false)
+	}, [])
+
+	useEffect(() => {
+		if (!searchSupported && contentSearchOpen) closeContentSearch()
+	}, [closeContentSearch, contentSearchOpen, searchSupported])
 
 	/** Downloads the original audio file from the readonly share bundle. */
 	async function handleDownloadRecording() {
@@ -140,7 +177,6 @@ export default function ShareMobileAudioRecordingDetailPage({
 		>
 			<ShareMobileRecordingHeader
 				activeTab={activeTab}
-				allowDownload={allowDownloadProjectFile}
 				topbarOffset={resolvedTopbarOffset}
 				onOpenMore={openShareExportSheet}
 				onTabChange={setActiveTab}
@@ -171,6 +207,8 @@ export default function ShareMobileAudioRecordingDetailPage({
 						onSelectedSpeakerIdsChange={handleSelectedSpeakerIdsChange}
 						onOpenSpeakerSettings={() => undefined}
 						onSeek={(seconds) => player.seekTo(seconds)}
+						searchScopeRef={searchScopeRef}
+						onActiveTabChange={setSourceSubtab}
 					/>
 				) : (
 					<MobileRecordingSummaryPanel
@@ -181,6 +219,9 @@ export default function ShareMobileAudioRecordingDetailPage({
 						speakerNameMap={speakerNameMap}
 						onOpenSpeakerSettings={() => undefined}
 						onTimeClick={handleSummaryTimeClick}
+						searchScopeRef={searchScopeRef}
+						searchActive={contentSearchOpen}
+						onActiveTypeChange={setSummaryType}
 					/>
 				)}
 			</div>
@@ -198,7 +239,29 @@ export default function ShareMobileAudioRecordingDetailPage({
 				onSeek={player.seekTo}
 				onExpandedChange={setPlayerExpanded}
 				onPlaybackRateChange={player.setPlaybackRate}
+				hidden={contentSearchOpen}
 			/>
+
+			{contentSearchOpen && searchSupported ? (
+				<MobileBottomSearchBar
+					value={contentSearchQuery}
+					placeholder={t("detail.searchContentPlaceholder")}
+					clearAriaLabel={t("detail.searchContentClear")}
+					closeAriaLabel={t("detail.searchContentClose")}
+					previousAriaLabel={t("detail.searchContentPrevious")}
+					nextAriaLabel={t("detail.searchContentNext")}
+					onValueChange={setContentSearchQuery}
+					onClose={closeContentSearch}
+					onPrevious={contentSearch.goToPrevious}
+					onNext={contentSearch.goToNext}
+					currentResult={contentSearch.currentIndex}
+					totalResults={contentSearch.totalMatches}
+					variant="recording-content"
+					testIdPrefix="mobile-recording-share-content-search"
+					className="bottom-[calc(12px+var(--share-watermark-safe-bottom,0px))] bg-[#f7f7f8]/95 backdrop-blur-sm"
+					autoFocus
+				/>
+			) : null}
 
 			<MobileRecordingShareExportSheet
 				open={shareExportSheetOpen}
@@ -211,6 +274,7 @@ export default function ShareMobileAudioRecordingDetailPage({
 				onOpenChange={setShareExportSheetOpen}
 				onShareLink={() => undefined}
 				onDownloadRecording={() => void handleDownloadRecording()}
+				onSearch={searchSupported ? openContentSearch : undefined}
 			/>
 		</div>
 	)
@@ -219,13 +283,11 @@ export default function ShareMobileAudioRecordingDetailPage({
 /** Aligns the readonly share header with the mobile detail prototype while keeping share actions disabled. */
 function ShareMobileRecordingHeader({
 	activeTab,
-	allowDownload,
 	topbarOffset,
 	onOpenMore,
 	onTabChange,
 }: {
 	activeTab: MobileRecordingTopTab
-	allowDownload: boolean
 	topbarOffset: string
 	onOpenMore: () => void
 	onTabChange: (tab: MobileRecordingTopTab) => void
@@ -255,17 +317,15 @@ function ShareMobileRecordingHeader({
 					</div>
 				</div>
 
-				{allowDownload ? (
-					<button
-						type="button"
-						className="inline-flex h-11 w-11 items-center justify-center text-foreground"
-						onClick={onOpenMore}
-						aria-label={t("card.moreActions")}
-						data-testid="mobile-recording-share-more-button"
-					>
-						<MoreHorizontal className="size-5" strokeWidth={2} />
-					</button>
-				) : null}
+				<button
+					type="button"
+					className="inline-flex h-11 w-11 items-center justify-center text-foreground"
+					onClick={onOpenMore}
+					aria-label={t("card.moreActions")}
+					data-testid="mobile-recording-share-more-button"
+				>
+					<MoreHorizontal className="size-5" strokeWidth={2} />
+				</button>
 			</div>
 		</header>
 	)

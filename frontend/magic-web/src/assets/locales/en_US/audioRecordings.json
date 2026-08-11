@@ -105,6 +105,12 @@
 			"waveformSeekAria": "Playback progress on waveform; drag or use arrow keys to seek"
 		},
 		"relatedDialogue": "Related dialogue",
+		"searchContent": "Search content",
+		"searchContentClear": "Clear search query",
+		"searchContentClose": "Close content search",
+		"searchContentNext": "Next match",
+		"searchContentPlaceholder": "Search current content",
+		"searchContentPrevious": "Previous match",
 		"share": "Share",
 		"shareAndExport": "Share & Export",
 		"shareCreate": "Create share",

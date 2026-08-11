@@ -1,6 +1,6 @@
 import type { ChangeEvent, MouseEvent } from "react"
 import { memo, useEffect, useRef, useState } from "react"
-import { Search, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -36,6 +36,15 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 	onCompositionEnd,
 	className,
 	disabled = false,
+	variant = "default",
+	currentResult = 0,
+	totalResults = 0,
+	closeAriaLabel,
+	previousAriaLabel,
+	nextAriaLabel,
+	onClose,
+	onPrevious,
+	onNext,
 }: MobileBottomSearchBarProps) {
 	const inputRef = useRef<HTMLInputElement>(null)
 	const [isInputFocused, setIsInputFocused] = useState(false)
@@ -86,8 +95,99 @@ const MobileBottomSearchBar = memo(function MobileBottomSearchBar({
 		inputRef.current?.blur()
 	}
 
+	/** Clears only the recording-content query while keeping the search toolbar open. */
+	function handleRecordingQueryClear(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		onValueChange("")
+		inputRef.current?.focus()
+	}
+
 	const shellClassName =
 		layout === "inline" ? "shrink-0" : "shrink-0 bg-mobile-background px-[10px] pb-3 pt-2"
+
+	if (variant === "recording-content") {
+		const navigationDisabled = disabled || totalResults === 0
+		return (
+			<div
+				className={cn(
+					"fixed inset-x-[10px] bottom-3 z-30 shrink-0 pb-[env(safe-area-inset-bottom)]",
+					className,
+				)}
+				data-testid={`${testIdPrefix}-root`}
+			>
+				<div className="flex items-center gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="flex size-[44px] shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-magic-floating-action"
+						aria-label={closeAriaLabel}
+						data-testid={`${testIdPrefix}-close`}
+					>
+						<X className="size-[18px] text-foreground" strokeWidth={2.5} />
+					</button>
+
+					<div
+						className="flex h-[44px] min-w-0 flex-1 items-center gap-1 rounded-full border border-border bg-card px-3 shadow-magic-floating-action"
+						data-testid={`${testIdPrefix}-field`}
+					>
+						<Search className="size-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+						<input
+							ref={inputRef}
+							type="text"
+							value={value}
+							onChange={handleValueChange}
+							onFocus={handleFocus}
+							onBlur={handleBlur}
+							onCompositionStart={onCompositionStart}
+							onCompositionEnd={onCompositionEnd}
+							placeholder={placeholder}
+							disabled={disabled}
+							className="min-w-0 flex-1 border-none bg-transparent text-[14px] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
+							data-testid={`${testIdPrefix}-input`}
+						/>
+						{value ? (
+							<button
+								type="button"
+								onMouseDown={handleRecordingQueryClear}
+								className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-muted"
+								aria-label={clearAriaLabel}
+								data-testid={`${testIdPrefix}-clear`}
+							>
+								<X className="size-3.5" strokeWidth={2.5} />
+							</button>
+						) : null}
+						<span
+							className="shrink-0 text-[12px] tabular-nums text-muted-foreground"
+							data-testid={`${testIdPrefix}-result-count`}
+						>
+							{currentResult}/{totalResults}
+						</span>
+					</div>
+
+					<button
+						type="button"
+						onClick={onPrevious}
+						disabled={navigationDisabled}
+						className="flex size-[44px] shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-magic-floating-action"
+						aria-label={previousAriaLabel}
+						data-testid={`${testIdPrefix}-previous`}
+					>
+						<ChevronUp className="size-[18px]" strokeWidth={2.25} />
+					</button>
+					<button
+						type="button"
+						onClick={onNext}
+						disabled={navigationDisabled}
+						className="flex size-[44px] shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-magic-floating-action"
+						aria-label={nextAriaLabel}
+						data-testid={`${testIdPrefix}-next`}
+					>
+						<ChevronDown className="size-[18px]" strokeWidth={2.25} />
+					</button>
+				</div>
+			</div>
+		)
+	}
 
 	return (
 		<div className={cn(shellClassName, className)} data-testid={`${testIdPrefix}-root`}>

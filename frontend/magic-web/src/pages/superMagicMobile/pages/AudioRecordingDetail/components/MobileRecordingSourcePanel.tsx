@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/lib/utils"
@@ -33,6 +33,8 @@ interface MobileRecordingSourcePanelProps {
 	onContentScroll?: () => void
 	attachmentTree?: AttachmentFile[]
 	notesFilePath?: string
+	searchScopeRef?: RefObject<HTMLDivElement | null>
+	onActiveTabChange?: (tab: MobileRecordingSourceTab) => void
 }
 
 /** Shows completed source attachments: transcript timeline and readonly notes markdown. */
@@ -51,6 +53,8 @@ export function MobileRecordingSourcePanel({
 	onContentScroll,
 	attachmentTree = [],
 	notesFilePath,
+	searchScopeRef,
+	onActiveTabChange,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
@@ -87,12 +91,18 @@ export function MobileRecordingSourcePanel({
 					<SourceTabButton
 						active={activeTab === "transcript"}
 						label={t("detail.tabs.transcript")}
-						onClick={() => setActiveTab("transcript")}
+						onClick={() => {
+							setActiveTab("transcript")
+							onActiveTabChange?.("transcript")
+						}}
 					/>
 					<SourceTabButton
 						active={activeTab === "notes"}
 						label={t("detail.tabs.notes")}
-						onClick={() => setActiveTab("notes")}
+						onClick={() => {
+							setActiveTab("notes")
+							onActiveTabChange?.("notes")
+						}}
 					/>
 				</div>
 				{activeTab === "transcript" &&
@@ -119,6 +129,8 @@ export function MobileRecordingSourcePanel({
 				onScroll={onContentScroll}
 			>
 				<div
+					ref={searchScopeRef}
+					data-search-scope="mobile-recording-source"
 					className={cn(
 						"flex min-h-full flex-col",
 						// Keep both source tabs on the same height chain so their empty states

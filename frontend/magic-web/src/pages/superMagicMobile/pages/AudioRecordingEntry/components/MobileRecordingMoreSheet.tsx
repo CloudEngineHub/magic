@@ -22,6 +22,7 @@ interface MobileRecordingMoreSheetProps {
 	onMoveToGroup?: (item: AudioProjectListItem) => void
 	onCopyToProject?: (item: AudioProjectListItem) => void
 	onShare?: () => void
+	onSearch?: () => void
 	isSubmittingAction?: boolean
 	isSubmittingSummary?: boolean
 	canCopyToProject?: boolean
@@ -86,6 +87,7 @@ export function MobileRecordingMoreSheet({
 	onMoveToGroup,
 	onCopyToProject,
 	onShare,
+	onSearch,
 	isSubmittingAction = false,
 	isSubmittingSummary = false,
 	canCopyToProject = true,
@@ -188,6 +190,12 @@ export function MobileRecordingMoreSheet({
 		toast.info(t("super:mobile.recordingEntry.moreSheet.comingSoon"))
 	}, [handleClose, onShare, t])
 
+	/** Opens content search from the first menu row and closes the sheet immediately. */
+	const handleSearch = useCallback(() => {
+		onSearch?.()
+		handleClose()
+	}, [handleClose, onSearch])
+
 	function resolveHeaderTitle() {
 		if (view === "rename") return t("super:mobile.recordingEntry.moreSheet.rename")
 		if (view === "deleteConfirm") return t("super:mobile.recordingEntry.moreSheet.deleteTitle")
@@ -261,6 +269,14 @@ export function MobileRecordingMoreSheet({
 			{view === "menu" ? (
 				<>
 					<MenuGroup>
+						{onSearch ? (
+							<MenuItem
+								label={t("audioRecordings:detail.searchContent")}
+								dataTestId="mobile-recording-more-search"
+								showDivider
+								onClick={handleSearch}
+							/>
+						) : null}
 						{onOpenProject ? (
 							<MenuItem
 								label={t("audioRecordings:card.openProject")}

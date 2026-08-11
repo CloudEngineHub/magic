@@ -15,4 +15,14 @@ export interface MobileBottomSearchBarProps {
 	onCompositionEnd?: () => void
 	className?: string
 	disabled?: boolean
+	/** Enables the recording-detail layout with a leading close action and result navigation. */
+	variant?: "default" | "recording-content"
+	currentResult?: number
+	totalResults?: number
+	closeAriaLabel?: string
+	previousAriaLabel?: string
+	nextAriaLabel?: string
+	onClose?: () => void
+	onPrevious?: () => void
+	onNext?: () => void
 }

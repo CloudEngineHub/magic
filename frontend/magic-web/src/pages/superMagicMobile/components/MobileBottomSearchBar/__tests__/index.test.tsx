@@ -110,4 +110,61 @@ describe("MobileBottomSearchBar", () => {
 		expect(screen.getByTestId("plain-search-root").className).toContain("mt-2")
 		expect(screen.getByTestId("plain-search-root").className).toContain("bg-mobile-background")
 	})
+
+	it("renders recording-content count and cyclic navigation controls", () => {
+		const onClose = vi.fn()
+		const onPrevious = vi.fn()
+		const onNext = vi.fn()
+
+		render(
+			<MobileBottomSearchBar
+				value="topic"
+				placeholder="Search current content"
+				clearAriaLabel="Clear query"
+				closeAriaLabel="Close content search"
+				previousAriaLabel="Previous match"
+				nextAriaLabel="Next match"
+				onValueChange={vi.fn()}
+				onClose={onClose}
+				onPrevious={onPrevious}
+				onNext={onNext}
+				currentResult={2}
+				totalResults={6}
+				variant="recording-content"
+				testIdPrefix="recording-search"
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-search-result-count")).toHaveTextContent("2/6")
+		fireEvent.click(screen.getByLabelText("Close content search"))
+		fireEvent.click(screen.getByLabelText("Previous match"))
+		fireEvent.click(screen.getByLabelText("Next match"))
+		expect(onClose).toHaveBeenCalledOnce()
+		expect(onPrevious).toHaveBeenCalledOnce()
+		expect(onNext).toHaveBeenCalledOnce()
+	})
+
+	it("keeps disabled recording navigation controls opaque", () => {
+		// Disabled controls remain visually solid so the page content cannot bleed through them.
+		render(
+			<MobileBottomSearchBar
+				value=""
+				placeholder="Search current content"
+				clearAriaLabel="Clear query"
+				closeAriaLabel="Close content search"
+				previousAriaLabel="Previous match"
+				nextAriaLabel="Next match"
+				onValueChange={vi.fn()}
+				variant="recording-content"
+				testIdPrefix="empty-recording-search"
+			/>,
+		)
+
+		const previousButton = screen.getByTestId("empty-recording-search-previous")
+		const nextButton = screen.getByTestId("empty-recording-search-next")
+		expect(previousButton).toBeDisabled()
+		expect(nextButton).toBeDisabled()
+		expect(previousButton.className).not.toContain("opacity")
+		expect(nextButton.className).not.toContain("opacity")
+	})
 })

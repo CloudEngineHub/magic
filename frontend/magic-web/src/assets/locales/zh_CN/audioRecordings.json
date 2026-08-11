@@ -105,6 +105,12 @@
 			"waveformSeekAria": "波形播放进度，拖动或使用方向键跳转"
 		},
 		"relatedDialogue": "关联对话",
+		"searchContent": "搜索内容",
+		"searchContentClear": "清空搜索词",
+		"searchContentClose": "关闭内容搜索",
+		"searchContentNext": "下一个命中",
+		"searchContentPlaceholder": "搜索当前内容",
+		"searchContentPrevious": "上一个命中",
 		"share": "分享",
 		"shareAndExport": "分享 & 导出",
 		"shareCreate": "创建分享",

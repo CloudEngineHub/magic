@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, Check, Ellipsis, FileAudio, Loader2, Pencil, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useParams } from "react-router"
@@ -32,7 +32,7 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
-import type { MobileRecordingTopTab } from "./types"
+import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
 import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
@@ -45,6 +45,8 @@ import { MobileRecordingShareExportSheet } from "./components/MobileRecordingSha
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import { MobileRecordingMoreSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoreSheet"
+import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
+import { useMobileRecordingContentSearch } from "./hooks/useMobileRecordingContentSearch"
 import { MobileRecordingMoveGroupSheet } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingMoveGroupSheet"
 import type { MobileRecordingGroup } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileRecordingGroupSheet"
 import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareSheet"
@@ -66,6 +68,7 @@ import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver
 const COLLAPSED_PLAYER_HEIGHT = 40
 const EXPANDED_PLAYER_HEIGHT = 182
 const FLOATING_PLAYER_BOTTOM = 12
+const SEARCH_BAR_HEIGHT = 72
 
 interface AudioRecordingDetailLocationState {
 	projectName?: string
@@ -122,7 +125,12 @@ export default function MobileAudioRecordingDetailPage() {
 	const [playerExpanded, setPlayerExpanded] = useState(false)
 	const [shareExportSheetOpen, setShareExportSheetOpen] = useState(false)
 	const [projectShareSheetOpen, setProjectShareSheetOpen] = useState(false)
+	const [contentSearchOpen, setContentSearchOpen] = useState(false)
+	const [contentSearchQuery, setContentSearchQuery] = useState("")
+	const [sourceSubtab, setSourceSubtab] = useState<MobileRecordingSourceTab>("transcript")
+	const [summaryType, setSummaryType] = useState("")
 	const titleInputRef = useRef<HTMLInputElement>(null)
+	const searchScopeRef = useRef<HTMLDivElement | null>(null)
 	const defaultTab = useMemo<MobileRecordingTopTab>(() => {
 		const cardStatus =
 			detailItem?.card_status ?? projectItem?.card_status ?? locationState?.cardStatus
@@ -233,6 +241,7 @@ export default function MobileAudioRecordingDetailPage() {
 
 	/** Updates the tab query so browser back/forward restores the AI tab. */
 	function handleTabChange(nextTab: MobileRecordingTopTab) {
+		if (nextTab === "ai") closeContentSearch()
 		setActiveTab(nextTab)
 		const nextParams = new URLSearchParams(searchParams)
 		if (nextTab === "ai") nextParams.set("tab", "ai")
@@ -486,10 +495,22 @@ export default function MobileAudioRecordingDetailPage() {
 			),
 		[activeSpeakerIds, speakerNameOverrides],
 	)
-	const scrollPaddingBottom =
-		FLOATING_PLAYER_BOTTOM +
-		(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
-		20
+	const searchSupported =
+		activeTab !== "ai" && !(activeTab === "summary" && summaryType === "metrics")
+	const contentSearch = useMobileRecordingContentSearch(contentSearchQuery, {
+		scopeRef: searchScopeRef,
+		enabled: contentSearchOpen && searchSupported,
+		contentKey: `${projectId}:${activeTab}:${sourceSubtab}:${summaryType}:${selectedSpeakerIds.join(",")}:${texts.transcript?.content?.length ?? 0}:${Object.values(
+			texts.summary,
+		)
+			.map((file) => file?.content?.length ?? 0)
+			.join(",")}`,
+	})
+	const scrollPaddingBottom = contentSearchOpen
+		? SEARCH_BAR_HEIGHT + 20
+		: FLOATING_PLAYER_BOTTOM +
+			(playerExpanded ? EXPANDED_PLAYER_HEIGHT : COLLAPSED_PLAYER_HEIGHT) +
+			20
 
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
 
@@ -497,6 +518,25 @@ export default function MobileAudioRecordingDetailPage() {
 	function handlePlayerContentScroll() {
 		setPlayerScrollSignal((value) => value + 1)
 	}
+
+	/** Opens content search and hides the floating player without interrupting audio playback. */
+	const openContentSearch = useCallback(() => {
+		if (!searchSupported) return
+		setMoreSheetOpen(false)
+		setContentSearchOpen(true)
+		setPlayerExpanded(false)
+	}, [searchSupported])
+
+	/** Closes content search and clears the detail-session query while preserving audio state. */
+	const closeContentSearch = useCallback(() => {
+		setContentSearchOpen(false)
+		setContentSearchQuery("")
+		setPlayerExpanded(false)
+	}, [])
+
+	useEffect(() => {
+		if (!searchSupported && contentSearchOpen) closeContentSearch()
+	}, [closeContentSearch, contentSearchOpen, searchSupported])
 
 	useEffect(() => {
 		setTitleOverride("")
@@ -507,11 +547,17 @@ export default function MobileAudioRecordingDetailPage() {
 		setPlayerExpanded(false)
 		setShareExportSheetOpen(false)
 		setProjectShareSheetOpen(false)
+		setContentSearchOpen(false)
+		setContentSearchQuery("")
 		setTopicActionItem(null)
 		setTopicActionsOpen(false)
 		setTopicRenameOpen(false)
 		setTopicDeleteOpen(false)
 	}, [projectId])
+
+	useEffect(() => {
+		if (activeTab === "ai") closeContentSearch()
+	}, [activeTab, closeContentSearch])
 
 	useEffect(() => {
 		if (speakerFilterProjectId === projectId) return
@@ -896,6 +942,8 @@ export default function MobileAudioRecordingDetailPage() {
 						onOpenSpeakerSettings={openSpeakerSettings}
 						onSeek={(seconds) => player.seekTo(seconds, { autoplay: true })}
 						onContentScroll={handlePlayerContentScroll}
+						searchScopeRef={searchScopeRef}
+						onActiveTabChange={setSourceSubtab}
 						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
 						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
 					/>
@@ -917,6 +965,9 @@ export default function MobileAudioRecordingDetailPage() {
 							onOpenSpeakerSettings={openSpeakerSettings}
 							onTimeClick={handleSummaryTimeClick}
 							onContentScroll={handlePlayerContentScroll}
+							searchScopeRef={searchScopeRef}
+							searchActive={contentSearchOpen}
+							onActiveTypeChange={setSummaryType}
 						/>
 					) : (
 						<MobileRecordingSummaryPlaceholder
@@ -993,6 +1044,27 @@ export default function MobileAudioRecordingDetailPage() {
 					onPlaybackRateChange={player.setPlaybackRate}
 					colorSegments={colorSegments}
 					scrollSignal={playerScrollSignal}
+					hidden={contentSearchOpen}
+				/>
+			) : null}
+
+			{contentSearchOpen && searchSupported ? (
+				<MobileBottomSearchBar
+					value={contentSearchQuery}
+					placeholder={t("detail.searchContentPlaceholder")}
+					clearAriaLabel={t("detail.searchContentClear")}
+					closeAriaLabel={t("detail.searchContentClose")}
+					previousAriaLabel={t("detail.searchContentPrevious")}
+					nextAriaLabel={t("detail.searchContentNext")}
+					onValueChange={setContentSearchQuery}
+					onClose={closeContentSearch}
+					onPrevious={contentSearch.goToPrevious}
+					onNext={contentSearch.goToNext}
+					currentResult={contentSearch.currentIndex}
+					totalResults={contentSearch.totalMatches}
+					variant="recording-content"
+					testIdPrefix="mobile-recording-content-search"
+					autoFocus
 				/>
 			) : null}
 
@@ -1126,6 +1198,7 @@ export default function MobileAudioRecordingDetailPage() {
 				// Wire the more-actions "share" entry to the same share & export sheet opened by the header share button,
 				// matching the prototype's single-share-sheet behavior (RecordingDetailScreen onShare).
 				onShare={openShareExportSheet}
+				onSearch={searchSupported ? openContentSearch : undefined}
 				isSubmittingAction={actionSubmitting}
 				isSubmittingSummary={summarySubmitting}
 				canCopyToProject={
