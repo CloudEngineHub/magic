@@ -104,7 +104,12 @@ class MessageDbService {
 					logger.log("addMessage success", res)
 				})
 				.catch((err) => {
-					logger.error("addMessage error", err)
+					logger.error({
+						eventKey: "add_message_failed",
+						errorKind: "unknown",
+						error: err,
+						message: "addMessage error",
+					})
 					throw err
 				})
 		}
@@ -251,7 +256,12 @@ class MessageDbService {
 					.between(["", Dexie.minKey], ["", Dexie.maxKey])
 			} catch (indexError) {
 				// 如果复合索引查询失败，回退到普通索引
-				logger.error("使用复合索引查询失败，回退到普通索引", indexError)
+				logger.error({
+					eventKey: "get_message_list_failed",
+					errorKind: "unknown",
+					error: indexError,
+					message: "使用复合索引查询失败，回退到普通索引",
+				})
 
 				if (topicId) {
 					return table.where("message.topic_id").equals(topicId)
@@ -268,7 +278,12 @@ class MessageDbService {
 			// }
 
 			// 索引失败使用普通索引
-			logger.error("数据库访问错误，无法获取消息", error)
+			logger.error({
+				eventKey: "database_get_message_failed",
+				errorKind: "storage",
+				error: error,
+				message: "数据库访问错误，无法获取消息",
+			})
 			const table = await this.getMessageTable(conversationId)
 
 			if (topicId) {
@@ -397,11 +412,21 @@ class MessageDbService {
 						logger.log("updateMessageStatus success", res)
 					})
 					.catch((err) => {
-						logger.error("updateMessageStatus error", err)
+						logger.error({
+							eventKey: "update_message_status_failed",
+							errorKind: "unknown",
+							error: err,
+							message: "updateMessageStatus error",
+						})
 					})
 			})
 			.catch((error) => {
-				logger.error("updateMessageStatus getMessageTable error", error)
+				logger.error({
+					eventKey: "update_message_status_table_access_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "updateMessageStatus getMessageTable error",
+				})
 			})
 	}
 
@@ -423,11 +448,21 @@ class MessageDbService {
 						logger.log("updateMessageUnreadCount success", res, messageId)
 					})
 					.catch((err) => {
-						logger.error("updateMessageUnreadCount error", err)
+						logger.error({
+							eventKey: "update_message_unread_count_failed",
+							errorKind: "unknown",
+							error: err,
+							message: "updateMessageUnreadCount error",
+						})
 					})
 			})
 			.catch((error) => {
-				logger.error("updateMessageUnreadCount getMessageTable error", error)
+				logger.error({
+					eventKey: "update_message_unread_count_table_access_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "updateMessageUnreadCount getMessageTable error",
+				})
 			})
 	}
 
@@ -445,7 +480,12 @@ class MessageDbService {
 		const table = await this.getMessageTable(conversation_id)
 		if (table) {
 			table.update(localMessageId, changes).catch((err) => {
-				logger.error("updateMessage error", err)
+				logger.error({
+					eventKey: "update_message_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "updateMessage error",
+				})
 			})
 		}
 	}

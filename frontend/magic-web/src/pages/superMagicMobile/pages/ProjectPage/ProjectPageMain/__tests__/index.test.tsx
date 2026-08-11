@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { observable, runInAction } from "mobx"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageMain from ".."
 import ProjectTopicListView from "../ProjectTopicListView"
 
-const { mockNavigate, mockSetSelectedTopic, topicStoreMock } = vi.hoisted(() => ({
+const { mockNavigate, topicStoreMock } = vi.hoisted(() => ({
 	mockNavigate: vi.fn(),
-	mockSetSelectedTopic: vi.fn(),
 	topicStoreMock: {
 		setSelectedTopic: vi.fn(),
 		topics: [] as Topic[],
@@ -31,10 +31,6 @@ vi.mock("ahooks", () => ({
 	useMemoizedFn: (fn: (...args: unknown[]) => unknown) => fn,
 }))
 
-vi.mock("mobx-react-lite", () => ({
-	observer: <T,>(component: T) => component,
-}))
-
 vi.mock("@/pages/superMagic/stores/core", () => ({
 	projectStore: {
 		selectedProject: { id: "project-1" },
@@ -47,8 +43,16 @@ vi.mock("@/components/base-mobile/MagicPullToRefresh", () => ({
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
-	ScrollEdgeFadeContainer: ({ children }: { children: React.ReactNode }) => (
-		<div data-testid="scroll-edge-fade-container">{children}</div>
+	ScrollEdgeFadeContainer: ({
+		children,
+		scrollClassName,
+	}: {
+		children: React.ReactNode
+		scrollClassName?: string
+	}) => (
+		<div data-testid="scroll-edge-fade-container" data-scroll-class-name={scrollClassName}>
+			{children}
+		</div>
 	),
 }))
 
@@ -128,6 +132,17 @@ describe("ProjectPageMain", () => {
 		const emptyState = screen.getByTestId("project-topics-empty-state")
 		expect(emptyState).toHaveTextContent("暂无话题")
 		expect(emptyState).toHaveTextContent("在下方输入区创建新话题。")
+	})
+
+	it("keeps horizontal padding inside the scroll port so edge overlays remain full width", () => {
+		render(
+			<ProjectPageMain onTopicMore={vi.fn()} onTopicPin={vi.fn()} onTopicDelete={vi.fn()} />,
+		)
+
+		expect(screen.getByTestId("scroll-edge-fade-container")).toHaveAttribute(
+			"data-scroll-class-name",
+			"px-3",
+		)
 	})
 
 	it("renders pin swipe action and calls onTopicPin with the current topic", () => {
@@ -222,5 +237,57 @@ describe("ProjectPageMain", () => {
 		const row = screen.getByTestId("topic-item-topic-scoped")
 		fireEvent.click(within(row).getByTestId("topic-item-topic-scoped-action-pin"))
 		expect(screen.getByText("Scoped topic")).toBeInTheDocument()
+		expect(screen.getByTestId("scroll-edge-fade-container")).not.toHaveAttribute(
+			"data-scroll-class-name",
+		)
+	})
+
+	it("reacts to in-place MobX updates for pin ordering and running status", () => {
+		const recentTopic = observable(
+			createTopic({
+				id: "topic-recent",
+				topic_name: "Recent Topic",
+				updated_at: "2026-05-12 10:00:00",
+			}),
+		)
+		const reactiveTopic = observable(
+			createTopic({
+				id: "topic-reactive",
+				topic_name: "Reactive Topic",
+				updated_at: "2026-05-12 09:00:00",
+			}),
+		)
+
+		render(
+			<ProjectTopicListView
+				projectId="project-reactive"
+				topics={[recentTopic, reactiveTopic]}
+				loading={false}
+				onRefresh={vi.fn(async () => undefined)}
+				onSelectTopic={vi.fn()}
+				onTopicPin={vi.fn()}
+			/>,
+		)
+
+		act(() => {
+			runInAction(() => {
+				reactiveTopic.is_pinned = true
+				reactiveTopic.pinned_at = "2026-05-12 11:00:00"
+				reactiveTopic.task_status = TaskStatus.RUNNING
+			})
+		})
+
+		const topicRows = screen
+			.getAllByTestId(/^topic-item-topic-(recent|reactive)$/)
+			.map((row) => row.getAttribute("data-testid"))
+		expect(topicRows).toEqual(["topic-item-topic-reactive", "topic-item-topic-recent"])
+		expect(
+			screen.getByTestId("topic-item-topic-reactive").querySelector('[aria-busy="true"]'),
+		).toBeInTheDocument()
+		expect(
+			within(screen.getByTestId("topic-item-topic-reactive")).getByTestId(
+				"mobile-topic-item-pinned-badge",
+			),
+		).toBeInTheDocument()
 	})
 })

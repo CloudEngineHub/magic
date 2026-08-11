@@ -180,8 +180,11 @@ function ShareManagement({
 					/>
 				</div>
 
-				{/* 列表内容区域 - 固定高度，可滚动 */}
-				<div className="flex-1 overflow-y-auto px-3" style={{ maxHeight: "388px" }}>
+				{/* Keep long names inside the scrollable list. */}
+				<div
+					className="flex-1 overflow-y-auto overflow-x-hidden px-3"
+					style={{ maxHeight: "388px" }}
+				>
 					{renderListContent()}
 				</div>
 

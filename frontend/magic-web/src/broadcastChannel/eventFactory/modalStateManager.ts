@@ -153,7 +153,12 @@ export class ModalStateManager {
 			try {
 				this.organizationModal.destroy()
 			} catch (error) {
-				logger.error("销毁组织切换弹窗失败", error)
+				logger.error({
+					eventKey: "organization_switch_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "销毁组织切换弹窗失败",
+				})
 			}
 			this.organizationModal = null
 		}
@@ -181,7 +186,12 @@ export class ModalStateManager {
 			try {
 				this.accountModal.destroy()
 			} catch (error) {
-				logger.error("销毁账号切换弹窗失败", error)
+				logger.error({
+					eventKey: "switch_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "销毁账号切换弹窗失败",
+				})
 			}
 			this.accountModal = null
 		}
@@ -230,7 +240,12 @@ export class ModalStateManager {
 			try {
 				this.accountReactionCancel()
 			} catch (error) {
-				logger.error("清理账号切换 reaction 失败", error)
+				logger.error({
+					eventKey: "cleanup_switch_reaction_failed",
+					errorKind: "lifecycle",
+					error: error,
+					message: "清理账号切换 reaction 失败",
+				})
 			}
 			this.accountReactionCancel = null
 		}

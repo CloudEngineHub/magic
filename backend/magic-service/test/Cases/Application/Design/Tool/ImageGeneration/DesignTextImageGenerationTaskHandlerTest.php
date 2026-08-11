@@ -14,8 +14,8 @@ use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use PHPUnit\Framework\TestCase;
 
 /**

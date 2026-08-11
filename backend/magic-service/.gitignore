@@ -31,9 +31,10 @@ scripts/
 storage/files/test001
 /CLAUDE.md
 /AGENTS.md
+/agents/skills/
 .cursor/
 .github
-docs/
+/docs/
 !go-engine/docs/
 !go-engine/docs/**
 

@@ -1,5 +1,6 @@
-import { memo, useMemo, useState } from "react"
+import { useState } from "react"
 import { ChevronRight, Ellipsis, Pin, PinOff, Trash2 } from "lucide-react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
@@ -21,6 +22,8 @@ type TopicWithPinnedState = Topic & {
 
 export interface ProjectTopicListViewProps {
 	className?: string
+	/** Keeps page-specific horizontal spacing on the scroll port without narrowing edge fades. */
+	scrollClassName?: string
 	projectId?: string
 	topics: Topic[]
 	loading: boolean
@@ -48,7 +51,7 @@ function isRunningLikeTopicStatus(status: Topic["task_status"] | string | undefi
 }
 
 /** Renders one swipeable topic row with the same actions across project and recording details. */
-const TopicItem = memo(function TopicItem({
+const TopicItem = observer(function TopicItem({
 	item,
 	timeLabel,
 	isSwipeOpen,
@@ -149,8 +152,9 @@ const TopicItem = memo(function TopicItem({
 })
 
 /** Displays a dependency-injected mobile topic list without reading global project stores. */
-export function ProjectTopicListView({
+export const ProjectTopicListView = observer(function ProjectTopicListView({
 	className,
+	scrollClassName,
 	projectId,
 	topics,
 	loading,
@@ -162,7 +166,8 @@ export function ProjectTopicListView({
 }: ProjectTopicListViewProps) {
 	const { i18n } = useTranslation("super")
 	const [openItemId, setOpenItemId] = useState<string | null>(null)
-	const processedTopics = useMemo(() => sortTopicsWithPinnedFirst(topics), [topics])
+	// Sort during each observed render so in-place MobX pin updates cannot reuse stale ordering.
+	const processedTopics = sortTopicsWithPinnedFirst(topics)
 	const formatTopicTimeLabel = useMemoizedFn((topic: Topic) => {
 		return topic.updated_at ? formatRelativeTime(i18n.language)(topic.updated_at) : ""
 	})
@@ -174,6 +179,7 @@ export function ProjectTopicListView({
 		<ScrollEdgeFadeContainer
 			fadeColor="mobile-background"
 			className={cn("min-h-0 flex-1", className)}
+			scrollClassName={scrollClassName}
 			contentDeps={[processedTopics.length, loading, isTopicsEmpty, projectId]}
 		>
 			<MagicPullToRefresh
@@ -226,6 +232,6 @@ export function ProjectTopicListView({
 			</MagicPullToRefresh>
 		</ScrollEdgeFadeContainer>
 	)
-}
+})
 
 export default ProjectTopicListView

@@ -169,11 +169,12 @@ class ProjectAttachmentsChangeLogger {
 		}
 
 		if (this.reportToServer) {
-			logger.error(`[ProjectAttachmentsChangeLogger] ${stage}`, {
-				...entry.data,
-				level,
-				time: entry.time,
+			logger.error({
+				eventKey: "project_attachments_change_logger_failed",
+				errorKind: "unknown",
 				error: entry.error,
+				message: `[ProjectAttachmentsChangeLogger] ${stage}`,
+				context: { ...entry.data, level, time: entry.time },
 			})
 		}
 	}

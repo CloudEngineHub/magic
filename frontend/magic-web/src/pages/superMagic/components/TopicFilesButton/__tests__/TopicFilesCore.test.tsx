@@ -26,4 +26,11 @@ describe("TopicFilesCore", () => {
 		expect(source).toContain('"file-item-action-visible"')
 		expect(source).toContain("(contextMenuItemId === itemId || shouldShowInlineFileAction) &&")
 	})
+
+	it("does not require a preloaded project list for cross-project moves", async () => {
+		const source = await readTopicFilesCoreSource()
+
+		expect(source).toContain("capabilities.crossProject && !isChatProject && !isMobile")
+		expect(source).not.toContain("capabilities.crossProject && projects.length > 0")
+	})
 })

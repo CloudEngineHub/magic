@@ -41,7 +41,10 @@ const BaseLayoutMobile = () => {
 	const location = useLocation()
 	const { styles, cx } = useStyles()
 	const antdMobileLocale = useAntdMobileLocale()
-	const { isUp: isSoftKeyboardOpen } = useMonitorSoftKeyboard()
+	const { isUp: isSoftKeyboardOpen } = useMonitorSoftKeyboard({
+		// Restore the bottom safe area as soon as keyboard dismissal begins to avoid a second layout jump.
+		focusOutDelay: 0,
+	})
 
 	// Sync document.title from route meta, same as BaseLayoutPc (chat, contacts, Super Shell, etc.).
 	useMetaSet()

@@ -518,6 +518,7 @@ describe("SuperMagic Store typed events", () => {
 				],
 				{
 					mode: "merge",
+					assistantSnapshotPolicy: "canonical_final",
 					eventPolicy: "live_arrival",
 					toolProjectionPolicy: "preserve_live",
 					canonicalCommitContext: {
@@ -590,6 +591,7 @@ describe("SuperMagic Store typed events", () => {
 				],
 				{
 					mode: "merge",
+					assistantSnapshotPolicy: "canonical_final",
 					eventPolicy: "live_arrival",
 					toolProjectionPolicy: "preserve_live",
 					canonicalCommitContext: {
@@ -787,6 +789,7 @@ describe("SuperMagic Store typed events", () => {
 				],
 				{
 					mode: "merge",
+					assistantSnapshotPolicy: "canonical_final",
 					eventPolicy: "live_arrival",
 					toolProjectionPolicy: "preserve_live",
 					canonicalCommitContext: {
@@ -804,6 +807,34 @@ describe("SuperMagic Store typed events", () => {
 			expect(store.getStreamState(TOPIC_ID, superMessageId)).toBeUndefined()
 		},
 	)
+
+	it("keeps a live progress snapshot open without publishing a canonical Final event", () => {
+		const store = new SuperMagicStore()
+		store.setActiveTopicId(TOPIC_ID)
+		const events: Array<MessageStreamEndedEvent | MessageCommittedEvent> = []
+		store.subscribe("message.stream.ended", (event) => events.push(event))
+		store.subscribe("message.committed", (event) => events.push(event))
+		store.receiveChunk(createChunk({ content: "draft" }))
+
+		store.initializeMessages(
+			TOPIC_ID,
+			[createAssistantEnvelope({ status: "running", seqId: "251" })],
+			{
+				mode: "merge",
+				assistantSnapshotPolicy: "progress_snapshot",
+				eventPolicy: "live_arrival",
+				toolProjectionPolicy: "preserve_live",
+				canonicalCommitContext: {
+					source: "http",
+					lifecycleEventPolicy: "silent",
+					trigger: "recovery",
+				},
+			},
+		)
+
+		expect(events.map((event) => event.type)).toEqual(["message.committed"])
+		expect(store.getStreamState(TOPIC_ID, SUPER_MESSAGE_ID)).toBeDefined()
+	})
 
 	it("publishes a strong tool settlement when the protocol ids match", () => {
 		const store = new SuperMagicStore()

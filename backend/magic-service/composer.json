@@ -33,7 +33,6 @@
         "dtyq/php-mcp": "0.1.*",
         "dtyq/rule-engine-core": "~0.1",
         "dtyq/sdk-base": "~0.1",
-        "dtyq/super-magic-module": "^v0.0",
         "dtyq/task-scheduler": "~0.1",
         "dtyq/tiptap": "~0.1",
         "facile-it/php-openid-client": "^0.3.5",
@@ -78,6 +77,7 @@
         "symfony/css-selector": "^7.1",
         "symfony/dom-crawler": "^7.1",
         "symfony/mime": "^7.1",
+        "symfony/yaml": "^6.4 || ^7.0",
         "volcengine/volc-sdk-php": "^1.0",
         "w7corp/easywechat": "^6.17",
         "wyndow/fuzzywuzzy": "^0.6.0",
@@ -105,6 +105,7 @@
             "MagicBase\\": "magicbase/"
         },
         "files": [
+            "app/Infrastructure/SuperMagic/Legacy/legacy_class_aliases.php",
             "app/Infrastructure/Util/Functions/functions.php"
         ]
     },
@@ -116,6 +117,9 @@
         "files": [
             "app/Infrastructure/Util/Functions/functions.php"
         ]
+    },
+    "replace": {
+        "dtyq/super-magic-module": "*"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

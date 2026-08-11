@@ -140,7 +140,12 @@ export class AudioBufferManager {
 				this.flushBuffer(sampleRate, false)
 			}
 		} catch (error) {
-			this.logger.error("Failed to add data to buffer:", error)
+			this.logger.error({
+				eventKey: "add_data_buffer_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to add data to buffer:",
+			})
 			throw new BufferOperationError("Failed to add audio data to buffer", error as Error)
 		}
 	}
@@ -185,7 +190,12 @@ export class AudioBufferManager {
 
 			return newPcm
 		} catch (error) {
-			this.logger.error("Failed to process sample data:", error)
+			this.logger.error({
+				eventKey: "process_sample_data_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to process sample data:",
+			})
 			throw new BufferOperationError("Failed to process sample data", error as Error)
 		}
 	}
@@ -330,7 +340,12 @@ export class AudioBufferManager {
 
 			// Note: Don't reset sampleDataChunk here as it's needed for continuous processing
 		} catch (error) {
-			this.logger.error("Failed to flush buffer:", error)
+			this.logger.error({
+				eventKey: "flush_buffer_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to flush buffer:",
+			})
 			throw new BufferOperationError("Failed to flush audio buffer", error as Error)
 		}
 	}
@@ -401,11 +416,16 @@ export class AudioBufferManager {
 			const elapsedTime = (now - this.lastChunkTime) / 1000 // seconds
 
 			if (elapsedTime > timeoutThreshold) {
-				this.logger.error("Chunk generation timeout detected", {
-					expectedInterval: this.config.chunkDuration,
-					actualElapsed: elapsedTime,
-					lastChunkIndex: this.currentChunkIndex,
-					bufferDuration: this.bufferDuration,
+				this.logger.error({
+					eventKey: "chunk_generation_timeout",
+					errorKind: "timeout",
+					message: "Chunk generation timeout detected",
+					context: {
+						expectedInterval: this.config.chunkDuration,
+						actualElapsed: elapsedTime,
+						lastChunkIndex: this.currentChunkIndex,
+						bufferDuration: this.bufferDuration,
+					},
 				})
 
 				// 上报监控：分片生成超时（可能原因：音频流中断、音频数据为空、系统资源不足）

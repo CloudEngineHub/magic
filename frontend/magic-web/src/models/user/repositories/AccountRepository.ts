@@ -16,7 +16,13 @@ export class AccountRepository extends GlobalBaseRepository<User.UserAccount> {
 		try {
 			return await this.getAll()
 		} catch (error) {
-			logger.error("getAllAccountsError", AccountRepository.tableName, error)
+			logger.error({
+				eventKey: "get_all_accounts_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getAllAccountsError",
+				context: { tableName: AccountRepository.tableName },
+			})
 			return Storage.getAll<User.UserAccount>(`${AccountRepository.tableName}:`)
 		}
 	}
@@ -25,7 +31,13 @@ export class AccountRepository extends GlobalBaseRepository<User.UserAccount> {
 		try {
 			await this.put(account)
 		} catch (error) {
-			logger.error("setClusterConfigError", AccountRepository.tableName, error)
+			logger.error({
+				eventKey: "add_account_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Add account failed",
+				context: { tableName: AccountRepository.tableName },
+			})
 			return Storage.set(`${AccountRepository.tableName}:${account?.magic_id ?? ""}`, account)
 		}
 	}
@@ -34,7 +46,13 @@ export class AccountRepository extends GlobalBaseRepository<User.UserAccount> {
 		try {
 			await this.delete(magicId)
 		} catch (error) {
-			logger.error("setClusterConfigError", AccountRepository.tableName, error)
+			logger.error({
+				eventKey: "delete_account_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Delete account failed",
+				context: { tableName: AccountRepository.tableName },
+			})
 			return Storage.remove(`${AccountRepository.tableName}:${magicId}`)
 		}
 	}
@@ -43,7 +61,13 @@ export class AccountRepository extends GlobalBaseRepository<User.UserAccount> {
 		try {
 			await this.update(magicId, account)
 		} catch (error) {
-			logger.error("setClusterConfigError", AccountRepository.tableName, error)
+			logger.error({
+				eventKey: "update_account_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Update account failed",
+				context: { tableName: AccountRepository.tableName },
+			})
 			const cache = Storage.get(`${AccountRepository.tableName}:${magicId}`)
 			return Storage.set(`${AccountRepository.tableName}:${magicId}`, {
 				...cache,
@@ -56,7 +80,13 @@ export class AccountRepository extends GlobalBaseRepository<User.UserAccount> {
 		try {
 			await this.clear()
 		} catch (error) {
-			logger.error("setClusterConfigError", AccountRepository.tableName, error)
+			logger.error({
+				eventKey: "clear_accounts_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Clear accounts failed",
+				context: { tableName: AccountRepository.tableName },
+			})
 			return Storage.clearById(`${AccountRepository.tableName}:`)
 		}
 	}

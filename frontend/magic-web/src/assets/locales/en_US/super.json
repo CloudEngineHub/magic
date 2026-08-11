@@ -466,6 +466,14 @@
 		"latest": "Latest",
 		"latestVersion": "Latest Version",
 		"loading": "Loading",
+		"markdownImage": {
+			"address": "Image address",
+			"emptySource": "Image address is empty",
+			"fileMissing": "Image file does not exist",
+			"loadFailed": "Image failed to load",
+			"notImage": "This resource is not an image",
+			"urlFailed": "Failed to fetch image address"
+		},
 		"meetingMode": "Summary",
 		"more": "More",
 		"moreActions": "More",
@@ -2998,6 +3006,7 @@
 			"title": "Mentions"
 		},
 		"modeNotAvailableMessage": "Current crew is not available, please create a \"New Topic\" and select an available crew to continue",
+		"modelLoadFailed": "Failed to load models. Please try again.",
 		"modelSwitch": {
 			"autoModelDescription": "Auto mode automatically selects the most efficient AI model for the current task, suitable for handling most regular tasks with moderate credit consumption.",
 			"collapseDescription": "Collapse model description",

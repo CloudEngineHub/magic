@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
+import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Badge } from "@/components/shadcn-ui/badge"
@@ -14,6 +15,7 @@ import {
 } from "@/components/business/MentionPanel/types"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import memoryFilesStore from "@/stores/memoryFiles"
 import { MEMORY_SCOPE } from "../services/memoryFileService"
 import { MemoryTreeNodeIcon } from "./MemoryTreeNodeIcon"
 import {
@@ -104,7 +106,7 @@ function filterMemoryMenuItems(
 }
 
 /** 项目侧用户记忆文件树，复用项目文件的完整交互能力。 */
-export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
+export const MemoryFileTreePanel = observer(function MemoryFileTreePanel({
 	selectedProject,
 	selectedWorkspace,
 	activeFileId,
@@ -112,40 +114,41 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	showTitle = true,
 }: MemoryFileTreePanelProps) {
 	const { t } = useTranslation("super/longMemory")
-	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-	const [loading, setLoading] = useState(false)
-	const [loadError, setLoadError] = useState(false)
+	const identityKey = memoryFilesStore.currentIdentityKey
+	const { attachments, loadError } = memoryFilesStore.getSnapshot()
 
 	/** 重新加载当前用户的完整记忆文件树。 */
-	const refreshMemoryFiles = useCallback(async (signal?: AbortSignal) => {
-		setLoading(true)
-		setLoadError(false)
-		try {
-			const result = await loadProjectAttachments({
-				projectId: MEMORY_PROJECT_ID,
-				scope: MEMORY_SCOPE,
-				temporaryToken: null,
-				signal,
-				onBatchSnapshot: (snapshot) => {
-					setAttachments(snapshot.tree)
-				},
-			})
-			setAttachments(result.tree)
-		} catch (error) {
-			if ((error as { name?: string })?.name === "AbortError") return
-			console.error("加载记忆文件树失败", error)
-			setLoadError(true)
-			throw error
-		} finally {
-			if (!signal?.aborted) setLoading(false)
-		}
-	}, [])
+	const refreshMemoryFiles = useCallback(
+		async (signal?: AbortSignal, options?: { silent?: boolean }) => {
+			await memoryFilesStore.load(async (publishAttachments) => {
+				const result = await loadProjectAttachments({
+					projectId: MEMORY_PROJECT_ID,
+					scope: MEMORY_SCOPE,
+					temporaryToken: null,
+					signal,
+					onBatchSnapshot: (snapshot) => {
+						if (!signal?.aborted) publishAttachments(snapshot.tree)
+					},
+				})
+				return result.tree
+			}, options)
+		},
+		[],
+	)
 
 	useEffect(() => {
 		const controller = new AbortController()
-		void refreshMemoryFiles(controller.signal).catch(() => undefined)
+		void refreshMemoryFiles(controller.signal).catch((error) => {
+			if ((error as { name?: string })?.name !== "AbortError") {
+				console.error("加载记忆文件树失败", error)
+			}
+		})
 		return () => controller.abort()
-	}, [refreshMemoryFiles])
+	}, [identityKey, refreshMemoryFiles])
+
+	const handleAttachmentsChange = useCallback((nextAttachments: AttachmentItem[]) => {
+		memoryFilesStore.setAttachments(nextAttachments)
+	}, [])
 
 	const memoryNodePathIndex = useMemo(
 		() => buildMemoryTreeNodePathIndex(attachments),
@@ -242,7 +245,7 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 	/** 手动刷新失败时保留当前文件树并提示用户。 */
 	const handleRefresh = useCallback(async () => {
 		try {
-			await refreshMemoryFiles()
+			await refreshMemoryFiles(undefined, { silent: false })
 		} catch {
 			magicToast.error(t("fileTree.loadFailed"))
 		}
@@ -285,12 +288,12 @@ export const MemoryFileTreePanel = memo(function MemoryFileTreePanel({
 			projectId={MEMORY_PROJECT_ID}
 			selectedProject={memoryProject}
 			activeFileId={activeFileId}
-			allowEdit={hasMemoryRoot && !loadError && !loading}
+			allowEdit={hasMemoryRoot && !loadError}
 			allowDownload
 			isInProject
 			showMobileActions
 			refreshAttachments={handleRefresh}
-			onAttachmentsChange={setAttachments}
+			onAttachmentsChange={handleAttachmentsChange}
 			onFileClick={handleMemoryFileClick}
 			filterMenuItems={filterMemoryTreeMenuItems}
 			resolveTopicFileRowDecoration={resolveMemoryRowDecoration}

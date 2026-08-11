@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Pencil } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
@@ -9,6 +9,7 @@ interface SelectedFilesHierarchySectionProps {
 	hierarchy: SelectedFileHierarchyNode[]
 	totalCount: number
 	testId: string
+	onEdit?: () => void
 }
 
 /**
@@ -30,12 +31,16 @@ export default function SelectedFilesHierarchySection({
 	hierarchy,
 	totalCount,
 	testId,
+	onEdit,
 }: SelectedFilesHierarchySectionProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useState(false)
 	const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set())
 
-	if (totalCount === 0 || hierarchy.length === 0) {
+	/** Toggles the selected-file hierarchy while keeping the edit action independent. */
+	const toggleExpanded = () => setExpanded((value) => !value)
+
+	if ((totalCount === 0 || hierarchy.length === 0) && !onEdit) {
 		return null
 	}
 
@@ -109,23 +114,54 @@ export default function SelectedFilesHierarchySection({
 
 	return (
 		<div className="overflow-hidden rounded-[14px] bg-white">
-			<button
-				type="button"
-				className="flex h-12 w-full items-center gap-3 px-3.5 text-left active:opacity-75"
-				onClick={() => setExpanded((value) => !value)}
+			<div
+				className="flex h-12 w-full items-center"
+				onClick={toggleExpanded}
 				data-testid={testId}
 			>
-				<span className="flex-1 text-[15px] leading-5 text-foreground">
-					{t("projectShare.selectedFilesLabel")}
-				</span>
-				<span className="shrink-0 text-[13px] leading-4 text-[#8A8A8A]">{totalCount}</span>
-				<ChevronDown
-					className={cn(
-						"h-4 w-4 shrink-0 text-[#8A8A8A] transition-transform",
-						expanded && "rotate-180",
-					)}
-				/>
-			</button>
+				<button
+					type="button"
+					className="flex h-12 shrink-0 items-center gap-3 pl-3.5 text-left active:opacity-75"
+					onClick={(event) => {
+						event.stopPropagation()
+						toggleExpanded()
+					}}
+				>
+					<span className="text-[15px] leading-5 text-foreground">
+						{t("projectShare.selectedFilesLabel")}
+					</span>
+				</button>
+				{onEdit ? (
+					<button
+						type="button"
+						className="flex h-12 w-8 shrink-0 items-center justify-center text-[#8A8A8A] active:opacity-70"
+						onClick={(event) => {
+							event.stopPropagation()
+							onEdit()
+						}}
+						aria-label={t("share.editShare")}
+						data-testid={`${testId}-edit-button`}
+					>
+						<Pencil className="h-[18px] w-[18px]" strokeWidth={1.8} />
+					</button>
+				) : null}
+				<button
+					type="button"
+					className="ml-auto flex h-12 items-center gap-2 pl-2 pr-3.5 text-left active:opacity-75"
+					onClick={(event) => {
+						event.stopPropagation()
+						toggleExpanded()
+					}}
+				>
+					<span className="text-[13px] leading-4 text-[#8A8A8A]">{totalCount}</span>
+					<ChevronDown
+						className={cn(
+							"h-4 w-4 shrink-0 text-[#8A8A8A] transition-transform",
+							expanded && "rotate-180",
+						)}
+					/>
+				</button>
+			</div>
 			{expanded ? (
 				<div className="border-t border-border">
 					{hierarchy.map((node, index) => (

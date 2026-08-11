@@ -265,7 +265,7 @@ const MagicAggregateAISearchCardV2 = observer(({ content }: MagicAggregateAISear
 						<TimeLineDot
 							status={
 								content?.stream_options?.status === StreamStatus.End ||
-									keywords.length
+								keywords.length
 									? TimeLineDotStatus.SUCCESS
 									: TimeLineDotStatus.PENDING
 							}
@@ -280,38 +280,38 @@ const MagicAggregateAISearchCardV2 = observer(({ content }: MagicAggregateAISear
 				},
 				content?.status !== AggregateAISearchCardV2Status.isSearching
 					? {
-						key: "reading_page",
-						dot: (
-							<TimeLineDot
-								status={
-									llmResponse
-										? TimeLineDotStatus.SUCCESS
-										: TimeLineDotStatus.PENDING
-								}
-							/>
-						),
-						children: (
-							<Flex vertical gap={6} className={styles.timelineItem}>
-								<span className={styles.questionReadCount}>
-									{t("chat.aggregate_ai_search_card.read_page", {
-										number: allPages?.length || 0,
+							key: "reading_page",
+							dot: (
+								<TimeLineDot
+									status={
+										llmResponse
+											? TimeLineDotStatus.SUCCESS
+											: TimeLineDotStatus.PENDING
+									}
+								/>
+							),
+							children: (
+								<Flex vertical gap={6} className={styles.timelineItem}>
+									<span className={styles.questionReadCount}>
+										{t("chat.aggregate_ai_search_card.read_page", {
+											number: allPages?.length || 0,
+										})}
+									</span>
+									{allPages?.map((item) => {
+										return (
+											<Flex key={item.id} gap={8} align="center">
+												<SourceItem
+													key={item.id}
+													name={item.name}
+													url={item.url}
+													datePublished={item.datePublished}
+												/>
+											</Flex>
+										)
 									})}
-								</span>
-								{allPages?.map((item) => {
-									return (
-										<Flex key={item.id} gap={8} align="center">
-											<SourceItem
-												key={item.id}
-												name={item.name}
-												url={item.url}
-												datePublished={item.datePublished}
-											/>
-										</Flex>
-									)
-								})}
-							</Flex>
-						),
-					}
+								</Flex>
+							),
+						}
 					: null,
 			].filter(Boolean) as TimelineProps["items"]
 		}
@@ -444,14 +444,14 @@ const MagicAggregateAISearchCardV2 = observer(({ content }: MagicAggregateAISear
 							style={
 								finish
 									? {
-										// 避免展开情况，撑开宽度
-										maxWidth: size?.width,
-									}
+											// 避免展开情况，撑开宽度
+											maxWidth: size?.width,
+										}
 									: {
-										margin: "-10px",
-										// 避免展开情况，撑开宽度
-										maxWidth: "unset",
-									}
+											margin: "-10px",
+											// 避免展开情况，撑开宽度
+											maxWidth: "unset",
+										}
 							}
 							expandIcon={({ isActive }) => (
 								<MagicIcon
@@ -498,7 +498,12 @@ export default (props: MagicAggregateAISearchCardV2Props) => {
 	return (
 		<ErrorBoundary
 			fallbackRender={(p) => {
-				logger.error("MagicAggregateAISearchCardV2 error", p)
+				logger.error({
+					eventKey: "ai_search_card_aggregation_failed",
+					errorKind: "unknown",
+					error: p,
+					message: "MagicAggregateAISearchCardV2 error",
+				})
 				return null
 			}}
 		>

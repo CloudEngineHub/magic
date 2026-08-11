@@ -1,5 +1,6 @@
 import type { LogContext, LoggerPlugin } from "../types"
 import type Logger from "../../Logger"
+import { ErrorCaptureSource, type StructuredErrorInput } from "../../errorReport"
 
 /**
  * 异步错误监控插件配置接口
@@ -47,7 +48,7 @@ interface ErrorInfo {
  * 核心功能：
  * - 监控全局未捕获的 Promise 异常 (unhandledrejection)
  * - 监控全局 JavaScript 错误 (error)
- * - 通过 logger.report 上报错误信息
+ * - 通过 logger.error 上报错误信息
  * - 数据脱敏和格式处理交给其他插件处理
  * - 支持错误过滤和频率限制
  */
@@ -134,13 +135,12 @@ export class ErrorMonitorPlugin implements LoggerPlugin {
 		}
 
 		if (this.shouldReportError(errorInfo)) {
-			// event.reason 为 reject 内容，一般为 Error 对象，需要通过额外的插件做统一的格式解析
-			this.logger?.report({
-				namespace: "unhandledRejection",
-				data: {
-					errorInfo,
-					reason: event.reason,
-				},
+			this.reportCapturedError("unhandledRejection", {
+				eventKey: "unhandled_promise_rejection",
+				errorKind: "unknown",
+				// reject(Error) 时原样传递真实对象；非 Error 值由 Provider 统一生成带标识的合成异常。
+				error: event.reason,
+				message: errorInfo.message,
 			})
 		}
 	}
@@ -161,8 +161,23 @@ export class ErrorMonitorPlugin implements LoggerPlugin {
 		}
 
 		if (this.shouldReportError(errorInfo)) {
-			this.logger?.report({ namespace: "globalError", data: { error: event.error } })
+			this.reportCapturedError("globalError", {
+				eventKey: "global_javascript_error",
+				errorKind: "unknown",
+				error: event.error,
+				message: event.message,
+				context: {
+					errorInfo,
+				},
+			})
 		}
+	}
+
+	private reportCapturedError(namespace: string, input: StructuredErrorInput): void {
+		// 火山自动监听已关闭，同一次全局异常由 Logger 同步进入火山自定义上报和自建 error 链路。
+		this.logger?.error({ namespace, data: input }, undefined, {
+			captureSource: ErrorCaptureSource.GLOBAL,
+		})
 	}
 
 	/**

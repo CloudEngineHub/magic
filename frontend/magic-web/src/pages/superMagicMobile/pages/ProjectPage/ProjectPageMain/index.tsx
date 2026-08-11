@@ -31,6 +31,7 @@ const ProjectPageMain = observer(function ProjectPageMain({
 	return (
 		<ProjectPageMainTopicsView
 			className={className}
+			scrollClassName="px-3"
 			projectId={selectedProject?.id}
 			topics={topicStore.topics}
 			loading={topicStore.isFetchList}

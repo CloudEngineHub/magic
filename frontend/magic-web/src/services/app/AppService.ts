@@ -140,9 +140,14 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		const delay = Math.min(maxDelay, baseDelay * 2 ** this.configInitRetryCount)
 
 		if (this.configInitRetryCount >= this.configInitMaxRetry) {
-			this.logger.error("配置初始化已达最大重试次数，停止继续重试", {
-				retryCount: this.configInitRetryCount,
-				maxRetry: this.configInitMaxRetry,
+			this.logger.error({
+				eventKey: "config_initialization_retry_exhausted",
+				errorKind: "unknown",
+				message: "配置初始化已达最大重试次数，停止继续重试",
+				context: {
+					retryCount: this.configInitRetryCount,
+					maxRetry: this.configInitMaxRetry,
+				},
 			})
 			return
 		}
@@ -180,7 +185,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		this.settingsAllPromise = GlobalApi.getSettingsAll(appInitSkipWaitRequestOptions).catch(
 			(error) => {
 				this.settingsAllPromise = null
-				this.logger.error("加载平台配置失败", error)
+				this.logger.error({
+					eventKey: "load_config_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "加载平台配置失败",
+				})
 				throw new AppInitializationError({
 					code: AppInitErrorCode.PlatformSettingsRequestFailed,
 					cause: error,
@@ -234,7 +244,13 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		}
 
 		if (error) {
-			this.logger.error("appInitError", result.toLowerCase(), error)
+			this.logger.error({
+				eventKey: "app_init_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "appInitError",
+				context: { result: result.toLowerCase() },
+			})
 		}
 
 		this.logger.report({
@@ -274,7 +290,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					.get<ConfigService>("configService")
 					.loadConfig(appInitSkipWaitRequestOptions)
 			} catch (error) {
-				this.logger.error("加载配置服务失败", error)
+				this.logger.error({
+					eventKey: "load_config_service_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "加载配置服务失败",
+				})
 				throw new AppInitializationError({
 					code: AppInitErrorCode.ConfigLoadFailed,
 					cause: error,
@@ -294,7 +315,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 							?.default_language as Config.LanguageValue,
 					})
 					.catch((error) => {
-						this.logger.error("全局配置初始化失败", error)
+						this.logger.error({
+							eventKey: "config_initialize_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "全局配置初始化失败",
+						})
 						throw new AppInitializationError({
 							code: AppInitErrorCode.ConfigInitFailed,
 							cause: error,
@@ -319,7 +345,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 			const globalConfigInitPromise = globalConfigStore
 				.initGlobalConfig(response.platform_settings, i18next, response.global_config)
 				.catch((error) => {
-					this.logger.error("全局配置语言包初始化失败", error)
+					this.logger.error({
+						eventKey: "config_initialize_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "全局配置语言包初始化失败",
+					})
 					throw new AppInitializationError({
 						code: AppInitErrorCode.GlobalConfigInitFailed,
 						cause: error,
@@ -422,7 +453,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					.get<UserService>("userService")
 					.init()
 					.catch((error) => {
-						this.logger.error("用户服务初始化失败", error)
+						this.logger.error({
+							eventKey: "user_service_initialize_failed",
+							errorKind: "unknown",
+							error: error,
+							message: "用户服务初始化失败",
+						})
 						throw new AppInitializationError({
 							code: AppInitErrorCode.UserInitFailed,
 							cause: error,
@@ -496,7 +532,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 
 				this.logger.log("开始初始化账户")
 				await this.initAccount().catch((error) => {
-					this.logger.error("账户初始化失败", error)
+					this.logger.error({
+						eventKey: "account_initialize_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "账户初始化失败",
+					})
 					throw new AppInitializationError({
 						code: AppInitErrorCode.AccountInitFailed,
 						cause: error,
@@ -549,7 +590,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 								cause: error,
 								message: "app init failed",
 							})
-				this.logger.error("应用初始化失败", initError)
+				this.logger.error({
+					eventKey: "initialize_failed",
+					errorKind: "unknown",
+					error: initError,
+					message: "应用初始化失败",
+				})
 				if (!isWhiteListRoute) {
 					this.logger.log("非白名单路由，重定向到登录页")
 					this.redirectToLogin()
@@ -685,7 +731,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 
 			return false
 		} catch (error) {
-			this.logger.error("检查系统维护状态失败", error)
+			this.logger.error({
+				eventKey: "check_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "检查系统维护状态失败",
+			})
 			return false
 		}
 	}
@@ -727,7 +778,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 			this.logger.log("系统不需要初始化，继续正常流程")
 			return false
 		} catch (error) {
-			this.logger.error("检查系统初始化状态失败", error)
+			this.logger.error({
+				eventKey: "check_initialize_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "检查系统初始化状态失败",
+			})
 			return false
 		}
 	}
@@ -820,7 +876,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 
 	private triggerPostAppInitUserData(user: User.UserInfo) {
 		Promise.resolve(this.initUserData(user)).catch((error) => {
-			this.logger.error("应用启动后的用户数据初始化失败", error)
+			this.logger.error({
+				eventKey: "start_user_initialize_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "应用启动后的用户数据初始化失败",
+			})
 		})
 	}
 
@@ -928,7 +989,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					}
 					shouldRefreshAccountContext = true
 				} catch (err) {
-					this.logger.error("组织切换失败，恢复当前组织", err)
+					this.logger.error({
+						eventKey: "organization_switch_restore_organization_failed",
+						errorKind: "unknown",
+						error: err,
+						message: "组织切换失败，恢复当前组织",
+					})
 					// 切换失败，恢复当前组织
 					service
 						.get<UserService>("userService")
@@ -945,7 +1011,12 @@ class AppService extends AbstractAppService<AppInitResultData> {
 			}
 			this.logger.log("组织切换流程完成")
 		} catch (err) {
-			this.logger.error("切换组织过程中发生错误", err)
+			this.logger.error({
+				eventKey: "switch_organization_failed",
+				errorKind: "unknown",
+				error: err,
+				message: "切换组织过程中发生错误",
+			})
 		} finally {
 			interfaceStore.setIsSwitchingOrganization(false)
 		}

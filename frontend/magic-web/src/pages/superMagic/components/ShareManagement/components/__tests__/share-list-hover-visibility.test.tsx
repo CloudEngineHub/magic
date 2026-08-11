@@ -14,7 +14,8 @@ vi.mock("@/utils/devices", () => ({
 	isNoHoverCoarsePointer: () => mockDeviceState.isNoHoverCoarsePointer,
 }))
 
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-i18next")>()),
 	useTranslation: () => ({
 		t: (key: string, values?: Record<string, unknown>) =>
 			values ? `${key}:${JSON.stringify(values)}` : key,
@@ -139,15 +140,17 @@ describe("Share management hover action visibility", () => {
 	})
 
 	it("keeps file share actions hidden until hover in a normal browser", () => {
+		const longTitle = "A very long shared file name that must yield space to the status badge"
 		render(
 			<FileShareListNew
-				data={[createFileShare()]}
+				data={[createFileShare({ title: longTitle })]}
 				loading={false}
 				onCancelShare={vi.fn()}
 				onRefresh={vi.fn()}
 			/>,
 		)
 
+		expect(screen.getByText(longTitle)).toHaveClass("min-w-0", "flex-1", "truncate")
 		expect(screen.getByText("share.passwordProtected")).toBeInTheDocument()
 		expect(
 			screen.queryByRole("button", { name: "shareManagement.more" }),

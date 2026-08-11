@@ -45,4 +45,54 @@ describe("useElementVisibility", () => {
 		unmount()
 		expect(disconnect).toHaveBeenCalledTimes(1)
 	})
+
+	it("requires the configured intersection ratio inside a referenced root", async () => {
+		let callback: IntersectionObserverCallback | undefined
+		let observerOptions: IntersectionObserverInit | undefined
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn(
+				(
+					nextCallback: IntersectionObserverCallback,
+					nextOptions: IntersectionObserverInit,
+				) => {
+					callback = nextCallback
+					observerOptions = nextOptions
+					return { observe: vi.fn(), disconnect: vi.fn() }
+				},
+			),
+		)
+		const element = document.createElement("div")
+		const root = document.createElement("div")
+		const ref = createRef<HTMLDivElement>()
+		const rootRef = createRef<HTMLDivElement>()
+		Object.defineProperty(ref, "current", { value: element })
+		Object.defineProperty(rootRef, "current", { value: root })
+
+		const { result } = renderHook(() =>
+			useElementVisibility(ref, {
+				minimumIntersectionRatio: 0.99,
+				rootMargin: "0px -48px",
+				rootRef,
+				threshold: [0, 0.99, 1],
+			}),
+		)
+
+		expect(observerOptions).toMatchObject({ root, rootMargin: "0px -48px" })
+		act(() => {
+			callback?.(
+				[{ intersectionRatio: 0.8, isIntersecting: true } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		})
+		expect(result.current).toBe(false)
+
+		act(() => {
+			callback?.(
+				[{ intersectionRatio: 1, isIntersecting: true } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		})
+		await waitFor(() => expect(result.current).toBe(true))
+	})
 })

@@ -56,12 +56,17 @@ function EditorErrorBoundary({
 		<ErrorBoundary
 			onError={(error, errorInfo) => {
 				// 记录详细的错误信息
-				logger.error("EditorBody Error Boundary caught an error:", {
-					error: error.message,
-					stack: error.stack,
-					componentStack: errorInfo.componentStack,
-					errorBoundary: "EditorErrorBoundary",
-					inputData,
+				logger.error({
+					eventKey: "super_magic_editor_render_failed",
+					errorKind: "render",
+					error: error,
+					message: "EditorBody Error Boundary caught an error:",
+					context: {
+						stack: error.stack,
+						componentStack: errorInfo.componentStack,
+						errorBoundary: "EditorErrorBoundary",
+						inputData,
+					},
 				})
 
 				// 检查是否是DOM操作相关的错误
@@ -90,11 +95,11 @@ function EditorErrorBoundary({
 									<div>
 										{isDOMError
 											? t(
-												"super:editorErrorBoundary.description.domOperationError",
-											)
+													"super:editorErrorBoundary.description.domOperationError",
+												)
 											: t(
-												"super:editorErrorBoundary.description.generalError",
-											)}
+													"super:editorErrorBoundary.description.generalError",
+												)}
 									</div>
 
 									{fallbackMode === "detailed" && (

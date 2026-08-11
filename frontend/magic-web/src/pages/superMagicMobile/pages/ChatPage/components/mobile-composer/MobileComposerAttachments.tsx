@@ -169,7 +169,12 @@ function VideoAttachmentThumbContent({ previewUrl }: { previewUrl: string }) {
 				data-testid="mobile-composer-attachments-video"
 			/>
 			{posterDataUrl ? (
-				<img src={posterDataUrl} alt="" className="h-full w-full bg-black object-cover"  data-testid="mobile-composer-attachments-image"/>
+				<img
+					src={posterDataUrl}
+					alt=""
+					className="h-full w-full bg-black object-cover"
+					data-testid="mobile-composer-attachments-image"
+				/>
 			) : (
 				<div className="h-full w-full bg-black" aria-hidden />
 			)}
@@ -199,7 +204,9 @@ function MobileComposerAttachmentThumb({
 	const objectUrl = useObjectUrl(needsPreviewUrl ? file.file : null)
 	const previewUrl = objectUrl ?? ""
 
-	const isUploading = file.status === "uploading"
+	// `init` is already an active upload. Preview cards intentionally use loading only
+	// because their percentage can lag behind the editor-scoped upload state.
+	const isUploading = file.status === "init" || file.status === "uploading"
 	const isError = file.status === "error"
 
 	const { Icon: FileIcon, label: fileLabel } =
@@ -211,7 +218,12 @@ function MobileComposerAttachmentThumb({
 			data-testid="mobile-composer-attachment-item"
 		>
 			{isImage && previewUrl ? (
-				<img src={previewUrl} alt={file.name} className="h-full w-full object-cover"  data-testid="mobile-composer-attachments-image-2"/>
+				<img
+					src={previewUrl}
+					alt={file.name}
+					className="h-full w-full object-cover"
+					data-testid="mobile-composer-attachments-image-2"
+				/>
 			) : isVideo && previewUrl ? (
 				<VideoAttachmentThumbContent previewUrl={previewUrl} />
 			) : isImage && needsPreviewUrl && !previewUrl ? (
@@ -227,11 +239,6 @@ function MobileComposerAttachmentThumb({
 					<span className="w-full truncate text-xs leading-none text-foreground/35">
 						{file.name}
 					</span>
-					{isUploading ? (
-						<span className="text-xs text-muted-foreground">
-							{Math.round(file.progress ?? 0)}%
-						</span>
-					) : null}
 				</div>
 			)}
 
