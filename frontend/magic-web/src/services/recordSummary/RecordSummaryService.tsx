@@ -466,7 +466,8 @@ class RecordSummaryService {
 		sessionId,
 		transcriptionEnabled = true,
 	}: {
-		workspace: Workspace
+		/** Allow starting without a workspace when the recordings entry is on All / Ungrouped */
+		workspace: Workspace | null
 		model: ModelItem
 		project: ProjectListItem
 		topic?: Topic | null
@@ -552,7 +553,7 @@ class RecordSummaryService {
 			})
 
 			logger.report("开始录音", {
-				workspace: workspace.name,
+				workspace: workspace?.name,
 				project: project.project_name,
 				audioSource: audioSource?.source,
 			})
@@ -2023,13 +2024,13 @@ class RecordSummaryService {
 		onError: (error: Error) => void
 		skipSummary?: boolean
 	}) => {
+		// Workspace may be null for All / Ungrouped audio recordings; project + topic are enough.
 		if (
-			!recordSummaryStore.businessData.workspace ||
 			!recordSummaryStore.businessData.topic ||
 			!recordSummaryStore.businessData.project ||
 			!recordSummaryStore.businessData.model
 		) {
-			onError(new Error("workspace, topic, project, model is required"))
+			onError(new Error("topic, project, model is required"))
 			return
 		}
 
@@ -2157,8 +2158,9 @@ class RecordSummaryService {
 			throw new Error("录音会话不能为空")
 		}
 
-		if (!session.workspace || !session.model) {
-			throw new Error("会话中缺少必需的 workspace 或 model")
+		// Workspace can be null when the recording started from All / Ungrouped.
+		if (!session.model) {
+			throw new Error("会话中缺少必需的 model")
 		}
 
 		logger.log("开始完成目标录音会话", {
@@ -3702,8 +3704,9 @@ class RecordSummaryService {
 				return
 			}
 
-			if (!session.workspace || !session.model) {
-				logger.warn("finishHistoricalSession: session missing workspace or model")
+			// Null workspace is valid for ungrouped recordings; only model is required here.
+			if (!session.model) {
+				logger.warn("finishHistoricalSession: session missing model")
 				return
 			}
 
@@ -4146,7 +4149,8 @@ class RecordSummaryService {
 	}> {
 		const workspaceId = session.workspace?.id || ""
 
-		// 如果没有项目ID，创建新项目
+		// Create a project only when a real workspace is available; ungrouped
+		// recordings must already carry a project created at start.
 		if (!session.project && workspaceId) {
 			const res = await SuperMagicApi.createProject({
 				workspace_id: workspaceId,
@@ -4158,8 +4162,8 @@ class RecordSummaryService {
 			session.project = res.project
 			session.topic = res.topic
 		}
-		// 如果有项目但没有话题，创建新话题
-		else if (session.project && !session.topic && workspaceId) {
+		// Topic creation only needs project_id; allow null workspace (ungrouped).
+		else if (session.project && !session.topic) {
 			const res = await SuperMagicApi.createTopic({
 				// workspace_id: workspaceId,
 				project_id: session.project.id,

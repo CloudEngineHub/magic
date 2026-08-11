@@ -1369,6 +1369,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * Detaches projects/topics from a workspace then deletes the empty workspace shell.
+	 * Used by audio recording groups so deleting a group keeps the underlying recordings.
+	 */
+	detachWorkspace({ id }: { id: string }) {
+		return fetch.put(
+			`/api/v1/super-agent/workspaces/${id}/detach`,
+			{},
+			{
+				enableRequestUnion: true,
+			},
+		)
+	},
+
+	/**
 	 * @description 新增工作区
 	 * @param workspace_name
 	 */

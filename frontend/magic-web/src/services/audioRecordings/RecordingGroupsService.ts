@@ -114,9 +114,12 @@ export class RecordingGroupsService {
 		})
 	}
 
-	/** Deletes a real audio workspace group */
+	/**
+	 * Safely removes a recording group by detaching its projects first,
+	 * so recordings become ungrouped instead of cascading into hard deletes.
+	 */
 	async deleteGroup(id: string): Promise<void> {
-		await SuperMagicApi.deleteWorkspace({ id })
+		await SuperMagicApi.detachWorkspace({ id })
 	}
 }
 
