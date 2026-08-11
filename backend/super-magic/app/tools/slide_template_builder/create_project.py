@@ -149,11 +149,20 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 "working_directory": str(template_dir / WORK_DIR_NAME),
                 "slide_count": len(params.slides),
                 "canvas": params.source.canvas.model_dump(),
+                "canvas_contract": {
+                    "selector": ".slide-container",
+                    "width_attribute": "data-width",
+                    "height_attribute": "data-height",
+                    "width": params.source.canvas.width,
+                    "height": params.source.canvas.height,
+                },
             }
             return ToolResult(
                 content=(
                     f"Slide template project created at `{template_dir}` with {len(params.slides)} planned slides. "
                     f"Put all reference renders, extracted candidates, and QA scratch files under `{template_dir / WORK_DIR_NAME}`. "
+                    "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
+                    "`data-height` matching `template.json.source.canvas`; preserve this contract when authoring. "
                     "Replace every scaffold file, then call finalize_slide_template; it removes the working directory after success."
                 ),
                 data=data,
@@ -176,7 +185,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
   <!-- {SCAFFOLD_MARKER} -->
 </head>
 <body>
-  <main class="slide" data-layout="{layout}" data-width="{canvas.width}" data-height="{canvas.height}"></main>
+  <main class="slide-container" data-width="{canvas.width}" data-height="{canvas.height}" data-layout="{layout}"></main>
 </body>
 </html>
 """

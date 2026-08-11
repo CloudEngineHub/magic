@@ -73,6 +73,8 @@ During authoring, `create_slide_template_project` also creates `<template-id>/.t
 ## Authoring Rules
 
 - Use the declared source canvas from `template.json` with no responsive layout. Default to `1920x1080` only when the source does not provide dimensions, and preserve source ratios such as `1:1`.
+- Preserve the generated slide canvas contract on every page. Each slide must keep one root element in the form `<main class="slide-container" data-width="..." data-height="...">`.
+- Keep `data-width` and `data-height` equal to `template.json.source.canvas.width` and `template.json.source.canvas.height`. When replacing scaffold content, replace only the content inside the root canvas; do not remove or rename the `slide-container` class or either dimension attribute.
 - Make `visual-spec.md` the design contract: palette, typography, spacing, backgrounds, components, chart rules, image treatment, page rhythm, editing guidance, and forbidden patterns.
 - Keep reusable visual-system CSS in `theme.css`; keep page-specific grid, flex, padding, and positioning in each slide HTML file.
 - Use lowercase kebab-case filenames for English-context templates. Chinese-context templates may use concise Chinese semantic filenames such as `封面.html`, while `layout` remains lowercase kebab-case.
@@ -212,6 +214,7 @@ Do not report completion until:
 - `category_code` and every `tag_codes` value exist in the bundled taxonomy, and `tag_codes` is non-empty.
 - When a source PPTX was supplied, every extracted source asset has a completed `reuse` or `discard` decision. Only selected assets that are actually referenced by final HTML/CSS may remain under `images/source-assets/`; discarded and unused candidates must not be copied into the final package.
 - Every indexed slide exists, loads `../theme.css`, and resolves local assets.
+- Every indexed slide has exactly one `main.slide-container` root, and its `data-width`/`data-height` values match `template.json.source.canvas`.
 - No legacy conversion residue or forbidden output file remains.
 - `.template-work/` and other intermediate authoring files are absent after successful finalization.
 - Every external converter, extraction, download, and QA artifact path tracked during the task has been deleted without touching the source input or final template files.

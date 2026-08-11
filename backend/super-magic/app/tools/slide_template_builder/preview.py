@@ -64,7 +64,7 @@ _SLIDE_INSPECTION_SCRIPT = """
     .filter((img) => !img.complete || img.naturalWidth === 0)
     .map((img) => img.getAttribute('src') || ''),
   slideBounds: (() => {
-    const slide = document.querySelector('.slide') || document.body;
+    const slide = document.querySelector('.slide-container, .slide') || document.body;
     if (!slide) return null;
     const rect = slide.getBoundingClientRect();
     return { width: Math.round(rect.width), height: Math.round(rect.height) };

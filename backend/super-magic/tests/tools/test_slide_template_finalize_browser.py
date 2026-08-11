@@ -49,12 +49,13 @@ async def test_finalize_project_uses_browser_sdk_instead_of_direct_playwright(tm
         template_dir / "theme.css",
         ":root { --navy: #102a43; }\n"
         "html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }\n"
-        ".slide { width: 1920px; height: 1080px; background: var(--navy); }\n",
+        ".slide-container { width: 1920px; height: 1080px; background: var(--navy); }\n",
     )
     await async_write_text(
         template_dir / "slides/cover.html",
         '<!doctype html><html><head><link rel="stylesheet" href="../theme.css"></head>'
-        '<body><main class="slide"><h1 data-slot="title">Business Review</h1>'
+        '<body><main class="slide-container" data-width="1920" data-height="1080">'
+        '<h1 data-slot="title">Business Review</h1>'
         '<p data-slot="subtitle">Q4</p><span data-slot="meta">Strategy Team</span></main></body></html>',
     )
 

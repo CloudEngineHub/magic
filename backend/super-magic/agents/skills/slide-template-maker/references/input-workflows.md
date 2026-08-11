@@ -11,6 +11,16 @@ After calling `create_slide_template_project`, store source copies, screenshots,
 5. Keep user-owned brand assets only when their ownership and intended reuse are clear. Ask before retaining ambiguous logos, real people, QR codes, private dashboards, customer screenshots, or proprietary UI.
 6. Use `source.kind: "derived"` and `source.method: "image-rebuild"`.
 
+## Generated Canvas Contract
+
+`create_slide_template_project` writes a fixed canvas root into every slide scaffold. Preserve this exact protocol while authoring:
+
+```html
+<main class="slide-container" data-width="<canvas width>" data-height="<canvas height>">
+```
+
+The two data attributes must match `template.json.source.canvas`. Replace scaffold content inside this root; do not remove or rename the class or dimension attributes.
+
 ## HTML Source
 
 1. Read the HTML, CSS, scripts, and local assets.

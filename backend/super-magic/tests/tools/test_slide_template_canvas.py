@@ -20,7 +20,11 @@ from app.tools.slide_template_builder.models import (
     TemplateSourceParams,
 )
 from app.tools.slide_template_builder.pptx_structure import extract_pptx_structure
-from app.tools.slide_template_builder.preview import _create_collage, render_slide_previews
+from app.tools.slide_template_builder.preview import (
+    _SLIDE_INSPECTION_SCRIPT,
+    _create_collage,
+    render_slide_previews,
+)
 from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplateSourceParams
 from magic_use.config import BrowserRuntimeConfig
 
@@ -133,6 +137,7 @@ async def test_render_slide_previews_uses_fixed_canvas_browser_sdk_and_blob_url(
     assert captures[0].inspection == inspection
     assert browser.navigated_urls == ["blob:https://browser.example/rendered-page"]
     assert browser.closed is True
+    assert "document.querySelector('.slide-container, .slide')" in _SLIDE_INSPECTION_SCRIPT
 
 
 @pytest.mark.asyncio
@@ -148,8 +153,11 @@ async def test_create_project_preserves_square_source_canvas(tmp_path):
     template_dir = Path(result.data["template_directory"])
     metadata = json.loads((template_dir / "template.json").read_text())
     assert metadata["source"]["canvas"] == {"width": 1080, "height": 1080}
+    assert result.data["canvas_contract"]["width"] == 1080
+    assert result.data["canvas_contract"]["height"] == 1080
     scaffold = (template_dir / "slides/cover.html").read_text()
     assert 'content="width=1080, height=1080"' in scaffold
+    assert '<main class="slide-container"' in scaffold
     assert 'data-width="1080" data-height="1080"' in scaffold
 
 
