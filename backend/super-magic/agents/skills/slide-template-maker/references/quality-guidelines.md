@@ -52,11 +52,13 @@ Confirm:
 
 ## Browser And Visual Checks
 
-Invoke both webpage QA tools through `run_sdk_snippet` with `sdk.tool.call(...)`, following the Code Mode example in the main skill. Do not call them as standalone tools.
+Invoke both webpage QA tools through `run_sdk_snippet` with `sdk.tool.call(...)`, following the Code Mode example in the main skill. Do not call them as standalone tools. Use the declared canvas as the Browser viewport and use `device_scale_factor: 1` for visual capture.
 
 Use `analysis_slide_webpage` through that Code Mode path on all pages when practical, or at minimum on every high-risk page. Fix overflow, clipping, scrollbars, missing images, and aspect-ratio distortion.
 
-Use `visual_understanding_webpage` through that Code Mode path on at least:
+Before finalization, use `visual_understanding_webpage` through that Code Mode path on representative pages. After finalization, inspect the matching generated files under `previews/slides/` with `visual_understanding`; those generated images are the authoritative evidence for the final result.
+
+Visually inspect at least:
 
 - Cover.
 - Densest content page.

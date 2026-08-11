@@ -151,8 +151,10 @@ selected = tool.call("select_slide_template_source_assets", {
 - Use the `document-converter` skill through `run_sdk_snippet` to render presentation pages and analyze them with its document-image workflow.
 - Use `visual_understanding` for standalone images and screenshots, not as a replacement for `document-converter` when reading presentation files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
-- Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML and sampled final slides visually.
-- Use `analysis_slide_webpage` through that Code Mode path for the declared canvas overflow, clipping, scrollbar, and broken-image checks.
+- Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML before finalization. Pass the declared canvas as `viewport_width` and `viewport_height`, with `device_scale_factor: 1`.
+- Use `analysis_slide_webpage` through that Code Mode path for declared-canvas overflow, clipping, scrollbar, and broken-image checks. The tool uses `max_width` and `max_height` as its Browser viewport.
+- After `finalize_slide_template`, use `visual_understanding` on the generated files under `previews/slides/`. These images are the authoritative visual evidence because they are the exact preview artifacts that will be published.
+- Do not install Playwright or Chromium from the Agent. Template finalization uses the configured Super Magic Browser backend automatically.
 - Use `generate_images` only for neutral, non-sensitive visual assets when the source does not provide enough usable imagery.
 - Use `ask_user` only for material decisions such as ambiguous sensitive assets, intentional template updates, or an occupied user-provided target.
 
@@ -162,16 +164,19 @@ For webpage visual QA, call the tools in `run_sdk_snippet` like this:
 run_sdk_snippet(python_code="""
 from sdk.tool import tool
 
+canvas_width = 1920  # Read source.canvas.width from template.json.
+canvas_height = 1080  # Read source.canvas.height from template.json.
 visual_result = tool.call("visual_understanding_webpage", {
     "target": "<template-id>/slides/cover.html",
-    "query": "Review visual hierarchy, readability, composition, canvas usage, and image quality."
+    "query": "Review visual hierarchy, readability, composition, canvas usage, and image quality.",
+    "viewport_width": canvas_width,
+    "viewport_height": canvas_height,
+    "device_scale_factor": 1
 })
 if not visual_result.ok:
     raise SystemExit(visual_result.content)
 print(visual_result.content)
 
-canvas_width = 1920  # Read source.canvas.width from template.json.
-canvas_height = 1080  # Read source.canvas.height from template.json.
 layout_result = tool.call("analysis_slide_webpage", {
     "target": "<template-id>/slides/cover.html",
     "max_width": canvas_width,
@@ -180,6 +185,22 @@ layout_result = tool.call("analysis_slide_webpage", {
 if not layout_result.ok:
     raise SystemExit(layout_result.content)
 print(layout_result.content)
+""")
+```
+
+After finalization, visually inspect the exact generated preview instead of recapturing the webpage:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("visual_understanding", {
+    "images": ["<template-id>/previews/slides/slide-001.png"],
+    "query": "Review hierarchy, readability, composition, canvas usage, image quality, and background interference."
+})
+if not result.ok:
+    raise SystemExit(result.content)
+print(result.content)
 """)
 ```
 
