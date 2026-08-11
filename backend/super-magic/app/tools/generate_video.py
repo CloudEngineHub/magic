@@ -6,12 +6,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
-from urllib.parse import urlparse
 
 import aiofiles
 import aiohttp
@@ -22,7 +19,8 @@ from agentlang.path_manager import PathManager
 from agentlang.utils.file import generate_safe_filename
 from agentlang.utils.metadata import MetadataUtil
 from app.core.entity.tool.tool_result import VideoToolResult
-from app.infrastructure.magic_service.config import MagicServiceConfig, MagicServiceConfigLoader
+from app.infrastructure.magic_service.client import MagicServiceClient
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.abstract_file_tool import AbstractFileTool
 from app.tools.core import BaseToolParams, tool
 from app.tools.media_utils.presigned_url import generate_presigned_url
@@ -35,10 +33,10 @@ MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
 
 
 class GenerateVideoParams(BaseToolParams):
-    action: Literal["generate", "query"] = Field(
+    action: Literal["estimate_points", "generate", "query"] = Field(
         "generate",
-        description="""<!--zh: 操作类型：generate 创建视频，query 查询已有任务。-->
-Action: generate creates a video; query checks an existing task.""",
+        description="""<!--zh: 操作类型：estimate_points 仅预估积分，generate 创建视频，query 查询已有任务。-->
+Action: estimate_points only estimates points, generate creates a video, and query checks an existing task.""",
     )
     prompt: str = Field(
         "",
@@ -168,7 +166,7 @@ Maximum time in seconds to wait for completion. Usually keep the default.""",
         if task in {"text_to_video", "image_to_video"}:
             normalized["task"] = "generate"
         mode = str(normalized.get("input_mode") or "").strip().lower()
-        if mode == "text_to_video":
+        if mode in {"text", "text_only", "text_to_video", "text_prompt"}:
             normalized["input_mode"] = "standard"
         elif mode == "image_to_video":
             normalized["input_mode"] = ""
@@ -209,8 +207,8 @@ Maximum time in seconds to wait for completion. Usually keep the default.""",
 
     @model_validator(mode="after")
     def validate_action_fields(self):
-        if self.action == "generate" and not self.prompt.strip():
-            raise ValueError("The generate action requires prompt")
+        if self.action in {"estimate_points", "generate"} and not self.prompt.strip():
+            raise ValueError(f"The {self.action} action requires prompt")
         if self.action == "query" and not self.operation_id.strip():
             raise ValueError("The query action requires operation_id")
         return self
@@ -223,7 +221,7 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
     def __init__(self, **data: Any):
         data.setdefault("base_dir", PathManager.get_workspace_dir())
         super().__init__(**data)
-        self._config: Optional[MagicServiceConfig] = None
+        self._magic_service_client: Optional[MagicServiceClient] = None
 
     def get_prompt_hint(self) -> str:
         return """\
@@ -233,17 +231,20 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 **关键规则**
 - 用户未明确指定时，省略 model_id、input_mode、task、size、resolution、fps、seed、watermark，由工具按当前模型选择
 - output_path 通常省略，使用默认 videos 目录
+- 用户明确忽略附件或引用素材时，不分析素材、不调用素材理解工具，也不传任何参考素材字段，按纯文本请求处理
 
 **Prompt 写法**
 - Prompt 是可执行的视频创意简报，至少明确主体、动作、场景、镜头、光线、风格、节奏，以及用户要求时的音频要求
 - 用户需求模糊时扩写为完整描述；用户已有完整 prompt 时保留原文，只补充必要信息
-- 用户要求旁白或对白、配音、音乐或音效时，必须逐字保留相关内容，并注明说话人、语言、声音特征和出现时间
+- 用户要求旁白或对白、配音、音乐或音效时，必须逐字保留，不得概括、改写或遗漏；注明说话人、语言、声音特征、出现时机，以及口型同步和对应动作
 
 **参考素材**
 - 用户提供图片、视频、音频或首尾帧时，传入对应字段，并在 prompt 中说明各素材的用途
 
 **确认与风险**
-- 默认生成前等待用户确认；用户明确要求直接生成或跳过确认时可直接生成
+- 用户未明确要求立即生成或跳过确认时，先用 action="estimate_points"；向用户完整逐字复制 Final Prompt（旁白和对白不可概括），再展示主要参数和预计积分，结束当前轮并等待用户确认。确认后再用 action="generate"
+- 用户明确要求立即生成或跳过确认时，可直接使用 action="generate"
+- 积分预估失败时，不得直接生成；使用 ask_user 提供选项：“在无积分预估的情况下继续”和“修改或取消”，结束当前轮等待用户选择
 - 涉及 IP、真人、色情、政治、暴力等风险内容，或需要提供多个方向时，必须先调用 ask_user；至少提供“保留原始要求继续尝试”和“风险降低调整”，不得用普通文本代替 ask_user，也不得强制改写
 
 **失败处理**
@@ -257,17 +258,20 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 **Key rules**
 - Unless explicitly specified, omit model_id, input_mode, task, size, resolution, fps, seed, and watermark; let the tool choose for the current model
 - Usually omit output_path and use the default videos directory
+- If the user explicitly ignores attachments or reference media, do not analyze them, call media-understanding tools, or pass reference fields; handle the request as text-only
 
 **Prompt writing**
 - Treat the prompt as an executable video brief covering at least subject, action, scene, camera, lighting, style, pacing, and audio requirements when requested
 - Expand vague requests into a complete description; when the user provides a complete or detailed prompt, preserve their wording and add only necessary details
-- Preserve requested narration, dialogue, voice-over, music, or sound effects verbatim, specifying speaker, language, voice characteristics, and timing
+- Preserve requested narration, dialogue, voice-over, music, or sound effects verbatim; never summarize, rewrite, or omit them. Specify speaker, language, voice characteristics, timing, lip sync, and matching actions
 
 **Reference media**
 - When the user provides images, videos, audio, or first/last frames, pass the corresponding fields and explain each reference's role in the prompt
 
 **Confirmation and risk**
-- Wait for confirmation by default; generate immediately only when the user explicitly requests direct generation or asks to skip confirmation
+- Unless the user explicitly requests immediate generation or skips confirmation, call action="estimate_points" first. In the user-facing response, copy the complete Final Prompt verbatim—never summarize narration or dialogue—then show the main parameters and estimated points, end the current turn and wait for confirmation. Use action="generate" only after confirmation
+- Generate immediately only when the user explicitly requests it or asks to skip confirmation
+- If estimation fails, do not generate directly. Use ask_user to offer “continue without an estimate” and “revise or cancel”, then end the current turn and wait for the user's choice
 - For IP, real-person, sexual, political, violent, or other multi-choice situations, call ask_user first. Offer at least “keep the original request and attempt it as written” and “apply a risk-reducing adjustment”; do not replace ask_user with plain text or force a rewrite
 
 **Failure handling**
@@ -284,23 +288,59 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         try:
             operation_id = params.operation_id.strip()
             request_id = str(uuid.uuid4())
+            if params.action == "estimate_points":
+                payload = await self._build_payload(tool_context, params)
+                estimate = await self._get_magic_service_client().estimate_video_points(
+                    payload,
+                    request_id=request_id,
+                )
+                points = self._read_estimated_points(estimate)
+                generation = payload.get("generation") or {}
+                data = {
+                    "points": points,
+                    "prompt": params.prompt,
+                    "model_id": payload.get("model_id"),
+                    "input_mode": payload.get("input_mode"),
+                    "generation": generation,
+                }
+                return VideoToolResult(
+                    ok=True,
+                    content=(
+                        f"Video points estimated: {points} points. "
+                        "MANDATORY: In the user-facing response, copy the complete "
+                        "Final Prompt verbatim. Do not summarize narration or dialogue. "
+                        f"<final_prompt>{params.prompt}</final_prompt> "
+                        f"Main parameters: model_id={payload.get('model_id')}, "
+                        f"input_mode={payload.get('input_mode')}, generation={generation}. "
+                        "End this turn and wait for user confirmation before generation."
+                    ),
+                    videos=[],
+                    data=data,
+                )
             if params.action == "query":
                 if not operation_id:
                     raise ValueError("The query action requires operation_id")
-                operation = await self._request_json(
-                    "GET", f"/videos/{operation_id}", request_id=request_id
+                operation = await self._get_magic_service_client().get_video_operation(
+                    operation_id,
+                    request_id=request_id,
                 )
             else:
                 payload = await self._build_payload(tool_context, params)
-                created = await self._request_json(
-                    "POST", "/videos", payload, request_id=request_id
+                created = await self._get_magic_service_client().create_video(
+                    payload,
+                    request_id=request_id,
                 )
                 operation_id = str(created.get("id") or created.get("operation_id") or "").strip()
                 if not operation_id:
                     raise ValueError("Video API response is missing operation_id")
                 operation = created
 
-            operation = await self._poll(operation_id, operation, params, request_id)
+            operation = await self._poll(
+                operation_id,
+                operation,
+                params,
+                request_id,
+            )
             status = self._status(operation)
             extra = {"operation_id": operation_id, "status": status}
             if operation.get("timed_out"):
@@ -335,6 +375,18 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
             extra = {"error": str(exc)}
             if operation_id:
                 extra["operation_id"] = operation_id
+            if params.action == "estimate_points":
+                return VideoToolResult(
+                    ok=False,
+                    content=(
+                        f"Point estimation failed: {exc}. "
+                        "Do not call action=generate in this turn. Use ask_user to "
+                        "offer two choices: continue without an estimate, or revise or "
+                        "cancel. End this turn and wait for the user's choice."
+                    ),
+                    videos=[],
+                    extra_info=extra,
+                )
             return VideoToolResult(
                 ok=False,
                 content=self._failure_content(str(exc)),
@@ -568,62 +620,25 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
             interval = min(params.poll_interval_seconds, params.poll_timeout_seconds - elapsed)
             await asyncio.sleep(interval)
             elapsed += interval
-            operation = await self._request_json(
-                "GET", f"/videos/{operation_id}", request_id=request_id
-            )
+            try:
+                operation = await self._get_magic_service_client().get_video_operation(
+                    operation_id,
+                    request_id=request_id,
+                )
+            except ApiError as exc:
+                if exc.status_code is None or exc.status_code < 500:
+                    raise
+                continue
             status = self._status(operation)
         if status not in TERMINAL_STATUSES:
             operation = dict(operation)
             operation["timed_out"] = True
         return operation
 
-    async def _request_json(
-        self,
-        method: str,
-        path: str,
-        payload: Optional[Dict[str, Any]] = None,
-        request_id: str = "",
-    ) -> Dict[str, Any]:
-        config = self._config or MagicServiceConfigLoader.load_with_fallback()
-        self._config = config
-        url = f"{self._video_api_base(config.api_base_url)}{path}"
-        headers = self._headers(request_id)
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, json=payload, headers=headers, timeout=600) as response:
-                text = await response.text()
-                content_type = response.headers.get("Content-Type", "")
-                context = self._response_context(
-                    method, path, response.status, content_type, text
-                )
-                if response.status >= 400:
-                    data = None
-                    if text.strip():
-                        try:
-                            data = json.loads(text)
-                        except json.JSONDecodeError:
-                            pass
-                    message = self._error_message(data) if isinstance(data, dict) else ""
-                    suffix = f"；服务错误：{message}" if message else ""
-                    raise ValueError(f"Video API request failed: HTTP {response.status}; {context}{suffix}")
-                if not text.strip():
-                    raise ValueError(f"Video API returned an empty response; {context}")
-                try:
-                    data = json.loads(text)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(f"Video API returned invalid JSON; {context}") from exc
-                if not isinstance(data, dict):
-                    raise ValueError(f"Video API response must be a JSON object; {context}")
-                return data
-
-    @staticmethod
-    def _response_context(
-        method: str, path: str, status: int, content_type: str, body: str
-    ) -> str:
-        summary = " ".join(body.split())[:300] or "<empty>"
-        return (
-            f"method={method} path={path} status={status} "
-            f"content_type={content_type or '<missing>'} body={summary!r}"
-        )
+    def _get_magic_service_client(self) -> MagicServiceClient:
+        if self._magic_service_client is None:
+            self._magic_service_client = MagicServiceClient()
+        return self._magic_service_client
 
     async def _resolve_input_uri(self, value: str) -> str:
         if value.startswith(("http://", "https://")):
@@ -632,30 +647,6 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         if not await async_exists(str(path)):
             raise ValueError(f"Reference asset does not exist: {value}")
         return await generate_presigned_url(str(path))
-
-    @staticmethod
-    def _video_api_base(api_base_url: str) -> str:
-        parsed = urlparse(api_base_url.strip().rstrip("/"))
-        path = re.sub(r"/v\d+$", "", parsed.path.rstrip("/"))
-        return parsed._replace(path=f"{path}/v1").geturl().rstrip("/")
-
-    @staticmethod
-    def _headers(request_id: str) -> Dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        MetadataUtil.add_magic_and_user_authorization_headers(headers)
-        if request_id:
-            headers["request-id"] = request_id
-        if MetadataUtil.is_initialized():
-            metadata = MetadataUtil.get_metadata()
-            for source, target in (
-                ("super_magic_task_id", "Magic-Task-Id"),
-                ("topic_id", "Magic-Topic-Id"),
-                ("chat_topic_id", "Magic-Chat-Topic-Id"),
-                ("language", "Magic-Language"),
-            ):
-                if metadata.get(source):
-                    headers[target] = str(metadata[source])
-        return headers
 
     @staticmethod
     def _business_params() -> Dict[str, str]:
@@ -699,6 +690,13 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
     @staticmethod
     def _status(operation: Dict[str, Any]) -> str:
         return str(operation.get("status", "")).strip().lower()
+
+    @staticmethod
+    def _read_estimated_points(response: Dict[str, Any]) -> int | float:
+        points = response.get("points")
+        if isinstance(points, bool) or not isinstance(points, (int, float)) or points < 0:
+            raise ValueError("Video point estimate is missing valid points")
+        return points
 
     @staticmethod
     def _error_message(operation: Dict[str, Any]) -> str:

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.generate_video import GenerateVideo, GenerateVideoParams
-from app.infrastructure.magic_service.config import MagicServiceConfig
 
 
 VIDEO_CONFIG = {
@@ -59,6 +59,21 @@ def test_prompt_hint_keeps_video_and_audio_requirements():
     assert "必须先调用 ask_user" in hint
     assert "保留原始要求继续尝试" in hint
     assert "风险降低调整" in hint
+    assert "明确忽略附件或引用素材" in hint
+    assert "不分析素材" in hint
+    assert 'action="estimate_points"' in hint
+    assert "结束当前轮并等待用户确认" in hint
+    assert "完整逐字复制 Final Prompt" in hint
+    assert "积分预估失败时，不得直接生成" in hint
+    assert "使用 ask_user 提供选项" in hint
+    assert "不得概括、改写或遗漏" in hint
+    assert "口型同步和对应动作" in hint
+    assert "explicitly ignores attachments or reference media" in hint
+    assert "end the current turn and wait for confirmation" in hint
+    assert "copy the complete Final Prompt verbatim" in hint
+    assert "If estimation fails, do not generate directly" in hint
+    assert "lip sync" in hint
+    assert "matching actions" in hint
 
 
 def test_prompt_hint_is_structured_and_preserves_user_language():
@@ -105,8 +120,13 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
     assert "用户所用的语言" not in properties["output_path"]["description"]
 
 
-def test_video_api_base_normalizes_existing_version():
-    assert GenerateVideo._video_api_base("https://example.com/magic-service/v2/") == "https://example.com/magic-service/v1"
+def test_video_params_support_estimate_points_action():
+    params = GenerateVideoParams(
+        action="estimate_points",
+        prompt="小猫游泳",
+    )
+
+    assert params.action == "estimate_points"
 
 
 def test_tool_is_only_declared_by_general_agent():
@@ -115,7 +135,7 @@ def test_tool_is_only_declared_by_general_agent():
     assert "- generate_video" not in (root / "agents/design.agent").read_text()
 
 
-def test_design_agent_preloads_canvas_video_guidance():
+def test_design_agent_preloads_canvas_designer_without_explicit_files():
     root = Path(__file__).parents[2]
     design_source = (root / "agents/design.agent").read_text()
     preload_section = design_source.split("  preload:", 1)[1].split(
@@ -123,8 +143,9 @@ def test_design_agent_preloads_canvas_video_guidance():
     )[0]
 
     assert "- name: canvas-designer" in preload_section
-    assert "- SKILL.md" in preload_section
-    assert "- reference/video/generation.md" in preload_section
+    assert "files:" not in preload_section
+    assert "SKILL.md" not in preload_section
+    assert "reference/video/generation.md" not in preload_section
 
 
 def test_image_only_request_uses_image_reference_mode():
@@ -212,6 +233,25 @@ def test_real_agent_string_arguments_are_normalized():
     assert params.watermark is None
 
 
+@pytest.mark.parametrize("input_mode", ["text_prompt", "text", "text_only"])
+def test_text_input_mode_aliases_are_normalized_to_standard(input_mode):
+    params = GenerateVideoParams(
+        prompt="小猫游泳",
+        input_mode=input_mode,
+    )
+
+    assert params.input_mode == "standard"
+
+
+def test_mention_guidance_respects_explicitly_ignored_attachments():
+    root = Path(__file__).parents[2]
+    guidance = (root / "agents/prompts/mention_mechanism.prompt").read_text()
+
+    assert "明确要求忽略附件或引用素材" in guidance
+    assert "不得调用 visual_understanding" in guidance
+    assert "explicitly asks to ignore attachments or referenced media" in guidance
+
+
 def test_model_id_match_is_case_insensitive_and_keeps_context_config():
     model_id, config = GenerateVideo._resolve_model_config(_ToolContext(), "minimax-h3")
 
@@ -220,69 +260,24 @@ def test_model_id_match_is_case_insensitive_and_keeps_context_config():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("status", "content_type", "body", "expected"),
-    [
-        (200, "application/json", "", "Video API returned an empty response"),
-        (200, "text/plain", "upstream unavailable", "Video API returned invalid JSON"),
-        (502, "text/html", "<html>bad gateway</html>", "HTTP 502"),
-    ],
-)
-async def test_request_json_reports_response_boundary_errors(
-    monkeypatch, tmp_path, status, content_type, body, expected
-):
-    tool = GenerateVideo(base_dir=tmp_path)
-    tool._config = MagicServiceConfig(api_base_url="https://magic.example")
-    monkeypatch.setattr(
-        "app.tools.generate_video.aiohttp.ClientSession",
-        lambda: _JsonSession(status, content_type, body),
-    )
-
-    with pytest.raises(ValueError, match=expected):
-        await tool._request_json("GET", "/videos/op-1")
-
-
-@pytest.mark.asyncio
-async def test_request_json_accepts_normal_json(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
-    tool._config = MagicServiceConfig(api_base_url="https://magic.example")
-    monkeypatch.setattr(
-        "app.tools.generate_video.aiohttp.ClientSession",
-        lambda: _JsonSession(200, "application/json", '{"id":"op-1","status":"queued"}'),
-    )
-
-    assert await tool._request_json("GET", "/videos/op-1") == {"id": "op-1", "status": "queued"}
-
-
-@pytest.mark.asyncio
-async def test_request_json_uses_chinese_message_for_invalid_json(monkeypatch, tmp_path):
-    tool = GenerateVideo(base_dir=tmp_path)
-    tool._config = MagicServiceConfig(api_base_url="https://magic.example")
-    monkeypatch.setattr(
-        "app.tools.generate_video.aiohttp.ClientSession",
-        lambda: _JsonSession(200, "text/plain", "upstream unavailable"),
-    )
-
-    with pytest.raises(ValueError, match="Video API returned invalid JSON"):
-        await tool._request_json("GET", "/videos/op-1")
-
-
-@pytest.mark.asyncio
 async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch, tmp_path):
     tool = GenerateVideo(base_dir=tmp_path)
     requests = []
 
-    async def fake_request(method, path, payload=None, request_id=""):
-        requests.append((method, path, payload))
-        if method == "POST":
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
+            requests.append(("create", payload, request_id))
             return {"id": "op-1", "status": "queued"}
-        return {"id": "op-1", "status": "succeeded", "output": {"video_url": "https://cdn/video.mp4"}}
+
+        async def get_video_operation(self, operation_id, request_id=""):
+            requests.append(("get", operation_id, request_id))
+            return {"id": "op-1", "status": "succeeded", "output": {"video_url": "https://cdn/video.mp4"}}
 
     async def fake_download(_tool_context, url, output_path, video_name, override):
         assert url == "https://cdn/video.mp4"
         return str(tmp_path / output_path / f"{video_name}.mp4"), f"{output_path}/{video_name}.mp4"
 
-    monkeypatch.setattr(tool, "_request_json", fake_request)
+    tool._magic_service_client = FakeMagicServiceClient()
     monkeypatch.setattr(tool, "_download_video", fake_download)
     monkeypatch.setattr(tool, "_business_params", lambda: {})
     monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
@@ -301,9 +296,8 @@ async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch
     assert result.ok is True
     assert result.videos == [str(tmp_path / "videos/cat.mp4")]
     assert result.video_url == str(tmp_path / "videos/cat.mp4")
-    assert requests[0] == (
-        "POST",
-        "/videos",
+    assert requests[0][:2] == (
+        "create",
         {
             "model_id": "MiniMax-H3",
             "task": "generate",
@@ -317,7 +311,74 @@ async def test_generate_builds_request_and_downloads_succeeded_video(monkeypatch
             },
         },
     )
-    assert requests[1][:2] == ("GET", "/videos/op-1")
+    assert requests[0][2]
+    assert requests[1] == ("get", "op-1", requests[0][2])
+
+
+@pytest.mark.asyncio
+async def test_estimate_points_does_not_create_or_poll(monkeypatch, tmp_path):
+    tool = GenerateVideo(base_dir=tmp_path)
+    requests = []
+
+    class FakeMagicServiceClient:
+        async def estimate_video_points(self, payload, request_id=""):
+            requests.append((payload, request_id))
+            return {"resource_type": "video", "points": 12, "detail": {}}
+
+        async def create_video(self, payload, request_id=""):
+            raise AssertionError("estimate_points must not create a video")
+
+        async def get_video_operation(self, operation_id, request_id=""):
+            raise AssertionError("estimate_points must not poll")
+
+    tool._magic_service_client = FakeMagicServiceClient()
+    monkeypatch.setattr(tool, "_business_params", lambda: {})
+
+    result = await tool.execute_purely(
+        _ToolContext(),
+        GenerateVideoParams(
+            action="estimate_points",
+            prompt="小猫在泳池里游泳",
+            duration_seconds=5,
+            aspect_ratio="16:9",
+            resolution="768p",
+        ),
+    )
+
+    assert result.ok is True
+    assert result.videos == []
+    assert result.data["points"] == 12
+    assert result.data["prompt"] == "小猫在泳池里游泳"
+    assert result.data["generation"]["duration_seconds"] == 5
+    assert "12 points" in result.content
+    assert "<final_prompt>小猫在泳池里游泳</final_prompt>" in result.content
+    assert "copy the complete Final Prompt verbatim" in result.content
+    assert "Do not summarize narration or dialogue" in result.content
+    assert len(requests) == 1
+    assert requests[0][1]
+
+
+@pytest.mark.asyncio
+async def test_estimate_failure_requires_user_choice_before_generation(tmp_path):
+    tool = GenerateVideo(base_dir=tmp_path)
+
+    class FakeMagicServiceClient:
+        async def estimate_video_points(self, payload, request_id=""):
+            raise ApiError("estimate endpoint unavailable", status_code=405)
+
+    tool._magic_service_client = FakeMagicServiceClient()
+
+    result = await tool.execute_purely(
+        _ToolContext(),
+        GenerateVideoParams(action="estimate_points", prompt="小猫游泳"),
+    )
+
+    assert result.ok is False
+    assert "Point estimation failed" in result.content
+    assert "Do not call action=generate in this turn" in result.content
+    assert "ask_user" in result.content
+    assert "continue without an estimate" in result.content
+    assert "revise or cancel" in result.content
 
 
 @pytest.mark.asyncio
@@ -325,11 +386,12 @@ async def test_query_existing_operation_does_not_create_new_task(monkeypatch, tm
     tool = GenerateVideo(base_dir=tmp_path)
     requests = []
 
-    async def fake_request(method, path, payload=None, request_id=""):
-        requests.append((method, path, payload))
-        return {"id": "op-existing", "status": "failed", "error": {"message": "blocked"}}
+    class FakeMagicServiceClient:
+        async def get_video_operation(self, operation_id, request_id=""):
+            requests.append((operation_id, request_id))
+            return {"id": "op-existing", "status": "failed", "error": {"message": "blocked"}}
 
-    monkeypatch.setattr(tool, "_request_json", fake_request)
+    tool._magic_service_client = FakeMagicServiceClient()
 
     result = await tool.execute_purely(
         None,
@@ -339,17 +401,22 @@ async def test_query_existing_operation_does_not_create_new_task(monkeypatch, tm
     assert result.ok is False
     assert result.extra_info["operation_id"] == "op-existing"
     assert "blocked" in result.content
-    assert requests == [("GET", "/videos/op-existing", None)]
+    assert requests[0][0] == "op-existing"
+    assert requests[0][1]
 
 
 @pytest.mark.asyncio
 async def test_generate_timeout_returns_operation_id(monkeypatch, tmp_path):
     tool = GenerateVideo(base_dir=tmp_path)
 
-    async def fake_request(method, path, payload=None, request_id=""):
-        return {"id": "op-timeout", "status": "processing"}
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
+            return {"id": "op-timeout", "status": "processing"}
 
-    monkeypatch.setattr(tool, "_request_json", fake_request)
+        async def get_video_operation(self, operation_id, request_id=""):
+            return {"id": operation_id, "status": "processing"}
+
+    tool._magic_service_client = FakeMagicServiceClient()
     monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
     result = await tool.execute_purely(
@@ -367,6 +434,48 @@ async def test_generate_timeout_returns_operation_id(monkeypatch, tmp_path):
         "status": "processing",
         "timed_out": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_poll_continues_after_transient_server_error(monkeypatch, tmp_path):
+    tool = GenerateVideo(base_dir=tmp_path)
+    requests = []
+
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
+            requests.append(("create", request_id))
+            return {"id": "op-transient", "status": "processing"}
+
+        async def get_video_operation(self, operation_id, request_id=""):
+            requests.append(("get", request_id))
+            if len(requests) == 2:
+                raise ApiError("temporary provider query failure", status_code=500)
+            return {
+                "id": operation_id,
+                "status": "succeeded",
+                "output": {"video_url": "https://cdn/video.mp4"},
+            }
+
+    async def fake_download(_tool_context, url, output_path, video_name, override):
+        return str(tmp_path / "videos/video.mp4"), "videos/video.mp4"
+
+    tool._magic_service_client = FakeMagicServiceClient()
+    monkeypatch.setattr(tool, "_download_video", fake_download)
+    monkeypatch.setattr(tool, "_business_params", lambda: {})
+    monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
+
+    result = await tool.execute_purely(
+        _ToolContext(),
+        GenerateVideoParams(
+            prompt="小猫游泳",
+            poll_interval_seconds=1,
+            poll_timeout_seconds=3,
+        ),
+    )
+
+    assert result.ok is True
+    assert [request[0] for request in requests] == ["create", "get", "get"]
+    assert len({request[1] for request in requests}) == 1
 
 
 @pytest.mark.asyncio
@@ -424,12 +533,14 @@ async def test_missing_model_fails_explicitly(tmp_path):
 async def test_poll_error_preserves_operation_id(monkeypatch, tmp_path):
     tool = GenerateVideo(base_dir=tmp_path)
 
-    async def fake_request(method, path, payload=None, request_id=""):
-        if method == "POST":
+    class FakeMagicServiceClient:
+        async def create_video(self, payload, request_id=""):
             return {"id": "op-error", "status": "processing"}
-        raise RuntimeError("poll failed")
 
-    monkeypatch.setattr(tool, "_request_json", fake_request)
+        async def get_video_operation(self, operation_id, request_id=""):
+            raise RuntimeError("poll failed")
+
+    tool._magic_service_client = FakeMagicServiceClient()
     monkeypatch.setattr(tool, "_business_params", lambda: {})
     monkeypatch.setattr("app.tools.generate_video.asyncio.sleep", lambda _: _completed())
 
@@ -497,36 +608,6 @@ class _FakeSession:
 
     def get(self, *_args, **_kwargs):
         return _FakeResponse(self.chunks)
-
-
-class _JsonResponse:
-    def __init__(self, status, content_type, body):
-        self.status = status
-        self.headers = {"Content-Type": content_type}
-        self.body = body
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_args):
-        return False
-
-    async def text(self):
-        return self.body
-
-
-class _JsonSession:
-    def __init__(self, status, content_type, body):
-        self.response = _JsonResponse(status, content_type, body)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_args):
-        return False
-
-    def request(self, *_args, **_kwargs):
-        return self.response
 
 
 async def _completed():
