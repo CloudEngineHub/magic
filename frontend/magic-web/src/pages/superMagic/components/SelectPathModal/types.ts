@@ -88,6 +88,7 @@ export interface CrossProjectFileOperationModalProps {
 		sourceAttachments: AttachmentItem[]
 		includeDocumentDependencies?: boolean
 		documentDependencyFileIds?: string[]
+		preserveParentPath?: boolean
 	}) => void
 }
 
@@ -117,6 +118,7 @@ export interface ProjectResourceSelectorSubmitData {
 	selections?: ProjectResourceSelection[]
 	includeDocumentDependencies?: boolean
 	documentDependencyFileIds?: string[]
+	preserveParentPath?: boolean
 }
 
 export interface ProjectResourceSelectorModalProps extends Omit<

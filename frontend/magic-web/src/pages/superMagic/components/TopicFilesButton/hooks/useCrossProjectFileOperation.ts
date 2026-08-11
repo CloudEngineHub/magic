@@ -213,6 +213,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			fileIds?: string[]
 			includeDocumentDependencies?: boolean
 			documentDependencyFileIds?: string[]
+			preserveParentPath?: boolean
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
@@ -225,6 +226,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
+			const shouldPreserveParentPath =
+				data.preserveParentPath === true &&
+				data.targetProjectId !== projectId &&
+				(data.fileIds || fileIds).length > 1
 
 			let keepBothIds =
 				data.targetProjectId === projectId
@@ -316,6 +321,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						target_parent_id: targetParentId,
 						pre_file_id: "",
 						keep_both_file_ids: keepBothIds,
+						...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
 					})
 				}
 
@@ -363,6 +369,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 			fileIds?: string[]
 			includeDocumentDependencies?: boolean
 			documentDependencyFileIds?: string[]
+			preserveParentPath?: boolean
 		}) => {
 			const { fileIds: effectiveFileIds, dependencyAnalysisFailed } =
 				await resolveEffectiveOperationFileIds({
@@ -375,6 +382,10 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 				magicToast.warning(t("share.documentDependenciesAnalysisFailed"))
 			}
 			if (!projectId || effectiveFileIds.length === 0) return
+			const shouldPreserveParentPath =
+				data.preserveParentPath === true &&
+				data.targetProjectId !== projectId &&
+				(data.fileIds ?? fileIds).length > 1
 
 			let keepBothIds =
 				data.targetProjectId === projectId
@@ -442,6 +453,7 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 					target_parent_id: targetParentId,
 					pre_file_id: "",
 					keep_both_file_ids: keepBothIds,
+					...(shouldPreserveParentPath ? { preserve_parent_path: true } : {}),
 				})
 
 				if (result.status === "success") {

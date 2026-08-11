@@ -908,14 +908,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post(`/api/v1/super-agent/file/${file_id}/copy`, requestData)
 	},
 	/**
-	 * @description 批量移动文件或文件夹（支持跨项目）
+	 * @description Move files or folders in batches, including across projects
 	 * @param {object} params
-	 * @param {string[]} params.file_ids 文件ID列表
-	 * @param {string} params.target_parent_id 目标父级ID
-	 * @param {string} params.pre_file_id 前置文件ID
-	 * @param {string} params.project_id 源项目ID
-	 * @param {string} params.target_project_id 目标项目ID
-	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 * @param {string[]} params.file_ids File IDs
+	 * @param {string} params.target_parent_id Target parent folder ID
+	 * @param {string} params.pre_file_id Previous file ID used for ordering
+	 * @param {string} params.project_id Source project ID
+	 * @param {string} params.target_project_id Target project ID
+	 * @param {string[]} params.keep_both_file_ids File IDs that should keep both copies
+	 * @param {boolean} params.preserve_parent_path Whether to preserve the source parent folder path
 	 */
 	moveFiles(params: {
 		file_ids: string[]
@@ -924,18 +925,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_parent_id: string
 		pre_file_id?: string
 		keep_both_file_ids?: string[]
+		preserve_parent_path?: boolean
 	}) {
 		return fetch.post(`/api/v1/super-agent/file/batch-move`, params)
 	},
 	/**
-	 * @description 批量复制文件或文件夹（支持跨项目）
+	 * @description Copy files or folders in batches, including across projects
 	 * @param {object} params
-	 * @param {string[]} params.file_ids 文件ID列表
-	 * @param {string} params.target_parent_id 目标父级ID
-	 * @param {string} params.pre_file_id 前置文件ID
-	 * @param {string} params.project_id 源项目ID
-	 * @param {string} params.target_project_id 目标项目ID
-	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 * @param {string[]} params.file_ids File IDs
+	 * @param {string} params.target_parent_id Target parent folder ID
+	 * @param {string} params.pre_file_id Previous file ID used for ordering
+	 * @param {string} params.project_id Source project ID
+	 * @param {string} params.target_project_id Target project ID
+	 * @param {string[]} params.keep_both_file_ids File IDs that should keep both copies
+	 * @param {boolean} params.preserve_parent_path Whether to preserve the source parent folder path
 	 */
 	copyFiles(params: {
 		file_ids: string[]
@@ -944,6 +947,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_parent_id: string
 		pre_file_id?: string
 		keep_both_file_ids?: string[]
+		preserve_parent_path?: boolean
 	}) {
 		return fetch.post(`/api/v1/super-agent/file/batch-copy`, params)
 	},
