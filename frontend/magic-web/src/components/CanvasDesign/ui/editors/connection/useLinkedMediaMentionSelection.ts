@@ -35,7 +35,7 @@ function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }):
  */
 export function useLinkedMediaMentionSelection(
 	options: UseLinkedMediaMentionSelectionOptions,
-): (connectionId: string, selected: boolean) => void {
+): (connectionId: string, selected: boolean) => boolean {
 	const {
 		mediaItems,
 		mentionedReferencePaths,
@@ -146,18 +146,18 @@ export function useLinkedMediaMentionSelection(
 						createCanvasMentionPathMatcher(mentionedPath, resolveResourceReference),
 					)
 				) {
-					return
+					return false
 				}
 				mentionSnapshotByConnectionIdRef.current.delete(connectionId)
-				return
+				return true
 			}
 
 			const item = mediaItems.find(
 				(candidate): candidate is LinkedEditorMediaItem & { path: string } =>
 					candidate.connectionId === connectionId && Boolean(candidate.path),
 			)
-			if (!item || item.selectionDisabledReason) return
-			if (!canSelectMediaConnection(connectionId)) return
+			if (!item || item.selectionDisabledReason) return false
+			if (!canSelectMediaConnection(connectionId)) return false
 
 			const fileName = getLinkedMediaFileName(item)
 			const existingMentionPath = mentionedPathByIdentity.get(getResourceIdentity(item.path))
@@ -166,7 +166,7 @@ export function useLinkedMediaMentionSelection(
 					path: existingMentionPath,
 					fileName,
 				})
-				return
+				return true
 			}
 
 			const inserted =
@@ -175,13 +175,14 @@ export function useLinkedMediaMentionSelection(
 					{ replaceSelection: false },
 				) ?? false
 			if (!inserted) {
-				return
+				return false
 			}
 
 			mentionSnapshotByConnectionIdRef.current.set(connectionId, {
 				path: item.path,
 				fileName,
 			})
+			return true
 		},
 		[
 			canSelectMediaConnection,

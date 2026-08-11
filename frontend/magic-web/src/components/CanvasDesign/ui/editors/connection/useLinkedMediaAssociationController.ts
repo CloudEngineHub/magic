@@ -1,15 +1,21 @@
-import { useCallback, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCanvas } from "../../../app/providers/CanvasProvider"
 import type { MessageEditorMentionChangeContext, MessageEditorRef } from "../message/MessageEditor"
 import type { LinkedEditorMediaPolicy, LinkedEditorTargetKind } from "./linkedEditorInputs"
 import { useLinkedEditorInputs } from "./useLinkedEditorInputs"
 import { useLinkedMediaMentionSelection } from "./useLinkedMediaMentionSelection"
 import { reconcileMentionPathsWithPersistedReferences } from "../message/mentionPathReconciliation"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
+import {
+	resolveInitialLinkedEditorAssociation,
+	type LinkedEditorMediaPolicyStatus,
+} from "./resolveInitialLinkedEditorAssociation"
 
 interface UseLinkedMediaAssociationControllerOptions {
 	targetElementId: string
 	targetKind: LinkedEditorTargetKind
 	mediaPolicy?: LinkedEditorMediaPolicy
+	mediaPolicyStatus: LinkedEditorMediaPolicyStatus
 	editorRef: RefObject<MessageEditorRef | null>
 	onReadyMentionChange?: (
 		paths: string[],
@@ -23,15 +29,20 @@ interface UseLinkedMediaAssociationControllerOptions {
 export function useLinkedMediaAssociationController(
 	options: UseLinkedMediaAssociationControllerOptions,
 ) {
+	const { canvas } = useCanvas()
 	const {
 		targetElementId,
 		targetKind,
 		mediaPolicy,
+		mediaPolicyStatus,
 		editorRef,
 		onReadyMentionChange,
 		resolveResourceReference,
 	} = options
 	const [mentionedReferencePaths, setMentionedReferencePaths] = useState<string[]>([])
+	const [mentionReadyTargetElementId, setMentionReadyTargetElementId] = useState<string | null>(
+		null,
+	)
 	const pendingSyncRef = useRef<{ revision: number; token: number } | null>(null)
 	const syncTokenRef = useRef(0)
 	const acceptedSyncTokenRef = useRef(0)
@@ -41,10 +52,17 @@ export function useLinkedMediaAssociationController(
 		mediaPolicy,
 		mentionedReferencePaths,
 	})
+	const {
+		connectedSourceElementIds,
+		mediaItems,
+		setTextConnectionSelected,
+		textConnections,
+		canSelectMediaConnection,
+	} = linkedEditorInputs
 	const handleLinkedMediaSelectionChange = useLinkedMediaMentionSelection({
-		mediaItems: linkedEditorInputs.mediaItems,
+		mediaItems,
 		mentionedReferencePaths,
-		canSelectMediaConnection: linkedEditorInputs.canSelectMediaConnection,
+		canSelectMediaConnection,
 		editorRef,
 		resolveResourceReference,
 	})
@@ -70,6 +88,8 @@ export function useLinkedMediaAssociationController(
 				}
 				acceptedSyncTokenRef.current = pendingSync.token
 			}
+			// 编辑器组件可能复用于不同目标，ready 必须绑定当前元素，避免沿用上一个元素的状态。
+			setMentionReadyTargetElementId(targetElementId)
 			const persistedPaths =
 				mediaPolicy?.manualReferences?.map((reference) => reference.path) ?? []
 			const reconciledPaths = reconcileMentionPathsWithPersistedReferences({
@@ -82,8 +102,60 @@ export function useLinkedMediaAssociationController(
 			onReadyMentionChange?.(reconciledPaths, currentPrompt, context)
 			return true
 		},
-		[mediaPolicy?.manualReferences, onReadyMentionChange, resolveResourceReference],
+		[
+			mediaPolicy?.manualReferences,
+			onReadyMentionChange,
+			resolveResourceReference,
+			targetElementId,
+		],
 	)
+	const applyingSeedIdRef = useRef<string | null>(null)
+
+	useEffect(() => {
+		if (!canvas || applyingSeedIdRef.current) return
+		const seed = canvas.connectionAssociationSeedManager?.peek(targetElementId)
+		if (!seed) return
+		if (mentionReadyTargetElementId !== targetElementId) return
+
+		const association = resolveInitialLinkedEditorAssociation({
+			seed,
+			targetKind,
+			mediaPolicyStatus,
+			connectedSourceElementIds,
+			textConnections,
+			mediaItems,
+			mediaPolicy,
+			resolveResourceReference,
+		})
+		if (association.status === "pending") return
+		applyingSeedIdRef.current = seed.id
+		try {
+			association.selectedTextConnectionIds.forEach((connectionId) => {
+				setTextConnectionSelected(connectionId, true)
+			})
+			const mediaApplied = association.selectedMediaConnectionIds.every((connectionId) =>
+				handleLinkedMediaSelectionChange(connectionId, true),
+			)
+			if (mediaApplied) {
+				canvas.connectionAssociationSeedManager.consume(targetElementId, seed.id)
+			}
+		} finally {
+			applyingSeedIdRef.current = null
+		}
+	}, [
+		canvas,
+		connectedSourceElementIds,
+		handleLinkedMediaSelectionChange,
+		mediaItems,
+		setTextConnectionSelected,
+		textConnections,
+		mediaPolicy,
+		mediaPolicyStatus,
+		mentionReadyTargetElementId,
+		resolveResourceReference,
+		targetElementId,
+		targetKind,
+	])
 
 	return {
 		linkedEditorInputs,

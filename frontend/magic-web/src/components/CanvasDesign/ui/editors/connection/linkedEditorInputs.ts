@@ -153,6 +153,7 @@ export function resolveLinkedMediaSelectionDisplay(
 }
 
 export interface LinkedEditorInputsResolution {
+	connectedSourceElementIds: string[]
 	textConnections: LinkedTextConnection[]
 	textPrompt: string
 	mediaItems: LinkedEditorMediaItem[]
@@ -492,11 +493,13 @@ export function resolveLinkedEditorInputs(
 	options: ResolveLinkedEditorInputsOptions,
 ): LinkedEditorInputsResolution {
 	const { canvas, targetElementId, targetKind, enabled = true, mediaPolicy } = options
+	const connectedSourceElementIds: string[] = []
 	const textConnections: LinkedTextConnection[] = []
 	const mediaCandidates: LinkedEditorMediaCandidate[] = []
 
 	if (canvas && enabled) {
 		const sourceElements = collectConnectedSourceElements(canvas, targetElementId)
+		connectedSourceElementIds.push(...sourceElements.map((source) => source.sourceElementId))
 		mediaCandidates.push(...resolveConnectedMediaCandidatesFromSources(sourceElements))
 		sourceElements.forEach(({ connectionId, sourceElementId, element: sourceElement }) => {
 			if (sourceElement.type === ElementTypeEnum.Text) {
@@ -519,6 +522,7 @@ export function resolveLinkedEditorInputs(
 	})
 
 	return {
+		connectedSourceElementIds,
 		textConnections,
 		textPrompt: getLinkedTextPromptText(textConnections),
 		mediaItems: mediaSelection.items,

@@ -4,7 +4,7 @@ import type { Canvas } from "../../../core/Canvas"
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import {
 	canCreateStoryboardFromConnection,
-	createStoryboardFromImageConnection,
+	createStoryboardFromConnection,
 	resolveStoryboardConnectionGenerationConfig,
 } from "../storyboardConnectionCreation"
 
@@ -40,17 +40,26 @@ function createImageModel(): ImageModelItem {
 function createCanvasMock(options?: {
 	originType?: LayerElement["type"]
 	originChildren?: LayerElement[]
+	originSrc?: string
 	connectionStatus?: "created" | "invalid"
 	storedConfig?: Record<string, unknown>
 }) {
+	let shouldRecordResult: boolean | undefined
 	const originType = options?.originType ?? ElementTypeEnum.Image
 	const originElement = {
 		id: "image-1",
 		type: originType,
-		contents: [{ contentId: "image-1-content" }],
+		contents: [
+			{
+				contentId: "image-1-content",
+				...(originType === ElementTypeEnum.Image
+					? { src: options?.originSrc ?? "/image-1.png" }
+					: {}),
+			},
+		],
 		activeContentId: "image-1-content",
 		mainContentId: "image-1-content",
-		...(originType === ElementTypeEnum.Frame
+		...(originType === ElementTypeEnum.Frame || originType === ElementTypeEnum.Group
 			? { children: options?.originChildren ?? [] }
 			: {}),
 	} as LayerElement
@@ -64,14 +73,31 @@ function createCanvasMock(options?: {
 	)
 	const select = vi.fn()
 	const moveElementToViewport = vi.fn()
+	const runTransaction = vi.fn(
+		(callback: () => string | null, shouldRecord?: (result: string | null) => boolean) => {
+			const result = callback()
+			shouldRecordResult = shouldRecord?.(result)
+			return result
+		},
+	)
 	const canvas = {
+		historyManager: { runTransaction },
 		elementManager: {
+			getAllElements: vi.fn(() => [originElement]),
 			getElementData: vi.fn((elementId: string) => elements.get(elementId)),
 			getNextZIndexInLevel: vi.fn(() => 7),
 			create,
 			delete: remove,
 			hasElement: vi.fn((elementId: string) => elements.has(elementId)),
+			isElementVisibleInDataTree: vi.fn(
+				(elementId: string) => elements.get(elementId)?.visible !== false,
+			),
+			canParticipateInDocumentRelations: vi.fn(() => true),
+			getNodeAdapter: vi.fn(() => ({
+				getElementsBounds: vi.fn(() => ({ x: 0, y: 0, width: 100, height: 100 })),
+			})),
 		},
+		permissionManager: { canConnect: vi.fn(() => true) },
 		connectionManager: { connectElements },
 		selectionManager: { select },
 		viewportController: {
@@ -89,7 +115,17 @@ function createCanvasMock(options?: {
 		},
 	} as unknown as Canvas
 
-	return { canvas, create, remove, connectElements, select, moveElementToViewport }
+	return {
+		canvas,
+		originElement,
+		create,
+		remove,
+		connectElements,
+		select,
+		moveElementToViewport,
+		runTransaction,
+		getShouldRecordResult: () => shouldRecordResult,
+	}
 }
 
 describe("storyboard connection creation", () => {
@@ -97,25 +133,28 @@ describe("storyboard connection creation", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("is available from the right handle of an image or usable Frame", () => {
+	it("is available from the right handle of an image or usable container", () => {
 		const { canvas } = createCanvasMock()
 
 		expect(
 			canCreateStoryboardFromConnection(canvas, {
-				originElementId: "image-1",
-				originSide: "right",
+				kind: "element",
+				elementId: "image-1",
+				side: "right",
 			}),
 		).toBe(true)
 		expect(
 			canCreateStoryboardFromConnection(canvas, {
-				originElementId: "image-1",
-				originSide: "left",
+				kind: "element",
+				elementId: "image-1",
+				side: "left",
 			}),
 		).toBe(false)
 		expect(
 			canCreateStoryboardFromConnection(createCanvasMock({ originType: "video" }).canvas, {
-				originElementId: "image-1",
-				originSide: "right",
+				kind: "element",
+				elementId: "image-1",
+				side: "right",
 			}),
 		).toBe(false)
 		expect(
@@ -127,19 +166,66 @@ describe("storyboard connection creation", () => {
 							id: "frame-image",
 							type: ElementTypeEnum.Image,
 							visible: true,
-							contents: [{ contentId: "frame-image-content" }],
+							contents: [
+								{ contentId: "frame-image-content", src: "/frame-image.png" },
+							],
 							activeContentId: "frame-image-content",
 							mainContentId: "frame-image-content",
 						} as LayerElement,
 					],
 				}).canvas,
-				{ originElementId: "image-1", originSide: "right" },
+				{ kind: "element", elementId: "image-1", side: "right" },
 			),
 		).toBe(true)
 		expect(
 			canCreateStoryboardFromConnection(
 				createCanvasMock({ originType: ElementTypeEnum.Frame }).canvas,
-				{ originElementId: "image-1", originSide: "right" },
+				{ kind: "element", elementId: "image-1", side: "right" },
+			),
+		).toBe(false)
+		expect(
+			canCreateStoryboardFromConnection(
+				createCanvasMock({
+					originType: ElementTypeEnum.Group,
+					originChildren: [
+						{
+							id: "group-image",
+							type: ElementTypeEnum.Image,
+							visible: true,
+							contents: [
+								{ contentId: "group-image-content", src: "/group-image.png" },
+							],
+							activeContentId: "group-image-content",
+							mainContentId: "group-image-content",
+						} as LayerElement,
+					],
+				}).canvas,
+				{ kind: "element", elementId: "image-1", side: "right" },
+			),
+		).toBe(true)
+		expect(
+			canCreateStoryboardFromConnection(createCanvasMock({ originSrc: "" }).canvas, {
+				kind: "element",
+				elementId: "image-1",
+				side: "right",
+			}),
+		).toBe(false)
+		expect(
+			canCreateStoryboardFromConnection(
+				createCanvasMock({
+					originType: ElementTypeEnum.Frame,
+					originChildren: [
+						{
+							id: "hidden-image",
+							type: ElementTypeEnum.Image,
+							visible: false,
+							contents: [{ contentId: "hidden-image-content", src: "/hidden.png" }],
+							activeContentId: "hidden-image-content",
+							mainContentId: "hidden-image-content",
+						} as LayerElement,
+					],
+				}).canvas,
+				{ kind: "element", elementId: "image-1", side: "right" },
 			),
 		).toBe(false)
 	})
@@ -171,17 +257,23 @@ describe("storyboard connection creation", () => {
 		})
 	})
 
-	it("creates, connects, selects and focuses the storyboard", () => {
+	it("creates, connects, selects and focuses the storyboard in one transaction", () => {
 		vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
 			callback(0)
 			return 1
 		})
-		const { canvas, create, connectElements, select, moveElementToViewport } =
-			createCanvasMock()
+		const {
+			canvas,
+			create,
+			connectElements,
+			select,
+			moveElementToViewport,
+			runTransaction,
+			getShouldRecordResult,
+		} = createCanvasMock()
 
-		const elementId = createStoryboardFromImageConnection(canvas, {
-			originElementId: "image-1",
-			originSide: "right",
+		const elementId = createStoryboardFromConnection(canvas, {
+			origin: { kind: "element", elementId: "image-1", side: "right" },
 			x: 1200,
 			y: 300,
 			imageModelList: [createImageModel()],
@@ -211,14 +303,17 @@ describe("storyboard connection creation", () => {
 			animated: true,
 			padding: { top: 50, right: 50, bottom: 50, left: 100 },
 		})
+		expect(runTransaction).toHaveBeenCalledTimes(1)
+		expect(getShouldRecordResult()).toBe(true)
 	})
 
-	it("removes the new element when the connection cannot be persisted", () => {
-		const { canvas, remove, select } = createCanvasMock({ connectionStatus: "invalid" })
+	it("rolls back the new element and skips history when the connection is rejected", () => {
+		const { canvas, remove, select, runTransaction, getShouldRecordResult } = createCanvasMock({
+			connectionStatus: "invalid",
+		})
 
-		const result = createStoryboardFromImageConnection(canvas, {
-			originElementId: "image-1",
-			originSide: "right",
+		const result = createStoryboardFromConnection(canvas, {
+			origin: { kind: "element", elementId: "image-1", side: "right" },
 			x: 1200,
 			y: 300,
 			imageModelList: [createImageModel()],
@@ -227,5 +322,33 @@ describe("storyboard connection creation", () => {
 		expect(result).toBeNull()
 		expect(remove).toHaveBeenCalledWith(expect.stringMatching(/^element-/))
 		expect(select).not.toHaveBeenCalled()
+		expect(runTransaction).toHaveBeenCalledTimes(1)
+		expect(getShouldRecordResult()).toBe(false)
+	})
+
+	it("revalidates downstream image availability before creating", () => {
+		const { canvas, originElement, create, connectElements, runTransaction } =
+			createCanvasMock()
+		expect(
+			canCreateStoryboardFromConnection(canvas, {
+				kind: "element",
+				elementId: originElement.id,
+				side: "right",
+			}),
+		).toBe(true)
+		const content = originElement.contents[0]
+		if (content && "src" in content) content.src = ""
+
+		const result = createStoryboardFromConnection(canvas, {
+			origin: { kind: "element", elementId: originElement.id, side: "right" },
+			x: 1200,
+			y: 300,
+			imageModelList: [createImageModel()],
+		})
+
+		expect(result).toBeNull()
+		expect(runTransaction).not.toHaveBeenCalled()
+		expect(create).not.toHaveBeenCalled()
+		expect(connectElements).not.toHaveBeenCalled()
 	})
 })

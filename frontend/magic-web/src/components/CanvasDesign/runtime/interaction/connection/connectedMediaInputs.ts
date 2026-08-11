@@ -1,5 +1,9 @@
 import type { Canvas } from "../../core/Canvas"
-import { getDownstreamContent } from "../../document/elementContent"
+import {
+	getDownstreamContent,
+	getUsableDownstreamImageContent,
+	isImageContentUsableDownstream,
+} from "../../document/elementContent"
 import {
 	type AudioElementContent,
 	type CropConfig,
@@ -67,9 +71,12 @@ export function resolveConnectedMediaCandidatesFromSources(
 	return sources.flatMap((source) => {
 		const sourceElement: LayerElement = source.element
 		if (sourceElement.type === ElementTypeEnum.Image) {
-			const content =
+			const resolvedContent =
 				options?.resolveImageContent?.(sourceElement) ??
-				getDownstreamContent<ImageElementContent>(sourceElement)
+				getUsableDownstreamImageContent(sourceElement)
+			const content = isImageContentUsableDownstream(resolvedContent)
+				? resolvedContent
+				: undefined
 			const path = content?.src
 			return [
 				createCandidate(source, {

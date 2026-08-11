@@ -130,6 +130,19 @@ export function getDownstreamContent<TContent extends ElementContentBase>(
 	return getMainContent(element)
 }
 
+export function isImageContentUsableDownstream(
+	content: ImageElementContent | undefined,
+): content is ImageElementContent {
+	return Boolean(content?.src && (content.status === undefined || content.status === "completed"))
+}
+
+export function getUsableDownstreamImageContent(
+	element: ImageElement,
+): ImageElementContent | undefined {
+	const content = getDownstreamContent<ImageElementContent>(element)
+	return isImageContentUsableDownstream(content) ? content : undefined
+}
+
 export function getActiveContentId<TContent extends ElementContentBase>(
 	element: ContentElementProps<TContent>,
 ): string | undefined {

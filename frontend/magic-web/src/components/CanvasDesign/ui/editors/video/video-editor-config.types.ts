@@ -131,6 +131,8 @@ export interface VideoEditorConfig {
 	supportsEndFrame: boolean
 	/** 当前模式是否支持参考素材输入区 */
 	supportsReferenceAssets: boolean
+	/** 当前模型与输入模式配置是否已完成解析，可用于执行一次性关联初始化。 */
+	isReferencePolicyReady: boolean
 	/** 当前模式是否支持参考图 */
 	supportsReferenceImages: boolean
 	/** 当前模式是否支持参考视频 */

@@ -202,6 +202,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			targetElementId: videoElement.id,
 			targetKind: "video",
 			mediaPolicy: linkedMediaPolicy,
+			mediaPolicyStatus: config.isReferencePolicyReady ? "ready" : "loading",
 			editorRef,
 			onReadyMentionChange: handlers.handleReferenceMentionPathsChange,
 			resolveResourceReference,

@@ -95,6 +95,7 @@ export interface ImageEditorConfig {
 	modelOptions: ImageModelOption[]
 	modelOptionGroups: ImageModelOptionGroup[]
 	selectedModelOption: ImageModelOption | undefined
+	isReferencePolicyReady: boolean
 	maxReferenceFiles: number | undefined
 	isReferenceFileLimitReached: boolean
 	isUploading: boolean
@@ -178,7 +179,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		preferCurrentRequestOnRestore = false,
 	} = options
 	const activeImageContent = getActiveImageContent(imageElement)
-	const { imageModelList, methods } = useMagic()
+	const { imageModelList, isLoadingImageModelList, methods } = useMagic()
 	const resolveResourceReference = methods?.resolveResourceReference
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
@@ -240,10 +241,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	)
 
 	// 获取当前模型的最大参考文件数量限制（需要提前计算，供 useReferenceImagesState 使用）
-	const maxReferenceFiles = useMemo(() => {
-		const selectedModel = imageModelList.find((model) => model.model_id === selectedModelId)
-		return selectedModel?.image_size_config?.max_reference_images
-	}, [imageModelList, selectedModelId])
+	const selectedModel = useMemo(
+		() => imageModelList.find((model) => model.model_id === selectedModelId),
+		[imageModelList, selectedModelId],
+	)
+	const isReferencePolicyReady = !isLoadingImageModelList && Boolean(selectedModel)
+	const maxReferenceFiles = selectedModel?.image_size_config?.max_reference_images
 
 	// 使用新的参考文件状态管理 hook
 	const referenceFilesState = useReferenceImagesState({
@@ -1423,6 +1426,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		modelOptions,
 		modelOptionGroups,
 		selectedModelOption,
+		isReferencePolicyReady,
 		maxReferenceFiles,
 		isReferenceFileLimitReached,
 		isUploading,

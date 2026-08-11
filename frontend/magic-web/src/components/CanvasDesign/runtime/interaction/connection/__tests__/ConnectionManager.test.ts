@@ -840,6 +840,35 @@ describe("ConnectionManager", () => {
 		expect(onConnectionChange).toHaveBeenCalledTimes(1)
 	})
 
+	it("preflights a batch and emits one change for all created edges", () => {
+		const { canvas } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		const onConnectionChange = vi.fn()
+		canvas.eventEmitter.on("connection:change", onConnectionChange)
+
+		const created = manager.connectElementsBatch({
+			edges: [
+				{ sourceElementId: "source", targetElementId: "target" },
+				{ sourceElementId: "source", targetElementId: "other" },
+			],
+		})
+
+		expect(created.status).toBe("created")
+		expect(created.status === "created" ? created.connectionIds : []).toHaveLength(2)
+		expect(manager.exportConnections()).toHaveLength(2)
+		expect(onConnectionChange).toHaveBeenCalledTimes(1)
+
+		const rejected = manager.connectElementsBatch({
+			edges: [
+				{ sourceElementId: "target", targetElementId: "other" },
+				{ sourceElementId: "other", targetElementId: "missing" },
+			],
+		})
+		expect(rejected).toEqual({ status: "invalid", reason: "missing-element" })
+		expect(manager.exportConnections()).toHaveLength(2)
+		expect(onConnectionChange).toHaveBeenCalledTimes(1)
+	})
+
 	it("protects locked connections from ordinary deletion and upgrades existing ones", () => {
 		const { canvas } = createCanvasStub()
 		const manager = new ConnectionManager({ canvas })

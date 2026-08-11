@@ -1,20 +1,22 @@
 import type { ImageModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
-import { ElementTypeEnum, type StoryboardGenerationConfig } from "../../document/types"
+import type { StoryboardGenerationConfig } from "../../document/types"
 import { StoryboardElement } from "../../elements/storyboard/StoryboardElement"
 import { generateElementId } from "../../shared/ids"
-import type { ConnectionHandleSide } from "./ConnectionHandleRenderer"
-import { collectConnectedFrameSourceElements } from "./connectedInputSources"
+import type { ConnectionOrigin } from "../../shared/connectionOrigin"
+import { collectSelectionContentSnapshot } from "../selection/selectionContentCollector"
+import { createElementFromElementConnection } from "./elementConnectionCreation"
 
-export interface StoryboardConnectionOrigin {
-	originElementId?: string
-	originSide?: ConnectionHandleSide
-}
+type ElementConnectionOrigin = Extract<ConnectionOrigin, { kind: "element" }>
 
-interface CreateStoryboardFromConnectionOptions extends StoryboardConnectionOrigin {
+interface CreateStoryboardElementOptions {
 	x: number
 	y: number
 	imageModelList: ImageModelItem[]
+}
+
+interface CreateStoryboardFromConnectionOptions extends CreateStoryboardElementOptions {
+	origin: ElementConnectionOrigin
 }
 
 function cloneStoredGenerationConfig(
@@ -49,19 +51,12 @@ function resolveModelDefaultImageGenerationConfig(
 
 export function canCreateStoryboardFromConnection(
 	canvas: Canvas | null | undefined,
-	context: StoryboardConnectionOrigin | null | undefined,
+	origin: ElementConnectionOrigin | null | undefined,
 ): boolean {
-	if (!canvas || !context?.originElementId || context.originSide !== "right") {
-		return false
-	}
+	if (!canvas || !origin || origin.side !== "right") return false
 
-	const originElement = canvas.elementManager.getElementData(context.originElementId)
-	if (originElement?.type === ElementTypeEnum.Image) return true
-	if (originElement?.type !== ElementTypeEnum.Frame) return false
-
-	return collectConnectedFrameSourceElements(originElement.id, originElement).some(
-		({ element }) => element.type === ElementTypeEnum.Image,
-	)
+	const snapshot = collectSelectionContentSnapshot(canvas, [origin.elementId])
+	return snapshot.allRootsCanConnect && snapshot.imageSequence.length >= 1
 }
 
 export function getStoryboardConnectionCreateSize(): { width: number; height: number } {
@@ -89,14 +84,10 @@ export function resolveStoryboardConnectionGenerationConfig(
 	}
 }
 
-export function createStoryboardFromConnection(
+export function createStoryboardConnectionElement(
 	canvas: Canvas,
-	options: CreateStoryboardFromConnectionOptions,
-): string | null {
-	if (!canCreateStoryboardFromConnection(canvas, options)) return null
-	const originElementId = options.originElementId
-	if (!originElementId) return null
-
+	options: CreateStoryboardElementOptions,
+): string {
 	const elementId = generateElementId()
 	const element = StoryboardElement.createElementData({
 		id: elementId,
@@ -110,15 +101,10 @@ export function createStoryboardFromConnection(
 	})
 
 	canvas.elementManager.create(element)
-	const connection = canvas.connectionManager.connectElements({
-		sourceElementId: originElementId,
-		targetElementId: elementId,
-	})
-	if (connection.status !== "created") {
-		canvas.elementManager.delete(elementId)
-		return null
-	}
+	return elementId
+}
 
+export function completeStoryboardConnectionCreation(canvas: Canvas, elementId: string): void {
 	canvas.selectionManager.select(elementId)
 	requestAnimationFrame(() => {
 		if (!canvas.elementManager.hasElement(elementId)) return
@@ -128,9 +114,20 @@ export function createStoryboardFromConnection(
 			padding: { top: 50, right: 50, bottom: 50, left: 100 },
 		})
 	})
-
-	return elementId
 }
 
-/** @deprecated Use createStoryboardFromConnection. */
-export const createStoryboardFromImageConnection = createStoryboardFromConnection
+export function createStoryboardFromConnection(
+	canvas: Canvas,
+	options: CreateStoryboardFromConnectionOptions,
+): string | null {
+	if (!canCreateStoryboardFromConnection(canvas, options.origin)) return null
+
+	return createElementFromElementConnection({
+		canvas,
+		origin: options.origin,
+		createElement: () => createStoryboardConnectionElement(canvas, options),
+		afterConnect: ({ createdElementId }) => {
+			completeStoryboardConnectionCreation(canvas, createdElementId)
+		},
+	})
+}

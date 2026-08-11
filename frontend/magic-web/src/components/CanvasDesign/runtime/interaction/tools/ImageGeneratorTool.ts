@@ -224,9 +224,10 @@ export class ImageGeneratorTool extends BaseTool {
 		centerX: number,
 		centerY: number,
 		imageModelList?: ImageModelItem[],
+		options?: ImageGeneratorElementCreateOptions,
 	): string {
 		const size = this.getImageElementSizeForModelList(imageModelList)
-		return this.createImageElementAtCenter(centerX, centerY, size.width, size.height)
+		return this.createImageElementAtCenter(centerX, centerY, size.width, size.height, options)
 	}
 
 	public getImageElementSizeForModelList(imageModelList?: ImageModelItem[]): {
@@ -357,6 +358,7 @@ export class ImageGeneratorTool extends BaseTool {
 		centerY: number,
 		width?: number,
 		height?: number,
+		options?: ImageGeneratorElementCreateOptions,
 	): string {
 		const size = this.getImageElementSize(width, height)
 		return this.createImageElementAt(
@@ -364,6 +366,7 @@ export class ImageGeneratorTool extends BaseTool {
 			centerY - size.height / 2,
 			size.width,
 			size.height,
+			options,
 		)
 	}
 
@@ -379,12 +382,7 @@ export class ImageGeneratorTool extends BaseTool {
 		y: number,
 		width?: number,
 		height?: number,
-		options?: {
-			select?: boolean
-			ensureInViewport?: boolean
-			completeTask?: boolean
-			temporary?: boolean
-		},
+		options?: ImageGeneratorElementCreateOptions & { temporary?: boolean },
 	): string {
 		const size = this.getImageElementSize(width, height)
 
@@ -461,4 +459,10 @@ export class ImageGeneratorTool extends BaseTool {
 	public setDefaultSize(size: { width: number; height: number }): void {
 		this.cachedDefaultSize = size
 	}
+}
+
+export interface ImageGeneratorElementCreateOptions {
+	select?: boolean
+	ensureInViewport?: boolean
+	completeTask?: boolean
 }

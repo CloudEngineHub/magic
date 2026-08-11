@@ -168,6 +168,7 @@ describe("linked frame source collection", () => {
 			mediaPolicy: { supportedKinds: ["video", "audio"] },
 		})
 
+		expect(result.connectedSourceElementIds).toEqual([text.id, video.id, audio.id])
 		expect(result.textPrompt).toContain("main prompt")
 		expect(result.textPrompt).not.toContain("active prompt")
 		expect(result.mediaItems).toEqual(
@@ -303,6 +304,44 @@ describe("linked frame source collection", () => {
 				connectionId: createLinkedFrameSourceId("frame-connection", "text-top"),
 				sourceElementId: "text-top",
 			},
+		])
+	})
+
+	it("expands a directly connected Group root into image inputs", () => {
+		const group: GroupElement = {
+			id: "group-source",
+			type: ElementTypeEnum.Group,
+			activeContentId: "group-source-content-1",
+			mainContentId: "group-source-content-1",
+			contents: [{ contentId: "group-source-content-1" }],
+			children: [imageElement("group-image", "/images/group.png")],
+		}
+		const target = videoElement("target", "/videos/target.mp4")
+		const canvas = createCanvasStub(
+			[group, target],
+			[
+				{
+					id: "group-connection",
+					sourceElementId: group.id,
+					targetElementId: target.id,
+				},
+			],
+		)
+
+		expect(
+			resolveLinkedEditorInputs({
+				canvas,
+				targetElementId: target.id,
+				targetKind: "video",
+				mediaPolicy: { supportedKinds: ["image"] },
+			}).mediaItems,
+		).toEqual([
+			expect.objectContaining({
+				connectionId: createLinkedFrameSourceId("group-connection", "group-image"),
+				sourceElementId: "group-image",
+				rootSourceElementId: "group-source",
+				path: "/images/group.png",
+			}),
 		])
 	})
 

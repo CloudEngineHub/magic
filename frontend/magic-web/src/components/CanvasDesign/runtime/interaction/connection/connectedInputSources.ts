@@ -1,5 +1,10 @@
 import type { Canvas } from "../../core/Canvas"
-import { ElementTypeEnum, type FrameElement, type LayerElement } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type FrameElement,
+	type GroupElement,
+	type LayerElement,
+} from "../../document/types"
 import { sortCanvasElementsByZIndexStable } from "../../document/elementIndex"
 
 export type ConnectedSourceOrigin = "connected-element" | "frame-descendant"
@@ -59,14 +64,18 @@ export function isConnectedSourceConsumableElement(element: LayerElement): boole
 	)
 }
 
+function isConnectedSourceContainer(element: LayerElement): element is FrameElement | GroupElement {
+	return element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group
+}
+
 /**
- * Recursively expands a connected Frame into visible editor-consumable
+ * Recursively expands a connected Frame or Group into visible editor-consumable
  * descendants in stable back-to-front order. Frame and Group are containers;
  * they are not themselves source candidates.
  */
 export function collectConnectedFrameSourceElements(
 	connectionId: string,
-	frame: FrameElement,
+	container: FrameElement | GroupElement,
 	options?: {
 		excludedElementIds?: Iterable<string>
 		rootConnectionId?: string
@@ -78,7 +87,7 @@ export function collectConnectedFrameSourceElements(
 	const visitedElementIds = new Set<string>()
 	const excludedElementIds = new Set(options?.excludedElementIds)
 	const rootConnectionId = options?.rootConnectionId ?? connectionId
-	const rootSourceElementId = options?.rootSourceElementId ?? frame.id
+	const rootSourceElementId = options?.rootSourceElementId ?? container.id
 	const depth = options?.depth ?? 1
 
 	const collect = (elements: LayerElement[] | undefined): void => {
@@ -110,7 +119,7 @@ export function collectConnectedFrameSourceElements(
 		}
 	}
 
-	collect(frame.children)
+	collect(container.children)
 	return result
 }
 
@@ -149,7 +158,7 @@ function collectDirectConnectedSourceElements(
 			continue
 		}
 
-		if (sourceElement.type !== ElementTypeEnum.Frame) continue
+		if (!isConnectedSourceContainer(sourceElement)) continue
 
 		for (const frameSource of collectConnectedFrameSourceElements(
 			connection.id,
@@ -265,7 +274,7 @@ export function collectConnectedUpstreamSourceElements(
 					sourceDepth,
 					"connected-element",
 				)
-			} else if (sourceElement.type === ElementTypeEnum.Frame) {
+			} else if (isConnectedSourceContainer(sourceElement)) {
 				for (const frameSource of collectConnectedFrameSourceElements(
 					sourceCandidateId,
 					sourceElement,

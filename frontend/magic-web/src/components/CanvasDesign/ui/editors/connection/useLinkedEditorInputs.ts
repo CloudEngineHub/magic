@@ -109,6 +109,12 @@ function areLinkedEditorInputsEqual(
 	next: LinkedEditorInputsResolution,
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
+	if (prev.connectedSourceElementIds.length !== next.connectedSourceElementIds.length)
+		return false
+	for (let index = 0; index < prev.connectedSourceElementIds.length; index += 1) {
+		if (prev.connectedSourceElementIds[index] !== next.connectedSourceElementIds[index])
+			return false
+	}
 	if (prev.textPrompt !== next.textPrompt) return false
 	if (prev.textConnections.length !== next.textConnections.length) return false
 	for (let index = 0; index < prev.textConnections.length; index += 1) {

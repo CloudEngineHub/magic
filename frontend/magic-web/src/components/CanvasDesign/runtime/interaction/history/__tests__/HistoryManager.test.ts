@@ -75,4 +75,41 @@ describe("HistoryManager runtime-only generation elements", () => {
 		expect(manager.getSnapshot().pendingDebounce).toBe(false)
 		expect(exportDocument).not.toHaveBeenCalled()
 	})
+
+	it("records one history snapshot for a successful transaction", () => {
+		const { manager, eventEmitter, exportDocument } = createHistoryManager()
+
+		const result = manager.runTransaction(
+			() => {
+				eventEmitter.emit({ type: "element:created", data: { elementId: "video-edit-1" } })
+				eventEmitter.emit({
+					type: "connection:change",
+					data: { connections: [], changedConnectionIds: ["connection-1"] },
+				})
+				return "video-edit-1"
+			},
+			(value) => value !== null,
+		)
+
+		expect(result).toBe("video-edit-1")
+		expect(exportDocument).toHaveBeenCalledTimes(1)
+		expect(manager.getSnapshot().historyStackSize).toBe(1)
+	})
+
+	it("does not record a transaction that rolls its changes back", () => {
+		const { manager, eventEmitter, exportDocument } = createHistoryManager()
+
+		const result = manager.runTransaction(
+			() => {
+				eventEmitter.emit({ type: "element:created", data: { elementId: "video-edit-1" } })
+				eventEmitter.emit({ type: "element:deleted", data: { elementId: "video-edit-1" } })
+				return null
+			},
+			(value) => value !== null,
+		)
+
+		expect(result).toBeNull()
+		expect(exportDocument).not.toHaveBeenCalled()
+		expect(manager.getSnapshot().historyStackSize).toBe(0)
+	})
 })

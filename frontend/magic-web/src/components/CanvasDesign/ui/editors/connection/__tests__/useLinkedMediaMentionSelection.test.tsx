@@ -90,8 +90,12 @@ describe("useLinkedMediaMentionSelection", () => {
 			}),
 		)
 
-		act(() => result.current(mediaItem.connectionId, true))
+		let applied = false
+		act(() => {
+			applied = result.current(mediaItem.connectionId, true)
+		})
 
+		expect(applied).toBe(true)
 		expect(canSelectMediaConnection).toHaveBeenCalledWith(mediaItem.connectionId)
 		expect(insertMentionItem).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -117,8 +121,12 @@ describe("useLinkedMediaMentionSelection", () => {
 			}),
 		)
 
-		act(() => result.current(mediaItem.connectionId, true))
+		let applied = true
+		act(() => {
+			applied = result.current(mediaItem.connectionId, true)
+		})
 
+		expect(applied).toBe(false)
 		expect(mediaItem.selected).toBe(false)
 	})
 
@@ -181,8 +189,12 @@ describe("useLinkedMediaMentionSelection", () => {
 			}),
 		)
 
-		act(() => result.current(mediaItem.connectionId, false))
+		let applied = true
+		act(() => {
+			applied = result.current(mediaItem.connectionId, false)
+		})
 
+		expect(applied).toBe(false)
 		expect(removeMentionItems).toHaveBeenCalled()
 		expect(mediaItem.selected).toBe(true)
 	})

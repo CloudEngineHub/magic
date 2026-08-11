@@ -1,9 +1,14 @@
 import Konva from "konva"
+import type { ConnectionOrigin } from "../../shared/connectionOrigin"
 import type { Rect } from "../../shared/ids"
 
-export type ConnectionHandleSide = "left" | "right"
+export type ConnectionHandleSide = ConnectionOrigin["side"]
 export type ConnectionHandleInteractionState = "idle" | "hover" | "active"
 export type ConnectionHandleHitRegion = Rect & { side: ConnectionHandleSide }
+
+export type ConnectionHandleOverlayOrigin =
+	| Omit<Extract<ConnectionOrigin, { kind: "element" }>, "side">
+	| Omit<Extract<ConnectionOrigin, { kind: "selection" }>, "side" | "boundingRect">
 
 interface ConnectionHandleCanvasMetrics {
 	radius: number
@@ -20,6 +25,7 @@ export class ConnectionHandleRenderer {
 	public static readonly HANDLE_CIRCLE_NAME = "connection-drag-handle-circle"
 	public static readonly HANDLE_PLUS_HORIZONTAL_NAME = "connection-drag-handle-plus-horizontal"
 	public static readonly HANDLE_PLUS_VERTICAL_NAME = "connection-drag-handle-plus-vertical"
+	public static readonly HANDLE_ORIGIN_ATTR = "connectionHandleOrigin"
 
 	private static readonly HANDLE_RADIUS_PX = 9
 	private static readonly HANDLE_OFFSET_PX = 20
@@ -33,7 +39,11 @@ export class ConnectionHandleRenderer {
 	private static readonly HANDLE_HOVER_SHADOW_OPACITY = 0.12
 	private static readonly HANDLE_ACTIVE_SHADOW_OPACITY = 0.18
 
-	public createOverlay(elementId: string, rect: Rect, stageScale: number): Konva.Group {
+	public createOverlay(
+		origin: ConnectionHandleOverlayOrigin,
+		rect: Rect,
+		stageScale: number,
+	): Konva.Group {
 		const group = new Konva.Group({
 			name: ConnectionHandleRenderer.OVERLAY_GROUP_NAME,
 			listening: true,
@@ -44,7 +54,7 @@ export class ConnectionHandleRenderer {
 			this.createHandleNode("left"),
 			this.createHandleNode("right"),
 		)
-		this.updateOverlay(group, elementId, rect, stageScale)
+		this.updateOverlay(group, origin, rect, stageScale)
 		return group
 	}
 
@@ -82,7 +92,7 @@ export class ConnectionHandleRenderer {
 
 	public updateOverlay(
 		group: Konva.Group,
-		elementId: string,
+		origin: ConnectionHandleOverlayOrigin,
 		rect: Rect,
 		stageScale: number,
 	): void {
@@ -92,15 +102,15 @@ export class ConnectionHandleRenderer {
 		const rightHitRegion = this.getHandleHitRegion(rect, stageScale, "right")
 
 		this.updateCorridorNode(group, {
-			elementId,
+			origin,
 			...leftHitRegion,
 		})
 		this.updateCorridorNode(group, {
-			elementId,
+			origin,
 			...rightHitRegion,
 		})
 		this.updateHandleNode(group, {
-			elementId,
+			origin,
 			side: "left",
 			x: rect.x - metrics.offset,
 			y: centerY,
@@ -109,7 +119,7 @@ export class ConnectionHandleRenderer {
 			plusHalfSize: metrics.plusHalfSize,
 		})
 		this.updateHandleNode(group, {
-			elementId,
+			origin,
 			side: "right",
 			x: rect.x + rect.width + metrics.offset,
 			y: centerY,
@@ -187,7 +197,7 @@ export class ConnectionHandleRenderer {
 	private updateCorridorNode(
 		root: Konva.Group,
 		options: {
-			elementId: string
+			origin: ConnectionHandleOverlayOrigin
 			side: ConnectionHandleSide
 			x: number
 			y: number
@@ -200,7 +210,11 @@ export class ConnectionHandleRenderer {
 			.find((node) => node.getAttr("connectionHandleSide") === options.side)
 		if (!(corridor instanceof Konva.Rect)) return
 
-		corridor.id(options.elementId)
+		const elementId =
+			options.origin.kind === "element"
+				? options.origin.elementId
+				: options.origin.elementIds[0]
+		corridor.id(elementId ?? "")
 		corridor.setAttrs({
 			x: options.x,
 			y: options.y,
@@ -209,14 +223,14 @@ export class ConnectionHandleRenderer {
 			fill: "rgba(0, 0, 0, 0)",
 			listening: true,
 		})
-		corridor.setAttr("elementId", options.elementId)
+		this.setOriginAttr(corridor, options.origin)
 		corridor.setAttr("connectionHandleSide", options.side)
 	}
 
 	private updateHandleNode(
 		root: Konva.Group,
 		options: {
-			elementId: string
+			origin: ConnectionHandleOverlayOrigin
 			side: ConnectionHandleSide
 			x: number
 			y: number
@@ -231,9 +245,13 @@ export class ConnectionHandleRenderer {
 		if (!(handle instanceof Konva.Group)) return
 		const interactionState = this.getHandleInteractionState(handle)
 
-		handle.id(options.elementId)
+		const elementId =
+			options.origin.kind === "element"
+				? options.origin.elementId
+				: options.origin.elementIds[0]
+		handle.id(elementId ?? "")
 		handle.position({ x: options.x, y: options.y })
-		handle.setAttr("elementId", options.elementId)
+		this.setOriginAttr(handle, options.origin)
 		handle.setAttr("connectionHandleSide", options.side)
 
 		const circle = handle.findOne(`.${ConnectionHandleRenderer.HANDLE_CIRCLE_NAME}`)
@@ -283,6 +301,15 @@ export class ConnectionHandleRenderer {
 	private getHandleInteractionState(handle: Konva.Group): ConnectionHandleInteractionState {
 		const state = handle.getAttr("connectionHandleInteractionState")
 		return state === "hover" || state === "active" ? state : "idle"
+	}
+
+	private setOriginAttr(node: Konva.Node, origin: ConnectionHandleOverlayOrigin): void {
+		node.setAttr(
+			ConnectionHandleRenderer.HANDLE_ORIGIN_ATTR,
+			origin.kind === "element"
+				? { ...origin }
+				: { ...origin, elementIds: [...origin.elementIds] },
+		)
 	}
 
 	private resolveHandleInteractionStyle(state: ConnectionHandleInteractionState): {

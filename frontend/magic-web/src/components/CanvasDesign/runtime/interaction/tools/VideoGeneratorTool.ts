@@ -121,9 +121,10 @@ export class VideoGeneratorTool extends BaseTool {
 		centerX: number,
 		centerY: number,
 		videoModelList?: VideoModelItem[],
+		options?: VideoGeneratorElementCreateOptions,
 	): string {
 		const size = this.getVideoElementSizeForModelList(videoModelList)
-		return this.createVideoElementAtCenter(centerX, centerY, size.width, size.height)
+		return this.createVideoElementAtCenter(centerX, centerY, size.width, size.height, options)
 	}
 
 	public getVideoElementSizeForModelList(videoModelList?: VideoModelItem[]): {
@@ -311,6 +312,7 @@ export class VideoGeneratorTool extends BaseTool {
 		centerY: number,
 		width?: number,
 		height?: number,
+		options?: VideoGeneratorElementCreateOptions,
 	): string {
 		const size = this.getVideoElementSize(width, height)
 		return this.createVideoElementAt(
@@ -318,10 +320,17 @@ export class VideoGeneratorTool extends BaseTool {
 			centerY - size.height / 2,
 			size.width,
 			size.height,
+			options,
 		)
 	}
 
-	private createVideoElementAt(x: number, y: number, width?: number, height?: number): string {
+	private createVideoElementAt(
+		x: number,
+		y: number,
+		width?: number,
+		height?: number,
+		options?: VideoGeneratorElementCreateOptions,
+	): string {
 		const size = this.getVideoElementSize(width, height)
 		const elementId = generateElementId()
 		const newZIndex = this.canvas.elementManager.getNextZIndexInLevel()
@@ -336,19 +345,31 @@ export class VideoGeneratorTool extends BaseTool {
 		) as VideoElement
 
 		this.canvas.elementManager.create(videoElement)
-		this.canvas.selectionManager?.select(elementId)
+		if (options?.select !== false) {
+			this.canvas.selectionManager?.select(elementId)
+		}
 
-		requestAnimationFrame(() => {
-			const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
-			if (!isInViewport) {
-				this.canvas.viewportController.moveElementToViewport([elementId], {
-					animated: true,
-					padding: { top: 50, right: 50, bottom: 50, left: 100 },
-				})
-			}
-		})
+		if (options?.ensureInViewport !== false) {
+			requestAnimationFrame(() => {
+				const isInViewport = this.canvas.viewportController.isElementInViewport([elementId])
+				if (!isInViewport) {
+					this.canvas.viewportController.moveElementToViewport([elementId], {
+						animated: true,
+						padding: { top: 50, right: 50, bottom: 50, left: 100 },
+					})
+				}
+			})
+		}
 
-		this.onTaskComplete()
+		if (options?.completeTask !== false) {
+			this.onTaskComplete()
+		}
 		return elementId
 	}
+}
+
+export interface VideoGeneratorElementCreateOptions {
+	select?: boolean
+	ensureInViewport?: boolean
+	completeTask?: boolean
 }

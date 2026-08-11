@@ -78,6 +78,7 @@ import {
 import { ConnectionManager } from "../interaction/connection/ConnectionManager"
 import { ConnectionDragManager } from "../interaction/connection/ConnectionDragManager"
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
+import { ConnectionAssociationSeedManager } from "../interaction/connection/ConnectionAssociationSeedManager"
 import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import {
@@ -151,6 +152,7 @@ export class Canvas {
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
 	public inputManager: CanvasInputManager
 	public connectionManager: ConnectionManager
+	public connectionAssociationSeedManager: ConnectionAssociationSeedManager
 	public connectionDragManager: ConnectionDragManager
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
 	public storyboardInteractionManager: StoryboardInteractionManager
@@ -372,6 +374,9 @@ export class Canvas {
 
 		// 初始化关联线管理器（使用 contentLayer 内的 connectionGroup 绘制元素业务因果关系）
 		this.connectionManager = new ConnectionManager({
+			canvas: this,
+		})
+		this.connectionAssociationSeedManager = new ConnectionAssociationSeedManager({
 			canvas: this,
 		})
 
@@ -1436,6 +1441,7 @@ export class Canvas {
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.connectionManager.destroy()
+		this.connectionAssociationSeedManager?.destroy()
 		this.connectionDragManager.destroy()
 		this.connectionHandleOverlayManager.destroy()
 		this.viewportController.destroy()

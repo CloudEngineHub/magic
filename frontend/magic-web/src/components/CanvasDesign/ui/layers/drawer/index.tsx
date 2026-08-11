@@ -8,7 +8,7 @@ import {
 	LockKeyhole,
 	LockOpen,
 	Minimize2 as MinimizeIcon,
-	Music2,
+	Mic,
 	Search,
 	Type,
 	Video,
@@ -275,7 +275,7 @@ export default function LayersDrawer() {
 					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
 					break
 				case ElementTypeEnum.Audio:
-					iconContent = <Music2 size={16} className={styles.layerNodeVideoIcon} />
+					iconContent = <Mic size={16} className={styles.layerNodeVideoIcon} />
 					break
 				case ElementTypeEnum.Storyboard:
 					iconContent = <Workflow size={16} className={styles.layerNodeVideoIcon} />

@@ -133,7 +133,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		syncElementSize = true,
 	} = options
 	const { t } = useCanvasDesignI18n()
-	const { videoModelList, methods } = useMagic()
+	const { videoModelList, isLoadingVideoModelList, methods } = useMagic()
 	const { canvas } = useCanvas()
 	const savedRequest = getActiveContent(videoElement)?.generateVideoRequest
 	const resolveResourceReference = methods?.resolveResourceReference
@@ -246,6 +246,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const currentInputModeConfig = useMemo(() => {
 		return getInputModeConfig(selectedModel, selectedInputMode)
 	}, [selectedModel, selectedInputMode])
+	const isReferencePolicyReady =
+		!isLoadingVideoModelList && Boolean(selectedModel && currentInputModeConfig)
 	const supportedFields = currentInputModeConfig?.supported_fields || []
 	const { supportsStartFrame, supportsEndFrame } = useMemo(
 		() => resolveVideoFrameRoleSupport(currentInputModeConfig),
@@ -1999,6 +2001,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		supportsStartFrame,
 		supportsEndFrame,
 		supportsReferenceAssets,
+		isReferencePolicyReady,
 		supportsReferenceImages,
 		supportsReferenceVideos,
 		supportsReferenceAudios,

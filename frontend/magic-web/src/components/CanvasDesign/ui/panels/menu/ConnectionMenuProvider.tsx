@@ -17,11 +17,21 @@ import {
 	createStoryboardFromConnection,
 	getStoryboardConnectionCreateSize,
 } from "../../../runtime/interaction/connection/storyboardConnectionCreation"
+import { createElementFromElementConnection } from "../../../runtime/interaction/connection/elementConnectionCreation"
+import { createElementFromSelectionConnection } from "../../../runtime/interaction/connection/selectionConnectionCreation"
 import {
-	canCreateVideoEditFromFrameConnection,
-	createVideoEditFromFrameConnection,
-	getVideoEditConnectionCreateSize,
-} from "../../../runtime/interaction/connection/videoEditConnectionCreation"
+	getConnectionAssociationTargetKind,
+	registerConnectionMenuAssociationSeed,
+} from "../../../runtime/interaction/connection/connectionMenuAssociationSeed"
+import {
+	collectSelectionContentSnapshot,
+	createSelectionRevision,
+} from "../../../runtime/interaction/selection/selectionContentCollector"
+import { getSelectionCreateRecipes } from "../../../runtime/interaction/selection/selectionCreationRecipes"
+import {
+	cloneConnectionOrigin,
+	type ConnectionOrigin,
+} from "../../../runtime/shared/connectionOrigin"
 import {
 	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
 	collectConnectedElementSiblingRects,
@@ -33,15 +43,23 @@ import {
 	type ConnectionCreatePlacementContext,
 } from "./connectionCreatePlacement"
 
-type ConnectionMenuCreateKind =
-	"text" | "image-generator" | "storyboard" | "video-edit" | "video-generator"
+type DefaultConnectionMenuCreateKind = "text" | "image-generator" | "video-generator"
+type ConnectionMenuCreateKind = DefaultConnectionMenuCreateKind | "storyboard"
 
-interface ConnectionMenuContext extends ConnectionCreatePlacementContext {
-	connectionId?: string
-	originElementId?: string
+interface ConnectionMenuContext extends Omit<ConnectionCreatePlacementContext, "originSide"> {
+	origin: ConnectionOrigin
 }
 
 const MENU_WIDTH = 220
+
+function getPlacementContext(context: ConnectionMenuContext): ConnectionCreatePlacementContext {
+	return {
+		canvasX: context.canvasX,
+		canvasY: context.canvasY,
+		source: context.source,
+		originSide: context.origin.side,
+	}
+}
 
 export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -74,25 +92,37 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 
 	const resolveCreateGap = useCallback(
 		(context: ConnectionMenuContext): number => {
-			if (!canvas || !context.originElementId || !context.originSide) {
-				return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
+			if (!canvas) return CREATE_ELEMENT_GAP_MIN_CANVAS_PX
+			if (context.origin.kind === "selection") {
+				return Math.min(
+					2048,
+					Math.max(
+						CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
+						context.origin.boundingRect.width * 0.7,
+					),
+				)
 			}
 
-			const originElement = canvas.elementManager.getElementData(context.originElementId)
-			return resolveConnectionCreateGapForElement(originElement, context.originSide)
+			const originElement = canvas.elementManager.getElementData(context.origin.elementId)
+			return resolveConnectionCreateGapForElement(originElement, context.origin.side)
 		},
 		[canvas],
 	)
 
 	const resolveCreatePlacementContext = useCallback(
 		(context: ConnectionMenuContext): ConnectionCreatePlacementContext => {
-			if (!canvas || !context.originElementId || context.source !== "handle") {
-				return context
+			const placementContext = getPlacementContext(context)
+			if (!canvas || context.source !== "handle") return placementContext
+			if (context.origin.kind === "selection") {
+				return resolveConnectionCreateContextWithOriginRect(
+					placementContext,
+					context.origin.boundingRect,
+				)
 			}
 
 			return resolveConnectionCreateContextWithOriginRect(
-				context,
-				canvas.geometryCacheManager.getElementBounds(context.originElementId),
+				placementContext,
+				canvas.geometryCacheManager.getElementBounds(context.origin.elementId),
 			)
 		},
 		[canvas],
@@ -111,10 +141,10 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				{
 					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
 					siblingRects:
-						canvas && context.originElementId && context.originSide
+						canvas && context.origin.kind === "element"
 							? collectConnectedElementSiblingRects(canvas, {
-									originElementId: context.originElementId,
-									originSide: context.originSide,
+									originElementId: context.origin.elementId,
+									originSide: context.origin.side,
 								})
 							: [],
 				},
@@ -136,10 +166,10 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				{
 					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
 					siblingRects:
-						canvas && context.originElementId && context.originSide
+						canvas && context.origin.kind === "element"
 							? collectConnectedElementSiblingRects(canvas, {
-									originElementId: context.originElementId,
-									originSide: context.originSide,
+									originElementId: context.origin.elementId,
+									originSide: context.origin.side,
 								})
 							: [],
 				},
@@ -148,81 +178,40 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		[canvas, resolveCreateGap, resolveCreatePlacementContext],
 	)
 
-	const connectCreatedElement = useCallback(
-		(context: ConnectionMenuContext, createdElementId: string) => {
-			if (!canvas || !context.originElementId || !context.originSide) return
-
-			const sourceElementId =
-				context.originSide === "right" ? context.originElementId : createdElementId
-			const targetElementId =
-				context.originSide === "right" ? createdElementId : context.originElementId
-			canvas.connectionManager.connectElements({
-				sourceElementId,
-				targetElementId,
-			})
-		},
-		[canvas],
-	)
-
-	const createElementAndConnect = useCallback(
-		(kind: ConnectionMenuCreateKind, context: ConnectionMenuContext) => {
-			if (!canvas || !context.originElementId || !context.originSide) {
-				return
-			}
-
+	const createDefaultElement = useCallback(
+		(kind: DefaultConnectionMenuCreateKind, context: ConnectionMenuContext): string | null => {
+			if (!canvas) return null
 			let createdElementId: string | null = null
-			let point: { x: number; y: number } | null = null
 			if (kind === "text") {
 				const size = canvas.textEditingManager.getInitialTextElementSize()
-				point = resolveCreateTopLeftPoint(context, size)
+				const point = resolveCreateTopLeftPoint(context, size)
 				createdElementId = canvas.textEditingManager.startCreatingAt(point.x, point.y)
 			} else if (kind === "image-generator") {
 				const imageGeneratorTool = canvas.toolManager.getImageGeneratorTool()
 				const size = imageGeneratorTool.getImageElementSizeForModelList(imageModelList)
-				point = resolveCreateCenterPoint(context, size)
+				const point = resolveCreateCenterPoint(context, size)
 				createdElementId = imageGeneratorTool.createImageAtCanvasPoint(
 					point.x,
 					point.y,
 					imageModelList,
+					{ select: false, ensureInViewport: false, completeTask: false },
 				)
-			} else if (kind === "storyboard") {
-				const size = getStoryboardConnectionCreateSize()
-				point = resolveCreateTopLeftPoint(context, size)
-				createStoryboardFromConnection(canvas, {
-					originElementId: context.originElementId,
-					originSide: context.originSide,
-					x: point.x,
-					y: point.y,
-					imageModelList,
-				})
-				return
-			} else if (kind === "video-edit") {
-				const size = getVideoEditConnectionCreateSize()
-				point = resolveCreateTopLeftPoint(context, size)
-				createVideoEditFromFrameConnection(canvas, {
-					originElementId: context.originElementId,
-					originSide: context.originSide,
-					x: point.x,
-					y: point.y,
-				})
-				return
 			} else if (kind === "video-generator") {
 				const videoGeneratorTool = canvas.toolManager.getVideoGeneratorTool()
 				const size = videoGeneratorTool.getVideoElementSizeForModelList(videoModelList)
-				point = resolveCreateCenterPoint(context, size)
+				const point = resolveCreateCenterPoint(context, size)
 				createdElementId = videoGeneratorTool.createVideoAtCanvasPoint(
 					point.x,
 					point.y,
 					videoModelList,
+					{ select: false, ensureInViewport: false, completeTask: false },
 				)
 			}
 
-			if (!createdElementId || !point) return
-			connectCreatedElement(context, createdElementId)
+			return createdElementId
 		},
 		[
 			canvas,
-			connectCreatedElement,
 			imageModelList,
 			resolveCreateCenterPoint,
 			resolveCreateTopLeftPoint,
@@ -230,39 +219,245 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		],
 	)
 
+	const completeCreatedGenerator = useCallback(
+		(elementId: string) => {
+			if (!canvas) return
+			canvas.toolManager.switchToSelection()
+			canvas.selectionManager.select(elementId)
+			requestAnimationFrame(() => {
+				if (!canvas.elementManager.hasElement(elementId)) return
+				if (canvas.viewportController.isElementInViewport([elementId])) return
+				canvas.viewportController.moveElementToViewport([elementId], {
+					animated: true,
+					padding: { top: 50, right: 50, bottom: 50, left: 100 },
+				})
+			})
+		},
+		[canvas],
+	)
+
+	const rollbackDefaultElement = useCallback(
+		(kind: DefaultConnectionMenuCreateKind, elementId: string, selectedIds: string[]) => {
+			if (!canvas) return
+			// 文本创建会立即进入编辑态，先取消选中以完成编辑器自身清理。
+			if (kind === "text" && canvas.textEditingManager.getEditingElementId() === elementId) {
+				canvas.selectionManager.deselect(elementId)
+			}
+			if (canvas.elementManager.hasElement(elementId)) {
+				canvas.elementManager.delete(elementId)
+			}
+			if (selectedIds.length > 0) {
+				canvas.selectionManager.selectMultiple(selectedIds)
+			} else {
+				canvas.selectionManager.deselectAll()
+			}
+		},
+		[canvas],
+	)
+
+	const createElementAndConnect = useCallback(
+		(kind: ConnectionMenuCreateKind, context: ConnectionMenuContext) => {
+			if (!canvas || context.origin.kind !== "element") return
+
+			if (kind === "storyboard") {
+				const size = getStoryboardConnectionCreateSize()
+				const point = resolveCreateTopLeftPoint(context, size)
+				createStoryboardFromConnection(canvas, {
+					origin: context.origin,
+					x: point.x,
+					y: point.y,
+					imageModelList,
+				})
+				return
+			}
+
+			const previousSelectedIds = [...canvas.selectionManager.getSelectedIds()]
+			const associationSnapshot = collectSelectionContentSnapshot(canvas, [
+				context.origin.elementId,
+			])
+			createElementFromElementConnection({
+				canvas,
+				origin: context.origin,
+				createElement: () => createDefaultElement(kind, context),
+				rollbackElement: (elementId) => {
+					rollbackDefaultElement(kind, elementId, previousSelectedIds)
+				},
+				afterConnect: ({ createdElementId }) => {
+					registerConnectionMenuAssociationSeed({
+						canvas,
+						kind,
+						originSide: context.origin.side,
+						snapshot: associationSnapshot,
+						targetElementId: createdElementId,
+					})
+					if (getConnectionAssociationTargetKind(kind)) {
+						completeCreatedGenerator(createdElementId)
+					}
+				},
+			})
+		},
+		[
+			canvas,
+			completeCreatedGenerator,
+			createDefaultElement,
+			imageModelList,
+			resolveCreateTopLeftPoint,
+			rollbackDefaultElement,
+		],
+	)
+
+	const resolveSelectionSnapshot = useCallback(
+		(context: ConnectionMenuContext) => {
+			if (!canvas || context.origin.kind !== "selection") return null
+			if (
+				createSelectionRevision(canvas.selectionManager.getSelectedIds()) !==
+				context.origin.selectionRevision
+			) {
+				return null
+			}
+
+			const snapshot = collectSelectionContentSnapshot(
+				canvas,
+				context.origin.elementIds,
+				context.origin.boundingRect,
+			)
+			return snapshot.selectionRevision === context.origin.selectionRevision &&
+				snapshot.allRootsCanConnect
+				? snapshot
+				: null
+		},
+		[canvas],
+	)
+
+	const createDefaultFromSelection = useCallback(
+		(kind: DefaultConnectionMenuCreateKind, context: ConnectionMenuContext) => {
+			if (!canvas || context.origin.kind !== "selection") return
+			const snapshot = resolveSelectionSnapshot(context)
+			if (!snapshot) return
+
+			createElementFromSelectionConnection({
+				canvas,
+				snapshot,
+				originSide: context.origin.side,
+				createElement: () => createDefaultElement(kind, context),
+				rollbackElement: (elementId) => {
+					rollbackDefaultElement(kind, elementId, snapshot.rootElementIds)
+				},
+				afterConnect: ({ createdElementId }) => {
+					registerConnectionMenuAssociationSeed({
+						canvas,
+						kind,
+						originSide: context.origin.side,
+						snapshot,
+						targetElementId: createdElementId,
+					})
+					if (getConnectionAssociationTargetKind(kind)) {
+						completeCreatedGenerator(createdElementId)
+					}
+				},
+			})
+		},
+		[
+			canvas,
+			completeCreatedGenerator,
+			createDefaultElement,
+			resolveSelectionSnapshot,
+			rollbackDefaultElement,
+		],
+	)
+
+	const createFromSelectionRecipe = useCallback(
+		(recipeId: string, context: ConnectionMenuContext) => {
+			if (!canvas || context.origin.kind !== "selection") return
+			const snapshot = resolveSelectionSnapshot(context)
+			if (!snapshot) return
+
+			const recipe = getSelectionCreateRecipes(snapshot, context.origin.side).find(
+				(item) => item.id === recipeId,
+			)
+			if (!recipe) return
+
+			const point = resolveCreateTopLeftPoint(context, recipe.getSize())
+			recipe.create({
+				canvas,
+				snapshot,
+				imageModelList,
+				originSide: context.origin.side,
+				x: point.x,
+				y: point.y,
+			})
+		},
+		[canvas, imageModelList, resolveCreateTopLeftPoint, resolveSelectionSnapshot],
+	)
+
+	const closeConnectionMenu = useCallback(() => {
+		const closingContext = connectionMenuContextRef.current
+		if (canvas && closingContext) {
+			canvas.eventEmitter.emit({
+				type: "connection:menu:close",
+				data: {
+					origin: cloneConnectionOrigin(closingContext.origin),
+					source: closingContext.source,
+				},
+			})
+		}
+		connectionMenuContextRef.current = null
+		setConnectionMenuContext(null)
+		setIsClickEnabled(false)
+		setIsMenuOpen(false)
+	}, [canvas])
+
 	const menuItems = useMemo<MenuItem[]>(() => {
 		if (!connectionMenuContext) return []
 		const translate = (key: string, fallback: string) => {
 			return t ? t(key, fallback) : fallback
 		}
-
-		const items: MenuItem[] = [
+		const createDefaultMenuItems = (
+			onCreate: (kind: DefaultConnectionMenuCreateKind) => void,
+		): MenuItem[] => [
 			{
 				id: "connection-add-text",
 				label: translate("tools.text", "文本"),
 				icon: Type,
-				onClick: () => {
-					createElementAndConnect("text", connectionMenuContext)
-				},
+				onClick: () => onCreate("text"),
 			},
 			{
 				id: "connection-add-image-generator",
 				label: translate("tools.imageGenerator", "图像生成"),
 				icon: ImageSparkles,
-				onClick: () => {
-					createElementAndConnect("image-generator", connectionMenuContext)
-				},
+				onClick: () => onCreate("image-generator"),
+			},
+			{
+				id: "connection-add-video-generator",
+				label: translate("tools.videoGenerator", "视频生成"),
+				icon: Film,
+				onClick: () => onCreate("video-generator"),
 			},
 		]
-		items.push({
-			id: "connection-add-video-generator",
-			label: translate("tools.videoGenerator", "视频生成"),
-			icon: Film,
-			onClick: () => {
-				createElementAndConnect("video-generator", connectionMenuContext)
-			},
-		})
-		if (canCreateStoryboardFromConnection(canvas, connectionMenuContext)) {
+
+		if (connectionMenuContext.origin.kind === "selection") {
+			const snapshot = resolveSelectionSnapshot(connectionMenuContext)
+			if (!snapshot) return []
+			const items = createDefaultMenuItems((kind) =>
+				createDefaultFromSelection(kind, connectionMenuContext),
+			)
+			items.push(
+				...getSelectionCreateRecipes(snapshot, connectionMenuContext.origin.side).map(
+					(recipe) => ({
+						id: `connection-add-${recipe.id}`,
+						label: translate(recipe.label, recipe.fallbackLabel),
+						icon: recipe.icon === "workflow" ? Workflow : Film,
+						onClick: () => createFromSelectionRecipe(recipe.id, connectionMenuContext),
+					}),
+				),
+			)
+			return items
+		}
+
+		const items = createDefaultMenuItems((kind) =>
+			createElementAndConnect(kind, connectionMenuContext),
+		)
+		if (canCreateStoryboardFromConnection(canvas, connectionMenuContext.origin)) {
 			items.push({
 				id: "connection-add-storyboard",
 				label: translate("storyboard.menuName", "制作分镜"),
@@ -272,18 +467,16 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				},
 			})
 		}
-		if (canCreateVideoEditFromFrameConnection(canvas, connectionMenuContext)) {
-			items.push({
-				id: "connection-add-video-edit",
-				label: translate("videoEditNode.mergeVideos", "合并视频"),
-				icon: Film,
-				onClick: () => {
-					createElementAndConnect("video-edit", connectionMenuContext)
-				},
-			})
-		}
 		return items
-	}, [canvas, connectionMenuContext, createElementAndConnect, t])
+	}, [
+		canvas,
+		connectionMenuContext,
+		createDefaultFromSelection,
+		createElementAndConnect,
+		createFromSelectionRecipe,
+		resolveSelectionSnapshot,
+		t,
+	])
 
 	const handleMenuOpenChange = useCallback(
 		(open: boolean) => {
@@ -296,24 +489,24 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				return
 			}
 
-			const closingContext = connectionMenuContextRef.current
-			if (canvas && closingContext) {
-				canvas.eventEmitter.emit({
-					type: "connection:menu:close",
-					data: {
-						connectionId: closingContext.connectionId,
-						originElementId: closingContext.originElementId,
-						originSide: closingContext.originSide,
-						source: closingContext.source,
-					},
-				})
-			}
-			connectionMenuContextRef.current = null
-			setConnectionMenuContext(null)
-			setIsClickEnabled(false)
+			closeConnectionMenu()
 		},
-		[canvas],
+		[closeConnectionMenu],
 	)
+
+	const invalidateSelectionMenu = useCallback(() => {
+		const context = connectionMenuContextRef.current
+		if (!canvas || !context || context.origin.kind !== "selection") return
+		if (
+			createSelectionRevision(canvas.selectionManager.getSelectedIds()) !==
+			context.origin.selectionRevision
+		) {
+			closeConnectionMenu()
+		}
+	}, [canvas, closeConnectionMenu])
+
+	useCanvasEvent("element:select", invalidateSelectionMenu)
+	useCanvasEvent("element:deselect", invalidateSelectionMenu)
 
 	useEffect(() => {
 		if (!canvas) return
@@ -330,9 +523,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		useCallback(
 			({ data }) => {
 				const nextContext = {
-					connectionId: data.connectionId,
-					originElementId: data.originElementId,
-					originSide: data.originSide,
+					origin: cloneConnectionOrigin(data.origin),
 					canvasX: data.canvasX,
 					canvasY: data.canvasY,
 					source: data.source,

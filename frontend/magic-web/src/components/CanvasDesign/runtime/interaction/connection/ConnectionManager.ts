@@ -185,6 +185,73 @@ export class ConnectionManager {
 		return { status: "created", connectionId: id }
 	}
 
+	/**
+	 * 原子创建多条连接。先对整批边做完整预检，任意一条非法时不修改连接存储，
+	 * 成功时只发出一次 connection:change。
+	 */
+	public connectElementsBatch(options: {
+		edges: Array<{
+			sourceElementId: string
+			targetElementId: string
+			locked?: boolean
+		}>
+	}):
+		| { status: "created"; connectionIds: string[] }
+		| {
+				status: "invalid"
+				reason:
+					| "empty"
+					| "self"
+					| "missing-element"
+					| "temporary-element"
+					| "already-connected"
+					| "reverse-existing"
+					| "duplicate"
+		  } {
+		const edges = options.edges
+		if (edges.length === 0) return { status: "invalid", reason: "empty" }
+
+		const plannedPairs = new Set<string>()
+		for (const edge of edges) {
+			const { sourceElementId, targetElementId } = edge
+			if (sourceElementId === targetElementId) return { status: "invalid", reason: "self" }
+			if (!this.hasElement(sourceElementId) || !this.hasElement(targetElementId)) {
+				return { status: "invalid", reason: "missing-element" }
+			}
+			if (!this.canPersistConnection(edge)) {
+				return { status: "invalid", reason: "temporary-element" }
+			}
+
+			const pair = `${sourceElementId}\u0000${targetElementId}`
+			const reversePair = `${targetElementId}\u0000${sourceElementId}`
+			if (plannedPairs.has(pair)) return { status: "invalid", reason: "duplicate" }
+			if (plannedPairs.has(reversePair))
+				return { status: "invalid", reason: "reverse-existing" }
+			if (this.hasConnection(sourceElementId, targetElementId)) {
+				return { status: "invalid", reason: "already-connected" }
+			}
+			if (this.hasReverseConnection(sourceElementId, targetElementId)) {
+				return { status: "invalid", reason: "reverse-existing" }
+			}
+			plannedPairs.add(pair)
+		}
+
+		const connectionIds: string[] = []
+		for (const edge of edges) {
+			const id = generateConnectionId()
+			connectionIds.push(id)
+			this.store.add({
+				id,
+				sourceElementId: edge.sourceElementId,
+				targetElementId: edge.targetElementId,
+				...(edge.locked ? { locked: true } : {}),
+			})
+		}
+		this.hitTester.invalidateConnections(connectionIds)
+		this.emitChangeAndRender({ changedConnectionIds: connectionIds })
+		return { status: "created", connectionIds }
+	}
+
 	/** 创建或升级分镜输出连接；升级过程不会破坏现有连接 ID。 */
 	public ensureLockedConnection(
 		sourceElementId: string,

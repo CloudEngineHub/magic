@@ -16,6 +16,7 @@ import type {
 } from "../resources/image/ImageResourceManager"
 import type { LoadedVideoResource } from "../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../resources/media-common/resourceLoadFailure"
+import type { ConnectionOrigin } from "../shared/connectionOrigin"
 
 export type ViewportChangeSource =
 	"wheel" | "gesture" | "minimap" | "programmatic" | "resize" | "restore" | "unknown"
@@ -108,9 +109,7 @@ export interface CanvasEventMap {
 	"connection:select": { connectionId: string } // 选中元素业务关联线
 	"connection:deselect": { connectionId: string } // 取消选中元素业务关联线
 	"connection:menu:open": {
-		connectionId?: string
-		originElementId?: string
-		originSide?: "left" | "right"
+		origin: ConnectionOrigin
 		x: number
 		y: number
 		canvasX: number
@@ -118,9 +117,7 @@ export interface CanvasEventMap {
 		source: "handle" | "drag-empty"
 	} // 元素业务关联线菜单打开
 	"connection:menu:close": {
-		connectionId?: string
-		originElementId?: string
-		originSide?: "left" | "right"
+		origin: ConnectionOrigin
 		source: "handle" | "drag-empty"
 	} // 元素业务关联线菜单关闭
 
