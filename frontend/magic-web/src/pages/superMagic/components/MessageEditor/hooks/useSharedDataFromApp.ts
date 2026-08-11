@@ -58,11 +58,11 @@ function useSharedDataFromApp({ editor, addFiles, uploadEnabled }: UseSharedData
 						// editor 可能已被销毁（如移动端切换 Tab 导致编辑器卸载），
 						// 此时其 commandManager 已为 null，直接调用 chain() 会抛
 						// "null is not an object (evaluating 'this.commandManager.chain')"。
-							runActiveEditor(editor, (activeEditor) => {
-								activeEditor.chain().insertContent(data.content).focus().run()
-							})
-							return
-						}
+						runActiveEditor(editor, (activeEditor) => {
+							activeEditor.chain().insertContent(data.content).focus().run()
+						})
+						return
+					}
 
 					// Handle file sharing with streaming
 					if (data.type === 1 && data.stream) {
@@ -110,7 +110,12 @@ function useSharedDataFromApp({ editor, addFiles, uploadEnabled }: UseSharedData
 								logger.log(`File ${fileName} processed successfully`)
 							}
 						} catch (error) {
-							logger.error("Error processing file stream", error)
+							logger.error({
+								eventKey: "processing_file_stream_failed",
+								errorKind: "unknown",
+								error: error,
+								message: "Error processing file stream",
+							})
 							magicToast.error(
 								t("sharedData.error.fileProcessFailed", "文件处理失败，请重试"),
 							)
@@ -119,7 +124,12 @@ function useSharedDataFromApp({ editor, addFiles, uploadEnabled }: UseSharedData
 						}
 					}
 				} catch (error) {
-					logger.error("Error handling shared data", error)
+					logger.error({
+						eventKey: "handling_shared_data_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "Error handling shared data",
+					})
 					magicToast.error(t("sharedData.error.processFailed", "数据处理失败"))
 				}
 			})
@@ -132,7 +142,12 @@ function useSharedDataFromApp({ editor, addFiles, uploadEnabled }: UseSharedData
 				chunkManagerRef.current?.clearAll()
 			}
 		} catch (error) {
-			logger.error("error", error)
+			logger.error({
+				eventKey: "shared_app_data_processing_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "error",
+			})
 		}
 	}, [editor, addFiles, t, uploadEnabled])
 }

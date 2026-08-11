@@ -51,6 +51,7 @@ import {
 	SHARE_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
+	isCollaborationWorkspace,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -211,16 +212,19 @@ function ProjectResourceSelectorModal({
 		return [] // 复制操作不限制
 	}, [sourceAttachments, fileIds, operationType])
 
-	// 检查当前项目是否有编辑权限
+	// Check whether creation is allowed at the current location.
 	const canEdit = useMemo(() => {
 		if (effectiveViewMode === "directory" && currentProject) {
-			// 目录视图：检查项目权限
-			return hasEditPermission(currentProject.user_role)
+			// Shared workspaces are read-only in this selector.
+			return (
+				!isCollaborationWorkspace(currentWorkspace) &&
+				hasEditPermission(currentProject.user_role)
+			)
 		} else if (effectiveViewMode === "project" && currentWorkspace) {
-			// 项目视图：只要有工作区就可以创建项目（假设工作区创建者可以创建项目）
-			return true
+			// Only regular workspaces allow creating projects.
+			return !isCollaborationWorkspace(currentWorkspace)
 		} else if (effectiveViewMode === "workspace") {
-			// 工作区视图：可以创建工作区
+			// Workspace view allows creating workspaces.
 			return true
 		}
 		return false
@@ -1335,7 +1339,7 @@ function ProjectResourceSelectorModal({
 
 		return (
 			<>
-				{createProjectHook.createProjectShown && (
+				{canEdit && createProjectHook.createProjectShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
 							<IconProject />
@@ -1531,7 +1535,7 @@ function ProjectResourceSelectorModal({
 			"max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap leading-6 text-foreground md:max-w-[400px]"
 		return (
 			<>
-				{createDirectoryHook.createDirectoryShown && (
+				{canEdit && createDirectoryHook.createDirectoryShown && (
 					<div
 						className={cn(textFolderItemClass, "gap-2")}
 						data-testid="cross-project-file-modal-create-directory-row"
@@ -1998,12 +2002,11 @@ function ProjectResourceSelectorModal({
 									<div className="flex flex-col items-center gap-2 text-center">
 										<div className="flex flex-col gap-1.5 text-center text-sm font-normal leading-5 text-foreground/35">
 											<span>{emptyStorageDescription}</span>
-											{emptyStorageAction && (
+											{emptyStorageAction && createAction && (
 												<Button
 													variant="link"
-													className="h-auto p-0 leading-5 text-foreground disabled:pointer-events-none disabled:opacity-50"
-													onClick={createAction?.onClick}
-													disabled={!createAction}
+													className="h-auto p-0 leading-5 text-foreground"
+													onClick={createAction.onClick}
 													data-testid="cross-project-file-modal-empty-create-folder"
 												>
 													{emptyStorageAction}

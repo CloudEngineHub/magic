@@ -35,7 +35,12 @@ const generateRequestKey = (config: RequestConfig) => {
 			enableAuthorization: config.enableAuthorization !== false,
 		})
 	} catch (error) {
-		logger.error("Generate a unique identifier key for the request", error)
+		logger.error({
+			eventKey: "request_identifier_generation_failed",
+			errorKind: "network",
+			error: error,
+			message: "Generate a unique identifier key for the request",
+		})
 		return nanoid(32)
 	}
 }

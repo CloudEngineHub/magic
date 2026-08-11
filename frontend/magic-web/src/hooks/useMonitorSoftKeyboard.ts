@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { useIOSKeyboard } from "./useIOSKeyboard"
-import type { MonitorSoftKeyboardResult } from "./useIOSKeyboard.types"
+import type { MonitorSoftKeyboardResult, UseIOSKeyboardOptions } from "./useIOSKeyboard.types"
 
 type MonitorSoftKeyboardAction = {
 	/**
@@ -17,7 +17,7 @@ type MonitorSoftKeyboardAction = {
 	heightDifference?: number
 }
 
-type Props = {
+type Props = UseIOSKeyboardOptions & {
 	/**
 	 * 监听软键盘弹起或收起的回调
 	 * @param params
@@ -36,8 +36,12 @@ type Props = {
  * @param props
  * @returns
  */
-const useMonitorSoftKeyboard = ({ callback }: Props = {}): MonitorSoftKeyboardResult => {
-	const keyboardState = useIOSKeyboard()
+const useMonitorSoftKeyboard = ({
+	callback,
+	focusInDelay,
+	focusOutDelay,
+}: Props = {}): MonitorSoftKeyboardResult => {
+	const keyboardState = useIOSKeyboard({ focusInDelay, focusOutDelay })
 
 	const {
 		isUp,

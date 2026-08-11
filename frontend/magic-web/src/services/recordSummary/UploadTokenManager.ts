@@ -166,9 +166,12 @@ export class UploadTokenManager {
 			})
 			return token
 		} catch (error) {
-			logger.error("Token请求失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "Token请求失败",
+				context: { sessionId },
 			})
 			throw error
 		} finally {
@@ -252,10 +255,12 @@ export class UploadTokenManager {
 		} catch (error) {
 			const taskEndErr = error as TaskEndError
 
-			logger.error("获取Token失败", {
-				topicId,
-				retryCount,
-				error,
+			logger.error({
+				eventKey: "get_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "获取Token失败",
+				context: { topicId, retryCount },
 			})
 
 			if (isTaskEndError(error)) {
@@ -276,16 +281,22 @@ export class UploadTokenManager {
 					try {
 						this.onTaskEnd(sessionId)
 					} catch (callbackError) {
-						logger.error("任务结束回调执行失败", {
+						logger.error({
+							eventKey: "task_failed",
+							errorKind: "permission",
 							error: callbackError,
+							message: "任务结束回调执行失败",
 						})
 					}
 				}
 
 				// Notify error manager (unified error handling)
 				defaultErrorManager.handleTaskEnd(taskEndError).catch((handlerError) => {
-					logger.error("错误管理器处理失败", {
+					logger.error({
+						eventKey: "manager_process_failed",
+						errorKind: "permission",
 						error: handlerError,
+						message: "错误管理器处理失败",
 					})
 				})
 
@@ -336,8 +347,13 @@ export class UploadTokenManager {
 
 		const topicId = this.sessionTopicMap.get(sessionId)
 		if (!topicId) {
-			logger.error("后台刷新Token失败：找不到topicId", {
-				sessionId,
+			const error = new Error(`No topicId found for session ${sessionId}`)
+			logger.error({
+				eventKey: "background_token_refresh_topic_missing",
+				errorKind: "permission",
+				error,
+				message: "后台刷新Token失败：找不到topicId",
+				context: { sessionId },
 			})
 			cachedEntry.isRefreshing = false
 			return
@@ -356,9 +372,12 @@ export class UploadTokenManager {
 				sessionId,
 			})
 		} catch (error) {
-			logger.error("后台刷新Token失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "refresh_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "后台刷新Token失败",
+				context: { sessionId },
 			})
 			// Keep the current token and reset refresh flag
 			cachedEntry.isRefreshing = false
@@ -389,10 +408,15 @@ export class UploadTokenManager {
 
 		const topicId = this.sessionTopicMap.get(sessionId)
 		if (!topicId) {
-			logger.error("强制刷新失败：找不到topicId", {
-				sessionId,
+			const error = new Error(`No topicId found for session ${sessionId}`)
+			logger.error({
+				eventKey: "forced_token_refresh_topic_missing",
+				errorKind: "permission",
+				error,
+				message: "强制刷新失败：找不到topicId",
+				context: { sessionId },
 			})
-			throw new Error(`No topicId found for session ${sessionId}`)
+			throw error
 		}
 
 		try {
@@ -403,9 +427,12 @@ export class UploadTokenManager {
 			})
 			return token
 		} catch (error) {
-			logger.error("强制刷新Token失败", {
-				sessionId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "refresh_token_failed",
+				errorKind: "permission",
+				error: error,
+				message: "强制刷新Token失败",
+				context: { sessionId },
 			})
 			throw error
 		}

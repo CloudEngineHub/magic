@@ -57,7 +57,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			// Enterprise uses root `enterprise/`; outDir is repo `dist/` (outside root).
 			emptyOutDir: true,
 			reportCompressedSize: false,
-			sourcemap: isEnableSourceMap,
+			// Keep maps in the build artifact without exposing sourceMappingURL in public assets.
+			sourcemap: isEnableSourceMap ? "hidden" : false,
 			target: "es2015",
 			// Lightning CSS currently rejects some existing Tailwind arbitrary values.
 			cssMinify: "esbuild",
@@ -154,6 +155,13 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				"react-router-dom",
 				"i18next",
 				"react-i18next",
+				// These libraries expose shared React contexts. The standalone
+				// enterprise install root can otherwise resolve duplicate copies,
+				// making theme/config providers invisible to shared UI components.
+				"antd",
+				"antd-style",
+				"@emotion/react",
+				"@emotion/cache",
 			],
 			alias: [
 				{

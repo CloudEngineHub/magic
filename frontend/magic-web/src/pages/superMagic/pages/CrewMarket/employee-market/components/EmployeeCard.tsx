@@ -73,13 +73,14 @@ function EmployeeCard({
 	return (
 		<div
 			className={cn(
-				"group relative flex h-full min-h-0 w-full min-w-0 flex-col pt-10",
+				"group relative flex min-h-0 w-full min-w-0 flex-col pt-10",
 				onOpenMarketDetail ? "cursor-pointer" : undefined,
 			)}
 			data-testid="employee-card"
 			onClick={onOpenMarketDetail ? handleCardClick : undefined}
 		>
 			<div className="absolute inset-x-0 bottom-0 top-10 -z-10 rounded-xl transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] dark:group-hover:shadow-[0_12px_40px_rgba(255,255,255,0.06)]" />
+			{/* Keep the card surface on flex sizing; Safari can miscalculate h-full inside auto-sized grid rows. */}
 			<div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-300 group-hover:-translate-y-1 group-hover:border-primary/60">
 				<div className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pb-5 pt-12">
 					{employee.isFeatured ? (

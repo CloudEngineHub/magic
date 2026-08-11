@@ -483,27 +483,25 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <ChatProjectPage />,
 					},
 					...superMagicSlidesTemplateRoutes,
+					{
+						name: RouteName.SuperWorkspaceProjectState,
+						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectState}`,
+						element: (
+							<ProjectOrganizationAccessGuard>
+								<ProjectPage />
+							</ProjectOrganizationAccessGuard>
+						),
+					},
+					{
+						name: RouteName.SuperWorkspaceProjectTopicState,
+						path: `/:clusterCode${RoutePath.SuperWorkspaceProjectTopicState}`,
+						element: (
+							<ProjectOrganizationAccessGuard>
+								<TopicPage />
+							</ProjectOrganizationAccessGuard>
+						),
+					},
 				],
-			},
-			{
-				name: RouteName.SuperWorkspaceProjectState,
-				path: `/:clusterCode${RoutePath.SuperWorkspaceProjectState}`,
-				element: (
-					<ProjectOrganizationAccessGuard>
-						<SuperMagicCommonLayout />
-					</ProjectOrganizationAccessGuard>
-				),
-				children: [{ index: true, element: <ProjectPage /> }],
-			},
-			{
-				name: RouteName.SuperWorkspaceProjectTopicState,
-				path: `/:clusterCode${RoutePath.SuperWorkspaceProjectTopicState}`,
-				element: (
-					<ProjectOrganizationAccessGuard>
-						<SuperMagicCommonLayout />
-					</ProjectOrganizationAccessGuard>
-				),
-				children: [{ index: true, element: <TopicPage /> }],
 			},
 			...standaloneSuperMagicRoutes,
 			{

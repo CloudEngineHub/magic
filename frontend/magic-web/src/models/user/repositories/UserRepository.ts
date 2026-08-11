@@ -43,7 +43,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 
 			return (configValue || cacheValue) as string | null
 		} catch (error) {
-			logger.error("getAuthorizationError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_authorization_failed",
+				errorKind: "permission",
+				error: error,
+				message: "getAuthorizationError",
+				context: { tableName: UserRepository.tableName },
+			})
 			// 最后的保险：直接读取 localStorage 缓存
 			return Storage.get(`${UserRepository.tableName}:authorization`)?.value
 		}
@@ -56,7 +62,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: token,
 			})
 		} catch (error) {
-			logger.error("setAuthorizationError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_authorization_failed",
+				errorKind: "permission",
+				error: error,
+				message: "setAuthorizationError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:authorization`, {
 				key: "authorization",
@@ -70,7 +82,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 			const config = await this.get("userInfo")
 			return config?.value as User.UserInfo
 		} catch (error) {
-			logger.error("getUserInfoError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_user_info_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getUserInfoError",
+				context: { tableName: UserRepository.tableName },
+			})
 			return Storage.get(`${UserRepository.tableName}:userInfo`)?.value
 		}
 	}
@@ -82,7 +100,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: info,
 			})
 		} catch (error) {
-			logger.error("setUserInfoError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_user_info_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setUserInfoError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:userInfo`, {
 				key: "userInfo",
@@ -98,7 +122,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: org,
 			})
 		} catch (error) {
-			logger.error("setOrganizationError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_organization_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setOrganizationError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:organization`, {
 				key: "organization",
@@ -112,7 +142,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 			const config = await this.get("organizations")
 			return config?.value as Record<string, User.MagicOrganization>
 		} catch (error) {
-			logger.error("getOrganizationsError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_organizations_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getOrganizationsError",
+				context: { tableName: UserRepository.tableName },
+			})
 			return Storage.get(`${UserRepository.tableName}:organizations`)?.value
 		}
 	}
@@ -124,7 +160,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: org,
 			})
 		} catch (error) {
-			logger.error("setOrganizationsError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_organizations_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setOrganizationsError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:organizations`, {
 				key: "organizations",
@@ -138,7 +180,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 			const config = await this.get("teamshareOrganizations")
 			return config?.value as Array<User.UserOrganization>
 		} catch (error) {
-			logger.error("getTeamshareOrganizationsError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_teamshare_organizations_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getTeamshareOrganizationsError",
+				context: { tableName: UserRepository.tableName },
+			})
 			return Storage.get(`${UserRepository.tableName}:teamshareOrganizations`)?.value
 		}
 	}
@@ -150,7 +198,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: org,
 			})
 		} catch (error) {
-			logger.error("setTeamshareOrganizationsError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_teamshare_organizations_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setTeamshareOrganizationsError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:teamshareOrganizations`, {
 				key: "teamshareOrganizations",
@@ -164,7 +218,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 			const config = await this.get("organizationCode")
 			return config?.value as string
 		} catch (error) {
-			logger.error("getOrganizationCodeError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_organization_code_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getOrganizationCodeError",
+				context: { tableName: UserRepository.tableName },
+			})
 			return Storage.get(`${UserRepository.tableName}:organizationCode`)?.value
 		}
 	}
@@ -176,7 +236,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: org,
 			})
 		} catch (error) {
-			logger.error("setOrganizationCodeError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_organization_code_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setOrganizationCodeError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:organizationCode`, {
 				key: "organizationCode",
@@ -190,7 +256,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 			const config = await this.get("teamshareOrganizationCode")
 			return config?.value as string
 		} catch (error) {
-			logger.error("getTeamshareOrganizationCodeError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_teamshare_organization_code_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getTeamshareOrganizationCodeError",
+				context: { tableName: UserRepository.tableName },
+			})
 			return Storage.get(`${UserRepository.tableName}:teamshareOrganizationCode`)?.value
 		}
 	}
@@ -202,7 +274,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				value: org,
 			})
 		} catch (error) {
-			logger.error("setTeamshareOrganizationCodeError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_teamshare_organization_code_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setTeamshareOrganizationCodeError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			Storage.set(`${UserRepository.tableName}:teamshareOrganizationCode`, {
 				key: "teamshareOrganizationCode",
@@ -246,7 +324,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				teamshareOrganizationCode: (results[5]?.value as string) ?? null,
 			}
 		} catch (error) {
-			logger.error("getBatchUserDataError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "get_batch_user_data_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getBatchUserDataError",
+				context: { tableName: UserRepository.tableName },
+			})
 			// Fallback: 从 localStorage 读取
 			return {
 				authorization:
@@ -311,7 +395,13 @@ export class UserRepository extends GlobalBaseRepository<UserSchema> {
 				await this.bulkPut(batchData)
 			}
 		} catch (error) {
-			logger.error("setBatchOrganizationDataError", UserRepository.tableName, error)
+			logger.error({
+				eventKey: "set_batch_organization_data_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setBatchOrganizationDataError",
+				context: { tableName: UserRepository.tableName },
+			})
 		} finally {
 			// 同步到 localStorage（批量操作）
 			if (data.organizations !== undefined) {

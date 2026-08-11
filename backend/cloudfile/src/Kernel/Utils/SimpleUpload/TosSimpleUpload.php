@@ -872,12 +872,6 @@ class TosSimpleUpload extends SimpleUpload
             // Prepare headers array
             $headers = [];
 
-            // Set response headers if specified
-            if (isset($options['filename'])) {
-                $filename = $options['filename'];
-                $headers['response-content-disposition'] = 'attachment; filename="' . addslashes($filename) . '"';
-            }
-
             if (isset($options['content_type'])) {
                 $headers['response-content-type'] = $options['content_type'];
             }
@@ -899,6 +893,13 @@ class TosSimpleUpload extends SimpleUpload
 
             if (isset($options['custom_query']) && is_array($options['custom_query'])) {
                 $query = $options['custom_query'];
+            }
+
+            // TOS 的响应内容处置参数必须作为查询参数参与预签名
+            if (isset($options['filename'])) {
+                $filename = (string) $options['filename'];
+                $download = (bool) ($options['download'] ?? true);
+                $query['response-content-disposition'] = $this->buildContentDisposition($filename, $download);
             }
 
             // Handle image processing parameters (only for GET method)

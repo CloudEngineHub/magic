@@ -10,6 +10,7 @@ import { GuideTourElementId } from "../../LazyGuideTour"
 import type { FileData, MessageEditorSize } from "../types"
 import type { FileUploadStore } from "../stores/FileUploadStore"
 import { MagicTooltip } from "@/components/base"
+import { toDisplayUploadProgress } from "../utils/uploadProgress"
 
 interface UploadHoverPanelButtonProps {
 	iconSize: number
@@ -31,8 +32,16 @@ function UploadHoverPanelButtonComponent({
 	className,
 }: UploadHoverPanelButtonProps) {
 	const uploadLabel = t("topicFiles.emptyState.uploadFile", { ns: "super" })
-	const files = fileUploadStore.files
-	const fileCount = files.length
+	// UploadAction invokes its render prop outside this observer's render reaction.
+	// Read observable fields here so in-place progress updates rerender the hover panel.
+	const fileItems = fileUploadStore.files.map((file) => ({
+		file,
+		id: file.id,
+		name: file.name,
+		status: file.status,
+		progress: toDisplayUploadProgress(file.progress) ?? 0,
+	}))
+	const fileCount = fileItems.length
 
 	const getFileIcon = () => {
 		// TODO: Return different icons based on file type
@@ -98,19 +107,13 @@ function UploadHoverPanelButtonComponent({
 
 							{/* Attachment List */}
 							<div className="flex w-full flex-col gap-1">
-								{files.map((file) => {
-									const isUploading = file.status === "uploading"
-									const progress = file.progress || 0
+								{fileItems.map(({ file, id, name, status, progress }) => {
+									const isUploading = status === "uploading"
 
 									return (
 										<div
-											key={file.id}
+											key={id}
 											className="relative flex w-full items-center gap-2 overflow-clip rounded-sm px-2.5 py-1.5 hover:bg-accent"
-											style={
-												isUploading && file.status !== "uploading"
-													? { backgroundColor: "#f5f5f5" }
-													: undefined
-											}
 										>
 											{/* Progress background for uploading files */}
 											{isUploading && (
@@ -127,13 +130,13 @@ function UploadHoverPanelButtonComponent({
 
 											{/* File Name */}
 											<p className="relative z-10 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs leading-4 text-foreground">
-												{file.name}
+												{name}
 											</p>
 
 											{/* Upload Progress */}
 											{isUploading && (
 												<p className="relative z-10 shrink-0 text-xs leading-4 text-foreground">
-													{Math.round(progress)}%
+													{progress}%
 												</p>
 											)}
 

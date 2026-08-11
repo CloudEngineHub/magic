@@ -320,8 +320,7 @@ class MessagePullService {
 					string,
 					Promise<{
 						message:
-						| SeqResponse<AggregateAISearchCardConversationMessage<false>>
-						| undefined
+							SeqResponse<AggregateAISearchCardConversationMessage<false>> | undefined
 						index: number
 					}>
 				>,
@@ -450,7 +449,12 @@ class MessagePullService {
 					await new Promise((resolve) => setTimeout(resolve, 50))
 				}
 			} catch (error) {
-				logger.error("pullMessagesFromPageToken error:", error)
+				logger.error({
+					eventKey: "page_token_message_pull_failed",
+					errorKind: "permission",
+					error: error,
+					message: "pullMessagesFromPageToken error:",
+				})
 				// 出错时中断拉取过程
 				throw error
 			}
@@ -549,7 +553,12 @@ class MessagePullService {
 				}
 			}
 		} catch (error) {
-			logger.error("pullMessageOnFirstLoad error =======> ", error)
+			logger.error({
+				eventKey: "initial_message_pull_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "pullMessageOnFirstLoad error =======> ",
+			})
 		}
 	}
 

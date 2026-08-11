@@ -2505,31 +2505,6 @@ class ProjectAppService extends AbstractAppService
         $this->projectDomainService->deleteProject($projectId, $project->getUserId());
     }
 
-    private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
-    {
-        $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
-        if ($microAppRecord === null) {
-            return;
-        }
-
-        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
-            $microAppRecord->getResourceId(),
-            ResourceType::Project->value
-        )) {
-            throw new RuntimeException(sprintf(
-                'Failed to delete micro app share for project %d',
-                $projectId
-            ));
-        }
-
-        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
-            throw new RuntimeException(sprintf(
-                'Failed to delete micro app record for project %d',
-                $projectId
-            ));
-        }
-    }
-
     /**
      * 项目可访问性与资源侧上下文.
      */
@@ -2562,6 +2537,31 @@ class ProjectAppService extends AbstractAppService
         }
 
         return $project;
+    }
+
+    private function deleteMicroAppResources(int $projectId, ?MicroAppEntity $microAppRecord = null): void
+    {
+        $microAppRecord ??= $this->microAppRepository->findByProjectId($projectId);
+        if ($microAppRecord === null) {
+            return;
+        }
+
+        if (! $this->resourceShareDomainService->deleteAllSharesByResource(
+            $microAppRecord->getResourceId(),
+            ResourceType::Project->value
+        )) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app share for project %d',
+                $projectId
+            ));
+        }
+
+        if (! $this->microAppRepository->deleteByProjectId($projectId)) {
+            throw new RuntimeException(sprintf(
+                'Failed to delete micro app record for project %d',
+                $projectId
+            ));
+        }
     }
 
     /**

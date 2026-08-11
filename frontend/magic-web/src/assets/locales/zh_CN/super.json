@@ -3007,6 +3007,7 @@
 			"title": "提及列表"
 		},
 		"modeNotAvailableMessage": "当前员工暂不可用，请\"新建话题\" 并选择可用的员工后继续",
+		"modelLoadFailed": "模型加载失败，请稍后重试",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
 			"collapseDescription": "收起模型描述",

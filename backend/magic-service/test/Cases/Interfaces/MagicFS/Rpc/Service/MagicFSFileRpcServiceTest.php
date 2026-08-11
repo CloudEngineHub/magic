@@ -8,12 +8,12 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Interfaces\MagicFS\Rpc\Service;
 
 use App\Application\Authentication\Service\AuthSandboxAppService;
+use App\Application\SuperMagic\File\Service\MagicFSFileAppService;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\MagicFS\Rpc\Service\MagicFSFileAccessCache;
 use App\Interfaces\MagicFS\Rpc\Service\MagicFSFileRpcService;
-use Dtyq\SuperMagic\Application\MagicFS\Service\MagicFSFileAppService;
-use Dtyq\SuperMagic\Interfaces\MagicFS\DTO\Response\FileInfoResponseDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileInfoResponseDTO;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;

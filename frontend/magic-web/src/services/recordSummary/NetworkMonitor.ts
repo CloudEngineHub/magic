@@ -53,7 +53,12 @@ export class NetworkMonitor {
 				try {
 					callback(isOnline)
 				} catch (error) {
-					logger.error("Error in network status callback", error)
+					logger.error({
+						eventKey: "network_status_callback_failed",
+						errorKind: "network",
+						error: error,
+						message: "Error in network status callback",
+					})
 				}
 			})
 		}

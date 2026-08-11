@@ -9,6 +9,13 @@ export interface IOSKeyboardState {
 	isVisible: boolean
 }
 
+export interface UseIOSKeyboardOptions {
+	/** Delay before confirming that an input focus opened the software keyboard. */
+	focusInDelay?: number
+	/** Delay before confirming that an input blur closed the software keyboard. */
+	focusOutDelay?: number
+}
+
 export interface MonitorSoftKeyboardResult {
 	isUp: boolean
 	isDown: boolean

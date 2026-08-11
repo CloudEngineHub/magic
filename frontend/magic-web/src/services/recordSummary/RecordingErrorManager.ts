@@ -136,10 +136,12 @@ export class RecordingErrorManager {
 			try {
 				await handler(error)
 			} catch (handlerError) {
-				logger.error(
-					`Error in task end handler for session ${error.sessionId}:`,
-					handlerError,
-				)
+				logger.error({
+					eventKey: "task_end_handler_session_failed",
+					errorKind: "unknown",
+					error: handlerError,
+					message: `Error in task end handler for session ${error.sessionId}:`,
+				})
 			}
 		})
 

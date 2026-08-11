@@ -284,7 +284,7 @@ function LegacyProjectPage() {
 			{/* 与 MobileShell 面板、ProjectDetailHeader 及原型一致：整页使用主题 background，避免头部与内容区硬编码暖色分层 */}
 			<div className={cn("relative flex h-full min-h-0 flex-auto flex-col overflow-hidden")}>
 				{/* 与原型一致：tab 条单独 shrink-0 + px-3 pt-4，主内容区 flex-1 再各自 px-3，避免整块同一列 padding 与原型分层不一致 */}
-				<div className="flex shrink-0 justify-start px-3 pt-4">
+				<div className="relative z-40 flex shrink-0 justify-start px-3 pt-4">
 					<SmoothTabs
 						tabs={projectDetailTabs}
 						value={activeSiderTab}
@@ -328,7 +328,7 @@ function LegacyProjectPage() {
 						</div>
 					) : (
 						<div
-							className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2"
+							className="flex h-full min-h-0 flex-1 flex-col overflow-hidden pb-2"
 							data-testid="project-detail-topics-panel"
 						>
 							<ProjectPageMain

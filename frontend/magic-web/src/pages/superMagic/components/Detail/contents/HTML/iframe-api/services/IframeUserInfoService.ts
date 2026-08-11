@@ -100,9 +100,12 @@ export class IframeUserInfoService {
 				userInfo: this.pickUserInfoFields(userInfo, scopes),
 			})
 		} catch (error) {
-			htmlMicroAppPreviewLogger.error("Failed to handle user info request", {
-				requestId: req.requestId,
-				error: error instanceof Error ? error.message : String(error),
+			htmlMicroAppPreviewLogger.error({
+				eventKey: "handle_user_info_request_failed",
+				errorKind: "network",
+				error: error,
+				message: "Failed to handle user info request",
+				context: { requestId: req.requestId },
 			})
 			this.respondError(
 				req.requestId,

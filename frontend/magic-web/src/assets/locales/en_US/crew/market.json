@@ -325,8 +325,8 @@
 	"noMoreData": "You've seen everything!",
 	"noResults": "No results found.",
 	"pptEmployee": {
-		"delivered": "{{count}} slides delivered",
-		"deliveredPrivate": "{{count}} decks delivered"
+		"delivered": "{{marker}} slides delivered",
+		"deliveredPrivate": "{{marker}} decks delivered"
 	},
 	"skillDetailDialog": {
 		"collapse": "Collapse",

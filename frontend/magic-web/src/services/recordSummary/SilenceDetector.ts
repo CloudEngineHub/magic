@@ -110,7 +110,12 @@ class SilenceDetector {
 
 			logger.log("Silence detector started")
 		} catch (error) {
-			logger.error("Failed to start silence detector:", error)
+			logger.error({
+				eventKey: "start_silence_detector_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to start silence detector:",
+			})
 			this.cleanup()
 			throw error
 		}
@@ -211,7 +216,12 @@ class SilenceDetector {
 				}, this.checkInterval)
 			}
 		} catch (error) {
-			logger.error("Error checking audio level:", error)
+			logger.error({
+				eventKey: "checking_audio_level_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Error checking audio level:",
+			})
 			// Continue checking even if there's an error
 			if (this.isRunning) {
 				this.checkTimer = setTimeout(() => {

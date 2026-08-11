@@ -10,13 +10,13 @@ namespace App\Application\Speech\Service;
 use App\Application\Speech\Assembler\AsrAssembler;
 use App\Application\Speech\DTO\AsrRecordingDirectoryDTO;
 use App\Application\Speech\DTO\AsrTaskStatusDTO;
+use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Constants\AsrPaths;
 use App\Domain\Asr\ValueObject\AsrDirectoryRoleEnum;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\AsrErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
-use Dtyq\SuperMagic\Application\SuperAgent\Service\AbstractAppService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Contract\TranslatorInterface;
 use Throwable;
 

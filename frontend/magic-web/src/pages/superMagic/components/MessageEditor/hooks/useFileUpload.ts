@@ -125,7 +125,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 		)
 		upload([file], customCredentials).then(async (res) => {
 			if (res.rejected.length > 0) {
-				logger.error("reUpload file failed", res.rejected)
+				logger.error({
+					eventKey: "re_upload_file_failed",
+					errorKind: "unknown",
+					error: res.rejected,
+					message: "reUpload file failed",
+				})
 			}
 		})
 	})
@@ -196,7 +201,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 						relative_file_path: file.defaultRelativePath,
 					})
 				} catch (error) {
-					logger.error("save file to project failed", error)
+					logger.error({
+						eventKey: "save_file_project_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "save file to project failed",
+					})
 				}
 
 				// 乐观更新：先把附件写入 projectFilesStore，
@@ -249,7 +259,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 					return newFiles
 				})
 			} catch (error) {
-				logger.error("report file failed", error)
+				logger.error({
+					eventKey: "report_file_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "report file failed",
+				})
 				// 上报失败时设置为错误状态
 				setFilesWithLimit((prev) => {
 					const newFiles = [...prev]
@@ -285,7 +300,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 				return newFiles
 			})
 
-			logger.error("upload failed", { fileId: file.id, message: errorMessage })
+			logger.error({
+				eventKey: "upload_failed",
+				errorKind: "unknown",
+				message: "upload failed",
+				context: { fileId: file.id, message: errorMessage },
+			})
 		},
 		onInit(file, { cancel }) {
 			setFilesWithLimit((prev) => {
@@ -592,7 +612,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 							})
 							upload(newFileDataList, newCustomCredentials).then((res) => {
 								if (res.rejected.length > 0) {
-									logger.error("reUpload file failed", res.rejected)
+									logger.error({
+										eventKey: "re_upload_file_failed",
+										errorKind: "unknown",
+										error: res.rejected,
+										message: "reUpload file failed",
+									})
 								}
 							})
 						}

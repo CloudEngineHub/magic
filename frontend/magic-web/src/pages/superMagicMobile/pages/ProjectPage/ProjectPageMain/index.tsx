@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useState } from "react"
 import { ChevronRight, Ellipsis, Pin, PinOff, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import type { TopicListProps } from "./types"
@@ -149,10 +149,7 @@ const ProjectPageMain = observer(function ProjectPageMain({
 	const { i18n } = useTranslation("super")
 
 	const selectedProject = projectStore.selectedProject
-	const processedTopics = useMemo(
-		() => sortTopicsWithPinnedFirst(topicStore.topics),
-		[topicStore.topics],
-	)
+	const processedTopics = sortTopicsWithPinnedFirst(topicStore.topics)
 	const { switchToProjectTopic: onSwitchSuperMagicChat } = useMobileProjectTopicSwitch({
 		projectId: selectedProject?.id,
 	})
@@ -206,6 +203,7 @@ const ProjectPageMain = observer(function ProjectPageMain({
 		<ScrollEdgeFadeContainer
 			fadeColor="mobile-background"
 			className={cn("min-h-0 flex-1", className)}
+			scrollClassName="px-3"
 			contentDeps={[processedTopics.length, loading, isTopicsEmpty, selectedProject?.id]}
 		>
 			<MagicPullToRefresh
@@ -219,7 +217,10 @@ const ProjectPageMain = observer(function ProjectPageMain({
 				)}
 			>
 				{loading ? (
-					<div className="flex w-full flex-col gap-1 pt-0" data-testid="project-topics-loading">
+					<div
+						className="flex w-full flex-col gap-1 pt-0"
+						data-testid="project-topics-loading"
+					>
 						<TopicItemSkeleton />
 						<TopicItemSkeleton />
 						<TopicItemSkeleton />
@@ -233,7 +234,10 @@ const ProjectPageMain = observer(function ProjectPageMain({
 						<ProjectTopicsEmptyState />
 					</div>
 				) : (
-					<div className="flex w-full flex-col gap-1 pt-0" data-testid="project-topics-list">
+					<div
+						className="flex w-full flex-col gap-1 pt-0"
+						data-testid="project-topics-list"
+					>
 						{processedTopics.map((item) => (
 							<TopicItemComponent
 								key={item.id}
