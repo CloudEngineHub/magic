@@ -212,18 +212,6 @@ function isSafeUrlAttribute(attributeName: string, value: string): boolean {
 	)
 }
 
-function hasDangerousStyleValue(styleValue: string): boolean {
-	const normalizedStyle = removeProtocolWhitespaceAndControls(styleValue)
-	if (/expression\s*\(/i.test(normalizedStyle)) return true
-
-	for (const match of normalizedStyle.matchAll(/url\s*\(\s*(["']?)(.*?)\1\s*\)/gi)) {
-		const urlValue = match[2]
-		if (urlValue.includes("\\") || !isSafeUrlAttribute("style", urlValue)) return true
-	}
-
-	return false
-}
-
 function hasDangerousHtmlAttributes(html: string): boolean {
 	if (typeof DOMParser === "undefined") {
 		// Rendering without a DOM parser is uncommon for this client-only flow.
@@ -239,11 +227,9 @@ function hasDangerousHtmlAttributes(html: string): boolean {
 			const attributeName = attribute.name.toLowerCase()
 			if (attributeName.startsWith("on") || attributeName === "srcdoc") return true
 
-			if (attributeName === "style") {
-				inspectedRiskAttribute = true
-				if (hasDangerousStyleValue(attribute.value)) return true
-				continue
-			}
+			// Untrusted inline CSS can cover the application UI, intercept clicks,
+			// or imitate trusted dialogs without using script or external URLs.
+			if (attributeName === "style") return true
 
 			if (multiUrlAttributeNames.has(attributeName)) return true
 

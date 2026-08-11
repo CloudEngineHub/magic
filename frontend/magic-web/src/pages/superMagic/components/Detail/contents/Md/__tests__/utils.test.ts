@@ -76,6 +76,17 @@ describe("Markdown Utils", () => {
 			).toBe('before <code>&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;</code> after')
 		})
 
+		it("renders any inline style as code to prevent UI overlay injection", () => {
+			const markdown =
+				'<div style="position:fixed;inset:0;z-index:2147483647;background:white">login</div>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				'<pre><code>&lt;div style="position:fixed;inset:0;z-index:2147483647;background:white"&gt;login&lt;/div&gt;</code></pre>',
+			)
+			expect(escapeDangerousInvisibleHtmlTags('<span style="color:red">text</span>')).toBe(
+				'<code>&lt;span style="color:red"&gt;text&lt;/span&gt;</code>',
+			)
+		})
+
 		it.each([
 			"java&#x73;cript:alert(1)",
 			"jav&#97;script:alert(1)",
