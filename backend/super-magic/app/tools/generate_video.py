@@ -337,8 +337,10 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
                 return VideoToolResult(
                     ok=False,
                     content=(
-                        f"Point estimation failed: {exc}; use ask_user to offer continuing "
-                        "without an estimate or revising or canceling, and do not generate yet."
+                        f"Point estimation failed: {exc}; use the ask_user tool to explain "
+                        "this specific reason and offer three options: continue without point "
+                        "estimation, revise the request, or cancel; do not generate until the "
+                        "user chooses."
                     ),
                     videos=[],
                     data=estimate_error,

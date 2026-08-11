@@ -379,10 +379,12 @@ async def test_estimate_failure_requires_user_choice_before_generation(tmp_path)
 
     assert result.ok is False
     assert "Point estimation failed" in result.content
-    assert "ask_user" in result.content
-    assert "continuing without an estimate" in result.content
-    assert "revising or canceling" in result.content
-    assert "do not generate yet" in result.content
+    assert "estimate endpoint unavailable" in result.content
+    assert "use the ask_user tool" in result.content
+    assert "continue without point estimation" in result.content
+    assert "revise the request" in result.content
+    assert "cancel" in result.content
+    assert "do not generate until the user chooses" in result.content
     assert result.data["error_code"] == "estimate_failed"
     assert result.data["points_deducted"] is False
     assert result.extra_info["error_code"] == "estimate_failed"
