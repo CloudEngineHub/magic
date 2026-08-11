@@ -126,6 +126,23 @@ class ContentTypeUtil
     ];
 
     /**
+     * Get mapped Content-Type for a file based on its extension.
+     *
+     * Returns null when the extension is empty or not explicitly mapped,
+     * allowing callers to preserve the object storage provider's default.
+     */
+    public static function getMappedContentType(string $filename): ?string
+    {
+        $extension = strtolower((string) pathinfo($filename, PATHINFO_EXTENSION));
+
+        if ($extension === '') {
+            return null;
+        }
+
+        return self::$contentTypeMap[$extension] ?? null;
+    }
+
+    /**
      * Get Content-Type for a file based on its extension.
      *
      * @param string $filename File name or path
@@ -133,9 +150,7 @@ class ContentTypeUtil
      */
     public static function getContentType(string $filename): string
     {
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-
-        return self::$contentTypeMap[$extension] ?? 'application/octet-stream';
+        return self::getMappedContentType($filename) ?? 'application/octet-stream';
     }
 
     /**
