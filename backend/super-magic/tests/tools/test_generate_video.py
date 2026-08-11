@@ -45,16 +45,64 @@ class _ToolContext:
 def test_prompt_hint_keeps_video_and_audio_requirements():
     hint = GenerateVideo().get_prompt_hint()
 
-    assert "generate_canvas_videos" in hint
+    assert "generate_canvas_videos" not in hint
+    assert "仅用于通用模式生成普通视频" in hint
+    assert "Use only for regular video generation in general mode" in hint
     assert "旁白或对白" in hint
     assert "逐字保留" in hint
-    assert all(word in hint for word in ("主体", "动作", "场景", "镜头", "光线", "节奏", "音频"))
+    assert all(word in hint for word in ("主体", "动作", "场景", "镜头", "光线", "节奏"))
+    assert "用户要求时的音频要求" in hint
+    assert "audio requirements when requested" in hint
     assert "do not call generate_images" in GenerateVideo._failure_content("test")
     assert "Generation failed" in GenerateVideo._failure_content("test")
     assert "Failure does not deduct points" in GenerateVideo._failure_content("test")
     assert "必须先调用 ask_user" in hint
     assert "保留原始要求继续尝试" in hint
     assert "风险降低调整" in hint
+
+
+def test_prompt_hint_is_structured_and_preserves_user_language():
+    hint = GenerateVideo().get_prompt_hint()
+
+    assert "**调用时机**" in hint
+    assert "**Prompt 写法**" in hint
+    assert "**When to call**" in hint
+    assert "**Prompt writing**" in hint
+    assert "prompt、video_name 使用用户所用的语言" in hint
+    assert "output_path" not in hint.split("**语言规则**", 1)[1].split("-->", 1)[0]
+    assert "用户所用的语言" in hint
+    assert "保留原文" in hint
+    assert "same language the user is using" in hint
+    assert "complete or detailed prompt" in hint
+    assert "crafted prompt" not in hint
+
+
+def test_video_parameter_descriptions_are_bilingual_and_actionable():
+    properties = GenerateVideoParams.model_json_schema()["properties"]
+
+    for field_name in (
+        "action",
+        "prompt",
+        "operation_id",
+        "video_name",
+        "output_path",
+        "input_mode",
+        "reference_image_paths",
+        "frame_start_path",
+        "duration_seconds",
+        "size",
+    ):
+        description = properties[field_name]["description"]
+        assert "<!--zh:" in description
+        assert "-->" in description
+        assert description.rstrip().endswith(".")
+
+    assert "生成时" in properties["prompt"]["description"]
+    assert "查询时必填" in properties["operation_id"]["description"]
+    assert "用户未明确指定时省略" in properties["input_mode"]["description"]
+    assert "通常省略" in properties["output_path"]["description"]
+    assert "默认 videos" in properties["output_path"]["description"]
+    assert "用户所用的语言" not in properties["output_path"]["description"]
 
 
 def test_video_api_base_normalizes_existing_version():
@@ -65,23 +113,18 @@ def test_tool_is_only_declared_by_general_agent():
     root = Path(__file__).parents[2]
     assert "- generate_video" in (root / "agents/magic.agent").read_text()
     assert "- generate_video" not in (root / "agents/design.agent").read_text()
-    magic_prompt = (root / "agents/magic.agent").read_text()
-    assert "必须优先调用 ask_user" in magic_prompt
-    assert "保留原始要求继续尝试" in magic_prompt
-    assert "不代表已确认生成" in magic_prompt
-    assert "展示最终提示词和主要参数" in magic_prompt
-    assert "所有视频请求首轮默认不得调用视频生成工具" in magic_prompt
-    assert "不得改用 generate_images" in magic_prompt
 
 
-def test_design_agent_has_first_turn_video_risk_gate_without_changing_skill_loading():
+def test_design_agent_preloads_canvas_video_guidance():
     root = Path(__file__).parents[2]
-    design_prompt = (root / "agents/design.agent").read_text()
-    assert "必须先调用 ask_user 提供选择" in design_prompt
-    assert "保留原始要求继续尝试" in design_prompt
-    assert "不得调用 generate_canvas_videos、estimate" in design_prompt
-    assert "canvas-designer" in design_prompt
-    assert "generation.md" in design_prompt
+    design_source = (root / "agents/design.agent").read_text()
+    preload_section = design_source.split("  preload:", 1)[1].split(
+        "  system_skills:", 1
+    )[0]
+
+    assert "- name: canvas-designer" in preload_section
+    assert "- SKILL.md" in preload_section
+    assert "- reference/video/generation.md" in preload_section
 
 
 def test_image_only_request_uses_image_reference_mode():

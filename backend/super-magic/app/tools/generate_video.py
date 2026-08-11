@@ -35,30 +35,128 @@ MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024
 
 
 class GenerateVideoParams(BaseToolParams):
-    action: Literal["generate", "query"] = Field("generate", description="创建或查询视频任务")
-    prompt: str = Field("", description="视频生成提示词")
-    model_id: str = Field("", description="视频模型 ID；用户未明确指定时省略，使用当前会话模型")
-    operation_id: str = Field("", description="查询已有任务时使用的 operation ID")
-    video_name: str = Field("", description="输出文件名（不含扩展名）")
-    output_path: str = Field(DEFAULT_OUTPUT_PATH, description="相对工作区的输出目录")
-    input_mode: str = Field("", description="输入模式；用户未明确指定时省略，由工具按素材选择")
-    task: str = Field("generate", description="视频任务类型；用户未明确指定时省略")
-    reference_image_paths: List[str] = Field(default_factory=list, description="参考图片工作区路径或 URL")
-    reference_video_paths: List[str] = Field(default_factory=list, description="参考视频工作区路径或 URL")
-    reference_audio_paths: List[str] = Field(default_factory=list, description="参考音频工作区路径或 URL")
-    frame_start_path: str = Field("", description="首帧工作区路径或 URL")
-    frame_end_path: str = Field("", description="尾帧工作区路径或 URL")
-    size: str = Field("", description="模型支持的视频尺寸；用户未明确指定时省略，由工具选择")
-    duration_seconds: Optional[int] = Field(None, description="视频时长（秒）")
-    aspect_ratio: str = Field("", description="视频比例，例如 16:9")
-    resolution: str = Field("", description="视频分辨率；用户未明确指定时省略")
-    fps: Optional[int] = Field(None, description="帧率；用户未明确指定时省略")
-    seed: Optional[int] = Field(None, description="随机种子；用户未明确指定时省略")
-    watermark: Optional[bool] = Field(None, description="水印；用户未明确指定时省略")
-    extensions: Dict[str, Any] = Field(default_factory=dict, description="透传扩展配置")
-    override: bool = Field(False, description="是否覆盖同名文件")
-    poll_interval_seconds: float = Field(5, gt=0, description="轮询间隔")
-    poll_timeout_seconds: float = Field(300, ge=0, description="轮询超时")
+    action: Literal["generate", "query"] = Field(
+        "generate",
+        description="""<!--zh: 操作类型：generate 创建视频，query 查询已有任务。-->
+Action: generate creates a video; query checks an existing task.""",
+    )
+    prompt: str = Field(
+        "",
+        description="""<!--zh: 生成时必填的视频提示词，应清晰描述画面、动作、镜头，以及用户要求时的音频要求。-->
+Required for generation. Clearly describe the visuals, motion, camera, and audio requirements when requested.""",
+    )
+    model_id: str = Field(
+        "",
+        description="""<!--zh: 视频模型 ID；用户未明确指定时省略，使用当前会话模型。-->
+Video model ID. Omit unless explicitly requested; the current session model is used.""",
+    )
+    operation_id: str = Field(
+        "",
+        description="""<!--zh: 查询时必填的任务 ID；创建视频时省略。-->
+Required for query. Omit when creating a video.""",
+    )
+    video_name: str = Field(
+        "",
+        description="""<!--zh: 输出文件名（不含扩展名），使用用户所用的语言描述视频内容。-->
+Output file stem without extension. Describe the video content in the user's language.""",
+    )
+    output_path: str = Field(
+        DEFAULT_OUTPUT_PATH,
+        description="""<!--zh: 工作区内的相对保存目录；通常省略并使用默认 videos。-->
+Workspace-relative save directory. Usually omit it and use the default videos directory.""",
+    )
+    input_mode: str = Field(
+        "",
+        description="""<!--zh: 模型输入模式；用户未明确指定时省略，由工具根据参考素材选择。-->
+Model input mode. Omit unless explicitly requested; the tool infers it from reference media.""",
+    )
+    task: str = Field(
+        "generate",
+        description="""<!--zh: 视频任务类型；用户未明确指定时保留默认值。-->
+Video task type. Keep the default unless explicitly requested.""",
+    )
+    reference_image_paths: List[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 参考图片的工作区路径或 URL；用户提供参考图片时传入。-->
+Workspace paths or URLs of reference images. Provide when the user supplies image references.""",
+    )
+    reference_video_paths: List[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 参考视频的工作区路径或 URL；用户提供参考视频时传入。-->
+Workspace paths or URLs of reference videos. Provide when the user supplies video references.""",
+    )
+    reference_audio_paths: List[str] = Field(
+        default_factory=list,
+        description="""<!--zh: 参考音频的工作区路径或 URL；用户提供参考音频时传入。-->
+Workspace paths or URLs of reference audio. Provide when the user supplies audio references.""",
+    )
+    frame_start_path: str = Field(
+        "",
+        description="""<!--zh: 首帧图片的工作区路径或 URL；需要限定视频起始画面时传入。-->
+Workspace path or URL of the first frame. Provide when the opening frame must be constrained.""",
+    )
+    frame_end_path: str = Field(
+        "",
+        description="""<!--zh: 尾帧图片的工作区路径或 URL；需要限定视频结束画面时传入。-->
+Workspace path or URL of the last frame. Provide when the ending frame must be constrained.""",
+    )
+    size: str = Field(
+        "",
+        description="""<!--zh: 模型支持的视频尺寸（如 1366x768）；用户未明确指定时省略。-->
+Model-supported video dimensions, such as 1366x768. Omit unless explicitly requested.""",
+    )
+    duration_seconds: Optional[int] = Field(
+        None,
+        description="""<!--zh: 视频时长（秒）；用户未明确指定时省略，由模型使用默认值。-->
+Video duration in seconds. Omit unless explicitly requested; the model default is used.""",
+    )
+    aspect_ratio: str = Field(
+        "",
+        description="""<!--zh: 视频宽高比（如 16:9）；用户未明确指定时省略。-->
+Video aspect ratio, such as 16:9. Omit unless explicitly requested.""",
+    )
+    resolution: str = Field(
+        "",
+        description="""<!--zh: 视频分辨率；用户未明确指定时省略。-->
+Video resolution. Omit unless explicitly requested.""",
+    )
+    fps: Optional[int] = Field(
+        None,
+        description="""<!--zh: 视频帧率；用户未明确指定时省略。-->
+Video frame rate. Omit unless explicitly requested.""",
+    )
+    seed: Optional[int] = Field(
+        None,
+        description="""<!--zh: 随机种子；用户未明确指定时省略。-->
+Random seed. Omit unless explicitly requested.""",
+    )
+    watermark: Optional[bool] = Field(
+        None,
+        description="""<!--zh: 是否添加水印；用户未明确指定时省略。-->
+Whether to add a watermark. Omit unless explicitly requested.""",
+    )
+    extensions: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="""<!--zh: 透传给视频接口的扩展配置；仅在明确需要时填写。-->
+Extension settings passed through to the video API. Provide only when needed.""",
+    )
+    override: bool = Field(
+        False,
+        description="""<!--zh: 是否覆盖同名视频文件；默认不覆盖。-->
+Whether to overwrite an existing video with the same name. Defaults to false.""",
+    )
+    poll_interval_seconds: float = Field(
+        5,
+        gt=0,
+        description="""<!--zh: 查询任务状态的轮询间隔（秒）；通常保留默认值。-->
+Polling interval in seconds. Usually keep the default.""",
+    )
+    poll_timeout_seconds: float = Field(
+        300,
+        ge=0,
+        description="""<!--zh: 等待任务完成的最长时间（秒）；通常保留默认值。-->
+Maximum time in seconds to wait for completion. Usually keep the default.""",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -128,20 +226,55 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
         self._config: Optional[MagicServiceConfig] = None
 
     def get_prompt_hint(self) -> str:
-        return """<!--zh
-调用时机：通用模式生成普通视频；画布设计请求使用 generate_canvas_videos。
-将模糊需求整理为清晰提示词，至少包含主体、动作、场景、镜头、光线、风格、节奏和音频。
-用户要求旁白或对白、配音、音乐、音效时，必须在最终 prompt 中逐字保留相关内容，并注明说话人、语言、声音特征和出现时间。
-用户未明确指定时，省略 model_id、input_mode、task、size、resolution、fps、seed、watermark，由工具按当前模型选择。
-默认生成前等待用户确认；用户明确要求直接生成或跳过确认时可直接生成。涉及 IP、真人、色情、政治、暴力等风险内容，或需要向用户提供多个方向选择时，必须先调用 ask_user，再根据用户选择继续；至少提供“保留原始要求继续尝试”和“风险降低调整”两个选项，不得先用普通文本代替 ask_user，也不得强制改写。
-生成失败不得改用生图或其他工具替代，也不自动重试。
+        return """\
+<!--zh
+**调用时机**：仅用于通用模式生成普通视频。
+
+**关键规则**
+- 用户未明确指定时，省略 model_id、input_mode、task、size、resolution、fps、seed、watermark，由工具按当前模型选择
+- output_path 通常省略，使用默认 videos 目录
+
+**Prompt 写法**
+- Prompt 是可执行的视频创意简报，至少明确主体、动作、场景、镜头、光线、风格、节奏，以及用户要求时的音频要求
+- 用户需求模糊时扩写为完整描述；用户已有完整 prompt 时保留原文，只补充必要信息
+- 用户要求旁白或对白、配音、音乐或音效时，必须逐字保留相关内容，并注明说话人、语言、声音特征和出现时间
+
+**参考素材**
+- 用户提供图片、视频、音频或首尾帧时，传入对应字段，并在 prompt 中说明各素材的用途
+
+**确认与风险**
+- 默认生成前等待用户确认；用户明确要求直接生成或跳过确认时可直接生成
+- 涉及 IP、真人、色情、政治、暴力等风险内容，或需要提供多个方向时，必须先调用 ask_user；至少提供“保留原始要求继续尝试”和“风险降低调整”，不得用普通文本代替 ask_user，也不得强制改写
+
+**失败处理**
+- 生成失败不得改用生图或其他工具替代，也不自动重试
+
+**语言规则**
+- prompt、video_name 使用用户所用的语言
 -->
-Use this tool to generate regular videos in general mode; use `generate_canvas_videos` for canvas design requests.
-Turn vague requests into clear prompts containing at least the subject, action, scene, camera, lighting, style, pacing, and audio.
-When the user requests narration, dialogue, voice-over, music, or sound effects, preserve the requested content verbatim in the final prompt and specify the speaker, language, voice characteristics, and timing.
-Unless explicitly specified by the user, omit `model_id`, `input_mode`, `task`, `size`, `resolution`, `fps`, `seed`, and `watermark`, allowing the tool to choose based on the current model.
-By default, wait for user confirmation before generation. Generate immediately only when the user explicitly requests direct generation or asks to skip confirmation. For risks involving IP, real people, sexual content, politics, violence, or any situation requiring multiple choices, call `ask_user` first and proceed according to the user's selection. Provide at least two options: keep the original request and attempt it as written, or apply a risk-reducing adjustment. Do not replace `ask_user` with plain text or force a rewrite.
-If generation fails, do not substitute image generation or another tool, and do not retry automatically.
+**When to call**: Use only for regular video generation in general mode.
+
+**Key rules**
+- Unless explicitly specified, omit model_id, input_mode, task, size, resolution, fps, seed, and watermark; let the tool choose for the current model
+- Usually omit output_path and use the default videos directory
+
+**Prompt writing**
+- Treat the prompt as an executable video brief covering at least subject, action, scene, camera, lighting, style, pacing, and audio requirements when requested
+- Expand vague requests into a complete description; when the user provides a complete or detailed prompt, preserve their wording and add only necessary details
+- Preserve requested narration, dialogue, voice-over, music, or sound effects verbatim, specifying speaker, language, voice characteristics, and timing
+
+**Reference media**
+- When the user provides images, videos, audio, or first/last frames, pass the corresponding fields and explain each reference's role in the prompt
+
+**Confirmation and risk**
+- Wait for confirmation by default; generate immediately only when the user explicitly requests direct generation or asks to skip confirmation
+- For IP, real-person, sexual, political, violent, or other multi-choice situations, call ask_user first. Offer at least “keep the original request and attempt it as written” and “apply a risk-reducing adjustment”; do not replace ask_user with plain text or force a rewrite
+
+**Failure handling**
+- Do not substitute image generation or another tool, and do not retry automatically
+
+**Language rules**
+- Write prompt and video_name in the same language the user is using
 """
 
     async def execute(self, tool_context: ToolContext, params: GenerateVideoParams) -> VideoToolResult:
