@@ -1,5 +1,9 @@
 import type { Canvas } from "../../core/Canvas"
-import { getActiveContent, getUsableDownstreamImageContent } from "../../document/elementContent"
+import {
+	getActiveContent,
+	getMainContent,
+	getUsableDownstreamImageContent,
+} from "../../document/elementContent"
 import {
 	ElementTypeEnum,
 	type ElementContentBase,
@@ -14,7 +18,9 @@ export interface SelectionContentItem {
 	type: LayerElement["type"]
 	rootElementId: string
 	activeContent?: ElementContentBase
+	mainContent?: ElementContentBase
 	ready: boolean
+	mainReady: boolean
 }
 
 export interface SelectionContentSnapshot {
@@ -23,6 +29,8 @@ export interface SelectionContentSnapshot {
 	/** Storyboard 等连接下游实际可消费的图片元素 ID，按文档顺序排列。 */
 	imageSequence: string[]
 	videoSequence: string[]
+	/** 续写视频等操作使用稳定 main content 的视频 ID，按文档顺序排列。 */
+	mainVideoSequence: string[]
 	audioSequence: string[]
 	counts: {
 		image: number
@@ -68,6 +76,18 @@ function isReadyMedia(element: LayerElement): boolean {
 		return false
 	}
 	return content.status === undefined || content.status === "completed"
+}
+
+function isReadyVideoMainContent(element: LayerElement): boolean {
+	if (element.type !== ElementTypeEnum.Video) return false
+	const content = getMainContent(element)
+	return Boolean(
+		content &&
+		"src" in content &&
+		typeof content.src === "string" &&
+		content.src &&
+		(content.status === undefined || content.status === "completed"),
+	)
 }
 
 function isUsableDownstreamImage(element: LayerElement): boolean {
@@ -125,12 +145,15 @@ export function collectSelectionContentSnapshot(
 		}
 
 		const content = getActiveContent(latest)
+		const mainContent = getMainContent(latest)
 		items.push({
 			elementId: latest.id,
 			type: latest.type,
 			rootElementId,
 			activeContent: content,
 			ready: isReadyMedia(latest),
+			mainContent,
+			mainReady: isReadyVideoMainContent(latest),
 		})
 		if (isUsableDownstreamImage(latest)) imageSequence.push(latest.id)
 	}
@@ -143,6 +166,9 @@ export function collectSelectionContentSnapshot(
 	const videoSequence = items
 		.filter((item) => item.type === ElementTypeEnum.Video && item.ready)
 		.map((item) => item.elementId)
+	const mainVideoSequence = items
+		.filter((item) => item.type === ElementTypeEnum.Video && item.mainReady)
+		.map((item) => item.elementId)
 	const audioSequence = items
 		.filter((item) => item.type === ElementTypeEnum.Audio && item.ready)
 		.map((item) => item.elementId)
@@ -152,6 +178,7 @@ export function collectSelectionContentSnapshot(
 		items,
 		imageSequence,
 		videoSequence,
+		mainVideoSequence,
 		audioSequence,
 		counts: {
 			image: items.filter((item) => item.type === ElementTypeEnum.Image).length,

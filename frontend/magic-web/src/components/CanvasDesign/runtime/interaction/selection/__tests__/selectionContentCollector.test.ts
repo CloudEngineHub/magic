@@ -70,6 +70,7 @@ describe("collectSelectionContentSnapshot", () => {
 		])
 		expect(snapshot.imageSequence).toEqual([])
 		expect(snapshot.videoSequence).toEqual(["video-1", "video-2", "video-3"])
+		expect(snapshot.mainVideoSequence).toEqual(["video-1", "video-2", "video-3"])
 		expect(snapshot.audioSequence).toEqual(["audio-1"])
 		expect(snapshot.counts).toEqual({ image: 0, video: 3, audio: 1, text: 0 })
 		expect(snapshot.boundingRect).toEqual({ x: 10, y: 20, width: 400, height: 200 })
@@ -83,11 +84,41 @@ describe("collectSelectionContentSnapshot", () => {
 		const snapshot = collectSelectionContentSnapshot(canvas, ["video-1", "video-2"])
 
 		expect(snapshot.videoSequence).toEqual(["video-1"])
+		expect(snapshot.mainVideoSequence).toEqual(["video-1"])
 		expect(snapshot.imageSequence).toEqual([])
 		const unavailableItem = snapshot.items.find((item) => item.elementId === "video-2")
 		expect(unavailableItem?.activeContent?.contentId).toBe("video-2-content")
 		expect(unavailableItem?.ready).toBe(false)
 		expect(snapshot.counts.video).toBe(2)
+	})
+
+	it("uses main content availability for video continuation independently of active content", () => {
+		const video = {
+			id: "video-versioned",
+			type: ElementTypeEnum.Video,
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 80,
+			activeContentId: "active-content",
+			mainContentId: "main-content",
+			contents: [
+				{ contentId: "active-content", src: "", status: "failed" },
+				{ contentId: "main-content", src: "/main-video.mp4", status: "completed" },
+			],
+		} as LayerElement
+		const canvas = createCanvas([video], [video])
+
+		const snapshot = collectSelectionContentSnapshot(canvas, [video.id])
+
+		expect(snapshot.videoSequence).toEqual([])
+		expect(snapshot.mainVideoSequence).toEqual([video.id])
+		expect(snapshot.items[0]).toMatchObject({
+			activeContent: { contentId: "active-content" },
+			mainContent: { contentId: "main-content" },
+			ready: false,
+			mainReady: true,
+		})
 	})
 
 	it("protects against cyclic container references", () => {

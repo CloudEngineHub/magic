@@ -12,7 +12,7 @@ import {
 	wrapPromptForTextNode,
 } from "../imagePromptExtractionText"
 import ImagePromptExtractionButton from "../index"
-import { CONNECTION_CREATE_NODE_SPACING } from "../../../../panels/menu/connectionCreatePlacement"
+import { CONNECTION_CREATE_NODE_SPACING } from "../../../../../runtime/shared/placement/connectionCreatePlacement"
 
 const mockCompleteImagePrompt = vi.fn()
 const mockElementManagerCreate = vi.fn()

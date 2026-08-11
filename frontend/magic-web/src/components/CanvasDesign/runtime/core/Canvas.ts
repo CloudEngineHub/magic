@@ -81,6 +81,7 @@ import { ConnectionHandleOverlayManager } from "../interaction/connection/Connec
 import { ConnectionAssociationSeedManager } from "../interaction/connection/ConnectionAssociationSeedManager"
 import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
+import { VideoContinuationManager } from "../interaction/video-continuation/VideoContinuationManager"
 import {
 	editActions,
 	layerActions,
@@ -156,6 +157,7 @@ export class Canvas {
 	public connectionDragManager: ConnectionDragManager
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
 	public storyboardInteractionManager: StoryboardInteractionManager
+	public videoContinuationManager: VideoContinuationManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
 	public alignmentManager: AlignmentManager
@@ -473,6 +475,8 @@ export class Canvas {
 		this.toolManager = new ToolManager({
 			canvas: this,
 		})
+
+		this.videoContinuationManager = new VideoContinuationManager(this)
 
 		// 分镜内部控件依赖选择工具、权限与 CursorManager，统一在工具初始化后接入。
 		this.storyboardInteractionManager = new StoryboardInteractionManager({
@@ -1430,6 +1434,7 @@ export class Canvas {
 		this.imageReplaceController.destroy()
 		this.mediaReplaceController?.destroy()
 		this.storyboardInteractionManager.destroy()
+		this.videoContinuationManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()

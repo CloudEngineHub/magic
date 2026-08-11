@@ -11,6 +11,7 @@ function createSnapshot(): SelectionContentSnapshot {
 		items: [],
 		imageSequence: ["image-1", "image-2", "image-3"],
 		videoSequence: [],
+		mainVideoSequence: [],
 		audioSequence: [],
 		counts: { image: 3, video: 0, audio: 0, text: 0 },
 		boundingRect: { x: 0, y: 0, width: 500, height: 300 },

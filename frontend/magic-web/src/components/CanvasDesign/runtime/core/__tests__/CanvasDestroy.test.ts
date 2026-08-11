@@ -29,6 +29,7 @@ describe("Canvas destroy", () => {
 			audioReplaceController: destroyable("audioReplaceController"),
 			imageReplaceController: destroyable("imageReplaceController"),
 			storyboardInteractionManager: destroyable("storyboardInteractionManager"),
+			videoContinuationManager: destroyable("videoContinuationManager"),
 			eventEmitter: {
 				removeAllListeners: vi.fn(() => destroyOrder.push("eventEmitter")),
 			},

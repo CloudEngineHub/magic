@@ -27,6 +27,7 @@ import {
 	collectSelectionContentSnapshot,
 	createSelectionRevision,
 } from "../../../runtime/interaction/selection/selectionContentCollector"
+import { getConnectionMenuActionRecipes } from "../../../runtime/interaction/selection/connectionMenuActionRecipes"
 import { getSelectionCreateRecipes } from "../../../runtime/interaction/selection/selectionCreationRecipes"
 import {
 	cloneConnectionOrigin,
@@ -41,7 +42,7 @@ import {
 	resolveConnectedElementCreateCenterPoint,
 	resolveConnectedElementCreateTopLeftPoint,
 	type ConnectionCreatePlacementContext,
-} from "./connectionCreatePlacement"
+} from "../../../runtime/shared/placement/connectionCreatePlacement"
 
 type DefaultConnectionMenuCreateKind = "text" | "image-generator" | "video-generator"
 type ConnectionMenuCreateKind = DefaultConnectionMenuCreateKind | "storyboard"
@@ -329,6 +330,19 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		[canvas],
 	)
 
+	const resolveOriginSnapshot = useCallback(
+		(context: ConnectionMenuContext) => {
+			if (!canvas) return null
+			if (context.origin.kind === "selection") return resolveSelectionSnapshot(context)
+
+			const snapshot = collectSelectionContentSnapshot(canvas, [context.origin.elementId])
+			return snapshot.rootElementIds.length === 1 && snapshot.allRootsCanConnect
+				? snapshot
+				: null
+		},
+		[canvas, resolveSelectionSnapshot],
+	)
+
 	const createDefaultFromSelection = useCallback(
 		(kind: DefaultConnectionMenuCreateKind, context: ConnectionMenuContext) => {
 			if (!canvas || context.origin.kind !== "selection") return
@@ -407,6 +421,30 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		setIsMenuOpen(false)
 	}, [canvas])
 
+	const executeConnectionMenuAction = useCallback(
+		(recipeId: string, context: ConnectionMenuContext) => {
+			if (!canvas) return
+			const snapshot = resolveOriginSnapshot(context)
+			if (!snapshot) return
+			const recipe = getConnectionMenuActionRecipes({
+				canvas,
+				snapshot,
+				originSide: context.origin.side,
+				videoModelList,
+			}).find((item) => item.id === recipeId)
+			if (!recipe) return
+
+			closeConnectionMenu()
+			void recipe.execute({
+				canvas,
+				snapshot,
+				originSide: context.origin.side,
+				videoModelList,
+			})
+		},
+		[canvas, closeConnectionMenu, resolveOriginSnapshot, videoModelList],
+	)
+
 	const menuItems = useMemo<MenuItem[]>(() => {
 		if (!connectionMenuContext) return []
 		const translate = (key: string, fallback: string) => {
@@ -434,6 +472,25 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				onClick: () => onCreate("video-generator"),
 			},
 		]
+		const createActionMenuItems = (
+			snapshot: ReturnType<typeof collectSelectionContentSnapshot>,
+		): MenuItem[] => {
+			if (!canvas) return []
+			return getConnectionMenuActionRecipes({
+				canvas,
+				snapshot,
+				originSide: connectionMenuContext.origin.side,
+				videoModelList,
+			}).map((recipe) => {
+				const label = recipe.getLabel(snapshot)
+				return {
+					id: `connection-action-${recipe.id}`,
+					label: translate(label.key, label.fallback),
+					icon: Film,
+					onClick: () => executeConnectionMenuAction(recipe.id, connectionMenuContext),
+				}
+			})
+		}
 
 		if (connectionMenuContext.origin.kind === "selection") {
 			const snapshot = resolveSelectionSnapshot(connectionMenuContext)
@@ -441,6 +498,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			const items = createDefaultMenuItems((kind) =>
 				createDefaultFromSelection(kind, connectionMenuContext),
 			)
+			items.push(...createActionMenuItems(snapshot))
 			items.push(
 				...getSelectionCreateRecipes(snapshot, connectionMenuContext.origin.side).map(
 					(recipe) => ({
@@ -457,6 +515,8 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		const items = createDefaultMenuItems((kind) =>
 			createElementAndConnect(kind, connectionMenuContext),
 		)
+		const snapshot = resolveOriginSnapshot(connectionMenuContext)
+		if (snapshot) items.push(...createActionMenuItems(snapshot))
 		if (canCreateStoryboardFromConnection(canvas, connectionMenuContext.origin)) {
 			items.push({
 				id: "connection-add-storyboard",
@@ -474,8 +534,11 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		createDefaultFromSelection,
 		createElementAndConnect,
 		createFromSelectionRecipe,
+		executeConnectionMenuAction,
+		resolveOriginSnapshot,
 		resolveSelectionSnapshot,
 		t,
+		videoModelList,
 	])
 
 	const handleMenuOpenChange = useCallback(

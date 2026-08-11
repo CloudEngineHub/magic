@@ -11,6 +11,7 @@ function createSnapshot(
 		items: [],
 		imageSequence: [],
 		videoSequence: [],
+		mainVideoSequence: [],
 		audioSequence: [],
 		counts: { image: 0, video: 0, audio: 0, text: 2 },
 		boundingRect: { x: 10, y: 20, width: 300, height: 160 },

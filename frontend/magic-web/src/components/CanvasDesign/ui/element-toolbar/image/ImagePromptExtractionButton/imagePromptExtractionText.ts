@@ -19,7 +19,7 @@ import {
 	resolveConnectionCreateGapForElement,
 	resolveConnectedElementCreateTopLeftPoint,
 	type ConnectionCreatePlacementContext,
-} from "../../../panels/menu/connectionCreatePlacement"
+} from "../../../../runtime/shared/placement/connectionCreatePlacement"
 
 const IMAGE_PROMPT_TEXT_LINE_HEIGHT = 1.45
 

@@ -13,6 +13,7 @@ function snapshot(
 		items: [],
 		imageSequence,
 		videoSequence,
+		mainVideoSequence: videoSequence,
 		audioSequence,
 		counts: {
 			image: imageCount,

@@ -583,6 +583,15 @@
 		"retryEditing": "Please edit your video generation request again",
 		"uploading": "Uploading..."
 	},
+	"videoContinuation": {
+		"batchMenu": "Batch Continue Video",
+		"batchSuccess": "Batch continuation completed",
+		"failed": "Failed to continue video. Please try again.",
+		"menu": "Continue Video",
+		"partialSuccess": "Created {{created}}; {{failed}} failed",
+		"processing": "Continuing video, please wait...",
+		"success": "Continuation video created"
+	},
 	"videoEditNode": {
 		"defaultName": "Video Editing",
 		"mergeVideos": "Merge Videos"

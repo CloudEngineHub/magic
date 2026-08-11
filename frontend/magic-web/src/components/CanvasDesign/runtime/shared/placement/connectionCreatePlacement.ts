@@ -1,10 +1,10 @@
-import type { Canvas } from "../../../runtime/core/Canvas"
-import type { Rect } from "../../../runtime/shared/ids"
+import type { Canvas } from "../../core/Canvas"
+import type { Rect } from "../ids"
 import {
 	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
 	resolveConnectionCreateGapForElement,
 	type ConnectionCreateOriginSide,
-} from "../../../runtime/shared/placement/connectionCreateGap"
+} from "./connectionCreateGap"
 
 export {
 	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
@@ -12,7 +12,7 @@ export {
 	getConnectionMenuTriggerAxisSize,
 	resolveConnectionCreateGapForElement,
 	type ConnectionCreateOriginSide,
-} from "../../../runtime/shared/placement/connectionCreateGap"
+} from "./connectionCreateGap"
 
 export type ConnectionCreateSource = "handle" | "drag-empty"
 

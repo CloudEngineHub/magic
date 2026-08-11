@@ -583,6 +583,15 @@
 		"retryEditing": "请重新编辑视频生成需求",
 		"uploading": "正在上传中..."
 	},
+	"videoContinuation": {
+		"batchMenu": "批量续写视频",
+		"batchSuccess": "批量续写完成",
+		"failed": "续写视频失败，请重试",
+		"menu": "续写视频",
+		"partialSuccess": "已创建 {{created}} 个，{{failed}} 个失败",
+		"processing": "正在续写视频，请稍候...",
+		"success": "续写视频已创建"
+	},
 	"videoEditNode": {
 		"defaultName": "视频编辑",
 		"mergeVideos": "合并视频"
