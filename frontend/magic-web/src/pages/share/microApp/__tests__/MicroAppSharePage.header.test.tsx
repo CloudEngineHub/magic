@@ -68,7 +68,7 @@ describe("MicroAppSharePage header", () => {
 			resource_id: "resource-1",
 			share_code: "resource-1",
 			cover_url: "https://example.com/cover.webp",
-			pure_mode: true,
+			extra: { pure_mode: true },
 		})
 
 		renderPage()
@@ -82,12 +82,12 @@ describe("MicroAppSharePage header", () => {
 		let resolveSecondApp: (value: {
 			app_id: string
 			resource_id: string
-			pure_mode: boolean
+			extra: { pure_mode: boolean }
 		}) => void = () => undefined
 		const secondAppResponse = new Promise<{
 			app_id: string
 			resource_id: string
-			pure_mode: boolean
+			extra: { pure_mode: boolean }
 		}>((resolve) => {
 			resolveSecondApp = resolve
 		})
@@ -97,7 +97,7 @@ describe("MicroAppSharePage header", () => {
 				return Promise.resolve({
 					app_id: "app-1",
 					resource_id: "resource-1",
-					pure_mode: true,
+					extra: { pure_mode: true },
 				})
 			}
 			return secondAppResponse
@@ -113,7 +113,7 @@ describe("MicroAppSharePage header", () => {
 		resolveSecondApp({
 			app_id: "app-2",
 			resource_id: "resource-2",
-			pure_mode: false,
+			extra: { pure_mode: false },
 		})
 
 		expect(await screen.findByTestId("micro-app-share-header")).toBeInTheDocument()

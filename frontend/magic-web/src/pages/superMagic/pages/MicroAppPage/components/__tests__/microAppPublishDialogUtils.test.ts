@@ -43,7 +43,7 @@ describe("microAppPublishDialogUtils", () => {
 		).toEqual({
 			app_name: "Demo App",
 			share_type: ShareType.Public,
-			pure_mode: false,
+			extra: { pure_mode: false },
 		})
 		expect(
 			createFormStateFromPublishedItem(
@@ -70,7 +70,7 @@ describe("microAppPublishDialogUtils", () => {
 			app_name: "Demo App",
 			share_type: ShareType.Public,
 			cover_file_key: "micro-app/covers/demo.png",
-			pure_mode: true,
+			extra: { pure_mode: true },
 		})
 	})
 

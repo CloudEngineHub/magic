@@ -12,7 +12,6 @@ use Dtyq\SuperMagic\Domain\Share\Entity\ResourceShareEntity;
 use Dtyq\SuperMagic\Domain\Share\Service\ResourceShareDomainService;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\MicroAppEntity;
 use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MicroAppPublishStatus;
 use Dtyq\SuperMagic\Infrastructure\Utils\ShareUrlBuilder;
 use Throwable;
 
@@ -26,8 +25,12 @@ class MicroAppProjectResponseFormatter
     ) {
     }
 
-    public function formatPublishRecord(MicroAppEntity $record, ?string $projectName = null): array
-    {
+    public function formatPublishRecord(
+        MicroAppEntity $record,
+        ?string $projectName = null,
+        ?array $extra = null,
+    ): array {
+        $responseExtra = $this->shareConfig->formatResponseExtra($extra);
         return [
             'app_id' => (string) $record->getId(),
             'project_id' => $record->getProjectId(),
@@ -39,6 +42,7 @@ class MicroAppProjectResponseFormatter
             'share_range' => $record->getShareRange(),
             'target_ids' => $record->getTargetIds(),
             'cover_file_key' => $record->getCoverFileKey(),
+            'extra' => $responseExtra,
             'publish_status' => $record->getPublishStatus(),
             'access_url' => $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId()) ?? $record->getAccessUrl(),
             'published_at' => $record->getPublishedAt(),
@@ -49,8 +53,11 @@ class MicroAppProjectResponseFormatter
     public function formatMicroApp(MicroAppEntity $record, ProjectEntity $project): array
     {
         $shareEntity = $this->resourceShareDomainService->getShareByResourceIdWithTrashed($record->getResourceId());
-        $publish = $this->formatPublishRecord($record, $project->getProjectName());
-        $publish['pure_mode'] = $this->shareConfig->isPureMode($shareEntity?->getExtra());
+        $publish = $this->formatPublishRecord(
+            $record,
+            $project->getProjectName(),
+            $shareEntity?->getExtra(),
+        );
 
         return [
             'app_id' => (string) $record->getId(),
@@ -103,12 +110,13 @@ class MicroAppProjectResponseFormatter
         ];
         $coverUrls = $this->resolveCoverUrls([$coverRow]);
 
+        $responseExtra = $this->shareConfig->formatResponseExtra($shareEntity->getExtra());
         return [
             'app_id' => (string) $record->getId(),
             'resource_id' => $record->getResourceId(),
             'share_code' => $shareEntity->getShareCode(),
             'cover_url' => $coverUrls[$this->coverUrlMapKey($coverRow, $coverKey)] ?? '',
-            'pure_mode' => $this->shareConfig->isPureMode($shareEntity->getExtra()),
+            'extra' => $responseExtra,
         ];
     }
 

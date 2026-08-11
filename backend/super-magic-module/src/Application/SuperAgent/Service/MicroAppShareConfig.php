@@ -14,22 +14,26 @@ final class MicroAppShareConfig
 {
     public function buildExtra(?array $existingExtra, PublishMicroAppRequestDTO $requestDTO): ?array
     {
-        if (! $requestDTO->hasPureMode()) {
+        if (! $requestDTO->hasExtra()) {
             return null;
         }
 
-        return array_merge($existingExtra ?? [], [
-            CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE => $requestDTO->isPureMode(),
-        ]);
+        $extra = $existingExtra ?? [];
+        $requestedExtra = $requestDTO->getExtra();
+        if (array_key_exists(CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE, $requestedExtra)) {
+            $extra[CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE] = filter_var(
+                $requestedExtra[CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE],
+                FILTER_VALIDATE_BOOLEAN,
+            );
+        }
+        return $extra;
     }
 
-    public function isPureMode(?array $extra): bool
+    public function formatResponseExtra(?array $extra): array
     {
-        $value = $extra[CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE] ?? false;
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        return [CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE => filter_var(
+            ($extra ?? [])[CreateShareRequestDTO::EXTRA_FIELD_PURE_MODE] ?? false,
+            FILTER_VALIDATE_BOOLEAN,
+        )];
     }
 }

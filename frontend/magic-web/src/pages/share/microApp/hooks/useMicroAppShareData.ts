@@ -244,7 +244,9 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			const appData = unwrapResponse<{
 				resource_id?: string
 				cover_url?: string
-				pure_mode?: boolean
+				extra?: {
+					pure_mode?: boolean
+				}
 			}>(appResponse)
 			const resolvedResourceId = readString(appData?.resource_id)
 			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
@@ -252,7 +254,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			setCoverUrl(readString(appData?.cover_url))
 			setDisplayMode({
 				appId: requestContext.appId,
-				fullScreen: appData?.pure_mode === true,
+				fullScreen: appData?.extra?.pure_mode === true,
 			})
 
 			const checkResponse: any = await SuperMagicApi.checkShareResourcePassword({

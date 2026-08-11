@@ -26,7 +26,7 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
     public function testFormatsMicroAppDetailsWithPureMode(): void
     {
         $shareEntity = (new ResourceShareEntity())
-            ->setExtra(['allow_copy_project_files' => true, 'pure_mode' => true]);
+            ->setExtra(['allow_copy_project_files' => true, 'pure_mode' => false]);
         $shareDomainService = $this->createMock(ResourceShareDomainService::class);
         $shareDomainService->expects(self::once())
             ->method('getShareByResourceIdWithTrashed')
@@ -57,7 +57,9 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
                 ->setProjectName('Demo App'),
         );
 
-        self::assertTrue($result['publish']['pure_mode']);
+        self::assertFalse($result['publish']['extra']['pure_mode']);
+        self::assertArrayNotHasKey('pure_mode', $result['publish']);
+        self::assertArrayNotHasKey('allow_copy_project_files', $result['publish']['extra']);
         self::assertSame('Demo App', $result['project']['project_name']);
     }
 
@@ -77,10 +79,30 @@ final class MicroAppProjectResponseFormatterTest extends TestCase
                 ->setOrganizationCode('org-1'),
             (new ResourceShareEntity())
                 ->setShareCode('share-code-1')
-                ->setExtra(['pure_mode' => true]),
+                ->setExtra(['pure_mode' => '1']),
         );
 
         self::assertSame('share-code-1', $result['share_code']);
-        self::assertTrue($result['pure_mode']);
+        self::assertTrue($result['extra']['pure_mode']);
+        self::assertArrayNotHasKey('pure_mode', $result);
+    }
+
+    public function testFormatsPublishRecordWithShareExtra(): void
+    {
+        $formatter = new MicroAppProjectResponseFormatter(
+            $this->createMock(ShareUrlBuilder::class),
+            new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)),
+            $this->createMock(ResourceShareDomainService::class),
+            new MicroAppShareConfig(),
+        );
+
+        $result = $formatter->formatPublishRecord(
+            (new MicroAppEntity())->setId(1001),
+            null,
+            ['pure_mode' => true],
+        );
+
+        self::assertTrue($result['extra']['pure_mode']);
+        self::assertArrayNotHasKey('pure_mode', $result);
     }
 }

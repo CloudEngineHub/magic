@@ -105,7 +105,7 @@ class MicroAppProjectAppService extends AbstractAppService
                 'expire_days' => null,
                 'show_share_url' => true,
             ];
-            if ($requestDTO->hasPureMode()) {
+            if ($requestDTO->hasExtra()) {
                 $existingShare = $this->resourceShareDomainService->getShareByResourceIdWithTrashed($record->getResourceId());
                 $shareData['extra'] = $this->shareConfig->buildExtra($existingShare?->getExtra(), $requestDTO);
             }
@@ -136,7 +136,11 @@ class MicroAppProjectAppService extends AbstractAppService
             $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($project, $authorization));
         }
 
-        return $this->responseFormatter->formatPublishRecord($record, $project->getProjectName());
+        return $this->responseFormatter->formatPublishRecord(
+            $record,
+            $project->getProjectName(),
+            $shareItem->extra,
+        );
     }
 
     public function update(RequestContext $requestContext, int $appId, UpdateMicroAppRequestDTO $requestDTO): array
@@ -320,7 +324,11 @@ class MicroAppProjectAppService extends AbstractAppService
 
             $items[] = [
                 'project' => $this->responseFormatter->formatProject($project),
-                'publish' => $this->responseFormatter->formatPublishRecord($record, $project->getProjectName()),
+                'publish' => $this->responseFormatter->formatPublishRecord(
+                    $record,
+                    $project->getProjectName(),
+                    $shareEntity->getExtra(),
+                ),
             ];
         }
 
@@ -462,5 +470,4 @@ class MicroAppProjectAppService extends AbstractAppService
 
         return array_values(array_unique(array_merge($paidOrganizationCodes, [$currentOrganizationCode])));
     }
-
 }

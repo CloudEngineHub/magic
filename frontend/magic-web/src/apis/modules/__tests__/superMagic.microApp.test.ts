@@ -55,6 +55,7 @@ describe("SuperMagic micro app API", () => {
 			app_name: "客户跟进助手",
 			share_type: 4,
 			cover_file_key: "micro-app/covers/customer.png",
+			extra: { pure_mode: true },
 		})
 
 		expect(client.post).toHaveBeenNthCalledWith(
@@ -84,6 +85,7 @@ describe("SuperMagic micro app API", () => {
 				app_name: "客户跟进助手",
 				share_type: 4,
 				cover_file_key: "micro-app/covers/customer.png",
+				extra: { pure_mode: true },
 			},
 			{ parseJsonLargeIntAsString: true },
 		)

@@ -20,9 +20,7 @@ export interface MicroAppPublishFormState {
 }
 
 export type MicroAppPublishValidationError =
-	| "projectNameRequired"
-	| "projectNameTooLong"
-	| "passwordInvalid"
+	"projectNameRequired" | "projectNameTooLong" | "passwordInvalid"
 
 export function normalizeMicroAppPublishShareType(
 	shareType: MicroAppPublishShareType,
@@ -65,7 +63,7 @@ export function buildMicroAppPublishPayload(
 	if (formState.coverFileKey !== undefined) {
 		payload.cover_file_key = formState.coverFileKey
 	}
-	payload.pure_mode = formState.fullScreen
+	payload.extra = { pure_mode: formState.fullScreen }
 
 	if (shareType === ShareType.Organization) {
 		payload.share_range = formState.shareRange
@@ -124,7 +122,7 @@ export function createFormStateFromPublishedItem(
 			item?.password || (item?.publish_status === "published" ? "" : generateSharePassword()),
 		coverFileKey: item?.cover_file_key ?? undefined,
 		coverUrl: item?.cover_url || "",
-		fullScreen: item?.pure_mode === true,
+		fullScreen: item?.extra?.pure_mode === true,
 	}
 }
 

@@ -25,7 +25,7 @@ describe("MicroAppPublishDialog fullscreen settings", () => {
 				resource_id: "resource-1",
 				share_code: "share-code-1",
 				share_type: ShareType.Public,
-				pure_mode: true,
+				extra: { pure_mode: true },
 				publish_status: "published",
 			},
 		})
@@ -45,7 +45,7 @@ describe("MicroAppPublishDialog fullscreen settings", () => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				app_name: "Demo App",
 				share_type: ShareType.Public,
-				pure_mode: false,
+				extra: { pure_mode: false },
 			})
 		})
 	})

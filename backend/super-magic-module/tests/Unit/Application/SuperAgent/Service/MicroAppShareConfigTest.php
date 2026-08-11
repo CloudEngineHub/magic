@@ -16,10 +16,13 @@ use PHPUnit\Framework\TestCase;
  */
 final class MicroAppShareConfigTest extends TestCase
 {
-    public function testBuildExtraPreservesExistingValuesWhenPureModeIsProvided(): void
+    public function testBuildExtraPreservesExistingValuesWhenExtraIsProvided(): void
     {
         $requestDTO = new PublishMicroAppRequestDTO();
-        $requestDTO->setPureMode(false);
+        $requestDTO->setExtra([
+            'pure_mode' => false,
+            'allow_download_project_file' => true,
+        ]);
 
         self::assertSame([
             'allow_copy_project_files' => true,
@@ -27,7 +30,7 @@ final class MicroAppShareConfigTest extends TestCase
         ], (new MicroAppShareConfig())->buildExtra(['allow_copy_project_files' => true], $requestDTO));
     }
 
-    public function testBuildExtraReturnsNullWhenPureModeIsNotProvided(): void
+    public function testBuildExtraReturnsNullWhenExtraIsNotProvided(): void
     {
         self::assertNull((new MicroAppShareConfig())->buildExtra(
             ['pure_mode' => true],
@@ -35,12 +38,12 @@ final class MicroAppShareConfigTest extends TestCase
         ));
     }
 
-    public function testIsPureModeNormalizesBooleanValues(): void
+    public function testFormatResponseExtraUsesTheCommonShareExtraFormat(): void
     {
         $config = new MicroAppShareConfig();
 
-        self::assertTrue($config->isPureMode(['pure_mode' => '1']));
-        self::assertFalse($config->isPureMode(['pure_mode' => '0']));
-        self::assertFalse($config->isPureMode(null));
+        self::assertSame(['pure_mode' => true], $config->formatResponseExtra(['pure_mode' => '1']));
+        self::assertSame(['pure_mode' => false], $config->formatResponseExtra(['pure_mode' => '0']));
+        self::assertSame(['pure_mode' => false], $config->formatResponseExtra(null));
     }
 }
