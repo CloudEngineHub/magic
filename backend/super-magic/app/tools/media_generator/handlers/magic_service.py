@@ -38,6 +38,11 @@ class _ImageApiPayload:
 class MagicServiceHandler(BaseImageGeneratorHandler):
     """magic-service 图片生成驱动"""
 
+    _BASE64_IMAGE_PATTERN = re.compile(
+        r"^data:(?P<mime_type>image/[^;]+);base64,(?P<data>.*)$",
+        re.DOTALL,
+    )
+
     def __init__(self, api_base_url: str, access_key: str) -> None:
         super().__init__()
         self._api_base_url = api_base_url
@@ -74,6 +79,28 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         )
         return headers
 
+    @classmethod
+    def _sanitize_payload_for_log(cls, payload: dict) -> dict:
+        """脱敏请求中的 Base64 图片，避免日志记录完整图片内容。"""
+        sanitized = dict(payload)
+        sanitized["images"] = [
+            cls._sanitize_image_for_log(image)
+            for image in payload.get("images", [])
+        ]
+        return sanitized
+
+    @classmethod
+    def _sanitize_image_for_log(cls, image: str) -> str | dict[str, object]:
+        """将 Base64 Data URL 转换为仅包含类型和长度的日志摘要。"""
+        match = cls._BASE64_IMAGE_PATTERN.match(image)
+        if match is None:
+            return image
+        return {
+            "type": "base64_image",
+            "mime_type": match.group("mime_type"),
+            "base64_length": len(match.group("data")),
+        }
+
     async def _call_api(self, endpoint: str, payload: _ImageApiPayload) -> list[str]:
         """
         调用 magic-service 图片生成 API，返回图片 URL 列表。
@@ -83,7 +110,8 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         headers = self._build_api_headers()
         payload_dict = dataclasses.asdict(payload)
 
-        logger.info(f"调用 magic-service API: {url}, payload: {payload_dict}")
+        sanitized_payload = self._sanitize_payload_for_log(payload_dict)
+        logger.info(f"调用 magic-service API: {url}, payload: {sanitized_payload}")
 
         async with aiohttp.ClientSession() as session:
             async with session.post(

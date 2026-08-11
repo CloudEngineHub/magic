@@ -347,6 +347,8 @@ image_generator:
   text_to_image_api_base_url: ${TEXT_TO_IMAGE_API_BASE_URL}
   text_to_image_access_key: ${TEXT_TO_IMAGE_ACCESS_KEY}
   text_to_image_secret_key: ${TEXT_TO_IMAGE_SECRET_KEY}
+  # 是否将本地参考图转换为 Base64 Data URL 后传给生图服务
+  use_base64_reference_images: ${IMAGE_GENERATOR_USE_BASE64_REFERENCE_IMAGES:-false}
   image_to_image_model: ${IMAGE_TO_IMAGE_MODEL:-doubao-seedream-4-0-250828}
   text_to_image_model: ${TEXT_TO_IMAGE_MODEL:-doubao-seedream-4-0-250828}
 
