@@ -83,12 +83,13 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 }
             }
 
-            $sandboxId = $this->initializeSandbox($dataIsolation, $project);
-            $this->logger->info('Slides template export Sandbox initialized', [
+            $sandboxId = $this->resolveExportTarget($dataIsolation, $project);
+            $this->logger->info('Slides template export target resolved', [
                 'project_id' => $projectId,
                 'directory_id' => $directoryId,
                 'code' => $code,
                 'sandbox_id' => $sandboxId,
+                'mode' => config('super-magic.sandbox.enabled', true) ? 'sandbox' : 'local-direct',
             ]);
 
             $exportDirectory = 'slide-templates/' . $code . '/' . $exportId;
@@ -220,23 +221,41 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
 
     private function resolveSourcePath(ProjectEntity $project, TaskFileEntity $directory): string
     {
-        $path = WorkDirectoryUtil::getRelativeFilePath($directory->getFileKey(), $project->getWorkDir());
-        $path = trim(str_replace('\\', '/', $path), '/');
-        if ($path !== '') {
-            return $path;
+        $fileKey = trim(str_replace('\\', '/', $directory->getFileKey()), '/');
+        $workDir = trim(str_replace('\\', '/', $project->getWorkDir()), '/');
+        if ($workDir !== '' && ($fileKey === $workDir || str_starts_with($fileKey, $workDir . '/'))) {
+            $path = trim(WorkDirectoryUtil::getRelativeFilePath($fileKey, $workDir), '/');
+            if ($path !== '') {
+                return $path;
+            }
         }
 
         $allFiles = $this->taskFileDomainService->getFilesWithParentsByIds([$directory->getFileId()], $project->getId());
         $fileMap = RelativeFilePathUtil::indexByFileId($allFiles);
-        $path = trim(RelativeFilePathUtil::buildPathByParentChain($directory, $fileMap), '/');
+        $path = trim(str_replace('\\', '/', RelativeFilePathUtil::buildPathByParentChain($directory, $fileMap)), '/');
         if ($path === '') {
             throw new RuntimeException('Unable to resolve Sandbox source path.');
         }
+
+        $this->logger->debug('Slides template export source path resolved from file parent chain', [
+            'project_id' => $project->getId(),
+            'directory_id' => $directory->getFileId(),
+            'directory_file_key' => $directory->getFileKey(),
+            'project_work_dir' => $project->getWorkDir(),
+            'source_path' => $path,
+        ]);
         return $path;
     }
 
-    private function initializeSandbox(SlidesTemplateDataIsolation $dataIsolation, ProjectEntity $project): string
+    private function resolveExportTarget(SlidesTemplateDataIsolation $dataIsolation, ProjectEntity $project): string
     {
+        if (! config('super-magic.sandbox.enabled', true)) {
+            $this->logger->info('Slides template export using local Super Magic service', [
+                'project_id' => $project->getId(),
+            ]);
+            return '';
+        }
+
         $topicId = $project->getCurrentTopicId();
         if (empty($topicId)) {
             throw new RuntimeException('Project topic is required for Sandbox export.');
@@ -249,6 +268,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
         if ($sandboxId === (string) $topic->getId()) {
             $sandboxId = '';
         }
+
         $topic->setSandboxId($sandboxId);
         $contactIsolation = ContactDataIsolation::create($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId());
         $task = $this->taskDomainService->initDefaultTask($contactIsolation, $topic, self::EXPORT_PROMPT);
