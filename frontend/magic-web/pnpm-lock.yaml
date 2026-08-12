@@ -58,7 +58,7 @@ overrides:
   '@types/react': 18.3.23
   '@types/react-dom': 18.3.7
   lucide-react: 0.577.0
-  '@tabler/icons-react': 3.40.0
+  '@tabler/icons-react': 3.46.0
   esbuild: 0.24.0
   katex: 0.16.21
   marked: 15.0.12
@@ -116,7 +116,7 @@ importers:
         version: link:packages/magic-admin
       '@dtyq/magic-flow':
         specifier: ~0.0.15
-        version: 0.0.15(@babel/core@7.29.0)(@tabler/icons-react@3.40.0(react@18.3.1))(@types/react@18.3.23)(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(monaco-editor@0.48.0)(react-is@18.3.1)
+        version: 0.0.15(@babel/core@7.29.0)(@tabler/icons-react@3.46.0(react@18.3.1))(@types/react@18.3.23)(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(monaco-editor@0.48.0)(react-is@18.3.1)
       '@dtyq/timezone':
         specifier: ^0.0.2
         version: 0.0.2(dayjs@1.11.13)
@@ -125,7 +125,7 @@ importers:
         version: 0.0.9
       '@dtyq/user-selector':
         specifier: ^0.1.14
-        version: 0.1.14(ff204a7ea2f4d06f758195691344a4bd)
+        version: 0.1.14(82b21e21b05aa9f9f6c0df7a84a76118)
       '@dtyq/x-markdown':
         specifier: workspace:*
         version: link:packages/x-markdown
@@ -277,8 +277,8 @@ importers:
         specifier: ^1.5.2
         version: 1.29.2
       '@tabler/icons-react':
-        specifier: 3.40.0
-        version: 3.40.0(react@18.3.1)
+        specifier: 3.46.0
+        version: 3.46.0(react@18.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.13.24
         version: 3.13.24(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1239,8 +1239,8 @@ importers:
         specifier: ^9.0.1
         version: 9.0.2(semantic-release@19.0.3(encoding@0.1.13))
       '@tabler/icons-react':
-        specifier: 3.40.0
-        version: 3.40.0(react@18.3.1)
+        specifier: 3.46.0
+        version: 3.46.0(react@18.3.1)
       '@types/lodash-es':
         specifier: ^4.17.12
         version: 4.17.12
@@ -2452,7 +2452,7 @@ packages:
   '@dtyq/magic-flow@0.0.15':
     resolution: {integrity: sha512-ecacA2U4gPs/NcoJ7w1VtoQXViBKcLVI//upeyMvtIeo5VpZb7jOkhJDl4qbIQRe8o6dx2xcLBWtj674XcmKSg==, tarball: https://registry.npmjs.org/@dtyq/magic-flow/-/magic-flow-0.0.15.tgz}
     peerDependencies:
-      '@tabler/icons-react': 3.40.0
+      '@tabler/icons-react': 3.46.0
 
   '@dtyq/timezone@0.0.2':
     resolution: {integrity: sha512-iiEr7xoq0iMiFLK4m0OS9xJ0xAcB0W0ECZxhpb/DYO/oDy/fqxZH7SBnCBcCXPRanGPvy5hZQjGobHHy7IAleA==}
@@ -2475,7 +2475,7 @@ packages:
       '@radix-ui/react-select': '>=2 <3'
       '@radix-ui/react-slot': '>=1 <2'
       '@radix-ui/react-tooltip': '>=1 <2'
-      '@tabler/icons-react': 3.40.0
+      '@tabler/icons-react': 3.46.0
       ahooks: '>=3 <4'
       lodash-es: '>=4 <5'
       lucide-react: 0.577.0
@@ -5075,16 +5075,16 @@ packages:
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
 
-  '@tabler/icons-react@3.40.0':
-    resolution: {integrity: sha512-oO5+6QCnna4a//mYubx4euZfECtzQZFDGsDMIdzZUhbdyBCT+3bRVFBPueGIcemWld4Vb/0UQ39C/cmGfGylAg==}
+  '@tabler/icons-react@3.46.0':
+    resolution: {integrity: sha512-CCm7xJWhDT2PH4ZIFkP6AgYKtVhq0gpYkjUN+GVh1AzmIQaa77OW0bQPBPQiTE0PsXMR9oSxFqA3qBglzPyrVQ==}
     peerDependencies:
       react: '>= 16'
 
   '@tabler/icons@3.34.1':
     resolution: {integrity: sha512-9gTnUvd7Fd/DmQgr3MKY+oJLa1RfNsQo8c/ir3TJAWghOuZXodbtbVp0QBY2DxWuuvrSZFys0HEbv1CoiI5y6A==}
 
-  '@tabler/icons@3.40.0':
-    resolution: {integrity: sha512-V/Q4VgNPKubRTiLdmWjV/zscYcj5IIk+euicUtaVVqF6luSC9rDngYWgST5/yh3Mrg/mYUwRv1YVTk71Jp0twQ==}
+  '@tabler/icons@3.46.0':
+    resolution: {integrity: sha512-f2RYFl3fzPwj5WO82x6en0dmkjefxEfOm16D1ByM6cj/McNiwOkL4VaPUoP9VVIrXAD9WnTSVFr70px703b//A==}
 
   '@tanstack/react-virtual@3.13.24':
     resolution: {integrity: sha512-aIJvz5OSkhNIhZIpYivrxrPTKYsjW9Uzy+sP/mx0S3sev2HyvPb7xmjbYvokzEpfgYHy/HjzJ2zFAETuUfgCpg==}
@@ -18380,14 +18380,14 @@ snapshots:
       - eslint-plugin-import-x
       - supports-color
 
-  '@dtyq/magic-flow@0.0.15(@babel/core@7.29.0)(@tabler/icons-react@3.40.0(react@18.3.1))(@types/react@18.3.23)(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(monaco-editor@0.48.0)(react-is@18.3.1)':
+  '@dtyq/magic-flow@0.0.15(@babel/core@7.29.0)(@tabler/icons-react@3.46.0(react@18.3.1))(@types/react@18.3.23)(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(monaco-editor@0.48.0)(react-is@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.23.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@douyinfe/semi-icons': 2.83.0(react@18.3.1)
       '@iconify/react': 4.1.1(react@18.3.1)
       '@monaco-editor/react': 4.7.0(monaco-editor@0.48.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@tabler/icons-react': 3.40.0(react@18.3.1)
+      '@tabler/icons-react': 3.46.0(react@18.3.1)
       ahooks: 3.9.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       antd: 5.24.9(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       antd-style: 3.6.3(@types/react@18.3.23)(antd@5.24.9(date-fns@4.1.0)(luxon@3.7.1)(moment@2.30.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -18446,7 +18446,7 @@ snapshots:
       - aws-crt
       - debug
 
-  '@dtyq/user-selector@0.1.14(ff204a7ea2f4d06f758195691344a4bd)':
+  '@dtyq/user-selector@0.1.14(82b21e21b05aa9f9f6c0df7a84a76118)':
     dependencies:
       '@radix-ui/react-avatar': 1.1.11(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-checkbox': 1.3.3(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -18455,7 +18455,7 @@ snapshots:
       '@radix-ui/react-select': 2.2.6(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-slot': 1.2.4(@types/react@18.3.23)(react@18.3.1)
       '@radix-ui/react-tooltip': 1.2.8(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@tabler/icons-react': 3.40.0(react@18.3.1)
+      '@tabler/icons-react': 3.46.0(react@18.3.1)
       ahooks: 3.9.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       class-variance-authority: 0.7.1
       clsx: 2.1.1
@@ -21333,14 +21333,14 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
-  '@tabler/icons-react@3.40.0(react@18.3.1)':
+  '@tabler/icons-react@3.46.0(react@18.3.1)':
     dependencies:
-      '@tabler/icons': 3.40.0
+      '@tabler/icons': 3.46.0
       react: 18.3.1
 
   '@tabler/icons@3.34.1': {}
 
-  '@tabler/icons@3.40.0': {}
+  '@tabler/icons@3.46.0': {}
 
   '@tanstack/react-virtual@3.13.24(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

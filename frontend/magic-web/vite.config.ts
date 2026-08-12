@@ -329,7 +329,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 						// http2Proxy({ quiet: true }),
 					]
 				: []),
-			// optional -- suppress error logging],
 		],
 		css: {
 			preprocessorOptions: {

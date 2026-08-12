@@ -79,5 +79,13 @@ export function createCodeSplittingGroups() {
 					"src/components/business/MentionPanel/runtime/default-runtime",
 				),
 		},
+		{
+			name: "tabler-icons-used",
+			priority: 100,
+			test: (id: string) =>
+				normalizeModuleId(id).includes(
+					"node_modules/@tabler/icons-react/dist/esm/"
+				),
+		},
 	]
 }
