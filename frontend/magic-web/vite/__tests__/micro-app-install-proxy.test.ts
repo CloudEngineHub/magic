@@ -5,21 +5,12 @@ import {
 } from "../micro-app-install-proxy"
 
 describe("resolveMicroAppInstallDevProxyTarget", () => {
-	it("prefers MAGIC_DEV_NODE_PROXY over other sources", () => {
+	it("accepts host-only MAGIC_WEB_URL values", () => {
 		expect(
 			resolveMicroAppInstallDevProxyTarget({
-				MAGIC_DEV_NODE_PROXY: "https://node.example.com",
-				MAGIC_WEB_URL: "https://web.example.com",
+				MAGIC_WEB_URL: "remote.web.example.com",
 			}),
-		).toBe("https://node.example.com")
-	})
-
-	it("accepts host-only MAGIC_DEV_NODE_PROXY values", () => {
-		expect(
-			resolveMicroAppInstallDevProxyTarget({
-				MAGIC_DEV_NODE_PROXY: "magic-web.example.test",
-			}),
-		).toBe("https://magic-web.example.test")
+		).toBe("https://remote.web.example.com")
 	})
 
 	it("falls back to profile runtime config origin", () => {
@@ -27,13 +18,13 @@ describe("resolveMicroAppInstallDevProxyTarget", () => {
 			resolveMicroAppInstallDevProxyTarget(
 				{},
 				{
-					fallbackOrigin: "https://magic-web.example.test",
+					fallbackOrigin: "https://remote.web.example.com",
 				},
 			),
-		).toBe("https://magic-web.example.test")
+		).toBe("https://remote.web.example.com")
 	})
 
-	it("falls back to MAGIC_WEB_URL when explicit proxy target is absent", () => {
+	it("normalizes MAGIC_WEB_URL to origin", () => {
 		expect(
 			resolveMicroAppInstallDevProxyTarget({
 				MAGIC_WEB_URL: "https://web.example.com/default/super",
@@ -45,7 +36,7 @@ describe("resolveMicroAppInstallDevProxyTarget", () => {
 describe("resolveMicroAppInstallDevProxy", () => {
 	it("returns manifest and icon proxy rules for a configured target", () => {
 		const proxy = resolveMicroAppInstallDevProxy({
-			MAGIC_DEV_NODE_PROXY: "https://node.example.com",
+			MAGIC_WEB_URL: "https://web.example.com",
 		})
 
 		expect(Object.keys(proxy)).toEqual([
@@ -53,7 +44,7 @@ describe("resolveMicroAppInstallDevProxy", () => {
 			"^/micro-app/[^/]+/icon",
 		])
 		expect(proxy["^/micro-app/[^/]+/manifest\\.webmanifest$"]).toMatchObject({
-			target: "https://node.example.com",
+			target: "https://web.example.com",
 			changeOrigin: true,
 			secure: true,
 		})

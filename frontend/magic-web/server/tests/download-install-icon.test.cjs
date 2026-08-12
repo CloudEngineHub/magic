@@ -87,3 +87,51 @@ test("rejects icon responses above the size limit", async () => {
 		/Install icon is too large/,
 	)
 })
+
+test("rejects forbidden install icon hosts", async () => {
+	await assert.rejects(
+		downloadInstallIcon("http://127.0.0.1/icon.svg"),
+		/Install icon URL host is not allowed/,
+	)
+	await assert.rejects(
+		downloadInstallIcon("https://localhost/icon.svg"),
+		/Install icon URL host is not allowed/,
+	)
+})
+
+test("rejects redirects to forbidden hosts", async () => {
+	global.fetch = async () =>
+		new Response(null, {
+			status: 302,
+			headers: { location: "http://127.0.0.1/icon.svg" },
+		})
+
+	await assert.rejects(
+		downloadInstallIcon("https://files.example.com/icon.svg"),
+		/Install icon URL host is not allowed/,
+	)
+})
+
+test("follows safe redirects before downloading the icon", async () => {
+	let requestCount = 0
+	global.fetch = async (url) => {
+		requestCount += 1
+		if (requestCount === 1) {
+			assert.equal(url, "https://files.example.com/icon.svg")
+			return new Response(null, {
+				status: 302,
+				headers: { location: "/cdn/icon.svg" },
+			})
+		}
+
+		assert.equal(url, "https://files.example.com/cdn/icon.svg")
+		return new Response(validSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
+	}
+
+	const result = await downloadInstallIcon("https://files.example.com/icon.svg")
+	assert.equal(result.contentType, "image/svg+xml")
+	assert.equal(requestCount, 2)
+})
