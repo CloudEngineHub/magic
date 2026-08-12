@@ -268,6 +268,16 @@ final class BillingObject
         return new self(self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST);
     }
 
+    public function isVideoReferenceImageAfter5CountObject(): bool
+    {
+        return $this->value === self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT;
+    }
+
+    public function isVideoReferenceImageAfter5CountCostObject(): bool
+    {
+        return $this->value === self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST;
+    }
+
     /**
      * VideoDuration: 分辨率 + 参考视频扩展。
      */
@@ -397,6 +407,15 @@ final class BillingObject
     public function toVideoPricing(): ?array
     {
         return self::parseVideoObjectValue($this->value);
+    }
+
+    public function usesInputVideoDuration(): bool
+    {
+        $pricing = $this->toVideoPricing();
+
+        return $pricing !== null
+            && $pricing['billing_unit'] === self::VIDEO_BILLING_UNIT_DURATION
+            && in_array(self::VIDEO_MODIFIER_REFERENCE_VIDEO, $pricing['modifier'], true);
     }
 
     /**
