@@ -10,6 +10,7 @@ import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/lib/utils"
 import { formatNumber } from "@/utils/format"
 import type { OptionItem } from "../types"
@@ -20,6 +21,7 @@ import {
 	getSlidesTemplateTagDisplayName,
 	hasSlidesTemplateUsageCount,
 } from "./templateMeta"
+import SlidesTemplateFavoriteIcon from "./SlidesTemplateFavoriteIcon"
 
 interface SlidesPresetCardProps {
 	template: OptionItem
@@ -27,6 +29,8 @@ interface SlidesPresetCardProps {
 	onClick?: (template: OptionItem) => void
 	onPreviewClick?: (template: OptionItem) => void
 	onPreviewPreload?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
+	favoritePending?: boolean
 	canUseHoverPreview?: boolean
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
@@ -67,12 +71,15 @@ function SlidesPresetCard({
 	onClick,
 	onPreviewClick,
 	onPreviewPreload,
+	onFavoriteToggle,
+	favoritePending = false,
 	canUseHoverPreview = false,
 	showHoverDetails = true,
 	hoverDetailsContainer,
 }: SlidesPresetCardProps) {
 	const lt = useLocaleText()
 	const { t, i18n } = useTranslation("crew/create")
+	const { t: tSuper } = useTranslation("super")
 	const preloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [isThumbnailLoaded, setIsThumbnailLoaded] = useState(false)
 	const [isCollageLoaded, setIsCollageLoaded] = useState(false)
@@ -86,6 +93,9 @@ function SlidesPresetCard({
 	const showUsageCount = hasSlidesTemplateUsageCount(template)
 	const usageCount = Math.max(0, template.usage_count ?? 0)
 	const formattedUsageCount = formatNumber(usageCount)
+	const favoriteLabel = template.is_favorite
+		? tSuper("mySlidesTemplates.unfavorite")
+		: tSuper("mySlidesTemplates.favorite")
 	const testIdSuffix = getTemplateTestIdSuffix(template)
 	const canPreview = Boolean(
 		template.preview_image_urls?.length ||
@@ -109,6 +119,7 @@ function SlidesPresetCard({
 	}
 
 	function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+		if (event.target !== event.currentTarget) return
 		if (event.key !== "Enter" && event.key !== " ") return
 
 		event.preventDefault()
@@ -125,6 +136,12 @@ function SlidesPresetCard({
 		event.preventDefault()
 		event.stopPropagation()
 		onPreviewClick?.(template)
+	}
+
+	function handleFavoriteClick(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
+		onFavoriteToggle?.(template)
 	}
 
 	function handlePreviewIntentStart() {
@@ -179,6 +196,32 @@ function SlidesPresetCard({
 					canUseHoverPreview && "group-hover:border-primary/30 group-hover:shadow-md",
 				)}
 			>
+				{onFavoriteToggle ? (
+					<MagicTooltip title={favoriteLabel} placement="top">
+						<Button
+							type="button"
+							size="icon"
+							variant="secondary"
+							className={cn(
+								"absolute right-2 top-2 z-30 size-9 bg-background/95 text-muted-foreground shadow-md backdrop-blur transition-[color,opacity,transform] active:scale-[0.96] sm:size-8",
+								canUseHoverPreview &&
+									!template.is_favorite &&
+									"opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+								template.is_favorite && "text-rose-500",
+							)}
+							aria-label={favoriteLabel}
+							aria-pressed={template.is_favorite}
+							disabled={favoritePending}
+							data-testid="slides-preset-card-favorite-button"
+							onClick={handleFavoriteClick}
+						>
+							<SlidesTemplateFavoriteIcon
+								isFavorite={Boolean(template.is_favorite)}
+								className="size-4"
+							/>
+						</Button>
+					</MagicTooltip>
+				) : null}
 				{template.thumbnail_url ? (
 					<>
 						{!isThumbnailLoaded && (

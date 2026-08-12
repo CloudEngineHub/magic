@@ -7,14 +7,20 @@ import TemplateGroupSelector from "@/pages/superMagic/components/MainInputContai
 import GroupIcon from "@/pages/superMagic/components/MainInputContainer/panels/GroupIcon"
 import type { OptionGroup } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import MySlidesTemplatesTabIcon from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/MySlidesTemplatesTabIcon"
+import type { MySlidesTemplateSection } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 import SlidesTemplateColorPalette from "./SlidesTemplateColorPalette"
 import SlidesTemplateGlowBorder from "./SlidesTemplateGlowBorder"
+import MySlidesTemplatesGroupTabs from "./MySlidesTemplatesGroupTabs"
 import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "./useMySlidesTemplates"
 
 const GROUP_SCROLL_CONTROL_CLASS_NAME =
 	"[&_button]:border-white/20 [&_button]:bg-zinc-800/[0.86] [&_button]:text-white [&_button]:shadow-[0_4px_14px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.12)] [&_button]:backdrop-blur-lg [&_button:hover]:bg-zinc-700/[0.92]"
 
-interface SlidesTemplatesToolbarProps {
+const GROUP_OPTION_CLASS_NAME =
+	"border-white/[0.10] bg-white/[0.10] text-white/[0.82] shadow-none hover:border-white/[0.18] hover:bg-white/[0.16] hover:text-white data-[selected=true]:border-white/[0.32] data-[selected=true]:bg-white/[0.22] data-[selected=true]:text-white data-[selected=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_8px_22px_rgba(0,0,0,0.14)]"
+
+export interface SlidesTemplatesToolbarProps {
+	activeMyTemplatesSection: MySlidesTemplateSection
 	className?: string
 	groups: OptionGroup[]
 	onClearSearch: () => void
@@ -23,6 +29,7 @@ interface SlidesTemplatesToolbarProps {
 	onCompositionStart: () => void
 	onFocusRandomTemplate: () => void
 	onGroupChange: (groupKey: string) => void
+	onMyTemplatesSectionChange: (section: MySlidesTemplateSection) => void
 	onSearchChange: (value: string) => void
 	randomDisabled: boolean
 	searchValue: string
@@ -35,6 +42,7 @@ interface SlidesTemplatesToolbarProps {
 }
 
 export default function SlidesTemplatesToolbar({
+	activeMyTemplatesSection,
 	className,
 	groups,
 	onClearSearch,
@@ -43,6 +51,7 @@ export default function SlidesTemplatesToolbar({
 	onCompositionStart,
 	onFocusRandomTemplate,
 	onGroupChange,
+	onMyTemplatesSectionChange,
 	onSearchChange,
 	randomDisabled,
 	searchValue,
@@ -149,8 +158,21 @@ export default function SlidesTemplatesToolbar({
 							<GroupIcon icon={group.group_icon} className="size-4 shrink-0" />
 						) : null
 					}}
+					renderGroupOption={(group, optionProps) =>
+						group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY ? (
+							<MySlidesTemplatesGroupTabs
+								activeSection={activeMyTemplatesSection}
+								isSelected={selectedGroupKey === MY_SLIDES_TEMPLATES_GROUP_KEY}
+								onGroupClick={() => onGroupChange(MY_SLIDES_TEMPLATES_GROUP_KEY)}
+								onSectionChange={onMyTemplatesSectionChange}
+								optionProps={optionProps}
+								variant="dark"
+							/>
+						) : null
+					}
 					showEmptyGroups
-					className="mt-2.5 [&_button:hover]:border-white/[0.18] [&_button:hover]:bg-white/[0.16] [&_button:hover]:text-white [&_button[aria-pressed=true]]:border-white/[0.32] [&_button[aria-pressed=true]]:bg-white/[0.22] [&_button[aria-pressed=true]]:text-white [&_button[aria-pressed=true]]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_8px_22px_rgba(0,0,0,0.14)] [&_button]:border-white/[0.10] [&_button]:bg-white/[0.10] [&_button]:text-white/[0.82] [&_button]:shadow-none"
+					optionClassName={GROUP_OPTION_CLASS_NAME}
+					className="mt-2.5"
 					controlBackground="transparent"
 					leftControlClassName={GROUP_SCROLL_CONTROL_CLASS_NAME}
 					rightControlClassName={GROUP_SCROLL_CONTROL_CLASS_NAME}

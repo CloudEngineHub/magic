@@ -46,9 +46,13 @@ import type {
 import type {
 	SlidesTemplateCategoryListResponse,
 	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateCodeAvailabilityResponse,
 	SlidesTemplateCountResponse,
 	SlidesTemplateDetail,
+	SaveSlidesTemplatePayload,
+	SlidesTemplateTagListResponse,
 	SlidesTemplateTagGroupItem,
+	SlidesTemplateTagQueryParams,
 	SlidesTemplateListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
@@ -879,7 +883,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
 		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates", {}, params),
+			genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
 			{
 				headers: {
 					...(options?.xMagicImageProcess && {
@@ -890,9 +894,63 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		)
 	},
 
+	getFavoriteSlidesTemplates(
+		params: Omit<SlidesTemplateQueryParams, "scope">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch.get<SlidesTemplateListResponse>(
+			genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
+		)
+	},
+
+	getUsedSlidesTemplates(
+		params: Pick<SlidesTemplateQueryParams, "page" | "page_size">,
+		options?: { xMagicImageProcess?: ImageProcessOptions },
+	) {
+		return fetch.get<SlidesTemplateListResponse>(
+			genRequestUrl("/api/v1/slides-templates/used", {}, params),
+			{
+				headers: {
+					...(options?.xMagicImageProcess && {
+						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
+					}),
+				},
+			},
+		)
+	},
+
+	getSlidesTemplateCodeAvailability(code: string) {
+		return fetch.get<SlidesTemplateCodeAvailabilityResponse>(
+			genRequestUrl("/api/v1/slides-templates/${code}/availability", { code }),
+		)
+	},
+
+	favoriteSlidesTemplate(code: string) {
+		return fetch.post<[]>(genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }))
+	},
+
+	unfavoriteSlidesTemplate(code: string) {
+		return fetch.delete<[]>(
+			genRequestUrl("/api/v1/slides-templates/${code}/favorite", { code }),
+		)
+	},
+
 	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
 		return fetch.get<SlidesTemplateCategoryListResponse>(
 			genRequestUrl("/api/v1/slides-template-categories", {}, params),
+		)
+	},
+
+	getSlidesTemplateTags(params: SlidesTemplateTagQueryParams = {}) {
+		return fetch.get<SlidesTemplateTagListResponse>(
+			genRequestUrl("/api/v1/slides-template-tags", {}, params),
 		)
 	},
 
@@ -904,7 +962,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
 		return fetch.get<SlidesTemplateCountResponse>(
-			genRequestUrl("/api/v1/slides-templates/count", {}, params),
+			genRequestUrl("/api/v1/slides-templates/count", {}, { scope: "official", ...params }),
 		)
 	},
 
@@ -919,6 +977,10 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				},
 			},
 		)
+	},
+
+	saveSlidesTemplate(payload: SaveSlidesTemplatePayload) {
+		return fetch.post<SlidesTemplateDetail>("/api/v1/slides-templates", payload)
 	},
 
 	/**

@@ -2,7 +2,11 @@ import { useReducedMotion } from "framer-motion"
 import { memo, useMemo, type CSSProperties, type RefObject } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { TemplateCanvasItem } from "./canvasLayout"
-import { EAGER_TEMPLATE_COVER_COUNT, type SlidesTemplateCanvasTile } from "./canvasInteraction"
+import {
+	EAGER_TEMPLATE_COVER_COUNT,
+	getTemplateKey,
+	type SlidesTemplateCanvasTile,
+} from "./canvasInteraction"
 import SlidesTemplateCanvasTileItem from "./SlidesTemplateCanvasTileItem"
 import SlidesTemplateCanvasLoopColumn, {
 	type SlidesTemplateCanvasColumnItem,
@@ -14,6 +18,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	canvasItems: Array<TemplateCanvasItem<SlidesTemplateCanvasTile>>
 	contentRef: RefObject<HTMLDivElement | null>
 	enableIdleLoops: boolean
+	favoritePendingCodes?: ReadonlySet<string>
 	focusedAnchorTileId: string
 	isCanvasFocusSettling: boolean
 	isCanvasMoving: boolean
@@ -21,6 +26,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	keepIdleLoopsMounted: boolean
 	prioritizeCoverLoading: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -37,6 +43,7 @@ function SlidesTemplateCanvasItemsLayer({
 	canvasItems,
 	contentRef,
 	enableIdleLoops,
+	favoritePendingCodes,
 	focusedAnchorTileId,
 	isCanvasFocusSettling,
 	isCanvasMoving,
@@ -44,6 +51,7 @@ function SlidesTemplateCanvasItemsLayer({
 	keepIdleLoopsMounted,
 	prioritizeCoverLoading,
 	onFindSimilarColors,
+	onFavoriteToggle,
 	onPreviewClick,
 	onPreviewIntent,
 	onTemplateSelect,
@@ -116,10 +124,12 @@ function SlidesTemplateCanvasItemsLayer({
 					keepIdleLoopMountedWhenPaused={keepIdleLoopsMounted}
 					reduceMotion={reduceMotion}
 					focusedAnchorTileId={focusedAnchorTileId}
+					favoritePendingCodes={favoritePendingCodes}
 					isCanvasFocusSettling={isCanvasFocusSettling}
 					isCanvasMoving={isCanvasMoving}
 					selectedTemplateValue={selectedTemplateValue}
 					onFindSimilarColors={onFindSimilarColors}
+					onFavoriteToggle={onFavoriteToggle}
 					onTemplateSelect={onTemplateSelect}
 					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={onPreviewClick}
@@ -145,10 +155,12 @@ function SlidesTemplateCanvasItemsLayer({
 								: "lazy"
 						}
 						focusedAnchorTileId={focusedAnchorTileId}
+						favoritePending={favoritePendingCodes?.has(getTemplateKey(tile.template))}
 						isCanvasFocusSettling={isCanvasFocusSettling}
 						isCanvasMoving={isCanvasMoving}
 						selectedTemplateValue={selectedTemplateValue}
 						onFindSimilarColors={onFindSimilarColors}
+						onFavoriteToggle={onFavoriteToggle}
 						onTemplateSelect={onTemplateSelect}
 						onPreviewIntent={onPreviewIntent}
 						onPreviewClick={onPreviewClick}

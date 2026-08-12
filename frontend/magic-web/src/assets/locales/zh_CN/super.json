@@ -4043,9 +4043,24 @@
 	},
 	"mySlidesTemplates": {
 		"convertPrompt": "请将这个文件夹转化为可复用的 PPT 模板。",
-		"emptyDescription": "创建模板后会显示在这里。",
-		"emptyTitle": "还没有我的模板",
+		"empty": {
+			"created": {
+				"description": "创建模板后会显示在这里。",
+				"title": "还没有我创建的模板"
+			},
+			"favorites": {
+				"description": "收藏常用模板后，可以从这里快速找到。",
+				"title": "还没有收藏模板"
+			},
+			"used": {
+				"description": "使用模板后，会按最近使用时间显示在这里。",
+				"title": "还没有使用记录"
+			}
+		},
 		"entry": "我的模板",
+		"favorite": "收藏模板",
+		"favoriteFailed": "收藏操作失败，请稍后重试",
+		"favoriteSuccess": "已收藏模板",
 		"guide": {
 			"chat": "通过对话创建",
 			"chatDescription": "向 PPT 专家描述模板主题和视觉风格。",
@@ -4055,10 +4070,31 @@
 		"loadFailedDescription": "我的模板加载失败，请重试。",
 		"loading": "正在加载我的模板",
 		"retry": "重试",
+		"saveDialog": {
+			"create": "保存为新的模板",
+			"createdTemplates": "我创建的模板",
+			"description": "选择新建模板，或覆盖你创建过的模板。",
+			"newDescription": "保存后不会覆盖已有模板。",
+			"newTemplate": "保存为新的模板",
+			"noCreatedTemplates": "还没有创建过模板",
+			"overwrite": "覆盖模板",
+			"overwriteHint": "保存后将覆盖「{{name}}」的内容。",
+			"targetLabel": "保存目标",
+			"title": "存入我的模板"
+		},
 		"saveFailed": "模板保存失败，请稍后重试",
+		"saveOccupied": "模板编码已被占用，请另存为新模板",
 		"saveSuccess": "已存入我的模板",
 		"saveUnavailable": "我的模板保存功能暂未开放",
-		"unavailableDescription": "我的模板保存功能暂未开放。"
+		"sections": {
+			"created": "我创建的",
+			"favorites": "我收藏的",
+			"label": "我的模板筛选",
+			"used": "最近使用"
+		},
+		"unavailableDescription": "我的模板功能暂未开放。",
+		"unfavorite": "取消收藏",
+		"unfavoriteSuccess": "已取消收藏"
 	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name)通知",

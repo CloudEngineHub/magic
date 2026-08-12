@@ -1,10 +1,19 @@
-import { House, LoaderCircle, MessageCircleMore, Presentation, RefreshCw } from "lucide-react"
+import {
+	Clock3,
+	Heart,
+	House,
+	LoaderCircle,
+	MessageCircleMore,
+	Presentation,
+	RefreshCw,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import type { MySlidesTemplatesEmptyStatus } from "./useMySlidesTemplates"
+import type { MySlidesTemplateSection } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 
 /* Hallmark · pre-emit critique: P5 H4 E5 S4 R5 V3 */
 
@@ -13,6 +22,7 @@ interface MySlidesTemplatesEmptyStateProps {
 	onRetry?: () => void
 	bottomInset?: number
 	variant?: "inline" | "overlay"
+	section?: MySlidesTemplateSection
 }
 
 function MySlidesTemplatesGuideIllustration({ isOverlay }: { isOverlay: boolean }) {
@@ -57,10 +67,24 @@ export default function MySlidesTemplatesEmptyState({
 	onRetry,
 	bottomInset = 0,
 	variant = "overlay",
+	section = "created",
 }: MySlidesTemplatesEmptyStateProps) {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const isOverlay = variant === "overlay"
+	const isCreatedSection = section === "created"
+	const emptyTitle =
+		section === "created"
+			? t("mySlidesTemplates.empty.created.title")
+			: section === "favorites"
+				? t("mySlidesTemplates.empty.favorites.title")
+				: t("mySlidesTemplates.empty.used.title")
+	const emptyDescription =
+		section === "created"
+			? t("mySlidesTemplates.empty.created.description")
+			: section === "favorites"
+				? t("mySlidesTemplates.empty.favorites.description")
+				: t("mySlidesTemplates.empty.used.description")
 
 	if (status === "loading") {
 		return (
@@ -92,32 +116,94 @@ export default function MySlidesTemplatesEmptyState({
 			data-testid={`my-slides-templates-${status}`}
 		>
 			<div className="relative flex w-full max-w-2xl flex-col items-center">
-				<MySlidesTemplatesGuideIllustration isOverlay={isOverlay} />
-				<h1
+				{isCreatedSection ? (
+					<MySlidesTemplatesGuideIllustration isOverlay={isOverlay} />
+				) : (
+					<div
+						className={cn(
+							"flex size-16 items-center justify-center rounded-full",
+							isOverlay
+								? "bg-white/8 text-white/55"
+								: "bg-muted text-muted-foreground",
+						)}
+						aria-hidden="true"
+					>
+						{section === "favorites" ? (
+							<Heart className="size-7" />
+						) : (
+							<Clock3 className="size-7" />
+						)}
+					</div>
+				)}
+				<h2
 					id="my-slides-templates-empty-title"
 					className={cn(
 						"mt-3 text-xl font-semibold tracking-[-0.02em]",
 						isOverlay ? "text-white/95" : "text-foreground",
 					)}
 				>
-					{t("mySlidesTemplates.emptyTitle")}
-				</h1>
+					{emptyTitle}
+				</h2>
 				<p
 					className={cn(
 						"mt-1.5 text-sm",
 						isOverlay ? "text-white/50" : "text-muted-foreground",
 					)}
 				>
-					{t("mySlidesTemplates.emptyDescription")}
+					{emptyDescription}
 				</p>
 
-				<ul className="mt-6 flex w-full max-w-xl flex-col gap-5 text-left">
-					<li className={cn("flex items-start gap-4", isOverlay && "justify-between")}>
-						<div className="flex min-w-0 items-start gap-3">
-							<MessageCircleMore
+				{isCreatedSection ? (
+					<ul className="mt-6 flex w-full max-w-xl flex-col gap-5 text-left">
+						<li
+							className={cn("flex items-start gap-4", isOverlay && "justify-between")}
+						>
+							<div className="flex min-w-0 items-start gap-3">
+								<MessageCircleMore
+									className={cn(
+										"mt-0.5 size-5 shrink-0",
+										isOverlay ? "text-cyan-200/80" : "text-primary/80",
+									)}
+									aria-hidden="true"
+								/>
+								<div className="min-w-0">
+									<p
+										className={cn(
+											"text-sm font-medium",
+											isOverlay ? "text-white/85" : "text-foreground/85",
+										)}
+									>
+										{t("mySlidesTemplates.guide.chat")}
+									</p>
+									<p
+										className={cn(
+											"mt-1 text-xs leading-5",
+											isOverlay ? "text-white/40" : "text-muted-foreground",
+										)}
+									>
+										{t("mySlidesTemplates.guide.chatDescription")}
+									</p>
+								</div>
+							</div>
+							{isOverlay ? (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="mt-0.5 gap-1.5 border-white/15 bg-transparent text-white hover:bg-white/5 hover:text-white"
+									onClick={() => navigate({ name: RouteName.Super })}
+									data-testid="my-slides-templates-go-home"
+								>
+									<House className="size-4" aria-hidden="true" />
+									{t("mobile.shell.brandGoHome")}
+								</Button>
+							) : null}
+						</li>
+						<li className="flex items-start gap-3">
+							<Presentation
 								className={cn(
 									"mt-0.5 size-5 shrink-0",
-									isOverlay ? "text-cyan-200/80" : "text-primary/80",
+									isOverlay ? "text-violet-200/75" : "text-violet-500/75",
 								)}
 								aria-hidden="true"
 							/>
@@ -128,7 +214,7 @@ export default function MySlidesTemplatesEmptyState({
 										isOverlay ? "text-white/85" : "text-foreground/85",
 									)}
 								>
-									{t("mySlidesTemplates.guide.chat")}
+									{t("mySlidesTemplates.guide.project")}
 								</p>
 								<p
 									className={cn(
@@ -136,52 +222,12 @@ export default function MySlidesTemplatesEmptyState({
 										isOverlay ? "text-white/40" : "text-muted-foreground",
 									)}
 								>
-									{t("mySlidesTemplates.guide.chatDescription")}
+									{t("mySlidesTemplates.guide.projectDescription")}
 								</p>
 							</div>
-						</div>
-						{isOverlay ? (
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="mt-0.5 gap-1.5 border-white/15 bg-transparent text-white hover:bg-white/5 hover:text-white"
-								onClick={() => navigate({ name: RouteName.Super })}
-								data-testid="my-slides-templates-go-home"
-							>
-								<House className="size-4" aria-hidden="true" />
-								{t("mobile.shell.brandGoHome")}
-							</Button>
-						) : null}
-					</li>
-					<li className="flex items-start gap-3">
-						<Presentation
-							className={cn(
-								"mt-0.5 size-5 shrink-0",
-								isOverlay ? "text-violet-200/75" : "text-violet-500/75",
-							)}
-							aria-hidden="true"
-						/>
-						<div className="min-w-0">
-							<p
-								className={cn(
-									"text-sm font-medium",
-									isOverlay ? "text-white/85" : "text-foreground/85",
-								)}
-							>
-								{t("mySlidesTemplates.guide.project")}
-							</p>
-							<p
-								className={cn(
-									"mt-1 text-xs leading-5",
-									isOverlay ? "text-white/40" : "text-muted-foreground",
-								)}
-							>
-								{t("mySlidesTemplates.guide.projectDescription")}
-							</p>
-						</div>
-					</li>
-				</ul>
+						</li>
+					</ul>
+				) : null}
 
 				{status === "unavailable" ? (
 					<p

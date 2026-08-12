@@ -20,6 +20,8 @@ import type { SlidesTemplatePanelState } from "./useSlidesTemplatePanelState"
 import { MY_SLIDES_TEMPLATES_GROUP_KEY } from "@/pages/superMagic/pages/SlidesTemplates/useMySlidesTemplates"
 import MySlidesTemplatesEmptyState from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesEmptyState"
 import MySlidesTemplatesTabIcon from "./MySlidesTemplatesTabIcon"
+import MySlidesTemplatesGroupTabs from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesGroupTabs"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface SlidesTemplatePanelContentProps {
 	slidesState: SlidesTemplatePanelState
@@ -49,15 +51,17 @@ function SlidesTemplatePanelContent({
 	showMyTemplates = false,
 }: SlidesTemplatePanelContentProps) {
 	const { t } = useTranslation("crew/create")
+	const { t: tSuper } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const [isSearchOpen, setIsSearchOpen] = useState(() => Boolean(slidesState.keyword.trim()))
 	const [searchValue, setSearchValue] = useState(slidesState.keyword)
 	const searchInputRef = useRef<HTMLInputElement>(null)
 	const isComposingRef = useRef(false)
+	const selectedGroupKey = slidesState.selectedGroupKey
+	const isMyTemplatesSelected = selectedGroupKey === MY_SLIDES_TEMPLATES_GROUP_KEY
 	const selectorGroups = showMyTemplates
 		? slidesState.groups
 		: slidesState.groups.filter((group) => group.group_key !== MY_SLIDES_TEMPLATES_GROUP_KEY)
-	const selectedGroupKey = slidesState.selectedGroupKey
 	const setSelectedGroupKey = slidesState.setSelectedGroupKey
 	const hasGroups = selectorGroups.length > 1
 	const hasSelectedChildTags = slidesState.selectedChildTagCodes.length > 0
@@ -79,8 +83,30 @@ function SlidesTemplatePanelContent({
 		},
 		[onPreviewOpenChange],
 	)
+	const handleFavoriteToggle = useCallback(
+		(template: OptionItem) => {
+			void slidesState
+				.toggleTemplateFavorite(template)
+				.then((isFavorite) => {
+					if (isFavorite === undefined) return
+					magicToast.success(
+						tSuper(
+							isFavorite
+								? "mySlidesTemplates.favoriteSuccess"
+								: "mySlidesTemplates.unfavoriteSuccess",
+						),
+					)
+				})
+				.catch(() => {
+					magicToast.error(tSuper("mySlidesTemplates.favoriteFailed"))
+				})
+		},
+		[slidesState, tSuper],
+	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
+			if (groupKey === MY_SLIDES_TEMPLATES_GROUP_KEY && groupKey === selectedGroupKey) return
+
 			setSelectedGroupKey(
 				groupKey === selectedGroupKey ? ALL_SLIDES_TEMPLATE_GROUP_KEY : groupKey,
 			)
@@ -159,6 +185,19 @@ function SlidesTemplatePanelContent({
 									/>
 								) : null
 							}}
+							renderGroupOption={(group, optionProps) =>
+								group.group_key === MY_SLIDES_TEMPLATES_GROUP_KEY ? (
+									<MySlidesTemplatesGroupTabs
+										activeSection={slidesState.myTemplatesActiveSection}
+										isSelected={isMyTemplatesSelected}
+										onGroupClick={() =>
+											handlePrimaryGroupChange(group.group_key)
+										}
+										onSectionChange={slidesState.setMyTemplatesActiveSection}
+										optionProps={optionProps}
+									/>
+								) : null
+							}
 							showEmptyGroups
 							className="flex-1"
 						/>
@@ -265,12 +304,15 @@ function SlidesTemplatePanelContent({
 					status={slidesState.myTemplatesEmptyStatus}
 					onRetry={slidesState.retryMyTemplates}
 					variant="inline"
+					section={slidesState.myTemplatesActiveSection}
 				/>
 			) : (
 				<SlidesPresetGrid
 					templates={slidesState.templateOptions}
 					selectedTemplate={selectedTemplate ?? undefined}
 					onTemplateClick={onTemplateClick}
+					onFavoriteToggle={handleFavoriteToggle}
+					favoritePendingCodes={slidesState.favoritePendingCodes}
 					isLoading={slidesState.isLoading}
 					isRefreshing={slidesState.isRefreshing}
 					hasMore={slidesState.hasMore}

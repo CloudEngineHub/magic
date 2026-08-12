@@ -87,6 +87,8 @@ export interface OptionItem {
 	height?: number
 	aspect_ratio?: number
 	usage_count?: number
+	is_favorite?: boolean
+	status?: number
 	sort?: number
 	colors?: string[]
 	tags?: OptionItemTag[]

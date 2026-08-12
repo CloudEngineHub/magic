@@ -301,6 +301,7 @@ export function useSlidesTemplateCatalogState({
 			}
 
 			const queryParams = {
+				scope: "official" as const,
 				page: nextPage,
 				page_size: pageSize,
 				...(debouncedKeyword ? { keyword: debouncedKeyword } : {}),
@@ -506,6 +507,23 @@ export function useSlidesTemplateCatalogState({
 		fetchTemplates(1, "replace")
 	}, [fetchTemplates, isLoading, isLoadingMore, isRefreshing])
 
+	const setTemplateFavorite = useCallback((code: string, isFavorite: boolean) => {
+		setTemplates((currentTemplates) => {
+			const nextTemplates = currentTemplates.map((template) =>
+				template.code === code ? { ...template, is_favorite: isFavorite } : template,
+			)
+			templatesRef.current = nextTemplates
+			return nextTemplates
+		})
+		const cachedDetail = templateDetailCacheRef.current.get(code)
+		if (cachedDetail) {
+			templateDetailCacheRef.current.set(code, {
+				...cachedDetail,
+				is_favorite: isFavorite,
+			})
+		}
+	}, [])
+
 	return {
 		groups,
 		hasAnyTemplate,
@@ -538,6 +556,7 @@ export function useSlidesTemplateCatalogState({
 		setKeyword,
 		setSelectedGroupKey,
 		setSelectedChildTagCodes,
+		setTemplateFavorite,
 		templateOptions,
 	}
 }

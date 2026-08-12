@@ -4042,10 +4042,25 @@
 		"selectMode": "Select Mode"
 	},
 	"mySlidesTemplates": {
-		"convertPrompt": "Please convert this folder into a reusable PPT template.",
-		"emptyDescription": "Templates you create will appear here.",
-		"emptyTitle": "No templates yet",
+		"convertPrompt": "Please convert this folder into a reusable slide template.",
+		"empty": {
+			"created": {
+				"description": "Slide templates you create will appear here.",
+				"title": "No templates created yet"
+			},
+			"favorites": {
+				"description": "Favorite templates to find them here quickly.",
+				"title": "No favorite templates yet"
+			},
+			"used": {
+				"description": "Templates you use will appear here in recent order.",
+				"title": "No recently used templates"
+			}
+		},
 		"entry": "My templates",
+		"favorite": "Favorite template",
+		"favoriteFailed": "Unable to update favorite. Try again later.",
+		"favoriteSuccess": "Template added to favorites",
 		"guide": {
 			"chat": "Create through conversation",
 			"chatDescription": "Describe the template topic and visual style to the PPT expert.",
@@ -4055,10 +4070,31 @@
 		"loadFailedDescription": "Unable to load My templates. Try again.",
 		"loading": "Loading My templates",
 		"retry": "Retry",
+		"saveDialog": {
+			"create": "Save as a new template",
+			"createdTemplates": "Templates I created",
+			"description": "Create a new template or overwrite one you created.",
+			"newDescription": "This will not overwrite an existing template.",
+			"newTemplate": "Save as a new template",
+			"noCreatedTemplates": "You have not created any templates yet",
+			"overwrite": "Overwrite template",
+			"overwriteHint": "This will overwrite “{{name}}”.",
+			"targetLabel": "Save target",
+			"title": "Save to my templates"
+		},
 		"saveFailed": "Unable to save the template. Try again later.",
+		"saveOccupied": "This template code is occupied. Save it as a new template.",
 		"saveSuccess": "Saved to my templates",
 		"saveUnavailable": "Saving to My templates is not available yet",
-		"unavailableDescription": "Saving to My templates is not available yet."
+		"sections": {
+			"created": "Created by me",
+			"favorites": "Favorites",
+			"label": "My templates filters",
+			"used": "Recently used"
+		},
+		"unavailableDescription": "My templates is not available yet.",
+		"unfavorite": "Remove from favorites",
+		"unfavoriteSuccess": "Template removed from favorites"
 	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name) Notification",

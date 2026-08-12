@@ -44,6 +44,10 @@ const useResolvedTemplateColorsMock = vi.hoisted(() =>
 
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false))
 const useFinePointerHoverMock = vi.hoisted(() => vi.fn(() => false))
+const toastMock = vi.hoisted(() => ({
+	success: vi.fn(),
+	error: vi.fn(),
+}))
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: apiMock,
@@ -84,6 +88,10 @@ vi.mock("@/hooks/useIsMobile", () => ({
 
 vi.mock("../../../panels/slides-preset/useFinePointerHover", () => ({
 	useFinePointerHover: useFinePointerHoverMock,
+}))
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: toastMock,
 }))
 
 const businessCategory: SlidesTemplateCategoryItem = {
@@ -145,6 +153,8 @@ function createSlidesTemplatePanelContentState(
 		total: 0,
 		myTemplatesEmptyStatus: null,
 		retryMyTemplates: vi.fn(),
+		favoritePendingCodes: new Set(),
+		toggleTemplateFavorite: vi.fn(async () => undefined),
 		...overrides,
 	}
 }
@@ -284,7 +294,8 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -301,7 +312,8 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})
@@ -720,6 +732,9 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(trigger)
 
 		expect(await screen.findByTestId("slides-template-search-toggle")).toBeInTheDocument()
+		expect(
+			screen.getByTestId("template-group-selector-option-__my_slides_templates__"),
+		).toBeInTheDocument()
 		expect(screen.queryByTestId("slides-template-search-input")).not.toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("slides-template-search-toggle"))
 		expect(await screen.findByTestId("slides-template-search-input")).toBeInTheDocument()
@@ -894,6 +909,34 @@ describe("SlidesTemplatePanel", () => {
 		expect(screen.getByTestId("slides-template-search-input")).toHaveValue("business")
 	})
 
+	it("shows a success toast after favoriting or unfavoriting a template", async () => {
+		const toggleTemplateFavorite = vi
+			.fn()
+			.mockResolvedValueOnce(true)
+			.mockResolvedValueOnce(false)
+		const favoriteTemplate = { ...businessTemplate, value: businessTemplate.code }
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					templateOptions: [favoriteTemplate],
+					toggleTemplateFavorite,
+				})}
+				onTemplateClick={vi.fn()}
+			/>,
+		)
+
+		const favoriteButton = screen.getByTestId("slides-preset-card-favorite-button")
+		fireEvent.click(favoriteButton)
+		await waitFor(() =>
+			expect(toastMock.success).toHaveBeenCalledWith("mySlidesTemplates.favoriteSuccess"),
+		)
+
+		fireEvent.click(favoriteButton)
+		await waitFor(() =>
+			expect(toastMock.success).toHaveBeenCalledWith("mySlidesTemplates.unfavoriteSuccess"),
+		)
+	})
+
 	it("renders filter skeletons while filter metadata initializes", () => {
 		render(
 			<SlidesTemplatePanelContent
@@ -976,6 +1019,34 @@ describe("SlidesTemplatePanel", () => {
 		expect(
 			myTemplatesTab.compareDocumentPosition(featuredTab) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
+	})
+
+	it("keeps My templates selected when its selected entry is clicked again", () => {
+		const myTemplatesGroupKey = "__my_slides_templates__"
+		const setSelectedGroupKey = vi.fn()
+		render(
+			<SlidesTemplatePanelContent
+				slidesState={createSlidesTemplatePanelContentState({
+					selectedGroupKey: myTemplatesGroupKey,
+					setSelectedGroupKey,
+					groups: [
+						{ group_key: "all", group_name: "All", children: [] },
+						{
+							group_key: myTemplatesGroupKey,
+							group_name: "My templates",
+							children: [],
+						},
+						{ group_key: "tag:featured", group_name: "Featured", children: [] },
+					],
+				})}
+				onTemplateClick={vi.fn()}
+				showMyTemplates
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId(`template-group-selector-option-${myTemplatesGroupKey}`))
+
+		expect(setSelectedGroupKey).not.toHaveBeenCalled()
 	})
 
 	it("renders each tag group as a multi-select dropdown", () => {
