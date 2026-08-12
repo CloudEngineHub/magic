@@ -11,7 +11,7 @@ use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\ModelGateway\Service\SlidesTemplateAppService as ModelGatewaySlidesTemplateAppService;
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService as PublicSlidesTemplateAppService;
-use App\Application\SlidesTemplate\Service\SlidesTemplateProjectPublishService;
+use App\Application\SlidesTemplate\Service\SlidesTemplateProjectExportService;
 use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
 use App\Domain\ModelGateway\Entity\Dto\SlidesTemplateFileUrlRequestDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
@@ -950,8 +950,8 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
         $favoriteDomainService = (new ReflectionClass(SlidesTemplateFavoriteDomainService::class))->newInstanceWithoutConstructor();
         /** @var ResourceAccessLogDomainService $resourceAccessLogDomainService */
         $resourceAccessLogDomainService = (new ReflectionClass(ResourceAccessLogDomainService::class))->newInstanceWithoutConstructor();
-        /** @var SlidesTemplateProjectPublishService $projectPublishService */
-        $projectPublishService = (new ReflectionClass(SlidesTemplateProjectPublishService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateProjectExportService $projectPublishService */
+        $projectPublishService = (new ReflectionClass(SlidesTemplateProjectExportService::class))->newInstanceWithoutConstructor();
         parent::__construct(
             $slidesTemplateDomainService,
             $slidesTemplateTagDomainService ?? new class extends SlidesTemplateTagDomainService {
