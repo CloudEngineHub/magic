@@ -5,10 +5,39 @@ export interface ResponseParseOptions {
 	parseJsonLargeIntAsString?: boolean
 }
 
+/**
+ * Raised when an HTTP response was received but its body could not be parsed.
+ * Keeping the original response makes this distinguishable from a fetch-level
+ * network error while still allowing the existing error-interceptor path to
+ * handle it consistently.
+ */
+export class ResponseParseError extends Error {
+	readonly response: Response
+	readonly contentType: string
+	readonly rawText?: string
+
+	constructor(
+		message: string,
+		response: Response,
+		contentType: string,
+		rawText?: string,
+		cause?: unknown,
+	) {
+		super(message)
+		this.name = "ResponseParseError"
+		this.response = response
+		this.contentType = contentType
+		this.rawText = rawText
+		if (cause !== undefined) {
+			;(this as Error & { cause?: unknown }).cause = cause
+		}
+	}
+}
+
 export class UrlUtils {
 	/**
-	 * 判断 URL 是否包含 host
-	 * @param url - 需要判断的 URL 字符串
+	 * Checks whether a URL contains a host.
+	 * @param url - The URL string to check
 	 */
 	static hasHost(url: string) {
 		try {
@@ -19,13 +48,13 @@ export class UrlUtils {
 	}
 
 	/**
-	 * 安全地拼接 URL
-	 * @param origin - 基础URL
-	 * @param pathname - 路径
-	 * @returns 拼接后的URL
+	 * Safely joins URL segments.
+	 * @param origin - The base URL
+	 * @param pathname - The path
+	 * @returns The joined URL
 	 */
 	static join(origin: string, pathname: string): string {
-		// 处理绝对URL的情况
+		// Return absolute URLs unchanged.
 		if (pathname.startsWith("http://") || pathname.startsWith("https://")) {
 			return pathname
 		}
@@ -34,12 +63,12 @@ export class UrlUtils {
 			return pathname
 		}
 
-		// 处理无效URL的情况
+		// Handle invalid URLs.
 		try {
 			const originUrl = new URL(origin)
 			const originPathname = originUrl.pathname
 
-			// 规范化路径，去除多余的斜杠
+			// Normalize the path by removing redundant slashes.
 			const normalizedPathname = originPathname.endsWith("/")
 				? originPathname.slice(0, -1)
 				: originPathname
@@ -50,15 +79,15 @@ export class UrlUtils {
 
 			return url.toString()
 		} catch (e) {
-			// 简单处理无效URL的情况
+			// Fall back to simple concatenation for invalid URLs.
 			return origin + (origin.endsWith("/") ? "" : "/") + pathname.replace(/^\.\/|^\/+/, "")
 		}
 	}
 
 	/**
-	 * @description 替换 URL 中的主机名
-	 * @param uri pathname、query、hash 皆可
-	 * @param hostname 新的主机名
+	 * @description Replaces the hostname in a URL.
+	 * @param uri A pathname, query string, or hash
+	 * @param hostname The new hostname
 	 */
 	static replaceHostname(uri: string, hostname: string) {
 		const baseUri = "https://a.com"
@@ -69,7 +98,7 @@ export class UrlUtils {
 	}
 
 	/**
-	 * 获取 URL 的各个部分
+	 * Gets the individual parts of a URL.
 	 */
 	static parse = (url: string) => {
 		try {
@@ -97,13 +126,13 @@ export class UrlUtils {
 	}
 
 	/**
-	 * 将WebSocket连接地址转换为Socket.io连接地址
-	 * @param url WebSocket连接地址
-	 * @returns Socket.io连接地址
+	 * Converts a WebSocket connection URL to a Socket.IO connection URL.
+	 * @param url The WebSocket connection URL
+	 * @returns The Socket.IO connection URL
 	 */
 	static transformToSocketIoUrl(url: string) {
 		return `${url}/socket.io/?EIO=3&transport=websocket&timestamp=${Date.now()}`
-		// 一个无效的 ws 地址，用于调试重连机制
+		// An invalid WebSocket URL for debugging the reconnection mechanism.
 		// return `wss://192.0.2.1/test`
 	}
 
@@ -114,12 +143,32 @@ export class UrlUtils {
 	static async responseParse(response: Response, options?: ResponseParseOptions) {
 		const contentType = (response.headers.get("Content-Type") || "").toLowerCase()
 
+		// 204/205 responses are explicitly bodyless. Do not call response.json()
+		// for them because the browser rejects an empty body as invalid JSON.
+		if (response.status === 204 || response.status === 205) {
+			return { data: undefined, type: "empty" }
+		}
+
 		if (contentType.includes("application/json")) {
-			if (options?.parseJsonLargeIntAsString) {
-				const text = await response.text()
-				return { data: parseJsonLargeIntAsString(text), type: "json" }
+			const text = await response.text()
+			if (!text.trim()) return { data: undefined, type: "empty" }
+
+			try {
+				return {
+					data: options?.parseJsonLargeIntAsString
+						? parseJsonLargeIntAsString(text)
+						: JSON.parse(text),
+					type: "json",
+				}
+			} catch (error) {
+				throw new ResponseParseError(
+					`Failed to parse JSON response: ${response.status} ${response.url}`,
+					response,
+					contentType,
+					text.slice(0, 2000),
+					error,
+				)
 			}
-			return { data: await response.json(), type: "json" }
 		}
 		if (contentType.includes("text/")) {
 			return { data: await response.text(), type: "text" }
@@ -149,19 +198,19 @@ export class StringUtils {
 	}
 
 	static createRequestId() {
-		// 第一部分：时间熵源（8字符）
+		// Part 1: time-based entropy (8 characters).
 		const timePart = Math.floor(performance.timeOrigin + performance.now())
 			.toString(36)
 			.slice(-8)
 			.padStart(8, "0")
 
-		// 第二部分：密码学随机（16字符）
+		// Part 2: cryptographically secure randomness (16 characters).
 		const randomBuffer = window.crypto.getRandomValues(new Uint8Array(6))
 		const randomPart = Array.from(randomBuffer, (byte) =>
 			byte.toString(16).padStart(2, "0"),
 		).join("")
 
-		// 第三部分：会话上下文指纹（8字符）
+		// Part 3: session-context fingerprint (8 characters).
 		const contextPart = StringUtils.generateSessionFingerprint()
 
 		return `${timePart}${randomPart}${contextPart}`.toUpperCase()

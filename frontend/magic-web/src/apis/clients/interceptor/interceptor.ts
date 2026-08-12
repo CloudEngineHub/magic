@@ -10,36 +10,36 @@ import { UrlUtils } from "@/apis/utils"
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
 import magicToast from "@/components/base/MagicToaster/utils"
 
-/** HTTP 状态码枚举（RFC 7231、RFC 7233、RFC 7540） */
+/** HTTP status code enum (RFC 7231, RFC 7233, and RFC 7540) */
 const enum HttpStatusCode {
-	/** 200 OK - 请求成功 */
+	/** 200 OK - Request succeeded */
 	Ok = 200,
-	/** 302 Found - 资源临时重定向 */
+	/** 302 Found - Resource temporarily redirected */
 	Found = 302,
-	/** 400 Bad Request - 请求语法错误 */
+	/** 400 Bad Request - Invalid request syntax */
 	BadRequest = 400,
-	/** 401 Unauthorized - 未认证 */
+	/** 401 Unauthorized - Authentication required */
 	Unauthorized = 401,
-	/** 403 Forbidden - 无权限访问 */
+	/** 403 Forbidden - Access denied */
 	Forbidden = 403,
-	/** 404 Not Found - 资源不存在 */
+	/** 404 Not Found - Resource does not exist */
 	NotFound = 404,
-	/** 500 Internal Server Error - 服务器内部错误 */
+	/** 500 Internal Server Error - Internal server error */
 	InternalServerError = 500,
 }
 
 const enum BusinessResponseCode {
-	/** 响应成功 */
+	/** Successful response */
 	Success = 1000,
-	/** 组织无效 */
+	/** Invalid organization */
 	InvalidOrganization = 40101,
-	/** api平台无权限 */
+	/** No API platform permission */
 	PlatformUnauthorized = 70007,
 }
 
 /**
- * 生成登录重定向 URL
- * @returns 登录重定向 URL
+ * Generates the login redirect URL.
+ * @returns The login redirect URL
  */
 export const genLoginRedirectUrl = () => {
 	const redirectUrl = new URL(RoutePath.Login, window.location.origin)
@@ -57,19 +57,18 @@ export const genLoginRedirectUrl = () => {
 	return redirectUrl.toString()
 }
 
-/** 登录无效 */
+/** Invalid login */
 export function generateUnauthorizedResInterceptor(service: Container) {
 	const loginInvalidCodeSet = new Set([
 		BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION,
 		BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED,
 	])
 
-	/** 登录无效处理: 清除登录态、重定向登录页 */
+	/** Handles an invalid login by clearing the login state and redirecting to the login page. */
 	async function unAuthorizedRedirect() {
 		await service.get<AccountService>("accountService").deleteAccount()
 		if (window.location.pathname !== RoutePath.Login) {
-			// window.history.pushState({}, "", genLoginRedirectUrl())
-			// 退出登录需要重定向当前路由，重置应用所有状态
+			// Redirect the current route on logout to reset all application state.
 			window.location.replace(genLoginRedirectUrl())
 		}
 	}
@@ -83,11 +82,11 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 		) {
 			const authorization = request.headers?.get("authorization")
 			const user = userStore.account.getAccountByAccessToken(authorization || "")
-			/** 当且仅当集群编码映射异常，纠正请求请求集群对应域名，API 重试 */
+			/** Correct the request domain and retry only when the cluster-code mapping is invalid. */
 			if (user) {
 				const baseUrl = http.getBaseURL(user.deployCode)
 				if (baseUrl) {
-					// 返回新的api请求
+					// Return the retried API request.
 					http.setBaseURL(UrlUtils.parse(baseUrl).origin)
 					const res = await http.retry({
 						...request,
@@ -132,7 +131,7 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 	}
 }
 
-/** 组织无效 */
+/** Invalid organization */
 export function generateInvalidOrgResInterceptor(service: Container) {
 	return async function invalidOrg({ request, response, http }: InterceptorContext) {
 		const jsonResponse = response.data
@@ -146,7 +145,7 @@ export function generateInvalidOrgResInterceptor(service: Container) {
 	}
 }
 
-/** api平台无权限 */
+/** No API platform permission */
 export function generatePlatformUnauthorizedResInterceptor() {
 	return async function invalidPlatform({ request, response, http }: InterceptorContext) {
 		const jsonResponse = response.data
@@ -162,7 +161,7 @@ export function generatePlatformUnauthorizedResInterceptor() {
 	}
 }
 
-/** 成功响应 */
+/** Successful response */
 export function generateSuccessResInterceptor() {
 	return async function success({ request, response, http }: InterceptorContext) {
 		const jsonResponse = response.data
