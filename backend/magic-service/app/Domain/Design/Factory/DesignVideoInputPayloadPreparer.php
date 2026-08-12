@@ -131,7 +131,7 @@ final class DesignVideoInputPayloadPreparer
         if ($sourceType === 'base64') {
             $mimeType = strtolower(trim((string) ($input['mime_type'] ?? '')));
             $base64Data = preg_replace('/\s+/', '', trim((string) ($input['base64_data'] ?? '')));
-            if ($base64Data === false || $base64Data === '') {
+            if ($base64Data === null || $base64Data === '') {
                 ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.invalid', ['label' => $label . '.base64_data']);
             }
             $binaryData = base64_decode($base64Data, true);
