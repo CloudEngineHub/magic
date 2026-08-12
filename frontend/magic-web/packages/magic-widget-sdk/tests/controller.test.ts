@@ -21,6 +21,87 @@ function appendWidgetScript(src = "https://www.letsmagic.cn/sdk/magic-widget.js"
 	return script
 }
 
+/** Announces that a mounted iframe can receive runtime configuration snapshots. */
+function dispatchConfigReady(iframe: HTMLIFrameElement, frameWindow: Window, origin: string) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "config_ready",
+			},
+		}),
+	)
+}
+
+/** Resolves one config request using the same mock iframe identity. */
+function respondToConfig(frameWindow: Window, origin: string, message: Record<string, unknown>) {
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: message.protocol,
+				version: message.version,
+				instanceId: message.instanceId,
+				requestId: message.requestId,
+				type: "response",
+				ok: true,
+			},
+		}),
+	)
+}
+
+/** Sends a validated fictional preview state from the currently mounted iframe. */
+function dispatchPreviewFullscreen(
+	iframe: HTMLIFrameElement,
+	frameWindow: Window,
+	origin: string,
+	isFullscreen: boolean,
+) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "ui_state",
+				state: { previewFullscreen: isFullscreen },
+			},
+		}),
+	)
+}
+
+/** Sends one fictional runtime result from the currently mounted iframe. */
+function dispatchRuntimeEvent(
+	iframe: HTMLIFrameElement,
+	frameWindow: Window,
+	origin: string,
+	event: Record<string, unknown>,
+) {
+	const instanceId = new URL(iframe.src).searchParams.get("magicWidgetInstanceId")
+	window.dispatchEvent(
+		new MessageEvent("message", {
+			origin,
+			source: frameWindow,
+			data: {
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "event",
+				event,
+			},
+		}),
+	)
+}
+
 describe("createMagicWidgetController", () => {
 	beforeEach(() => {
 		setViewport(1024, 768)
@@ -44,6 +125,7 @@ describe("createMagicWidgetController", () => {
 			},
 			auth: {
 				loginStrategy: "phone_password",
+				deploymentCode: "private-mock",
 				organizationCode: "org-001",
 			},
 		})
@@ -84,9 +166,18 @@ describe("createMagicWidgetController", () => {
 		expect(panel.style.left).not.toBe("")
 		expect(panel.style.top).not.toBe("")
 		expect(panel.style.transformOrigin).not.toBe("")
-		expect(iframe?.getAttribute("src")).toContain("/global/super/crew/crew-001")
+		expect(iframe?.getAttribute("src")).toContain("/private-mock/super/crew/crew-001")
 		expect(iframe?.getAttribute("src")).toContain("login-strategy=phone_password")
 		expect(iframe?.getAttribute("src")).toContain("organizationCode=org-001")
+		const initialConfig = JSON.parse(
+			new URL(
+				iframe?.getAttribute("src") ?? "https://widget.example.invalid",
+			).searchParams.get("magicWidgetConfig") ?? "null",
+		)
+		expect(initialConfig).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
 	})
 
 	it("plays a closing animation before hiding the panel", () => {
@@ -242,8 +333,174 @@ describe("createMagicWidgetController", () => {
 		trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 
 		const iframe = root?.shadowRoot?.querySelector("iframe")
-		expect(iframe?.getAttribute("src")).toBe(
+		const iframeUrl = new URL(iframe?.getAttribute("src") ?? "")
+		expect(iframeUrl.origin + iframeUrl.pathname).toBe(
 			"https://magic.example.com/global/super/crew/crew-001",
+		)
+		expect(iframeUrl.searchParams.get("magicWidgetEmbed")).toBe("1")
+		expect(iframeUrl.searchParams.get("magicWidgetProtocolVersion")).toBe("1")
+	})
+
+	it("emits agent_ready and rejects empty appended input", async () => {
+		appendWidgetScript("https://magic.example.invalid/sdk/magic-widget.js")
+		const widget = createMagicWidgetController()
+		const listener = vi.fn()
+		const unsubscribe = widget.on("agent_ready", listener)
+
+		widget.mount({
+			page: {
+				type: "crew",
+				crewId: "crew-mock-001",
+			},
+		})
+
+		await expect(widget.appendInput("   ")).rejects.toMatchObject({ code: "INVALID_INPUT" })
+		widget.open()
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const iframeUrl = new URL(iframe.getAttribute("src") ?? "")
+		const instanceId = iframeUrl.searchParams.get("magicWidgetInstanceId")
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: "https://magic.example.invalid",
+				source: iframe.contentWindow,
+				data: {
+					protocol: "magic-widget",
+					version: 1,
+					instanceId,
+					type: "ready",
+					capabilities: ["appendInput"],
+				},
+			}),
+		)
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		unsubscribe()
+	})
+
+	it("delivers runtime result events and isolates failing host listeners", () => {
+		const origin = "https://magic-runtime-events.example.invalid"
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const widget = createMagicWidgetController()
+		const target = document.createElement("div")
+		document.body.append(target)
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const streamStartedEvents: unknown[] = []
+		const toolEvents: unknown[] = []
+		const taskEvents: unknown[] = []
+		const unsubscribeFailing = widget.on("toolCall.settled", () => {
+			throw new Error("mock host listener failure")
+		})
+		const unsubscribeFailingStreamStarted = widget.on("message.stream.started", () => {
+			throw new Error("mock stream listener failure")
+		})
+		const unsubscribeTool = widget.on("toolCall.settled", (event) => toolEvents.push(event))
+		const unsubscribeTask = widget.on("task.completed", (event) => taskEvents.push(event))
+		const unsubscribeStreamStarted = widget.on("message.stream.started", (event) =>
+			streamStartedEvents.push(event),
+		)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-runtime-events" },
+			target,
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const frameWindow = { postMessage: vi.fn() } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+
+		const toolEvent = {
+			type: "toolCall.settled",
+			meta: {
+				sequence: 4,
+				revision: 1,
+				occurredAt: 1_700_000_000_000,
+				source: "im",
+				topicId: "topic-mock-runtime-events",
+				toolCallId: "tool-mock-runtime-events",
+			},
+			payload: {
+				toolCall: { id: "tool-mock-runtime-events", name: "mock_tool" },
+				response: { status: "finished" },
+				strength: "strong",
+				replaceable: false,
+			},
+		}
+		const taskEvent = {
+			type: "task.completed",
+			meta: {
+				sequence: 5,
+				revision: 1,
+				occurredAt: 1_700_000_000_100,
+				source: "im",
+				topicId: "topic-mock-runtime-events",
+				correlationId: "correlation-mock-runtime-events",
+				appMessageId: "message-mock-runtime-events",
+				taskId: "task-mock-runtime-events",
+			},
+			payload: {
+				source: "finish_task",
+				result: { attachments: [] },
+			},
+		}
+		const streamStartedEvent = {
+			type: "message.stream.started",
+			meta: {
+				sequence: 6,
+				revision: 1,
+				occurredAt: 1_700_000_000_200,
+				source: "stream",
+				topicId: "topic-mock-runtime-events",
+				correlationId: "correlation-mock-stream-started",
+				streamGeneration: 1,
+			},
+			payload: {
+				chunkIndex: 0,
+				startsWith: "content",
+			},
+		}
+
+		dispatchRuntimeEvent(iframe, frameWindow, origin, toolEvent)
+		dispatchRuntimeEvent(iframe, frameWindow, origin, taskEvent)
+		dispatchRuntimeEvent(iframe, frameWindow, origin, streamStartedEvent)
+
+		expect(toolEvents).toEqual([toolEvent])
+		expect(taskEvents).toEqual([taskEvent])
+		expect(streamStartedEvents).toEqual([streamStartedEvent])
+		expect(consoleError).toHaveBeenCalledWith(
+			"Magic widget toolCall.settled listener failed",
+			expect.any(Error),
+		)
+		expect(consoleError).toHaveBeenCalledWith(
+			"Magic widget message.stream.started listener failed",
+			expect.any(Error),
+		)
+
+		unsubscribeFailing()
+		unsubscribeFailingStreamStarted()
+		unsubscribeTool()
+		unsubscribeTask()
+		unsubscribeStreamStarted()
+		dispatchRuntimeEvent(iframe, frameWindow, origin, streamStartedEvent)
+		expect(streamStartedEvents).toEqual([streamStartedEvent])
+		widget.destroy()
+	})
+
+	it("rejects unsupported event names from JavaScript callers", () => {
+		const widget = createMagicWidgetController()
+		const subscribe = widget.on as unknown as (
+			event: string,
+			listener: () => void,
+		) => () => void
+
+		expect(() => subscribe("task.complete", vi.fn())).toThrow(
+			"Magic widget event name is not supported",
 		)
 	})
 
@@ -263,7 +520,9 @@ describe("createMagicWidgetController", () => {
 		})
 
 		const root = document.querySelector("[data-magic-widget-root]")
-		const trigger = root?.shadowRoot?.querySelector("[data-magic-widget-trigger]") as HTMLElement
+		const trigger = root?.shadowRoot?.querySelector(
+			"[data-magic-widget-trigger]",
+		) as HTMLElement
 
 		Object.defineProperty(trigger, "getBoundingClientRect", {
 			value: () => ({
@@ -516,5 +775,200 @@ describe("createMagicWidgetController", () => {
 		expect(panel.style.backgroundColor).toBe("rgb(1, 2, 3)")
 		expect(header.style.borderBottomColor).toBe("rgb(4, 5, 6)")
 		expect(iframe.style.backgroundColor).toBe("rgb(7, 8, 9)")
+	})
+
+	it("uses the latest locally updated config when the iframe first opens", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-latest-config" },
+			config: {
+				layout: "desktop",
+				responsive: { mobileDetection: "viewport" },
+				conversation: { projectFiles: true },
+			},
+		})
+		await widget.updateConfig({
+			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		widget.open()
+
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const config = JSON.parse(
+			new URL(iframe.src).searchParams.get("magicWidgetConfig") ?? "null",
+		)
+		expect(config).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		widget.destroy()
+	})
+
+	it("updates a loaded iframe without changing its URL", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-runtime-config" },
+			target,
+			config: { layout: "desktop" },
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const initialSrc = iframe.src
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, "https://widget-app.example.invalid")
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		respondToConfig(
+			frameWindow,
+			"https://widget-app.example.invalid",
+			postMessage.mock.calls[0]?.[0] as Record<string, unknown>,
+		)
+		await Promise.resolve()
+		postMessage.mockClear()
+
+		const updatePromise = widget.updateConfig({
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalled())
+		const configMessage = postMessage.mock.calls[0]?.[0] as {
+			protocol: string
+			version: number
+			instanceId: string
+			requestId: string
+			config: unknown
+		}
+		expect(configMessage.config).toEqual({
+			layout: "desktop",
+			responsive: { mobileDetection: "viewport" },
+			shell: { appSidebar: false },
+			conversation: { projectFiles: false, topicHistory: true },
+		})
+
+		respondToConfig(frameWindow, "https://widget-app.example.invalid", configMessage)
+
+		await expect(updatePromise).resolves.toBeUndefined()
+		expect(iframe.src).toBe(initialSrc)
+		widget.destroy()
+	})
+
+	it("resynchronizes the latest runtime config after iframe reload without changing its URL", async () => {
+		const origin = "https://widget-app.example.invalid"
+		const widget = createMagicWidgetController()
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-reload-config" },
+			target,
+			config: { layout: "desktop" },
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const initialSrc = iframe.src
+
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, origin)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		respondToConfig(frameWindow, origin, postMessage.mock.calls[0]?.[0])
+		postMessage.mockClear()
+
+		const updatePromise = widget.updateConfig({ layout: "mobile" })
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const runtimeMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
+		expect(runtimeMessage.config).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
+		respondToConfig(frameWindow, origin, runtimeMessage)
+		await expect(updatePromise).resolves.toBeUndefined()
+		postMessage.mockClear()
+
+		iframe.dispatchEvent(new Event("load"))
+		dispatchConfigReady(iframe, frameWindow, origin)
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1))
+		const reloadMessage = postMessage.mock.calls[0]?.[0] as Record<string, unknown>
+		expect(reloadMessage.config).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
+		expect(iframe.src).toBe(initialSrc)
+		respondToConfig(frameWindow, origin, reloadMessage)
+		widget.destroy()
+	})
+
+	it("rejects invalid runtime config without opening the iframe", async () => {
+		const widget = createMagicWidgetController()
+		appendWidgetScript("https://widget-app.example.invalid/sdk/magic-widget.js")
+		widget.mount({ page: { type: "crew", crewId: "crew-mock-invalid-config" } })
+
+		await expect(widget.updateConfig({ layout: "tablet" } as never)).rejects.toMatchObject({
+			code: "INVALID_CONFIG",
+		})
+		const iframe = document
+			.querySelector("[data-magic-widget-root]")
+			?.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		expect(iframe.getAttribute("src")).toBeNull()
+		widget.destroy()
+	})
+
+	it("publishes preview fullscreen state without changing host layout", async () => {
+		const origin = "https://widget-preview.example.invalid"
+		const widget = createMagicWidgetController()
+		appendWidgetScript(`${origin}/sdk/magic-widget.js`)
+		const target = document.createElement("div")
+		document.body.append(target)
+
+		widget.mount({
+			page: { type: "crew", crewId: "crew-mock-fullscreen-preview" },
+			target,
+		})
+		const root = document.querySelector("[data-magic-widget-root]") as HTMLElement
+		const iframe = root.shadowRoot?.querySelector("iframe") as HTMLIFrameElement
+		const postMessage = vi.fn()
+		const frameWindow = { postMessage } as unknown as Window
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: frameWindow,
+		})
+		const previewStates: boolean[] = []
+		widget.on("preview_fullscreen", (isFullscreen) => previewStates.push(isFullscreen))
+
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, true)
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, true)
+
+		dispatchPreviewFullscreen(iframe, frameWindow, origin, false)
+
+		expect(previewStates).toEqual([false, true, false])
+		expect(root.shadowRoot?.querySelector("iframe")).toBe(iframe)
+		expect(document.querySelectorAll("dialog")).toHaveLength(0)
+		expect(document.documentElement.style.overflow).toBe("")
+		expect(document.body.style.overflow).toBe("")
+		widget.destroy()
 	})
 })

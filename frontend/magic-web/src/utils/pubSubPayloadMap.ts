@@ -38,6 +38,7 @@ import type {
 	SuperMagicSetInputMessageArgs,
 	SuperMagicStreamMessageArgs,
 	SuperMagicSyncMarkersToChatPayload,
+	SuperMagicWidgetEditorCommandPayload,
 } from "@/pages/superMagic/events/message"
 import type {
 	SuperMagicOpenFileTabPayload,
@@ -130,6 +131,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Open_Playback_Tab]: SuperMagicOpenPlaybackTabPayload
 	/** 展开话题对话面板：无参数。 */
 	[PubSubEvents.Expand_Topic_Conversation_Panel]: []
+	/** Collapse the topic conversation panel without changing the active preview. */
+	[PubSubEvents.Collapse_Topic_Conversation_Panel]: []
 	/** 消息队列消费完成：传入可选消息数据。 */
 	[PubSubEvents.SuperMagicMessageQueueConsumed]: SuperMagicQueueConsumedArgs
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */
@@ -164,6 +167,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Receive_RecordSummary_Audio_File]: SuperMagicReceiveRecordSummaryAudioFileArgs
 	/** 设置输入框文本：传入字符串消息。 */
 	[PubSubEvents.Set_Input_Message]: SuperMagicSetInputMessageArgs
+	/** Executes Widget-only append, clear, or read operations against the active editor. */
+	[PubSubEvents.Magic_Widget_Editor_Command]: SuperMagicWidgetEditorCommandPayload
 	/** 添加内容到聊天框：传入可选内容与额外信息。 */
 	[PubSubEvents.Add_Content_To_Chat]: SuperMagicAddContentToChatPayload
 	/** 进入编辑状态：传入目标文件 ID。 */

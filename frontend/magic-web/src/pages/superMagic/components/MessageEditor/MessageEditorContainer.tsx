@@ -1,7 +1,7 @@
 import type { Editor, JSONContent } from "@tiptap/react"
 import { forwardRef, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { useMemoizedFn, useAsyncEffect } from "ahooks"
+import { useAsyncEffect, useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useMessageEditor, useDragUpload, useSlideContentSync } from "./hooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -111,6 +111,7 @@ export const MessageEditorContainer = observer(
 				modelTopicMode,
 				onFocus,
 				onBlur,
+				onReady,
 				onMentionInsertItems,
 				onFileClick,
 				onEnsureProject,
@@ -529,22 +530,28 @@ export const MessageEditorContainer = observer(
 				store.draftStore.resetSendingGuard()
 				clearAllMarkers()
 
-				if (!draftKey) {
-					return
-				}
+				try {
+					if (!draftKey || skipInitialDraftRestore) {
+						store.draftStore.markDraftReady()
+						return
+					}
 
-				if (skipInitialDraftRestore) {
-					return
+					await store.draftStore.loadLatestDraft({
+						isClearContent: true,
+						replaceDirectly: true,
+					})
+				} catch (error) {
+					store.draftStore.markDraftReady()
+					console.error("Failed to restore latest draft:", error)
+				} finally {
+					// Report readiness after the existing draft phase has settled.
+					onReady?.()
 				}
-
-				await store.draftStore.loadLatestDraft({
-					isClearContent: true,
-					replaceDirectly: true,
-				})
 			}, [
 				draftKey?.topicId,
 				draftKey?.projectId,
 				draftKey?.workspaceId,
+				onReady,
 				skipInitialDraftRestore,
 			])
 

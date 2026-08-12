@@ -466,6 +466,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				sendButtonLoading={isHomePreparingSend}
 				onFocus={handleFocus}
 				onBlur={handleBlur}
+				onReady={editorContext?.onReady}
 				onFileClick={editorContext?.onFileClick}
 				onEnsureProject={handleEnsureProject}
 				attachments={editorContext?.attachments}

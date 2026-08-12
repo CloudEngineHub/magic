@@ -36,10 +36,18 @@ interface MCPPanelProps extends BasePanel {
 	storageKey?: string
 	/** 是否使用临时存储模式 */
 	useTempStorage?: boolean
+	/** Enables the compact single-column layout for narrow embedded containers. */
+	compact?: boolean
 }
 
 export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
-	const { onClose, onSuccessCallback, storageKey, useTempStorage = false } = props
+	const {
+		onClose,
+		onSuccessCallback,
+		storageKey,
+		useTempStorage = false,
+		compact = false,
+	} = props
 
 	const { t } = useTranslation("agent")
 	const controller = useMCPPanelController({
@@ -168,26 +176,29 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 			<AuthManagerModal
 				title={t("agent:mcp.panel.manageAuth")}
 				open={authModalState.open}
-				extraConfig={{ resourceType: ResourceTypes.Mcp, resourceId: authModalState.resourceId }}
+				extraConfig={{
+					resourceType: ResourceTypes.Mcp,
+					resourceId: authModalState.resourceId,
+				}}
 				onClose={closeManageAuth}
 			/>
 		)
 	}, [authModalState.open, authModalState.resourceId, closeManageAuth])
 
-	if (isMobile) {
+	if (isMobile || compact) {
 		return (
 			<div className="flex h-full flex-col" data-testid="agent-mcp-panel">
 				<div
 					className="flex w-full flex-col gap-2.5 border-b border-border p-5 backdrop-blur-[12px]"
 					data-testid="agent-mcp-panel-mobile-header"
 				>
-					<div className="flex w-full items-center gap-2">
-						<div className="size-[30px] overflow-hidden rounded-md">
+					<div className="flex w-full min-w-0 items-center gap-2">
+						<div className="size-[30px] shrink-0 overflow-hidden rounded-md">
 							<span className="flex size-[30px] items-center justify-center bg-black text-white">
 								<IconPlug size="24" />
 							</span>
 						</div>
-						<div>
+						<div className="min-w-0">
 							<div className="text-sm font-semibold leading-5 text-foreground">
 								{t("mcp.panel.title")}
 							</div>
@@ -224,13 +235,13 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 				className="flex items-center justify-between gap-2.5 border-b border-border p-5 backdrop-blur-[12px]"
 				data-testid="agent-mcp-panel-header"
 			>
-				<div className="flex h-full items-center gap-2">
-					<div className="size-[30px] overflow-hidden rounded-md">
+				<div className="flex min-w-0 flex-1 items-center gap-2">
+					<div className="size-[30px] shrink-0 overflow-hidden rounded-md">
 						<span className="flex size-[30px] items-center justify-center bg-black text-white">
 							<IconPlug size="24" />
 						</span>
 					</div>
-					<div>
+					<div className="min-w-0">
 						<div className="text-sm font-semibold leading-5 text-foreground">
 							{t("mcp.panel.title")}
 						</div>
@@ -239,8 +250,8 @@ export const MCPPanel = observer(function MCPPanel(props: MCPPanelProps) {
 						</div>
 					</div>
 				</div>
-				<div className="inline-flex items-center gap-2.5">
-					<div className="relative w-[240px]">
+				<div className="inline-flex min-w-0 shrink-0 items-center gap-2.5">
+					<div className="relative w-full min-w-0 max-w-[240px]">
 						<IconSearch
 							size={16}
 							className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"

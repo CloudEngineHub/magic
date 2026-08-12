@@ -31,6 +31,7 @@ vi.mock("@/models/config", () => ({
 describe("useLoginClusterSession", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		window.history.replaceState(null, "", "/login")
 		mocks.clusterCode = ""
 		mocks.configStore.cluster.clusterCode = ""
 		mocks.configStore.cluster.clusterCodeCache = ""
@@ -71,6 +72,44 @@ describe("useLoginClusterSession", () => {
 			expect(result.current.deployment).toBe(LoginDeployment.PrivateDeploymentLogin)
 		})
 		expect(mocks.setClusterCode).toHaveBeenLastCalledWith("private-demo")
+	})
+
+	it("opens the private login form and preserves the Widget deployment code", async () => {
+		window.history.replaceState(
+			null,
+			"",
+			"/login?login-strategy=private_deployment&redirect=https%3A%2F%2Fmagic.example.invalid%2Fglobal%2Fsuper%2Fcrew%2Fcrew-mock%3Flogin-strategy%3Dprivate_deployment%26magicWidgetDeploymentCode%3Dprivate-form-mock",
+		)
+
+		const { result } = renderHook(() =>
+			useLoginClusterSession({ service: createService() as never }),
+		)
+
+		await waitFor(() => {
+			expect(result.current.deployment).toBe(LoginDeployment.PrivateDeploymentLogin)
+		})
+		expect(result.current.prefilledDeploymentCode).toBe("private-form-mock")
+		expect(mocks.setClusterCode).toHaveBeenLastCalledWith("")
+	})
+
+	it("does not restore a cached cluster before the Widget private code is confirmed", async () => {
+		mocks.configStore.cluster.clusterCodeCache = "private-cached-mock"
+		window.history.replaceState(
+			null,
+			"",
+			"/login?login-strategy=private_deployment&redirect=https%3A%2F%2Fmagic.example.invalid%2Fglobal%2Fsuper%2Fcrew%2Fcrew-mock%3Flogin-strategy%3Dprivate_deployment%26magicWidgetDeploymentCode%3Dprivate-form-mock",
+		)
+
+		const { result } = renderHook(() =>
+			useLoginClusterSession({ service: createService() as never }),
+		)
+
+		await waitFor(() => {
+			expect(result.current.deployment).toBe(LoginDeployment.PrivateDeploymentLogin)
+		})
+		expect(result.current.prefilledDeploymentCode).toBe("private-form-mock")
+		expect(mocks.setClusterCode).toHaveBeenLastCalledWith("")
+		expect(mocks.setClusterCode).not.toHaveBeenCalledWith("private-cached-mock")
 	})
 
 	it("restores the cached private cluster after switching back from public login", async () => {

@@ -1,10 +1,26 @@
-export function shouldForceMobileCrewConversation(search: string): boolean {
-	const searchParams = new URLSearchParams(search)
-	const view = searchParams.get("view")?.toLowerCase()
-	const layout = searchParams.get("layout")?.toLowerCase()
-	const mobile = searchParams.get("mobile")?.toLowerCase()
+import {
+	resolveMagicWidgetCrewLayout,
+	shouldForceMobileCrewConversation,
+} from "@/providers/MagicWidgetProvider/config"
+import type { MagicWidgetLayout } from "@/providers/MagicWidgetProvider/types"
 
-	return view === "mobile" || layout === "mobile" || mobile === "1" || mobile === "true"
+export { shouldForceMobileCrewConversation }
+
+/** Applies an explicit Widget layout before the existing viewport and legacy query fallback. */
+export function getCrewConversationLayout({
+	widgetLayout,
+	isMobileViewport,
+	search,
+}: {
+	widgetLayout?: MagicWidgetLayout
+	isMobileViewport: boolean
+	search: string
+}): MagicWidgetLayout {
+	return resolveMagicWidgetCrewLayout({
+		configuredLayout: widgetLayout,
+		isMobileViewport,
+		search,
+	})
 }
 
 const MAGIC_ORGANIZATION_QUERY_KEYS = [

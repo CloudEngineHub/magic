@@ -13,6 +13,8 @@ interface UseTopicHistoryLayoutStateOptions {
 	/** localStorage 键，按页面 scope 区分 */
 	storageKey: string
 	isEnabled?: boolean
+	/** Disable persistence for temporary embed instances that must start closed. */
+	persistOpenState?: boolean
 }
 
 interface UseTopicHistoryLayoutStateResult {
@@ -43,9 +45,10 @@ function writeOpenToStorage(key: string, open: boolean) {
 export function useTopicHistoryLayoutState({
 	storageKey,
 	isEnabled = true,
+	persistOpenState = true,
 }: UseTopicHistoryLayoutStateOptions): UseTopicHistoryLayoutStateResult {
 	const [isTopicHistoryPanelOpen, setIsTopicHistoryPanelOpen] = useState(() =>
-		isEnabled ? readOpenFromStorage(storageKey) : false,
+		isEnabled && persistOpenState ? readOpenFromStorage(storageKey) : false,
 	)
 
 	const isEnabledRef = useRef(isEnabled)
@@ -56,25 +59,25 @@ export function useTopicHistoryLayoutState({
 			setIsTopicHistoryPanelOpen(false)
 			return
 		}
-		setIsTopicHistoryPanelOpen(readOpenFromStorage(storageKey))
-	}, [isEnabled, storageKey])
+		setIsTopicHistoryPanelOpen(persistOpenState ? readOpenFromStorage(storageKey) : false)
+	}, [isEnabled, persistOpenState, storageKey])
 
 	const openTopicHistoryPanel = useMemoizedFn(() => {
 		if (!isEnabledRef.current) return
-		writeOpenToStorage(storageKey, true)
+		if (persistOpenState) writeOpenToStorage(storageKey, true)
 		setIsTopicHistoryPanelOpen(true)
 	})
 
 	const closeTopicHistoryPanel = useMemoizedFn(() => {
 		setIsTopicHistoryPanelOpen(false)
-		if (isEnabledRef.current) writeOpenToStorage(storageKey, false)
+		if (isEnabledRef.current && persistOpenState) writeOpenToStorage(storageKey, false)
 	})
 
 	const toggleTopicHistoryPanel = useMemoizedFn(() => {
 		if (!isEnabledRef.current) return
 		setIsTopicHistoryPanelOpen((prev) => {
 			const next = !prev
-			writeOpenToStorage(storageKey, next)
+			if (persistOpenState) writeOpenToStorage(storageKey, next)
 			return next
 		})
 	})

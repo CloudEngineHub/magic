@@ -20,10 +20,12 @@
 		"closeTopics": "关闭话题列表",
 		"emptyHint": "开始一次新的员工专属对话。",
 		"invalidCode": "员工不存在或已不可用。",
-		"loadFailed": "员工对话加载失败，请稍后重试。",
+		"loadFailed": "员工对话加载失败，请稍后重试；如果您有多个账号，请选择有权限访问该员工的账号进行登录。",
 		"newConversation": "新建对话",
+		"relogin": "重新登录",
 		"retry": "重试",
 		"topics": "话题",
+		"unavailable": "当前员工暂不可用，请稍后重试。",
 		"unknownCrew": "数字员工"
 	},
 	"detailDialog": {

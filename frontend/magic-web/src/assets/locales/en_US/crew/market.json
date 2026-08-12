@@ -20,10 +20,12 @@
 		"closeTopics": "Close topics",
 		"emptyHint": "Start a dedicated crew conversation.",
 		"invalidCode": "This crew member is unavailable.",
-		"loadFailed": "Failed to load this crew conversation. Please try again.",
+		"loadFailed": "Failed to load this crew conversation. Please try again. If you have multiple accounts, sign in with an account that has access to this crew member.",
 		"newConversation": "New conversation",
+		"relogin": "Sign in again",
 		"retry": "Retry",
 		"topics": "Topics",
+		"unavailable": "This crew member is temporarily unavailable. Please try again later.",
 		"unknownCrew": "Digital Crew"
 	},
 	"detailDialog": {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { SuperMagicApi } from "@/apis"
+import { CrewApi, SuperMagicApi } from "@/apis"
 import { crewService, type AgentDetailView } from "@/services/crew/CrewService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -17,6 +17,9 @@ type TopicsResponse = Awaited<ReturnType<typeof SuperMagicApi.getTopicsByProject
 type AttachmentsResponse = Awaited<ReturnType<typeof SuperMagicApi.getAttachmentsByProjectId>>
 
 vi.mock("@/apis", () => ({
+	CrewApi: {
+		hireStoreAgent: vi.fn(),
+	},
 	SuperMagicApi: {
 		getSpecialProject: vi.fn(),
 		getProjectDetail: vi.fn(),
@@ -29,11 +32,13 @@ vi.mock("@/apis", () => ({
 vi.mock("@/services/crew/CrewService", () => ({
 	crewService: {
 		getAgentDetail: vi.fn(),
+		checkAgentAccess: vi.fn(),
 	},
 }))
 
 vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
 	default: {
+		fetchModeList: vi.fn(),
 		fetchDefaultModeModelList: vi.fn(),
 	},
 }))
@@ -107,9 +112,36 @@ function createTopic(overrides: Partial<Topic> = {}): Topic {
 	}
 }
 
+/** Creates a normalized access-check result with synthetic identifiers. */
+function createAccessCheck(
+	overrides: Partial<{ code: string; exists: boolean; canUse: boolean }> = {},
+) {
+	return {
+		code: "SMA-access-mock",
+		exists: true,
+		canUse: true,
+		...overrides,
+	}
+}
+
+/** Configures the downstream project requests required for a ready conversation. */
+function mockReadyConversation() {
+	vi.mocked(SuperMagicApi.getSpecialProject).mockResolvedValue({
+		project: createProject(),
+		is_existing: false,
+	} as SpecialProjectResponse)
+	vi.mocked(SuperMagicApi.getProjectDetail).mockResolvedValue(
+		createProject() as ProjectDetailResponse,
+	)
+	vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+		list: [createTopic()],
+	} as TopicsResponse)
+}
+
 describe("CrewConversationStore", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.mocked(superMagicModeService.fetchModeList).mockResolvedValue([])
 		vi.mocked(superMagicModeService.fetchDefaultModeModelList).mockResolvedValue(undefined)
 		vi.mocked(SuperMagicApi.getAttachmentsByProjectId).mockResolvedValue({
 			tree: [],
@@ -124,11 +156,12 @@ describe("CrewConversationStore", () => {
 
 		expect(store.status).toBe("invalid")
 		expect(crewService.getAgentDetail).not.toHaveBeenCalled()
+		expect(crewService.checkAgentAccess).not.toHaveBeenCalled()
 		expect(SuperMagicApi.getSpecialProject).not.toHaveBeenCalled()
 	})
 
 	it("does not create a special project when agent validation fails", async () => {
-		vi.mocked(crewService.getAgentDetail).mockRejectedValue(new Error("not found"))
+		vi.mocked(crewService.getAgentDetail).mockRejectedValue(new Error("mock detail failure"))
 		const store = new CrewConversationStore()
 
 		await store.bootstrap("SMA-missing")
@@ -136,6 +169,156 @@ describe("CrewConversationStore", () => {
 		expect(store.status).toBe("invalid")
 		expect(crewService.getAgentDetail).toHaveBeenCalledWith("SMA-missing")
 		expect(SuperMagicApi.getSpecialProject).not.toHaveBeenCalled()
+	})
+
+	it("marks a missing Widget agent invalid without loading detail", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(
+			createAccessCheck({ exists: false, canUse: false }),
+		)
+		const store = new CrewConversationStore()
+
+		await store.bootstrap("SMA-missing-widget", { autoHire: true })
+
+		expect(store.status).toBe("invalid")
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+		expect(crewService.getAgentDetail).not.toHaveBeenCalled()
+		expect(SuperMagicApi.getSpecialProject).not.toHaveBeenCalled()
+	})
+
+	it("does not hire when automatic hiring is disabled", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(
+			createAccessCheck({ canUse: false }),
+		)
+		const store = new CrewConversationStore()
+
+		await store.bootstrap("SMA-unavailable", { autoHire: false })
+
+		expect(store.status).toBe("unavailable")
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+		expect(SuperMagicApi.getSpecialProject).not.toHaveBeenCalled()
+	})
+
+	it("loads ordinary detail directly when access check allows use", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(
+			createAccessCheck({ code: "SMA-canonical-access" }),
+		)
+		vi.mocked(crewService.getAgentDetail).mockResolvedValue(createAgent())
+		mockReadyConversation()
+
+		const store = new CrewConversationStore()
+		await store.bootstrap("SMA-alias-access", { autoHire: true })
+
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+		expect(crewService.getAgentDetail).toHaveBeenCalledWith("SMA-canonical-access")
+		expect(superMagicModeService.fetchModeList).not.toHaveBeenCalled()
+		expect(store.status).toBe("ready")
+	})
+
+	it("hires an unavailable market agent and continues without another access check", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(
+			createAccessCheck({ code: "SMA-canonical-market", canUse: false }),
+		)
+		vi.mocked(CrewApi.hireStoreAgent).mockResolvedValue([])
+		vi.mocked(crewService.getAgentDetail).mockResolvedValue(createAgent())
+		mockReadyConversation()
+
+		const store = new CrewConversationStore()
+		await store.bootstrap("SMA-market-mock", { autoHire: true })
+
+		expect(CrewApi.hireStoreAgent).toHaveBeenCalledWith(
+			{ code: "SMA-canonical-market" },
+			{ enableErrorMessagePrompt: false },
+		)
+		expect(crewService.checkAgentAccess).toHaveBeenCalledTimes(1)
+		expect(crewService.getAgentDetail).toHaveBeenCalledWith("SMA-canonical-market")
+		expect(superMagicModeService.fetchModeList).toHaveBeenCalledWith({ force: true })
+		expect(store.status).toBe("ready")
+	})
+
+	it("stops after one failed hire without another access check", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(
+			createAccessCheck({ canUse: false }),
+		)
+		vi.mocked(CrewApi.hireStoreAgent).mockRejectedValue(new Error("mock hire failure"))
+		const store = new CrewConversationStore()
+
+		await store.bootstrap("SMA-still-unavailable", { autoHire: true })
+
+		expect(store.status).toBe("unavailable")
+		expect(CrewApi.hireStoreAgent).toHaveBeenCalledTimes(1)
+		expect(crewService.checkAgentAccess).toHaveBeenCalledTimes(1)
+		expect(superMagicModeService.fetchModeList).not.toHaveBeenCalled()
+		expect(crewService.getAgentDetail).not.toHaveBeenCalled()
+	})
+
+	it("does not hire after an access-check transport failure", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockRejectedValue(new Error("mock network"))
+		const store = new CrewConversationStore()
+
+		await store.bootstrap("SMA-network-mock", { autoHire: true })
+
+		expect(store.status).toBe("error")
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+	})
+
+	it("treats detail failure after confirmed access as recoverable error", async () => {
+		vi.mocked(crewService.checkAgentAccess).mockResolvedValue(createAccessCheck())
+		vi.mocked(crewService.getAgentDetail).mockRejectedValue(new Error("mock detail failure"))
+		const store = new CrewConversationStore()
+
+		await store.bootstrap("SMA-detail-error", { autoHire: true })
+
+		expect(store.status).toBe("error")
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+	})
+
+	it("reuses an in-flight hire across overlapping bootstraps", async () => {
+		let resolveHire: ((value: []) => void) | undefined
+		const hirePromise = new Promise<[]>((resolve) => {
+			resolveHire = resolve
+		})
+		vi.mocked(crewService.checkAgentAccess)
+			.mockResolvedValueOnce(createAccessCheck({ canUse: false }))
+			.mockResolvedValueOnce(createAccessCheck({ canUse: false }))
+		vi.mocked(CrewApi.hireStoreAgent).mockReturnValue(hirePromise)
+		vi.mocked(crewService.getAgentDetail).mockResolvedValue(createAgent())
+		mockReadyConversation()
+		const store = new CrewConversationStore()
+
+		const firstBootstrap = store.bootstrap("SMA-overlap", { autoHire: true })
+		await vi.waitFor(() => expect(CrewApi.hireStoreAgent).toHaveBeenCalledTimes(1))
+		const secondBootstrap = store.bootstrap("SMA-overlap", { autoHire: true })
+		await vi.waitFor(() => expect(crewService.checkAgentAccess).toHaveBeenCalledTimes(2))
+		resolveHire?.([])
+		await Promise.all([firstBootstrap, secondBootstrap])
+
+		expect(CrewApi.hireStoreAgent).toHaveBeenCalledTimes(1)
+		expect(crewService.checkAgentAccess).toHaveBeenCalledTimes(2)
+		expect(superMagicModeService.fetchModeList).toHaveBeenCalledTimes(1)
+		expect(store.status).toBe("ready")
+	})
+
+	it("does not hire when an obsolete access check resolves after a newer bootstrap", async () => {
+		let resolveFirstAccess: ((value: ReturnType<typeof createAccessCheck>) => void) | undefined
+		const firstAccess = new Promise<ReturnType<typeof createAccessCheck>>((resolve) => {
+			resolveFirstAccess = resolve
+		})
+		vi.mocked(crewService.checkAgentAccess)
+			.mockReturnValueOnce(firstAccess)
+			.mockResolvedValueOnce(createAccessCheck({ code: "SMA-current-access" }))
+		vi.mocked(crewService.getAgentDetail).mockResolvedValue(createAgent())
+		mockReadyConversation()
+		const store = new CrewConversationStore()
+
+		const obsoleteBootstrap = store.bootstrap("SMA-obsolete", { autoHire: true })
+		const currentBootstrap = store.bootstrap("SMA-current", { autoHire: true })
+		await currentBootstrap
+		resolveFirstAccess?.(createAccessCheck({ code: "SMA-obsolete", canUse: false }))
+		await obsoleteBootstrap
+
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+		expect(crewService.getAgentDetail).toHaveBeenCalledWith("SMA-current-access")
+		expect(store.status).toBe("ready")
 	})
 
 	it("does not create a special project when validated employee id is empty", async () => {

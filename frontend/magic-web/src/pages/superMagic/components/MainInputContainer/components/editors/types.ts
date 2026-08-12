@@ -109,6 +109,8 @@ export interface SceneEditorContext {
 	onFileClick?: (fileItem: unknown) => void
 	onEditorFocus?: () => void
 	onEditorBlur?: () => void
+	/** Reports that the current editor subscriptions and draft restoration are complete. */
+	onReady?: () => void
 	onMessageSendReady?: (
 		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
 		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,

@@ -21,6 +21,9 @@ export const enum LoginValueKey {
 }
 
 export const LOGIN_STRATEGY_QUERY_KEY = "login-strategy"
+export const PRIVATE_DEPLOYMENT_LOGIN_STRATEGY = "private_deployment"
+/** Carries the Widget deployment code while the private-login strategy keeps the SaaS route. */
+export const WIDGET_DEPLOYMENT_CODE_QUERY_KEY = "magicWidgetDeploymentCode"
 
 export const ServiceAgreementUrl = "/web/terms"
 export const PrivacyPolicyUrl = "/web/privacy"

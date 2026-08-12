@@ -155,6 +155,9 @@ export default function useMobileComposerLogic({
 
 	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
 	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
+	const draftKey = editorContext.draftKey
+	const onReady = editorContext.onReady
+	const skipInitialDraftRestore = editorContext.skipInitialDraftRestore
 	const effectiveTopicMode = editorContext.topicMode ?? roleStore.currentRole
 	const currentAgentCode = editorContext.agentCode ?? selectedTopic?.agent_code
 	const effectiveSetSelectedWorkspace =
@@ -707,18 +710,29 @@ export default function useMobileComposerLogic({
 		store.draftStore.resetSendingGuard()
 		pubsub.publish(PubSubEvents.Super_Magic_Clear_Canvas_Markers, {})
 
-		if (!editorContext.draftKey) return
-		if (editorContext.skipInitialDraftRestore) return
+		try {
+			if (!draftKey || skipInitialDraftRestore) {
+				store.draftStore.markDraftReady()
+				return
+			}
 
-		await store.draftStore.loadLatestDraft({
-			isClearContent: true,
-			replaceDirectly: true,
-		})
+			await store.draftStore.loadLatestDraft({
+				isClearContent: true,
+				replaceDirectly: true,
+			})
+		} catch (error) {
+			store.draftStore.markDraftReady()
+			console.error("Failed to restore latest draft:", error)
+		} finally {
+			// Report readiness after the existing mobile draft phase has settled.
+			onReady?.()
+		}
 	}, [
-		editorContext.draftKey?.topicId,
-		editorContext.draftKey?.projectId,
-		editorContext.draftKey?.workspaceId,
-		editorContext.skipInitialDraftRestore,
+		draftKey?.topicId,
+		draftKey?.projectId,
+		draftKey?.workspaceId,
+		onReady,
+		skipInitialDraftRestore,
 		store.draftStore,
 	])
 

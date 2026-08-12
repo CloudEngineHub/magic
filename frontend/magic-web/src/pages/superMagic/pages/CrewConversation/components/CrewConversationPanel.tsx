@@ -40,9 +40,11 @@ import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEdit
 import { MOBILE_LAYOUT_CONFIG } from "@/pages/superMagic/components/MainInputContainer/components/editors/constant"
 import { cn } from "@/lib/utils"
 import { useCrewConversationStore } from "../context"
+import { useMagicWidgetBridge } from "../hooks/useMagicWidgetBridge"
 import CrewAvatar from "./CrewAvatar"
 
 interface CrewConversationPanelProps {
+	widgetContext?: { instanceId: string; hostOrigin: string } | null
 	variant: "desktop" | "mobile"
 	detailPanelVisible?: boolean
 	isConversationPanelCollapsed?: boolean
@@ -51,6 +53,7 @@ interface CrewConversationPanelProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	showTopicHistory?: boolean
 	onOpenTopics?: () => void
 	topicActions?: MessageHeaderTopicActions
 	onFileClick?: (fileItem?: unknown) => void
@@ -65,9 +68,11 @@ function CrewConversationPanel({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	showTopicHistory = true,
 	onOpenTopics,
 	topicActions,
 	onFileClick,
+	widgetContext = null,
 }: CrewConversationPanelProps) {
 	const { t } = useTranslation(["crew/market", "super"])
 	const store = useCrewConversationStore()
@@ -77,6 +82,11 @@ function CrewConversationPanel({
 	const topicStore = store.topicStore
 	const isMobile = variant === "mobile"
 	const [stopEventLoading, setStopEventLoading] = useState(false)
+	const { notifyAgentReady } = useMagicWidgetBridge({
+		// Keep the protocol listener alive before a topic exists so early commands receive an explicit response.
+		context: widgetContext,
+		createNewConversation: store.createAndSelectNewTopic,
+	})
 
 	const scopedMessageSendService = useMemo(
 		() =>
@@ -203,6 +213,7 @@ function CrewConversationPanel({
 			showLoading,
 			isTaskRunning: canInterruptTask,
 			stopEventLoading,
+			onReady: notifyAgentReady,
 			handleInterrupt,
 			onFileClick,
 			mentionPanelStore: store.mentionPanelStore,
@@ -248,6 +259,7 @@ function CrewConversationPanel({
 		canInterruptTask,
 		stopEventLoading,
 		onFileClick,
+		notifyAgentReady,
 		store.mentionPanelStore,
 		store.projectFilesStore,
 		store.selectedWorkspace,
@@ -310,6 +322,7 @@ function CrewConversationPanel({
 						historyTriggerMode={historyTriggerMode}
 						isHistoryPanelOpen={isHistoryPanelOpen}
 						onToggleHistoryPanel={onToggleHistoryPanel}
+						showTopicHistory={showTopicHistory}
 					/>
 				) : null}
 				{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
