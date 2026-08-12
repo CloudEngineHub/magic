@@ -6,11 +6,63 @@ description: Use when the user wants to create, continue, revise, or finish a vi
 # Core Rules
 
 - Adapt the workflow to the user's current request and existing results. Do not restart completed stages.
+- Select the production mode from the user's explicit wording. If the user explicitly requests “普通模式” (or an equivalent direct-generation mode), use the ordinary workflow below. If the user explicitly requests “精细模式” (or an equivalent storyboard workflow), use the detailed workflow. If the user does not name a mode, always use the detailed workflow by default.
 - Call Canvas tools through Code Mode with `sdk.tool.call(...)`.
 - Read tool outputs from `result.content`, then carry the returned IDs, media paths, counts, and statuses into the plan and later calls. Do not depend on `result.data`.
 - Use the user's language for plans, analysis, names, descriptions, prompts, and confirmation text. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
 - Treat current Canvas results as the production source of truth. The Markdown plan is recovery context, not a replacement for querying current Elements.
+
+# Production Modes
+
+The mode changes the amount of planning and the number of generation stages. Do not expose internal Canvas or DSL details to the user; describe the selected mode in terms of the creative workflow and expected result.
+
+## Ordinary Mode
+
+Use this mode only when the user explicitly asks for a simple, direct, or ordinary video workflow.
+
+1. Understand all user-provided assets and identify the intended subjects, products, scenes, style, motion, duration, aspect ratio, resolution, and output model.
+2. Present one complete creative target in readable Markdown before generating anything. Include the final video objective, subject and product treatment, scene, visual style, motion and pacing, audio expectation, output specifications, reference-material usage, artifact exclusions, and the complete final video prompt.
+3. If duration, aspect ratio, resolution, or model is missing, propose suitable values and ask the user to confirm them in the same confirmation round.
+4. Ask one concise confirmation question after the complete creative target. Do not repeat the full plan or prompt inside the question. Treat any requested change as a revision and ask for confirmation again.
+5. After explicit confirmation, call `generate_video_production_videos` once with one task. Put every relevant reference path in the task's reference arrays and put every submitted Canvas Element that directly contributes to the final video in `source_element_ids`.
+6. Do not call `upsert_storyboard`, generate initialization images, generate first-frame images, `configure_video_edit`, or `compose_canvas_video` for the ordinary workflow. The generated video Element is the final video result for this mode.
+7. If the user later asks to revise the ordinary-mode video, preserve its Element, append a new candidate Content, wait for confirmation, and promote the confirmed Content. If the user asks for a multi-shot storyboard, staged approvals, BGM replacement, or a separate final composition, continue in detailed mode using the existing results instead of silently mixing workflows.
+
+Ordinary-mode example:
+
+```python
+from sdk.tool import tool
+
+result = tool.call("generate_video_production_videos", {
+    "project_path": "city-travel-short-film",
+    "model_id": "model-from-media-model-info",
+    "tasks": [{
+        "name": "City Travel Final Video",
+        "prompt": "Create the complete 15-second vertical travel video from [image1] and [image2]. Show the traveler arriving at the city overlook, walking through the lively street, and ending with a confident view of the skyline. Maintain the confirmed subject identity, clothing, products, and visual style. Use smooth cinematic motion, clear visual progression, and no text, watermarks, captions, or interface artifacts.",
+        "aspect_ratio": "9:16",
+        "input_mode": "image_reference",
+        "task": "generate",
+        "reference_image_paths": [
+            "images/traveler-upload.webp",
+            "images/city-upload.webp"
+        ],
+        "duration_seconds": 15,
+        "resolution": "1080p",
+        "source_element_ids": [
+            "element-747400000000000001",
+            "element-747400000000000002"
+        ]
+    }]
+})
+print(result.content)
+```
+
+In ordinary mode, `source_element_ids` describes the direct business relationship from the submitted assets to the final video. Reference paths describe generation inputs; if a reference is used only for visual guidance and is not a direct business predecessor, keep its path in the reference array but omit its Element ID from `source_element_ids`.
+
+## Detailed Mode
+
+Use the existing detailed workflow for all other requests. It covers staged creative confirmation, initialization assets, video storyboard, first frames, shot videos, optional audio, edit configuration, and final MP4 composition. The detailed workflow below remains the default when the user does not explicitly select a mode.
 
 # Task Plan and Recovery
 
