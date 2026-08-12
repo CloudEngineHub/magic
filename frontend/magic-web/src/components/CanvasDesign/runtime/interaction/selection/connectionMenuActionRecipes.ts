@@ -1,12 +1,20 @@
 import type { VideoModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
+import {
+	canCreateBatchImageVideos,
+	createBatchImageVideos,
+} from "../connection/imageVideoBatchCreation"
 import { resolveVideoContinuationModel } from "../video-continuation/videoContinuationModel"
-import type { SelectionContentSnapshot } from "./selectionContentCollector"
+import {
+	collectSelectionContentSnapshot,
+	type SelectionContentSnapshot,
+} from "./selectionContentCollector"
 
 export interface ConnectionMenuActionContext {
 	canvas: Canvas
 	snapshot: SelectionContentSnapshot
 	originSide: "left" | "right"
+	originKind: "element" | "selection"
 	videoModelList: VideoModelItem[]
 }
 
@@ -37,8 +45,34 @@ const VIDEO_CONTINUATION_RECIPE: ConnectionMenuActionRecipe = {
 	},
 }
 
+const BATCH_IMAGE_TO_VIDEO_RECIPE: ConnectionMenuActionRecipe = {
+	id: "batch-image-to-video",
+	supportedSides: ["right"],
+	getLabel: () => ({
+		key: "imageToVideo.batchMenu",
+		fallback: "批量图片生成视频",
+	}),
+	// 仅多选入口；Frame 右侧走「制作分镜视频」，避免两个动作叠在同一菜单。
+	match: ({ canvas, snapshot, originKind, videoModelList }) =>
+		originKind === "selection" && canCreateBatchImageVideos(canvas, snapshot, videoModelList),
+	execute: async ({ canvas, snapshot, videoModelList }) => {
+		// 点击时重新收集图片，避免依赖菜单打开时的旧快照
+		const freshSnapshot = collectSelectionContentSnapshot(
+			canvas,
+			snapshot.rootElementIds,
+			snapshot.boundingRect,
+		)
+		createBatchImageVideos({
+			canvas,
+			snapshot: freshSnapshot,
+			videoModelList,
+		})
+	},
+}
+
 const CONNECTION_MENU_ACTION_RECIPES: readonly ConnectionMenuActionRecipe[] = [
 	VIDEO_CONTINUATION_RECIPE,
+	BATCH_IMAGE_TO_VIDEO_RECIPE,
 ]
 
 export function getConnectionMenuActionRecipes(

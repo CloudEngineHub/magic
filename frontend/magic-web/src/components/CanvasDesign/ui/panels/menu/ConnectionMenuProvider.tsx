@@ -13,6 +13,11 @@ import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { MenuItemRenderer } from "./MenuItemRenderer"
 import type { MenuItem } from "./types"
 import {
+	canCreateStoryboardVideosFromConnection,
+	createStoryboardVideosFromConnection,
+	getStoryboardVideoMenuLabel,
+} from "../../../runtime/interaction/connection/imageVideoBatchCreation"
+import {
 	canCreateStoryboardFromConnection,
 	createStoryboardFromConnection,
 	getStoryboardConnectionCreateSize,
@@ -430,6 +435,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				canvas,
 				snapshot,
 				originSide: context.origin.side,
+				originKind: context.origin.kind,
 				videoModelList,
 			}).find((item) => item.id === recipeId)
 			if (!recipe) return
@@ -439,6 +445,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				canvas,
 				snapshot,
 				originSide: context.origin.side,
+				originKind: context.origin.kind,
 				videoModelList,
 			})
 		},
@@ -480,6 +487,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				canvas,
 				snapshot,
 				originSide: connectionMenuContext.origin.side,
+				originKind: connectionMenuContext.origin.kind,
 				videoModelList,
 			}).map((recipe) => {
 				const label = recipe.getLabel(snapshot)
@@ -527,9 +535,38 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				},
 			})
 		}
+		if (
+			canCreateStoryboardVideosFromConnection(
+				canvas,
+				connectionMenuContext.origin,
+				videoModelList,
+			)
+		) {
+			const imageCount =
+				resolveOriginSnapshot(connectionMenuContext)?.imageSequence.length ?? 0
+			const storyboardVideoLabel = getStoryboardVideoMenuLabel(imageCount)
+			items.push({
+				id: "connection-add-storyboard-video",
+				label: translate(storyboardVideoLabel.key, storyboardVideoLabel.fallback).replace(
+					"{{count}}",
+					String(imageCount),
+				),
+				icon: Film,
+				onClick: () => {
+					if (!canvas || connectionMenuContext.origin.kind !== "element") return
+					closeConnectionMenu()
+					createStoryboardVideosFromConnection({
+						canvas,
+						origin: connectionMenuContext.origin,
+						videoModelList,
+					})
+				},
+			})
+		}
 		return items
 	}, [
 		canvas,
+		closeConnectionMenu,
 		connectionMenuContext,
 		createDefaultFromSelection,
 		createElementAndConnect,

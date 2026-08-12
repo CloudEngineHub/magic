@@ -60,12 +60,14 @@ describe("connection menu action recipes", () => {
 			canvas: currentCanvas,
 			snapshot: snapshot(["video-1"]),
 			originSide: "right",
+			originKind: "selection",
 			videoModelList: [frameModel],
 		})
 		const batch = getConnectionMenuActionRecipes({
 			canvas: currentCanvas,
 			snapshot: snapshot(["video-1", "video-2"]),
 			originSide: "right",
+			originKind: "selection",
 			videoModelList: [frameModel],
 		})
 
@@ -82,6 +84,7 @@ describe("connection menu action recipes", () => {
 				canvas: currentCanvas,
 				snapshot: snapshot(["video-1"]),
 				originSide: "left",
+				originKind: "selection",
 				videoModelList: [frameModel],
 			}),
 		).toEqual([])
@@ -94,6 +97,7 @@ describe("connection menu action recipes", () => {
 				canvas: currentCanvas,
 				snapshot: snapshot(["video-1"]),
 				originSide: "right",
+				originKind: "selection",
 				videoModelList: [
 					{
 						...frameModel,

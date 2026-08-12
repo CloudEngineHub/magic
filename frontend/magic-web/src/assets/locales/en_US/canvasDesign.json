@@ -268,6 +268,9 @@
 		"trigger": "Extract Prompt",
 		"unavailable": "Image prompt extraction is currently unavailable"
 	},
+	"imageToVideo": {
+		"batchMenu": "Batch images to video"
+	},
 	"layers": {
 		"collapse": "Collapse",
 		"empty": {
@@ -532,6 +535,11 @@
 		"resolution": "Resolution",
 		"shotList": "Shot list",
 		"shotWithIndex": "Shot {{index}}"
+	},
+	"storyboardVideo": {
+		"menuName": "Create storyboard videos",
+		"menuNameWithCount": "Create storyboard videos ({{count}})",
+		"outputFrameName": "Storyboard video group"
 	},
 	"text": {
 		"defaultName": "Text"

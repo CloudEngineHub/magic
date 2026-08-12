@@ -269,6 +269,9 @@
 		"trigger": "提炼提示词",
 		"unavailable": "图片提炼能力暂不可用"
 	},
+	"imageToVideo": {
+		"batchMenu": "批量图片生成视频"
+	},
 	"layers": {
 		"collapse": "收起",
 		"empty": {
@@ -546,6 +549,11 @@
 		"resolution": "分辨率",
 		"shotList": "分镜列表",
 		"shotWithIndex": "分镜 {{index}}"
+	},
+	"storyboardVideo": {
+		"menuName": "制作分镜视频",
+		"menuNameWithCount": "制作分镜视频（{{count}} 个）",
+		"outputFrameName": "分镜视频组合"
 	},
 	"text": {
 		"defaultName": "文本"
