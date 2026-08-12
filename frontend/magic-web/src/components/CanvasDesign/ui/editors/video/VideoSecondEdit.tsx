@@ -231,6 +231,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			key={`${videoElement.id}-from-result`}
 			videoElement={videoElement}
 			autoFocus
+			autoFocusAtDocumentEnd
 			restoreOnMount="originalRequestOnly"
 			submitTarget="current-content"
 			syncElementSize={false}

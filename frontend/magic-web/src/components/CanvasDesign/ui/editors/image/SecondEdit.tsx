@@ -475,6 +475,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				onSend={handleSend}
 				isSending={isSending}
 				autoFocus
+				autoFocusAtDocumentEnd
 				isDropEnabled={isEditing}
 				className={styles.imageMessageEditor}
 				style={{ visibility: isVisible ? "visible" : "hidden" }}
