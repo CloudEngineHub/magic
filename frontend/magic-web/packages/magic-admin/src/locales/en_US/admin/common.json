@@ -210,6 +210,15 @@
 	"pleaseSelectMember": "Please select user",
 	"pleaseSelectPlaceholder": "Please select {{name}}",
 	"prePage": "Previous Page",
+	"publishTarget": {
+		"departmentCount": "Departments: {{count}}",
+		"departments": "Departments",
+		"details": "Publish target details",
+		"empty": "No details",
+		"memberCount": "Members: {{count}}",
+		"members": "Members",
+		"view": "View list"
+	},
 	"search": "Search Options",
 	"slidesTemplate": {
 		"addButton": "Add Template",

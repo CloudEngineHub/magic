@@ -8,7 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 
 export const messageMarkdownBaseClassName = cn(
-	"w-full break-words leading-relaxed text-foreground",
+	"my-2 w-full break-words leading-relaxed text-foreground",
 	"[&_h1]:mb-2.5 [&_h1]:mt-2.5 [&_h1]:pb-1.5 [&_h1]:text-[2em] [&_h1]:font-semibold [&_h1]:leading-tight",
 	"[&_h2]:mb-2.5 [&_h2]:mt-2.5 [&_h2]:pb-1.5 [&_h2]:text-[1.5em] [&_h2]:font-semibold [&_h2]:leading-tight",
 	"[&_h3]:mb-2.5 [&_h3]:mt-2.5 [&_h3]:text-[1.25em] [&_h3]:font-semibold [&_h3]:leading-tight",

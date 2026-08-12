@@ -13,6 +13,7 @@ import { useIsMobile } from "@admin/hooks/useIsMobile"
 import { useDetail } from "../hooks/useDetail"
 import { useStyles } from "./styles"
 import { AiPowerLogoMap, hasLogoMap } from "../AIPower/index.page"
+import { stripSuperMagicBrand } from "../AIPower/displayName"
 import { DefaultProviderListMap, DeprecatedProviderMap } from "./constants"
 
 const ServiceConfig = lazy(() => import("./components/ServiceConfig"))
@@ -107,12 +108,16 @@ function AIPowerDetailPage() {
 	const { run } = useRequest(PlatformPackageApi.getAiPowerDetail, {
 		manual: true,
 		onSuccess(res) {
+			const displayName = stripSuperMagicBrand(res.name)
+			const displayDescription = stripSuperMagicBrand(res.description)
 			const defaultList = DefaultProviderListMap[res.code] || []
 			const availableProviders = getAvailableProviderList(res.code, res.config?.providers)
 
 			const isProviders = hasProvidersConfig(res) || defaultList.length > 0
 			setData({
 				...res,
+				name: displayName,
+				description: displayDescription,
 				icon: hasLogoMap.includes(res.code as keyof typeof AiPowerLogoMap)
 					? AiPowerLogoMap[res.code as keyof typeof AiPowerLogoMap]
 					: "",
@@ -150,7 +155,7 @@ function AIPowerDetailPage() {
 				})
 			}
 
-			handleDataLoaded(res.name)
+			handleDataLoaded(displayName)
 		},
 	})
 
@@ -245,8 +250,7 @@ function AIPowerDetailPage() {
 		if (useProvidersConfig) {
 			const providerConfig = (form.getFieldValue(["config", "providers"]) ||
 				providerList.find((item) => item.provider === selectedProvider)) as
-				| PlatformPackage.ProviderConfig
-				| undefined
+				PlatformPackage.ProviderConfig | undefined
 
 			if (!providerConfig) return
 

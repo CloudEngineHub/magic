@@ -676,11 +676,12 @@ class AliyunSimpleUpload extends SimpleUpload
                 unset($signedUrlOptions['response-content-type']);
             }
 
-            // Set response headers if specified
+            // 设置响应文件名和内容处置方式，默认保持附件下载行为
             if (isset($options['filename'])) {
-                $filename = $options['filename'];
+                $filename = (string) $options['filename'];
+                $download = (bool) ($options['download'] ?? true);
                 $signedUrlOptions['response-content-disposition']
-                    = 'attachment; filename="' . addslashes($filename) . '"';
+                    = $this->buildContentDisposition($filename, $download);
             }
 
             // Handle image processing parameters (only for GET method)

@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\Skill\Entity\ValueObject;
 
-use Dtyq\SuperMagic\Domain\Skill\Entity\ValueObject\PublishTargetValue;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetValue;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;

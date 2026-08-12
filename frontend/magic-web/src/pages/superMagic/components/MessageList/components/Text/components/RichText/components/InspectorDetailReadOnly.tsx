@@ -40,13 +40,14 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 			? (attrs.fileMention.data as ProjectFileMentionData)
 			: null
 
+	// RichText 会统一覆盖 .magic-mention；折叠态在这里恢复与编辑器一致的行内布局和高度。
 	return (
 		<span
 			className={cn(
 				"inspector-detail-read-only select-none transition-colors",
 				expanded
 					? "my-1 block w-full rounded-md border border-primary/50 bg-primary/5"
-					: "magic-mention inline-flex max-w-[min(360px,100%)] border border-border/60 !bg-muted/30 px-0.5 align-middle",
+					: "magic-mention !inline-flex max-w-[min(360px,100%)] !overflow-visible !bg-transparent !p-0 !align-middle",
 			)}
 		>
 			<button
@@ -54,6 +55,7 @@ export function InspectorDetailReadOnly({ attrs }: InspectorDetailReadOnlyProps)
 				className={cn(
 					"inline-flex max-w-full cursor-pointer items-center gap-1 text-left font-[inherit] leading-[inherit] text-[inherit]",
 					expanded ? "w-full" : "w-auto",
+					!expanded && "h-6 rounded-md border border-border/60 bg-muted/30 px-1.5",
 					expanded &&
 						"border-b border-primary/20 px-1 py-0.5 text-xs font-normal leading-5 text-primary",
 				)}

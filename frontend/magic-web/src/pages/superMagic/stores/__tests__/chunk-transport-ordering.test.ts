@@ -598,7 +598,10 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		})
 
 		// super_magic_message 即使携带 running，也已经是该消息的 canonical Final。
-		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
 		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
 		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
 
@@ -608,6 +611,7 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 		const generation = store.beginTopicSync(TOPIC_ID)
 		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
 			mode: "replace",
+			assistantSnapshotPolicy: "canonical_final",
 			syncGeneration: generation,
 		})
 		expect(
@@ -637,7 +641,10 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 			status: "running",
 		})
 
-		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
 		const staleGeneration = store.beginTopicSync(TOPIC_ID)
 		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
 		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
@@ -645,6 +652,7 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 
 		store.initializeMessages(TOPIC_ID, [cloneFixture(runningSnapshot)], {
 			mode: "replace",
+			assistantSnapshotPolicy: "canonical_final",
 			syncGeneration: staleGeneration,
 		})
 		store.completeTopicSync(TOPIC_ID, staleGeneration, {
@@ -677,7 +685,10 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 			})
 		})
 
-		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
 		store.receiveChunk(createChunk({ i: 284, reasoningContent: "untrusted tail" }))
 		store.receiveChunk(createChunk({ i: 510, finishReason: "stop" }))
 		vi.advanceTimersByTime(30_000)
@@ -702,7 +713,10 @@ describe("SuperMagicStore / Chunk 传输与顺序", () => {
 			reasoningContent: "canonical reasoning",
 			status: "running",
 		})
-		store.initializeMessages(TOPIC_ID, [runningSnapshot], { mode: "merge" })
+		store.initializeMessages(TOPIC_ID, [runningSnapshot], {
+			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
+		})
 		store.receiveChunk(createChunk({ i: 0, reasoningContent: "local reasoning" }))
 		store.receiveChunk(
 			createChunk({ i: 0, correlationId: siblingCorrelationId, content: "sibling answer" }),

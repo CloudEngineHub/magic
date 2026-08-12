@@ -152,6 +152,15 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			...collectAttachmentNodes(displayData ? [displayData] : []),
 		])
 	}, [attachments, attachmentList, displayData])
+	const pptAttachments = useMemo(() => {
+		// PPTRender uses attachments as a tree. Keep the source tree when available,
+		// while preserving folder previews whose tree only exists on displayData.
+		if (attachments?.length) return attachments
+		if (Array.isArray(displayData?.children) && displayData.children.length > 0) {
+			return [displayData]
+		}
+		return pptAttachmentList
+	}, [attachments, displayData, pptAttachmentList])
 	const processAttachments = pptAttachmentList
 	const magicProjectFile = useMemo(() => {
 		if (!displayData?.file_id || pptAttachmentList.length === 0) return undefined
@@ -426,7 +435,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 				<PPTRender
 					key={`ppt-${renderKey}`}
 					slidePaths={derivedSlidePaths}
-					attachments={pptAttachmentList}
+					attachments={pptAttachments}
 					attachmentList={pptAttachmentList}
 					projectId={projectId}
 					mainFileId={displayData?.file_id}

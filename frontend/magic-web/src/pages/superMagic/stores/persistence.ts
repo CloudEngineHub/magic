@@ -27,6 +27,27 @@ const websocketRecordWriterId = createRandomUuidV4()
 let websocketRecordWriterSequence = 0
 let messagePersistenceBarrier = Promise.resolve()
 
+/**
+ * IndexedDB receives a stable snapshot, but JSON.stringify creates a large transient
+ * string for every streamed batch. Messages are JSON-shaped, so a small structural
+ * copier preserves the old omission-of-undefined behavior without the string roundtrip.
+ */
+function snapshotPersistableValue<T>(value: T): T {
+	if (value === null || typeof value !== "object") return value
+	if (Array.isArray(value)) {
+		return value.map((entry) =>
+			entry === undefined ? null : snapshotPersistableValue(entry),
+		) as T
+	}
+
+	const snapshot: Record<string, unknown> = {}
+	Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+		if (entry === undefined) return
+		snapshot[key] = snapshotPersistableValue(entry)
+	})
+	return snapshot as T
+}
+
 export function createWebSocketRecordMetadata(
 	source: WebSocketRecordSource,
 	sentAt?: number,
@@ -64,11 +85,10 @@ export function persistMessagesToStorage(
 				: ("seq_id" in value ? value.seq_id : undefined) || performance.now()
 			return {
 				id: `${cacheId}-${persistenceSequence++}`,
-				value,
+				value: snapshotPersistableValue(value),
 			}
 		})
-		const parsedEntries = JSON.parse(JSON.stringify(entries))
-		const write = db.addManyToTable(_topicId, parsedEntries).catch((error) => {
+		const write = db.addManyToTable(_topicId, entries).catch((error) => {
 			console.log(error)
 		})
 		// 每次调用立即提交给 Dexie，同时让报告查询能等待所有尚未完成的并发写入。

@@ -154,7 +154,7 @@ function createController(
 }
 
 describe("ProjectShareLinkDetailView", () => {
-	it("展示原型结构的详情信息，并移除旧编辑按钮", () => {
+	it("展示原型结构的详情信息，并提供新版编辑入口", () => {
 		const controller = createController()
 
 		renderLinkDetailWithFooter(controller)
@@ -183,16 +183,18 @@ describe("ProjectShareLinkDetailView", () => {
 		expect(screen.getByTestId("project-share-sheet-copy-password-button")).toHaveTextContent(
 			"复制密码",
 		)
-		expect(screen.queryByTestId("project-share-sheet-edit-button")).not.toBeInTheDocument()
+		expect(screen.getByTestId("project-share-sheet-edit-button")).toHaveTextContent(
+			"share.editShare",
+		)
 		expect(
 			screen.queryByTestId("project-share-sheet-native-share-button"),
 		).not.toBeInTheDocument()
 		expect(
-			screen.getByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
-		).toBeInTheDocument()
+			screen.queryByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
+		).not.toBeInTheDocument()
 	})
 
-	it("系统分享可用时展示分享至按钮并扩大底部留白", () => {
+	it("系统分享可用时展示分享至按钮且不重复预留底部空间", () => {
 		const controller = createController({
 			canNativeShare: true,
 			selectedShareMessageText: "Fictional share text",
@@ -204,10 +206,8 @@ describe("ProjectShareLinkDetailView", () => {
 			"分享至",
 		)
 		expect(
-			screen.getByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
-		).toHaveStyle({
-			height: "calc(10.25rem+max(var(--safe-area-inset-bottom),16px))",
-		})
+			screen.queryByTestId("project-share-sheet-detail-floating-bar-scroll-spacer"),
+		).not.toBeInTheDocument()
 	})
 
 	it("点击详情页底部删除按钮进入删除确认视图", () => {

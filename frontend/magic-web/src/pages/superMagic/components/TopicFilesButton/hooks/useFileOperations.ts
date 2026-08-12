@@ -104,8 +104,7 @@ const findParentSlideFolder = (
 			// 检查目标文件是否是该文件夹的直接子项
 			if (item.children.some((child) => child.file_id === targetFileId)) {
 				const config = (item.display_config || item.metadata) as
-					| { type?: string; [key: string]: unknown }
-					| undefined
+					{ type?: string; [key: string]: unknown } | undefined
 				if (config?.type === "slide") {
 					return item
 				}
@@ -993,11 +992,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const toastId = createRandomUuidV4()
 			const resourceErrors = documentExporter.createResourceErrorCollector(t)
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			let mergedDisplayConfig = displayConfig || metadata
 			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
@@ -1010,8 +1007,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (parentFolder) {
 					isSlideFolder = true
 					const parentConfig = (parentFolder.display_config || parentFolder.metadata) as
-						| { type?: string; slides?: string[]; [key: string]: unknown }
-						| undefined
+						{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 					mergedDisplayConfig = parentConfig
 					slidePaths = [] // 单文件，不走多 slide 路径
 				}
@@ -1218,11 +1214,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 			const toastId = createRandomUuidV4()
 			const displayConfig = item.display_config as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const metadata = item.metadata as
-				| { type?: string; slides?: string[]; [key: string]: unknown }
-				| undefined
+				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
 			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides

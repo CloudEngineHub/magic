@@ -603,6 +603,48 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		expect(getToolNode(store, "tool-response-1")).toBeUndefined()
 	})
 
+	it("活动 Assistant 渲染期间，response_missing 兜底也必须立即取消 Tool loading。", () => {
+		const store = createStore()
+		const ownerSuperMessageId = toAssistantSuperMessageId(CORRELATION_ID)
+		const embeddedTool = createToolCall({ status: "running" })
+
+		store.receiveChunk(createToolHeaderChunk())
+		expect(store.getStreamState(TOPIC_ID, ownerSuperMessageId)).toBeDefined()
+		expect(
+			(
+				store.getToolResponseForRendering(
+					TOPIC_ID,
+					ownerSuperMessageId,
+					embeddedTool,
+				) as ToolState
+			)?.status,
+		).toBe("running")
+
+		store.toolResponseMap.set(
+			TOPIC_ID,
+			new Map([
+				[
+					"tool-1",
+					{
+						id: "tool-1",
+						name: "read_file",
+						status: "response_missing",
+					},
+				],
+			]),
+		)
+
+		expect(
+			(
+				store.getToolResponseForRendering(
+					TOPIC_ID,
+					ownerSuperMessageId,
+					embeddedTool,
+				) as ToolState
+			)?.status,
+		).toBe("response_missing")
+	})
+
 	it("同一个 tool response 重复到达。", () => {
 		const store = createStore()
 		const arrivals = collectArrivals(store)
@@ -966,6 +1008,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 
 		store.initializeMessages(TOPIC_ID, [historicalAssistant], {
 			mode: "merge",
+			assistantSnapshotPolicy: "canonical_final",
 			toolProjectionPolicy: "historical_terminal",
 		})
 
@@ -2191,6 +2234,46 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		).toBe("response_missing")
 	})
 
+	it("Topic error 终态也会结束没有 role=tool 响应的工具 loading。", () => {
+		const store = createStore()
+		const correlationId = "vm-init-correlation"
+		const superMessageId = toAssistantSuperMessageId(correlationId)
+		const toolCall = createToolCall({
+			id: "vm-init-tool",
+			name: "initialize_virtual_machine",
+			arguments: '{"image":"default"}',
+			status: "running",
+		})
+
+		store.enqueueMessage(
+			TOPIC_ID,
+			createAssistantEnvelope({
+				appMessageId: "vm-init-assistant",
+				correlationId,
+				status: "running",
+				toolCalls: [toolCall],
+			}),
+		)
+		settleRendering()
+
+		const generation = store.beginTopicSync(TOPIC_ID)
+		expect(getCanonicalToolState(store, "vm-init-tool")).toBeUndefined()
+		expect(
+			store.completeTopicSync(TOPIC_ID, generation, {
+				succeeded: true,
+				taskStatus: "error",
+			}),
+		).toBe(true)
+
+		expect(getCanonicalToolState(store, "vm-init-tool")).toMatchObject({
+			id: "vm-init-tool",
+			status: "response_missing",
+		})
+		expect(
+			store.getToolResponseForRendering(TOPIC_ID, superMessageId, toolCall) as ToolState,
+		).toMatchObject({ status: "response_missing" })
+	})
+
 	it("页面常驻增量轮询没有新消息但任务已结束时，缺少 role=tool 的工具调用进入 response_missing。", () => {
 		const store = createStore()
 
@@ -2502,7 +2585,10 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 					toolCalls: [createToolCall({ id: "still-running-tool", status: "running" })],
 				}),
 			],
-			{ toolProjectionPolicy: "preserve_live" },
+			{
+				assistantSnapshotPolicy: "progress_snapshot",
+				toolProjectionPolicy: "preserve_live",
+			},
 		)
 		expect(
 			store.completeTopicSync(TOPIC_ID, generation, {

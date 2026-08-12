@@ -6,6 +6,7 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import MessageRenderErrorBoundary from "./MessageRenderErrorBoundary"
 import {
+	ASSISTANT_MESSAGE_ROW_CLASS,
 	USER_MESSAGE_ROW_CLASS,
 	USER_MESSAGE_STICKY_MASK_CLASS,
 	USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
@@ -23,12 +24,15 @@ const terminalToolStatuses = new Set(["completed", "failed", "error", "finished"
 const MESSAGE_ROW_SPACING = 8
 
 export interface VirtualMessageListProps {
+	topicId?: string
 	items: Array<VirtualMessageItem>
 	userIndices: Array<number>
 	isMobile: boolean
 	getScrollElement: () => HTMLDivElement | null
 	renderNode: (args: { item: VirtualMessageItem }) => ReactNode
 	stickyMessageClassName?: string
+	/** Disable the shared mobile mask when a caller needs the desktop mask appearance. */
+	useMobileStickyOverlay?: boolean
 	exportMode?: boolean
 	selectedKeys?: ReadonlySet<string>
 	onToggleSelect?: (key: string) => void
@@ -40,14 +44,52 @@ export interface VirtualMessageListProps {
 	) => void
 }
 
-function VirtualMessageRenderRow({
+const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 	item,
+	topicId,
 	renderNode,
 }: {
 	item: VirtualMessageItem
+	topicId?: string
 	renderNode: VirtualMessageListProps["renderNode"]
 }) {
-	const content = renderNode({ item })
+	// The revision read is the row's only Store subscription. Updating another message
+	// must not force this visible row to rebuild its Markdown/tool subtree.
+	const superMessageId = item.node?.super_message_id || ""
+	void (topicId && superMagicStore.getMessageRevision(topicId, superMessageId))
+	const canonicalNode = superMessageId
+		? (((topicId
+				? superMagicStore.getTopicMessageNode?.(topicId, superMessageId)
+				: undefined) || superMagicStore.getMessageNode(superMessageId)) as
+				Record<string, unknown> | undefined)
+		: undefined
+	if (item.isTool && !terminalToolStatuses.has(String(canonicalNode?.status || ""))) {
+		// Keep a measured zero-height anchor in the virtualizer. Removing the row
+		// altogether leaves its old estimate in TanStack's measurement cache and
+		// creates a phantom gap until the next full layout pass.
+		return (
+			<div
+				data-virtual-message-hidden="true"
+				aria-hidden
+				className="h-0 w-full overflow-hidden"
+				style={{ height: 0 }}
+			/>
+		)
+	}
+	const effectiveItem = canonicalNode
+		? ({
+				...item,
+				node: {
+					...item.node,
+					...canonicalNode,
+					// Historical canonical nodes may carry the inner business/sandbox Topic ID,
+					// while Tool responses are bucketed by the outer chat Topic ID. Keep the
+					// row's Store scope authoritative so paged history resolves toolResponseMap.
+					topic_id: topicId || item.node?.topic_id || canonicalNode.topic_id,
+				},
+			} as VirtualMessageItem)
+		: item
+	const content = renderNode({ item: effectiveItem })
 	if (content == null || content === false) return null
 
 	return (
@@ -56,24 +98,24 @@ function VirtualMessageRenderRow({
 			data-message-role={item.role || "user"}
 			className={cn(
 				"relative w-full",
-				!item.isUser &&
-					!item.isTool &&
-					"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
+				!item.isUser && !item.isTool && ASSISTANT_MESSAGE_ROW_CLASS,
 				item.isUser && USER_MESSAGE_ROW_CLASS,
 			)}
 		>
 			{content}
 		</div>
 	)
-}
+})
 
 function VirtualMessageListInner({
+	topicId,
 	items,
 	userIndices,
 	isMobile,
 	getScrollElement,
 	renderNode,
 	stickyMessageClassName,
+	useMobileStickyOverlay = true,
 	exportMode,
 	selectedKeys,
 	onToggleSelect,
@@ -103,7 +145,7 @@ function VirtualMessageListInner({
 	const nextStickyIndex =
 		activeStickyPosition >= 0 ? userIndices[activeStickyPosition + 1] : undefined
 	const stickyTopClass = getUserMessageStickyTopClass(isMobile)
-	const stickyTop = isMobile ? 10 : 40
+	const stickyTop = isMobile ? 0 : 40
 
 	return (
 		<div
@@ -114,25 +156,6 @@ function VirtualMessageListInner({
 			{virtualItems.map((virtualItem) => {
 				const item = items[virtualItem.index]
 				if (!item) return null
-
-				const card = superMagicStore.getMessageNode(item.node?.super_message_id) as
-					{ status?: string } | undefined
-				if (item.isTool && !terminalToolStatuses.has(card?.status as string)) {
-					return (
-						<div
-							key={item.key}
-							ref={virtualizer.measureElement}
-							data-index={virtualItem.index}
-							data-virtual-message-hidden="true"
-							aria-hidden
-							className="absolute left-0 top-0 w-full overflow-hidden"
-							style={{
-								height: 0,
-								transform: `translateY(${virtualItem.start}px)`,
-							}}
-						/>
-					)
-				}
 
 				const isActiveSticky = item.stickyCandidate && activeStickyIndex === item.index
 				const nextStickyStart =
@@ -168,9 +191,7 @@ function VirtualMessageListInner({
 						data-message-role={item.role || "user"}
 						className={cn(
 							"relative w-full",
-							!item.isUser &&
-								!item.isTool &&
-								"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
+							!item.isUser && !item.isTool && ASSISTANT_MESSAGE_ROW_CLASS,
 							item.isUser && USER_MESSAGE_ROW_CLASS,
 						)}
 					>
@@ -184,7 +205,11 @@ function VirtualMessageListInner({
 						fallbackWrapper={wrapMessageRow}
 					>
 						<MessageViewStateScopeProvider messageKey={item.key}>
-							<VirtualMessageRenderRow item={item} renderNode={renderNode} />
+							<VirtualMessageRenderRow
+								topicId={topicId}
+								item={item}
+								renderNode={renderNode}
+							/>
 						</MessageViewStateScopeProvider>
 					</MessageRenderErrorBoundary>
 				)
@@ -203,6 +228,7 @@ function VirtualMessageListInner({
 								? cn(
 										USER_MESSAGE_STICKY_POSITION_CLASS,
 										stickyTopClass,
+										isMobile && "z-40",
 										stickyMessageClassName,
 									)
 								: "absolute top-0",
@@ -242,7 +268,9 @@ function VirtualMessageListInner({
 										className={cn(
 											"relative",
 											USER_MESSAGE_STICKY_MASK_CLASS,
-											isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
+											isMobile &&
+												useMobileStickyOverlay &&
+												USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 											stickyMessageClassName,
 										)}
 									>
@@ -265,4 +293,4 @@ function VirtualMessageListInner({
 	)
 }
 
-export const VirtualMessageList = memo(observer(VirtualMessageListInner))
+export const VirtualMessageList = memo(VirtualMessageListInner)

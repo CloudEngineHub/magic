@@ -8,11 +8,11 @@ declare(strict_types=1);
 namespace App\Application\Speech\Assembler;
 
 use App\Domain\Asr\ValueObject\AsrDirectoryRoleEnum;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\FileType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\StorageType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\TaskFileSource;
-use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
+use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
+use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
+use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use Hyperf\Codec\Json;
 
 /**

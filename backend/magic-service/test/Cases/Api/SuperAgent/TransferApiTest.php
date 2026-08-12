@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Api\SuperAgent;
 
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\ProjectRepositoryInterface;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\WorkspaceRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
 
 /**
  * @internal

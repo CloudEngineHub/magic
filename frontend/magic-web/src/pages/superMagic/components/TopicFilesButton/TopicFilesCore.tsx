@@ -242,16 +242,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
-	const selectionEnabled = shouldEnableTopicFileSelection({
-		isSelectMode,
-		allowEdit,
-		allowDownload,
-		hasLogin,
-		allowReadonlySelection,
-	})
+	const selectionEnabled =
+		capabilities.multiSelect &&
+		shouldEnableTopicFileSelection({
+			isSelectMode,
+			allowEdit,
+			allowDownload,
+			hasLogin,
+			allowReadonlySelection,
+		})
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
-	const canUseDesktopCrossProjectMove =
-		capabilities.crossProject && projects.length > 0 && !isChatProject && !isMobile
+	const canUseDesktopCrossProjectMove = capabilities.crossProject && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 	const downloadProgress = useDownloadProgress()
 
@@ -860,17 +861,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								onKeepBoth: noopFolderConflictHandler,
 							}
 
-	// 创建移动文件处理函数的适配器
+	// Route desktop project moves to the cross-project selector.
 	const handleMoveFileAdapter = useMemoizedFn((item: AttachmentItem) => {
-		// 桌面端普通项目继续复用现有跨项目 Modal；移动端和 chat 项目统一走目录 Sheet。
 		if (canUseDesktopCrossProjectMove) {
 			if (item.file_id) {
-				// 获取文件的父目录路径
 				const parentPath = getParentPathByFileId(item.file_id)
 				crossProjectOperation.openMoveModal([item.file_id], parentPath)
 			}
 		} else {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.showMoveSelector(item)
 		}
 	})
@@ -1917,7 +1916,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getParentPathByFileId,
 		selectedWorkspace,
 		selectedProject,
-		projects,
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,

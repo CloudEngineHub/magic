@@ -234,8 +234,7 @@ export function registerMicroAppDesktopWorkspaceCases({
 			}),
 		)
 		const latestDetailProps = detailMocks.render.mock.lastCall?.[0] as
-			| Record<string, unknown>
-			| undefined
+			Record<string, unknown> | undefined
 		expect(latestDetailProps).not.toHaveProperty("hideTabBar")
 		expect(latestDetailProps).not.toHaveProperty("nonClosableFileIds")
 

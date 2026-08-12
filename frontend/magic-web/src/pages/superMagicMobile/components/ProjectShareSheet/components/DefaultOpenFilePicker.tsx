@@ -1,14 +1,16 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react"
-import { Check, ChevronRight, X } from "lucide-react"
+import { type MouseEvent, useMemo } from "react"
+import { Check, ChevronRight, Minus } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
-import MobileBottomSearchBar from "@/pages/superMagicMobile/components/MobileBottomSearchBar"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
-import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadcrumb"
 import { canSetAsDefault } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { MobileAttachmentRowIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MobileAttachmentRowIcon"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import {
+	getAttachmentDisplayName,
+	MobileAttachmentPickerShell,
+	useMobileAttachmentBrowser,
+} from "@/pages/superMagicMobile/components/MobileAttachmentPicker"
 
 interface DefaultOpenFilePickerProps {
 	open: boolean
@@ -18,58 +20,56 @@ interface DefaultOpenFilePickerProps {
 	onSelectFile: (fileId: string) => void
 }
 
-interface SearchResult {
-	file: AttachmentItem
-	pathLabel: string
-	parentFolders: AttachmentItem[]
+type FolderCheckState = "checked" | "unchecked" | "indeterminate"
+
+interface SelectionCoverage {
+	totalNodeCount: number
+	selectedNodeCount: number
 }
 
-/**
- * Reads a stable display name from the mixed attachment payloads used by project and file shares.
- */
-function getAttachmentDisplayName(item: AttachmentItem): string {
-	return item.name || item.file_name || item.display_filename || item.filename || ""
-}
-
-/**
- * Collects search matches only when the picker is open and the query is non-empty.
- */
-function collectSearchResults(
+/** Builds every folder state in one tree pass so row rendering only performs map lookups. */
+function buildFolderCheckStateMap(
 	nodes: AttachmentItem[],
-	query: string,
-	pathParts: string[] = [],
-	parentFolders: AttachmentItem[] = [],
-): SearchResult[] {
-	const normalizedQuery = query.trim().toLowerCase()
-	if (!normalizedQuery) return []
+	selectedFileId?: string,
+): Map<string, FolderCheckState> {
+	const folderStates = new Map<string, FolderCheckState>()
+	if (!selectedFileId) return folderStates
 
-	const results: SearchResult[] = []
-	nodes.forEach((node) => {
-		const name = getAttachmentDisplayName(node)
-		const extension = node.file_extension || ""
-		const nextPathParts = node.is_directory ? [...pathParts, name] : pathParts
-		const nextParentFolders = node.is_directory ? [...parentFolders, node] : parentFolders
+	/** Returns subtree coverage while recording the current folder's visual state. */
+	const visitNode = (node: AttachmentItem): SelectionCoverage => {
+		let descendantNodeCount = 0
+		let selectedDescendantCount = 0
 
-		if (
-			canSetAsDefault(node) &&
-			(name.toLowerCase().includes(normalizedQuery) ||
-				extension.toLowerCase().includes(normalizedQuery))
-		) {
-			results.push({
-				file: node,
-				pathLabel: pathParts.join(" / "),
-				parentFolders,
-			})
+		for (const child of node.children || []) {
+			const childCoverage = visitNode(child)
+			descendantNodeCount += childCoverage.totalNodeCount
+			selectedDescendantCount += childCoverage.selectedNodeCount
 		}
 
-		if (node.children?.length) {
-			results.push(
-				...collectSearchResults(node.children, query, nextPathParts, nextParentFolders),
-			)
-		}
-	})
+		const nodeId = node.file_id
+		const isSelectedNode = nodeId === selectedFileId
+		const ownNodeCount = nodeId ? 1 : 0
+		const totalNodeCount = ownNodeCount + descendantNodeCount
+		const selectedNodeCount = isSelectedNode ? totalNodeCount : selectedDescendantCount
 
-	return results
+		if (node.is_directory && nodeId) {
+			if (
+				isSelectedNode ||
+				(descendantNodeCount > 0 && selectedDescendantCount === descendantNodeCount)
+			) {
+				folderStates.set(nodeId, "checked")
+			} else if (selectedDescendantCount > 0) {
+				folderStates.set(nodeId, "indeterminate")
+			} else {
+				folderStates.set(nodeId, "unchecked")
+			}
+		}
+
+		return { totalNodeCount, selectedNodeCount }
+	}
+
+	for (const node of nodes) visitNode(node)
+	return folderStates
 }
 
 /**
@@ -83,45 +83,33 @@ export default function DefaultOpenFilePicker({
 	onSelectFile,
 }: DefaultOpenFilePickerProps) {
 	const { t } = useTranslation("super")
-	const [pathStack, setPathStack] = useState<AttachmentItem[]>([])
-	const [searchQuery, setSearchQuery] = useState("")
-	const scrollPortRef = useRef<HTMLDivElement | null>(null)
-	const currentNodes =
-		pathStack.length === 0 ? candidateTree : (pathStack[pathStack.length - 1].children ?? [])
-	const searchResults = useMemo(
-		() => collectSearchResults(candidateTree, searchQuery),
-		[candidateTree, searchQuery],
+	const includeDefaultCandidate = useMemo(() => canSetAsDefault, [])
+	const {
+		pathStack,
+		currentNodes,
+		searchQuery,
+		setSearchQuery,
+		isSearching,
+		searchResults,
+		scrollPortRef,
+		openFolder,
+		openSearchFolder,
+		navigateTo,
+		resetBrowser,
+	} = useMobileAttachmentBrowser(open, candidateTree, includeDefaultCandidate)
+	const folderCheckStates = useMemo(
+		() => buildFolderCheckStateMap(candidateTree, selectedFileId),
+		[candidateTree, selectedFileId],
 	)
-	const isSearching = searchQuery.trim().length > 0
-
-	useEffect(() => {
-		// Search and folder navigation replace the list contents; reset stale long-list offsets.
-		const resetScrollOffsets = () => {
-			if (scrollPortRef.current) {
-				scrollPortRef.current.scrollTop = 0
-				const dialog = scrollPortRef.current.closest('[role="dialog"]')
-				if (dialog instanceof HTMLElement) {
-					dialog.scrollTop = 0
-				}
-			}
-		}
-
-		resetScrollOffsets()
-		const frame = window.requestAnimationFrame(resetScrollOffsets)
-
-		return () => window.cancelAnimationFrame(frame)
-	}, [candidateTree.length, currentNodes.length, isSearching, pathStack.length, searchQuery])
 
 	const resetAndClose = () => {
-		setPathStack([])
-		setSearchQuery("")
+		resetBrowser()
 		onClose()
 	}
 
 	const handleSelect = (fileId: string) => {
 		onSelectFile(fileId)
-		setPathStack([])
-		setSearchQuery("")
+		resetBrowser()
 	}
 
 	/**
@@ -137,11 +125,7 @@ export default function DefaultOpenFilePicker({
 	 * Navigates within the selected folder stack while keeping the same breadcrumb behavior as topic files.
 	 */
 	const handleNavigateTo = (index: number) => {
-		if (index < 0) {
-			setPathStack([])
-			return
-		}
-		setPathStack((previous) => previous.slice(0, index + 1))
+		navigateTo(index)
 	}
 
 	const renderFileRow = (file: AttachmentItem, secondaryText?: string) => {
@@ -187,6 +171,11 @@ export default function DefaultOpenFilePicker({
 	const renderFolderRow = (folder: AttachmentItem, options: { onOpen?: () => void } = {}) => {
 		const displayName = getAttachmentDisplayName(folder)
 		const selectable = canSetAsDefault(folder)
+		const folderCheckState = folder.file_id
+			? (folderCheckStates.get(folder.file_id) ?? "unchecked")
+			: "unchecked"
+		const isFolderChecked = folderCheckState === "checked"
+		const isFolderIndeterminate = folderCheckState === "indeterminate"
 
 		return (
 			<div
@@ -202,7 +191,7 @@ export default function DefaultOpenFilePicker({
 							options.onOpen()
 							return
 						}
-						setPathStack((previous) => [...previous, folder])
+						openFolder(folder)
 					}}
 					data-testid="project-share-default-file-picker-folder-primary"
 				>
@@ -221,29 +210,47 @@ export default function DefaultOpenFilePicker({
 					<button
 						type="button"
 						className={
-							selectedFileId === folder.file_id
+							isFolderChecked || isFolderIndeterminate
 								? "flex size-[22px] shrink-0 items-center justify-center rounded-full bg-foreground active:opacity-75"
 								: "size-[22px] shrink-0 rounded-full border-2 border-[#D0D0D0] active:opacity-75"
 						}
 						disabled={!folder.file_id}
 						onClick={(event) => handleFolderSelect(event, folder)}
 						aria-label={t("projectShare.defaultOpenFileLabel")}
+						aria-pressed={isFolderIndeterminate ? "mixed" : isFolderChecked}
 						data-testid="project-share-default-file-picker-folder-select"
 					>
-						{selectedFileId === folder.file_id ? (
+						{isFolderChecked ? (
 							<Check className="size-3.5 text-white" strokeWidth={2.4} />
+						) : isFolderIndeterminate ? (
+							<Minus className="size-3.5 text-white" strokeWidth={2.4} />
 						) : null}
 					</button>
 				) : null}
 				{!selectable && folder.children?.length ? (
-					<button
-						type="button"
-						className="flex size-8 shrink-0 items-center justify-center rounded-full active:bg-[#F0F0F0]"
-						onClick={() => setPathStack((previous) => [...previous, folder])}
-						data-testid="project-share-default-file-picker-folder-open"
-					>
-						<ChevronRight className="size-[18px] text-[#8A8A8A]" />
-					</button>
+					<>
+						<button
+							type="button"
+							className="flex size-8 shrink-0 items-center justify-center rounded-full active:bg-[#F0F0F0]"
+							onClick={() => openFolder(folder)}
+							data-testid="project-share-default-file-picker-folder-open"
+						>
+							<ChevronRight className="size-[18px] text-[#8A8A8A]" />
+						</button>
+						{isFolderChecked || isFolderIndeterminate ? (
+							<span
+								className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-foreground"
+								aria-hidden="true"
+								data-testid={`project-share-default-file-picker-folder-state-${folder.file_id}`}
+							>
+								{isFolderChecked ? (
+									<Check className="size-3.5 text-white" strokeWidth={2.4} />
+								) : (
+									<Minus className="size-3.5 text-white" strokeWidth={2.4} />
+								)}
+							</span>
+						) : null}
+					</>
 				) : null}
 			</div>
 		)
@@ -262,131 +269,74 @@ export default function DefaultOpenFilePicker({
 	)
 
 	return (
-		<CommonPopup
-			title=""
-			hideHeader
-			showHeader={false}
-			popupProps={{
-				visible: open,
-				onClose: resetAndClose,
-				onMaskClick: resetAndClose,
-				showCloseButton: false,
-				bodyClassName:
-					"flex h-[95dvh] max-h-[calc(100dvh-8px)] min-h-0 flex-col !overflow-hidden p-0",
-				className: "rounded-t-[14px] border-0 bg-[#F7F7F6]",
-				bodyStyle: {
-					background: "#F7F7F6",
-					borderRadius: "14px 14px 0 0",
-					height: "95dvh",
-					overflow: "hidden",
-				},
-			}}
-			wrapperStyle={{
-				height: "100%",
-				maxHeight: "100%",
-				minHeight: 0,
-			}}
-		>
-			<div
-				className="flex h-full min-h-0 flex-col bg-[#F7F7F6]"
-				data-testid="project-share-default-file-picker"
-			>
-				<div className="relative flex h-14 shrink-0 items-center justify-center px-16">
-					<button
-						type="button"
-						className="absolute left-3 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-sm active:opacity-75"
-						onClick={resetAndClose}
-						aria-label={t("common.close")}
-						data-testid="project-share-default-file-picker-close"
-					>
-						<X className="size-[20px] text-foreground" />
-					</button>
-					<div className="truncate text-[18px] font-semibold leading-6 text-foreground">
-						{t("projectShare.defaultOpenFileLabel")}
-					</div>
-				</div>
-				{!isSearching ? (
-					<div
-						className="shrink-0 pr-[14px]"
-						data-testid="project-share-default-file-picker-breadcrumb"
-					>
-						<MobilePathBreadcrumb
-							className="px-[10px] py-2"
-							segments={pathStack.map((item, index) => ({
-								key: item.file_id || `${index}-${getAttachmentDisplayName(item)}`,
-								label: getAttachmentDisplayName(item),
-								onClick: () => handleNavigateTo(index),
-							}))}
-							canBack={pathStack.length > 0}
-							onBack={() => handleNavigateTo(pathStack.length - 2)}
-							onGoHome={() => handleNavigateTo(-1)}
-							backLabel={t("back")}
-							homeLabel={t("home")}
-							backButtonTestId="project-share-default-file-picker-back-button"
-							homeButtonTestId="project-share-default-file-picker-home-button"
-							scrollTestId="project-share-default-file-picker-breadcrumb-scroll"
-							homeIconClassName="h-4.5 w-4.5"
-							separatorClassName="h-4 w-4 text-muted-foreground/60"
-							segmentButtonClassName="px-2 text-base leading-6"
-						/>
-					</div>
-				) : null}
-				<ScrollEdgeFadeContainer
-					fadeColor="mobile-background"
-					className="min-h-0 flex-1"
-					scrollClassName="scrollbar-y-thin"
-					scrollPortRef={scrollPortRef}
-					contentDeps={[
-						candidateTree.length,
-						currentNodes.length,
-						searchResults.length,
-						searchQuery,
-					]}
+		<MobileAttachmentPickerShell
+			open={open}
+			testId="project-share-default-file-picker"
+			closeTestId="project-share-default-file-picker-close"
+			searchTestIdPrefix="project-share-default-file-picker-search"
+			title={t("projectShare.defaultOpenFileLabel")}
+			closeAriaLabel={t("common.close")}
+			searchPlaceholder={t("projectShare.defaultOpenFileSearchPlaceholder")}
+			clearSearchLabel={t("projectDetail.clearSearch")}
+			searchQuery={searchQuery}
+			showBreadcrumb={!isSearching}
+			scrollPortRef={scrollPortRef}
+			contentDeps={[
+				candidateTree.length,
+				currentNodes.length,
+				searchResults.length,
+				searchQuery,
+			]}
+			onClose={resetAndClose}
+			onSearchQueryChange={setSearchQuery}
+			breadcrumb={
+				<div
+					className="shrink-0 pr-[14px]"
+					data-testid="project-share-default-file-picker-breadcrumb"
 				>
-					<div
-						className="min-h-full space-y-2 px-3 pb-2"
-						data-testid="project-share-default-file-picker-list"
-					>
-						{candidateTree.length === 0
-							? renderEmptyState()
-							: isSearching
-								? searchResults.length > 0
-									? searchResults.map((result) =>
-											result.file.is_directory
-												? renderFolderRow(result.file, {
-														onOpen: () => {
-															setPathStack([
-																...result.parentFolders,
-																result.file,
-															])
-															setSearchQuery("")
-														},
-													})
-												: renderFileRow(
-														result.file,
-														result.pathLabel || undefined,
-													),
-										)
-									: renderEmptyState()
-								: currentNodes.map((node) =>
-										node.is_directory
-											? renderFolderRow(node)
-											: renderFileRow(node),
-									)}
-					</div>
-				</ScrollEdgeFadeContainer>
-				<div className="relative z-10 shrink-0 bg-[#F7F7F6]">
-					{/* Match the topic file sheet: search stays docked at the bottom so filtering never changes sheet height. */}
-					<MobileBottomSearchBar
-						value={searchQuery}
-						placeholder={t("projectShare.defaultOpenFileSearchPlaceholder")}
-						clearAriaLabel={t("projectDetail.clearSearch")}
-						onValueChange={setSearchQuery}
-						testIdPrefix="project-share-default-file-picker-search"
-						className="bg-[#F7F7F6] pb-[max(var(--safe-area-inset-bottom),24px)] pt-2.5"
+					<MobilePathBreadcrumb
+						className="px-[10px] py-2"
+						segments={pathStack.map((item, index) => ({
+							key: item.file_id || `${index}-${getAttachmentDisplayName(item)}`,
+							label: getAttachmentDisplayName(item),
+							onClick: () => handleNavigateTo(index),
+						}))}
+						canBack={pathStack.length > 0}
+						onBack={() => handleNavigateTo(pathStack.length - 2)}
+						onGoHome={() => handleNavigateTo(-1)}
+						backLabel={t("back")}
+						homeLabel={t("home")}
+						backButtonTestId="project-share-default-file-picker-back-button"
+						homeButtonTestId="project-share-default-file-picker-home-button"
+						scrollTestId="project-share-default-file-picker-breadcrumb-scroll"
+						homeIconClassName="h-4.5 w-4.5"
+						separatorClassName="h-4 w-4 text-muted-foreground/60"
+						segmentButtonClassName="px-2 text-base leading-6"
 					/>
 				</div>
+			}
+		>
+			<div
+				className="min-h-full space-y-2 px-3 pb-2"
+				data-testid="project-share-default-file-picker-list"
+			>
+				{candidateTree.length === 0
+					? renderEmptyState()
+					: isSearching
+						? searchResults.length > 0
+							? searchResults.map((result) =>
+									result.item.is_directory
+										? renderFolderRow(result.item, {
+												onOpen: () =>
+													openSearchFolder(result.pathItems, result.item),
+											})
+										: renderFileRow(result.item, result.pathLabel || undefined),
+								)
+							: renderEmptyState()
+						: currentNodes.map((node) =>
+								node.is_directory ? renderFolderRow(node) : renderFileRow(node),
+							)}
 			</div>
-		</CommonPopup>
+		</MobileAttachmentPickerShell>
 	)
 }

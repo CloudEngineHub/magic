@@ -205,8 +205,12 @@ export class PPTPathMappingService {
 				},
 			})
 		} catch (error) {
-			this.logger.error("构建路径映射失败", error, {
-				operation: "buildPathMappings",
+			this.logger.error({
+				eventKey: "build_path_mappings_failed",
+				errorKind: "render",
+				error: error,
+				message: "构建路径映射失败",
+				context: { operation: "buildPathMappings" },
 			})
 		}
 	}
@@ -247,8 +251,12 @@ export class PPTPathMappingService {
 				metadata: { requestCount: fileIds.length, responseCount: urlMap.size },
 			})
 		} catch (error) {
-			this.logger.error("获取 URL 失败", error, {
-				operation: "fetchUrlsForFileIds",
+			this.logger.error({
+				eventKey: "get_url_failed",
+				errorKind: "render",
+				error: error,
+				message: "获取 URL 失败",
+				context: { operation: "fetchUrlsForFileIds" },
 			})
 		}
 

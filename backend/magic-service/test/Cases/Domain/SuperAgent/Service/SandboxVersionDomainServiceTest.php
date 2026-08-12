@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\SuperAgent\Service;
 
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TopicEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\SandboxVersionDomainService;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TopicDomainService;
+use App\Domain\SuperMagic\Task\Service\AgentDomainService;
+use App\Domain\SuperMagic\Task\Service\SandboxVersionDomainService;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;

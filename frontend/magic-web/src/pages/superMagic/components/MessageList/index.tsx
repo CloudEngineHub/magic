@@ -31,7 +31,12 @@ import type { Virtualizer } from "@tanstack/react-virtual"
 import { superMagicStore } from "../../stores"
 import { optimisticMessageStore } from "../../stores/optimisticMessageStore"
 import { SuperMagicApi } from "@/apis"
-import { messagesConverter, getMessageNodeKey, createCheckIsLastMessage } from "./helpers"
+import {
+	messagesConverter,
+	getMessageNodeKey,
+	createCheckIsLastMessage,
+	MessageProjectionCache,
+} from "./helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { Button } from "@/components/shadcn-ui/button"
@@ -185,6 +190,10 @@ const MessageList = observer(
 		}, [scrollEdgeFade, isMobile, isShare])
 
 		const renderedMessageKeysRef = useRef<Set<string>>(new Set())
+		const projectionCachesRef = useRef({
+			main: new MessageProjectionCache(),
+			revoked: new MessageProjectionCache(),
+		})
 		const canAnimateNewMessagesRef = useRef(false)
 		const currentTopicKeyRef = useRef<string>("")
 
@@ -211,7 +220,10 @@ const MessageList = observer(
 		)
 		// Store retains all server facts. User-anchored projection decides whole-turn
 		// ownership so Assistant/Tool outer statuses cannot split one conversation round.
-		const revokedProjection = projectRevokedMessageBranches(data, activeRevokedAnchor?.seq_id)
+		const revokedProjection = useMemo(
+			() => projectRevokedMessageBranches(data, activeRevokedAnchor?.seq_id),
+			[data, activeRevokedAnchor?.seq_id],
+		)
 
 		// An anchor can disappear after authoritative replacement or topic cleanup. Remove the
 		// stale UI sidecars only when no canonical User can establish an active revoke branch.
@@ -243,13 +255,34 @@ const MessageList = observer(
 			)
 		}, [hiddenRevokedOptimisticMessageIdSet, revokedProjection.revokedBranchMessages])
 
+		const currentTopicKey = selectedTopic?.chat_topic_id || ""
+		if (currentTopicKeyRef.current !== currentTopicKey) {
+			// Projection snapshots are scoped to the active Topic; clearing here prevents
+			// a topic switch from retaining thousands of historical object clones.
+			projectionCachesRef.current.main.clear()
+			projectionCachesRef.current.revoked.clear()
+			currentTopicKeyRef.current = currentTopicKey
+			renderedMessageKeysRef.current = new Set()
+			canAnimateNewMessagesRef.current = false
+		}
+		const topicMembershipRevision =
+			superMagicStore.getTopicMessageMembershipRevision?.(currentTopicKey) || 0
+		const projectionVersion = currentTopicKey
+			? `${topicMembershipRevision}:${activeRevokedAnchor?.seq_id || ""}:${hiddenRevokedOptimisticMessageIds.join("\u0000")}`
+			: undefined
+
 		const visibleData = [...mainDisplayData, ...revokedBranchData]
 
 		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
 			useMemo(() => {
 				// Visibility has already been decided at the User-turn boundary. Do not let the
 				// converter filter a temporarily revoked Assistant out of an otherwise restored turn.
-				const messages = messagesConverter(mainDisplayData, false)
+				const messages = messagesConverter(
+					mainDisplayData,
+					false,
+					projectionCachesRef.current.main,
+					projectionVersion,
+				)
 				const projection = buildVirtualMessageProjection(messages)
 				return {
 					messages,
@@ -257,15 +290,9 @@ const MessageList = observer(
 					messageTurnGroups: projection.messageTurnGroups,
 					normalVirtualMessageItems: projection.items,
 				}
-			}, [mainDisplayData])
+			}, [mainDisplayData, projectionVersion])
 
-		const currentTopicKey = selectedTopic?.chat_topic_id || ""
 		const isStreamLoading = superMagicStore.isTopicStreaming(currentTopicKey)
-		if (currentTopicKeyRef.current !== currentTopicKey) {
-			currentTopicKeyRef.current = currentTopicKey
-			renderedMessageKeysRef.current = new Set(messageKeys)
-			canAnimateNewMessagesRef.current = false
-		}
 
 		const entryAnimationMeta = useMemo(() => {
 			const insertedKeySet = new Set<string>()
@@ -299,8 +326,14 @@ const MessageList = observer(
 		}, [mainDisplayData])
 
 		const revokedDisplayMessages = useMemo<Array<SuperMagicMessageItem>>(
-			() => messagesConverter(revokedBranchData, false) as Array<SuperMagicMessageItem>,
-			[revokedBranchData],
+			() =>
+				messagesConverter(
+					revokedBranchData,
+					false,
+					projectionCachesRef.current.revoked,
+					projectionVersion,
+				) as Array<SuperMagicMessageItem>,
+			[projectionVersion, revokedBranchData],
 		)
 
 		// 撤回编辑区只保留第一条用户消息作为可编辑主体，其余 revoked 消息继续留在下面的预览区。
@@ -673,7 +706,7 @@ const MessageList = observer(
 			return (
 				<div
 					className={cn(
-						"relative overflow-hidden rounded-lg px-4 py-1",
+						"relative w-full overflow-hidden rounded-lg px-4 py-1",
 						"after:pointer-events-none after:absolute after:inset-0 after:z-[1] after:bg-white/50 after:content-[''] dark:after:bg-black/30",
 					)}
 				>
@@ -722,6 +755,7 @@ const MessageList = observer(
 							{visibleData.length > 0 || !isEmptyStatus ? (
 								<>
 									<VirtualMessageList
+										topicId={currentTopicKey}
 										items={virtualMessageItems}
 										userIndices={userIndices}
 										isMobile={isMobile}
@@ -839,19 +873,18 @@ const MessageList = observer(
 )
 
 export default function MessageListEntry(props: MessageListProps) {
+	// Initial Topic hydration is the visibility barrier for locally received stream overlays.
+	// Keep the existing canonical data intact, but do not flash a provisional card before the
+	// authoritative User baseline has established the list order.
+	if (props.isMessagesLoading) {
+		return (
+			<div className={cn("flex h-full w-full items-center justify-center", props.className)}>
+				<Spinner size={16} className="animate-spin text-muted-foreground" />
+			</div>
+		)
+	}
+
 	if (props.data.length === 0) {
-		if (props.isMessagesLoading) {
-			return (
-				<div
-					className={cn(
-						"flex h-full w-full items-center justify-center",
-						props.className,
-					)}
-				>
-					<Spinner size={16} className="animate-spin text-muted-foreground" />
-				</div>
-			)
-		}
 		return props.fallbackRender || <MessageListFallback className={props.className} />
 	}
 

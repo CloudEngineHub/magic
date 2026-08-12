@@ -58,7 +58,12 @@ interface StackItem {
 }
 
 export function resolveAttachmentKey(item: AttachmentItem, fallbackKey: string) {
-	return String(item.file_id || item.relative_file_path || item.path || fallbackKey)
+	return String(resolveAttachmentId(item) || item.relative_file_path || item.path || fallbackKey)
+}
+
+/** Resolves the API identifier shared by current and legacy attachment payloads. */
+export function resolveAttachmentId(item: AttachmentItem): string | undefined {
+	return item.file_id || (item as AttachmentItem & { id?: string }).id
 }
 
 function toLookupKey(key: AttachmentIndexLookupKey): string | undefined {
@@ -97,7 +102,7 @@ export function buildAttachmentIndex(
 		if (!includeHidden && item?.is_hidden) continue
 
 		const key = resolveAttachmentKey(item, fallbackKey)
-		const itemId = item?.file_id || key
+		const itemId = resolveAttachmentId(item) || key
 		const entry: AttachmentIndexEntry = {
 			key,
 			item,

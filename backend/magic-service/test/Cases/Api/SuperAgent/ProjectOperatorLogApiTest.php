@@ -7,9 +7,9 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Api\SuperAgent;
 
-use Dtyq\SuperMagic\Domain\SuperAgent\Constants\OperationAction;
-use Dtyq\SuperMagic\Domain\SuperAgent\Constants\ResourceType;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\ProjectOperationLogDomainService;
+use App\Domain\SuperMagic\Common\Constants\OperationAction;
+use App\Domain\SuperMagic\Common\Constants\ResourceType;
+use App\Domain\SuperMagic\Project\Service\ProjectOperationLogDomainService;
 
 /**
  * @internal

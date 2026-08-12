@@ -17,15 +17,16 @@ use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\VideoCatalog\Entity\ValueObject\VideoCatalogModelDefinition;
 use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 use App\Interfaces\Design\DTO\VideoPointEstimateDTO;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ProjectEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\ValueObject\MemberRole;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use Hyperf\Amqp\Producer;
 use Hyperf\Database\Exception\QueryException;
 use Qbhy\HyperfAuth\Authenticatable;
@@ -270,7 +271,7 @@ class DesignVideoAppService extends DesignAppService
     private function assertWorkspaceInputPayloadFilesExist(int $projectId, array $inputPayload): void
     {
         foreach ((array) ($inputPayload['reference_images'] ?? []) as $referenceImage) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($referenceImage['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($referenceImage['uri'] ?? ''));
         }
 
         foreach ((array) ($inputPayload['reference_videos'] ?? []) as $referenceVideo) {
@@ -287,8 +288,20 @@ class DesignVideoAppService extends DesignAppService
         }
 
         foreach ((array) ($inputPayload['frames'] ?? []) as $frame) {
-            $this->assertWorkspaceFileExists($projectId, (string) ($frame['uri'] ?? ''));
+            $this->assertWorkspaceInputUri($projectId, (string) ($frame['uri'] ?? ''));
         }
+    }
+
+    /**
+     * 仅对工作区路径执行文件存在校验，内联 Base64 图片由入口完成校验。
+     */
+    private function assertWorkspaceInputUri(int $projectId, string $uri): void
+    {
+        if (ImageBase64DataUriParser::isValid($uri)) {
+            return;
+        }
+
+        $this->assertWorkspaceFileExists($projectId, $uri);
     }
 
     /**

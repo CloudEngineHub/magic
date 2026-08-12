@@ -19,7 +19,13 @@ async function waitForAppInitWithTimeout(
 		await withTimeout(appStore.appInitPromise, timeoutMs, warnMessage)
 	} catch (error) {
 		console.error(warnMessage, { error, requestConfig })
-		logger.error(warnMessage, { error, requestConfig })
+		logger.error({
+			eventKey: "app_init_wait_timeout",
+			errorKind: "timeout",
+			message: warnMessage,
+			error: error,
+			context: { requestConfig },
+		})
 	}
 }
 

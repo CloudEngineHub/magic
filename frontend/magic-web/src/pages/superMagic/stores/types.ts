@@ -24,6 +24,13 @@ export interface PendingUserMessageEnvelope {
 
 export type HttpToolProjectionPolicy = "preserve_live" | "historical_terminal"
 
+/**
+ * HTTP 消息列表本身无法表达 Assistant 是否已完成本次消息级流。
+ * 调用方必须根据请求来源明确选择：普通进度快照保留非终态流，
+ * 已由 WS/完整恢复确认的 canonical 消息则统一进入 Final 结算。
+ */
+export type HttpAssistantSnapshotPolicy = "progress_snapshot" | "canonical_final"
+
 export type LifecycleEventPolicy = "silent" | "live"
 
 export type CanonicalCommitTrigger = "websocket" | "recovery" | "polling" | "history"
@@ -40,6 +47,8 @@ export interface CanonicalCommitContext {
 
 export interface InitializeMessagesOptions {
 	mode?: "replace" | "merge" | "replace_tail"
+	/** HTTP Assistant 的消息级 Final 准入策略；历史持久消息默认按 canonical Final 处理。 */
+	assistantSnapshotPolicy?: HttpAssistantSnapshotPolicy
 	/** 历史 HTTP 快照必须让普通 Tool 进入终态；live 增量则保留 waiting/running。 */
 	toolProjectionPolicy?: HttpToolProjectionPolicy
 	/** 冷历史只建立事件基线；实时权威尾部需要广播本次新到达的 canonical 消息。 */
@@ -60,7 +69,9 @@ export interface ReconcileAuthoritativeMessagesInput {
 	statusItems: RawSuperMagicMessageEnvelope[]
 	/** 本次 HTTP 写入要采用的 membership 快照；允许按 SuperMessage 锚点截断。 */
 	membershipItems: RawSuperMagicMessageEnvelope[]
-	writeOptions: InitializeMessagesOptions | { mode: "incremental" }
+	writeOptions:
+		| InitializeMessagesOptions
+		| { mode: "incremental"; assistantSnapshotPolicy?: HttpAssistantSnapshotPolicy }
 }
 
 export interface ServerMessagesConfirmedPayload {
