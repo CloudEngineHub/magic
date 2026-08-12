@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import dayjs from "dayjs"
+import dayjs from "@/lib/dayjs"
 import i18n from "i18next"
 import { SupportLocales } from "@/constants/locale"
 import type { SkillDetailResponse, SkillI18nText } from "@/apis/modules/skills"

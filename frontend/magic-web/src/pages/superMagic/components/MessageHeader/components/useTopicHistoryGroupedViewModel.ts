@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import dayjs from "dayjs"
+import dayjs from "@/lib/dayjs"
 import { useTranslation } from "react-i18next"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 

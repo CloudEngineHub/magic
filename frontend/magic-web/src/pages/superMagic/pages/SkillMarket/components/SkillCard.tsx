@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Award, CircleUserRound, ShieldCheck } from "lucide-react"
-import dayjs from "dayjs"
+import dayjs from "@/lib/dayjs"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import type { SkillPublisherType } from "@/apis/modules/skills"
