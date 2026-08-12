@@ -224,6 +224,33 @@ class ProjectService {
 		}
 	}
 
+	reorderProjects = async (workspaceId: string, projectIds: string[]): Promise<void> => {
+		const previousProjectIds = projectStore
+			.getProjectsByWorkspace(workspaceId)
+			.map((project) => project.id)
+		runInAction(() => {
+			projectStore.reorderProjectsInWorkspace(workspaceId, projectIds)
+		})
+
+		try {
+			const response = await SuperMagicApi.reorderProjects({
+				workspace_id: workspaceId,
+				project_ids: projectIds,
+			})
+			const confirmedIds = response?.project_ids
+			if (confirmedIds?.length) {
+				runInAction(() => {
+					projectStore.reorderProjectsInWorkspace(workspaceId, confirmedIds)
+				})
+			}
+		} catch (error) {
+			runInAction(() => {
+				projectStore.reorderProjectsInWorkspace(workspaceId, previousProjectIds)
+			})
+			throw error
+		}
+	}
+
 	/**
 	 * 获取项目详情
 	 * @param projectId 项目ID
@@ -472,6 +499,55 @@ class ProjectService {
 				clearWhenNoProjects: false,
 			}),
 		])
+	}
+
+	/**
+	 * Sidebar move: update both workspace caches optimistically, then persist and
+	 * refresh the two affected lazy-loaded lists.
+	 */
+	moveProjectFromSidebar = async ({
+		project,
+		targetWorkspaceId,
+		targetWorkspaceName,
+		targetIndex,
+	}: {
+		project: ProjectListItem
+		targetWorkspaceId: string
+		targetWorkspaceName?: string
+		targetIndex?: number
+	}): Promise<void> => {
+		const sourceWorkspaceId = project.workspace_id
+		if (!sourceWorkspaceId || sourceWorkspaceId === targetWorkspaceId) return
+
+		runInAction(() => {
+			projectStore.moveProjectBetweenWorkspaces(
+				project,
+				sourceWorkspaceId,
+				targetWorkspaceId,
+				targetWorkspaceName,
+				targetIndex,
+			)
+		})
+
+		try {
+			await SuperMagicApi.moveProjectToNewWorkspace({
+				source_project_id: project.id,
+				target_workspace_id: targetWorkspaceId,
+				target_workspace_name: targetWorkspaceName,
+			})
+			await Promise.all([
+				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
+				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
+			])
+		} catch (error) {
+			// A forced refresh is the safest rollback because either side may have
+			// been changed by another tab while the move was in flight.
+			await Promise.all([
+				projectStore.loadProjectsForWorkspace(sourceWorkspaceId, true, true),
+				projectStore.loadProjectsForWorkspace(targetWorkspaceId, true, true),
+			])
+			throw error
+		}
 	}
 
 	/**

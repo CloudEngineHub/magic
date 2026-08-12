@@ -1,6 +1,8 @@
 import { useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
-import { Ellipsis } from "lucide-react"
+import { Ellipsis, GripVertical } from "lucide-react"
+import { useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import projectStore from "@/pages/superMagic/stores/core/project"
@@ -18,9 +20,11 @@ import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import { preloadProjectPage } from "@/pages/superMagic/pages/ProjectPage/utils"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import { getProjectDragId } from "./types"
 
 function ProjectItem({
 	project,
+	dndDisabled,
 	onOpenInNewWindow,
 	onPinProject,
 	onCopyCollaborationLink,
@@ -41,6 +45,23 @@ function ProjectItem({
 	const suppressItemClickRef = useRef(false)
 
 	const canRename = canManageProject(project.user_role) && !!onRenameProject
+	const canDrag =
+		!dndDisabled &&
+		!isWorkspaceShortcut &&
+		(!isCollaborationProjectStatus || canManageProject(project.user_role) || !project.user_role)
+	const {
+		attributes: sortableAttributes,
+		listeners: sortableListeners,
+		setNodeRef: setSortableNodeRef,
+		setActivatorNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({
+		id: getProjectDragId(project.id),
+		data: { type: "project", projectId: project.id, workspaceId: project.workspace_id },
+		disabled: !canDrag,
+	})
 
 	const {
 		isEditing,
@@ -173,10 +194,19 @@ function ProjectItem({
 		>
 			{({ open, triggerContextMenu }) => (
 				<SidebarMenuSubButton
+					ref={setSortableNodeRef}
 					asChild
 					size="md"
 					isActive={isSelected}
-					className={cn("h-7 px-2", isSelected && "bg-[#f5f5f5] dark:bg-[#262626]")}
+					className={cn(
+						"h-7 px-2",
+						isSelected && "bg-[#f5f5f5] dark:bg-[#262626]",
+						isDragging && "opacity-50",
+					)}
+					style={{
+						transform: CSS.Transform.toString(transform),
+						transition,
+					}}
 				>
 					<a
 						href={getWorkspaceProjectRouteUrl(project.workspace_id, project.id)}
@@ -223,6 +253,29 @@ function ProjectItem({
 									)}
 								</div>
 							</div>
+							{canDrag && (
+								<div
+									ref={setActivatorNodeRef}
+									{...sortableAttributes}
+									{...sortableListeners}
+									className={cn(
+										"ml-1 flex h-4 w-4 shrink-0 cursor-grab items-center justify-center rounded text-sidebar-foreground transition-opacity hover:bg-sidebar-accent active:cursor-grabbing",
+										isHovered || isDragging
+											? "opacity-100"
+											: "pointer-events-none opacity-0 [@media(hover:hover)_and_(pointer:fine)]:ml-0 [@media(hover:hover)_and_(pointer:fine)]:w-0 [@media(hover:hover)_and_(pointer:fine)]:overflow-hidden",
+										"no-hover:pointer-events-auto no-hover:opacity-100",
+									)}
+									aria-label={t("sidebar:project.dragToReorder", {
+										defaultValue: "拖动排序项目",
+									})}
+									onClick={(e) => {
+										e.preventDefault()
+										e.stopPropagation()
+									}}
+								>
+									<GripVertical className="h-3 w-3" />
+								</div>
+							)}
 							{/* The menu trigger must stay tappable on coarse pointer desktop layouts. */}
 							<div
 								data-project-more-trigger="true"

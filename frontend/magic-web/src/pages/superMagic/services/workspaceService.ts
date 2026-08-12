@@ -146,6 +146,28 @@ class WorkspaceService {
 		}
 	}
 
+	reorderWorkspaces = async (workspaceIds: string[]): Promise<void> => {
+		const previousWorkspaceIds = workspaceStore.workspaces.map((workspace) => workspace.id)
+		runInAction(() => {
+			workspaceStore.reorderWorkspaces(workspaceIds)
+		})
+
+		try {
+			const response = await SuperMagicApi.reorderWorkspaces({ workspace_ids: workspaceIds })
+			const confirmedIds = response?.workspace_ids
+			if (confirmedIds?.length) {
+				runInAction(() => {
+					workspaceStore.reorderWorkspaces(confirmedIds)
+				})
+			}
+		} catch (error) {
+			runInAction(() => {
+				workspaceStore.reorderWorkspaces(previousWorkspaceIds)
+			})
+			throw error
+		}
+	}
+
 	/**
 	 * Rename workspace and refresh workspace list
 	 * @param id Workspace ID

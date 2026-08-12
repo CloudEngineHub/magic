@@ -38,6 +38,24 @@ class WorkspaceStore {
 		this.workspaces = workspaces
 	}
 
+	reorderWorkspaces(workspaceIds: string[]) {
+		const workspaceMap = new Map(this.workspaces.map((workspace) => [workspace.id, workspace]))
+		const ordered = workspaceIds.flatMap((id, index) => {
+			const workspace = workspaceMap.get(id)
+			return workspace ? [{ ...workspace, sort_order: index } as Workspace] : []
+		})
+		const orderedIds = new Set(ordered.map((workspace) => workspace.id))
+		this.workspaces = [
+			...ordered,
+			...this.workspaces.filter((workspace) => !orderedIds.has(workspace.id)),
+		]
+		if (this.selectedWorkspace) {
+			this.selectedWorkspace =
+				this.workspaces.find((workspace) => workspace.id === this.selectedWorkspace?.id) ||
+				this.selectedWorkspace
+		}
+	}
+
 	/**
 	 * 追加工作区到列表末尾，用于分页加载后续页时逐步扩充数据，不影响已有项的引用。
 	 */

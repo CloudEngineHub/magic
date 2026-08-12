@@ -1431,6 +1431,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * 保存侧栏工作区顺序。
+	 */
+	reorderWorkspaces({ workspace_ids }: { workspace_ids: string[] }) {
+		return fetch.post<{ workspace_ids?: string[] }>("/api/v1/super-agent/workspaces/reorder", {
+			workspace_ids,
+		})
+	},
+
+	/**
 	 * @description 删除工作区
 	 * @param id
 	 */
@@ -2194,6 +2203,22 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				enableRequestUnion: true,
 			},
 		)
+	},
+
+	/**
+	 * 保存指定工作区内的项目顺序。
+	 */
+	reorderProjects({
+		workspace_id,
+		project_ids,
+	}: {
+		workspace_id: string
+		project_ids: string[]
+	}) {
+		return fetch.post<{ project_ids?: string[] }>("/api/v1/super-agent/projects/reorder", {
+			workspace_id,
+			project_ids,
+		})
 	},
 
 	/**
