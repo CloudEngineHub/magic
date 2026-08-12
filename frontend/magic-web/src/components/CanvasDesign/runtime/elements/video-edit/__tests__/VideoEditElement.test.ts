@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import Konva from "konva"
 import { exportCanvasDocument } from "../../../document/exportDocument"
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
@@ -158,6 +159,39 @@ describe("VideoEditElement", () => {
 		expect(exportedContent?.output).not.toBe(sourceContent?.output)
 	})
 
+	it("keeps transformer bounds on the card hit-area after control hits expand", () => {
+		mockCanvasRenderingContext()
+		const video = createVideoSource("video-1", "开场", "./videos/1.mp4")
+		const audio = createAudioSource("audio-1", "./audios/旁白_V2.wav")
+		const element = new VideoEditElement(
+			VideoEditElement.createElementData({
+				id: "video-edit-bounds",
+				x: 0,
+				y: 0,
+				videoSequence: [video.id],
+				audioSequence: [audio.id],
+			}),
+			createCanvasMock([video, audio]),
+		)
+		const root = new Konva.Group()
+		const viewport = new Konva.Group({ x: 40, y: 20, scaleX: 0.4, scaleY: 0.4 })
+		const group = element.render()
+		root.add(viewport)
+		viewport.add(group)
+		element.onMounted()
+
+		const hitArea = group.findOne(".hit-area") as Konva.Rect
+		expect(group.getClientRect({ relativeTo: root, skipStroke: true })).toEqual(
+			hitArea.getClientRect({ relativeTo: root, skipStroke: true }),
+		)
+		expect(group.getClientRect({ relativeTo: root }).width).toBeCloseTo(
+			VIDEO_EDIT_CONFIG.DEFAULT_WIDTH * 0.4,
+		)
+		expect(group.getClientRect({ relativeTo: root }).height).toBeCloseTo(
+			VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT * 0.4,
+		)
+	})
+
 	it("renders the responsive video track and one compact audio row without a header", () => {
 		mockCanvasRenderingContext()
 		const videos = Array.from({ length: 8 }, (_, index) =>
@@ -184,7 +218,25 @@ describe("VideoEditElement", () => {
 		expect(node.find(".video-edit-video-card")).toHaveLength(8)
 		expect(node.findOne(".video-edit-audio-name")?.getAttr("text")).toBe("旁白_V2.wav")
 		expect(node.findOne(".video-edit-audio-row")).toBeDefined()
+		expect(node.findOne(".video-edit-audio-progress-track")).toBeDefined()
+		expect(node.findOne(".video-edit-audio-progress-fill")).toBeDefined()
+		expect(node.findOne(".video-edit-audio-progress-thumb")).toBeDefined()
+		expect(node.findOne(".video-edit-audio-progress-hit")).toBeDefined()
+		expect(node.findOne(".video-edit-audio-duration")?.getAttr("text")).toBe("0:00 / 0:00")
+		expect(node.findOne(".video-edit-audio-waveform")).toBeUndefined()
 		expect(node.findOne(".video-edit-merge-button")).toBeDefined()
+
+		const playButton = node.findOne(".video-edit-audio-play-button") as Konva.Group
+		const track = node.findOne(".video-edit-audio-progress-track") as Konva.Rect
+		const thumb = node.findOne(".video-edit-audio-progress-thumb") as Konva.Circle
+		const duration = node.findOne(".video-edit-audio-duration") as Konva.Text
+		const playRight =
+			(playButton.findOne(".video-edit-control-background") as Konva.Circle).x() +
+			(playButton.findOne(".video-edit-control-background") as Konva.Circle).radius()
+		const gapLeft = thumb.x() - thumb.radius() - playRight
+		const gapRight = duration.x() - (track.x() + track.width() + thumb.radius())
+		expect(gapLeft).toBeCloseTo(gapRight)
+		expect(gapLeft).toBeGreaterThan(0)
 		expect(node.find("Text").some((text) => text.getAttr("text")?.includes("48kHz"))).toBe(
 			false,
 		)

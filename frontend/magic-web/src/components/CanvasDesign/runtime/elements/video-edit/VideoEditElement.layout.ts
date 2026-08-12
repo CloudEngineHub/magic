@@ -8,39 +8,48 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 	width: 1280,
 	height: 720,
 	baseRem: 16,
+	/**
+	 * 间距尺度（设计稿 px）：xs=4 / sm=8 / md=12 / lg=16 / xl=24
+	 * 同语义只用一档，避免 10/14/18 等碎台阶。
+	 */
+	spaceXs: 4,
+	spaceSm: 8,
+	spaceMd: 12,
+	spaceLg: 16,
+	spaceXl: 24,
 	sectionHorizontalPadding: 24,
-	videoPaddingTop: 20,
-	videoPaddingBottom: 16,
-	audioVerticalPadding: 8,
+	/** 视频 / 音频 / 页脚区块上下内边距统一。 */
+	sectionVerticalPadding: 16,
 	headingHeight: 22,
-	headingGap: 10,
-	audioHeadingGap: 4,
-	videoCardWidth: 176,
-	videoCardHeight: 300,
+	/** 区块标题 → 内容。 */
+	headingGap: 12,
+	/** 视频卡片为正方形边长。 */
+	videoCardSize: 300,
 	videoCardInfoHeight: 42,
 	videoCardGap: 12,
-	videoCardPadding: 10,
+	videoCardPadding: 12,
 	videoGripSize: 24,
 	videoScrollbarHeight: 6,
+	/** 卡片与滚动条；滚动条绝对定位，不挤占列表空间。 */
 	videoScrollbarGap: 8,
-	audioSectionMinHeight: 112,
-	audioSectionMaxHeight: 144,
+	audioSectionMinHeight: 128,
 	audioRowHeight: 64,
-	audioRowHorizontalPadding: 14,
-	audioColumnGap: 18,
+	audioRowHorizontalPadding: 12,
+	audioColumnGap: 16,
 	audioPlayButtonSize: 42,
-	audioInfoWidth: 72,
-	footerMinHeight: 112,
-	footerMaxHeight: 158,
+	audioProgressHeight: 6,
+	/** 时长列最大宽度；实际渲染会按文案收紧并右对齐。 */
+	audioInfoWidth: 96,
+	/** 页脚按内容定高：上下 padding + max(参数行, 合并按钮)。 */
 	footerColumnGap: 24,
-	footerParameterColumnGap: 10,
+	footerParameterColumnGap: 12,
 	// 与分镜参数行一致：固定控件尺寸，不随 footer 剩余空间拉伸。
 	footerParameterWidth: 176,
 	footerParameterHeight: 46,
 	footerParameterLabelWidth: 56,
 	footerParameterResolutionLabelWidth: 48,
 	footerParameterHorizontalPadding: 8,
-	footerParameterSuffixGap: 6,
+	footerParameterSuffixGap: 8,
 	footerParameterSuffixIconSize: 12,
 	mergeButtonWidth: 150,
 	mergeButtonHeight: 46,
@@ -52,7 +61,7 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 	audioDurationFontSize: 12,
 	footerSecondaryFontSize: 11,
 	footerParameterValueFontSize: 12,
-	buttonFontSize: 14,
+	buttonFontSize: 16,
 } as const
 
 export interface VideoEditFooterParameterLayout {
@@ -93,9 +102,12 @@ export interface VideoEditElementLayout {
 	audioSection: LayoutRect
 	audioTitle: LayoutRect
 	audioCount: LayoutRect
+	/** 标题下方可用内容区；空状态 placeholder 铺满此区域。 */
+	audioPlaceholder: LayoutRect
+	/** 有音频时的控件行（在 audioPlaceholder 内垂直居中）。 */
 	audioRow: LayoutRect
 	audioPlayButton: LayoutRect
-	audioWaveform: LayoutRect
+	audioProgress: LayoutRect
 	audioInfo: LayoutRect
 	footer: LayoutRect
 	footerOutput: LayoutRect
@@ -105,6 +117,8 @@ export interface VideoEditElementLayout {
 		format: VideoEditFooterParameterLayout
 	}
 	mergeButton: LayoutRect
+	mergeButtonCornerRadius: number
+	mergeButtonFontSize: number
 	fonts: {
 		title: number
 		count: number
@@ -222,21 +236,42 @@ export function resolveVideoEditElementLayout(
 	const scale = responsive.scale
 	const px = (value: number) => responsive.designPx(value)
 	const sectionHorizontalPadding = responsive.clamp(
-		px(16),
+		px(VIDEO_EDIT_LAYOUT_DESIGN.spaceLg),
 		Math.min(responsive.width, responsive.height) * 0.035,
 		px(VIDEO_EDIT_LAYOUT_DESIGN.sectionHorizontalPadding),
 	)
-	const audioHeight = responsive.clamp(
+	const sectionVerticalPadding = px(VIDEO_EDIT_LAYOUT_DESIGN.sectionVerticalPadding)
+	const headingHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.headingHeight)
+	const headingGap = px(VIDEO_EDIT_LAYOUT_DESIGN.headingGap)
+	const scrollbarHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarHeight)
+	const scrollbarGap = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarGap)
+	const preferredVideoCardSize = px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardSize)
+	const preferredAudioRowHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.audioRowHeight)
+
+	// 1) 页脚按内容定高
+	const footerControlHeight = Math.max(
+		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHeight),
+		px(VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonHeight),
+	)
+	const preferredFooterHeight = sectionVerticalPadding * 2 + footerControlHeight
+	const footerHeight = Math.min(preferredFooterHeight, responsive.height)
+
+	// 2) 视频按内容定高（正方形卡片）；必要时压缩边长，给音频留出最小内容高度
+	const videoChromeHeight = sectionVerticalPadding * 2 + headingHeight + headingGap
+	const preferredVideoHeight = videoChromeHeight + preferredVideoCardSize
+	const audioContentMinHeight = Math.min(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.audioSectionMinHeight),
-		responsive.height * 0.2,
-		px(VIDEO_EDIT_LAYOUT_DESIGN.audioSectionMaxHeight),
+		sectionVerticalPadding * 2 + headingHeight + headingGap + preferredAudioRowHeight,
 	)
-	const footerHeight = responsive.clamp(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerMinHeight),
-		responsive.height * 0.22,
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerMaxHeight),
-	)
-	const videoHeight = Math.max(0, responsive.height - audioHeight - footerHeight)
+	const availableForVideo = Math.max(0, responsive.height - footerHeight - audioContentMinHeight)
+	const videoHeight = Math.min(preferredVideoHeight, availableForVideo)
+	const videoCardSize = Math.max(0, videoHeight - videoChromeHeight)
+	const videoCardHeight = videoCardSize
+	const videoCardWidth = videoCardSize
+
+	// 3) 音频吃掉剩余高度，贴底页脚之上
+	const audioHeight = Math.max(0, responsive.height - videoHeight - footerHeight)
+
 	const videoSection: LayoutRect = {
 		x: 0,
 		y: 0,
@@ -256,85 +291,73 @@ export function resolveVideoEditElementLayout(
 		height: footerHeight,
 	}
 
-	const headingHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.headingHeight)
-	const headingGap = px(VIDEO_EDIT_LAYOUT_DESIGN.headingGap)
-	const videoPaddingTop = px(VIDEO_EDIT_LAYOUT_DESIGN.videoPaddingTop)
-	const videoPaddingBottom = px(VIDEO_EDIT_LAYOUT_DESIGN.videoPaddingBottom)
 	const headingWidth = Math.max(0, responsive.width - sectionHorizontalPadding * 2)
+	// 视频 / 音频共用同一标题列宽；右侧留给数量或音频名。
+	const sectionTitleWidth = Math.min(px(88), headingWidth * 0.4)
 	const videoTitle: LayoutRect = {
 		x: sectionHorizontalPadding,
-		y: videoSection.y + videoPaddingTop,
-		width: headingWidth * 0.7,
-		height: headingHeight,
+		y: videoSection.y + sectionVerticalPadding,
+		width: sectionTitleWidth,
+		height: Math.min(headingHeight, Math.max(0, videoHeight - sectionVerticalPadding * 2)),
 	}
 	const videoCount: LayoutRect = {
 		x: videoTitle.x + videoTitle.width,
 		y: videoTitle.y,
-		width: headingWidth - videoTitle.width,
-		height: headingHeight,
+		width: Math.max(0, headingWidth - videoTitle.width),
+		height: videoTitle.height,
 	}
-	const scrollbarHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarHeight)
-	const scrollbarGap = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarGap)
 	const videoViewport: LayoutRect = {
 		x: sectionHorizontalPadding,
 		y: videoTitle.y + videoTitle.height + headingGap,
 		width: headingWidth,
-		height: Math.max(
-			0,
-			videoSection.y +
-				videoSection.height -
-				videoPaddingBottom -
-				(videoTitle.y + videoTitle.height + headingGap),
-		),
-	}
-	const videoScrollbar: LayoutRect = {
-		x: videoViewport.x,
-		y: Math.max(videoViewport.y, videoViewport.y + videoViewport.height - scrollbarHeight),
-		width: videoViewport.width,
-		height: Math.min(scrollbarHeight, videoViewport.height),
+		height: videoCardHeight,
 	}
 	const videoCardViewport: LayoutRect = {
 		x: videoViewport.x,
 		y: videoViewport.y,
 		width: videoViewport.width,
-		height: Math.max(0, videoViewport.height - scrollbarGap - videoScrollbar.height),
+		height: videoViewport.height,
 	}
-	const videoCardHeight = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardHeight),
-		videoCardViewport.height,
-	)
+	// 顶对齐：标题 → headingGap → 内容；滚动条叠在卡片下 gap 处（落在底 padding 内）。
+	const videoCardTop = videoViewport.y
+	const videoScrollbar: LayoutRect = {
+		x: videoViewport.x,
+		y: Math.min(
+			videoCardTop + videoCardHeight + scrollbarGap,
+			videoSection.y + videoSection.height - scrollbarHeight,
+		),
+		width: videoViewport.width,
+		height: Math.min(scrollbarHeight, Math.max(0, videoSection.height)),
+	}
 
-	const audioVerticalPadding = px(VIDEO_EDIT_LAYOUT_DESIGN.audioVerticalPadding)
-	const audioHeadingGap = px(VIDEO_EDIT_LAYOUT_DESIGN.audioHeadingGap)
-	const audioTitleGap = px(10)
-	const audioTitleWidth = Math.min(px(72), headingWidth * 0.28)
 	const audioTitle: LayoutRect = {
 		x: sectionHorizontalPadding,
-		y: audioSection.y + audioVerticalPadding,
-		width: audioTitleWidth,
+		y: audioSection.y + sectionVerticalPadding,
+		width: sectionTitleWidth,
 		height: Math.min(
 			headingHeight,
-			Math.max(0, audioSection.height - audioVerticalPadding * 2),
+			Math.max(0, audioSection.height - sectionVerticalPadding * 2),
 		),
 	}
 	const audioCount: LayoutRect = {
-		x: audioTitle.x + audioTitle.width + audioTitleGap,
+		x: audioTitle.x + audioTitle.width,
 		y: audioTitle.y,
-		width: Math.max(0, headingWidth - audioTitle.width - audioTitleGap),
+		width: Math.max(0, headingWidth - audioTitle.width),
 		height: audioTitle.height,
 	}
 	const audioRowContainer: LayoutRect = {
 		x: sectionHorizontalPadding,
-		y: audioTitle.y + audioTitle.height + audioHeadingGap,
+		y: audioTitle.y + audioTitle.height + headingGap,
 		width: headingWidth,
 		height: Math.max(
 			0,
 			audioSection.y +
 				audioSection.height -
-				audioVerticalPadding -
-				(audioTitle.y + audioTitle.height + audioHeadingGap),
+				sectionVerticalPadding -
+				(audioTitle.y + audioTitle.height + headingGap),
 		),
 	}
+	const audioPlaceholder = audioRowContainer
 	const audioRow = responsive.alignRect(
 		{
 			width: audioRowContainer.width,
@@ -363,7 +386,7 @@ export function resolveVideoEditElementLayout(
 		audioRow.x + audioRow.width - audioRowPadding - audioPlayButton.x - audioPlayButton.width,
 	)
 	const resolvedAudioGap = Math.min(audioColumnGap, remainingAfterButton / 6)
-	const maxAudioInfoWidth = Math.max(0, remainingAfterButton * 0.28)
+	const maxAudioInfoWidth = Math.max(0, remainingAfterButton - resolvedAudioGap * 2)
 	const audioInfoWidth = Math.min(desiredAudioInfoWidth, maxAudioInfoWidth)
 	const audioInfo: LayoutRect = {
 		x: audioRow.x + audioRow.width - audioRowPadding - audioInfoWidth,
@@ -371,23 +394,25 @@ export function resolveVideoEditElementLayout(
 		width: audioInfoWidth,
 		height: audioRow.height,
 	}
-	const audioWaveform: LayoutRect = {
-		x: audioPlayButton.x + audioPlayButton.width + resolvedAudioGap,
-		y: audioRow.y + audioRow.height * 0.21,
-		width: Math.max(
-			0,
-			audioInfo.x -
-				resolvedAudioGap -
-				(audioPlayButton.x + audioPlayButton.width + resolvedAudioGap),
-		),
-		height: audioRow.height * 0.58,
+	const audioProgressHeight = Math.min(
+		px(VIDEO_EDIT_LAYOUT_DESIGN.audioProgressHeight),
+		Math.max(2, audioRow.height * 0.18),
+	)
+	// 进度条左右使用同一间距：播放按钮 | gap | 进度条 | gap | 时长
+	const audioProgressStart = audioPlayButton.x + audioPlayButton.width + resolvedAudioGap
+	const audioProgressEnd = audioInfo.x - resolvedAudioGap
+	const audioProgress: LayoutRect = {
+		x: audioProgressStart,
+		y: audioRow.y + (audioRow.height - audioProgressHeight) / 2,
+		width: Math.max(0, audioProgressEnd - audioProgressStart),
+		height: audioProgressHeight,
 	}
 
 	const footerContent = responsive.insetRect(footer, {
 		left: sectionHorizontalPadding,
 		right: sectionHorizontalPadding,
-		top: px(12),
-		bottom: px(12),
+		top: sectionVerticalPadding,
+		bottom: sectionVerticalPadding,
 	})
 	const footerColumnGap = Math.min(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.footerColumnGap),
@@ -402,6 +427,11 @@ export function resolveVideoEditElementLayout(
 		{ preferredScale: scale, inline: "end", block: "center" },
 	)
 	const mergeButton = responsive.constrainRect(mergeButtonFit.rect, footerContent)
+	const mergeButtonCornerRadius = 10 * mergeButtonFit.scale
+	const mergeButtonFontSize = Math.max(
+		px(VIDEO_EDIT_LAYOUT_DESIGN.buttonFontSize),
+		20 * mergeButtonFit.scale,
+	)
 	const footerOutput: LayoutRect = {
 		x: footerContent.x,
 		y: footerContent.y,
@@ -499,7 +529,7 @@ export function resolveVideoEditElementLayout(
 		videoCardViewport,
 		videoScrollbar,
 		videoCard: {
-			width: px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardWidth),
+			width: videoCardWidth,
 			height: videoCardHeight,
 			infoHeight: Math.min(
 				px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardInfoHeight),
@@ -512,14 +542,17 @@ export function resolveVideoEditElementLayout(
 		audioSection,
 		audioTitle,
 		audioCount,
+		audioPlaceholder,
 		audioRow,
 		audioPlayButton,
-		audioWaveform,
+		audioProgress,
 		audioInfo,
 		footer,
 		footerOutput,
 		footerParameterRows,
 		mergeButton,
+		mergeButtonCornerRadius,
+		mergeButtonFontSize,
 		fonts: {
 			title: px(VIDEO_EDIT_LAYOUT_DESIGN.titleFontSize),
 			count: px(VIDEO_EDIT_LAYOUT_DESIGN.countFontSize),
@@ -527,7 +560,7 @@ export function resolveVideoEditElementLayout(
 			cardDuration: px(VIDEO_EDIT_LAYOUT_DESIGN.cardDurationFontSize),
 			audioName: px(VIDEO_EDIT_LAYOUT_DESIGN.audioNameFontSize),
 			audioDuration: px(VIDEO_EDIT_LAYOUT_DESIGN.audioDurationFontSize),
-			button: px(VIDEO_EDIT_LAYOUT_DESIGN.buttonFontSize),
+			button: mergeButtonFontSize,
 		},
 	}
 }
