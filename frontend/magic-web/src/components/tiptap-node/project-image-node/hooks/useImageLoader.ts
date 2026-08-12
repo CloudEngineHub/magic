@@ -3,7 +3,8 @@ import { IMAGE_LOADING_CONFIG } from "../constants"
 import { calculateBackoffDelay, isAbsoluteUrl } from "../utils/url-utils"
 import { convertHeicUrlToBlob, isHeicUrl } from "../utils/heic-utils"
 import { isTempPath } from "../temp-path-utils"
-import { useMemoizedFn, useWhyDidYouUpdate } from "ahooks"
+import { useMemoizedFn } from "ahooks"
+import type { ProjectImageUrlResolver } from "../project-image-node-extension"
 
 interface UseImageLoaderOptions {
 	/** Source path or URL of the image */
@@ -11,7 +12,7 @@ interface UseImageLoaderOptions {
 	/** Whether to start loading */
 	shouldLoad: boolean
 	/** Function to resolve URL from source path */
-	urlResolver: (src: string) => Promise<string | null>
+	urlResolver: ProjectImageUrlResolver
 	/** Error handler callback */
 	onError?: (error: Error) => void
 	/** Retry configuration override */
@@ -53,8 +54,25 @@ export function useImageLoader(options: UseImageLoaderOptions): UseImageLoaderRe
 		[retryConfig],
 	)
 
+	/** Keeps a successfully rendered image stable across attachment context refreshes. */
+	React.useEffect(() => {
+		return urlResolver.subscribe?.(() => {
+			if (loadedSrcRef.current === src) return
+
+			loadedSrcRef.current = null
+			setImageUrl(null)
+			setError(null)
+			setRetryTrigger((previous) => previous + 1)
+		})
+	}, [src, urlResolver])
+
 	React.useEffect(() => {
 		if (!shouldLoad || !src || isTempPath(src)) return
+		if (urlResolver.isReady?.() === false) {
+			setLoading(true)
+			setError(null)
+			return
+		}
 
 		// If this src was already loaded successfully, don't reload
 		if (loadedSrcRef.current === src) return

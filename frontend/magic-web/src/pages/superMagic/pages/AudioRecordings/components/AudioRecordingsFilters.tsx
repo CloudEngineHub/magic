@@ -130,7 +130,7 @@ function AudioRecordingGroupFilter({
 					className="flex h-8 items-center gap-1 rounded-lg px-2 transition-colors hover:bg-muted/80 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:outline-none data-[state=open]:ring-0"
 					data-testid="audio-recordings-group-filter-trigger"
 				>
-					<span className="max-w-[200px] truncate text-lg font-medium text-foreground">
+					<span className="max-w-[280px] truncate text-lg font-medium text-foreground">
 						{currentLabel}
 					</span>
 					<ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -138,12 +138,12 @@ function AudioRecordingGroupFilter({
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
-				className="max-h-[360px] min-w-[190px] overflow-y-auto"
+				className="max-h-[360px] w-max min-w-[240px] max-w-[320px] overflow-y-auto"
 			>
-				{/* Menu items use text-sm to match other filter dropdowns in this bar */}
+				{/* Match the standard filter dropdown color while keeping regular item weight. */}
 				<DropdownMenuItem
 					onClick={() => onGroupChange(ALL_RECORDING_GROUP_ID)}
-					className="flex items-center justify-between gap-3 font-medium"
+					className="flex items-center justify-between gap-3 font-normal"
 					data-testid="audio-recordings-group-all"
 				>
 					<span>{t("super:mobile.recordingEntry.groupSheet.all")}</span>
@@ -155,7 +155,7 @@ function AudioRecordingGroupFilter({
 				{/* Virtual Item: Ungrouped */}
 				<DropdownMenuItem
 					onClick={() => onGroupChange(UNGROUPED_RECORDING_GROUP_ID)}
-					className="flex items-center justify-between gap-3 font-medium"
+					className="flex items-center justify-between gap-3 font-normal"
 					data-testid="audio-recordings-group-ungrouped"
 				>
 					<span>{t("super:mobile.recordingEntry.groupSheet.ungrouped")}</span>
@@ -169,13 +169,13 @@ function AudioRecordingGroupFilter({
 					<DropdownMenuItem
 						key={group.id}
 						onClick={() => onGroupChange(group.id)}
-						className="flex items-center justify-between gap-3 font-medium"
+						className="flex items-center justify-between gap-3 font-normal"
 						data-testid={`audio-recordings-group-custom-${group.id}`}
 					>
-						<span className="max-w-[120px] truncate">
+						<span className="min-w-0 flex-1 truncate">
 							{resolveRecordingGroupDisplayName(group.name, unnamedGroupLabel)}
 						</span>
-						<span className="text-xs tabular-nums text-muted-foreground">
+						<span className="shrink-0 text-xs tabular-nums text-muted-foreground">
 							{group.projectCount}
 						</span>
 					</DropdownMenuItem>
@@ -189,7 +189,7 @@ function AudioRecordingGroupFilter({
 						e.stopPropagation()
 						onManageGroups()
 					}}
-					className="flex items-center gap-2 font-semibold text-primary"
+					className="flex items-center gap-2 font-medium"
 					data-testid="audio-recordings-group-manage-trigger"
 				>
 					<FolderClosed className="h-4 w-4" />

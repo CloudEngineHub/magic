@@ -27,11 +27,15 @@ import { getCachedRecordingSettings, patchCachedRecordingSettings } from "./useR
 import { audioRecordingsService } from "@/services/audioRecordings/AudioRecordingsService"
 import { audioRecordingsStore } from "../stores/audio-recordings-store"
 import { SuperMagicApi } from "@/apis"
-import { AUDIO_WORKSPACE_TYPE } from "@/services/audioRecordings/RecordingGroupsConstants"
+import {
+	ALL_RECORDING_GROUP_ID,
+	UNGROUPED_RECORDING_GROUP_ID,
+} from "@/services/audioRecordings/RecordingGroupsConstants"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { buildOptimisticRecordingItem } from "../utils/build-optimistic-recording-item"
 import { resolveCardStatusFromListItem } from "../utils/normalize-audio-project-item"
+import { readAudioRecordingsFilterSession } from "../utils/audio-recordings-filter-session"
 
 export type EntryPresentation = "list" | "recording"
 export type RecordingStartupState = "idle" | "starting" | "error"
@@ -45,6 +49,8 @@ const RECORDING_START_TIMEOUT_MS = 15000
 function expandDesktopRecordingFloatPanel(): void {
 	recordSummaryStore.isVisible = true
 	recordSummaryStore.floatPanel.setExpanded(true)
+	// Audio recordings open with the conversation visible so the new entry is discoverable.
+	recordSummaryStore.floatPanel.setExpandedAiChat?.(true)
 }
 
 /**
@@ -176,7 +182,8 @@ function resolveRecordingStartupErrorContent(error: Error | undefined): {
 }
 
 interface AudioProjectContext {
-	workspace: Workspace
+	/** Null when the shared filter is All / Ungrouped so the new project stays ungrouped */
+	workspace: Workspace | null
 	project: ProjectListItem
 	topic: Topic
 }
@@ -298,8 +305,8 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 	}, [])
 
 	/**
-	 * Creates a new audio recording project context under the dedicated audio
-	 * workspace so `/audio-projects` queries can later surface it in the list.
+	 * Creates a new audio project under the group selected at click-time.
+	 * Real groups resolve their workspace detail; All / Ungrouped stay ungrouped.
 	 */
 	const createAudioProjectContext = useCallback(
 		async (options: {
@@ -310,16 +317,22 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			autoSummaryEnabled?: boolean
 			transcriptionEnabled?: boolean
 		}): Promise<AudioProjectContext | null> => {
-			const workspacesResponse = (await SuperMagicApi.getWorkspaces({
-				page: 1,
-				page_size: 200,
-				workspace_type: AUDIO_WORKSPACE_TYPE,
-				auto_create: true,
-			})) as {
-				list?: Workspace[]
+			// Snapshot the shared PC/H5 list filter at the moment of the action.
+			const { groupId } = readAudioRecordingsFilterSession()
+			const isVirtualGroup =
+				groupId === ALL_RECORDING_GROUP_ID || groupId === UNGROUPED_RECORDING_GROUP_ID
+
+			let workspace: Workspace | null = null
+			if (!isVirtualGroup) {
+				// Abort creation when the real group cannot be resolved so we never
+				// silently fall back into the ungrouped bucket.
+				try {
+					workspace = await SuperMagicApi.getWorkspaceDetail({ id: groupId })
+				} catch {
+					return null
+				}
+				if (!workspace?.id) return null
 			}
-			const audioWorkspace = workspacesResponse.list?.[0]
-			if (!audioWorkspace) return null
 
 			const autoSummary =
 				options.autoSummaryEnabled ??
@@ -335,7 +348,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				)
 
 			const createdProject = await SuperMagicApi.createAudioProject({
-				workspace_id: audioWorkspace.id,
+				...(workspace?.id ? { workspace_id: workspace.id } : {}),
 				project_name: options.projectName ?? "",
 				task_key: options.taskKey,
 				auto_summary: autoSummary,
@@ -353,7 +366,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			if (!createdProject?.project || !createdProject?.topic) return null
 
 			return {
-				workspace: audioWorkspace,
+				workspace,
 				project: createdProject.project,
 				topic: createdProject.topic,
 			}
@@ -762,7 +775,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 			const initialOptimisticItem = buildOptimisticRecordingItem({
 				projectId: audioProjectContext.project.id,
 				projectName: normalizedFiles[0]?.name || audioProjectContext.project.project_name,
-				workspaceId: audioProjectContext.workspace.id,
+				workspaceId: audioProjectContext.workspace?.id ?? UNGROUPED_RECORDING_GROUP_ID,
 				modelId: model.model_id,
 				taskKey,
 				audioSource: "imported",
@@ -779,7 +792,7 @@ export function useRecordingEntryFacade(): UseRecordingEntryFacadeResult {
 				projectId: audioProjectContext.project.id,
 				projectName: normalizedFiles[0]?.name || audioProjectContext.project.project_name,
 				topicId: audioProjectContext.topic.id,
-				workspaceId: audioProjectContext.workspace.id,
+				workspaceId: audioProjectContext.workspace?.id ?? UNGROUPED_RECORDING_GROUP_ID,
 				modelId: model.model_id,
 				taskKey,
 				autoSummaryEnabled,

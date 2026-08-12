@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { observable, runInAction } from "mobx"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageMain from ".."
+import ProjectTopicListView from "../ProjectTopicListView"
 
 const { mockNavigate, topicStoreMock } = vi.hoisted(() => ({
 	mockNavigate: vi.fn(),
@@ -27,10 +29,6 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("ahooks", () => ({
 	useMemoizedFn: (fn: (...args: unknown[]) => unknown) => fn,
-}))
-
-vi.mock("mobx-react-lite", () => ({
-	observer: <T,>(component: T) => component,
 }))
 
 vi.mock("@/pages/superMagic/stores/core", () => ({
@@ -219,5 +217,77 @@ describe("ProjectPageMain", () => {
 			"topic-item-topic-late",
 			"topic-item-topic-middle",
 		])
+	})
+
+	it("renders the dependency-injected topic view and forwards selection", () => {
+		const topic = createTopic({ id: "topic-scoped", topic_name: "Scoped topic" })
+
+		render(
+			<ProjectTopicListView
+				projectId="project-scoped"
+				topics={[topic]}
+				loading={false}
+				onRefresh={vi.fn(async () => undefined)}
+				onSelectTopic={vi.fn()}
+				onTopicPin={vi.fn()}
+				onTopicDelete={vi.fn()}
+			/>,
+		)
+
+		const row = screen.getByTestId("topic-item-topic-scoped")
+		fireEvent.click(within(row).getByTestId("topic-item-topic-scoped-action-pin"))
+		expect(screen.getByText("Scoped topic")).toBeInTheDocument()
+		expect(screen.getByTestId("scroll-edge-fade-container")).not.toHaveAttribute(
+			"data-scroll-class-name",
+		)
+	})
+
+	it("reacts to in-place MobX updates for pin ordering and running status", () => {
+		const recentTopic = observable(
+			createTopic({
+				id: "topic-recent",
+				topic_name: "Recent Topic",
+				updated_at: "2026-05-12 10:00:00",
+			}),
+		)
+		const reactiveTopic = observable(
+			createTopic({
+				id: "topic-reactive",
+				topic_name: "Reactive Topic",
+				updated_at: "2026-05-12 09:00:00",
+			}),
+		)
+
+		render(
+			<ProjectTopicListView
+				projectId="project-reactive"
+				topics={[recentTopic, reactiveTopic]}
+				loading={false}
+				onRefresh={vi.fn(async () => undefined)}
+				onSelectTopic={vi.fn()}
+				onTopicPin={vi.fn()}
+			/>,
+		)
+
+		act(() => {
+			runInAction(() => {
+				reactiveTopic.is_pinned = true
+				reactiveTopic.pinned_at = "2026-05-12 11:00:00"
+				reactiveTopic.task_status = TaskStatus.RUNNING
+			})
+		})
+
+		const topicRows = screen
+			.getAllByTestId(/^topic-item-topic-(recent|reactive)$/)
+			.map((row) => row.getAttribute("data-testid"))
+		expect(topicRows).toEqual(["topic-item-topic-reactive", "topic-item-topic-recent"])
+		expect(
+			screen.getByTestId("topic-item-topic-reactive").querySelector('[aria-busy="true"]'),
+		).toBeInTheDocument()
+		expect(
+			within(screen.getByTestId("topic-item-topic-reactive")).getByTestId(
+				"mobile-topic-item-pinned-badge",
+			),
+		).toBeInTheDocument()
 	})
 })

@@ -64,6 +64,8 @@ export function RecordingSummaryFloatPanel() {
 	const isOnMobileRecordingDetailRoute =
 		isMobile &&
 		matchPath(`/:clusterCode${RoutePath.AudioRecordingDetail}`, location.pathname) != null
+	const isManagedByMobileRecordingPage =
+		isOnMobileRecordingsListRoute || isOnMobileRecordingDetailRoute
 
 	const editorRef = useRef<SimpleEditorRef>(null)
 	// Create projectFilesStore for managing workspace files
@@ -276,6 +278,7 @@ export function RecordingSummaryFloatPanel() {
 
 	useProjectAttachmentsChangeRealtime({
 		projectId: selectedProjectId,
+		enabled: !isManagedByMobileRecordingPage,
 		store: projectFilesStore,
 		onAttachmentsChange: useMemoizedFn(({ tree, list }) => {
 			_setAttachments(tree)
@@ -289,6 +292,7 @@ export function RecordingSummaryFloatPanel() {
 
 	// Initialize attachments when project changes
 	useEffect(() => {
+		if (isManagedByMobileRecordingPage) return
 		const selectedProject = recordingSummaryStore.businessData.project
 		if (selectedProjectId && selectedProject) {
 			projectFilesStore.setSelectedProject(selectedProject)
@@ -305,7 +309,13 @@ export function RecordingSummaryFloatPanel() {
 				}
 			})
 		}
-	}, [selectedProjectId, projectFilesStore, recordSummaryFileStore, updateAttachments])
+	}, [
+		isManagedByMobileRecordingPage,
+		selectedProjectId,
+		projectFilesStore,
+		recordSummaryFileStore,
+		updateAttachments,
+	])
 
 	// Get preset files (note and transcript) for current recording session
 	const presetFiles = recordSummaryService.getPresetFiles()

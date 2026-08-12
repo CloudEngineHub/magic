@@ -1,4 +1,5 @@
 import type { RefObject } from "react"
+import { cn } from "@/lib/utils"
 import type { FlatColorSegment } from "@/pages/superMagic/pages/AudioRecordings/utils/chapter-color-segments"
 import { RecordingDetailAudioBar } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/player"
 
@@ -16,6 +17,7 @@ interface MobileRecordingAudioPlayerProps {
 	onSeek: (seconds: number) => void
 	onExpandedChange: (expanded: boolean) => void
 	onPlaybackRateChange?: (rate: number) => void
+	hidden?: boolean
 }
 
 /** Mobile fixed-bottom shell around the shared recording detail audio bar. */
@@ -33,11 +35,16 @@ export function MobileRecordingAudioPlayer({
 	onSeek,
 	onExpandedChange,
 	onPlaybackRateChange,
+	hidden = false,
 }: MobileRecordingAudioPlayerProps) {
 	if (!audioUrl) return null
 
 	return (
-		<div className="fixed inset-x-3 bottom-3 z-20" data-testid="mobile-recording-audio-player">
+		<div
+			className={cn("fixed inset-x-3 bottom-3 z-20", hidden && "hidden")}
+			data-testid="mobile-recording-audio-player"
+			aria-hidden={hidden}
+		>
 			<RecordingDetailAudioBar
 				audioRef={audioRef}
 				audioUrl={audioUrl}

@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest"
 import { render, screen } from "@testing-library/react"
 import {
 	RecordingDetailEmptyState,
+	RecordingDetailChatSkeleton,
 	RecordingDetailPageSkeleton,
 } from "../components/recording-detail/RecordingDetailEmptyState"
+import {
+	RECORDING_DETAIL_SUMMARY_MIN_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH,
+	RECORDING_DETAIL_WORKBENCH_MIN_WIDTH,
+} from "../components/recording-detail/recording-detail-layout"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -45,8 +52,13 @@ describe("RecordingDetailEmptyState", () => {
 	it("renders page skeleton with shimmer blocks and fade-in transition", () => {
 		const { container } = render(<RecordingDetailPageSkeleton />)
 		const skeleton = screen.getByTestId("recording-detail-page-skeleton")
+		const scrollContainer = screen.getByTestId("recording-detail-page-skeleton-scroll")
 
-		expect(skeleton).toHaveClass("grid-cols-[400px_minmax(0,1fr)]")
+		expect(scrollContainer).toHaveClass("overflow-x-auto", "overflow-y-hidden")
+		expect(skeleton).toHaveStyle({
+			minWidth: `${RECORDING_DETAIL_WORKBENCH_MIN_WIDTH}px`,
+			gridTemplateColumns: `minmax(${RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH}px, ${RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH}px) minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
+		})
 		expect(skeleton).toHaveClass("animate-in", "fade-in")
 		expect(skeleton).toHaveAttribute("aria-busy", "true")
 		expect(container.querySelector(".animate-pulse")).toBeNull()
@@ -61,5 +73,24 @@ describe("RecordingDetailEmptyState", () => {
 		expect(
 			screen.getByTestId("recording-detail-transcript-skeleton").querySelector(".border-b"),
 		).toBeNull()
+	})
+
+	it("renders the conversation rail skeleton with topic and composer placeholders", () => {
+		const { container } = render(<RecordingDetailChatSkeleton />)
+
+		expect(screen.getByTestId("recording-detail-chat-skeleton")).toBeInTheDocument()
+		const header = screen.getByTestId("recording-detail-chat-header-skeleton")
+		const composer = screen.getByTestId("recording-detail-chat-composer-skeleton")
+		expect(header).toBeInTheDocument()
+		expect(header).not.toHaveClass("border-b")
+		const messages = screen.getAllByTestId("recording-detail-chat-message-skeleton")
+		expect(messages).toHaveLength(4)
+		expect(messages[0].querySelector(".w-\\[78\\%\\]")).toBeInTheDocument()
+		expect(messages[1].querySelector(".w-\\[88\\%\\]")).toBeInTheDocument()
+		expect(screen.getAllByTestId("recording-detail-chat-avatar-skeleton")).toHaveLength(4)
+		expect(composer).toHaveClass("border")
+		expect(screen.getByTestId("recording-detail-chat-input-skeleton")).toHaveClass("h-8")
+		expect(screen.getByTestId("recording-detail-chat-send-skeleton")).toHaveClass("size-8")
+		expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(6)
 	})
 })

@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Settings } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useLocation } from "react-router"
+import { useMemoizedFn } from "ahooks"
+import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import { ProjectFilesStore } from "@/stores/projectFiles"
+import AiChat from "@/components/business/RecordingSummary/components/AiChat"
+import recordingSummaryStore from "@/stores/recordingSummary"
+import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
+import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
+import { useImageUrlResolver } from "@/pages/superMagic/components/Detail/contents/Md/hooks/useImageUrlResolver"
+import { getRecordingImagesDirPath } from "@/services/recordSummary/const/files"
+import { initializeService } from "@/services/recordSummary/serviceInstance"
+import { SuperMagicApi } from "@/apis"
+import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 
 import {
 	MobileShellSidebarToggleButton,
@@ -22,6 +36,80 @@ function AudioRecordingEntryPanel() {
 	const [settingsSheetOpen, setSettingsSheetOpen] = useState(false)
 	const location = useLocation()
 	const facade = useMobileRecordingEntryFacade()
+	const recordSummaryService = initializeService()
+	const [recordingProjectFilesStore] = useState(() => new ProjectFilesStore())
+	const [recordingMentionStore] = useState(() =>
+		createMentionPanelStore(recordingProjectFilesStore),
+	)
+	const [recordingImageAttachments, setRecordingImageAttachments] = useState<AttachmentFile[]>([])
+	const [attachmentsReadyProjectId, setAttachmentsReadyProjectId] = useState("")
+	const activeRecordingProjectId = recordingSummaryStore.businessData.project?.id
+	const noteFile = recordSummaryService.getPresetFiles()?.note_file
+	const noteFilePath = noteFile?.file_path ? `/${noteFile.file_path}` : ""
+	const displayDirPath = useMemo(() => {
+		if (!noteFile?.file_path) return undefined
+		const lastSlashIndex = noteFile.file_path.lastIndexOf("/")
+		return lastSlashIndex > 0 ? noteFile.file_path.substring(0, lastSlashIndex) : undefined
+	}, [noteFile?.file_path])
+	const folderPath = displayDirPath ? getRecordingImagesDirPath(displayDirPath) : "images"
+	const { urlResolver } = useImageUrlResolver({
+		attachments: recordingImageAttachments,
+		relativeFilePath: noteFilePath,
+		isReady:
+			Boolean(activeRecordingProjectId && noteFilePath) &&
+			attachmentsReadyProjectId === activeRecordingProjectId,
+	})
+	const imagesFolderIdRef = useRef<string | undefined>(undefined)
+
+	/**
+	 * Resolves the recording-scoped images directory before the shared project
+	 * image extension uploads a captured photo.
+	 */
+	const resolveImagesFolderParentId = useMemoizedFn(async (targetFolderPath: string) => {
+		if (!activeRecordingProjectId) return undefined
+		if (imagesFolderIdRef.current) return imagesFolderIdRef.current
+
+		const displayDirId = recordSummaryService.getAsrDisplayDir()?.directory_id
+		if (!displayDirId) return undefined
+		const folderName = targetFolderPath.split("/").filter(Boolean).pop() || "images"
+
+		try {
+			const result = await SuperMagicApi.createFile({
+				project_id: activeRecordingProjectId,
+				parent_id: displayDirId,
+				file_name: folderName,
+				is_directory: true,
+			})
+			const folderId = (result as { file_id?: string })?.file_id
+			if (folderId) imagesFolderIdRef.current = folderId
+			return folderId
+		} catch (error) {
+			if ((error as { code?: number })?.code === SuperMagicApiErrorCode.DuplicateFile) {
+				requestProjectAttachmentsFullRefresh({
+					projectId: activeRecordingProjectId,
+					reason: "mobile-recording-images-folder-duplicate",
+				})
+				return imagesFolderIdRef.current
+			}
+			return undefined
+		}
+	})
+
+	/**
+	 * Refreshes the local attachment tree after a photo becomes a project file.
+	 */
+	const handleImageUploadSuccess = useMemoizedFn(() => {
+		if (!activeRecordingProjectId) return
+		loadProjectAttachments({ projectId: activeRecordingProjectId }).then(({ tree }) => {
+			setRecordingImageAttachments(tree as unknown as AttachmentFile[])
+			recordingProjectFilesStore.setWorkspaceFileTree(tree)
+		})
+	})
+	useProjectAttachmentsChangeRealtime({
+		projectId: activeRecordingProjectId,
+		enabled: facade.presentation === "recording",
+		store: recordingProjectFilesStore,
+	})
 	const lastHandledDeletedProjectIdRef = useRef<string>("")
 
 	useEffect(() => {
@@ -33,6 +121,35 @@ function AudioRecordingEntryPanel() {
 		lastHandledDeletedProjectIdRef.current = deletedProjectId
 		facade.clearOptimisticItem(deletedProjectId)
 	}, [facade, location.state])
+
+	useEffect(() => {
+		if (facade.presentation !== "recording") return
+		const projectId = activeRecordingProjectId
+		if (!projectId) return
+		const controller = new AbortController()
+		setRecordingImageAttachments([])
+		setAttachmentsReadyProjectId("")
+		recordingMentionStore.initLoadAttachments(projectId)
+		loadProjectAttachments({ projectId, signal: controller.signal })
+			.then(({ tree }) => {
+				if (!controller.signal.aborted) {
+					setRecordingImageAttachments(tree as unknown as AttachmentFile[])
+					recordingProjectFilesStore.setWorkspaceFileTree(tree)
+					setAttachmentsReadyProjectId(projectId)
+				}
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) {
+					recordingMentionStore.finishLoadAttachmentsPromise(projectId)
+				}
+			})
+		return () => controller.abort()
+	}, [
+		activeRecordingProjectId,
+		facade.presentation,
+		recordingMentionStore,
+		recordingProjectFilesStore,
+	])
 
 	if (facade.presentation === "recording") {
 		return (
@@ -55,10 +172,25 @@ function AudioRecordingEntryPanel() {
 				onFinish={() => void facade.finishRecording()}
 				onCancel={() => void facade.cancelRecording()}
 				onNoteChange={facade.updateNote}
+				selectedProject={recordingSummaryStore.businessData.project}
+				currentDocumentPath={noteFilePath}
+				folderPath={folderPath}
+				urlResolver={urlResolver}
+				resolveImagesFolderParentId={resolveImagesFolderParentId}
+				onImageUploadSuccess={handleImageUploadSuccess}
 				onEnableTranscription={() => void facade.enableTranscription()}
 				onRenameTitle={facade.renameRecordingTitle}
 				WaveformComponent={facade.WaveformComponent}
 				MessageListComponent={facade.MessageListComponent}
+				aiChat={
+					<AiChat
+						projectFilesStore={recordingProjectFilesStore}
+						attachments={recordingProjectFilesStore.workspaceFileTree}
+						attachmentList={recordingProjectFilesStore.workspaceFilesList}
+						checkNowDebounced={() => undefined}
+						recordSummaryFileStore={recordingMentionStore}
+					/>
+				}
 			/>
 		)
 	}

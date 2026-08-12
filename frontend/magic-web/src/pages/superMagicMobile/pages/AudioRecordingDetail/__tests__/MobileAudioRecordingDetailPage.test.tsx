@@ -4,11 +4,18 @@ import MobileAudioRecordingDetailPage from "../index"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import { RouteName } from "@/routes/constants"
 import { toast } from "sonner"
+import { SuperMagicApi } from "@/apis"
 
 const navigateMock = vi.fn()
 const saveMediaSpeakersAndMagicProjectJsMock = vi.fn()
 const downloadRecordingAudioFileMock = vi.fn()
 const deleteAudioRecordingProjectsMock = vi.fn()
+// Mirrors the router query so tab switches can be observed the way the real page sees
+// them: writing `tab=ai` and clearing it must both be visible on the next render.
+const searchParamsStateRef = { current: new URLSearchParams() }
+const setSearchParamsMock = vi.fn((next: URLSearchParams) => {
+	searchParamsStateRef.current = new URLSearchParams(next)
+})
 
 const {
 	detailDataMock,
@@ -47,6 +54,15 @@ function createItem(overrides: Partial<AudioProjectListItem> = {}): AudioProject
 	}
 }
 
+/** Builds a topics response the test resolves on demand so pending states stay observable. */
+function createDeferredTopicsResponse() {
+	let resolve!: (value: { list: unknown[] }) => void
+	const promise = new Promise<{ list: unknown[] }>((innerResolve) => {
+		resolve = innerResolve
+	})
+	return { promise, resolve }
+}
+
 vi.mock("react-router", async () => {
 	const actual = await vi.importActual<typeof import("react-router")>("react-router")
 	return {
@@ -61,6 +77,97 @@ vi.mock("react-router", async () => {
 		}),
 	}
 })
+
+vi.mock("react-router-dom", async () => {
+	const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom")
+	return {
+		...actual,
+		// Keep query-state behavior isolated from a real Router while exercising the page handlers.
+		useSearchParams: () => [searchParamsStateRef.current, setSearchParamsMock],
+	}
+})
+
+vi.mock("@/pages/superMagic/components/ProjectPageInputContainer", () => ({
+	default: (props: {
+		createTopic?: () => Promise<unknown>
+		onSendSuccess?: (params: { currentTopic: unknown }) => void
+	}) => (
+		<div data-testid="mock-recording-ai-composer">
+			<button
+				type="button"
+				onClick={async () => {
+					const currentTopic = await props.createTopic?.()
+					props.onSendSuccess?.({ currentTopic })
+				}}
+			>
+				send mock question
+			</button>
+		</div>
+	),
+}))
+
+vi.mock("@/pages/superMagicMobile/pages/ProjectPage/ProjectPageMain/ProjectTopicListView", () => ({
+	// Expose the loading flag and refresh hook so tests can tell the first-load skeleton
+	// apart from a pull-to-refresh that must keep the already rendered rows.
+	default: (props: { loading: boolean; onRefresh: () => Promise<void> }) => (
+		<div data-testid="mock-recording-topic-list" data-loading={String(props.loading)}>
+			<button type="button" onClick={() => void props.onRefresh()}>
+				refresh mock topics
+			</button>
+		</div>
+	),
+}))
+
+vi.mock("@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime", () => ({
+	useProjectAttachmentsChangeRealtime: vi.fn(),
+}))
+
+vi.mock("@/pages/superMagic/services/projectAttachmentsLoader", () => ({
+	loadProjectAttachments: vi.fn(async () => ({ tree: [], list: [] })),
+}))
+
+vi.mock("@/stores/projectFiles", () => ({
+	ProjectFilesStore: class ProjectFilesStore {
+		workspaceFileTree: unknown[] = []
+		workspaceFilesList: unknown[] = []
+		setSelectedProject = vi.fn()
+		setWorkspaceFileTree = vi.fn((tree: unknown[]) => {
+			this.workspaceFileTree = tree
+		})
+	},
+}))
+
+vi.mock("@/stores/recordingSummary", () => ({
+	default: {
+		isRecordingTopic: vi.fn(() => false),
+	},
+}))
+
+vi.mock("@/components/business/MentionPanel/builtin-store", () => ({
+	createMentionPanelStore: () => ({
+		initLoadAttachments: vi.fn(),
+		finishLoadAttachmentsPromise: vi.fn(),
+	}),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		getTopicsByProjectId: vi.fn(async () => ({ list: [] })),
+		getProjectDetail: vi.fn(async () => ({
+			id: "project-mobile-001",
+			workspace_id: "workspace-mobile-001",
+		})),
+		getWorkspaceDetail: vi.fn(async () => ({ id: "workspace-mobile-001" })),
+		createTopic: vi.fn(),
+		getTopicDetail: vi.fn(),
+		pinTopic: vi.fn(),
+		unpinTopic: vi.fn(),
+		deleteTopic: vi.fn(),
+		editTopic: vi.fn(),
+		archiveTopic: vi.fn(),
+		unarchiveTopic: vi.fn(),
+	},
+}))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
@@ -81,6 +188,9 @@ vi.mock("react-i18next", () => ({
 				"detail.back": "Back",
 				"detail.tabs.source": "Source",
 				"detail.tabs.summaryRoot": "Summary",
+				"detail.tabs.ai": "Ask AI",
+				"detail.topicListTitle": "Topics",
+				"detail.newTopic": "New topic",
 				"detail.share": "Share",
 				"detail.shareAndExport": "Share & Export",
 				"detail.shareSection": "Share",
@@ -451,6 +561,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 		magicPopupScrollLockCountRef.current = 0
 		document.body.removeAttribute("data-scroll-locked")
 		navigateMock.mockReset()
+		searchParamsStateRef.current = new URLSearchParams()
+		setSearchParamsMock.mockClear()
 		deleteAudioRecordingProjectsMock.mockReset()
 		deleteAudioRecordingProjectsMock.mockResolvedValue(undefined)
 		saveMediaSpeakersAndMagicProjectJsMock.mockReset()
@@ -461,6 +573,22 @@ describe("MobileAudioRecordingDetailPage", () => {
 		collectSpeakerIdsFromTextMock.mockReturnValue([])
 		downloadRecordingAudioFileMock.mockReset()
 		downloadRecordingAudioFileMock.mockResolvedValue(true)
+		vi.mocked(SuperMagicApi.createTopic).mockReset()
+		vi.mocked(SuperMagicApi.createTopic).mockResolvedValue({
+			id: "topic-mobile-created",
+			project_id: "project-mobile-001",
+			workspace_id: "workspace-mobile-001",
+		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
+		vi.mocked(SuperMagicApi.getTopicDetail).mockReset()
+		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue({
+			id: "topic-mobile-created",
+			project_id: "project-mobile-001",
+			workspace_id: "workspace-mobile-001",
+			chat_topic_id: "chat-topic-mobile-created",
+			chat_conversation_id: "chat-conversation-mobile-created",
+		} as never)
 		vi.mocked(toast.info).mockReset()
 		detailDataMock.mockReturnValue({
 			loading: false,
@@ -552,6 +680,127 @@ describe("MobileAudioRecordingDetailPage", () => {
 		)
 	})
 
+	it("opens the Ask AI tab, preserves it in the query, and hides the player", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		expect(setSearchParamsMock).toHaveBeenCalledWith(expect.any(URLSearchParams), {
+			replace: true,
+		})
+		const nextParams = setSearchParamsMock.mock.calls.at(-1)?.[0] as URLSearchParams
+		expect(nextParams.get("tab")).toBe("ai")
+		expect(screen.getByTestId("mobile-recording-detail-ai")).toBeInTheDocument()
+		expect(screen.getByTestId("mock-recording-topic-list")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-recording-audio-player")).toBeNull()
+		expect(screen.queryByText("Topics")).toBeNull()
+		expect(screen.queryByText("New topic")).toBeNull()
+
+		const topicsContainer = screen.getByTestId("mobile-recording-detail-ai-topics")
+		expect(topicsContainer.className).toContain("px-3")
+		expect(topicsContainer.className).toContain("pt-2")
+		expect(screen.getByTestId("mobile-recording-detail-ai").className).toContain(
+			"bg-mobile-background",
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-recording-ai-composer")).toBeInTheDocument()
+		})
+		const composerContainer = screen.getByTestId("mobile-recording-detail-ai-composer")
+		expect(composerContainer.className).not.toContain("mt-4")
+		expect(composerContainer.className).not.toContain("pt-2")
+		expect(composerContainer.className).toContain("bg-mobile-background")
+		expect(composerContainer.className).not.toContain("data-testid=mobile-composer")
+	})
+
+	it("shows the topic skeleton only while the first Ask AI load has no topics yet", async () => {
+		// Hold the first request open so the pending first load can be observed.
+		const firstLoad = createDeferredTopicsResponse()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReturnValueOnce(
+			firstLoad.promise as never,
+		)
+
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("true")
+
+		await act(async () => {
+			firstLoad.resolve({ list: [{ id: "topic-mobile-001", topic_name: "Mock topic" }] })
+		})
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+	})
+
+	it("keeps the topic list rendered while pull-to-refresh reloads the Ask AI topics", async () => {
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [{ id: "topic-mobile-001", topic_name: "Mock topic" }],
+		} as never)
+
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+		})
+
+		// Keep the refresh request pending so the skeleton would be visible if the refresh
+		// path still reused the first-load flag.
+		const refreshLoad = createDeferredTopicsResponse()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReturnValueOnce(
+			refreshLoad.promise as never,
+		)
+
+		fireEvent.click(screen.getByText("refresh mock topics"))
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+
+		await act(async () => {
+			refreshLoad.resolve({
+				list: [{ id: "topic-mobile-002", topic_name: "Refreshed topic" }],
+			})
+		})
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+		expect(vi.mocked(SuperMagicApi.getTopicsByProjectId)).toHaveBeenCalledTimes(2)
+	})
+
+	it("keeps the summary tab active when leaving Ask AI on an unsummarized recording", () => {
+		// The default tab of an unsummarized recording is Source, so clearing `tab=ai`
+		// must not silently restore that default over the user's Summary choice.
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByText("Ask AI"))
+		expect(screen.getByTestId("mobile-recording-detail-ai")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByText("Summary"))
+
+		expect(searchParamsStateRef.current.get("tab")).toBeNull()
+		// An unsummarized recording renders the summary placeholder, which still proves
+		// the Summary tab stayed active instead of falling back to Source.
+		expect(screen.getByTestId("mobile-recording-summary-placeholder")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-recording-source-panel")).toBeNull()
+		expect(screen.queryByTestId("mobile-recording-detail-ai")).toBeNull()
+	})
+
+	it("creates a topic for a direct AI question and navigates into that topic", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-recording-ai-composer")).toBeInTheDocument()
+		})
+		fireEvent.click(screen.getByText("send mock question"))
+
+		await waitFor(() => {
+			expect(navigateMock).toHaveBeenCalledWith({
+				name: RouteName.SuperWorkspaceProjectTopicState,
+				params: { projectId: "project-mobile-001", topicId: "topic-mobile-created" },
+			})
+		})
+		expect(SuperMagicApi.createTopic).toHaveBeenCalled()
+	})
+
 	it("keeps the summary tab active when a summary time chip starts playback", () => {
 		detailDataMock.mockReturnValue({
 			loading: false,
@@ -580,8 +829,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 
 		fireEvent.click(screen.getByText("Summary"))
 		const latestSummaryPanelProps = summaryPanelPropsMock.mock.calls.at(-1)?.[0] as
-			| { onTimeClick?: (start: number, end?: number) => void }
-			| undefined
+			{ onTimeClick?: (start: number, end?: number) => void } | undefined
 
 		act(() => {
 			latestSummaryPanelProps?.onTimeClick?.(12, 24)
@@ -625,27 +873,43 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(navigateMock).toHaveBeenCalledWith({ name: RouteName.AudioRecordings })
 	})
 
-	it("uses the shared mobile header button and icon sizing for back/share/more actions", () => {
+	it("uses the shared mobile header button and keeps only the more action", () => {
 		render(<MobileAudioRecordingDetailPage />)
 
 		const backButton = screen.getByLabelText("Back")
-		const shareButton = screen.getByLabelText("Share")
 		const moreButton = screen.getByLabelText("More actions")
 
-		// Lock the header geometry to the same 48px buttons used by mobile project detail so icon size and stroke stay visually aligned.
+		// Lock the header geometry to one 48px action target and keep share inside the menu.
 		expect(backButton.className).toContain("mobile-page-header-btn")
-		expect(shareButton.className).toContain("h-12 w-12")
 		expect(moreButton.className).toContain("h-12 w-12")
+		expect(screen.queryByLabelText("Share")).toBeNull()
 
 		expect(backButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
-		expect(shareButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
 		expect(moreButton.querySelector("svg")?.getAttribute("class")).toContain("size-[22px]")
 	})
 
-	it("opens the share & export sheet from the header share action", async () => {
+	it("keeps all recording detail tabs on one line inside the mobile header", () => {
 		render(<MobileAudioRecordingDetailPage />)
 
-		fireEvent.click(screen.getByLabelText("Share"))
+		const sourceTab = screen.getByRole("button", { name: "Source" })
+		const summaryTab = screen.getByRole("button", { name: "Summary" })
+		const askAiTab = screen.getByRole("button", { name: "Ask AI" })
+
+		// Verify compact content-sized tabs keep localized labels on one line without forcing equal widths.
+		expect(sourceTab.className).toContain("whitespace-nowrap")
+		expect(summaryTab.className).toContain("whitespace-nowrap")
+		expect(askAiTab.className).toContain("whitespace-nowrap")
+		expect(sourceTab.parentElement?.className).toContain("w-max")
+		expect(sourceTab.parentElement?.className).toContain("max-w-full")
+		expect(sourceTab.parentElement?.parentElement?.className).toContain("left-[66px]")
+		expect(sourceTab.parentElement?.parentElement?.className).toContain("right-[66px]")
+	})
+
+	it("opens the share & export sheet from the more-actions share entry", async () => {
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-share"))
 
 		expect(await screen.findByTestId("mobile-recording-share-export-sheet")).toBeInTheDocument()
 	})
@@ -653,7 +917,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 	it("opens the existing project-share sheet from the share & export launcher", async () => {
 		render(<MobileAudioRecordingDetailPage />)
 
-		fireEvent.click(screen.getByLabelText("Share"))
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-share"))
 		fireEvent.click(await screen.findByTestId("mobile-recording-share-link"))
 
 		expect(
@@ -664,7 +929,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 	it("downloads the original recording from the share & export launcher", async () => {
 		render(<MobileAudioRecordingDetailPage />)
 
-		fireEvent.click(screen.getByLabelText("Share"))
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-share"))
 		fireEvent.click(await screen.findByTestId("mobile-recording-export-recording"))
 
 		await waitFor(() => {
@@ -679,7 +945,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 	it("passes fileMap to the share-export sheet", async () => {
 		render(<MobileAudioRecordingDetailPage />)
 
-		fireEvent.click(screen.getByLabelText("Share"))
+		fireEvent.click(screen.getByLabelText("More actions"))
+		fireEvent.click(await screen.findByTestId("mobile-recording-more-share"))
 		expect(await screen.findByTestId("mobile-recording-share-export-sheet")).toBeInTheDocument()
 		expect(screen.getByTestId("file-map")).not.toBeEmptyDOMElement()
 	})

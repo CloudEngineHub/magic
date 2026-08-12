@@ -208,6 +208,16 @@ export class AudioImportStore {
 			})
 		})
 
+		// Remind users not to hard-refresh while SPA navigation remains safe during upload.
+		magicToast.info({
+			content: i18next.t("import.doNotRefreshTip", {
+				ns: "audioRecordings",
+				defaultValue:
+					"Please don't refresh until the import finishes. Switching to other pages won't interrupt it.",
+			}),
+			duration: 5000,
+		})
+
 		try {
 			// Trigger file upload using global upload service
 			await ossUploadService.uploadFiles(

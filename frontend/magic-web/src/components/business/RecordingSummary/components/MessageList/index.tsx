@@ -51,6 +51,15 @@ const useStyles = createStyles(({ token, css }) => ({
 		font-weight: 400;
 		line-height: 20px;
 	`,
+	mobileMessageItem: css`
+		padding: 0 16px;
+		margin: 0 0 20px;
+		gap: 2px;
+	`,
+	mobileMessageText: css`
+		font-size: 16px;
+		line-height: 24px;
+	`,
 	streamLoading: css`
 		transform: translateY(-1px);
 		display: unset;
@@ -167,10 +176,12 @@ interface MessageListProps {
 	message: (VoiceResultUtterance & { add_time: number; id: string })[]
 	isExpanded: boolean
 	className?: string
+	/** Enables the spacing and typography used by the full-screen mobile recorder. */
+	mobile?: boolean
 }
 
 const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function MessageList(
-	{ message, isExpanded, className },
+	{ message, isExpanded, className, mobile = false },
 	ref,
 ) {
 	const { styles, cx } = useStyles()
@@ -190,11 +201,15 @@ const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function Messag
 		const isLastMessage = index === validMessages.length - 1
 
 		return (
-			<div className={cx(styles.messageItem, { "is-last": isLastMessage })}>
+			<div
+				className={cx(styles.messageItem, mobile && styles.mobileMessageItem, {
+					"is-last": isLastMessage,
+				})}
+			>
 				<div className={styles.timestamp}>
 					{formatTime((item.add_time || Date.now()) / 1000, "HH:mm:ss")}
 				</div>
-				<div className={styles.messageText}>
+				<div className={cx(styles.messageText, mobile && styles.mobileMessageText)}>
 					{item.text}
 					{isLastMessage && !item.definite && (
 						<StreamLoading size={20} className={styles.streamLoading} />

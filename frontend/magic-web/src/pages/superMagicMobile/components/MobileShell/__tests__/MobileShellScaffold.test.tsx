@@ -15,6 +15,17 @@ const DEFAULT_RECT = {
 	toJSON: () => ({}),
 }
 
+/** Configures horizontal overflow dimensions that JSDOM does not calculate from layout. */
+function mockHorizontalScrollDimensions(
+	element: HTMLElement,
+	{ clientWidth, scrollWidth }: { clientWidth: number; scrollWidth: number },
+) {
+	Object.defineProperties(element, {
+		clientWidth: { configurable: true, value: clientWidth },
+		scrollWidth: { configurable: true, value: scrollWidth },
+	})
+}
+
 vi.mock("@/models/config/hooks", () => ({
 	useTheme: () => ({
 		prefersColorScheme: "light",
@@ -295,5 +306,101 @@ describe("MobileShellScaffold", () => {
 		fireEvent.touchEnd(guard, { changedTouches: [{ clientX: 600, clientY: 100 }] })
 
 		expect(onOpenSidebar).not.toHaveBeenCalled()
+	})
+
+	it("触点位于真实横向滚动区域的深层子元素时不触发侧边栏", () => {
+		const onOpenSidebar = vi.fn()
+		render(
+			<MobileShellScaffold
+				isSidebarOpen={false}
+				sidebar={<div>sidebar</div>}
+				panel={
+					<div data-testid="horizontal-scroll-container" style={{ overflowX: "auto" }}>
+						<button type="button" data-testid="horizontal-scroll-child">
+							option
+						</button>
+					</div>
+				}
+				onOpenSidebar={onOpenSidebar}
+				onCloseSidebar={vi.fn()}
+			/>,
+		)
+
+		const root = screen.getByTestId("mobile-shell-root")
+		const panel = screen.getByTestId("mobile-shell-panel")
+		const scrollContainer = screen.getByTestId("horizontal-scroll-container")
+		const scrollChild = screen.getByTestId("horizontal-scroll-child")
+		vi.spyOn(root, "getBoundingClientRect").mockReturnValue(DEFAULT_RECT)
+		mockHorizontalScrollDimensions(scrollContainer, { clientWidth: 200, scrollWidth: 600 })
+
+		fireEvent.touchStart(scrollChild, { touches: [{ clientX: 100, clientY: 100 }] })
+		fireEvent.touchMove(scrollChild, { touches: [{ clientX: 600, clientY: 100 }] })
+		fireEvent.touchEnd(scrollChild, { changedTouches: [{ clientX: 600, clientY: 100 }] })
+
+		expect(panel.style.transform).toBe("translateX(0px)")
+		expect(onOpenSidebar).not.toHaveBeenCalled()
+	})
+
+	it("横向滚动容器没有实际溢出时仍允许右滑打开侧边栏", () => {
+		const onOpenSidebar = vi.fn()
+		render(
+			<MobileShellScaffold
+				isSidebarOpen={false}
+				sidebar={<div>sidebar</div>}
+				panel={
+					<div data-testid="fitting-scroll-container" style={{ overflowX: "auto" }}>
+						content
+					</div>
+				}
+				onOpenSidebar={onOpenSidebar}
+				onCloseSidebar={vi.fn()}
+			/>,
+		)
+
+		const root = screen.getByTestId("mobile-shell-root")
+		const scrollContainer = screen.getByTestId("fitting-scroll-container")
+		vi.spyOn(root, "getBoundingClientRect").mockReturnValue(DEFAULT_RECT)
+		mockHorizontalScrollDimensions(scrollContainer, { clientWidth: 200, scrollWidth: 200 })
+
+		fireEvent.touchStart(scrollContainer, { touches: [{ clientX: 100, clientY: 100 }] })
+		fireEvent.touchMove(scrollContainer, { touches: [{ clientX: 600, clientY: 100 }] })
+		fireEvent.touchEnd(scrollContainer, {
+			changedTouches: [{ clientX: 600, clientY: 100 }],
+		})
+
+		expect(onOpenSidebar).toHaveBeenCalledTimes(1)
+	})
+
+	it("仅纵向滚动的容器不屏蔽侧边栏右滑手势", () => {
+		const onOpenSidebar = vi.fn()
+		render(
+			<MobileShellScaffold
+				isSidebarOpen={false}
+				sidebar={<div>sidebar</div>}
+				panel={
+					<div
+						data-testid="vertical-scroll-container"
+						style={{ overflowX: "hidden", overflowY: "auto" }}
+					>
+						content
+					</div>
+				}
+				onOpenSidebar={onOpenSidebar}
+				onCloseSidebar={vi.fn()}
+			/>,
+		)
+
+		const root = screen.getByTestId("mobile-shell-root")
+		const scrollContainer = screen.getByTestId("vertical-scroll-container")
+		vi.spyOn(root, "getBoundingClientRect").mockReturnValue(DEFAULT_RECT)
+		mockHorizontalScrollDimensions(scrollContainer, { clientWidth: 200, scrollWidth: 600 })
+
+		fireEvent.touchStart(scrollContainer, { touches: [{ clientX: 100, clientY: 100 }] })
+		fireEvent.touchMove(scrollContainer, { touches: [{ clientX: 600, clientY: 100 }] })
+		fireEvent.touchEnd(scrollContainer, {
+			changedTouches: [{ clientX: 600, clientY: 100 }],
+		})
+
+		expect(onOpenSidebar).toHaveBeenCalledTimes(1)
 	})
 })

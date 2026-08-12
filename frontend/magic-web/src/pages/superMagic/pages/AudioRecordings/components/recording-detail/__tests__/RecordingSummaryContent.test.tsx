@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { RecordingSummaryContent } from "../RecordingSummaryContent"
 import {
@@ -189,27 +189,6 @@ describe("RecordingSummaryContent desktop markdown layout", () => {
 })
 
 describe("RecordingSummaryContent topics pill scroll", () => {
-	let scrollIntoViewMock: ReturnType<typeof vi.fn>
-	let originalScrollIntoView: PropertyDescriptor | undefined
-
-	beforeEach(() => {
-		scrollIntoViewMock = vi.fn()
-		originalScrollIntoView = Object.getOwnPropertyDescriptor(
-			HTMLElement.prototype,
-			"scrollIntoView",
-		)
-		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-			configurable: true,
-			value: scrollIntoViewMock,
-		})
-	})
-
-	afterEach(() => {
-		if (originalScrollIntoView) {
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
-		}
-	})
-
 	it("uses a hidden-scrollbar horizontal scroll container for topic pills", () => {
 		render(
 			<RecordingSummaryContent
@@ -259,6 +238,9 @@ describe("RecordingSummaryContent topics pill scroll", () => {
 			get() {
 				return 120
 			},
+			set() {
+				// Allow components to update their local scroller while this test pins the observed state.
+			},
 		})
 
 		render(
@@ -278,12 +260,18 @@ describe("RecordingSummaryContent topics pill scroll", () => {
 
 		if (scrollWidthDescriptor) {
 			Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidthDescriptor)
+		} else {
+			delete (HTMLElement.prototype as Partial<HTMLElement>).scrollWidth
 		}
 		if (clientWidthDescriptor) {
 			Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidthDescriptor)
+		} else {
+			delete (HTMLElement.prototype as Partial<HTMLElement>).clientWidth
 		}
 		if (scrollLeftDescriptor) {
 			Object.defineProperty(HTMLElement.prototype, "scrollLeft", scrollLeftDescriptor)
+		} else {
+			delete (HTMLElement.prototype as Partial<HTMLElement>).scrollLeft
 		}
 	})
 
@@ -319,7 +307,7 @@ describe("RecordingSummaryContent topics pill scroll", () => {
 		expect(scrollContainer.scrollLeft).toBe(40)
 	})
 
-	it("scrolls the active topic pill into view when selection changes", () => {
+	it("centers the active topic pill inside only the local scroll container", () => {
 		render(
 			<RecordingSummaryContent
 				file={topicsFile}
@@ -331,13 +319,21 @@ describe("RecordingSummaryContent topics pill scroll", () => {
 				layout="desktop"
 			/>,
 		)
-
-		fireEvent.click(screen.getByRole("button", { name: "Topic Label 5" }))
-
-		expect(scrollIntoViewMock).toHaveBeenCalledWith({
-			block: "nearest",
-			inline: "center",
+		const scrollContainer = screen.getByTestId("recording-detail-topics-scroll")
+		const targetTopic = screen.getByRole("button", { name: "Topic Label 5" })
+		Object.defineProperties(scrollContainer, {
+			scrollWidth: { configurable: true, value: 640 },
+			clientWidth: { configurable: true, value: 240 },
+			scrollLeft: { configurable: true, writable: true, value: 0 },
 		})
+		Object.defineProperties(targetTopic, {
+			offsetLeft: { configurable: true, value: 360 },
+			offsetWidth: { configurable: true, value: 80 },
+		})
+
+		fireEvent.click(targetTopic)
+
+		expect(scrollContainer.scrollLeft).toBe(280)
 	})
 })
 

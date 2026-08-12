@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react"
 import type { AnchorHTMLAttributes, ComponentProps, MouseEvent } from "react"
 import { cn } from "@/lib/utils"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
+import { resolveSingleImageUrl } from "@/pages/superMagic/utils/image-url-resolver"
 import {
 	isRecordingTimeText,
 	parseMarkdownSpeakerLink,
@@ -17,6 +20,8 @@ export interface RecordingMarkdownComponentOptions {
 	speakerNameMap?: Record<string, string>
 	timeLinkTestId?: string
 	speakerLinkTestId?: string
+	attachments?: AttachmentFile[]
+	relativeFilePath?: string
 }
 
 /** Test hook for time chip class — styles live in `.recording-time-chip` (index.css). */
@@ -45,6 +50,8 @@ export function createRecordingMarkdownComponents({
 	speakerNameMap = {},
 	timeLinkTestId = "recording-detail-time-link",
 	speakerLinkTestId = "recording-detail-speaker-link",
+	attachments = [],
+	relativeFilePath,
 }: RecordingMarkdownComponentOptions = {}) {
 	return {
 		a: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -93,7 +100,47 @@ export function createRecordingMarkdownComponents({
 		input: ({ checked, ...props }: ComponentProps<"input">) => (
 			<input type="checkbox" checked={checked} readOnly {...props} />
 		),
+		img: (props: ComponentProps<"img">) => (
+			<RecordingMarkdownImage
+				{...props}
+				attachments={attachments}
+				relativeFilePath={relativeFilePath}
+			/>
+		),
 	}
+}
+
+/** Resolves project-relative note images to temporary download URLs before rendering. */
+function RecordingMarkdownImage({
+	attachments,
+	relativeFilePath,
+	src,
+	...props
+}: ComponentProps<"img"> & {
+	attachments: AttachmentFile[]
+	relativeFilePath?: string
+}) {
+	const [resolvedSrc, setResolvedSrc] = useState(src)
+
+	useEffect(() => {
+		let disposed = false
+		if (!src || !attachments.length || /^(?:data:|https?:|blob:)/i.test(src)) {
+			setResolvedSrc(src)
+			return () => {
+				disposed = true
+			}
+		}
+
+		void resolveSingleImageUrl(src, attachments, relativeFilePath).then((nextSrc) => {
+			if (!disposed) setResolvedSrc(nextSrc)
+		})
+
+		return () => {
+			disposed = true
+		}
+	}, [attachments, relativeFilePath, src])
+
+	return <img {...props} src={resolvedSrc} />
 }
 
 /** Converts inline code-wrapped magic-time links into playable time controls. */

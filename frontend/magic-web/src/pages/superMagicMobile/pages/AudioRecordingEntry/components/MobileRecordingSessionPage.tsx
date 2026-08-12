@@ -1,11 +1,25 @@
-import type { ComponentType } from "react"
-import { Check, ChevronLeft, FileAudio, Loader2, MicVocal, Pencil } from "lucide-react"
+import type { ChangeEvent, ComponentType, ReactNode } from "react"
+import {
+	Camera,
+	Check,
+	ChevronLeft,
+	FileAudio,
+	Loader2,
+	MicVocal,
+	Pencil,
+	Sparkles,
+} from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
 import { formatRecordingDuration } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
+import EditorBody from "@/pages/superMagic/components/Detail/contents/Md/components/EditorBody"
+import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
+import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 
 import { LiveAudioWaveform } from "./LiveAudioWaveform"
+import MagicPopup from "@/components/base-mobile/MagicPopup"
 
 type TranscriptMessage = VoiceResultUtterance & { add_time: number; id: string }
 
@@ -29,13 +43,22 @@ interface MobileRecordingSessionPageProps {
 	onCancel: () => void
 	onRenameTitle?: (title: string) => Promise<boolean>
 	onNoteChange: (content: string) => void
+	selectedProject?: ProjectListItem | null
+	currentDocumentPath?: string
+	folderPath?: string
+	urlResolver?: ProjectImageUrlResolver
+	resolveImagesFolderParentId?: (folderPath: string) => Promise<string | undefined>
+	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadError?: (error: Error) => void
 	onEnableTranscription: () => void
 	WaveformComponent: ComponentType<{ isRecording: boolean; isPaused: boolean }>
 	MessageListComponent: ComponentType<{
 		message: TranscriptMessage[]
 		isExpanded: boolean
 		className?: string
+		mobile?: boolean
 	}>
+	aiChat?: ReactNode
 }
 
 type RecordingTopTab = "transcript" | "notes"
@@ -86,15 +109,66 @@ export function MobileRecordingSessionPage({
 	onFinish,
 	onRenameTitle,
 	onNoteChange,
+	selectedProject,
+	currentDocumentPath,
+	folderPath,
+	urlResolver,
+	resolveImagesFolderParentId,
+	onImageUploadSuccess,
+	onImageUploadError,
 	onEnableTranscription,
 	MessageListComponent,
+	aiChat,
 }: MobileRecordingSessionPageProps) {
 	const { t } = useTranslation("super")
 	const [activeTab, setActiveTab] = useState<RecordingTopTab>("transcript")
 	const [isEditingTitle, setIsEditingTitle] = useState(false)
 	const [draftTitle, setDraftTitle] = useState(title)
 	const [isSavingTitle, setIsSavingTitle] = useState(false)
+	const [isAiChatOpen, setIsAiChatOpen] = useState(false)
+	const [isCameraUploadPending, setIsCameraUploadPending] = useState(false)
 	const titleInputRef = useRef<HTMLInputElement>(null)
+	const cameraInputRef = useRef<HTMLInputElement>(null)
+	const editorRef = useRef<SimpleEditorRef>(null)
+	const shouldInsertCameraAtEndRef = useRef(false)
+
+	/**
+	 * Opens the native camera input and moves the user to the note editor first.
+	 * The synchronous click keeps the browser user-activation required by mobile
+	 * camera capture while the state update makes the insertion target explicit.
+	 */
+	function handleCameraPointerDown() {
+		if (isCameraUploadPending || isStarting || isBusy || !selectedProject?.id) return
+		// Capture focus before opening the native camera because the camera input will
+		// blur the editor; an unfocused editor should insert the photo at note end.
+		const editor = editorRef.current?.editor
+		shouldInsertCameraAtEndRef.current = activeTab !== "notes" || !editor?.isFocused
+	}
+
+	function handleCameraClick() {
+		if (isCameraUploadPending || isStarting || isBusy || !selectedProject?.id) return
+		setActiveTab("notes")
+		cameraInputRef.current?.click()
+	}
+
+	/**
+	 * Inserts the captured file through the same Tiptap project-image command used
+	 * by PC notes, preserving project storage and Markdown serialization behavior.
+	 */
+	function handleCameraFileChange(event: ChangeEvent<HTMLInputElement>) {
+		const file = event.target.files?.[0]
+		event.target.value = ""
+		if (!file || !editorRef.current?.editor) return
+
+		setIsCameraUploadPending(true)
+		if (shouldInsertCameraAtEndRef.current) {
+			editorRef.current.editor.commands.focus("end")
+			shouldInsertCameraAtEndRef.current = false
+		}
+		// The command is supplied by SaveImageToProjectExtension; the declaration is
+		// augmented in the shared Tiptap image extension module.
+		editorRef.current.editor.commands.insertProjectImageFromFile?.(file)
+	}
 
 	/**
 	 * Resets the editable title draft whenever a new shared session/project title
@@ -163,7 +237,7 @@ export function MobileRecordingSessionPage({
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background"
+			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-mobile-background"
 			data-testid="mobile-recording-session-page"
 		>
 			<div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-3">
@@ -174,7 +248,7 @@ export function MobileRecordingSessionPage({
 					aria-label={t("mobile.recordingEntry.active.backAria")}
 					data-testid="mobile-recording-session-back"
 				>
-					<ChevronLeft className="size-[22px] text-foreground" strokeWidth={2.6} />
+					<ChevronLeft className="size-[22px] !stroke-2 text-foreground" />
 				</button>
 
 				<div className="flex min-w-0 flex-1 items-center justify-center gap-2">
@@ -209,7 +283,7 @@ export function MobileRecordingSessionPage({
 							barGap={2}
 							sampleIntervalMs={60}
 							fadeWidth={16}
-							fadeColor="var(--color-background)"
+							fadeColor="mobile-background"
 						/>
 					</div>
 
@@ -226,7 +300,7 @@ export function MobileRecordingSessionPage({
 					aria-label={t("mobile.recordingEntry.active.finishAria")}
 					data-testid="mobile-recording-session-finish"
 				>
-					<Check className="size-[22px]" strokeWidth={2.6} />
+					<Check className="size-[22px] !stroke-2" />
 				</button>
 			</div>
 
@@ -303,8 +377,8 @@ export function MobileRecordingSessionPage({
 				</button>
 			</div>
 
-			<div className="min-h-0 flex-1 px-4 pb-4">
-				<div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-card">
+			<div className="min-h-0 flex-1">
+				<div className="flex h-full min-h-0 flex-col overflow-hidden bg-mobile-background">
 					<div className="min-h-0 flex-1">
 						{isStarting ? (
 							<div
@@ -342,6 +416,7 @@ export function MobileRecordingSessionPage({
 									message={transcriptMessages}
 									isExpanded
 									className="h-full"
+									mobile
 								/>
 							) : (
 								<TranscriptionDisabledState
@@ -351,72 +426,151 @@ export function MobileRecordingSessionPage({
 							)
 						) : (
 							<div className="flex h-full flex-col px-4 py-4">
-								<textarea
-									value={noteContent}
-									onChange={(event) => onNoteChange(event.target.value)}
+								<EditorBody
+									isLoading={false}
+									viewMode="phone"
+									content={noteContent}
+									processedContent={noteContent}
+									isEditMode
+									editContent={noteContent}
+									setEditContent={onNoteChange}
+									selectedProject={selectedProject}
+									currentDocumentPath={currentDocumentPath}
+									folderPath={folderPath}
+									urlResolver={urlResolver}
+									onImageUploadSuccess={(relativePath) => {
+										setIsCameraUploadPending(false)
+										onImageUploadSuccess?.(relativePath)
+									}}
+									onImageUploadError={(error) => {
+										setIsCameraUploadPending(false)
+										onImageUploadError?.(error)
+									}}
+									resolveImagesFolderParentId={resolveImagesFolderParentId}
+									editorRef={editorRef}
 									placeholder={t("mobile.recordingEntry.active.notesPlaceholder")}
-									className="min-h-0 flex-1 resize-none bg-transparent text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+									className="min-h-0 flex-1 overflow-y-auto bg-mobile-background text-[15px] leading-6 text-foreground [&_.simple-editor-content]:!bg-mobile-background [&_.simple-editor-wrapper]:!bg-mobile-background [&_.simple-editor]:!bg-mobile-background [&_.tiptap-toolbar]:!bg-mobile-background"
 									data-testid="mobile-recording-session-notes"
 								/>
 							</div>
 						)}
 					</div>
 				</div>
+				<input
+					ref={cameraInputRef}
+					type="file"
+					accept="image/*"
+					capture="environment"
+					onChange={handleCameraFileChange}
+					className="hidden"
+					aria-hidden="true"
+					data-testid="mobile-recording-session-camera-input"
+				/>
 			</div>
 
-			<div className="flex min-h-[92px] shrink-0 items-center justify-center px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3">
-				{hasStartupError ? (
-					<button
-						type="button"
-						onClick={onRetryStart}
-						disabled={isBusy}
-						className="rounded-full bg-card px-8 py-3 text-[15px] font-medium leading-5 text-foreground shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)] transition-opacity active:opacity-70 disabled:opacity-50"
-						data-testid="mobile-recording-session-toggle"
-					>
-						{t("recordingSummary.actions.retry")}
-					</button>
-				) : isPaused ? (
-					/* Resume: capsule-shaped button, centered */
-					<button
-						key="resume"
-						type="button"
-						onClick={onResume}
-						disabled={isBusy}
-						className="flex h-14 items-center justify-center rounded-full px-10 text-[17px] font-semibold transition-opacity active:opacity-70 disabled:opacity-50"
-						style={{
-							background: "rgba(239, 68, 68, 0.12)",
-							color: "#ef4444",
-						}}
-						data-testid="mobile-recording-session-toggle"
-					>
-						{t("mobile.recordingEntry.active.resume")}
-					</button>
-				) : (
-					/* Recording: red circular pause button, centered */
-					<button
-						key="pause"
-						type="button"
-						onClick={onPause}
-						disabled={isBusy || isStarting}
-						className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-card transition-opacity active:opacity-70 disabled:opacity-50"
-						style={{
-							boxShadow:
-								"0px 4px 14px 0px rgba(0,0,0,0.18), 0px 0px 0px 1px rgba(0,0,0,0.04)",
-						}}
-						aria-label={t("mobile.recordingEntry.active.pause")}
-						data-testid="mobile-recording-session-toggle"
-					>
-						<span
-							aria-hidden="true"
-							className="flex h-14 w-14 items-center justify-center gap-[5px] rounded-full"
-							style={{ background: "#ef4444" }}
+			<div className="grid min-h-[92px] shrink-0 grid-cols-3 items-center px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3">
+				<button
+					type="button"
+					onClick={() => setIsAiChatOpen(true)}
+					className="flex min-w-[76px] flex-col items-center gap-1 justify-self-center text-[13px] text-foreground transition-opacity active:opacity-70"
+					data-testid="mobile-recording-session-ask-ai"
+				>
+					<Sparkles className="size-6 !stroke-2 text-muted-foreground" />
+					<span>{t("mobile.recordingEntry.active.askAi")}</span>
+				</button>
+				{/* Keep the control slot height stable while pause and resume buttons swap shapes. */}
+				<div
+					className="flex h-[68px] items-center justify-center"
+					data-testid="mobile-recording-session-control-slot"
+				>
+					{hasStartupError ? (
+						<button
+							type="button"
+							onClick={onRetryStart}
+							disabled={isBusy}
+							className="rounded-full bg-card px-8 py-3 text-[15px] font-medium leading-5 text-foreground shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)] transition-opacity active:opacity-70 disabled:opacity-50"
+							data-testid="mobile-recording-session-toggle"
 						>
-							<span className="block h-5 w-[4px] rounded-full bg-white" />
-							<span className="block h-5 w-[4px] rounded-full bg-white" />
-						</span>
-					</button>
-				)}
+							{t("recordingSummary.actions.retry")}
+						</button>
+					) : isPaused ? (
+						/* Resume: capsule-shaped button, centered */
+						<button
+							key="resume"
+							type="button"
+							onClick={onResume}
+							disabled={isBusy}
+							className="flex h-12 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-10 text-[17px] font-semibold transition-opacity active:opacity-70 disabled:opacity-50"
+							style={{
+								background: "rgba(239, 68, 68, 0.12)",
+								color: "#ef4444",
+							}}
+							data-testid="mobile-recording-session-toggle"
+						>
+							{t("mobile.recordingEntry.active.resume")}
+						</button>
+					) : (
+						/* Recording: red circular pause button, centered */
+						<button
+							key="pause"
+							type="button"
+							onClick={onPause}
+							disabled={isBusy || isStarting}
+							className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-card transition-opacity active:opacity-70 disabled:opacity-50"
+							style={{
+								boxShadow:
+									"0px 4px 14px 0px rgba(0,0,0,0.18), 0px 0px 0px 1px rgba(0,0,0,0.04)",
+							}}
+							aria-label={t("mobile.recordingEntry.active.pause")}
+							data-testid="mobile-recording-session-toggle"
+						>
+							<span
+								aria-hidden="true"
+								className="flex h-14 w-14 items-center justify-center gap-[5px] rounded-full"
+								style={{ background: "#ef4444" }}
+							>
+								<span className="block h-5 w-[4px] rounded-full bg-white" />
+								<span className="block h-5 w-[4px] rounded-full bg-white" />
+							</span>
+						</button>
+					)}
+				</div>
+				<button
+					type="button"
+					onPointerDown={handleCameraPointerDown}
+					onClick={handleCameraClick}
+					disabled={isCameraUploadPending || isBusy || isStarting || !selectedProject?.id}
+					className="flex min-w-[76px] flex-col items-center gap-1 justify-self-center text-[13px] text-muted-foreground transition-opacity active:opacity-70 disabled:opacity-50"
+					data-testid="mobile-recording-session-camera"
+				>
+					<Camera className="size-6 !stroke-2" />
+					<span>{t("mobile.recordingEntry.active.camera")}</span>
+				</button>
 			</div>
+
+			<MagicPopup
+				visible={isAiChatOpen}
+				onClose={() => setIsAiChatOpen(false)}
+				headerVariant="actionHeader"
+				headerTitle={t("mobile.recordingEntry.active.askAi")}
+				headerSubtitle={`${
+					isPaused
+						? t("mobile.recordingEntry.active.statusPaused")
+						: t("mobile.recordingEntry.active.statusRecording")
+				} · ${formattedDuration}`}
+				headerLeadingAction={{
+					icon: <ChevronLeft />,
+					ariaLabel: t("mobile.recordingEntry.active.backAria"),
+					onClick: () => setIsAiChatOpen(false),
+					testId: "mobile-recording-ai-chat-back",
+				}}
+				className="!h-[98dvh] !max-h-[calc(100dvh-var(--safe-area-inset-top)-0.5rem)] !bg-mobile-background data-[vaul-drawer-direction=bottom]:!mt-[max(0.5rem,var(--safe-area-inset-top))]"
+				bodyClassName="!flex !w-full !min-h-0 !flex-1 !flex-col !overflow-hidden !bg-mobile-background"
+			>
+				<div className="flex h-full min-h-0 flex-col overflow-hidden bg-mobile-background">
+					{aiChat}
+				</div>
+			</MagicPopup>
 
 			<style>{`
 				@keyframes rec-pulse {
