@@ -13,7 +13,8 @@ import type { TreeNode } from "@dtyq/user-selector"
 import type { RecordingDetailFileMap } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
 import type { RecordingShareGroupedItem } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 
-export type ProjectShareSheetView = "create" | "manage" | "linkDetail" | "expiry" | "deleteConfirm"
+export type ProjectShareSheetView =
+	"create" | "manage" | "linkDetail" | "edit" | "expiry" | "deleteConfirm"
 export type MobileShareSheetMode = "project" | "file"
 export type MobileShareItem = ProjectShareItem | FileShareItem
 
@@ -78,6 +79,12 @@ export interface ProjectShareSheetController {
 	defaultOpenFileCandidates: AttachmentItem[]
 	defaultOpenFileCandidateTree: AttachmentItem[]
 	defaultOpenFilePickerOpen: boolean
+	/** Whether the sheet is editing an existing share resource. */
+	isEditing?: boolean
+	/** Whether the edit settings request is still loading. */
+	editLoading?: boolean
+	/** Whether the file-range popup is visible. */
+	fileSelectorOpen?: boolean
 	memberSelectorOpen: boolean
 	selectedMemberNodes: TreeNode[]
 	detailMemberNodes: TreeNode[]
@@ -114,6 +121,9 @@ export interface ProjectShareSheetController {
 	selectDefaultOpenFile: (fileId: string) => void
 	submitCreateShare: () => Promise<void>
 	openEditSelectedShare: () => void
+	openFileSelector?: () => void
+	closeFileSelector?: () => void
+	confirmFileSelector?: (fileIds: string[]) => void
 	confirmCancelShare: () => Promise<void>
 	editResourceId?: string
 	closeEditModal: () => void

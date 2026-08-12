@@ -326,11 +326,16 @@ class MultiFolderUploadStore {
 				const errorMsg = this.t("folderUpload.messages.noValidFiles", {
 					maxSize: `${maxFileSizeMB}MB`,
 				})
-				logger.error("[createUploadTask] No valid files to upload", {
-					projectId: options.projectId,
-					totalFiles: normalizedFiles.length,
-					oversizedFiles: oversizedFiles.length,
-					maxFileSizeMB,
+				logger.error({
+					eventKey: "upload_task_valid_files_missing",
+					errorKind: "unknown",
+					message: "[createUploadTask] No valid files to upload",
+					context: {
+						projectId: options.projectId,
+						totalFiles: normalizedFiles.length,
+						oversizedFiles: oversizedFiles.length,
+						maxFileSizeMB,
+					},
 				})
 				magicToast.error(String(errorMsg))
 				throw new Error(errorMsg)
@@ -428,11 +433,16 @@ class MultiFolderUploadStore {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 			console.error("Failed to create upload task:", error)
 
-			logger.error("[createUploadTask] Failed to create upload task", {
-				error: errorMessage,
-				projectId: options.projectId,
-				projectName: options.projectName,
-				fileCount: Array.isArray(files) ? files.length : 0,
+			logger.error({
+				eventKey: "create_upload_task_failed",
+				errorKind: "unknown",
+				error,
+				message: "[createUploadTask] Failed to create upload task",
+				context: {
+					projectId: options.projectId,
+					projectName: options.projectName,
+					fileCount: Array.isArray(files) ? files.length : 0,
+				},
 			})
 
 			magicToast.error(
@@ -1113,27 +1123,32 @@ class MultiFolderUploadStore {
 				task.state.processedFiles > expectedMaxFiles ||
 				task.state.successFiles > expectedMaxFiles
 			) {
-				logger.error("[FolderUpload] Completed task has anomalous file counts", {
-					taskId: task.id,
-					projectId: task.projectId,
-					projectName: task.projectName,
-					anomaly: {
-						type: "completed_task_count_mismatch",
-						display: `${task.state.processedFiles}/${task.state.totalFiles} (${task.state.errorFiles} failed)`,
-						expectedMax: expectedMaxFiles,
+				logger.error({
+					eventKey: "completed_upload_file_count_anomaly",
+					errorKind: "unknown",
+					message: "[FolderUpload] Completed task has anomalous file counts",
+					context: {
+						taskId: task.id,
+						projectId: task.projectId,
+						projectName: task.projectName,
+						anomaly: {
+							type: "completed_task_count_mismatch",
+							display: `${task.state.processedFiles}/${task.state.totalFiles} (${task.state.errorFiles} failed)`,
+							expectedMax: expectedMaxFiles,
+						},
+						counts: {
+							totalFiles: task.state.totalFiles,
+							processedFiles: task.state.processedFiles,
+							successFiles: task.state.successFiles,
+							errorFiles: task.state.errorFiles,
+						},
+						state: {
+							isCompleted: task.state.isCompleted,
+							isError: task.state.isError,
+							currentPhase: task.state.currentPhase,
+						},
+						timestamp: Date.now(),
 					},
-					counts: {
-						totalFiles: task.state.totalFiles,
-						processedFiles: task.state.processedFiles,
-						successFiles: task.state.successFiles,
-						errorFiles: task.state.errorFiles,
-					},
-					state: {
-						isCompleted: task.state.isCompleted,
-						isError: task.state.isError,
-						currentPhase: task.state.currentPhase,
-					},
-					timestamp: Date.now(),
 				})
 			}
 		})

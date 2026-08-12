@@ -6,6 +6,9 @@
 // 核心导出
 export { createLogger, getLogger } from "./core/logger"
 export { BaseProvider } from "./core/base-provider"
+export { MagicLoggerSyntheticError, normalizeError } from "./core/error"
+export { ErrorCaptureSource } from "./core/types"
+export type { NormalizedError } from "./core/error"
 
 // 类型导出
 export type {
@@ -17,6 +20,7 @@ export type {
 	IUserInfo,
 	ICustomEvent,
 	IErrorInfo,
+	ProviderErrorInput,
 	ProviderType,
 	LogLevel,
 } from "./core/types"

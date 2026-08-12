@@ -754,12 +754,7 @@ function EditToolbar({
 							onExportSpecificPages={(
 								filePaths: string[],
 								format:
-									| "source"
-									| "pdf"
-									| "ppt"
-									| "pptx"
-									| "image_png"
-									| "image_jpeg",
+									"source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg",
 							) => {
 								if (!filePaths.length) return
 

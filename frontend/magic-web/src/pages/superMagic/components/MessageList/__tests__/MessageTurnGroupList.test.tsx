@@ -37,7 +37,7 @@ describe("MessageTurnGroupList", () => {
 	const messages = [msg("user", "u1"), msg("assistant", "a1")]
 	const { messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 
-	it("keeps the User sticky wrapper on mobile with the 10px offset", () => {
+	it("keeps the User sticky wrapper flush to the mobile header with an opaque background", () => {
 		const { container } = render(
 			<MessageTurnGroupList
 				groups={messageTurnGroups}
@@ -48,10 +48,16 @@ describe("MessageTurnGroupList", () => {
 
 		expect(container.querySelector('[data-sticky-message-id="u1"]')).toHaveClass(
 			"sticky",
-			"top-[10px]",
+			"top-0",
+			"z-40",
+			"bg-mobile-background",
+			"pb-2",
 		)
 		expect(container.querySelector('[data-testid="msg-u1"]')).not.toBeNull()
 		expect(container.querySelector('[data-testid="msg-a1"]')).not.toBeNull()
+		expect(container.querySelector('[data-message-id="a1"]')).toHaveClass(
+			"[--message-status-offset:-1.5rem]",
+		)
 	})
 
 	it("keeps sticky wrapper on desktop for user turns", () => {
@@ -64,7 +70,7 @@ describe("MessageTurnGroupList", () => {
 		)
 
 		expect(container.querySelector('[data-sticky-message-id="u1"]')).not.toBeNull()
-		expect(container.querySelector(".sticky")).not.toBeNull()
+		expect(container.querySelector(".sticky")).toHaveClass("z-20")
 	})
 
 	it("keeps other messages rendered when one message throws", () => {

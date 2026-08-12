@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Project\Facade;
 
+use App\Application\SuperMagic\File\FileScope\FileScopeHandlerResolver;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Project\Service\ProjectMemberAppService;
 use App\Application\SuperMagic\Project\Service\TransferAppService;
@@ -43,6 +44,7 @@ class ProjectApi extends AbstractApi
         private readonly ProjectAppService $projectAppService,
         private readonly ProjectMemberAppService $projectMemberAppService,
         private readonly TransferAppService $transferAppService,
+        private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -243,6 +245,13 @@ class ProjectApi extends AbstractApi
         $dto = GetProjectAttachmentsRequestDTO::fromRequest($this->request);
         // 临时解决用户使用上限问题
         $dto->setPageSize(10000);
+        if ($dto->hasScope()) {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($dto->getScope())
+                ->listProjectAttachments($authorization, $dto);
+        }
+
         if (! empty($dto->getToken())) {
             // 走令牌校验的逻辑
             return $this->projectAppService->getProjectAttachmentsByAccessToken($dto);
@@ -260,6 +269,13 @@ class ProjectApi extends AbstractApi
     {
         $dto = GetProjectAttachmentsV2RequestDTO::fromRequest($this->request);
 
+        if ($dto->hasScope()) {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($dto->getScope())
+                ->listProjectAttachmentsV2($authorization, $dto);
+        }
+
         if (! empty($dto->getToken())) {
             return $this->projectAppService->getProjectAttachmentsByAccessTokenV2($dto);
         }
@@ -274,6 +290,14 @@ class ProjectApi extends AbstractApi
      */
     public function getProjectAttachmentsCount(RequestContext $requestContext, string $id): array
     {
+        $scope = trim((string) $this->request->input('scope', ''));
+        if ($scope !== '') {
+            $authorization = $this->checkAndGetAuthorization();
+            return $this->fileScopeHandlerResolver
+                ->resolve($scope)
+                ->countProjectAttachments($authorization);
+        }
+
         $token = (string) $this->request->input('token', '');
 
         if ($token !== '') {

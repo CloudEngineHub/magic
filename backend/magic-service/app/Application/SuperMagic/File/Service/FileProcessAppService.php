@@ -21,6 +21,7 @@ use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
 use App\Domain\SuperMagic\File\Service\MagicFSFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileVersionDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -1013,12 +1014,12 @@ class FileProcessAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, 'file.not_found');
         }
 
-        // Validate project access permission
+        // 校验项目访问权限，用户空间文件改走 owner 权限。
         $userAuthorization = $requestContext->getUserAuthorization();
-        $projectEntity = $this->getAccessibleProject(
-            $taskFileEntity->getProjectId(),
-            $userAuthorization->getId(),
-            $userAuthorization->getOrganizationCode()
+        $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $userAuthorization,
+            MemberRole::VIEWER,
         );
 
         // Get current version (latest version number) - optimized for performance
@@ -1029,7 +1030,7 @@ class FileProcessAppService extends AbstractAppService
             $taskFileEntity->getFileName(),
             $currentVersion,
             $taskFileEntity->getOrganizationCode(),
-            $this->buildRelativeFilePathForEntity($taskFileEntity, $projectEntity->getId())
+            $this->buildRelativeFilePathForEntity($taskFileEntity, $taskFileEntity->getProjectId())
         );
         return $responseDTO->toArray();
     }
@@ -1058,7 +1059,16 @@ class FileProcessAppService extends AbstractAppService
         // 1. Validate file permission
         $taskFileEntity = $this->validateFilePermission((int) $requestDTO->getFileId(), $authorization);
 
-        $projectEntity = $this->getAccessibleProjectWithEditor($taskFileEntity->getProjectId(), $authorization->getId(), $authorization->getOrganizationCode());
+        $projectEntity = $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $authorization,
+            MemberRole::EDITOR,
+        );
+        $storageOrganizationCode = $projectEntity?->getUserOrganizationCode()
+            ?? $taskFileEntity->getOrganizationCode();
+
+        // 校验编辑基准，避免旧正文覆盖文件系统中的最新内容。
+        $this->assertExpectedRevisionMatches($taskFileEntity, $requestDTO->getExpectedRevision());
 
         // 2. Process content (decode shadow if enabled)
         $content = $requestDTO->getContent();
@@ -1078,47 +1088,60 @@ class FileProcessAppService extends AbstractAppService
             $taskFileEntity->getFileKey(),
             $taskFileEntity->getFileName(),
             $taskFileEntity->getFileExtension(),
-            $projectEntity->getUserOrganizationCode(),
+            $storageOrganizationCode,
             $taskFileEntity->getFileId()
         );
 
         // 4. Update file metadata
-        $this->updateFileMetadata($taskFileEntity, $result, $authorization);
+        $revision = $this->updateFileMetadata($taskFileEntity, $result, $authorization);
 
         // 5. 创建文件版本
-        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($projectEntity->getUserOrganizationCode(), $taskFileEntity);
+        $versionEntity = $this->taskFileVersionDomainService->createFileVersion($storageOrganizationCode, $taskFileEntity);
 
         return [
             'file_id' => $requestDTO->getFileId(),
             'size' => $result['size'],
             'updated_at' => date('Y-m-d H:i:s'),
             'version' => $versionEntity?->getVersion(),
+            'revision' => $revision,
             'shadow_decoded' => $requestDTO->getEnableShadow(),
         ];
     }
 
     /**
-     * Validate file permission.
+     * 校验文件修订号，未传修订号时保持旧调用兼容。
+     */
+    private function assertExpectedRevisionMatches(TaskFileEntity $taskFileEntity, ?int $expectedRevision): void
+    {
+        if ($expectedRevision === null) {
+            return;
+        }
+
+        if (! $taskFileEntity->matchesMetadataRevision($expectedRevision)) {
+            ExceptionBuilder::throw(
+                SuperAgentErrorCode::FILE_CONCURRENT_MODIFICATION,
+                'file.concurrent_modification'
+            );
+        }
+    }
+
+    /**
+     * 校验文件读取权限。
      *
-     * @param int $fileId File ID
-     * @param MagicUserAuthorization $authorization User authorization
-     * @return TaskFileEntity Task file entity
+     * 项目文件沿用项目权限，用户空间文件使用 task_files 中的 owner 信息。
      */
     private function validateFilePermission(int $fileId, MagicUserAuthorization $authorization): TaskFileEntity
     {
-        // Get TaskFileEntity by file_id
         $taskFileEntity = $this->taskDomainService->getTaskFile($fileId);
-
         if (empty($taskFileEntity)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TASK_NOT_FOUND, 'file.not_found');
         }
 
-        /*// Check if current user is the file owner
-        if ($taskFileEntity->getUserId() !== $authorization->getId()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
-        }*/
-
-        $this->getAccessibleProject($taskFileEntity->getProjectId(), $authorization->getId(), $authorization->getOrganizationCode());
+        $this->getAccessibleProjectForTaskFile(
+            $taskFileEntity,
+            $authorization,
+            MemberRole::VIEWER,
+        );
 
         return $taskFileEntity;
     }
@@ -1225,13 +1248,19 @@ class FileProcessAppService extends AbstractAppService
      * @param array $result Upload result
      * @param MagicUserAuthorization $authorization User authorization
      */
-    private function updateFileMetadata(TaskFileEntity $taskFileEntity, array $result, MagicUserAuthorization $authorization): void
+    private function updateFileMetadata(TaskFileEntity $taskFileEntity, array $result, MagicUserAuthorization $authorization): int
     {
+        $nextRevision = $taskFileEntity->getMetadataVersion() + 1;
+
         // Update file size via MagicFS to keep metadata version chain in sync.
         $taskFileEntity = $this->magicFSFileDomainService->updateFile(
             (string) $taskFileEntity->getFileId(),
             ['size' => $result['size']]
         );
+
+        if (! $taskFileEntity->isProjectFile()) {
+            return $nextRevision;
+        }
 
         // Dispatch file content saved event for WebSocket notification
         $event = new FileContentSavedEvent(
@@ -1246,5 +1275,7 @@ class FileProcessAppService extends AbstractAppService
             $authorization->getId(),
             $authorization->getOrganizationCode()
         ));
+
+        return $nextRevision;
     }
 }

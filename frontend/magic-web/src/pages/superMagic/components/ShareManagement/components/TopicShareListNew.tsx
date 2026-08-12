@@ -87,7 +87,7 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 		)
 	}
 
-	// 空状态
+	// Empty state
 	if (data.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center">
@@ -108,7 +108,7 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 						<div
 							key={item.resource_id}
 							className={cn(
-								"flex h-14 cursor-pointer items-start gap-2 rounded-lg p-2 transition-colors duration-200",
+								"flex h-14 min-w-0 cursor-pointer items-start gap-2 rounded-lg p-2 transition-colors duration-200",
 								isHovered && "bg-neutral-100",
 							)}
 							onMouseEnter={() => setHoveredId(item.resource_id)}
@@ -116,7 +116,7 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 							onClick={() => handleItemClick(item)}
 							data-testid="set-hovered-id"
 						>
-							{/* 话题模式图标 */}
+							{/* Topic mode icon */}
 							<div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
 								<ModeTag
 									mode={item.topic_mode || getFallbackTopicModeIdentifier()}
@@ -124,17 +124,20 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 								/>
 							</div>
 
-							{/* 内容区域 */}
+							{/* Row content */}
 							<div className="flex min-w-0 flex-1 flex-col gap-2">
-								{/* 第一行：话题信息、项目名和操作/分享时间 */}
+								{/* Topic details and actions */}
 								<div className="flex h-5 items-center justify-between gap-2">
 									<div className="flex min-w-0 flex-1 items-center gap-2">
-										{/* 话题名 */}
-										<span className="truncate text-sm font-medium leading-none text-gray-900">
+										{/* Topic name */}
+										<span
+											className="truncate text-sm font-medium leading-none text-gray-900"
+											title={item.title}
+										>
 											{item.title}
 										</span>
 
-										{/* 项目名badge */}
+										{/* Project name */}
 										<ProjectNameBadge
 											projectId={item.project_id}
 											projectName={item.project_name}
@@ -142,7 +145,7 @@ function TopicShareListNew({ data, loading, onCancelShare, onRefresh }: TopicSha
 										/>
 									</div>
 
-									{/* 右侧：分享时间与操作按钮 */}
+									{/* Shared time and actions */}
 									<div className="flex h-5 flex-shrink-0 items-center gap-2">
 										<span className="text-xs leading-none text-neutral-500">
 											{t("shareManagement.sharedAt")}:{" "}

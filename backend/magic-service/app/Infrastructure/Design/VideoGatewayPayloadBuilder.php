@@ -14,6 +14,7 @@ use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 
 readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderInterface
 {
@@ -96,6 +97,15 @@ readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderI
         $referenceImages = [];
         foreach ($entity->getReferenceImages() as $referenceImage) {
             $relativePath = (string) ($referenceImage[self::FIELD_URI] ?? '');
+            if (ImageBase64DataUriParser::isValid($relativePath)) {
+                $item = [self::FIELD_URI => $relativePath];
+                $type = trim((string) ($referenceImage[self::FIELD_TYPE] ?? ''));
+                if ($type !== '') {
+                    $item[self::FIELD_TYPE] = $type;
+                }
+                $referenceImages[] = $item;
+                continue;
+            }
             $fileKey = $this->resolveFileKey($projectId, $relativePath, self::ERROR_REFERENCE_IMAGE_URL_MISSING);
             $item = [self::FIELD_URI => $supportsImageInputUrl
                 ? $this->buildImageUrl(
@@ -121,6 +131,10 @@ readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderI
         foreach ($entity->getFrames() as $frame) {
             $uri = (string) ($frame[self::FIELD_URI] ?? '');
             $role = (string) ($frame[self::FIELD_ROLE] ?? '');
+            if (ImageBase64DataUriParser::isValid($uri)) {
+                $frames[] = [self::FIELD_ROLE => $role, self::FIELD_URI => $uri];
+                continue;
+            }
             $fileKey = $this->resolveFileKey($projectId, $uri, self::ERROR_FRAME_URL_MISSING);
             $frames[] = [
                 self::FIELD_ROLE => $role,

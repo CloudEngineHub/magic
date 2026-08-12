@@ -69,10 +69,12 @@ function MessageList({
 		<MessageListProvider value={value}>
 			<MessageViewStateProvider topicKey={topicId}>
 				<div className="relative flex flex-col gap-2">
+					{/* Topic shares keep mobile positioning while reusing the desktop sticky mask. */}
 					<VirtualMessageList
 						items={virtualProjection.items}
 						userIndices={virtualProjection.userIndices}
 						isMobile={isMobile}
+						useMobileStickyOverlay={false}
 						getScrollElement={getScrollElement}
 						stickyMessageClassName={stickyMessageClassName}
 						renderNode={({ item }) => {

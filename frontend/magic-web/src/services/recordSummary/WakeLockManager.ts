@@ -67,7 +67,12 @@ export class WakeLockManager {
 
 			return true
 		} catch (error) {
-			logger.error("Failed to acquire wake lock", error)
+			logger.error({
+				eventKey: "acquire_wake_lock_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to acquire wake lock",
+			})
 
 			// Common error reasons:
 			// - Document is not active (tab not focused)
@@ -91,7 +96,12 @@ export class WakeLockManager {
 			await this.wakeLock.release()
 			logger.log("Wake lock released successfully")
 		} catch (error) {
-			logger.error("Failed to release wake lock", error)
+			logger.error({
+				eventKey: "release_wake_lock_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to release wake lock",
+			})
 		} finally {
 			this.cleanup()
 		}
@@ -127,7 +137,12 @@ export class WakeLockManager {
 		} else if (errorMessage.includes("not allowed")) {
 			logger.warn("Cannot acquire wake lock: permission denied or disabled")
 		} else {
-			logger.error("Unknown wake lock error", error)
+			logger.error({
+				eventKey: "unknown_wake_lock_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Unknown wake lock error",
+			})
 		}
 	}
 
@@ -151,9 +166,9 @@ export class WakeLockManager {
 			isActive: this.isActive,
 			wakeLock: this.wakeLock
 				? {
-					type: this.wakeLock.type,
-					released: this.wakeLock.released,
-				}
+						type: this.wakeLock.type,
+						released: this.wakeLock.released,
+					}
 				: null,
 		}
 	}

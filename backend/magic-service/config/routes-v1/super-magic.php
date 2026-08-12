@@ -175,6 +175,8 @@ Router::addGroup(
             Router::get('/queries', [MicroAppProjectApi::class, 'list']);
             // 编辑微应用名称和封面
             Router::put('/{appId}', [MicroAppProjectApi::class, 'update']);
+            // 删除微应用及其对应项目
+            Router::delete('/{appId}', [MicroAppProjectApi::class, 'destroy']);
         });
 
         // 用户级别特殊项目

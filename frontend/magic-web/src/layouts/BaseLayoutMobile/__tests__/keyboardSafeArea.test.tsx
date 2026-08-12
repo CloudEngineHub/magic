@@ -4,7 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import BaseLayoutMobile from "../index"
 
-const keyboardState = vi.hoisted(() => ({ isUp: false }))
+const keyboardMock = vi.hoisted(() => {
+	const state = { isUp: false }
+
+	return {
+		state,
+		useMonitorSoftKeyboard: vi.fn(() => ({ isUp: state.isUp })),
+	}
+})
 
 vi.mock("antd-mobile", () => ({
 	ConfigProvider: ({ children }: PropsWithChildren) => children,
@@ -93,7 +100,7 @@ vi.mock("@/hooks/useAntdMobileLocale", () => ({ useAntdMobileLocale: () => undef
 vi.mock("@/components/global/MaintenanceNotice", () => ({ default: () => null }))
 
 vi.mock("@/hooks/useMonitorSoftKeyboard", () => ({
-	default: () => ({ isUp: keyboardState.isUp }),
+	default: keyboardMock.useMonitorSoftKeyboard,
 }))
 
 vi.mock("../components/MobileTabBar", () => ({ default: () => null }))
@@ -112,7 +119,8 @@ function renderMobileLayout() {
 
 describe("BaseLayoutMobile keyboard safe area", () => {
 	beforeEach(() => {
-		keyboardState.isUp = false
+		keyboardMock.state.isUp = false
+		keyboardMock.useMonitorSoftKeyboard.mockClear()
 	})
 
 	it("keeps both safe areas when the software keyboard is closed", async () => {
@@ -120,10 +128,13 @@ describe("BaseLayoutMobile keyboard safe area", () => {
 
 		expect(await screen.findByTestId("global-safe-area-top")).toBeInTheDocument()
 		expect(screen.getByTestId("global-safe-area-bottom")).toBeInTheDocument()
+		expect(keyboardMock.useMonitorSoftKeyboard).toHaveBeenCalledWith({
+			focusOutDelay: 0,
+		})
 	})
 
 	it("keeps the top safe area and removes the bottom spacer when the keyboard is open", async () => {
-		keyboardState.isUp = true
+		keyboardMock.state.isUp = true
 		renderMobileLayout()
 
 		expect(await screen.findByTestId("global-safe-area-top")).toBeInTheDocument()

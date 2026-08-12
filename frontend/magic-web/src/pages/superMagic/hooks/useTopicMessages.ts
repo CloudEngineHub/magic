@@ -3,8 +3,10 @@ import { isEmpty } from "lodash-es"
 import { useEffect, useRef, useState } from "react"
 import { SuperMagicApi } from "@/apis"
 import {
+	getTopicRecoveryStatus,
 	registerStreamRecoveryOwner,
 	requestTopicRecovery,
+	resumeTopicRecovery,
 } from "@/pages/superMagic/services/streamRecoveryCoordinator"
 import { superMagicStore, type CanonicalCommitTrigger } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
@@ -15,6 +17,7 @@ import {
 import type { SeqResponse } from "@/types/request"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { MessageStatus, TaskStatus, Topic } from "../pages/Workspace/types"
+import { topicHistoryPageCache } from "./topic-history-page-cache"
 
 // 完全同步时单次拉取的消息数量
 const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
@@ -28,14 +31,82 @@ const POLLING_SYNC_MESSAGE_COUNT = 20
 // 实时/轮询权威尾部同步最多向前寻找三页公共锚点；超过预算交给后续轮询或完整 recovery。
 const AUTHORITATIVE_TAIL_MAX_PAGE_COUNT = 3
 
-// 前台恢复时第一段回拉窗口：先用中等窗口补最近消息，尽量一次命中大多数休眠场景。
-const FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT = 200
+// 前台恢复固定按页向更早历史扩展；命中 durable anchor 后立即停止。
+const FOREGROUND_RECOVERY_PAGE_SIZE = 100
 
-// 前台恢复时第二段回拉窗口：若第一段仍未追平到休眠前锚点，再放大一次窗口兜底。
-const FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT = 400
+// 没有 durable anchor 时只补最近有限窗口；此分支不能把一次前台恢复升级为全历史扫描。
+const FOREGROUND_RECOVERY_ANCHORLESS_PAGE_COUNT = 3
+
+// 前台恢复必须有硬预算，防止服务端持续返回新 token 时无限请求和聚合。
+const FOREGROUND_RECOVERY_MAX_PAGE_COUNT = 50
+const FOREGROUND_RECOVERY_MAX_MESSAGE_COUNT = 5_000
+
+// 完整 recovery 同样需要预算；正常历史可以远大于前台恢复，但不能无限等待服务端。
+const FULL_RECOVERY_MAX_PAGE_COUNT = 500
+const FULL_RECOVERY_MAX_MESSAGE_COUNT = 50_000
 
 // 前台恢复防抖时间（毫秒），避免重复触发同步
 const FOREGROUND_SYNC_DEDUPE_MS = 1000
+
+type MessagePageRequestParams = {
+	conversation_id: string
+	chat_topic_id: string
+	page_token: string
+	order: "asc" | "desc"
+	limit: number
+}
+
+interface InFlightMessagePageRequest {
+	promise: Promise<any>
+	owners: Set<symbol>
+}
+
+/**
+ * API 层的精确请求 single-flight。
+ *
+ * 前台恢复、初始加载和 watchdog 可能在同一个 Topic 同时请求同一页；只共享
+ * HTTP 响应 Promise，调用方各自继续执行状态过滤和 Store 对账，避免改变 Final
+ * / progress_snapshot 的业务语义。
+ */
+const inFlightMessagePageRequests = new Map<string, InFlightMessagePageRequest>()
+
+function getMessagePageRequestKey(params: MessagePageRequestParams) {
+	return [
+		params.conversation_id,
+		params.chat_topic_id,
+		params.order,
+		params.limit,
+		params.page_token,
+	].join("\u0000")
+}
+
+function requestMessagePage(params: MessagePageRequestParams, ownerToken: symbol): Promise<any> {
+	const key = getMessagePageRequestKey(params)
+	const existing = inFlightMessagePageRequests.get(key)
+	if (existing) {
+		existing.owners.add(ownerToken)
+		return existing.promise
+	}
+
+	const entry = {} as InFlightMessagePageRequest
+	entry.owners = new Set([ownerToken])
+	entry.promise = Promise.resolve(SuperMagicApi.getMessagesByConversationId(params)).finally(
+		() => {
+			if (inFlightMessagePageRequests.get(key) === entry) {
+				inFlightMessagePageRequests.delete(key)
+			}
+		},
+	)
+	inFlightMessagePageRequests.set(key, entry)
+	return entry.promise
+}
+
+function releaseMessagePageRequests(ownerToken: symbol) {
+	inFlightMessagePageRequests.forEach((entry, key) => {
+		entry.owners.delete(ownerToken)
+		if (entry.owners.size === 0) inFlightMessagePageRequests.delete(key)
+	})
+}
 
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
@@ -55,6 +126,7 @@ interface PullMessageParams {
 	requiredSeqId?: string
 	recoveryAnchorAppMessageId?: string
 	allowRemoteRevokedAnchorCleanup?: boolean
+	useHistoryPageCache?: boolean
 	callback?: () => void
 }
 
@@ -78,9 +150,17 @@ interface AuthoritativeTailPullResult extends PullMessageResult {
 		  }
 }
 
+interface ForegroundRecoveryAnchor {
+	appMessageId: string
+	role?: "user" | "assistant" | "tool"
+	superMessageId?: string
+	/** 仅保留为恢复水位元数据，不参与逻辑消息身份的严格相等判断。 */
+	seqId?: string
+}
+
 interface ForegroundRecoveryAnchorState {
-	baseAnchor?: string
-	latestCommittedAnchor?: string
+	baseAnchor?: ForegroundRecoveryAnchor
+	latestCommittedAnchor?: ForegroundRecoveryAnchor
 }
 
 /**
@@ -147,17 +227,44 @@ function compareMessageSeqId(left: string, right: string) {
 	return normalizedLeft.localeCompare(normalizedRight)
 }
 
+function getRecoveryAnchorRole(role: unknown): ForegroundRecoveryAnchor["role"] {
+	return role === "user" || role === "assistant" || role === "tool" ? role : undefined
+}
+
 /**
- * 判断前台恢复是否还需要继续向更早的分页扩展。
- * 只要当前聚合结果还没覆盖到恢复锚点，就继续拉第二段窗口。
+ * 判断前台恢复是否命中离开前的 durable anchor。
+ * User 的协议身份由 app_message_id 唯一确定；Assistant/Tool 的 Final revision
+ * 可能更换 app_message_id，因此优先使用稳定的 super_message_id。seq_id 只描述
+ * 持久化顺序，发送阶段本地临时值不能成为继续扫描历史的硬条件。
  */
-function shouldContinueForegroundRecovery(pulledItems: any[], recoveryAnchorAppMessageId?: string) {
-	// 恢复补拉只关心“是否已经追平到离开前最后一条本地可见消息”：
-	// 只要新回拉结果已经包含这个锚点，就说明锚点之后的缺口已被补齐，无需继续向更老分页扩散。
-	if (!recoveryAnchorAppMessageId) return false
-	return !pulledItems.some(
-		(item) => item?.seq?.message?.app_message_id === recoveryAnchorAppMessageId,
-	)
+function getFetchedRecoveryAnchor(item: any): ForegroundRecoveryAnchor | undefined {
+	const message = item?.seq?.message
+	const appMessageId = String(message?.app_message_id || "")
+	if (!appMessageId) return undefined
+	const node = message?.type ? message?.[message.type] || message?.general_agent_card : undefined
+	const role = getRecoveryAnchorRole(node?.role)
+	const superMessageId = role === "user" ? "" : String(node?.super_message_id || appMessageId)
+	const seqId = String(item?.seq?.seq_id || "")
+	return {
+		appMessageId,
+		...(role ? { role } : {}),
+		...(superMessageId ? { superMessageId } : {}),
+		...(seqId ? { seqId } : {}),
+	}
+}
+
+function matchesForegroundRecoveryAnchor(item: any, anchor?: ForegroundRecoveryAnchor): boolean {
+	if (!anchor?.appMessageId) return false
+	const fetchedAnchor = getFetchedRecoveryAnchor(item)
+	if (!fetchedAnchor) return false
+	if (anchor.role === "user") {
+		return fetchedAnchor.role === "user" && fetchedAnchor.appMessageId === anchor.appMessageId
+	}
+	if (anchor.role && fetchedAnchor.role && fetchedAnchor.role !== anchor.role) return false
+	if (anchor.superMessageId && fetchedAnchor.superMessageId) {
+		return fetchedAnchor.superMessageId === anchor.superMessageId
+	}
+	return fetchedAnchor.appMessageId === anchor.appMessageId
 }
 
 /**
@@ -171,6 +278,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	const initialLoadedTopicsRef = useRef<Set<string>>(new Set())
 	const selectedTopicRef = useRef(selectedTopic)
 	const recoveryOwnerTokenRef = useRef(Symbol("useTopicMessages"))
+	const activationTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	const foregroundTopicSyncRef = useRef<{ topicId: string; generation: number } | null>(null)
 	const lastForegroundSyncAtRef = useRef(0)
 	const foregroundRecoveryAnchorRef = useRef<Record<string, ForegroundRecoveryAnchorState>>({})
@@ -187,15 +295,46 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	)
 
 	/**
-	 * 读取当前 topic 在 messages 列表中最靠前的一条消息 id。
-	 * 该值代表当前已经真正落地到 UI 主列表中的最新消息边界。
+	 * 读取当前 topic 最新的 durable committed message 作为恢复下界。
+	 * Store canonical 列表按 seq_id 升序排列，不能再用数组首项代表最新消息；
+	 * 活动 StreamState 也必须单独排除，避免把未持久化的临时卡当分页停止锚点。
 	 */
-	const getTopicLatestMessageAnchor = useMemoizedFn((topicId?: string) => {
-		if (!topicId) return ""
-		const currentMessages = superMagicStore.messages.get(topicId) || []
-		// store 内消息按 desc 排序，数组首项就是当前已落地列表中的最新消息。
-		return currentMessages[0]?.app_message_id || ""
-	})
+	const getTopicLatestMessageAnchor = useMemoizedFn(
+		(topicId?: string): ForegroundRecoveryAnchor | undefined => {
+			if (!topicId) return undefined
+			const currentMessages = superMagicStore.messages.get(topicId) || []
+			const activeStreamIds = new Set(
+				Array.from(superMagicStore.topicMeta.get(topicId)?.content?.keys() || []),
+			)
+			const durableMessages = currentMessages.filter((message: any) => {
+				const superMessageId = getStoredMessageSuperMessageId(message)
+				return Boolean(
+					message?.app_message_id &&
+					!activeStreamIds.has(superMessageId) &&
+					!optimisticMessageStore.getStatus(topicId, message.app_message_id),
+				)
+			})
+			const latestMessage = durableMessages.reduce<any>((latest, message: any) => {
+				if (!latest) return message
+				const latestSeqId = String(latest.seq_id || "")
+				const messageSeqId = String(message.seq_id || "")
+				return compareMessageSeqId(messageSeqId, latestSeqId) > 0 ? message : latest
+			}, undefined)
+			if (!latestMessage?.app_message_id) return undefined
+			const role = getRecoveryAnchorRole(latestMessage.role || latestMessage.debug?.role)
+			return {
+				appMessageId: String(latestMessage.app_message_id),
+				...(role ? { role } : {}),
+				...(role !== "user"
+					? {
+							superMessageId:
+								getStoredMessageSuperMessageId(latestMessage) || undefined,
+						}
+					: {}),
+				seqId: String(latestMessage.seq_id || "") || undefined,
+			}
+		},
+	)
 
 	/**
 	 * 在页面进入 hidden 时记录一个“离开瞬间”的基准锚点。
@@ -279,7 +418,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	/**
 	 * 只请求一页消息，不直接写入 store。
-	 * 前台恢复会复用这层能力，先聚合两段分页结果，再一次性重建列表。
+	 * 前台恢复会复用这层能力，逐页聚合结果后再一次性提交列表。
 	 */
 	const fetchMessagesPage = useMemoizedFn(
 		async ({
@@ -289,19 +428,48 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			order,
 			limit = 20,
 			updatePageToken = true,
+			useHistoryPageCache = false,
 			callback,
 		}: Omit<
 			PullMessageParams,
 			"writeIntent" | "syncGeneration"
 		>): Promise<PullMessageResult> => {
 			try {
-				const response = await SuperMagicApi.getMessagesByConversationId({
-					conversation_id,
-					chat_topic_id,
-					page_token,
-					limit,
-					order,
-				})
+				const cachedPage = useHistoryPageCache
+					? topicHistoryPageCache.get(chat_topic_id, page_token, order, limit)
+					: undefined
+				if (cachedPage) {
+					if (updatePageToken) {
+						if (cachedPage.response?.has_more === false) {
+							topicNotHaveMoreMessageMap.current[chat_topic_id] = true
+							delete topicPageTokenMap.current[chat_topic_id]
+						} else if (cachedPage.response?.page_token) {
+							topicNotHaveMoreMessageMap.current[chat_topic_id] = false
+							topicPageTokenMap.current[chat_topic_id] =
+								cachedPage.response.page_token
+						}
+					}
+					callback?.()
+					return {
+						didPullSucceed: true,
+						pulledItems: cachedPage.pulledItems,
+						statusItems: cachedPage.statusItems,
+						response: cachedPage.response,
+					}
+				}
+				const response = await requestMessagePage(
+					{
+						conversation_id,
+						chat_topic_id,
+						page_token,
+						limit,
+						order,
+					},
+					recoveryOwnerTokenRef.current,
+				)
+				if (!response || !Array.isArray(response.items)) {
+					throw new Error("[useTopicMessages] invalid messages page response")
+				}
 				const pulledItems = response?.items || []
 				const renderableMessages = pulledItems
 					.filter(shouldIncludeFetchedMessage)
@@ -322,6 +490,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				)
 				if (hasAttachments) {
 					checkNowDebounced?.()
+				}
+				if (useHistoryPageCache) {
+					topicHistoryPageCache.set(chat_topic_id, page_token, order, limit, {
+						pulledItems,
+						statusItems: pulledItems,
+						response,
+					})
 				}
 				if (updatePageToken) {
 					// 历史分页必须同时记录 token 和终页状态；仅保留旧 token 会让布局滚动
@@ -554,7 +729,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				page_token &&
 				updatePageToken
 			) {
-				console.log("没有更多消息")
 				if (selectedTopicRef.current?.chat_topic_id === chat_topic_id)
 					setIsSelectedTopicMessagesReady(true)
 				return { didPullSucceed: true, pulledItems: [], statusItems: [] }
@@ -593,6 +767,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					writeOptions: {
 						...authoritativeTailResult.writeOptions,
 						...(syncGeneration !== undefined ? { syncGeneration } : {}),
+						// WS persistent-message 通知已经确认该 Assistant 可进入消息级 Final；
+						// 普通前台恢复与轮询只能作为非终态进度快照对账。
+						assistantSnapshotPolicy:
+							commitTrigger === "websocket" ? "canonical_final" : "progress_snapshot",
 						canonicalCommitContext: {
 							source: "http",
 							lifecycleEventPolicy: commitTrigger === "websocket" ? "live" : "silent",
@@ -619,6 +797,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					membershipItems: pullResult.pulledItems,
 					writeOptions: {
 						mode: writeIntent,
+						assistantSnapshotPolicy: "canonical_final",
 						syncGeneration,
 						// 初次快照、恢复和历史分页都是已持久化历史；普通 Tool
 						// 不允许继续以 waiting/running 形式进入 UI。
@@ -659,7 +838,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	)
 
 	/**
-	 * Store watchdog recovery 必须拿到完整 authoritative snapshot 后才能一次性 replace。
+	 * 只有 checkpoint 等显式完整恢复才能聚合完整 authoritative snapshot 并一次性 replace。
 	 * 任一分页失败或服务端声明 has_more 却不给下一页 token 时，都返回失败且不提交 partial。
 	 */
 	const recoverTopicMessages = useMemoizedFn(
@@ -684,9 +863,17 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			const visitedPageTokens = new Set<string>()
 			let pageToken = ""
 			let latestResponse: any
+			let pageCount = 0
 
 			// eslint-disable-next-line no-constant-condition
 			while (true) {
+				if (
+					pageCount >= FULL_RECOVERY_MAX_PAGE_COUNT ||
+					pulledItems.length >= FULL_RECOVERY_MAX_MESSAGE_COUNT ||
+					!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
+				) {
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
+				}
 				const pageResult = await fetchMessagesPage({
 					conversation_id: conversationId,
 					chat_topic_id: topicId,
@@ -696,9 +883,13 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 					updatePageToken: false,
 				})
 				if (!pageResult.didPullSucceed) return pageResult
+				pageCount += 1
 
 				pulledItems.push(...pageResult.pulledItems)
 				statusItems.push(...(pageResult.statusItems || pageResult.pulledItems))
+				if (pulledItems.length > FULL_RECOVERY_MAX_MESSAGE_COUNT) {
+					return { didPullSucceed: false, pulledItems: [], statusItems: [] }
+				}
 				latestResponse = pageResult.response
 				if (!latestResponse?.has_more) break
 
@@ -715,11 +906,8 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			if (latestResponse?.snapshot_complete !== true) {
 				return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 			}
-			// Checkpoint 快照拥有缺席删除和 revoked -> read 语义，只允许当前 generation 提交。
-			if (
-				checkpointRollback &&
-				!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)
-			) {
+			// 任意完整恢复都只有当前 generation 能提交；请求在最后一页期间也可能被抢占。
+			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) {
 				return { didPullSucceed: false, pulledItems: [], statusItems: [] }
 			}
 
@@ -733,6 +921,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				membershipItems: pulledItems,
 				writeOptions: {
 					mode: "replace",
+					assistantSnapshotPolicy: "canonical_final",
 					syncGeneration,
 					toolProjectionPolicy: "historical_terminal",
 				},
@@ -756,7 +945,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	 * 否则退回 hidden 瞬间的基准锚点，最后再兜底使用当前列表顶部消息。
 	 */
 	const getCurrentTopicRecoveryAnchor = useMemoizedFn((topicId?: string) => {
-		if (!topicId) return ""
+		if (!topicId) return undefined
 		const cachedAnchorState = foregroundRecoveryAnchorRef.current[topicId]
 		if (cachedAnchorState?.latestCommittedAnchor) return cachedAnchorState.latestCommittedAnchor
 		if (cachedAnchorState?.baseAnchor) return cachedAnchorState.baseAnchor
@@ -790,6 +979,67 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		superMagicStore.cancelTopicSync(inFlightSync.topicId, inFlightSync.generation)
 	})
 
+	const cancelActivationTopicSync = useMemoizedFn((topicId?: string) => {
+		const inFlightSync = activationTopicSyncRef.current
+		if (!inFlightSync || (topicId && inFlightSync.topicId !== topicId)) return
+		activationTopicSyncRef.current = null
+		superMagicStore.cancelTopicSync(inFlightSync.topicId, inFlightSync.generation)
+	})
+
+	/**
+	 * Topic 首次/切换激活也必须走 generation-scoped 权威同步。屏障要先于
+	 * setActiveTopicId 建立，否则该调用会同步恢复后台 StreamState，并在 User
+	 * 历史尚未写入时创建错误排序的 Assistant 占位卡。
+	 */
+	const syncSelectedTopicOnActivation = useMemoizedFn((topic: Topic) => {
+		const topicId = topic.chat_topic_id
+		const syncGeneration = superMagicStore.beginTopicSync(topicId)
+		const inFlightSync = { topicId, generation: syncGeneration }
+		activationTopicSyncRef.current = inFlightSync
+		superMagicStore.setActiveTopicId(topicId)
+
+		void pullMessage({
+			conversation_id: topic.chat_conversation_id,
+			chat_topic_id: topicId,
+			page_token: "",
+			order: "desc",
+			limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
+			updatePageToken: true,
+			writeIntent: "replace",
+			syncGeneration,
+		})
+			.then((pullResult) => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
+				const currentTopic = selectedTopicRef.current
+				if (currentTopic?.chat_topic_id !== topicId) return
+
+				superMagicStore.completeTopicSync(topicId, syncGeneration, {
+					succeeded: pullResult.didPullSucceed,
+					taskStatus: currentTopic.task_status || currentTopic.status,
+					latestSeqId: pullResult.didPullSucceed
+						? superMagicStore.getLatestMessageSeqId(topicId)
+						: undefined,
+				})
+				if (!pullResult.didPullSucceed) setIsMessagesInitialLoading(false)
+			})
+			.catch(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				if (superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) {
+					superMagicStore.completeTopicSync(topicId, syncGeneration, {
+						succeeded: false,
+						taskStatus: selectedTopicRef.current?.task_status,
+					})
+				}
+				setIsMessagesInitialLoading(false)
+			})
+			.finally(() => {
+				if (activationTopicSyncRef.current !== inFlightSync) return
+				activationTopicSyncRef.current = null
+				if (getTopicRecoveryStatus(topicId).hasScheduled) resumeTopicRecovery(topicId)
+			})
+	})
+
 	/**
 	 * 拉取当前选中话题的消息。
 	 * 除前台恢复外，其余场景继续使用既有的一次请求模型。
@@ -821,19 +1071,18 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 	)
 
 	/**
-	 * 当前处于前台时同步当前选中话题的消息列表。
-	 *
-	 * 这里不再按“离开时长”估算窗口，而是按固定两段回拉：
-	 * 1. 先拉最近 200 条，覆盖绝大多数短时休眠/切页场景；
-	 * 2. 若仍未追平隐藏期最新已落地锚点（没有则退回 hidden 基准锚点），
-	 *    再用服务端返回的 page_token 补一段 400 条。
-	 *
-	 * 两段之后仍未追平且服务端仍声明 has_more 时，本轮按失败结束并保留旧列表。
+	 * 当前处于前台时按 durable anchor 恢复当前 Topic。
+	 * 每页固定 100 条，逐页向更早历史扩展；命中公共 anchor 后只替换权威尾部，
+	 * 只有服务端明确给出完整快照证明时才允许 destructive full replace。
 	 */
 	const syncSelectedTopicOnForeground = useMemoizedFn(async () => {
 		const currentSelectedTopic = selectedTopicRef.current
 		if (!currentSelectedTopic?.id || document.visibilityState !== "visible") return
 		if (foregroundTopicSyncRef.current) return
+		// StreamRecoveryCoordinator 可能已经在同一 Topic 建立 authoritative sync；
+		// visible 只复用该代次，不能再次从 page_token="" 开启第二条分页链路。
+		const topicMeta = superMagicStore.topicMeta.get(currentSelectedTopic.chat_topic_id)
+		if (topicMeta?.syncState === "syncing") return
 		const now = Date.now()
 		// 某些浏览器在切回前台时会连续触发 visibilitychange，所有前台 HTTP 对账共享去重窗口。
 		if (now - lastForegroundSyncAtRef.current < FOREGROUND_SYNC_DEDUPE_MS) return
@@ -870,98 +1119,135 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				renderStrategy: "foreground-instant",
 			})
 		}
-		const recoveryAnchorAppMessageId = getCurrentTopicRecoveryAnchor(topicId)
+		const recoveryAnchor = getCurrentTopicRecoveryAnchor(topicId)
+		const activeStreamIdsAtRequestStart = Array.from(
+			superMagicStore.topicMeta.get(topicId)?.content?.keys() || [],
+		)
 		try {
 			let aggregatedPulledItems: any[] = []
 			let aggregatedStatusItems: any[] = []
+			let latestResponse: any
+			let pageToken = ""
+			let pageCount = 0
+			let reachedAnchorIndex = -1
 			let isAuthoritativeQueryComplete = false
-			const firstPageResult = await fetchMessagesPage({
-				conversation_id: currentSelectedTopic.chat_conversation_id,
-				chat_topic_id: topicId,
-				page_token: "",
-				order: "desc",
-				limit: FOREGROUND_RECOVERY_FIRST_PAGE_MESSAGE_COUNT,
-				updatePageToken: true,
-			})
-			if (!firstPageResult.didPullSucceed) {
-				completeFailedSync()
-				return
-			}
-			aggregatedStatusItems = dedupePulledItemsByAppMessageId([
-				...(firstPageResult.statusItems || firstPageResult.pulledItems),
-			])
-			aggregatedPulledItems = dedupePulledItemsByAppMessageId([
-				...firstPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
-			])
+			let writeMode: "replace" | "replace_tail" | "merge" = "merge"
+			let anchorSuperMessageId = ""
+			let didResolveRecovery = false
+			const visitedPageTokens = new Set<string>()
+			const maxForegroundPageCount = recoveryAnchor
+				? FOREGROUND_RECOVERY_MAX_PAGE_COUNT
+				: FOREGROUND_RECOVERY_ANCHORLESS_PAGE_COUNT
 
-			const didReachAnchorOnFirstPage = Boolean(
-				recoveryAnchorAppMessageId &&
-				!shouldContinueForegroundRecovery(
-					firstPageResult.pulledItems,
-					recoveryAnchorAppMessageId,
-				),
-			)
-			const isFirstPageServerComplete = !firstPageResult.response?.has_more
-			isAuthoritativeQueryComplete = isFirstPageServerComplete
-			const shouldFetchSecondPage = !didReachAnchorOnFirstPage && !isFirstPageServerComplete
-			if (shouldFetchSecondPage) {
-				const nextPageToken = String(firstPageResult.response?.page_token || "")
-				if (!nextPageToken) {
+			while (
+				pageCount < maxForegroundPageCount &&
+				aggregatedPulledItems.length < FOREGROUND_RECOVERY_MAX_MESSAGE_COUNT
+			) {
+				if (!isCurrentForegroundOwner()) return
+				if (visitedPageTokens.has(pageToken)) {
 					completeFailedSync()
 					return
 				}
-				const secondPageResult = await fetchMessagesPage({
+				visitedPageTokens.add(pageToken)
+				const pageResult = await fetchMessagesPage({
 					conversation_id: currentSelectedTopic.chat_conversation_id,
 					chat_topic_id: topicId,
-					page_token: nextPageToken,
+					page_token: pageToken,
 					order: "desc",
-					limit: FOREGROUND_RECOVERY_SECOND_PAGE_MESSAGE_COUNT,
-					updatePageToken: true,
+					limit: FOREGROUND_RECOVERY_PAGE_SIZE,
+					updatePageToken: false,
 				})
-				if (!secondPageResult.didPullSucceed) {
+				if (!pageResult.didPullSucceed) {
 					completeFailedSync()
 					return
 				}
+				pageCount += 1
+				latestResponse = pageResult.response
 				aggregatedStatusItems = dedupePulledItemsByAppMessageId([
 					...aggregatedStatusItems,
-					...(secondPageResult.statusItems || secondPageResult.pulledItems),
+					...(pageResult.statusItems || pageResult.pulledItems),
 				])
 				aggregatedPulledItems = dedupePulledItemsByAppMessageId([
 					...aggregatedPulledItems,
-					...secondPageResult.pulledItems.filter(shouldIncludeFetchedMessage),
+					...pageResult.pulledItems.filter(shouldIncludeFetchedMessage),
 				])
-				const didReachAnchorOnSecondPage = Boolean(
-					recoveryAnchorAppMessageId &&
-					!shouldContinueForegroundRecovery(
-						aggregatedPulledItems,
-						recoveryAnchorAppMessageId,
-					),
-				)
-				const isSecondPageServerComplete = !secondPageResult.response?.has_more
-				isAuthoritativeQueryComplete = isSecondPageServerComplete
-				if (!didReachAnchorOnSecondPage && !isSecondPageServerComplete) {
+				if (aggregatedPulledItems.length > FOREGROUND_RECOVERY_MAX_MESSAGE_COUNT) {
 					completeFailedSync()
 					return
 				}
+
+				reachedAnchorIndex = recoveryAnchor
+					? aggregatedPulledItems.findIndex((item) =>
+							matchesForegroundRecoveryAnchor(item, recoveryAnchor),
+						)
+					: -1
+				if (reachedAnchorIndex >= 0) {
+					writeMode = "replace_tail"
+					anchorSuperMessageId = getFetchedMessageSuperMessageId(
+						aggregatedPulledItems[reachedAnchorIndex],
+					)
+					didResolveRecovery = true
+					break
+				}
+				if (!recoveryAnchor && pageCount >= maxForegroundPageCount) {
+					// 没有 durable anchor 时只能把最近窗口作为非破坏性 tail 对账；
+					// 禁止为了寻找不存在的 anchor 扫完整 Topic 历史。
+					writeMode = "merge"
+					didResolveRecovery = true
+					break
+				}
+
+				if (!latestResponse?.has_more) {
+					isAuthoritativeQueryComplete = Boolean(
+						recoveryAnchor && latestResponse?.snapshot_complete === true,
+					)
+					// 普通 visible 在没有 durable anchor 时永远不具备缺席删除语义；
+					// 即使服务端末页声明完整，也只允许有限 tail merge。
+					writeMode = isAuthoritativeQueryComplete ? "replace" : "merge"
+					didResolveRecovery = true
+					break
+				}
+
+				const nextPageToken = String(latestResponse?.page_token || "")
+				if (!nextPageToken || visitedPageTokens.has(nextPageToken)) {
+					completeFailedSync()
+					return
+				}
+				pageToken = nextPageToken
+			}
+			if (!didResolveRecovery) {
+				completeFailedSync()
+				return
 			}
 
-			// 前台恢复是“权威快照重建”场景，因此把两段分页结果先聚合后一次性写回。
-			// 旧 generation 的 payload 仍进入 Store 做消息版本裁决，但无权替换 membership。
+			const membershipItems =
+				writeMode === "replace_tail" && reachedAnchorIndex >= 0
+					? aggregatedPulledItems.slice(0, reachedAnchorIndex + 1)
+					: aggregatedPulledItems
+			const preserveStreamSuperMessageIds = activeStreamIdsAtRequestStart
+			// Only the selected write mode is allowed to decide membership. Message revision
+			// arbitration and stream overlay preservation remain Store responsibilities.
 			superMagicStore.reconcileAuthoritativeMessages(topicId, {
 				statusItems: aggregatedStatusItems,
-				membershipItems: aggregatedPulledItems,
+				membershipItems,
 				writeOptions: {
-					mode: "replace",
+					mode: writeMode,
+					assistantSnapshotPolicy: "progress_snapshot",
+					...(writeMode === "replace_tail" ? { anchorSuperMessageId } : {}),
+					...(writeMode !== "merge" ? { preserveStreamSuperMessageIds } : {}),
 					syncGeneration,
-					toolProjectionPolicy: "historical_terminal",
+					toolProjectionPolicy:
+						writeMode === "merge" ? "preserve_live" : "historical_terminal",
 				},
 			})
 			reconcileActiveRevokedAnchorFromHttp(
 				topicId,
 				aggregatedStatusItems,
-				isAuthoritativeQueryComplete
-					? { mode: "replace", preserveStreamSuperMessageIds: [] }
-					: undefined,
+				writeMode === "replace_tail"
+					? { mode: "replace_tail", anchorSuperMessageId, preserveStreamSuperMessageIds }
+					: writeMode === "replace"
+						? { mode: "replace", preserveStreamSuperMessageIds }
+						: undefined,
 			)
 			if (!isCurrentForegroundOwner()) return
 			if (!superMagicStore.isTopicSyncCurrent(topicId, syncGeneration)) return
@@ -1020,6 +1306,7 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 						limit: 100,
 						updatePageToken: true,
 						writeIntent: "merge",
+						useHistoryPageCache: true,
 					})
 					if (!pullResult.didPullSucceed) {
 						delete lastHistoryPageTokenMapRef.current[topicId]
@@ -1033,24 +1320,32 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Initialize messages when topic changes
 	useEffect(() => {
-		const topicId = selectedTopic?.chat_topic_id
-		superMagicStore.setActiveTopicId(selectedTopic?.chat_topic_id || null)
+		const currentTopic = selectedTopicRef.current
+		const topicId = currentTopic?.chat_topic_id
 		setIsSelectedTopicMessagesReady(false)
 		if (topicId && !initialLoadedTopicsRef.current.has(topicId)) {
 			setIsMessagesInitialLoading(true)
 		} else {
 			setIsMessagesInitialLoading(false)
 		}
-		updateTopicMessages()
+		if (currentTopic?.id && topicId) {
+			syncSelectedTopicOnActivation(currentTopic)
+		} else {
+			superMagicStore.setActiveTopicId(null)
+		}
+		const requestOwnerToken = recoveryOwnerTokenRef.current
 		return () => {
+			releaseMessagePageRequests(requestOwnerToken)
+			cancelActivationTopicSync(topicId)
 			cancelForegroundTopicSync(topicId)
 		}
 	}, [
+		cancelActivationTopicSync,
 		cancelForegroundTopicSync,
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
-		updateTopicMessages,
+		syncSelectedTopicOnActivation,
 	])
 
 	useEffect(() => {
@@ -1062,6 +1357,11 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 			ownerToken: recoveryOwnerTokenRef.current,
 			topicId,
 			conversationId,
+			canRecover: () =>
+				document.visibilityState === "visible" &&
+				!activationTopicSyncRef.current &&
+				!foregroundTopicSyncRef.current &&
+				superMagicStore.topicMeta.get(topicId)?.syncState !== "syncing",
 			getTaskStatus: () => {
 				const currentTopic = selectedTopicRef.current
 				if (currentTopic?.chat_topic_id !== topicId) return undefined
@@ -1073,28 +1373,33 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				requiredSeqId,
 				anchorAppMessageId,
 				checkpointRollback,
-			}) =>
-				reason === "tool_response" || reason === "persistent_message"
-					? pullMessage({
-							conversation_id: conversationId,
-							chat_topic_id: topicId,
-							page_token: "",
-							order: "desc",
-							limit: LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT,
-							updatePageToken: false,
-							writeIntent: "authoritative_tail",
-							canonicalCommitTrigger:
-								reason === "persistent_message" ? "websocket" : "recovery",
-							syncGeneration,
-							requiredSeqId,
-							recoveryAnchorAppMessageId: anchorAppMessageId,
-						})
-					: recoverTopicMessages({
-							conversationId,
-							topicId,
-							syncGeneration,
-							checkpointRollback,
-						}),
+			}) => {
+				if (reason === "checkpoint_rollback") {
+					return recoverTopicMessages({
+						conversationId,
+						topicId,
+						syncGeneration,
+						checkpointRollback,
+					})
+				}
+				return pullMessage({
+					conversation_id: conversationId,
+					chat_topic_id: topicId,
+					page_token: "",
+					order: "desc",
+					limit:
+						reason === "tool_response" || reason === "persistent_message"
+							? LIVE_INCREMENTAL_SYNC_MESSAGE_COUNT
+							: POLLING_SYNC_MESSAGE_COUNT,
+					updatePageToken: false,
+					writeIntent: "authoritative_tail",
+					canonicalCommitTrigger:
+						reason === "persistent_message" ? "websocket" : "recovery",
+					syncGeneration,
+					requiredSeqId,
+					recoveryAnchorAppMessageId: anchorAppMessageId,
+				})
+			},
 		})
 	}, [
 		pullMessage,
@@ -1151,7 +1456,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		 * 统一交给 TopicRecoveryCoordinator，避免与 Tool recovery 形成两套请求状态机。
 		 */
 		const handleNewMessage = (data: any) => {
-			console.log("我接受到的 ws 消息", data)
 			const { topic_id: chat_topic_id = "" } = data.message || {}
 			const currentTopic = selectedTopicRef.current
 			if (!currentTopic?.chat_conversation_id || chat_topic_id !== currentTopic.chat_topic_id)
@@ -1170,7 +1474,6 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 		return () => {
 			pubsub?.unsubscribe(PubSubEvents.Super_Magic_New_Message_V2, handleNewMessage)
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedTopic?.chat_conversation_id, selectedTopic?.chat_topic_id])
 
 	useEffect(() => {
@@ -1188,7 +1491,20 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				return
 			}
 			if (document.visibilityState !== "visible") return
-			syncSelectedTopicOnForeground()
+			const topicId = selectedTopicRef.current?.chat_topic_id
+			if (!topicId) return
+			const recoveryStatus = getTopicRecoveryStatus(topicId)
+			if (recoveryStatus.hasInFlight) return
+			if (recoveryStatus.hasScheduled && recoveryStatus.reason === "checkpoint_rollback") {
+				// checkpoint 具有完整快照和撤回状态恢复语义，不能被普通前台 tail 降级。
+				resumeTopicRecovery(topicId)
+				return
+			}
+			void syncSelectedTopicOnForeground().finally(() => {
+				// 前台 anchor 对账结束后重新解析 hidden 期间积累的恢复要求；已经被本轮
+				// HTTP 覆盖的请求会由 Store resolver 消除，仍有缺口才继续 tail recovery。
+				if (getTopicRecoveryStatus(topicId).hasScheduled) resumeTopicRecovery(topicId)
+			})
 		}
 
 		document.addEventListener("visibilitychange", handleVisibilityChange)
@@ -1298,7 +1614,10 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 
 	// Handle refresh topic messages after revoke
 	useEffect(() => {
-		const handleRefreshTopicMessages = () =>
+		const handleRefreshTopicMessages = () => {
+			if (selectedTopic?.chat_topic_id) {
+				topicHistoryPageCache.clearTopic(selectedTopic.chat_topic_id)
+			}
 			updateTopicMessages({
 				// Revoke refresh is an authoritative snapshot: replace preserves the server's
 				// complete canonical membership, while visible-branch filtering stays in UI projection.
@@ -1307,21 +1626,23 @@ export function useTopicMessages({ selectedTopic, checkNowDebounced }: UseTopicM
 				// 本地 undo 成功后会先设置锚点；紧随其后的刷新不能把尚未收敛的 read 当作远端恢复。
 				allowRemoteRevokedAnchorCleanup: false,
 			})
+		}
 
 		pubsub.subscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 
 		return () => {
 			pubsub?.unsubscribe(PubSubEvents.Refresh_Topic_Messages, handleRefreshTopicMessages)
 		}
-	}, [updateTopicMessages])
+	}, [selectedTopic?.chat_topic_id, updateTopicMessages])
 
 	// Cleanup on component unmount
 	useEffect(() => {
+		const historyPullInFlightTopics = historyPullInFlightTopicsRef.current
 		return () => {
 			// Cleanup topic_id and page_token mapping
 			topicPageTokenMap.current = {}
 			topicNotHaveMoreMessageMap.current = {}
-			historyPullInFlightTopicsRef.current.clear()
+			historyPullInFlightTopics.clear()
 			lastHistoryPageTokenMapRef.current = {}
 		}
 	}, [])

@@ -449,4 +449,18 @@ describe("MessageList bottom loading", () => {
 		expect(screen.getByTestId("message-list-fallback")).toBeInTheDocument()
 		expect(screen.queryByTestId("super-magic-message-list-loading")).not.toBeInTheDocument()
 	})
+
+	it("首次权威同步期间即使已有本地占位卡也不提前投影消息列表", () => {
+		render(
+			<MessageList
+				data={[userMessage]}
+				selectedTopic={topicA}
+				showLoading={false}
+				isMessagesLoading
+			/>,
+		)
+
+		expect(screen.getByTestId("initial-spinner")).toBeInTheDocument()
+		expect(screen.queryByTestId("message-user-1")).not.toBeInTheDocument()
+	})
 })

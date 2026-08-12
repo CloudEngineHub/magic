@@ -28,6 +28,8 @@ class GenerateVideoFormRequest extends FormRequest
 
     private const int MAX_URI_LENGTH = 4096;
 
+    private const int MAX_BASE64_LENGTH = 24 * 1024 * 1024;
+
     private const int MAX_SHORT_TEXT_LENGTH = 20;
 
     private const int MAX_OPTION_TEXT_LENGTH = 50;
@@ -68,10 +70,16 @@ class GenerateVideoFormRequest extends FormRequest
             'inputs.frames' => 'nullable|array|max:' . self::MAX_FRAME_COUNT,
             'inputs.frames.*' => 'required|array',
             'inputs.frames.*.role' => 'required|string|in:' . $frameRoles,
-            'inputs.frames.*.uri' => 'required|string|max:' . self::MAX_URI_LENGTH,
+            'inputs.frames.*.uri' => 'nullable|string|max:' . self::MAX_URI_LENGTH,
+            'inputs.frames.*.source_type' => 'nullable|string|in:workspace_path,base64|max:' . self::MAX_SHORT_TEXT_LENGTH,
+            'inputs.frames.*.base64_data' => 'nullable|string|max:' . self::MAX_BASE64_LENGTH,
+            'inputs.frames.*.mime_type' => 'nullable|string|in:image/jpeg,image/jpg,image/png,image/webp|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'inputs.reference_images' => 'nullable|array|max:' . self::MAX_REFERENCE_IMAGE_COUNT,
             'inputs.reference_images.*' => 'required|array',
-            'inputs.reference_images.*.uri' => 'required|string|max:' . self::MAX_URI_LENGTH,
+            'inputs.reference_images.*.uri' => 'nullable|string|max:' . self::MAX_URI_LENGTH,
+            'inputs.reference_images.*.source_type' => 'nullable|string|in:workspace_path,base64|max:' . self::MAX_SHORT_TEXT_LENGTH,
+            'inputs.reference_images.*.base64_data' => 'nullable|string|max:' . self::MAX_BASE64_LENGTH,
+            'inputs.reference_images.*.mime_type' => 'nullable|string|in:image/jpeg,image/jpg,image/png,image/webp|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'inputs.reference_images.*.type' => 'nullable|string|in:' . $referenceImageTypes . '|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'inputs.reference_videos' => 'nullable|array|max:' . self::MAX_VIDEO_COUNT,
             'inputs.reference_videos.*' => 'required|array',

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\File\MagicFS\Facade;
 
+use App\Application\SuperMagic\File\FileScope\FileScopeHandlerResolver;
 use App\Application\SuperMagic\File\Service\MagicFSFileAppService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
@@ -24,6 +25,7 @@ class MagicFSApi extends AbstractApi
     public function __construct(
         protected RequestInterface $request,
         protected MagicFSFileAppService $magicFSFileAppService,
+        protected FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -36,6 +38,14 @@ class MagicFSApi extends AbstractApi
     {
         $authorization = $this->getCurrentUser();
         $requestDTO = ListFilesRequestDTO::fromRequest($this->request);
+
+        if ($requestDTO->hasScope()) {
+            $responseDTO = $this->fileScopeHandlerResolver
+                ->resolve($requestDTO->scope)
+                ->listFiles($authorization, $requestDTO);
+
+            return $responseDTO->toArray();
+        }
 
         $responseDTO = $this->magicFSFileAppService->listFiles($authorization, $requestDTO);
 

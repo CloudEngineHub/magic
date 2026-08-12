@@ -17,8 +17,9 @@ interface JsErrorConfig {
 export const plugin = (): Partial<JsErrorConfig> => {
 	return {
 		ignoreErrors: [],
-		onerror: true,
-		onunhandledrejection: true,
+		// 全局异常统一由应用 ErrorMonitorPlugin 捕获，再通过 captureException 自定义上报。
+		onerror: false,
+		onunhandledrejection: false,
 		captureGlobalAsync: false,
 		dedupe: true,
 	}

@@ -85,7 +85,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 }: FilePathAttachmentListProps) {
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
-    const downloadFileByPath = useFilePathAttachmentDownload()
+	const downloadFileByPath = useFilePathAttachmentDownload()
 
 	if (attachments.length === 0) return null
 

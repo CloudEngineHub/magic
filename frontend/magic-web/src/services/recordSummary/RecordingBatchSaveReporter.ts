@@ -112,15 +112,20 @@ export class RecordingBatchSaveReporter {
 			})
 			this.markFileAsSaved(file.sessionId, file.fileKey)
 		} catch (error) {
-			logger.error("Batch save failed", {
-				sessionId: file.sessionId,
-				fileKey: file.fileKey,
-				fileName: file.fileName,
-				fileSize: file.fileSize,
-				projectId: file.projectId,
-				topicId: file.topicId,
-				parentId: file.parentId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "batch_save_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Batch save failed",
+				context: {
+					sessionId: file.sessionId,
+					fileSize: file.fileSize,
+					projectId: file.projectId,
+					topicId: file.topicId,
+					parentId: file.parentId,
+					fileKey: file.fileKey,
+					fileName: file.fileName,
+				},
 			})
 			if (throwOnError) {
 				throw error

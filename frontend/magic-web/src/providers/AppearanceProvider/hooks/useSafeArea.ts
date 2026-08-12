@@ -77,10 +77,10 @@ export function useSafeArea(): SafeAreaTokens {
 			})
 			.catch((error: unknown) => {
 				logger.error({
-					namespace: "useSafeArea:getSafeArea",
-					data: {
-						error,
-					},
+					eventKey: "get_safe_area_failed",
+					errorKind: "unknown",
+					error,
+					message: "Failed to get native safe area",
 				})
 			})
 	}, [])

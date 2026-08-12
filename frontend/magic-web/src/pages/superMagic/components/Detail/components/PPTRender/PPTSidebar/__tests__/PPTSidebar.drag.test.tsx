@@ -282,8 +282,7 @@ function installRafController() {
 		cancel,
 		flushNext() {
 			const entry = callbacks.entries().next().value as
-				| [number, FrameRequestCallback]
-				| undefined
+				[number, FrameRequestCallback] | undefined
 			if (!entry) return false
 			const [id, callback] = entry
 			callbacks.delete(id)

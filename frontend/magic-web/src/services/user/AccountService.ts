@@ -146,7 +146,12 @@ export class AccountService {
 			await getHtmlPermissionGrantStore().clear()
 		} catch (error) {
 			// Permission storage cleanup is best effort and must not prevent token removal or logout.
-			logger.error("Failed to clear HTML permission grants during account removal", error)
+			logger.error({
+				eventKey: "clear_html_permission_grants_failed",
+				errorKind: "storage",
+				error,
+				message: "Failed to clear HTML permission grants during account removal",
+			})
 		}
 		const allClean = async () => {
 			MessageService.destroy()

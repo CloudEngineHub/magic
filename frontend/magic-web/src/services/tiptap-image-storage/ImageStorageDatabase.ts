@@ -124,7 +124,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			// Clean expired images on initialization
 			this.cleanExpiredImages().catch((error) => {
-				logger.error("Failed to clean expired images on initialization", error)
+				logger.error({
+					eventKey: "clean_expired_images_initialization_failed",
+					errorKind: "storage",
+					error: error,
+					message: "Failed to clean expired images on initialization",
+				})
 			})
 
 			// Set up periodic cleanup (every 24 hours)
@@ -132,13 +137,19 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			return db
 		} catch (error) {
-			logger.error("Failed to initialize image storage database", error)
+			logger.error({
+				eventKey: "initialize_image_storage_database_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to initialize image storage database",
+			})
 
 			// Reset dbPromise to allow retry on next attempt
 			this.dbPromise = null
 
 			throw new ImageStorageUnavailableError(
-				`Failed to initialize database: ${error instanceof Error ? error.message : "Unknown error"
+				`Failed to initialize database: ${
+					error instanceof Error ? error.message : "Unknown error"
 				}`,
 			)
 		}
@@ -157,7 +168,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 		const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 		this.cleanupInterval = setInterval(() => {
 			this.cleanExpiredImages().catch((error) => {
-				logger.error("Periodic cleanup failed", error)
+				logger.error({
+					eventKey: "periodic_cleanup_failed",
+					errorKind: "storage",
+					error: error,
+					message: "Periodic cleanup failed",
+				})
 			})
 		}, CLEANUP_INTERVAL_MS)
 	}
@@ -221,7 +237,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			return id
 		} catch (error) {
-			logger.error("Failed to save image", error)
+			logger.error({
+				eventKey: "save_image_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save image",
+			})
 			throw error
 		}
 	}
@@ -250,7 +271,13 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			return record.blob
 		} catch (error) {
-			logger.error("Failed to retrieve image", { id }, error)
+			logger.error({
+				eventKey: "retrieve_image_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to retrieve image",
+				context: { id },
+			})
 			throw error
 		}
 	}
@@ -265,7 +292,13 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			logger.log("Image deleted successfully", { id })
 		} catch (error) {
-			logger.error("Failed to delete image", { id }, error)
+			logger.error({
+				eventKey: "delete_image_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to delete image",
+				context: { id },
+			})
 			throw error
 		}
 	}
@@ -279,7 +312,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 			const images = await db.images.toArray()
 			return images.reduce((total, img) => total + img.size, 0)
 		} catch (error) {
-			logger.error("Failed to get storage size", error)
+			logger.error({
+				eventKey: "get_storage_size_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get storage size",
+			})
 			return 0
 		}
 	}
@@ -292,7 +330,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 			const db = await this.getDatabase()
 			return await db.images.count()
 		} catch (error) {
-			logger.error("Failed to get image count", error)
+			logger.error({
+				eventKey: "get_image_count_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get image count",
+			})
 			return 0
 		}
 	}
@@ -306,7 +349,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 			await db.images.clear()
 			logger.log("All images cleared")
 		} catch (error) {
-			logger.error("Failed to clear images", error)
+			logger.error({
+				eventKey: "clear_images_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to clear images",
+			})
 			throw error
 		}
 	}
@@ -339,7 +387,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			return expiredImages.length
 		} catch (error) {
-			logger.error("Failed to clean expired images", error)
+			logger.error({
+				eventKey: "clean_expired_images_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to clean expired images",
+			})
 			throw error
 		}
 	}
@@ -356,7 +409,12 @@ export class ImageStorageDatabase implements ImageStorageInterface {
 
 			return expiredImages.map((img) => img.id)
 		} catch (error) {
-			logger.error("Failed to get expired image IDs", error)
+			logger.error({
+				eventKey: "get_expired_image_ids_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get expired image IDs",
+			})
 			return []
 		}
 	}

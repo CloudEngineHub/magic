@@ -172,6 +172,48 @@ function createFinalEnvelope({
 	return envelope as unknown as RawSuperMagicMessageEnvelope
 }
 
+function createUserEnvelope({
+	topicId = TOPIC_A,
+	appMessageId = "user-background",
+	seqId = "100",
+	content = "user prompt",
+}: {
+	topicId?: string
+	appMessageId?: string
+	seqId?: string
+	content?: string
+} = {}): RawSuperMagicMessageEnvelope {
+	return {
+		type: SeqRecordType.seq,
+		seq: {
+			magic_id: "magic-user-background",
+			seq_id: seqId,
+			message_id: `server-${appMessageId}`,
+			refer_message_id: "",
+			sender_message_id: "",
+			conversation_id: "conversation-background",
+			organization_code: "organization-background",
+			message: {
+				magic_message_id: `magic-${appMessageId}`,
+				app_message_id: appMessageId,
+				sender_id: "user-background",
+				send_time: Number(seqId),
+				status: ConversationMessageStatus.Read,
+				unread_count: 0,
+				topic_id: topicId,
+				type: ConversationMessageType.SuperMagicMessage,
+				super_magic_message: {
+					role: "user",
+					topic_id: topicId,
+					message_id: `node-${appMessageId}`,
+					content,
+					send_timestamp: Number(seqId),
+				},
+			},
+		},
+	} as unknown as RawSuperMagicMessageEnvelope
+}
+
 function createToolResponseEnvelope({
 	topicId = TOPIC_A,
 	correlationId = CORRELATION_A,
@@ -677,6 +719,40 @@ describe("SuperMagicStore / Topic 切换与后台运行", () => {
 			super_message_id: SUPER_MESSAGE_A,
 			correlation_id: CORRELATION_A,
 		})
+	})
+
+	it("初始 HTTP User 基线建立后，后台创建的 Assistant 占位卡排在 User 之后", () => {
+		const store = createStore(TOPIC_B)
+
+		// Browser A can receive Browser B's chunk before B becomes active locally.
+		store.receiveChunk(createChunk({ topicId: TOPIC_A, content: "draft" }))
+		const beforeHydration = store.messages.get(TOPIC_A) || []
+		expect(beforeHydration).toContainEqual(
+			expect.objectContaining({ role: "assistant", seq_id: "1" }),
+		)
+
+		const generation = store.beginTopicSync(TOPIC_A)
+		store.setActiveTopicId(TOPIC_A)
+		store.initializeMessages(TOPIC_A, [createUserEnvelope()], {
+			mode: "replace",
+			syncGeneration: generation,
+		})
+
+		const hydratedMessages = store.messages.get(TOPIC_A) || []
+		expect(hydratedMessages.map((message) => [message.role, message.seq_id])).toEqual([
+			["user", "100"],
+			["assistant", "101"],
+		])
+		expect(store.getLatestMessageSeqId(TOPIC_A)).toBe("100")
+		expect(store.getStreamState(TOPIC_A, CORRELATION_A)?.content).toBe("draft")
+
+		expect(
+			store.completeTopicSync(TOPIC_A, generation, {
+				succeeded: true,
+				taskStatus: "running",
+				latestSeqId: "100",
+			}),
+		).toBe(true)
 	})
 
 	it("terminal topic 切回后拒绝 finalized correlation 的晚到 chunk。", () => {

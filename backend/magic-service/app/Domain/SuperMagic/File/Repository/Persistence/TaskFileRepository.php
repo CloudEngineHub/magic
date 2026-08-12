@@ -40,6 +40,28 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getByIdsWithTrash(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $result = [];
+        $chunks = array_chunk(array_values(array_unique($ids)), 500);
+
+        foreach ($chunks as $chunk) {
+            /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+            $models = $this->model::withTrashed()->whereIn('file_id', $chunk)->get();
+
+            foreach ($models as $model) {
+                $entity = new TaskFileEntity($model->toArray());
+                $result[$entity->getFileId()] = $entity;
+            }
+        }
+
+        return $result;
+    }
+
     public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array
     {
         // 如果 ID 列表为空，直接返回空数组
@@ -393,7 +415,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     ): array {
         $query = $this->model::query()
             ->select([
-                'file_id', 'task_id', 'project_id', 'topic_id', 'parent_id',
+                'file_id', 'user_id', 'organization_code', 'space_type',
+                'task_id', 'project_id', 'topic_id', 'parent_id',
                 'file_type', 'file_name', 'file_extension', 'file_key', 'file_size',
                 'is_hidden', 'is_directory', 'sort', 'source',
                 'updated_at', 'display_config', 'metadata',

@@ -570,6 +570,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $result['content_type'] ?? null,
                 'content_length' => $result['content_length'] ?? null,
                 'last_modified' => $result['last_modified'] ?? null,
             ]);
@@ -628,6 +629,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'organization_code' => $organizationCode,
                 'object_key' => $objectKey,
                 'bucket_type' => $bucketType->value,
+                'content_type' => $metadata['content_type'] ?? null,
                 'metadata_count' => count($metadata),
             ]);
         } catch (Throwable $exception) {
@@ -704,6 +706,7 @@ class CloudFileRepository implements CloudFileRepositoryInterface
                 'object_key' => $objectKey,
                 'object_type' => $isFolder ? 'folder' : 'file',
                 'bucket_type' => $bucketType->value,
+                'content_type' => $createOptions['content_type'] ?? null,
                 'content_length' => strlen($createOptions['content'] ?? ''),
             ]);
         } catch (Throwable $exception) {

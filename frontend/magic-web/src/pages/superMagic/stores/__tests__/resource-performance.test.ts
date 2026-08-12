@@ -15,6 +15,7 @@ import {
 	IntermediateMessageType,
 	type SuperMagicChunkMessage,
 } from "@/types/chat/intermediate_message"
+import { db } from "@/pages/superMagic/stores/storage"
 
 const TOPIC_A = "topic-resource-a"
 const TOPIC_B = "topic-resource-b"
@@ -256,6 +257,24 @@ describe("SuperMagicStore / 资源和性能", () => {
 		unsubscribe()
 	})
 
+	it("不同消息使用独立 revision，更新一个流不会使另一个行失效", () => {
+		const store = createStore()
+		store.receiveChunk(
+			createChunk({ correlationId: "corr-a", content: "A", finishReason: "stop" }),
+		)
+		settle()
+		const revisionA = store.getMessageRevision(TOPIC_A, "super-corr-a")
+
+		store.receiveChunk(
+			createChunk({ correlationId: "corr-b", content: "B", finishReason: "stop" }),
+		)
+		settle()
+
+		expect(revisionA).toBeGreaterThan(0)
+		expect(store.getMessageRevision(TOPIC_A, "super-corr-a")).toBe(revisionA)
+		expect(store.getMessageRevision(TOPIC_A, "super-corr-b")).toBeGreaterThan(0)
+	})
+
 	it("16ms timer 在无进展状态下永久运行。", () => {
 		const store = createStore()
 		const recoveries: unknown[] = []
@@ -437,31 +456,32 @@ describe("SuperMagicStore / 资源和性能", () => {
 		stringify.mockRestore()
 	})
 
-	it("小 chunk 按 10 条或 200ms 批量持久化，Final 立即 flush。", () => {
+	it("小 chunk 按批次和最小间隔限流持久化，Final 立即 flush。", () => {
 		const stringify = vi.spyOn(JSON, "stringify")
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
 		const store = createStore()
-		for (let index = 0; index < 9; index += 1) {
+		for (let index = 0; index < 9; index += 1)
 			store.receiveChunk(createChunk({ i: index, content: "x" }))
-		}
 		expect(stringify).not.toHaveBeenCalled()
 
 		store.receiveChunk(createChunk({ i: 9, content: "x" }))
-		expect(stringify).toHaveBeenCalledTimes(1)
+		expect(addManySpy).toHaveBeenCalledTimes(1)
+		expect(stringify).not.toHaveBeenCalled()
 
-		for (let index = 10; index < 15; index += 1) {
+		for (let index = 10; index < 20; index += 1)
 			store.receiveChunk(createChunk({ i: index, content: "x" }))
-		}
-		vi.advanceTimersByTime(199)
-		expect(stringify).toHaveBeenCalledTimes(1)
+		vi.advanceTimersByTime(99)
+		expect(addManySpy).toHaveBeenCalledTimes(1)
 		vi.advanceTimersByTime(1)
-		expect(stringify).toHaveBeenCalledTimes(2)
+		expect(addManySpy).toHaveBeenCalledTimes(2)
 
-		store.receiveChunk(createChunk({ i: 15, finishReason: "stop" }))
-		expect(stringify).toHaveBeenCalledTimes(3)
+		store.receiveChunk(createChunk({ i: 20, finishReason: "stop" }))
+		expect(addManySpy).toHaveBeenCalledTimes(3)
 		settle()
 
-		expect(getNode(store)?.content).toBe("x".repeat(15))
+		expect(getNode(store)?.content).toBe("x".repeat(20))
 		stringify.mockRestore()
+		addManySpy.mockRestore()
 	})
 
 	it("重复 chunk 导致 IndexedDB 写入量翻倍。", () => {
@@ -541,5 +561,61 @@ describe("SuperMagicStore / 资源和性能", () => {
 		expect(getNode(store)?.tool_calls?.[0]?.function?.arguments).toBe(canonical)
 		expect(store.getStreamState(TOPIC_A, "corr-resource")).toBeUndefined()
 		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	it("切换 Topic 时只保留旧 Topic 的热窗口，并清理裁掉行的 canonical sidecar", () => {
+		const store = createStore(TOPIC_A)
+		const messages = Array.from({ length: 5_001 }, (_, index) => ({
+			app_message_id: `app-hot-${index}`,
+			super_message_id: `super-hot-${index}`,
+			correlation_id: `corr-hot-${index}`,
+			seq_id: String(index + 1),
+			role: "assistant" as const,
+			content: `message-${index}`,
+		}))
+		store.messages.set(TOPIC_A, messages)
+		messages.forEach((message) => {
+			store.messageMap.set(message.super_message_id, message)
+		})
+
+		store.setActiveTopicId(TOPIC_B)
+
+		const retained = store.messages.get(TOPIC_A) || []
+		expect(retained).toHaveLength(5_000)
+		expect(retained[0]?.app_message_id).toBe("app-hot-1")
+		expect(store.getMessageNode("super-hot-0")).toBeUndefined()
+		expect(store.getTopicMessageIndexOf(TOPIC_A, "super-hot-0")).toBe(-1)
+		expect(store.getTopicMessageIndexOf(TOPIC_A, "super-hot-5000")).toBe(4_999)
+	})
+
+	it("disposeTopic cancels Topic timers and removes message, revision, and persistence state", () => {
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
+		const store = createStore(TOPIC_A)
+		store.receiveChunk(createChunk({ content: "draft" }))
+		store.recordWebSocketMessage(TOPIC_A, createChunk({ i: 1 }), "super_magic_chunk")
+		store.setActiveTopicId(TOPIC_B)
+
+		expect(store.disposeTopic(TOPIC_A)).toBe(true)
+		expect(store.messages.has(TOPIC_A)).toBe(false)
+		expect(store.topicMeta.has(TOPIC_A)).toBe(false)
+		expect(store.getMessageNode("super-corr-resource")).toBeUndefined()
+		expect(store.getMessageRevision(TOPIC_A, "super-corr-resource")).toBe(0)
+		expect(store.getMessagePersistenceStats(TOPIC_A).pendingRecords).toBe(0)
+		expect(store.isTopicStreaming(TOPIC_A)).toBe(false)
+		expect(vi.getTimerCount()).toBe(0)
+		addManySpy.mockRestore()
+	})
+
+	it("bounds a Topic persistence queue and reports dropped diagnostic records", () => {
+		const addManySpy = vi.spyOn(db, "addManyToTable").mockResolvedValue(undefined)
+		const store = createStore(TOPIC_A)
+		for (let index = 0; index < 250; index += 1) {
+			store.recordWebSocketMessage(TOPIC_A, createChunk({ i: index }), "super_magic_chunk")
+		}
+
+		const stats = store.getMessagePersistenceStats(TOPIC_A)
+		expect(stats.pendingRecords).toBeLessThanOrEqual(200)
+		expect(stats.droppedRecords).toBeGreaterThan(0)
+		addManySpy.mockRestore()
 	})
 })

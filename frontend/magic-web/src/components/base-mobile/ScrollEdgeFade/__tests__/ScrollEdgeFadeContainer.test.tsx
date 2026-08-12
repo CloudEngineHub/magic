@@ -30,9 +30,23 @@ describe("ScrollEdgeFadeContainer", () => {
 		for (const overlay of overlays ?? []) {
 			expect(overlay.parentElement).toBe(outer)
 			expect(overlay.parentElement).not.toBe(scrollPort)
-			expect(overlay.className).toContain("z-10")
-			expect(overlay.className).toContain("bg-gradient-to-")
 		}
+		// The top fade must sit above transformed list rows without escaping the clipped frame.
+		const topOverlay = overlays?.[0]
+		expect(topOverlay?.className).toContain("top-0")
+		expect(topOverlay?.className).toContain("z-30")
+		expect(topOverlay?.className).toContain("h-10")
+		expect(topOverlay?.className).not.toContain("backdrop-blur")
+		expect(topOverlay?.children[0]?.className).toContain("bg-gradient-to-b")
+		expect(topOverlay?.children[0]?.className).not.toContain("from-[")
+		expect(topOverlay?.children[1]?.className).toContain("top-[-1px]")
+		expect(topOverlay?.children[1]?.className).toContain("h-1")
+		expect(topOverlay?.children[1]?.className).toContain("transform-gpu")
+		expect(topOverlay?.children[1]).toHaveStyle({
+			backgroundColor: "rgb(var(--mobile-background-rgb) / 1)",
+		})
+		expect(overlays?.[1]?.className).toContain("bg-gradient-to-t")
+		expect(overlays?.[1]?.className).toContain("z-10")
 
 		expect(screen.getByTestId("list-content")).toBeInTheDocument()
 	})

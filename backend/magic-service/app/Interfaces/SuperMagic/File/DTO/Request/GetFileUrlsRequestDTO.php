@@ -43,11 +43,11 @@ class GetFileUrlsRequestDTO
     /**
      * Constructor.
      */
-    public function __construct(array $params, string $defaultDownloadMode = 'preview')
+    public function __construct(array $params)
     {
         $this->fileIds = $params['file_ids'] ?? [];
         $this->token = $params['token'] ?? '';
-        $this->downloadMode = $params['download_mode'] ?? $defaultDownloadMode;
+        $this->downloadMode = $params['download_mode'] ?? 'preview';
         $this->cache = $params['cache'] ?? true;
         $this->fileVersions = $params['file_versions'] ?? [];
         $this->isDownload = $params['is_download'] ?? false;  // 默认为 false，不校验下载权限
@@ -58,9 +58,9 @@ class GetFileUrlsRequestDTO
     /**
      * 从HTTP请求创建DTO.
      */
-    public static function fromRequest(RequestInterface $request, string $defaultDownloadMode = 'preview'): self
+    public static function fromRequest(RequestInterface $request): self
     {
-        return new self($request->all(), $defaultDownloadMode);
+        return new self($request->all());
     }
 
     /**

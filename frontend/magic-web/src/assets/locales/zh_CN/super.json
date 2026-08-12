@@ -473,6 +473,14 @@
 		"latest": "最新",
 		"latestVersion": "最新版本",
 		"loading": "加载中",
+		"markdownImage": {
+			"address": "图片地址",
+			"emptySource": "图片地址为空",
+			"fileMissing": "图片文件不存在",
+			"loadFailed": "图片加载失败",
+			"notImage": "该资源不是图片",
+			"urlFailed": "图片地址获取失败"
+		},
 		"meetingMode": "录音总结",
 		"more": "更多模式",
 		"moreActions": "更多",
@@ -3005,6 +3013,7 @@
 			"title": "提及列表"
 		},
 		"modeNotAvailableMessage": "当前员工暂不可用，请\"新建话题\" 并选择可用的员工后继续",
+		"modelLoadFailed": "模型加载失败，请稍后重试",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
 			"collapseDescription": "收起模型描述",

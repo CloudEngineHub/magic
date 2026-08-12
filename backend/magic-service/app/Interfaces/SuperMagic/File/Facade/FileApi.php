@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\File\Facade;
 
-use App\Application\SuperMagic\Common\Contract\DeploymentIdInterface;
 use App\Application\SuperMagic\Common\Service\AccessTokenAuthorizationService;
+use App\Application\SuperMagic\File\FileScope\FileScopeHandlerResolver;
 use App\Application\SuperMagic\File\Service\AgentFileAppService;
 use App\Application\SuperMagic\File\Service\FileBatchAppService;
 use App\Application\SuperMagic\File\Service\FileManagementAppService;
@@ -65,6 +65,7 @@ class FileApi extends AbstractApi
         protected AgentFileAppService $agentFileAppService,
         private readonly SandboxFileNotificationAppService $sandboxFileNotificationAppService,
         private readonly AccessTokenAuthorizationService $accessTokenAuthorizationService,
+        private readonly FileScopeHandlerResolver $fileScopeHandlerResolver,
     ) {
         parent::__construct($request);
     }
@@ -336,6 +337,12 @@ class FileApi extends AbstractApi
         $requestData = $this->request->all();
         $requestDTO = ProjectUploadTokenRequestDTO::fromRequest($requestData);
 
+        if ($requestDTO->hasScope()) {
+            return $this->fileScopeHandlerResolver
+                ->resolve($requestDTO->getScope())
+                ->getUploadToken($requestContext->getUserAuthorization(), $requestDTO);
+        }
+
         // 调用应用服务
         return $this->fileManagementAppService->getProjectUploadToken($requestContext, $requestDTO);
     }
@@ -510,7 +517,7 @@ class FileApi extends AbstractApi
     public function getFileUrls(RequestContext $requestContext): array
     {
         // 获取请求DTO
-        $dto = GetFileUrlsRequestDTO::fromRequest($this->request, $this->getDefaultDownloadMode());
+        $dto = GetFileUrlsRequestDTO::fromRequest($this->request);
 
         if (! empty($dto->getToken())) {
             // 只在真正下载时才进行下载权限校验
@@ -593,10 +600,5 @@ class FileApi extends AbstractApi
         $fileId = (int) $this->request->route('id');
         $requestDTO = ReplaceFileRequestDTO::fromRequest($this->request);
         return $this->fileManagementAppService->replaceFile($requestContext, $fileId, $requestDTO);
-    }
-
-    private function getDefaultDownloadMode(): string
-    {
-        return di(DeploymentIdInterface::class)->isPrivateDeployment() ? 'download' : 'preview';
     }
 }
