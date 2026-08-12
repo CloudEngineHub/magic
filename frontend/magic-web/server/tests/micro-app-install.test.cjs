@@ -94,7 +94,8 @@ test("builds a distinct password-free manifest for each published micro app", as
 	)
 
 	assert.equal(response.body.id, `/micro-app/${TEST_APP_ID}`)
-	assert.equal(response.body.start_url, `/micro-app/${TEST_APP_ID}?source=pwa`)
+	assert.equal(response.body.start_url, `/micro-app/${TEST_APP_ID}/?source=pwa`)
+	assert.equal(response.body.scope, `/micro-app/${TEST_APP_ID}/`)
 	assert.equal(response.body.name, "测试微应用")
 	assert.equal(response.headers["content-type"], "application/manifest+json; charset=utf-8")
 	assert.match(response.headers["cache-control"], /no-store/)
@@ -111,6 +112,8 @@ test("builds a distinct password-free manifest for each published micro app", as
 		},
 	)
 	assert.equal(secondResponse.body.id, "/micro-app/900000000000000002")
+	assert.equal(secondResponse.body.scope, "/micro-app/900000000000000002/")
+	assert.notEqual(secondResponse.body.scope, response.body.scope)
 	assert.notEqual(secondResponse.body.start_url, response.body.start_url)
 })
 

@@ -10,10 +10,10 @@ const {
 } = require("../utils/installIconCache")
 const {
 	DEFAULT_ICON_QUERY_SIZE,
-	MICRO_APP_INSTALL_SCOPE,
 	SUPPORTED_ICON_SIZES,
 	buildManifestIcons,
 	buildMicroAppBasePath,
+	buildMicroAppInstallScope,
 } = require("../utils/microAppInstallConstants")
 
 const SUPPORTED_ICON_SIZE_SET = new Set(SUPPORTED_ICON_SIZES.map(String))
@@ -59,8 +59,8 @@ function buildManifest(appId, appName) {
 		id: basePath,
 		name: appName || "Micro App",
 		short_name: appName || "Micro App",
-		start_url: `${basePath}?source=pwa`,
-		scope: MICRO_APP_INSTALL_SCOPE,
+		start_url: `${basePath}/?source=pwa`,
+		scope: buildMicroAppInstallScope(appId),
 		display: "standalone",
 		theme_color: "#ffffff",
 		background_color: "#ffffff",

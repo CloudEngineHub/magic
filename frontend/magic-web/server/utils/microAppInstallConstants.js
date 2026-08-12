@@ -13,7 +13,11 @@ function encodeMicroAppId(appId) {
 }
 
 function buildMicroAppBasePath(appId) {
-	return `/micro-app/${encodeMicroAppId(appId)}`
+	return `${MICRO_APP_INSTALL_SCOPE}${encodeMicroAppId(appId)}`
+}
+
+function buildMicroAppInstallScope(appId) {
+	return `${buildMicroAppBasePath(appId)}/`
 }
 
 function buildInstallIconPath(appId) {
@@ -51,6 +55,7 @@ module.exports = {
 	buildInstallIconUrl,
 	buildManifestIcons,
 	buildManifestUrl,
+	buildMicroAppInstallScope,
 	buildMicroAppBasePath,
 	encodeMicroAppId,
 }
