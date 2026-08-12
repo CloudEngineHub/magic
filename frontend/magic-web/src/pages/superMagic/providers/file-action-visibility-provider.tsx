@@ -8,6 +8,7 @@ export interface FileActionVisibility {
 	hideCreateNewTopic?: boolean
 	hideFullscreen?: boolean
 	hideVersionHistory?: boolean
+	showShareFileInReadOnly?: boolean
 }
 
 interface FileActionVisibilityProviderProps extends PropsWithChildren {
@@ -22,6 +23,7 @@ const defaultFileActionVisibility: Required<FileActionVisibility> = {
 	hideCreateNewTopic: false,
 	hideFullscreen: false,
 	hideVersionHistory: false,
+	showShareFileInReadOnly: false,
 }
 
 export const HIDE_COPY_MOVE_SHARE_FILE_ACTIONS: FileActionVisibility = {
@@ -64,6 +66,7 @@ export function FileActionVisibilityProvider({
 			hideCreateNewTopic: value?.hideCreateNewTopic ?? false,
 			hideFullscreen: value?.hideFullscreen ?? false,
 			hideVersionHistory: value?.hideVersionHistory ?? false,
+			showShareFileInReadOnly: value?.showShareFileInReadOnly ?? false,
 		}),
 		[
 			value?.hideCopyTo,
@@ -73,6 +76,7 @@ export function FileActionVisibilityProvider({
 			value?.hideShareTopic,
 			value?.hideFullscreen,
 			value?.hideVersionHistory,
+			value?.showShareFileInReadOnly,
 		],
 	)
 
