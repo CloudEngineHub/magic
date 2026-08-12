@@ -9,6 +9,7 @@ import {
 	type StoryboardElementContent,
 } from "../../../document/types"
 import type { Canvas } from "../../../core/Canvas"
+import { STORYBOARD_CONFIG } from "../../../elements/storyboard/StoryboardElement.config"
 import { StoryboardInteractionManager } from "../StoryboardInteractionManager"
 import type { ImageModelItem } from "../../../../public/magic-types"
 
@@ -27,8 +28,8 @@ function createStoryboardData(): StoryboardElement {
 		type: ElementTypeEnum.Storyboard,
 		x: 0,
 		y: 0,
-		width: 960,
-		height: 1360,
+		width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+		height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
 		contents: [content],
 		activeContentId: content.contentId,
 		mainContentId: content.contentId,

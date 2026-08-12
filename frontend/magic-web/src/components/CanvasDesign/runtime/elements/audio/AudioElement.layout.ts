@@ -13,7 +13,7 @@ export const AUDIO_PLAYER_DESIGN = {
 	progressHorizontalPaddingRatio: 0.0375,
 	waveformTopPadding: 32,
 	waveformToControlsGap: 36,
-	controlStackWidth: 296,
+	controlStackWidth: 304,
 	controlStackHeight: 154,
 	controlStackLift: 24,
 	progressHeight: 14,
@@ -23,9 +23,7 @@ export const AUDIO_PLAYER_DESIGN = {
 	progressToTimeOffset: 24,
 	timeToOperationsOffset: 74,
 	operationButtonSize: 80,
-	operationGap: 28,
-	timeFontSize: 22,
-	errorFontSize: 14,
+	operationGap: 32,
 	errorToProgressGap: 32,
 	bottomPadding: 40,
 	waveformBarWidth: 8,
@@ -38,7 +36,6 @@ export const AUDIO_PLAYER_DESIGN = {
 	statusSpinnerRadius: 20,
 	statusSpinnerStrokeWidth: 4,
 	statusSpinnerToTextGap: 20,
-	statusTextFontSize: 24,
 	statusTextLineHeight: 1.3,
 } as const
 
@@ -170,13 +167,20 @@ export function resolveAudioPlayerLayout(width: number, height: number): AudioPl
 			x: progressRect.x,
 			y: timeY,
 			width: progressRect.width,
-			fontSize: AUDIO_PLAYER_DESIGN.timeFontSize * controlScale,
+			// 时长比 display 小一档用 title，且不低于 caption，避免被 controlScale 压没。
+			fontSize: layout.design.minType(
+				layout.design.type.title * (controlScale / Math.max(layout.scale, 0.0001)),
+				"caption",
+			),
 		},
 		error: {
 			x: progressRect.x,
 			y: errorY,
 			width: progressRect.width,
-			fontSize: AUDIO_PLAYER_DESIGN.errorFontSize * controlScale,
+			fontSize: layout.design.minType(
+				layout.design.type.caption * (controlScale / Math.max(layout.scale, 0.0001)),
+				"caption",
+			),
 		},
 		operations: {
 			x: (layout.width - operationsWidth) / 2,
@@ -205,13 +209,13 @@ export function resolveAudioStatusPlaceholderLayout(
 	height: number,
 	options?: { showSpinner?: boolean },
 ): AudioStatusPlaceholderLayout {
-	const playerLayout = resolveAudioPlayerLayout(width, height)
-	const scale = playerLayout.rootScale
+	const layout = resolveResponsiveElementLayout({ width, height }, AUDIO_LAYOUT_SPEC)
+	const scale = layout.scale
 	const showSpinner = options?.showSpinner ?? true
 	const radius = AUDIO_PLAYER_DESIGN.statusSpinnerRadius * scale
 	const strokeWidth = AUDIO_PLAYER_DESIGN.statusSpinnerStrokeWidth * scale
 	const gap = AUDIO_PLAYER_DESIGN.statusSpinnerToTextGap * scale
-	const fontSize = AUDIO_PLAYER_DESIGN.statusTextFontSize * scale
+	const fontSize = layout.design.type.display
 	const lineHeight = AUDIO_PLAYER_DESIGN.statusTextLineHeight
 	const textHeight = fontSize * lineHeight
 	const contentHeight = showSpinner ? radius * 2 + gap + textHeight : textHeight

@@ -373,6 +373,7 @@ export class ElementFactory {
 }
 
 function normalizeStoryboardData(data: StoryboardElementData): StoryboardElementData {
+	// 镜头字段归一化；宽高由 StoryboardElement 构造时升到当前默认尺寸。
 	return {
 		...data,
 		contents: data.contents.map((content) => ({

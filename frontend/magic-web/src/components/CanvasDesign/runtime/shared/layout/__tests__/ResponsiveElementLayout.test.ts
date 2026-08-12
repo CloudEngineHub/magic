@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ELEMENT_DESIGN_TOKENS } from "../ElementDesignTokens"
 import { resolveResponsiveElementLayout } from "../ResponsiveElementLayout"
 
 const SPEC = {
@@ -21,6 +22,27 @@ describe("ResponsiveElementLayout", () => {
 		expect(layout.rem(4)).toBe(64)
 		expect(layout.designPx(224)).toBe(224)
 		expect(layout.mode).toBe("regular")
+	})
+
+	it("exposes shared design tokens scaled with the element", () => {
+		const layout = resolveResponsiveElementLayout({ width: 1280, height: 720 }, SPEC)
+
+		expect(layout.design.pad.sectionInline).toBe(ELEMENT_DESIGN_TOKENS.pad.sectionInline)
+		expect(layout.design.gap.content).toBe(ELEMENT_DESIGN_TOKENS.gap.content)
+		expect(layout.design.type).toEqual(ELEMENT_DESIGN_TOKENS.type)
+		expect(layout.design.space.lg).toBe(24)
+		expect(layout.design.minType(10, "caption")).toBe(28)
+		expect(layout.design.minType(32, "caption")).toBe(32)
+		expect(layout.design.minType(10, "display")).toBe(48)
+	})
+
+	it("scales shared design tokens with the element root scale", () => {
+		const layout = resolveResponsiveElementLayout({ width: 640, height: 720 }, SPEC)
+
+		expect(layout.design.type.title).toBeCloseTo(ELEMENT_DESIGN_TOKENS.type.title * layout.scale)
+		expect(layout.design.pad.sectionInline).toBeCloseTo(
+			ELEMENT_DESIGN_TOKENS.pad.sectionInline * layout.scale,
+		)
 	})
 
 	it("uses one weighted scale so width-only changes cannot deform controls", () => {

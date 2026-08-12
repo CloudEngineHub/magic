@@ -25,8 +25,17 @@ describe("resolveStoryboardElementLayout", () => {
 
 		expect(layout.mode).toBe("regular")
 		expect(layout.rootScale).toBe(1)
-		expect(layout.valueFontSize).toBe(STORYBOARD_LAYOUT_DESIGN.valueFontSize)
+		expect(layout.padding).toBe(32)
+		expect(layout.valueFontSize).toBe(28)
+		expect(layout.titleFontSize).toBe(28)
+		expect(layout.labelFontSize).toBe(28)
+		expect(layout.shotFontSize).toBe(28)
+		expect(layout.shotSmallFontSize).toBe(28)
 		expect(layout.parameterRows.stacked).toBe(false)
+		expect(
+			layout.parameterRows.aspectRatio.rect.y -
+				(layout.parameterRows.model.rect.y + layout.parameterRows.model.rect.height),
+		).toBeCloseTo(16)
 		expect(layout.visibleShotCount).toBe(1)
 		expect(shot?.rect.width).toBe(layout.shotListRect.width)
 		expect(shot?.rect.height).toBe(layout.shotMinimumHeight)
@@ -51,6 +60,30 @@ describe("resolveStoryboardElementLayout", () => {
 
 		expect(twoShots.shotLayouts[0]?.rect.height).toBe(fourShots.shotLayouts[0]?.rect.height)
 		expect(twoShots.shotLayouts[1]?.rect.height).toBe(fourShots.shotLayouts[1]?.rect.height)
+	})
+
+	it("keeps full design gaps in condensed mode and only densifies type/controls", () => {
+		const regular = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+		)
+		const condensed = resolveStoryboardElementLayout(320, STORYBOARD_CONFIG.DEFAULT_HEIGHT, 1)
+		const regularTitleGap =
+			regular.shotListRect.y - (regular.titleRect.y + regular.titleRect.height)
+		const condensedTitleGap =
+			condensed.shotListRect.y - (condensed.titleRect.y + condensed.titleRect.height)
+
+		expect(condensed.mode).toBe("condensed")
+		expect(condensedTitleGap / condensed.rootScale).toBeCloseTo(
+			regularTitleGap / regular.rootScale,
+		)
+		expect(condensed.titleFontSize / condensed.rootScale).toBeLessThan(
+			regular.titleFontSize / regular.rootScale,
+		)
+		expect(condensed.parameterRows.model.rect.height / condensed.rootScale).toBeLessThan(
+			regular.parameterRows.model.rect.height / regular.rootScale,
+		)
 	})
 
 	it("switches a narrow element to condensed stacked settings without horizontal overflow", () => {
@@ -109,8 +142,8 @@ describe("resolveStoryboardElementLayout", () => {
 	})
 
 	it("derives geometry only from logical element dimensions", () => {
-		const first = resolveStoryboardElementLayout(960, 1360, 4)
-		const afterViewportZoom = resolveStoryboardElementLayout(960, 1360, 4)
+		const first = resolveStoryboardElementLayout(1440, 2040, 4)
+		const afterViewportZoom = resolveStoryboardElementLayout(1440, 2040, 4)
 
 		expect(afterViewportZoom).toEqual(first)
 	})

@@ -181,12 +181,15 @@ function createAudioElementHarness(options?: {
 			id: "audio-1",
 			x: 0,
 			y: 0,
-			width: options?.width,
 			src,
 			name: options?.name,
 		}),
 		canvas,
 	)
+	// 构造会归一化到最新默认尺寸；会话内自定义宽度在构造后再写入。
+	if (options?.width !== undefined) {
+		element.update({ ...element.getData(), width: options.width })
+	}
 
 	return {
 		element,
@@ -303,7 +306,7 @@ describe("AudioElement", () => {
 		})
 	})
 
-	it("normalizes legacy audio dimensions without overwriting a custom width", () => {
+	it("forces latest default dimensions when opening persisted audio", () => {
 		const canvas = {
 			audioPlaybackManager: {
 				getSnapshot: vi.fn(() => ({
@@ -333,14 +336,28 @@ describe("AudioElement", () => {
 			},
 			canvas,
 		)
-		const legacyCustomWidth = new AudioElement(
+		const previousDefault = new AudioElement(
+			{
+				id: "audio-previous",
+				type: ElementTypeEnum.Audio,
+				x: 0,
+				y: 0,
+				width: 1920,
+				height: 1080,
+				activeContentId: "audio-previous-content",
+				mainContentId: "audio-previous-content",
+				contents: [{ contentId: "audio-previous-content" }],
+			},
+			canvas,
+		)
+		const customPersisted = new AudioElement(
 			{
 				id: "audio-custom",
 				type: ElementTypeEnum.Audio,
 				x: 0,
 				y: 0,
 				width: 640,
-				height: 120,
+				height: 720,
 				activeContentId: "audio-custom-content",
 				mainContentId: "audio-custom-content",
 				contents: [{ contentId: "audio-custom-content" }],
@@ -349,7 +366,11 @@ describe("AudioElement", () => {
 		)
 
 		expect(legacyDefault.getData()).toMatchObject({ width: 1280, height: 720 })
-		expect(legacyCustomWidth.getData()).toMatchObject({ width: 640, height: 720 })
+		expect(previousDefault.getData()).toMatchObject({ width: 1280, height: 720 })
+		expect(customPersisted.getData()).toMatchObject({ width: 1280, height: 720 })
+
+		customPersisted.update({ ...customPersisted.getData(), width: 640 })
+		expect(customPersisted.getData()).toMatchObject({ width: 640, height: 720 })
 	})
 
 	it("renders a sharp-cornered card without a fullscreen button", () => {

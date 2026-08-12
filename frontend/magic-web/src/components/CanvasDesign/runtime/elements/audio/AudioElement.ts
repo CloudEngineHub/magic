@@ -116,14 +116,26 @@ function formatTime(seconds: number): string {
 	return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
 
-function normalizeLegacyAudioDimensions(data: AudioElementData): AudioElementData {
-	if (data.height !== AUDIO_CONFIG.LEGACY_DEFAULT_HEIGHT) return data
+/** 打开 / 构造时始终使用当前默认尺寸，忽略旧 DSL 持久化宽高。 */
+function normalizeAudioDimensionsOnLoad(data: AudioElementData): AudioElementData {
 	return {
 		...data,
-		width:
-			data.width === AUDIO_CONFIG.LEGACY_DEFAULT_WIDTH
-				? AUDIO_CONFIG.DEFAULT_WIDTH
-				: data.width,
+		width: AUDIO_CONFIG.DEFAULT_WIDTH,
+		height: AUDIO_CONFIG.DEFAULT_HEIGHT,
+	}
+}
+
+/**
+ * 会话内更新：高度始终固定为默认；宽度保留用户拖拽结果。
+ * 若宿主再次推入已知旧默认宽，则一并升级。
+ */
+function normalizeAudioDimensionsOnUpdate(data: AudioElementData): AudioElementData {
+	const isStaleDefaultWidth =
+		data.width === AUDIO_CONFIG.LEGACY_DEFAULT_WIDTH ||
+		data.width === AUDIO_CONFIG.PREVIOUS_DEFAULT_WIDTH
+	return {
+		...data,
+		width: isStaleDefaultWidth ? AUDIO_CONFIG.DEFAULT_WIDTH : data.width,
 		height: AUDIO_CONFIG.DEFAULT_HEIGHT,
 	}
 }
@@ -202,7 +214,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private statusSpinnerAnimation?: Konva.Animation
 
 	constructor(data: AudioElementData, canvas: Canvas) {
-		const normalizedData = normalizeLegacyAudioDimensions(data)
+		const normalizedData = normalizeAudioDimensionsOnLoad(data)
 		super(normalizedData, canvas)
 		this.playbackSnapshot = canvas.audioPlaybackManager.getSnapshot(normalizedData.id)
 		this.playbackUnsubscribe = canvas.audioPlaybackManager.subscribe(
@@ -523,7 +535,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	}
 
 	public update(newData: AudioElementData): boolean {
-		const normalizedData = normalizeLegacyAudioDimensions(newData)
+		const normalizedData = normalizeAudioDimensionsOnUpdate(newData)
 		const previousData = this.data
 		const previousContent = this.getAudioContent()
 		this.data = normalizedData

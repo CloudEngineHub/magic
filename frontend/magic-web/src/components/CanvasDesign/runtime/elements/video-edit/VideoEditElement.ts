@@ -1,4 +1,5 @@
 import Konva from "konva"
+import type { Canvas } from "../../core/Canvas"
 import { getDownstreamContent, updateContent } from "../../document/elementContent"
 import {
 	ElementTypeEnum,
@@ -36,6 +37,17 @@ import {
 	type VideoEditElementLayout,
 	type VideoEditFooterParameterLayout,
 } from "./VideoEditElement.layout"
+
+/** 打开 / 更新时始终使用当前默认尺寸，忽略旧 DSL 持久化宽高。 */
+function normalizeVideoEditDisplayDimensions(
+	data: VideoEditElementData,
+): VideoEditElementData {
+	return {
+		...data,
+		width: VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
+		height: VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT,
+	}
+}
 
 interface VideoEditControlMetadata {
 	action: VideoEditControlAction
@@ -300,6 +312,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
 
+	constructor(data: VideoEditElementData, canvas: Canvas) {
+		super(normalizeVideoEditDisplayDimensions(data), canvas)
+	}
+
 	public static getDefaultConfig() {
 		return {
 			width: VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
@@ -347,11 +363,20 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		return this.getText("videoEditNode.defaultName", "视频编辑")
 	}
 
+	private resolveElementLayout(width: number, height: number): VideoEditElementLayout {
+		return resolveVideoEditElementLayout(width, height, {
+			sectionTitles: [
+				this.getText("videoEditNode.usedVideos", "使用视频"),
+				this.getText("videoEditNode.usedAudio", "使用音频"),
+			],
+		})
+	}
+
 	public render(): Konva.Group {
 		const content = this.getActiveContent<VideoEditElementContent>()
 		const width = Math.max(this.data.width ?? VIDEO_EDIT_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT, 1)
-		const layout = resolveVideoEditElementLayout(width, height)
+		const layout = this.resolveElementLayout(width, height)
 		const group = new Konva.Group({
 			width,
 			height,
@@ -384,21 +409,22 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const previousData = this.data
 		const previousContent = this.getActiveContent<VideoEditElementContent>()
 		const previousAudioElementId = previousContent?.audioSequence[0]
-		this.data = newData
+		const normalizedData = normalizeVideoEditDisplayDimensions(newData)
+		this.data = normalizedData
 		const nextContent = this.getActiveContent<VideoEditElementContent>()
 		const nextAudioElementId = nextContent?.audioSequence[0]
 		if (previousAudioElementId !== nextAudioElementId) this.bindAudioRuntime()
 
 		const needsRerender =
-			previousData.width !== newData.width ||
-			previousData.height !== newData.height ||
+			previousData.width !== normalizedData.width ||
+			previousData.height !== normalizedData.height ||
 			previousContent?.videoSequence !== nextContent?.videoSequence ||
 			previousContent?.audioSequence !== nextContent?.audioSequence ||
 			previousContent?.output !== nextContent?.output
 		if (previousContent?.videoSequence !== nextContent?.videoSequence) this.loadVideoPreviews()
 
 		if (!needsRerender && this.node) {
-			this.updateBaseProps(this.node, newData)
+			this.updateBaseProps(this.node, normalizedData)
 		}
 		return needsRerender
 	}
@@ -605,6 +631,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			new Konva.Text({
 				...layout.videoTitle,
 				text: this.getText("videoEditNode.usedVideos", "使用视频"),
+				wrap: "none",
+				ellipsis: true,
 				fontSize: layout.fonts.title,
 				fontStyle: "500",
 				fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
@@ -1060,11 +1088,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				listening: false,
 			}),
 		)
-		const radius = Math.max(1, layout.scale)
+		const radius = Math.max(1.5, size * 0.08)
 		const centerX = size / 2
 		const centerY = size / 2
-		const gapX = size * 0.19
-		const gapY = size * 0.2
+		const gapX = size * 0.2
+		const gapY = size * 0.24
 		for (const offsetX of [-gapX, gapX]) {
 			for (const offsetY of [-gapY, 0, gapY]) {
 				grip.add(
@@ -1119,6 +1147,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			new Konva.Text({
 				...layout.audioTitle,
 				text: this.getText("videoEditNode.usedAudio", "使用音频"),
+				wrap: "none",
+				ellipsis: true,
 				fontSize: layout.fonts.title,
 				fontStyle: "500",
 				fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
@@ -1500,6 +1530,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
 					fontSize: row.labelFontSize,
 					fill: VIDEO_EDIT_CONFIG.SECONDARY_TEXT,
+					wrap: "none",
+					ellipsis: true,
 					listening: false,
 					perfectDrawEnabled: false,
 					name: "video-edit-control-label",
@@ -2118,7 +2150,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!(this.node instanceof Konva.Group)) return
 		const width = Math.max(this.node.width(), 1)
 		const height = Math.max(this.node.height(), 1)
-		const layout = resolveVideoEditElementLayout(width, height)
+		const layout = this.resolveElementLayout(width, height)
 		const displayedProgress =
 			this.pendingScrubProgress ?? resolvePlaybackProgress(this.playbackSnapshot)
 		const audioProgressRow = resolveAudioProgressRowLayout(

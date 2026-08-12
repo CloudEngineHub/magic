@@ -1,4 +1,5 @@
 import Konva from "konva"
+import type { Canvas } from "../../core/Canvas"
 import {
 	ElementTypeEnum,
 	type LayerElement,
@@ -11,6 +12,7 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type {
 	StoryboardControlAction,
 	StoryboardControlState,
+	StoryboardEditorPresentation,
 	StoryboardSelectPresentation,
 } from "../../interaction/storyboard/StoryboardInteractionManager"
 import { generateUUID } from "../../shared/ids"
@@ -38,7 +40,39 @@ interface StoryboardControlMetadata {
 	visualNode: Konva.Group
 	overlayAnchorNode?: Konva.Node
 	selectPresentation?: StoryboardSelectPresentation
+	editorPresentation?: StoryboardEditorPresentation
 	baseBounds: { x: number; y: number; width: number; height: number }
+}
+
+interface StoryboardRectBounds {
+	x?: number
+	y?: number
+	width: number
+	height: number
+}
+
+/**
+ * Konva stroke 沿路径居中；在 clip 边界上外半圈会被裁掉。
+ * 描边 rect 内缩半线宽，保证四边线宽一致且完整可见。
+ */
+function createInsetStrokeRect(
+	bounds: StoryboardRectBounds,
+	strokeWidth: number,
+	attrs: Konva.RectConfig,
+): Konva.Rect {
+	const x = bounds.x ?? 0
+	const y = bounds.y ?? 0
+	return new Konva.Rect({
+		...attrs,
+		x: x + strokeWidth / 2,
+		y: y + strokeWidth / 2,
+		width: Math.max(0, bounds.width - strokeWidth),
+		height: Math.max(0, bounds.height - strokeWidth),
+		fillEnabled: false,
+		strokeWidth,
+		listening: false,
+		perfectDrawEnabled: false,
+	})
 }
 
 type CreatedStoryboardElementData = StoryboardElementData
@@ -76,6 +110,21 @@ function resolveAspectRatio(config?: StoryboardGenerationConfig): string {
 	return `${width / divisor}:${height / divisor}`
 }
 
+/** 打开 / 更新时使用当前默认宽度，高度至少容纳全部镜头。 */
+function normalizeStoryboardDisplayDimensions(
+	data: StoryboardElementData,
+): StoryboardElementData {
+	const content = getActiveContent<StoryboardElementContent>(data)
+	const shotCount = content?.shots?.length ?? 0
+	const width = STORYBOARD_CONFIG.DEFAULT_WIDTH
+	const requiredHeight = resolveStoryboardRequiredHeight(width, shotCount)
+	return {
+		...data,
+		width,
+		height: Math.max(STORYBOARD_CONFIG.DEFAULT_HEIGHT, requiredHeight),
+	}
+}
+
 /**
  * 分镜函数节点。
  *
@@ -85,6 +134,11 @@ function resolveAspectRatio(config?: StoryboardGenerationConfig): string {
 export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
+
+	constructor(data: StoryboardElementData, canvas: Canvas) {
+		super(normalizeStoryboardDisplayDimensions(data), canvas)
+	}
+
 	public static getDefaultConfig() {
 		return {
 			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
@@ -151,17 +205,25 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			clipFunc: (context) => context.rect(0, 0, width, height),
 		})
 		RenderUtils.createHitNode(group, width, height)
+		const frameStrokeWidth = Math.max(1, layout.scale)
+		// 填充占满逻辑框；描边内缩，避免 clipFunc 裁掉外半圈导致边粗细不一。
 		group.add(
 			new Konva.Rect({
 				width,
 				height,
 				fill: STORYBOARD_CONFIG.BACKGROUND,
-				stroke: STORYBOARD_CONFIG.BORDER,
-				strokeWidth: Math.max(1, 1.5 * layout.scale),
 				listening: false,
 				perfectDrawEnabled: false,
 				name: "storyboard-background",
 			}),
+			createInsetStrokeRect(
+				{ width, height },
+				frameStrokeWidth,
+				{
+					stroke: STORYBOARD_CONFIG.BORDER,
+					name: "storyboard-background-border",
+				},
+			),
 		)
 
 		this.renderParameters(group, layout)
@@ -174,17 +236,18 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 
 	public update(newData: StoryboardElementData): boolean {
 		const previousData = this.data
-		this.data = newData
+		const normalizedData = normalizeStoryboardDisplayDimensions(newData)
+		this.data = normalizedData
 		const previousContent = getActiveContent<StoryboardElementContent>(previousData)
 		const nextContent = this.getActiveContent<StoryboardElementContent>()
 		const needsRerender =
-			previousData.width !== newData.width ||
-			previousData.height !== newData.height ||
+			previousData.width !== normalizedData.width ||
+			previousData.height !== normalizedData.height ||
 			previousContent?.generationConfig !== nextContent?.generationConfig ||
 			previousContent?.shots !== nextContent?.shots
 
 		if (!needsRerender && this.node) {
-			this.updateBaseProps(this.node, newData)
+			this.updateBaseProps(this.node, normalizedData)
 		}
 		return needsRerender
 	}
@@ -210,6 +273,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 						node: candidate,
 						overlayAnchorNode: metadata.overlayAnchorNode,
 						selectPresentation: metadata.selectPresentation,
+						editorPresentation: metadata.editorPresentation,
 						action: metadata.action,
 						applyState: (state) => this.applyControlState(metadata, state),
 					}),
@@ -300,21 +364,6 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			action: { type: "select-resolution" },
 		})
 
-		settingsGroup.add(
-			new Konva.Line({
-				points: [
-					layout.contentRect.x,
-					layout.dividerY,
-					layout.contentRect.x + layout.contentRect.width,
-					layout.dividerY,
-				],
-				stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
-				strokeWidth: Math.max(1, layout.scale),
-				listening: false,
-				perfectDrawEnabled: false,
-			}),
-		)
-
 		if (!layout.showShotListTitle) return
 		settingsGroup.add(
 			new Konva.Text({
@@ -322,7 +371,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				text: this.getText("storyboard.shotList", "分镜列表"),
 				fontFamily: layout.fontFamily,
 				fontSize: layout.titleFontSize,
-				fontStyle: "bold",
+				fontStyle: "500",
 				fill: STORYBOARD_CONFIG.PRIMARY_TEXT,
 				listening: false,
 				perfectDrawEnabled: false,
@@ -361,6 +410,8 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 					fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
 					fontSize: row.labelFontSize,
 					fill: STORYBOARD_CONFIG.SECONDARY_TEXT,
+					wrap: "none",
+					ellipsis: true,
 					listening: false,
 					perfectDrawEnabled: false,
 					name: "storyboard-control-label",
@@ -463,16 +514,18 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		group.add(shotListGroup)
 		const shots = this.getActiveContent<StoryboardElementContent>()?.shots ?? []
 		if (shots.length === 0) {
+			const emptyStrokeWidth = Math.max(1, layout.scale)
 			shotListGroup.add(
 				new Konva.Rect({
 					...layout.shotListRect,
 					fill: STORYBOARD_CONFIG.SURFACE,
-					stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
-					strokeWidth: Math.max(1, layout.scale),
-					dash: [8 * layout.scale, 8 * layout.scale],
-					cornerRadius: STORYBOARD_CONFIG.SHOT_RADIUS * layout.scale,
 					listening: false,
 					perfectDrawEnabled: false,
+				}),
+				createInsetStrokeRect(layout.shotListRect, emptyStrokeWidth, {
+					stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
+					dash: [8 * layout.scale, 8 * layout.scale],
+					cornerRadius: STORYBOARD_CONFIG.SHOT_RADIUS * layout.scale,
 				}),
 				new Konva.Text({
 					...layout.shotListRect,
@@ -523,11 +576,12 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			new Konva.Rect({
 				...rect,
 				fill: STORYBOARD_CONFIG.SURFACE,
-				stroke: STORYBOARD_CONFIG.BORDER,
-				strokeWidth: layout.strokeWidth,
-				cornerRadius: layout.cornerRadius,
 				listening: false,
 				perfectDrawEnabled: false,
+			}),
+			createInsetStrokeRect(rect, layout.strokeWidth, {
+				stroke: STORYBOARD_CONFIG.BORDER,
+				cornerRadius: layout.cornerRadius,
 				name: `storyboard-shot-${shot.id}`,
 			}),
 		)
@@ -536,14 +590,26 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			"{{index}}",
 			String(index + 1),
 		)
+		const titleTextWidth = Math.min(
+			titleRect.width,
+			Math.ceil(
+				new Konva.Text({
+					text: shotLabel,
+					fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
+					fontSize: Math.min(titleRect.height, layout.fontSize),
+					fontStyle: "500",
+				}).width(),
+			),
+		)
 		group.add(
 			new Konva.Text({
 				...titleRect,
+				width: titleTextWidth,
 				text: shotLabel,
 				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: Math.min(layout.titleRect.height, 20 * controls.scale),
-				fontStyle: "bold",
-				fill: STORYBOARD_CONFIG.ACCENT,
+				fontSize: Math.min(layout.titleRect.height, layout.fontSize),
+				fontStyle: "500",
+				fill: STORYBOARD_CONFIG.PRIMARY_TEXT,
 				listening: false,
 				perfectDrawEnabled: false,
 			}),
@@ -551,15 +617,19 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 
 		const generated = this.hasConnectedOutputImage(shot)
 		if (statusRect.width > 0) {
+			const statusRight = statusRect.x + statusRect.width
+			const statusX = titleRect.x + titleTextWidth + layout.headingGap
 			group.add(
 				new Konva.Text({
 					...statusRect,
+					x: statusX,
+					width: Math.max(0, statusRight - statusX),
 					text: generated
 						? this.getText("storyboard.generated", "已生成")
 						: this.getText("storyboard.notGenerated", "未生成"),
 					fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-					fontSize: Math.min(statusRect.height, 16 * controls.scale),
-					fill: generated ? STORYBOARD_CONFIG.ACCENT : STORYBOARD_CONFIG.SECONDARY_TEXT,
+					fontSize: Math.min(statusRect.height, layout.smallFontSize),
+					fill: generated ? STORYBOARD_CONFIG.SUCCESS : STORYBOARD_CONFIG.SECONDARY_TEXT,
 					listening: false,
 					perfectDrawEnabled: false,
 				}),
@@ -570,7 +640,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const generateText = generated
 			? this.getText("storyboard.regenerate", "再次生成")
 			: this.getText("storyboard.generate", "生成")
-		const generateFontSize = 16 * controls.scale
+		const generateFontSize = Math.min(layout.smallFontSize, controls.generateRect.height)
 		const generateTextNode = new Konva.Text({
 			x: controls.generateRect.x,
 			y: controls.generateRect.y,
@@ -580,7 +650,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
 			fontSize: generateFontSize,
 			fontStyle: "bold",
-			fill: STORYBOARD_CONFIG.DISABLED_TEXT,
+			fill: "#FFFFFF",
 			listening: false,
 			perfectDrawEnabled: false,
 			name: "storyboard-control-text",
@@ -588,7 +658,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		generateVisual.add(
 			new Konva.Rect({
 				...controls.generateRect,
-				fill: STORYBOARD_CONFIG.DISABLED_BACKGROUND,
+				fill: STORYBOARD_CONFIG.ACCENT,
 				cornerRadius: 8 * controls.scale,
 				listening: false,
 				perfectDrawEnabled: false,
@@ -613,7 +683,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 					data: LUCIDE_ROTATE_CCW_PATH_D,
 					scaleX: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
 					scaleY: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
-					stroke: STORYBOARD_CONFIG.DISABLED_TEXT,
+					stroke: "#FFFFFF",
 					strokeWidth: 2,
 					lineCap: "round",
 					lineJoin: "round",
@@ -643,11 +713,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const deleteCenterY = controls.deleteRect.y + controls.deleteRect.height / 2
 		const closeHalfSize = 5 * controls.scale
 		deleteVisual.add(
-			new Konva.Circle({
-				x: deleteCenterX,
-				y: deleteCenterY,
-				radius: controls.deleteRect.width / 2,
-				fill: STORYBOARD_CONFIG.SECONDARY_TEXT,
+			new Konva.Rect({
+				...controls.deleteRect,
+				fill: "rgba(255, 255, 255, 0)",
+				cornerRadius: 8 * controls.scale,
 				listening: false,
 				perfectDrawEnabled: false,
 				name: "storyboard-control-background",
@@ -659,7 +728,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 					deleteCenterX + closeHalfSize,
 					deleteCenterY + closeHalfSize,
 				],
-				stroke: STORYBOARD_CONFIG.BACKGROUND,
+				stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
 				strokeWidth: Math.max(1.5, 1.8 * controls.scale),
 				lineCap: "round",
 				listening: false,
@@ -673,7 +742,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 					deleteCenterX - closeHalfSize,
 					deleteCenterY + closeHalfSize,
 				],
-				stroke: STORYBOARD_CONFIG.BACKGROUND,
+				stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
 				strokeWidth: Math.max(1.5, 1.8 * controls.scale),
 				lineCap: "round",
 				listening: false,
@@ -690,25 +759,31 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		})
 
 		const descriptionVisual = new Konva.Group({ listening: false })
+		const descriptionCornerRadius = 9 * controls.scale
 		const descriptionBackground = new Konva.Rect({
 			...descriptionRect,
 			fill: STORYBOARD_CONFIG.BACKGROUND,
-			stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
-			strokeWidth: layout.strokeWidth,
-			cornerRadius: 9 * controls.scale,
+			cornerRadius: descriptionCornerRadius,
 			listening: false,
 			perfectDrawEnabled: false,
 			name: "storyboard-control-background",
 		})
+		const descriptionBorder = createInsetStrokeRect(descriptionRect, layout.strokeWidth, {
+			// 常态保留细圆角描边，聚焦时切到 accent，与 overlay textarea 一致。
+			stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
+			cornerRadius: descriptionCornerRadius,
+			name: "storyboard-control-border",
+		})
 		descriptionVisual.add(
 			descriptionBackground,
+			descriptionBorder,
 			new Konva.Text({
 				...descriptionTextRect,
 				text:
 					shot.description ||
 					this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述"),
 				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: 16 * controls.scale,
+				fontSize: layout.smallFontSize,
 				lineHeight: 1.45,
 				fill: shot.description
 					? STORYBOARD_CONFIG.PRIMARY_TEXT
@@ -726,6 +801,11 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			kind: "description",
 			visualNode: descriptionVisual,
 			overlayAnchorNode: descriptionBackground,
+			editorPresentation: {
+				fontSize: layout.smallFontSize,
+				paddingX: Math.max(0, descriptionTextRect.x - descriptionRect.x),
+				paddingY: Math.max(0, descriptionTextRect.y - descriptionRect.y),
+			},
 			baseBounds: descriptionRect,
 		})
 	}
@@ -745,13 +825,15 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			new Konva.Rect({
 				...footer.addShotRect,
 				fill: STORYBOARD_CONFIG.BACKGROUND,
-				stroke: STORYBOARD_CONFIG.BORDER,
-				strokeWidth: footer.strokeWidth,
-				dash: [7 * layout.scale, 7 * layout.scale],
-				cornerRadius: 10 * layout.scale,
 				listening: false,
 				perfectDrawEnabled: false,
 				name: "storyboard-control-background",
+			}),
+			createInsetStrokeRect(footer.addShotRect, footer.strokeWidth, {
+				stroke: STORYBOARD_CONFIG.BORDER,
+				dash: [7 * layout.scale, 7 * layout.scale],
+				cornerRadius: 10 * layout.scale,
+				name: "storyboard-control-border",
 			}),
 			new Konva.Text({
 				...footer.addShotRect,
@@ -775,20 +857,6 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			baseBounds: footer.addShotRect,
 		})
 
-		footerGroup.add(
-			new Konva.Line({
-				points: [
-					footer.rect.x,
-					footer.separatorY,
-					footer.rect.x + footer.rect.width,
-					footer.separatorY,
-				],
-				stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
-				strokeWidth: footer.strokeWidth,
-				listening: false,
-				perfectDrawEnabled: false,
-			}),
-		)
 		// TODO: 接入图片生成积分计算接口后，在这里注入批量生成的实际 points。
 		// 当前没有可靠的计费接口，不能用分镜数量或其他字段伪造积分，因此暂不渲染。
 		const pointsCost: number | null = null
@@ -833,7 +901,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				align: "center",
 				verticalAlign: "middle",
 				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: 20 * footer.generateAllScale,
+				fontSize: layout.shotSmallFontSize * footer.generateAllScale,
 				fontStyle: "bold",
 				fill: "#FFFFFF",
 				listening: false,
@@ -895,10 +963,13 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	): void {
 		const background = metadata.visualNode.findOne(".storyboard-control-background") as
 			Konva.Shape | undefined
+		const border = metadata.visualNode.findOne(".storyboard-control-border") as
+			Konva.Shape | undefined
 		const text = metadata.visualNode.findOne(".storyboard-control-text") as
 			Konva.Text | undefined
 		const suffix = metadata.visualNode.findOne(".storyboard-control-suffix") as
 			Konva.Shape | undefined
+		const icons = metadata.visualNode.find(".storyboard-control-icon")
 		const generateAgainIcon = metadata.visualNode.findOne(".storyboard-generate-again-icon") as
 			Konva.Path | undefined
 		if (!background) return
@@ -937,7 +1008,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 							? STORYBOARD_CONFIG.SURFACE_STRONG
 							: STORYBOARD_CONFIG.BACKGROUND,
 				)
-				background.stroke(
+				border?.stroke(
 					state === "hover" || state === "pressed" || state === "editing"
 						? STORYBOARD_CONFIG.ACCENT
 						: STORYBOARD_CONFIG.BORDER_SUBTLE,
@@ -949,8 +1020,17 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 						? STORYBOARD_CONFIG.DANGER_PRESSED
 						: state === "hover"
 							? STORYBOARD_CONFIG.DANGER_HOVER
-							: STORYBOARD_CONFIG.SECONDARY_TEXT,
+							: "rgba(255, 255, 255, 0)",
 				)
+				icons.forEach((icon) => {
+					if (icon instanceof Konva.Line) {
+						icon.stroke(
+							state === "hover" || state === "pressed"
+								? STORYBOARD_CONFIG.DANGER
+								: STORYBOARD_CONFIG.SECONDARY_TEXT,
+						)
+					}
+				})
 				break
 			case "add":
 				background.fill(
@@ -960,7 +1040,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 							? STORYBOARD_CONFIG.SURFACE_STRONG
 							: STORYBOARD_CONFIG.BACKGROUND,
 				)
-				background.stroke(
+				border?.stroke(
 					state === "hover" || state === "pressed"
 						? STORYBOARD_CONFIG.ACCENT
 						: STORYBOARD_CONFIG.BORDER,
@@ -983,7 +1063,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				}
 				background.fill(
 					state === "pressed"
-						? STORYBOARD_CONFIG.DANGER_PRESSED
+						? STORYBOARD_CONFIG.ACCENT_PRESSED
 						: state === "hover"
 							? STORYBOARD_CONFIG.ACCENT
 							: STORYBOARD_CONFIG.ACCENT,

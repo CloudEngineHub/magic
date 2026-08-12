@@ -4,7 +4,6 @@ import { exportCanvasDocument } from "../../../document/exportDocument"
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
 import { ElementFactory } from "../../core/ElementFactory"
-import { AUDIO_CONFIG } from "../../audio/AudioElement.config"
 import { VIDEO_EDIT_CONFIG } from "../VideoEditElement.config"
 import { VideoEditElement } from "../VideoEditElement"
 
@@ -101,9 +100,9 @@ describe("VideoEditElement", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("uses the audio card dimensions and square corners", () => {
-		expect(VIDEO_EDIT_CONFIG.DEFAULT_WIDTH).toBe(AUDIO_CONFIG.DEFAULT_WIDTH)
-		expect(VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT).toBe(AUDIO_CONFIG.DEFAULT_HEIGHT)
+	it("uses independent enlarged card dimensions and square corners", () => {
+		expect(VIDEO_EDIT_CONFIG.DEFAULT_WIDTH).toBe(1920)
+		expect(VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT).toBe(1080)
 		expect(VIDEO_EDIT_CONFIG.CORNER_RADIUS).toBe(0)
 	})
 

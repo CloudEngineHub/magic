@@ -54,11 +54,19 @@ export interface StoryboardSelectPresentation {
 	modelIconGap?: number
 }
 
+/** 描述等文本字段的 DOM overlay 排版，需与 Konva 常态渲染一致。 */
+export interface StoryboardEditorPresentation {
+	fontSize: number
+	paddingX: number
+	paddingY: number
+}
+
 export interface StoryboardControlBindingOptions {
 	elementId: string
 	node: Konva.Rect
 	overlayAnchorNode?: Konva.Node
 	selectPresentation?: StoryboardSelectPresentation
+	editorPresentation?: StoryboardEditorPresentation
 	action: StoryboardControlAction
 	applyState: (state: StoryboardControlState) => void
 }
@@ -515,14 +523,24 @@ export class StoryboardInteractionManager {
 		if (!element || !shot || !anchorNode) return
 
 		this.beginEditing(binding)
+		const cornerRadiusGetter = (
+			anchorNode as Konva.Node & { cornerRadius?: () => number | number[] }
+		).cornerRadius
+		const rawCornerRadius =
+			typeof cornerRadiusGetter === "function" ? cornerRadiusGetter.call(anchorNode) : Number.NaN
+		const anchorCornerRadius = Array.isArray(rawCornerRadius)
+			? Number(rawCornerRadius[0])
+			: Number(rawCornerRadius)
 		this.overlayHost.mount({
 			kind: "textarea",
 			anchorNode,
 			ariaLabel: this.getText("storyboard.description", "分镜画面描述"),
 			value: shot.description,
 			placeholder: this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述"),
-			fontSize: 15,
-			borderRadius: 9,
+			fontSize: binding.editorPresentation?.fontSize ?? 28,
+			paddingX: binding.editorPresentation?.paddingX,
+			paddingY: binding.editorPresentation?.paddingY,
+			borderRadius: Number.isFinite(anchorCornerRadius) ? anchorCornerRadius : 9,
 			onInput: (value) => this.updateDescriptionDraft(element.id, shotId, value),
 			onCommit: (value) => {
 				this.finishEditing(binding)

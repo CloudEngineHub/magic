@@ -52,6 +52,9 @@ export type StoryboardFieldOverlayMountOptions = {
 	| {
 			kind: "textarea"
 			placeholder?: string
+			/** 与 Konva descriptionTextRect 内边距对齐；缺省回退旧值。 */
+			paddingX?: number
+			paddingY?: number
 			onInput?: (value: string) => void
 	  }
 	| {
@@ -220,7 +223,13 @@ export class StoryboardFieldOverlayHost {
 		control.style.height = "100%"
 		control.style.boxSizing = "border-box"
 		control.style.margin = "0"
-		control.style.padding = options.kind === "textarea" ? "10px 12px" : "0 12px"
+		if (options.kind === "textarea") {
+			const paddingX = Math.max(0, options.paddingX ?? 12)
+			const paddingY = Math.max(0, options.paddingY ?? 10)
+			control.style.padding = `${paddingY}px ${paddingX}px`
+		} else {
+			control.style.padding = "0 12px"
+		}
 		control.style.border = "2px solid #5B6EF5"
 		control.style.borderRadius = `${Math.max(0, options.borderRadius)}px`
 		control.style.outline = "none"

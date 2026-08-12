@@ -1,3 +1,14 @@
+import {
+	resolveElementDesignMetrics,
+	type ElementDesignMetrics,
+} from "./ElementDesignTokens"
+
+export type { ElementDesignMetrics } from "./ElementDesignTokens"
+export {
+	ELEMENT_DESIGN_TOKENS,
+	resolveElementDesignMetrics,
+} from "./ElementDesignTokens"
+
 export interface LayoutSize {
 	width: number
 	height: number
@@ -50,6 +61,8 @@ export interface ResponsiveElementLayoutMetrics {
 	scale: number
 	remSize: number
 	mode: ResponsiveLayoutMode
+	/** 共享间距 / 字阶 / 圆角（已乘元素 scale）。 */
+	design: ElementDesignMetrics
 	designPx(value: number): number
 	rem(value: number): number
 	clamp(min: number, preferred: number, max: number): number
@@ -94,7 +107,7 @@ function resolveAxisPosition(
 		case "end":
 			return containerStart + containerSize - itemSize
 		case "center":
-			return containerStart + (containerSize - itemSize) / 2
+			return containerStart + containerSize / 2 - itemSize / 2
 		default:
 			return containerStart
 	}
@@ -172,6 +185,8 @@ export function resolveResponsiveElementLayout(
 		}
 	}
 
+	const designPx = (value: number) => value * scale
+
 	const metrics: ResponsiveElementLayoutMetrics = {
 		width,
 		height,
@@ -182,7 +197,8 @@ export function resolveResponsiveElementLayout(
 		scale,
 		remSize: spec.baseRem * scale,
 		mode,
-		designPx: (value) => value * scale,
+		design: resolveElementDesignMetrics(designPx),
+		designPx,
 		rem: (value) => value * spec.baseRem * scale,
 		clamp,
 		insetRect: (rect, inset) => {

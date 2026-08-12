@@ -11,51 +11,34 @@ import {
  * 这些值只描述元素坐标系内的排版，不包含 viewport zoom。Konva 在元素外层
  * 统一缩放最终内容，列表和输入区域则直接使用 resolver 计算出的真实 rect。
  */
+/**
+ * 分镜特有尺寸；间距 / 字阶 / 圆角走 ResponsiveElementLayout.design（ElementDesignTokens）。
+ */
 export const STORYBOARD_LAYOUT_DESIGN = {
-	width: 960,
-	height: 1360,
+	width: 1440,
+	height: 2040,
 	baseRem: 16,
-	outerPadding: 30,
-	parameterRowHeight: 64,
-	parameterRowCompactGap: 4,
-	parameterColumnGap: 24,
-	parameterLabelWidth: 136,
-	resolutionLabelWidth: 112,
-	parameterHorizontalPadding: 16,
-	parameterSuffixGap: 8,
-	parameterSuffixIconSize: 14,
-	modelIconSize: 18,
-	modelIconGap: 8,
-	dividerGap: 16,
-	dividerToTitleGap: 18,
-	titleHeight: 30,
-	titleToListGap: 18,
-	footerGap: 20,
-	footerDividerGap: 16,
-	addShotHeight: 56,
-	footerButtonWidth: 156,
-	footerButtonHeight: 64,
-	shotRowGap: 16,
-	// 分镜卡片使用固定内容高度，避免镜头数量少时被列表剩余空间拉伸。
-	// 224 = 内边距 + 标题/操作区 + 描述区，能够保留舒适的输入区域。
-	shotMinimumHeight: 224,
-	shotCardPadding: 18,
-	shotHeaderHeight: 52,
-	shotDescriptionGap: 12,
-	shotDescriptionHorizontalPadding: 16,
-	shotDescriptionVerticalPadding: 12,
-	shotControlGap: 12,
-	shotGenerateWidth: 144,
-	shotDeleteSize: 42,
-	shotControlHeight: 42,
-	shotTitleWidth: 126,
-	shotStatusWidth: 90,
-	shotStatusGap: 10,
-	labelFontSize: 16,
-	valueFontSize: 20,
-	titleFontSize: 22,
-	shotFontSize: 20,
-	shotSmallFontSize: 16,
+	/** 对齐 title/body≈40 字阶；扣上下 inset 后仍够单行。 */
+	parameterRowHeight: 92,
+	parameterLabelWidth: 180,
+	resolutionLabelWidth: 150,
+	/** 与视频编辑底部控件左右 padding 同级。 */
+	parameterHorizontalPadding: 20,
+	parameterSuffixIconSize: 20,
+	modelIconSize: 32,
+	addShotHeight: 92,
+	footerButtonWidth: 220,
+	footerButtonHeight: 92,
+	// 分镜卡片固定内容高度：头区 + 描述区按大字阶留足输入空间。
+	shotMinimumHeight: 400,
+	shotHeaderHeight: 92,
+	shotGenerateWidth: 220,
+	/** 删除是轻量幽灵图标；命中区仍由交互层扩至 32/44。 */
+	shotDeleteSize: 48,
+	shotControlHeight: 76,
+	/** 对齐视频编辑“主标题 + 次信息”的紧凑固定标题列。 */
+	shotTitleWidth: 160,
+	shotStatusWidth: 160,
 	fontFamily: "Arial, PingFang SC, sans-serif",
 } as const
 
@@ -108,9 +91,12 @@ export interface StoryboardShotLayout {
 	headerRect: LayoutRect
 	titleRect: LayoutRect
 	statusRect: LayoutRect
+	headingGap: number
 	descriptionRect: LayoutRect
 	descriptionTextRect: LayoutRect
 	controls: StoryboardShotControlsLayout
+	fontSize: number
+	smallFontSize: number
 	cornerRadius: number
 	strokeWidth: number
 }
@@ -118,7 +104,6 @@ export interface StoryboardShotLayout {
 export interface StoryboardFooterLayout {
 	rect: LayoutRect
 	addShotRect: LayoutRect
-	separatorY: number
 	actionsRect: LayoutRect
 	generateAllRect: LayoutRect
 	generateAllScale: number
@@ -142,7 +127,6 @@ export interface StoryboardElementLayout {
 		resolution: StoryboardParameterLayout
 		stacked: boolean
 	}
-	dividerY: number
 	titleRect: LayoutRect
 	showShotListTitle: boolean
 	shotListRect: LayoutRect
@@ -160,12 +144,13 @@ export interface StoryboardElementLayout {
 	parameterCornerRadius: number
 }
 
-function resolveDensity(mode: ResponsiveLayoutMode): number {
+/** compact/condensed 优先缩字号与控件，不再压 gap（避免间距尺度碎掉）。 */
+function resolveControlDensity(mode: ResponsiveLayoutMode): number {
 	switch (mode) {
 		case "condensed":
-			return 0.72
-		case "compact":
 			return 0.86
+		case "compact":
+			return 0.93
 		default:
 			return 1
 	}
@@ -195,14 +180,16 @@ function resolveParameterLayout(options: {
 		rootScale,
 		responsive,
 	} = options
-	const horizontalPadding = STORYBOARD_LAYOUT_DESIGN.parameterHorizontalPadding * rootScale
-	const suffixGap = STORYBOARD_LAYOUT_DESIGN.parameterSuffixGap * rootScale
+	const { design } = responsive
+	const horizontalPadding =
+		STORYBOARD_LAYOUT_DESIGN.parameterHorizontalPadding * rootScale
+	const suffixGap = design.gap.control
 	const suffixIconSize = STORYBOARD_LAYOUT_DESIGN.parameterSuffixIconSize * rootScale
 	const modelIconSize = STORYBOARD_LAYOUT_DESIGN.modelIconSize * rootScale
-	const modelIconGap = STORYBOARD_LAYOUT_DESIGN.modelIconGap * rootScale
+	const modelIconGap = design.gap.control
 	const backgroundRect = responsive.insetRect(row, {
-		top: 4 * rootScale,
-		bottom: 4 * rootScale,
+		top: design.space.xs,
+		bottom: design.space.xs,
 	})
 	const contentRect = responsive.insetRect(row, {
 		left: horizontalPadding,
@@ -262,7 +249,7 @@ function resolveParameterLayout(options: {
 		suffixIconSize,
 		fontSize: valueFontSize,
 		labelFontSize,
-		cornerRadius: 8 * rootScale,
+		cornerRadius: design.radius.control,
 	}
 }
 
@@ -275,7 +262,9 @@ function resolveShotLayout(options: {
 	responsive: ResponsiveElementLayoutMetrics
 }): StoryboardShotLayout {
 	const { card, rootScale, fontSize, smallFontSize, showStatus, responsive } = options
-	const cardPadding = STORYBOARD_LAYOUT_DESIGN.shotCardPadding * rootScale
+	const { design } = responsive
+	const cardPadding = design.space.md
+	const shotControlGapDesign = design.space.sm / Math.max(rootScale, 0.0001)
 	const inner = responsive.insetRect(card, cardPadding)
 	const headerHeight = Math.min(
 		STORYBOARD_LAYOUT_DESIGN.shotHeaderHeight * rootScale,
@@ -294,7 +283,7 @@ function resolveShotLayout(options: {
 			width:
 				STORYBOARD_LAYOUT_DESIGN.shotGenerateWidth +
 				STORYBOARD_LAYOUT_DESIGN.shotDeleteSize +
-				STORYBOARD_LAYOUT_DESIGN.shotControlGap,
+				shotControlGapDesign,
 			height: STORYBOARD_LAYOUT_DESIGN.shotControlHeight,
 		},
 		controlsContainer,
@@ -302,7 +291,7 @@ function resolveShotLayout(options: {
 	)
 	const controlsScale = Math.max(0.01, controlsFit.scale)
 	const controlsRect = controlsFit.rect
-	const controlGap = STORYBOARD_LAYOUT_DESIGN.shotControlGap * controlsScale
+	const controlGap = shotControlGapDesign * controlsScale
 	const generateWidth = STORYBOARD_LAYOUT_DESIGN.shotGenerateWidth * controlsScale
 	const deleteSize = STORYBOARD_LAYOUT_DESIGN.shotDeleteSize * controlsScale
 	const controlHeight = STORYBOARD_LAYOUT_DESIGN.shotControlHeight * controlsScale
@@ -314,19 +303,19 @@ function resolveShotLayout(options: {
 	}
 	const deleteRect = {
 		x: generateRect.x + generateRect.width + controlGap,
-		y: controlsRect.y,
+		y: controlsRect.y + (controlHeight - deleteSize) / 2,
 		width: deleteSize,
 		height: deleteSize,
 	}
-	const titleAvailableWidth = Math.max(1, controlsRect.x - inner.x - 12 * rootScale)
+	const titleAvailableWidth = Math.max(1, controlsRect.x - inner.x - design.space.sm)
 	const titleRect = {
 		x: inner.x,
 		y: headerRect.y + Math.max(0, (headerRect.height - fontSize) / 2),
 		width: Math.min(STORYBOARD_LAYOUT_DESIGN.shotTitleWidth * rootScale, titleAvailableWidth),
 		height: Math.min(headerRect.height, Math.max(1, fontSize * 1.35)),
 	}
-	const statusStart =
-		titleRect.x + titleRect.width + STORYBOARD_LAYOUT_DESIGN.shotStatusGap * rootScale
+	// 渲染时按标题实际内容宽度 + content gap 放置状态文本。
+	const statusStart = titleRect.x + titleRect.width
 	const statusRect = showStatus
 		? {
 				x: statusStart,
@@ -341,30 +330,18 @@ function resolveShotLayout(options: {
 				height: Math.min(headerRect.height, Math.max(1, smallFontSize * 1.35)),
 			}
 		: { x: statusStart, y: headerRect.y, width: 0, height: 0 }
+	const descriptionGap = design.space.sm
 	const descriptionRect = {
 		x: inner.x,
-		y:
-			headerRect.y +
-			headerRect.height +
-			STORYBOARD_LAYOUT_DESIGN.shotDescriptionGap * rootScale,
+		y: headerRect.y + headerRect.height + descriptionGap,
 		width: inner.width,
 		height: Math.max(
 			0,
-			inner.y +
-				inner.height -
-				(headerRect.y +
-					headerRect.height +
-					STORYBOARD_LAYOUT_DESIGN.shotDescriptionGap * rootScale),
+			inner.y + inner.height - (headerRect.y + headerRect.height + descriptionGap),
 		),
 	}
-	const descriptionHorizontalInset = Math.min(
-		STORYBOARD_LAYOUT_DESIGN.shotDescriptionHorizontalPadding * rootScale,
-		descriptionRect.width / 2,
-	)
-	const descriptionVerticalInset = Math.min(
-		STORYBOARD_LAYOUT_DESIGN.shotDescriptionVerticalPadding * rootScale,
-		descriptionRect.height / 2,
-	)
+	const descriptionHorizontalInset = Math.min(design.space.md, descriptionRect.width / 2)
+	const descriptionVerticalInset = Math.min(design.space.sm, descriptionRect.height / 2)
 	const descriptionTextRect = responsive.insetRect(descriptionRect, {
 		left: descriptionHorizontalInset,
 		right: descriptionHorizontalInset,
@@ -377,6 +354,7 @@ function resolveShotLayout(options: {
 		headerRect,
 		titleRect,
 		statusRect,
+		headingGap: design.gap.content,
 		descriptionRect,
 		descriptionTextRect,
 		controls: {
@@ -385,7 +363,9 @@ function resolveShotLayout(options: {
 			generateRect,
 			deleteRect,
 		},
-		cornerRadius: 14 * rootScale,
+		fontSize,
+		smallFontSize,
+		cornerRadius: design.radius.card,
 		strokeWidth: Math.max(1, rootScale),
 	}
 }
@@ -408,26 +388,29 @@ export function resolveStoryboardElementLayout(
 	)
 	const widthValue = responsive.width
 	const heightValue = responsive.height
-	const density = resolveDensity(responsive.mode)
+	const controlDensity = resolveControlDensity(responsive.mode)
 	const scale = responsive.scale
+	const { design } = responsive
 	const px = (value: number) => value * scale
-	const spacing = (value: number) => value * scale * density
 	const bounds = responsive.bounds
 	const padding = responsive.clamp(
-		px(16),
+		design.pad.section,
 		Math.min(widthValue, heightValue) * 0.03,
-		px(STORYBOARD_LAYOUT_DESIGN.outerPadding + 4),
+		design.pad.sectionInline,
 	)
 	const contentRect = responsive.insetRect(bounds, padding)
 	const showParameterLabels = responsive.mode !== "condensed"
-	const valueFontSize = px(STORYBOARD_LAYOUT_DESIGN.valueFontSize)
-	const labelFontSize = px(STORYBOARD_LAYOUT_DESIGN.labelFontSize)
-	const titleFontSize = px(STORYBOARD_LAYOUT_DESIGN.titleFontSize)
-	const shotFontSize = px(STORYBOARD_LAYOUT_DESIGN.shotFontSize)
-	const shotSmallFontSize = px(STORYBOARD_LAYOUT_DESIGN.shotSmallFontSize)
-	const parameterRowHeight = px(STORYBOARD_LAYOUT_DESIGN.parameterRowHeight)
-	const parameterGap = spacing(STORYBOARD_LAYOUT_DESIGN.parameterRowCompactGap)
-	const parameterColumnGap = spacing(STORYBOARD_LAYOUT_DESIGN.parameterColumnGap)
+	// label / value 同档 caption，与视频编辑底部参数控件对齐。
+	const valueFontSize = design.type.caption * controlDensity
+	const labelFontSize = valueFontSize
+	// 分镜区标题、item 标题与右侧状态统一对齐视频编辑区块标题层级。
+	const titleFontSize = design.type.caption * controlDensity
+	const shotFontSize = design.type.caption * controlDensity
+	const shotSmallFontSize = design.type.caption * controlDensity
+	const parameterRowHeight = px(STORYBOARD_LAYOUT_DESIGN.parameterRowHeight) * controlDensity
+	// 参数行距跟共享 control gap，匹配大字阶行高；不再乘 density。
+	const parameterGap = design.gap.control
+	const parameterColumnGap = design.pad.sectionInline
 	const modelLabelWidth = px(STORYBOARD_LAYOUT_DESIGN.parameterLabelWidth)
 	const resolutionLabelWidth = px(STORYBOARD_LAYOUT_DESIGN.resolutionLabelWidth)
 	const modelRow: LayoutRect = {
@@ -461,22 +444,23 @@ export function resolveStoryboardElementLayout(
 				height: parameterRowHeight,
 			}
 	const detailBottom = resolutionRow.y + resolutionRow.height
-	const dividerY = detailBottom + spacing(STORYBOARD_LAYOUT_DESIGN.dividerGap)
-	const titleTop = dividerY + spacing(STORYBOARD_LAYOUT_DESIGN.dividerToTitleGap)
+	// 参数区 → 标题只保留一个 section gap；不再用分割线叠加两段留白。
+	const titleTop = detailBottom + design.gap.section
 	const titleRect = {
 		x: contentRect.x,
 		y: titleTop,
 		width: contentRect.width,
 		height: Math.min(contentRect.height, titleFontSize * 1.4),
 	}
-	const shotListTop =
-		titleRect.y + titleRect.height + spacing(STORYBOARD_LAYOUT_DESIGN.titleToListGap)
+	const titleToListGap = design.gap.content
+	const shotListTop = titleRect.y + titleRect.height + titleToListGap
 
-	const footerButtonHeight = px(STORYBOARD_LAYOUT_DESIGN.footerButtonHeight)
-	const addShotHeight = px(STORYBOARD_LAYOUT_DESIGN.addShotHeight)
-	const footerGap = spacing(STORYBOARD_LAYOUT_DESIGN.footerGap)
-	const footerDividerGap = spacing(STORYBOARD_LAYOUT_DESIGN.footerDividerGap)
-	const footerHeight = addShotHeight + footerGap + footerDividerGap + footerButtonHeight
+	const footerButtonHeight =
+		px(STORYBOARD_LAYOUT_DESIGN.footerButtonHeight) * controlDensity
+	const addShotHeight = px(STORYBOARD_LAYOUT_DESIGN.addShotHeight) * controlDensity
+	// 添加分镜 ↔ 全部生成 ↔ 底边使用同一 gap，避免“全部生成”上下留白不一致。
+	const footerGap = design.space.md
+	const footerHeight = addShotHeight + footerGap + footerButtonHeight + footerGap
 	const footerContainerY = Math.min(shotListTop, contentRect.y + contentRect.height)
 	const footerContainer = {
 		x: contentRect.x,
@@ -499,8 +483,6 @@ export function resolveStoryboardElementLayout(
 	const resolvedFooterButtonHeight = footerButtonHeight * footerScaleRatio
 	const resolvedAddShotHeight = addShotHeight * footerScaleRatio
 	const resolvedFooterGap = footerGap * footerScaleRatio
-	const resolvedFooterDividerGap = footerDividerGap * footerScaleRatio
-	const separatorY = footerRect.y + resolvedAddShotHeight + resolvedFooterGap
 	const addShotRect = {
 		x: footerRect.x,
 		y: footerRect.y,
@@ -509,7 +491,7 @@ export function resolveStoryboardElementLayout(
 	}
 	const actionsRect = {
 		x: footerRect.x,
-		y: separatorY + resolvedFooterDividerGap,
+		y: footerRect.y + resolvedAddShotHeight + resolvedFooterGap,
 		width: footerRect.width,
 		height: resolvedFooterButtonHeight,
 	}
@@ -525,12 +507,11 @@ export function resolveStoryboardElementLayout(
 	const footer: StoryboardFooterLayout = {
 		rect: footerRect,
 		addShotRect,
-		separatorY,
 		actionsRect,
 		generateAllRect,
 		generateAllScale: generateFit.scale,
 		buttonHeight: generateAllRect.height,
-		cornerRadius: 10 * generateFit.scale,
+		cornerRadius: design.radius.control * (generateFit.scale / Math.max(scale, 0.0001)),
 		strokeWidth: Math.max(1, scale),
 	}
 
@@ -539,14 +520,11 @@ export function resolveStoryboardElementLayout(
 			x: contentRect.x,
 			y: shotListTop,
 			width: contentRect.width,
-			height: Math.max(
-				0,
-				footerRect.y - spacing(STORYBOARD_LAYOUT_DESIGN.titleToListGap) - shotListTop,
-			),
+			height: Math.max(0, footerRect.y - titleToListGap - shotListTop),
 		},
 		contentRect,
 	)
-	const shotRowGap = spacing(STORYBOARD_LAYOUT_DESIGN.shotRowGap)
+	const shotRowGap = design.gap.section
 	const shotMinimumHeight = px(STORYBOARD_LAYOUT_DESIGN.shotMinimumHeight)
 	const normalizedShotCount = Math.max(0, Math.floor(shotCount))
 	const canRenderShots = shotListRect.height > 0
@@ -630,7 +608,6 @@ export function resolveStoryboardElementLayout(
 			}),
 			stacked: useStackedParameters,
 		},
-		dividerY,
 		titleRect,
 		showShotListTitle: titleRect.height > 0,
 		shotListRect,
@@ -645,7 +622,7 @@ export function resolveStoryboardElementLayout(
 		titleFontSize,
 		shotFontSize,
 		shotSmallFontSize,
-		parameterCornerRadius: 8 * scale,
+		parameterCornerRadius: design.radius.control,
 	}
 }
 

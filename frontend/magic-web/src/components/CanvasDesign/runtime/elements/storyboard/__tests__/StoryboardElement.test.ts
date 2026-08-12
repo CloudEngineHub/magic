@@ -6,7 +6,10 @@ import { ElementTypeEnum, type CanvasConnection } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
 import { ElementFactory } from "../../core/ElementFactory"
 import { STORYBOARD_CONFIG } from "../StoryboardElement.config"
-import { resolveStoryboardElementLayout } from "../StoryboardElement.layout"
+import {
+	resolveStoryboardElementLayout,
+	STORYBOARD_LAYOUT_DESIGN,
+} from "../StoryboardElement.layout"
 import { StoryboardElement } from "../StoryboardElement"
 
 function createCanvasMock(
@@ -217,13 +220,13 @@ describe("StoryboardElement", () => {
 		expect(group.find(".storyboard-control-suffix")).toHaveLength(3)
 		expect(group.findOne(".storyboard-points-cost")).toBeUndefined()
 		expect(modelMetadata?.selectPresentation).toEqual({
-			fontSize: 20,
-			horizontalPadding: 16,
-			suffixGap: 8,
-			suffixIconSize: 14,
+			fontSize: 28,
+			horizontalPadding: 20,
+			suffixGap: 16,
+			suffixIconSize: 20,
 			modelIconUrl: undefined,
-			modelIconSize: 18,
-			modelIconGap: 8,
+			modelIconSize: 32,
+			modelIconGap: 16,
 		})
 		expect(generateAll.listening()).toBe(false)
 		expect(generateAll.name().split(" ")).toEqual(
@@ -300,8 +303,8 @@ describe("StoryboardElement", () => {
 		).parameterRows.model.modelIconRect
 
 		expect(icon).toBeTruthy()
-		expect(icon.width()).toBe(18)
-		expect(icon.height()).toBe(18)
+		expect(icon.width()).toBe(32)
+		expect(icon.height()).toBe(32)
 		expect(icon.x()).toBeCloseTo(modelIconRect?.x ?? 0)
 		expect(icon.y()).toBeCloseTo(modelIconRect?.y ?? 0)
 		expect(data.contents[0]?.generationConfig).toEqual({ model_id: "gpt-image-2" })
@@ -343,8 +346,18 @@ describe("StoryboardElement", () => {
 		}) as Konva.Rect | undefined
 		const deleteBackground = group.findOne(".storyboard-control-background")
 
-		expect(deleteHit?.width()).toBe(STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE)
-		expect(deleteHit?.height()).toBe(STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE)
+		expect(deleteHit?.width()).toBe(
+			Math.max(
+				STORYBOARD_LAYOUT_DESIGN.shotDeleteSize,
+				STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE,
+			),
+		)
+		expect(deleteHit?.height()).toBe(
+			Math.max(
+				STORYBOARD_LAYOUT_DESIGN.shotDeleteSize,
+				STORYBOARD_CONFIG.COARSE_POINTER_MIN_HIT_SIZE,
+			),
+		)
 		expect(deleteBackground?.listening()).toBe(false)
 		expect(background.cornerRadius()).toBe(0)
 		expect(parameterLabel.x()).toBeGreaterThan(30)

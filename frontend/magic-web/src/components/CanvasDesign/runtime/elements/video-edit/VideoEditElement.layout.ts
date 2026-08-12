@@ -3,66 +3,41 @@ import {
 	type LayoutRect,
 	type ResponsiveLayoutMode,
 } from "../../shared/layout/ResponsiveElementLayout"
+import { VIDEO_EDIT_CONFIG } from "./VideoEditElement.config"
 
 export const VIDEO_EDIT_LAYOUT_DESIGN = {
-	width: 1280,
-	height: 720,
+	width: 1920,
+	height: 1080,
 	baseRem: 16,
-	/**
-	 * 间距尺度（设计稿 px）：xs=4 / sm=8 / md=12 / lg=16 / xl=24
-	 * 同语义只用一档，避免 10/14/18 等碎台阶。
-	 */
-	spaceXs: 4,
-	spaceSm: 8,
-	spaceMd: 12,
-	spaceLg: 16,
-	spaceXl: 24,
-	sectionHorizontalPadding: 24,
-	/** 视频 / 音频 / 页脚区块上下内边距统一。 */
-	sectionVerticalPadding: 16,
-	headingHeight: 22,
-	/** 区块标题 → 内容。 */
-	headingGap: 12,
 	/** 视频卡片为正方形边长。 */
-	videoCardSize: 300,
-	videoCardInfoHeight: 42,
-	videoCardGap: 12,
-	videoCardPadding: 12,
-	videoGripSize: 24,
-	videoScrollbarHeight: 6,
-	/** 卡片与滚动条；滚动条绝对定位，不挤占列表空间。 */
-	videoScrollbarGap: 8,
-	audioSectionMinHeight: 128,
-	audioRowHeight: 64,
-	audioRowHorizontalPadding: 12,
-	audioColumnGap: 16,
-	audioPlayButtonSize: 42,
-	audioProgressHeight: 6,
+	videoCardSize: 560,
+	videoCardInfoHeight: 72,
+	videoGripSize: 48,
+	videoScrollbarHeight: 8,
+	audioSectionMinHeight: 160,
+	audioRowHeight: 92,
+	audioPlayButtonSize: 56,
+	audioProgressHeight: 8,
 	/** 时长列最大宽度；实际渲染会按文案收紧并右对齐。 */
-	audioInfoWidth: 96,
-	/** 页脚按内容定高：上下 padding + max(参数行, 合并按钮)。 */
-	footerColumnGap: 24,
-	footerParameterColumnGap: 12,
+	audioInfoWidth: 160,
+	/** 未提供 sectionTitles 时的标题列回退宽度。 */
+	sectionTitleWidth: 200,
 	// 与分镜参数行一致：固定控件尺寸，不随 footer 剩余空间拉伸。
-	footerParameterWidth: 176,
-	footerParameterHeight: 46,
-	footerParameterLabelWidth: 56,
-	footerParameterResolutionLabelWidth: 48,
-	footerParameterHorizontalPadding: 8,
-	footerParameterSuffixGap: 8,
-	footerParameterSuffixIconSize: 12,
-	mergeButtonWidth: 150,
-	mergeButtonHeight: 46,
-	titleFontSize: 15,
-	countFontSize: 12,
-	cardNameFontSize: 12,
-	cardDurationFontSize: 11,
-	audioNameFontSize: 13,
-	audioDurationFontSize: 12,
-	footerSecondaryFontSize: 11,
-	footerParameterValueFontSize: 12,
-	buttonFontSize: 16,
+	footerParameterWidth: 300,
+	footerParameterHeight: 92,
+	/** 「画面比例：」等完整 label，避免大字阶换行。 */
+	footerParameterLabelWidth: 160,
+	footerParameterResolutionLabelWidth: 130,
+	footerParameterHorizontalPadding: 20,
+	footerParameterSuffixIconSize: 16,
+	mergeButtonWidth: 200,
+	mergeButtonHeight: 92,
 } as const
+
+export interface VideoEditLayoutOptions {
+	/** 视频/音频区块标题文案；按最长项测宽，保证两行标题列对齐。 */
+	sectionTitles?: string[]
+}
 
 export interface VideoEditFooterParameterLayout {
 	rect: LayoutRect
@@ -151,6 +126,43 @@ function resolveDimension(value: number): number {
 	return Number.isFinite(value) ? Math.max(1, value) : 1
 }
 
+/** 按实际字形测宽；无 canvas 时用字数估算，避免标题列被估窄。 */
+let sectionTitleMeasureContext: CanvasRenderingContext2D | null | false = null
+
+function getSectionTitleMeasureContext(): CanvasRenderingContext2D | null {
+	if (sectionTitleMeasureContext === false) return null
+	if (sectionTitleMeasureContext) return sectionTitleMeasureContext
+	if (typeof document === "undefined") {
+		sectionTitleMeasureContext = false
+		return null
+	}
+	try {
+		const canvas = document.createElement("canvas")
+		const context = canvas.getContext("2d")
+		if (!context) {
+			sectionTitleMeasureContext = false
+			return null
+		}
+		sectionTitleMeasureContext = context
+		return context
+	} catch {
+		sectionTitleMeasureContext = false
+		return null
+	}
+}
+
+function measureSectionTitleWidth(text: string, fontSize: number): number {
+	const normalized = text.trim()
+	if (!normalized) return 0
+	const context = getSectionTitleMeasureContext()
+	if (context) {
+		context.font = `${fontSize}px ${VIDEO_EDIT_CONFIG.FONT_FAMILY}`
+		const measured = context.measureText(normalized).width
+		if (Number.isFinite(measured) && measured > 0) return Math.ceil(measured)
+	}
+	return Math.ceil(normalized.length * fontSize)
+}
+
 function resolveFooterParameterLayout(options: {
 	row: LayoutRect
 	labelWidth: number
@@ -165,17 +177,18 @@ function resolveFooterParameterLayout(options: {
 		scale * VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHorizontalPadding,
 		row.width * 0.12,
 	)
-	const suffixGap = scale * VIDEO_EDIT_LAYOUT_DESIGN.footerParameterSuffixGap
+	const suffixGap = responsive.design.gap.control
 	const suffixIconSize = scale * VIDEO_EDIT_LAYOUT_DESIGN.footerParameterSuffixIconSize
 	const backgroundRect = responsive.insetRect(row, {
-		top: 2 * scale,
-		bottom: 2 * scale,
+		top: responsive.design.space.xs,
+		bottom: responsive.design.space.xs,
 	})
 	const contentRect = responsive.insetRect(row, {
 		left: horizontalPadding,
 		right: horizontalPadding,
 	})
-	const resolvedLabelWidth = showLabel ? Math.min(labelWidth, contentRect.width * 0.42) : 0
+	// 大字阶下 label 需要更大占比，否则「画面比例：」会在槽内换行。
+	const resolvedLabelWidth = showLabel ? Math.min(labelWidth, contentRect.width * 0.55) : 0
 	const labelRect = {
 		x: contentRect.x,
 		y: contentRect.y,
@@ -220,7 +233,7 @@ function resolveFooterParameterLayout(options: {
 		suffixIconSize,
 		fontSize: valueFontSize,
 		labelFontSize,
-		cornerRadius: 6 * scale,
+		cornerRadius: responsive.design.radius.control,
 	}
 }
 
@@ -228,6 +241,7 @@ function resolveFooterParameterLayout(options: {
 export function resolveVideoEditElementLayout(
 	width: number,
 	height: number,
+	options?: VideoEditLayoutOptions,
 ): VideoEditElementLayout {
 	const responsive = resolveResponsiveElementLayout(
 		{ width: resolveDimension(width), height: resolveDimension(height) },
@@ -235,16 +249,20 @@ export function resolveVideoEditElementLayout(
 	)
 	const scale = responsive.scale
 	const px = (value: number) => responsive.designPx(value)
+	const { design } = responsive
 	const sectionHorizontalPadding = responsive.clamp(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.spaceLg),
+		design.pad.section,
 		Math.min(responsive.width, responsive.height) * 0.035,
-		px(VIDEO_EDIT_LAYOUT_DESIGN.sectionHorizontalPadding),
+		design.pad.sectionInline,
 	)
-	const sectionVerticalPadding = px(VIDEO_EDIT_LAYOUT_DESIGN.sectionVerticalPadding)
-	const headingHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.headingHeight)
-	const headingGap = px(VIDEO_EDIT_LAYOUT_DESIGN.headingGap)
+	const sectionVerticalPadding = design.pad.section
+	const footerVerticalPadding = design.pad.sectionInline
+	// 「使用视频 / 使用音频」与右侧次要信息同档 caption，行高按实际显示字号算。
+	const sectionTitleFontSize = design.type.caption
+	const headingHeight = Math.max(sectionTitleFontSize * 1.35, design.space.lg)
+	const headingGap = design.gap.content
 	const scrollbarHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarHeight)
-	const scrollbarGap = px(VIDEO_EDIT_LAYOUT_DESIGN.videoScrollbarGap)
+	const scrollbarGap = design.gap.control
 	const preferredVideoCardSize = px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardSize)
 	const preferredAudioRowHeight = px(VIDEO_EDIT_LAYOUT_DESIGN.audioRowHeight)
 
@@ -253,7 +271,7 @@ export function resolveVideoEditElementLayout(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHeight),
 		px(VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonHeight),
 	)
-	const preferredFooterHeight = sectionVerticalPadding * 2 + footerControlHeight
+	const preferredFooterHeight = footerVerticalPadding * 2 + footerControlHeight
 	const footerHeight = Math.min(preferredFooterHeight, responsive.height)
 
 	// 2) 视频按内容定高（正方形卡片）；必要时压缩边长，给音频留出最小内容高度
@@ -292,8 +310,17 @@ export function resolveVideoEditElementLayout(
 	}
 
 	const headingWidth = Math.max(0, responsive.width - sectionHorizontalPadding * 2)
-	// 视频 / 音频共用同一标题列宽；右侧留给数量或音频名。
-	const sectionTitleWidth = Math.min(px(88), headingWidth * 0.4)
+	// 视频 / 音频共用同一标题列宽：按传入文案测最长项，再加 content gap 与右侧次要信息隔开。
+	const sectionTitles = options?.sectionTitles?.filter((title) => title.trim().length > 0) ?? []
+	const measuredTitleWidth =
+		sectionTitles.length > 0
+			? Math.max(
+					...sectionTitles.map((title) =>
+						measureSectionTitleWidth(title, sectionTitleFontSize),
+					),
+				) + design.gap.content
+			: px(VIDEO_EDIT_LAYOUT_DESIGN.sectionTitleWidth)
+	const sectionTitleWidth = Math.min(Math.max(1, measuredTitleWidth), headingWidth * 0.55)
 	const videoTitle: LayoutRect = {
 		x: sectionHorizontalPadding,
 		y: videoSection.y + sectionVerticalPadding,
@@ -366,11 +393,8 @@ export function resolveVideoEditElementLayout(
 		audioRowContainer,
 		{ inline: "start", block: "center" },
 	)
-	const audioRowPadding = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.audioRowHorizontalPadding),
-		audioRow.width / 4,
-	)
-	const audioColumnGap = px(VIDEO_EDIT_LAYOUT_DESIGN.audioColumnGap)
+	const audioRowPadding = Math.min(design.space.sm, audioRow.width / 4)
+	const audioColumnGap = design.gap.section
 	const audioPlaySize = Math.min(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.audioPlayButtonSize),
 		Math.max(0, audioRow.height - audioRowPadding * 2),
@@ -411,13 +435,10 @@ export function resolveVideoEditElementLayout(
 	const footerContent = responsive.insetRect(footer, {
 		left: sectionHorizontalPadding,
 		right: sectionHorizontalPadding,
-		top: sectionVerticalPadding,
-		bottom: sectionVerticalPadding,
+		top: footerVerticalPadding,
+		bottom: footerVerticalPadding,
 	})
-	const footerColumnGap = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerColumnGap),
-		footerContent.width * 0.04,
-	)
+	const footerColumnGap = Math.min(design.pad.sectionInline, footerContent.width * 0.04)
 	const mergeButtonFit = responsive.fitUniform(
 		{
 			width: VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonWidth,
@@ -427,10 +448,11 @@ export function resolveVideoEditElementLayout(
 		{ preferredScale: scale, inline: "end", block: "center" },
 	)
 	const mergeButton = responsive.constrainRect(mergeButtonFit.rect, footerContent)
-	const mergeButtonCornerRadius = 10 * mergeButtonFit.scale
-	const mergeButtonFontSize = Math.max(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.buttonFontSize),
-		20 * mergeButtonFit.scale,
+	const mergeButtonCornerRadius =
+		design.radius.control * (mergeButtonFit.scale / Math.max(scale, 0.0001))
+	const mergeButtonFontSize = design.minType(
+		design.type.caption * (mergeButtonFit.scale / Math.max(scale, 0.0001)),
+		"caption",
 	)
 	const footerOutput: LayoutRect = {
 		x: footerContent.x,
@@ -439,10 +461,7 @@ export function resolveVideoEditElementLayout(
 		height: footerContent.height,
 	}
 
-	const footerParameterGap = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterColumnGap),
-		footerOutput.width * 0.035,
-	)
+	const footerParameterGap = Math.min(design.space.md, footerOutput.width * 0.035)
 	const footerParameterColumnCount = 3
 	const footerParameterColumnWidth = Math.min(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterWidth),
@@ -485,8 +504,9 @@ export function resolveVideoEditElementLayout(
 		height: footerParameterColumnHeight,
 	}
 	const showFooterParameterLabels = responsive.mode !== "condensed"
-	const footerParameterValueFontSize = px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterValueFontSize)
-	const footerParameterLabelFontSize = px(VIDEO_EDIT_LAYOUT_DESIGN.footerSecondaryFontSize)
+	// label / value 同字号，避免底部控件视觉不齐。
+	const footerParameterLabelFontSize = design.type.caption
+	const footerParameterValueFontSize = footerParameterLabelFontSize
 	const footerParameterRows = {
 		aspectRatio: resolveFooterParameterLayout({
 			row: aspectColumn,
@@ -535,8 +555,8 @@ export function resolveVideoEditElementLayout(
 				px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardInfoHeight),
 				videoCardHeight * 0.34,
 			),
-			gap: px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardGap),
-			padding: px(VIDEO_EDIT_LAYOUT_DESIGN.videoCardPadding),
+			gap: design.space.md,
+			padding: design.space.sm,
 			gripSize: px(VIDEO_EDIT_LAYOUT_DESIGN.videoGripSize),
 		},
 		audioSection,
@@ -554,12 +574,12 @@ export function resolveVideoEditElementLayout(
 		mergeButtonCornerRadius,
 		mergeButtonFontSize,
 		fonts: {
-			title: px(VIDEO_EDIT_LAYOUT_DESIGN.titleFontSize),
-			count: px(VIDEO_EDIT_LAYOUT_DESIGN.countFontSize),
-			cardName: px(VIDEO_EDIT_LAYOUT_DESIGN.cardNameFontSize),
-			cardDuration: px(VIDEO_EDIT_LAYOUT_DESIGN.cardDurationFontSize),
-			audioName: px(VIDEO_EDIT_LAYOUT_DESIGN.audioNameFontSize),
-			audioDuration: px(VIDEO_EDIT_LAYOUT_DESIGN.audioDurationFontSize),
+			title: sectionTitleFontSize,
+			count: design.type.caption,
+			cardName: design.type.caption,
+			cardDuration: design.type.caption,
+			audioName: design.type.caption,
+			audioDuration: design.type.caption,
 			button: mergeButtonFontSize,
 		},
 	}
