@@ -1,6 +1,7 @@
 const crypto = require("node:crypto")
 const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
 const getPublishedMicroApp = require("../apis/getPublishedMicroApp")
+const defaultInstallIcon = require("./defaultInstallIcon")
 const downloadInstallIcon = require("./downloadInstallIcon")
 
 const PUBLISHED_MICRO_APP_CACHE_TTL_MS = 30_000
@@ -46,7 +47,8 @@ function readResourceId(publishedMicroApp) {
 function buildInstallIconCacheKey(appId, publishedMicroApp) {
 	const iconUrl = readInstallIconUrl(publishedMicroApp)
 	const resourceId = readResourceId(publishedMicroApp) || "no-resource"
-	const sourceKey = iconUrl ? toStableIconSourceKey(iconUrl) : "platform-favicon"
+	// Shared key for platform favicon + built-in default when app has no icon_url.
+	const sourceKey = iconUrl ? toStableIconSourceKey(iconUrl) : "fallback-icon"
 	return `${appId}:${resourceId}:${sourceKey}`
 }
 
@@ -139,7 +141,7 @@ async function getCachedPublishedMicroApp(appId) {
 }
 
 async function resolveInstallIconBody(publishedMicroApp) {
-	// App-local icon.svg wins; platform favicon is only a legacy fallback.
+	// App icon.svg → platform favicon → built-in default (keeps installable).
 	const iconUrl = readInstallIconUrl(publishedMicroApp)
 	if (iconUrl) {
 		const icon = await downloadInstallIcon(iconUrl).catch(() => null)
@@ -154,7 +156,7 @@ async function resolveInstallIconBody(publishedMicroApp) {
 		if (platformIcon) return platformIcon
 	}
 
-	return null
+	return defaultInstallIcon
 }
 
 /**

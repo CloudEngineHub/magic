@@ -44,10 +44,11 @@ function respondWithInstallError(error, res, next) {
 	return next(error)
 }
 
-function buildManifest(appId, appName, hasInstallIcon = true) {
+function buildManifest(appId, appName) {
 	const encodedAppId = encodeURIComponent(appId)
 	const iconUrl = `/micro-app/${encodedAppId}/icon`
 
+	// Always advertise icons; /icon falls back to platform favicon then a default SVG.
 	return {
 		id: `/micro-app/${encodedAppId}`,
 		name: appName || "Micro App",
@@ -57,12 +58,10 @@ function buildManifest(appId, appName, hasInstallIcon = true) {
 		display: "standalone",
 		theme_color: "#ffffff",
 		background_color: "#ffffff",
-		icons: hasInstallIcon
-			? [
-					{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
-					{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
-				]
-			: [],
+		icons: [
+			{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
+			{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
+		],
 	}
 }
 
@@ -71,16 +70,14 @@ class MicroAppInstallRoutes {
 		setNoStoreHeaders(res)
 		try {
 			const appId = String(req.params.appId || "").trim()
-			const [publishedMicroApp, projectNameResponse] = await Promise.all([
+			const [, projectNameResponse] = await Promise.all([
 				getPublishedMicroApp(appId),
 				getMicroAppProjectName(appId).catch(() => null),
 			])
 			const appName = readPublishedName(projectNameResponse)
-			// Metadata already says whether root icon.svg exists; skip icon download.
-			const hasInstallIcon = Boolean(readInstallIconUrl(publishedMicroApp))
 
 			res.setHeader("Content-Type", "application/manifest+json; charset=utf-8")
-			return res.json(buildManifest(appId, appName, hasInstallIcon))
+			return res.json(buildManifest(appId, appName))
 		} catch (error) {
 			return respondWithInstallError(error, res, next)
 		}

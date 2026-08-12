@@ -4,6 +4,7 @@ const MicroAppInstallRoutes = require("../routes/micro-app-install.route")
 const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
 const { processHtmlContent } = require("../middleware/seoMiddleware/html-utils")
 const buildInstallLinks = require("../middleware/seoMiddleware/micro-app-install-links")
+const defaultInstallIcon = require("../utils/defaultInstallIcon")
 const {
 	buildInstallIconCacheKey,
 	toStableIconSourceKey,
@@ -14,6 +15,18 @@ const TEST_APP_ID = "900000000000000001"
 const generatedIconSvg = Buffer.from(
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#111" d="M4 4h16v16H4z"/></svg>',
 )
+const expectedManifestIcons = [
+	{
+		src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
+		sizes: "192x192",
+		type: "image/svg+xml",
+	},
+	{
+		src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
+		sizes: "512x512",
+		type: "image/svg+xml",
+	},
+]
 
 afterEach(() => {
 	global.fetch = originalFetch
@@ -91,18 +104,7 @@ test("builds a distinct password-free manifest for each published micro app", as
 	assert.equal(response.headers["content-type"], "application/manifest+json; charset=utf-8")
 	assert.match(response.headers["cache-control"], /no-store/)
 	assert.doesNotMatch(JSON.stringify(response.body), /password|temporary_token|token=/i)
-	assert.deepEqual(response.body.icons, [
-		{
-			src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
-			sizes: "192x192",
-			type: "image/svg+xml",
-		},
-		{
-			src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
-			sizes: "512x512",
-			type: "image/svg+xml",
-		},
-	])
+	assert.deepEqual(response.body.icons, expectedManifestIcons)
 
 	mockPublishedMicroApp({ appId: "900000000000000002" })
 	const secondResponse = createResponse()
@@ -132,7 +134,7 @@ test("rejects an unpublished micro app instead of returning a manifest", async (
 	assert.equal(response.body, "")
 })
 
-test("does not advertise an unavailable icon in the manifest", async () => {
+test("still advertises install icons when the app has no icon.svg", async () => {
 	mockPublishedMicroApp()
 	const response = createResponse()
 	await new MicroAppInstallRoutes().manifest(
@@ -143,7 +145,7 @@ test("does not advertise an unavailable icon in the manifest", async () => {
 		},
 	)
 
-	assert.deepEqual(response.body.icons, [])
+	assert.deepEqual(response.body.icons, expectedManifestIcons)
 })
 
 test("manifest uses the SVG type for a backend-resolved root icon", async () => {
@@ -179,18 +181,7 @@ test("manifest uses the SVG type for a backend-resolved root icon", async () => 
 		},
 	)
 
-	assert.deepEqual(response.body.icons, [
-		{
-			src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
-			sizes: "192x192",
-			type: "image/svg+xml",
-		},
-		{
-			src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
-			sizes: "512x512",
-			type: "image/svg+xml",
-		},
-	])
+	assert.deepEqual(response.body.icons, expectedManifestIcons)
 })
 
 test("serves the generated SVG app icon through the same-origin icon route", async () => {
@@ -260,7 +251,7 @@ test("proxies an upstream SVG icon without changing its MIME type", async () => 
 	assert.deepEqual(response.body, generatedIconSvg)
 })
 
-test("uses the management favicon as the fallback icon and returns 404 without one", async () => {
+test("uses the management favicon as the fallback icon and a built-in default without one", async () => {
 	mockPublishedMicroApp()
 	global.fetch = async (url) => {
 		if (url.includes("/api/v1/settings/global")) {
@@ -309,7 +300,9 @@ test("uses the management favicon as the fallback icon and returns 404 without o
 			throw error
 		},
 	)
-	assert.equal(missingResponse.statusCode, 404)
+	assert.equal(missingResponse.statusCode, 200)
+	assert.equal(missingResponse.headers["content-type"], "image/svg+xml")
+	assert.deepEqual(missingResponse.body, defaultInstallIcon.body)
 })
 
 test("rate-limits abusive icon requests from the same client", async () => {
@@ -417,6 +410,10 @@ test("builds a stable icon cache key without signed query params", () => {
 		}),
 		"app-1:resource-9:https://files.example.com/a/icon.svg",
 	)
+	assert.equal(
+		buildInstallIconCacheKey("app-1", { resource_id: "resource-9", icon_url: "" }),
+		"app-1:resource-9:fallback-icon",
+	)
 })
 
 test("reuses cached icons when signed URL query params rotate", async () => {
@@ -512,6 +509,9 @@ test("downloads again when the stable icon path or resource id changes", async (
 
 test("does not use a published cover when the app icon is unavailable", async () => {
 	global.fetch = async (url) => {
+		if (url.includes("/api/v1/settings/global")) {
+			return new Response(JSON.stringify({ data: { favicon: "" } }), { status: 200 })
+		}
 		assert.match(url, /\/api\/v1\/share\/micro-apps\//)
 		return new Response(
 			JSON.stringify({
@@ -535,48 +535,17 @@ test("does not use a published cover when the app icon is unavailable", async ()
 		},
 	)
 
-	assert.equal(response.statusCode, 404)
+	assert.equal(response.statusCode, 200)
+	assert.deepEqual(response.body, defaultInstallIcon.body)
+	assert.doesNotMatch(String(response.body), /cover\.png/)
 })
 
-test("uses the management favicon as the fallback icon", async () => {
-	const managementIconUrl = "https://files.example.com/management-favicon.svg"
-	global.fetch = async (url) => {
-		if (url.includes("/api/v1/settings/global")) {
-			return new Response(JSON.stringify({ data: { favicon: managementIconUrl } }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			})
-		}
-		if (url.includes("/api/v1/share/micro-apps/")) {
-			return new Response(
-				JSON.stringify({
-					data: { app_id: TEST_APP_ID, resource_id: "resource-1", icon_url: "" },
-				}),
-				{ status: 200 },
-			)
-		}
-		assert.equal(url, managementIconUrl)
-		return new Response(generatedIconSvg, {
-			status: 200,
-			headers: { "content-type": "image/svg+xml" },
-		})
-	}
-
-	const response = createResponse()
-	await new MicroAppInstallRoutes().icon(
-		{ params: { appId: TEST_APP_ID }, query: {} },
-		response,
-		(error) => {
-			throw error
-		},
-	)
-
-	assert.deepEqual(response.body, generatedIconSvg)
-})
-
-test("does not proxy unsafe SVG active content", async () => {
+test("falls back to the built-in default when the app icon is unsafe SVG", async () => {
 	const iconUrl = "https://files.example.com/icon.svg"
 	global.fetch = async (url) => {
+		if (url.includes("/api/v1/settings/global")) {
+			return new Response(JSON.stringify({ data: { favicon: "" } }), { status: 200 })
+		}
 		if (url.includes("/api/v1/share/micro-apps/")) {
 			return new Response(
 				JSON.stringify({ data: { resource_id: "resource-1", icon_url: iconUrl } }),
@@ -596,7 +565,8 @@ test("does not proxy unsafe SVG active content", async () => {
 			throw error
 		},
 	)
-	assert.equal(response.statusCode, 404)
+	assert.equal(response.statusCode, 200)
+	assert.deepEqual(response.body, defaultInstallIcon.body)
 })
 
 test("injects install links only when the public micro app route opts in", () => {
