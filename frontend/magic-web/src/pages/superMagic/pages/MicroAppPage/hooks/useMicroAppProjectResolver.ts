@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react"
 
 import { SuperMagicApi } from "@/apis"
+import { isProjectAccessDeniedError } from "@/pages/superMagic/constants/apiErrorCodes"
 import { isMicroAppPublished } from "../utils/microAppPublish"
 
 const MAX_DISPLAY_ERROR_LENGTH = 240
+
+export interface MicroAppProjectError {
+	kind: "load" | "permission"
+	message: string
+}
 
 function readDisplayErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message.trim()
@@ -19,22 +25,23 @@ function readDisplayErrorMessage(error: unknown): string {
 	return ""
 }
 
-export function normalizeMicroAppProjectError(error: unknown): Error {
+export function normalizeMicroAppProjectError(error: unknown): MicroAppProjectError {
 	const message = readDisplayErrorMessage(error)
 	const isTechnicalValue = /^\[object\s.+\]$/i.test(message) || /^</.test(message)
+	const kind = isProjectAccessDeniedError(error) ? "permission" : "load"
 
 	if (!message || message.length > MAX_DISPLAY_ERROR_LENGTH || isTechnicalValue) {
-		return new Error()
+		return { kind, message: "" }
 	}
 
-	return new Error(message)
+	return { kind, message }
 }
 
 export function useMicroAppProjectResolver(appId: string) {
 	const [projectId, setProjectId] = useState("")
 	const [isPublished, setIsPublished] = useState(false)
 	const [loading, setLoading] = useState(Boolean(appId))
-	const [error, setError] = useState<Error | null>(null)
+	const [error, setError] = useState<MicroAppProjectError | null>(null)
 
 	useEffect(() => {
 		if (!appId) {
@@ -50,7 +57,7 @@ export function useMicroAppProjectResolver(appId: string) {
 		setProjectId("")
 		setIsPublished(false)
 
-		SuperMagicApi.getMicroAppProject(appId)
+		SuperMagicApi.getMicroAppProject(appId, { enableErrorMessagePrompt: false })
 			.then((result) => {
 				if (!active) return
 				const nextProjectId = String(result.project_id || result.project?.id || "")

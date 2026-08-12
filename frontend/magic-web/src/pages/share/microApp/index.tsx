@@ -1,7 +1,15 @@
 import { type ComponentProps, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router"
 import { useTranslation } from "react-i18next"
-import { Building2, ChevronDown, FileCode2, Loader2, LogIn, LogOut } from "lucide-react"
+import {
+	Building2,
+	ChevronDown,
+	FileCode2,
+	Loader2,
+	LogIn,
+	LogOut,
+	ShieldCheck,
+} from "lucide-react"
 import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "@/pages/share/components"
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
@@ -101,7 +109,17 @@ function goLogin() {
 	})
 }
 
-function MicroAppShareHeader({ appName }: { appName?: string }) {
+interface MicroAppShareHeaderProps {
+	appName?: string
+	showPermissionManager: boolean
+	onOpenPermissionManager: () => void
+}
+
+function MicroAppShareHeader({
+	appName,
+	showPermissionManager,
+	onOpenPermissionManager,
+}: MicroAppShareHeaderProps) {
 	const { t } = useTranslation("super")
 	const { t: tInterface } = useTranslation("interface")
 	const isMobile = useIsMobile()
@@ -235,34 +253,51 @@ function MicroAppShareHeader({ appName }: { appName?: string }) {
 					</div>
 				</div>
 
-				{isLoggedIn ? (
-					<div data-testid="micro-app-share-user">
-						{isMobile ? (
-							userTrigger
-						) : (
-							<MagicDropdown
-								placement="bottomRight"
-								open={userMenuOpen}
-								onOpenChange={handleUserMenuOpenChange}
-								trigger={["click"]}
-								popupRender={renderUserMenu}
-								overlayClassName={transparentDropdownOverlayClassName}
-							>
-								{userTrigger}
-							</MagicDropdown>
-						)}
-					</div>
-				) : (
-					<button
-						type="button"
-						className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
-						onClick={goLogin}
-						data-testid="micro-app-share-login"
-					>
-						<LogIn size={15} />
-						{t("microAppShare.login")}
-					</button>
-				)}
+				<div className="flex shrink-0 items-center gap-2">
+					{showPermissionManager && isLoggedIn ? (
+						<button
+							type="button"
+							className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted sm:px-3"
+							onClick={onOpenPermissionManager}
+							title={t("htmlEditor.permissionManager.open")}
+							data-testid="micro-app-share-permission-manager"
+						>
+							<ShieldCheck size={16} />
+							<span className="hidden sm:inline">
+								{t("htmlEditor.permissionManager.open")}
+							</span>
+						</button>
+					) : null}
+
+					{isLoggedIn ? (
+						<div data-testid="micro-app-share-user">
+							{isMobile ? (
+								userTrigger
+							) : (
+								<MagicDropdown
+									placement="bottomRight"
+									open={userMenuOpen}
+									onOpenChange={handleUserMenuOpenChange}
+									trigger={["click"]}
+									popupRender={renderUserMenu}
+									overlayClassName={transparentDropdownOverlayClassName}
+								>
+									{userTrigger}
+								</MagicDropdown>
+							)}
+						</div>
+					) : (
+						<button
+							type="button"
+							className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+							onClick={goLogin}
+							data-testid="micro-app-share-login"
+						>
+							<LogIn size={15} />
+							{t("microAppShare.login")}
+						</button>
+					)}
+				</div>
 			</header>
 			{isMobile ? <OrganizationSwitchPanel /> : null}
 		</>
@@ -275,6 +310,8 @@ export default function MicroAppSharePage() {
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [confirmedSafetyAppId, setConfirmedSafetyAppId] = useState<string | null>(null)
+	// 分享页隐藏了 HTML 文件头，通过管理句柄复用预览内部的同一个授权面板。
+	const [permissionManager, setPermissionManager] = useState<{ open: () => void } | null>(null)
 	const {
 		shareData,
 		resourceId,
@@ -304,6 +341,7 @@ export default function MicroAppSharePage() {
 	const hasConfirmedSafetyNotice = confirmedSafetyAppId === appId
 	useEffect(() => {
 		setConfirmedSafetyAppId(null)
+		setPermissionManager(null)
 	}, [appId])
 	const previewFile = useMemo(
 		() => attachmentList.find((item) => item.file_id === activeFileId) || defaultEntryFile,
@@ -333,6 +371,9 @@ export default function MicroAppSharePage() {
 	const handleLeave = useCallback(() => {
 		window.location.replace("/")
 	}, [])
+	const handleOpenPermissionManager = useCallback(() => {
+		permissionManager?.open()
+	}, [permissionManager])
 
 	if (emptyStateInfo) {
 		return (
@@ -353,7 +394,11 @@ export default function MicroAppSharePage() {
 			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
 			data-testid="micro-app-share-page"
 		>
-			<MicroAppShareHeader appName={displayAppName} />
+			<MicroAppShareHeader
+				appName={displayAppName}
+				showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
+				onOpenPermissionManager={handleOpenPermissionManager}
+			/>
 			<main className="min-h-0 flex-1 overflow-hidden">
 				{loading ? (
 					<div
@@ -426,6 +471,7 @@ export default function MicroAppSharePage() {
 							virtualStorageMarkerId={defaultEntryFile?.file_id}
 							projectId={shareMeta.projectId}
 							openFileTab={handleOpenFileTab}
+							onHtmlPermissionManagerChange={setPermissionManager}
 							className="h-full"
 						/>
 					</div>

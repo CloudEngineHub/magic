@@ -9,8 +9,8 @@ namespace HyperfTest\Cases\Application\Design\Event\Subscribe;
 
 use App\Application\Design\Event\Subscribe\DesignImageGenerationSubscriber;
 use App\Domain\Design\Entity\ImageGenerationEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Entity\TaskFileEntity;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 

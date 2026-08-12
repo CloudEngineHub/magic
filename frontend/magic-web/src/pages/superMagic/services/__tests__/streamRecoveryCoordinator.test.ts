@@ -110,6 +110,37 @@ describe("StreamRecoveryCoordinator", () => {
 		expect(harness.store.cancelTopicSync).not.toHaveBeenCalled()
 	})
 
+	it("keeps hidden recovery scheduled and starts it only after foreground resume", async () => {
+		const harness = createStoreHarness()
+		const coordinator = new StreamRecoveryCoordinator(harness.store)
+		let canRecover = false
+		const owner = createOwner({
+			canRecover: () => canRecover,
+		})
+		coordinator.registerOwner(owner)
+
+		coordinator.requestRecovery({
+			topicId: "topic-1",
+			correlationId: "hidden-watchdog",
+			reason: "stream_watchdog",
+		})
+
+		expect(coordinator.getTopicRecoveryStatus("topic-1")).toMatchObject({
+			hasScheduled: true,
+			hasInFlight: false,
+			reason: "stream_watchdog",
+		})
+		expect(harness.store.beginTopicSync).not.toHaveBeenCalled()
+		expect(owner.recover).not.toHaveBeenCalled()
+
+		canRecover = true
+		coordinator.resumeTopicRecovery("topic-1")
+		await Promise.resolve()
+
+		expect(harness.store.beginTopicSync).toHaveBeenCalledTimes(1)
+		expect(owner.recover).toHaveBeenCalledTimes(1)
+	})
+
 	it("reports HTTP failure to Store without retrying in the coordinator", async () => {
 		const harness = createStoreHarness()
 		const coordinator = new StreamRecoveryCoordinator(harness.store)

@@ -130,7 +130,12 @@ RUN --mount=type=cache,id=debian-${DEBIAN_VERSION}-npm-${TARGETARCH},target=/roo
     echo "========== TypeScript 版本信息 ==========" && \
     tsc -v && \
     echo "========== npx 版本信息 ==========" && \
-    npx -v
+    npx -v && \
+    # 安装 skillhub CLI（腾讯 SkillHub 技能市场命令行工具），安装后移至 /usr/local/bin 避免依赖 /root
+    curl -fsSL https://skillhub-1251783334.cos.ap-guangzhou.myqcloud.com/install/install.sh | bash && \
+    mv /root/.local/bin/skillhub /usr/local/bin/skillhub && \
+    echo "========== skillhub 版本信息 ==========" && \
+    skillhub -v
 
 ENV NVM_DIR=/root/.nvm
 ENV PNPM_HOME=/root/.local/share/pnpm

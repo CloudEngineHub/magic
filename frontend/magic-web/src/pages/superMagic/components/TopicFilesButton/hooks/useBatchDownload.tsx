@@ -50,7 +50,6 @@ interface UseBatchDownloadOptions {
 	attachments?: AttachmentItem[]
 	selectedWorkspace?: any
 	selectedProject?: any
-	projects?: any[]
 	crossProjectOperation?: {
 		openMoveModal: (fileIds: string[], parentPath: AttachmentItem[]) => void
 		openCopyModal: (fileIds: string[], parentPath?: AttachmentItem[]) => void
@@ -92,7 +91,6 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		attachments = [],
 		selectedWorkspace,
 		selectedProject,
-		projects = [],
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,
@@ -490,7 +488,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 	}
 
-	// 批量移动处理函数
+	// Open the appropriate selector for batch moves.
 	const handleBatchMove = () => {
 		if (!selectedItems || selectedItems.size === 0) return
 
@@ -498,11 +496,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		const firstFileId = fileIds[0]
 		const parentPath = firstFileId ? getInitialParentPath(firstFileId) : []
 
-		// 只有桌面普通项目继续走跨项目 Modal；移动端和 chat 项目回退到目录选择器。
-		if (projects.length > 0 && crossProjectOperation && !isMobile && !isChatProject) {
+		if (crossProjectOperation && !isMobile && !isChatProject) {
 			crossProjectOperation.openMoveModal(fileIds, parentPath)
 		} else if (moveFileHook) {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.openBatchMove()
 		}
 	}

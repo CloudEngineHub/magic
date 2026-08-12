@@ -80,7 +80,12 @@ export const useVoiceInput = (options: UseVoiceInputOptions = {}) => {
 
 	const handleError = useCallback(
 		(error: Error) => {
-			logger.error("VoiceInput error", error)
+			logger.error({
+				eventKey: "voice_input_failed",
+				errorKind: "unknown",
+				error,
+				message: "VoiceInput error",
+			})
 			updateStatus("error")
 			onError?.(error)
 		},
@@ -139,7 +144,8 @@ export const useVoiceInput = (options: UseVoiceInputOptions = {}) => {
 			// 检查连接状态
 			if (!isConnectedRef.current) {
 				logger.log(
-					`[VoiceInput] 连接已断开，停止发送剩余音频数据 (剩余 ${bufferedAudio.length - i
+					`[VoiceInput] 连接已断开，停止发送剩余音频数据 (剩余 ${
+						bufferedAudio.length - i
 					} 块)`,
 				)
 				// 将剩余数据重新放回缓冲区（保持时间顺序：先放未发送的原有数据，再放新产生的数据）
@@ -160,7 +166,13 @@ export const useVoiceInput = (options: UseVoiceInputOptions = {}) => {
 					await new Promise((resolve) => setTimeout(resolve, PACKET_INTERVAL))
 				}
 			} catch (error) {
-				logger.error(`[VoiceInput] 发送第 ${i + 1} 个音频数据包失败:`, error)
+				logger.error({
+					eventKey: "voice_input_audio_packet_send_failed",
+					errorKind: "network",
+					error,
+					message: `[VoiceInput] 发送第 ${i + 1} 个音频数据包失败:`,
+					context: { packetNumber: i + 1 },
+				})
 				// 发送失败时，将剩余数据重新放回缓冲区（保持时间顺序：先放未发送的原有数据，再放新产生的数据）
 				audioBufferRef.current = [...bufferedAudio.slice(i), ...audioBufferRef.current]
 				// 清除发送状态
@@ -183,9 +195,13 @@ export const useVoiceInput = (options: UseVoiceInputOptions = {}) => {
 		})
 
 		client.on("error", async (message, code) => {
-			logger.error(
-				`[VoiceInput] VoiceClient error: ${message} (code=${code}), connectionId=${client.connectionId}`,
-			)
+			logger.error({
+				eventKey: "voice_client_failed",
+				errorKind: "network",
+				error: message,
+				message: `[VoiceInput] VoiceClient error: ${message} (code=${code}), connectionId=${client.connectionId}`,
+				context: { code, connectionId: client.connectionId },
+			})
 			const msg = String(message || "")
 			const codeNumber = code != null ? Number(code) : ""
 			if (!isRecoveringRef.current) {
@@ -220,7 +236,12 @@ export const useVoiceInput = (options: UseVoiceInputOptions = {}) => {
 					return
 				} catch (e) {
 					// Fall back to error handling
-					logger.error(`❌ [VoiceInput] 重连失败:`, e)
+					logger.error({
+						eventKey: "voice_input_reconnect_failed",
+						errorKind: "network",
+						error: e,
+						message: "❌ [VoiceInput] 重连失败",
+					})
 					handleError(e as Error)
 				} finally {
 					isRecoveringRef.current = false

@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\Util;
 
-use Dtyq\SuperMagic\Infrastructure\Utils\WorkDirectoryUtil;
+use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use PHPUnit\Framework\TestCase;
 
 /**

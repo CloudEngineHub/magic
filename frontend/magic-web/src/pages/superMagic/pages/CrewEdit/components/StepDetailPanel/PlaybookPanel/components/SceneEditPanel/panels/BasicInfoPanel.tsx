@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { IconPickerPanel } from "../components/IconPickerPanel"
@@ -67,166 +68,178 @@ export const BasicInfoPanel = observer(function BasicInfoPanel() {
 	}
 
 	return (
-		<div
-			className="flex h-full min-h-0 flex-col gap-3.5 overflow-y-auto pr-1"
+		// Radix adds a table-layout wrapper by default; block layout keeps the form width stable.
+		<ScrollArea
+			className="h-full min-h-0"
+			viewportClassName="[&>div]:!block"
 			data-testid="basic-info-scroll-container"
 		>
-			{/* Content header */}
-			<div className="flex shrink-0 items-center">
-				<p className="flex-1 truncate text-lg font-medium text-foreground">
-					{t("playbook.edit.basicInfo.title")}
-				</p>
-			</div>
+			<div className="flex flex-col gap-3.5 pr-3">
+				{/* Content header */}
+				<div className="flex shrink-0 items-center">
+					<p className="flex-1 truncate text-lg font-medium text-foreground">
+						{t("playbook.edit.basicInfo.title")}
+					</p>
+				</div>
 
-			{/* Form card */}
-			<div className="shrink-0 rounded-lg border border-border p-6">
-				<div className="flex flex-col gap-4">
-					{/* Icon row */}
-					<div className="flex items-center gap-2">
-						<div className="flex h-9 w-[40%] shrink-0 items-center">
-							<span className="text-base font-medium text-foreground">
-								{t("playbook.edit.basicInfo.icon")}
-							</span>
-						</div>
-						{readOnly ? (
-							<Button variant="outline" className="h-9 gap-2 px-4 shadow-xs" disabled>
-								<LucideLazyIcon icon={form.icon} size={24} />
-							</Button>
-						) : (
-							<IconPickerPanel
-								value={form.icon}
-								onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
-							>
-								<span>
-									<Button
-										variant="outline"
-										className="h-9 gap-2 px-4 shadow-xs"
-										data-testid="basic-info-icon-picker"
-									>
-										<LucideLazyIcon icon={form.icon} size={24} />
-										<ChevronDown className="h-4 w-4" />
-									</Button>
+				{/* Form card */}
+				<div className="shrink-0 rounded-lg border border-border p-6">
+					<div className="flex flex-col gap-4">
+						{/* Icon row */}
+						<div className="flex items-center gap-2">
+							<div className="flex h-9 w-[40%] shrink-0 items-center">
+								<span className="text-base font-medium text-foreground">
+									{t("playbook.edit.basicInfo.icon")}
 								</span>
-							</IconPickerPanel>
-						)}
-					</div>
-
-					{/* Title row */}
-					<div className="flex items-center gap-2">
-						<div className="flex h-9 w-[40%] shrink-0 items-center">
-							<span className="text-base font-medium text-foreground">
-								{t("playbook.edit.basicInfo.name")}
-							</span>
+							</div>
+							{readOnly ? (
+								<Button
+									variant="outline"
+									className="h-9 gap-2 px-4 shadow-xs"
+									disabled
+								>
+									<LucideLazyIcon icon={form.icon} size={24} />
+								</Button>
+							) : (
+								<IconPickerPanel
+									value={form.icon}
+									onChange={(icon) => setForm((prev) => ({ ...prev, icon }))}
+								>
+									<span>
+										<Button
+											variant="outline"
+											className="h-9 gap-2 px-4 shadow-xs"
+											data-testid="basic-info-icon-picker"
+										>
+											<LucideLazyIcon icon={form.icon} size={24} />
+											<ChevronDown className="h-4 w-4" />
+										</Button>
+									</span>
+								</IconPickerPanel>
+							)}
 						</div>
-						<LocaleTextInput
-							value={form.name}
-							onChange={(name) => setForm((prev) => ({ ...prev, name }))}
-							localizeLabel={t("playbook.edit.basicInfo.name")}
-							placeholder={t("playbook.edit.basicInfo.namePlaceholder")}
-							data-testid="basic-info-name-input"
-							disabled={readOnly}
-						/>
-					</div>
 
-					{/* Description row */}
-					<div className="flex items-start gap-2">
-						<div className="flex h-9 w-[40%] shrink-0 items-center">
-							<span className="text-base font-medium text-foreground">
-								{t("playbook.edit.basicInfo.description")}
-							</span>
+						{/* Title row */}
+						<div className="flex items-center gap-2">
+							<div className="flex h-9 w-[40%] shrink-0 items-center">
+								<span className="text-base font-medium text-foreground">
+									{t("playbook.edit.basicInfo.name")}
+								</span>
+							</div>
+							<LocaleTextInput
+								value={form.name}
+								onChange={(name) => setForm((prev) => ({ ...prev, name }))}
+								localizeLabel={t("playbook.edit.basicInfo.name")}
+								placeholder={t("playbook.edit.basicInfo.namePlaceholder")}
+								data-testid="basic-info-name-input"
+								disabled={readOnly}
+							/>
 						</div>
-						<LocaleTextInput
-							value={form.description}
-							onChange={(description) =>
-								setForm((prev) => ({ ...prev, description }))
-							}
-							placeholder={t("playbook.edit.basicInfo.descriptionPlaceholder")}
-							localizeLabel={t("playbook.edit.basicInfo.description")}
-							multiline
-							className="min-h-[120px]"
-							data-testid="basic-info-description-textarea"
-							disabled={readOnly}
-						/>
-					</div>
 
-					{/* Color row */}
-					<div className="flex items-center gap-2">
-						<div className="flex h-9 w-[40%] shrink-0 items-center">
-							<span className="text-base font-medium text-foreground">
-								{t("playbook.edit.basicInfo.color")}
-							</span>
-						</div>
-						{readOnly ? (
-							<Button variant="outline" className="h-9 gap-2 px-4 shadow-xs" disabled>
-								<div
-									className="h-6 w-6 rounded-sm border border-border"
-									style={{ backgroundColor: form.theme_color }}
-								/>
-							</Button>
-						) : (
-							<ColorPickerPopover
-								value={form.theme_color}
-								onChange={(color) =>
-									setForm((prev) => ({ ...prev, theme_color: color }))
+						{/* Description row */}
+						<div className="flex items-start gap-2">
+							<div className="flex h-9 w-[40%] shrink-0 items-center">
+								<span className="text-base font-medium text-foreground">
+									{t("playbook.edit.basicInfo.description")}
+								</span>
+							</div>
+							<LocaleTextInput
+								value={form.description}
+								onChange={(description) =>
+									setForm((prev) => ({ ...prev, description }))
 								}
-							>
-								<span>
-									<Button
-										variant="outline"
-										className="h-9 gap-2 px-4 shadow-xs"
-										data-testid="basic-info-color-picker"
-									>
-										<div
-											className="h-6 w-6 rounded-sm border border-border"
-											style={{ backgroundColor: form.theme_color }}
-										/>
-										<ChevronDown className="h-4 w-4" />
-									</Button>
-								</span>
-							</ColorPickerPopover>
-						)}
-					</div>
-
-					{/* Enable row */}
-					<div className="flex items-center gap-2">
-						<div className="flex h-9 w-[40%] shrink-0 items-center">
-							<span className="text-base font-medium text-foreground">
-								{t("playbook.edit.basicInfo.enable")}
-							</span>
+								placeholder={t("playbook.edit.basicInfo.descriptionPlaceholder")}
+								localizeLabel={t("playbook.edit.basicInfo.description")}
+								multiline
+								className="min-h-[120px]"
+								data-testid="basic-info-description-textarea"
+								disabled={readOnly}
+							/>
 						</div>
-						<Switch
-							checked={form.enabled}
-							onCheckedChange={(checked) =>
-								setForm((prev) => ({ ...prev, enabled: checked }))
-							}
-							data-testid="basic-info-enable-switch"
-							disabled={readOnly}
-						/>
+
+						{/* Color row */}
+						<div className="flex items-center gap-2">
+							<div className="flex h-9 w-[40%] shrink-0 items-center">
+								<span className="text-base font-medium text-foreground">
+									{t("playbook.edit.basicInfo.color")}
+								</span>
+							</div>
+							{readOnly ? (
+								<Button
+									variant="outline"
+									className="h-9 gap-2 px-4 shadow-xs"
+									disabled
+								>
+									<div
+										className="h-6 w-6 rounded-sm border border-border"
+										style={{ backgroundColor: form.theme_color }}
+									/>
+								</Button>
+							) : (
+								<ColorPickerPopover
+									value={form.theme_color}
+									onChange={(color) =>
+										setForm((prev) => ({ ...prev, theme_color: color }))
+									}
+								>
+									<span>
+										<Button
+											variant="outline"
+											className="h-9 gap-2 px-4 shadow-xs"
+											data-testid="basic-info-color-picker"
+										>
+											<div
+												className="h-6 w-6 rounded-sm border border-border"
+												style={{ backgroundColor: form.theme_color }}
+											/>
+											<ChevronDown className="h-4 w-4" />
+										</Button>
+									</span>
+								</ColorPickerPopover>
+							)}
+						</div>
+
+						{/* Enable row */}
+						<div className="flex items-center gap-2">
+							<div className="flex h-9 w-[40%] shrink-0 items-center">
+								<span className="text-base font-medium text-foreground">
+									{t("playbook.edit.basicInfo.enable")}
+								</span>
+							</div>
+							<Switch
+								checked={form.enabled}
+								onCheckedChange={(checked) =>
+									setForm((prev) => ({ ...prev, enabled: checked }))
+								}
+								data-testid="basic-info-enable-switch"
+								disabled={readOnly}
+							/>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			{/* Footer actions */}
-			{readOnly ? null : (
-				<div className="flex shrink-0 items-center justify-end gap-1.5">
-					<Button
-						variant="outline"
-						className="h-9 shadow-xs"
-						onClick={handleReset}
-						data-testid="basic-info-reset-button"
-					>
-						{t("playbook.edit.basicInfo.reset")}
-					</Button>
-					<Button
-						className="h-9 shadow-xs"
-						onClick={handleSave}
-						disabled={!isDirty}
-						data-testid="basic-info-save-button"
-					>
-						{t("playbook.edit.basicInfo.save")}
-					</Button>
-				</div>
-			)}
-		</div>
+				{/* Footer actions */}
+				{readOnly ? null : (
+					<div className="flex shrink-0 items-center justify-end gap-1.5">
+						<Button
+							variant="outline"
+							className="h-9 shadow-xs"
+							onClick={handleReset}
+							data-testid="basic-info-reset-button"
+						>
+							{t("playbook.edit.basicInfo.reset")}
+						</Button>
+						<Button
+							className="h-9 shadow-xs"
+							onClick={handleSave}
+							disabled={!isDirty}
+							data-testid="basic-info-save-button"
+						>
+							{t("playbook.edit.basicInfo.save")}
+						</Button>
+					</div>
+				)}
+			</div>
+		</ScrollArea>
 	)
 })

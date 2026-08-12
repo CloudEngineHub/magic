@@ -55,6 +55,9 @@ import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
 
+const SHARE_MESSAGE_TOP_MASK_CLASS_NAME =
+	"pointer-events-none absolute inset-x-0 top-0 z-10 h-2.5 bg-white dark:bg-card"
+
 function Topic({
 	data,
 	resource_name,
@@ -1110,7 +1113,7 @@ function Topic({
 										isEmpty(autoDetail) &&
 										isEmpty(userDetail)) ||
 										!hasStarted) &&
-										"max-md:max-w-none w-full min-w-[420px] max-w-[840px]",
+										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
 									!(
 										(!showAllProjectFiles &&
 											isEmpty(autoDetail) &&
@@ -1118,7 +1121,7 @@ function Topic({
 										!hasStarted
 									) && "w-[420px] min-w-[420px]",
 									!hasStarted &&
-										"max-md:scale-110 max-md:[transform:perspective(550px)_rotateX(20deg)_translateY(-20px)] scale-[1.7] [transform:perspective(900px)_rotateX(30deg)_translateY(150px)]",
+										"scale-[1.7] [transform:perspective(900px)_rotateX(30deg)_translateY(150px)] max-md:scale-110 max-md:[transform:perspective(550px)_rotateX(20deg)_translateY(-20px)]",
 									(isMessagePanelDragging || isMessagePanelHovering) &&
 										"select-none !transition-none",
 								)}
@@ -1159,6 +1162,14 @@ function Topic({
 											<LoadingMessage />
 										)}
 									</ScrollArea>
+									{/* Keep scrolling rows hidden inside the viewport's top padding. */}
+									<div
+										aria-hidden
+										className={cn(
+											SHARE_MESSAGE_TOP_MASK_CLASS_NAME,
+											"max-md:h-[calc(60px+var(--safe-area-inset-top,env(safe-area-inset-top)))]",
+										)}
+									/>
 									<BackToLatestButton
 										visible={showBackToLatest}
 										onClick={scrollToBottom}
@@ -1176,14 +1187,14 @@ function Topic({
 
 			{hasStarted && !isFileShare && !isNewFileShare && (
 				<div
-					className="max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)]"
+					className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]"
 					data-testid="share-playback-controls"
 				>
 					<div className="flex flex-col gap-2.5 p-2">
-						<div className="max-md:gap-2.5 flex flex-1 flex-row items-center justify-between [&_img]:h-9 [&_img]:w-auto">
+						<div className="flex flex-1 flex-row items-center justify-between max-md:gap-2.5 [&_img]:h-9 [&_img]:w-auto">
 							{isMobile && <FooterLogo />}
 							{(taskData?.process?.length || 0) > 0 && (
-								<div className="max-md:mr-0 max-md:flex-1 mr-[30px] min-w-0 max-w-[400px] shrink overflow-visible">
+								<div className="mr-[30px] min-w-0 max-w-[400px] shrink overflow-visible max-md:mr-0 max-md:flex-1">
 									<TaskList taskData={taskData} />
 								</div>
 							)}
@@ -1198,7 +1209,7 @@ function Topic({
 									</MagicTooltip>
 								</div>
 							)}
-							<div className="max-md:absolute max-md:-top-[0] max-md:left-0 max-md:right-0 max-md:z-10 max-md:mr-0 max-md:h-[26px] mr-[30px] flex-1">
+							<div className="mr-[30px] flex-1 max-md:absolute max-md:-top-[0] max-md:left-0 max-md:right-0 max-md:z-10 max-md:mr-0 max-md:h-[26px]">
 								<Slider
 									min={0}
 									max={messagesWithoutRevoked?.length || 0}
@@ -1241,7 +1252,7 @@ function Topic({
 					className="fixed bottom-0 left-0 right-0 z-10 flex h-full animate-fadeInUp flex-col items-center justify-center bg-gradient-to-b from-transparent via-[#F9F9F9] to-[#F9F9F9] px-5 pb-0 pt-[60px] transition-all duration-300 ease-in-out dark:via-background dark:to-background"
 					data-testid="share-replay-intro"
 				>
-					<div className="max-md:w-[335px] max-md:max-w-[335px] w-[840px]">
+					<div className="w-[840px] max-md:w-[335px] max-md:max-w-[335px]">
 						<div className="mb-5 flex items-center justify-start gap-2.5 rounded-lg">
 							<div className="relative h-[50px] w-[50px] shrink-0 overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300">
 								<div className="absolute -left-[30px] -top-[30px] h-[120px] w-[120px] animate-[spin_3s_linear_infinite] bg-gradient-to-r from-[#FFAFC8] via-[#E08AFF] to-[#9FC3FF] opacity-90"></div>
@@ -1254,10 +1265,10 @@ function Topic({
 								</div>
 							</div>
 							<div className="flex flex-col items-start">
-								<div className="max-md:text-sm max-md:leading-5 mb-1.5 text-center text-sm font-normal leading-5 text-foreground">
+								<div className="mb-1.5 text-center text-sm font-normal leading-5 text-foreground max-md:text-sm max-md:leading-5">
 									{t("share.viewingTask")}
 								</div>
-								<div className="max-md:max-h-10 max-md:text-sm max-md:leading-5 bg-gradient-to-br from-[#3F8FFF] to-[#EF2FDF] bg-clip-text text-lg font-semibold leading-[1.3333em] text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent]">
+								<div className="bg-gradient-to-br from-[#3F8FFF] to-[#EF2FDF] bg-clip-text text-lg font-semibold leading-[1.3333em] text-transparent [-webkit-background-clip:text] [-webkit-text-fill-color:transparent] max-md:max-h-10 max-md:text-sm max-md:leading-5">
 									{resource_name}
 								</div>
 							</div>
@@ -1265,16 +1276,16 @@ function Topic({
 						<div className="relative mx-auto flex min-h-[300px] w-full min-w-[200px] flex-col items-center justify-center gap-5 rounded-[20px] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.1)] backdrop-blur-[10px] after:absolute after:bottom-[-1px] after:left-0 after:h-full after:w-full after:rounded-b-lg after:bg-gradient-to-b after:from-transparent after:via-transparent after:to-background dark:bg-white/[0.95] dark:after:to-gray-100">
 							<div className="absolute bottom-0 left-0 right-0 top-0 z-10 flex h-full w-full items-center justify-center">
 								<div
-									className="max-md:h-[60px] max-md:w-[60px] relative h-20 w-20 cursor-pointer overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300"
+									className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] transition-all duration-300 max-md:h-[60px] max-md:w-[60px]"
 									onClick={startShowingMessages}
 									data-testid="share-replay-play-trigger"
 								>
-									<div className="max-md:-left-[30px] max-md:-top-[30px] max-md:h-[120px] max-md:w-[120px] absolute -left-[50px] -top-[50px] h-[150px] w-[150px] cursor-pointer bg-black/80"></div>
-									<div className="max-md:h-10 max-md:w-10 absolute left-1/2 top-1/2 z-10 flex h-[50px] w-[50px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full">
+									<div className="absolute -left-[50px] -top-[50px] h-[150px] w-[150px] cursor-pointer bg-black/80 max-md:-left-[30px] max-md:-top-[30px] max-md:h-[120px] max-md:w-[120px]"></div>
+									<div className="absolute left-1/2 top-1/2 z-10 flex h-[50px] w-[50px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full max-md:h-10 max-md:w-10">
 										<IconPlayerPlayFilled
 											size={50}
 											color="white"
-											className="max-md:h-10 max-md:w-10 h-[50px] w-[50px] cursor-pointer brightness-0 invert"
+											className="h-[50px] w-[50px] cursor-pointer brightness-0 invert max-md:h-10 max-md:w-10"
 										/>
 									</div>
 								</div>
@@ -1290,12 +1301,12 @@ function Topic({
 							</div>
 							<div
 								className={cn(
-									"max-md:max-h-[335px] max-md:min-w-0 max-md:max-w-[calc(100%-40px)] max-md:p-0 max-md:[mask-image:none] relative h-full max-h-[500px] overflow-x-hidden overflow-y-hidden rounded-lg bg-background px-[90px] py-7 transition-all ease-in-out [mask-image:linear-gradient(to_bottom,transparent,black_28px,black_calc(100%-28px),transparent)] [transition-duration:800ms] dark:bg-card",
+									"relative h-full max-h-[500px] overflow-x-hidden overflow-y-hidden rounded-lg bg-background px-[90px] py-7 transition-all ease-in-out [mask-image:linear-gradient(to_bottom,transparent,black_28px,black_calc(100%-28px),transparent)] [transition-duration:800ms] dark:bg-card max-md:max-h-[335px] max-md:min-w-0 max-md:max-w-[calc(100%-40px)] max-md:p-0 max-md:[mask-image:none]",
 									((!showAllProjectFiles &&
 										isEmpty(autoDetail) &&
 										isEmpty(userDetail)) ||
 										!hasStarted) &&
-										"max-md:max-w-none w-full min-w-[420px] max-w-[840px]",
+										"w-full min-w-[420px] max-w-[840px] max-md:max-w-none",
 								)}
 							>
 								<div
@@ -1326,7 +1337,7 @@ function Topic({
 						</div>
 						<div className="flex w-full flex-col items-center gap-3 text-center">
 							<div className="my-5 rounded-md backdrop-blur-[5px]">
-								<div className="max-md:text-[13px] max-md:leading-[18px] text-xs font-normal leading-4 text-muted-foreground [text-shadow:0_1px_1px_rgba(255,255,255,0.6)] dark:[text-shadow:none]">
+								<div className="text-xs font-normal leading-4 text-muted-foreground [text-shadow:0_1px_1px_rgba(255,255,255,0.6)] dark:[text-shadow:none] max-md:text-[13px] max-md:leading-[18px]">
 									{t("share.replayWillStartIn", { countdown })}
 								</div>
 							</div>

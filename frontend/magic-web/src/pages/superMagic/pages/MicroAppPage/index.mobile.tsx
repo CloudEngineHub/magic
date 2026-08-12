@@ -18,6 +18,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { cn } from "@/lib/utils"
 
 import MicroAppConversationFloatingButton from "./components/MicroAppMobileConversation/MicroAppConversationFloatingButton"
+import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppMobileHeader from "./components/MicroAppMobileHeader"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
@@ -156,18 +157,7 @@ function MicroAppPageMobileInner({
 	}
 
 	if (store.initError) {
-		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background px-6 text-center">
-				<p className="text-sm text-destructive">{store.initError}</p>
-				<button
-					type="button"
-					className="text-sm font-medium text-primary"
-					onClick={handleBackToMicroApps}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
-		)
+		return <MicroAppFallbackState variant="load" mobile onBack={handleBackToMicroApps} />
 	}
 
 	return (
@@ -312,7 +302,6 @@ const MicroAppPageMobileInnerObserver = observer(MicroAppPageMobileInner)
 
 export default function MicroAppPageMobile() {
 	const { appId = "" } = useParams<{ appId: string }>()
-	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const { projectId, isPublished, setIsPublished, loading, error } =
 		useMicroAppProjectResolver(appId)
@@ -329,18 +318,11 @@ export default function MicroAppPageMobile() {
 
 	if (error || !projectId) {
 		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-mobile-background px-6 text-center">
-				<p className="text-sm text-destructive">
-					{error?.message || t("microAppPage.errors.loadFailed")}
-				</p>
-				<button
-					type="button"
-					className="text-sm font-medium text-primary"
-					onClick={() => navigate({ name: RouteName.MicroApps })}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
+			<MicroAppFallbackState
+				variant={error?.kind === "permission" ? "permission" : "load"}
+				mobile
+				onBack={() => navigate({ name: RouteName.MicroApps })}
+			/>
 		)
 	}
 

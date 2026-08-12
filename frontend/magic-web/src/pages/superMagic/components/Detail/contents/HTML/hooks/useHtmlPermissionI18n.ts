@@ -1,5 +1,6 @@
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
+import type { HtmlPermissionTtl } from "../iframe-api/services/htmlPermissionPolicy"
 import type { HtmlPermissionScope } from "../iframe-api/types"
 
 export function useHtmlPermissionI18n() {
@@ -28,8 +29,10 @@ export function useHtmlPermissionI18n() {
 		}
 	})
 
-	const getTtlLabel = useMemoizedFn((ttlMs: number) => {
+	const getTtlLabel = useMemoizedFn((ttlMs: HtmlPermissionTtl) => {
 		switch (ttlMs) {
+			case null:
+				return t("htmlEditor.permissionAuthorizationConfirm.ttl.always")
 			case 0:
 				return t("htmlEditor.permissionAuthorizationConfirm.ttl.once")
 			case 5 * 60 * 1000:
@@ -50,6 +53,12 @@ export function useHtmlPermissionI18n() {
 				return t("htmlEditor.permissionAuthorizationConfirm.ttl.8h")
 			case 12 * 60 * 60 * 1000:
 				return t("htmlEditor.permissionAuthorizationConfirm.ttl.12h")
+			case 24 * 60 * 60 * 1000:
+				return t("htmlEditor.permissionAuthorizationConfirm.ttl.1d")
+			case 7 * 24 * 60 * 60 * 1000:
+				return t("htmlEditor.permissionAuthorizationConfirm.ttl.7d")
+			case 30 * 24 * 60 * 60 * 1000:
+				return t("htmlEditor.permissionAuthorizationConfirm.ttl.30d")
 			default:
 				return String(ttlMs)
 		}

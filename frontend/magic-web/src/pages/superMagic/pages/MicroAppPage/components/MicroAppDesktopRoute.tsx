@@ -1,12 +1,12 @@
 import { useEffect, type ComponentType } from "react"
 import { useParams } from "react-router"
-import { useTranslation } from "react-i18next"
 
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 
 import { AppStoreProvider } from "../context"
 import { useMicroAppProjectResolver } from "../hooks/useMicroAppProjectResolver"
+import MicroAppFallbackState from "./MicroAppFallbackState"
 import MicroAppPageLoadingState from "./MicroAppPageLoadingState"
 
 interface MicroAppDesktopContentProps {
@@ -22,7 +22,6 @@ export default function MicroAppDesktopRoute({
 	Content: ComponentType<MicroAppDesktopContentProps>
 }) {
 	const { appId = "" } = useParams<{ appId: string }>()
-	const { t } = useTranslation("super")
 	const navigate = useNavigate()
 	const { projectId, isPublished, setIsPublished, loading, error } =
 		useMicroAppProjectResolver(appId)
@@ -39,18 +38,10 @@ export default function MicroAppDesktopRoute({
 
 	if (error || !projectId) {
 		return (
-			<div className="flex h-full w-full flex-col items-center justify-center gap-4">
-				<p className="text-sm text-destructive">
-					{error?.message || t("microAppPage.errors.loadFailed")}
-				</p>
-				<button
-					type="button"
-					className="text-sm text-primary hover:underline"
-					onClick={() => navigate({ name: RouteName.MicroApps })}
-				>
-					{t("microAppPage.header.backToApps")}
-				</button>
-			</div>
+			<MicroAppFallbackState
+				variant={error?.kind === "permission" ? "permission" : "load"}
+				onBack={() => navigate({ name: RouteName.MicroApps })}
+			/>
 		)
 	}
 

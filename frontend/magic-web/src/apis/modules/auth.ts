@@ -5,7 +5,6 @@ import type {
 } from "@/pages/flow/components/AuthControlButton/types"
 import type { User } from "@/types/user"
 
-import { isCommercial } from "@/utils/env"
 import type { HttpClient, RequestConfig } from "../core/HttpClient"
 import { configStore } from "@/models/config"
 import { isNil } from "lodash-es"
@@ -108,9 +107,6 @@ export const generateAuthApi = (fetch: HttpClient) => ({
 	 * @description 获取当前账号所归属的环境 code
 	 */
 	getAccountDeployCode(options?: Pick<RequestConfig, "skipAppInitWait">) {
-		if (!isCommercial()) {
-			return { login_code: "" }
-		}
 		return fetch.get<{ login_code: string }>(genRequestUrl("/api/v1/auth/environment"), {
 			enableRequestUnion: true,
 			headers: (h) => {

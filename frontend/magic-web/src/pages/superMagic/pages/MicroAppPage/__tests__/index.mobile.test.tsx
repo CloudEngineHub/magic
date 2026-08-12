@@ -2,6 +2,8 @@ import { forwardRef, useImperativeHandle, type ReactNode } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { RouteName } from "@/routes/constants"
+import type { MicroAppProjectError } from "../hooks/useMicroAppProjectResolver"
 import MicroAppPageMobile from "../index.mobile"
 
 const previewPopupMocks = vi.hoisted(() => ({
@@ -12,13 +14,19 @@ const resolverMocks = vi.hoisted(() => ({
 	result: {
 		projectId: "project-1",
 		loading: false,
-		error: null as Error | null,
+		error: null as MicroAppProjectError | null,
 	},
 }))
 
 const controllerMocks = vi.hoisted(() => ({
 	initLoading: false,
+	initError: null as string | null,
 	checkAttachmentsNowDebounced: vi.fn(),
+	handleBackToMicroApps: vi.fn(),
+}))
+
+const navigateMocks = vi.hoisted(() => ({
+	navigate: vi.fn(),
 }))
 
 const mobileConversationMocks = vi.hoisted(() => ({
@@ -34,7 +42,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({
-	default: () => vi.fn(),
+	default: () => navigateMocks.navigate,
 }))
 
 vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
@@ -71,7 +79,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 	useMicroAppPageController: () => ({
 		store: {
 			initLoading: controllerMocks.initLoading,
-			initError: null,
+			initError: controllerMocks.initError,
 			mentionPanelStore: {},
 			projectFilesStore: {},
 		},
@@ -118,7 +126,7 @@ vi.mock("../hooks/useMicroAppPageController", () => ({
 		topicFilesProps: {},
 		handleOpenFile: vi.fn(),
 		handleActiveFileChange: vi.fn(),
-		handleBackToMicroApps: vi.fn(),
+		handleBackToMicroApps: controllerMocks.handleBackToMicroApps,
 		handleOpenPublishDialog: vi.fn(),
 		handleToggleDatabasePanel: vi.fn(),
 		handleFileTabsCacheLoaded: vi.fn(),
@@ -205,7 +213,10 @@ describe("MicroAppPageMobile", () => {
 			error: null,
 		}
 		controllerMocks.initLoading = false
+		controllerMocks.initError = null
 		controllerMocks.checkAttachmentsNowDebounced.mockClear()
+		controllerMocks.handleBackToMicroApps.mockClear()
+		navigateMocks.navigate.mockClear()
 		mobileConversationMocks.render.mockClear()
 		previewPopupMocks.open.mockClear()
 	})
@@ -214,13 +225,48 @@ describe("MicroAppPageMobile", () => {
 		resolverMocks.result = {
 			projectId: "",
 			loading: false,
-			error: new Error(),
+			error: { kind: "load", message: "" },
 		}
 
 		render(<MicroAppPageMobile />)
 
 		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-fallback")).toHaveAttribute("data-mobile", "true")
+		expect(screen.getByTestId("micro-app-load-fallback-illustration")).toHaveAttribute(
+			"data-state",
+			"retry",
+		)
 		expect(screen.queryByText("[object ArrayBuffer]")).not.toBeInTheDocument()
+	})
+
+	it("shows the mobile permission fallback and returns to the micro app list", () => {
+		resolverMocks.result = {
+			projectId: "",
+			loading: false,
+			error: { kind: "permission", message: "Access denied to this project" },
+		}
+
+		render(<MicroAppPageMobile />)
+
+		expect(screen.getByText("microAppPage.errors.permissionTitle")).toBeInTheDocument()
+		expect(screen.getByText("microAppPage.errors.permissionDescription")).toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-permission-fallback-illustration")).toHaveAttribute(
+			"data-state",
+			"permission",
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "microAppPage.header.backToApps" }))
+		expect(navigateMocks.navigate).toHaveBeenCalledWith({ name: RouteName.MicroApps })
+	})
+
+	it("reuses the mobile fallback when project context initialization fails", () => {
+		controllerMocks.initError = "Failed to load project"
+
+		render(<MicroAppPageMobile />)
+
+		expect(screen.getByText("microAppPage.errors.loadFailed")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "microAppPage.header.backToApps" }))
+		expect(controllerMocks.handleBackToMicroApps).toHaveBeenCalledTimes(1)
 	})
 
 	it("uses the loading illustration while resolving the project", () => {

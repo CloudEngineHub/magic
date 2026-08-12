@@ -4,17 +4,34 @@ from pathlib import Path
 from typing import BinaryIO, Dict, List, Optional, Tuple
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from agentlang.path_manager import PathManager
+from app.path_manager import PathManager
 
 
 class DebugWorkspaceFileService:
-    """Local .workspace file management for the debug client."""
+    """为调试客户端提供受控的工作区与长期记忆文件管理。"""
 
     MAX_READ_BYTES = 5 * 1024 * 1024
+    WORKSPACE_SCOPE = "workspace"
+    MEMORY_SCOPE = "memory"
 
-    def __init__(self, workspace_root: Optional[Path] = None):
-        self.workspace_root = (workspace_root or PathManager.get_workspace_dir()).resolve()
+    def __init__(self, scope: str = WORKSPACE_SCOPE, workspace_root: Optional[Path] = None):
+        """根据受控 scope 初始化文件根目录，不接受前端传入的绝对路径。"""
+        self.scope = self.normalize_scope(scope)
+        default_root = (
+            PathManager.get_memory_root_dir()
+            if self.scope == self.MEMORY_SCOPE
+            else PathManager.get_workspace_dir()
+        )
+        self.workspace_root = (workspace_root or default_root).resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def normalize_scope(cls, scope: str) -> str:
+        """校验调试文件面板支持的根目录范围。"""
+        normalized = str(scope or cls.WORKSPACE_SCOPE).strip().lower()
+        if normalized not in {cls.WORKSPACE_SCOPE, cls.MEMORY_SCOPE}:
+            raise ValueError(f"不支持的调试文件范围: {scope}")
+        return normalized
 
     def resolve_path(self, relative_path: str = "") -> Path:
         clean_path = self._normalize_relative_path(relative_path)

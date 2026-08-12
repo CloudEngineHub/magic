@@ -19,16 +19,20 @@ use App\ErrorCode\LongTermMemoryErrorCode;
 use App\ErrorCode\MagicAccountErrorCode;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\MagicBaseErrorCode;
+use App\ErrorCode\MagicFSErrorCode;
 use App\ErrorCode\MCPErrorCode;
 use App\ErrorCode\ModeErrorCode;
 use App\ErrorCode\PermissionErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
+use App\ErrorCode\ShareErrorCode;
+use App\ErrorCode\SkillErrorCode;
 use App\ErrorCode\SlidesTemplateErrorCode;
+use App\ErrorCode\SuperAgentErrorCode;
+use App\ErrorCode\SuperMagicErrorCode;
 use App\ErrorCode\TokenErrorCode;
 use App\ErrorCode\UserErrorCode;
 use App\ErrorCode\UserTaskErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
-use Dtyq\SuperMagic\ErrorCode\SuperMagicErrorCode;
 
 return [
     'exception_class' => BusinessException::class,
@@ -55,6 +59,10 @@ return [
         MagicBaseErrorCode::class => [48000, 49999],
         SlidesTemplateErrorCode::class => [47000, 47999],
         MCPErrorCode::class => [51500, 51599],
+        SuperAgentErrorCode::class => [51000, 51299],
+        MagicFSErrorCode::class => [51300, 51399],
+        ShareErrorCode::class => [51300, 51400],
+        SkillErrorCode::class => [51239, 51338],
         SuperMagicErrorCode::class => [60000, 60999],
         DesignErrorCode::class => [14000, 14999],
     ],

@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace Dtyq\SuperMagic\Tests\Unit\Application\SuperAgent\Service;
 
-use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
+use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;

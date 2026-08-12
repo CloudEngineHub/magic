@@ -152,7 +152,10 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 		>
 			{/* Section wraps header + projects so sticky releases when whole block scrolls out */}
 			<div className="flex w-full min-w-0 flex-col">
-				<div ref={workspaceHeaderRef} className="sticky top-0 z-10 w-full bg-sidebar">
+				<div
+					ref={workspaceHeaderRef}
+					className="sticky top-[var(--workspace-list-sticky-top)] z-10 w-full bg-sidebar"
+				>
 					<MagicDropdown
 						menu={{ items: menuProps.items }}
 						trigger={["contextMenu"]}

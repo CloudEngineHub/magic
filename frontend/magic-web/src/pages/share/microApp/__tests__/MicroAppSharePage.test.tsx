@@ -56,6 +56,69 @@ describe("MicroAppSharePage", () => {
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
 
+	it("shows permission management beside the user only after access confirmation", async () => {
+		mocks.authorization.current = "token-1"
+		mocks.hasHtmlPermissionDeclarations.current = true
+		mocks.userInfo.current = {
+			user_id: "usi_1",
+			magic_id: "magic_1",
+			nickname: "测试用户",
+			real_name: "测试用户",
+			avatar: "",
+			status: 1,
+			organization_code: "magic-org-1",
+		}
+
+		renderPage()
+
+		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-permission-manager")).not.toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("micro-app-share-safety-confirm"))
+
+		const permissionManagerButton = await screen.findByTestId(
+			"micro-app-share-permission-manager",
+		)
+		expect(permissionManagerButton).toHaveTextContent("htmlEditor.permissionManager.open")
+		expect(permissionManagerButton.nextElementSibling).toBe(
+			screen.getByTestId("micro-app-share-user"),
+		)
+
+		fireEvent.click(permissionManagerButton)
+
+		expect(mocks.openHtmlPermissionManager).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not show permission management when app.json has no permission declarations", async () => {
+		mocks.authorization.current = "token-1"
+		mocks.userInfo.current = {
+			user_id: "usi_1",
+			magic_id: "magic_1",
+			nickname: "测试用户",
+			real_name: "测试用户",
+			avatar: "",
+			status: 1,
+			organization_code: "magic-org-1",
+		}
+
+		renderPage()
+
+		await confirmSafetyNotice()
+
+		expect(screen.queryByTestId("micro-app-share-permission-manager")).not.toBeInTheDocument()
+	})
+
+	it("does not show permission management for anonymous visitors", async () => {
+		mocks.hasHtmlPermissionDeclarations.current = true
+
+		renderPage()
+
+		await confirmSafetyNotice()
+
+		expect(screen.getByTestId("micro-app-share-login")).toBeInTheDocument()
+		expect(screen.queryByTestId("micro-app-share-permission-manager")).not.toBeInTheDocument()
+	})
+
 	it("hides a cover image that fails to load", async () => {
 		renderPage()
 

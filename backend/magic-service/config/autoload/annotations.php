@@ -12,7 +12,6 @@ use Hyperf\SocketIOServer\Listener\StartSubscriberListener;
 use Hyperf\SocketIOServer\Room\RedisAdapter;
 use Hyperf\SocketIOServer\SidProvider\DistributedSidProvider;
 use Hyperf\SocketIOServer\SocketIO;
-use Tos\TosClient;
 
 return [
     'scan' => [
@@ -41,8 +40,6 @@ return [
             BodySummarizer::class => BASE_PATH . '/app/Infrastructure/Core/ClassMap/GuzzleHttp/BodySummarizer.php',
             // AWS SDK error handling enhancement
             WrappedHttpHandler::class => BASE_PATH . '/app/Infrastructure/Core/ClassMap/Aws/WrappedHttpHandler.php',
-            // Volcengine TOS SDK 2.1.12 passes an integer Content-Length to Guzzle.
-            TosClient::class => BASE_PATH . '/app/Infrastructure/Core/ClassMap/Volcengine/TosClient.php',
         ],
     ],
 ];

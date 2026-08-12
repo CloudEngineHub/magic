@@ -281,7 +281,10 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 		// While watchdog HTTP is in flight, resident polling must remain skipped for the active stream.
 		expect(mockState.getMessagesByConversationId).toHaveBeenCalledTimes(1)
 
-		recoveryResponse.resolve(createResponse([envelope]))
+		recoveryResponse.resolve({
+			...createResponse([envelope]),
+			snapshot_complete: true,
+		})
 		await act(async () => {
 			await flushPromises()
 		})
@@ -715,7 +718,7 @@ describe("useTopicMessages / persistent Assistant black-box integration", () => 
 			(superMagicStore.messages.get(topic.chat_topic_id) || []).map(
 				(message) => message.app_message_id,
 			),
-		).toEqual(["stable-prefix", "super-new-stream", "message-b"])
+		).toEqual(["stable-prefix", "message-b", "super-new-stream"])
 		expect(
 			superMagicStore.getStreamState(topic.chat_topic_id, toSuperMessageId("old-stream")),
 		).toBeUndefined()

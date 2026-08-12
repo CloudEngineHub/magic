@@ -439,7 +439,7 @@ class MessageService {
 			(prev, cur) => {
 				switch (cur.type) {
 					case ConversationMessageType.Files:
-						; (cur.message as FileConversationMessage).files?.attachments.forEach(
+						;(cur.message as FileConversationMessage).files?.attachments.forEach(
 							(file) => {
 								if (ChatFileService.checkFileExpired(file.file_id)) {
 									prev.push({ message_id: cur.message_id, file_id: file.file_id })
@@ -448,7 +448,7 @@ class MessageService {
 						)
 						break
 					case ConversationMessageType.RichText:
-						; (
+						;(
 							cur.message as RichTextConversationMessage
 						).rich_text?.attachments?.forEach((file) => {
 							if (ChatFileService.checkFileExpired(file.file_id)) {
@@ -457,7 +457,7 @@ class MessageService {
 						})
 						break
 					case ConversationMessageType.Text:
-						; (cur.message as TextConversationMessage).text?.attachments?.forEach(
+						;(cur.message as TextConversationMessage).text?.attachments?.forEach(
 							(file) => {
 								if (ChatFileService.checkFileExpired(file.file_id)) {
 									prev.push({ message_id: cur.message_id, file_id: file.file_id })
@@ -466,7 +466,7 @@ class MessageService {
 						)
 						break
 					case ConversationMessageType.Markdown:
-						; (
+						;(
 							cur.message as MarkdownConversationMessage
 						).markdown?.attachments?.forEach((file) => {
 							if (ChatFileService.checkFileExpired(file.file_id)) {
@@ -491,16 +491,16 @@ class MessageService {
 							"cur.message as VoiceConversationMessage",
 							cur.message as VoiceConversationMessage,
 						)
-							; (cur.message as VoiceConversationMessage).voice?.attachments?.forEach(
-								(file) => {
-									if (ChatFileService.checkFileExpired(file.file_id)) {
-										prev.push({ message_id: cur.message_id, file_id: file.file_id })
-									}
-								},
-							)
+						;(cur.message as VoiceConversationMessage).voice?.attachments?.forEach(
+							(file) => {
+								if (ChatFileService.checkFileExpired(file.file_id)) {
+									prev.push({ message_id: cur.message_id, file_id: file.file_id })
+								}
+							},
+						)
 						break
 					case ConversationMessageType.AiImage:
-						; (cur.message as AIImagesMessage).ai_image_card?.items?.forEach((item) => {
+						;(cur.message as AIImagesMessage).ai_image_card?.items?.forEach((item) => {
 							if (ChatFileService.checkFileExpired(item.file_id)) {
 								prev.push({ message_id: cur.message_id, file_id: item.file_id })
 							}
@@ -1036,7 +1036,15 @@ class MessageService {
 							return this.formatMessage(message, userInfo)
 						})
 						.catch((err) => {
-							logger.error("消息完整性检查失败", err, message)
+							logger.error({
+								eventKey: "message_check_failed",
+								errorKind: "unknown",
+								error: err,
+								message: "消息完整性检查失败",
+								context: {
+									message,
+								},
+							})
 							return this.formatMessage(message, userInfo)
 						})
 				}),
@@ -1044,7 +1052,12 @@ class MessageService {
 
 			return { messages, page: res.page, pageSize: res.pageSize, totalPages: res.totalPages }
 		} catch (error) {
-			logger.error("数据库访问错误，无法获取消息", error)
+			logger.error({
+				eventKey: "database_get_message_failed",
+				errorKind: "storage",
+				error: error,
+				message: "数据库访问错误，无法获取消息",
+			})
 			return { messages: [], page: 1, pageSize: 10, totalPages: 1 }
 		}
 	}
@@ -1065,7 +1078,7 @@ class MessageService {
 					appMessageId &&
 					(msg.aggregate_ai_search_card_v2?.stream_options?.status !== StreamStatus.End ||
 						msg.aggregate_ai_search_card_v2?.status !==
-						AggregateAISearchCardV2Status.isEnd)
+							AggregateAISearchCardV2Status.isEnd)
 				) {
 					const messages = await ChatApi.getMessagesByAppMessageId(appMessageId).then(
 						(messages) => {
@@ -1342,7 +1355,12 @@ class MessageService {
 				return message
 			})
 			.catch((err: any) => {
-				logger.error("获取消息失败", err)
+				logger.error({
+					eventKey: "get_message_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "获取消息失败",
+				})
 				return undefined
 			})
 	}

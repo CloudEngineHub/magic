@@ -77,7 +77,13 @@ export abstract class AbstractBaseRepository<T> {
 				errorMessage: error instanceof Error ? error.message : String(error),
 			}
 
-			logger.error("repositoryOperationFailed", errorDetails, error)
+			logger.error({
+				eventKey: "repository_operation_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "repositoryOperationFailed",
+				context: errorDetails,
+			})
 			throw new Error(
 				`Repository operation '${operation}' failed on table '${this.tableName}': ${error?.message}`,
 			)

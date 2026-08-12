@@ -119,7 +119,7 @@ describe("IframeUserInfoService", () => {
 	it("rejects sensitive access when stable user identity is unavailable", async () => {
 		const authorizeUserInfo = vi.fn().mockResolvedValue(true)
 		const { service, postToIframe } = createService({
-			getUserInfo: () => ({ ...fullUserInfo, user_id: "", magic_id: "" }),
+			getUserInfo: () => ({ ...fullUserInfo, user_id: "" }),
 			authorizeUserInfo,
 		})
 
@@ -143,7 +143,7 @@ describe("IframeUserInfoService", () => {
 			currentUserInfo = {
 				...fullUserInfo,
 				user_id: "user-2",
-				magic_id: "magic-2",
+				magic_id: fullUserInfo.magic_id,
 			}
 			return true
 		})

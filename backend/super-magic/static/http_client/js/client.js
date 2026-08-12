@@ -3909,7 +3909,13 @@ function handleSuperMagicChunkMessage(data) {
     if (!envelope || !envelope.chunk) return false;
 
     const chunk = envelope.chunk;
-    const messageKey = envelope.appMessageId || chunk.id || chunk.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    );
     const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
     for (const choice of choices) {
         const delta = choice && choice.delta ? choice.delta : {};
@@ -3948,12 +3954,13 @@ function isDuplicateSuperMagicChunkDelta(envelope, choice, deltaType) {
     const chunkIndex = chunk.i ?? chunk.chunk_id ?? chunk.index;
     if (chunkIndex === undefined || chunkIndex === null) return false;
 
-    const messageKey =
-        envelope.appMessageId ||
-        chunk.id ||
-        chunk.correlation_id ||
-        chunk.app_message_id ||
-        'unknown';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    ) || 'unknown';
     const choiceIndex = choice && choice.index !== undefined ? choice.index : 0;
     const dedupeKey = `${messageKey}:${choiceIndex}:${deltaType}:${chunkIndex}`;
 
@@ -4168,8 +4175,26 @@ function extractSuperMagicChunkEnvelope(data) {
     };
 }
 
+/**
+ * 解析 V2 流式消息与最终消息共享的稳定标识。
+ *
+ * super_message_id 由 Super Magic 生成并由下游透传，不会因消息落库而被覆盖；
+ * 其余标识仅用于兼容旧消息和未携带 super_message_id 的数据。
+ */
+function resolveSuperMagicMessageKey(superMessageId, ...fallbackIds) {
+    const messageId = [superMessageId, ...fallbackIds]
+        .find(value => value !== undefined && value !== null && value !== '');
+    return messageId === undefined ? '' : String(messageId);
+}
+
 function handleSuperMagicMessage(smsg, payload) {
-    const messageKey = smsg.message_id || payload.message_id || smsg.correlation_id || payload.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        smsg.super_message_id,
+        smsg.message_id,
+        payload.message_id,
+        smsg.correlation_id,
+        payload.correlation_id,
+    );
     const isToolRole = smsg.role === 'tool';
     let hasVisibleContent = false;
     let hasReplyContent = false;
@@ -4179,6 +4204,7 @@ function handleSuperMagicMessage(smsg, payload) {
         showThinkingMessage(smsg.reasoning_content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
@@ -4187,6 +4213,7 @@ function handleSuperMagicMessage(smsg, payload) {
         showAIMessage(smsg.content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
@@ -4514,7 +4541,7 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
         toggleBtn.textContent = showingRaw ? 'MD' : '原文';
     });
 
-    messageState = { messageDiv, renderedView, rawView, content: '' };
+    messageState = { messageDiv, renderedView, rawView, content: '', finalized: false };
     attachCopyButton(actions, () => messageState.content);
     updateAIMessageState(messageState, content, options);
     if (registryKey) {
@@ -4524,11 +4551,20 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateAIMessageState(messageState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(messageState, options)) return;
     const nextContent = options.append ? messageState.content + content : content;
     messageState.content = nextContent;
+    if (options.finalize) messageState.finalized = true;
     messageState.renderedView.replaceChildren(buildRenderedView(nextContent));
     messageState.rawView.textContent = nextContent;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
+}
+
+/**
+ * 判断是否应忽略权威最终消息到达后的迟到流式片段。
+ */
+function shouldIgnoreLateStreamAppend(messageState, options = {}) {
+    return messageState.finalized === true && options.append === true;
 }
 
 // 显示思考过程（折叠展示）
@@ -4565,7 +4601,7 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 
     wrapper.appendChild(summary);
     wrapper.appendChild(detail);
-    thinkingState = { wrapper, detail, content: '' };
+    thinkingState = { wrapper, detail, content: '', finalized: false };
     attachCopyButton(summary, () => thinkingState.content, { compact: true });
     updateThinkingMessageState(thinkingState, content, options);
     if (registryKey) {
@@ -4575,7 +4611,9 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateThinkingMessageState(thinkingState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(thinkingState, options)) return;
     thinkingState.content = options.append ? thinkingState.content + content : content;
+    if (options.finalize) thinkingState.finalized = true;
     thinkingState.detail.textContent = thinkingState.content;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
 }
@@ -5720,14 +5758,29 @@ function normalizeMentionFilePath(raw) {
 }
 
 /**
- * 从 prompt 解析 [@directory_path:…] / [@file_path:…]，生成 mentions 数组（按出现顺序，按路径去重）。
- * project_file 在本地客户端无服务端 file_id，file_id 置空串，file_key 为 null。
+ * 根据文件树范围生成可插入到消息中的 mention 文本。
+ */
+function buildFiletreeMentionSnippet(kind, path, scope = getActiveFiletreeScope()) {
+    const normalizedPath = kind === 'directory'
+        ? normalizeMentionDirectoryPath(path)
+        : normalizeMentionFilePath(path);
+    if (!normalizedPath) return '';
+    const type = scope === 'memory'
+        ? (kind === 'directory' ? 'memory_directory' : 'memory_file')
+        : (kind === 'directory' ? 'directory_path' : 'file_path');
+    return `[@${type}:${normalizedPath}]${MENTION_PROMPT_SEPARATOR}`;
+}
+
+/**
+ * 从 prompt 解析工作区与长期记忆 mention，生成后端需要的结构化 mentions。
  */
 function parsePromptMentions(prompt) {
     if (!prompt || typeof prompt !== 'string') return [];
     const found = [];
     const dirRe = /\[@directory_path:([^\]]+)\]/g;
     const fileRe = /\[@file_path:([^\]]+)\]/g;
+    const memoryDirRe = /\[@memory_(?:directory|dir):([^\]]+)\]/g;
+    const memoryFileRe = /\[@memory_file:([^\]]+)\]/g;
     let m;
     while ((m = dirRe.exec(prompt)) !== null) {
         const directory_path = normalizeMentionDirectoryPath(m[1]);
@@ -5751,13 +5804,40 @@ function parsePromptMentions(prompt) {
             });
         }
     }
+    while ((m = memoryDirRe.exec(prompt)) !== null) {
+        const directory_path = normalizeMentionDirectoryPath(m[1]);
+        if (directory_path) {
+            found.push({
+                index: m.index,
+                mention: {
+                    type: 'memory_directory',
+                    directory_name: getWorkspaceFileBaseName(directory_path.replace(/\/+$/, '')),
+                    directory_path,
+                },
+            });
+        }
+    }
+    while ((m = memoryFileRe.exec(prompt)) !== null) {
+        const file_path = normalizeMentionFilePath(m[1]);
+        if (file_path) {
+            found.push({
+                index: m.index,
+                mention: {
+                    type: 'memory_file',
+                    file_id: '',
+                    file_name: getWorkspaceFileBaseName(file_path),
+                    file_path,
+                },
+            });
+        }
+    }
     found.sort((a, b) => a.index - b.index);
     const seen = new Set();
     const mentions = [];
     for (const { mention } of found) {
-        const key = mention.type === 'project_directory'
-            ? `d:${mention.directory_path}`
-            : `f:${mention.file_path}`;
+        const key = mention.type === 'project_directory' || mention.type === 'memory_directory'
+            ? `d:${mention.type}:${mention.directory_path}`
+            : `f:${mention.type}:${mention.file_path}`;
         if (seen.has(key)) continue;
         seen.add(key);
         mentions.push(mention);
@@ -5854,13 +5934,13 @@ async function collectWorkspaceMentionPaths(dirHandle, pathPrefix, out) {
     }
 }
 
-function collectApiWorkspaceMentionPaths(entries, out) {
+function collectApiWorkspaceMentionPaths(entries, out, scope = getActiveFiletreeScope()) {
     for (const entry of entries || []) {
         if (!entry || !entry.path) continue;
         const kind = entry.type === 'directory' ? 'directory' : 'file';
-        out.push({ kind, path: entry.path });
+        out.push({ kind, path: entry.path, scope });
         if (kind === 'directory' && Array.isArray(entry.children)) {
-            collectApiWorkspaceMentionPaths(entry.children, out);
+            collectApiWorkspaceMentionPaths(entry.children, out, scope);
         }
     }
 }
@@ -5870,7 +5950,7 @@ async function refreshWorkspaceMentionIndex() {
     const out = [];
     try {
         const data = await debugWorkspaceApi.listTree('', 8);
-        collectApiWorkspaceMentionPaths(data.entries || [], out);
+        collectApiWorkspaceMentionPaths(data.entries || [], out, getActiveFiletreeScope());
         workspaceMentionIndex = out;
     } catch (e) {
         console.warn('构建 @ 路径索引失败', e);
@@ -5959,7 +6039,7 @@ function renderMentionPickerRows(items) {
     if (!items.length) {
         const empty = document.createElement('div');
         empty.className = 'mention-picker-empty';
-        empty.textContent = '没有匹配的工作区路径';
+        empty.textContent = '没有匹配的路径';
         el.appendChild(empty);
         return;
     }
@@ -5990,9 +6070,7 @@ function applyMentionPickerChoice(item) {
     if (!ta || !mentionPickerState.open) return;
     const end = ta.selectionStart ?? ta.value.length;
     const start = mentionPickerState.start;
-    const snippet = item.kind === 'directory'
-        ? `[@directory_path:${normalizeMentionDirectoryPath(item.path)}]${MENTION_PROMPT_SEPARATOR}`
-        : `[@file_path:${normalizeMentionFilePath(item.path)}]${MENTION_PROMPT_SEPARATOR}`;
+    const snippet = buildFiletreeMentionSnippet(item.kind, item.path, item.scope);
     const before = ta.value.slice(0, start);
     const after = ta.value.slice(end);
     ta.value = before + snippet + after;
@@ -6087,6 +6165,13 @@ const filePreviewMeta = document.getElementById('filePreviewMeta');
 const filePreviewClose = document.getElementById('filePreviewClose');
 const filePreviewOpenBtn = document.getElementById('filePreviewOpenBtn');
 const filePreviewRenderBtn = document.getElementById('filePreviewRenderBtn');
+const filePreviewEditBtn = document.getElementById('filePreviewEditBtn');
+const filePreviewSaveBtn = document.getElementById('filePreviewSaveBtn');
+const filePreviewCancelBtn = document.getElementById('filePreviewCancelBtn');
+const filetreeTitle = document.getElementById('filetreeTitle');
+const filetreeScopeTabs = [...document.querySelectorAll('[data-file-scope]')];
+const expandAllTreeBtn = document.getElementById('expandAllTreeBtn');
+const collapseAllTreeBtn = document.getElementById('collapseAllTreeBtn');
 
 /** 媒体/PDF 预览用的 blob URL，关闭或切换预览时需 revoke */
 let filePreviewObjectUrl = null;
@@ -6095,12 +6180,23 @@ let filePreviewObjectUrl = null;
 let currentPreviewFile = null;
 let currentPreviewPath = '';
 let currentPreviewCopyText = '';
+let currentPreviewEditable = false;
+let filePreviewEditMode = false;
+let filePreviewEditDirty = false;
+let filePreviewEditContent = '';
 const filePreviewTabs = new Map();
 let activeFilePreviewPath = '';
 let filePreviewScrollPositions = {};
 let filePreviewScrollSaveFrame = null;
 let isRestoringFilePreviewState = false;
 let workspaceUploadTargetDir = '';
+const FILETREE_SCOPE_KEY = 'httpClient.filetreeScope';
+const FILETREE_SCOPES = {
+    workspace: { title: '工作区文件', rootLabel: '.workspace', uploadLabel: '上传文件到 .workspace 根目录' },
+    memory: { title: '长期记忆文件', rootLabel: '~/.magic/memory', uploadLabel: '上传文件到长期记忆根目录' },
+};
+let activeFiletreeScope = localStorage.getItem(FILETREE_SCOPE_KEY) === 'memory' ? 'memory' : 'workspace';
+const DEFAULT_EXPANDED_DIRECTORY_LIMIT = 15;
 
 const UNSUPPORTED_REMOTE_IMAGE_EXT_RE = /\.(heic|heif|tif|tiff)(?:[?#]|$)/i;
 const DEBUG_WORKSPACE_FILES_API_PREFIX = '/api/v1/debug/workspace-files';
@@ -6110,8 +6206,37 @@ function getDebugWorkspaceApiBase() {
     return `${base}${DEBUG_WORKSPACE_FILES_API_PREFIX}`;
 }
 
-async function requestDebugWorkspaceJson(path, options = {}) {
-    const response = await fetch(`${getDebugWorkspaceApiBase()}${path}`, {
+function getActiveFiletreeScope() {
+    return activeFiletreeScope;
+}
+
+function getActiveFiletreeScopeConfig() {
+    return FILETREE_SCOPES[getActiveFiletreeScope()];
+}
+
+function updateFiletreeScopeUi() {
+    const config = getActiveFiletreeScopeConfig();
+    if (filetreeTitle) filetreeTitle.textContent = config.title;
+    filetreeScopeTabs.forEach((tab) => {
+        const isActive = tab.dataset.fileScope === getActiveFiletreeScope();
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+    });
+    if (uploadWorkspaceBtn) {
+        uploadWorkspaceBtn.title = config.uploadLabel;
+        uploadWorkspaceBtn.setAttribute('aria-label', config.uploadLabel);
+    }
+    if (refreshTreeBtn) refreshTreeBtn.title = `刷新${config.title}`;
+    if (selectWorkspaceBtn) selectWorkspaceBtn.title = `刷新${config.title}`;
+}
+
+function appendFiletreeScope(path, scope = getActiveFiletreeScope()) {
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}scope=${encodeURIComponent(scope)}`;
+}
+
+async function requestDebugWorkspaceJson(path, options = {}, scope = getActiveFiletreeScope()) {
+    const response = await fetch(`${getDebugWorkspaceApiBase()}${appendFiletreeScope(path, scope)}`, {
         headers: {
             ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
             ...(options.headers || {}),
@@ -6127,38 +6252,38 @@ async function requestDebugWorkspaceJson(path, options = {}) {
 
 function createDebugWorkspaceApiClient() {
     return {
-        listTree(path = '', depth = 2) {
+        listTree(path = '', depth = 2, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({
                 path: path || '',
                 depth: String(depth),
             });
-            return requestDebugWorkspaceJson(`/tree?${query.toString()}`);
+            return requestDebugWorkspaceJson(`/tree?${query.toString()}`, {}, scope);
         },
-        readFile(path) {
+        readFile(path, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/content', {
                 method: 'POST',
                 body: JSON.stringify({ path }),
-            });
+            }, scope);
         },
-        writeFile(path, content) {
+        writeFile(path, content, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/content', {
                 method: 'PUT',
                 body: JSON.stringify({ path, content, create_parent_dirs: true, overwrite: true }),
-            });
+            }, scope);
         },
-        deletePath(path, recursive = false) {
+        deletePath(path, recursive = false, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('', {
                 method: 'DELETE',
                 body: JSON.stringify({ path, recursive }),
-            });
+            }, scope);
         },
-        movePath(sourcePath, targetPath, overwrite = false) {
+        movePath(sourcePath, targetPath, overwrite = false, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/move', {
                 method: 'POST',
                 body: JSON.stringify({ source_path: sourcePath, target_path: targetPath, overwrite }),
-            });
+            }, scope);
         },
-        uploadFile(targetDir, filename, contentBase64, overwrite = true) {
+        uploadFile(targetDir, filename, contentBase64, overwrite = true, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/upload', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -6167,20 +6292,22 @@ function createDebugWorkspaceApiClient() {
                     content_base64: contentBase64,
                     overwrite,
                 }),
-            });
+            }, scope);
         },
-        rawUrl(path) {
+        rawUrl(path, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({ path });
+            query.set('scope', scope);
             return `${getDebugWorkspaceApiBase()}/raw?${query.toString()}`;
         },
         /** 构造保留目录层级的原始文件地址，供 HTML 相对资源解析使用。 */
-        rawPathUrl(path) {
+        rawPathUrl(path, scope = getActiveFiletreeScope()) {
             const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
             const encodedPath = normalizedPath.split('/').map(encodeURIComponent).join('/');
-            return `${getDebugWorkspaceApiBase()}/raw/${encodedPath}`;
+            return `${getDebugWorkspaceApiBase()}/raw/${encodedPath}?scope=${encodeURIComponent(scope)}`;
         },
-        downloadUrl(path) {
+        downloadUrl(path, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({ path });
+            query.set('scope', scope);
             return `${getDebugWorkspaceApiBase()}/download?${query.toString()}`;
         },
     };
@@ -6330,6 +6457,10 @@ function revokeCanvasBlobUrls() {
 }
 
 function hideFilePreview() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     resetActivePreviewSurface();
     setFilePreviewWorkbenchVisible(false);
@@ -6385,13 +6516,13 @@ async function uploadWorkspaceFiles(files, targetDir = '') {
     return uploaded;
 }
 
-async function uploadWorkspaceFilesToDirectory(files, targetDir = '') {
+async function uploadWorkspaceFilesToDirectory(files, targetDir = '', scope = getActiveFiletreeScope()) {
     const list = Array.from(files || []).filter(file => file && file.name);
     const normalizedTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     const uploaded = [];
     for (const file of list) {
         const contentBase64 = await fileToBase64(file);
-        const entry = await debugWorkspaceApi.uploadFile(normalizedTargetDir, file.name, contentBase64, true);
+        const entry = await debugWorkspaceApi.uploadFile(normalizedTargetDir, file.name, contentBase64, true, scope);
         uploaded.push(entry);
     }
     return uploaded;
@@ -6562,7 +6693,7 @@ async function uploadFilesFromMessageInput(files, options = {}) {
 
     const uploaded = [];
     for (const item of uploadItems) {
-        const entries = await uploadWorkspaceFilesToDirectory([item.file], item.targetDir);
+        const entries = await uploadWorkspaceFilesToDirectory([item.file], item.targetDir, 'workspace');
         uploaded.push(...entries);
         expandedDirs.add(item.targetDir);
     }
@@ -6591,6 +6722,10 @@ function isWorkspacePreviewPathAffected(targetPath, previewPath) {
 async function deleteWorkspacePath(path, isDir) {
     const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     if (!normalizedPath) return;
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     await debugWorkspaceApi.deletePath(normalizedPath, Boolean(isDir));
     for (const item of [...expandedDirs]) {
         if (item === normalizedPath || item.startsWith(`${normalizedPath}/`)) {
@@ -7116,7 +7251,94 @@ function renderFilePreviewTabs() {
     }
 }
 
-function resetActivePreviewSurface() {
+function hasUnsavedFilePreviewEdits() {
+    return filePreviewEditMode && filePreviewEditDirty;
+}
+
+function updateFilePreviewEditActions() {
+    if (filePreviewEditMode) {
+        if (filePreviewEditBtn) filePreviewEditBtn.style.display = 'none';
+        if (filePreviewSaveBtn) filePreviewSaveBtn.style.display = '';
+        if (filePreviewCancelBtn) filePreviewCancelBtn.style.display = '';
+        return;
+    }
+    if (filePreviewEditBtn) filePreviewEditBtn.style.display = currentPreviewEditable ? '' : 'none';
+    if (filePreviewSaveBtn) filePreviewSaveBtn.style.display = 'none';
+    if (filePreviewCancelBtn) filePreviewCancelBtn.style.display = 'none';
+}
+
+function enterFilePreviewEditMode() {
+    if (!currentPreviewEditable || !filePreviewBody || filePreviewEditMode) return;
+    filePreviewEditMode = true;
+    filePreviewEditDirty = false;
+    filePreviewEditContent = currentPreviewCopyText;
+    resetActivePreviewSurface({ preserveEditState: true });
+    const editor = document.createElement('textarea');
+    editor.className = 'file-preview-editor';
+    editor.value = filePreviewEditContent;
+    editor.setAttribute('aria-label', `编辑 ${currentPreviewPath}`);
+    editor.spellcheck = false;
+    editor.addEventListener('input', () => {
+        filePreviewEditContent = editor.value;
+        filePreviewEditDirty = editor.value !== currentPreviewCopyText;
+        updateFilePreviewEditActions();
+    });
+    editor.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            saveFilePreviewEdits();
+        }
+    });
+    filePreviewBody.appendChild(editor);
+    updateFilePreviewEditActions();
+    editor.focus();
+}
+
+async function saveFilePreviewEdits() {
+    if (!filePreviewEditMode || !currentPreviewPath || !filePreviewEditDirty) return;
+    const path = currentPreviewPath;
+    const content = filePreviewEditContent;
+    if (filePreviewSaveBtn) {
+        filePreviewSaveBtn.disabled = true;
+        filePreviewSaveBtn.textContent = '保存中...';
+    }
+    try {
+        const result = await debugWorkspaceApi.writeFile(path, content);
+        const tab = filePreviewTabs.get(path);
+        if (tab?.entry && result) {
+            tab.entry.size = result.size;
+            tab.entry.updated_at = result.updated_at;
+        }
+        filePreviewEditMode = false;
+        filePreviewEditDirty = false;
+        await renderApiFilePreviewTab(tab || { type: 'api-file', path, entry: { path } });
+        await renderFileTree();
+        await refreshWorkspaceMentionIndex();
+        showSystemMessage(`已保存 ${path}`);
+    } catch (error) {
+        console.error('保存文件失败', error);
+        showSystemMessage(`保存失败：${error.message || error}`);
+    } finally {
+        if (filePreviewSaveBtn) {
+            filePreviewSaveBtn.disabled = false;
+            filePreviewSaveBtn.textContent = '保存';
+        }
+        updateFilePreviewEditActions();
+    }
+}
+
+async function cancelFilePreviewEdits() {
+    if (!filePreviewEditMode) return;
+    const path = currentPreviewPath;
+    const tab = filePreviewTabs.get(path);
+    filePreviewEditMode = false;
+    filePreviewEditDirty = false;
+    await renderApiFilePreviewTab(tab || { type: 'api-file', path, entry: { path } });
+}
+
+function resetActivePreviewSurface(options = {}) {
+    const preservedCopyText = currentPreviewCopyText;
+    const preservedEditable = currentPreviewEditable;
     if (window.MicroAppRuntimeHost) {
         window.MicroAppRuntimeHost.dispose();
     }
@@ -7134,7 +7356,14 @@ function resetActivePreviewSurface() {
     if (filePreviewMeta) filePreviewMeta.innerHTML = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = '';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
-    currentPreviewCopyText = '';
+    currentPreviewCopyText = options.preserveEditState ? preservedCopyText : '';
+    currentPreviewEditable = options.preserveEditState ? preservedEditable : false;
+    if (!options.preserveEditState) {
+        filePreviewEditMode = false;
+        filePreviewEditDirty = false;
+        filePreviewEditContent = '';
+    }
+    updateFilePreviewEditActions();
 }
 
 function getStoredToolDetailModelRatio() {
@@ -7395,6 +7624,10 @@ function renderToolDetailPreviewTab(tab) {
 }
 
 function closeFilePreviewWorkbench() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return false;
+    }
     persistActiveFilePreviewScroll();
     resetActivePreviewSurface();
     filePreviewTabs.clear();
@@ -7404,9 +7637,14 @@ function closeFilePreviewWorkbench() {
     renderFilePreviewTabs();
     setFilePreviewWorkbenchVisible(false);
     localStorage.removeItem(FILE_PREVIEW_STATE_KEY);
+    return true;
 }
 
 function clearFilePreviewTabs() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     filePreviewTabs.clear();
     filePreviewScrollPositions = {};
@@ -7438,6 +7676,10 @@ function clearToolDetailPreviewTab() {
 
 function closeFilePreviewTab(filePath) {
     if (!filePreviewTabs.has(filePath)) return;
+    if (filePath === activeFilePreviewPath && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     const wasActive = activeFilePreviewPath === filePath;
     filePreviewTabs.delete(filePath);
@@ -7458,6 +7700,10 @@ function closeFilePreviewTab(filePath) {
 function closeFilePreviewTabs(filePaths, preferredActivePath = '') {
     const targets = new Set(filePaths.filter(path => filePreviewTabs.has(path)));
     if (!targets.size) return;
+    if (targets.has(activeFilePreviewPath) && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     const wasActiveClosed = targets.has(activeFilePreviewPath);
     for (const filePath of targets) {
@@ -7518,6 +7764,11 @@ async function openFilePreviewTab(fileHandle, filePath) {
 async function activateFilePreviewTab(filePath, options = {}) {
     const tab = filePreviewTabs.get(filePath);
     if (!tab) return;
+    if (filePath === activeFilePreviewPath && filePreviewEditMode) return;
+    if (filePath !== activeFilePreviewPath && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     activeFilePreviewPath = filePath;
     setFilePreviewWorkbenchVisible(true);
@@ -7542,6 +7793,46 @@ let workspaceDirHandle = null;
 let filetreeRefreshTimer = null;
 let selectBtnState = 'default'; // 'default' | 'active' | 'need-auth'
 const expandedDirs = new Set();
+const filetreeExpansionInitializedScopes = new Set();
+let currentFileTreeEntries = [];
+
+function sortFileTreeEntries(entries) {
+    return [...(entries || [])].sort((a, b) => {
+        const aDir = a.type === 'directory';
+        const bDir = b.type === 'directory';
+        if (aDir !== bDir) return aDir ? -1 : 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+}
+
+function collectDirectoryPaths(entries, output = []) {
+    for (const entry of sortFileTreeEntries(entries)) {
+        if (!entry || entry.type !== 'directory' || !entry.path) continue;
+        output.push(entry.path);
+        collectDirectoryPaths(entry.children || [], output);
+    }
+    return output;
+}
+
+function initializeDefaultExpandedDirectories(entries) {
+    const scope = getActiveFiletreeScope();
+    if (filetreeExpansionInitializedScopes.has(scope)) return;
+    filetreeExpansionInitializedScopes.add(scope);
+    expandedDirs.clear();
+    collectDirectoryPaths(entries)
+        .slice(0, DEFAULT_EXPANDED_DIRECTORY_LIMIT)
+        .forEach(path => expandedDirs.add(path));
+}
+
+function expandAllFiletreeDirectories() {
+    collectDirectoryPaths(currentFileTreeEntries).forEach(path => expandedDirs.add(path));
+    renderFileTree();
+}
+
+function collapseAllFiletreeDirectories() {
+    expandedDirs.clear();
+    renderFileTree();
+}
 
 // ── IndexedDB 存取 DirectoryHandle ──
 const IDB_NAME = 'http-client-fs';
@@ -7867,7 +8158,7 @@ async function uploadMicroAppWorkspaceFiles(files) {
         const targetDir = getWorkspaceParentPath(targetPath);
         const filename = getWorkspaceFileBaseName(targetPath) || item.filename || item.file.name;
         const contentBase64 = await fileToBase64(item.file);
-        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true));
+        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true, 'workspace'));
         if (targetDir) expandedDirs.add(targetDir);
     }
     await renderFileTree();
@@ -7986,6 +8277,36 @@ function updateSelectBtn(state) {
         selectWorkspaceBtn.title = '加载 .workspace 文件树';
     }
 }
+
+async function switchFiletreeScope(scope) {
+    const normalizedScope = scope === 'memory' ? 'memory' : 'workspace';
+    if (normalizedScope === getActiveFiletreeScope()) return;
+    if (!closeFilePreviewWorkbench()) return;
+    activeFiletreeScope = normalizedScope;
+    localStorage.setItem(FILETREE_SCOPE_KEY, activeFiletreeScope);
+    expandedDirs.clear();
+    filetreeExpansionInitializedScopes.delete(activeFiletreeScope);
+    currentFileTreeEntries = [];
+    updateFiletreeScopeUi();
+    if (filetreeContainer) {
+        filetreeContainer.innerHTML = `<div class="filetree-empty">正在加载${getActiveFiletreeScopeConfig().title}</div>`;
+    }
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+}
+
+updateFiletreeScopeUi();
+
+filetreeScopeTabs.forEach((tab) => {
+    tab.addEventListener('click', async () => {
+        try {
+            await switchFiletreeScope(tab.dataset.fileScope);
+        } catch (error) {
+            console.error('切换文件根目录失败', error);
+            showSystemMessage(`切换失败：${error.message || error}`);
+        }
+    });
+});
 
 // 激活文件树（已有 handle）
 async function activateFiletree(handle, options = {}) {
@@ -8107,6 +8428,14 @@ if (refreshTreeBtn) {
     });
 }
 
+if (expandAllTreeBtn) {
+    expandAllTreeBtn.addEventListener('click', expandAllFiletreeDirectories);
+}
+
+if (collapseAllTreeBtn) {
+    collapseAllTreeBtn.addEventListener('click', collapseAllFiletreeDirectories);
+}
+
 if (uploadWorkspaceBtn) {
     uploadWorkspaceBtn.addEventListener('click', () => openWorkspaceUploadPicker(''));
 }
@@ -8160,6 +8489,18 @@ if (filePreviewClose) {
 
 if (filePreviewOpenBtn) {
     filePreviewOpenBtn.addEventListener('click', () => openCurrentPreviewInNewTab());
+}
+
+if (filePreviewEditBtn) {
+    filePreviewEditBtn.addEventListener('click', enterFilePreviewEditMode);
+}
+
+if (filePreviewSaveBtn) {
+    filePreviewSaveBtn.addEventListener('click', saveFilePreviewEdits);
+}
+
+if (filePreviewCancelBtn) {
+    filePreviewCancelBtn.addEventListener('click', cancelFilePreviewEdits);
 }
 
 async function renderCurrentPreviewAsHtml() {
@@ -8237,6 +8578,8 @@ async function renderApiFilePreviewTab(tab) {
         if (kind === 'html') {
             const data = await debugWorkspaceApi.readFile(filePath);
             currentPreviewCopyText = data.content || '';
+            currentPreviewEditable = true;
+            updateFilePreviewEditActions();
             setMeta('html', []);
             const iframe = document.createElement('iframe');
             iframe.className = 'file-preview-pdf file-preview-html';
@@ -8306,6 +8649,8 @@ async function renderApiFilePreviewTab(tab) {
             const text = data.content || '';
             const lineCount = text.split(/\r\n|\r|\n/).length;
             currentPreviewCopyText = text;
+            currentPreviewEditable = true;
+            updateFilePreviewEditActions();
             setMeta(kind, [
                 { label: '行数', value: String(lineCount) },
                 { label: '字符数', value: String(text.length) },
@@ -8344,6 +8689,8 @@ async function renderFileTree() {
     if (!filetreeContainer) return;
     try {
         const data = await debugWorkspaceApi.listTree('', 8);
+        currentFileTreeEntries = data.entries || [];
+        initializeDefaultExpandedDirectories(currentFileTreeEntries);
         const frag = document.createDocumentFragment();
         await buildApiTreeNodes(data.entries || [], frag, 0);
         filetreeContainer.innerHTML = '';
@@ -8356,24 +8703,21 @@ async function renderFileTree() {
         console.error('渲染文件树失败', e);
         updateSelectBtn('need-auth');
         if (filetreeContainer) {
-            filetreeContainer.innerHTML = '<div class="filetree-empty">无法加载 .workspace 文件树，请确认 super-magic 后端已启动。</div>';
+            filetreeContainer.innerHTML = `<div class="filetree-empty">无法加载${getActiveFiletreeScopeConfig().title}，请确认 super-magic 后端已启动。</div>`;
         }
     }
 }
 
 async function buildApiTreeNodes(entries, container, depth) {
-    const sorted = [...(entries || [])].sort((a, b) => {
-        const aDir = a.type === 'directory';
-        const bDir = b.type === 'directory';
-        if (aDir !== bDir) return aDir ? -1 : 1;
-        return String(a.name || '').localeCompare(String(b.name || ''));
-    });
+    const sorted = sortFileTreeEntries(entries);
 
     for (const entry of sorted) {
         if (!entry || !entry.name) continue;
         const fullPath = entry.path || entry.name;
         const isDir = entry.type === 'directory';
-        const microAppConfig = isDir && hasApiMicroAppConfigFile(entry) ? await readApiMicroAppConfig(fullPath) : null;
+        const microAppConfig = getActiveFiletreeScope() === 'workspace' && isDir && hasApiMicroAppConfigFile(entry)
+            ? await readApiMicroAppConfig(fullPath)
+            : null;
 
         const node = document.createElement('div');
         node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}`;
@@ -8464,7 +8808,11 @@ async function buildApiTreeNodes(entries, container, depth) {
                 menuItems.push({
                     label: '引用此目录（插入 @）',
                     onSelect: () => {
-                        insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
+                        insertMentionAtCursor(buildFiletreeMentionSnippet(
+                            'directory',
+                            dirPath,
+                            getActiveFiletreeScope(),
+                        ));
                     },
                 });
                 openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
@@ -8490,7 +8838,11 @@ async function buildApiTreeNodes(entries, container, depth) {
                     {
                         label: '引用此文件（插入 @）',
                         onSelect: () => {
-                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                            insertMentionAtCursor(buildFiletreeMentionSnippet(
+                                'file',
+                                fp,
+                                getActiveFiletreeScope(),
+                            ));
                         },
                     },
                 ]);
@@ -8601,7 +8953,7 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                 menuItems.push({
                     label: '引用此目录（插入 @）',
                     onSelect: () => {
-                        insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
+                        insertMentionAtCursor(buildFiletreeMentionSnippet('directory', dirPath, 'workspace'));
                     },
                 });
                 openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
@@ -8623,7 +8975,7 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                     {
                         label: '引用此文件（插入 @）',
                         onSelect: () => {
-                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                            insertMentionAtCursor(buildFiletreeMentionSnippet('file', fp, 'workspace'));
                         },
                     },
                 ]);

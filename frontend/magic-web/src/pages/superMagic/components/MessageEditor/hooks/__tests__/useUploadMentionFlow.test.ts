@@ -27,13 +27,13 @@ vi.mock("../../services/uploadMentionService", () => ({
 	insertUploadMentionNodes: vi.fn(),
 	removeUploadMentionNodes: removeUploadMentionNodesMock,
 	replaceUploadMentionNode: vi.fn(),
-	updateUploadMentionProgress: vi.fn(),
 }))
 
 function createFileUploadStore() {
 	return {
 		updateOptions: vi.fn(),
 		files: [],
+		getFileById: vi.fn(),
 		getUploadMentionItems: vi.fn(() => []),
 		addFiles: vi.fn(),
 		removeFile: vi.fn(),
@@ -146,6 +146,68 @@ describe("useUploadMentionFlow", () => {
 
 		expect(fileUploadStore.getUploadMentionItems).toHaveBeenCalledTimes(1)
 		expect(mentionPanelStore.setUploadFiles).toHaveBeenCalledWith(syncedItems)
+	})
+
+	it("should reject a cut in-progress upload before it can be pasted again", () => {
+		const uploadMention = {
+			type: MentionItemType.UPLOAD_FILE,
+			data: {
+				file_id: "upload-file-1",
+				file_name: "demo.txt",
+				file_extension: "txt",
+				upload_status: "uploading",
+			},
+		}
+		const fileUploadStore = createFileUploadStore()
+		fileUploadStore.isCurrentSessionUploadFile.mockReturnValue(false)
+
+		const { result } = renderHook(() =>
+			useUploadMentionFlow({
+				fileUploadStore: fileUploadStore as unknown as FileUploadStore,
+				getEditor: () => null,
+				isProjectContext: false,
+				runWithoutMentionRemoveSync: (callback) => callback(),
+				selectedProjectId: "project-1",
+				selectedTopicId: "topic-1",
+				t: (key: string) => key,
+			}),
+		)
+
+		expect(
+			result.current.isAllowedUploadMention(uploadMention as TiptapMentionAttributes),
+		).toBe(false)
+
+		fileUploadStore.isCurrentSessionUploadFile.mockReturnValue(true)
+		expect(
+			result.current.isAllowedUploadMention(uploadMention as TiptapMentionAttributes),
+		).toBe(true)
+
+		expect(
+			result.current.isAllowedUploadMention({
+				...uploadMention,
+				data: { ...uploadMention.data, upload_status: "done" },
+			} as TiptapMentionAttributes),
+		).toBe(true)
+	})
+
+	it("should not persist live upload progress into the editor document", () => {
+		const fileUploadStore = createFileUploadStore()
+
+		renderHook(() =>
+			useUploadMentionFlow({
+				fileUploadStore: fileUploadStore as unknown as FileUploadStore,
+				getEditor: () => null,
+				isProjectContext: false,
+				runWithoutMentionRemoveSync: (callback) => callback(),
+				selectedProjectId: "project-1",
+				selectedTopicId: "topic-1",
+				t: (key: string) => key,
+			}),
+		)
+
+		const options = fileUploadStore.updateOptions.mock.calls[0][0]
+		expect(options).not.toHaveProperty("onFileProgressUpdate")
+		expect(options).toHaveProperty("onFileCompleted")
 	})
 
 	it("should confirm before deleting current session project files", async () => {

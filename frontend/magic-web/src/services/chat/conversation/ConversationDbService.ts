@@ -100,7 +100,12 @@ class ConversationDbServices {
 				logger.log("setConversationStatus to Hidden success", res)
 			})
 			.catch((err) => {
-				logger.error("setConversationStatus to Hidden error", err)
+				logger.error({
+					eventKey: "set_conversation_status_hidden_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "setConversationStatus to Hidden error",
+				})
 			})
 	}
 
@@ -114,7 +119,12 @@ class ConversationDbServices {
 				logger.log("setConversationStatus to Hidden success", res)
 			})
 			.catch((err) => {
-				logger.error("setConversationStatus to Hidden error", err)
+				logger.error({
+					eventKey: "set_conversation_status_hidden_failed",
+					errorKind: "unknown",
+					error: err,
+					message: "setConversationStatus to Hidden error",
+				})
 			})
 	}
 

@@ -262,7 +262,7 @@ export function useMarkdownComponent({
 			},
 			a: MarkdownLink,
 			img(props: XMarkdownComponentProps) {
-				return <Image alt={props.alt} src={props.src} />
+				return <Image alt={props.alt} src={props.src} title={props.title} />
 			},
 			"file-path"(props: XMarkdownComponentProps) {
 				return <FilePath path={props.path} />

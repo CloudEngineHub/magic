@@ -5,12 +5,50 @@ import {
 	buildMicroAppCopyUrl,
 	buildMicroAppPublishPayload,
 	buildMicroAppShareText,
+	createDefaultMicroAppPublishFormState,
 	createFormStateFromPublishedItem,
 	getMicroAppPublishValidationError,
 	hasMicroAppPublishFormChanged,
+	normalizeMicroAppPublishShareType,
 } from "../microAppPublishDialogUtils"
 
 describe("microAppPublishDialogUtils", () => {
+	it("uses public access as the personal organization default", () => {
+		expect(createDefaultMicroAppPublishFormState("Demo App", true)).toMatchObject({
+			appName: "Demo App",
+			shareType: ShareType.Public,
+		})
+		expect(createDefaultMicroAppPublishFormState("Demo App", false)).toMatchObject({
+			shareType: ShareType.Organization,
+		})
+	})
+
+	it("normalizes organization sharing to public access for personal organizations", () => {
+		expect(normalizeMicroAppPublishShareType(ShareType.Organization, true)).toBe(
+			ShareType.Public,
+		)
+		expect(
+			buildMicroAppPublishPayload(
+				{
+					appName: "Demo App",
+					shareType: ShareType.Organization,
+					shareRange: "designated",
+					targets: [],
+					password: "123456",
+					coverUrl: "",
+				},
+				true,
+			),
+		).toEqual({ app_name: "Demo App", share_type: ShareType.Public })
+		expect(
+			createFormStateFromPublishedItem(
+				{ share_type: ShareType.Organization },
+				"Demo App",
+				true,
+			),
+		).toMatchObject({ shareType: ShareType.Public })
+	})
+
 	it("builds the new app_name publish payload and optional cover", () => {
 		expect(
 			buildMicroAppPublishPayload({
@@ -46,8 +84,18 @@ describe("microAppPublishDialogUtils", () => {
 		expect(
 			createFormStateFromPublishedItem({
 				share_type: ShareType.PasswordProtected,
+				publish_status: "published",
 			}),
 		).toMatchObject({ password: "" })
+	})
+
+	it("generates an initial password for an unpublished protected share", () => {
+		const formState = createFormStateFromPublishedItem({
+			share_type: ShareType.PasswordProtected,
+			publish_status: "unpublished",
+		})
+
+		expect(formState.password).toMatch(/^[A-Z0-9]{6}$/)
 	})
 
 	it("builds access and share text from the stable app link", () => {

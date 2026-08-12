@@ -30,14 +30,19 @@ export const USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE = cn(
 
 export function getUserMessageStickyTopClass(
 	isMobile: boolean,
-): "top-[10px] [--sticky-message-top:10px]" | "top-[40px] [--sticky-message-top:40px]" {
-	return isMobile
-		? "top-[10px] [--sticky-message-top:10px]"
-		: "top-[40px] [--sticky-message-top:40px]"
+): "top-0 [--sticky-message-top:0px]" | "top-[40px] [--sticky-message-top:40px]" {
+	return isMobile ? "top-0 [--sticky-message-top:0px]" : "top-[40px] [--sticky-message-top:40px]"
 }
 
 /** Extra classes applied to the row wrapper when the message is from the user */
 export const USER_MESSAGE_ROW_CLASS = "flex min-w-0 justify-end"
+
+/**
+ * Assistant content keeps a timeline gutter, while terminal status badges cancel only that
+ * gutter through the inherited CSS variable so they align with top-level Tool statuses.
+ */
+export const ASSISTANT_MESSAGE_ROW_CLASS =
+	"pb-2 pl-6 [--message-status-offset:-1.5rem] after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']"
 
 export interface MessageTurnGroupListProps {
 	groups: Array<MessageTurnGroup>
@@ -81,9 +86,7 @@ function MessageRowContainer({
 			data-message-role={node?.role || "user"}
 			className={cn(
 				"relative w-full",
-				!isUser &&
-					!isTool &&
-					"pb-2 pl-6 after:absolute after:left-[11px] after:top-0 after:z-[-1] after:h-full after:w-px after:border-l after:border-dashed after:border-border after:content-['']",
+				!isUser && !isTool && ASSISTANT_MESSAGE_ROW_CLASS,
 				isUser && USER_MESSAGE_ROW_CLASS,
 			)}
 		>
@@ -244,7 +247,7 @@ function MessageTurnGroupListInner({
 								isMobile && USER_MESSAGE_STICKY_OVERLAY_CLASS_MOBILE,
 								userMessageStickyTopClass,
 								stickyMessageClassName,
-								"mb-2",
+								isMobile ? "z-40 bg-mobile-background pb-2" : "mb-2",
 							)}
 						>
 							{row(stickyItem.node, stickyItem.index)}
