@@ -4,7 +4,7 @@ description: |
   Use FIRST for Super Magic HTML micro-app work. Trigger even when the user does not say "micro-app", "HTML", or "window.Magic": when they ask to make/build/generate a usable interactive product such as an app, mini app, web page/site with controls, tool, form, calculator, generator, kanban, CRM/customer/order/inventory/task management system, tracker, planner, dashboard, data visualization UI, workflow console, editor, simulator, game, or a page that can operate on data/files.
   Also use FIRST whenever the task will use any window.Magic API (window.Magic.fs/llm/agent/project/user/getAppBasePath/setInputMessage/reload), including requests to add file persistence, model calls, agent dispatch, topic messaging, uploads/downloads, user info, or app reload behavior to an HTML page.
   Also use FIRST for existing app changes: if the workspace/project/folder contains app.json or legacy magic.project.js, or the user says "this app/page/tool/dashboard/system" and asks to modify, redesign, beautify, fix, add features/buttons/fields/pages/charts/interactions, persist data, connect LLM/agent/model/file APIs, or solve open/save/display/update issues.
-  Required output pattern: a static Super Magic micro-app folder with app.json, minimal magic.project.js display bridge, index.html, window.Magic APIs when needed, file-based persistence, and companion workspace skills for agent-side workflows.
+  Required output pattern: a static Super Magic micro-app folder with app.json, icon.svg by default (optional), minimal magic.project.js display bridge, index.html, window.Magic APIs when needed, file-based persistence, and companion workspace skills for agent-side workflows.
   Chinese trigger signals include: 做/搭/生成/创建/开发/改造/美化/修复 一个 应用/小程序/工具/网页/页面/网站/表单/工作台/后台/管理系统/看板/仪表盘/大屏/面板/追踪器/记账本/计划表/待办/清单/日程/CRM/客户管理/库存管理/订单管理/项目管理/审批流/流程工具/生成器/计算器/小游戏; 把表格/CSV/文件/数据做成可操作、可录入、可查询、可筛选、可统计、可分析、可管理、可展示的页面; 支持增删改查、搜索、排序、图表、上传、下载、保存、自动分析、AI建议、调用员工.
   Skip only when the deliverable is a read-only document/report/article with no interactive UI, a pure CLI/script/backend service, PPT/slides, canvas design/media generation, a calendar project handled by magic-calendar, or a general coding question that does not involve window.Magic APIs or an interactive frontend.
 ---
@@ -13,11 +13,11 @@ description: |
 
 You are a micro-app architect. Your job is to transform user requirements into fully functional micro-applications following the **three-layer architecture**:
 
-| Layer           | Maps to  | Responsibility                                                       |
-| --------------- | -------- | -------------------------------------------------------------------- |
-| HTML            | Frontend | UI interaction, data rendering, user input                           |
-| Workspace Skill | Backend  | Complex business logic, workflow orchestration, multi-step LLM calls |
-| Files (JSON/MD) | Database | Data persistence, state storage                                      |
+| Layer | Maps to | Responsibility |
+| --- | --- | --- |
+| HTML | Frontend | UI interaction, data rendering, user input |
+| Workspace Skill | Backend | Complex business logic, workflow orchestration, multi-step LLM calls |
+| Files (JSON/MD) | Database | Data persistence, state storage |
 
 **Collaboration mechanism**: HTML triggers skill via `createTopicAndSend()` (new topic with @file `.magic/skills/<name>/SKILL.md`) → Agent reads skill and executes workflow → skill writes results to files → HTML watches via `watchFile()` and re-renders.
 
@@ -63,7 +63,7 @@ Every micro-app request follows this sequence:
 
 5. Generation Phase
    ├─ Generate app.json (micro-app manifest, always first)
-   ├─ Generate one install icon (`icon.svg`)
+   ├─ Generate install icon (`icon.svg`) by default (optional; omit only when user explicitly asks for no icon)
    ├─ Generate magic.project.js (minimal display bridge for legacy file-tree metadata)
    ├─ Generate HTML file(s)
    ├─ Generate companion workspace skill(s) (if needed)
@@ -96,8 +96,7 @@ Before generating any code, **output a structured design document** for user con
 ### Feature Checklist
 
 1. [Feature name] — brief description
-2. [Feature name] — brief description
-   ...
+2. [Feature name] — brief description ...
 
 ### Interaction Flow
 
@@ -163,14 +162,14 @@ User requirement complexity?
 
 The HTML layer has access to `window.Magic.*` APIs (pre-injected, no imports needed):
 
-| Namespace                     | Key Methods                                                                              | Purpose                                            |
-| ----------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `window.Magic.fs`             | `readFile`, `writeFile`, `listFiles`, `listDir`, `watchFile`, `watchDir`                 | File read/write/watch (paths relative to app root) |
-| `window.Magic.llm`            | `getModels`, `chat`, `stream`                                                            | LLM calls (`model` required, default `"auto"`)     |
-| `window.Magic.agent`          | `getAgents`                                                                              | Discover available agents                          |
-| `window.Magic.project`        | `createTopicAndSend`, `sendMessage`, `uploadFiles`, `downloadFiles`, `addFilesToMessage` | Cross-topic messaging, file transfer               |
-| `window.Magic.getAppBasePath` | `getAppBasePath()`                                                                       | Get workspace-relative app path for @file mentions |
-| `window.Magic` (top-level)    | `setInputMessage`, `reload`                                                              | Quick message to current agent, force refresh      |
+| Namespace | Key Methods | Purpose |
+| --- | --- | --- |
+| `window.Magic.fs` | `readFile`, `writeFile`, `listFiles`, `listDir`, `watchFile`, `watchDir` | File read/write/watch (paths relative to app root) |
+| `window.Magic.llm` | `getModels`, `chat`, `stream` | LLM calls (`model` required, default `"auto"`) |
+| `window.Magic.agent` | `getAgents` | Discover available agents |
+| `window.Magic.project` | `createTopicAndSend`, `sendMessage`, `uploadFiles`, `downloadFiles`, `addFilesToMessage` | Cross-topic messaging, file transfer |
+| `window.Magic.getAppBasePath` | `getAppBasePath()` | Get workspace-relative app path for @file mentions |
+| `window.Magic` (top-level) | `setInputMessage`, `reload` | Quick message to current agent, force refresh |
 
 **For full API signatures, parameters, and constraints** → call `read_skills(["html-api-sdk"])` to load the complete API reference.
 
@@ -225,7 +224,8 @@ The companion skill is **not** auto-loaded. At runtime, the HTML app triggers it
 ```javascript
 // Get workspace-relative base path for file mentions
 const basePath = await window.Magic.getAppBasePath(); // e.g. "personal-finance/"
-const selectedRecordPath = "data/records/20260624153000__open__a8f3k2__record.json";
+const selectedRecordPath =
+  "data/records/20260624153000__open__a8f3k2__record.json";
 const selectedRecordName = selectedRecordPath.split("/").pop();
 
 // Trigger companion skill via new topic with @file mentions
@@ -290,7 +290,7 @@ Built-in system skills, such as web search or code execution, are invoked throug
 **Two skill invocation styles:**
 
 | Type | mention type | Data structure | Use case |
-|------|-------------|----------|----------|
+| --- | --- | --- | --- |
 | Generated companion skill | `project_file` | `{file_id, file_name, file_path, file_extension}` | Custom workflows |
 | Built-in system skill | `skill` | `{id, name, icon, description, mention_source}` | Platform-registered capabilities |
 
@@ -314,16 +314,16 @@ Built-in system skills, such as web search or code execution, are invoked throug
 
 **`mention_source` values:**
 
-| Value | Meaning |
-|-----|------|
+| Value      | Meaning                                        |
+| ---------- | ---------------------------------------------- |
 | `"system"` | Built-in system skill provided by the platform |
-| `"agent"` | Skill bound to a specific agent |
-| `"mine"` | Skill from the user's My Library provider |
+| `"agent"`  | Skill bound to a specific agent                |
+| `"mine"`   | Skill from the user's My Library provider      |
 
 **Invocation example — reference a system skill in a message:**
 
 ```javascript
-  // Create a topic and send a message with an @skill reference so the agent uses the specified skill.
+// Create a topic and send a message with an @skill reference so the agent uses the specified skill.
 const { topicId } = await window.Magic.project.createTopicAndSend(
   {
     type: "doc",
@@ -345,7 +345,10 @@ const { topicId } = await window.Magic.project.createTopicAndSend(
               },
             },
           },
-          { type: "text", text: " to find the latest AI industry reports and write the results to " },
+          {
+            type: "text",
+            text: " to find the latest AI industry reports and write the results to ",
+          },
           {
             type: "mention",
             attrs: {
@@ -453,7 +456,7 @@ For apps that need to trigger backend skills or drive multiple agents:
 ### Built-in Agent IDs
 
 | agentId | Name | Description |
-|---------|------|------|
+| --- | --- | --- |
 | `general` | General mode | General-purpose assistant. This is the default when no `agentId` is passed. |
 | `chat` | Chat mode | Assistant focused on conversation. |
 | `data_analysis` | Data analysis | Assistant for data analysis and processing. |
@@ -479,8 +482,7 @@ python agents/skills/micro-app-architect/scripts/list_agents.py --name-filter "D
 python agents/skills/micro-app-architect/scripts/list_agents.py --type-filter custom
 ```
 
-The result includes each agent's `code` as the `agentId`, plus `name`, `description`, and `type` (`official`, `custom`, or `public`).
-Usually do not hardcode real `agentId` values into generated HTML. Write a real `agentId` only when the user requested a fixed agent or an initial default selection. Normal agent pickers should call `window.Magic.agent.getAgents()` at runtime.
+The result includes each agent's `code` as the `agentId`, plus `name`, `description`, and `type` (`official`, `custom`, or `public`). Usually do not hardcode real `agentId` values into generated HTML. Write a real `agentId` only when the user requested a fixed agent or an initial default selection. Normal agent pickers should call `window.Magic.agent.getAgents()` at runtime.
 
 ### Agent Selector UI Pattern
 
@@ -495,7 +497,7 @@ async function initAgentSelector(defaultAgentName) {
   let selectedAgent = null;
   if (defaultAgentName) {
     selectedAgent = agents.find(
-      (a) => a.name === defaultAgentName || a.name.includes(defaultAgentName)
+      (a) => a.name === defaultAgentName || a.name.includes(defaultAgentName),
     );
   }
 
@@ -503,7 +505,8 @@ async function initAgentSelector(defaultAgentName) {
   const selector = document.getElementById("agent-selector");
   selector.innerHTML = `<option value="">General mode (no agent)</option>`;
   agents.forEach((agent) => {
-    const selected = selectedAgent && agent.id === selectedAgent.id ? "selected" : "";
+    const selected =
+      selectedAgent && agent.id === selectedAgent.id ? "selected" : "";
     selector.innerHTML += `<option value="${agent.id}" ${selected}>${agent.name}</option>`;
   });
 }
@@ -517,7 +520,7 @@ function getSelectedAgentId() {
 // 5. Pass it when dispatching.
 const { topicId } = await window.Magic.project.createTopicAndSend(
   tiptapMessage,
-  { agentId: getSelectedAgentId(), model: getSelectedModel() }
+  { agentId: getSelectedAgentId(), model: getSelectedModel() },
 );
 ```
 
@@ -678,15 +681,15 @@ window.Magic.setInputMessage("Please summarize the data in data/results.json");
 
 This skill generates the following artifacts:
 
-| Artifact         | Location                       | Always generated?              |
-| ---------------- | ------------------------------ | ------------------------------ |
-| app.json         | `<app-dir>/app.json`           | Yes                            |
-| Install icon     | `<app-dir>/icon.svg`                | Yes                            |
-| magic.project.js | `<app-dir>/magic.project.js`   | Yes                            |
-| Main HTML        | `<app-dir>/index.html`         | Yes                            |
-| Data files       | `<app-dir>/data/*.json`        | If app needs persistence       |
-| Companion skill  | Created by the `skill-creator` skill | If Medium/Complex architecture |
-| README           | `<app-dir>/README.md`          | For Medium/Complex apps        |
+| Artifact | Location | Always generated? |
+| --- | --- | --- |
+| app.json | `<app-dir>/app.json` | Yes |
+| Install icon | `<app-dir>/icon.svg` | Default (optional) |
+| magic.project.js | `<app-dir>/magic.project.js` | Yes |
+| Main HTML | `<app-dir>/index.html` | Yes |
+| Data files | `<app-dir>/data/*.json` | If app needs persistence |
+| Companion skill | Created by the `skill-creator` skill | If Medium/Complex architecture |
+| README | `<app-dir>/README.md` | For Medium/Complex apps |
 
 **Naming the app directory:** Use the user's language for the directory name. If the user asks for a sales dashboard, the directory should be named descriptively, such as `sales-dashboard/` in English or an equivalent name in the user's language.
 
@@ -715,7 +718,7 @@ Every new HTML micro-app **must** include an `app.json` file in the app root dir
 - Do not use `"webapp"` for `app.json`; `webapp` may appear in legacy display/share metadata, but the micro-app manifest type is `"micro-app"`
 - `name` should be user-friendly (e.g., `"Sales Dashboard"`, `"Task Manager"`, or an equivalent name in the user's language)
 - `entry` defaults to `"index.html"`; include it explicitly for new apps
-- `icon` must be `"icon.svg"`; this file is used as the install and home-screen icon for this app
+- Include `"icon": "icon.svg"` by default when you generate `icon.svg`; omit the `icon` field entirely when the user explicitly asks for no icon or when icon generation fails
 - Generate this file **before** `magic.project.js` and `index.html` so the source-of-truth manifest exists first
 - Do not put runtime business state in `app.json`; use data files under `data/` for app state
 
@@ -751,11 +754,11 @@ if (typeof window.magicProjectConfigure === "function") {
 - If `app.json` and `magic.project.js` differ for mirrored fields, `app.json` is the authoritative source and `magic.project.js` should be repaired to match
 - Generate this file before `index.html` when possible, so current file-tree metadata can recognize the folder as a micro-app early
 
-**Required: Install Icon (`icon` field)**
+**Install Icon (`icon` field, optional, generated by default)**
 
-Every new micro-app must generate one `icon.svg` file in the app root.
+By default, generate one `icon.svg` file in the app root for host install and home-screen display. Omit it only when the user explicitly asks for no icon. When omitted, do not include an `icon` field in `app.json` or `magic.project.js`, and do not reference a file that does not exist.
 
-`app.json.icon` and `magic.project.js.icon` must both point to `icon.svg`. Use a relative local file only. Do not use a remote URL, a published cover, raster image, or data URL for the micro-app icon.
+When generated, `app.json.icon` and `magic.project.js.icon` must both point to `icon.svg`. Use a relative local file only. Do not use a remote URL, a published cover, raster image, or data URL for the micro-app icon.
 
 ```json
 {
@@ -772,7 +775,7 @@ Every new micro-app must generate one `icon.svg` file in the app root.
 1. Design one square icon that reflects the app's main purpose. Use a simple symbol, 2–3 colors, and a solid background. Do not include small text, screenshots, detailed charts, or a pre-rounded app-icon mask. Keep the meaningful symbol inside the central 80% safe area.
 2. Use `write_file` to create `icon.svg` in the micro-app directory. Keep the SVG self-contained, with a `viewBox`, no external references, no scripts, no event-handler attributes, and no embedded HTML.
 3. Validate that the file is well-formed SVG and contains no active content before writing `app.json` and `magic.project.js`.
-4. If generation or validation fails, report the failure instead of silently omitting the file or referencing a file that does not exist.
+4. If generation or validation fails, report the failure; do not reference a missing file—omit the `icon` field instead.
 
 ---
 
@@ -793,14 +796,7 @@ For Medium/Complex apps, generate a `README.md` in the app directory documenting
 ## Directory Structure
 ```
 
-app-dir/
-├── app.json
-├── icon.svg
-├── magic.project.js
-├── index.html
-├── data/
-│ └── ...
-└── ...
+app-dir/ ├── app.json ├── icon.svg (optional, generated by default) ├── magic.project.js ├── index.html ├── data/ │ └── ... └── ...
 
 ```
 
@@ -834,13 +830,11 @@ When user requests feature changes to an existing micro-app:
 
 ### Simple App (Pure HTML)
 
-User: "Make a calculator"
-→ Generate `calculator/app.json` + `calculator/magic.project.js` + `calculator/index.html` with all logic in `<script>`, no companion skill needed.
+User: "Make a calculator" → Generate `calculator/app.json` + `calculator/magic.project.js` + `calculator/index.html` with all logic in `<script>`, no companion skill needed.
 
 ### Medium App (HTML + Skill)
 
-User: "Make a tool that can automatically analyze CSV data and generate a report"
-→ Generate:
+User: "Make a tool that can automatically analyze CSV data and generate a report" → Generate:
 
 - `data-analyzer/app.json` — source-of-truth micro-app manifest (`type: "micro-app"`)
 - `data-analyzer/magic.project.js` — minimal display bridge mirroring `version/type/name/entry/icon`
@@ -852,8 +846,7 @@ Runtime: HTML references the companion skill via @file mention → `createTopicA
 
 ### Complex App (Multi-Agent)
 
-User: "Make a content creation workspace where researchers collect materials, writers draft articles, and editors review"
-→ Generate:
+User: "Make a content creation workspace where researchers collect materials, writers draft articles, and editors review" → Generate:
 
 - `content-studio/app.json` — source-of-truth micro-app manifest (`type: "micro-app"`)
 - `content-studio/magic.project.js` — minimal display bridge mirroring `version/type/name/entry/icon`
