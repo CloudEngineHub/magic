@@ -349,12 +349,13 @@ test("injects install links only when the public micro app route opts in", () =>
 	assert.deepEqual(buildInstallLinks({ installable: true }, TEST_APP_ID), {
 		manifestUrl: `/micro-app/${TEST_APP_ID}/manifest.webmanifest`,
 		appleTouchIconUrl: `/micro-app/${TEST_APP_ID}/icon?size=180`,
+		faviconUrl: `/micro-app/${TEST_APP_ID}/icon?size=192`,
 	})
 
 	const html = processHtmlContent(
-		'<html><head><meta name="viewport" content="width=device-width" /></head></html>',
+		'<html><head><meta name="viewport" content="width=device-width" /><link rel="icon" href="/favicon.ico" /></head></html>',
 		{
-			favicon: "",
+			favicon: "/micro-app/1/icon?size=192",
 			title: "Micro App",
 			keywords: "",
 			description: "",
@@ -370,5 +371,9 @@ test("injects install links only when the public micro app route opts in", () =>
 	assert.match(
 		html,
 		/rel="apple-touch-icon" href="&#x2F;micro-app&#x2F;1&#x2F;icon\?size=180" data-micro-app-install="apple-touch-icon"/,
+	)
+	assert.match(
+		html,
+		/rel="icon"[^>]*href="&#x2F;micro-app&#x2F;1&#x2F;icon\?size=192" data-micro-app-install="favicon"/,
 	)
 })

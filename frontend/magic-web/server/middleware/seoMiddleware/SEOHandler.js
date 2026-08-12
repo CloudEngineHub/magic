@@ -128,7 +128,7 @@ module.exports = (app) => {
 
 				// 处理 HTML（一次性替换）
 				const htmlContent = processHtmlContent(htmlTemplate, {
-					favicon: platformInfo.favicon,
+					favicon: installableLinks.faviconUrl || platformInfo.favicon,
 					minimal_logo: platformInfo.minimal_logo,
 					title: ogTitle,
 					keywords: ogKeywords,

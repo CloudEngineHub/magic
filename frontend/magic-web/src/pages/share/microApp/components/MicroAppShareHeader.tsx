@@ -16,23 +16,23 @@ import GlobalSidebarStore from "@/stores/display/GlobalSidebarStore"
 import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 
 const transparentDropdownOverlayClassName =
-	"!rounded-none !border-0 !bg-transparent !p-0 !shadow-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
+	"!min-h-0 !min-w-0 !overflow-visible !rounded-none !border-0 !bg-transparent !p-0 !shadow-none !outline-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
 
 const headerActionButtonClassName =
 	"h-8 gap-1.5 rounded-full border-border/60 bg-background/80 px-2.5 shadow-sm sm:px-3"
 
 const dropdownEnterClassName =
-	"motion-reduce:animate-none animate-in fade-in-0 zoom-in-95 duration-200 fill-mode-both"
+	"motion-reduce:animate-none animate-in fade-in-0 duration-200 fill-mode-both"
 
-const userMenuEnterClassName = cn(dropdownEnterClassName, "slide-in-from-top-2")
+const userMenuEnterClassName = cn(dropdownEnterClassName, "slide-in-from-top-1")
 
-const organizationPanelEnterClassName = cn(dropdownEnterClassName, "slide-in-from-right-2")
+const organizationPanelEnterClassName = cn(dropdownEnterClassName, "slide-in-from-right-1")
 
 const menuItemClassName =
 	"flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-[13px] font-medium transition-colors duration-150 ease-out active:scale-[0.98]"
 
 const userMenuPanelClassName =
-	"w-[220px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-border/60 bg-popover/95 p-1 text-popover-foreground shadow-md backdrop-blur-xl"
+	"w-[220px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border/60 bg-popover p-1 text-popover-foreground shadow-md"
 
 function convertToQuery(params: URLSearchParams): Record<string, string> {
 	const query: Record<string, string> = {}

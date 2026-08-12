@@ -15,6 +15,7 @@ export default function useMicroAppManifestLinks(appId: string) {
 	useEffect(() => {
 		if (!appId) return
 		const encodedAppId = encodeURIComponent(appId)
+		const iconBaseUrl = `/micro-app/${encodedAppId}/icon`
 		const manifest = upsertInstallLink(
 			"manifest",
 			"manifest",
@@ -23,12 +24,14 @@ export default function useMicroAppManifestLinks(appId: string) {
 		const appleTouchIcon = upsertInstallLink(
 			"apple-touch-icon",
 			"apple-touch-icon",
-			`/micro-app/${encodedAppId}/icon?size=180`,
+			`${iconBaseUrl}?size=180`,
 		)
+		const favicon = upsertInstallLink("icon", "favicon", `${iconBaseUrl}?size=192`)
 
 		return () => {
 			manifest.remove()
 			appleTouchIcon.remove()
+			favicon.remove()
 		}
 	}, [appId])
 }

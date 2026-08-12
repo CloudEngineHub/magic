@@ -186,9 +186,11 @@ function processHtmlContent(htmlTemplate, options) {
 	if (favicon) {
 		const mimeType = getFaviconMimeType(favicon)
 		const safeFavicon = escapeUrl(favicon)
+		const installMarker =
+			manifestUrl || appleTouchIconUrl ? " data-micro-app-install=\"favicon\"" : ""
 		html = html.replace(
 			/<link\s+rel="icon"[^>]*>/i,
-			`<link rel="icon" type="${mimeType}" href="${safeFavicon}" />`,
+			`<link rel="icon" type="${mimeType}" href="${safeFavicon}"${installMarker} />`,
 		)
 	}
 
