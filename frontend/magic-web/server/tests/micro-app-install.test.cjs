@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict")
+const http = require("node:http")
 const { afterEach, test } = require("node:test")
 const MicroAppInstallRoutes = require("../routes/micro-app-install.route")
 const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
@@ -90,10 +91,12 @@ test("builds a distinct password-free manifest for each published micro app", as
 		{
 			src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
 			sizes: "192x192",
+			type: "image/svg+xml",
 		},
 		{
 			src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
 			sizes: "512x512",
+			type: "image/svg+xml",
 		},
 	])
 
@@ -159,6 +162,47 @@ test("serves the generated SVG app icon through the same-origin icon route", asy
 
 	assert.equal(response.headers["content-type"], "image/svg+xml")
 	assert.deepEqual(response.body, generatedIconSvg)
+})
+
+test("proxies an upstream SVG icon without changing its MIME type", async () => {
+	const upstream = http.createServer((req, res) => {
+		assert.equal(req.url, "/icon.svg")
+		res.writeHead(200, { "content-type": "image/svg+xml" })
+		res.end(generatedIconSvg)
+	})
+	await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve))
+	const address = upstream.address()
+	assert.ok(address && typeof address === "object")
+
+	const originalFetchForTest = global.fetch
+	global.fetch = async (url, options) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			return new Response(
+				JSON.stringify({
+					data: { resource_id: "resource-1", icon_url: `http://127.0.0.1:${address.port}/icon.svg` },
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			)
+		}
+		return originalFetchForTest(url, options)
+	}
+
+	try {
+		const response = createResponse()
+		await new MicroAppInstallRoutes().icon(
+			{ params: { appId: TEST_APP_ID }, query: { size: "512" } },
+			response,
+			(error) => {
+				throw error
+			},
+		)
+
+		assert.equal(response.headers["content-type"], "image/svg+xml")
+		assert.deepEqual(response.body, generatedIconSvg)
+	} finally {
+		global.fetch = originalFetchForTest
+		await new Promise((resolve, reject) => upstream.close((error) => (error ? reject(error) : resolve())))
+	}
 })
 
 test("uses the management favicon as the fallback icon and returns 404 without one", async () => {

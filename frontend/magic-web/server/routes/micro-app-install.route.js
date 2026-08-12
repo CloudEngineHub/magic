@@ -46,8 +46,8 @@ function buildManifest(appId, appName) {
 		theme_color: "#ffffff",
 		background_color: "#ffffff",
 		icons: [
-			{ src: `${iconUrl}?size=192`, sizes: "192x192" },
-			{ src: `${iconUrl}?size=512`, sizes: "512x512" },
+			{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
+			{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
 		],
 	}
 }
