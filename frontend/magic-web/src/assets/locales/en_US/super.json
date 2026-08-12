@@ -234,6 +234,12 @@
 		"workspaceSwitcherPrefix": "Workspace",
 		"workspaceSwitcherRefresh": "Refresh Workspace List"
 	},
+	"browserDetail": {
+		"addressUnavailable": "Address unavailable",
+		"detail": "Details",
+		"screenshot": "Screenshot",
+		"untitledWebpage": "Untitled webpage"
+	},
 	"chat": {
 		"backToChatList": "Back to chat list",
 		"chatNameFieldLabel": "Conversation Name",

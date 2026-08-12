@@ -321,6 +321,9 @@ class BrowserToolResultBuilder:
         artifact: BrowserScreenshotArtifact,
     ) -> ToolResult:
         screenshot_result = cls.screenshot(page, result, artifact)
+        tool_result.data["page_id"] = screenshot_result.data["page_id"]
+        tool_result.data["session_id"] = screenshot_result.data["session_id"]
+        tool_result.data["page"] = screenshot_result.data["page"]
         tool_result.data["screenshot"] = screenshot_result.data["screenshot"]
         tool_result.data["label_to_ref"] = screenshot_result.data["label_to_ref"]
         tool_result.extra_info.update(screenshot_result.extra_info)
@@ -388,22 +391,27 @@ class BrowserToolResultBuilder:
     @classmethod
     def console(cls, batch: DiagnosticBatch[ConsoleEntry], page_id: str) -> ToolResult:
         entries = batch.entries
-        error_count = sum(entry.level.lower() in {"error", "assert"} for entry in entries)
+        error_count = sum(entry.level.lower() in {"error", "fatal", "assert"} for entry in entries)
+        warning_count = sum(entry.level.lower() in {"warning", "warn"} for entry in entries)
         data = {
             "page_id": page_id,
             "console_entries": cls._structured(entries),
             "total_count": batch.total_count,
             "returned_count": len(entries),
             "error_count": error_count,
+            "warning_count": warning_count,
         }
         if not entries:
             return ToolResult(
-                content=f"Console entries for page {page_id}: total={batch.total_count}, returned=0, errors=0.",
+                content=(
+                    f"Console entries for page {page_id}: total={batch.total_count}, returned=0, "
+                    "errors=0, warnings=0."
+                ),
                 data=data,
             )
         lines = [
             f"Console entries for page {page_id}: total={batch.total_count}, "
-            f"returned={len(entries)}, errors={error_count}."
+            f"returned={len(entries)}, errors={error_count}, warnings={warning_count}."
         ]
         preview_entries = entries[-_MAX_DIAGNOSTIC_CONTENT_ENTRIES:]
         if len(preview_entries) < len(entries):
@@ -420,26 +428,33 @@ class BrowserToolResultBuilder:
     @classmethod
     def network(cls, batch: DiagnosticBatch[NetworkEntry], page_id: str) -> ToolResult:
         entries = batch.entries
-        error_count = sum(entry.error is not None or entry.phase == "failed" for entry in entries)
+        request_failed_count = sum(entry.error is not None or entry.phase == "failed" for entry in entries)
+        http_error_count = sum(
+            isinstance(entry.status, int) and entry.status >= 400
+            for entry in entries
+        )
         data = {
             "page_id": page_id,
             "network_entries": cls._structured(entries),
             "total_count": batch.total_count,
             "returned_count": len(entries),
-            "error_count": error_count,
+            "error_count": request_failed_count,
+            "request_failed_count": request_failed_count,
+            "http_error_count": http_error_count,
             "pending_count": batch.pending_count,
         }
         if not entries:
             return ToolResult(
                 content=(
                     f"Network entries for page {page_id}: total={batch.total_count}, "
-                    f"returned=0, errors=0, pending={batch.pending_count}."
+                    f"returned=0, request_failures=0, http_errors=0, pending={batch.pending_count}."
                 ),
                 data=data,
             )
         lines = [
             f"Network entries for page {page_id}: total={batch.total_count}, returned={len(entries)}, "
-            f"errors={error_count}, pending={batch.pending_count}."
+            f"request_failures={request_failed_count}, http_errors={http_error_count}, "
+            f"pending={batch.pending_count}."
         ]
         preview_entries = entries[-_MAX_DIAGNOSTIC_CONTENT_ENTRIES:]
         if len(preview_entries) < len(entries):

@@ -6,9 +6,17 @@ from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import ToolDetail
 from app.service.browser import BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
+from app.tools.browser.presentation.session import (
+    activate_page_detail,
+    close_page_detail,
+    list_pages_detail,
+    list_sessions_detail,
+    open_page_detail,
+)
 from app.tools.core import BaseToolParams, tool
 
 
@@ -38,6 +46,9 @@ class BrowserListSessions(BrowserToolBase[BrowserListSessionsParams]):
     name = "browser_list_sessions"
     operation_key = "browser.list_sessions"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, list_sessions_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserListSessionsParams) -> ToolResult:
         async def operation() -> ToolResult:
             sessions = await BrowserService(tool_context).list_sessions()
@@ -53,6 +64,9 @@ class BrowserListPages(BrowserToolBase[BrowserListPagesParams]):
 
     name = "browser_list_pages"
     operation_key = "browser.list_pages"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, list_pages_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserListPagesParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -71,6 +85,9 @@ class BrowserOpenPage(BrowserToolBase[BrowserOpenPageParams]):
 
     name = "browser_open_page"
     operation_key = "browser.goto"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, open_page_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserOpenPageParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -93,6 +110,9 @@ class BrowserClosePage(BrowserToolBase[BrowserPageParams]):
     name = "browser_close_page"
     operation_key = "browser.close_page"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, close_page_detail(result, arguments or {}))
+
     async def execute(self, tool_context: ToolContext, params: BrowserPageParams) -> ToolResult:
         async def operation() -> ToolResult:
             await BrowserService(tool_context).close_page(params.page_id, params.session_id)
@@ -111,6 +131,9 @@ class BrowserActivatePage(BrowserToolBase[BrowserPageParams]):
 
     name = "browser_activate_page"
     operation_key = "browser.activate_page"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, activate_page_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserPageParams) -> ToolResult:
         async def operation() -> ToolResult:

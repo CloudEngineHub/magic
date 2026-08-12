@@ -11,12 +11,29 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.attachment import AttachmentStorageType
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import (
+    BrowserContent,
+    BrowserDetailStatus,
+    DisplayType,
+    FileContent,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.service.browser import BrowserScreenshotService, BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.browser.presentation import BrowserDetailBuilder, BrowserRemarkBuilder
+from app.tools.browser.presentation import BrowserRemarkBuilder
+from app.tools.browser.presentation.common import (
+    escape_markdown,
+    message,
+    page_data,
+    page_display_title,
+    safe_page_url,
+    string,
+    target_text,
+    user_error,
+)
 from app.tools.core import BaseToolParams
 from magic_use.errors import BrowserErrorCode, BrowserSDKError
 
@@ -180,12 +197,11 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
             arguments=arguments or {},
         )
 
-    async def get_tool_detail(
-        self,
-        tool_context: ToolContext,
-        result: ToolResult,
-        arguments: dict[str, object] | None = None,
-    ) -> ToolDetail:
+    def create_browser_tool_detail(self, result: ToolResult, content: str) -> ToolDetail:
+        """将具体工具生成的正文包装成统一的 Browser/Markdown 详情。"""
+        if not result.ok:
+            content = ""
+
         output_path = result.data.get("output_path")
         if self.name == "browser_screenshot" and result.ok and isinstance(output_path, str) and output_path:
             relative_file_path = Path(output_path).as_posix()
@@ -198,17 +214,75 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
                     storage_type=AttachmentStorageType.WORKSPACE,
                 ),
             )
-        presentation = BrowserDetailBuilder.presentation(
-            self._operation_name(),
-            result,
-            tool_name=self.name,
-            arguments=arguments or {},
+        page = self._page_data(result)
+        url = BrowserToolResultBuilder.safe_url(string(page.get("url")))
+        title = page_display_title(page)
+        target = target_text(result)
+        summary = self._detail_summary(result, target=target, page=page)
+        detail_content = content.strip() or self._fallback_detail(result, summary)
+        file_key = self._screenshot_file_key(result)
+        if file_key is None:
+            return ToolDetail(
+                type=DisplayType.MD,
+                data=FileContent(
+                    file_name=f"{self.name}.md",
+                    content=detail_content,
+                ),
+            )
+        return ToolDetailFactory.create_browser_detail(
+            BrowserContent(
+                url=url,
+                title=title,
+                file_key=file_key,
+                file_size=self._screenshot_file_size(result),
+                file_url=self._screenshot_file_url(result),
+                action=self._operation_name(),
+                summary=summary,
+                detail=detail_content,
+                page_title=string(page.get("title")).strip() or None,
+                target=target or None,
+                status=BrowserDetailStatus.SUCCEEDED if result.ok else BrowserDetailStatus.FAILED,
+            )
         )
-        return BrowserDetailBuilder.detail(
-            presentation,
-            file_key=self._screenshot_file_key(result),
-            file_size=self._screenshot_file_size(result),
-            file_url=self._screenshot_file_url(result),
+
+    def create_browser_error_detail(self, result: ToolResult) -> ToolDetail:
+        return self.create_browser_tool_detail(result, "")
+
+    def _detail_summary(self, result: ToolResult, *, target: str, page: Mapping[str, object]) -> str:
+        if not result.ok:
+            if target:
+                return message(
+                    "browser.detail.failed_target",
+                    action=self._operation_name(),
+                    target=escape_markdown(target),
+                    error=user_error(result),
+                )
+            return message(
+                "browser.detail.failed",
+                action=self._operation_name(),
+                error=user_error(result),
+            )
+        if target:
+            return message(
+                "browser.detail.succeeded_target",
+                action=self._operation_name(),
+                target=escape_markdown(target),
+            )
+        title = string(page.get("title")).strip()
+        if title:
+            return message(
+                "browser.detail.succeeded_page",
+                action=self._operation_name(),
+                page=escape_markdown(title),
+            )
+        return message("browser.detail.succeeded", action=self._operation_name())
+
+    def _fallback_detail(self, result: ToolResult, summary: str) -> str:
+        if not result.ok:
+            return f"### {message('browser.detail.heading.result')}\n\n{summary}"
+        return (
+            f"### {message('browser.detail.heading.result')}\n\n"
+            f"{message('browser.detail.operation_completed')}"
         )
 
     def _operation_name(self) -> str:
@@ -239,6 +313,9 @@ class BrowserToolBase(AbstractFileTool[P], Generic[P]):
                 navigation_page = navigation.get("page")
                 if isinstance(navigation_page, dict):
                     return navigation_page
+        snapshot = result.data.get("snapshot")
+        if isinstance(snapshot, dict):
+            return snapshot
         return {}
 
     @staticmethod

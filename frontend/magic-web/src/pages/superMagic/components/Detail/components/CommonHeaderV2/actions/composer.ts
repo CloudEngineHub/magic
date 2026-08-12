@@ -45,7 +45,11 @@ function shouldShowBuiltinAction(key: ActionKey, context: ActionContext): boolea
 		case "share":
 			return showBasicActions(context.type) && !context.isEditMode && canShowShare(context)
 		case "openUrl":
-			return context.type === DetailType.Browser && !context.isEditMode
+			return (
+				context.type === DetailType.Browser &&
+				!context.isEditMode &&
+				Boolean(context.onOpenUrl)
+			)
 		case "fullscreen":
 			return !context.isMobile && !context.isFullscreenMode
 		case "versionMenu":

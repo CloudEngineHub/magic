@@ -233,6 +233,12 @@
 		"workspaceSwitcherPrefix": "工作空间",
 		"workspaceSwitcherRefresh": "刷新工作区列表"
 	},
+	"browserDetail": {
+		"addressUnavailable": "地址不可用",
+		"detail": "详情",
+		"screenshot": "截图",
+		"untitledWebpage": "未命名网页"
+	},
 	"chat": {
 		"backToChatList": "回到对话列表",
 		"chatNameFieldLabel": "对话名称",

@@ -16,10 +16,20 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.context.agent_context import AgentContext
+from app.core.entity.message.server_message import ToolDetail
 from app.service.browser import BrowserScreenshotService, BrowserService
 from app.service.browser.browser_file_adapter import BrowserFileAdapter
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
+from app.tools.browser.presentation.observation import (
+    find_detail,
+    find_visual_detail,
+    list_elements_detail,
+    read_html_detail,
+    read_page_detail,
+    screenshot_detail,
+    visual_query_detail,
+)
 from app.tools.core import BaseToolParams, tool
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.utils.async_file_utils import async_exists
@@ -228,6 +238,9 @@ class BrowserReadPage(BrowserToolBase[BrowserReadPageParams]):
     name = "browser_read_page"
     operation_key = "browser.read_as_markdown"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, read_page_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserReadPageParams) -> ToolResult:
         async def operation() -> ToolResult:
             page, markdown = await BrowserService(tool_context).read_page(
@@ -257,6 +270,9 @@ class BrowserReadHtml(BrowserToolBase[BrowserReadHtmlParams]):
 
     name = "browser_read_html"
     operation_key = "browser.read_html"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, read_html_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserReadHtmlParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -293,6 +309,9 @@ class BrowserFind(BrowserToolBase[BrowserFindParams]):
     name = "browser_find"
     operation_key = "browser.find_element"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, find_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserFindParams) -> ToolResult:
         async def operation() -> ToolResult:
             result = await BrowserService(tool_context).find(
@@ -318,6 +337,9 @@ class BrowserListElements(BrowserToolBase[BrowserListElementsParams]):
 
     name = "browser_list_elements"
     operation_key = "browser.list_elements"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, list_elements_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserListElementsParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -347,6 +369,9 @@ class BrowserScreenshot(BrowserToolBase[BrowserScreenshotParams]):
 
     name = "browser_screenshot"
     operation_key = "browser.screenshot"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, screenshot_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserScreenshotParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -408,6 +433,9 @@ class BrowserVisualQuery(_BrowserVisualToolBase[BrowserVisualQueryParams]):
     name = "browser_visual_query"
     operation_key = "browser.visual_query"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, visual_query_detail(result, arguments or {}))
+
     async def execute(self, tool_context: ToolContext, params: BrowserVisualQueryParams) -> ToolResult:
         return await self._execute_visual_query(
             tool_context,
@@ -426,6 +454,9 @@ class BrowserFindVisual(_BrowserVisualToolBase[BrowserFindVisualParams]):
 
     name = "browser_find_visual"
     operation_key = "browser.find_interactive_element_visually"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, find_visual_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserFindVisualParams) -> ToolResult:
         query = (

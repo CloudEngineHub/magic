@@ -151,6 +151,7 @@ class BrowserContent(BaseModel):
     file_tag: AttachmentTag = AttachmentTag.BROWSER  # 文件业务类型
     action: Optional[str] = None  # 用户可理解的操作名称
     summary: Optional[str] = None  # 本次操作结果摘要
+    detail: Optional[str] = None  # 脱敏后供用户查看的结构化 Markdown 详情
     page_title: Optional[str] = None  # 当前页面标题
     target: Optional[str] = None  # 本次操作对象
     status: Optional[BrowserDetailStatus] = None  # 本次操作状态
