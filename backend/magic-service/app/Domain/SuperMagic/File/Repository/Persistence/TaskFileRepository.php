@@ -1513,9 +1513,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
         if (empty($directoryIds)) {
             return [];
@@ -1550,6 +1551,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     if (! in_array($childId, $processedDirectoryIds)) {
                         $nextLevelParentIds[] = $childId;
                         $processedDirectoryIds[] = $childId;
+                        // 拷贝等场景需要保留目录结构时，把目录ID也计入结果
+                        if ($includeDirectories) {
+                            $allChildFileIds[] = $childId;
+                        }
                     }
                 } else {
                     // 只有文件才计入结果
