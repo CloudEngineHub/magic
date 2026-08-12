@@ -63,6 +63,7 @@ Every micro-app request follows this sequence:
 
 5. Generation Phase
    ├─ Generate app.json (micro-app manifest, always first)
+   ├─ Generate one install icon (`icon.svg`)
    ├─ Generate magic.project.js (minimal display bridge for legacy file-tree metadata)
    ├─ Generate HTML file(s)
    ├─ Generate companion workspace skill(s) (if needed)
@@ -680,6 +681,7 @@ This skill generates the following artifacts:
 | Artifact         | Location                       | Always generated?              |
 | ---------------- | ------------------------------ | ------------------------------ |
 | app.json         | `<app-dir>/app.json`           | Yes                            |
+| Install icon     | `<app-dir>/icon.svg`                | Yes                            |
 | magic.project.js | `<app-dir>/magic.project.js`   | Yes                            |
 | Main HTML        | `<app-dir>/index.html`         | Yes                            |
 | Data files       | `<app-dir>/data/*.json`        | If app needs persistence       |
@@ -700,6 +702,7 @@ Every new HTML micro-app **must** include an `app.json` file in the app root dir
   "type": "micro-app",
   "name": "<app display name>",
   "entry": "index.html",
+  "icon": "icon.svg",
   "files": {},
   "watch": [],
   "permissions": {}
@@ -712,6 +715,7 @@ Every new HTML micro-app **must** include an `app.json` file in the app root dir
 - Do not use `"webapp"` for `app.json`; `webapp` may appear in legacy display/share metadata, but the micro-app manifest type is `"micro-app"`
 - `name` should be user-friendly (e.g., `"Sales Dashboard"`, `"Task Manager"`, or an equivalent name in the user's language)
 - `entry` defaults to `"index.html"`; include it explicitly for new apps
+- `icon` must be `"icon.svg"`; this file is used as the install and home-screen icon for this app
 - Generate this file **before** `magic.project.js` and `index.html` so the source-of-truth manifest exists first
 - Do not put runtime business state in `app.json`; use data files under `data/` for app state
 
@@ -747,12 +751,11 @@ if (typeof window.magicProjectConfigure === "function") {
 - If `app.json` and `magic.project.js` differ for mirrored fields, `app.json` is the authoritative source and `magic.project.js` should be repaired to match
 - Generate this file before `index.html` when possible, so current file-tree metadata can recognize the folder as a micro-app early
 
-**Optional: Custom Icon (`icon` field)**
+**Required: Install Icon (`icon` field)**
 
-You can provide a custom icon for the app folder by adding an `icon` field to `app.json`. The value can be:
+Every new micro-app must generate one `icon.svg` file in the app root.
 
-- A relative path (relative to the app root) pointing to an SVG, PNG, or any image file you generate alongside the app
-- An `https://` URL for remote images
+`app.json.icon` and `magic.project.js.icon` must both point to `icon.svg`. Use a relative local file only. Do not use a remote URL, a published cover, raster image, or data URL for the micro-app icon.
 
 ```json
 {
@@ -764,23 +767,12 @@ You can provide a custom icon for the app folder by adding an `icon` field to `a
 }
 ```
 
-**When to use a custom icon:**
-
-- For business/domain apps where a unique icon adds context (e.g., a chart icon for a dashboard, a calendar icon for a scheduler)
-- When the user explicitly asks for a custom icon
-- For apps that will be shared or presented — a custom icon makes them easier to identify
-
 **How to generate an icon:**
 
-Use `write_file` to create a simple SVG in the app directory (e.g., `icon.svg`), then reference it in `app.json`. Example SVG for a sales dashboard:
-
-```svg
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- design a clean, recognizable icon that reflects the app's purpose -->
-</svg>
-```
-
-Keep SVG icons at 24×24, use flat/modern style with 2–3 colors, and ensure the design reflects the app's core function.
+1. Design one square icon that reflects the app's main purpose. Use a simple symbol, 2–3 colors, and a solid background. Do not include small text, screenshots, detailed charts, or a pre-rounded app-icon mask. Keep the meaningful symbol inside the central 80% safe area.
+2. Use `write_file` to create `icon.svg` in the micro-app directory. Keep the SVG self-contained, with a `viewBox`, no external references, no scripts, no event-handler attributes, and no embedded HTML.
+3. Validate that the file is well-formed SVG and contains no active content before writing `app.json` and `magic.project.js`.
+4. If generation or validation fails, report the failure instead of silently omitting the file or referencing a file that does not exist.
 
 ---
 
@@ -803,6 +795,7 @@ For Medium/Complex apps, generate a `README.md` in the app directory documenting
 
 app-dir/
 ├── app.json
+├── icon.svg
 ├── magic.project.js
 ├── index.html
 ├── data/

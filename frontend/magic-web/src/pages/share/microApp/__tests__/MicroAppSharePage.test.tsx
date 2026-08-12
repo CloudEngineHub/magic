@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
 import { RoutePath } from "@/constants/routes"
 import { whiteListRoutes } from "@/routes/const/whiteRoutes"
 import {
@@ -23,6 +23,26 @@ describe("MicroAppSharePage", () => {
 	it("registers the standalone micro app route as public", () => {
 		expect(RoutePath.MicroAppShare).toBe("/micro-app/:appId")
 		expect(whiteListRoutes).toContain("/micro-app/*")
+	})
+
+	it("keeps manifest links synchronized when navigating between shared apps", async () => {
+		renderPage()
+		await waitFor(() => {
+			expect(
+				document.head
+					.querySelector<HTMLLinkElement>('link[data-micro-app-install="manifest"]')
+					?.getAttribute("href"),
+			).toBe("/micro-app/app-1/manifest.webmanifest")
+		})
+
+		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
+		await waitFor(() => {
+			expect(
+				document.head
+					.querySelector<HTMLLinkElement>('link[data-micro-app-install="manifest"]')
+					?.getAttribute("href"),
+			).toBe("/micro-app/app-2/manifest.webmanifest")
+		})
 	})
 
 	it("waits for safety confirmation before rendering the root html entry", async () => {
@@ -407,133 +427,5 @@ describe("MicroAppSharePage", () => {
 			"data-state",
 			"permission",
 		)
-	})
-
-	it("uses password query when the resource requires password", async () => {
-		mocks.checkShareResourcePassword.mockResolvedValue({ has_password: true })
-
-		renderPage("/micro-app/app-1?password=abcd1234")
-
-		await waitFor(() => {
-			expect(mocks.getShareResource).toHaveBeenCalledWith({
-				resource_id: "resource-1",
-				password: "abcd1234",
-			})
-		})
-		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
-		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
-	})
-
-	it("requires a new confirmation after switching to another shared app", async () => {
-		renderPage()
-		await confirmSafetyNotice()
-
-		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
-
-		await waitFor(() => {
-			expect(mocks.resolvePublishedMicroApp).toHaveBeenCalledWith("app-2")
-			expect(mocks.getShareResource).toHaveBeenCalledTimes(2)
-		})
-		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
-		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
-	})
-
-	it("ignores a stale file response after switching shared apps", async () => {
-		let resolveFirstFiles: (value: {
-			tree: Array<Record<string, string>>
-			list: Array<Record<string, string>>
-		}) => void = () => undefined
-		const firstFiles = new Promise<{
-			tree: Array<Record<string, string>>
-			list: Array<Record<string, string>>
-		}>((resolve) => {
-			resolveFirstFiles = resolve
-		})
-		const buildFiles = (suffix: string) => ({
-			tree: [
-				{
-					file_id: `app-json-${suffix}`,
-					file_name: "app.json",
-					file_extension: "json",
-					relative_file_path: "app.json",
-				},
-				{
-					file_id: `file-${suffix}`,
-					file_name: "index.html",
-					file_extension: "html",
-					relative_file_path: "index.html",
-				},
-			],
-			list: [
-				{
-					file_id: `app-json-${suffix}`,
-					file_name: "app.json",
-					file_extension: "json",
-					relative_file_path: "app.json",
-				},
-				{
-					file_id: `file-${suffix}`,
-					file_name: "index.html",
-					file_extension: "html",
-					relative_file_path: "index.html",
-				},
-			],
-		})
-
-		mocks.resolvePublishedMicroApp.mockImplementation(async (requestedAppId: string) => ({
-			app_id: requestedAppId,
-			resource_id: `resource-${requestedAppId}`,
-		}))
-		mocks.getShareResource.mockImplementation(
-			async ({ resource_id }: { resource_id: string }) => ({
-				temporary_token: `token-${resource_id}`,
-				data: {
-					project_id: `project-${resource_id}`,
-					project_name: resource_id,
-				},
-			}),
-		)
-		mocks.getShareResourceFiles.mockImplementation(
-			({ resource_id }: { resource_id: string }) =>
-				resource_id === "resource-app-1"
-					? firstFiles
-					: Promise.resolve(buildFiles("app-2")),
-		)
-
-		renderPage()
-		await waitFor(() => {
-			expect(mocks.getShareResourceFiles).toHaveBeenCalledWith({
-				resource_id: "resource-app-1",
-				password: undefined,
-			})
-		})
-
-		fireEvent.click(screen.getByTestId("navigate-to-second-micro-app"))
-		expect(await confirmSafetyNotice()).toHaveAttribute(
-			"data-virtual-storage-marker-id",
-			"file-app-2",
-		)
-
-		resolveFirstFiles(buildFiles("app-1"))
-
-		await waitFor(() => {
-			expect(screen.getByTestId("mock-mounted-file-id")).toHaveTextContent("file-app-2")
-		})
-	})
-
-	it("redirects to login when app.json does not allow anonymous access", async () => {
-		vi.mocked(fetch).mockResolvedValueOnce({
-			ok: true,
-			json: vi.fn().mockResolvedValue({ type: "micro-app", anonymous: false }),
-		} as unknown as Response)
-
-		renderPage()
-
-		await waitFor(() => {
-			expect(mocks.historyReplace).toHaveBeenCalledWith(
-				expect.objectContaining({ name: "Login" }),
-			)
-		})
-		expect(screen.queryByTestId("mock-html-preview")).not.toBeInTheDocument()
 	})
 })

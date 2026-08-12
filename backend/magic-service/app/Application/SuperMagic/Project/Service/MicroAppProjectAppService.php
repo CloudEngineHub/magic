@@ -291,6 +291,7 @@ class MicroAppProjectAppService extends AbstractAppService
             'resource_id' => $record->getResourceId(),
             'share_code' => $shareEntity->getShareCode(),
             'cover_url' => $coverUrls[$this->coverUrlMapKey($coverRow, $coverKey)] ?? '',
+            'icon_url' => $this->publishedMicroAppResolver->getInstallIconUrl($record),
         ];
     }
 

@@ -11,6 +11,7 @@ const k8sOnlyMiddleware = require("../middleware/k8sOnlyMiddleware")
 const { logger } = require("../logger.cjs")
 const ConfigRoutes = require("./config.route")
 const LogsRoutes = require("./logs.route")
+const MicroAppInstallRoutes = require("./micro-app-install.route")
 const history = require("connect-history-api-fallback")
 const express = require("express")
 const fs = require("node:fs")
@@ -24,6 +25,7 @@ const hasLoginPopupTemplate = fs.existsSync(
 
 const configRoutes = new ConfigRoutes()
 const logsRoutes = new LogsRoutes()
+const microAppInstallRoutes = new MicroAppInstallRoutes()
 
 const configureRoutes = (app) => {
 	/**
@@ -50,6 +52,11 @@ const configureRoutes = (app) => {
 		logsRoutes.report,
 	)
 	app.get("/sw.js", serviceWorkerMiddleware)
+	app.get(
+		"/micro-app/:appId/manifest.webmanifest",
+		microAppInstallRoutes.manifest.bind(microAppInstallRoutes),
+	)
+	app.get("/micro-app/:appId/icon", microAppInstallRoutes.icon.bind(microAppInstallRoutes))
 
 	/**
 	 * ======================== 静态资源缓存配置 ========================

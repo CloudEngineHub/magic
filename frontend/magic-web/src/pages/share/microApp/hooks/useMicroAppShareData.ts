@@ -10,6 +10,10 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useSharePermission } from "@/pages/share/hooks/useSharePermission"
 import { useTokenRefreshPolling } from "@/pages/share/hooks/useTokenRefreshPolling"
+import {
+	microAppSharePasswordStore,
+	removeMicroAppSharePassword,
+} from "../utils/microAppSharePasswordStore"
 
 interface UseMicroAppShareDataParams {
 	appId: string
@@ -113,6 +117,52 @@ function redirectToLogin(): void {
 			}),
 		),
 	})
+}
+
+function removePasswordFromCurrentUrl(): void {
+	const url = new URL(window.location.href)
+	if (!url.searchParams.has("password")) return
+	url.searchParams.delete("password")
+	window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+}
+
+function readHttpStatus(error: unknown): number {
+	const value = error as {
+		response?: { status?: unknown }
+		status?: unknown
+		statusCode?: unknown
+	}
+	return Number(value?.response?.status || value?.status || value?.statusCode || 0)
+}
+
+function readBusinessCode(error: unknown): number {
+	const value = error as {
+		code?: unknown
+		data?: { code?: unknown; data?: { code?: unknown } }
+		response?: { data?: { code?: unknown; data?: { code?: unknown } } }
+	}
+	return Number(
+		value?.code ||
+			value?.data?.code ||
+			value?.data?.data?.code ||
+			value?.response?.data?.code ||
+			value?.response?.data?.data?.code ||
+			0,
+	)
+}
+
+function isShareUnavailableError(error: unknown): boolean {
+	return (
+		[404, 410].includes(readHttpStatus(error)) ||
+		[51200, 51302, 51305].includes(readBusinessCode(error))
+	)
+}
+
+function isPasswordRejectedError(error: unknown): boolean {
+	return (
+		[400, 401, 403].includes(readHttpStatus(error)) ||
+		[51306, 51317].includes(readBusinessCode(error))
+	)
 }
 
 export default function useMicroAppShareData({ appId }: UseMicroAppShareDataParams) {
@@ -229,13 +279,14 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		setAttachmentsTree([])
 		setVerifiedPassword(undefined)
 		let checkData: any
+		let resolvedResourceId = ""
 		try {
 			const appResponse = await SuperMagicApi.resolvePublishedMicroApp(appId)
 			if (!isRequestCurrent(requestContext)) return
 			const appData = unwrapResponse<{ resource_id?: string; cover_url?: string }>(
 				appResponse,
 			)
-			const resolvedResourceId = readString(appData?.resource_id)
+			resolvedResourceId = readString(appData?.resource_id)
 			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
 			setResourceId(resolvedResourceId)
 			setCoverUrl(readString(appData?.cover_url))
@@ -252,6 +303,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			setPasswordFromUrl(urlPassword)
 
 			if (!hasPassword) {
+				removeMicroAppSharePassword(appId, resolvedResourceId)
 				await fetchShareData({ resource_id: resolvedResourceId }, requestContext)
 				return
 			}
@@ -262,16 +314,52 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 						{ resource_id: resolvedResourceId, password: urlPassword },
 						requestContext,
 					)
-					if (isRequestCurrent(requestContext)) setVerifiedPassword(urlPassword)
-				} catch {
+					if (isRequestCurrent(requestContext)) {
+						setVerifiedPassword(urlPassword)
+						removePasswordFromCurrentUrl()
+					}
+					return
+				} catch (urlPasswordError) {
 					if (!isRequestCurrent(requestContext)) return
+					if (isShareUnavailableError(urlPasswordError)) throw urlPasswordError
+					setPasswordFromUrl("")
 					setShareData(null)
 					setAttachmentList([])
 					setAttachmentsTree([])
 				}
 			}
+
+			const rememberedPassword = microAppSharePasswordStore.read(resolvedResourceId)?.password
+			if (rememberedPassword) {
+				try {
+					await fetchShareData(
+						{ resource_id: resolvedResourceId, password: rememberedPassword },
+						requestContext,
+					)
+					if (isRequestCurrent(requestContext)) {
+						setVerifiedPassword(rememberedPassword)
+						removePasswordFromCurrentUrl()
+					}
+				} catch (rememberedPasswordError) {
+					if (isShareUnavailableError(rememberedPasswordError)) {
+						removeMicroAppSharePassword(appId, resolvedResourceId)
+						throw rememberedPasswordError
+					}
+					if (isPasswordRejectedError(rememberedPasswordError)) {
+						removeMicroAppSharePassword(appId, resolvedResourceId)
+					}
+					if (!isRequestCurrent(requestContext)) return
+					setShareData(null)
+					setAttachmentList([])
+					setAttachmentsTree([])
+					setError(null)
+				}
+			}
 		} catch (err: any) {
 			if (!isRequestCurrent(requestContext)) return
+			if (isShareUnavailableError(err)) {
+				removeMicroAppSharePassword(appId, resolvedResourceId)
+			}
 			setRequiredOrgCode(resolveRequiredOrgCode(err, checkData))
 			setError(err)
 		} finally {
