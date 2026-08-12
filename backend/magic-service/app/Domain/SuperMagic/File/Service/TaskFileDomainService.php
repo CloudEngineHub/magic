@@ -10,7 +10,9 @@ namespace App\Domain\SuperMagic\File\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Constant\TopicFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\SandboxFileNotificationDataValueObject;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
@@ -2065,7 +2067,7 @@ class TaskFileDomainService
             $rootDirEntity->setStorageType(StorageType::WORKSPACE);
             $rootDirEntity->setIsHidden(true);
             $rootDirEntity->setSort(0);
-            $rootDirEntity->setSpaceType('user');
+            $rootDirEntity->setSpaceType(FileSpaceType::USER->value);
 
             $now = date('Y-m-d H:i:s');
             $rootDirEntity->setCreatedAt($now);
@@ -2089,6 +2091,75 @@ class TaskFileDomainService
                     'lock_owner' => $lockOwner,
                 ]);
             }
+        }
+    }
+
+    public function findOrCreateTopicRootDirectory(
+        int $projectId,
+        int $topicId,
+        string $userId,
+        string $organizationCode,
+        string $projectOrganizationCode
+    ): int {
+        $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+        if ($root !== null) {
+            return $root->getFileId();
+        }
+
+        $lockKey = sprintf('magicfs:topic_root_dir:%s:%d:%d', $organizationCode, $projectId, $topicId);
+        $lockOwner = IdGenerator::getUniqueId32();
+        if (! $this->locker->spinLock($lockKey, $lockOwner, self::LOCK_TIMEOUT)) {
+            $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+            if ($root !== null) {
+                return $root->getFileId();
+            }
+            throw new RuntimeException('Failed to acquire lock for creating topic root directory');
+        }
+
+        try {
+            $root = $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+            if ($root !== null) {
+                return $root->getFileId();
+            }
+
+            // Topic root 使用既有固定物理目录，以便沙箱按该前缀申请最小范围权限。
+            // `.topic` 仅是 TaskFile 元数据名称，不拼入对象存储 file_key。
+            $relativeDir = WorkDirectoryUtil::getTopicRootDir($userId, $projectId, $topicId);
+            $fullPrefix = $this->getFullPrefix($projectOrganizationCode);
+            $fileKey = rtrim($fullPrefix . ltrim($relativeDir, '/'), '/') . '/';
+            $this->cloudFileRepository->createFolderByCredential(
+                WorkDirectoryUtil::getPrefix($relativeDir),
+                $projectOrganizationCode,
+                $fileKey,
+                StorageBucketType::SandBox,
+                ['metadata' => WorkDirectoryUtil::generateDefaultWorkDirMetadata()]
+            );
+
+            $entity = new TaskFileEntity();
+            $entity->setFileId(IdGenerator::getSnowId());
+            $entity->setUserId($userId);
+            $entity->setOrganizationCode($organizationCode);
+            $entity->setProjectId($projectId);
+            $entity->setTopicId($topicId);
+            $entity->setFileName(TopicFileConstant::ROOT_FILE_NAME);
+            $entity->setFileKey($fileKey);
+            $entity->setFileSize(0);
+            $entity->setFileType(FileType::DIRECTORY->value);
+            $entity->setIsDirectory(true);
+            $entity->setIsHidden(false);
+            $entity->setParentId(null);
+            $entity->setSource(TaskFileSource::AGENT);
+            $entity->setSpaceType(FileSpaceType::TOPIC->value);
+            $entity->setStorageType(StorageType::TOPIC);
+            $entity->setSort(0);
+            $now = date('Y-m-d H:i:s');
+            $entity->setCreatedAt($now);
+            $entity->setUpdatedAt($now);
+            $entity->setDeletedAt(null);
+
+            return $this->insertOrUpdate($entity)->getFileId();
+        } finally {
+            $this->locker->release($lockKey, $lockOwner);
         }
     }
 

@@ -286,18 +286,27 @@ class FileConverterAppService extends AbstractAppService
             $stsTemporaryCredential = $this->getStsCredential($userAuthorization, $projectEntity->getWorkDir(), $projectEntity->getUserOrganizationCode());
 
             $this->fileConvertStatusManager->setTaskProgress($taskKey, count($fileKeys) - 1, count($fileKeys), 'Converting files');
+            $topicId = ! empty($validFiles) && $validFiles[0]->getTopicId() > 0
+                ? (int) $validFiles[0]->getTopicId()
+                : 0;
+            $topicRootFileId = $topicId > 0
+                ? (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+                    (int) $projectId,
+                    $topicId,
+                    $userId,
+                    $userAuthorization->getOrganizationCode(),
+                    $projectEntity->getUserOrganizationCode()
+                )
+                : '';
             // Ensure sandbox is running via domain service (App layer orchestration).
             $actualSandboxId = $this->agentDomainService->ensureSandboxRunning(
                 $dataIsolation,
                 $sandboxId,
                 $projectId,
-                $fullWorkdir
+                $fullWorkdir,
+                $rootFileId,
+                $topicRootFileId
             );
-
-            // 从第一个文件中获取 topic_id
-            $topicId = ! empty($validFiles) && $validFiles[0]->getTopicId() > 0
-                ? (string) $validFiles[0]->getTopicId()
-                : '';
 
             // Create file conversion request
             $fileRequest = new FileConverterRequest(
@@ -309,7 +318,7 @@ class FileConverterAppService extends AbstractAppService
                 $taskKey,
                 $userId,
                 $userAuthorization->getOrganizationCode(),
-                $topicId,
+                (string) $topicId,
                 $rootFileId,
                 $authorization
             );

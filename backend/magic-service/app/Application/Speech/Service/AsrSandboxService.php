@@ -17,6 +17,7 @@ use App\Domain\Asr\Constants\AsrConfig;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\InitializationMetadataDTO;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
@@ -711,7 +712,15 @@ class AsrSandboxService extends AbstractAppService
                 skipInitMessage: true
             );
 
-            $actualSandboxId = $this->agentDomainService->ensureSandboxInitialized($dataIsolation, $agentContext);
+            $actualSandboxId = $this->agentDomainService->ensureSandboxInitialized(
+                $dataIsolation,
+                $agentContext,
+                new SandboxRootFileIds(
+                    (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                    (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode),
+                    (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $userId, $organizationCode, $projectEntity->getUserOrganizationCode())
+                )
+            );
 
             $this->logger->info('[ASR][Sandbox] 沙箱初始化完成（带锁保护）', [
                 'task_key' => $taskStatus->taskKey,

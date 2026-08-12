@@ -38,6 +38,7 @@ use App\Domain\SuperMagic\Message\Entity\ValueObject\ChatInstruction;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
@@ -593,6 +594,11 @@ class HandleUserMessageAppService extends AbstractAppService
         $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
             $dataIsolation,
             $agentContext,
+            new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()),
+                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
+            ),
             interruptChecker: fn () => TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskId)
         );
 
@@ -929,10 +935,15 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         // Phase 2: mount validated projects
+        $projectRootFileIds = [];
+        foreach ($projectIds as $projectId) {
+            $projectRootFileIds[(int) $projectId] = (string) $this->taskFileDomainService->getProjectRootFileId((int) $projectId);
+        }
         $this->agentDomainService->mountReferencedProjects(
             $dataIsolation,
             $sandboxId,
-            $projectIds
+            $projectIds,
+            $projectRootFileIds
         );
     }
 }

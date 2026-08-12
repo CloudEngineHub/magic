@@ -9,7 +9,9 @@ namespace App\Domain\SuperMagic\File\Repository\Persistence;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Constant\TopicFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -1671,7 +1673,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         $model = $this->model::query()
             ->where('user_id', $userId)
             ->where('organization_code', $organizationCode)
-            ->where('space_type', 'user')
+            ->where('space_type', FileSpaceType::USER->value)
             ->whereNull('parent_id')
             ->where('file_name', '/')
             ->where('is_directory', true)
@@ -1683,6 +1685,24 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         }
 
         return new TaskFileEntity($model->toArray());
+    }
+
+    public function findTopicSpaceRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity
+    {
+        $model = $this->model::query()
+            ->where('organization_code', $organizationCode)
+            ->where('project_id', $projectId)
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            ->where('file_name', TopicFileConstant::ROOT_FILE_NAME)
+            ->whereNull('parent_id')
+            ->where('is_directory', true)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id', 'asc')
+            ->first();
+
+        return $model ? new TaskFileEntity($model->toArray()) : null;
     }
 
     /**

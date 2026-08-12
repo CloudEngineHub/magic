@@ -277,6 +277,7 @@ class WarmPoolSandboxDomainService
         string $projectId,
         string $projectSpaceRootFileId,
         string $userSpaceRootFileId,
+        string $topicSpaceRootFileId = '',
         array $labels = [],
         ?string $topicId = null
     ): ?string {
@@ -314,6 +315,7 @@ class WarmPoolSandboxDomainService
                 $projectId,
                 $projectSpaceRootFileId,
                 $userSpaceRootFileId,
+                $topicSpaceRootFileId,
                 $labels
             );
         } catch (Throwable $e) {

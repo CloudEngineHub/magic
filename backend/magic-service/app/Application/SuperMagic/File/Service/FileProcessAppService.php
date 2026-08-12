@@ -151,6 +151,7 @@ class FileProcessAppService extends AbstractAppService
                 $task->getProjectId(),
                 $task->getTopicId()
             ) . '/snapshots';
+            // TODO: Topic 新空间启用时，Snapshot 物理目录应与上传、消息目录同步切换。
             $fullSnapshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $snapshotDir);
             if (! WorkDirectoryUtil::checkEffectiveFileKey($fullSnapshotDir, $fileKey)) {
                 $this->logger->warning('Tool Detail snapshot path does not belong to the current topic', [

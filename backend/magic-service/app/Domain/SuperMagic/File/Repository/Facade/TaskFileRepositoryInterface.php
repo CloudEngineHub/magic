@@ -536,6 +536,8 @@ interface TaskFileRepositoryInterface
      */
     public function findUserSpaceRootDirectory(string $userId, string $organizationCode): ?TaskFileEntity;
 
+    public function findTopicSpaceRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity;
+
     /**
      * Batch update is_hidden field for given file IDs.
      *

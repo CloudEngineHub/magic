@@ -3099,6 +3099,13 @@ class ResourceShareAppService extends AbstractShareAppService
                 '',
                 $workDir
             );
+            $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+                $forkProjectEntity->getId(),
+                $topicEntity->getId(),
+                $dataIsolation->getCurrentUserId(),
+                $dataIsolation->getCurrentOrganizationCode(),
+                $forkProjectEntity->getUserOrganizationCode()
+            );
             $this->logger->info(sprintf('创建默认话题成功, topicId=%s', $topicEntity->getId()));
 
             // 更新工作区信息

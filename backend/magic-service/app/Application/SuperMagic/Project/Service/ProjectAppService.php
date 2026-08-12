@@ -3116,6 +3116,13 @@ class ProjectAppService extends AbstractAppService
             dynamicParams: $dynamicParams,
             agentCode: $agentCode,
         );
+        $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+            $projectEntity->getId(),
+            $topicEntity->getId(),
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $projectEntity->getUserOrganizationCode()
+        );
         $this->logger->info(sprintf('创建默认话题成功, topicId=%s', $topicEntity->getId()));
 
         // 5. Update workspace with current topic and project (only if workspace exists)

@@ -318,6 +318,7 @@ class TopicAppService extends AbstractAppService
             }
             // 提交事务
             Db::commit();
+            $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
 
             // 发布话题已创建事件
             $topicCreatedEvent = new TopicCreatedEvent($topicEntity, $userAuthorization);
@@ -375,6 +376,7 @@ class TopicAppService extends AbstractAppService
             }
             // 提交事务
             Db::commit();
+            $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
             // 返回结果
             return TopicItemDTO::fromEntity($topicEntity);
         } catch (Throwable $e) {
@@ -857,18 +859,53 @@ class TopicAppService extends AbstractAppService
         // Create data isolation
         $dataIsolation = $this->createDataIsolation($userAuthorization);
 
-        // Execute complete duplication in transaction
+        // Phase 1: create the Topic skeleton first. The Topic record and IM
+        // conversation are committed before the File domain creates the root.
         Db::beginTransaction();
         try {
-            // Call domain service - pure business logic
-            $newTopicEntity = $this->topicDomainService->duplicateTopic(
+            $duplicateResult = $this->topicDomainService->duplicateTopicSkeleton(
                 $dataIsolation,
                 $sourceTopicEntity,
-                $requestDTO->getNewTopicName(),
-                (int) $requestDTO->getTargetMessageId()
+                $requestDTO->getNewTopicName()
             );
+            $newTopicEntity = $duplicateResult['topic_entity'];
+            $imConversationResult = $duplicateResult['im_conversation'];
 
             Db::commit();
+        } catch (Throwable $e) {
+            Db::rollBack();
+            $this->logger->error('Topic duplication skeleton creation failed', [
+                'source_topic_id' => $sourceTopicId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            ExceptionBuilder::throw(GenericErrorCode::SystemError, 'system.system_error');
+        }
+
+        try {
+            // Phase 2: create the Topic root outside the Topic transaction.
+            // A root failure must stop message copy; sandbox startup can retry
+            // the same idempotent root creation later.
+            $this->initializeTopicRoot(
+                $dataIsolation,
+                $newTopicEntity,
+                $this->projectDomainService->getProjectNotUserId($newTopicEntity->getProjectId())
+            );
+
+            // Phase 3: copy messages only after the Topic root exists.
+            Db::beginTransaction();
+            try {
+                $this->topicDomainService->copyTopicMessageFromOthers(
+                    $sourceTopicEntity,
+                    $newTopicEntity,
+                    (int) $requestDTO->getTargetMessageId(),
+                    $imConversationResult
+                );
+                Db::commit();
+            } catch (Throwable $e) {
+                Db::rollBack();
+                throw $e;
+            }
 
             // Copy topic model configuration (outside transaction, failure won't affect topic duplication)
             $this->copyTopicModelConfig($dataIsolation, $sourceTopicId, (string) $newTopicEntity->getId());
@@ -885,10 +922,9 @@ class TopicAppService extends AbstractAppService
                 'topic' => TopicItemDTO::fromEntity($newTopicEntity)->toArray(),
             ];
         } catch (Throwable $e) {
-            Db::rollBack();
-
             $this->logger->error('Topic duplication sync failed', [
                 'source_topic_id' => $sourceTopicId,
+                'new_topic_id' => $newTopicEntity->getId(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -948,6 +984,7 @@ class TopicAppService extends AbstractAppService
 
             // 提交事务
             Db::commit();
+            $this->initializeTopicRoot($dataIsolation, $newTopicEntity, $this->projectDomainService->getProjectNotUserId($newTopicEntity->getProjectId()));
 
             $this->logger->info('Topic skeleton created successfully (sync)', [
                 'source_topic_id' => $sourceTopicId,
@@ -1343,6 +1380,7 @@ class TopicAppService extends AbstractAppService
             isHidden: true,
             hiddenType: $hiddenType
         );
+        $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
 
         // 预热话题创建后，立即设置 sandbox_id 为话题ID（话题ID即沙箱ID）
         $topicId = $topicEntity->getId();
@@ -1413,6 +1451,20 @@ class TopicAppService extends AbstractAppService
         }
     }
 
+    private function initializeTopicRoot(DataIsolation $dataIsolation, TopicEntity $topicEntity, ?ProjectEntity $projectEntity): void
+    {
+        if ($projectEntity === null) {
+            throw new BusinessException('Project not found for topic root initialization');
+        }
+        $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+            $topicEntity->getProjectId(),
+            $topicEntity->getId(),
+            $dataIsolation->getCurrentUserId(),
+            $dataIsolation->getCurrentOrganizationCode(),
+            $projectEntity->getUserOrganizationCode()
+        );
+    }
+
     /**
      * Build relative paths based on parent_id chain instead of file_key.
      *
@@ -1472,6 +1524,7 @@ class TopicAppService extends AbstractAppService
             }
 
             Db::commit();
+            $this->initializeTopicRoot($dataIsolation, $hiddenTopic, $projectEntity);
         } catch (Throwable $e) {
             Db::rollBack();
             $this->logger->error(sprintf(
