@@ -71,11 +71,15 @@ class DesignVideoCreateDTO extends AbstractDTO
 
     private const array EXECUTION_ALLOWED_KEYS = ['service_tier', 'expires_after_seconds'];
 
-    private const array FRAME_ALLOWED_KEYS = ['role', 'uri'];
+    private const array FRAME_ALLOWED_KEYS = ['role', 'uri', 'source_type', 'base64_data', 'mime_type'];
 
     private const array MEDIA_ALLOWED_KEYS = ['uri'];
 
-    private const array REFERENCE_IMAGE_ALLOWED_KEYS = ['uri', 'type'];
+    private const array REFERENCE_IMAGE_ALLOWED_KEYS = ['uri', 'type', 'source_type', 'base64_data', 'mime_type'];
+
+    private const array VIDEO_IMAGE_SOURCE_TYPES = ['workspace_path', 'base64'];
+
+    private const array VIDEO_IMAGE_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
     protected string $inputMode = '';
 
@@ -527,10 +531,7 @@ class DesignVideoCreateDTO extends AbstractDTO
             }
             $seenRoles[$role] = true;
 
-            $uri = trim((string) ($frame['uri'] ?? ''));
-            if ($uri === '') {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('inputs.frames.%d.uri is required', $index));
-            }
+            $this->assertImageInputSource($frame, sprintf('inputs.frames.%d', $index));
         }
 
         foreach ($this->getReferenceImages() as $index => $referenceImage) {
@@ -540,10 +541,7 @@ class DesignVideoCreateDTO extends AbstractDTO
 
             $this->assertAllowedKeys($referenceImage, self::REFERENCE_IMAGE_ALLOWED_KEYS, sprintf('inputs.reference_images.%d', $index));
 
-            $uri = trim((string) ($referenceImage['uri'] ?? ''));
-            if ($uri === '') {
-                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('inputs.reference_images.%d.uri is required', $index));
-            }
+            $this->assertImageInputSource($referenceImage, sprintf('inputs.reference_images.%d', $index));
 
             $type = trim((string) ($referenceImage['type'] ?? ''));
             if ($type !== '' && ! in_array($type, self::REFERENCE_IMAGE_TYPES, true)) {
@@ -645,6 +643,42 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertAllowedKeys($value, self::MEDIA_ALLOWED_KEYS, $path);
 
         $uri = trim((string) ($value['uri'] ?? ''));
+        if ($uri === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.uri is required', $path));
+        }
+    }
+
+    /**
+     * 校验视频图片输入来源，兼容工作区路径和 Base64 图片两种协议。
+     *
+     * @param array<string, mixed> $input
+     */
+    private function assertImageInputSource(array $input, string $path): void
+    {
+        $sourceType = trim((string) ($input['source_type'] ?? ''));
+        $uri = trim((string) ($input['uri'] ?? ''));
+        $base64Data = trim((string) ($input['base64_data'] ?? ''));
+        $mimeType = strtolower(trim((string) ($input['mime_type'] ?? '')));
+
+        if ($sourceType !== '' && ! in_array($sourceType, self::VIDEO_IMAGE_SOURCE_TYPES, true)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.source_type is invalid', $path));
+        }
+
+        $hasBase64 = $base64Data !== '' || $mimeType !== '' || $sourceType === 'base64';
+        if ($hasBase64) {
+            if ($sourceType !== 'base64' || $uri !== '' || $base64Data === '' || $mimeType === '') {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s Base64 source is invalid', $path));
+            }
+            if (! in_array($mimeType, self::VIDEO_IMAGE_MIME_TYPES, true)) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.mime_type is invalid', $path));
+            }
+            $normalizedBase64 = preg_replace('/\s+/', '', $base64Data);
+            if (! is_string($normalizedBase64) || $normalizedBase64 === '' || base64_decode($normalizedBase64, true) === false) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.base64_data is invalid', $path));
+            }
+            return;
+        }
+
         if ($uri === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.uri is required', $path));
         }

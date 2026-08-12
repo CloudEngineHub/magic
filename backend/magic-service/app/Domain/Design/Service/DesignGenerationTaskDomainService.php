@@ -271,7 +271,11 @@ readonly class DesignGenerationTaskDomainService
     {
         $errorKey = 'video.errors.' . $errorCode;
         $errorMessage = trans($errorKey);
-        return $errorMessage === $errorKey ? null : $errorMessage;
+        if (! is_string($errorMessage) || $errorMessage === '' || $errorMessage === $errorKey) {
+            return null;
+        }
+
+        return $errorMessage;
     }
 
     private function sanitizePublicErrorMessage(?string $message): string

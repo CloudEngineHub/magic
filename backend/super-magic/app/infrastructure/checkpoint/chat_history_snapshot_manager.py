@@ -12,12 +12,18 @@
 
 from pathlib import Path
 from agentlang.path_manager import PathManager
+from agentlang.llms.utils.debug_logger import LLM_REQUEST_LOG_DIR_NAME
 from app.utils.async_file_utils import (
     async_rmtree, async_mkdir, async_copy2, async_copytree, async_exists, async_scandir
 )
 from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _should_skip_chat_history_entry(entry_name: str) -> bool:
+    """chat_history 快照/恢复时跳过的子目录。"""
+    return entry_name == LLM_REQUEST_LOG_DIR_NAME
 
 
 class ChatHistorySnapshotManager:
@@ -48,6 +54,9 @@ class ChatHistorySnapshotManager:
 
             items = await async_scandir(chat_history_source)
             for item in items:
+                if _should_skip_chat_history_entry(item.name):
+                    logger.debug("跳过 chat_history 快照目录: %s", item.name)
+                    continue
                 if item.is_file():
                     await async_copy2(item.path, snapshot_dir / item.name)
                 elif item.is_dir():
@@ -85,6 +94,9 @@ class ChatHistorySnapshotManager:
 
             items = await async_scandir(chat_history_source)
             for item in items:
+                if _should_skip_chat_history_entry(item.name):
+                    logger.debug("跳过 chat_history 快照目录: %s", item.name)
+                    continue
                 if item.is_file():
                     await async_copy2(item.path, snapshot_dir / item.name)
                 elif item.is_dir():
@@ -124,6 +136,9 @@ class ChatHistorySnapshotManager:
 
             items = await async_scandir(snapshot_dir)
             for item in items:
+                if _should_skip_chat_history_entry(item.name):
+                    logger.debug("跳过 chat_history 恢复目录: %s", item.name)
+                    continue
                 target_path = chat_history_target / item.name
                 if item.is_file():
                     await async_copy2(item.path, target_path)
@@ -164,6 +179,9 @@ class ChatHistorySnapshotManager:
 
             items = await async_scandir(snapshot_dir)
             for item in items:
+                if _should_skip_chat_history_entry(item.name):
+                    logger.debug("跳过 chat_history 恢复目录: %s", item.name)
+                    continue
                 target_path = chat_history_target / item.name
                 if item.is_file():
                     await async_copy2(item.path, target_path)
