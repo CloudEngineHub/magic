@@ -8,6 +8,7 @@ import type {
 	VideoInputMode,
 	VideoInputModeConfig,
 	VideoModelItem,
+	VideoGenerationDurationRange,
 } from "../../../public/magic-types"
 import type {
 	ReferenceAssetPerTypeLimits,
@@ -159,9 +160,14 @@ export interface VideoEditorConfig {
 	}>
 	/** 模型配置的可选时长（秒） */
 	supportedDurationOptions: number[]
+	/** 时长控件类型与范围配置 */
+	durationType: "options" | "range"
+	durationRange?: VideoGenerationDurationRange
 	/** 压缩质量可选值（模型开启 supports_compression_quality 时） */
 	supportedCompressionQualityOptions: string[]
 	selectedDurationSeconds: number | undefined
+	selectedGenerateAudio: boolean | undefined
+	selectedWebSearch: boolean | undefined
 	selectedCompressionQuality: string | undefined
 	currentSelectValue: string | undefined
 	ratioOption:
@@ -194,6 +200,8 @@ export interface VideoEditorConfig {
 		handleResolutionChange: (value: string) => void
 		handleRatioChange: (value: string) => void
 		handleDurationChange: (seconds: number) => void
+		handleGenerateAudioChange: (value: boolean) => void
+		handleWebSearchChange: (value: boolean) => void
 		handleCompressionQualityChange: (value: string) => void
 		handleInputModeChange: (value: VideoInputMode) => void
 		/** 切换首尾帧 / 参考图 Tab，仅切换 UI 展示 */
