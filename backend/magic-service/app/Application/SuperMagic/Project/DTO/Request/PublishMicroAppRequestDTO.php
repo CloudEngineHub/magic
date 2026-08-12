@@ -23,7 +23,11 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
 
     public ?string $coverFileKey = null;
 
+    public ?array $extra = null;
+
     private bool $coverFileKeyProvided = false;
+
+    private bool $extraProvided = false;
 
     public function getProjectName(): string
     {
@@ -92,6 +96,22 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
         return $this->coverFileKeyProvided;
     }
 
+    public function setExtra(?array $extra): void
+    {
+        $this->extraProvided = true;
+        $this->extra = $extra ?? [];
+    }
+
+    public function getExtra(): array
+    {
+        return $this->extra ?? [];
+    }
+
+    public function hasExtra(): bool
+    {
+        return $this->extraProvided;
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [
@@ -103,6 +123,8 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
             'target_ids.*.target_id' => 'required_with:target_ids|string|max:64',
             'password' => 'required_if:share_type,5|nullable|string|min:4|max:32',
             'cover_file_key' => 'nullable|string|max:512',
+            'extra' => 'nullable|array',
+            'extra.pure_mode' => 'nullable|boolean',
         ];
     }
 
