@@ -273,7 +273,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         $generationConfig = $capabilityProfile['generation'];
         $validationConfig = $capabilityProfile['validation'];
         $payload = [
-            'model' => $modelId,
+            'model' => $modelVersion,
             'task' => $this->firstNonEmptyString($request['task'] ?? null, 'generate') ?? 'generate',
             'content' => $content,
         ];
