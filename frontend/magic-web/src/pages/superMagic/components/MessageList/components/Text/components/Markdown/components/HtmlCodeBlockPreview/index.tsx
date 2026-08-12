@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import {

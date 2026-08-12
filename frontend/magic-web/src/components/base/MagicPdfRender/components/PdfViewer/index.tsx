@@ -1,4 +1,4 @@
-import { Document, Page } from "react-pdf"
+import { Document, Page } from "@/infrastructure/vendors/react-pdf"
 import { useTranslation } from "react-i18next"
 import { useEffect, useMemo, useState } from "react"
 import type { FC } from "react"

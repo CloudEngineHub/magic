@@ -14,7 +14,7 @@ import {
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { downloadRecordingAttachmentFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-attachment"
 import { downloadRecordingFilesBatch } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"

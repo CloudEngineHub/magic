@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { HTMLAttributes, MouseEventHandler, ReactNode, RefObject } from "react"
 
 type ScrollDirection = "left" | "right"

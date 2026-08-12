@@ -1,10 +1,10 @@
 import type { ElementType, PropsWithChildren } from "react"
-import { render, screen } from "@testing-library/react"
-import type { NodeViewProps } from "@tiptap/react"
+import { render, screen } from "@testing-library@/infrastructure/editors/tiptap/react"
+import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import { InspectorDetailComponent } from "../component"
 
-vi.mock("@tiptap/react", () => ({
+vi.mock("@/infrastructure/editors/tiptap/react", () => ({
 	NodeViewWrapper: ({
 		as: Component = "div",
 		children,

@@ -1,5 +1,5 @@
 import { makeAutoObservable } from "mobx"
-import { Editor, JSONContent } from "@tiptap/react"
+import { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { isEditorActive, runActiveEditor } from "../../utils/editorLifecycle"
 
 /**

@@ -26,7 +26,7 @@ import WorkspaceItem from "./WorkspaceItem"
 import CreateWorkspaceInput from "./CreateWorkspaceInput"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { toTestIdSegment } from "@/utils/testid"
 import {
 	SidebarGroup,

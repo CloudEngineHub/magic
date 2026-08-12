@@ -1,7 +1,7 @@
 import questionIcon from "@/assets/logos/question.svg"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"

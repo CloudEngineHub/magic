@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { History } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicTooltip } from "@/components/base"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 export interface TopicHistoryTriggerProps {
 	mode: "dropdown" | "layout"

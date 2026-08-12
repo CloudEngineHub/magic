@@ -17,7 +17,7 @@ import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"

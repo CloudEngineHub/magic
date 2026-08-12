@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { ChevronDown, Maximize2, Minimize2, Pause, Play } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { formatRecordingTime } from "../../../utils/time"
 import type { FlatColorSegment } from "../../../utils/chapter-color-segments"
 import { buildSimulatedWaveformBars } from "../../../utils/simulated-waveform-bars"

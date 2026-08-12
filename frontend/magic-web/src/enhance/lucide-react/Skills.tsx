@@ -1,5 +1,5 @@
 import { LucideProps } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 export const Skills = ({ className, size = 20, strokeWidth = 1.25, ...props }: LucideProps) => {
 	return (

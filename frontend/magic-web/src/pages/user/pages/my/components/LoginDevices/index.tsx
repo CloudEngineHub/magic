@@ -13,7 +13,7 @@ import LogoutConfirmModal from "./components/LogoutConfirmModal"
 import { getDeviceInfo } from "@/utils/devices"
 import { MagicEmpty } from "@/components/base"
 import { useTimezone } from "@/providers/TimezoneProvider/hooks"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type { User } from "@/types/user"
 import type { TFunction } from "i18next"
 

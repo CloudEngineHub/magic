@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { merge } from "lodash-es"

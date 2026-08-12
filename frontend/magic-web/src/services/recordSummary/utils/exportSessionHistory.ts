@@ -1,4 +1,4 @@
-import { loadJSZip } from "@/lib/jszip"
+import { loadJSZip } from "@/infrastructure/vendors/jszip"
 import type { StoredSessionHistory } from "../RecordingSessionHistoryDB"
 import { AudioChunkDB, type StoredAudioChunk } from "../MediaRecorderService/AudioChunkDB"
 

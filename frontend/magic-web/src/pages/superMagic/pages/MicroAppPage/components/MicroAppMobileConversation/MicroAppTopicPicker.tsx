@@ -5,7 +5,7 @@ import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { MobileResourceTypeIcon } from "@/pages/superMagicMobile/components/icons/mobile-resource-type-icon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface MicroAppTopicPickerProps {
 	open: boolean

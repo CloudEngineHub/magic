@@ -1,8 +1,8 @@
-import Mention from "@tiptap/extension-mention"
-import type { Editor } from "@tiptap/core"
-import { ReactNodeViewRenderer } from "@tiptap/react"
-import { Suggestion } from "@tiptap/suggestion"
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state"
+import Mention from "@/infrastructure/editors/tiptap/extension-mention"
+import type { Editor } from "@/infrastructure/editors/tiptap/core"
+import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
+import { Suggestion } from "@/infrastructure/editors/tiptap/suggestion"
+import { Plugin, PluginKey, type Transaction } from "@/infrastructure/editors/tiptap/pm-state"
 import { logger as Logger } from "@/utils/log"
 
 const logger = Logger.createLogger("MentionExtension")
@@ -21,7 +21,7 @@ import {
 } from "./types"
 
 // Suggestion configuration
-import { createMentionPanelSuggestion } from "./suggestion"
+import { createMentionPanelSuggestion } from ".@/infrastructure/editors/tiptap/suggestion"
 import { MentionItemType } from "../types"
 import MentionNodeView from "./MentionNodeView"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"

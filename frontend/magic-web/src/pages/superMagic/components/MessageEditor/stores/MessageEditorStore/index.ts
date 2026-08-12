@@ -1,5 +1,5 @@
 import { makeAutoObservable } from "mobx"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { EditorStore } from "../EditorStore"

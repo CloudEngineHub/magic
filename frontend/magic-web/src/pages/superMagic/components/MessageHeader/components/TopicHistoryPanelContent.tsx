@@ -35,7 +35,7 @@ import {
 	ContextMenuTrigger,
 } from "@/components/shadcn-ui/context-menu"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import usePaginatedTopics from "@/pages/superMagic/hooks/usePaginatedTopics"
 import type TopicServiceClass from "@/pages/superMagic/services/topicService"
 import SuperMagicService from "@/pages/superMagic/services"

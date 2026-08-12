@@ -1,7 +1,7 @@
 "use client"
 
-import { NodeViewWrapper, NodeViewContent } from "@tiptap/react"
-import type { NodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper, NodeViewContent } from "@/infrastructure/editors/tiptap/react"
+import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { Suspense, lazy, useEffect, useState } from "react"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))

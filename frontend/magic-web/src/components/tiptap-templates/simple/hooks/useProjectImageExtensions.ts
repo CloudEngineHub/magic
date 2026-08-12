@@ -1,12 +1,12 @@
 import { useMemo } from "react"
-import type { AnyExtension } from "@tiptap/react"
+import type { AnyExtension } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import { projectImageStorage } from "@/services/tiptap-image-project"
 import {
 	SaveImageToProjectExtension,
 	ImageUploadErrorType,
 } from "@/components/tiptap-node/project-image-node"
-import { MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+import { MAX_FILE_SIZE } from "@/infrastructure/editors/tiptap/utils"
 import ProjectImageNode from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 import magicToast from "@/components/base/MagicToaster/utils"

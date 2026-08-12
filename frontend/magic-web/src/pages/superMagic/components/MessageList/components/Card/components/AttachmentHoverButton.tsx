@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Paperclip } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type {
 	ProjectFileMentionData,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import MagicDatePicker from "@/components/base/MagicDatePicker"
 import MagicModal from "@/components/base/MagicModal"
 import MagicTimePicker from "@/components/base/MagicTimePicker"

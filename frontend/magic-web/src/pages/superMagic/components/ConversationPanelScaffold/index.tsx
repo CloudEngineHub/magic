@@ -1,5 +1,5 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { INPUT_CONTAINER_MIN_HEIGHT } from "@/pages/superMagic/components/MainInputContainer/constants"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"

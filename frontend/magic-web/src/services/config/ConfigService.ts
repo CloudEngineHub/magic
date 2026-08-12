@@ -228,7 +228,7 @@ export class ConfigService {
 		config.setLocaleConfig(lang).catch(console.error)
 		void configStore.i18n.setLanguage(lang)
 		BroadcastChannelSender.switchLanguage(lang)
-		import("@/lib/dayjs")
+		import("@/infrastructure/vendors/dayjs")
 			.then((module) => {
 				module.switchLanguage?.(lang)
 			})

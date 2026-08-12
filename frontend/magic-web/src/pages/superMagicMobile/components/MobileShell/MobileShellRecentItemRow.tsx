@@ -1,7 +1,7 @@
 import { useRef, type TouchEvent } from "react"
 import { useLongPress, useMemoizedFn } from "ahooks"
 import { Ellipsis, Loader } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MobileShellMenuRecentItem } from "./MobileShellMenuContext"
 import { getRecentItemActionAnchor } from "./utils/recentItemActionAnchor"
 

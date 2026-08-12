@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DraftStore } from "../stores"

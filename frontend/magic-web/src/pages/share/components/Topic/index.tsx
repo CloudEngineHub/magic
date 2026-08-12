@@ -50,7 +50,7 @@ import {
 	DEFAULT_MAX_WIDTH,
 	DEFAULT_WIDTH,
 } from "@/pages/superMagic/constants/resizablePanel"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"

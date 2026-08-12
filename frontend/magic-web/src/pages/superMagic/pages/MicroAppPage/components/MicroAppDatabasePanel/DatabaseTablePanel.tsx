@@ -15,7 +15,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { ConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import DataFilterBar from "./DataFilterBar"
 import DataFilterSummary from "./DataFilterSummary"

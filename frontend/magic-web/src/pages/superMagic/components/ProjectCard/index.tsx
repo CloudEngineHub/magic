@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, Ellipsis, ChevronsUpDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { ProjectCardProps, SeparatorProps } from "./types"
 import { IconShare3 } from "@tabler/icons-react"
 import { Button } from "@/components/shadcn-ui/button"

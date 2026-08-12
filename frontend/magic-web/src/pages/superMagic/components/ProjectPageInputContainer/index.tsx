@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import React, { useEffect, useMemo, useState } from "react"
 import TaskList from "../TaskList"
 import { useIsMobile } from "@/hooks/useIsMobile"

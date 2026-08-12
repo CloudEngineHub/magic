@@ -1,5 +1,5 @@
 import { useMemo, useEffect, type MouseEvent, type PointerEvent } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { X } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { TemplatePanelStore } from "../stores/TemplatePanelStore"

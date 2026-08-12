@@ -8,7 +8,7 @@ import {
 	type Dispatch,
 	type SetStateAction,
 } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	HTML_CODE_BLOCK_PREVIEW_CONTENT_METRICS_THRESHOLD,
 	HTML_CODE_BLOCK_PREVIEW_DESKTOP_DESIGN_WIDTH,

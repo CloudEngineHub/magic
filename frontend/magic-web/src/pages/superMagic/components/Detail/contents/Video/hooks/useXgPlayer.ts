@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import Player from "xgplayer"
+import Player from "@/infrastructure/vendors/xgplayer"
 import { defaultLanguage, getLocalizedText } from "../utils/i18n"
 
 export interface UseXgPlayerProps {

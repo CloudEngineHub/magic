@@ -1,6 +1,6 @@
 import { forwardRef } from "react"
 import { act, render } from "@testing-library/react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
@@ -39,7 +39,7 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagic/stores/core", () => ({
+vi.mock("@/pages/superMagic/stores@/infrastructure/editors/tiptap/core", () => ({
 	projectStore: { selectedProject: null },
 	topicStore: { selectedTopic: null, topics: [] },
 	workspaceStore: { selectedWorkspace: null, firstWorkspace: null },

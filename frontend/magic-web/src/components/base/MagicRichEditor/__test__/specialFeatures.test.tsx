@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest"
-import { render } from "@testing-library/react"
+import { render } from "@testing-library@/infrastructure/editors/tiptap/react"
 import React from "react"
 import "./setup"
 
@@ -9,7 +9,7 @@ const mockEmojiConfigure = vi.hoisted(() => vi.fn().mockReturnValue({}))
 const mockFileHandlerConfigure = vi.hoisted(() => vi.fn().mockReturnValue({}))
 
 // 模拟依赖
-vi.mock("@tiptap/react", () => {
+vi.mock("@/infrastructure/editors/tiptap/react", () => {
 	return {
 		useEditor: vi.fn().mockReturnValue({
 			commands: {

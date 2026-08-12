@@ -1,7 +1,7 @@
 import { Suspense, lazy, memo, type ClipboardEvent, type ReactNode } from "react"
 import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import type { FileItem } from "@/pages/superMagic/pages/Workspace/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ChevronUp, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"

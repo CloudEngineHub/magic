@@ -23,7 +23,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { merge } from "lodash-es"
 import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import { LongMemory } from "@/types/longMemory"
@@ -33,7 +33,7 @@ import { convertFileToTabItem } from "@/pages/superMagic/components/Detail/compo
 import MessageListFallback from "./components/MessageListFallback"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import TopicMessagePanel from "@/pages/superMagic/pages/TopicPage/components/TopicMessagePanel"
-import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import type { TopicStore } from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core/topic"
 import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/MessageHeader"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { Spinner } from "@/components/shadcn-ui/spinner"
@@ -447,12 +447,17 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 	)
 
 	// Live float panels continue to use the RecordingSummary fork (no main-site polling).
-	const { messages, showLoading, isShowLoadingInit, isMessagesInitialLoading, handlePullMoreMessage } =
-		useLiveRecordingTopicMessages({
-			selectedTopic,
-			selectedWorkspace,
-			checkNowDebounced,
-		})
+	const {
+		messages,
+		showLoading,
+		isShowLoadingInit,
+		isMessagesInitialLoading,
+		handlePullMoreMessage,
+	} = useLiveRecordingTopicMessages({
+		selectedTopic,
+		selectedWorkspace,
+		checkNowDebounced,
+	})
 
 	usePendingMemorySync(messages)
 

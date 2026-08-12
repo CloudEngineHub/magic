@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createWebSocketRecordMetadata,

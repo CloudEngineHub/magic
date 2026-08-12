@@ -26,7 +26,7 @@ import {
 	isIdentifiedOptionItem,
 	resolveDemoPromptText,
 } from "@/pages/superMagic/components/MainInputContainer/panels/utils"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { Badge } from "@/components/shadcn-ui/badge"
 import type { InspirationItemData } from "../inspirationItems"
 
