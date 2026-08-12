@@ -131,8 +131,8 @@ readonly class VideoGenerationConfigDomainService
             $rightConfig['generation']['aspect_ratios'],
         );
 
-        $leftDurationType = $leftConfig['generation']['duration_type'];
-        $rightDurationType = $rightConfig['generation']['duration_type'];
+        $leftDurationType = $leftConfig['generation']['duration_type'] ?? 'options';
+        $rightDurationType = $rightConfig['generation']['duration_type'] ?? 'options';
         $durationType = $leftDurationType === 'range' || $rightDurationType === 'range' ? 'range' : 'options';
         $durations = $durationType === 'range'
             ? self::intersectDurationRanges($leftConfig['generation'], $rightConfig['generation'])
@@ -178,8 +178,8 @@ readonly class VideoGenerationConfigDomainService
         ];
 
         foreach (['generate_audio', 'web_search'] as $switchName) {
-            $leftSwitch = $leftConfig['generation'][$switchName];
-            $rightSwitch = $rightConfig['generation'][$switchName];
+            $leftSwitch = $leftConfig['generation'][$switchName] ?? null;
+            $rightSwitch = $rightConfig['generation'][$switchName] ?? null;
             if (is_array($leftSwitch) && is_array($rightSwitch)) {
                 $generation[$switchName] = [
                     ...$leftSwitch,

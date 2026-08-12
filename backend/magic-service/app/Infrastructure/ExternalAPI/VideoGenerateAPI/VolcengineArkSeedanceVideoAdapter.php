@@ -102,7 +102,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         }
 
         $capabilityProfile = $this->resolveCapabilityProfile($modelVersion, $modelId);
-        $referenceLimits = $capabilityProfile['reference_limits'];
+        $referenceLimits = $capabilityProfile['reference_limits'] ?? ['images' => 9, 'videos' => 3, 'audios' => 3];
 
         return new VideoGenerationConfig([
             'supported_inputs' => [
@@ -308,7 +308,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             $generation,
             $acceptedParams,
             $ignoredParams,
-            $generationConfig['duration_type'],
+            $generationConfig['duration_type'] ?? 'options',
             $generationConfig['durations'],
             $generationConfig['default_duration_seconds'],
         );
@@ -678,7 +678,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      * @return array{
      *   generation: array{
      *     aspect_ratios: list<string>,
-     *     durations: list<int>,
+     *     duration_type: 'options'|'range',
+     *     durations: array{min:int,max:int,step:int}|list<int>,
      *     default_duration_seconds: int,
      *     resolutions: list<string>,
      *     sizes: list<array{label: string, value: string, width: int, height: int, resolution: string}>,
@@ -694,6 +695,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
      *     supports_resize_mode: bool,
      *     supports_sample_count: bool
      *   },
+     *   reference_limits: array{images:int,videos:int,audios:int},
      *   validation: array{
      *     explicit_resolution_errors?: array<string, array{key: string, replace: array<string, string>}>
      *   }
@@ -742,7 +744,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     /**
      * @return array{
      *   aspect_ratios: list<string>,
-     *   durations: list<int>,
+     *   duration_type: 'options'|'range',
+     *   durations: array{min:int,max:int,step:int}|list<int>,
      *   default_duration_seconds: int,
      *   default_resolution: string,
      *   supports_seed: bool,

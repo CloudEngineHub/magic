@@ -93,6 +93,7 @@ class GenerateVideoFormRequest extends FormRequest
             'generation.watermark' => 'nullable|boolean',
             'generation.negative_prompt' => 'nullable|string|max:' . self::MAX_PROMPT_LENGTH,
             'generation.generate_audio' => 'nullable|boolean',
+            'generation.web_search' => 'nullable|boolean',
             'generation.person_generation' => 'nullable|string|max:' . self::MAX_OPTION_TEXT_LENGTH,
             'generation.enhance_prompt' => 'nullable|boolean',
             'generation.compression_quality' => 'nullable|string|max:' . self::MAX_OPTION_TEXT_LENGTH,
