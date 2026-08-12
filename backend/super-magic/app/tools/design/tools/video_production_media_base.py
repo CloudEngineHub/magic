@@ -29,7 +29,7 @@ class BaseVideoProductionMediaTool(BaseVideoProductionTool[ParamsT], Generic[Par
         tool_context: ToolContext,
         source_inputs: Sequence[MediaSourceInput],
     ) -> list[PreparedMediaSource]:
-        """准备可供生成使用的参考素材路径，不自动创建来源关系。"""
+        """准备可供生成使用的参考素材快照，关系语义由具体工具初始化器决定。"""
         return await MediaGenerationService.prepare_source_references(
             manager,
             project_path,

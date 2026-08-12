@@ -1251,6 +1251,18 @@
         "zh_CN": "视频分镜保存失败，请检查镜头和输出节点",
         "en_US": "Video storyboard save failed; check the shots and output Elements"
     },
+    "upsert_storyboard.result_saved": {
+        "zh_CN": "视频分镜“{{name}}”已保存，共 {{shot_count}} 个镜头。",
+        "en_US": "Video storyboard \"{{name}}\" was saved with {{shot_count}} shot(s)."
+    },
+    "upsert_storyboard.update_failed": {
+        "zh_CN": "视频分镜保存失败：{{error}}",
+        "en_US": "Video storyboard update failed: {{error}}"
+    },
+    "upsert_storyboard.anchor_cannot_be_output": {
+        "zh_CN": "不能将视觉参考图 {{element_id}} 直接作为分镜首帧输出，请为该镜头生成独立图片。",
+        "en_US": "Visual anchor {{element_id}} cannot also be a storyboard output; generate a separate image for this shot."
+    },
     "configure_video_edit.success": {
         "zh_CN": "视频成片配置完成",
         "en_US": "Final video configuration completed"

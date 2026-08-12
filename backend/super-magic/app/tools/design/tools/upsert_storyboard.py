@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
+from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
 from app.tools.design.domain.content import ElementContent
@@ -224,10 +225,33 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                     )
 
             desired_output_connections: Dict[str, CanvasConnection] = {}
+            existing_anchor_ids = {
+                connection.source_element_id
+                for connection in config.canvas.connections
+                if connection.locked and connection.target_element_id == element.id
+            }
+            requested_anchor_ids = {
+                anchor_id
+                for anchor_id in (params.visual_anchor_element_ids or [])
+                if isinstance(anchor_id, str)
+            }
+            visual_anchor_ids = (
+                requested_anchor_ids
+                if params.visual_anchor_element_ids is not None
+                else existing_anchor_ids
+            )
             for shot in fields["shots"]:
                 output_image_element_id = shot.get("outputImageElementId")
                 if not output_image_element_id:
                     continue
+                if output_image_element_id in visual_anchor_ids:
+                    raise ValueError(
+                        i18n.translate(
+                            "upsert_storyboard.anchor_cannot_be_output",
+                            category="tool.messages",
+                            element_id=output_image_element_id,
+                        )
+                    )
                 output_element = config.canvas.get_element(output_image_element_id)
                 if output_element is None or output_element.type != "image":
                     raise ValueError(
@@ -294,6 +318,11 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                 "content_id": content_id,
                 "connection_ids": connection_ids,
                 "shot_count": len(fields["shots"]),
+                "output_shot_count": sum(
+                    1
+                    for shot in fields["shots"]
+                    if isinstance(shot.get("outputImageElementId"), str)
+                ),
                 "generation_config": effective_generation_config.to_result_data(),
             }
 
@@ -312,7 +341,11 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
             )
         except Exception as error:
             return ToolResult.error(
-                f"Storyboard update failed: {error}",
+                i18n.translate(
+                    "upsert_storyboard.update_failed",
+                    category="tool.messages",
+                    error=error,
+                ),
                 extra_info={"error_type": "design.storyboard_update_failed"},
             )
 
@@ -376,9 +409,16 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
         """构造包含后续调用所需 ID 和实际图片设置的模型结果。"""
         generation_config = result["generation_config"]
         return (
-            f'Storyboard "{name}" was saved with {result["shot_count"]} shot(s).\n'
+            i18n.translate(
+                "upsert_storyboard.result_saved",
+                category="tool.messages",
+                name=name,
+                shot_count=result["shot_count"],
+            )
+            + "\n"
             f'- element_id: "{result["element_id"]}"\n'
             f'- content_id: "{result["content_id"]}"\n'
+            f'- output_shot_count: {result["output_shot_count"]}\n'
             "- Image settings:\n"
             f'  - model_id: "{generation_config["image_model_id"]}"\n'
             f'  - aspect_ratio: "{generation_config["aspect_ratio"]}"\n'

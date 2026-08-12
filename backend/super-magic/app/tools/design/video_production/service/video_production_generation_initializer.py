@@ -16,14 +16,22 @@ from app.tools.design.video_production.service.video_production_layout_service i
 class VideoProductionGenerationInitializer(CanvasGenerationInitializer):
     """在生成开始前一次性确定本批新增媒体节点的位置。"""
 
+    @staticmethod
+    def layout_elements(config: Any, element_ids: Sequence[str]) -> None:
+        """统一为指定的新增视频生产节点执行增量布局。"""
+        VideoProductionLayoutService.layout_new_elements(
+            config.canvas,
+            element_ids,
+        )
+
     async def apply_batch(
         self,
         config: Any,
         contexts: Sequence[CanvasGenerationInitializationContext],
     ) -> Dict[int, Dict[str, Any]]:
         """只布局本批新建 Element，并保持已有 Element 完全不变。"""
-        VideoProductionLayoutService.layout_new_elements(
-            config.canvas,
+        self.layout_elements(
+            config,
             [context.element_id for context in contexts if context.element_created],
         )
         return {context.task_index: {} for context in contexts}

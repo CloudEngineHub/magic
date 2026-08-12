@@ -10,6 +10,7 @@ description: Use when the user wants to create, continue, revise, or complete a 
 - Use the production flow below as the default path, adapting it to the user's request, available assets, existing Canvas results, and confirmed decisions.
 - Call video-production Canvas tools through Code Mode with `sdk.tool.call(...)`.
 - Read tool results only from `result.content` and carry the required IDs, paths, counts, and statuses into later calls.
+- When the user is using Chinese, call a storyboard a “视频分镜” or “分镜” in all natural-language replies; do not expose the English term “Storyboard”.
 
 ## User Language
 
@@ -195,7 +196,7 @@ Present the prompts together when practical and use `ask_user` to collect revisi
 
 Update the storyboard descriptions with the confirmed prompts, then generate the remaining first-frame images.
 
-After generation, ask whether any shot needs adjustment. The generation tool has already bound each successful Image Element to its `shot_id`.
+Generate one independent image task for every confirmed shot that needs a first frame. Do not reuse an initialization image as `output_image_element_id`; initialization images are references for continuity, not shot outputs. After generation, read `result.content`, verify that the successful count and returned shot bindings cover every requested shot, and query the current Canvas when the count is unclear. If any shot is missing or the tool reports failure, stop the workflow, explain the exact missing shot, and do not claim that all first frames are ready. Ask whether the affected shot should be retried or revised. The generation tool binds each successful Image Element to its `shot_id`.
 
 Preserve successful frames and regenerate only the affected shots.
 
@@ -345,7 +346,7 @@ result = tool.call("upsert_storyboard", {
 print(result.content)
 ```
 
-When an existing confirmed Image Element needs to be assigned to a shot without generating it through the storyboard image tool, update the same storyboard Content explicitly:
+When an existing confirmed Image Element needs to be assigned to a shot without generating it through the storyboard image tool, update the same storyboard Content explicitly. Do not use an Element already listed in `visual_anchor_element_ids` as `output_image_element_id`; generate a separate first-frame Image Element for that shot instead:
 
 ```python
 result = tool.call("upsert_storyboard", {

@@ -19,6 +19,9 @@ from app.tools.design.tools.video_production_media_base import BaseVideoProducti
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
 )
+from app.tools.design.video_production.service.initialization_image_generation_initializer import (
+    InitializationImageGenerationInitializer,
+)
 from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceInput,
     MediaSourceType,
@@ -30,10 +33,8 @@ from app.tools.design.video_production.service.storyboard_generation_config_serv
 from app.tools.design.video_production.service.storyboard_image_generation_initializer import (
     StoryboardImageGenerationInitializer,
 )
-from app.tools.design.video_production.service.video_production_generation_initializer import (
-    VideoProductionGenerationInitializer,
-)
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+from app.i18n import i18n
 
 SdkSnippetTimeoutRegistry.register("generate_video_production_images", min_timeout=600)
 
@@ -191,7 +192,10 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                     prepared_storyboard_shots,
                 )
             else:
-                initializer = VideoProductionGenerationInitializer()
+                initializer = InitializationImageGenerationInitializer(
+                    manager,
+                    prepared_sources_by_task,
+                )
             result = await GenerateCanvasImages(
                 generation_initializer=initializer,
                 image_model_id=(
@@ -203,6 +207,10 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
             ).execute(tool_context, inner_params)
             result = self._merge_connections(result, initializer.get_connections())
             if storyboard_generation_config is not None:
+                self._append_storyboard_shot_results(
+                    result,
+                    params.tasks,
+                )
                 result.data = {
                     **(result.data or {}),
                     "storyboard_element_id": params.storyboard_element_id,
@@ -222,6 +230,64 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
             )
 
     @staticmethod
+    def _append_storyboard_shot_results(
+        result: ToolResult,
+        tasks: list[VideoProductionImageTask],
+    ) -> None:
+        """把每个镜头的生成状态和图片节点 ID补充到模型可读结果。"""
+        data = result.data if isinstance(result.data, dict) else {}
+        elements = list(data.get("created_elements") or [])
+        shot_results: list[dict[str, Any]] = []
+        for index, task in enumerate(tasks):
+            element = elements[index] if index < len(elements) else {}
+            element_id = element.get("id") or element.get("element_id")
+            content_id = element.get("content_id")
+            completed = bool(element.get("src"))
+            shot_results.append(
+                {
+                    "shot_id": task.shot_id,
+                    "status": "completed" if completed else "failed",
+                    "element_id": element_id,
+                    "content_id": content_id,
+                }
+            )
+        succeeded_shot_ids = [
+            item["shot_id"]
+            for item in shot_results
+            if item["status"] == "completed"
+        ]
+        missing_shot_ids = [
+            item["shot_id"]
+            for item in shot_results
+            if item["status"] != "completed"
+        ]
+        data["shot_results"] = shot_results
+        data["requested_shot_count"] = len(shot_results)
+        data["bound_shot_count"] = len(succeeded_shot_ids)
+        data["missing_shot_ids"] = missing_shot_ids
+        result.data = data
+
+        heading = "分镜镜头结果" if i18n.get_language() == "zh_CN" else "Storyboard shot results"
+        summary_label = "已绑定" if i18n.get_language() == "zh_CN" else "bound"
+        missing_label = "缺失镜头" if i18n.get_language() == "zh_CN" else "missing_shot_ids"
+        lines = [
+            f"\n\n{heading}:",
+            f'- requested_shot_count: {len(shot_results)}',
+            f'- {summary_label}_shot_count: {len(succeeded_shot_ids)}',
+            f'- {missing_label}: {", ".join(missing_shot_ids) if missing_shot_ids else "none"}',
+        ]
+        for item in shot_results:
+            line = (
+                f'- shot_id="{item["shot_id"]}", status="{item["status"]}"'
+            )
+            if item["element_id"]:
+                line += f', element_id="{item["element_id"]}"'
+            if item["content_id"]:
+                line += f', content_id="{item["content_id"]}"'
+            lines.append(line)
+        result.content += "\n".join(lines)
+
+    @staticmethod
     def _append_storyboard_settings(
         content: str,
         storyboard_element_id: Optional[str],
@@ -229,8 +295,10 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
         shot_ids: list[str],
     ) -> str:
         """把本次实际采用的分镜图片设置和镜头归属追加到模型结果。"""
+        label = "视频分镜" if i18n.get_language() == "zh_CN" else "Video storyboard"
+        settings_label = "视频分镜图片设置" if i18n.get_language() == "zh_CN" else "Video storyboard image settings"
         return (
-            f"{content}\n\nApplied Storyboard Image Settings:\n"
+            f"{content.replace('Storyboard', label)}\n\n{settings_label}:\n"
             f'- storyboard_element_id: "{storyboard_element_id}"\n'
             f'- shot_ids: "{", ".join(shot_ids)}"\n'
             f'- model_id: "{config.image_model_id}"\n'
