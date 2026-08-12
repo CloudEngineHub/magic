@@ -8,6 +8,7 @@ const messageHeaderMock = vi.hoisted(() => vi.fn())
 const historyPanelMock = vi.hoisted(() => vi.fn())
 const createTopicListenerMock = vi.hoisted(() => vi.fn())
 const refreshTopicDetailMock = vi.hoisted(() => vi.fn())
+const scopedTopicReadProgressMock = vi.hoisted(() => vi.fn())
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -53,6 +54,10 @@ vi.mock("@/pages/superMagic/components/TopicMode/useCreateTopicListener", () => 
 
 vi.mock("@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete", () => ({
 	useRefreshTopicDetailOnTaskComplete: refreshTopicDetailMock,
+}))
+
+vi.mock("@/pages/superMagic/hooks/useScopedTopicReadProgress", () => ({
+	useScopedTopicReadProgress: scopedTopicReadProgressMock,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
@@ -150,6 +155,12 @@ describe("RecordingDetailChatPanel", () => {
 		expect(refreshTopicDetailMock).toHaveBeenCalledWith({
 			selectedTopic: topic,
 			onTopicDetailLoaded: topicStore.updateTopic,
+		})
+		expect(scopedTopicReadProgressMock).toHaveBeenCalledWith({
+			scopeName: "RecordingDetailChatPanel",
+			topicStore,
+			selectedTopic: topic,
+			isSelectedTopicMessagesReady: false,
 		})
 		fireEvent.click(screen.getByText("toggle history"))
 		expect(toggleHistory).toHaveBeenCalledTimes(1)
@@ -319,6 +330,12 @@ describe("RecordingDetailChatPanel", () => {
 		expect(refreshTopicDetailMock).toHaveBeenCalledWith({
 			selectedTopic: null,
 			onTopicDetailLoaded: topicStore.updateTopic,
+		})
+		expect(scopedTopicReadProgressMock).toHaveBeenCalledWith({
+			scopeName: "RecordingDetailChatPanel",
+			topicStore,
+			selectedTopic: null,
+			isSelectedTopicMessagesReady: false,
 		})
 	})
 })

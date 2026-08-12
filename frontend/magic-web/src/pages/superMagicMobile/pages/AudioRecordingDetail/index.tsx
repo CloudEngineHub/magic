@@ -138,6 +138,10 @@ export default function MobileAudioRecordingDetailPage() {
 	}, [detailItem?.card_status, locationState?.cardStatus, projectItem?.card_status])
 	const requestedTab = searchParams.get("tab")
 	const [activeTab, setActiveTab] = useState<MobileRecordingTopTab>(defaultTab)
+	// Remembers whether the user already picked a tab for the current recording so a
+	// later default-tab change (detail request resolving card_status) or a dropped
+	// `tab=ai` query never overrides that explicit choice.
+	const tabPickedByUserRef = useRef(false)
 	const [topics, setTopics] = useState<Topic[]>([])
 	const [topicsLoading, setTopicsLoading] = useState(false)
 	const [chatProject, setChatProject] = useState<ProjectListItem | null>(null)
@@ -158,6 +162,9 @@ export default function MobileAudioRecordingDetailPage() {
 	})
 	const recordingShareSelection = useMemo(() => buildRecordingShareSelection(fileMap), [fileMap])
 	const copyController = useAudioRecordingCopyToProject()
+	// Skeleton belongs to the first empty load only; pull-to-refresh and AI tab re-entry
+	// reuse the already fetched rows so the list never blinks back into placeholders.
+	const showTopicsSkeleton = topicsLoading && topics.length === 0
 
 	useEffect(() => {
 		// Clear scoped AI state at route boundaries so a previous recording never
@@ -166,13 +173,23 @@ export default function MobileAudioRecordingDetailPage() {
 		setChatProject(null)
 		setChatWorkspace(null)
 		setComposerTopic(null)
+		// A new recording starts without a manual choice, so it may fall back to its
+		// own default tab again.
+		tabPickedByUserRef.current = false
 	}, [projectId])
 
 	useEffect(() => {
-		// Depend on the query value instead of the URLSearchParams object identity so
-		// local Source/Summary switches are not reset by an equivalent params instance.
-		setActiveTab(requestedTab === "ai" ? "ai" : defaultTab)
-	}, [defaultTab, requestedTab])
+		// Only the AI tab is mirrored in the URL, so `tab=ai` still wins over local state.
+		if (requestedTab === "ai") {
+			setActiveTab("ai")
+			return
+		}
+		// A missing `tab` param means "not the AI tab", not "restore the default tab":
+		// after the user switched to Source/Summary the local selection must survive
+		// both the query cleanup and any later default-tab recalculation.
+		if (tabPickedByUserRef.current) return
+		setActiveTab(defaultTab)
+	}, [defaultTab, projectId, requestedTab])
 
 	useEffect(() => {
 		if (activeTab !== "ai" || !projectId) return
@@ -242,6 +259,7 @@ export default function MobileAudioRecordingDetailPage() {
 	/** Updates the tab query so browser back/forward restores the AI tab. */
 	function handleTabChange(nextTab: MobileRecordingTopTab) {
 		if (nextTab === "ai") closeContentSearch()
+		tabPickedByUserRef.current = true
 		setActiveTab(nextTab)
 		const nextParams = new URLSearchParams(searchParams)
 		if (nextTab === "ai") nextParams.set("tab", "ai")
@@ -262,17 +280,15 @@ export default function MobileAudioRecordingDetailPage() {
 	/** Refreshes the scoped topic list without touching the global project stores. */
 	async function refreshRecordingTopics() {
 		if (!projectId) return
-		setTopicsLoading(true)
-		try {
-			const response = await SuperMagicApi.getTopicsByProjectId({
-				id: projectId,
-				page: 1,
-				page_size: 100,
-			})
-			setTopics(response.list ?? [])
-		} finally {
-			setTopicsLoading(false)
-		}
+		// Pull-to-refresh already renders its own indicator, so the loading flag stays
+		// untouched here to keep the existing rows visible instead of swapping them for
+		// the first-load skeleton. Failures bubble up to MagicPullToRefresh for toasting.
+		const response = await SuperMagicApi.getTopicsByProjectId({
+			id: projectId,
+			page: 1,
+			page_size: 100,
+		})
+		setTopics(response.list ?? [])
 	}
 
 	/** Applies the same pin/unpin topic operations used by the regular mobile project page. */
@@ -996,7 +1012,7 @@ export default function MobileAudioRecordingDetailPage() {
 								className="min-h-0 flex-1"
 								projectId={projectId}
 								topics={topics}
-								loading={topicsLoading}
+								loading={showTopicsSkeleton}
 								onRefresh={refreshRecordingTopics}
 								onSelectTopic={(topic) => void handleOpenTopic(topic)}
 								onTopicMore={openRecordingTopicActions}

@@ -10,7 +10,12 @@ const navigateMock = vi.fn()
 const saveMediaSpeakersAndMagicProjectJsMock = vi.fn()
 const downloadRecordingAudioFileMock = vi.fn()
 const deleteAudioRecordingProjectsMock = vi.fn()
-const setSearchParamsMock = vi.fn()
+// Mirrors the router query so tab switches can be observed the way the real page sees
+// them: writing `tab=ai` and clearing it must both be visible on the next render.
+const searchParamsStateRef = { current: new URLSearchParams() }
+const setSearchParamsMock = vi.fn((next: URLSearchParams) => {
+	searchParamsStateRef.current = new URLSearchParams(next)
+})
 
 const {
 	detailDataMock,
@@ -49,6 +54,15 @@ function createItem(overrides: Partial<AudioProjectListItem> = {}): AudioProject
 	}
 }
 
+/** Builds a topics response the test resolves on demand so pending states stay observable. */
+function createDeferredTopicsResponse() {
+	let resolve!: (value: { list: unknown[] }) => void
+	const promise = new Promise<{ list: unknown[] }>((innerResolve) => {
+		resolve = innerResolve
+	})
+	return { promise, resolve }
+}
+
 vi.mock("react-router", async () => {
 	const actual = await vi.importActual<typeof import("react-router")>("react-router")
 	return {
@@ -69,7 +83,7 @@ vi.mock("react-router-dom", async () => {
 	return {
 		...actual,
 		// Keep query-state behavior isolated from a real Router while exercising the page handlers.
-		useSearchParams: () => [new URLSearchParams(), setSearchParamsMock],
+		useSearchParams: () => [searchParamsStateRef.current, setSearchParamsMock],
 	}
 })
 
@@ -93,7 +107,15 @@ vi.mock("@/pages/superMagic/components/ProjectPageInputContainer", () => ({
 }))
 
 vi.mock("@/pages/superMagicMobile/pages/ProjectPage/ProjectPageMain/ProjectTopicListView", () => ({
-	default: () => <div data-testid="mock-recording-topic-list" />,
+	// Expose the loading flag and refresh hook so tests can tell the first-load skeleton
+	// apart from a pull-to-refresh that must keep the already rendered rows.
+	default: (props: { loading: boolean; onRefresh: () => Promise<void> }) => (
+		<div data-testid="mock-recording-topic-list" data-loading={String(props.loading)}>
+			<button type="button" onClick={() => void props.onRefresh()}>
+				refresh mock topics
+			</button>
+		</div>
+	),
 }))
 
 vi.mock("@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime", () => ({
@@ -539,7 +561,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 		magicPopupScrollLockCountRef.current = 0
 		document.body.removeAttribute("data-scroll-locked")
 		navigateMock.mockReset()
-		setSearchParamsMock.mockReset()
+		searchParamsStateRef.current = new URLSearchParams()
+		setSearchParamsMock.mockClear()
 		deleteAudioRecordingProjectsMock.mockReset()
 		deleteAudioRecordingProjectsMock.mockResolvedValue(undefined)
 		saveMediaSpeakersAndMagicProjectJsMock.mockReset()
@@ -556,6 +579,8 @@ describe("MobileAudioRecordingDetailPage", () => {
 			project_id: "project-mobile-001",
 			workspace_id: "workspace-mobile-001",
 		} as never)
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReset()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({ list: [] } as never)
 		vi.mocked(SuperMagicApi.getTopicDetail).mockReset()
 		vi.mocked(SuperMagicApi.getTopicDetail).mockResolvedValue({
 			id: "topic-mobile-created",
@@ -686,6 +711,76 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(composerContainer.className).not.toContain("pt-2")
 		expect(composerContainer.className).toContain("bg-mobile-background")
 		expect(composerContainer.className).not.toContain("data-testid=mobile-composer")
+	})
+
+	it("shows the topic skeleton only while the first Ask AI load has no topics yet", async () => {
+		// Hold the first request open so the pending first load can be observed.
+		const firstLoad = createDeferredTopicsResponse()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReturnValueOnce(
+			firstLoad.promise as never,
+		)
+
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("true")
+
+		await act(async () => {
+			firstLoad.resolve({ list: [{ id: "topic-mobile-001", topic_name: "Mock topic" }] })
+		})
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+	})
+
+	it("keeps the topic list rendered while pull-to-refresh reloads the Ask AI topics", async () => {
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockResolvedValue({
+			list: [{ id: "topic-mobile-001", topic_name: "Mock topic" }],
+		} as never)
+
+		render(<MobileAudioRecordingDetailPage />)
+		fireEvent.click(screen.getByText("Ask AI"))
+
+		await waitFor(() => {
+			expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+		})
+
+		// Keep the refresh request pending so the skeleton would be visible if the refresh
+		// path still reused the first-load flag.
+		const refreshLoad = createDeferredTopicsResponse()
+		vi.mocked(SuperMagicApi.getTopicsByProjectId).mockReturnValueOnce(
+			refreshLoad.promise as never,
+		)
+
+		fireEvent.click(screen.getByText("refresh mock topics"))
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+
+		await act(async () => {
+			refreshLoad.resolve({
+				list: [{ id: "topic-mobile-002", topic_name: "Refreshed topic" }],
+			})
+		})
+
+		expect(screen.getByTestId("mock-recording-topic-list").dataset.loading).toBe("false")
+		expect(vi.mocked(SuperMagicApi.getTopicsByProjectId)).toHaveBeenCalledTimes(2)
+	})
+
+	it("keeps the summary tab active when leaving Ask AI on an unsummarized recording", () => {
+		// The default tab of an unsummarized recording is Source, so clearing `tab=ai`
+		// must not silently restore that default over the user's Summary choice.
+		render(<MobileAudioRecordingDetailPage />)
+
+		fireEvent.click(screen.getByText("Ask AI"))
+		expect(screen.getByTestId("mobile-recording-detail-ai")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByText("Summary"))
+
+		expect(searchParamsStateRef.current.get("tab")).toBeNull()
+		// An unsummarized recording renders the summary placeholder, which still proves
+		// the Summary tab stayed active instead of falling back to Source.
+		expect(screen.getByTestId("mobile-recording-summary-placeholder")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-recording-source-panel")).toBeNull()
+		expect(screen.queryByTestId("mobile-recording-detail-ai")).toBeNull()
 	})
 
 	it("creates a topic for a direct AI question and navigates into that topic", async () => {

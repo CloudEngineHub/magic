@@ -56,6 +56,7 @@ import { createRecordingShareUiConfig } from "@/pages/superMagic/components/Shar
 import { AUDIO_RECORDINGS_PAGE_SHELL_CLASS } from "./constants/page-shell"
 import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToProject"
 import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
+import { useRecordingDetailConversationPanelState } from "./hooks/useRecordingDetailConversationPanelState"
 import {
 	RECORDING_CHAT_COLLAPSED_WIDTH,
 	RECORDING_CHAT_EXPANDED_WIDTH,
@@ -116,8 +117,9 @@ function AudioRecordingDetailPageDesktop() {
 	const [deleteOpen, setDeleteOpen] = useState(false)
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [ungroupedCount, setUngroupedCount] = useState(0)
-	const [isConversationPanelCollapsed, setIsConversationPanelCollapsed] = useState(false)
 	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
+	const { isConversationPanelCollapsed, toggleConversationPanel, expandConversationPanel } =
+		useRecordingDetailConversationPanelState()
 	const chat = useRecordingProjectChat({
 		projectId,
 		attachmentsLoading: loading,
@@ -154,19 +156,18 @@ function AudioRecordingDetailPageDesktop() {
 
 	useEffect(() => {
 		setChatHistoryOpen(false)
-		setIsConversationPanelCollapsed(false)
 	}, [projectId])
 
 	/** Toggles the conversation rail and dismisses topic history before collapsing it. */
 	const handleToggleConversationPanel = useCallback(() => {
 		if (!isConversationPanelCollapsed) setChatHistoryOpen(false)
-		setIsConversationPanelCollapsed((current) => !current)
-	}, [isConversationPanelCollapsed])
+		toggleConversationPanel()
+	}, [isConversationPanelCollapsed, toggleConversationPanel])
 
 	/** Restores the full conversation width without changing the selected topic or messages. */
 	const handleExpandConversationPanel = useCallback(() => {
-		setIsConversationPanelCollapsed(false)
-	}, [])
+		expandConversationPanel()
+	}, [expandConversationPanel])
 
 	useEffect(() => {
 		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
@@ -485,7 +486,8 @@ function AudioRecordingDetailPageDesktop() {
 						) : null}
 					</div>
 
-					{loading ? (
+					{/* Skip the chat skeleton when the persisted preference is collapsed to avoid a wide flash. */}
+					{loading && !isConversationPanelCollapsed ? (
 						<div
 							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar"
 							style={{

@@ -7,6 +7,7 @@ import {
 	RECORDING_CHAT_EXPANDED_WIDTH,
 	RECORDING_CHAT_HISTORY_WIDTH,
 } from "../components/recording-detail/recording-detail-layout"
+import { RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY } from "../hooks/useRecordingDetailConversationPanelState"
 
 const navigateMock = vi.fn()
 const storageMock = vi.hoisted(() => ({
@@ -27,6 +28,9 @@ const locationStateMock = vi.hoisted(() => ({
 	projectName: "Weekly sync",
 	cardStatus: "summarized" as "summarized" | "not_summarized" | "summarizing",
 	audioFileId: undefined as string | undefined,
+}))
+const routeParamsMock = vi.hoisted(() => ({
+	projectId: "project-alpha",
 }))
 const shareControlsMock = vi.hoisted(() => ({
 	shareManagementOpen: false,
@@ -82,7 +86,7 @@ vi.mock("react-router", async () => {
 	const actual = await vi.importActual<typeof import("react-router")>("react-router")
 	return {
 		...actual,
-		useParams: () => ({ projectId: "project-alpha" }),
+		useParams: () => ({ projectId: routeParamsMock.projectId }),
 		useLocation: () => ({
 			state: locationStateMock,
 		}),
@@ -458,6 +462,11 @@ vi.mock("@/services/audioRecordings", () => ({
 
 describe("AudioRecordingDetailPage", () => {
 	beforeEach(() => {
+		routeParamsMock.projectId = "project-alpha"
+		storageMock.getItem.mockImplementation(() => null)
+		storageMock.setItem.mockReset()
+		storageMock.removeItem.mockReset()
+		storageMock.clear.mockReset()
 		navigateMock.mockReset()
 		audioPlayerMock.seekTo.mockReset()
 		audioPlayerMock.playSegment.mockReset()
@@ -492,7 +501,89 @@ describe("AudioRecordingDetailPage", () => {
 		expect(screen.getByTestId("recording-detail-right-panel")).toBeInTheDocument()
 	})
 
-	it("keeps the conversation rail visible while the detail workbench is loading", () => {
+	it("defaults the conversation rail to collapsed and persists the user's choice", () => {
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"true",
+		)
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
+			width: "24px",
+			minWidth: "24px",
+		})
+
+		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
+		expect(storageMock.setItem).toHaveBeenCalledWith(
+			RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY,
+			"false",
+		)
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
+			width: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+			minWidth: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+		})
+	})
+
+	it("restores an expanded preference for the detail rail and loading skeleton", () => {
+		storageMock.getItem.mockImplementation((key: string) =>
+			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY ? "false" : null,
+		)
+
+		const { unmount } = render(<AudioRecordingDetailPage />)
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"false",
+		)
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
+			width: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+			minWidth: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+		})
+		unmount()
+
+		mockDetailData.loading = true
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-chat-skeleton-rail")).toHaveStyle({
+			width: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+			minWidth: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
+		})
+	})
+
+	it("keeps the persisted conversation preference when switching recordings", () => {
+		storageMock.getItem.mockImplementation((key: string) =>
+			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY ? "false" : null,
+		)
+		const { rerender } = render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"false",
+		)
+		routeParamsMock.projectId = "project-beta"
+		rerender(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"false",
+		)
+		expect(storageMock.setItem).not.toHaveBeenCalled()
+	})
+
+	it("hides the conversation skeleton when the persisted preference is collapsed", () => {
+		mockDetailData.loading = true
+
+		render(<AudioRecordingDetailPage />)
+
+		expect(screen.getByTestId("recording-detail-page-skeleton")).toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-chat-skeleton-rail")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-chat-rail")).not.toBeInTheDocument()
+	})
+
+	it("keeps the conversation skeleton visible while loading with an expanded preference", () => {
+		storageMock.getItem.mockImplementation((key: string) =>
+			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY ? "false" : null,
+		)
 		mockDetailData.loading = true
 
 		render(<AudioRecordingDetailPage />)
@@ -521,12 +612,20 @@ describe("AudioRecordingDetailPage", () => {
 		expect(await screen.findByTestId("recording-detail-selected-topic")).toHaveTextContent(
 			currentTopic.id,
 		)
-		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
 		expect(screen.getByTestId("recording-detail-chat-panel")).toHaveAttribute(
 			"data-collapsed",
 			"true",
 		)
 		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
+		expect(screen.getByTestId("recording-detail-chat-panel")).toHaveAttribute(
+			"data-collapsed",
+			"false",
+		)
+		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
+		expect(screen.getByTestId("recording-detail-chat-panel")).toHaveAttribute(
+			"data-collapsed",
+			"true",
+		)
 		expect(screen.getByTestId("recording-detail-selected-topic")).toHaveTextContent(
 			currentTopic.id,
 		)
@@ -606,6 +705,8 @@ describe("AudioRecordingDetailPage", () => {
 	it("closes topic history before collapsing to the project-detail narrow rail", () => {
 		render(<AudioRecordingDetailPage />)
 
+		// Expand the persisted default-collapsed rail before exercising history behavior.
+		fireEvent.click(screen.getByTestId("recording-detail-toggle-chat"))
 		fireEvent.click(screen.getByTestId("recording-detail-toggle-history"))
 		expect(screen.getByTestId("recording-detail-chat-panel")).toHaveAttribute(
 			"data-history-open",

@@ -12,6 +12,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { RECORDING_CHAT_HISTORY_WIDTH } from "./recording-detail-layout"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
+import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 
 export interface RecordingDetailChatPanelProps {
 	isConversationPanelCollapsed: boolean
@@ -64,6 +65,15 @@ export default function RecordingDetailChatPanel({
 	useRefreshTopicDetailOnTaskComplete({
 		selectedTopic,
 		onTopicDetailLoaded: topicStore.updateTopic,
+	})
+
+	// Keep the scoped topic status aligned with committed assistant/tool messages.
+	// RecordingSummary does not expose initial message readiness, so disable only the enter-topic sync.
+	useScopedTopicReadProgress({
+		scopeName: "RecordingDetailChatPanel",
+		topicStore,
+		selectedTopic,
+		isSelectedTopicMessagesReady: false,
 	})
 
 	return (
