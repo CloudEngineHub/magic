@@ -784,8 +784,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     {
         foreach ([$modelVersion, $modelId] as $identifier) {
             if ($identifier !== ''
-                && (str_contains(strtolower($identifier), 'seedance-2.0-mini') || str_contains(strtolower($identifier), 'seedance-2.0-mini')
-                    || str_contains(strtolower($identifier), 'seedance-2.0-fast') || str_contains(strtolower($identifier), 'seedance-2.0-fast'))) {
+                && (str_contains(strtolower($identifier), 'seedance-2.0-mini')
+                    || str_contains(strtolower($identifier), 'seedance-2.0-fast'))) {
                 return true;
             }
         }

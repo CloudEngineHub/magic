@@ -1294,42 +1294,6 @@ readonly class VideoQueueDomainService
     }
 
     /**
-     * @param list<int> $supportedValues
-     */
-    private function coerceIntToSupportedList(mixed $value, array $supportedValues, ?int $defaultValue): ?int
-    {
-        if ($supportedValues === []) {
-            return null;
-        }
-
-        $normalized = $this->normalizeNullableInt($value);
-        if ($normalized === null) {
-            return $defaultValue;
-        }
-
-        return $this->nearestInt($normalized, $supportedValues) ?? $defaultValue;
-    }
-
-    /**
-     * @param list<int> $supportedValues
-     */
-    private function nearestInt(int $value, array $supportedValues): ?int
-    {
-        sort($supportedValues);
-        $nearest = null;
-        $nearestDistance = null;
-        foreach ($supportedValues as $supportedValue) {
-            $distance = abs($supportedValue - $value);
-            if ($nearestDistance === null || $distance < $nearestDistance || ($distance === $nearestDistance && $supportedValue < $nearest)) {
-                $nearest = $supportedValue;
-                $nearestDistance = $distance;
-            }
-        }
-
-        return $nearest;
-    }
-
-    /**
      * @param list<string> $supportedResolutions
      */
     private function nearestResolution(int $targetScore, array $supportedResolutions): ?string

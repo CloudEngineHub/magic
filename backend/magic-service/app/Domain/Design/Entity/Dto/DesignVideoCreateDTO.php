@@ -24,56 +24,7 @@ class DesignVideoCreateDTO extends AbstractDTO
 
     private const array TOP_LEVEL_ARRAY_FIELDS = ['inputs', 'generation', 'callbacks', 'execution', 'extensions'];
 
-    private const array ROOT_ALLOWED_KEYS = [
-        'project_id',
-        'video_id',
-        'model_id',
-        'topic_id',
-        'task_id',
-        'task',
-        'input_mode',
-        'prompt',
-        'file_dir',
-        'file_name',
-        'inputs',
-        'generation',
-        'callbacks',
-        'execution',
-        'extensions',
-    ];
-
     // Design 创建入口统一使用参考输入，视频和音频参考都通过复数数组字段传入。
-    private const array INPUT_ALLOWED_KEYS = ['frames', 'reference_images', 'reference_videos', 'reference_audios', 'mask'];
-
-    private const array GENERATION_ALLOWED_KEYS = [
-        'size',
-        'mode',
-        'aspect_ratio',
-        'duration_seconds',
-        'resolution',
-        'fps',
-        'seed',
-        'sample_count',
-        'negative_prompt',
-        'generate_audio',
-        'person_generation',
-        'enhance_prompt',
-        'compression_quality',
-        'resize_mode',
-        'watermark',
-        'camera_fixed',
-        'return_last_frame',
-    ];
-
-    private const array CALLBACK_ALLOWED_KEYS = ['webhook_url'];
-
-    private const array EXECUTION_ALLOWED_KEYS = ['service_tier', 'expires_after_seconds'];
-
-    private const array FRAME_ALLOWED_KEYS = ['role', 'uri', 'source_type', 'base64_data', 'mime_type'];
-
-    private const array MEDIA_ALLOWED_KEYS = ['uri'];
-
-    private const array REFERENCE_IMAGE_ALLOWED_KEYS = ['uri', 'type', 'source_type', 'base64_data', 'mime_type'];
 
     private const array VIDEO_IMAGE_SOURCE_TYPES = ['workspace_path', 'base64'];
 
