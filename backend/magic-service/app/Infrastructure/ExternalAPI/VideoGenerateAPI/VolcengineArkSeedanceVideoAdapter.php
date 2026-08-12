@@ -14,6 +14,8 @@ use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
 use Hyperf\Contract\TranslatorInterface;
 
+use function Hyperf\Translation\__;
+
 readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProviderAdapterInterface
 {
     // 对齐方舟 Seedance 当前文档里的默认时长，缺省时我们按 5 秒回填。
