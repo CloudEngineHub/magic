@@ -59,7 +59,7 @@ function buildManifest(appId, appName) {
 		id: basePath,
 		name: appName || "Micro App",
 		short_name: appName || "Micro App",
-		start_url: `${basePath}/?source=pwa`,
+		start_url: `${basePath}?source=pwa`,
 		scope: buildMicroAppInstallScope(appId),
 		display: "standalone",
 		theme_color: "#ffffff",

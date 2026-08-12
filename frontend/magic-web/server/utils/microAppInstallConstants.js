@@ -17,7 +17,8 @@ function buildMicroAppBasePath(appId) {
 }
 
 function buildMicroAppInstallScope(appId) {
-	return `${buildMicroAppBasePath(appId)}/`
+	// Match page route /micro-app/:appId (no trailing slash).
+	return buildMicroAppBasePath(appId)
 }
 
 function buildInstallIconPath(appId) {
