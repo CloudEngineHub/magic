@@ -70,6 +70,8 @@ export type AuthSource =
 	| "anta"
 	/** Teamshare-specific authentication integration. */
 	| "teamshare"
+	/** Crew conversation authentication recovery. */
+	| "crew"
 
 // -----------------------------------------------------------------------------
 // Commands and event payloads
