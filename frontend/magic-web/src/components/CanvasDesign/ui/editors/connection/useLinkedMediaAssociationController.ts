@@ -98,8 +98,13 @@ export function useLinkedMediaAssociationController(
 				source: context.source,
 				resolveResourceReference,
 			})
+			// linked/mentioned 状态可用 sync reconcile 结果，避免同名路径在恢复期抖动。
 			setMentionedReferencePaths(reconciledPaths)
-			onReadyMentionChange?.(reconciledPaths, currentPrompt, context)
+			// A: sync 不得驱动 protected/参考图生命周期（空 mention 被 reconcile 补齐后会误 unprotect）。
+			// B: 即便后续扩展 sync 回调，也只能传编辑器真实 mention paths，不能传 reconcile 补齐结果。
+			if (context.source === "user") {
+				onReadyMentionChange?.(paths, currentPrompt, context)
+			}
 			return true
 		},
 		[
@@ -107,6 +112,7 @@ export function useLinkedMediaAssociationController(
 			onReadyMentionChange,
 			resolveResourceReference,
 			targetElementId,
+			targetKind,
 		],
 	)
 	const applyingSeedIdRef = useRef<string | null>(null)
@@ -133,12 +139,21 @@ export function useLinkedMediaAssociationController(
 			association.selectedTextConnectionIds.forEach((connectionId) => {
 				setTextConnectionSelected(connectionId, true)
 			})
-			const mediaApplied = association.selectedMediaConnectionIds.every((connectionId) =>
-				handleLinkedMediaSelectionChange(connectionId, true),
+			const mediaApplied = association.selectedMediaConnectionIds.every((connectionId) => {
+				return handleLinkedMediaSelectionChange(connectionId, true)
+			})
+			if (!mediaApplied) return
+
+			// 种子包含参考媒体时，必须真正勾选成功后才消费；
+			// 否则在 input_mode 尚未支持 reference_images 时会把空结果当成完成并丢掉种子。
+			const expectsMediaSelection = seed.orderedSources.some(
+				(source) => source.kind !== "text",
 			)
-			if (mediaApplied) {
-				canvas.connectionAssociationSeedManager.consume(targetElementId, seed.id)
+			if (expectsMediaSelection && association.selectedMediaConnectionIds.length === 0) {
+				return
 			}
+
+			canvas.connectionAssociationSeedManager.consume(targetElementId, seed.id)
 		} finally {
 			applyingSeedIdRef.current = null
 		}

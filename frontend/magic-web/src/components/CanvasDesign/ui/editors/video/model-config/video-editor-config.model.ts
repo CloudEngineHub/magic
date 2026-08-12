@@ -53,6 +53,21 @@ export function resolveInputModeForAvailableModes(
 	return availableModes[0] ?? "standard"
 }
 
+/**
+ * 底部模式 Tab 不展示 standard；存在非 standard 模式时，standard 只是初始化过渡态，
+ * 必须先归一化到最终可见模式，避免下游把过渡态能力当成稳定策略。
+ */
+export function resolveSelectableInputModeForAvailableModes(
+	availableModes: VideoInputMode[],
+	preferredMode: VideoInputMode,
+): VideoInputMode {
+	const selectableModes =
+		preferredMode === "standard" && availableModes.some((mode) => mode !== "standard")
+			? availableModes.filter((mode) => mode !== "standard")
+			: availableModes
+	return resolveInputModeForAvailableModes(selectableModes, preferredMode)
+}
+
 /** 子 Tab：若 preferred 仍可用则保留，否则按「首尾帧 → 参考图」取第一个可用项 */
 const INPUT_SUB_TAB_FALLBACK_ORDER: Array<"frame" | "reference"> = ["frame", "reference"]
 

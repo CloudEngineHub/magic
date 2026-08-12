@@ -66,6 +66,7 @@ import {
 	isReferenceAssetTypeAllowed,
 	resolveInputModeForAvailableModes,
 	resolveInputModeFromRequest,
+	resolveSelectableInputModeForAvailableModes,
 	resolveInputSubTabForAvailableTabs,
 	resolveReferenceAssetType,
 } from "./model-config/video-editor-config.model"
@@ -243,11 +244,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const availableInputModes = useMemo(() => {
 		return getAvailableInputModes(selectedModel)
 	}, [selectedModel])
+	const resolvedInputMode = useMemo(
+		() => resolveSelectableInputModeForAvailableModes(availableInputModes, selectedInputMode),
+		[availableInputModes, selectedInputMode],
+	)
 	const currentInputModeConfig = useMemo(() => {
 		return getInputModeConfig(selectedModel, selectedInputMode)
 	}, [selectedModel, selectedInputMode])
 	const isReferencePolicyReady =
-		!isLoadingVideoModelList && Boolean(selectedModel && currentInputModeConfig)
+		!isLoadingVideoModelList &&
+		selectedInputMode === resolvedInputMode &&
+		Boolean(selectedModel && currentInputModeConfig)
 	const supportedFields = currentInputModeConfig?.supported_fields || []
 	const { supportsStartFrame, supportsEndFrame } = useMemo(
 		() => resolveVideoFrameRoleSupport(currentInputModeConfig),
@@ -365,29 +372,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	useEffect(() => {
-		if (availableInputModes.length === 0) {
-			setSelectedInputMode("standard")
-			return
+		if (selectedInputMode !== resolvedInputMode) {
+			setSelectedInputMode(resolvedInputMode)
 		}
-		if (!availableInputModes.includes(selectedInputMode)) {
-			const nextInputMode = resolveInputModeForAvailableModes(
-				availableInputModes,
-				selectedInputMode,
-			)
-			setSelectedInputMode(nextInputMode)
-			return
-		}
-		/** 底部模式 Tab 不展示 standard，若仍停在 standard 会导致无任何 Tab 呈选中态 */
-		const hasNonStandardMode = availableInputModes.some((mode) => mode !== "standard")
-		if (selectedInputMode === "standard" && hasNonStandardMode) {
-			const nonStandardModes = availableInputModes.filter((mode) => mode !== "standard")
-			const nextInputMode = resolveInputModeForAvailableModes(
-				nonStandardModes,
-				"omni_reference",
-			)
-			setSelectedInputMode(nextInputMode)
-		}
-	}, [availableInputModes, selectedInputMode])
+	}, [resolvedInputMode, selectedInputMode])
 
 	useEffect(() => {
 		if (!availableInputTabs.includes(activeInputTab)) {

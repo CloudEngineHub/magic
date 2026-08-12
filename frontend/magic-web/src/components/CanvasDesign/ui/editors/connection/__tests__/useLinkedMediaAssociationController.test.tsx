@@ -410,12 +410,9 @@ describe("useLinkedMediaAssociationController", () => {
 				}),
 			).toBe(true)
 		})
+		// sync 只更新 linked mention 快照，不驱动 protected/参考图回调。
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/ready.png"])
-		expect(onReadyMentionChange).toHaveBeenCalledWith(["./images/ready.png"], "@ready.png", {
-			source: "sync",
-			status: "ready",
-			revision: 1,
-		})
+		expect(onReadyMentionChange).not.toHaveBeenCalled()
 
 		act(() => {
 			expect(
@@ -445,6 +442,7 @@ describe("useLinkedMediaAssociationController", () => {
 			).toBe(true)
 		})
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/next.png"])
+		expect(onReadyMentionChange).not.toHaveBeenCalled()
 
 		act(() => {
 			result.current.handleMentionChange(["./images/remounted.png"], "@remounted.png", {
@@ -461,6 +459,7 @@ describe("useLinkedMediaAssociationController", () => {
 			).toBe(true)
 		})
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/remounted.png"])
+		expect(onReadyMentionChange).not.toHaveBeenCalled()
 	})
 
 	it("keeps the persisted same-name path during sync but allows an explicit user switch", () => {
@@ -496,11 +495,7 @@ describe("useLinkedMediaAssociationController", () => {
 		})
 
 		expect(result.current.mentionedReferencePaths).toEqual(["/images/x.png"])
-		expect(onReadyMentionChange).toHaveBeenLastCalledWith(["/images/x.png"], "@x.png", {
-			source: "sync",
-			status: "ready",
-			revision: 1,
-		})
+		expect(onReadyMentionChange).not.toHaveBeenCalled()
 
 		act(() => {
 			result.current.handleMentionChange(["./images/x.png"], "@x.png", {
@@ -511,7 +506,62 @@ describe("useLinkedMediaAssociationController", () => {
 		})
 
 		expect(result.current.mentionedReferencePaths).toEqual(["./images/x.png"])
+		// user 回调必须传编辑器真实 paths，不能用 sync reconcile 后的持久化拼写。
 		expect(onReadyMentionChange).toHaveBeenLastCalledWith(["./images/x.png"], "@x.png", {
+			source: "user",
+			status: "ready",
+			revision: 2,
+		})
+	})
+
+	it("does not treat sync-filled empty mentions as prompt bindings", () => {
+		const onReadyMentionChange = vi.fn()
+		const editorRef = createRef<MessageEditorRef>()
+		const { result } = renderHook(() =>
+			useLinkedMediaAssociationController({
+				targetElementId: "target-image",
+				targetKind: "image",
+				mediaPolicy: {
+					supportedKinds: ["image"],
+					manualReferences: [
+						{ kind: "image", path: "/images/a.png" },
+						{ kind: "image", path: "/images/b.png" },
+					],
+				},
+				mediaPolicyStatus: "ready",
+				editorRef,
+				onReadyMentionChange,
+			}),
+		)
+
+		act(() => {
+			result.current.handleMentionChange([], "改成卡通风格", {
+				source: "sync",
+				status: "pending",
+				revision: 1,
+			})
+			expect(
+				result.current.handleMentionChange([], "改成卡通风格", {
+					source: "sync",
+					status: "ready",
+					revision: 1,
+				}),
+			).toBe(true)
+		})
+
+		expect(result.current.mentionedReferencePaths).toEqual(["/images/a.png", "/images/b.png"])
+		expect(onReadyMentionChange).not.toHaveBeenCalled()
+
+		act(() => {
+			result.current.handleMentionChange([], "改成卡通风格，再亮一点", {
+				source: "user",
+				status: "ready",
+				revision: 2,
+			})
+		})
+
+		expect(onReadyMentionChange).toHaveBeenCalledTimes(1)
+		expect(onReadyMentionChange).toHaveBeenCalledWith([], "改成卡通风格，再亮一点", {
 			source: "user",
 			status: "ready",
 			revision: 2,
