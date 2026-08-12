@@ -3500,7 +3500,7 @@
 	"microAppShare": {
 		"copyLink": "复制链接",
 		"errorTitle": "微应用不可访问",
-		"install": "添加到桌面",
+		"install": "安装到桌面",
 		"installConfirm": "继续安装",
 		"installDescription": "安装后可以从桌面直接打开此微应用。",
 		"installIosDescription": "Safari 需要通过系统分享菜单手动添加。",

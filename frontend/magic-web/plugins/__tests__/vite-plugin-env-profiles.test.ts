@@ -14,9 +14,9 @@ const enterpriseProfiles: MagicEnvProfile[] = [
 	{
 		name: "test",
 		label: "Testing",
-		host: "magic-web.saas-test.cn-beijing.volce.teamshare.work",
-		allowedHosts: ["magic-web.saas-test.cn-beijing.volce.teamshare.work"],
-		runtimeConfigUrl: "https://magic-web.saas-test.cn-beijing.volce.teamshare.work/config.js",
+		host: "magic-web.example.test",
+		allowedHosts: ["magic-web.example.test"],
+		runtimeConfigUrl: "https://magic-web.example.test/config.js",
 	},
 	{
 		name: "intl-pre",
@@ -88,6 +88,20 @@ describe("resolveMagicEnvProfileConfig", () => {
 
 		expect(config).toEqual({})
 	})
+
+	it("proxies micro app install routes to the selected profile origin", () => {
+		const config = resolveMagicEnvProfileConfig({
+			env: {
+				MAGIC_ENV_PROFILE: "test",
+			},
+			profiles: enterpriseProfiles,
+		})
+
+		expect(config.server?.proxy?.["^/micro-app/[^/]+/manifest\\.webmanifest$"]).toMatchObject({
+			target: "https://magic-web.example.test",
+			changeOrigin: true,
+		})
+	})
 })
 
 describe("resolveMagicEnvProfileRuntimeConfig", () => {
@@ -102,7 +116,7 @@ describe("resolveMagicEnvProfileRuntimeConfig", () => {
 		expect(runtimeConfig).toEqual({
 			profileName: "test",
 			runtimeConfigUrl:
-				"https://magic-web.saas-test.cn-beijing.volce.teamshare.work/config.js",
+				"https://magic-web.example.test/config.js",
 		})
 	})
 })
@@ -125,7 +139,7 @@ describe("vitePluginMagicEnvProfiles", () => {
 		const config = await runConfigHook(plugin, "enterprise-test")
 
 		expect(config?.server?.allowedHosts).toContain(
-			"magic-web.saas-test.cn-beijing.volce.teamshare.work",
+			"magic-web.example.test",
 		)
 	})
 
@@ -141,7 +155,7 @@ describe("vitePluginMagicEnvProfiles", () => {
 		const config = await runConfigHook(plugin, "development")
 
 		expect(config?.server?.allowedHosts).toContain(
-			"magic-web.saas-test.cn-beijing.volce.teamshare.work",
+			"magic-web.example.test",
 		)
 		expect(config?.server?.allowedHosts).not.toContain("lower-layer.local")
 	})
@@ -175,7 +189,7 @@ describe("vitePluginMagicEnvProfiles", () => {
 		expect(response.body).toBe(remoteConfig)
 		expect(response.next).not.toHaveBeenCalled()
 		expect(fetchMock).toHaveBeenCalledWith(
-			"https://magic-web.saas-test.cn-beijing.volce.teamshare.work/config.js",
+			"https://magic-web.example.test/config.js",
 			{
 				headers: {
 					"cache-control": "no-cache",

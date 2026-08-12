@@ -3500,7 +3500,7 @@
 	"microAppShare": {
 		"copyLink": "Copy link",
 		"errorTitle": "Micro app unavailable",
-		"install": "Add to desktop",
+		"install": "Install to desktop",
 		"installConfirm": "Continue installation",
 		"installDescription": "Install this micro app to open it directly from your desktop or home screen.",
 		"installIosDescription": "Safari requires you to add this app from the system share menu.",
