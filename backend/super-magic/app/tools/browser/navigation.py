@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import ToolDetail
 from app.service.browser import BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
+from app.tools.browser.presentation.navigation import (
+    keep_alive_detail,
+    navigate_detail,
+    wait_detail,
+)
 from app.tools.core import BaseToolParams, tool
 from magic_use import WaitConditionKind, WaitRequest
 
@@ -44,6 +50,16 @@ class BrowserWaitParams(BaseToolParams):
     state: str | None = Field(None, description="Required load state, or optional text/ref state.")
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
+    @model_validator(mode="after")
+    def validate_condition_arguments(self) -> "BrowserWaitParams":
+        if self.condition is WaitConditionKind.TIME and self.duration_ms is None:
+            raise ValueError("a time wait requires duration_ms")
+        if self.condition in {WaitConditionKind.URL, WaitConditionKind.TEXT, WaitConditionKind.REF} and not self.value:
+            raise ValueError(f"a {self.condition.value} wait requires value")
+        if self.condition is WaitConditionKind.LOAD_STATE and not self.state:
+            raise ValueError("a load_state wait requires state")
+        return self
+
 
 class BrowserKeepAliveParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
@@ -58,6 +74,9 @@ class BrowserNavigate(BrowserToolBase[BrowserNavigateParams]):
 
     name = "browser_navigate"
     operation_key = "browser.goto"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, navigate_detail(result))
 
     async def execute(self, tool_context: ToolContext, params: BrowserNavigateParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -84,6 +103,9 @@ class BrowserWait(BrowserToolBase[BrowserWaitParams]):
 
     name = "browser_wait"
     operation_key = "browser.wait"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, wait_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserWaitParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -116,6 +138,9 @@ class BrowserKeepAlive(BrowserToolBase[BrowserKeepAliveParams]):
 
     name = "browser_keep_alive"
     operation_key = "browser.keep_alive"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, keep_alive_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserKeepAliveParams) -> ToolResult:
         async def operation() -> ToolResult:

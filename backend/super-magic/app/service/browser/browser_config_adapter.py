@@ -28,7 +28,7 @@ from app.utils.async_file_utils import (
     async_write_bytes,
 )
 from magic_use.config import (
-    BrowserArtifactConfig,
+    BrowserScreenshotConfig,
     BrowserContextConfig,
     BrowserLifecycleConfig,
     BrowserResourceLimits,
@@ -39,7 +39,7 @@ from magic_use.config import (
     ProxyConfig,
     PureConfig,
     RemotePlaywrightConfig,
-    SnapshotConfig,
+    ElementScanConfig,
 )
 from magic_use.models import BrowserBackendKind, BrowserName
 from magic_use.userscripts import Userscript, parse_userscript
@@ -74,7 +74,10 @@ class BrowserConfigAdapter:
             browser_name=cls._browser_name(),
             local_playwright=LocalPlaywrightConfig(
                 headless=cls._bool("browser.headless", True),
-                browser_args=cls._strings("browser.browser_args"),
+                browser_args=cls._strings(
+                    "browser.browser_args",
+                    ("--disable-blink-features=AutomationControlled",),
+                ),
                 downloads_path=None,
                 proxy=cls._proxy(),
             ),
@@ -101,15 +104,16 @@ class BrowserConfigAdapter:
                     disabled_domains=frozenset(cls._strings("browser.scripts.pure_disabled_domains")),
                     session_override=None,
                 ),
+                mask_enabled=cls._bool("browser.scripts.mask_enabled", True),
                 lens_enabled=cls._bool("browser.scripts.lens_enabled", True),
                 marker_enabled=cls._bool("browser.scripts.marker_enabled", True),
                 userscripts=userscripts,
             ),
-            snapshot=SnapshotConfig(
-                max_nodes=cls._int("browser.snapshot.max_nodes", 500),
-                max_depth=cls._int("browser.snapshot.max_depth", 30),
+            elements=ElementScanConfig(
+                max_nodes=cls._int("browser.elements.max_nodes", 500),
+                max_depth=cls._int("browser.elements.max_depth", 30),
             ),
-            artifacts=cls.artifact_config(),
+            screenshot=cls.screenshot_config(),
             timeouts=BrowserTimeouts(
                 default_ms=cls._float("browser.default_timeout", 30_000),
                 navigation_ms=cls._float("browser.navigation_timeout", 30_000),
@@ -138,15 +142,18 @@ class BrowserConfigAdapter:
         )
 
     @classmethod
-    def artifact_config(cls) -> BrowserArtifactConfig:
-        return BrowserArtifactConfig(
-            webp_quality=cls._int("browser.artifacts.webp_quality", 35),
-            webp_min_quality=cls._int("browser.artifacts.webp_min_quality", 15),
-            webp_quality_step=cls._int("browser.artifacts.webp_quality_step", 5),
-            max_bytes=cls._int("browser.artifacts.max_bytes", 128 * 1024),
-            max_width=cls._int("browser.artifacts.max_width", 1_600),
-            resize_step=cls._float("browser.artifacts.resize_step", 0.85),
-            min_dimension=cls._int("browser.artifacts.min_dimension", 640),
+    def screenshot_config(cls) -> BrowserScreenshotConfig:
+        return BrowserScreenshotConfig(
+            webp_quality=cls._int("browser.screenshot.webp_quality", 82),
+            webp_min_quality=cls._int("browser.screenshot.webp_min_quality", 58),
+            webp_quality_step=cls._int("browser.screenshot.webp_quality_step", 6),
+            target_bpp=cls._float("browser.screenshot.target_bpp", 0.5),
+            min_bytes=cls._int("browser.screenshot.min_bytes", 128 * 1024),
+            max_bytes=cls._int("browser.screenshot.max_bytes", 256 * 1024),
+            max_width=cls._int("browser.screenshot.max_width", 1_600),
+            max_height_ratio=cls._float("browser.screenshot.max_height_ratio", 1.6),
+            resize_step=cls._float("browser.screenshot.resize_step", 0.85),
+            min_dimension=cls._int("browser.screenshot.min_dimension", 1_280),
         )
 
     @classmethod

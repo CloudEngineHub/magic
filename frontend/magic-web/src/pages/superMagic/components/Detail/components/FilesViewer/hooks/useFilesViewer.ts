@@ -1682,6 +1682,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList,
 		loading,
 		isRestoringFileTabs: Boolean(activeTab?.isLoading),
+		isAwaitingProjectAttachments,
 		error,
 		favoriteFiles,
 		fullscreenFileId,

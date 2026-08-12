@@ -23,7 +23,8 @@ from typing import Optional
 from agentlang.logger import get_logger
 from app.core.horizon.migration import CURRENT_VERSION, apply_migrations
 from app.core.horizon.models import (
-    FileReadRecord,
+    BrowserPageObservation,
+    FileContextRecord,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -42,7 +43,7 @@ from app.utils.async_file_utils import (
 logger = get_logger(__name__)
 
 
-def _record_to_dict(r: FileReadRecord) -> dict:
+def _record_to_dict(r: FileContextRecord) -> dict:
     return {
         "path": r.path,
         "file_hash": r.file_hash,
@@ -57,8 +58,8 @@ def _record_to_dict(r: FileReadRecord) -> dict:
     }
 
 
-def _record_from_dict(d: dict) -> FileReadRecord:
-    return FileReadRecord(
+def _record_from_dict(d: dict) -> FileContextRecord:
+    return FileContextRecord(
         path=d["path"],
         file_hash=d.get("file_hash", ""),
         file_mtime_ms=float(d.get("file_mtime_ms", 0.0)),
@@ -81,6 +82,24 @@ def _notif_from_dict(d: dict) -> PendingNotification:
         pushed_at=d["pushed_at"],
         source=d["source"],
         content=d["content"],
+    )
+
+
+def _browser_page_to_dict(page: BrowserPageObservation) -> dict[str, str]:
+    return {
+        "page_id": page.page_id,
+        "url": page.url,
+        "title": page.title,
+        "observed_at": page.observed_at,
+    }
+
+
+def _browser_page_from_dict(data: dict) -> BrowserPageObservation:
+    return BrowserPageObservation(
+        page_id=str(data.get("page_id") or ""),
+        url=str(data.get("url") or ""),
+        title=str(data.get("title") or ""),
+        observed_at=str(data.get("observed_at") or ""),
     )
 
 
@@ -149,6 +168,10 @@ def _encode_state(state: HorizonState) -> dict:
         "agent_id": state.agent_id,
         "loaded_skills": state.loaded_skills,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
+        "browser_pages": {
+            page_id: _browser_page_to_dict(page)
+            for page_id, page in state.browser_pages.items()
+        },
         "file_records": {k: _record_to_dict(v) for k, v in state.file_records.items()},
         "image_model": {"model_id": state.image_model.model_id, "sizes": state.image_model.sizes},
         "video_model": {"model_id": state.video_model.model_id, "config": state.video_model.config},
@@ -164,7 +187,6 @@ def _encode_state(state: HorizonState) -> dict:
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
         "workspace_entries": state.workspace_entries,
-        "memory": state.memory,
         "client_context": state.client_context,
         "cli_status": state.cli_status,
         "context_usage_baseline_used": state.context_usage_baseline_used,
@@ -188,6 +210,7 @@ def _decode_state(data: dict) -> HorizonState:
         "agent_id",
         "file_records",
         "pending_notifications",
+        "browser_pages",
         "loaded_skills",
         "image_model",
         "video_model",
@@ -199,7 +222,6 @@ def _decode_state(data: dict) -> HorizonState:
         "user_preferred_language",
         "workspace_files",
         "workspace_entries",
-        "memory",
         "client_context",
         "cli_status",
         "context_usage_baseline_used",
@@ -216,6 +238,11 @@ def _decode_state(data: dict) -> HorizonState:
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])
     ]
+    state.browser_pages = {
+        page_id: _browser_page_from_dict(page)
+        for page_id, page in data.get("browser_pages", {}).items()
+        if isinstance(page_id, str) and isinstance(page, dict)
+    }
     state.file_records = {
         key: _record_from_dict(record)
         for key, record in data.get("file_records", {}).items()
@@ -242,7 +269,6 @@ def _decode_state(data: dict) -> HorizonState:
     state.user_preferred_language = data.get("user_preferred_language", "")
     state.workspace_files = data.get("workspace_files", "")
     state.workspace_entries = data.get("workspace_entries", [])
-    state.memory = data.get("memory", "")
     state.client_context = data.get("client_context", "")
     state.cli_status = data.get("cli_status", "")
     state.context_usage_baseline_used = int(data.get("context_usage_baseline_used", 0))

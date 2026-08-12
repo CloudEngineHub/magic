@@ -12,11 +12,30 @@ from app.infrastructure.oauth2.callback_relay.models import (
     OAuth2CallbackStatus,
 )
 from app.infrastructure.oauth2.security import hash_text
+from app.infrastructure.oauth2.session_store import OAuth2SessionStore
 from app.infrastructure.oauth2.time_utils import format_utc
 from app.path_manager import PathManager
-from app.utils.async_file_utils import async_exists, async_mkdir, async_read_json, async_unlink, async_write_json
+from app.utils.async_file_utils import (
+    async_chmod,
+    async_exists,
+    async_read_json,
+    async_unlink,
+    async_write_json,
+)
+from app.utils.runtime_storage import (
+    RuntimeEvictionPolicy,
+    ensure_runtime_directory,
+    evict_runtime_files,
+    trigger_opportunistic_cleanup,
+)
 
 ENV_LOCAL_REDIRECT_URI = "OAUTH2_LOCAL_CALLBACK_REDIRECT_URI"
+
+_CALLBACK_EVICTION_POLICY = RuntimeEvictionPolicy(
+    max_entries=128,
+    target_entries=96,
+    max_age_seconds=24 * 60 * 60,
+)
 
 
 class LocalOAuth2CallbackRelay(OAuth2CallbackRelay):
@@ -24,7 +43,13 @@ class LocalOAuth2CallbackRelay(OAuth2CallbackRelay):
 
     def __init__(self, root_dir: Path | None = None) -> None:
         """使用可选 runtime 根目录初始化本地 callback relay。"""
-        self._root_dir = root_dir or PathManager.get_runtime_dir() / "oauth2" / "callback_relay" / "local"
+        self._root_dir = (
+            root_dir
+            or PathManager.get_runtime_dir()
+            / "oauth2"
+            / "callback_relay"
+            / "local"
+        )
 
     @property
     def callbacks_dir(self) -> Path:
@@ -46,11 +71,14 @@ class LocalOAuth2CallbackRelay(OAuth2CallbackRelay):
         payload.received_at = payload.received_at or format_utc()
         payload.source = payload.source or "local"
         file_path = self._callback_file(payload.state)
-        await async_mkdir(file_path.parent, parents=True, exist_ok=True)
+        await ensure_runtime_directory(file_path.parent)
+        self._trigger_cleanup()
         await async_write_json(file_path, payload.to_dict(), ensure_ascii=False, indent=2)
+        await async_chmod(file_path, 0o600)
 
     async def fetch_callback(self, state: str) -> OAuth2CallbackResult:
         """从本地 runtime 存储中按 state 拉取 callback payload。"""
+        self._trigger_cleanup()
         file_path = self._callback_file(state)
         if not await async_exists(file_path):
             return OAuth2CallbackResult(status=OAuth2CallbackStatus.PENDING, message="Callback has not arrived.")
@@ -75,3 +103,22 @@ class LocalOAuth2CallbackRelay(OAuth2CallbackRelay):
     def _callback_file(self, state: str) -> Path:
         """返回单个 state 对应的 callback 文件路径。"""
         return self.callbacks_dir / f"{hash_text(state)}.json"
+
+    def _trigger_cleanup(self) -> None:
+        trigger_opportunistic_cleanup(
+            "oauth2_callbacks",
+            self._cleanup_callbacks,
+        )
+
+    async def _cleanup_callbacks(self) -> None:
+        active_hashes = await OAuth2SessionStore().collect_active_state_hashes()
+        protected_paths = frozenset(
+            self.callbacks_dir / f"{state_hash}.json"
+            for state_hash in active_hashes
+        )
+        await evict_runtime_files(
+            self.callbacks_dir,
+            policy=_CALLBACK_EVICTION_POLICY,
+            suffixes=(".json",),
+            protected_paths=protected_paths,
+        )

@@ -2,7 +2,7 @@ import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react
 import { Loader2, ChevronDown } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef, useRef } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -69,6 +69,7 @@ import { DuplicateFileModal } from "./components/DuplicateFileModal"
 import { FolderConflictModal } from "./components/FolderConflictModal"
 import { CustomFolderMagicIcon } from "./components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "./components/MagicSystemFolderIcon"
+import { TopicFileIcon } from "./components/TopicFileIcon"
 import {
 	ProjectFileImagePreviewProvider,
 	resolveProjectFileImagePreviewSource,
@@ -106,7 +107,10 @@ import { DetailType } from "../Detail/types"
 import SelfMediaPostRowPlatformIcon from "../Detail/components/SelfMediaRootRender/components/SelfMediaPostRowPlatformIcon"
 import { useSelfMediaTreeNavigation } from "./hooks/useSelfMediaTreeNavigation"
 import { useAICardTreeNavigation } from "./hooks/useAICardTreeNavigation"
-import { isMagicSystemFolder } from "./utils/magic-system-folder"
+import {
+	isMagicSystemFolder,
+	resolveProjectInstructionsFileKind,
+} from "./utils/magic-system-folder"
 import { useAICardCreateDialog } from "../Detail/components/SelfMediaRootRender/components/AICardCreateDialog"
 import { isNoHoverCoarsePointer } from "@/utils/devices"
 import { useActiveTreeSelection } from "./hooks/useActiveTreeSelection"
@@ -115,6 +119,12 @@ import {
 	shouldShowMobileBatchActions,
 } from "./utils/batch-selection"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
+import { getAttachmentKey } from "./utils/getAttachmentKey"
+
+export interface TopicFilesExpansionState {
+	hasExpandableFolders: boolean
+	allFoldersExpanded: boolean
+}
 
 interface TopicFilesCoreProps {
 	className?: string
@@ -136,6 +146,7 @@ interface TopicFilesCoreProps {
 	onSelectAll?: () => void
 	onDeselectAll?: () => void
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
+	onExpansionStateChange?: (state: TopicFilesExpansionState) => void
 	allowEdit?: boolean
 	onUpdateAttachments?: () => void
 	afterAddFileToNewTopic?: () => void
@@ -185,6 +196,7 @@ export interface TopicFilesCoreRef {
 	handleUploadFolder: (item?: any) => void
 	handleImportFromOtherProject: (item?: any) => void
 	openBatchMoveByFileIds: (fileIds: string[]) => void
+	toggleAllFolders: () => void
 	resetAllStates: () => void
 }
 
@@ -207,6 +219,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isSelectMode = false,
 		onSelectModeChange,
 		onSelectionChange,
+		onExpansionStateChange,
 		allowEdit = true,
 		onUpdateAttachments,
 		afterAddFileToNewTopic,
@@ -574,6 +587,83 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 			refreshLoading,
 			selectedProjectId: selectedProject?.id || projectId,
 		})
+
+	// 复用现有索引收集非空目录，避免在大文件树上再次递归 attachments。
+	const expandableFolderKeys = useMemo(() => {
+		const folderKeys: string[] = []
+		treeIndex.childKeysByKey.forEach((childKeys, key) => {
+			if (childKeys.length > 0) folderKeys.push(key)
+		})
+		return folderKeys
+	}, [treeIndex])
+	const expansionState = useMemo<TopicFilesExpansionState>(() => {
+		const hasExpandableFolders = expandableFolderKeys.length > 0
+		return {
+			hasExpandableFolders,
+			allFoldersExpanded:
+				hasExpandableFolders &&
+				expandableFolderKeys.every((key) => expandedKeySet.has(key)),
+		}
+	}, [expandableFolderKeys, expandedKeySet])
+
+	// 项目切换时也重新上报，避免 Header 沿用上一个项目的展开摘要。
+	useEffect(() => {
+		onExpansionStateChange?.(expansionState)
+	}, [expansionState, onExpansionStateChange, projectId])
+
+	const toggleAllFolders = useMemoizedFn(() => {
+		setExpandedKeys(expansionState.allFoldersExpanded ? [] : expandableFolderKeys)
+	})
+
+	const getFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
+		const folderEntry =
+			treeIndex.getEntryById(item.file_id) || treeIndex.getEntryByKey(getAttachmentKey(item))
+		if (!folderEntry) return []
+
+		return [folderEntry.key, ...treeIndex.getDescendantKeysByKey(folderEntry.key)]
+	})
+
+	const getExpandableFolderSubtreeKeys = useMemoizedFn((item: AttachmentItem): string[] => {
+		// 展开状态只需要目录 key，文件节点无需写入 expandedKeys。
+		return getFolderSubtreeKeys(item).filter(
+			(key) => (treeIndex.childKeysByKey.get(key)?.length || 0) > 0,
+		)
+	})
+
+	const isFolderContentsExpanded = useMemoizedFn((item: AttachmentItem): boolean => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
+		return (
+			expandableSubtreeKeys.length > 0 &&
+			expandableSubtreeKeys.every((key) => expandedKeySet.has(key))
+		)
+	})
+
+	const handleExpandFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const expandableSubtreeKeys = getExpandableFolderSubtreeKeys(item)
+		if (expandableSubtreeKeys.length === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			Array.from(new Set([...currentKeys.map(String), ...expandableSubtreeKeys])),
+		)
+	})
+
+	const handleCollapseFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		const subtreeKeySet = new Set(getFolderSubtreeKeys(item))
+		if (subtreeKeySet.size === 0) return
+
+		setExpandedKeys((currentKeys) =>
+			currentKeys.filter((key) => !subtreeKeySet.has(String(key))),
+		)
+	})
+
+	const handleToggleFolderContents = useMemoizedFn((item: AttachmentItem) => {
+		if (isFolderContentsExpanded(item)) {
+			handleCollapseFolderContents(item)
+			return
+		}
+
+		handleExpandFolderContents(item)
+	})
 
 	// 文件定位 hook
 	const { locatingFileId } = useLocateFile({
@@ -970,6 +1060,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		treeIndex,
+		isFolderContentsExpanded: externalSearchValue ? undefined : isFolderContentsExpanded,
+		handleToggleFolderContents: externalSearchValue ? undefined : handleToggleFolderContents,
 		attachments,
 	})
 
@@ -1012,6 +1104,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		openBatchMoveByFileIds: (fileIds: string[]) => {
 			moveFileHook.openBatchMoveByFileIds(fileIds)
 		},
+		toggleAllFolders,
 		resetAllStates,
 	}))
 
@@ -1782,6 +1875,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 						) : null}
 						{decoration?.icon && !isFileBusy ? (
 							decoration.icon
+						) : resolveProjectInstructionsFileKind(item) ? (
+							<TopicFileIcon magicVariant="magic-file-agent" size={16} />
 						) : item?.display_config?.type === "custom" ||
 						  (item?.display_config?.type === "micro-app" && item?.is_directory) ? (
 							<CustomFolderMagicIcon

@@ -39,7 +39,7 @@ class PageReadiness(str, Enum):
     UNKNOWN = "unknown"
 
 
-class SnapshotScope(str, Enum):
+class ElementScope(str, Enum):
     INTERACTIVE = "interactive"
     VIEWPORT = "viewport"
     SUBTREE = "subtree"

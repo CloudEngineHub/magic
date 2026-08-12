@@ -17,7 +17,6 @@ import aiofiles
 
 from agentlang.llms.token_usage.models import TokenUsage
 from agentlang.utils.token_estimator import num_tokens_from_string
-from agentlang.utils.tool_param_utils import preprocess_tool_call_arguments
 
 # 从新的模块导入类型和工具
 from agentlang.chat_history.chat_history_models import (
@@ -1061,12 +1060,6 @@ class ChatHistory:
                  if not isinstance(tc, ToolCall) or not tc.id or not tc.function or not tc.function.name:
                      raise ValueError(f"AssistantMessage 包含无效的 ToolCall 结构: {tc}")
 
-                 # 验证和修复工具调用参数的 JSON 格式
-                 # 这确保了无论是新创建的消息还是从外部文件加载的消息，
-                 # 其工具调用参数都是有效的 JSON 格式，避免后续执行时出错
-                 if isinstance(tc.function.arguments, str):
-                     # 预处理工具调用参数的 JSON 格式
-                     preprocess_tool_call_arguments(tc)
 
         # 确保 created_at 存在且格式正确
         if not hasattr(message, 'created_at') or not isinstance(message.created_at, str):

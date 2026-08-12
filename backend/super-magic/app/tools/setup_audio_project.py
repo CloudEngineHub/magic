@@ -470,7 +470,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 
             # 使用 versioning context 写入文件（无需更新时间戳，因为是工具生成的文件）
             try:
-                async with self._file_versioning_context(tool_context, project_js_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, project_js_path, track_in_horizon=False):
                     await asyncio.to_thread(project_js_path.write_text, project_js_content, encoding='utf-8')
                 created_files.append(project_js_path)
                 logger.info(f"创建项目配置文件: {project_js_path}")

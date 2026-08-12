@@ -119,9 +119,10 @@ class WaitWechatLogin(BaseTool[WaitWechatLoginParams]):
 
 def _build_qr_refresh_message(qrcode_url: str) -> str:
     return "\n".join([
-        "The previous QR code expired. Reply with the updated content below (no extra prose), "
-        "adapting the heading and description to user preferred language. "
-        "Then immediately call `wait_wechat_login` again.",
+        "The previous QR code expired. Output the updated content below as your reply "
+        "(no extra prose), adapting the heading and description to user preferred language, "
+        "and include another `wait_wechat_login` call in the same reply. "
+        "Do not end your turn after showing the QR — the user's scan would go unanswered.",
         "",
         "---",
         "",

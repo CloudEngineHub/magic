@@ -30,6 +30,7 @@ from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
+from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
@@ -133,7 +134,7 @@ class AgentService(Base):
             logger.info(f"已更新本地项目存档信息文件: {project_archive_info_file}")
         return True
 
-    async def download_and_extract_workspace(self, agent_context: AgentContext) -> None:
+    async def download_and_extract_chat_history_and_checkpoints(self, agent_context: AgentContext) -> None:
         """
         Download and extract workspace with separated archive support
 
@@ -483,9 +484,14 @@ class AgentService(Base):
         await StorageFactory.get_storage(sts_token_refresh=sts_token_refresh, metadata=metadata, platform=platform_type)
 
         if fetch_history:
-            await self.download_and_extract_workspace(agent_context)
+            await self.download_and_extract_chat_history_and_checkpoints(agent_context)
         else:
             logger.info("fetch_history disabled, skip downloading remote chat history and checkpoints")
+
+        # Horizon 对象早于持久目录创建。必须在 ZIP 解压或挂载目录准备完成后重载，
+        # 再启动会写入 Horizon 的 CLI 探测，避免把“文件暂时不存在”固定成空 baseline。
+        await agent_context.horizon.reload_from_store()
+        CliManagerService.schedule_initial_status_detection(agent_context)
 
         # 触发初始化后事件
         after_init_data = AfterInitEventData(tool_context=tool_context, agent_context=agent_context, success=True)

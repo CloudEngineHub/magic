@@ -68,3 +68,9 @@ class AgentRerankAbilityConfig(ModelIdRequiredAIAbilityConfig):
     """始终启用的 Agent 搜索排序能力运行时配置。"""
 
     ability_key_value = "agent_rerank"
+
+
+class JsonRepairValidationAbilityConfig(ModelIdRequiredAIAbilityConfig):
+    """JSON repair candidate validation ability runtime configuration."""
+
+    ability_key_value = "json_repair_validation"

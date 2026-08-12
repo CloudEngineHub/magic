@@ -2,9 +2,19 @@ import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useState } from "react"
 import { Flex } from "antd"
 import { IconWorld } from "@tabler/icons-react"
-import { ChevronLeft, ChevronRight, Menu, Plus, RotateCw, ShieldCheck } from "lucide-react"
+import {
+	ChevronLeft,
+	ChevronRight,
+	FileText,
+	Image as ImageIcon,
+	Menu,
+	Plus,
+	RotateCw,
+	ShieldCheck,
+} from "lucide-react"
 import MagicIcon from "@/components/base/MagicIcon"
 import { useTranslation } from "react-i18next"
+import Markdown from "markdown-to-jsx"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import type { DetailBrowserAttachment, DetailBrowserData } from "../../types"
 import { useStyles } from "./styles"
@@ -70,7 +80,10 @@ export default memo(function Browser(props: BrowserProps) {
 	} = props
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("super")
-	const { url, title, file_id, file_key } = data || {}
+	const { url, title, page_title, file_id, file_key, detail } = data || {}
+	const hasUrl = typeof url === "string" && url.trim().length > 0
+	const displayUrl = hasUrl ? url : t("browserDetail.addressUnavailable")
+	const displayTitle = title || page_title || (hasUrl ? url : t("browserDetail.untitledWebpage"))
 	const matchedAttachment = useMemo(
 		() => browserAttachments.find((attachment) => attachment.file_key === file_key),
 		[browserAttachments, file_key],
@@ -79,18 +92,31 @@ export default memo(function Browser(props: BrowserProps) {
 	const resolvedFileId = matchedAttachment?.file_id || file_id || ""
 	const [imgSrc, setImgSrc] = useState("")
 	const [imageError, setImageError] = useState(false)
+	const [fallbackToDetail, setFallbackToDetail] = useState(false)
+	const hasDetail = Boolean(detail?.trim())
+	const hasScreenshot = Boolean(resolvedFileId || snapshotUrl)
+	const showViewSwitcher = hasScreenshot && hasDetail
+	const showDetail = hasDetail && (!hasScreenshot || viewMode === "code" || fallbackToDetail)
 
-	const onOpenUrl = () => {
-		window.open(data?.url, "_blank")
-	}
+	const onOpenUrl = hasUrl
+		? () => {
+				window.open(url, "_blank", "noopener,noreferrer")
+			}
+		: undefined
 
 	useEffect(() => {
 		let cancelled = false
 		setImageError(false)
+		setFallbackToDetail(false)
 		setImgSrc("")
 
 		if (!resolvedFileId) {
 			setImgSrc(snapshotUrl)
+			if (!snapshotUrl && hasDetail) {
+				setImageError(true)
+				setFallbackToDetail(true)
+				onViewModeChange?.("code")
+			}
 			return () => {
 				cancelled = true
 			}
@@ -98,18 +124,44 @@ export default memo(function Browser(props: BrowserProps) {
 
 		getTemporaryDownloadUrl({ file_ids: [resolvedFileId], enableErrorMessagePrompt: false })
 			.then((res: Array<{ url?: string }> = []) => {
-				if (!cancelled) setImgSrc(res[0]?.url || snapshotUrl)
+				if (cancelled) return
+				const source = res[0]?.url || snapshotUrl
+				setImgSrc(source)
+				if (!source && hasDetail) {
+					setImageError(true)
+					setFallbackToDetail(true)
+					onViewModeChange?.("code")
+				}
 			})
 			.catch(() => {
-				if (!cancelled) setImgSrc(snapshotUrl)
+				if (cancelled) return
+				setImgSrc(snapshotUrl)
+				if (!snapshotUrl && hasDetail) {
+					setImageError(true)
+					setFallbackToDetail(true)
+					onViewModeChange?.("code")
+				}
 			})
 
 		return () => {
 			cancelled = true
 		}
-	}, [resolvedFileId, snapshotUrl])
+	}, [hasDetail, onViewModeChange, resolvedFileId, snapshotUrl])
 
-	const tabTitle = title || url
+	const handleImageError = () => {
+		setImageError(true)
+		if (hasDetail) {
+			setFallbackToDetail(true)
+			onViewModeChange?.("code")
+		}
+	}
+
+	const handleViewModeChange = (mode: "desktop" | "code") => {
+		setFallbackToDetail(false)
+		onViewModeChange?.(mode)
+	}
+
+	const tabTitle = displayTitle
 
 	return (
 		<div className={cx(styles.browserContainer, className)}>
@@ -131,6 +183,34 @@ export default memo(function Browser(props: BrowserProps) {
 						<span className={styles.nonInteractiveControl} aria-hidden="true">
 							<Plus size={16} strokeWidth={1.7} />
 						</span>
+						{showViewSwitcher && (
+							<div className={styles.viewModeSwitcher} role="group">
+								<button
+									type="button"
+									className={cx(
+										styles.viewModeButton,
+										!showDetail && styles.viewModeButtonActive,
+									)}
+									onClick={() => handleViewModeChange("desktop")}
+									aria-pressed={!showDetail}
+								>
+									<ImageIcon size={16} />
+									<span>{t("browserDetail.screenshot")}</span>
+								</button>
+								<button
+									type="button"
+									className={cx(
+										styles.viewModeButton,
+										showDetail && styles.viewModeButtonActive,
+									)}
+									onClick={() => handleViewModeChange("code")}
+									aria-pressed={showDetail}
+								>
+									<FileText size={16} />
+									<span>{t("browserDetail.detail")}</span>
+								</button>
+							</div>
+						)}
 						<CommonHeaderV2
 							type={type}
 							renderMode="actions"
@@ -141,7 +221,7 @@ export default memo(function Browser(props: BrowserProps) {
 							viewMode={viewMode}
 							onViewModeChange={onViewModeChange}
 							onCopy={onCopy}
-							fileContent={fileContent || url}
+							fileContent={fileContent || (hasUrl ? url : "")}
 							currentFile={currentFile}
 							onOpenUrl={onOpenUrl}
 							allowEdit={allowEdit}
@@ -157,20 +237,26 @@ export default memo(function Browser(props: BrowserProps) {
 						<ChevronRight size={16} strokeWidth={1.8} />
 						<RotateCw size={15} strokeWidth={1.8} />
 					</div>
-					<div className={styles.addressBar} title={url}>
+					<div className={styles.addressBar} title={displayUrl}>
 						<ShieldCheck size={15} strokeWidth={1.8} />
-						<span>{url}</span>
+						<span>{displayUrl}</span>
 					</div>
 				</div>
 			</div>
 			<div className={styles.content}>
-				{imgSrc && !imageError ? (
+				{showDetail ? (
+					<div className={styles.detailContent} data-testid="browser-detail">
+						<Markdown options={{ disableParsingRawHTML: true }}>
+							{detail || ""}
+						</Markdown>
+					</div>
+				) : imgSrc && !imageError ? (
 					<img
 						className={styles.screenshot}
 						src={imgSrc}
-						alt={title}
+						alt={displayTitle}
 						data-testid="browser-image"
-						onError={() => setImageError(true)}
+						onError={handleImageError}
 					/>
 				) : imageError ? (
 					<div className={styles.imageError} role="status">

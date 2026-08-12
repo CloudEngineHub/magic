@@ -59,7 +59,7 @@ class ProbeNodeSource:
 
 
 @dataclass(frozen=True, slots=True)
-class SnapshotSources:
+class ElementSources:
     accessibility: tuple[AccessibilityNodeSource, ...]
     dom: tuple[DOMNodeSource, ...]
     probe: tuple[ProbeNodeSource, ...]

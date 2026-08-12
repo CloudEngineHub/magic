@@ -21,6 +21,7 @@ class MyLibraryProvider(SkillProvider):
     """平台「我的技能库」来源（通过 magic_service SDK 访问）"""
 
     id = SkillProviderId.MY_LIBRARY
+    supports_browse = True
 
     async def search(self, keyword: str, limit: int | None = 10) -> list[SkillCandidate]:
         from app.infrastructure.sdk.magic_service.factory import create_magic_service_sdk_with_defaults

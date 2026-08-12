@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from magic_use.models.common import SnapshotScope
+from magic_use.models.common import ElementScope
 from magic_use.models.geometry import BoundingBox, Viewport
 from magic_use.models.refs import ElementRefRecord
 
 
 @dataclass(frozen=True, slots=True)
-class SnapshotNode:
+class ElementNode:
     role: str
     name: str
     description: str
@@ -24,11 +24,11 @@ class SnapshotNode:
     frame_id: str
     depth: int
     ref: str | None = None
-    children: tuple["SnapshotNode", ...] = ()
+    children: tuple["ElementNode", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
-class SnapshotDiff:
+class ElementDiff:
     added: tuple[str, ...] = ()
     removed: tuple[str, ...] = ()
     changed: tuple[str, ...] = ()
@@ -39,31 +39,31 @@ class SnapshotDiff:
 
 
 @dataclass(frozen=True, slots=True)
-class PageSnapshot:
+class PageElements:
     id: str
     session_id: str
     page_id: str
     document_generation: int
-    scope: SnapshotScope
+    scope: ElementScope
     url: str
     title: str
     viewport: Viewport
-    root_nodes: tuple[SnapshotNode, ...]
+    root_nodes: tuple[ElementNode, ...]
     refs: tuple[ElementRefRecord, ...]
     truncated: bool
     created_at: datetime
-    diff: SnapshotDiff | None = None
+    diff: ElementDiff | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class SnapshotOptions:
-    scope: SnapshotScope = SnapshotScope.INTERACTIVE
+class ElementQuery:
+    scope: ElementScope = ElementScope.INTERACTIVE
     root_ref: str | None = None
     max_nodes: int = 500
     max_depth: int = 30
 
     def __post_init__(self) -> None:
-        if self.scope is SnapshotScope.SUBTREE and self.root_ref is None:
+        if self.scope is ElementScope.SUBTREE and self.root_ref is None:
             raise ValueError("root_ref is required for subtree snapshots")
         if self.max_nodes < 1:
             raise ValueError("max_nodes must be greater than zero")

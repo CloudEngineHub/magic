@@ -114,7 +114,7 @@ class ConvertVideoToAudio(AbstractFileTool[ConvertVideoToAudioParams], Workspace
             # 4. 使用 versioning context 执行转换（无需更新时间戳，因为是工具生成的文件）
             logger.info(f"开始转换视频到音频：{video_path} -> {output_path}")
 
-            async with self._file_versioning_context(tool_context, output_path, update_timestamp=False):
+            async with self._file_versioning_context(tool_context, output_path, track_in_horizon=False):
                 success, error = await self._convert_video_to_audio(
                     video_path=video_path,
                     output_path=output_path,

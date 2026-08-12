@@ -556,7 +556,7 @@
         "en_US": "Image understanding completed"
     },
     "visual_understanding_webpage.error": {
-        "zh_CN": "网页视觉分析失败: {{error}}",
+        "zh_CN": "网页视觉理解失败: {{error}}",
         "en_US": "Webpage visual analysis failed: {{error}}"
     },
     "visual_understanding_webpage.analysis_webpage": {
@@ -1399,10 +1399,6 @@
         "zh_CN": "搜索关键词",
         "en_US": "Search keywords"
     },
-    "find_agents.detail_all": {
-        "zh_CN": "全部",
-        "en_US": "All"
-    },
     "find_agents.detail_query": {
         "zh_CN": "完整需求",
         "en_US": "Full request"
@@ -1442,6 +1438,34 @@
     "find_agents.detail_no_results": {
         "zh_CN": "没有找到匹配的数字员工。",
         "en_US": "No matching Crew found."
+    },
+    "find_agents.browsing_page": {
+        "zh_CN": "正在浏览第 {{page}} 页数字员工",
+        "en_US": "Browsing Crew page {{page}}"
+    },
+    "find_agents.done_browse_page": {
+        "zh_CN": "已展示第 {{page}} 页 {{count}} 个数字员工，共 {{total}} 个",
+        "en_US": "Page {{page}}: {{count}} of {{total}} Crew shown"
+    },
+    "find_agents.detail_page": {
+        "zh_CN": "当前页",
+        "en_US": "Page"
+    },
+    "find_agents.detail_more_pages": {
+        "zh_CN": "共 {{total}} 个，还有更多可以继续查看。",
+        "en_US": "{{total}} in total. More results are available."
+    },
+    "find_agents.detail_browse_title": {
+        "zh_CN": "可用数字员工",
+        "en_US": "Available Crew"
+    },
+    "find_agents.detail_available_total": {
+        "zh_CN": "可用总数",
+        "en_US": "Total available"
+    },
+    "find_agents.detail_shown_on_page": {
+        "zh_CN": "本页展示",
+        "en_US": "Shown on this page"
     },
     "wait_for_subagents.error": {
         "zh_CN": "等待智能体失败: {{error}}",
@@ -1568,20 +1592,20 @@
         "en_US": "Click element"
     },
     "browser.find_interactive_element_visually": {
-        "zh_CN": "查找可交互元素",
-        "en_US": "Find interactive elements"
+        "zh_CN": "视觉定位元素",
+        "en_US": "Locate element visually"
     },
-    "browser.get_interactive_elements": {
-        "zh_CN": "查找可交互元素",
-        "en_US": "Find interactive elements"
+    "browser.find_element": {
+        "zh_CN": "定位网页元素",
+        "en_US": "Find webpage elements"
+    },
+    "browser.list_elements": {
+        "zh_CN": "查看可操作元素",
+        "en_US": "List interactive elements"
     },
     "browser.goto": {
         "zh_CN": "打开网页",
         "en_US": "Open webpage"
-    },
-    "browser.goto_and_read": {
-        "zh_CN": "打开网页并阅读网页内容",
-        "en_US": "Open webpage and read content"
     },
     "browser.input_text": {
         "zh_CN": "输入内容",
@@ -1591,13 +1615,21 @@
         "zh_CN": "阅读网页内容",
         "en_US": "Read webpage content"
     },
+    "browser.read_html": {
+        "zh_CN": "查看网页结构",
+        "en_US": "Inspect webpage structure"
+    },
+    "browser.add_init_script": {
+        "zh_CN": "注册页面初始化脚本",
+        "en_US": "Register page init script"
+    },
     "browser.scroll_to": {
         "zh_CN": "滚动屏幕",
         "en_US": "Scroll screen"
     },
     "browser.visual_query": {
-        "zh_CN": "阅读网页内容",
-        "en_US": "Read webpage content"
+        "zh_CN": "视觉理解网页",
+        "en_US": "Understand webpage visually"
     },
     "browser.remark.running": {
         "zh_CN": "正在{{action}}",
@@ -1727,9 +1759,17 @@
         "zh_CN": "页面及资源加载完成",
         "en_US": "the page and its resources to finish loading"
     },
+    "browser.detail.state_commit": {
+        "zh_CN": "导航已提交",
+        "en_US": "the navigation to be committed"
+    },
     "browser.detail.state_dom_content_loaded": {
         "zh_CN": "页面结构加载完成",
         "en_US": "the page structure to finish loading"
+    },
+    "browser.detail.state_network_idle": {
+        "zh_CN": "网络请求基本停止",
+        "en_US": "the network to become idle"
     },
     "browser.detail.wait_default": {
         "zh_CN": "达到指定状态",
@@ -1783,9 +1823,589 @@
         "zh_CN": "上传文件：{{count}} 个",
         "en_US": "Uploaded files: {{count}}"
     },
-    "browser.attachment.snapshot": {
+    "browser.detail.field": {
+        "zh_CN": "- **{{label}}：** {{value}}",
+        "en_US": "- **{{label}}:** {{value}}"
+    },
+    "browser.detail.heading.result": {
+        "zh_CN": "结果",
+        "en_US": "Result"
+    },
+    "browser.detail.operation_completed": {
+        "zh_CN": "操作已完成。",
+        "en_US": "The operation completed."
+    },
+    "browser.detail.heading.page": {
+        "zh_CN": "页面",
+        "en_US": "Page"
+    },
+    "browser.detail.heading.pages": {
+        "zh_CN": "页面列表",
+        "en_US": "Pages"
+    },
+    "browser.detail.heading.content": {
+        "zh_CN": "内容",
+        "en_US": "Content"
+    },
+    "browser.detail.heading.details": {
+        "zh_CN": "详情",
+        "en_US": "Details"
+    },
+    "browser.detail.heading.scope": {
+        "zh_CN": "范围",
+        "en_US": "Scope"
+    },
+    "browser.detail.heading.html": {
+        "zh_CN": "HTML 结构",
+        "en_US": "HTML structure"
+    },
+    "browser.detail.heading.matches": {
+        "zh_CN": "匹配元素",
+        "en_US": "Matching elements"
+    },
+    "browser.detail.heading.suggestions": {
+        "zh_CN": "可用建议",
+        "en_US": "Suggestions"
+    },
+    "browser.detail.heading.elements": {
+        "zh_CN": "可操作元素",
+        "en_US": "Interactive elements"
+    },
+    "browser.detail.heading.changes": {
+        "zh_CN": "页面变化",
+        "en_US": "Page changes"
+    },
+    "browser.detail.heading.limits": {
+        "zh_CN": "说明",
+        "en_US": "Notes"
+    },
+    "browser.detail.heading.analysis": {
+        "zh_CN": "视觉分析",
+        "en_US": "Visual analysis"
+    },
+    "browser.detail.heading.evidence": {
+        "zh_CN": "匹配依据",
+        "en_US": "Match evidence"
+    },
+    "browser.detail.heading.value": {
+        "zh_CN": "返回值",
+        "en_US": "Returned value"
+    },
+    "browser.detail.heading.diagnostics": {
+        "zh_CN": "错误与警告",
+        "en_US": "Errors and warnings"
+    },
+    "browser.detail.heading.console_errors": {
+        "zh_CN": "错误",
+        "en_US": "Errors"
+    },
+    "browser.detail.heading.console_warnings": {
+        "zh_CN": "警告",
+        "en_US": "Warnings"
+    },
+    "browser.detail.heading.failed_requests": {
+        "zh_CN": "失败请求",
+        "en_US": "Failed requests"
+    },
+    "browser.detail.heading.http_errors": {
+        "zh_CN": "HTTP 错误响应",
+        "en_US": "HTTP error responses"
+    },
+    "browser.detail.label.title": {
+        "zh_CN": "标题",
+        "en_US": "Title"
+    },
+    "browser.detail.label.url": {
+        "zh_CN": "地址",
+        "en_US": "URL"
+    },
+    "browser.detail.label.status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "browser.detail.label.backend": {
+        "zh_CN": "浏览器后端",
+        "en_US": "Browser backend"
+    },
+    "browser.detail.label.readiness": {
+        "zh_CN": "页面状态",
+        "en_US": "Page readiness"
+    },
+    "browser.detail.label.pages": {
+        "zh_CN": "打开页面",
+        "en_US": "Open pages"
+    },
+    "browser.detail.label.capabilities": {
+        "zh_CN": "可用能力",
+        "en_US": "Capabilities"
+    },
+    "browser.detail.label.detail": {
+        "zh_CN": "结构模式",
+        "en_US": "Structure mode"
+    },
+    "browser.detail.label.root": {
+        "zh_CN": "根元素",
+        "en_US": "Root element"
+    },
+    "browser.detail.label.scope": {
+        "zh_CN": "读取范围",
+        "en_US": "Read scope"
+    },
+    "browser.detail.label.dimensions": {
+        "zh_CN": "图片尺寸",
+        "en_US": "Image dimensions"
+    },
+    "browser.detail.label.labels": {
+        "zh_CN": "交互标签",
+        "en_US": "Interaction labels"
+    },
+    "browser.detail.label.query": {
+        "zh_CN": "分析问题",
+        "en_US": "Question"
+    },
+    "browser.detail.label.target": {
+        "zh_CN": "目标",
+        "en_US": "Target"
+    },
+    "browser.detail.label.label": {
+        "zh_CN": "视觉标签",
+        "en_US": "Visual label"
+    },
+    "browser.detail.label.ref": {
+        "zh_CN": "元素引用",
+        "en_US": "Element ref"
+    },
+    "browser.detail.label.key": {
+        "zh_CN": "按键",
+        "en_US": "Key"
+    },
+    "browser.detail.label.total": {
+        "zh_CN": "记录总数",
+        "en_US": "Total entries"
+    },
+    "browser.detail.label.returned": {
+        "zh_CN": "本次返回",
+        "en_US": "Returned"
+    },
+    "browser.detail.label.buffer": {
+        "zh_CN": "读取后处理",
+        "en_US": "After reading"
+    },
+    "browser.detail.result.sessions": {
+        "zh_CN": "当前有 {{count}} 个可用浏览器会话。",
+        "en_US": "{{count}} Browser sessions are available."
+    },
+    "browser.detail.result.no_sessions": {
+        "zh_CN": "当前没有可用的浏览器会话。",
+        "en_US": "No Browser sessions are currently available."
+    },
+    "browser.detail.result.pages": {
+        "zh_CN": "当前打开了 {{count}} 个网页。",
+        "en_US": "{{count}} webpages are currently open."
+    },
+    "browser.detail.result.no_pages": {
+        "zh_CN": "当前浏览器会话中没有打开的网页。",
+        "en_US": "No webpages are open in this Browser session."
+    },
+    "browser.detail.result.page_opened": {
+        "zh_CN": "网页已经打开，可以继续读取或操作。",
+        "en_US": "The webpage is open and ready for further reading or interaction."
+    },
+    "browser.detail.result.page_activated": {
+        "zh_CN": "该网页已切换为当前操作页面。",
+        "en_US": "This webpage is now the active page."
+    },
+    "browser.detail.result.page_navigated": {
+        "zh_CN": "网页已完成导航，可以继续读取或操作。",
+        "en_US": "Navigation completed and the webpage is ready for further use."
+    },
+    "browser.detail.result.page_read": {
+        "zh_CN": "已读取当前范围内可展示的网页正文。",
+        "en_US": "Readable webpage content was collected from the selected scope."
+    },
+    "browser.detail.result.html_read": {
+        "zh_CN": "已读取当前范围内的真实 HTML 结构。",
+        "en_US": "The real HTML structure was read from the selected scope."
+    },
+    "browser.detail.result.matches": {
+        "zh_CN": "找到 {{count}} 个符合条件的元素。",
+        "en_US": "Found {{count}} matching elements."
+    },
+    "browser.detail.result.no_matches": {
+        "zh_CN": "没有找到符合当前条件的元素。",
+        "en_US": "No elements matched the current criteria."
+    },
+    "browser.detail.result.elements": {
+        "zh_CN": "当前页面包含 {{count}} 个可继续操作的元素。",
+        "en_US": "The current page contains {{count}} interactive elements."
+    },
+    "browser.detail.result.screenshot": {
+        "zh_CN": "已生成当前网页的截图。",
+        "en_US": "A screenshot of the current webpage was captured."
+    },
+    "browser.detail.result.visual_analysis": {
+        "zh_CN": "已根据页面截图完成视觉分析。",
+        "en_US": "Visual analysis of the webpage screenshot is complete."
+    },
+    "browser.detail.result.visual_match": {
+        "zh_CN": "已在页面截图中找到目标元素。",
+        "en_US": "The target element was found in the webpage screenshot."
+    },
+    "browser.detail.result.evaluated": {
+        "zh_CN": "页面脚本执行完成，返回值如下。",
+        "en_US": "The page script completed and returned the value below."
+    },
+    "browser.detail.result.console_clean": {
+        "zh_CN": "本次返回的控制台记录中没有 JavaScript 错误或断言失败。",
+        "en_US": "No JavaScript errors or failed assertions were found in the returned console entries."
+    },
+    "browser.detail.result.console_issues": {
+        "zh_CN": "本次返回的控制台记录中有 {{count}} 条错误或断言失败。",
+        "en_US": "The returned console entries contain {{count}} errors or failed assertions."
+    },
+    "browser.detail.result.console_summary": {
+        "zh_CN": "控制台记录读取完成：发现 {{errors}} 条错误、{{warnings}} 条警告。",
+        "en_US": "Console entries were read successfully: {{errors}} errors and {{warnings}} warnings found."
+    },
+    "browser.detail.result.network_clean": {
+        "zh_CN": "本次返回的网络记录中没有失败请求，仍有 {{pending}} 条请求尚未完成。",
+        "en_US": "No failed requests were found; {{pending}} requests are still pending."
+    },
+    "browser.detail.result.network_issues": {
+        "zh_CN": "本次网络记录中有 {{count}} 条失败请求，另有 {{pending}} 条请求尚未完成。",
+        "en_US": "The network records contain {{count}} failed requests and {{pending}} pending requests."
+    },
+    "browser.detail.result.network_summary": {
+        "zh_CN": "网络记录读取完成：{{request_failures}} 条请求本身失败，{{http_errors}} 条返回 HTTP 错误，{{pending}} 条仍在处理中。",
+        "en_US": "Network entries were read successfully: {{request_failures}} request failures, {{http_errors}} HTTP error responses, and {{pending}} pending requests."
+    },
+    "browser.detail.result.files_uploaded": {
+        "zh_CN": "已提交 {{count}} 个文件：{{files}}",
+        "en_US": "Submitted {{count}} files: {{files}}"
+    },
+    "browser.detail.wait_satisfied": {
+        "zh_CN": "等待条件已满足：{{condition}}（{{expected}}）。",
+        "en_US": "The wait condition was satisfied: {{condition}} ({{expected}})."
+    },
+    "browser.detail.current_page": {
+        "zh_CN": "当前页面",
+        "en_US": "active"
+    },
+    "browser.detail.untitled_page": {
+        "zh_CN": "未命名网页",
+        "en_US": "Untitled webpage"
+    },
+    "browser.detail.session": {
+        "zh_CN": "浏览器会话 {{index}}",
+        "en_US": "Browser session {{index}}"
+    },
+    "browser.detail.element": {
+        "zh_CN": "元素",
+        "en_US": "element"
+    },
+    "browser.detail.unnamed_element": {
+        "zh_CN": "未命名元素",
+        "en_US": "unnamed element"
+    },
+    "browser.detail.in_viewport": {
+        "zh_CN": "当前可见",
+        "en_US": "in the viewport"
+    },
+    "browser.detail.outside_viewport": {
+        "zh_CN": "当前不可见",
+        "en_US": "outside the viewport"
+    },
+    "browser.detail.available_actions": {
+        "zh_CN": "可执行：{{actions}}",
+        "en_US": "available actions: {{actions}}"
+    },
+    "browser.detail.find_suggestions": {
+        "zh_CN": "可尝试使用这些页面名称重新查找：{{suggestions}}",
+        "en_US": "Try searching again with one of these page names: {{suggestions}}"
+    },
+    "browser.detail.list_truncated": {
+        "zh_CN": "结果较多，这里仅展示前 {{limit}} 项。",
+        "en_US": "Only the first {{limit}} items are shown."
+    },
+    "browser.detail.no_html_content": {
+        "zh_CN": "当前范围内没有读取到可展示的 HTML 结构。",
+        "en_US": "No displayable HTML structure was found in the selected scope."
+    },
+    "browser.detail.html_truncated": {
+        "zh_CN": "HTML 结构较长，这里仅展示前 {{limit}} 个字符。可以先查找目标元素，再读取它的局部结构。",
+        "en_US": "The HTML structure is long; only the first {{limit}} characters are shown. Find the target element first, then read its subtree."
+    },
+    "browser.detail.elements_truncated": {
+        "zh_CN": "页面元素较多，本次只返回了部分结果。可以缩小范围或读取指定子树。",
+        "en_US": "The page contains more elements than were returned. Narrow the scope or read a specific subtree."
+    },
+    "browser.detail.value_truncated": {
+        "zh_CN": "返回值较长，这里仅展示前 {{limit}} 个字符。",
+        "en_US": "The returned value is long; only the first {{limit}} characters are shown."
+    },
+    "browser.detail.redirect_chain": {
+        "zh_CN": "页面发生了重定向：{{chain}}",
+        "en_US": "The webpage redirected through: {{chain}}"
+    },
+    "browser.detail.buffer_cleared": {
+        "zh_CN": "已清空本页诊断缓冲区",
+        "en_US": "This page's diagnostic buffer was cleared"
+    },
+    "browser.detail.buffer_kept": {
+        "zh_CN": "保留本页诊断缓冲区",
+        "en_US": "This page's diagnostic buffer was preserved"
+    },
+    "browser.detail.condition_download": {
+        "zh_CN": "文件下载完成",
+        "en_US": "a file download to complete"
+    },
+    "browser.detail.scope_interactive": {
+        "zh_CN": "可操作元素",
+        "en_US": "interactive elements"
+    },
+    "browser.detail.scope_subtree": {
+        "zh_CN": "指定元素及其子元素",
+        "en_US": "the selected element subtree"
+    },
+    "browser.detail.scope_changes": {
+        "zh_CN": "相对上次读取发生变化的元素",
+        "en_US": "elements changed since the previous read"
+    },
+    "browser.detail.session_state.starting": {
+        "zh_CN": "正在启动",
+        "en_US": "Starting"
+    },
+    "browser.detail.session_state.connected": {
+        "zh_CN": "已连接",
+        "en_US": "Connected"
+    },
+    "browser.detail.session_state.disconnected": {
+        "zh_CN": "连接已断开",
+        "en_US": "Disconnected"
+    },
+    "browser.detail.session_state.failed": {
+        "zh_CN": "连接失败",
+        "en_US": "Failed"
+    },
+    "browser.detail.session_state.closed": {
+        "zh_CN": "已关闭",
+        "en_US": "Closed"
+    },
+    "browser.detail.page_state.open": {
+        "zh_CN": "可继续操作",
+        "en_US": "Open and available"
+    },
+    "browser.detail.page_state.closed": {
+        "zh_CN": "已关闭",
+        "en_US": "Closed"
+    },
+    "browser.detail.page_state.failed": {
+        "zh_CN": "页面异常",
+        "en_US": "Failed"
+    },
+    "browser.detail.state_unknown": {
+        "zh_CN": "状态未知",
+        "en_US": "Unknown"
+    },
+    "browser.detail.readiness.stable": {
+        "zh_CN": "内容稳定",
+        "en_US": "Stable"
+    },
+    "browser.detail.readiness.loading": {
+        "zh_CN": "仍在加载",
+        "en_US": "Loading"
+    },
+    "browser.detail.readiness.unknown": {
+        "zh_CN": "尚未确认",
+        "en_US": "Not confirmed"
+    },
+    "browser.detail.capability.accessibility": {
+        "zh_CN": "无障碍结构",
+        "en_US": "accessibility tree"
+    },
+    "browser.detail.capability.elements": {
+        "zh_CN": "元素结构",
+        "en_US": "element structure"
+    },
+    "browser.detail.capability.script": {
+        "zh_CN": "页面脚本",
+        "en_US": "page scripts"
+    },
+    "browser.detail.capability.screenshot": {
+        "zh_CN": "网页截图",
+        "en_US": "screenshots"
+    },
+    "browser.detail.capability.labels": {
+        "zh_CN": "交互标签截图",
+        "en_US": "labeled screenshots"
+    },
+    "browser.detail.capability.console": {
+        "zh_CN": "控制台诊断",
+        "en_US": "console diagnostics"
+    },
+    "browser.detail.capability.network": {
+        "zh_CN": "网络诊断",
+        "en_US": "network diagnostics"
+    },
+    "browser.detail.capability.upload": {
+        "zh_CN": "文件上传",
+        "en_US": "file uploads"
+    },
+    "browser.detail.capability.download": {
+        "zh_CN": "文件下载",
+        "en_US": "downloads"
+    },
+    "browser.detail.action.click": {
+        "zh_CN": "点击",
+        "en_US": "click"
+    },
+    "browser.detail.action.fill": {
+        "zh_CN": "输入",
+        "en_US": "fill"
+    },
+    "browser.detail.action.press": {
+        "zh_CN": "按键",
+        "en_US": "press"
+    },
+    "browser.detail.action.hover": {
+        "zh_CN": "悬停",
+        "en_US": "hover"
+    },
+    "browser.detail.action.scroll": {
+        "zh_CN": "滚动",
+        "en_US": "scroll"
+    },
+    "browser.detail.action.select": {
+        "zh_CN": "选择",
+        "en_US": "select"
+    },
+    "browser.detail.action.check": {
+        "zh_CN": "勾选",
+        "en_US": "check"
+    },
+    "browser.detail.action.upload": {
+        "zh_CN": "上传",
+        "en_US": "upload"
+    },
+    "browser.detail.change.navigation": {
+        "zh_CN": "页面已导航到「{{title}}」：{{url}}",
+        "en_US": "Navigated to {{title}}: {{url}}"
+    },
+    "browser.detail.change.opened_page": {
+        "zh_CN": "新打开网页「{{title}}」：{{url}}",
+        "en_US": "Opened a new webpage, {{title}}: {{url}}"
+    },
+    "browser.detail.change.download": {
+        "zh_CN": "开始下载文件：{{file}}",
+        "en_US": "Started downloading: {{file}}"
+    },
+    "browser.detail.change.dialog": {
+        "zh_CN": "页面弹窗：{{text}}",
+        "en_US": "Page dialog: {{text}}"
+    },
+    "browser.detail.change.selected_label": {
+        "zh_CN": "当前选中：{{value}}",
+        "en_US": "Selected: {{value}}"
+    },
+    "browser.detail.change.selected_value": {
+        "zh_CN": "当前值：{{value}}",
+        "en_US": "Current value: {{value}}"
+    },
+    "browser.detail.change.added": {
+        "zh_CN": "新增：{{item}}",
+        "en_US": "Added: {{item}}"
+    },
+    "browser.detail.change.removed": {
+        "zh_CN": "移除：{{item}}",
+        "en_US": "Removed: {{item}}"
+    },
+    "browser.detail.change.changed": {
+        "zh_CN": "变化：{{item}}",
+        "en_US": "Changed: {{item}}"
+    },
+    "browser.detail.result.page_closed": {
+        "zh_CN": "网页已关闭，后续操作需要重新打开页面。",
+        "en_US": "The webpage was closed. Open a new page before continuing."
+    },
+    "browser.detail.page_closed_note": {
+        "zh_CN": "页面关闭后不再提供可读取的标题、地址或截图。",
+        "en_US": "A closed page no longer provides a readable title, URL, or screenshot."
+    },
+    "browser.detail.label.page_id": {
+        "zh_CN": "页面 ID",
+        "en_US": "Page ID"
+    },
+    "browser.detail.label.warning": {
+        "zh_CN": "提示",
+        "en_US": "Warning"
+    },
+    "browser.detail.result.page_lease_extended": {
+        "zh_CN": "页面保活时间已延长，可继续执行长时间操作。",
+        "en_US": "The page lease was extended and can support longer operations."
+    },
+    "browser.detail.label.duration": {
+        "zh_CN": "延长时长",
+        "en_US": "Extension"
+    },
+    "browser.detail.label.expires_at": {
+        "zh_CN": "预计过期时间",
+        "en_US": "Expected expiry"
+    },
+    "browser.detail.result.init_script_registered": {
+        "zh_CN": "初始化脚本已登记。",
+        "en_US": "The initialization script was registered."
+    },
+    "browser.detail.init_script_next_navigation": {
+        "zh_CN": "它会在下一次导航及之后的每次导航中运行，不会影响当前文档。",
+        "en_US": "It will run on the next navigation and later navigations, but not in the current document."
+    },
+    "browser.detail.no_visual_analysis": {
+        "zh_CN": "没有返回可展示的视觉分析结果。",
+        "en_US": "No displayable visual analysis was returned."
+    },
+    "browser.detail.no_visual_evidence": {
+        "zh_CN": "没有返回可展示的视觉定位证据。",
+        "en_US": "No displayable visual matching evidence was returned."
+    },
+    "browser.detail.label.output_path": {
+        "zh_CN": "保存路径",
+        "en_US": "Saved path"
+    },
+    "browser.detail.label.value": {
+        "zh_CN": "值",
+        "en_US": "Value"
+    },
+    "browser.detail.value_entered": {
+        "zh_CN": "已输入文本（具体内容不在详情中展示）。",
+        "en_US": "Text was entered; the exact value is not shown here."
+    },
+    "browser.detail.label.action": {
+        "zh_CN": "操作",
+        "en_US": "Action"
+    },
+    "browser.detail.label.state": {
+        "zh_CN": "状态",
+        "en_US": "State"
+    },
+    "browser.detail.interaction_completed": {
+        "zh_CN": "交互已完成。",
+        "en_US": "The interaction completed."
+    },
+    "browser.detail.no_observable_change": {
+        "zh_CN": "操作完成，但当前结果中没有可确认的页面变化。",
+        "en_US": "The action completed, but no observable page change was reported."
+    },
+    "browser.detail.label.horizontal": {
+        "zh_CN": "水平滚动",
+        "en_US": "Horizontal scroll"
+    },
+    "browser.detail.label.vertical": {
+        "zh_CN": "垂直滚动",
+        "en_US": "Vertical scroll"
+    },
+    "browser.attachment.screenshot": {
         "zh_CN": "网页操作截图",
-        "en_US": "Browser snapshot"
+        "en_US": "Browser screenshot"
     },
     "browser.error.invalid_config": {
         "zh_CN": "浏览器配置不完整或不正确",
@@ -2048,8 +2668,8 @@
         "en_US": "AI ranking is temporarily unavailable. Skills shown using basic ordering: {{count}}."
     },
     "find_skills.fallback_partial": {
-        "zh_CN": "部分来源和智能排序暂时不可用，已按基础规则展示 {{count}} 个 Skill",
-        "en_US": "Some sources and AI ranking are temporarily unavailable. Skills shown using basic ordering: {{count}}."
+        "zh_CN": "已按基础规则展示 {{count}} 个技能，智能排序和部分来源这次没能用上",
+        "en_US": "Showing {{count}} skills using basic ordering. AI ranking and some sources were not available this time."
     },
     "find_skills.empty": {
         "zh_CN": "没有找到合适的 Skill",
@@ -2060,16 +2680,16 @@
         "en_US": "Unable to search Skills. Please try again later."
     },
     "find_skills.partial": {
-        "zh_CN": "部分来源暂时不可用，已展示 {{count}} 个其他结果",
-        "en_US": "Some sources are temporarily unavailable. Other results shown: {{count}}."
+        "zh_CN": "已找到 {{count}} 个技能，还有部分来源这次没有返回结果",
+        "en_US": "Found {{count}} skills. Some sources did not respond this time."
     },
     "find_skills.partial_empty": {
-        "zh_CN": "部分来源暂时不可用，其他来源也没有找到合适的 Skill",
-        "en_US": "Some sources are temporarily unavailable, and no suitable Skills were found from the other sources."
+        "zh_CN": "没有找到合适的技能，还有部分来源这次没有返回结果",
+        "en_US": "No suitable skills found, and some sources did not respond this time."
     },
     "find_skills.partial_detail": {
-        "zh_CN": "部分来源暂时不可用，以下结果来自其他可用来源。",
-        "en_US": "Some sources are temporarily unavailable. The results below come from other available sources."
+        "zh_CN": "以下是本次可用来源的结果，还有部分来源没有返回。",
+        "en_US": "The results below come from the sources that responded. Some sources did not respond this time."
     },
     "find_skills.detail_fallback_notice": {
         "zh_CN": "智能排序暂时不可用，本次结果按基础规则排列。",
@@ -2126,6 +2746,38 @@
     "find_skills.provider.clawhub": {
         "zh_CN": "ClawHub",
         "en_US": "ClawHub"
+    },
+    "find_skills.browsing_page": {
+        "zh_CN": "正在浏览第 {{page}} 页技能",
+        "en_US": "Browsing skills page {{page}}"
+    },
+    "find_skills.done_browse_page": {
+        "zh_CN": "已展示第 {{page}} 页 {{count}} 个技能",
+        "en_US": "Page {{page}}: {{count}} skills shown"
+    },
+    "find_skills.detail_page": {
+        "zh_CN": "当前页",
+        "en_US": "Page"
+    },
+    "find_skills.detail_more_pages": {
+        "zh_CN": "还有更多技能可以继续查看。",
+        "en_US": "More skills are available."
+    },
+    "find_skills.detail_keyword_only_sources": {
+        "zh_CN": "部分来源需要关键词才能查找，本次浏览未包含。",
+        "en_US": "Some sources require a keyword and were not included in this browse."
+    },
+    "find_skills.detail_browse_title": {
+        "zh_CN": "可用技能",
+        "en_US": "Available skills"
+    },
+    "find_skills.detail_available_total": {
+        "zh_CN": "可用总数",
+        "en_US": "Total available"
+    },
+    "find_skills.detail_shown_on_page": {
+        "zh_CN": "本页展示",
+        "en_US": "Shown on this page"
     },
     "install_skills.installing": {
         "zh_CN": "正在安装：{{ids}}",
@@ -3856,8 +4508,8 @@
         "en_US": "Listing local skills for \"{{keywords}}\""
     },
     "find_skills.searching.online": {
-        "zh_CN": "正在搜索互联网技能「{{keywords}}」",
-        "en_US": "Searching online skills for \"{{keywords}}\""
+        "zh_CN": "正在技能市场中搜索「{{keywords}}」",
+        "en_US": "Searching the skill marketplace for \"{{keywords}}\""
     },
     "find_skills.searching.auto": {
         "zh_CN": "正在检索技能「{{keywords}}」",
@@ -3872,8 +4524,8 @@
         "en_US": "Listed local skills for \"{{keywords}}\", {{total}} found"
     },
     "find_skills.searched.online": {
-        "zh_CN": "已搜索互联网技能「{{keywords}}」，共找到 {{total}} 个候选",
-        "en_US": "Searched online skills for \"{{keywords}}\", found {{total}} candidates"
+        "zh_CN": "已在技能市场中搜索「{{keywords}}」，共找到 {{total}} 个候选",
+        "en_US": "Searched the skill marketplace for \"{{keywords}}\", found {{total}} candidates"
     },
     "find_skills.searched.auto": {
         "zh_CN": "已检索技能「{{keywords}}」，共找到 {{total}} 个候选",

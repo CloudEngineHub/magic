@@ -13,9 +13,11 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
-    PageSnapshot,
+    PageElements,
+    FindQuery,
+    FindResult,
     ScreenshotResult,
-    SnapshotOptions,
+    ElementQuery,
     WaitRequest,
 )
 from magic_use.models.common import JsonValue
@@ -55,7 +57,20 @@ class BrowserBackend(Protocol):
 
     async def read_page(self, page_id: str, scope: str = "viewport") -> str: ...
 
-    async def snapshot(self, page_id: str, options: SnapshotOptions | None = None) -> PageSnapshot: ...
+    async def read_html(
+        self,
+        page_id: str,
+        *,
+        ref: str | None = None,
+        detail: str = "outline",
+        max_chars: int = 20_000,
+    ) -> tuple[str, bool]: ...
+
+    async def add_init_script(self, page_id: str, source: str) -> None: ...
+
+    async def snapshot(self, page_id: str, options: ElementQuery | None = None) -> PageElements: ...
+
+    async def find(self, page_id: str, query: FindQuery) -> FindResult: ...
 
     async def describe_ref(self, page_id: str, ref: str) -> ActionTarget: ...
 

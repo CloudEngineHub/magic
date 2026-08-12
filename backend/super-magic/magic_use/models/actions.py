@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from magic_use.models.common import ActionKind, ActionOutcome
 from magic_use.models.page import BrowserPage
 from magic_use.models.refs import ElementRefRecord
-from magic_use.models.snapshot import SnapshotDiff
+from magic_use.models.elements import ElementDiff
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ class ActionResult:
     opened_pages: tuple[BrowserPage, ...] = ()
     downloads: tuple[str, ...] = ()
     dialogs: tuple[str, ...] = ()
-    snapshot_diff: SnapshotDiff | None = None
+    snapshot_diff: ElementDiff | None = None
     target: ActionTarget | None = None
     post_action_state: ActionState | None = None
     message: str = ""

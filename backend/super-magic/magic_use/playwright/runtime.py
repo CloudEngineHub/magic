@@ -157,6 +157,7 @@ class PlaywrightRuntime:
             expires_at=handle.expires_at,
             resource_warning=handle.resource_warning or (self.context_lease.resource_warning if self.context_lease else None),
             readiness=handle.readiness,
+            redirect_chain=tuple(handle.url_history) if len(handle.url_history) > 1 else (),
         )
 
     async def _read_page_title(self, handle: PlaywrightPageHandle) -> str:
@@ -239,6 +240,12 @@ class PlaywrightRuntime:
             try:
                 if self.config.browser_name is BrowserName.CHROMIUM:
                     cdp = await self._require_context().new_cdp_session(page)
+                    override = self._require_lease().user_agent_override
+                    if override is not None:
+                        await cdp.send(
+                            "Emulation.setUserAgentOverride",
+                            override.to_cdp_params(self.config.context.locale),
+                        )
                 handle = PlaywrightPageHandle(
                     page_id=page_id,
                     page=page,
@@ -249,6 +256,7 @@ class PlaywrightRuntime:
                     + timedelta(seconds=self.config.lifecycle.page_idle_seconds),
                     resource_warning=resource_warning,
                     readiness=PageReadiness.STABLE if page.url == "about:blank" else PageReadiness.LOADING,
+                    url_history=[page.url] if page.url else [],
                 )
             except BaseException:
                 self._require_lease().release_page()
@@ -337,6 +345,9 @@ class PlaywrightRuntime:
             {"url": frame.url, "name": frame.name, "main_frame": main_frame},
         )
         if main_frame:
+            if frame.url and (not handle.url_history or handle.url_history[-1] != frame.url):
+                handle.url_history.append(frame.url)
+                del handle.url_history[:-10]
             handle.document_generation += 1
             handle.readiness = PageReadiness.LOADING
             self._emit(

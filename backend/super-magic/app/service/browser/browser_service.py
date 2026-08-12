@@ -32,9 +32,11 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
-    PageSnapshot,
+    PageElements,
+    FindQuery,
+    FindResult,
     ScreenshotResult,
-    SnapshotOptions,
+    ElementQuery,
     WaitRequest,
 )
 from magic_use.models.common import JsonValue, SessionState
@@ -197,17 +199,51 @@ class BrowserService:
         )
         return await self._find_page(entry, page_id), content
 
+    async def read_html(
+        self,
+        page_id: str,
+        *,
+        ref: str | None,
+        detail: str,
+        max_chars: int,
+        session_id: str | None = None,
+    ) -> tuple[BrowserPage, str, bool]:
+        entry = await self._resolve_entry(session_id)
+        content, truncated = await await_browser_operation(
+            self._tool_context,
+            entry.client.read_html(
+                page_id,
+                ref=ref,
+                detail=detail,
+                max_chars=max_chars,
+            ),
+        )
+        return await self._find_page(entry, page_id), content, truncated
+
+    async def add_init_script(self, page_id: str, source: str, session_id: str | None = None) -> None:
+        entry = await self._resolve_entry(session_id)
+        await await_browser_operation(self._tool_context, entry.client.add_init_script(page_id, source))
+
     async def snapshot(
         self,
         page_id: str,
-        options: SnapshotOptions,
+        options: ElementQuery,
         session_id: str | None = None,
-    ) -> PageSnapshot:
+    ) -> PageElements:
         entry = await self._resolve_entry(session_id)
         return await await_browser_operation(
             self._tool_context,
             entry.client.snapshot(page_id, options),
         )
+
+    async def find(
+        self,
+        page_id: str,
+        query: FindQuery,
+        session_id: str | None = None,
+    ) -> FindResult:
+        entry = await self._resolve_entry(session_id)
+        return await await_browser_operation(self._tool_context, entry.client.find(page_id, query))
 
     async def describe_ref(
         self,
@@ -271,7 +307,7 @@ class BrowserService:
     async def analyze_screenshot(self, image: bytes, query: str) -> str:
         from app.tools.visual_understanding import VisualUnderstanding, VisualUnderstandingParams
 
-        async with BrowserFileAdapter.temporary_png(image) as file_path:
+        async with BrowserFileAdapter.temporary_image(image) as file_path:
             analysis_result = await await_browser_operation(
                 self._tool_context,
                 VisualUnderstanding().execute_purely(

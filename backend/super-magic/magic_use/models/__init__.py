@@ -15,7 +15,7 @@ from magic_use.models.common import (
     PageReadiness,
     PageState,
     SessionState,
-    SnapshotScope,
+    ElementScope,
 )
 from magic_use.models.diagnostics import (
     ConsoleEntry,
@@ -25,11 +25,12 @@ from magic_use.models.diagnostics import (
     WaitRequest,
 )
 from magic_use.models.events import BrowserEvent
+from magic_use.models.find import FindMatch, FindQuery, FindResult
 from magic_use.models.geometry import BoundingBox, Viewport
 from magic_use.models.page import BrowserPage
 from magic_use.models.refs import ElementRefRecord
 from magic_use.models.session import BrowserCapabilities, BrowserIdentity, BrowserSession
-from magic_use.models.snapshot import PageSnapshot, SnapshotDiff, SnapshotNode, SnapshotOptions
+from magic_use.models.elements import PageElements, ElementDiff, ElementNode, ElementQuery
 
 __all__ = [
     "ActionKind",
@@ -52,15 +53,18 @@ __all__ = [
     "ElementRefRecord",
     "NavigationResult",
     "NetworkEntry",
-    "PageSnapshot",
+    "PageElements",
     "PageReadiness",
     "PageState",
     "ScreenshotResult",
     "SessionState",
-    "SnapshotDiff",
-    "SnapshotNode",
-    "SnapshotOptions",
-    "SnapshotScope",
+    "ElementDiff",
+    "ElementNode",
+    "ElementQuery",
+    "ElementScope",
+    "FindMatch",
+    "FindQuery",
+    "FindResult",
     "Viewport",
     "WaitConditionKind",
     "WaitRequest",

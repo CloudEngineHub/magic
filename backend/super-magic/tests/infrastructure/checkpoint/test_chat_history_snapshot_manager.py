@@ -19,8 +19,12 @@ async def test_create_latest_chat_history_snapshot_skips_llm_request(tmp_path: P
     snapshot_dir = tmp_path / "checkpoint" / "latest_chat_history_snapshots"
     manager = ChatHistorySnapshotManager()
 
-    with patch("agentlang.path_manager.PathManager.get_chat_history_dir", return_value=chat_history_dir):
-        assert await manager.create_latest_chat_history_snapshot(snapshot_dir) is True
+    assert await manager.create_latest_chat_history_snapshot(
+        snapshot_dir,
+        agent_name="mock-agent",
+        agent_id="mock-agent-id",
+        chat_history_dir=chat_history_dir,
+    ) is True
 
     assert (snapshot_dir / "history.json").exists()
     assert not (snapshot_dir / "llm_request").exists()
@@ -43,7 +47,7 @@ async def test_restore_from_latest_chat_history_skips_llm_request(tmp_path: Path
 
     manager = ChatHistorySnapshotManager()
 
-    with patch("agentlang.path_manager.PathManager.get_chat_history_dir", return_value=chat_history_dir):
+    with patch("app.path_manager.PathManager.get_chat_history_dir", return_value=chat_history_dir):
         assert await manager.restore_from_latest_chat_history(snapshot_dir) is True
 
     assert (chat_history_dir / "history.json").exists()

@@ -6,9 +6,16 @@ from pydantic import Field, JsonValue
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import ToolDetail
 from app.service.browser import BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
+from app.tools.browser.presentation.debugging import (
+    add_init_script_detail,
+    evaluate_detail,
+    read_console_detail,
+    read_network_detail,
+)
 from app.tools.core import BaseToolParams, tool
 
 
@@ -16,6 +23,17 @@ class BrowserEvaluateParams(BaseToolParams):
     page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
     expression: str = Field(..., min_length=1, description="Focused JavaScript expression or function executed in the page.")
     argument: JsonValue = Field(None, description="Optional JSON-serializable argument passed to the expression.")
+    session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
+
+
+class BrowserAddInitScriptParams(BaseToolParams):
+    page_id: str = Field(..., description="Opaque page ID returned by a Browser tool.")
+    source: str = Field(
+        ...,
+        min_length=1,
+        description="""<!--zh: 在每个新文档创建时、任何站点脚本运行前执行的 JavaScript。对当前已加载的文档无效。-->
+JavaScript that runs on every new document before any page script. Has no effect on the currently loaded document.""",
+    )
     session_id: str | None = Field(None, description="Browser session ID. Omit to use the default session.")
 
 
@@ -34,6 +52,9 @@ class BrowserEvaluate(BrowserToolBase[BrowserEvaluateParams]):
     name = "browser_evaluate"
     operation_key = "browser.evaluate"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, evaluate_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserEvaluateParams) -> ToolResult:
         async def operation() -> ToolResult:
             value = await BrowserService(tool_context).evaluate(
@@ -48,12 +69,41 @@ class BrowserEvaluate(BrowserToolBase[BrowserEvaluateParams]):
 
 
 # Agent-facing usage is documented in agents/skills/browser/.
+@tool(name="browser_add_init_script", code_mode_only=True)
+class BrowserAddInitScript(BrowserToolBase[BrowserAddInitScriptParams]):
+    """Register JavaScript that runs before page scripts on future navigations."""
+
+    name = "browser_add_init_script"
+    operation_key = "browser.add_init_script"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, add_init_script_detail(result, arguments or {}))
+
+    async def execute(self, tool_context: ToolContext, params: BrowserAddInitScriptParams) -> ToolResult:
+        async def operation() -> ToolResult:
+            await BrowserService(tool_context).add_init_script(params.page_id, params.source, params.session_id)
+            return ToolResult(
+                content=(
+                    "Init script registered. It will run before any page script on the next navigation "
+                    "of this page, and on every navigation after that. It did not run on the current document; "
+                    "navigate or reload to apply it."
+                ),
+                data={"page_id": params.page_id},
+            )
+
+        return await self.execute_safely(operation())
+
+
+# Agent-facing usage is documented in agents/skills/browser/.
 @tool(name="browser_read_console", code_mode_only=True)
 class BrowserReadConsole(BrowserToolBase[BrowserDiagnosticParams]):
     """Read buffered console entries for one Browser page."""
 
     name = "browser_read_console"
     operation_key = "browser.read_console"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, read_console_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserDiagnosticParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -75,6 +125,9 @@ class BrowserReadNetwork(BrowserToolBase[BrowserDiagnosticParams]):
 
     name = "browser_read_network"
     operation_key = "browser.read_network"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, read_network_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserDiagnosticParams) -> ToolResult:
         async def operation() -> ToolResult:

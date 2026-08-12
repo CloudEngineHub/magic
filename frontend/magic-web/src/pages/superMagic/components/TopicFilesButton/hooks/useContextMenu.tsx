@@ -17,6 +17,8 @@ import {
 	IconSquareCheck,
 	IconInfoCircle,
 	IconCopy,
+	IconChevronsDown,
+	IconChevronsUp,
 } from "@tabler/icons-react"
 import IconOpenWindow from "@/enhance/tabler/icons-react/icons/IconOpenWindow"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -103,6 +105,8 @@ interface UseContextMenuOptions {
 	isSelectMode?: boolean
 	/* File tree index for parent checks */
 	treeIndex?: AttachmentIndex
+	isFolderContentsExpanded?: (item: AttachmentItem) => boolean
+	handleToggleFolderContents?: (item: AttachmentItem) => void
 	/** Full attachment tree for mobile hierarchy delete confirmation */
 	attachments?: AttachmentItem[]
 }
@@ -308,6 +312,8 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		handleEnterMultiSelectMode,
 		isSelectMode = false,
 		treeIndex,
+		isFolderContentsExpanded,
+		handleToggleFolderContents,
 		attachments = [],
 	} = options
 
@@ -474,6 +480,13 @@ export function useContextMenu(options: UseContextMenuOptions) {
 		if (item.is_directory && "children" in item) {
 			const parentPath = getFolderPath(item)
 			const key = item.file_id
+			const folderEntry =
+				treeIndex?.getEntryById(item.file_id) ||
+				treeIndex?.getEntryByKey(getAttachmentKey(item))
+			const hasFolderContents = Boolean(
+				folderEntry && treeIndex?.getChildKeysByKey(folderEntry.key).length,
+			)
+			const folderContentsExpanded = isFolderContentsExpanded?.(item) ?? false
 			// 特殊项目目录内不允许嵌套创建画布、自媒体项目或 AI 卡片。
 			const canCreateDesignProject =
 				!item.display_config && !hasDisplayConfigInAncestors(item, treeIndex)
@@ -721,6 +734,28 @@ export function useContextMenu(options: UseContextMenuOptions) {
 						]
 					: []),
 				...showInfoMenuItems,
+				...(hasFolderContents && isFolderContentsExpanded && handleToggleFolderContents
+					? [
+							{
+								key: "toggleFolderContents",
+								label: folderContentsExpanded
+									? t("topicFiles.contextMenu.collapseAll")
+									: t("topicFiles.contextMenu.expandAll"),
+								icon: (
+									<MagicIcon
+										component={
+											folderContentsExpanded
+												? IconChevronsUp
+												: IconChevronsDown
+										}
+										stroke={2}
+										size={18}
+									/>
+								),
+								onClick: () => handleToggleFolderContents(item),
+							},
+						]
+					: []),
 				{ type: "divider" as const },
 				{
 					key: "delete",

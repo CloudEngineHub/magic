@@ -15,6 +15,9 @@ browser:
   backend: ${BROWSER_BACKEND:-None}
   browser_type: ${BROWSER_TYPE:-chromium}
   headless: ${BROWSER_HEADLESS:-false}
+  # 关闭 Blink 自动化标记，使 navigator.webdriver 使用浏览器原生的 false。
+  browser_args:
+    - --disable-blink-features=AutomationControlled
   storage_state_template_url: ${BROWSER_STORAGE_STATE_TEMPLATE_URL:-None}
   viewport_width: ${BROWSER_VIEWPORT_WIDTH:-1280}
   viewport_height: ${BROWSER_VIEWPORT_HEIGHT:-1940}
@@ -39,14 +42,17 @@ browser:
     host_idle_seconds: ${BROWSER_HOST_IDLE_SECONDS:-120}
     sweep_interval_seconds: ${BROWSER_LIFECYCLE_SWEEP_INTERVAL_SECONDS:-5}
 
-  artifacts:
-    webp_quality: ${BROWSER_WEBP_QUALITY:-35}
-    webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-15}
-    webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-5}
-    max_bytes: ${BROWSER_SNAPSHOT_MAX_BYTES:-131072}
-    max_width: ${BROWSER_SNAPSHOT_MAX_WIDTH:-1600}
-    resize_step: ${BROWSER_SNAPSHOT_RESIZE_STEP:-0.85}
-    min_dimension: ${BROWSER_SNAPSHOT_MIN_DIMENSION:-640}
+  screenshot:
+    webp_quality: ${BROWSER_WEBP_QUALITY:-82}
+    webp_min_quality: ${BROWSER_WEBP_MIN_QUALITY:-58}
+    webp_quality_step: ${BROWSER_WEBP_QUALITY_STEP:-6}
+    target_bpp: ${BROWSER_SCREENSHOT_TARGET_BPP:-0.5}
+    min_bytes: ${BROWSER_SCREENSHOT_MIN_BYTES:-131072}
+    max_bytes: ${BROWSER_SCREENSHOT_MAX_BYTES:-262144}
+    max_width: ${BROWSER_SCREENSHOT_MAX_WIDTH:-1600}
+    max_height_ratio: ${BROWSER_SCREENSHOT_MAX_HEIGHT_RATIO:-1.6}
+    resize_step: ${BROWSER_SCREENSHOT_RESIZE_STEP:-0.85}
+    min_dimension: ${BROWSER_SCREENSHOT_MIN_DIMENSION:-1280}
 
   resources:
     soft_contexts: ${BROWSER_SOFT_CONTEXTS:-8}
@@ -55,6 +61,7 @@ browser:
     hard_pages: ${BROWSER_HARD_PAGES:-32}
 
   scripts:
+    mask_enabled: ${BROWSER_MASK_ENABLED:-true}
     pure_enabled: ${BROWSER_PURE_ENABLED:-true}
     # 按需在 config.local.yaml 填写域名列表。
     pure_disabled_domains: []
@@ -64,9 +71,9 @@ browser:
     userscript_directories:
       - magic_use/userscripts/scripts
 
-  snapshot:
-    max_nodes: ${BROWSER_SNAPSHOT_MAX_NODES:-500}
-    max_depth: ${BROWSER_SNAPSHOT_MAX_DEPTH:-30}
+  elements:
+    max_nodes: ${BROWSER_ELEMENTS_MAX_NODES:-500}
+    max_depth: ${BROWSER_ELEMENTS_MAX_DEPTH:-30}
 
   # 浏览器服务端 WebSocket URL
   # 仅在 backend=remote_playwright 时生效
@@ -490,6 +497,17 @@ checkpoint:
   # 是否启用自动清理功能
   auto_cleanup: ${CHECKPOINT_AUTO_CLEANUP:-true}
 
+# 聊天记录统计与清理。默认全部为空，只统计，不删除用户历史。
+chat_history_cleanup:
+  completed_subagent_max_age_days: null
+  completed_subagent_max_count: null
+  compacted_max_age_days: null
+  compacted_max_count: null
+  total_max_bytes: null
+  llm_request_max_age_days: null
+  llm_request_max_count: null
+  llm_request_max_bytes: null
+
 # 文件记忆运行时配置
 memory:
   after_run:
@@ -576,6 +594,13 @@ ai_abilities:
   # Agent Candidate Ranking Ability (Agent 候选排序能力)
   agent_rerank:
     model_id: "${AGENT_RERANK_MODEL_ID:-deepseek-v4-flash}"
+
+  # Validate candidates produced by JSON repair before tool execution
+  json_repair_validation:
+    model_id: "${JSON_REPAIR_VALIDATION_MODEL_ID:-deepseek-v4-flash}"
+    timeout: 30
+    max_advice_words: 50
+    enabled: true
 
   # 记忆提取能力
   # 当前仅保留能力配置，供后续 AFTER_MAIN_AGENT_RUN 提取机制使用

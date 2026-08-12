@@ -9,6 +9,7 @@ interface FileMenuDropdownProps {
 	onAddDesign?: () => void
 	onAddSelfMedia?: () => void
 	onAddAICard?: () => void
+	onAddFolder?: () => void
 	children: ReactNode
 }
 
@@ -21,6 +22,7 @@ function FileMenuDropdown({
 	onAddDesign: onAddDesignProp,
 	onAddSelfMedia: onAddSelfMediaProp,
 	onAddAICard: onAddAICardProp,
+	onAddFolder: onAddFolderProp,
 	children,
 }: FileMenuDropdownProps) {
 	/**
@@ -51,11 +53,18 @@ function FileMenuDropdown({
 		}, 100)
 	})
 
+	const onAddFolder = useMemoizedFn(() => {
+		setTimeout(() => {
+			onAddFolderProp?.()
+		}, 100)
+	})
+
 	const fileMenuItems = useFileMenuItems({
 		onAddFile,
 		onAddDesign,
 		onAddSelfMedia: onAddSelfMediaProp ? onAddSelfMedia : undefined,
 		onAddAICard: onAddAICardProp ? onAddAICard : undefined,
+		onAddFolder: onAddFolderProp ? onAddFolder : undefined,
 	})
 
 	return (

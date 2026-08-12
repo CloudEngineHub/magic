@@ -274,7 +274,7 @@ class SplitAudio(AbstractFileTool[SplitAudioParams], WorkspaceTool[SplitAudioPar
                 output_path = parent_dir / output_filename
                 
                 # 使用 file versioning context 确保文件版本控制
-                async with self._file_versioning_context(tool_context, output_path, update_timestamp=False):
+                async with self._file_versioning_context(tool_context, output_path, track_in_horizon=False):
                     success, error = await self._extract_audio_segment(
                         input_path=audio_path,
                         output_path=output_path,

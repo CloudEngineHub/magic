@@ -7,13 +7,9 @@
 
 ## Flow
 
-1. Call the start tool to create the QR login session.
-2. The tool returns the exact markdown content you must reply with — output it verbatim, no extra prose.
-3. Immediately call the wait tool and keep following its instructions until it returns success, timeout, or failure.
+Connecting is one turn, not a sequence of steps. The reply that carries the QR code must also carry the `wait_wechat_login` call. A reply containing only the QR ends your turn — the user then scans and gets no response until they message you again.
 
-## Start Login
-
-Use `run_sdk_snippet` with this `python_code`:
+Create the session with `run_sdk_snippet`:
 
 ```python
 from sdk.tool import tool
@@ -22,11 +18,7 @@ result = tool.call("connect_wechat_bot", {})
 print(result.content)
 ```
 
-After the tool returns, reply to the user with exactly the markdown content from the tool output.
-
-## Wait For Result
-
-Call this only after you have sent the QR block from the previous step:
+Then, in one single reply: output the tool's markdown verbatim (no extra prose) and call `wait_wechat_login` within that same reply.
 
 ```python
 from sdk.tool import tool
@@ -37,11 +29,11 @@ result = tool.call("wait_wechat_login", {
 print(result.content)
 ```
 
-Interpret the wait tool result like this:
+Handle the wait result:
 
-- If it returns a fresh QR block, output it verbatim and immediately call `wait_wechat_login` again.
-- If it returns a success message, tell the user to send `hi` in the WeChat ClawBot chat.
-- If it returns a timeout or failure message, relay it and stop.
+- A fresh QR block — output it verbatim and call `wait_wechat_login` again in the same reply.
+- Success — tell the user to send `hi` in the WeChat ClawBot chat.
+- Timeout or failure — relay it and stop.
 
 ## Reply Format After Connection
 

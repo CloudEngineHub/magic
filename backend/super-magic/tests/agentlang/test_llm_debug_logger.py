@@ -1,6 +1,8 @@
 import time
+import sys
+import types
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -11,6 +13,19 @@ from agentlang.llms.utils.debug_logger import (
     _sanitize_request_params,
     save_llm_debug_log,
 )
+
+
+class _MockChatHistoryCleanupService:
+    """用于隔离日志单测的清理服务 mock。"""
+
+    trigger = staticmethod(lambda: None)
+
+
+def _mock_cleanup_module() -> types.ModuleType:
+    """构造不加载真实云存储依赖的清理服务模块。"""
+    module = types.ModuleType("app.service.chat_history_cleanup_service")
+    module.ChatHistoryCleanupService = _MockChatHistoryCleanupService
+    return module
 
 
 def test_llm_debug_log_sanitizes_sensitive_request_params():
@@ -85,9 +100,9 @@ async def test_prune_llm_request_logs_noop_when_unlimited(tmp_path: Path):
 async def test_save_llm_debug_log_prunes_after_write(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("LLM_REQUEST_LOG_MAX_FILES", "2")
 
-    chat_history_dir = tmp_path / ".chat_history"
-    chat_history_dir.mkdir()
-    log_dir = chat_history_dir / "llm_request"
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir()
+    log_dir = runtime_dir / "llm_request"
     log_dir.mkdir()
 
     for index in range(2):
@@ -102,7 +117,11 @@ async def test_save_llm_debug_log_prunes_after_write(tmp_path: Path, monkeypatch
         api_key="secret",
     )
 
-    with patch("agentlang.path_manager.PathManager.get_chat_history_dir", return_value=chat_history_dir):
+    with (
+        patch("app.path_manager.PathManager.get_llm_request_dir", return_value=log_dir),
+        patch("app.utils.runtime_storage.ensure_runtime_directory", new=AsyncMock(return_value=log_dir)),
+        patch.dict(sys.modules, {"app.service.chat_history_cleanup_service": _mock_cleanup_module()}),
+    ):
         await save_llm_debug_log(
             debug_info=debug_info,
             request_params={"model": "mock-model"},
@@ -126,9 +145,9 @@ async def test_save_llm_debug_log_prunes_backlog_without_writing_success_log(
     monkeypatch.setenv("LLM_REQUEST_LOG_MAX_FILES", "2")
     monkeypatch.setenv("ENABLE_LLM_SUCCESS_REQUEST_LOG", "false")
 
-    chat_history_dir = tmp_path / ".chat_history"
-    chat_history_dir.mkdir()
-    log_dir = chat_history_dir / "llm_request"
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir()
+    log_dir = runtime_dir / "llm_request"
     log_dir.mkdir()
 
     for index in range(5):
@@ -143,7 +162,11 @@ async def test_save_llm_debug_log_prunes_backlog_without_writing_success_log(
         api_key="secret",
     )
 
-    with patch("agentlang.path_manager.PathManager.get_chat_history_dir", return_value=chat_history_dir):
+    with (
+        patch("app.path_manager.PathManager.get_llm_request_dir", return_value=log_dir),
+        patch("app.utils.runtime_storage.ensure_runtime_directory", new=AsyncMock(return_value=log_dir)),
+        patch.dict(sys.modules, {"app.service.chat_history_cleanup_service": _mock_cleanup_module()}),
+    ):
         await save_llm_debug_log(
             debug_info=debug_info,
             request_params={"model": "mock-model"},

@@ -91,6 +91,37 @@ export const useStyles = createStyles(({ token }) => ({
 		pointerEvents: "none",
 		cursor: "default",
 	},
+	viewModeSwitcher: {
+		display: "flex",
+		alignItems: "center",
+		gap: 2,
+		padding: 2,
+		borderRadius: token.borderRadius,
+		backgroundColor: token.colorFillQuaternary,
+		pointerEvents: "auto",
+	},
+	viewModeButton: {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: 4,
+		height: 26,
+		padding: `0 ${token.paddingXS}px`,
+		border: 0,
+		borderRadius: token.borderRadiusSM,
+		background: "transparent",
+		color: token.colorTextSecondary,
+		fontSize: token.fontSizeSM,
+		cursor: "pointer",
+		"&:hover": {
+			color: token.colorText,
+			backgroundColor: token.colorFillSecondary,
+		},
+	},
+	viewModeButtonActive: {
+		color: token.colorText,
+		backgroundColor: token.colorBgContainer,
+		boxShadow: token.boxShadowTertiary,
+	},
 	toolbar: {
 		display: "flex",
 		alignItems: "center",
@@ -147,6 +178,57 @@ export const useStyles = createStyles(({ token }) => ({
 		margin: "0 auto",
 		objectFit: "contain",
 		objectPosition: "top center",
+	},
+	detailContent: {
+		minHeight: "100%",
+		padding: token.paddingLG,
+		color: token.colorText,
+		fontSize: token.fontSize,
+		lineHeight: token.lineHeight,
+		userSelect: "text",
+		WebkitUserSelect: "text",
+		"& > :first-child": {
+			marginTop: 0,
+		},
+		"& > :last-child": {
+			marginBottom: 0,
+		},
+		"& h3": {
+			margin: `${token.marginLG}px 0 ${token.marginSM}px`,
+			fontSize: token.fontSizeLG,
+			lineHeight: token.lineHeightLG,
+		},
+		"& h3:first-child": {
+			marginTop: 0,
+		},
+		"& h4": {
+			margin: `${token.marginMD}px 0 ${token.marginXS}px`,
+			fontSize: token.fontSize,
+			lineHeight: token.lineHeight,
+		},
+		"& p": {
+			margin: `0 0 ${token.marginSM}px`,
+		},
+		"& ul, & ol": {
+			margin: `0 0 ${token.marginSM}px`,
+			paddingLeft: token.paddingLG,
+		},
+		"& li + li": {
+			marginTop: token.marginXXS,
+		},
+		"& pre": {
+			overflow: "auto",
+			padding: token.paddingSM,
+			borderRadius: token.borderRadius,
+			backgroundColor: token.colorFillQuaternary,
+		},
+		"& code": {
+			fontFamily: token.fontFamilyCode,
+		},
+		"& a": {
+			color: token.colorLink,
+			wordBreak: "break-all",
+		},
 	},
 	imageError: {
 		display: "flex",

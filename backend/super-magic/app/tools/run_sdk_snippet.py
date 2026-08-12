@@ -39,7 +39,6 @@ from app.tools.core.base_tool import ToolForwardRequest
 from app.tools.python_snippet_repair import prepare_python_code
 from app.tools.snippet_environment import SnippetEnvironment
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
-from app.utils.async_file_utils import async_mkdir, async_unlink, async_write_text
 from app.utils.process_executor import ProcessExecutor
 
 # 匹配 tool.call('tool_name', ...) 或 tool.call("tool_name", ...) 中的工具名
@@ -375,23 +374,25 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             agent_ctx = tool_context.get_extension_typed("agent_context", AgentContext)
             if agent_ctx is None:
                 raise RuntimeError(
-                    "run_sdk_snippet: tool_context 中不存在 agent_context，"
-                    "无法确定调用方 Agent 标识"
+                    "run_sdk_snippet requires agent_context in tool_context to identify "
+                    "the calling Agent."
                 )
 
-            runtime_dir = PathManager.get_runtime_dir() / "sdk_scripts"
-            await async_mkdir(runtime_dir, parents=True, exist_ok=True)
-
-            script_file_path = runtime_dir / f"temp_sdk_{uuid.uuid4().hex}.py"
+            try:
+                script_file_path = await SnippetEnvironment.create_temporary_script(
+                    python_code,
+                    "run_sdk",
+                )
+            except Exception as e:
+                logger.exception(f"Failed to prepare temporary SDK script: {e}")
+                return ToolResult.error(
+                    SnippetEnvironment.format_execution_error(
+                        "Failed to prepare the temporary SDK script.",
+                        e,
+                    )
+                )
 
             logger.info(f"创建 SDK 代码片段脚本: {script_file_path}")
-
-            try:
-                await async_write_text(script_file_path, python_code)
-                logger.debug(f"成功写入代码到: {script_file_path}")
-            except Exception as e:
-                logger.exception(f"写入 SDK 代码片段失败: {e}")
-                return ToolResult.error(f"写入 SDK 代码片段失败: {e}")
 
             command = f"python {shlex.quote(str(script_file_path))}"
             effective_timeout = SdkSnippetTimeoutRegistry.get_effective_timeout(
@@ -472,8 +473,8 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
                     registry.cancel_by_execution(agent_ctx.context_id, sdk_execution_id)
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"清理 SDK in-flight 记录失败: execution_id={sdk_execution_id}, "
-                        f"错误: {cleanup_error}"
+                        f"Failed to clean up SDK in-flight calls: "
+                        f"execution_id={sdk_execution_id}, error={cleanup_error}"
                     )
                 finally:
                     registry.clear_execution(agent_ctx.context_id, sdk_execution_id)
@@ -493,19 +494,25 @@ You can also chain multiple tool results: fetch IDs from one tool, pass to anoth
             raise
 
         except Exception as e:
-            logger.exception(f"执行 SDK 代码片段时出错: {e}")
+            logger.exception(f"SDK snippet execution failed: {e}")
             system = TOOL_RESULT_SYSTEM_DISPATCHED if early_after_sent else None
-            return ToolResult.error(f"执行 SDK 代码片段时出错: {e}", system=system)
+            return ToolResult.error(
+                SnippetEnvironment.format_execution_error(
+                    "SDK snippet execution failed.",
+                    e,
+                ),
+                system=system,
+            )
 
         finally:
             if script_file_path is not None:
                 try:
-                    await async_unlink(script_file_path)
+                    await SnippetEnvironment.delete_temporary_script(script_file_path)
                     logger.debug(f"已删除 SDK 代码片段脚本: {script_file_path}")
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"删除 SDK 代码片段脚本失败: {script_file_path}, "
-                        f"错误: {cleanup_error}"
+                        f"Failed to delete temporary SDK script: "
+                        f"path={script_file_path}, error={cleanup_error}"
                     )
 
     @classmethod

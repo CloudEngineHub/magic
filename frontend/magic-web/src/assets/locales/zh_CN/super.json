@@ -233,6 +233,12 @@
 		"workspaceSwitcherPrefix": "工作空间",
 		"workspaceSwitcherRefresh": "刷新工作区列表"
 	},
+	"browserDetail": {
+		"addressUnavailable": "地址不可用",
+		"detail": "详情",
+		"screenshot": "截图",
+		"untitledWebpage": "未命名网页"
+	},
 	"chat": {
 		"backToChatList": "回到对话列表",
 		"chatNameFieldLabel": "对话名称",
@@ -5849,8 +5855,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI 编辑",
-		"addFile": "添加文件",
-		"addFolder": "添加文件夹",
+		"addFileOrFolder": "添加文件/文件夹",
 		"aiPick": "AI 选取",
 		"aiPickTooltip": "点击后选取页面元素，让 AI 对其进行修改",
 		"batchExportingPdf": "批量导出 PDF 中",
@@ -5895,6 +5900,7 @@
 			"batchCopy": "批量复制",
 			"batchMove": "批量移动",
 			"cancel": "取消",
+			"collapseAll": "全部收起",
 			"confirmBatchDelete": "确认删除{{count}}个文件？",
 			"confirmBatchDeleteWithFolders": "选中项包含文件夹，子级未选中文件也将被删除",
 			"confirmBatchDeleteWithMagicSystemFolder": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
@@ -5960,6 +5966,7 @@
 			"downloadPdfRaster": "下载 PDF 格式（截图版）",
 			"downloadPpt": "下载 PPT 格式",
 			"downloadPptx": "下载 PPTX 格式（可编辑）",
+			"expandAll": "全部展开",
 			"fileExport": {
 				"checkStatusFailed": "检查导出状态失败",
 				"emptyFileId": "文件ID不能为空",

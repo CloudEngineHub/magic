@@ -1,7 +1,9 @@
 import type { MenuProps } from "antd"
+import { IconFolderPlus } from "@tabler/icons-react"
 import { useMemo } from "react"
 import type { TFunction } from "i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
+import MagicIcon from "@/components/base/MagicIcon"
 import { useTranslation } from "react-i18next"
 import { type PresetFileType } from "../../constant"
 
@@ -27,6 +29,11 @@ interface CreateFileMenuItemsParams {
 	 * If provided, AI card project option will be included
 	 */
 	onAddAICard?: () => void
+	/**
+	 * Optional callback for creating a folder
+	 * If provided, folder option will be included
+	 */
+	onAddFolder?: () => void
 }
 
 /**
@@ -39,8 +46,20 @@ export function createFileMenuItems({
 	onAddDesign,
 	onAddSelfMedia,
 	onAddAICard,
+	onAddFolder,
 }: CreateFileMenuItemsParams): MenuProps["items"] {
 	return [
+		...(onAddFolder
+			? [
+					{
+						key: "createFolder",
+						label: t("topicFiles.contextMenu.createFolder"),
+						onClick: onAddFolder,
+						icon: <MagicIcon component={IconFolderPlus} stroke={2} size={18} />,
+					},
+					{ type: "divider" as const },
+				]
+			: []),
 		{
 			key: "createTxt",
 			label: t("topicFiles.contextMenu.createSubMenu.txtFile"),
@@ -140,6 +159,11 @@ interface UseFileMenuItemsParams {
 	 * If provided, AI card project option will be included
 	 */
 	onAddAICard?: () => void
+	/**
+	 * Optional callback for creating a folder
+	 * If provided, folder option will be included
+	 */
+	onAddFolder?: () => void
 }
 
 /**
@@ -151,13 +175,22 @@ function useFileMenuItems({
 	onAddDesign,
 	onAddSelfMedia,
 	onAddAICard,
+	onAddFolder,
 }: UseFileMenuItemsParams): MenuProps["items"] {
 	const { t } = useTranslation("super")
 
 	// File operation menu items
 	const fileMenuItems: MenuProps["items"] = useMemo(
-		() => createFileMenuItems({ t, onAddFile, onAddDesign, onAddSelfMedia, onAddAICard }),
-		[t, onAddFile, onAddDesign, onAddSelfMedia, onAddAICard],
+		() =>
+			createFileMenuItems({
+				t,
+				onAddFile,
+				onAddDesign,
+				onAddSelfMedia,
+				onAddAICard,
+				onAddFolder,
+			}),
+		[t, onAddFile, onAddDesign, onAddSelfMedia, onAddAICard, onAddFolder],
 	)
 
 	return fileMenuItems

@@ -105,6 +105,9 @@ class SubagentSessionState(BaseModel):
 
     agent_name: str
     agent_id: str
+    # 只记录直接父 Agent，不通过目录层级推断父子关系。
+    parent_agent_name: Optional[str] = None
+    parent_agent_id: Optional[str] = None
     # 保留基础名称和最终 ID，便于排查“模型请求名”和“实际会话地址”不一致的情况。
     requested_agent_id: Optional[str] = None
     # 不能仅凭文件是否存在推断继续意图；这里记录调用方是否显式传了 resume=true。

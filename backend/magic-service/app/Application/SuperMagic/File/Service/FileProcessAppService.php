@@ -123,7 +123,7 @@ class FileProcessAppService extends AbstractAppService
     /**
      * 登记 Tool Detail 引用的内部文件，不经过普通消息附件链路。
      *
-     * 当前仅 Snapshot 需要由 Tool Detail 独立登记；其他文件类型继续使用已有附件流程。
+     * 当前仅浏览器工具详情截图需要由 Tool Detail 独立登记；其他文件类型继续使用已有附件流程。
      * 未声明存储类型或路径不属于当前项目话题时直接跳过，避免污染 Workspace。
      */
     public function processToolDetailFileReference(?array &$tool, TaskEntity $task, DataIsolation $dataIsolation): void
@@ -139,21 +139,21 @@ class FileProcessAppService extends AbstractAppService
 
         $fileKey = trim((string) ($detailData['file_key'] ?? ''));
         $storageType = StorageType::tryFrom((string) ($detailData['storage_type'] ?? ''));
-        if ($fileKey === '' || $storageType !== StorageType::SNAPSHOT) {
+        $fileType = FileType::tryFrom((string) ($detailData['file_tag'] ?? ''));
+        if ($fileKey === '' || $storageType !== StorageType::TOPIC || $fileType !== FileType::BROWSER) {
             return;
         }
         try {
-            $fileType = FileType::tryFrom((string) ($detailData['file_tag'] ?? '')) ?? FileType::PROCESS;
             $projectEntity = $this->projectDomainService->getProjectNotUserId($task->getProjectId());
             $fullPrefix = $this->taskFileDomainService->getFullPrefix($projectEntity->getUserOrganizationCode());
-            $snapshotDir = WorkDirectoryUtil::getTopicRootDir(
+            $screenshotDir = WorkDirectoryUtil::getTopicRootDir(
                 $task->getUserId(),
                 $task->getProjectId(),
                 $task->getTopicId()
-            ) . '/snapshots';
-            $fullSnapshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $snapshotDir);
-            if (! WorkDirectoryUtil::checkEffectiveFileKey($fullSnapshotDir, $fileKey)) {
-                $this->logger->warning('Tool Detail snapshot path does not belong to the current topic', [
+            ) . '/screenshots';
+            $fullScreenshotDir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $screenshotDir);
+            if (! WorkDirectoryUtil::checkEffectiveFileKey($fullScreenshotDir, $fileKey)) {
+                $this->logger->warning('Tool Detail screenshot path does not belong to the current topic', [
                     'task_id' => $task->getTaskId(),
                     'file_key' => $fileKey,
                 ]);
@@ -180,11 +180,11 @@ class FileProcessAppService extends AbstractAppService
                     topicId: $task->getTopicId(),
                     taskId: (int) $task->getId(),
                     fileType: $fileType->value,
-                    storageType: StorageType::SNAPSHOT->value,
+                    storageType: StorageType::TOPIC->value,
                 );
             }
 
-            $taskFileEntity->setStorageType(StorageType::SNAPSHOT);
+            $taskFileEntity->setStorageType(StorageType::TOPIC);
             $taskFileEntity->setIsHidden(true);
             $taskFileEntity->setParentId(null);
             $taskFileEntity->setOrganizationCode($projectEntity->getUserOrganizationCode());

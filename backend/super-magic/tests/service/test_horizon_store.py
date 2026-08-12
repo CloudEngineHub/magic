@@ -4,7 +4,7 @@ import pytest
 
 from app.core.horizon.migration import CURRENT_VERSION
 from app.core.horizon.models import (
-    FileReadRecord,
+    FileContextRecord,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -22,7 +22,7 @@ def _full_horizon_state(agent_id: str = "agent-1") -> HorizonState:
     return HorizonState(
         agent_id=agent_id,
         file_records={
-            "/workspace/example.txt": FileReadRecord(
+            "/workspace/example.txt": FileContextRecord(
                 path="/workspace/example.txt",
                 file_hash="hash",
                 file_mtime_ms=123.0,

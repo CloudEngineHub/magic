@@ -4,9 +4,16 @@
 """
 
 import inspect
-from typing import Any, Dict, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, Optional, get_args, get_origin
 
 from pydantic import BaseModel
+
+from agentlang.utils.security import sanitize_log_value
+
+
+_LOG_SENSITIVE_FIELD = "log_sensitive"
+_REDACTED_VALUE = "<redacted>"
 
 
 class BaseToolParams(BaseModel):
@@ -14,6 +21,56 @@ class BaseToolParams(BaseModel):
 
     所有工具参数模型的基类，定义共同参数
     """
+
+    @classmethod
+    def get_log_field_names(cls, arguments: Mapping[str, object]) -> tuple[str, ...]:
+        """返回稳定排序后的参数字段名，供日志记录。"""
+        return tuple(sorted(str(key) for key in arguments))
+
+    @classmethod
+    def sanitize_log_arguments(cls, arguments: Mapping[str, object]) -> dict[str, object]:
+        """生成只用于日志和遥测的参数副本，不修改真实调用参数。"""
+        sanitized: dict[str, object] = {}
+        for field_name, value in arguments.items():
+            field_info = cls.model_fields.get(str(field_name))
+            schema_extra = field_info.json_schema_extra if field_info is not None else None
+            if isinstance(schema_extra, dict) and schema_extra.get(_LOG_SENSITIVE_FIELD) is True:
+                sanitized[str(field_name)] = _REDACTED_VALUE
+            else:
+                annotation = field_info.annotation if field_info is not None else None
+                sanitized[str(field_name)] = cls._sanitize_log_value(annotation, value)
+        return sanitized
+
+    @classmethod
+    def _sanitize_log_value(cls, annotation: object, value: object) -> object:
+        params_class = cls._find_params_class(annotation)
+        if params_class is not None and isinstance(value, Mapping):
+            return params_class.sanitize_log_arguments(value)
+
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        if origin in (list, tuple, set, frozenset) and args and isinstance(value, (list, tuple, set, frozenset)):
+            item_annotation = args[0]
+            sanitized_items = [cls._sanitize_log_value(item_annotation, item) for item in value]
+            if origin is tuple:
+                return tuple(sanitized_items)
+            if origin is set:
+                return set(sanitized_items)
+            if origin is frozenset:
+                return frozenset(sanitized_items)
+            return sanitized_items
+
+        return sanitize_log_value(value)
+
+    @classmethod
+    def _find_params_class(cls, annotation: object) -> Optional[type["BaseToolParams"]]:
+        if isinstance(annotation, type) and issubclass(annotation, BaseToolParams):
+            return annotation
+        for argument in get_args(annotation):
+            params_class = cls._find_params_class(argument)
+            if params_class is not None:
+                return params_class
+        return None
 
     @classmethod
     def get_custom_error_message(cls, field_name: str, error_type: str) -> Optional[str]:
@@ -51,7 +108,19 @@ class BaseToolParams(BaseModel):
 
             # 展开 $ref 引用为内联定义
             cls._expand_refs(schema)
+            cls._remove_internal_schema_metadata(schema)
         return schema
+
+    @classmethod
+    def _remove_internal_schema_metadata(cls, schema_obj: Any) -> None:
+        """移除只服务于运行时日志策略的 schema 元数据。"""
+        if isinstance(schema_obj, dict):
+            schema_obj.pop(_LOG_SENSITIVE_FIELD, None)
+            for value in schema_obj.values():
+                cls._remove_internal_schema_metadata(value)
+        elif isinstance(schema_obj, list):
+            for item in schema_obj:
+                cls._remove_internal_schema_metadata(item)
 
     @classmethod
     def _expand_refs(cls, schema: Dict):

@@ -46,6 +46,9 @@ from agentlang.utils.token_estimator import num_tokens_from_string
 from agentlang.utils.datetime_formatter import get_current_datetime_str
 from agentlang.exceptions import UserFriendlyException, ResourceLimitExceededException, StreamChunkTimeoutError, StreamInterruptedError, iter_exception_chain
 from agentlang.utils.tool_param_utils import preprocess_tool_calls_batch
+from app.service.tool_argument_json_repair_validation_service import (
+    tool_argument_json_repair_validation_service,
+)
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 
 from app.core.ai_abilities import get_compact_model_id
@@ -77,6 +80,7 @@ from app.core.entity.message.server_message import TaskStatus
 # 多语言支持
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
+from app.service.auto_read_file_service import AutoReadFileService
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator, app_tool_validator
@@ -257,6 +261,8 @@ class Agent(BaseAgent):
         self._closed = False
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
+        self._tool_preflight_failures: Dict[str, str] = {}
+        self._workspace_snapshot: WorkspaceSnapshot | None = None
 
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
@@ -644,7 +650,9 @@ class Agent(BaseAgent):
             max_chars=WORKSPACE_FILES_DISPLAY_MAX_CHARS,
             scan_depth=WORKSPACE_TREE_SCAN_DEPTH,
         )
-        return WorkspaceSnapshot(display=display, entries=entries)
+        snapshot = WorkspaceSnapshot(display=display, entries=entries)
+        self._workspace_snapshot = snapshot
+        return snapshot
 
     async def async_complete_dynamic_init(self) -> None:
         """异步完成动态初始化，将 workspace 文件树和用户语言同步到 AgentHorizon。
@@ -1164,6 +1172,7 @@ class Agent(BaseAgent):
                     # 部分模型（如千问）截断工具参数时仍返回 finish_reason=tool_calls，
                     # 上面的 finish_reason 检测无法覆盖，通过检测畸形 JSON 来发现截断。
                     if llm_context.has_tool_calls:
+                        self._tool_preflight_failures = {}
                         preprocess_result = preprocess_tool_calls_batch(llm_context.tool_calls)
                         if preprocess_result.processed_count > 0:
                             logger.debug(f"工具调用参数预处理完成，处理了 {preprocess_result.processed_count} 个工具调用")
@@ -1188,6 +1197,27 @@ class Agent(BaseAgent):
                                 source="tool_args_truncation_recovery",
                             )
                             continue
+                        for candidate in preprocess_result.json_repair_candidates:
+                            validation = await tool_argument_json_repair_validation_service.validate(
+                                tool_name=candidate.tool_name,
+                                original_arguments=candidate.original_arguments,
+                                repaired_arguments=candidate.repaired_arguments,
+                                tool_schema=candidate.tool_schema,
+                                interruption_event=self.agent_context.get_interruption_event(),
+                            )
+                            if validation.valid:
+                                matching_call = next(
+                                    (
+                                        tc
+                                        for tc in llm_context.tool_calls
+                                        if tc.id == candidate.tool_call_id
+                                    ),
+                                    None,
+                                )
+                                if matching_call is not None:
+                                    matching_call.function.arguments = candidate.repaired_arguments
+                            else:
+                                self._tool_preflight_failures[candidate.tool_call_id] = validation.advice
 
                     # 添加工具调用响应到历史（现在包含修复后的参数）
                     # 中断时 stop_run 会在 cancel_blocker 归零后调用 task.cancel()，
@@ -2457,6 +2487,17 @@ Since your subsequent output will be merged with pre-interruption content and di
         threshold_model_id = self._require_current_text_model_id()
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
+        # 自动规则文件统一在真实模型调用前发现和读取；压缩或 /new 后会根据当前 ChatHistory 自动重建交付状态。
+        await AutoReadFileService.prepare_before_llm(
+            self.agent_context,
+            self.chat_history,
+            workspace_entries=(
+                self._workspace_snapshot.entries
+                if self._workspace_snapshot is not None
+                else None
+            ),
+        )
+
         # 使用ChatHistory获取格式化后的消息列表
         messages_for_llm = self.chat_history.get_messages_for_llm()
         if not messages_for_llm:
@@ -3046,24 +3087,25 @@ Since your subsequent output will be merged with pre-interruption content and di
         await VideoModelConfigService.sync_to_horizon(dynamic_config, self.agent_context.horizon)
 
     async def _backup_before_compact(self) -> None:
-        """Backup chat history before compact for recovery purposes"""
-        try:
-            # Create backup directory
-            backup_dir = os.path.join(self.chat_history.chat_history_dir, '.compacted')
-            os.makedirs(backup_dir, exist_ok=True)
+        """压缩前完整保存当前聊天记录；写入失败时中止本次压缩。"""
+        from app.utils.async_file_utils import async_write_json
 
-            # Generate backup filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            backup_filename = f'{self.agent_name}_{self.id}_{timestamp}_backup.json'
-            backup_file_path = os.path.join(backup_dir, backup_filename)
-
-            # Save backup using chat history's save method
-            await self.chat_history.save(custom_file_path=backup_file_path)
-
-            logger.info(f"Chat history backed up to: {backup_file_path}")
-
-        except Exception as e:
-            logger.error(f"Failed to backup chat history before compact: {e}", exc_info=True)
+        backup_dir = Path(self.chat_history.chat_history_dir) / "compacted"
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        backup_file_path = backup_dir / f"{self.agent_name}<{self.id}>_{timestamp}.json"
+        history_document = [
+            self.chat_history._message_to_storage_dict(message)
+            for message in self.chat_history.messages
+        ]
+        await async_write_json(
+            backup_file_path,
+            history_document,
+            ensure_ascii=False,
+            indent=4,
+        )
+        logger.info(f"Chat history backed up to: {backup_file_path}")
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
     # 输出过长恢复消息的共享上限（覆盖流式降级 + 退避重试 + finish_reason 截断等场景）
     _MAX_OUTPUT_RECOVERY_LIMIT = 6
@@ -3384,7 +3426,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         # 按需查看并调用，不再通过 tool_factory 暴露给模型。
 
         # 保存工具列表到与聊天记录同名的.tools.json文件
-        if self.chat_history and tools_list:
+        if self.chat_history and tools_list and not self.agent_context.is_subagent_context():
             self.chat_history.save_tools_list(tools_list)
 
         # 创建 ToolContext 实例
@@ -3492,7 +3534,8 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         return await tool_call_executor.execute(
             tool_calls,
-            self.agent_context
+            self.agent_context,
+            preflight_failures=self._tool_preflight_failures,
         )
 
     async def _execute_tool_calls_sequential(self, tool_calls: List[ToolCall], llm_response_message: ChatCompletionMessage) -> List[ToolResult]:

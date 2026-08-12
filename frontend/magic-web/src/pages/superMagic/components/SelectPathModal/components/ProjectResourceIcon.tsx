@@ -1,7 +1,11 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
 import { MagicSystemFolderIcon } from "@/pages/superMagic/components/TopicFilesButton/components/MagicSystemFolderIcon"
-import { isMagicSystemFolder } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
+import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
+import {
+	isMagicSystemFolder,
+	resolveProjectInstructionsFileKind,
+} from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import {
 	getAttachmentType,
 	getChildrenForCustomMetadataIconPath,
@@ -44,6 +48,7 @@ export function ProjectResourceIcon({
 	folderTestId,
 }: ProjectResourceIconProps) {
 	const displayConfigType = item.display_config?.type
+	const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
 	const isCustomMetadata = displayConfigType === "custom"
 	const isMicroAppMetadata = displayConfigType === "micro-app"
 	const childrenItems =
@@ -86,6 +91,10 @@ export function ProjectResourceIcon({
 				data-testid={folderTestId}
 			/>
 		)
+	}
+
+	if (projectInstructionsFileKind) {
+		return <TopicFileIcon magicVariant="magic-file-agent" size={size} />
 	}
 
 	if (isCustomMetadata) {

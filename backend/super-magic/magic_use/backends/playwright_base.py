@@ -27,12 +27,14 @@ from magic_use.models import (
     NavigationResult,
     NetworkEntry,
     PageReadiness,
-    PageSnapshot,
+    PageElements,
+    FindQuery,
+    FindResult,
     ScreenshotResult,
     SessionState,
-    SnapshotNode,
-    SnapshotOptions,
-    SnapshotScope,
+    ElementNode,
+    ElementQuery,
+    ElementScope,
     WaitConditionKind,
     WaitRequest,
 )
@@ -40,6 +42,7 @@ from magic_use.models.common import BrowserBackendKind, BrowserEventType, JsonVa
 from magic_use.observation.accessibility import AccessibilityCollector
 from magic_use.observation.dom_snapshot import DOMSnapshotCollector
 from magic_use.playwright import PlaywrightActionDispatcher, PlaywrightObserver, PlaywrightRuntime
+from magic_use.observation import find_in_elements
 
 
 class PlaywrightBackend(ABC):
@@ -50,7 +53,7 @@ class PlaywrightBackend(ABC):
         self._resolver = RefResolver(self._refs)
         self._observer = PlaywrightObserver(
             scripts=config.scripts,
-            snapshot_config=config.snapshot,
+            elements_config=config.elements,
             refs=self._refs,
         )
         self._actions = PlaywrightActionDispatcher()
@@ -234,15 +237,40 @@ class PlaywrightBackend(ABC):
     async def read_page(self, page_id: str, scope: str = "viewport") -> str:
         return await self._observer.read_page(self._runtime.require_page(page_id), scope)
 
+    async def read_html(
+        self,
+        page_id: str,
+        *,
+        ref: str | None = None,
+        detail: str = "outline",
+        max_chars: int = 20_000,
+    ) -> tuple[str, bool]:
+        return await self._observer.read_html(
+            self._runtime.require_page(page_id),
+            ref=ref,
+            detail=detail,
+            max_chars=max_chars,
+        )
+
+    async def add_init_script(self, page_id: str, source: str) -> None:
+        await self._runtime.require_page(page_id).page.add_init_script(script=source)
+
     async def snapshot(
         self,
         page_id: str,
-        options: SnapshotOptions | None = None,
-    ) -> PageSnapshot:
+        options: ElementQuery | None = None,
+    ) -> PageElements:
         return await self._observer.snapshot(
             session_id=self._runtime.session_id,
             handle=self._runtime.require_page(page_id),
-            options=options or SnapshotOptions(),
+            options=options or ElementQuery(),
+        )
+
+    async def find(self, page_id: str, query: FindQuery) -> FindResult:
+        return await self._observer.find(
+            session_id=self._runtime.session_id,
+            handle=self._runtime.require_page(page_id),
+            query=query,
         )
 
     async def describe_ref(self, page_id: str, ref: str) -> ActionTarget:
@@ -319,7 +347,7 @@ class PlaywrightBackend(ABC):
                 changed = await self._observer.snapshot(
                     session_id=self._runtime.session_id,
                     handle=handle,
-                    options=SnapshotOptions(scope=SnapshotScope.CHANGES),
+                    options=ElementQuery(scope=ElementScope.CHANGES),
                     update_baseline=False,
                 )
                 snapshot_diff = changed.diff
@@ -408,7 +436,7 @@ class PlaywrightBackend(ABC):
             snapshot = await self._observer.snapshot(
                 session_id=self._runtime.session_id,
                 handle=self._runtime.require_page(page_id),
-                options=SnapshotOptions(scope=SnapshotScope.INTERACTIVE),
+                options=ElementQuery(scope=ElementScope.INTERACTIVE),
                 update_baseline=False,
             )
             node = self._find_ref(snapshot, request.value or "")
@@ -441,7 +469,7 @@ class PlaywrightBackend(ABC):
             await self.close()
 
     @staticmethod
-    def _find_ref(snapshot: PageSnapshot, ref: str) -> SnapshotNode | None:
+    def _find_ref(snapshot: PageElements, ref: str) -> ElementNode | None:
         stack = list(snapshot.root_nodes)
         while stack:
             node = stack.pop()
@@ -451,7 +479,7 @@ class PlaywrightBackend(ABC):
         return None
 
     @staticmethod
-    def _ref_state_matches(node: SnapshotNode | None, expected_state: str) -> bool:
+    def _ref_state_matches(node: ElementNode | None, expected_state: str) -> bool:
         if expected_state == "detached":
             return node is None
         if node is None:

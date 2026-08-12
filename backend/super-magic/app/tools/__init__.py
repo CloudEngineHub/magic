@@ -12,6 +12,9 @@ from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
+from app.tools.list_chat_history import ListChatHistory
+from app.tools.search_chat_history import SearchChatHistory
+from app.tools.read_chat_history import ReadChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
 from app.tools.create_slide_project import CreateSlideProject
@@ -52,12 +55,15 @@ from app.tools.restart_sandbox import RestartSandbox
 from app.tools.upgrade_sandbox import UpgradeSandbox
 from app.tools.browser import (
     BrowserActivatePage,
+    BrowserAddInitScript,
     BrowserCheck,
     BrowserClick,
     BrowserClosePage,
     BrowserEvaluate,
     BrowserFill,
     BrowserFindVisual,
+    BrowserFind,
+    BrowserReadHtml,
     BrowserHover,
     BrowserKeepAlive,
     BrowserListPages,
@@ -71,7 +77,7 @@ from app.tools.browser import (
     BrowserScreenshot,
     BrowserScroll,
     BrowserSelect,
-    BrowserSnapshot,
+    BrowserListElements,
     BrowserUploadFile,
     BrowserVisualQuery,
     BrowserWait,
@@ -239,6 +245,9 @@ __all__ = [
     "ConnectWechatBot",
     "WaitWechatLogin",
     "CompactChatHistory",
+    "ListChatHistory",
+    "SearchChatHistory",
+    "ReadChatHistory",
     "ConvertPptxToSlideTemplate",
     "BuildDocumentIndex",
     "ConvertDocumentFormat",
@@ -314,12 +323,14 @@ __all__ = [
     "RestartSandbox",
     "UpgradeSandbox",
     "BrowserActivatePage",
+    "BrowserAddInitScript",
     "BrowserCheck",
     "BrowserClick",
     "BrowserClosePage",
     "BrowserEvaluate",
     "BrowserFill",
     "BrowserFindVisual",
+    "BrowserFind",
     "BrowserHover",
     "BrowserKeepAlive",
     "BrowserListPages",
@@ -328,12 +339,13 @@ __all__ = [
     "BrowserOpenPage",
     "BrowserPress",
     "BrowserReadConsole",
+    "BrowserReadHtml",
     "BrowserReadNetwork",
     "BrowserReadPage",
     "BrowserScreenshot",
     "BrowserScroll",
     "BrowserSelect",
-    "BrowserSnapshot",
+    "BrowserListElements",
     "BrowserUploadFile",
     "BrowserVisualQuery",
     "BrowserWait",
