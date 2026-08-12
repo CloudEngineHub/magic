@@ -34,18 +34,10 @@ import {
 
 export type ProjectAttachmentsSourceVersion = "v1" | "v2"
 export type ProjectAttachmentsLoadStrategy =
-	| "force_v1"
-	| "force_v2"
-	| "count_v1"
-	| "count_v2"
-	| "fallback_v1"
+	"force_v1" | "force_v2" | "count_v1" | "count_v2" | "fallback_v1"
 
 export type ProjectAttachmentsFallbackReason =
-	| "count_failed"
-	| "count_below_threshold"
-	| "v2_fetch_failed"
-	| "bfs_anomaly"
-	| "forced_v1"
+	"count_failed" | "count_below_threshold" | "v2_fetch_failed" | "bfs_anomaly" | "forced_v1"
 
 export interface ProjectAttachmentsDiagnostics extends Partial<ProjectAttachmentsV2Diagnostics> {
 	fallback_reason?: ProjectAttachmentsFallbackReason
@@ -102,7 +94,7 @@ class ProjectAttachmentsAbortError extends Error {
 	}
 }
 
-const DEFAULT_THRESHOLD = 1000
+const DEFAULT_THRESHOLD = 0
 const DEFAULT_PAGE_SIZE = 1000
 const MIDDLE_BATCH_SNAPSHOT_MIN_GAP_MS = 2500
 const MIDDLE_BATCH_SNAPSHOT_IDLE_TIMEOUT_MS = 1200

@@ -62,6 +62,19 @@ abstract class CloudFileBaseTest extends TestCase
     }
 
     /**
+     * 验证预签名 URL 中的响应内容处置参数.
+     */
+    protected function assertContentDisposition(string $url, string $expected): void
+    {
+        $queryString = parse_url($url, PHP_URL_QUERY);
+        $this->assertIsString($queryString);
+
+        parse_str($queryString, $query);
+        $this->assertArrayHasKey('response-content-disposition', $query);
+        $this->assertSame($expected, $query['response-content-disposition']);
+    }
+
+    /**
      * Get the storage configuration name for this test class.
      * Must be implemented by subclasses.
      */

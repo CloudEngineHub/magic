@@ -60,8 +60,6 @@ export interface IframePermissionAppInstance {
 	content: string
 	/** Stable versions of executable files belonging to this HTML app. */
 	runtimeFingerprint?: string
-	/** Remote executable resources cannot be bound to a local content version. */
-	hasUnversionedExternalRuntimeResources?: boolean
 }
 
 export type HtmlAppConfigState =
@@ -411,13 +409,8 @@ export class IframePermissionService {
 	}
 
 	private canPersistGrant(identity: HtmlPermissionGrantIdentity): boolean {
-		return (
-			Boolean(
-				identity.userId &&
-				identity.projectId &&
-				identity.entryPath &&
-				identity.appFingerprint,
-			) && !this.cfg.appInstance.hasUnversionedExternalRuntimeResources
+		return Boolean(
+			identity.userId && identity.projectId && identity.entryPath && identity.appFingerprint,
 		)
 	}
 

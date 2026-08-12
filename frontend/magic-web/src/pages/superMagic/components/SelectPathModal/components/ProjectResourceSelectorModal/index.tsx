@@ -22,6 +22,7 @@ import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import BaseModal from "../BaseModal"
+import MagicModal from "@/components/base/MagicModal"
 import MobileFilesMoveSheet from "../SelectDirectoryModal/MobileFilesMoveSheet"
 import MagicSpin from "@/components/base/MagicSpin"
 import { SuperMagicApi } from "@/apis"
@@ -51,6 +52,7 @@ import {
 	SHARE_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
+	isCollaborationWorkspace,
 } from "../../../../constants"
 import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
@@ -161,6 +163,45 @@ function ProjectResourceSelectorModal({
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	// This option only applies to multi-file transfers into another project; same-project
+	// operations retain their existing flat target-directory semantics.
+	const showPreserveParentPathOption =
+		!isMentionMode &&
+		fileIds.length > 1 &&
+		currentProject !== null &&
+		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
+	const confirmPreserveParentPath = useMemoizedFn(
+		() =>
+			new Promise<boolean | null>((resolve) => {
+				let shouldPreserveParentPath = false
+				MagicModal.confirm({
+					title: t("selectPathModal.preserveParentPathConfirmTitle"),
+					content: (
+						<div className="flex flex-col gap-3">
+							<div className="text-sm leading-5 text-muted-foreground">
+								{t("selectPathModal.preserveParentPathDescription")}
+							</div>
+							<label
+								className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+								data-testid="cross-project-file-preserve-parent-path-option"
+							>
+								<Checkbox
+									onChange={(event) => {
+										shouldPreserveParentPath = event.target.checked
+									}}
+								/>
+								<span>{t("selectPathModal.preserveParentPath")}</span>
+							</label>
+						</div>
+					),
+					okText: t("selectPathModal.confirm"),
+					cancelText: t("common.cancel"),
+					maskClosable: false,
+					onOk: () => resolve(shouldPreserveParentPath),
+					onCancel: () => resolve(null),
+				})
+			}),
+	)
 	const [isSearch, setIsSearch] = useState(false)
 	const [fileName, setFileName] = useState("")
 	const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -211,16 +252,19 @@ function ProjectResourceSelectorModal({
 		return [] // 复制操作不限制
 	}, [sourceAttachments, fileIds, operationType])
 
-	// 检查当前项目是否有编辑权限
+	// Check whether creation is allowed at the current location.
 	const canEdit = useMemo(() => {
 		if (effectiveViewMode === "directory" && currentProject) {
-			// 目录视图：检查项目权限
-			return hasEditPermission(currentProject.user_role)
+			// Shared workspaces are read-only in this selector.
+			return (
+				!isCollaborationWorkspace(currentWorkspace) &&
+				hasEditPermission(currentProject.user_role)
+			)
 		} else if (effectiveViewMode === "project" && currentWorkspace) {
-			// 项目视图：只要有工作区就可以创建项目（假设工作区创建者可以创建项目）
-			return true
+			// Only regular workspaces allow creating projects.
+			return !isCollaborationWorkspace(currentWorkspace)
 		} else if (effectiveViewMode === "workspace") {
-			// 工作区视图：可以创建工作区
+			// Workspace view allows creating workspaces.
 			return true
 		}
 		return false
@@ -918,7 +962,7 @@ function ProjectResourceSelectorModal({
 		},
 	)
 
-	const submit = useMemoizedFn(() => {
+	const submit = useMemoizedFn(async () => {
 		if (isMentionMode) {
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
@@ -933,6 +977,7 @@ function ProjectResourceSelectorModal({
 				selections: selectedResources,
 				includeDocumentDependencies,
 				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath: false,
 			})
 			if (closeOnSubmit) onClose?.()
 			return
@@ -943,6 +988,13 @@ function ProjectResourceSelectorModal({
 
 		// Some flows, such as recording copy, let users save at workspace level so
 		// the submit handler can create a normal target project before copying.
+		let preserveParentPath = false
+		if (showPreserveParentPathOption) {
+			const preserveParentPathChoice = await confirmPreserveParentPath()
+			if (preserveParentPathChoice === null) return
+			preserveParentPath = preserveParentPathChoice
+		}
+
 		const targetPath = currentProject ? path : []
 		const targetAttachments = currentProject ? attachments : []
 		onSubmit &&
@@ -955,6 +1007,7 @@ function ProjectResourceSelectorModal({
 				sourceAttachments: sourceAttachments,
 				includeDocumentDependencies,
 				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath,
 			})
 		if (closeOnSubmit) onClose && onClose()
 	})
@@ -1335,7 +1388,7 @@ function ProjectResourceSelectorModal({
 
 		return (
 			<>
-				{createProjectHook.createProjectShown && (
+				{canEdit && createProjectHook.createProjectShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
 							<IconProject />
@@ -1531,7 +1584,7 @@ function ProjectResourceSelectorModal({
 			"max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap leading-6 text-foreground md:max-w-[400px]"
 		return (
 			<>
-				{createDirectoryHook.createDirectoryShown && (
+				{canEdit && createDirectoryHook.createDirectoryShown && (
 					<div
 						className={cn(textFolderItemClass, "gap-2")}
 						data-testid="cross-project-file-modal-create-directory-row"
@@ -1998,12 +2051,11 @@ function ProjectResourceSelectorModal({
 									<div className="flex flex-col items-center gap-2 text-center">
 										<div className="flex flex-col gap-1.5 text-center text-sm font-normal leading-5 text-foreground/35">
 											<span>{emptyStorageDescription}</span>
-											{emptyStorageAction && (
+											{emptyStorageAction && createAction && (
 												<Button
 													variant="link"
-													className="h-auto p-0 leading-5 text-foreground disabled:pointer-events-none disabled:opacity-50"
-													onClick={createAction?.onClick}
-													disabled={!createAction}
+													className="h-auto p-0 leading-5 text-foreground"
+													onClick={createAction.onClick}
 													data-testid="cross-project-file-modal-empty-create-folder"
 												>
 													{emptyStorageAction}

@@ -130,12 +130,12 @@ class UploadLogger {
 		console.error(`❌ [${stage}] ${log.time} (+${elapsed}ms) 上传链路错误`, log.data, error)
 
 		if (this.reportToServer) {
-			serverLogger.error(`[UploadLogger] ${stage} 发生错误`, {
-				sessionId: this.sessionId,
-				time: log.time,
-				stage,
-				...extraData,
-				error,
+			serverLogger.error({
+				eventKey: "upload_logger_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `[UploadLogger] ${stage} 发生错误`,
+				context: { sessionId: this.sessionId, time: log.time, stage, ...extraData },
 			})
 		}
 	}

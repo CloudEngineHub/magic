@@ -153,6 +153,28 @@ class OSSTest extends CloudFileBaseTest
     }
 
     /**
+     * 验证 OSS 真实 STS 预签名链接支持切换下载和内联展示.
+     */
+    public function testGetPreSignedUrlContentDisposition(): void
+    {
+        $filesystem = $this->getFilesystem();
+        $credentialPolicy = new CredentialPolicy([]);
+
+        $attachmentUrl = $filesystem->getPreSignedUrlByCredential($credentialPolicy, 'easy-file/easy.jpeg', [
+            'filename' => 'text.css',
+            'cache' => false,
+        ]);
+        $inlineUrl = $filesystem->getPreSignedUrlByCredential($credentialPolicy, 'easy-file/easy.jpeg', [
+            'filename' => 'text.css',
+            'download' => false,
+            'cache' => false,
+        ]);
+
+        $this->assertContentDisposition($attachmentUrl, 'attachment; filename="text.css"');
+        $this->assertContentDisposition($inlineUrl, 'inline; filename="text.css"');
+    }
+
+    /**
      * 验证 OSS 直签链接支持切换内网 endpoint.
      */
     public function testGetLinkWithInternalEndpoint()

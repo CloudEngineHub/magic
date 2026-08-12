@@ -114,6 +114,25 @@ async def cleanup_stale_files_on_startup():
     except Exception as e:
         logger.error(f".visual 目录残留文件清理失败: {e}")
 
+    try:
+        from app.path_manager import PathManager
+        from app.utils.async_file_utils import async_exists, async_rmtree, async_scandir
+
+        background_dir = PathManager.get_background_compact_dir()
+        if await async_exists(background_dir):
+            for entry in await async_scandir(background_dir):
+                if entry.is_dir(follow_symlinks=False):
+                    await async_rmtree(Path(entry.path))
+            logger.info("后台压缩临时目录残留检查完成")
+    except Exception as e:
+        logger.error(f"后台压缩临时目录残留清理失败: {e}")
+
+    try:
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        await ChatHistoryCleanupService().run()
+    except Exception as e:
+        logger.error(f"聊天记录启动统计与清理失败: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """服务生命周期管理"""

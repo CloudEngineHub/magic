@@ -114,7 +114,12 @@ export class DraftCleanupScheduler {
 				timestamp: new Date(this.lastCleanupTime).toISOString(),
 			})
 		} catch (error) {
-			logger.error("Failed to cleanup expired drafts", error)
+			logger.error({
+				eventKey: "cleanup_expired_drafts_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "Failed to cleanup expired drafts",
+			})
 			throw error
 		}
 	}
@@ -205,7 +210,12 @@ export class DraftCleanupScheduler {
 			try {
 				await this.runCleanup()
 			} catch (error) {
-				logger.error("Scheduled cleanup failed", error)
+				logger.error({
+					eventKey: "scheduled_cleanup_failed",
+					errorKind: "lifecycle",
+					error: error,
+					message: "Scheduled cleanup failed",
+				})
 			}
 
 			// Schedule next cleanup

@@ -130,7 +130,12 @@ export function useOfficialPromptsPayload({
 				clearOfficialPromptsPayload()
 			} catch (error) {
 				clearOfficialPromptsPayload()
-				logger.error("Failed to consume officialPromptsPayload from sessionStorage", error)
+				logger.error({
+					eventKey: "official_prompts_payload_consumption_failed",
+					errorKind: "storage",
+					error: error,
+					message: "Failed to consume officialPromptsPayload from sessionStorage",
+				})
 			}
 		})()
 

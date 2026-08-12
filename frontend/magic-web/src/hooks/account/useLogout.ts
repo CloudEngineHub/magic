@@ -133,7 +133,12 @@ function useLogout({ onConfirm, onCancel }: UseLogoutProps = {}) {
 								}
 							})
 							.catch((error) => {
-								logger.error("switchAccountError", error)
+								logger.error({
+									eventKey: "switch_account_failed",
+									errorKind: "unknown",
+									error: error,
+									message: "switchAccountError",
+								})
 							})
 
 						if (info?.magic_id) {
@@ -156,7 +161,12 @@ function useLogout({ onConfirm, onCancel }: UseLogoutProps = {}) {
 						})
 					}
 				} catch (error) {
-					logger.error("useLogout", error)
+					logger.error({
+						eventKey: "use_logout_failed",
+						errorKind: "unknown",
+						error: error,
+						message: "useLogout",
+					})
 				} finally {
 					onConfirm?.()
 				}
@@ -172,7 +182,12 @@ function useLogout({ onConfirm, onCancel }: UseLogoutProps = {}) {
 				onCancel,
 			})
 		} catch (error) {
-			logger.error("useLogout", error)
+			logger.error({
+				eventKey: "use_logout_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "useLogout",
+			})
 		}
 	})
 }

@@ -554,7 +554,7 @@ class VolcEngineUploader(AbstractStorage, BaseFileProcessor):
                 return True
             except TosServerError as e:
                 if e.status_code == 404:
-                    logger.warning(f"Object not found (404) for key '{key}'")
+                    logger.debug(f"Object does not exist during existence check (404): {key}")
                 else:
                     logger.error(f"Error during head_object for key '{key}': {type(e).__name__} - {e}")
                 return False

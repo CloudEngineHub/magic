@@ -90,10 +90,7 @@ export function withThirdPartyAuth<T extends object>(
 						error: error,
 						message: "temporary authorization code call exception",
 						// 临时授权码属于凭据，只记录是否存在，禁止进入上报内容。
-						context: {
-							hasTempToken: Boolean(tempToken),
-							tempTokenLength: tempToken?.length ?? 0,
-						},
+						context: { tempToken },
 					})
 					// Need to redirect to login route
 						authEventBus.emit(AuthEventName.RequestLogin, {
@@ -200,7 +197,13 @@ export function withThirdPartyAuth<T extends object>(
 					// Optimized for specific scenarios, continue the business process under the same tab
 					await redirectUrlStep()
 				} catch (error: any) {
-					logger.error("login free error", `deployCode: ${deployCode}`, error)
+					logger.error({
+						eventKey: "login_free_failed",
+						errorKind: "permission",
+						error: error,
+						message: "login free error",
+						context: { deployCode },
+					})
 					magicToast.error(error?.message)
 
 					// Need to redirect to login route
@@ -247,7 +250,12 @@ export function withThirdPartyAuth<T extends object>(
 							}
 						}
 					} catch (error) {
-						logger.error("login free mount error", error)
+						logger.error({
+							eventKey: "login_free_mount_failed",
+							errorKind: "permission",
+							error: error,
+							message: "login free mount error",
+						})
 					} finally {
 						setLoading(false)
 					}

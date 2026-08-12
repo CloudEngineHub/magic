@@ -1,12 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import ProjectOrganizationAccessGuard from "../index"
-
-const useProjectOrganizationAccessMock = vi.fn()
-
-vi.mock("react-router", () => ({
-	useParams: () => ({ projectId: "project-1" }),
-}))
+import { ProjectOrganizationAccessProvider } from "../../../contexts/ProjectOrganizationAccessContext"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -29,42 +24,43 @@ vi.mock("@/routes/history", () => ({
 	history: { push: vi.fn() },
 }))
 
-vi.mock("../../../hooks/useProjectOrganizationAccess", () => ({
-	useProjectOrganizationAccess: (projectId: string) =>
-		useProjectOrganizationAccessMock(projectId),
-}))
-
 describe("ProjectOrganizationAccessGuard", () => {
-	beforeEach(() => {
-		useProjectOrganizationAccessMock.mockReset()
-	})
+	beforeEach(() => vi.clearAllMocks())
 
 	it("renders the project only when the current organization can access it", () => {
-		useProjectOrganizationAccessMock.mockReturnValue({ status: "ready" })
-
 		render(
-			<ProjectOrganizationAccessGuard>
-				<div>project content</div>
-			</ProjectOrganizationAccessGuard>,
+			<ProjectOrganizationAccessProvider
+				value={{
+					status: "ready",
+					targetOrganization: null,
+					targetUserInfo: null,
+					handleSwitchOrganization: vi.fn(async () => undefined),
+				}}
+			>
+				<ProjectOrganizationAccessGuard>
+					<div>project content</div>
+				</ProjectOrganizationAccessGuard>
+			</ProjectOrganizationAccessProvider>,
 		)
 
 		expect(screen.getByText("project content")).toBeInTheDocument()
-		expect(useProjectOrganizationAccessMock).toHaveBeenCalledWith("project-1")
 	})
 
 	it("shows the target organization and starts the switch when required", () => {
 		const handleSwitchOrganization = vi.fn()
-		useProjectOrganizationAccessMock.mockReturnValue({
-			status: "switch-required",
-			targetOrganization: { organization_name: "Target Team" },
-			targetUserInfo: { nickname: "Target User" },
-			handleSwitchOrganization,
-		})
-
 		render(
-			<ProjectOrganizationAccessGuard>
-				<div>project content</div>
-			</ProjectOrganizationAccessGuard>,
+			<ProjectOrganizationAccessProvider
+				value={{
+					status: "switch-required",
+					targetOrganization: { organization_name: "Target Team" } as never,
+					targetUserInfo: { nickname: "Target User" } as never,
+					handleSwitchOrganization,
+				}}
+			>
+				<ProjectOrganizationAccessGuard>
+					<div>project content</div>
+				</ProjectOrganizationAccessGuard>
+			</ProjectOrganizationAccessProvider>,
 		)
 
 		expect(

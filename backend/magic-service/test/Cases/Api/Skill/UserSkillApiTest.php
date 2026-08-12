@@ -8,13 +8,13 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Api\Skill;
 
 use App\Application\File\Service\FileAppService;
+use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillMarketModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillModel;
+use App\Domain\SuperMagic\Skill\Repository\Persistence\Model\SkillVersionModel;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillMarketModel;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillModel;
-use Dtyq\SuperMagic\Domain\Skill\Repository\Persistence\Model\SkillVersionModel;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Model\TaskFileModel;
 use Hyperf\DbConnection\Db;
 use HyperfTest\Cases\Api\SuperAgent\AbstractApiTest;
 use RuntimeException;

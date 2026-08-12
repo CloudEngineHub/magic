@@ -45,6 +45,31 @@ export interface ReporterPluginOptions {
 	}
 }
 
+export function formatLogData(context: LogContext) {
+	// 新旧记录共用原有 /log-report 队列和接口，仅在单条数据格式化阶段区分协议。
+	const runtimeFields = {
+		logType: context.logType,
+		traceId: context.traceId,
+		release: context.release,
+		url: context.url,
+		info: context.info,
+		timestamp: context.timestamp,
+	}
+
+	if (context.errorReport) {
+		return {
+			...runtimeFields,
+			...context.errorReport,
+		}
+	}
+
+	return {
+		...runtimeFields,
+		namespace: context.namespace,
+		data: context.data,
+	}
+}
+
 /**
  * Log reporter plugin.
  * Sends logs to the server.
@@ -189,15 +214,7 @@ export class ReporterPlugin implements LoggerPlugin {
 	 * Format log data.
 	 */
 	private formatLogData(context: LogContext) {
-		return {
-			logType: context.logType,
-			traceId: context.traceId,
-			namespace: context.namespace,
-			url: context.url,
-			data: context.data,
-			info: context.info,
-			timestamp: context.timestamp,
-		}
+		return formatLogData(context)
 	}
 
 	/**

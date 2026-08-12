@@ -29,6 +29,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { useAuthorization, useOrganization, useUserInfo } from "@/models/user/hooks"
 import GlobalSidebarStore from "@/stores/display/GlobalSidebarStore"
 import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
+import useMicroAppSafetyNoticeConfirmation from "./hooks/useMicroAppSafetyNoticeConfirmation"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 import { authEventBus } from "@/services/auth/AuthEventBus"
 import { AuthEventName } from "@/services/auth/AuthEvents"
@@ -297,13 +298,16 @@ export default function MicroAppSharePage() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
-	const [confirmedSafetyAppId, setConfirmedSafetyAppId] = useState<string | null>(null)
 	// 分享页隐藏了 HTML 文件头，通过管理句柄复用预览内部的同一个授权面板。
 	const [permissionManager, setPermissionManager] = useState<{ open: () => void } | null>(null)
+	const { hasConfirmedSafetyNotice, confirmSafetyNotice } =
+		useMicroAppSafetyNoticeConfirmation(appId)
 	const {
 		shareData,
 		resourceId,
 		coverUrl,
+		fullScreen,
+		displayModeResolved,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,
@@ -325,10 +329,7 @@ export default function MicroAppSharePage() {
 		[attachmentList],
 	)
 	const displayAppName = shareMeta.projectName
-	// 将确认绑定到 appId，切换分享路由时不会短暂复用上一应用的确认状态。
-	const hasConfirmedSafetyNotice = confirmedSafetyAppId === appId
 	useEffect(() => {
-		setConfirmedSafetyAppId(null)
 		setPermissionManager(null)
 	}, [appId])
 	const previewFile = useMemo(
@@ -382,11 +383,13 @@ export default function MicroAppSharePage() {
 			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
 			data-testid="micro-app-share-page"
 		>
-			<MicroAppShareHeader
-				appName={displayAppName}
-				showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
-				onOpenPermissionManager={handleOpenPermissionManager}
-			/>
+			{displayModeResolved && !fullScreen ? (
+				<MicroAppShareHeader
+					appName={displayAppName}
+					showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
+					onOpenPermissionManager={handleOpenPermissionManager}
+				/>
+			) : null}
 			<main className="min-h-0 flex-1 overflow-hidden">
 				{loading ? (
 					<div
@@ -431,9 +434,10 @@ export default function MicroAppSharePage() {
 
 				{!loading && !error && previewFile && !hasConfirmedSafetyNotice ? (
 					<MicroAppSafetyNotice
+						key={appId}
 						appName={displayAppName}
 						coverUrl={coverUrl}
-						onConfirm={() => setConfirmedSafetyAppId(appId)}
+						onConfirm={confirmSafetyNotice}
 						onLeave={handleLeave}
 					/>
 				) : null}

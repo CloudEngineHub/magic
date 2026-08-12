@@ -11,6 +11,7 @@ const {
 	updateOptimisticItemTransferMock,
 	clearOptimisticItemMock,
 	toastErrorMock,
+	toastInfoMock,
 	localStorageMock,
 	storeSubmitSummaryMock,
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
 	updateOptimisticItemTransferMock: vi.fn(),
 	clearOptimisticItemMock: vi.fn(),
 	toastErrorMock: vi.fn(),
+	toastInfoMock: vi.fn(),
 	storeSubmitSummaryMock: vi.fn(),
 	localStorageMock: {
 		getItem: vi.fn(() => null),
@@ -89,6 +91,7 @@ vi.mock("../../utils/recording-settings-mapper", () => ({
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: {
 		error: toastErrorMock,
+		info: toastInfoMock,
 	},
 }))
 
@@ -178,6 +181,33 @@ describe("AudioImportStore", () => {
 				task_key: "session-web-imported",
 			}),
 		)
+		expect(toastInfoMock).toHaveBeenCalledTimes(1)
+		expect(toastInfoMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				duration: 5000,
+			}),
+		)
+	})
+
+	it("does not show the do-not-refresh tip when file validation fails", async () => {
+		const { AudioImportStore } = await import("../audio-import-store")
+		const store = new AudioImportStore()
+		const oversizedFile = new File([new Uint8Array(1)], "huge.wav", { type: "audio/wav" })
+		Object.defineProperty(oversizedFile, "size", { value: store.MAX_UPLOAD_SIZE + 1 })
+
+		await store.startAudioImport([oversizedFile], {
+			projectId: "project-import",
+			projectName: "Imported Project",
+			topicId: "topic-import",
+			workspaceId: "workspace-import",
+			modelId: "model-alpha",
+			taskKey: "session-web-imported",
+			autoSummaryEnabled: true,
+		})
+
+		expect(toastInfoMock).not.toHaveBeenCalled()
+		expect(uploadFilesMock).not.toHaveBeenCalled()
+		expect(toastErrorMock).toHaveBeenCalled()
 	})
 
 	it("stops after import-files when imported auto summary is disabled", async () => {

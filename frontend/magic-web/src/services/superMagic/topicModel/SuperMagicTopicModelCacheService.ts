@@ -92,7 +92,12 @@ class SuperMagicTopicModelCacheService {
 
 			return data
 		} catch (error) {
-			logger.error("Failed to get user cache", { error })
+			logger.error({
+				eventKey: "get_user_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get user cache",
+			})
 			return null
 		}
 	}
@@ -133,7 +138,12 @@ class SuperMagicTopicModelCacheService {
 			const value = JSON.stringify(cacheData)
 			await this.storageAdapter.setItem(key, value)
 		} catch (error) {
-			logger.error("Failed to save user cache", { error })
+			logger.error({
+				eventKey: "save_user_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save user cache",
+			})
 			throw error
 		}
 	}
@@ -161,7 +171,12 @@ class SuperMagicTopicModelCacheService {
 
 			return data
 		} catch (error) {
-			logger.error("Failed to get default model from cache", { error })
+			logger.error({
+				eventKey: "get_default_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get default model from cache",
+			})
 			return null
 		}
 	}
@@ -191,7 +206,13 @@ class SuperMagicTopicModelCacheService {
 
 			return data
 		} catch (error) {
-			logger.error("Failed to get topic model from cache", { topicId, error })
+			logger.error({
+				eventKey: "get_topic_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get topic model from cache",
+				context: { topicId },
+			})
 			return null
 		}
 	}
@@ -221,7 +242,13 @@ class SuperMagicTopicModelCacheService {
 
 			return data
 		} catch (error) {
-			logger.error("Failed to get project model from cache", { projectId, error })
+			logger.error({
+				eventKey: "get_project_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get project model from cache",
+				context: { projectId },
+			})
 			return null
 		}
 	}
@@ -251,7 +278,13 @@ class SuperMagicTopicModelCacheService {
 
 			return data
 		} catch (error) {
-			logger.error("Failed to get mode default model from cache", { modeDefaultKey, error })
+			logger.error({
+				eventKey: "default_model_cache_read_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get mode default model from cache",
+				context: { modeDefaultKey },
+			})
 			return null
 		}
 	}
@@ -303,7 +336,13 @@ class SuperMagicTopicModelCacheService {
 			logger.log("No model found in fallback chain", { topicId, projectId, modeDefaultKey })
 			return null
 		} catch (error) {
-			logger.error("Failed to get model with fallback", { topicId, projectId, error })
+			logger.error({
+				eventKey: "get_model_fallback_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get model with fallback",
+				context: { topicId, projectId },
+			})
 			return null
 		}
 	}
@@ -333,7 +372,12 @@ class SuperMagicTopicModelCacheService {
 				videoModelId: modelData.videoModelId,
 			})
 		} catch (error) {
-			logger.error("Failed to save default model to cache", { error })
+			logger.error({
+				eventKey: "save_default_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save default model to cache",
+			})
 			throw error
 		}
 	}
@@ -370,7 +414,13 @@ class SuperMagicTopicModelCacheService {
 				videoModelId: modelData.videoModelId,
 			})
 		} catch (error) {
-			logger.error("Failed to save topic model to cache", { topicId, error })
+			logger.error({
+				eventKey: "save_topic_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save topic model to cache",
+				context: { topicId },
+			})
 			throw error
 		}
 	}
@@ -407,7 +457,13 @@ class SuperMagicTopicModelCacheService {
 				videoModelId: modelData.videoModelId,
 			})
 		} catch (error) {
-			logger.error("Failed to save project model to cache", { projectId, error })
+			logger.error({
+				eventKey: "save_project_model_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save project model to cache",
+				context: { projectId },
+			})
 			throw error
 		}
 	}
@@ -444,7 +500,13 @@ class SuperMagicTopicModelCacheService {
 				videoModelId: modelData.videoModelId,
 			})
 		} catch (error) {
-			logger.error("Failed to save mode default model to cache", { modeDefaultKey, error })
+			logger.error({
+				eventKey: "default_model_cache_save_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to save mode default model to cache",
+				context: { modeDefaultKey },
+			})
 			throw error
 		}
 	}
@@ -519,7 +581,13 @@ class SuperMagicTopicModelCacheService {
 			userCache.lastUpdated = Date.now()
 			await this.saveUserCache(userCache)
 		} catch (error) {
-			logger.error("Failed to clear cache", { scope, error })
+			logger.error({
+				eventKey: "clear_cache_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to clear cache",
+				context: { scope },
+			})
 			throw error
 		}
 	}
@@ -566,7 +634,12 @@ class SuperMagicTopicModelCacheService {
 				cacheSize,
 			}
 		} catch (error) {
-			logger.error("Failed to get cache stats", { error })
+			logger.error({
+				eventKey: "get_cache_stats_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get cache stats",
+			})
 			return {
 				version: CACHE_VERSION,
 				hasDefault: false,

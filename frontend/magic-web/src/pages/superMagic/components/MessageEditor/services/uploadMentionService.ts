@@ -15,9 +15,10 @@ import {
 } from "../utils/mention"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"
 import { INSPECTOR_DETAIL_TYPE } from "../extensions/inspector-detail/const"
+import type { StructuredErrorInput } from "@/utils/log/errorReport"
 
 interface LoggerLike {
-	error: (message: string, error?: unknown) => void
+	error: (input: StructuredErrorInput) => void
 }
 
 interface DeleteProjectFileParams {
@@ -97,51 +98,6 @@ export function insertUploadMentionNodes({
 	})
 }
 
-export function updateUploadMentionProgress({
-	editor,
-	fileId,
-	progress,
-	status,
-	error,
-}: {
-	editor: Editor | null
-	fileId: string
-	progress: number
-	status: FileData["status"]
-	error?: string
-}) {
-	if (!isEditorReady(editor)) return
-
-	const { state, dispatch } = editor.view
-	const { tr } = state
-
-	state.doc.descendants((node, pos) => {
-		if (node.type.name !== "mention") return true
-
-		const attrs = node.attrs as TiptapMentionAttributes
-		if (attrs.type !== MentionItemType.UPLOAD_FILE) return true
-
-		const uploadData = attrs.data as UploadFileMentionData
-		if (uploadData.file_id !== fileId) return true
-
-		tr.setNodeMarkup(pos, undefined, {
-			type: MentionItemType.UPLOAD_FILE,
-			data: {
-				...uploadData,
-				upload_progress: progress,
-				upload_status: status,
-				upload_error: error,
-			},
-		})
-
-		return true
-	})
-
-	if (tr.steps.length > 0) {
-		dispatch(tr)
-	}
-}
-
 export function replaceUploadMentionNode({
 	editor,
 	fileId,
@@ -189,9 +145,9 @@ export function replaceUploadMentionNode({
 					file: uploadData.file,
 					relative_file_path: uploadData.relative_file_path,
 					is_hidden: uploadData.is_hidden,
-					upload_progress: uploadData.upload_progress,
-					upload_status: uploadData.upload_status,
-					upload_error: uploadData.upload_error,
+					upload_progress: 100,
+					upload_status: "done",
+					upload_error: undefined,
 				},
 			})
 		}
@@ -262,7 +218,12 @@ export async function deleteProjectFile({ fileId, logger, onError }: DeleteProje
 	try {
 		await SuperMagicApi.deleteFile(fileId)
 	} catch (error) {
-		logger.error("delete project file failed", error)
+		logger.error({
+			eventKey: "delete_project_file_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "delete project file failed",
+		})
 		onError?.(error)
 	}
 }

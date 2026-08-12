@@ -167,7 +167,11 @@ class MessageSendService {
 		const currentTopic = selectedTopic ?? context?.selectedTopic ?? options?._tempTopic ?? null
 
 		if (!currentTopic?.id) {
-			this.deps.logger.error("发送消息 - 未找到选中的话题")
+			this.deps.logger.error({
+				eventKey: "send_message_failed",
+				errorKind: "unknown",
+				message: "发送消息 - 未找到选中的话题",
+			})
 			return false
 		}
 
@@ -210,7 +214,12 @@ class MessageSendService {
 								context,
 							}),
 						onError: (error) => {
-							this.deps.logger.error("Smart topic rename failed", error)
+							this.deps.logger.error({
+								eventKey: "smart_topic_rename_failed",
+								errorKind: "unknown",
+								error,
+								message: "Smart topic rename failed",
+							})
 						},
 					})
 				: undefined
@@ -327,7 +336,11 @@ class MessageSendService {
 
 		try {
 			if (!currentProject?.id || !currentTopic?.id) {
-				this.deps.logger.error("handleSend error: missing project/topic context")
+				this.deps.logger.error({
+					eventKey: "send_project_topic_context_missing",
+					errorKind: "invalid_state",
+					message: "handleSend error: missing project/topic context",
+				})
 				return
 			}
 
@@ -374,7 +387,12 @@ class MessageSendService {
 				currentTopic,
 			}
 		} catch (error) {
-			this.deps.logger.error("handleSend error", error)
+			this.deps.logger.error({
+				eventKey: "handle_send_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "handleSend error",
+			})
 		} finally {
 			setIsSending(false)
 		}
@@ -466,7 +484,12 @@ class MessageSendService {
 			optimisticMessageStore.clearActiveRevokedAnchor(topic.chat_topic_id)
 			return true
 		} catch (error) {
-			this.deps.logger.error("confirm undo message failed", error)
+			this.deps.logger.error({
+				eventKey: "confirm_undo_message_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "confirm undo message failed",
+			})
 			return false
 		}
 	}

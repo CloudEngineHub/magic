@@ -1,5 +1,6 @@
 import { useRef } from "react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import MarketBackToTopButton from "@/pages/superMagic/pages/CrewMarket/components/MarketBackToTopButton"
 import SkillsLibrary from "./components/SkillsLibrary"
 
 function SkillMarketDesktopPage() {
@@ -7,7 +8,7 @@ function SkillMarketDesktopPage() {
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
+			className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
 			data-testid="skill-market-page"
 		>
 			<ScrollArea
@@ -20,6 +21,10 @@ function SkillMarketDesktopPage() {
 					</div>
 				</div>
 			</ScrollArea>
+			<MarketBackToTopButton
+				viewportRef={scrollViewportRef}
+				testId="skill-market-back-to-top"
+			/>
 		</div>
 	)
 }

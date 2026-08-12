@@ -50,7 +50,12 @@ function LoginPage() {
 				authNavigationCoordinator.reset()
 				redirect()
 			} catch (error: any) {
-				logger.error("error", error)
+				logger.error({
+					eventKey: "login_page_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "error",
+				})
 			} finally {
 				setLoading(false)
 			}

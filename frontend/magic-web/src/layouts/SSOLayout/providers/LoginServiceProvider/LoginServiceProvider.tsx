@@ -7,6 +7,11 @@ import { useLoginClusterSession } from "./useLoginClusterSession"
 interface LoginServiceStore extends LoginServiceProviderProps {
 	deployment: LoginDeployment
 	clusterCode: string
+	/**
+	 * The Widget-provided code used only as the initial private-login form value.
+	 * It must not be treated as the active cluster until the user confirms it.
+	 */
+	prefilledDeploymentCode: string
 	/** 展示公网登录 / Show public deployment login */
 	showPublicDeployment: () => void
 	/** 展示私有化登录 / Show private deployment login */
@@ -26,6 +31,7 @@ function noop() {
 export const LoginServiceContext = createContext<LoginServiceStore>({
 	deployment: LoginDeployment.PublicDeploymentLogin,
 	clusterCode: "",
+	prefilledDeploymentCode: "",
 	showPublicDeployment: noop,
 	showPrivateDeployment: noop,
 	setPrivateClusterCode: noop,
@@ -40,6 +46,7 @@ export const LoginServiceProvider = (props: PropsWithChildren<LoginServiceProvid
 	const {
 		clusterCode,
 		deployment,
+		prefilledDeploymentCode,
 		showPrivateDeployment,
 		showPublicDeployment,
 		setPrivateClusterCode,
@@ -50,6 +57,7 @@ export const LoginServiceProvider = (props: PropsWithChildren<LoginServiceProvid
 			service,
 			deployment,
 			clusterCode,
+			prefilledDeploymentCode,
 			showPrivateDeployment,
 			showPublicDeployment,
 			setPrivateClusterCode,
@@ -57,6 +65,7 @@ export const LoginServiceProvider = (props: PropsWithChildren<LoginServiceProvid
 	}, [
 		clusterCode,
 		deployment,
+		prefilledDeploymentCode,
 		service,
 		setPrivateClusterCode,
 		showPrivateDeployment,

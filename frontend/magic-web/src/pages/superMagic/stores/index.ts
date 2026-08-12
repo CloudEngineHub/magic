@@ -1319,7 +1319,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private drainPendingHttpToolResponses(
 		topicId: string,
 		toolResponseMap: Map<string, ToolResponseState>,
-		settlements: Array<{ toolId: string; response: ToolResponseState }>,
+		settlements: Array<{
+			toolId: string
+			response: ToolResponseState
+			messageNode?: RawSuperMagicMessageNode
+		}>,
 	) {
 		const topicPending = this.pendingHttpToolResponses.get(topicId)
 		if (!topicPending) return
@@ -1343,8 +1347,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					toolResponseMap,
 					"http",
 				)
-				if (result.kind === "recorded")
-					settlements.push({ toolId, response: result.response })
+				if (result.kind === "recorded") {
+					settlements.push({
+						toolId,
+						response: result.response,
+						messageNode: candidate.node,
+					})
+				}
 				if (result.kind !== "missing_owner") correlationPending.delete(correlationId)
 			})
 			if (correlationPending.size === 0) topicPending.delete(toolId)
@@ -1614,6 +1623,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const revision = this.eventTransitions.nextRevision(messageKey)
 		const identity = {
 			topicId,
+			...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 			correlationId: messageRef.correlationId,
 			appMessageId: messageRef.appMessageId,
 			messageSeqId: messageRef.seqId,
@@ -1737,6 +1747,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		authority: Exclude<TopicExecutionAuthority, "history" | "stream">,
 		identity: {
 			executionId?: string
+			superMagicTopicId?: string
 			correlationId?: string
 			taskId?: string
 			messageSeqId?: string
@@ -1777,6 +1788,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			type: "topic.execution.ended",
 			meta: this.createEventMeta(source, executionKey, {
 				topicId,
+				...(identity.superMagicTopicId
+					? { superMagicTopicId: identity.superMagicTopicId }
+					: {}),
 				...(transition.state.correlationId
 					? { correlationId: transition.state.correlationId }
 					: {}),
@@ -1822,6 +1836,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				"assistant_final",
 				{
 					executionId: identity.executionId,
+					...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId: identity.correlationId,
 					taskId: identity.taskId,
 					messageSeqId: message.seqId,
@@ -1876,6 +1891,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			meta: {
 				...this.createEventMeta(source, toolKey, {
 					topicId,
+					...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId,
 					toolCallId: toolId,
 				}),
@@ -1981,6 +1997,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			meta: {
 				...this.createEventMeta(context.source, taskKey, {
 					topicId,
+					...(messageNode.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId,
 					appMessageId,
 				}),
@@ -3897,6 +3914,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const httpToolSettlements: Array<{
 			toolId: string
 			response: ToolResponseState
+			messageNode?: RawSuperMagicMessageNode
 		}> = []
 		const tailAnchorIndex =
 			mode === "replace_tail" && anchorSuperMessageId
@@ -4173,6 +4191,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						httpToolSettlements.push({
 							toolId: String(rawNode?.tool?.id || ""),
 							response: toolResponseResult.response,
+							messageNode: rawNode,
 						})
 					} else if (toolResponseResult.kind === "missing_owner" && rawNode) {
 						this.queuePendingHttpToolResponse(topicId, rawNode, envelope?.seq?.seq_id)
@@ -4375,9 +4394,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (eventPolicy === "live_arrival") {
 			// Cold history and recovery snapshots may restore canonical Tool terminal state,
 			// but only a real-time authoritative tail represents a newly arrived business event.
-			httpToolSettlements.forEach(({ toolId, response }) => {
+			httpToolSettlements.forEach(({ toolId, response, messageNode }) => {
 				if (toolId)
-					this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
+					this.publishToolCallSettled(topicId, toolId, response, messageNode, "http")
 			})
 		}
 		if (toolProjectionPolicy === "historical_terminal") {
@@ -4457,7 +4476,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.publishMessageCommitted(
 					topicId,
 					currentMessage,
-					canonicalNode,
+					// Use only the current raw message's business Topic for event metadata.
+					canonicalNode && { ...canonicalNode, topic_id: rawNode?.topic_id },
 					canonicalCommitContext,
 				)
 			} else {

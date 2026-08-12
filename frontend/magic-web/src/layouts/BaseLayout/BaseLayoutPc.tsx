@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState, type CSSProperties } from "react"
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react"
 import { useMemoizedFn, useMount } from "ahooks"
 import MemberCard from "@/components/business/MemberCard"
 import MemberCardStore from "@/stores/display/MemberCardStore"
@@ -22,6 +22,9 @@ import { globalShareManagementStore } from "@/pages/superMagic/components/ShareM
 import { magic } from "@/enhance/magicElectron"
 import LayoutModalContainer from "./components/LayoutModalContainer"
 import MaintenanceNotice from "@/components/global/MaintenanceNotice"
+import { useLocation } from "react-router-dom"
+import { useMagicWidgetConfig } from "@/providers/MagicWidgetProvider"
+import { resolveMagicWidgetCrewLayout } from "@/providers/MagicWidgetProvider/config"
 
 const isElectron = magic?.env?.isElectron?.()
 
@@ -42,6 +45,16 @@ const BaseLayoutPc = observer(() => {
 	useMetaSet()
 	const { Content } = useKeepAlive()
 	const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
+	const { search } = useLocation()
+	const { config: widgetConfig, embedContext } = useMagicWidgetConfig()
+	const widgetLayout = resolveMagicWidgetCrewLayout({
+		configuredLayout: embedContext ? widgetConfig.layout : undefined,
+		// This component is mounted only for the desktop shell; explicit mobile uses BaseLayoutMobile.
+		isMobileViewport: false,
+		search,
+	})
+	const showAppSidebar =
+		!embedContext || widgetLayout !== "desktop" || widgetConfig.shell?.appSidebar !== false
 
 	// Cache initial width to avoid re-reading during drag
 	const [initialWidth] = useState(() => sidebarStore.width)
@@ -72,6 +85,22 @@ const BaseLayoutPc = observer(() => {
 			}
 		},
 	)
+
+	useEffect(() => {
+		const sidebarPanel = sidebarPanelRef.current
+		if (!sidebarPanel) return
+		cancelSidebarAnimation()
+		if (!showAppSidebar) {
+			// Resize imperatively so runtime configuration keeps the main content subtree mounted.
+			sidebarPanel.resize(0)
+			return
+		}
+		sidebarPanel.resize(
+			sidebarStore.collapsed
+				? sidebarStore.collapsedSizePercent
+				: getExpandedSidebarSizePercent(window.innerWidth),
+		)
+	}, [cancelSidebarAnimation, getExpandedSidebarSizePercent, showAppSidebar])
 
 	useMount(() => {
 		if (window.location.pathname === "/") {
@@ -118,23 +147,37 @@ const BaseLayoutPc = observer(() => {
 							ref={sidebarPanelRef}
 							id="sidebar-panel"
 							defaultSize={
-								sidebarStore.collapsed
-									? sidebarStore.collapsedSizePercent
-									: initialWidth
+								!showAppSidebar
+									? 0
+									: sidebarStore.collapsed
+										? sidebarStore.collapsedSizePercent
+										: initialWidth
 							}
 							maxSize={
-								sidebarStore.collapsed
-									? sidebarStore.collapsedSizePercent
-									: sidebarStore.MAX_WIDTH_PERCENT
+								!showAppSidebar
+									? 0
+									: sidebarStore.collapsed
+										? sidebarStore.collapsedSizePercent
+										: sidebarStore.MAX_WIDTH_PERCENT
 							}
 							minSize={
-								sidebarStore.collapsed
-									? sidebarStore.collapsedSizePercent
-									: minSidebarSizePercent
+								!showAppSidebar
+									? 0
+									: sidebarStore.collapsed
+										? sidebarStore.collapsedSizePercent
+										: minSidebarSizePercent
 							}
-							onResize={handleSidebarResize}
+							onResize={showAppSidebar ? handleSidebarResize : undefined}
 						>
-							<MagicSidebar />
+							<div
+								className={cn(
+									"h-full",
+									!showAppSidebar && "pointer-events-none invisible",
+								)}
+								aria-hidden={!showAppSidebar}
+							>
+								<MagicSidebar />
+							</div>
 						</ResizablePanel>
 					)}
 				</Observer>
@@ -143,12 +186,12 @@ const BaseLayoutPc = observer(() => {
 				<Observer>
 					{() => (
 						<ResizableHandle
-							disabled={sidebarStore.collapsed}
+							disabled={!showAppSidebar || sidebarStore.collapsed}
 							onDragging={handleSidebarDraggingChange}
 							onKeyDownCapture={handleSidebarHandleKeyDown}
 							className={cn(
 								"w-px bg-transparent hover:!bg-transparent",
-								sidebarStore.collapsed
+								!showAppSidebar || sidebarStore.collapsed
 									? "pointer-events-none opacity-0"
 									: "opacity-100 hover:bg-primary/30",
 							)}
@@ -158,9 +201,9 @@ const BaseLayoutPc = observer(() => {
 
 				{/* Main Content Panel - "被包裹"效果 */}
 				<ResizablePanel id="main-content-panel">
-					{/* The root shell already applies safe area, so this frame keeps the original desktop 8px floating gap. */}
+					{/* Keep the desktop floating gap only when the page is not embedded by Widget SDK. */}
 					<div
-						className="flex h-full flex-col py-2 pl-0 pr-2"
+						className={cn("flex h-full flex-col", !embedContext && "py-2 pl-0 pr-2")}
 						data-testid="base-layout-pc-main-frame"
 					>
 						{/* 白色容器，带圆角、边框、阴影 */}

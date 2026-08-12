@@ -76,6 +76,17 @@ describe("normalizeAudioProjectListItem", () => {
 		expect(item?.model_id).toBe("mock-model-id")
 	})
 
+	it("does not treat finished project status as summarized", () => {
+		const item = normalizeAudioProjectListItem({
+			...SAMPLE_MERGING,
+			project_status: "finished",
+			current_topic_status: "finished",
+		})
+
+		expect(item?.card_status).toBe("not_summarized")
+		expect(item?.is_summarized).toBe(false)
+	})
+
 	it("keeps summarizing failed items visible and resolves card_status as summary_failed", () => {
 		const item = normalizeAudioProjectListItem({
 			...SAMPLE_MERGING,

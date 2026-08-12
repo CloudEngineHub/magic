@@ -26,7 +26,7 @@ export function getTranscriptSegmentTextClassName(
 	density: TranscriptSegmentDensity,
 ) {
 	return cn(
-		density === "desktop" ? "whitespace-pre-wrap text-sm leading-6" : "text-[16px] leading-7",
+		density === "desktop" ? "whitespace-pre-wrap text-sm leading-6" : "text-[16px] leading-6",
 		"transition-colors",
 		state === "dimmed" ? "text-foreground/65" : "text-foreground",
 	)

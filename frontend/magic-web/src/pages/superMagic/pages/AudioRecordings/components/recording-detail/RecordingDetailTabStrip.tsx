@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
-import { useHorizontalScrollWithFade } from "../../hooks/useHorizontalScrollWithFade"
+import {
+	centerHorizontalItemInContainer,
+	useHorizontalScrollWithFade,
+} from "../../hooks/useHorizontalScrollWithFade"
 
 export interface RecordingDetailTabItem {
 	key: string
@@ -73,10 +76,10 @@ export function RecordingDetailTabStrip({
 	// Keep the active tab visible when the strip overflows horizontally.
 	useEffect(() => {
 		const activeTab = tabRefs.current[activeKey]
-		if (typeof activeTab?.scrollIntoView === "function") {
-			activeTab.scrollIntoView({ block: "nearest", inline: "center" })
-		}
-	}, [activeKey])
+		const bar = scrollRef.current
+		if (!activeTab || !bar) return
+		centerHorizontalItemInContainer(bar, activeTab)
+	}, [activeKey, scrollRef])
 
 	return (
 		<div

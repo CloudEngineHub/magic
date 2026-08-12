@@ -59,7 +59,7 @@ class ScriptInjectionError(BrowserSDKError):
         super().__init__(BrowserErrorCode.SCRIPT_INJECTION_FAILED, message)
 
 
-class SnapshotError(BrowserSDKError):
+class ElementScanError(BrowserSDKError):
     def __init__(self, message: str) -> None:
         super().__init__(BrowserErrorCode.SNAPSHOT_FAILED, message)
 

@@ -114,7 +114,8 @@ describe("AccountService.deleteAccount", () => {
 	})
 
 	it("continues logging out when permission grant cleanup fails", async () => {
-		mocks.clearHtmlPermissionGrants.mockRejectedValueOnce(new Error("IndexedDB failed"))
+		const cleanupError = new Error("IndexedDB failed")
+		mocks.clearHtmlPermissionGrants.mockRejectedValueOnce(cleanupError)
 		const service = {
 			get: vi.fn((key: string) => {
 				if (key === "loginService") return { logout: mocks.logout }
@@ -133,10 +134,12 @@ describe("AccountService.deleteAccount", () => {
 
 		expect(mocks.logout).toHaveBeenCalled()
 		expect(mocks.clearAccount).toHaveBeenCalled()
-		expect(mocks.accountLoggerError).toHaveBeenCalledWith(
-			"Failed to clear HTML permission grants during account removal",
-			expect.any(Error),
-		)
+		expect(mocks.accountLoggerError).toHaveBeenCalledWith({
+			eventKey: "clear_html_permission_grants_failed",
+			errorKind: "storage",
+			error: cleanupError,
+			message: "Failed to clear HTML permission grants during account removal",
+		})
 	})
 
 	it("clears current cluster after removing the last cached account", async () => {

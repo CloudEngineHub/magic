@@ -25,6 +25,11 @@ interface ShareRequestContext {
 	sequence: number
 }
 
+interface MicroAppDisplayMode {
+	appId: string
+	fullScreen: boolean
+}
+
 function unwrapResponse<T = any>(response: any): T {
 	return response?.data ?? response
 }
@@ -109,6 +114,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 	const requestSequenceRef = useRef(0)
 	const [resourceId, setResourceId] = useState("")
 	const [coverUrl, setCoverUrl] = useState("")
+	const [displayMode, setDisplayMode] = useState<MicroAppDisplayMode | null>(null)
 	const [shareData, setShareData] = useState<any>(null)
 	const [attachmentsTree, setAttachmentsTree] = useState<AttachmentItem[]>([])
 	const [attachmentList, setAttachmentList] = useState<AttachmentItem[]>([])
@@ -121,6 +127,8 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		useSharePermission()
 
 	const shareMeta = useMemo(() => resolveShareMeta(shareData), [shareData])
+	const displayModeResolved = displayMode?.appId === appId
+	const fullScreen = displayModeResolved ? displayMode.fullScreen : false
 	currentAppIdRef.current = appId
 
 	const createRequestContext = useCallback(
@@ -212,6 +220,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		setRequiredOrgCode("")
 		setResourceId("")
 		setCoverUrl("")
+		setDisplayMode(null)
 		setShareData(null)
 		setAttachmentList([])
 		setAttachmentsTree([])
@@ -220,13 +229,21 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		try {
 			const appResponse = await SuperMagicApi.resolvePublishedMicroApp(appId)
 			if (!isRequestCurrent(requestContext)) return
-			const appData = unwrapResponse<{ resource_id?: string; cover_url?: string }>(
-				appResponse,
-			)
+			const appData = unwrapResponse<{
+				resource_id?: string
+				cover_url?: string
+				extra?: {
+					pure_mode?: boolean
+				}
+			}>(appResponse)
 			const resolvedResourceId = readString(appData?.resource_id)
 			if (!resolvedResourceId) throw new Error("Micro app share mapping is missing")
 			setResourceId(resolvedResourceId)
 			setCoverUrl(readString(appData?.cover_url))
+			setDisplayMode({
+				appId: requestContext.appId,
+				fullScreen: appData?.extra?.pure_mode === true,
+			})
 
 			const checkResponse: any = await SuperMagicApi.checkShareResourcePassword({
 				resource_id: resolvedResourceId,
@@ -262,6 +279,7 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			if (!isRequestCurrent(requestContext)) return
 			setRequiredOrgCode(resolveRequiredOrgCode(err, checkData))
 			setError(err)
+			setDisplayMode({ appId: requestContext.appId, fullScreen: false })
 		} finally {
 			if (isRequestCurrent(requestContext)) setLoading(false)
 		}
@@ -289,6 +307,8 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 		shareData,
 		resourceId,
 		coverUrl,
+		fullScreen,
+		displayModeResolved,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,

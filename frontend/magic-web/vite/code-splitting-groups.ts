@@ -3,8 +3,28 @@ function normalizeModuleId(id: string): string {
 	return id.replace(/\\/g, "/")
 }
 
+function isLocaleJsonModule(id: string, locale: "zh_CN" | "en_US"): boolean {
+	// Vite/Rolldown may append query parameters to transformed JSON module ids.
+	const normalizedId = normalizeModuleId(id).split("?", 1)[0]
+
+	// Matching /src/ keeps the rule valid for base, enterprise and customer overlays.
+	return normalizedId.includes(`/src/assets/locales/${locale}/`) && normalizedId.endsWith(".json")
+}
+
 export function createCodeSplittingGroups() {
 	return [
+		{
+			name: "locale-zh-cn",
+			priority: 100,
+			entriesAware: false,
+			test: (id: string) => isLocaleJsonModule(id, "zh_CN"),
+		},
+		{
+			name: "locale-en-us",
+			priority: 100,
+			entriesAware: false,
+			test: (id: string) => isLocaleJsonModule(id, "en_US"),
+		},
 		{
 			name: "antd-colors",
 			priority: 40,

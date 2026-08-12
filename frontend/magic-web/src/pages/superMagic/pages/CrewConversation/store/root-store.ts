@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import { SuperMagicApi } from "@/apis"
+import { CrewApi, SuperMagicApi } from "@/apis"
 import { crewService, type AgentDetailView } from "@/services/crew/CrewService"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
@@ -17,7 +17,18 @@ import { WorkspaceStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
-export type CrewConversationStatus = "idle" | "loading" | "ready" | "invalid" | "error"
+export type CrewConversationStatus =
+	"idle" | "loading" | "ready" | "invalid" | "unavailable" | "error"
+
+export interface CrewConversationBootstrapOptions {
+	autoHire?: boolean
+}
+
+type WidgetAgentResolution =
+	| { kind: "ready"; agent: AgentDetailView }
+	| { kind: "invalid" }
+	| { kind: "unavailable" }
+	| { kind: "cancelled" }
 
 interface CrewConversationHydration {
 	project: ProjectListItem | null
@@ -37,6 +48,12 @@ export class CrewConversationStore {
 	attachmentList: AttachmentItem[] = []
 	isCreatingTopic = false
 	isConversationGenerating = false
+	private bootstrapGeneration = 0
+	private lastBootstrapRequest: {
+		code: string | undefined
+		options: CrewConversationBootstrapOptions
+	} | null = null
+	private readonly inFlightHireRequests = new Map<string, Promise<void>>()
 
 	readonly topicStore = new TopicStore()
 	readonly projectFilesStore = new ProjectFilesStore()
@@ -47,6 +64,9 @@ export class CrewConversationStore {
 		makeAutoObservable(
 			this,
 			{
+				bootstrapGeneration: false,
+				lastBootstrapRequest: false,
+				inFlightHireRequests: false,
 				topicStore: false,
 				projectFilesStore: false,
 				topicModelStore: false,
@@ -64,7 +84,13 @@ export class CrewConversationStore {
 		return this.topicStore.topics
 	}
 
-	async bootstrap(rawCode: string | undefined): Promise<void> {
+	/** Initializes one Crew conversation with an immutable auto-hire decision snapshot. */
+	async bootstrap(
+		rawCode: string | undefined,
+		options: CrewConversationBootstrapOptions = {},
+	): Promise<void> {
+		const generation = ++this.bootstrapGeneration
+		this.lastBootstrapRequest = { code: rawCode, options: { ...options } }
 		const nextAgentCode = rawCode?.trim() ?? ""
 		this.resetRuntimeState()
 
@@ -75,9 +101,29 @@ export class CrewConversationStore {
 
 		this.status = "loading"
 		this.agentCode = nextAgentCode
+		const isWidgetBootstrap = options.autoHire !== undefined
 
 		try {
-			const agent = await crewService.getAgentDetail(nextAgentCode)
+			let agent: AgentDetailView
+			if (isWidgetBootstrap) {
+				const resolution = await this.resolveWidgetAgent(
+					nextAgentCode,
+					options.autoHire === true,
+					generation,
+				)
+				if (resolution.kind === "cancelled") return
+				if (resolution.kind !== "ready") {
+					runInAction(() => {
+						this.status = resolution.kind
+						this.clearProjectContext()
+					})
+					return
+				}
+				agent = resolution.agent
+			} else {
+				agent = await crewService.getAgentDetail(nextAgentCode)
+			}
+			if (!this.isCurrentBootstrap(generation)) return
 
 			const validatedAgentCode = agent?.id?.trim() ?? ""
 
@@ -98,6 +144,7 @@ export class CrewConversationStore {
 				SuperMagicApi.getSpecialProject({ key: validatedAgentCode }),
 				superMagicModeService.fetchDefaultModeModelList(),
 			])
+			if (!this.isCurrentBootstrap(generation)) return
 
 			if (!project?.id) {
 				runInAction(() => {
@@ -108,18 +155,75 @@ export class CrewConversationStore {
 			}
 
 			const hydration = await this.loadProjectContext(project.id)
+			if (!this.isCurrentBootstrap(generation)) return
 
 			runInAction(() => {
 				this.hydrate(hydration)
 				this.status = "ready"
 			})
 		} catch (error) {
+			if (!this.isCurrentBootstrap(generation)) return
 			runInAction(() => {
-				this.status = this.agent ? "error" : "invalid"
+				this.status = isWidgetBootstrap || this.agent ? "error" : "invalid"
 				this.error = error
 				this.clearProjectContext()
 			})
 		}
+	}
+
+	/** Repeats the latest bootstrap request without losing its Widget configuration snapshot. */
+	async retryBootstrap(): Promise<void> {
+		if (!this.lastBootstrapRequest) return
+		await this.bootstrap(this.lastBootstrapRequest.code, this.lastBootstrapRequest.options)
+	}
+
+	/** Resolves Widget access and performs at most one hire without exception-based state flow. */
+	private async resolveWidgetAgent(
+		code: string,
+		autoHire: boolean,
+		generation: number,
+	): Promise<WidgetAgentResolution> {
+		const access = await crewService.checkAgentAccess(code)
+		if (!this.isCurrentBootstrap(generation)) return { kind: "cancelled" }
+		if (!access.exists) return { kind: "invalid" }
+		if (access.canUse) {
+			return { kind: "ready", agent: await crewService.getAgentDetail(access.code) }
+		}
+		if (!autoHire) return { kind: "unavailable" }
+
+		try {
+			await this.hireAgentOnce(access.code)
+		} catch {
+			if (!this.isCurrentBootstrap(generation)) return { kind: "cancelled" }
+			return { kind: "unavailable" }
+		}
+		if (!this.isCurrentBootstrap(generation)) return { kind: "cancelled" }
+
+		// Refresh the cached mode list so the newly hired agent is usable before rendering.
+		await superMagicModeService.fetchModeList({ force: true })
+		if (!this.isCurrentBootstrap(generation)) return { kind: "cancelled" }
+		return { kind: "ready", agent: await crewService.getAgentDetail(access.code) }
+	}
+
+	/** Reuses a pending hire request so remounts cannot create duplicate side effects. */
+	private hireAgentOnce(code: string): Promise<void> {
+		const pending = this.inFlightHireRequests.get(code)
+		if (pending) return pending
+
+		const request = CrewApi.hireStoreAgent({ code }, { enableErrorMessagePrompt: false })
+			.then(() => undefined)
+			.finally(() => {
+				if (this.inFlightHireRequests.get(code) === request) {
+					this.inFlightHireRequests.delete(code)
+				}
+			})
+		this.inFlightHireRequests.set(code, request)
+		return request
+	}
+
+	/** Prevents an obsolete route or configuration request from replacing newer state. */
+	private isCurrentBootstrap(generation: number): boolean {
+		return generation === this.bootstrapGeneration
 	}
 
 	async loadProjectContext(projectId: string): Promise<CrewConversationHydration> {
@@ -243,6 +347,7 @@ export class CrewConversationStore {
 	}
 
 	reset() {
+		this.bootstrapGeneration += 1
 		this.resetRuntimeState()
 		this.status = "idle"
 	}

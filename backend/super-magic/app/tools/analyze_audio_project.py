@@ -886,7 +886,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 """
 
             # 使用封装方法自动处理版本控制（工具生成的文件，不更新 timestamp）
-            await self._write_text_with_versioning(tool_context, config_path, new_content, update_timestamp=False)
+            await self._write_text_with_versioning(tool_context, config_path, new_content, track_in_horizon=False)
 
             logger.info(f"已更新配置文件 scene_type: {scene_type}")
 
@@ -945,7 +945,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 """
 
             # 使用封装方法自动处理版本控制（工具生成的文件，不更新 timestamp）
-            await self._write_text_with_versioning(tool_context, config_path, new_content, update_timestamp=False)
+            await self._write_text_with_versioning(tool_context, config_path, new_content, track_in_horizon=False)
 
             logger.info(f"配置文件已更新，成功追加 {len(new_files)} 个新分析类型")
 
@@ -2441,7 +2441,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
 
             # Write back with versioning (can rollback if needed!)
             await self._write_text_with_versioning(
-                tool_context, config_path, new_content, update_timestamp=False
+                tool_context, config_path, new_content, track_in_horizon=False
             )
 
             logger.info(f"✅ 配置文件标签已更新: {old_tags} → {tags}")
@@ -2471,7 +2471,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
             file_path = project_path / filename
 
             # 使用封装方法自动处理版本控制（工具生成的文件，不更新 timestamp）
-            await self._write_text_with_versioning(tool_context, file_path, content, update_timestamp=False)
+            await self._write_text_with_versioning(tool_context, file_path, content, track_in_horizon=False)
 
             logger.info(f"成功写入分析文件: {file_path}")
 
@@ -2497,7 +2497,7 @@ if (typeof window.magicProjectConfigure === 'function') {{
                 raise FileNotFoundError(f"找不到模板文件: {source_index_path}")
 
             # 使用封装方法自动处理版本控制（工具生成的文件，不更新 timestamp）
-            await self._copy_file_with_versioning(tool_context, source_index_path, index_path, update_timestamp=False)
+            await self._copy_file_with_versioning(tool_context, source_index_path, index_path, track_in_horizon=False)
 
             logger.info(f"成功复制可视化界面: {index_path}")
 

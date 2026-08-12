@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
+import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
+import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 
 export const Attachment = ({
 	attachments,
@@ -106,6 +108,7 @@ export const Attachment = ({
 					{displayedAttachments?.map((item: AttachmentProps) => {
 						const { display_config } = item
 						const isFolder = item.file_extension === ""
+						const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
 						return (
 							<div
 								key={item.file_id}
@@ -134,6 +137,8 @@ export const Attachment = ({
 											height={24}
 											data-testid="message-attachment-image"
 										/>
+									) : projectInstructionsFileKind ? (
+										<TopicFileIcon magicVariant="magic-file-agent" size={24} />
 									) : (
 										<MagicFileIcon
 											type={getAttachmentType(item) || item.file_extension}

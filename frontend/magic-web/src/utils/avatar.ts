@@ -16,7 +16,12 @@ export const getAvatarUrl = (avatar: string, height: number = 50) => {
 				h: height * 2,
 			})}/${buildFormatProcess({ format: "webp" })}`
 		} catch (error) {
-			logger.error("getAvatarUrl error", error)
+			logger.error({
+				eventKey: "get_avatar_url_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getAvatarUrl error",
+			})
 			return avatar
 		}
 	}
@@ -32,7 +37,12 @@ export const getAvatarUrl = (avatar: string, height: number = 50) => {
 				h: height * 2,
 			})}/${buildFormatProcess({ format: "webp" })}`
 		} catch (error) {
-			logger.error("getAvatarUrl error", error)
+			logger.error({
+				eventKey: "get_avatar_url_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getAvatarUrl error",
+			})
 			return avatar
 		}
 	}

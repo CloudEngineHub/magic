@@ -168,13 +168,13 @@ function SearchBar({
 							<SelectValue placeholder={t("shareManagement.allProjects")} />
 						</SelectTrigger>
 						<SelectContent
-							className="max-h-[280px]"
-							align="start"
+							className="max-h-[280px] w-[320px] max-w-[calc(100vw-32px)]"
+							align="end"
 							style={{ zIndex: 1300 }}
 							showScrollButtons={false}
 							viewportClassName="pt-0"
 						>
-							{/* 搜索输入框 */}
+							{/* Project search */}
 							<div
 								className="sticky top-0 z-10 bg-popover px-2 pb-2 pt-2"
 								onPointerDown={(e) => e.stopPropagation()}
@@ -188,7 +188,7 @@ function SearchBar({
 									onClick={(e) => e.stopPropagation()}
 									onKeyDown={(e) => {
 										e.stopPropagation()
-										// 阻止 Enter 键关闭 Select
+										// Keep the select open while searching.
 										if (e.key === "Enter") {
 											e.preventDefault()
 										}
@@ -200,35 +200,50 @@ function SearchBar({
 								/>
 							</div>
 
-							{/* 所有项目选项 */}
+							{/* All projects */}
 							<SelectItem value={ALL_PROJECTS}>
 								{t("shareManagement.allProjects")}
 							</SelectItem>
 
-							{/* 二级分组展示 */}
+							{/* Projects grouped by workspace */}
 							{filteredProjectsTree.length > 0
 								? filteredProjectsTree.map((workspace) => (
-									<SelectGroup key={workspace.workspace_id}>
-										<SelectLabel>
-											{workspace.workspace_name ||
-												t("share.unNamedWorkspace")}
-										</SelectLabel>
-										{workspace.projects.map((project) => (
-											<SelectItem
-												key={project.project_id}
-												value={project.project_id}
+										<SelectGroup key={workspace.workspace_id}>
+											<SelectLabel
+												className="truncate"
+												title={
+													workspace.workspace_name ||
+													t("share.unNamedWorkspace")
+												}
 											>
-												{project.project_name ||
-													t("common.untitledProject")}
-											</SelectItem>
-										))}
-									</SelectGroup>
-								))
+												{workspace.workspace_name ||
+													t("share.unNamedWorkspace")}
+											</SelectLabel>
+											{workspace.projects.map((project) => (
+												<SelectItem
+													key={project.project_id}
+													value={project.project_id}
+													className="overflow-hidden"
+												>
+													<span
+														className="block max-w-[240px] truncate"
+														title={
+															project.project_name ||
+															t("common.untitledProject")
+														}
+													>
+														{project.project_name ||
+															t("common.untitledProject")}
+													</span>
+												</SelectItem>
+											))}
+										</SelectGroup>
+									))
 								: debouncedSearchQuery.trim() && (
-									<div className="px-2 py-1.5 text-sm text-muted-foreground">
-										{t("shareManagement.noProjectFound")}
-									</div>
-								)}
+										<div className="px-2 py-1.5 text-sm text-muted-foreground">
+											{t("shareManagement.noProjectFound")}
+										</div>
+									)}
 						</SelectContent>
 					</Select>
 				</div>
