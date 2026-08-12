@@ -15,7 +15,6 @@ from agentlang.event.event import EventType
 from agentlang.utils.file import generate_safe_filename
 from app.i18n import i18n
 from app.core.entity.tool.tool_result import VideoToolResult
-from app.tools.core import tool
 from app.tools.generate_video import GenerateVideo
 from app.tools.core import BaseToolParams
 
@@ -59,9 +58,13 @@ Whether to overwrite an existing video.
         return self
 
 
-@tool(name="get_video")
 class GetVideo(GenerateVideo):
     """Query and download a regular video generation task."""
+
+    _is_tool = False
+
+    # Internal service helper; intentionally excluded from tool discovery.
+    _is_tool = False
 
     name = "get_video"
     params_class = GetVideoParams

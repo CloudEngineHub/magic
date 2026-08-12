@@ -20,7 +20,7 @@ from app.core.entity.tool.tool_result import VideoToolResult
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.abstract_file_tool import AbstractFileTool
-from app.tools.core import BaseToolParams, tool
+from app.tools.core import BaseToolParams
 from app.tools.media_utils.presigned_url import generate_presigned_url
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_mkdir, async_replace, async_unlink
@@ -191,9 +191,13 @@ Whether to overwrite an existing video with the same name. Defaults to false."""
         return self
 
 
-@tool(name="generate_video")
 class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[GenerateVideoParams]):
     """Create regular video generation tasks in general mode."""
+
+    _is_tool = False
+
+    # Internal service helper; intentionally excluded from tool discovery.
+    _is_tool = False
 
     def __init__(self, **data: Any):
         data.setdefault("base_dir", PathManager.get_workspace_dir())
