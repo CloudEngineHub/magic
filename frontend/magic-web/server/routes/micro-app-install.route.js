@@ -32,7 +32,7 @@ function respondWithInstallError(error, res, next) {
 	return next(error)
 }
 
-function buildManifest(appId, appName) {
+function buildManifest(appId, appName, hasInstallIcon = true) {
 	const encodedAppId = encodeURIComponent(appId)
 	const iconUrl = `/micro-app/${encodedAppId}/icon`
 
@@ -45,11 +45,33 @@ function buildManifest(appId, appName) {
 		display: "standalone",
 		theme_color: "#ffffff",
 		background_color: "#ffffff",
-		icons: [
-			{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
-			{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
-		],
+		icons: hasInstallIcon
+			? [
+					{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
+					{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
+				]
+			: [],
 	}
+}
+
+async function resolveInstallIconBody(publishedMicroApp) {
+	// The backend resolves the app-local icon.svg first; the platform favicon is
+	// only a fallback for old or incomplete published micro apps.
+	const iconUrl = readInstallIconUrl(publishedMicroApp)
+	if (iconUrl) {
+		const icon = await downloadInstallIcon(iconUrl).catch(() => null)
+		if (icon) return icon
+	}
+
+	const platformFaviconUrl = await getGlobalPlatformInfo()
+		.then(readPlatformFaviconUrl)
+		.catch(() => "")
+	if (platformFaviconUrl) {
+		const platformIcon = await downloadInstallIcon(platformFaviconUrl).catch(() => null)
+		if (platformIcon) return platformIcon
+	}
+
+	return null
 }
 
 class MicroAppInstallRoutes {
@@ -57,14 +79,17 @@ class MicroAppInstallRoutes {
 		setNoStoreHeaders(res)
 		try {
 			const appId = String(req.params.appId || "").trim()
-			const [, projectNameResponse] = await Promise.all([
+			const [publishedMicroApp, projectNameResponse] = await Promise.all([
 				getPublishedMicroApp(appId),
 				getMicroAppProjectName(appId).catch(() => null),
 			])
 			const appName = readPublishedName(projectNameResponse)
+			// The published metadata already indicates whether the fixed root icon.svg exists.
+			// Do not download the icon again just to build the manifest MIME entry.
+			const hasInstallIcon = Boolean(readInstallIconUrl(publishedMicroApp))
 
 			res.setHeader("Content-Type", "application/manifest+json; charset=utf-8")
-			return res.json(buildManifest(appId, appName))
+			return res.json(buildManifest(appId, appName, hasInstallIcon))
 		} catch (error) {
 			return respondWithInstallError(error, res, next)
 		}
@@ -79,25 +104,10 @@ class MicroAppInstallRoutes {
 			}
 
 			const publishedMicroApp = await getPublishedMicroApp(req.params.appId)
-			const iconUrl = readInstallIconUrl(publishedMicroApp)
-
-			if (iconUrl) {
-				const icon = await downloadInstallIcon(iconUrl).catch(() => null)
-				if (icon) {
-					res.setHeader("Content-Type", icon.contentType)
-					return res.send(icon.body)
-				}
-			}
-
-			const platformFaviconUrl = await getGlobalPlatformInfo()
-				.then(readPlatformFaviconUrl)
-				.catch(() => "")
-			if (platformFaviconUrl) {
-				const platformIcon = await downloadInstallIcon(platformFaviconUrl).catch(() => null)
-				if (platformIcon) {
-					res.setHeader("Content-Type", platformIcon.contentType)
-					return res.send(platformIcon.body)
-				}
+			const installIcon = await resolveInstallIconBody(publishedMicroApp)
+			if (installIcon) {
+				res.setHeader("Content-Type", installIcon.contentType)
+				return res.send(installIcon.body)
 			}
 
 			return res.status(404).send("")
@@ -110,3 +120,4 @@ class MicroAppInstallRoutes {
 module.exports = MicroAppInstallRoutes
 module.exports.buildManifest = buildManifest
 module.exports.readInstallIconUrl = readInstallIconUrl
+module.exports.resolveInstallIconBody = resolveInstallIconBody

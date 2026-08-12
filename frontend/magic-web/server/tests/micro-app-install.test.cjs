@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict")
-const http = require("node:http")
 const { afterEach, test } = require("node:test")
 const MicroAppInstallRoutes = require("../routes/micro-app-install.route")
 const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
@@ -71,7 +70,7 @@ function mockPublishedMicroApp({ appId = TEST_APP_ID, iconUrl = "" } = {}) {
 }
 
 test("builds a distinct password-free manifest for each published micro app", async () => {
-	mockPublishedMicroApp()
+	mockPublishedMicroApp({ iconUrl: "https://files.example.com/icon.svg" })
 	const response = createResponse()
 	await new MicroAppInstallRoutes().manifest(
 		{ params: { appId: TEST_APP_ID } },
@@ -128,6 +127,67 @@ test("rejects an unpublished micro app instead of returning a manifest", async (
 	assert.equal(response.body, "")
 })
 
+test("does not advertise an unavailable icon in the manifest", async () => {
+	mockPublishedMicroApp()
+	const response = createResponse()
+	await new MicroAppInstallRoutes().manifest(
+		{ params: { appId: TEST_APP_ID } },
+		response,
+		(error) => {
+			throw error
+		},
+	)
+
+	assert.deepEqual(response.body.icons, [])
+})
+
+test("manifest uses the SVG type for a backend-resolved root icon", async () => {
+	const iconUrl = "https://files.example.com/icon.svg?token=secret"
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			return new Response(
+				JSON.stringify({
+					data: {
+						app_id: TEST_APP_ID,
+						resource_id: "resource-1",
+						icon_url: iconUrl,
+					},
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			)
+		}
+		if (url.includes("/title")) {
+			return new Response(JSON.stringify({ data: { project_name: "测试微应用" } }), {
+				status: 200,
+				headers: { "content-type": "application/json" },
+			})
+		}
+		throw new Error(`Unexpected request: ${url}`)
+	}
+
+	const response = createResponse()
+	await new MicroAppInstallRoutes().manifest(
+		{ params: { appId: TEST_APP_ID } },
+		response,
+		(error) => {
+			throw error
+		},
+	)
+
+	assert.deepEqual(response.body.icons, [
+		{
+			src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
+			sizes: "192x192",
+			type: "image/svg+xml",
+		},
+		{
+			src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
+			sizes: "512x512",
+			type: "image/svg+xml",
+		},
+	])
+})
+
 test("serves the generated SVG app icon through the same-origin icon route", async () => {
 	const iconUrl = "https://files.example.com/icon.svg?token=secret"
 	global.fetch = async (url) => {
@@ -165,44 +225,34 @@ test("serves the generated SVG app icon through the same-origin icon route", asy
 })
 
 test("proxies an upstream SVG icon without changing its MIME type", async () => {
-	const upstream = http.createServer((req, res) => {
-		assert.equal(req.url, "/icon.svg")
-		res.writeHead(200, { "content-type": "image/svg+xml" })
-		res.end(generatedIconSvg)
-	})
-	await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve))
-	const address = upstream.address()
-	assert.ok(address && typeof address === "object")
-
-	const originalFetchForTest = global.fetch
-	global.fetch = async (url, options) => {
+	const iconUrl = "https://files.example.com/icon.svg"
+	global.fetch = async (url) => {
 		if (url.includes("/api/v1/share/micro-apps/")) {
 			return new Response(
 				JSON.stringify({
-					data: { resource_id: "resource-1", icon_url: `http://127.0.0.1:${address.port}/icon.svg` },
+					data: { resource_id: "resource-1", icon_url: iconUrl },
 				}),
 				{ status: 200, headers: { "content-type": "application/json" } },
 			)
 		}
-		return originalFetchForTest(url, options)
+		assert.equal(url, iconUrl)
+		return new Response(generatedIconSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
 	}
 
-	try {
-		const response = createResponse()
-		await new MicroAppInstallRoutes().icon(
-			{ params: { appId: TEST_APP_ID }, query: { size: "512" } },
-			response,
-			(error) => {
-				throw error
-			},
-		)
+	const response = createResponse()
+	await new MicroAppInstallRoutes().icon(
+		{ params: { appId: TEST_APP_ID }, query: { size: "512" } },
+		response,
+		(error) => {
+			throw error
+		},
+	)
 
-		assert.equal(response.headers["content-type"], "image/svg+xml")
-		assert.deepEqual(response.body, generatedIconSvg)
-	} finally {
-		global.fetch = originalFetchForTest
-		await new Promise((resolve, reject) => upstream.close((error) => (error ? reject(error) : resolve())))
-	}
+	assert.equal(response.headers["content-type"], "image/svg+xml")
+	assert.deepEqual(response.body, generatedIconSvg)
 })
 
 test("uses the management favicon as the fallback icon and returns 404 without one", async () => {

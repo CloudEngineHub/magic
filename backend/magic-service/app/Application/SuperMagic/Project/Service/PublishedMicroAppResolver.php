@@ -65,20 +65,17 @@ class PublishedMicroAppResolver
         return trim($project->getProjectName());
     }
 
-    /** Resolve the install icon link from the generated file beside app.json. */
+    /** Resolve the install icon link from the generated file in the project root. */
     public function getInstallIconUrl(MicroAppEntity $record): string
     {
-        $appConfig = $this->taskFileRepository->getByProjectIdAndFileName(
-            $record->getProjectId(),
-            'app.json'
-        );
-        if ($appConfig === null) {
+        $rootDirectory = $this->taskFileRepository->findRootDirectoryByProjectId($record->getProjectId());
+        if ($rootDirectory === null) {
             return '';
         }
 
         $iconFile = $this->taskFileRepository->getByProjectParentAndName(
             $record->getProjectId(),
-            $appConfig->getParentId(),
+            $rootDirectory->getFileId(),
             self::INSTALL_ICON_FILE
         );
         if ($iconFile === null || $iconFile->getFileKey() === '') {

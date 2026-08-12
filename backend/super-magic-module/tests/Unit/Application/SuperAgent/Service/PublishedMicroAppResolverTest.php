@@ -24,22 +24,22 @@ use PHPUnit\Framework\TestCase;
  */
 class PublishedMicroAppResolverTest extends TestCase
 {
-    public function testResolvesInstallIconOnlyFromTheAppConfigDirectory(): void
+    public function testResolvesTheRootIconSvg(): void
     {
         $projectId = 2001;
-        $parentId = 3001;
+        $rootDirectoryId = 3001;
         $organizationCode = 'ORG-1';
-        $appConfig = $this->createFile('app.json', 'workspace/app/app.json', $parentId);
-        $icon = $this->createFile('icon.svg', 'workspace/app/icon.svg', $parentId);
+        $rootDirectory = $this->createFile('/', 'workspace/app/', null, $rootDirectoryId);
+        $icon = $this->createFile('icon.svg', 'workspace/app/icon.svg', $rootDirectoryId);
 
         $taskFileRepository = $this->createMock(TaskFileRepositoryInterface::class);
         $taskFileRepository->expects($this->once())
-            ->method('getByProjectIdAndFileName')
-            ->with($projectId, 'app.json')
-            ->willReturn($appConfig);
+            ->method('findRootDirectoryByProjectId')
+            ->with($projectId)
+            ->willReturn($rootDirectory);
         $taskFileRepository->expects($this->once())
             ->method('getByProjectParentAndName')
-            ->with($projectId, $parentId, 'icon.svg')
+            ->with($projectId, $rootDirectoryId, 'icon.svg')
             ->willReturn($icon);
 
         $url = 'https://files.example.com/icon.svg';
@@ -55,13 +55,7 @@ class PublishedMicroAppResolverTest extends TestCase
             )
             ->willReturn($links);
 
-        $resolver = new PublishedMicroAppResolver(
-            $this->createMock(MicroAppRepositoryInterface::class),
-            $this->createMock(ProjectRepositoryInterface::class),
-            $this->createMock(ResourceShareDomainService::class),
-            $taskFileRepository,
-            $fileDomainService,
-        );
+        $resolver = $this->createResolver($taskFileRepository, $fileDomainService);
         $record = (new MicroAppEntity())
             ->setProjectId($projectId)
             ->setOrganizationCode($organizationCode);
@@ -69,9 +63,53 @@ class PublishedMicroAppResolverTest extends TestCase
         self::assertSame($url, $resolver->getInstallIconUrl($record));
     }
 
-    private function createFile(string $fileName, string $fileKey, int $parentId): TaskFileEntity
+    public function testReturnsEmptyWhenTheRootIconSvgIsMissing(): void
+    {
+        $projectId = 2001;
+        $rootDirectoryId = 3001;
+        $organizationCode = 'ORG-1';
+        $rootDirectory = $this->createFile('/', 'workspace/app/', null, $rootDirectoryId);
+
+        $taskFileRepository = $this->createMock(TaskFileRepositoryInterface::class);
+        $taskFileRepository->expects($this->once())
+            ->method('findRootDirectoryByProjectId')
+            ->with($projectId)
+            ->willReturn($rootDirectory);
+        $taskFileRepository->expects($this->once())
+            ->method('getByProjectParentAndName')
+            ->with($projectId, $rootDirectoryId, 'icon.svg')
+            ->willReturn(null);
+
+        $fileDomainService = $this->createMock(FileDomainService::class);
+        $fileDomainService->expects($this->never())->method('getLinks');
+
+        $resolver = $this->createResolver($taskFileRepository, $fileDomainService);
+        $record = (new MicroAppEntity())
+            ->setProjectId($projectId)
+            ->setOrganizationCode($organizationCode);
+
+        self::assertSame('', $resolver->getInstallIconUrl($record));
+    }
+
+    private function createResolver(
+        TaskFileRepositoryInterface $taskFileRepository,
+        FileDomainService $fileDomainService,
+    ): PublishedMicroAppResolver {
+        return new PublishedMicroAppResolver(
+            $this->createMock(MicroAppRepositoryInterface::class),
+            $this->createMock(ProjectRepositoryInterface::class),
+            $this->createMock(ResourceShareDomainService::class),
+            $taskFileRepository,
+            $fileDomainService,
+        );
+    }
+
+    private function createFile(string $fileName, string $fileKey, ?int $parentId, ?int $fileId = null): TaskFileEntity
     {
         $file = new TaskFileEntity();
+        if ($fileId !== null) {
+            $file->setFileId($fileId);
+        }
         $file->setFileName($fileName);
         $file->setFileKey($fileKey);
         $file->setParentId($parentId);
