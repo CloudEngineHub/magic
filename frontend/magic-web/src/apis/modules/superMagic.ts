@@ -2359,15 +2359,19 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 创建文件或文件夹
 	 * @param data
+	 * @param config Optional request config
 	 */
-	createFile(data: {
-		project_id: string
-		parent_id?: string | number
-		file_name: string
-		is_directory: boolean
-		ignore_duplicate?: boolean
-	}) {
-		return fetch.post("/api/v1/super-agent/file", data)
+	createFile(
+		data: {
+			project_id: string
+			parent_id?: string | number
+			file_name: string
+			is_directory: boolean
+			ignore_duplicate?: boolean
+		},
+		config?: { enableErrorMessagePrompt?: boolean },
+	) {
+		return fetch.post("/api/v1/super-agent/file", data, config)
 	},
 
 	/**

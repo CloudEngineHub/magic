@@ -36,6 +36,7 @@ import TopicMessagePanel from "@/pages/superMagic/pages/TopicPage/components/Top
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/MessageHeader"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import { Spinner } from "@/components/shadcn-ui/spinner"
 
 /** Normalize relative paths before matching path-only message attachments to workspace files. */
 function normalizeAttachmentPath(path: string | undefined): string {
@@ -446,7 +447,7 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 	)
 
 	// Live float panels continue to use the RecordingSummary fork (no main-site polling).
-	const { messages, showLoading, isShowLoadingInit, handlePullMoreMessage } =
+	const { messages, showLoading, isShowLoadingInit, isMessagesInitialLoading, handlePullMoreMessage } =
 		useLiveRecordingTopicMessages({
 			selectedTopic,
 			selectedWorkspace,
@@ -554,7 +555,11 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
 			<MessageListProvider value={value}>
-				{messages.length === 0 ? (
+				{isMessagesInitialLoading ? (
+					<div className={`${styles.messageListFallback} min-h-0 flex-1`}>
+						<Spinner className="h-5 w-5" />
+					</div>
+				) : messages.length === 0 ? (
 					<div className={`${styles.messageListFallback} min-h-0 flex-1`}>
 						<MessageListFallback />
 					</div>

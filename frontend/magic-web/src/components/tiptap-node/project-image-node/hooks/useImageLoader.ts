@@ -178,8 +178,13 @@ export function useImageLoader(options: UseImageLoaderOptions): UseImageLoaderRe
 		setRetryTrigger((prev) => prev + 1)
 	})
 
-	// Handle image load error
+	/**
+	 * Marks the rendered image as failed and clears loadedSrcRef so attachment-context
+	 * subscribe / manual retry can re-resolve instead of being short-circuited.
+	 */
 	const handleImageError = useMemoizedFn(() => {
+		loadedSrcRef.current = null
+		setImageUrl(null)
 		const errorObj = new Error("Failed to load image")
 		setError(errorObj)
 	})

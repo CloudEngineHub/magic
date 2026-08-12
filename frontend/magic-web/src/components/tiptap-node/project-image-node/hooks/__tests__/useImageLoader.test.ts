@@ -96,4 +96,55 @@ describe("useImageLoader attachment readiness", () => {
 		expect(resolver).toHaveBeenCalledTimes(1)
 		expect(result.current.imageUrl).toBe("https://tos.invalid/./images/mock-stable.png")
 	})
+
+	it("recovers via subscribe after img onError clears the loaded-src short-circuit", async () => {
+		let attempt = 0
+		let listener: (() => void) | undefined
+		const resolver = vi.fn(async (src: string) => {
+			attempt += 1
+			// First resolve returns a URL that later fails at the <img> layer.
+			return attempt === 1
+				? `https://tos.invalid/broken-${src}`
+				: `https://tos.invalid/recovered-${src}`
+		}) as ProjectImageUrlResolver
+		resolver.isReady = () => true
+		resolver.subscribe = (nextListener) => {
+			listener = nextListener
+			return () => {
+				listener = undefined
+			}
+		}
+
+		const { result } = renderHook(() =>
+			useImageLoader({
+				src: "./images/mock-recover.png",
+				shouldLoad: true,
+				urlResolver: resolver,
+				retryConfig,
+			}),
+		)
+
+		await waitFor(() => {
+			expect(result.current.imageUrl).toBe(
+				"https://tos.invalid/broken-./images/mock-recover.png",
+			)
+		})
+
+		act(() => {
+			result.current.handleImageError()
+		})
+		expect(result.current.error?.message).toBe("Failed to load image")
+		expect(result.current.imageUrl).toBeNull()
+
+		act(() => {
+			listener?.()
+		})
+
+		await waitFor(() => {
+			expect(result.current.imageUrl).toBe(
+				"https://tos.invalid/recovered-./images/mock-recover.png",
+			)
+		})
+		expect(result.current.error).toBeNull()
+	})
 })
