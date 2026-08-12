@@ -22,6 +22,7 @@ use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\File\Service\UpsertProjectFileNodeDTO;
 use App\Domain\SuperMagic\Message\Entity\TaskMessageEntity;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\ChatInstruction;
+use App\Domain\SuperMagic\Message\Entity\ValueObject\MessagePayload;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageType;
 use App\Domain\SuperMagic\Message\Service\TaskMessageDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
@@ -122,9 +123,11 @@ class HandleAgentMessageAppService extends AbstractAppService
             ));
         } catch (EventException $e) {
             $this->handleEventException($e, $messageDTO, $taskContext ?? null, $topicEntity ?? null);
+            $this->dispatchErrorCallbackOnFailure($messageDTO, $taskContext ?? null, $topicEntity ?? null);
             throw $e;
         } catch (Throwable $e) {
             $this->handleGeneralException($e, $messageDTO);
+            $this->dispatchErrorCallbackOnFailure($messageDTO, $taskContext ?? null, $topicEntity ?? null);
             throw $e;
         }
     }
@@ -459,6 +462,41 @@ class HandleAgentMessageAppService extends AbstractAppService
             $messageDTO,
             $messageDTO->getMetadata()->getLanguage()
         ));
+    }
+
+    /**
+     * Dispatch a forced-ERROR callback event when message processing fails.
+     *
+     * Ensures downstream subscribers (e.g. recording summary phase settlement) always
+     * receive a terminal signal even when the message itself cannot be processed.
+     * Never throws: any failure here is only logged, retry semantics stay intact.
+     */
+    private function dispatchErrorCallbackOnFailure(
+        TopicTaskMessageDTO $messageDTO,
+        ?TaskContext $taskContext,
+        ?TopicEntity $topicEntity
+    ): void {
+        if ($taskContext === null || $topicEntity === null) {
+            $this->logger->warning('Skip error callback dispatch: task context or topic not ready', [
+                'message_id' => $messageDTO->getPayload()->getMessageId(),
+                'task_id' => $messageDTO->getPayload()->getTaskId(),
+            ]);
+            return;
+        }
+
+        try {
+            $payloadArray = $messageDTO->getPayload()->toArray();
+            $payloadArray['status'] = TaskStatus::ERROR->value;
+            $messageDTO->setPayload(MessagePayload::fromArray($payloadArray));
+
+            $this->dispatchCallbackEvent($messageDTO, $taskContext, $topicEntity);
+        } catch (Throwable $e) {
+            $this->logger->error('Failed to dispatch error callback event', [
+                'message_id' => $messageDTO->getPayload()->getMessageId(),
+                'task_id' => $messageDTO->getPayload()->getTaskId(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
