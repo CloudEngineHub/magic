@@ -42,6 +42,12 @@ export type StoryboardFieldOverlayMountOptions = {
 			modelIconUrl?: string
 			modelIconSize?: number
 			modelIconGap?: number
+			/** Select 打开时画布 pointer 被禁用；点画布后由宿主 commit，再回调此函数做切换。 */
+			onCanvasOutsidePointer?: (point: {
+				clientX: number
+				clientY: number
+				target: EventTarget | null
+			}) => void
 	  }
 	| {
 			kind: "textarea"
@@ -112,6 +118,13 @@ export class StoryboardFieldOverlayHost {
 						...options,
 						onCommit: (value) => this.commitValue(value),
 						onCancel: () => this.cancel(),
+						onCanvasOutsidePointer: (point) => {
+							if (options.onCanvasOutsidePointer) {
+								options.onCanvasOutsidePointer(point)
+								return
+							}
+							this.commit()
+						},
 					}),
 				)
 			})
@@ -130,6 +143,23 @@ export class StoryboardFieldOverlayHost {
 	public commit(): void {
 		if (!this.options || this.finishing) return
 		this.commitValue(this.control?.value ?? this.options.value)
+	}
+
+	/**
+	 * 切换控件时关闭当前 overlay。
+	 * Select 的值已在选项点击时提交；再走 commit 会触发文档更新/控件重绑，
+	 * 进而在新 overlay mount 后被 binding cleanup cancel 掉。
+	 */
+	public dismissForSwitch(): void {
+		if (!this.options || this.finishing) {
+			this.unmount()
+			return
+		}
+		if (this.options.kind === "select") {
+			this.cancel()
+			return
+		}
+		this.commit()
 	}
 
 	public cancel(): void {

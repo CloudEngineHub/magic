@@ -11,6 +11,12 @@ import {
 import type { StoryboardSelectGroup, StoryboardSelectOption } from "./StoryboardFieldOverlayHost"
 import styles from "./StoryboardSelectOverlay.module.css"
 
+export interface StoryboardSelectCanvasOutsidePointer {
+	clientX: number
+	clientY: number
+	target: EventTarget | null
+}
+
 interface StoryboardSelectOverlayProps {
 	ariaLabel: string
 	value: string
@@ -26,6 +32,11 @@ interface StoryboardSelectOverlayProps {
 	borderRadius: number
 	onCommit: (value: string) => void
 	onCancel: () => void
+	/**
+	 * Select 打开时会 disableOutsidePointerEvents，画布收不到指针。
+	 * 点在画布/字段 overlay 区域时走此回调，由宿主 commit 后按坐标激活目标控件。
+	 */
+	onCanvasOutsidePointer: (point: StoryboardSelectCanvasOutsidePointer) => void
 }
 
 type StoryboardSelectCssVariables = CSSProperties & {
@@ -45,6 +56,31 @@ type StoryboardOptionCssVariables = CSSProperties & {
 	"--storyboard-option-preview-height"?: string
 }
 
+/** Select 打开时 body 常为 pointer-events:none，event.target 可能不是 canvas，需结合坐标判断。 */
+function isPointerOverCanvasSurface(
+	clientX: number,
+	clientY: number,
+	target: EventTarget | null,
+): boolean {
+	if (target instanceof Element) {
+		if (
+			target.closest(".konvajs-content") ||
+			target.closest('[data-canvas-ui="storyboard-field-overlay"]')
+		) {
+			return true
+		}
+	}
+	const content = document.querySelector(".konvajs-content")
+	if (!content) return false
+	const rect = content.getBoundingClientRect()
+	return (
+		clientX >= rect.left &&
+		clientX <= rect.right &&
+		clientY >= rect.top &&
+		clientY <= rect.bottom
+	)
+}
+
 export function StoryboardSelectOverlay({
 	ariaLabel,
 	value,
@@ -60,6 +96,7 @@ export function StoryboardSelectOverlay({
 	borderRadius,
 	onCommit,
 	onCancel,
+	onCanvasOutsidePointer,
 }: StoryboardSelectOverlayProps) {
 	const triggerRef = useRef<HTMLButtonElement | null>(null)
 	const triggerStyle: StoryboardSelectCssVariables = {
@@ -114,14 +151,7 @@ export function StoryboardSelectOverlay({
 
 	return (
 		<div data-canvas-ui-component style={{ width: "100%", height: "100%" }}>
-			<Select
-				value={value}
-				open
-				onValueChange={onCommit}
-				onOpenChange={(open) => {
-					if (!open) onCancel()
-				}}
-			>
+			<Select value={value} open onValueChange={onCommit}>
 				<SelectPrimitive.Trigger
 					ref={triggerRef}
 					aria-label={ariaLabel}
@@ -148,6 +178,29 @@ export function StoryboardSelectOverlay({
 					align="end"
 					sideOffset={4}
 					style={{ minWidth: "var(--radix-select-trigger-width)", maxWidth: 320 }}
+					// 同控件再点 trigger：不走 onOpenChange(false) 关闭。
+					// Select 打开时 disableOutsidePointerEvents，画布收不到事件；
+					// 点画布区域时交给 onCanvasOutsidePointer（按坐标切换/关闭目标控件）。
+					onEscapeKeyDown={() => onCancel()}
+					onPointerDownOutside={(event) => {
+						const original = event.detail.originalEvent
+						if (
+							isPointerOverCanvasSurface(
+								original.clientX,
+								original.clientY,
+								original.target,
+							)
+						) {
+							event.preventDefault()
+							onCanvasOutsidePointer({
+								clientX: original.clientX,
+								clientY: original.clientY,
+								target: original.target,
+							})
+							return
+						}
+						onCancel()
+					}}
 				>
 					{groups?.map((group) => (
 						<SelectGroup key={group.id}>

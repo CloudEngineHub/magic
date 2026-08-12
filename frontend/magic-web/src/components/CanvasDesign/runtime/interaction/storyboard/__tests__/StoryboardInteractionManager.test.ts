@@ -202,7 +202,17 @@ describe("StoryboardInteractionManager", () => {
 		const data = createStoryboardData()
 		getStoryboardContent(data).shots![0].outputImageElementId = "image-output"
 		const outputImage = createImageOutput("image-output")
-		const harness = createCanvasMock(data, [outputImage])
+		const harness = createCanvasMock(
+			data,
+			[outputImage],
+			[
+				{
+					id: "storyboard-output",
+					sourceElementId: data.id,
+					targetElementId: outputImage.id,
+				},
+			],
+		)
 		harness.selected.value = true
 		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
 		const hit = new Konva.Rect({ width: 100, height: 40 })
@@ -219,9 +229,61 @@ describe("StoryboardInteractionManager", () => {
 
 		const shots = harness.updates[0]?.patch.shots as StoryboardElementContent["shots"]
 		expect(shots).toHaveLength(2)
-		expect(shots?.[1]?.outputImageElementId).toBeUndefined()
+		expect(shots?.[1]).toEqual(
+			expect.objectContaining({ id: expect.any(String), description: "" }),
+		)
+		expect(shots?.[1]).not.toHaveProperty("durationSeconds")
 		expect(harness.canvas.elementManager.create).not.toHaveBeenCalled()
 		expect(harness.elements.has("image-output")).toBe(true)
+
+		manager.destroy()
+	})
+
+	it("rerenders storyboard state when its output connection is deleted or restored", () => {
+		const data = createStoryboardData()
+		getStoryboardContent(data).shots![0].outputImageElementId = "image-output"
+		const outputImage = createImageOutput("image-output")
+		const outputConnection: CanvasConnection = {
+			id: "storyboard-output",
+			sourceElementId: data.id,
+			targetElementId: outputImage.id,
+		}
+		const connections = [outputConnection]
+		const harness = createCanvasMock(data, [outputImage], connections)
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		harness.rerender.mockClear()
+
+		connections.length = 0
+		harness.eventEmitter.emit({
+			type: "connection:change",
+			data: {
+				connections: [],
+				deletedConnectionIds: [outputConnection.id],
+			},
+		})
+		expect(harness.rerender).toHaveBeenCalled()
+
+		harness.rerender.mockClear()
+		connections.push(outputConnection)
+		harness.eventEmitter.emit({
+			type: "connection:change",
+			data: { connections: [outputConnection], changedConnectionIds: [outputConnection.id] },
+		})
+		expect(harness.rerender).toHaveBeenCalled()
+
+		manager.destroy()
+	})
+
+	it("rerenders storyboard state after document restoration completes", async () => {
+		const data = createStoryboardData()
+		const harness = createCanvasMock(data)
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		harness.rerender.mockClear()
+
+		harness.eventEmitter.emit({ type: "document:restored", data: undefined })
+		expect(harness.rerender).not.toHaveBeenCalled()
+		await Promise.resolve()
+		expect(harness.rerender).toHaveBeenCalled()
 
 		manager.destroy()
 	})
@@ -245,7 +307,12 @@ describe("StoryboardInteractionManager", () => {
 			sourceElementId: data.id,
 			targetElementId: outputImage.id,
 		}
-		const harness = createCanvasMock(data, [outputImage], [outputConnection])
+		const manualConnection: CanvasConnection = {
+			id: "manual-output",
+			sourceElementId: data.id,
+			targetElementId: "manual-image",
+		}
+		const harness = createCanvasMock(data, [outputImage], [outputConnection, manualConnection])
 		harness.selected.value = true
 		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
 		const hit = new Konva.Rect({ width: 100, height: 40 })
@@ -335,7 +402,7 @@ describe("StoryboardInteractionManager", () => {
 		manager.destroy()
 	})
 
-	it("enables generation from the live description draft and commits before the first click", async () => {
+	it("defers description commit until generate mouseup when switching from the editor", async () => {
 		const data = createStoryboardData()
 		const harness = createCanvasMock(data)
 		harness.selected.value = true
@@ -426,6 +493,91 @@ describe("StoryboardInteractionManager", () => {
 			},
 		})
 		expect(descriptionStates).toContain("editing")
+		manager.destroy()
+	})
+
+	it("commits the description draft on mousedown when switching to another field control", async () => {
+		const data = createStoryboardData()
+		getStoryboardContent(data).generationConfig = {
+			model_id: "model-1",
+			size: "1024x1024",
+			image_generation_config: { aspect_ratio: "1:1" },
+		}
+		const harness = createCanvasMock(data)
+		harness.selected.value = true
+		const getImageModelList =
+			harness.canvas.magicConfigManager.config?.methods?.getImageModelList
+		if (!getImageModelList) throw new Error("Expected image model list mock")
+		vi.mocked(getImageModelList).mockResolvedValue([
+			{
+				id: "model-1",
+				group_id: "official",
+				model_id: "model-1",
+				model_name: "测试模型",
+				provider_model_id: "provider-model-1",
+				model_description: "",
+				model_icon: "",
+				model_status: "normal",
+				sort: 1,
+				image_size_config: {
+					sizes: [{ label: "1:1", value: "1024x1024" }],
+				},
+			} as ImageModelItem,
+		])
+
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		await vi.waitFor(() => expect(harness.rerender).toHaveBeenCalled())
+
+		const descriptionHit = new Konva.Rect({ width: 240, height: 80 })
+		const aspectHit = new Konva.Rect({ width: 100, height: 40 })
+		vi.spyOn(aspectHit, "getStage").mockReturnValue({} as Konva.Stage)
+		const descriptionAnchor = {
+			getStage: () => ({}),
+			getAbsoluteTransform: () => ({ getMatrix: () => [1, 0, 0, 1, 10, 20] }),
+			width: () => 240,
+			height: () => 80,
+		} as unknown as Konva.Node
+		const aspectAnchor = {
+			getStage: () => ({}),
+			getAbsoluteTransform: () => ({ getMatrix: () => [1, 0, 0, 1, 10, 120] }),
+			width: () => 100,
+			height: () => 40,
+		} as unknown as Konva.Node
+		manager.bindControl({
+			elementId: data.id,
+			node: descriptionHit,
+			overlayAnchorNode: descriptionAnchor,
+			action: { type: "edit-description", shotId: "shot-1" },
+			applyState: vi.fn(),
+		})
+		manager.bindControl({
+			elementId: data.id,
+			node: aspectHit,
+			overlayAnchorNode: aspectAnchor,
+			action: { type: "select-aspect-ratio" },
+			applyState: vi.fn(),
+		})
+
+		descriptionHit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		descriptionHit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		descriptionHit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+		const textarea = harness.container.querySelector<HTMLTextAreaElement>("textarea")
+		if (!textarea) throw new Error("Expected storyboard description editor")
+		textarea.value = "切到比例前的描述"
+		textarea.dispatchEvent(new Event("input", { bubbles: true }))
+		harness.updates.length = 0
+
+		aspectHit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		expect(harness.updates).toContainEqual({
+			id: data.id,
+			patch: {
+				shots: [{ id: "shot-1", description: "切到比例前的描述" }],
+			},
+		})
+		await vi.waitFor(() => {
+			expect(harness.container.querySelector('button[aria-label="画面比例"]')).toBeTruthy()
+		})
+
 		manager.destroy()
 	})
 

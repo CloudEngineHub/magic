@@ -161,6 +161,17 @@ export class StoryboardInteractionManager {
 			this.restoreCursorIfIdle()
 		}
 
+		const tryActivateFromGesture = (): boolean => {
+			if (this.isDisabled(binding) && this.isSelectedBinding(binding)) return false
+			if (!binding.activationPending || !this.canActivate(binding)) return false
+			binding.activationPending = false
+			const now = Date.now()
+			if (now - binding.lastActivationAt < ACTIVATION_DEDUPLICATION_MS) return false
+			binding.lastActivationAt = now
+			this.activate(binding)
+			return true
+		}
+
 		const handlePressStart = (event: Konva.KonvaEventObject<Event>) => {
 			const selected = this.isSelectedBinding(binding)
 			if (!selected) {
@@ -186,6 +197,36 @@ export class StoryboardInteractionManager {
 			}
 
 			stopKonvaEvent(event)
+
+			// 同一控件已在编辑：保持打开，只拦截拖拽。
+			if (this.editingBinding === binding) {
+				binding.activationPending = false
+				binding.applyState("editing")
+				this.canvas.cursorManager.setTemporary(this.getCursor(binding))
+				binding.node.getLayer()?.batchDraw()
+				return
+			}
+
+			// 切换到另一控件：
+			// - 普通字段：mousedown 立即 commit 旧 overlay 并打开新的。
+			// - 生成按钮：延后到 mouseup/click，避免按下时抢先提交描述草稿。
+			if (this.editingBinding && this.editingBinding !== binding) {
+				if (this.isGenerationAction(binding.action)) {
+					binding.activationPending = true
+					this.activeBinding = binding
+					binding.applyState("pressed")
+					this.canvas.cursorManager.setTemporary(this.getCursor(binding))
+					binding.node.getLayer()?.batchDraw()
+					return
+				}
+				binding.activationPending = false
+				const now = Date.now()
+				if (now - binding.lastActivationAt < ACTIVATION_DEDUPLICATION_MS) return
+				binding.lastActivationAt = now
+				this.activate(binding)
+				return
+			}
+
 			binding.activationPending = true
 			this.activeBinding = binding
 			binding.applyState("pressed")
@@ -208,6 +249,8 @@ export class StoryboardInteractionManager {
 			)
 			binding.node.getLayer()?.batchDraw()
 			this.restoreCursorIfIdle()
+			// Radix outside dismiss 常会吞掉后续 click；在 pointerup 补一次激活以支持切换。
+			if (!cancelled) tryActivateFromGesture()
 		}
 
 		const handleActivate = (event: Konva.KonvaEventObject<Event>) => {
@@ -216,13 +259,8 @@ export class StoryboardInteractionManager {
 				return
 			}
 			if (!binding.activationPending || !this.canActivate(binding)) return
-
 			stopKonvaEvent(event)
-			binding.activationPending = false
-			const now = Date.now()
-			if (now - binding.lastActivationAt < ACTIVATION_DEDUPLICATION_MS) return
-			binding.lastActivationAt = now
-			this.activate(binding)
+			tryActivateFromGesture()
 		}
 
 		binding.node.on("mouseenter", handleMouseEnter)
@@ -270,6 +308,11 @@ export class StoryboardInteractionManager {
 		const normalizeDocument = () => {
 			cancelEditor()
 			this.syncStoryboardHeights()
+			// Smart restore may emit before Canvas reloads connections; defer until the
+			// whole restore transaction has synchronously completed.
+			queueMicrotask(() => {
+				if (!this.destroyed) this.rerenderStoryboardElements()
+			})
 		}
 		const normalizeUpdatedStoryboard = ({
 			data,
@@ -299,6 +342,9 @@ export class StoryboardInteractionManager {
 			if (this.editingBinding?.elementId === data.elementId) cancelEditor()
 			this.rerenderStoryboardElements()
 		}
+		const handleConnectionChanged = () => {
+			this.rerenderStoryboardElements()
+		}
 
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("element:select", reconcileSelection),
@@ -313,6 +359,7 @@ export class StoryboardInteractionManager {
 			}),
 			this.canvas.eventEmitter.on("element:deleted", handleElementDeleted),
 			this.canvas.eventEmitter.on("element:updated", handleElementUpdated),
+			this.canvas.eventEmitter.on("connection:change", handleConnectionChanged),
 			this.canvas.eventEmitter.on("element:image:generate-submit-started", () => {
 				this.rerenderStoryboardElements()
 			}),
@@ -527,11 +574,55 @@ export class StoryboardInteractionManager {
 				options.onCommit(value)
 			},
 			onCancel: () => this.finishEditing(binding),
+			onCanvasOutsidePointer: (point) => this.handleSelectCanvasOutsidePointer(point),
 		})
 	}
 
+	private handleSelectCanvasOutsidePointer(point: {
+		clientX: number
+		clientY: number
+		target: EventTarget | null
+	}): void {
+		// 点在当前字段 overlay（含 invisible trigger）上：保持打开。
+		if (
+			point.target instanceof Element &&
+			point.target.closest('[data-canvas-ui="storyboard-field-overlay"]')
+		) {
+			return
+		}
+		const nextBinding = this.findBindingAtClientPoint(point.clientX, point.clientY)
+		if (nextBinding && nextBinding === this.editingBinding) return
+
+		this.overlayHost.dismissForSwitch()
+		if (!nextBinding || !this.canActivate(nextBinding)) return
+		const now = Date.now()
+		if (now - nextBinding.lastActivationAt < ACTIVATION_DEDUPLICATION_MS) return
+		nextBinding.lastActivationAt = now
+		this.activate(nextBinding)
+	}
+
+	private findBindingAtClientPoint(
+		clientX: number,
+		clientY: number,
+	): StoryboardControlBinding | null {
+		const rect = this.canvas.stage.container().getBoundingClientRect()
+		const stagePoint = { x: clientX - rect.left, y: clientY - rect.top }
+		const shape = this.canvas.stage.getIntersection(stagePoint)
+		if (!shape) return null
+		for (const binding of this.bindings) {
+			let node: Konva.Node | null = shape
+			while (node) {
+				if (node === binding.node) return binding
+				node = node.getParent()
+			}
+		}
+		return null
+	}
+
 	private beginEditing(binding: StoryboardControlBinding): void {
-		if (this.editingBinding && this.editingBinding !== binding) this.overlayHost.commit()
+		if (this.editingBinding && this.editingBinding !== binding) {
+			this.overlayHost.dismissForSwitch()
+		}
 		this.editingBinding = binding
 		binding.applyState("editing")
 		binding.node.getLayer()?.batchDraw()
