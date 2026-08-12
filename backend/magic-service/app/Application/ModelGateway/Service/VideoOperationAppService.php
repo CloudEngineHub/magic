@@ -648,7 +648,7 @@ readonly class VideoOperationAppService
             $operation,
             $requestBusinessParams,
         );
-        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($operation);
+        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($dataIsolation, $operation);
         if ($usageTokens['completion_tokens'] !== null) {
             $businessParams['completion_tokens'] = $usageTokens['completion_tokens'];
         }
@@ -1358,11 +1358,14 @@ readonly class VideoOperationAppService
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
-    private function resolveVideoReferenceMaterialContext(VideoQueueOperationEntity $operation): array
-    {
+    private function resolveVideoReferenceMaterialContext(
+        ModelGatewayDataIsolation $dataIsolation,
+        VideoQueueOperationEntity $operation
+    ): array {
         $raw = $operation->getRawRequest();
         $inputs = is_array($raw['inputs'] ?? null) ? $raw['inputs'] : [];
         $inputMode = isset($raw['input_mode']) ? trim((string) $raw['input_mode']) : '';
@@ -1370,12 +1373,22 @@ readonly class VideoOperationAppService
         $images = is_array($inputs['reference_images'] ?? null) ? $inputs['reference_images'] : [];
         $videos = is_array($inputs['reference_videos'] ?? null) ? $inputs['reference_videos'] : [];
         $audios = is_array($inputs['reference_audios'] ?? null) ? $inputs['reference_audios'] : [];
+        $inputVideoDurationSeconds = 0;
+        if ($videos !== []) {
+            $metadata = $this->videoInputMediaMetadataResolver->resolve(
+                $dataIsolation,
+                $operation->getProjectId(),
+                $videos,
+            );
+            $inputVideoDurationSeconds = (int) ($metadata['total_duration_seconds'] ?? 0);
+        }
 
         return [
             'input_mode' => $inputMode === '' ? null : $inputMode,
             'reference_image_count' => count($images),
             'reference_video_count' => count($videos),
             'reference_audio_count' => count($audios),
+            'input_video_duration_seconds' => $inputVideoDurationSeconds,
         ];
     }
 }

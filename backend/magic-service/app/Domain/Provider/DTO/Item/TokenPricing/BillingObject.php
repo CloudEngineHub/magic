@@ -107,9 +107,9 @@ final class BillingObject
      */
     public const IMAGE_REFERENCE_INPUT_COUNT_COST = 'image_reference_input_count_cost';
 
-    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT = 'video.reference_image_after_5.count';
+    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT = 'video.reference_image.after_5.count';
 
-    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST = 'video.reference_image_after_5.count.cost';
+    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST = 'video.reference_image.after_5.count.cost';
 
     /**
      * TextTokens 固定对象。
