@@ -776,14 +776,14 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
             'generate_audio' => [
                 'type' => 'switch',
                 'default' => true,
-                'name' => 'Audio',
-                'description' => 'Whether to generate audio',
+                'name' => __('video.generation.generate_audio.name'),
+                'description' => __('video.generation.generate_audio.description'),
             ],
             'web_search' => [
                 'type' => 'switch',
                 'default' => false,
-                'name' => 'Web Search',
-                'description' => 'Whether to enable web search',
+                'name' => __('video.generation.web_search.name'),
+                'description' => __('video.generation.web_search.description'),
             ],
         ];
     }

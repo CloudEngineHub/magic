@@ -5,6 +5,16 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'generation' => [
+        'generate_audio' => [
+            'name' => '生成音频',
+            'description' => '是否生成音频',
+        ],
+        'web_search' => [
+            'name' => '联网搜索',
+            'description' => '是否启用联网搜索',
+        ],
+    ],
     'input_modes' => [
         'standard' => '普通文生视频模式，不依赖任何参考素材。',
         'omni_reference' => '上传 1~:max_count 张参考图片生成视频；若同时上传 1 个参考视频，则参考图片最多 6 张。示例：综合 @图片 1 的主体与 @视频 1 的动态，生成一段氛围感短片。',
