@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Design;
 
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+
 readonly class DesignVideoPromptReferenceRewriter
 {
     private const string INPUT_KEY_REFERENCE_IMAGES = 'reference_images';
@@ -66,7 +68,12 @@ readonly class DesignVideoPromptReferenceRewriter
                 continue;
             }
 
-            $fileName = $this->extractReferenceFileName((string) ($reference[self::FIELD_URI] ?? ''));
+            $uri = (string) ($reference[self::FIELD_URI] ?? '');
+            if (ImageBase64DataUriParser::isValid($uri)) {
+                continue;
+            }
+
+            $fileName = $this->extractReferenceFileName($uri);
             if ($fileName === '') {
                 continue;
             }

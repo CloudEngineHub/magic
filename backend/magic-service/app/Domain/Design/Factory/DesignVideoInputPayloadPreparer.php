@@ -10,6 +10,7 @@ namespace App\Domain\Design\Factory;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\Util\File\ImageBase64DataUriParser;
 
 final class DesignVideoInputPayloadPreparer
 {
@@ -35,7 +36,7 @@ final class DesignVideoInputPayloadPreparer
 
         $referenceImages = [];
         foreach ($dto->getReferenceImages() as $referenceImage) {
-            $item = ['uri' => self::normalizePath((string) ($referenceImage['uri'] ?? ''), false, 'reference_images.uri')];
+            $item = ['uri' => self::normalizeImageInput($referenceImage, 'reference_images')];
             $type = trim((string) ($referenceImage['type'] ?? ''));
             if ($type !== '') {
                 $item['type'] = $type;
@@ -61,7 +62,7 @@ final class DesignVideoInputPayloadPreparer
         foreach ($dto->getFrames() as $frame) {
             $frames[] = [
                 'role' => (string) ($frame['role'] ?? ''),
-                'uri' => self::normalizePath((string) ($frame['uri'] ?? ''), false, 'frames.uri'),
+                'uri' => self::normalizeImageInput($frame, 'frames'),
             ];
         }
 
@@ -117,5 +118,29 @@ final class DesignVideoInputPayloadPreparer
         }
 
         return $path;
+    }
+
+    /**
+     * 将 Base64 图片转换为统一 Data URL，否则按原有工作区路径规范化。
+     *
+     * @param array<string, mixed> $input
+     */
+    private static function normalizeImageInput(array $input, string $label): string
+    {
+        $sourceType = trim((string) ($input['source_type'] ?? ''));
+        if ($sourceType === 'base64') {
+            $mimeType = strtolower(trim((string) ($input['mime_type'] ?? '')));
+            $base64Data = preg_replace('/\s+/', '', trim((string) ($input['base64_data'] ?? '')));
+            if ($base64Data === false || $base64Data === '') {
+                ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.invalid', ['label' => $label . '.base64_data']);
+            }
+            $binaryData = base64_decode($base64Data, true);
+            if ($binaryData === false || $binaryData === '') {
+                ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.invalid', ['label' => $label . '.base64_data']);
+            }
+            return sprintf('data:%s;base64,%s', ImageBase64DataUriParser::normalizeMimeType($mimeType), $base64Data);
+        }
+
+        return self::normalizePath((string) ($input['uri'] ?? ''), false, $label . '.uri');
     }
 }
