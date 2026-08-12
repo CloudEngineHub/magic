@@ -586,3 +586,100 @@ def test_generate_canvas_videos_request_infers_omni_reference_for_references():
         "reference_audios": [],
         "frames": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_build_transport_video_request_keeps_workspace_paths_when_base64_disabled(
+    monkeypatch,
+    tmp_path,
+):
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="小猫从箱子里探头 [image1]",
+        name="小猫探头",
+        reference_image_paths=["images/cat.png"],
+        frame_start_path="images/start.png",
+    )
+    persisted_payload = {
+        "video_id": "video-test-1",
+        "inputs": {
+            "reference_images": [{"uri": "/project/images/cat.png"}],
+            "reference_videos": [],
+            "reference_audios": [],
+            "frames": [{"role": "start", "uri": "/project/images/start.png"}],
+        },
+    }
+
+    monkeypatch.setattr(
+        "app.tools.video_generation_utils.video_input_utils.config.get",
+        lambda key, default=False: default,
+    )
+
+    transport_payload = await tool._build_transport_video_request(
+        persisted_payload,
+        task,
+        workspace_root=tmp_path,
+    )
+
+    assert transport_payload == persisted_payload
+
+
+@pytest.mark.asyncio
+async def test_build_transport_video_request_converts_images_to_base64_when_enabled(
+    monkeypatch,
+    tmp_path,
+):
+    image_dir = tmp_path / "images"
+    image_dir.mkdir(parents=True)
+    image_path = image_dir / "cat.png"
+    image_path.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="小猫从箱子里探头 [image1]",
+        name="小猫探头",
+        reference_image_paths=["images/cat.png"],
+        frame_start_path="images/cat.png",
+    )
+    persisted_payload = {
+        "video_id": "video-test-1",
+        "inputs": {
+            "reference_images": [{"uri": "/project/images/cat.png"}],
+            "reference_videos": [{"uri": "/project/videos/motion.mp4"}],
+            "reference_audios": [],
+            "frames": [{"role": "start", "uri": "/project/images/cat.png"}],
+        },
+    }
+
+    monkeypatch.setattr(
+        "app.tools.video_generation_utils.video_input_utils.config.get",
+        lambda key, default=False: key == "video_generator.use_base64_reference_images",
+    )
+
+    transport_payload = await tool._build_transport_video_request(
+        persisted_payload,
+        task,
+        workspace_root=tmp_path,
+    )
+
+    assert transport_payload["inputs"]["reference_images"] == [
+        {
+            "source_type": "base64",
+            "base64_data": transport_payload["inputs"]["reference_images"][0]["base64_data"],
+            "mime_type": "image/png",
+        }
+    ]
+    assert transport_payload["inputs"]["frames"] == [
+        {
+            "role": "start",
+            "source_type": "base64",
+            "base64_data": transport_payload["inputs"]["frames"][0]["base64_data"],
+            "mime_type": "image/png",
+        }
+    ]
+    assert transport_payload["inputs"]["reference_videos"] == persisted_payload["inputs"]["reference_videos"]
+    assert persisted_payload["inputs"]["reference_images"] == [{"uri": "/project/images/cat.png"}]

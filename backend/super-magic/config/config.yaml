@@ -352,6 +352,11 @@ image_generator:
   image_to_image_model: ${IMAGE_TO_IMAGE_MODEL:-doubao-seedream-4-0-250828}
   text_to_image_model: ${TEXT_TO_IMAGE_MODEL:-doubao-seedream-4-0-250828}
 
+# 视频生成服务配置
+video_generator:
+  # 是否将本地视频生成参考图片转换为 Base64 结构后传给视频生成服务
+  use_base64_reference_images: ${VIDEO_GENERATOR_USE_BASE64_REFERENCE_IMAGES:-false}
+
 bing:
   search_api_key: "${BING_SUBSCRIPTION_KEY}"
   search_endpoint: "${BING_SUBSCRIPTION_ENDPOINT:-https://api.bing.microsoft.com/v7.0}"

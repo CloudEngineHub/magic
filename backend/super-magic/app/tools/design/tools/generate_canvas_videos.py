@@ -32,6 +32,7 @@ from app.tools.design.tools.base_generate_canvas_elements import (
 from app.tools.media_generator.factory import get_video_generator
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
+from app.tools.video_generation_utils import VideoInputPayloadBuilder
 from app.utils.async_file_utils import async_exists, async_mkdir
 from app.utils.video_logger import get_video_logger
 
@@ -500,6 +501,12 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 file_dir=design_file_dir,
                 relative_project_path=_relative_project_path,
             )
+            persisted_payload = payload
+            payload = await self._build_transport_video_request(
+                payload,
+                task,
+                workspace_root=Path(str(kwargs.get("workspace_root") or project_path.parent)),
+            )
             width, height = task.canvas_dimensions
             file_name = f"{self._sanitize_filename(task.name, max_length=120)}-{video_id}.mp4"
             relative_output_path = f"./videos/{file_name}"
@@ -528,7 +535,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             )
         except (ApiError, OSError, RuntimeError, ValueError) as error:
             error_message = str(error)
-            payload = self._build_initial_design_video_request(task, video_id)
+            payload = persisted_payload if "persisted_payload" in locals() else self._build_initial_design_video_request(task, video_id)
             logger.warning(
                 f"设计视频子任务提交失败: index={idx} name={task.name} "
                 f"video_id={video_id} error={error_message}"
@@ -546,7 +553,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             )
 
         if response.completed:
-            completed_payload = {**payload, **response.metadata}
+            completed_payload = {**persisted_payload, **response.metadata}
             return TaskExecutionResult(
                 index=idx,
                 success=True,
@@ -569,7 +576,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
 
         update = VideoPlaceholderUpdate(
             status="processing",
-            generateVideoRequest=payload,
+            generateVideoRequest=persisted_payload,
             errorMessage=None,
         )
         return TaskExecutionResult(
@@ -645,6 +652,7 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             "design_file_dir": design_file_dir,
             "project_id": project_id,
             "_relative_project_path": str(relative_project_path),
+            "workspace_root": str(workspace_path),
         }
 
     async def _normalize_reference_paths(
@@ -930,6 +938,39 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         inputs["frames"] = frames
 
         return inputs
+
+    async def _build_transport_video_request(
+        self,
+        persisted_payload: Dict[str, Any],
+        task: VideoTaskSpec,
+        workspace_root: Path,
+    ) -> Dict[str, Any]:
+        """按配置构建实际发送给视频服务的请求，不改变画布持久化快照。"""
+        builder = VideoInputPayloadBuilder(workspace_root)
+        if not builder.enabled:
+            return persisted_payload
+
+        payload = {
+            **persisted_payload,
+            "inputs": {
+                **persisted_payload.get("inputs", {}),
+                "reference_images": [
+                    await builder.build_image_input(path)
+                    for path in task.reference_image_paths
+                ],
+                "frames": [
+                    {
+                        "role": role,
+                        **await builder.build_image_input(path),
+                    }
+                    for role, path in (
+                        [("start", task.frame_start_path)] if task.frame_start_path else []
+                    )
+                    + ([("end", task.frame_end_path)] if task.frame_end_path else [])
+                ],
+            },
+        }
+        return payload
 
     @staticmethod
     def _resolve_design_input_mode(task: VideoTaskSpec) -> str:
