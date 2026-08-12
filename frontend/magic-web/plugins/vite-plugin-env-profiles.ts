@@ -247,14 +247,23 @@ function normalizeLineEndings(content: string): string {
 }
 
 function getUrlHostname(value: string | undefined): string | undefined {
-	return getUrlOrigin(value)?.replace(/^https?:\/\//, "")
+	const url = parseHttpUrl(value)
+	return url?.hostname || undefined
 }
 
 function getUrlOrigin(value: string | undefined): string | undefined {
+	const url = parseHttpUrl(value)
+	// Node may parse bad schemes into opaque origin "null".
+	return url && url.origin !== "null" ? url.origin : undefined
+}
+
+function parseHttpUrl(value: string | undefined): URL | undefined {
 	if (!value) return undefined
 
 	try {
-		return new URL(value).origin
+		const url = new URL(value)
+		if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+		return url
 	} catch {
 		return undefined
 	}

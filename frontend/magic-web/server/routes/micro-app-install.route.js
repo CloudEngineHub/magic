@@ -1,7 +1,13 @@
 const getMicroAppProjectName = require("../apis/getMicroAppProjectName")
-const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
 const getPublishedMicroApp = require("../apis/getPublishedMicroApp")
-const downloadInstallIcon = require("../utils/downloadInstallIcon")
+const {
+	consumeIconRateLimit,
+	getCachedInstallIcon,
+	getIconClientKey,
+	readInstallIconUrl,
+	resetInstallIconCache,
+	resolveInstallIconBody,
+} = require("../utils/installIconCache")
 
 const SUPPORTED_ICON_SIZES = new Set(["180", "192", "512"])
 
@@ -10,24 +16,30 @@ function readPublishedName(response) {
 	return typeof data.project_name === "string" ? data.project_name.trim() : ""
 }
 
-function readInstallIconUrl(publishedMicroApp) {
-	const rawUrl = publishedMicroApp?.icon_url
-	return typeof rawUrl === "string" && rawUrl.trim() ? rawUrl.trim() : ""
-}
-
-function readPlatformFaviconUrl(platformInfo) {
-	const favicon = platformInfo?.favicon
-	return typeof favicon === "string" && favicon.trim() ? favicon.trim() : ""
-}
-
 function setNoStoreHeaders(res) {
 	res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate")
 	res.setHeader("Pragma", "no-cache")
 	res.setHeader("X-Content-Type-Options", "nosniff")
 }
 
+function setIconCacheHeaders(res, etag) {
+	res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=60")
+	res.setHeader("ETag", etag)
+	res.setHeader("X-Content-Type-Options", "nosniff")
+}
+
+function setRetryableEmptyHeaders(res) {
+	res.setHeader("Cache-Control", "public, max-age=10")
+	res.setHeader("Retry-After", "60")
+	res.setHeader("X-Content-Type-Options", "nosniff")
+}
+
 function respondWithInstallError(error, res, next) {
 	const statusCode = Number(error?.statusCode)
+	if (statusCode === 429 || statusCode === 503) {
+		setRetryableEmptyHeaders(res)
+		return res.status(statusCode).send("")
+	}
 	if (statusCode >= 400 && statusCode < 500) return res.status(statusCode).send("")
 	return next(error)
 }
@@ -54,26 +66,6 @@ function buildManifest(appId, appName, hasInstallIcon = true) {
 	}
 }
 
-async function resolveInstallIconBody(publishedMicroApp) {
-	// The backend resolves the app-local icon.svg first; the platform favicon is
-	// only a fallback for old or incomplete published micro apps.
-	const iconUrl = readInstallIconUrl(publishedMicroApp)
-	if (iconUrl) {
-		const icon = await downloadInstallIcon(iconUrl).catch(() => null)
-		if (icon) return icon
-	}
-
-	const platformFaviconUrl = await getGlobalPlatformInfo()
-		.then(readPlatformFaviconUrl)
-		.catch(() => "")
-	if (platformFaviconUrl) {
-		const platformIcon = await downloadInstallIcon(platformFaviconUrl).catch(() => null)
-		if (platformIcon) return platformIcon
-	}
-
-	return null
-}
-
 class MicroAppInstallRoutes {
 	async manifest(req, res, next) {
 		setNoStoreHeaders(res)
@@ -84,8 +76,7 @@ class MicroAppInstallRoutes {
 				getMicroAppProjectName(appId).catch(() => null),
 			])
 			const appName = readPublishedName(projectNameResponse)
-			// The published metadata already indicates whether the fixed root icon.svg exists.
-			// Do not download the icon again just to build the manifest MIME entry.
+			// Metadata already says whether root icon.svg exists; skip icon download.
 			const hasInstallIcon = Boolean(readInstallIconUrl(publishedMicroApp))
 
 			res.setHeader("Content-Type", "application/manifest+json; charset=utf-8")
@@ -96,20 +87,27 @@ class MicroAppInstallRoutes {
 	}
 
 	async icon(req, res, next) {
-		setNoStoreHeaders(res)
 		try {
 			const size = String(req.query.size || "512")
-			if (!SUPPORTED_ICON_SIZES.has(size)) {
+			if (!SUPPORTED_ICON_SIZES.has(size))
 				return res.status(400).json({ message: "Unsupported icon size" })
+
+			if (!consumeIconRateLimit(getIconClientKey(req))) {
+				setRetryableEmptyHeaders(res)
+				return res.status(429).send("")
 			}
 
-			const publishedMicroApp = await getPublishedMicroApp(req.params.appId)
-			const installIcon = await resolveInstallIconBody(publishedMicroApp)
+			const installIcon = await getCachedInstallIcon(String(req.params.appId || "").trim())
 			if (installIcon) {
+				setIconCacheHeaders(res, installIcon.etag)
+				if (req.headers?.["if-none-match"] === installIcon.etag)
+					return res.status(304).send("")
 				res.setHeader("Content-Type", installIcon.contentType)
 				return res.send(installIcon.body)
 			}
 
+			res.setHeader("Cache-Control", "public, max-age=10")
+			res.setHeader("X-Content-Type-Options", "nosniff")
 			return res.status(404).send("")
 		} catch (error) {
 			return respondWithInstallError(error, res, next)
@@ -121,3 +119,4 @@ module.exports = MicroAppInstallRoutes
 module.exports.buildManifest = buildManifest
 module.exports.readInstallIconUrl = readInstallIconUrl
 module.exports.resolveInstallIconBody = resolveInstallIconBody
+module.exports.resetInstallIconCache = resetInstallIconCache

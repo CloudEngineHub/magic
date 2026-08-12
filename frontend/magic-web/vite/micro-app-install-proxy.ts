@@ -5,10 +5,13 @@ const ICON_PROXY_PATTERN = "^/micro-app/[^/]+/icon"
 
 function normalizeProxyOrigin(value: string): string | undefined {
 	const trimmed = value.trim()
-	if (!trimmed) return undefined
+	// Opaque URL origins serialize as the literal "null"; never proxy to that.
+	if (!trimmed || trimmed === "null") return undefined
 
 	try {
 		const url = trimmed.includes("://") ? new URL(trimmed) : new URL(`https://${trimmed}`)
+		if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+		if (!url.hostname || url.hostname === "null") return undefined
 		return url.origin
 	} catch {
 		return undefined

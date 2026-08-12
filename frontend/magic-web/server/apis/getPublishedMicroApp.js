@@ -14,6 +14,7 @@ module.exports = async function getPublishedMicroApp(appId) {
 		headers: {
 			"Content-Type": "application/json",
 		},
+		signal: AbortSignal.timeout(5_000),
 	})
 
 	if (!response.ok) {

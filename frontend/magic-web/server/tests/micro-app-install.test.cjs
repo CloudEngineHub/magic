@@ -4,6 +4,10 @@ const MicroAppInstallRoutes = require("../routes/micro-app-install.route")
 const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
 const { processHtmlContent } = require("../middleware/seoMiddleware/html-utils")
 const buildInstallLinks = require("../middleware/seoMiddleware/micro-app-install-links")
+const {
+	buildInstallIconCacheKey,
+	toStableIconSourceKey,
+} = require("../utils/installIconCache")
 
 const originalFetch = global.fetch
 const TEST_APP_ID = "900000000000000001"
@@ -14,6 +18,7 @@ const generatedIconSvg = Buffer.from(
 afterEach(() => {
 	global.fetch = originalFetch
 	getGlobalPlatformInfo.resetCache()
+	MicroAppInstallRoutes.resetInstallIconCache()
 })
 
 function createResponse() {
@@ -294,6 +299,8 @@ test("uses the management favicon as the fallback icon and returns 404 without o
 			status: 200,
 		})
 	}
+	MicroAppInstallRoutes.resetInstallIconCache()
+	getGlobalPlatformInfo.resetCache()
 	const missingResponse = createResponse()
 	await route.icon(
 		{ params: { appId: TEST_APP_ID }, query: { size: "192" } },
@@ -303,6 +310,204 @@ test("uses the management favicon as the fallback icon and returns 404 without o
 		},
 	)
 	assert.equal(missingResponse.statusCode, 404)
+})
+
+test("rate-limits abusive icon requests from the same client", async () => {
+	const iconUrl = "https://files.example.com/icon.svg"
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			return new Response(JSON.stringify({ data: { resource_id: "resource-1", icon_url: iconUrl } }), {
+				status: 200,
+			})
+		}
+		return new Response(generatedIconSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
+	}
+
+	const route = new MicroAppInstallRoutes()
+	const req = {
+		params: { appId: TEST_APP_ID },
+		query: { size: "192" },
+		ip: "203.0.113.10",
+		headers: {},
+	}
+
+	for (let i = 0; i < 120; i++) {
+		const response = createResponse()
+		await route.icon(req, response, (error) => {
+			throw error
+		})
+		assert.equal(response.statusCode, 200)
+	}
+
+	const limited = createResponse()
+	await route.icon(req, limited, (error) => {
+		throw error
+	})
+	assert.equal(limited.statusCode, 429)
+	assert.match(limited.headers["cache-control"] || "", /max-age=10|no-store/)
+})
+
+test("caches icon downloads and merges concurrent requests across icon sizes", async () => {
+	const iconUrl = "https://files.example.com/icon.svg"
+	let metadataRequests = 0
+	let iconRequests = 0
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			metadataRequests += 1
+			await new Promise((resolve) => setTimeout(resolve, 5))
+			return new Response(JSON.stringify({ data: { resource_id: "resource-1", icon_url: iconUrl } }), {
+				status: 200,
+			})
+		}
+		iconRequests += 1
+		return new Response(generatedIconSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
+	}
+
+	const route = new MicroAppInstallRoutes()
+	const responses = [createResponse(), createResponse()]
+	await Promise.all(
+		responses.map((response, index) =>
+			route.icon(
+				{ params: { appId: TEST_APP_ID }, query: { size: index ? "512" : "192" } },
+				response,
+				(error) => {
+					throw error
+				},
+			),
+		),
+	)
+
+	assert.equal(metadataRequests, 1)
+	assert.equal(iconRequests, 1)
+	assert.match(responses[0].headers.etag, /^"[a-f0-9]{64}"$/)
+	assert.match(responses[0].headers["cache-control"], /max-age=300/)
+
+	const cachedResponse = createResponse()
+	await route.icon(
+		{
+			params: { appId: TEST_APP_ID },
+			query: { size: "180" },
+			headers: { "if-none-match": responses[0].headers.etag },
+		},
+		cachedResponse,
+		(error) => {
+			throw error
+		},
+	)
+	assert.equal(cachedResponse.statusCode, 304)
+	assert.equal(metadataRequests, 1)
+	assert.equal(iconRequests, 1)
+})
+
+test("builds a stable icon cache key without signed query params", () => {
+	assert.equal(
+		toStableIconSourceKey("https://files.example.com/a/icon.svg?token=abc#x"),
+		"https://files.example.com/a/icon.svg",
+	)
+	assert.equal(
+		buildInstallIconCacheKey("app-1", {
+			resource_id: "resource-9",
+			icon_url: "https://files.example.com/a/icon.svg?token=abc",
+		}),
+		"app-1:resource-9:https://files.example.com/a/icon.svg",
+	)
+})
+
+test("reuses cached icons when signed URL query params rotate", async () => {
+	let iconRequests = 0
+	let signedToken = "v1"
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			return new Response(
+				JSON.stringify({
+					data: {
+						resource_id: "resource-1",
+						icon_url: `https://files.example.com/workspace/app/icon.svg?token=${signedToken}`,
+					},
+				}),
+				{ status: 200 },
+			)
+		}
+		iconRequests += 1
+		return new Response(generatedIconSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
+	}
+
+	const route = new MicroAppInstallRoutes()
+	await route.icon(
+		{ params: { appId: TEST_APP_ID }, query: { size: "192" }, headers: {} },
+		createResponse(),
+		(error) => {
+			throw error
+		},
+	)
+	assert.equal(iconRequests, 1)
+
+	// Refresh metadata only; body cache must survive signed-query rotation.
+	MicroAppInstallRoutes.resetInstallIconCache({ keepIconBodies: true })
+	signedToken = "v2"
+	await route.icon(
+		{ params: { appId: TEST_APP_ID }, query: { size: "512" }, headers: {} },
+		createResponse(),
+		(error) => {
+			throw error
+		},
+	)
+	assert.equal(iconRequests, 1)
+})
+
+test("downloads again when the stable icon path or resource id changes", async () => {
+	let iconRequests = 0
+	let iconPath = "icon-a.svg"
+	let resourceId = "resource-1"
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/share/micro-apps/")) {
+			return new Response(
+				JSON.stringify({
+					data: {
+						resource_id: resourceId,
+						icon_url: `https://files.example.com/workspace/app/${iconPath}?token=abc`,
+					},
+				}),
+				{ status: 200 },
+			)
+		}
+		iconRequests += 1
+		return new Response(generatedIconSvg, {
+			status: 200,
+			headers: { "content-type": "image/svg+xml" },
+		})
+	}
+
+	const route = new MicroAppInstallRoutes()
+	await route.icon(
+		{ params: { appId: TEST_APP_ID }, query: { size: "192" }, headers: {} },
+		createResponse(),
+		(error) => {
+			throw error
+		},
+	)
+	assert.equal(iconRequests, 1)
+
+	MicroAppInstallRoutes.resetInstallIconCache({ keepIconBodies: true })
+	iconPath = "icon-b.svg"
+	resourceId = "resource-2"
+	await route.icon(
+		{ params: { appId: TEST_APP_ID }, query: { size: "192" }, headers: {} },
+		createResponse(),
+		(error) => {
+			throw error
+		},
+	)
+	assert.equal(iconRequests, 2)
 })
 
 test("does not use a published cover when the app icon is unavailable", async () => {

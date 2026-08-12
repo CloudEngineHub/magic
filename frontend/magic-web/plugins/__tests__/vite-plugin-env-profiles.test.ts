@@ -102,6 +102,51 @@ describe("resolveMagicEnvProfileConfig", () => {
 			changeOrigin: true,
 		})
 	})
+
+	it("keeps ports out of allowed hosts while preserving the proxy origin", () => {
+		const config = resolveMagicEnvProfileConfig({
+			env: { MAGIC_ENV_PROFILE: "custom-port" },
+			profiles: [
+				{
+					name: "custom-port",
+					runtimeConfigUrl: "https://example.test:8443/config.js",
+				},
+			],
+		})
+
+		expect(config.server?.allowedHosts).toEqual(["example.test"])
+		expect(config.server?.proxy?.["^/micro-app/[^/]+/icon"]).toMatchObject({
+			target: "https://example.test:8443",
+		})
+	})
+
+	it("uses a bare IPv6 hostname in allowed hosts", () => {
+		const config = resolveMagicEnvProfileConfig({
+			env: { MAGIC_ENV_PROFILE: "ipv6" },
+			profiles: [
+				{
+					name: "ipv6",
+					runtimeConfigUrl: "https://[2001:db8::1]:8443/config.js",
+				},
+			],
+		})
+
+		expect(config.server?.allowedHosts).toEqual(["[2001:db8::1]"])
+	})
+
+	it("ignores runtime config URLs without a protocol", () => {
+		const config = resolveMagicEnvProfileConfig({
+			env: { MAGIC_ENV_PROFILE: "invalid-url" },
+			profiles: [
+				{
+					name: "invalid-url",
+					runtimeConfigUrl: "example.test:8443/config.js",
+				},
+			],
+		})
+
+		expect(config).toEqual({})
+	})
 })
 
 describe("resolveMagicEnvProfileRuntimeConfig", () => {

@@ -53,4 +53,15 @@ describe("resolveMicroAppInstallDevProxy", () => {
 	it("returns an empty object when no proxy target is configured", () => {
 		expect(resolveMicroAppInstallDevProxy({})).toEqual({})
 	})
+
+	it("ignores opaque null origins from invalid fallback URLs", () => {
+		expect(
+			resolveMicroAppInstallDevProxy(
+				{},
+				{
+					fallbackOrigin: "null",
+				},
+			),
+		).toEqual({})
+	})
 })

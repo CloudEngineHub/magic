@@ -92,6 +92,7 @@ class PublishedMicroAppResolver
             return '';
         }
 
-        return $links[$iconFile->getFileKey()]?->getUrl() ?? '';
+        $link = $links[$iconFile->getFileKey()] ?? null;
+        return $link?->getUrl() ?? '';
     }
 }
