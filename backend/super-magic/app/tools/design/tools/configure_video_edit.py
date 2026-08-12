@@ -8,18 +8,19 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.tools.core import BaseToolParams, tool
-from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
+from app.tools.design.domain.canvas_document import CanvasElementV3
 from app.tools.design.domain.content import ElementContent
 from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
-from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
-from app.tools.design.domain.services.element_layout_service import ElementLayoutService
 from app.tools.design.tools.video_production_base import BaseVideoProductionTool
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
 )
-from app.tools.design.video_production.service.video_production_layout_service import (
-    VideoProductionLayoutService,
+from app.tools.design.video_production.service.video_production_flow_layout_service import (
+    VideoProductionFlowLayoutService,
+)
+from app.tools.design.video_production.service.video_production_relation_service import (
+    VideoProductionRelationService,
 )
 
 
@@ -126,7 +127,6 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                     active_content_id=content_id,
                     main_content_id=content_id,
                 )
-                ElementLayoutService.layout_element(config.canvas, element)
                 config.canvas.elements.append(element)
             else:
                 if element.type != "video-edit":
@@ -148,24 +148,16 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                         set_main_when_empty=True,
                     )
 
-            desired_connections: Dict[str, CanvasConnection] = {}
-            for input_element_id in [*params.video_sequence, *params.audio_sequence]:
-                desired_connections[input_element_id] = CanvasConnection(
-                    id=CanvasIdGenerator.generate_connection_id(),
-                    source_element_id=input_element_id,
-                    target_element_id=element.id,
-                    locked=True,
-                )
-            connections = ConnectionService.reconcile_locked_connections(
+            input_element_ids = [*params.video_sequence, *params.audio_sequence]
+            connections = VideoProductionRelationService.synchronize_incoming(
                 config.canvas,
-                desired_connections.values(),
-                owner_element_id=element.id,
-                direction="incoming",
-                counterpart_types={"video", "audio"},
+                element.id,
+                input_element_ids,
             )
             if creating_element:
-                VideoProductionLayoutService.layout_new_elements(
+                VideoProductionFlowLayoutService.layout_targets(
                     config.canvas,
+                    {element.id: input_element_ids},
                     [element.id],
                 )
             connection_ids = [connection.id for connection in connections]

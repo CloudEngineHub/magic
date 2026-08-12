@@ -4,18 +4,15 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional
 
-from app.tools.design.domain.canvas_document import (
-    CanvasConnection,
-    CanvasDocumentV3,
-    CanvasElementV3,
-)
+from app.tools.design.domain.canvas_document import CanvasDocumentV3, CanvasElementV3
 from app.tools.design.domain.content import ElementContent
 from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
-from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
-from app.tools.design.domain.services.element_layout_service import ElementLayoutService
-from app.tools.design.video_production.service.video_production_layout_service import (
-    VideoProductionLayoutService,
+from app.tools.design.video_production.service.video_production_flow_layout_service import (
+    VideoProductionFlowLayoutService,
+)
+from app.tools.design.video_production.service.video_production_relation_service import (
+    VideoProductionRelationService,
 )
 
 
@@ -152,7 +149,6 @@ class VideoCompositionService:
                 active_content_id=content_id,
                 main_content_id=content_id,
             )
-            ElementLayoutService.layout_element(canvas, element)
             canvas.elements.append(element)
         else:
             if element.type != "video":
@@ -168,18 +164,15 @@ class VideoCompositionService:
                 activate=True,
                 set_main_when_empty=True,
             )
-        ConnectionService.ensure_connection(
+        VideoProductionRelationService.synchronize_incoming(
             canvas,
-            CanvasConnection(
-                id=CanvasIdGenerator.generate_connection_id(),
-                source_element_id=video_edit_element_id,
-                target_element_id=element.id,
-                locked=True,
-            ),
+            element.id,
+            [video_edit_element_id],
         )
         if creating_element:
-            VideoProductionLayoutService.layout_new_elements(
+            VideoProductionFlowLayoutService.layout_targets(
                 canvas,
+                {element.id: [video_edit_element_id]},
                 [element.id],
             )
         return CompositionPreparation(

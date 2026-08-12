@@ -9,12 +9,10 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
-from app.tools.design.domain.canvas_document import CanvasConnection, CanvasElementV3
+from app.tools.design.domain.canvas_document import CanvasElementV3
 from app.tools.design.domain.content import ElementContent
 from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
-from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
-from app.tools.design.domain.services.element_layout_service import ElementLayoutService
 from app.tools.design.tools.video_production_base import BaseVideoProductionTool
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
@@ -23,8 +21,11 @@ from app.tools.design.video_production.service.storyboard_generation_config_serv
     StoryboardGenerationConfig,
     StoryboardGenerationConfigService,
 )
-from app.tools.design.video_production.service.video_production_layout_service import (
-    VideoProductionLayoutService,
+from app.tools.design.video_production.service.video_production_flow_layout_service import (
+    VideoProductionFlowLayoutService,
+)
+from app.tools.design.video_production.service.video_production_relation_service import (
+    VideoProductionRelationService,
 )
 
 
@@ -81,12 +82,12 @@ class UpsertStoryboardParams(BaseToolParams):
             "omit when updating an existing Storyboard to preserve its current configuration."
         ),
     )
-    visual_anchor_element_ids: Optional[List[str]] = Field(
+    source_element_ids: Optional[List[str]] = Field(
         default=None,
         max_length=20,
         description=(
-            "Confirmed visual anchor Image Element IDs that the storyboard should follow. "
-            "Omit on update to preserve the current anchors; pass an empty list to clear them."
+            "Direct upstream Canvas Element IDs for this storyboard. Omit on update to preserve "
+            "existing relations; pass an empty list to clear managed upstream relations."
         ),
     )
     replace_all_shots: bool = Field(
@@ -202,7 +203,6 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                     active_content_id=content_id,
                     main_content_id=content_id,
                 )
-                ElementLayoutService.layout_element(config.canvas, element)
                 config.canvas.elements.append(element)
             else:
                 if element.type != "storyboard":
@@ -224,27 +224,16 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                         set_main_when_empty=True,
                     )
 
-            desired_output_connections: Dict[str, CanvasConnection] = {}
-            existing_anchor_ids = {
-                connection.source_element_id
-                for connection in config.canvas.connections
-                if connection.locked and connection.target_element_id == element.id
-            }
-            requested_anchor_ids = {
-                anchor_id
-                for anchor_id in (params.visual_anchor_element_ids or [])
-                if isinstance(anchor_id, str)
-            }
-            visual_anchor_ids = (
-                requested_anchor_ids
-                if params.visual_anchor_element_ids is not None
-                else existing_anchor_ids
-            )
+                # 分镜没有候选版本翻页语义；每次成功修改后，最新 Content 即为当前主内容。
+                element.main_content_id = content_id
+
+            source_ids = set(params.source_element_ids or [])
+            output_element_ids: list[str] = []
             for shot in fields["shots"]:
                 output_image_element_id = shot.get("outputImageElementId")
                 if not output_image_element_id:
                     continue
-                if output_image_element_id in visual_anchor_ids:
+                if output_image_element_id in source_ids:
                     raise ValueError(
                         i18n.translate(
                             "upsert_storyboard.anchor_cannot_be_output",
@@ -257,61 +246,35 @@ class UpsertStoryboard(BaseVideoProductionTool[UpsertStoryboardParams]):
                     raise ValueError(
                         f"Storyboard output must reference an Image Element: {output_image_element_id}"
                     )
-                desired_output_connections[output_element.id] = CanvasConnection(
-                    id=CanvasIdGenerator.generate_connection_id(),
-                    source_element_id=element.id,
-                    target_element_id=output_element.id,
-                    locked=True,
-                )
-            output_connections = ConnectionService.reconcile_locked_connections(
+                if output_element.id not in output_element_ids:
+                    output_element_ids.append(output_element.id)
+            output_connections = VideoProductionRelationService.synchronize_outgoing(
                 config.canvas,
-                desired_output_connections.values(),
-                owner_element_id=element.id,
-                direction="outgoing",
-                counterpart_types={"image"},
+                element.id,
+                output_element_ids,
             )
 
-            should_update_anchors = creating_element or params.visual_anchor_element_ids is not None
-            if should_update_anchors:
-                visual_anchor_ids = list(dict.fromkeys(params.visual_anchor_element_ids or []))
-                desired_anchor_connections: List[CanvasConnection] = []
-                for visual_anchor_id in visual_anchor_ids:
-                    visual_anchor = config.canvas.get_element(visual_anchor_id)
-                    if visual_anchor is None or visual_anchor.type != "image":
-                        raise ValueError(
-                            f"Storyboard visual anchor must reference an Image Element: {visual_anchor_id}"
-                        )
-                    desired_anchor_connections.append(
-                        CanvasConnection(
-                            id=CanvasIdGenerator.generate_connection_id(),
-                            source_element_id=visual_anchor.id,
-                            target_element_id=element.id,
-                            locked=True,
-                        )
-                    )
-                anchor_connections = ConnectionService.reconcile_locked_connections(
+            if params.source_element_ids is not None:
+                source_connections = VideoProductionRelationService.synchronize_incoming(
                     config.canvas,
-                    desired_anchor_connections,
-                    owner_element_id=element.id,
-                    direction="incoming",
-                    counterpart_types={"image"},
+                    element.id,
+                    params.source_element_ids,
                 )
             else:
-                anchor_connections = []
-                for connection in config.canvas.connections:
-                    if not connection.locked or connection.target_element_id != element.id:
-                        continue
-                    source = config.canvas.get_element(connection.source_element_id)
-                    if source is not None and source.type == "image":
-                        anchor_connections.append(connection)
+                source_connections = [
+                    connection
+                    for connection in config.canvas.connections
+                    if connection.locked and connection.target_element_id == element.id
+                ]
             if creating_element:
-                VideoProductionLayoutService.layout_new_elements(
+                VideoProductionFlowLayoutService.layout_targets(
                     config.canvas,
+                    {element.id: params.source_element_ids or ()},
                     [element.id],
                 )
             connection_ids = [
                 connection.id
-                for connection in [*output_connections, *anchor_connections]
+                for connection in [*output_connections, *source_connections]
             ]
             return {
                 "element_id": element.id,

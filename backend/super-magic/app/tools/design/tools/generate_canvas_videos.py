@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.metadata import MetadataUtil
+from app.core.config.debug_config import is_local_debug_mode_enabled
 from app.core.entity.message.server_message import DisplayType, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.magic_service.exceptions import ApiError
@@ -30,6 +31,10 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskPlaceholderInfo,
 )
 from app.tools.media_generator.factory import get_video_generator
+from app.tools.design.service.local_video_result_sync_service import (
+    LocalVideoResultSyncRequest,
+    LocalVideoResultSyncService,
+)
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
 from app.tools.video_generation_utils import VideoInputPayloadBuilder
@@ -590,7 +595,38 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 "element_name": task.name,
                 "video_id": video_id,
                 "pending_status": status,
+                "project_id": project_id,
+                "relative_output_path": relative_output_path,
+                "output_path": str(project_path / "videos" / file_name),
+                "width": width,
+                "height": height,
             },
+        )
+
+    async def _after_placeholder_updated(
+        self,
+        result: TaskExecutionResult,
+        task: VideoTaskSpec,
+        placeholder: ElementDetail,
+        tool_context: ToolContext,
+        project_path: Path,
+    ) -> None:
+        """本地开发模式下在 processing 状态落盘后启动结果同步。"""
+        if not is_local_debug_mode_enabled() or not result.metadata.get("is_processing"):
+            return
+        LocalVideoResultSyncService.schedule(
+            LocalVideoResultSyncRequest(
+                project_path=project_path,
+                project_id=str(result.metadata["project_id"]),
+                video_id=str(result.metadata["video_id"]),
+                element_id=placeholder.id,
+                content_id=str(placeholder.content_id or placeholder.id),
+                output_path=Path(str(result.metadata["output_path"])),
+                relative_output_path=str(result.metadata["relative_output_path"]),
+                width=int(result.metadata["width"]),
+                height=int(result.metadata["height"]),
+                set_as_main=task.set_as_main,
+            )
         )
 
     # ------------------------------------------------------------------

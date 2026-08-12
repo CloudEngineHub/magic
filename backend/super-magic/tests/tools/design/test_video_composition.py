@@ -22,6 +22,7 @@ from app.tools.design.tools.compose_canvas_video import (
 from app.tools.design.video_production.adapters.ffmpeg_video_composition_adapter import (
     FfmpegVideoCompositionAdapter,
     VideoCompositionError,
+    _SourceMediaInfo,
 )
 from app.tools.design.video_production.ports.video_composition_port import (
     VideoCompositionRequest,
@@ -201,6 +202,32 @@ def test_ffmpeg_adapter_builds_fixed_concat_and_single_audio_command(tmp_path: P
     assert "-shortest" in command
     assert "-c:a" in command
     assert "-movflags" in command
+
+
+def test_ffmpeg_adapter_preserves_source_audio_without_external_track(tmp_path: Path):
+    """未指定外部音频时，合成命令保留源视频音轨并为静音片段补齐音频。"""
+    adapter = FfmpegVideoCompositionAdapter()
+    command = adapter._build_command(
+        VideoCompositionRequest(
+            video_paths=[tmp_path / "with-audio.mp4", tmp_path / "without-audio.mp4"],
+            audio_path=None,
+            output_path=tmp_path / "final.mp4",
+            width=720,
+            height=1280,
+        ),
+        tmp_path / "temporary.mp4",
+        [
+            _SourceMediaInfo(has_audio=True, duration_seconds=5.0),
+            _SourceMediaInfo(has_audio=False, duration_seconds=4.0),
+        ],
+    )
+    filter_complex = command[command.index("-filter_complex") + 1]
+
+    assert "concat=n=2:v=1:a=1[vout][aout]" in filter_complex
+    assert "-map" in command
+    assert "[aout]" in command
+    assert "-an" not in command
+    assert "anullsrc=r=48000:cl=stereo" in command
 
 
 @pytest.mark.asyncio

@@ -5,15 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from app.tools.design.domain.canvas_document import CanvasConnection, CanvasDocumentV3
+from app.tools.design.domain.canvas_document import CanvasDocumentV3
 from app.tools.design.domain.generation_initializer import (
     CanvasGenerationInitializationContext,
+    CanvasGenerationInitializer,
 )
-from app.tools.design.domain.services.canvas_id_generator import CanvasIdGenerator
-from app.tools.design.domain.services.connection_service import ConnectionService
 from app.tools.design.domain.services.content_service import ContentService
-from app.tools.design.video_production.service.video_production_generation_initializer import (
-    VideoProductionGenerationInitializer,
+from app.tools.design.video_production.service.explicit_source_generation_initializer import (
+    ExplicitSourceGenerationInitializer,
+)
+from app.tools.design.video_production.service.video_production_relation_service import (
+    VideoProductionRelationService,
 )
 
 
@@ -26,7 +28,7 @@ class PreparedStoryboardShot:
     shot_id: str
 
 
-class StoryboardImageGenerationInitializer(VideoProductionGenerationInitializer):
+class StoryboardImageGenerationInitializer(CanvasGenerationInitializer):
     """在图片生成开始前绑定分镜镜头和 processing 占位图片。"""
 
     def __init__(
@@ -35,7 +37,9 @@ class StoryboardImageGenerationInitializer(VideoProductionGenerationInitializer)
     ) -> None:
         """保存分镜镜头快照和按任务归集的关系摘要。"""
         self._storyboard_shots_by_task = tuple(storyboard_shots_by_task)
-        self._connections_by_task: dict[int, list[dict[str, str]]] = {}
+        self._source_initializer = ExplicitSourceGenerationInitializer(
+            [[binding.storyboard_element_id] for binding in storyboard_shots_by_task]
+        )
 
     @staticmethod
     def prepare_storyboard_shots(
@@ -80,45 +84,41 @@ class StoryboardImageGenerationInitializer(VideoProductionGenerationInitializer)
         config: Any,
         contexts: Sequence[CanvasGenerationInitializationContext],
     ) -> dict[int, dict[str, Any]]:
-        """批量绑定镜头输出关系，再按分镜阶段统一布局新增图片。"""
-        results: dict[int, dict[str, Any]] = {}
+        """批量绑定镜头输出，并按分镜直接上游初始化关系和布局。"""
         for context in contexts:
             binding = self._storyboard_shots_by_task[context.task_index]
-            connection = self._bind_storyboard_output(
+            self._bind_storyboard_output(
                 config.canvas,
                 binding,
                 context.element_id,
             )
-            self._connections_by_task[context.task_index] = [connection]
-            results[context.task_index] = {
-                "connections": [connection],
-                "storyboard_element_id": binding.storyboard_element_id,
-                "storyboard_content_id": binding.storyboard_content_id,
-                "shot_id": binding.shot_id,
-            }
-        await super().apply_batch(config, contexts)
+        results = await self._source_initializer.apply_batch(config, contexts)
+        for context in contexts:
+            binding = self._storyboard_shots_by_task[context.task_index]
+            results[context.task_index].update(
+                {
+                    "storyboard_element_id": binding.storyboard_element_id,
+                    "storyboard_content_id": binding.storyboard_content_id,
+                    "shot_id": binding.shot_id,
+                }
+            )
         return results
 
     def get_connections(self) -> list[dict[str, str]]:
         """按任务顺序返回已经随 processing 状态提交的分镜关系。"""
-        return [
-            connection
-            for task_index in sorted(self._connections_by_task)
-            for connection in self._connections_by_task[task_index]
-        ]
+        return self._source_initializer.get_connections()
 
     def discard(self, task_indices: Sequence[int]) -> None:
         """丢弃事务提交失败所对应的分镜关系摘要。"""
-        for task_index in task_indices:
-            self._connections_by_task.pop(task_index, None)
+        self._source_initializer.discard(task_indices)
 
     @staticmethod
     def _bind_storyboard_output(
         canvas: CanvasDocumentV3,
         binding: PreparedStoryboardShot,
         image_element_id: str,
-    ) -> dict[str, str]:
-        """把 processing 图片写入确定镜头，并同步分镜拥有的锁定关系。"""
+    ) -> None:
+        """把 processing 图片写入确定镜头，关系由显式来源初始化器同步。"""
         storyboard = canvas.get_element(binding.storyboard_element_id)
         if storyboard is None or storyboard.type != "storyboard":
             raise ValueError(
@@ -157,37 +157,13 @@ class StoryboardImageGenerationInitializer(VideoProductionGenerationInitializer)
             binding.storyboard_content_id,
             {"shots": updated_shots},
         )
-
-        desired_connections: list[CanvasConnection] = []
-        for shot in updated_shots:
-            output_element_id = shot.get("outputImageElementId")
-            if not isinstance(output_element_id, str):
-                continue
-            output = canvas.get_element(output_element_id)
-            if output is None or output.type != "image":
-                raise ValueError(
-                    f"Storyboard output must reference an Image Element: {output_element_id}"
-                )
-            desired_connections.append(
-                CanvasConnection(
-                    id=CanvasIdGenerator.generate_connection_id(),
-                    source_element_id=storyboard.id,
-                    target_element_id=output_element_id,
-                    locked=True,
-                )
-            )
-        connections = ConnectionService.reconcile_locked_connections(
+        output_element_ids = [
+            str(shot["outputImageElementId"])
+            for shot in updated_shots
+            if isinstance(shot.get("outputImageElementId"), str)
+        ]
+        VideoProductionRelationService.synchronize_outgoing(
             canvas,
-            desired_connections,
-            owner_element_id=storyboard.id,
-            direction="outgoing",
-            counterpart_types={"image"},
+            storyboard.id,
+            output_element_ids,
         )
-        connection = next(
-            item for item in connections if item.target_element_id == image_element_id
-        )
-        return {
-            "connection_id": connection.id,
-            "source_element_id": connection.source_element_id,
-            "target_element_id": connection.target_element_id,
-        }

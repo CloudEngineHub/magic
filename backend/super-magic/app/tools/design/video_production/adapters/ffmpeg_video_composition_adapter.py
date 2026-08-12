@@ -4,6 +4,7 @@ import asyncio
 import errno
 import json
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence
 from uuid import uuid4
@@ -27,6 +28,14 @@ class VideoCompositionError(RuntimeError):
     """表示基础视频合成或输出校验失败。"""
 
 
+@dataclass(frozen=True)
+class _SourceMediaInfo:
+    """记录源视频是否包含音频以及其时长。"""
+
+    has_audio: bool
+    duration_seconds: float
+
+
 class FfmpegVideoCompositionAdapter:
     """统一规格后顺序拼接视频，并输出 H.264/AAC MP4。"""
 
@@ -45,14 +54,20 @@ class FfmpegVideoCompositionAdapter:
         temporary_output = temp_dir / f"composition-{uuid4().hex}.mp4"
         await async_mkdir(request.output_path.parent, parents=True, exist_ok=True)
         try:
-            command = self._build_command(request, temporary_output)
+            source_media = (
+                await self._probe_source_media(request.video_paths, interruption_event)
+                if request.audio_path is None
+                else None
+            )
+            command = self._build_command(request, temporary_output, source_media)
             await self._run_process(command, interruption_event=interruption_event)
             probe = await self._probe_output(temporary_output, interruption_event=interruption_event)
             self._validate_probe(
                 probe,
                 expected_width=request.width,
                 expected_height=request.height,
-                expected_audio=request.audio_path is not None,
+                expected_audio=request.audio_path is not None
+                or bool(source_media and any(item.has_audio for item in source_media)),
             )
             await self._move_output(temporary_output, request.output_path)
             persisted_probe = await self._probe_output(
@@ -65,7 +80,12 @@ class FfmpegVideoCompositionAdapter:
                 width=request.width,
                 height=request.height,
                 duration_seconds=duration_seconds,
-                has_audio=request.audio_path is not None,
+                has_audio=bool(
+                    any(
+                        stream.get("codec_type") == "audio"
+                        for stream in (persisted_probe.get("streams") or [])
+                    )
+                ),
             )
         finally:
             await async_unlink(temporary_output)
@@ -79,13 +99,39 @@ class FfmpegVideoCompositionAdapter:
         self,
         request: VideoCompositionRequest,
         temporary_output: Path,
+        source_media: Optional[Sequence[_SourceMediaInfo]] = None,
     ) -> list[str]:
-        """构建不包含转场、裁剪或多音轨的固定合成命令。"""
+        """构建顺序拼接命令，并按音频优先级选择音轨。"""
         command = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
         for video_path in request.video_paths:
             command.extend(["-i", str(video_path)])
         if request.audio_path is not None:
             command.extend(["-i", str(request.audio_path)])
+
+        source_audio_enabled = bool(
+            request.audio_path is None
+            and source_media
+            and any(item.has_audio for item in source_media)
+        )
+        audio_input_indices: list[int] = list(range(len(request.video_paths)))
+        if source_audio_enabled:
+            assert source_media is not None
+            next_input_index = len(request.video_paths)
+            for index, media in enumerate(source_media):
+                if media.has_audio:
+                    continue
+                audio_input_indices[index] = next_input_index
+                command.extend(
+                    [
+                        "-f",
+                        "lavfi",
+                        "-t",
+                        f"{max(media.duration_seconds, 0.001):.6f}",
+                        "-i",
+                        "anullsrc=r=48000:cl=stereo",
+                    ]
+                )
+                next_input_index += 1
 
         filters = []
         video_labels = []
@@ -99,9 +145,27 @@ class FfmpegVideoCompositionAdapter:
                 f"[{output_label}]"
             )
             video_labels.append(f"[{output_label}]")
-        filters.append(
-            f"{''.join(video_labels)}concat=n={len(video_labels)}:v=1:a=0[vout]"
-        )
+
+        audio_labels: list[str] = []
+        if source_audio_enabled:
+            assert source_media is not None
+            for index, media in enumerate(source_media):
+                label = f"a{index}"
+                input_index = audio_input_indices[index]
+                audio_input = f"[{input_index}:a:0]"
+                filters.append(
+                    f"{audio_input}aresample=48000,aformat=sample_fmts=fltp:"
+                    f"sample_rates=48000:channel_layouts=stereo[{label}]"
+                )
+                audio_labels.append(f"[{label}]")
+            filters.append(
+                f"{''.join(video_labels)}{''.join(audio_labels)}"
+                f"concat=n={len(video_labels)}:v=1:a=1[vout][aout]"
+            )
+        else:
+            filters.append(
+                f"{''.join(video_labels)}concat=n={len(video_labels)}:v=1:a=0[vout]"
+            )
         command.extend(["-filter_complex", ";".join(filters), "-map", "[vout]"])
 
         if request.audio_path is not None:
@@ -119,6 +183,8 @@ class FfmpegVideoCompositionAdapter:
                     "-shortest",
                 ]
             )
+        elif source_audio_enabled:
+            command.extend(["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"])
         else:
             command.append("-an")
         command.extend(
@@ -137,6 +203,24 @@ class FfmpegVideoCompositionAdapter:
             ]
         )
         return command
+
+    async def _probe_source_media(
+        self,
+        video_paths: Sequence[Path],
+        interruption_event: Optional[asyncio.Event],
+    ) -> list[_SourceMediaInfo]:
+        """读取源视频的音频流和时长，供无外部音频时保留原音轨。"""
+        results: list[_SourceMediaInfo] = []
+        for video_path in video_paths:
+            probe = await self._probe_output(video_path, interruption_event=interruption_event)
+            streams = probe.get("streams") or []
+            results.append(
+                _SourceMediaInfo(
+                    has_audio=any(stream.get("codec_type") == "audio" for stream in streams),
+                    duration_seconds=self._duration_seconds(probe),
+                )
+            )
+        return results
 
     async def _probe_output(
         self,

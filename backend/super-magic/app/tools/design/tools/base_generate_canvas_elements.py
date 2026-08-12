@@ -291,6 +291,17 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         """生成占位符创建或复用时需要同步写入的初始字段。"""
         return {}
 
+    async def _after_placeholder_updated(
+        self,
+        result: TaskExecutionResult,
+        task: Any,
+        placeholder: ElementDetail,
+        tool_context: ToolContext,
+        project_path: Path,
+    ) -> None:
+        """在占位状态成功写回后执行子类异步后处理。"""
+        return None
+
     def _build_result_content(
         self,
         project_path: Path,
@@ -949,6 +960,14 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             result, task, placeholder, tool_context, project_path
         )
         result.updated_elements = updated_elements
+        if updated_elements:
+            await self._after_placeholder_updated(
+                result,
+                task,
+                placeholder,
+                tool_context,
+                project_path,
+            )
         return result
 
     async def _update_placeholder(

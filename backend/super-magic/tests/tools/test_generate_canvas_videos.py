@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -89,6 +90,46 @@ async def test_magic_service_client_generate_design_video_forwards_user_auth_and
     assert headers["User-Authorization"] == "test-user-token"
     assert headers["organization-code"] == "test-org"
     assert headers["Magic-Task-Id"] == "task-1"
+
+
+@pytest.mark.asyncio
+async def test_magic_service_client_queries_design_video_generation_result(monkeypatch):
+    """视频结果查询接口应使用项目 ID 和视频 ID 作为查询参数。"""
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.add_magic_and_user_authorization_headers",
+        lambda headers: headers.update({"User-Authorization": "test-user-token"}),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_llm_request_headers",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.magic_service.client.MetadataUtil.get_metadata",
+        lambda: {},
+    )
+    client = MagicServiceClient(config=MagicServiceConfig(api_base_url="http://magic-service.test"))
+    client.session = _FakeMagicServiceSession(
+        _FakeMagicServiceResponse(
+            {
+                "code": 1000,
+                "data": {
+                    "project_id": "project-1",
+                    "video_id": "video-1",
+                    "status": "completed",
+                    "file_url": "https://example.test/video.mp4",
+                },
+            }
+        )
+    )
+
+    result = await client.query_video_generation_result("project-1", "video-1")
+
+    assert result["status"] == "completed"
+    request = client.session.requests[0]
+    assert request["method"] == "GET"
+    assert request["url"] == "http://magic-service.test/api/v1/design/video-generation-result"
+    assert request["json"] is None
+    assert request["params"] == {"project_id": "project-1", "video_id": "video-1"}
 
 
 def test_video_task_spec_normalizes_input_mode_aliases_from_llm():
@@ -481,6 +522,128 @@ async def test_execute_video_task_submits_design_task_without_agent_polling(monk
         "seed": 7,
     }
     assert result.placeholder_update.generateVideoRequest == payload
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_schedules_local_result_sync_after_placeholder_update(
+    monkeypatch,
+    tmp_path,
+):
+    """本地模式应在 processing 占位落盘后调度确定 Content 的后台同步。"""
+    scheduled_requests = []
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.is_local_debug_mode_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.LocalVideoResultSyncService.schedule",
+        scheduled_requests.append,
+    )
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="后台托管视频",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+        set_as_main=True,
+    )
+    placeholder = ElementDetail(
+        id="element-1",
+        type="video",
+        name="后台托管视频",
+        x=0,
+        y=0,
+        width=1280,
+        height=720,
+        content_id="element-1-content-2",
+    )
+    result = TaskExecutionResult(
+        index=0,
+        success=True,
+        placeholder_update=VideoPlaceholderUpdate(status="processing"),
+        metadata={
+            "is_processing": True,
+            "project_id": "project-1",
+            "video_id": "video-1",
+            "relative_output_path": "./videos/result.mp4",
+            "output_path": str(tmp_path / "videos" / "result.mp4"),
+            "width": 1280,
+            "height": 720,
+        },
+    )
+
+    await tool._after_placeholder_updated(
+        result,
+        task,
+        placeholder,
+        ToolContext(),
+        tmp_path,
+    )
+
+    assert len(scheduled_requests) == 1
+    request = scheduled_requests[0]
+    assert request.project_path == tmp_path
+    assert request.project_id == "project-1"
+    assert request.video_id == "video-1"
+    assert request.element_id == "element-1"
+    assert request.content_id == "element-1-content-2"
+    assert request.output_path == Path(tmp_path / "videos" / "result.mp4")
+    assert request.relative_output_path == "./videos/result.mp4"
+    assert request.width == 1280
+    assert request.height == 720
+    assert request.set_as_main is True
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_does_not_schedule_local_sync_outside_local_mode(
+    monkeypatch,
+    tmp_path,
+):
+    """非本地模式只提交远端任务，不启动本地结果同步。"""
+    schedule = AsyncMock()
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.is_local_debug_mode_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "app.tools.design.tools.generate_canvas_videos.LocalVideoResultSyncService.schedule",
+        schedule,
+    )
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="森林中的小路。",
+        name="后台托管视频",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+    )
+    placeholder = ElementDetail(
+        id="element-1",
+        type="video",
+        name="后台托管视频",
+        x=0,
+        y=0,
+        width=1280,
+        height=720,
+        content_id="element-1-content-1",
+    )
+    result = TaskExecutionResult(
+        index=0,
+        success=True,
+        placeholder_update=VideoPlaceholderUpdate(status="processing"),
+        metadata={"is_processing": True},
+    )
+
+    await tool._after_placeholder_updated(
+        result,
+        task,
+        placeholder,
+        ToolContext(),
+        tmp_path,
+    )
+
+    schedule.assert_not_called()
 
 
 def test_generate_canvas_videos_extra_info_uses_video_names():

@@ -78,6 +78,7 @@ def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
     content = (SKILLS_DIR / "video-production" / "SKILL.md").read_text(encoding="utf-8")
 
     for documented_tool_name in (
+        "create_canvas",
         "import_canvas_assets",
         "query_canvas_elements",
         "promote_canvas_content",
@@ -88,12 +89,11 @@ def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
         "compose_canvas_video",
     ):
         assert f'tool.call("{documented_tool_name}"' in content
-    assert 'tool.call("create_canvas"' not in content
     assert 'tool.call("upsert_canvas_audio"' not in content
     assert 'tool.call("generate_canvas_images"' not in content
     assert 'tool.call("generate_canvas_videos"' not in content
-    assert "source_element_id" not in content
-    assert "target_element_id" not in content
+    assert '"source_element_id"' not in content
+    assert '"target_element_id"' not in content
     assert "projects/" not in content
     assert "assets/" not in content
 

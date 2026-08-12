@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import ToolDetail
+from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.generate_canvas_images import (
     GenerateCanvasImages,
@@ -19,8 +20,8 @@ from app.tools.design.tools.video_production_media_base import BaseVideoProducti
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
 )
-from app.tools.design.video_production.service.initialization_image_generation_initializer import (
-    InitializationImageGenerationInitializer,
+from app.tools.design.video_production.service.explicit_source_generation_initializer import (
+    ExplicitSourceGenerationInitializer,
 )
 from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceInput,
@@ -34,13 +35,12 @@ from app.tools.design.video_production.service.storyboard_image_generation_initi
     StoryboardImageGenerationInitializer,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
-from app.i18n import i18n
 
 SdkSnippetTimeoutRegistry.register("generate_video_production_images", min_timeout=600)
 
 
 class VideoProductionImageTask(BaseModel):
-    """视频制作中的单张图片生成任务，不暴露 Canvas 维护字段。"""
+    """视频制作中的单张图片生成任务，只声明生成内容和直接上游。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -50,6 +50,14 @@ class VideoProductionImageTask(BaseModel):
     reference_images: list[str] = Field(
         default_factory=list,
         description="Reference image paths from project files, uploads, or earlier tool results.",
+    )
+    source_element_ids: Optional[list[str]] = Field(
+        default=None,
+        max_length=20,
+        description=(
+            "Direct upstream Canvas Element IDs for this generated image. Omit to preserve existing "
+            "relations when updating an Element; pass an empty list to clear managed upstream relations."
+        ),
     )
     shot_id: Optional[str] = Field(
         default=None,
@@ -172,7 +180,9 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                 tasks=[
                     ImageTaskSpec(
                         **{
-                            **task.model_dump(exclude={"reference_images", "shot_id"}),
+                            **task.model_dump(
+                                exclude={"reference_images", "shot_id", "source_element_ids"}
+                            ),
                             "reference_images": [
                                 source.generation_path
                                 for source in prepared_sources_by_task[index]
@@ -192,9 +202,8 @@ class GenerateVideoProductionImages(BaseVideoProductionMediaTool[GenerateVideoPr
                     prepared_storyboard_shots,
                 )
             else:
-                initializer = InitializationImageGenerationInitializer(
-                    manager,
-                    prepared_sources_by_task,
+                initializer = ExplicitSourceGenerationInitializer(
+                    [task.source_element_ids for task in params.tasks],
                 )
             result = await GenerateCanvasImages(
                 generation_initializer=initializer,

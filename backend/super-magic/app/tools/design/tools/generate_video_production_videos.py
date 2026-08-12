@@ -19,13 +19,13 @@ from app.tools.design.tools.video_production_media_base import BaseVideoProducti
 from app.tools.design.tools.video_production_presentation import (
     VideoProductionMarkdownPresenter,
 )
+from app.tools.design.video_production.service.explicit_source_generation_initializer import (
+    ExplicitSourceGenerationInitializer,
+)
 from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceInput,
     MediaSourceType,
     PreparedMediaSource,
-)
-from app.tools.design.video_production.service.video_production_generation_initializer import (
-    VideoProductionGenerationInitializer,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 
@@ -33,7 +33,7 @@ SdkSnippetTimeoutRegistry.register("generate_video_production_videos", min_timeo
 
 
 class VideoProductionVideoTask(BaseModel):
-    """视频制作中的单个视频任务，不包含 Canvas 关系和布局字段。"""
+    """视频制作中的单个视频任务，只声明生成内容和直接上游。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +53,17 @@ class VideoProductionVideoTask(BaseModel):
     reference_audio_paths: list[str] = Field(
         default_factory=list,
         description="Reference audio paths from project files, uploads, or earlier tool results.",
+    )
+    source_element_ids: Optional[list[str]] = Field(
+        default=None,
+        max_length=20,
+        description=(
+            "Direct upstream Canvas Element IDs for this generated video, not a list of reference files. "
+            "For a shot video, pass exactly the corresponding confirmed first-frame Image Element ID; "
+            "do not add initialization, product, scene, or other reference-image Element IDs. Omit to "
+            "preserve existing relations when updating an Element; pass an empty list to clear managed "
+            "upstream relations."
+        ),
     )
     frame_start_path: str = Field(
         default="",
@@ -165,7 +176,9 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
                 model_id=params.model_id,
                 tasks=normalized_tasks,
             )
-            initializer = VideoProductionGenerationInitializer()
+            initializer = ExplicitSourceGenerationInitializer(
+                [task.source_element_ids for task in params.tasks],
+            )
             result = await GenerateCanvasVideos(
                 generation_initializer=initializer,
                 base_dir=self.base_dir,
@@ -188,7 +201,7 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
         for source_input, prepared_source in zip(source_inputs, prepared_sources, strict=True):
             paths_by_key[(source_input.media_type, source_input.path)] = prepared_source.generation_path
 
-        values = task.model_dump()
+        values = task.model_dump(exclude={"source_element_ids"})
         values["reference_image_paths"] = [
             paths_by_key[(MediaSourceType.IMAGE, path)]
             for path in task.reference_image_paths

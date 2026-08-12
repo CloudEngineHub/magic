@@ -38,6 +38,7 @@ from app.tools.design.tools.generate_canvas_images import (
     ImagePlaceholderUpdate,
     ImageTaskSpec,
 )
+from app.tools.design.tools.generate_canvas_videos import GenerateCanvasVideos
 from app.tools.design.tools.generate_video_production_images import (
     GenerateVideoProductionImages,
     GenerateVideoProductionImagesParams,
@@ -564,11 +565,11 @@ async def test_upsert_storyboard_creates_content_and_locked_image_connection(wor
     assert 'aspect_ratio: "16:9"' in result.content
     assert 'resolution: "1K"' in result.content
     assert 'size: "1280x720"' in result.content
-    assert storyboard.properties["x"] == -1520.0
-    assert storyboard.properties["y"] == 0.0
-    assert storyboard.properties["zIndex"] == 2
     shot_image = config.canvas.get_element("shot-image-1")
     assert shot_image is not None
+    assert storyboard.properties["x"] == 0.0
+    assert storyboard.properties["y"] > shot_image.properties["y"]
+    assert storyboard.properties["zIndex"] == 2
     assert (shot_image.x, shot_image.y, shot_image.zIndex) == (0.0, 0.0, 1)
     connection = next(item for item in config.canvas.connections if item.id == result.data["connection_ids"][0])
     assert connection.source_element_id == storyboard.id
@@ -598,7 +599,7 @@ async def test_upsert_storyboard_rejects_visual_anchor_as_shot_output(workspace:
         UpsertStoryboardParams(
             project_path=project_name,
             name="冲突分镜",
-            visual_anchor_element_ids=["visual-anchor"],
+            source_element_ids=["visual-anchor"],
             generation_config=StoryboardGenerationConfigInput(
                 aspect_ratio="16:9",
                 resolution="1K",
@@ -684,6 +685,10 @@ async def test_upsert_storyboard_reconciles_replaced_removed_and_manual_connecti
     assert replaced.ok
     assert replaced.data["content_id"] == f"{storyboard_id}-content-2"
     config = await manager.read_current_canvas()
+    storyboard = config.canvas.get_element(storyboard_id)
+    assert storyboard is not None
+    assert storyboard.active_content_id == f"{storyboard_id}-content-2"
+    assert storyboard.main_content_id == f"{storyboard_id}-content-2"
     storyboard_connections = [
         connection
         for connection in config.canvas.connections
@@ -713,6 +718,10 @@ async def test_upsert_storyboard_reconciles_replaced_removed_and_manual_connecti
     assert removed.ok
     assert removed.data["content_id"] == f"{storyboard_id}-content-3"
     config = await manager.read_current_canvas()
+    storyboard = config.canvas.get_element(storyboard_id)
+    assert storyboard is not None
+    assert storyboard.active_content_id == f"{storyboard_id}-content-3"
+    assert storyboard.main_content_id == f"{storyboard_id}-content-3"
     storyboard_connections = [
         connection
         for connection in config.canvas.connections
@@ -1360,13 +1369,14 @@ async def test_initialization_image_generation_connects_sources_before_generatio
                     name="生成图片",
                     size="640x360",
                     reference_images=["images/reference.png", "images/scene.png"],
+                    source_element_ids=["source-image", "source-scene"],
                 )
             ],
         ),
     )
 
     assert result.ok
-    assert "connection" not in VideoProductionImageTask.model_fields
+    assert "source_element_ids" in VideoProductionImageTask.model_fields
     assert transaction_count == 2
     target_element_id = result.data["created_elements"][0]["id"]
     assert {
@@ -1408,7 +1418,7 @@ async def test_initialization_image_generation_registers_missing_source_in_place
     workspace: Path,
     monkeypatch,
 ):
-    """未导入的参考素材与初始化图片在同一占位事务中登记、连接和布局。"""
+    """未导入的参考路径只作为生成输入，不隐式登记或创建关系。"""
     project_name = "production-image-missing-source-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
@@ -1419,42 +1429,6 @@ async def test_initialization_image_generation_registers_missing_source_in_place
         "app.tools.generate_images.resolve_reference_images_to_urls",
         _resolve_mock_reference_images_to_urls,
     )
-
-    processing_snapshot: dict[str, object] = {}
-    original_execute_item = GenerateCanvasImages._execute_task_item
-
-    async def inspect_registered_source(self, idx, task, placeholder, *args, **kwargs):
-        """在生成开始前确认来源素材已经与 processing 图片一起提交。"""
-        manager = await get_canvas_manager(str(project_dir))
-        config = await manager.read_current_canvas()
-        target = config.canvas.get_element(placeholder.id)
-        source = next(
-            element
-            for element in config.canvas.elements
-            if element.id != target.id and element.type == "image"
-        )
-        processing_snapshot.update(
-            {
-                "source_position": (source.x, source.y, source.zIndex),
-                "target_position": (target.x, target.y, target.zIndex),
-                "connected": any(
-                    connection.source_element_id == source.id
-                    and connection.target_element_id == target.id
-                    and connection.locked
-                    for connection in config.canvas.connections
-                ),
-            }
-        )
-        return await original_execute_item(
-            self,
-            idx,
-            task,
-            placeholder,
-            *args,
-            **kwargs,
-        )
-
-    monkeypatch.setattr(GenerateCanvasImages, "_execute_task_item", inspect_registered_source)
 
     result = await GenerateVideoProductionImages(base_dir=str(workspace)).execute(
         _image_generation_tool_context(),
@@ -1472,13 +1446,14 @@ async def test_initialization_image_generation_registers_missing_source_in_place
     )
 
     assert result.ok
-    source_x, source_y, source_z = processing_snapshot["source_position"]
-    target_x, target_y, target_z = processing_snapshot["target_position"]
-    assert (source_x, source_y) == (0.0, 0.0)
-    assert target_x > source_x
-    assert target_y == source_y
-    assert target_z > source_z
-    assert processing_snapshot["connected"] is True
+    manager = await get_canvas_manager(str(project_dir))
+    config = await manager.read_current_canvas()
+    assert len(config.canvas.elements) == 1
+    assert config.canvas.connections == []
+    target = config.canvas.elements[0]
+    assert target.get_active_content().fields["generateImageRequest"]["reference_images"] == [
+        f"{project_name}/images/reference.png"
+    ]
 
 
 @pytest.mark.asyncio
@@ -1513,7 +1488,7 @@ async def test_storyboard_image_generation_binds_shot_and_layouts_after_storyboa
         UpsertStoryboardParams(
             project_path=project_name,
             name="模拟分镜",
-            visual_anchor_element_ids=["visual-anchor"],
+            source_element_ids=["visual-anchor"],
             generation_config=StoryboardGenerationConfigInput(
                 aspect_ratio="16:9",
                 resolution="1K",
@@ -1847,7 +1822,7 @@ async def test_initialization_image_generation_registers_project_asset_as_source
     workspace: Path,
     monkeypatch,
 ):
-    """项目内参考素材会登记为初始化图片的直接来源并保留生成请求路径。"""
+    """项目内参考素材只保留生成请求路径，不隐式登记为画布节点。"""
     project_name = "production-image-unregistered-source-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "assets", parents=True, exist_ok=True)
@@ -1877,18 +1852,12 @@ async def test_initialization_image_generation_registers_project_asset_as_source
     assert result.ok
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    assert len(config.canvas.elements) == 2
+    assert len(config.canvas.elements) == 1
     target = config.canvas.get_element(result.data["created_elements"][0]["id"])
-    source = next(element for element in config.canvas.elements if element.id != target.id)
     assert target.get_active_content().fields["generateImageRequest"]["reference_images"] == [
         f"{project_name}/assets/reference.png"
     ]
-    assert source.get_active_content().fields["src"] == "./assets/reference.png"
-    assert target.x > source.x
-    assert {
-        (connection.source_element_id, connection.target_element_id, connection.locked)
-        for connection in config.canvas.connections
-    } == {(source.id, target.id, True)}
+    assert config.canvas.connections == []
 
 
 @pytest.mark.asyncio
@@ -1896,7 +1865,7 @@ async def test_initialization_image_generation_materializes_and_registers_upload
     workspace: Path,
     monkeypatch,
 ):
-    """项目外上传素材复制进项目后登记为初始化图片的直接来源。"""
+    """项目外上传素材复制进项目，但不隐式登记画布来源节点。"""
     project_name = "production-image-uploaded-source-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir, parents=True, exist_ok=True)
@@ -1927,22 +1896,15 @@ async def test_initialization_image_generation_materializes_and_registers_upload
     assert result.ok
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    assert len(config.canvas.elements) == 2
+    assert len(config.canvas.elements) == 1
     target = config.canvas.get_element(result.data["created_elements"][0]["id"])
-    source = next(element for element in config.canvas.elements if element.id != target.id)
     reference_path = target.get_active_content().fields["generateImageRequest"][
         "reference_images"
     ][0]
     assert reference_path.startswith(f"{project_name}/images/upload-")
     assert reference_path.endswith(".png")
     assert (workspace / reference_path).is_file()
-    assert source.get_active_content().fields["src"].startswith("./images/upload-")
-    assert any(
-        connection.source_element_id == source.id
-        and connection.target_element_id == target.id
-        and connection.locked
-        for connection in config.canvas.connections
-    )
+    assert config.canvas.connections == []
 
 
 @pytest.mark.asyncio
@@ -2011,19 +1973,53 @@ async def test_video_production_image_honors_reference_element_deletion_during_g
 
 
 @pytest.mark.asyncio
-async def test_video_production_video_tool_keeps_first_frame_in_request_only(
+async def test_video_production_video_tool_connects_first_frame_and_layouts_to_its_right(
     workspace: Path,
     monkeypatch,
 ):
-    """视频参考帧只保存在生成请求中，不自动创建 Canvas 关系。"""
+    """视频在 processing 阶段连接首帧，并稳定放在首帧右侧。"""
     project_name = "production-video-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
     Image.new("RGB", (64, 36), color="green").save(project_dir / "images" / "first-frame.png")
-    await write_magic_project_js_v3(project_name, _v3_config())
+    first_frame = _content_element(
+        "first-frame",
+        "image",
+        name="模拟首帧",
+        fields={"src": "./images/first-frame.png", "status": "completed"},
+    )
+    first_frame.properties.update({"x": 1200, "y": 360, "width": 720, "height": 1280})
+    storyboard = _content_element(
+        "storyboard",
+        "storyboard",
+        name="模拟分镜",
+        fields={
+            "shots": [
+                {
+                    "id": "S01",
+                    "durationSeconds": 4,
+                    "description": "模拟镜头",
+                    "outputImageElementId": first_frame.id,
+                }
+            ]
+        },
+    )
+    storyboard.properties.update({"x": 0, "y": 360, "width": 640, "height": 960})
+    config = _v3_config(storyboard, first_frame)
+    config.canvas.connections.append(
+        CanvasConnection(
+            id="storyboard-first-frame",
+            source_element_id=storyboard.id,
+            target_element_id=first_frame.id,
+            locked=True,
+        )
+    )
+    await write_magic_project_js_v3(project_name, config)
     monkeypatch.setenv("ENABLE_MOCK_VIDEO_GENERATION", "true")
     transaction_count = 0
+    processing_snapshot: dict[str, object] = {}
     original_transaction = CanvasManagerV3.run_write_transaction
+    original_execute_item = GenerateCanvasVideos._execute_task_item
 
     async def count_transaction(self, *args, **kwargs):
         """统计专用视频生成流程对画布执行的真实写事务次数。"""
@@ -2031,7 +2027,34 @@ async def test_video_production_video_tool_keeps_first_frame_in_request_only(
         transaction_count += 1
         return await original_transaction(self, *args, **kwargs)
 
+    async def inspect_processing_canvas(self, idx, task, placeholder, *args, **kwargs):
+        """在视频生成开始前检查首帧关系和预占布局。"""
+        manager = await get_canvas_manager(str(project_dir))
+        config = await manager.read_current_canvas()
+        target = config.canvas.get_element(placeholder.id)
+        processing_snapshot.update(
+            {
+                "position": (target.x, target.y, target.zIndex),
+                "status": target.get_active_content().fields["status"],
+                "connected": any(
+                    connection.source_element_id == first_frame.id
+                    and connection.target_element_id == target.id
+                    and connection.locked
+                    for connection in config.canvas.connections
+                ),
+            }
+        )
+        return await original_execute_item(
+            self,
+            idx,
+            task,
+            placeholder,
+            *args,
+            **kwargs,
+        )
+
     monkeypatch.setattr(CanvasManagerV3, "run_write_transaction", count_transaction)
+    monkeypatch.setattr(GenerateCanvasVideos, "_execute_task_item", inspect_processing_canvas)
 
     result = await GenerateVideoProductionVideos(base_dir=str(workspace)).execute(
         _video_generation_tool_context(),
@@ -2041,33 +2064,48 @@ async def test_video_production_video_tool_keeps_first_frame_in_request_only(
                 VideoProductionVideoTask(
                     prompt="首帧 [image1] 缓慢推进",
                     name="镜头视频",
-                    frame_start_path="images/first-frame.png",
                     reference_image_paths=["images/first-frame.png"],
+                    source_element_ids=[first_frame.id],
                 )
             ],
         ),
     )
 
     assert result.ok
-    assert "connection" not in VideoProductionVideoTask.model_fields
+    assert "source_element_ids" in VideoProductionVideoTask.model_fields
     assert transaction_count == 2
-    assert result.data["connections"] == []
     target_element_id = result.data["created_elements"][0]["element_id"]
+    assert {
+        (connection["source_element_id"], connection["target_element_id"])
+        for connection in result.data["connections"]
+    } == {(first_frame.id, target_element_id)}
     created_content_id = result.data["created_elements"][0]["content_id"]
     assert f'element_id="{target_element_id}"' in result.content
     assert f'content_id="{created_content_id}"' in result.content
     assert "Internal Canvas relations" not in result.content
     manager = await get_canvas_manager(str(project_dir))
     config = await manager.read_current_canvas()
-    assert config.canvas.connections == []
-    assert len(config.canvas.elements) == 1
+    assert len(config.canvas.elements) == 3
     target = config.canvas.get_element(target_element_id)
     assert target is not None
     assert target.get_active_content().fields["status"] in {"completed", "processing"}
+    assert target.x > first_frame.x + first_frame.width
+    assert target.y == first_frame.y
+    assert processing_snapshot == {
+        "position": (target.x, target.y, target.zIndex),
+        "status": "processing",
+        "connected": True,
+    }
+    assert {
+        (connection.source_element_id, connection.target_element_id, connection.locked)
+        for connection in config.canvas.connections
+    } == {
+        (storyboard.id, first_frame.id, True),
+        (first_frame.id, target.id, True),
+    }
     generate_request = target.get_active_content().fields["generateVideoRequest"]
-    assert generate_request["inputs"]["frames"] == [
+    assert generate_request["inputs"]["reference_images"] == [
         {
-            "role": "start",
             "uri": f"/{project_name}/images/first-frame.png",
         }
     ]

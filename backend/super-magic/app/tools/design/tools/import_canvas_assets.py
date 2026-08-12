@@ -21,8 +21,8 @@ from app.tools.design.video_production.service.media_generation_service import (
     MediaSourceInput,
     MediaSourceType,
 )
-from app.tools.design.video_production.service.video_production_layout_service import (
-    VideoProductionLayoutService,
+from app.tools.design.video_production.service.video_production_flow_layout_service import (
+    VideoProductionFlowLayoutService,
 )
 
 
@@ -112,7 +112,7 @@ class ImportCanvasAssets(BaseVideoProductionTool[ImportCanvasAssetsParams]):
                     prepared_sources,
                 )
                 if self._is_video_production_agent(tool_context):
-                    VideoProductionLayoutService.layout_new_elements(
+                    VideoProductionFlowLayoutService.layout_roots(
                         config.canvas,
                         [
                             registration.element_id

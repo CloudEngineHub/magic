@@ -37,5 +37,4 @@ class VideoCompositionPort(Protocol):
         *,
         interruption_event: Optional[asyncio.Event] = None,
     ) -> VideoCompositionResult:
-        """顺序合并视频并按需使用一条最终音轨。"""
-
+        """顺序合并视频，并按优先级选择外部音频或源视频音频。"""
