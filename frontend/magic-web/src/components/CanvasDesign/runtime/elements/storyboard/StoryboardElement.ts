@@ -30,8 +30,7 @@ import {
 	type StoryboardShotLayout,
 } from "./StoryboardElement.layout"
 
-type StoryboardControlKind =
-	"parameter" | "duration" | "description" | "delete" | "add" | "generate"
+type StoryboardControlKind = "parameter" | "description" | "delete" | "add" | "generate"
 
 interface StoryboardControlMetadata {
 	action: StoryboardControlAction
@@ -109,7 +108,6 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		const shots = options.shots ?? [
 			{
 				id: generateUUID(),
-				durationSeconds: 3,
 				description: "",
 			},
 		]
@@ -498,14 +496,18 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		})
 	}
 
-	private hasOutputImageElement(shot: StoryboardShot): boolean {
-		const outputImageElementId = shot.outputImageElementId
-		if (!outputImageElementId) return false
-		const getElementData = this.canvas.elementManager?.getElementData
-		if (typeof getElementData !== "function") return false
-		return (
-			getElementData.call(this.canvas.elementManager, outputImageElementId)?.type ===
+	private hasConnectedOutputImage(shot: StoryboardShot): boolean {
+		if (!shot.outputImageElementId) return false
+		const outputElement =
+			this.canvas.elementManager?.getElementData(shot.outputImageElementId)?.type ===
 			ElementTypeEnum.Image
+		if (!outputElement) return false
+
+		return (
+			this.canvas.connectionManager?.hasConnection(
+				this.data.id,
+				shot.outputImageElementId,
+			) === true
 		)
 	}
 
@@ -547,7 +549,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}),
 		)
 
-		const generated = this.hasOutputImageElement(shot)
+		const generated = this.hasConnectedOutputImage(shot)
 		if (statusRect.width > 0) {
 			group.add(
 				new Konva.Text({
@@ -563,41 +565,6 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				}),
 			)
 		}
-
-		const durationVisual = new Konva.Group({ listening: false })
-		const durationBackground = new Konva.Rect({
-			...controls.durationRect,
-			fill: STORYBOARD_CONFIG.BACKGROUND,
-			stroke: STORYBOARD_CONFIG.BORDER,
-			strokeWidth: layout.strokeWidth,
-			cornerRadius: 8 * controls.scale,
-			listening: false,
-			perfectDrawEnabled: false,
-			name: "storyboard-duration-background storyboard-control-background",
-		})
-		durationVisual.add(
-			durationBackground,
-			new Konva.Text({
-				...controls.durationRect,
-				text: `${shot.durationSeconds}  ${this.getText("storyboard.seconds", "秒")}`,
-				align: "center",
-				verticalAlign: "middle",
-				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: 16 * controls.scale,
-				fill: STORYBOARD_CONFIG.PRIMARY_TEXT,
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-text",
-			}),
-		)
-		group.add(durationVisual)
-		this.addControlHit(group, {
-			action: { type: "edit-duration", shotId: shot.id },
-			kind: "duration",
-			visualNode: durationVisual,
-			overlayAnchorNode: durationBackground,
-			baseBounds: controls.durationRect,
-		})
 
 		const generateVisual = new Konva.Group({ listening: false })
 		const generateText = generated
@@ -962,25 +929,6 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				else suffix?.fill(foreground)
 				break
 			}
-			case "duration":
-				background.fill(
-					state === "pressed"
-						? STORYBOARD_CONFIG.SURFACE_PRESSED
-						: state === "hover" || state === "editing"
-							? STORYBOARD_CONFIG.SURFACE_STRONG
-							: STORYBOARD_CONFIG.BACKGROUND,
-				)
-				background.stroke(
-					state === "hover" || state === "pressed" || state === "editing"
-						? STORYBOARD_CONFIG.ACCENT
-						: STORYBOARD_CONFIG.BORDER,
-				)
-				text?.fill(
-					state === "hover" || state === "pressed" || state === "editing"
-						? STORYBOARD_CONFIG.ACCENT
-						: STORYBOARD_CONFIG.PRIMARY_TEXT,
-				)
-				break
 			case "description":
 				background.fill(
 					state === "pressed"

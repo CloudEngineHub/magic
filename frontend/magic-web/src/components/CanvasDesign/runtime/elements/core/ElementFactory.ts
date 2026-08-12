@@ -2,9 +2,9 @@ import type {
 	LayerElement,
 	ElementType,
 	StoryboardElement as StoryboardElementData,
-	StoryboardShot,
 } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
+import { normalizeStoryboardShot } from "../../document/storyboardMigration"
 import { BaseElement, BASE_ELEMENT_DEFAULTS } from "./BaseElement"
 // import { RectangleElement } from "../shape/RectangleElement"
 // import { EllipseElement } from "../shape/EllipseElement"
@@ -377,11 +377,7 @@ function normalizeStoryboardData(data: StoryboardElementData): StoryboardElement
 		...data,
 		contents: data.contents.map((content) => ({
 			...content,
-			shots: content.shots?.map((shot) => {
-				const normalizedShot = { ...shot } as unknown as Record<string, unknown>
-				delete normalizedShot.status
-				return normalizedShot as unknown as StoryboardShot
-			}),
+			shots: content.shots?.map(normalizeStoryboardShot),
 		})),
 	}
 }

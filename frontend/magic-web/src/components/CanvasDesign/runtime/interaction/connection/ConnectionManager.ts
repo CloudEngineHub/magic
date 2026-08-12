@@ -1,6 +1,6 @@
 import type { Canvas } from "../../core/Canvas"
-import type { CanvasConnection, CanvasDocument } from "../../document/types"
 import type { CanvasDocumentPatch } from "../../document/patch"
+import { type CanvasConnection, type CanvasDocument } from "../../document/types"
 import type { Rect } from "../../shared/ids"
 import { generateConnectionId } from "../../shared/ids"
 import { ConnectionHitTestService } from "./ConnectionHitTestService"
@@ -132,18 +132,13 @@ export class ConnectionManager {
 			id,
 			sourceElementId: connection.sourceElementId,
 			targetElementId: connection.targetElementId,
-			...(connection.locked ? { locked: true } : {}),
 		})
 		this.hitTester.invalidateConnections([id])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
 		return id
 	}
 
-	public connectElements(options: {
-		sourceElementId: string
-		targetElementId: string
-		locked?: boolean
-	}):
+	public connectElements(options: { sourceElementId: string; targetElementId: string }):
 		| { status: "created"; connectionId: string }
 		| {
 				status: "invalid"
@@ -178,7 +173,6 @@ export class ConnectionManager {
 			id,
 			sourceElementId,
 			targetElementId,
-			...(options.locked ? { locked: true } : {}),
 		})
 		this.hitTester.invalidateConnections([id])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
@@ -193,7 +187,6 @@ export class ConnectionManager {
 		edges: Array<{
 			sourceElementId: string
 			targetElementId: string
-			locked?: boolean
 		}>
 	}):
 		| { status: "created"; connectionIds: string[] }
@@ -244,37 +237,11 @@ export class ConnectionManager {
 				id,
 				sourceElementId: edge.sourceElementId,
 				targetElementId: edge.targetElementId,
-				...(edge.locked ? { locked: true } : {}),
 			})
 		}
 		this.hitTester.invalidateConnections(connectionIds)
 		this.emitChangeAndRender({ changedConnectionIds: connectionIds })
 		return { status: "created", connectionIds }
-	}
-
-	/** 创建或升级分镜输出连接；升级过程不会破坏现有连接 ID。 */
-	public ensureLockedConnection(
-		sourceElementId: string,
-		targetElementId: string,
-	): { status: "created" | "existing" | "invalid"; connectionId?: string } {
-		const existing = this.getDownstreamConnections(sourceElementId).find(
-			(connection) => connection.targetElementId === targetElementId,
-		)
-		if (existing) {
-			if (!existing.locked) {
-				this.store.update(existing.id, { locked: true })
-				this.hitTester.invalidateConnections([existing.id])
-				this.emitChangeAndRender({ changedConnectionIds: [existing.id] })
-			}
-			return { status: "existing", connectionId: existing.id }
-		}
-
-		const result = this.connectElements({
-			sourceElementId,
-			targetElementId,
-			locked: true,
-		})
-		return result.status === "created" ? result : { status: "invalid" }
 	}
 
 	public replaceConnectionSelection(
@@ -360,17 +327,9 @@ export class ConnectionManager {
 
 	public removeConnections(
 		connectionIds: string[],
-		options?: { emitChange?: boolean; force?: boolean },
+		options?: { emitChange?: boolean },
 	): string[] {
-		const removableConnectionIds = options?.force
-			? connectionIds
-			: connectionIds.filter((connectionId) => {
-					const connection = this.store.getConnectionsByIds([connectionId])[0]
-					return !connection?.locked
-				})
-		const deletedConnectionIds = this.store.removeConnections(removableConnectionIds, {
-			force: options?.force,
-		})
+		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return []
 		}
@@ -389,18 +348,8 @@ export class ConnectionManager {
 		elementId: string,
 		options?: { emitChange?: boolean },
 	): void {
-		// 元素删除是系统联动清理，必须允许清理分镜输出的 locked 连接。
-		const deletedConnectionIds = this.store
-			.getConnectionIdsByElementId(elementId)
-			.reduce<string[]>((deleted, connectionId) => {
-				deleted.push(
-					...this.removeConnections([connectionId], {
-						emitChange: false,
-						force: true,
-					}),
-				)
-				return deleted
-			}, [])
+		const connectionIds = this.store.getConnectionIdsByElementId(elementId)
+		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return
 		}

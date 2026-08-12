@@ -1,11 +1,8 @@
+import { cloneCanvasConnection } from "../../document/connectionIndex"
 import type { CanvasConnection } from "../../document/types"
 
-function cloneConnection(connection: CanvasConnection): CanvasConnection {
-	return { ...connection }
-}
-
 function cloneConnections(connections: CanvasConnection[]): CanvasConnection[] {
-	return connections.map(cloneConnection)
+	return connections.map(cloneCanvasConnection)
 }
 
 function createDirectedPairKey(sourceElementId: string, targetElementId: string): string {
@@ -65,7 +62,7 @@ export class ConnectionStore {
 		const connectionIdSet = new Set(connectionIds)
 		return this.connections
 			.filter((connection) => connectionIdSet.has(connection.id))
-			.map(cloneConnection)
+			.map(cloneCanvasConnection)
 	}
 
 	public hasConnectionId(connectionId: string): boolean {
@@ -106,27 +103,8 @@ export class ConnectionStore {
 		return this.addInternal(connection)
 	}
 
-	public update(connectionId: string, updates: Partial<CanvasConnection>): boolean {
-		const current = this.connectionsById.get(connectionId)
-		if (!current) return false
-		const next = { ...current, ...updates, id: current.id }
-		this.load(
-			this.connections.map((connection) =>
-				connection.id === connectionId ? next : connection,
-			),
-		)
-		return true
-	}
-
-	public removeConnections(
-		connectionIds: Iterable<string>,
-		options?: { force?: boolean },
-	): string[] {
-		const connectionIdSet = new Set(
-			Array.from(connectionIds).filter(
-				(connectionId) => options?.force || !this.connectionsById.get(connectionId)?.locked,
-			),
-		)
+	public removeConnections(connectionIds: Iterable<string>): string[] {
+		const connectionIdSet = new Set(connectionIds)
 		const deletedConnectionIds = this.connections
 			.filter((connection) => connectionIdSet.has(connection.id))
 			.map((connection) => connection.id)
@@ -136,11 +114,8 @@ export class ConnectionStore {
 		return deletedConnectionIds
 	}
 
-	public removeConnectionsByElementId(
-		elementId: string,
-		options?: { force?: boolean },
-	): string[] {
-		return this.removeConnections(this.getConnectionIdsByElementId(elementId), options)
+	public removeConnectionsByElementId(elementId: string): string[] {
+		return this.removeConnections(this.getConnectionIdsByElementId(elementId))
 	}
 
 	private addInternal(connection: CanvasConnection): boolean {
@@ -167,7 +142,7 @@ export class ConnectionStore {
 			return false
 		}
 
-		const clonedConnection = cloneConnection(connection)
+		const clonedConnection = cloneCanvasConnection(connection)
 		this.connections.push(clonedConnection)
 		this.connectionsById.set(clonedConnection.id, clonedConnection)
 		this.connectionIdByDirectedPair.set(directedPairKey, clonedConnection.id)
@@ -200,6 +175,6 @@ export class ConnectionStore {
 		return Array.from(connectionIds)
 			.map((connectionId) => this.connectionsById.get(connectionId))
 			.filter((connection): connection is CanvasConnection => !!connection)
-			.map(cloneConnection)
+			.map(cloneCanvasConnection)
 	}
 }

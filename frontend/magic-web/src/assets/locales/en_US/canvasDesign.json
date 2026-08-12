@@ -530,7 +530,6 @@
 		"referenceLimit": "This model supports up to {{count}} reference images",
 		"regenerate": "Regenerate",
 		"resolution": "Resolution",
-		"seconds": "sec",
 		"shotList": "Shot list",
 		"shotWithIndex": "Shot {{index}}"
 	},

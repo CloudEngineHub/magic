@@ -388,8 +388,6 @@ export interface AudioElement extends ContentElementProps<AudioElementContent> {
 export interface StoryboardShot {
 	/** 镜头唯一标识 */
 	id: string
-	/** 镜头时长，单位为秒 */
-	durationSeconds: number
 	/** 画面描述 */
 	description: string
 	/** 稳定关联的输出图片元素 ID；缺省表示尚未创建输出元素 */
@@ -571,8 +569,6 @@ export interface CanvasConnection {
 	sourceElementId: string
 	/** 下游/结果/消费方元素 ID */
 	targetElementId: string
-	/** 锁定的业务连接不可被普通用户删除；历史连接缺省为 false */
-	locked?: boolean
 }
 
 /** 画布文档结构 */

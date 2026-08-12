@@ -18,7 +18,6 @@ function createStoryboardData(): StoryboardElement {
 		shots: [
 			{
 				id: "shot-1",
-				durationSeconds: 3,
 				description: "",
 			},
 		],
@@ -227,18 +226,16 @@ describe("StoryboardInteractionManager", () => {
 		manager.destroy()
 	})
 
-	it("deletes only the locked output connection when removing a generated shot", () => {
+	it("deletes only the output connection when removing a generated shot", () => {
 		const data = createStoryboardData()
 		getStoryboardContent(data).shots = [
 			{
 				id: "shot-1",
-				durationSeconds: 3,
 				description: "wide shot",
 				outputImageElementId: "image-output",
 			},
 			{
 				id: "shot-2",
-				durationSeconds: 3,
 				description: "close up",
 			},
 		]
@@ -247,7 +244,6 @@ describe("StoryboardInteractionManager", () => {
 			id: "storyboard-output",
 			sourceElementId: data.id,
 			targetElementId: outputImage.id,
-			locked: true,
 		}
 		const harness = createCanvasMock(data, [outputImage], [outputConnection])
 		harness.selected.value = true
@@ -264,9 +260,7 @@ describe("StoryboardInteractionManager", () => {
 		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
 		hit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
 
-		expect(harness.removeConnections).toHaveBeenCalledWith([outputConnection.id], {
-			force: true,
-		})
+		expect(harness.removeConnections).toHaveBeenCalledWith([outputConnection.id])
 		expect(harness.canvas.elementManager.delete).not.toHaveBeenCalled()
 		expect(harness.elements.has(outputImage.id)).toBe(true)
 		const shots = harness.updates[0]?.patch.shots as StoryboardElementContent["shots"]
@@ -428,7 +422,7 @@ describe("StoryboardInteractionManager", () => {
 		expect(harness.updates).toContainEqual({
 			id: data.id,
 			patch: {
-				shots: [{ id: "shot-1", durationSeconds: 3, description: "实时输入的描述" }],
+				shots: [{ id: "shot-1", description: "实时输入的描述" }],
 			},
 		})
 		expect(descriptionStates).toContain("editing")
@@ -439,7 +433,6 @@ describe("StoryboardInteractionManager", () => {
 		const data = createStoryboardData()
 		getStoryboardContent(data).shots = Array.from({ length: 20 }, (_, index) => ({
 			id: `shot-${index + 1}`,
-			durationSeconds: 3,
 			description: `镜头 ${index + 1}`,
 		}))
 		const harness = createCanvasMock(data)

@@ -1,6 +1,13 @@
-import type { CanvasDocument, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	CanvasDocument,
+	CanvasConnection,
+	LayerElement,
+	StoryboardShot,
+} from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import { cloneCanvasConnections } from "@/components/CanvasDesign/runtime/document/connectionIndex"
 import { normalizeLegacyHighImageTaskMeta } from "@/components/CanvasDesign/runtime/document/elementContent"
+import { normalizeStoryboardShot } from "@/components/CanvasDesign/runtime/document/storyboardMigration"
 import { validateElementData } from "@/components/CanvasDesign/runtime/document/validateElement"
 import { cloneDeep } from "lodash-es"
 import { MAGIC_PROJECT_VERSION_V3 } from "./magicProjectCompression"
@@ -126,6 +133,15 @@ function migrateElementToV3(rawElement: unknown): LayerElement {
 	if (hadContents && contents.length === 0 && Object.keys(firstContent).length > 1) {
 		contents.push(firstContent)
 	}
+	if (element.type === ElementTypeEnum.Storyboard) {
+		contents.forEach((content) => {
+			if (Array.isArray(content.shots)) {
+				content.shots = content.shots.map((shot) =>
+					normalizeStoryboardShot(shot as StoryboardShot),
+				)
+			}
+		})
+	}
 
 	const contentIds = new Set(contents.map((content) => String(content.contentId)).filter(Boolean))
 	const activeContentId =
@@ -162,9 +178,17 @@ function migrateElementToV3(rawElement: unknown): LayerElement {
 export function upgradeDesignDataToV3(designData: DesignData | DesignDataCodecInput): DesignData {
 	const next = cloneValue(designData) as unknown as DesignData
 	if (next.canvas) {
+		const elements = (next.canvas.elements ?? []).map((element) => migrateElementToV3(element))
 		next.canvas = {
 			...next.canvas,
-			elements: (next.canvas.elements ?? []).map((element) => migrateElementToV3(element)),
+			elements,
+			...(Array.isArray(next.canvas.connections)
+				? {
+						connections: cloneCanvasConnections(
+							next.canvas.connections as CanvasConnection[],
+						),
+					}
+				: {}),
 		} satisfies CanvasDocument
 	}
 	next.version = MAGIC_PROJECT_VERSION_V3

@@ -94,6 +94,7 @@ import {
 	conversationActions,
 	downloadActions,
 } from "../actions/index"
+import { normalizeStoryboardDocument } from "../document/storyboardMigration"
 
 function areCanvasDeviceInfoEqual(a: CanvasDeviceInfo, b: CanvasDeviceInfo): boolean {
 	return (
@@ -968,14 +969,15 @@ export class Canvas {
 		doc: CanvasDocument,
 		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
 	): void {
-		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocument")
+		const normalizedDoc = normalizeStoryboardDocument(doc)
+		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
 		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
 		// 禁用历史记录，避免在加载时记录
 		this.historyManager.disable()
 
-		this.elementManager.loadDocument(doc)
-		this.connectionManager.loadDocument(doc)
+		this.elementManager.loadDocument(normalizedDoc)
+		this.connectionManager.loadDocument(normalizedDoc)
 
 		// 重新启用历史记录
 		this.historyManager.enable()
@@ -1001,7 +1003,8 @@ export class Canvas {
 		doc: CanvasDocument,
 		options?: { elementDetailsProvenance?: ElementDetailsProvenance },
 	): void {
-		this.resourceUrlWarmupManager.warmupDocument(doc, "loadDocumentSmart")
+		const normalizedDoc = normalizeStoryboardDocument(doc)
+		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
 		if (options?.elementDetailsProvenance) {
 			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
 		}
@@ -1011,11 +1014,11 @@ export class Canvas {
 			didEmitDocumentRestored = true
 		})
 		try {
-			this.elementManager.loadDocumentSmart(doc)
+			this.elementManager.loadDocumentSmart(normalizedDoc)
 		} finally {
 			unsubscribeDocumentRestored()
 		}
-		this.connectionManager.loadDocument(doc)
+		this.connectionManager.loadDocument(normalizedDoc)
 		const nextConnections = this.connectionManager.exportConnections()
 		if (
 			!didEmitDocumentRestored &&

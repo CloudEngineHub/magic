@@ -45,7 +45,6 @@ export const STORYBOARD_LAYOUT_DESIGN = {
 	shotDescriptionHorizontalPadding: 16,
 	shotDescriptionVerticalPadding: 12,
 	shotControlGap: 12,
-	shotDurationWidth: 96,
 	shotGenerateWidth: 144,
 	shotDeleteSize: 42,
 	shotControlHeight: 42,
@@ -100,7 +99,6 @@ export interface StoryboardParameterLayout {
 export interface StoryboardShotControlsLayout {
 	rect: LayoutRect
 	scale: number
-	durationRect: LayoutRect
 	generateRect: LayoutRect
 	deleteRect: LayoutRect
 }
@@ -294,10 +292,9 @@ function resolveShotLayout(options: {
 	const controlsFit = responsive.fitUniform(
 		{
 			width:
-				STORYBOARD_LAYOUT_DESIGN.shotDurationWidth +
 				STORYBOARD_LAYOUT_DESIGN.shotGenerateWidth +
 				STORYBOARD_LAYOUT_DESIGN.shotDeleteSize +
-				STORYBOARD_LAYOUT_DESIGN.shotControlGap * 2,
+				STORYBOARD_LAYOUT_DESIGN.shotControlGap,
 			height: STORYBOARD_LAYOUT_DESIGN.shotControlHeight,
 		},
 		controlsContainer,
@@ -306,18 +303,11 @@ function resolveShotLayout(options: {
 	const controlsScale = Math.max(0.01, controlsFit.scale)
 	const controlsRect = controlsFit.rect
 	const controlGap = STORYBOARD_LAYOUT_DESIGN.shotControlGap * controlsScale
-	const durationWidth = STORYBOARD_LAYOUT_DESIGN.shotDurationWidth * controlsScale
 	const generateWidth = STORYBOARD_LAYOUT_DESIGN.shotGenerateWidth * controlsScale
 	const deleteSize = STORYBOARD_LAYOUT_DESIGN.shotDeleteSize * controlsScale
 	const controlHeight = STORYBOARD_LAYOUT_DESIGN.shotControlHeight * controlsScale
-	const durationRect = {
-		x: controlsRect.x,
-		y: controlsRect.y,
-		width: durationWidth,
-		height: controlHeight,
-	}
 	const generateRect = {
-		x: durationRect.x + durationRect.width + controlGap,
+		x: controlsRect.x,
 		y: controlsRect.y,
 		width: generateWidth,
 		height: controlHeight,
@@ -392,7 +382,6 @@ function resolveShotLayout(options: {
 		controls: {
 			rect: controlsRect,
 			scale: controlsScale,
-			durationRect,
 			generateRect,
 			deleteRect,
 		},

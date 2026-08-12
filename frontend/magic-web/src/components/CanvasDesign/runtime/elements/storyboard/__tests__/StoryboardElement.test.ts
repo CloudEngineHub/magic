@@ -2,14 +2,18 @@ import Konva from "konva"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Canvas } from "../../../core/Canvas"
 import { exportCanvasDocument } from "../../../document/exportDocument"
-import { ElementTypeEnum } from "../../../document/types"
+import { ElementTypeEnum, type CanvasConnection } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
 import { ElementFactory } from "../../core/ElementFactory"
 import { STORYBOARD_CONFIG } from "../StoryboardElement.config"
 import { resolveStoryboardElementLayout } from "../StoryboardElement.layout"
 import { StoryboardElement } from "../StoryboardElement"
 
-function createCanvasMock(modelIcon?: string, outputImageIds: string[] = []): Canvas {
+function createCanvasMock(
+	modelIcon?: string,
+	outputImageIds: string[] = [],
+	connections: CanvasConnection[] = [],
+): Canvas {
 	const outputImageIdSet = new Set(outputImageIds)
 	return {
 		deviceInfo: {
@@ -29,6 +33,18 @@ function createCanvasMock(modelIcon?: string, outputImageIds: string[] = []): Ca
 		storyboardInteractionManager: {
 			bindControl: vi.fn(() => vi.fn()),
 			getModelIcon: vi.fn(() => modelIcon),
+		},
+		connectionManager: {
+			hasConnection: vi.fn((sourceElementId: string, targetElementId: string) =>
+				connections.some(
+					(connection) =>
+						connection.sourceElementId === sourceElementId &&
+						connection.targetElementId === targetElementId,
+				),
+			),
+			getDownstreamConnections: vi.fn((elementId: string) =>
+				connections.filter((connection) => connection.sourceElementId === elementId),
+			),
 		},
 	} as unknown as Canvas
 }
@@ -57,9 +73,9 @@ describe("StoryboardElement", () => {
 		})
 		expect(element.contents[0]?.shots).toHaveLength(1)
 		expect(element.contents[0]?.shots?.[0]).toMatchObject({
-			durationSeconds: 3,
 			description: "",
 		})
+		expect(element.contents[0]?.shots?.[0]).not.toHaveProperty("durationSeconds")
 		expect(element.contents[0]?.shots?.[0]).not.toHaveProperty("status")
 		expect(element.contents[0]?.shots?.[0]?.id).toEqual(expect.any(String))
 	})
@@ -136,13 +152,22 @@ describe("StoryboardElement", () => {
 				shots: [
 					{
 						id: "shot-1",
-						durationSeconds: 4,
 						description: "雨后的森林小路，人物穿橙色冲锋衣进入画面。",
 						outputImageElementId: "image-output",
 					},
 				],
 			}),
-			createCanvasMock(undefined, ["image-output"]),
+			createCanvasMock(
+				undefined,
+				["image-output"],
+				[
+					{
+						id: "storyboard-output",
+						sourceElementId: "storyboard-1",
+						targetElementId: "image-output",
+					},
+				],
+			),
 		)
 
 		const group = element.render()
@@ -154,7 +179,6 @@ describe("StoryboardElement", () => {
 		const texts = group.find("Text").map((node) => (node as Konva.Text).text())
 		const generateAll = group.findOne(".storyboard-generate-all") as Konva.Rect
 		const shotBackground = group.findOne(".storyboard-shot-shot-1") as Konva.Rect
-		const durationBackground = group.findOne(".storyboard-duration-background") as Konva.Rect
 		const generateAgainIcon = group.findOne(".storyboard-generate-again-icon") as Konva.Path
 		const modelHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
@@ -172,7 +196,7 @@ describe("StoryboardElement", () => {
 		expect(group.findOne(".hit-area")).toBeTruthy()
 		expect(group.findOne(".storyboard-shot-shot-1")).toBeTruthy()
 		expect(shotBackground.strokeWidth()).toBe(Math.max(1, layout.scale))
-		expect(durationBackground.strokeWidth()).toBe(shotBackground.strokeWidth())
+		expect(group.findOne(".storyboard-duration-background")).toBeUndefined()
 		expect(group.find(".storyboard-control-hit").length).toBeGreaterThanOrEqual(8)
 		expect(group.find(".storyboard-control-hit").every((node) => node.listening())).toBe(true)
 		expect(texts).toEqual(
@@ -183,7 +207,6 @@ describe("StoryboardElement", () => {
 				"分镜 1",
 				"已生成",
 				"再次生成",
-				"4  秒",
 				"雨后的森林小路，人物穿橙色冲锋衣进入画面。",
 			]),
 		)
@@ -207,6 +230,45 @@ describe("StoryboardElement", () => {
 			expect.arrayContaining(["storyboard-control-background"]),
 		)
 		expect(generateAll.fill()).toBe(STORYBOARD_CONFIG.ACCENT)
+	})
+
+	it("shows a generated shot only while its output connection exists", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const connection: CanvasConnection = {
+			id: "storyboard-output",
+			sourceElementId: "storyboard-1",
+			targetElementId: "image-output",
+		}
+		const data = StoryboardElement.createElementData({
+			id: "storyboard-1",
+			x: 0,
+			y: 0,
+			shots: [
+				{
+					id: "shot-1",
+					description: "森林小路",
+					outputImageElementId: "image-output",
+				},
+			],
+		})
+		const connections = [connection]
+		const canvas = createCanvasMock(undefined, ["image-output"], connections)
+
+		const connectedGroup = new StoryboardElement(data, canvas).render()
+		expect(connectedGroup.find("Text").map((node) => (node as Konva.Text).text())).toEqual(
+			expect.arrayContaining(["已生成", "再次生成"]),
+		)
+
+		connections.length = 0
+		const disconnectedGroup = new StoryboardElement(data, canvas).render()
+		expect(disconnectedGroup.find("Text").map((node) => (node as Konva.Text).text())).toEqual(
+			expect.arrayContaining(["未生成", "生成"]),
+		)
 	})
 
 	it("renders the selected model icon from runtime metadata without persisting it", () => {
@@ -263,7 +325,6 @@ describe("StoryboardElement", () => {
 				shots: [
 					{
 						id: "shot-1",
-						durationSeconds: 3,
 						description: "",
 					},
 				],
@@ -368,7 +429,6 @@ describe("StoryboardElement", () => {
 			shots: [
 				{
 					id: "shot-1",
-					durationSeconds: 4,
 					description: "森林小路",
 				},
 			],
@@ -409,7 +469,6 @@ describe("StoryboardElement", () => {
 		} as unknown as CanvasRenderingContext2D)
 		const shots = Array.from({ length: 20 }, (_, index) => ({
 			id: `shot-${index + 1}`,
-			durationSeconds: 3,
 			description: `镜头 ${index + 1}`,
 		}))
 		const element = new StoryboardElement(

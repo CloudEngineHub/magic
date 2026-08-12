@@ -39,7 +39,6 @@ export type StoryboardControlAction =
 	| { type: "select-aspect-ratio" }
 	| { type: "select-resolution" }
 	| { type: "edit-description"; shotId: string }
-	| { type: "edit-duration"; shotId: string }
 	| { type: "add-shot" }
 	| { type: "delete-shot"; shotId: string }
 	| { type: "generate-shot"; shotId: string; disabled?: boolean }
@@ -342,9 +341,6 @@ export class StoryboardInteractionManager {
 			case "edit-description":
 				this.openDescriptionEditor(binding, binding.action.shotId)
 				break
-			case "edit-duration":
-				this.openDurationEditor(binding, binding.action.shotId)
-				break
 			case "add-shot":
 				this.addShot(binding.elementId)
 				break
@@ -498,39 +494,6 @@ export class StoryboardInteractionManager {
 		this.refreshGenerationControlStates(element.id)
 	}
 
-	private openDurationEditor(binding: StoryboardControlBinding, shotId: string): void {
-		const element = this.getStoryboardElement(binding.elementId)
-		const shot = element
-			? getActiveContent<StoryboardElementContent>(element)?.shots?.find(
-					(item) => item.id === shotId,
-				)
-			: undefined
-		const anchorNode = binding.overlayAnchorNode
-		if (!element || !shot || !anchorNode) return
-
-		this.beginEditing(binding)
-		this.overlayHost.mount({
-			kind: "number",
-			anchorNode,
-			ariaLabel: this.getText("storyboard.duration", "分镜时长"),
-			value: String(shot.durationSeconds),
-			step: "any",
-			min: "0.000001",
-			fontSize: 15,
-			borderRadius: 8,
-			onCommit: (value) => {
-				this.finishEditing(binding)
-				const durationSeconds = Number(value)
-				if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return
-				this.updateShot(element.id, shotId, (current) => ({
-					...current,
-					durationSeconds,
-				}))
-			},
-			onCancel: () => this.finishEditing(binding),
-		})
-	}
-
 	private mountSelect(
 		binding: StoryboardControlBinding,
 		options: {
@@ -589,7 +552,6 @@ export class StoryboardInteractionManager {
 			...shots,
 			{
 				id: generateUUID(),
-				durationSeconds: 3,
 				description: "",
 			},
 		]
@@ -621,9 +583,7 @@ export class StoryboardInteractionManager {
 					.getDownstreamConnections(elementId)
 					.find((connection) => connection.targetElementId === shot.outputImageElementId)
 				if (outputConnection) {
-					this.canvas.connectionManager.removeConnections([outputConnection.id], {
-						force: true,
-					})
+					this.canvas.connectionManager.removeConnections([outputConnection.id])
 				}
 			}
 			const nextShots = (content?.shots ?? []).filter((item) => item.id !== shotId)
@@ -649,9 +609,7 @@ export class StoryboardInteractionManager {
 		const shots = content.shots.map((shot) => {
 			if (shot.id !== shotId) return shot
 			const next = updater(shot)
-			changed =
-				next.description !== shot.description ||
-				next.durationSeconds !== shot.durationSeconds
+			changed = next.description !== shot.description
 			return changed ? next : shot
 		})
 		if (changed) this.canvas.elementManager.update(elementId, { shots })

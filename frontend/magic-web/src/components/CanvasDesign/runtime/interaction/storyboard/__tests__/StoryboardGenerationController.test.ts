@@ -26,8 +26,8 @@ function createStoryboard(): StoryboardElement {
 			{
 				contentId,
 				shots: [
-					{ id: "shot-1", durationSeconds: 3, description: "wide shot" },
-					{ id: "shot-2", durationSeconds: 4, description: "close up" },
+					{ id: "shot-1", description: "wide shot" },
+					{ id: "shot-2", description: "close up" },
 				],
 				generationConfig: {
 					model_id: "model-1",
@@ -83,9 +83,9 @@ function createHarness(options?: {
 		request: Record<string, unknown>
 	}> = []
 	const connections: Array<{
+		id: string
 		sourceElementId: string
 		targetElementId: string
-		locked?: boolean
 	}> = []
 	const eventEmitter = new EventEmitter()
 	let zIndex = 10
@@ -232,17 +232,20 @@ function createHarness(options?: {
 			getDownstreamConnections: vi.fn((id: string) =>
 				connections.filter((connection) => connection.sourceElementId === id),
 			),
-			ensureLockedConnection: vi.fn((sourceElementId: string, targetElementId: string) => {
-				if (
-					!connections.some(
-						(connection) =>
-							connection.sourceElementId === sourceElementId &&
-							connection.targetElementId === targetElementId,
-					)
-				) {
-					connections.push({ sourceElementId, targetElementId, locked: true })
-				}
-			}),
+			hasConnection: vi.fn((sourceElementId: string, targetElementId: string) =>
+				connections.some(
+					(connection) =>
+						connection.sourceElementId === sourceElementId &&
+						connection.targetElementId === targetElementId,
+				),
+			),
+			connectElements: vi.fn(
+				({ sourceElementId, targetElementId }: Record<string, string>) => {
+					const id = `connection-${connections.length + 1}`
+					connections.push({ id, sourceElementId, targetElementId })
+					return { status: "created", connectionId: id }
+				},
+			),
 		},
 	} as any
 
@@ -262,7 +265,7 @@ function createHarness(options?: {
 describe("StoryboardGenerationController", () => {
 	afterEach(() => vi.restoreAllMocks())
 
-	it("creates one frame, one locked output per shot, and submits all requests concurrently", async () => {
+	it("creates one frame, one removable output connection per shot, and submits concurrently", async () => {
 		const harness = createHarness()
 		const controller = new StoryboardGenerationController(harness.canvas, async () => [
 			harness.model,
@@ -288,23 +291,15 @@ describe("StoryboardGenerationController", () => {
 		expect(harness.submissions).toHaveLength(2)
 		expect(harness.submissions.map((item) => item.kind)).toEqual(["initial", "initial"])
 		expect(harness.connections).toHaveLength(2)
-		expect(harness.connections.every((connection) => connection.locked)).toBe(true)
-		expect(
-			getStoryboardContent(harness.storyboard).shots?.map(
-				(shot) => shot.outputImageElementId,
-			),
-		).toEqual(expect.arrayContaining([expect.any(String), expect.any(String)]))
-		expect(
-			new Set(
-				getStoryboardContent(harness.storyboard).shots?.map(
-					(shot) => shot.outputImageElementId,
-				),
-			).size,
-		).toBe(2)
+		const outputIds = getStoryboardContent(harness.storyboard).shots?.map(
+			(shot) => shot.outputImageElementId,
+		)
+		expect(outputIds).toEqual(expect.arrayContaining([expect.any(String), expect.any(String)]))
+		expect(new Set(outputIds).size).toBe(2)
 		controller.destroy()
 	})
 
-	it("generates only the requested shot and keeps its output connection locked", async () => {
+	it("generates only the requested shot and creates a normal output connection", async () => {
 		const harness = createHarness()
 		const controller = new StoryboardGenerationController(harness.canvas, async () => [
 			harness.model,
@@ -324,7 +319,6 @@ describe("StoryboardGenerationController", () => {
 			expect.any(String),
 		)
 		expect(harness.connections).toHaveLength(1)
-		expect(harness.connections[0]?.locked).toBe(true)
 		controller.destroy()
 	})
 
@@ -479,17 +473,21 @@ describe("StoryboardGenerationController", () => {
 		])
 
 		await controller.generateAll(harness.storyboard.id)
-		const outputIds = getStoryboardContent(harness.storyboard).shots?.map(
+		const outputIds = harness.connections.map((connection) => connection.targetElementId)
+		const shotOutputIds = getStoryboardContent(harness.storyboard).shots?.map(
 			(shot) => shot.outputImageElementId,
 		)
 		await controller.generateAll(harness.storyboard.id)
 
 		expect(harness.frameCount()).toBe(1)
+		expect(harness.connections.map((connection) => connection.targetElementId)).toEqual(
+			outputIds,
+		)
 		expect(
 			getStoryboardContent(harness.storyboard).shots?.map(
 				(shot) => shot.outputImageElementId,
 			),
-		).toEqual(outputIds)
+		).toEqual(shotOutputIds)
 		expect(harness.submissions.map((item) => item.kind)).toEqual([
 			"initial",
 			"initial",
@@ -514,6 +512,10 @@ describe("StoryboardGenerationController", () => {
 		harness.elements.delete(missingId)
 		harness.instances.delete(missingId)
 		harness.parents.delete(missingId)
+		const missingConnectionIndex = harness.connections.findIndex(
+			(connection) => connection.targetElementId === missingId,
+		)
+		if (missingConnectionIndex >= 0) harness.connections.splice(missingConnectionIndex, 1)
 		const frame = harness.elements.get(frameId)
 		frame.children = frame.children?.filter((child: { id: string }) => child.id !== missingId)
 
@@ -597,6 +599,7 @@ describe("StoryboardGenerationController", () => {
 
 		await controller.generateAll(harness.storyboard.id)
 		expect(harness.frameCount()).toBe(1)
+		expect(harness.connections).toHaveLength(2)
 		expect(
 			getStoryboardContent(harness.storyboard).shots?.every(
 				(shot) => shot.outputImageElementId,

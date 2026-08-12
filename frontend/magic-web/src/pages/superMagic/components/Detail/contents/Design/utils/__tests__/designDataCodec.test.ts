@@ -115,6 +115,58 @@ describe("designDataCodec", () => {
 		validateV3CanvasDocument(result.canvas)
 	})
 
+	it("removes deprecated storyboard duration fields while preserving output mappings", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "legacy-storyboard",
+			version: MAGIC_PROJECT_VERSION_V3,
+			canvas: {
+				elements: [
+					{
+						id: "storyboard-1",
+						type: ElementTypeEnum.Storyboard,
+						contents: [
+							{
+								contentId: "storyboard-1-content-1",
+								shots: [
+									{
+										id: "shot-1",
+										durationSeconds: 3,
+										description: "抱在一起",
+										outputImageElementId: "image-1",
+									},
+								],
+							},
+						],
+						activeContentId: "storyboard-1-content-1",
+						mainContentId: "storyboard-1-content-1",
+					},
+				],
+				connections: [
+					{
+						id: "storyboard-output",
+						sourceElementId: "storyboard-1",
+						targetElementId: "image-1",
+						locked: true,
+						legacyField: "remove-me",
+					},
+				],
+			},
+		})
+
+		expect(result.canvas?.elements?.[0]?.contents[0]?.shots).toEqual([
+			{ id: "shot-1", description: "抱在一起", outputImageElementId: "image-1" },
+		])
+		expect(result.canvas?.connections).toEqual([
+			{
+				id: "storyboard-output",
+				sourceElementId: "storyboard-1",
+				targetElementId: "image-1",
+			},
+		])
+		validateV3CanvasDocument(result.canvas)
+	})
+
 	it("preserves an explicitly incomplete empty Content container", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",

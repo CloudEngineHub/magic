@@ -4,10 +4,12 @@ import {
 	type CropConfig,
 	type InteractionConfig,
 	type LayerElement,
+	type StoryboardShot,
 	type TextStyle,
 } from "./types"
 import { compactTextDefaultStyle } from "../text/richText"
 import { getContents } from "./elementContent"
+import { normalizeStoryboardShot } from "./storyboardMigration"
 
 const BASE_EXPORT_DEFAULTS = {
 	visible: true,
@@ -136,11 +138,9 @@ export function exportLayerElement(element: LayerElement): LayerElement {
 			)
 		}
 		if (element.type === ElementTypeEnum.Storyboard && Array.isArray(serialized.shots)) {
-			serialized.shots = (serialized.shots as Array<Record<string, unknown>>).map((shot) => {
-				const sanitizedShot = { ...shot }
-				delete sanitizedShot.status
-				return sanitizedShot
-			})
+			serialized.shots = (serialized.shots as Array<Record<string, unknown>>).map((shot) =>
+				normalizeStoryboardShot(shot as unknown as StoryboardShot),
+			)
 		}
 		return serialized
 	})

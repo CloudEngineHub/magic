@@ -289,7 +289,9 @@ describe("storyboard connection creation", () => {
 				zIndex: 7,
 				contents: [
 					expect.objectContaining({
-						shots: [expect.objectContaining({ durationSeconds: 3 })],
+						shots: [
+							expect.objectContaining({ id: expect.any(String), description: "" }),
+						],
 					}),
 				],
 			}),

@@ -88,6 +88,58 @@ describe("loadDesignDataToRuntime", () => {
 		})
 	})
 
+	it("accepts v3 storyboard data with deprecated duration fields during migration", async () => {
+		const content = `window.magicProjectConfig = ${JSON.stringify({
+			version: MAGIC_PROJECT_VERSION_V3,
+			type: "design",
+			name: "storyboard-with-duration",
+			canvas: {
+				elements: [
+					{
+						id: "storyboard-1",
+						type: ElementTypeEnum.Storyboard,
+						contents: [
+							{
+								contentId: "storyboard-1-content-1",
+								shots: [
+									{
+										id: "shot-1",
+										durationSeconds: 3,
+										description: "抱在一起",
+										outputImageElementId: "image-1",
+									},
+								],
+							},
+						],
+						activeContentId: "storyboard-1-content-1",
+						mainContentId: "storyboard-1-content-1",
+					},
+				],
+				connections: [
+					{
+						id: "storyboard-output",
+						sourceElementId: "storyboard-1",
+						targetElementId: "image-1",
+						locked: true,
+					},
+				],
+			},
+		})};`
+
+		const loaded = await loadDesignDataToRuntime({ content })
+
+		expect(loaded.data.canvas?.elements?.[0]?.contents[0]?.shots).toEqual([
+			{ id: "shot-1", description: "抱在一起", outputImageElementId: "image-1" },
+		])
+		expect(loaded.data.canvas?.connections).toEqual([
+			{
+				id: "storyboard-output",
+				sourceElementId: "storyboard-1",
+				targetElementId: "image-1",
+			},
+		])
+	})
+
 	it("clones and validates in-memory Draft data before returning it to Runtime", async () => {
 		const draft = {
 			version: "2.0.0",

@@ -9,6 +9,7 @@ import {
 	MAGIC_PROJECT_VERSION_V3,
 } from "../magicProjectCompression"
 import type { CanvasDocument } from "@/components/CanvasDesign/runtime/document"
+import type { CanvasConnection } from "@/components/CanvasDesign/runtime/document/types"
 import type { DesignData } from "../../types"
 
 function createDesignData(version: string): DesignData {
@@ -56,7 +57,12 @@ function createDesignData(version: string): DesignData {
 
 describe("magic project content", () => {
 	it("always writes a compressed v3 envelope and preserves connections", () => {
-		const content = generateMagicProjectJsContent(createDesignData(MAGIC_PROJECT_VERSION_V2))
+		const data = createDesignData(MAGIC_PROJECT_VERSION_V2)
+		data.canvas!.connections![0] = {
+			...data.canvas!.connections![0],
+			unsupportedField: true,
+		} as CanvasConnection & { unsupportedField: true }
+		const content = generateMagicProjectJsContent(data)
 		const config = parseMagicProjectConfigContent(content)
 		const canvasField = (config as { canvas?: unknown }).canvas
 

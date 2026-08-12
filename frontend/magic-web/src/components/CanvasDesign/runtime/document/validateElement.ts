@@ -94,7 +94,9 @@ function isValidStoryboardContent(content: Record<string, unknown>): boolean {
 	const outputElementIds = new Set<string>()
 	for (const shot of content.shots) {
 		if (!isObject(shot) || typeof shot.id !== "string" || ids.has(shot.id)) return false
-		if (!isFiniteNumber(shot.durationSeconds) || shot.durationSeconds <= 0) return false
+		if (!hasOnlyAllowedFields(shot, new Set(["id", "description", "outputImageElementId"]))) {
+			return false
+		}
 		if (typeof shot.description !== "string") return false
 		if (shot.outputImageElementId !== undefined) {
 			if (

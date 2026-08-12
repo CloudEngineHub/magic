@@ -57,7 +57,7 @@ interface StoryboardGenerationContext {
 /**
  * 分镜批量生成控制器。
  *
- * Frame 只承担视觉容器职责，镜头与输出图片的唯一业务映射保存在 shot 上；
+ * Frame 只承担视觉容器职责，镜头与输出图片的映射保存在 shot 上；
  * 这样解除 Frame 后仍能复用已有图片，删除 Frame 后也能按缺失映射重建。
  */
 export class StoryboardGenerationController {
@@ -336,10 +336,7 @@ export class StoryboardGenerationController {
 			(imageId) =>
 				!this.canvas.connectionManager
 					.getDownstreamConnections(storyboard.id)
-					.some(
-						(connection) =>
-							connection.targetElementId === imageId && connection.locked === true,
-					),
+					.some((connection) => connection.targetElementId === imageId),
 		)
 		const needsMutation = missingIndexes.length > 0 || needsConnectionMutation
 		const history = this.canvas.historyManager
@@ -497,7 +494,11 @@ export class StoryboardGenerationController {
 
 	private ensureConnections(storyboardId: string, imageIds: string[]): void {
 		imageIds.forEach((imageId) => {
-			this.canvas.connectionManager.ensureLockedConnection(storyboardId, imageId)
+			if (this.canvas.connectionManager.hasConnection(storyboardId, imageId)) return
+			this.canvas.connectionManager.connectElements({
+				sourceElementId: storyboardId,
+				targetElementId: imageId,
+			})
 		})
 	}
 

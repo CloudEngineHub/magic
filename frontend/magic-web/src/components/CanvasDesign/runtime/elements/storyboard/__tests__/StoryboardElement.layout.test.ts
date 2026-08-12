@@ -65,7 +65,6 @@ describe("resolveStoryboardElementLayout", () => {
 		layout.shotLayouts.forEach((shot) => {
 			expectRectInside(shot.rect, layout.shotListRect)
 			expectRectInside(shot.descriptionRect, shot.rect)
-			expectRectInside(shot.controls.durationRect, shot.headerRect)
 			expectRectInside(shot.controls.generateRect, shot.headerRect)
 			expectRectInside(shot.controls.deleteRect, shot.headerRect)
 		})
@@ -97,9 +96,6 @@ describe("resolveStoryboardElementLayout", () => {
 
 		expect(controls).toBeTruthy()
 		if (!controls) return
-		expect(controls.durationRect.width / controls.durationRect.height).toBeCloseTo(
-			STORYBOARD_LAYOUT_DESIGN.shotDurationWidth / STORYBOARD_LAYOUT_DESIGN.shotControlHeight,
-		)
 		expect(controls.generateRect.width / controls.generateRect.height).toBeCloseTo(
 			STORYBOARD_LAYOUT_DESIGN.shotGenerateWidth / STORYBOARD_LAYOUT_DESIGN.shotControlHeight,
 		)

@@ -8,6 +8,7 @@ import type {
 	CanvasConnection,
 	LayerElement,
 } from "@/components/CanvasDesign/runtime/document/types"
+import { cloneCanvasConnections } from "@/components/CanvasDesign/runtime/document/connectionIndex"
 import { t } from "i18next"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -44,7 +45,7 @@ function layerTreeHasMedia(elements: LayerElement[] | undefined): boolean {
 }
 
 function getCanvasConnections(canvas: DesignData["canvas"] | null | undefined): CanvasConnection[] {
-	return canvas?.connections ?? []
+	return cloneCanvasConnections(canvas?.connections)
 }
 
 function buildCanvasPayload(

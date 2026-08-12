@@ -65,10 +65,10 @@ describe("isValidElementData", () => {
 		expect(isValidElementData(contentElement(ElementTypeEnum.Audio, { src: 123 }))).toBe(false)
 	})
 
-	it("validates storyboard shots and stable output associations", () => {
+	it("validates storyboard shots without redundant output or duration fields", () => {
 		const content = {
 			generationConfig: { model_id: "gpt-image-2", size: "1080x1920" },
-			shots: [{ id: "shot-1", durationSeconds: 4, description: "森林小路" }],
+			shots: [{ id: "shot-1", description: "森林小路" }],
 		}
 		expect(isValidElementData(contentElement(ElementTypeEnum.Storyboard, content))).toBe(true)
 		expect(
@@ -84,13 +84,11 @@ describe("isValidElementData", () => {
 					shots: [
 						{
 							id: "shot-1",
-							durationSeconds: 3,
 							description: "镜头一",
 							outputImageElementId: "image-output",
 						},
 						{
 							id: "shot-2",
-							durationSeconds: 3,
 							description: "镜头二",
 							outputImageElementId: "image-output",
 						},
