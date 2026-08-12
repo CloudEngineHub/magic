@@ -21,6 +21,7 @@ readonly class VideoPointEstimateRequest
      * @param array<string, mixed> $businessParams 业务上下文，例如组织、用户、项目和视频任务 ID
      * @param bool $hasAudioOutput 是否有音频输出
      * @param array<string, mixed> $inputMedia 规范化后的输入素材，供不同计费模型按需解析
+     * @param string $providerCode 服务商编码
      */
     public function __construct(
         private string $modelId,
@@ -34,6 +35,7 @@ readonly class VideoPointEstimateRequest
         private array $businessParams = [],
         private bool $hasAudioOutput = true,
         private array $inputMedia = [],
+        private string $providerCode = '',
     ) {
     }
 
@@ -148,6 +150,11 @@ readonly class VideoPointEstimateRequest
         return $this->providerModelId;
     }
 
+    public function getProviderCode(): string
+    {
+        return $this->providerCode;
+    }
+
     /**
      * 转换为日志和调试使用的请求快照。
      *
@@ -167,6 +174,7 @@ readonly class VideoPointEstimateRequest
             'has_reference_video' => $this->hasReferenceVideo,
             'has_audio_output' => $this->hasAudioOutput,
             'input_media' => $this->inputMedia,
+            'provider_code' => $this->providerCode,
         ];
     }
 }

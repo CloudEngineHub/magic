@@ -597,6 +597,7 @@ readonly class VideoOperationAppService
             $requestDTO->getBusinessParams(),
             $hasAudioOutput,
             $inputMedia,
+            $providerCode->value,
         );
     }
 
