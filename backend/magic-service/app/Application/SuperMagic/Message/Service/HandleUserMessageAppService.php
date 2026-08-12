@@ -42,6 +42,7 @@ use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
+use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -49,16 +50,20 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\EventErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\ErrorCode\SuperMagicErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\EventExceptionBuilder;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use App\Interfaces\SuperMagic\Message\DTO\TopicTaskMessageDTO;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Codec\Json;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
+use Hyperf\Server\Exception\ServerException;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
@@ -321,21 +326,43 @@ class HandleUserMessageAppService extends AbstractAppService
         }
 
         // Create and send message to agent
-        $sandboxID = $this->createAndSendMessageToAgent($dataIsolation, $taskContext, $projectEntity, $topicEntity);
-        $taskEntity->setSandboxId($sandboxID);
+        try {
+            $sandboxID = $this->createAndSendMessageToAgent($dataIsolation, $taskContext, $projectEntity, $topicEntity);
+            $taskEntity->setSandboxId($sandboxID);
 
-        // Update task status
-        if (TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskEntity->getId())) {
-            $result = $this->agentDomainService->getSandboxStatus($topicEntity->getSandboxId());
-            if ($result->getStatus() === SandboxStatus::RUNNING) {
-                $this->agentDomainService->sendInterruptMessage($dataIsolation, $taskEntity->getSandboxId(), (string) $taskEntity->getId(), '');
+            // Update task status
+            if (TaskTerminationUtil::isTaskTerminated($this->redis, $this->logger, $taskEntity->getId())) {
+                $result = $this->agentDomainService->getSandboxStatus($topicEntity->getSandboxId());
+                if ($result->getStatus() === SandboxStatus::RUNNING) {
+                    $this->agentDomainService->sendInterruptMessage($dataIsolation, $taskEntity->getSandboxId(), (string) $taskEntity->getId(), '');
+                }
+            } else {
+                $this->topicTaskAppService->updateTaskStatus(
+                    dataIsolation: $dataIsolation,
+                    task: $taskEntity,
+                    status: TaskStatus::RUNNING
+                );
             }
-        } else {
-            $this->topicTaskAppService->updateTaskStatus(
-                dataIsolation: $dataIsolation,
-                task: $taskEntity,
-                status: TaskStatus::RUNNING
-            );
+        } catch (Throwable $e) {
+            // The task failed before any agent message could exist, so the normal
+            // RunTaskCallbackEvent flow never triggers. Settle the task here and emit
+            // the terminal event so downstream state (e.g. recording summary phase)
+            // never gets stuck.
+            $this->settleFailedChatTask($dataIsolation, $topicEntity, $taskEntity, $e);
+
+            // Business exceptions already carry a translated, client-safe message.
+            if ($e instanceof BusinessException) {
+                throw $e;
+            }
+
+            // Convert technical failures into a friendly, translated message:
+            // sandbox-related ones blame the runtime environment, everything else
+            // is a generic task start failure. The original trace is logged via `throwable`.
+            $errorCode = match (true) {
+                $e instanceof SandboxOperationException, $e instanceof ServerException => SuperMagicErrorCode::SandboxInitFailed,
+                default => SuperMagicErrorCode::ChatTaskStartFailed,
+            };
+            ExceptionBuilder::throw($errorCode, throwable: $e);
         }
     }
 
@@ -639,6 +666,59 @@ class HandleUserMessageAppService extends AbstractAppService
         $this->agentDomainService->sendChatMessage($dataIsolation, $taskContext);
 
         return $sandboxId;
+    }
+
+    /**
+     * Settle a task that failed during agent startup (sandbox init / message send).
+     *
+     * Marks the task as ERROR and dispatches a forced-ERROR RunTaskCallbackEvent so
+     * downstream subscribers (e.g. recording summary phase settlement) receive a
+     * terminal signal even though no agent message will ever arrive. Never throws.
+     */
+    private function settleFailedChatTask(
+        DataIsolation $dataIsolation,
+        TopicEntity $topicEntity,
+        TaskEntity $taskEntity,
+        Throwable $e
+    ): void {
+        try {
+            $this->topicTaskAppService->updateTaskStatus(
+                dataIsolation: $dataIsolation,
+                task: $taskEntity,
+                status: TaskStatus::ERROR,
+                errMsg: $e->getMessage()
+            );
+        } catch (Throwable $updateError) {
+            $this->logger->error('Failed to mark chat task as ERROR', [
+                'task_id' => $taskEntity->getId(),
+                'error' => $updateError->getMessage(),
+            ]);
+        }
+
+        try {
+            $messageDTO = TopicTaskMessageDTO::fromArray([
+                'payload' => [
+                    'task_id' => (string) $taskEntity->getId(),
+                    'status' => TaskStatus::ERROR->value,
+                ],
+            ]);
+
+            AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+                $topicEntity->getId(),
+                $topicEntity->getTopicName(),
+                $taskEntity->getId(),
+                $messageDTO,
+                $dataIsolation->getLanguage() ?? ''
+            ));
+        } catch (Throwable $dispatchError) {
+            $this->logger->error('Failed to dispatch error callback event for failed chat task', [
+                'task_id' => $taskEntity->getId(),
+                'topic_id' => $topicEntity->getId(),
+                'error' => $dispatchError->getMessage(),
+            ]);
+        }
     }
 
     /**

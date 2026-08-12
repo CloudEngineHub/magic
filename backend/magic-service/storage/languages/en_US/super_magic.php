@@ -168,6 +168,8 @@ return [
     ],
     'task' => [
         'prompt_length_exceeded' => 'Input text is too long. Please upload it as a file and reference it in the dialog.',
+        'sandbox_init_failed' => 'Runtime environment error. Please try again later.',
+        'chat_task_start_failed' => 'Failed to start the task. Please try again later.',
     ],
     'magic_claw' => [
         'create_system_error' => 'A system error occurred. Please try again later.',
