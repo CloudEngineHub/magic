@@ -59,7 +59,7 @@ class SlidesTemplateAppService extends AbstractLLMAppService
     {
         $fileLinks = $this->getPrivateFileLinks($template->getOrganizationCode(), [$template->getTemplateFileKey()]);
         $fileLink = $fileLinks[$template->getTemplateFileKey()] ?? null;
-        if (! $fileLink instanceof FileLink) {
+        if (! $fileLink instanceof FileLink || trim($fileLink->getUrl()) === '') {
             ExceptionBuilder::throw(SlidesTemplateErrorCode::FILE_URL_GENERATE_FAILED);
         }
         $template->setTemplateFileUrl($fileLink->getUrl());

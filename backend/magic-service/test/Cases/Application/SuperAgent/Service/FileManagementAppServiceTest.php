@@ -536,8 +536,7 @@ class FileManagementAppServiceTest extends TestCase
             public function __construct(
                 private readonly TranslatorInterface $translator,
                 private readonly ConfigInterface $config,
-            )
-            {
+            ) {
             }
 
             public function get(string $id): mixed

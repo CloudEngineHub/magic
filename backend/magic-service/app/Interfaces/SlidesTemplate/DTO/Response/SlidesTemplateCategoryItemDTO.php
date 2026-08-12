@@ -19,8 +19,6 @@ class SlidesTemplateCategoryItemDTO extends AbstractDTO
 
     public int $sort = 0;
 
-    public int $templateCount = 0;
-
     public bool $isOfficial = false;
 
     public function __construct(?array $data = null)
@@ -67,16 +65,6 @@ class SlidesTemplateCategoryItemDTO extends AbstractDTO
     public function setSort(null|int|string $sort): void
     {
         $this->sort = $sort === null ? 0 : (int) $sort;
-    }
-
-    public function getTemplateCount(): int
-    {
-        return $this->templateCount;
-    }
-
-    public function setTemplateCount(null|int|string $templateCount): void
-    {
-        $this->templateCount = $templateCount === null ? 0 : (int) $templateCount;
     }
 
     public function isOfficial(): bool
