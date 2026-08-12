@@ -3,6 +3,7 @@ const getGlobalPlatformInfo = require("../apis/getGlobalPlatformInfo")
 const getPublishedMicroApp = require("../apis/getPublishedMicroApp")
 const defaultInstallIcon = require("./defaultInstallIcon")
 const downloadInstallIcon = require("./downloadInstallIcon")
+const { BUILTIN_DEFAULT_ICON_KEY } = require("./microAppInstallConstants")
 
 const PUBLISHED_MICRO_APP_CACHE_TTL_MS = 30_000
 const INSTALL_ICON_CACHE_TTL_MS = 5 * 60_000
@@ -40,15 +41,23 @@ function readResourceId(publishedMicroApp) {
 	return typeof resourceId === "string" && resourceId.trim() ? resourceId.trim() : ""
 }
 
+async function readPlatformFaviconSourceKey() {
+	const platformFaviconUrl = await getGlobalPlatformInfo()
+		.then(readPlatformFaviconUrl)
+		.catch(() => "")
+	return platformFaviconUrl ? toStableIconSourceKey(platformFaviconUrl) : BUILTIN_DEFAULT_ICON_KEY
+}
+
 /**
  * Drop signed query/hash so token rotation reuses the same cache entry.
- * Key shape: appId + resource_id + origin/path (stable file identity).
+ * Key shape: appId + resource_id + stable source identity.
  */
-function buildInstallIconCacheKey(appId, publishedMicroApp) {
+async function buildInstallIconCacheKey(appId, publishedMicroApp) {
 	const iconUrl = readInstallIconUrl(publishedMicroApp)
 	const resourceId = readResourceId(publishedMicroApp) || "no-resource"
-	// Shared key for platform favicon + built-in default when app has no icon_url.
-	const sourceKey = iconUrl ? toStableIconSourceKey(iconUrl) : "fallback-icon"
+	const sourceKey = iconUrl
+		? toStableIconSourceKey(iconUrl)
+		: await readPlatformFaviconSourceKey()
 	return `${appId}:${resourceId}:${sourceKey}`
 }
 
@@ -169,7 +178,7 @@ async function getCachedInstallIcon(appId) {
 
 	const promise = (async () => {
 		const publishedMicroApp = await getCachedPublishedMicroApp(appId)
-		const cacheKey = buildInstallIconCacheKey(appId, publishedMicroApp)
+		const cacheKey = await buildInstallIconCacheKey(appId, publishedMicroApp)
 		pruneStaleAppIconEntries(appId, cacheKey)
 
 		const now = Date.now()

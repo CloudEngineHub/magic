@@ -6,6 +6,12 @@ const { processHtmlContent } = require("../middleware/seoMiddleware/html-utils")
 const buildInstallLinks = require("../middleware/seoMiddleware/micro-app-install-links")
 const defaultInstallIcon = require("../utils/defaultInstallIcon")
 const {
+	BUILTIN_DEFAULT_ICON_KEY,
+	buildInstallIconUrl,
+	buildManifestIcons,
+	buildManifestUrl,
+} = require("../utils/microAppInstallConstants")
+const {
 	buildInstallIconCacheKey,
 	toStableIconSourceKey,
 } = require("../utils/installIconCache")
@@ -15,18 +21,7 @@ const TEST_APP_ID = "900000000000000001"
 const generatedIconSvg = Buffer.from(
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#111" d="M4 4h16v16H4z"/></svg>',
 )
-const expectedManifestIcons = [
-	{
-		src: `/micro-app/${TEST_APP_ID}/icon?size=192`,
-		sizes: "192x192",
-		type: "image/svg+xml",
-	},
-	{
-		src: `/micro-app/${TEST_APP_ID}/icon?size=512`,
-		sizes: "512x512",
-		type: "image/svg+xml",
-	},
-]
+const expectedManifestIcons = buildManifestIcons(TEST_APP_ID)
 
 afterEach(() => {
 	global.fetch = originalFetch
@@ -398,21 +393,44 @@ test("caches icon downloads and merges concurrent requests across icon sizes", a
 	assert.equal(iconRequests, 1)
 })
 
-test("builds a stable icon cache key without signed query params", () => {
+test("builds a stable icon cache key without signed query params", async () => {
 	assert.equal(
 		toStableIconSourceKey("https://files.example.com/a/icon.svg?token=abc#x"),
 		"https://files.example.com/a/icon.svg",
 	)
 	assert.equal(
-		buildInstallIconCacheKey("app-1", {
+		await buildInstallIconCacheKey("app-1", {
 			resource_id: "resource-9",
 			icon_url: "https://files.example.com/a/icon.svg?token=abc",
 		}),
 		"app-1:resource-9:https://files.example.com/a/icon.svg",
 	)
+
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/settings/global")) {
+			return new Response(JSON.stringify({ data: { favicon: "" } }), { status: 200 })
+		}
+		throw new Error(`Unexpected request: ${url}`)
+	}
+	getGlobalPlatformInfo.resetCache()
 	assert.equal(
-		buildInstallIconCacheKey("app-1", { resource_id: "resource-9", icon_url: "" }),
-		"app-1:resource-9:fallback-icon",
+		await buildInstallIconCacheKey("app-1", { resource_id: "resource-9", icon_url: "" }),
+		`app-1:resource-9:${BUILTIN_DEFAULT_ICON_KEY}`,
+	)
+
+	global.fetch = async (url) => {
+		if (url.includes("/api/v1/settings/global")) {
+			return new Response(
+				JSON.stringify({ data: { favicon: "https://files.example.com/favicon.svg?v=2" } }),
+				{ status: 200 },
+			)
+		}
+		throw new Error(`Unexpected request: ${url}`)
+	}
+	getGlobalPlatformInfo.resetCache()
+	assert.equal(
+		await buildInstallIconCacheKey("app-1", { resource_id: "resource-9", icon_url: "" }),
+		"app-1:resource-9:https://files.example.com/favicon.svg",
 	)
 })
 
@@ -572,21 +590,21 @@ test("falls back to the built-in default when the app icon is unsafe SVG", async
 test("injects install links only when the public micro app route opts in", () => {
 	assert.deepEqual(buildInstallLinks({}, TEST_APP_ID), {})
 	assert.deepEqual(buildInstallLinks({ installable: true }, TEST_APP_ID), {
-		manifestUrl: `/micro-app/${TEST_APP_ID}/manifest.webmanifest`,
-		appleTouchIconUrl: `/micro-app/${TEST_APP_ID}/icon?size=180`,
-		faviconUrl: `/micro-app/${TEST_APP_ID}/icon?size=192`,
+		manifestUrl: buildManifestUrl(TEST_APP_ID),
+		appleTouchIconUrl: buildInstallIconUrl(TEST_APP_ID, 180),
+		faviconUrl: buildInstallIconUrl(TEST_APP_ID, 192),
 	})
 
 	const html = processHtmlContent(
 		'<html><head><meta name="viewport" content="width=device-width" /><link rel="icon" href="/favicon.ico" /></head></html>',
 		{
-			favicon: "/micro-app/1/icon?size=192",
+			favicon: buildInstallIconUrl("1", 192),
 			title: "Micro App",
 			keywords: "",
 			description: "",
 			ogUrl: "https://example.com/micro-app/1",
-			manifestUrl: "/micro-app/1/manifest.webmanifest",
-			appleTouchIconUrl: "/micro-app/1/icon?size=180",
+			manifestUrl: buildManifestUrl("1"),
+			appleTouchIconUrl: buildInstallIconUrl("1", 180),
 		},
 	)
 	assert.match(

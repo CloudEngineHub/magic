@@ -8,8 +8,15 @@ const {
 	resetInstallIconCache,
 	resolveInstallIconBody,
 } = require("../utils/installIconCache")
+const {
+	DEFAULT_ICON_QUERY_SIZE,
+	MICRO_APP_INSTALL_SCOPE,
+	SUPPORTED_ICON_SIZES,
+	buildManifestIcons,
+	buildMicroAppBasePath,
+} = require("../utils/microAppInstallConstants")
 
-const SUPPORTED_ICON_SIZES = new Set(["180", "192", "512"])
+const SUPPORTED_ICON_SIZE_SET = new Set(SUPPORTED_ICON_SIZES.map(String))
 
 function readPublishedName(response) {
 	const data = response?.data?.data || response?.data || response || {}
@@ -45,23 +52,19 @@ function respondWithInstallError(error, res, next) {
 }
 
 function buildManifest(appId, appName) {
-	const encodedAppId = encodeURIComponent(appId)
-	const iconUrl = `/micro-app/${encodedAppId}/icon`
+	const basePath = buildMicroAppBasePath(appId)
 
 	// Always advertise icons; /icon falls back to platform favicon then a default SVG.
 	return {
-		id: `/micro-app/${encodedAppId}`,
+		id: basePath,
 		name: appName || "Micro App",
 		short_name: appName || "Micro App",
-		start_url: `/micro-app/${encodedAppId}?source=pwa`,
-		scope: "/micro-app/",
+		start_url: `${basePath}?source=pwa`,
+		scope: MICRO_APP_INSTALL_SCOPE,
 		display: "standalone",
 		theme_color: "#ffffff",
 		background_color: "#ffffff",
-		icons: [
-			{ src: `${iconUrl}?size=192`, sizes: "192x192", type: "image/svg+xml" },
-			{ src: `${iconUrl}?size=512`, sizes: "512x512", type: "image/svg+xml" },
-		],
+		icons: buildManifestIcons(appId),
 	}
 }
 
@@ -85,8 +88,8 @@ class MicroAppInstallRoutes {
 
 	async icon(req, res, next) {
 		try {
-			const size = String(req.query.size || "512")
-			if (!SUPPORTED_ICON_SIZES.has(size))
+			const size = String(req.query.size || DEFAULT_ICON_QUERY_SIZE)
+			if (!SUPPORTED_ICON_SIZE_SET.has(size))
 				return res.status(400).json({ message: "Unsupported icon size" })
 
 			if (!consumeIconRateLimit(getIconClientKey(req))) {

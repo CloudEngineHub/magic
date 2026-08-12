@@ -1,13 +1,18 @@
+const {
+	APPLE_TOUCH_ICON_SIZE,
+	FAVICON_ICON_SIZE,
+	buildInstallIconUrl,
+	buildManifestUrl,
+} = require("../../utils/microAppInstallConstants")
+
 function buildInstallLinks(routeOptions, appId) {
 	if (!routeOptions.installable || !appId) return {}
 
-	const encodedAppId = encodeURIComponent(appId)
-	const iconUrl = `/micro-app/${encodedAppId}/icon`
 	return {
-		manifestUrl: `/micro-app/${encodedAppId}/manifest.webmanifest`,
-		appleTouchIconUrl: `${iconUrl}?size=180`,
+		manifestUrl: buildManifestUrl(appId),
+		appleTouchIconUrl: buildInstallIconUrl(appId, APPLE_TOUCH_ICON_SIZE),
 		// Reuse install icon route: app icon.svg first, platform favicon fallback.
-		faviconUrl: `${iconUrl}?size=192`,
+		faviconUrl: buildInstallIconUrl(appId, FAVICON_ICON_SIZE),
 	}
 }
 
