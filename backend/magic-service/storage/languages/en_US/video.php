@@ -5,6 +5,16 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'generation' => [
+        'generate_audio' => [
+            'name' => 'Generate audio',
+            'description' => 'Whether to generate audio',
+        ],
+        'web_search' => [
+            'name' => 'Web search',
+            'description' => 'Whether to enable web search',
+        ],
+    ],
     'input_modes' => [
         'standard' => 'Standard text-to-video mode without any reference assets.',
         'omni_reference' => 'Upload 1 to :max_count reference images to generate a video, with up to 1 reference video. Example: combine the subject from @image 1 with the motion from @video 1 to create an atmospheric short film.',
