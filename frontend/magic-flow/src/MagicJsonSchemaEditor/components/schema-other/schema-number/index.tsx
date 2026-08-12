@@ -8,7 +8,7 @@ import {
   Switch,
   Tooltip,
 } from 'antd';
-import _ from 'lodash';
+import { cloneDeep } from 'lodash-es'
 import React, { ReactElement, useContext, useEffect, useState } from 'react';
 import Schema from '../../../types/Schema';
 import { EditorContext } from '../../editor';
@@ -73,7 +73,7 @@ const SchemaNumber = (props: SchemaNumberProp): ReactElement => {
     }
     setEnumVal(newEnumVal);
     const arr: string[] = newEnumVal.split('\n');
-    const newData = _.cloneDeep(data);
+    const newData = cloneDeep(data);
     const newEnum: number[] = [];
     arr.forEach((item) => {
       if (!Number.isNaN(Number(item))) {
