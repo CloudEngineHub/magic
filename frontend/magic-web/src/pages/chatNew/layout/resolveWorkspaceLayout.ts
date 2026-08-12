@@ -1,16 +1,16 @@
-import type { WorkspaceLayoutResult, WorkspaceSpec, WorkspaceDensity } from "./types"
+import type { ChatWorkspaceDensity, ChatWorkspaceLayoutResult, ChatWorkspaceSpec } from "./types"
 
-function resolveDensity(height: number): WorkspaceDensity {
+function resolveDensity(height: number): ChatWorkspaceDensity {
 	if (height > 0 && height <= 720) return "short"
 	if (height > 0 && height <= 800) return "compact"
 	return "regular"
 }
 
-export function resolveWorkspaceLayout(input: {
+export function resolveChatWorkspaceLayout(input: {
 	availableWidth: number
 	availableHeight: number
-	spec: WorkspaceSpec
-}): WorkspaceLayoutResult {
+	spec: ChatWorkspaceSpec
+}): ChatWorkspaceLayoutResult {
 	const { availableWidth, availableHeight, spec } = input
 	const density = resolveDensity(availableHeight)
 	const filesAndMainWidth = spec.files.minWidth + spec.main.minWidth

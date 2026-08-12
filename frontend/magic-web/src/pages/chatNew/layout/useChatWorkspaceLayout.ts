@@ -1,9 +1,6 @@
 import { useEffect, useState, type RefObject } from "react"
-import {
-	resolveWorkspaceLayout,
-	type WorkspaceLayoutResult,
-	type WorkspaceSpec,
-} from "@/layout/core"
+import { resolveChatWorkspaceLayout } from "./resolveWorkspaceLayout"
+import type { ChatWorkspaceLayoutResult, ChatWorkspaceSpec } from "./types"
 function getAvailableSize(container: HTMLElement | null) {
 	if (container) {
 		const { width, height } = container.getBoundingClientRect()
@@ -18,10 +15,10 @@ function getAvailableSize(container: HTMLElement | null) {
 
 export function useChatWorkspaceLayout(
 	containerRef: RefObject<HTMLElement | null>,
-	spec: WorkspaceSpec,
-): WorkspaceLayoutResult {
-	const [layout, setLayout] = useState<WorkspaceLayoutResult>(() =>
-		resolveWorkspaceLayout({
+	spec: ChatWorkspaceSpec,
+): ChatWorkspaceLayoutResult {
+	const [layout, setLayout] = useState<ChatWorkspaceLayoutResult>(() =>
+		resolveChatWorkspaceLayout({
 			availableWidth: getAvailableSize(containerRef.current).width,
 			availableHeight: getAvailableSize(containerRef.current).height,
 			spec,
@@ -32,7 +29,7 @@ export function useChatWorkspaceLayout(
 		const updateLayout = () => {
 			const { width, height } = getAvailableSize(containerRef.current)
 			setLayout(
-				resolveWorkspaceLayout({
+				resolveChatWorkspaceLayout({
 					availableWidth: width,
 					availableHeight: height,
 					spec,
