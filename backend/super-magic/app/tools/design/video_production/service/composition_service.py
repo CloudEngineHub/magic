@@ -200,6 +200,8 @@ class VideoCompositionService:
                 "errorMessage": None,
             },
         )
+        # 合成工具只有在最终文件成功生成后才把最新结果设为主内容。
+        ContentService.set_main_content(element, preparation.result_content_id)
 
     @staticmethod
     def mark_failed(

@@ -230,6 +230,29 @@ def test_ffmpeg_adapter_preserves_source_audio_without_external_track(tmp_path: 
     assert "anullsrc=r=48000:cl=stereo" in command
 
 
+def test_ffmpeg_adapter_interleaves_video_and_audio_inputs_for_concat(tmp_path: Path):
+    """源视频均带音频时，concat 输入必须按视频、音频逐段交替排列。"""
+    adapter = FfmpegVideoCompositionAdapter()
+    command = adapter._build_command(
+        VideoCompositionRequest(
+            video_paths=[tmp_path / "one.mp4", tmp_path / "two.mp4", tmp_path / "three.mp4"],
+            audio_path=None,
+            output_path=tmp_path / "final.mp4",
+            width=720,
+            height=1280,
+        ),
+        tmp_path / "temporary.mp4",
+        [
+            _SourceMediaInfo(has_audio=True, duration_seconds=4.0),
+            _SourceMediaInfo(has_audio=True, duration_seconds=4.0),
+            _SourceMediaInfo(has_audio=True, duration_seconds=4.0),
+        ],
+    )
+    filter_complex = command[command.index("-filter_complex") + 1]
+
+    assert "[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[vout][aout]" in filter_complex
+
+
 @pytest.mark.asyncio
 async def test_compose_tool_writes_completed_result_with_mock_adapter(workspace: Path):
     """合成工具使用 mock 适配器后写回 completed 结果 Content。"""

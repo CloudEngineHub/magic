@@ -1235,6 +1235,14 @@
         "zh_CN": "画布节点查询失败，请检查项目和节点 ID",
         "en_US": "Canvas element query failed; check the project and Element IDs"
     },
+    "repair_video_production_connections.success": {
+        "zh_CN": "视频制作连线修复完成",
+        "en_US": "Video production connections repaired"
+    },
+    "repair_video_production_connections.exception": {
+        "zh_CN": "视频制作连线修复失败，请检查节点 ID",
+        "en_US": "Video production connection repair failed; check the Element IDs"
+    },
     "promote_canvas_content.success": {
         "zh_CN": "已确认当前画布内容",
         "en_US": "Canvas content confirmed"
@@ -1396,6 +1404,34 @@
         "en_US": "- Main Content ID: {{content_id}}"
     },
     "promote_canvas_content.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
+    "repair_video_production_connections.before": {
+        "zh_CN": "正在检查并修复 {{target_count}} 个节点的直接连线",
+        "en_US": "Checking and repairing direct connections for {{target_count}} target(s)"
+    },
+    "repair_video_production_connections.after_success": {
+        "zh_CN": "已修复连线，共保留 {{connection_count}} 条直接关系",
+        "en_US": "Repaired connections, with {{connection_count}} direct relation(s) retained"
+    },
+    "repair_video_production_connections.after_failure": {
+        "zh_CN": "连线修复失败：{{failure}}",
+        "en_US": "Connection repair failed: {{failure}}"
+    },
+    "repair_video_production_connections.detail_title": {
+        "zh_CN": "视频制作连线修复结果",
+        "en_US": "Video Production Connection Repair Results"
+    },
+    "repair_video_production_connections.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "repair_video_production_connections.detail_targets": {
+        "zh_CN": "- 修复目标：{{count}} 个",
+        "en_US": "- Repaired targets: {{count}}"
+    },
+    "repair_video_production_connections.detail_failure": {
         "zh_CN": "- 结果：**{{failure}}**",
         "en_US": "- Result: **{{failure}}**"
     },

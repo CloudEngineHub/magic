@@ -58,6 +58,11 @@ from app.tools.design.tools.promote_canvas_content import (
     PromoteCanvasContentParams,
 )
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements, QueryCanvasElementsParams
+from app.tools.design.tools.repair_video_production_connections import (
+    ConnectionRepairTarget,
+    RepairVideoProductionConnections,
+    RepairVideoProductionConnectionsParams,
+)
 from app.tools.design.tools.upsert_storyboard import (
     StoryboardGenerationConfigInput,
     StoryboardShotInput,
@@ -1043,6 +1048,68 @@ async def test_configure_video_edit_reconciles_replaced_removed_and_appended_inp
         for connection in config.canvas.connections
         if connection.target_element_id == video_edit_id and connection.locked
     } == {"video-1", "video-2", "audio-1"}
+
+
+@pytest.mark.asyncio
+async def test_repair_video_production_connections_only_reconciles_managed_edges(workspace: Path):
+    """关系修复工具只同步锁定入边，并保留用户手工关系。"""
+    project_name = "video-production-connection-repair-project"
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    await write_magic_project_js_v3(
+        project_name,
+        _v3_config(
+            _content_element("first-frame", "image", name="首帧", fields={"status": "completed"}),
+            _content_element("wrong-source", "image", name="错误来源", fields={"status": "completed"}),
+            _content_element("shot-video", "video", name="镜头视频", fields={"status": "completed"}),
+            _content_element("manual-source", "image", name="手工来源", fields={"status": "completed"}),
+        ),
+    )
+    manager = await get_canvas_manager(project_name)
+
+    async def add_connections(config):
+        config.canvas.connections.extend(
+            [
+                CanvasConnection(
+                    id="managed-wrong",
+                    source_element_id="wrong-source",
+                    target_element_id="shot-video",
+                    locked=True,
+                ),
+                CanvasConnection(
+                    id="manual-edge",
+                    source_element_id="manual-source",
+                    target_element_id="shot-video",
+                    locked=False,
+                ),
+            ]
+        )
+
+    await manager.run_write_transaction(add_connections)
+    tool = RepairVideoProductionConnections(base_dir=str(workspace))
+    result = await tool.execute(
+        None,
+        RepairVideoProductionConnectionsParams(
+            project_path=project_name,
+            targets=[
+                ConnectionRepairTarget(
+                    target_element_id="shot-video",
+                    source_element_ids=["first-frame"],
+                )
+            ],
+        ),
+    )
+
+    assert result.ok
+    config = await manager.read_current_canvas()
+    assert {
+        (connection.source_element_id, connection.target_element_id)
+        for connection in config.canvas.connections
+        if connection.target_element_id == "shot-video" and connection.locked
+    } == {("first-frame", "shot-video")}
+    assert any(
+        connection.id == "manual-edge" and not connection.locked
+        for connection in config.canvas.connections
+    )
 
 
 @pytest.mark.asyncio

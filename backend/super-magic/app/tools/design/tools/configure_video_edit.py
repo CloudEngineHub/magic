@@ -148,6 +148,9 @@ class ConfigureVideoEdit(BaseVideoProductionTool[ConfigureVideoEditParams]):
                         set_main_when_empty=True,
                     )
 
+                # Video Edit 表示当前工作配置；成功更新后始终让最新 Content 成为主配置。
+                element.main_content_id = content_id
+
             input_element_ids = [*params.video_sequence, *params.audio_sequence]
             connections = VideoProductionRelationService.synchronize_incoming(
                 config.canvas,

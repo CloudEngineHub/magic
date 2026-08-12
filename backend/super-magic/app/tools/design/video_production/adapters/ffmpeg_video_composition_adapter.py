@@ -158,8 +158,12 @@ class FfmpegVideoCompositionAdapter:
                     f"sample_rates=48000:channel_layouts=stereo[{label}]"
                 )
                 audio_labels.append(f"[{label}]")
+            concat_inputs = "".join(
+                f"{video_labels[index]}{audio_labels[index]}"
+                for index in range(len(video_labels))
+            )
             filters.append(
-                f"{''.join(video_labels)}{''.join(audio_labels)}"
+                f"{concat_inputs}"
                 f"concat=n={len(video_labels)}:v=1:a=1[vout][aout]"
             )
         else:

@@ -91,6 +91,8 @@ Apply one versioning contract to generated images and videos:
 - When updating an existing Element, omit `source_element_ids` to preserve its current upstream relations.
 - Pass `source_element_ids=[]` only when the user intentionally removes managed upstream relations.
 - Do not manage relation IDs or placement values.
+- Use `repair_video_production_connections` only when the user asks to correct or remove an existing Canvas relation without regenerating the related media. Do not call it for ordinary media generation or revision.
+- For a relation-only repair, provide the complete direct source list for every affected target. An empty list intentionally removes all video-production-managed incoming relations for that target. Never infer a relation from a reference path alone.
 
 Use this default production chain when it matches the task:
 
@@ -165,11 +167,11 @@ Generate the remaining confirmed shots in supported batches. Preserve successful
 
 Import user-provided audio when needed. The initial composition capability accepts zero or one final audio track.
 
-After the user chooses to create the complete video, call `configure_video_edit` with the confirmed ordered Video Element IDs, optional Audio Element ID, and output settings.
+After the user chooses to create the complete video, call `configure_video_edit` with the confirmed ordered Video Element IDs, optional Audio Element ID, and output settings. When updating an existing Video Edit, the latest configuration is the current working configuration and becomes its main Content after a successful update.
 
 ## 9. Compose and Deliver
 
-Call `compose_canvas_video` with the confirmed Video Edit Element. Present the returned MP4 path, duration, dimensions, and audio status. For later revisions, reuse confirmed results and rebuild only the affected downstream stages.
+Call `compose_canvas_video` with the confirmed Video Edit Element. Present the returned MP4 path, duration, dimensions, and audio status. For later revisions, pass the existing final Video Element through `result_element_id` when the user wants to keep the same logical result node; show the new candidate and promote it after confirmation.
 
 # General Capabilities
 
@@ -548,4 +550,35 @@ print(result.content)
 - If a batch result is incomplete, identify the missing IDs from `result.content`, query uncertain Elements, and stop before claiming the stage is complete.
 - After a first-frame change, update the corresponding shot and regenerate only dependent videos.
 - Rebuild `video_sequence` from the currently confirmed shot Video Element IDs after shot changes.
+- When an initialization image changes, regenerate only first frames or shot videos that actually depend on it; keep unrelated shots and confirmed media unchanged.
+- When a shot video changes, keep its existing Video Element ID, append a candidate Content, confirm it, and promote it before composing again. The Video Edit sequence normally continues to reference that same Element ID.
+- When adding, replacing, or removing BGM, import or reuse the Audio Element, update `audio_sequence`, confirm the edit configuration, and compose again. An explicit audio input overrides source-video audio; an empty audio sequence preserves source-video audio when available.
+- When changing shot count or order, update the storyboard first, preserve unaffected outputs, rebuild the ordered video sequence, confirm the edit, and compose again.
+- If a video task returns `processing`, record its `element_id`, `content_id`, and `video_id`; query the Element before any dependent operation. Do not submit a duplicate while the Content is still processing. Retry a failed task using its existing IDs.
+- If a connection is wrong but the media itself is correct, call `repair_video_production_connections` with the target Element and its complete intended direct sources. This tool changes only managed incoming relations and does not move nodes or regenerate media.
+
+## `repair_video_production_connections`
+
+Use this tool only for a relation-only correction, such as removing an accidental source, restoring a missing direct source, or replacing an incorrect direct source. Do not use it as part of every generation call.
+
+```python
+from sdk.tool import tool
+
+result = tool.call("repair_video_production_connections", {
+    "project_path": "city-travel-short-film",
+    "targets": [
+        {
+            "target_element_id": "element-747400000000000010",
+            "source_element_ids": ["element-747400000000000006"]
+        },
+        {
+            "target_element_id": "element-747400000000000015",
+            "source_element_ids": ["element-747400000000000014"]
+        }
+    ]
+})
+print(result.content)
+```
+
+The source list is authoritative for each target. Use `source_element_ids: []` only when the user explicitly wants the target's managed incoming relations removed. User-created non-locked relations are preserved.
 - Recalculate expected duration after adding, removing, or changing shot durations.

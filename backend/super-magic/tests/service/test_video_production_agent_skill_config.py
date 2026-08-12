@@ -80,8 +80,9 @@ def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
     for documented_tool_name in (
         "create_canvas",
         "import_canvas_assets",
-        "query_canvas_elements",
-        "promote_canvas_content",
+            "query_canvas_elements",
+            "repair_video_production_connections",
+            "promote_canvas_content",
         "generate_video_production_images",
         "generate_video_production_videos",
         "upsert_storyboard",
@@ -93,7 +94,6 @@ def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
     assert 'tool.call("generate_canvas_images"' not in content
     assert 'tool.call("generate_canvas_videos"' not in content
     assert '"source_element_id"' not in content
-    assert '"target_element_id"' not in content
     assert "projects/" not in content
     assert "assets/" not in content
 
