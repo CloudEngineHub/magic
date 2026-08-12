@@ -36,10 +36,15 @@ describe("microAppPublishDialogUtils", () => {
 					targets: [],
 					password: "123456",
 					coverUrl: "",
+					fullScreen: false,
 				},
 				true,
 			),
-		).toEqual({ app_name: "Demo App", share_type: ShareType.Public })
+		).toEqual({
+			app_name: "Demo App",
+			share_type: ShareType.Public,
+			extra: { pure_mode: false },
+		})
 		expect(
 			createFormStateFromPublishedItem(
 				{ share_type: ShareType.Organization },
@@ -59,11 +64,13 @@ describe("microAppPublishDialogUtils", () => {
 				password: "123456",
 				coverFileKey: "micro-app/covers/demo.png",
 				coverUrl: "",
+				fullScreen: true,
 			}),
 		).toEqual({
 			app_name: "Demo App",
 			share_type: ShareType.Public,
 			cover_file_key: "micro-app/covers/demo.png",
+			extra: { pure_mode: true },
 		})
 	})
 
@@ -76,6 +83,7 @@ describe("microAppPublishDialogUtils", () => {
 				targets: [],
 				password: "123456",
 				coverUrl: "",
+				fullScreen: false,
 			}),
 		).toBe("projectNameRequired")
 	})
@@ -153,6 +161,12 @@ describe("microAppPublishDialogUtils", () => {
 		expect(
 			hasMicroAppPublishFormChanged(
 				{ ...publishedFormState, coverFileKey: null, coverUrl: "" },
+				publishedFormState,
+			),
+		).toBe(true)
+		expect(
+			hasMicroAppPublishFormChanged(
+				{ ...publishedFormState, fullScreen: true },
 				publishedFormState,
 			),
 		).toBe(true)

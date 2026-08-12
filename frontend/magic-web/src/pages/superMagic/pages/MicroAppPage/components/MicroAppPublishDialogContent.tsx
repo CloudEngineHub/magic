@@ -1,5 +1,5 @@
 import type { ChangeEventHandler, ClipboardEventHandler, RefObject } from "react"
-import { ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react"
+import { ImagePlus, Loader2, RefreshCw, Settings2, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { PublishedMicroAppProjectItem } from "@/apis/modules/superMagic"
@@ -8,6 +8,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
+import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/lib/utils"
 import {
 	ShareRangeField,
@@ -45,6 +46,7 @@ interface MicroAppPublishDialogContentProps {
 	onCoverChange: ChangeEventHandler<HTMLInputElement>
 	onCoverFile: (file: File) => void
 	onClearCover: () => void
+	onFullScreenChange: (value: boolean) => void
 	onShareTypeChange: (shareType: ShareType) => void
 	onShareRangeChange: (shareRange: ShareRange) => void
 	onTargetsChange: (targets: ShareTarget[]) => void
@@ -89,6 +91,7 @@ export default function MicroAppPublishDialogContent({
 	onCoverChange,
 	onCoverFile,
 	onClearCover,
+	onFullScreenChange,
 	onShareTypeChange,
 	onShareRangeChange,
 	onTargetsChange,
@@ -306,6 +309,36 @@ export default function MicroAppPublishDialogContent({
 									</p>
 								</div>
 							) : null}
+
+							<div
+								className="rounded-lg bg-muted/60 px-3 py-3"
+								data-testid="micro-app-publish-display-settings"
+							>
+								<div className="flex items-center gap-2 text-sm font-medium text-foreground">
+									<Settings2 className="size-4 text-muted-foreground" />
+									{t("microAppPage.publish.displaySettings")}
+								</div>
+								<div className="mt-3 flex items-start gap-3">
+									<Switch
+										id="micro-app-publish-full-screen"
+										checked={formState.fullScreen}
+										onCheckedChange={onFullScreenChange}
+										disabled={isBusy}
+										data-testid="micro-app-publish-full-screen"
+									/>
+									<div className="min-w-0">
+										<Label
+											htmlFor="micro-app-publish-full-screen"
+											className="cursor-pointer text-sm font-medium"
+										>
+											{t("microAppPage.publish.fullScreen")}
+										</Label>
+										<p className="mt-1 text-xs leading-5 text-muted-foreground">
+											{t("microAppPage.publish.fullScreenDescription")}
+										</p>
+									</div>
+								</div>
+							</div>
 						</>
 					)}
 				</div>
