@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import RecordingDetailChatPanel from "../RecordingDetailChatPanel"
@@ -8,7 +9,8 @@ const messageHeaderMock = vi.hoisted(() => vi.fn())
 const historyPanelMock = vi.hoisted(() => vi.fn())
 const createTopicListenerMock = vi.hoisted(() => vi.fn())
 const refreshTopicDetailMock = vi.hoisted(() => vi.fn())
-const scopedTopicReadProgressMock = vi.hoisted(() => vi.fn())
+/** Lets focused tests drive the messages-loading barrier that AiChat reports to the panel overlay. */
+const aiChatMessagesLoadingMock = vi.hoisted(() => ({ loading: true }))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -16,8 +18,9 @@ vi.mock("react-i18next", () => ({
 	}),
 }))
 
-vi.mock("@/components/business/RecordingSummary/components/AiChat", () => ({
-	default: (props: {
+vi.mock("@/components/business/RecordingSummary/components/AiChat", () => {
+	/** Test double that reports the messages-loading barrier like project-detail AiChat. */
+	function MockRecordingDetailAiChat(props: {
 		useRecordingSync?: boolean
 		projectDetailMode?: boolean
 		allowRecordingMode?: boolean
@@ -25,28 +28,43 @@ vi.mock("@/components/business/RecordingSummary/components/AiChat", () => ({
 		isConversationPanelCollapsed?: boolean
 		onToggleConversationPanel?: () => void
 		onExpandConversationPanel?: () => void
-	}) => (
-		<div>
-			<div data-testid="recording-detail-message-header" />
-			<button type="button" onClick={props.onToggleHistoryPanel}>
-				toggle history
-			</button>
-			<div
-				data-testid="recording-detail-ai-chat"
-				data-recording-sync={String(props.useRecordingSync)}
-				data-project-detail-mode={String(props.projectDetailMode)}
-				data-allow-recording-mode={String(props.allowRecordingMode)}
-				data-collapsed={String(props.isConversationPanelCollapsed)}
-			/>
-			<button type="button" onClick={props.onToggleConversationPanel}>
-				toggle conversation
-			</button>
-			<button type="button" onClick={props.onExpandConversationPanel}>
-				expand conversation
-			</button>
-		</div>
-	),
-}))
+		onMessagesInitialLoadingChange?: (loading: boolean) => void
+	}) {
+		const { onMessagesInitialLoadingChange } = props
+		const messagesLoading = aiChatMessagesLoadingMock.loading
+
+		// Mirror production: report the initial messages loading barrier after commit.
+		useLayoutEffect(() => {
+			onMessagesInitialLoadingChange?.(messagesLoading)
+		}, [onMessagesInitialLoadingChange, messagesLoading])
+
+		return (
+			<div>
+				<div data-testid="recording-detail-message-header" />
+				<button type="button" onClick={props.onToggleHistoryPanel}>
+					toggle history
+				</button>
+				<div
+					data-testid="recording-detail-ai-chat"
+					data-recording-sync={String(props.useRecordingSync)}
+					data-project-detail-mode={String(props.projectDetailMode)}
+					data-allow-recording-mode={String(props.allowRecordingMode)}
+					data-collapsed={String(props.isConversationPanelCollapsed)}
+				/>
+				<button type="button" onClick={props.onToggleConversationPanel}>
+					toggle conversation
+				</button>
+				<button type="button" onClick={props.onExpandConversationPanel}>
+					expand conversation
+				</button>
+			</div>
+		)
+	}
+
+	return {
+		default: MockRecordingDetailAiChat,
+	}
+})
 
 vi.mock("@/pages/superMagic/components/TopicMode/useCreateTopicListener", () => ({
 	useCreateTopicListener: createTopicListenerMock,
@@ -54,10 +72,6 @@ vi.mock("@/pages/superMagic/components/TopicMode/useCreateTopicListener", () => 
 
 vi.mock("@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete", () => ({
 	useRefreshTopicDetailOnTaskComplete: refreshTopicDetailMock,
-}))
-
-vi.mock("@/pages/superMagic/hooks/useScopedTopicReadProgress", () => ({
-	useScopedTopicReadProgress: scopedTopicReadProgressMock,
 }))
 
 vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
@@ -97,6 +111,7 @@ function createTopic() {
 describe("RecordingDetailChatPanel", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		aiChatMessagesLoadingMock.loading = true
 	})
 
 	it("uses the project-detail header and opens the scoped history panel", () => {
@@ -155,12 +170,6 @@ describe("RecordingDetailChatPanel", () => {
 		expect(refreshTopicDetailMock).toHaveBeenCalledWith({
 			selectedTopic: topic,
 			onTopicDetailLoaded: topicStore.updateTopic,
-		})
-		expect(scopedTopicReadProgressMock).toHaveBeenCalledWith({
-			scopeName: "RecordingDetailChatPanel",
-			topicStore,
-			selectedTopic: topic,
-			isSelectedTopicMessagesReady: false,
 		})
 		fireEvent.click(screen.getByText("toggle history"))
 		expect(toggleHistory).toHaveBeenCalledTimes(1)
@@ -331,11 +340,148 @@ describe("RecordingDetailChatPanel", () => {
 			selectedTopic: null,
 			onTopicDetailLoaded: topicStore.updateTopic,
 		})
-		expect(scopedTopicReadProgressMock).toHaveBeenCalledWith({
-			scopeName: "RecordingDetailChatPanel",
-			topicStore,
-			selectedTopic: null,
-			isSelectedTopicMessagesReady: false,
-		})
+	})
+
+	it("shows the chat skeleton while topics are loading before the project is ready", () => {
+		const topicStore = new TopicStore()
+
+		render(
+			<RecordingDetailChatPanel
+				isConversationPanelCollapsed={false}
+				historyOpen={false}
+				onToggleConversationPanel={vi.fn()}
+				onExpandConversationPanel={vi.fn()}
+				onToggleHistory={vi.fn()}
+				topicsLoading
+				topicStore={topicStore}
+				topicActions={{} as never}
+				selectedTopic={null}
+				project={null}
+				workspace={null}
+				setSelectedTopic={vi.fn()}
+				projectFilesStore={{} as never}
+				mentionPanelStore={{} as never}
+				attachments={[]}
+				attachmentList={[]}
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-chat-skeleton")).toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-ai-chat")).not.toBeInTheDocument()
+	})
+
+	it("skips the topics-loading skeleton when the conversation rail is collapsed", () => {
+		const topicStore = new TopicStore()
+
+		render(
+			<RecordingDetailChatPanel
+				isConversationPanelCollapsed
+				historyOpen={false}
+				onToggleConversationPanel={vi.fn()}
+				onExpandConversationPanel={vi.fn()}
+				onToggleHistory={vi.fn()}
+				topicsLoading
+				topicStore={topicStore}
+				topicActions={{} as never}
+				selectedTopic={null}
+				project={null}
+				workspace={null}
+				setSelectedTopic={vi.fn()}
+				projectFilesStore={{} as never}
+				mentionPanelStore={{} as never}
+				attachments={[]}
+				attachmentList={[]}
+			/>,
+		)
+
+		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
+	})
+
+	it("keeps AiChat mounted under a messages-loading skeleton overlay", () => {
+		const topicStore = new TopicStore()
+		const topic = createTopic()
+		topicStore.setTopics([topic])
+		topicStore.setSelectedTopic(topic)
+
+		render(
+			<RecordingDetailChatPanel
+				isConversationPanelCollapsed={false}
+				historyOpen={false}
+				onToggleConversationPanel={vi.fn()}
+				onExpandConversationPanel={vi.fn()}
+				onToggleHistory={vi.fn()}
+				topicsLoading={false}
+				topicStore={topicStore}
+				topicActions={{} as never}
+				selectedTopic={topic}
+				project={{ id: "mock-project-001" } as never}
+				workspace={{ id: "mock-workspace-001" } as never}
+				setSelectedTopic={vi.fn()}
+				projectFilesStore={{} as never}
+				mentionPanelStore={{} as never}
+				attachments={[]}
+				attachmentList={[]}
+			/>,
+		)
+
+		// Overlay covers the surface while hydration runs; the real chat stays mounted underneath.
+		expect(screen.getByTestId("recording-detail-ai-chat")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-skeleton")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-skeleton-overlay")).toBeInTheDocument()
+	})
+
+	it("hides the messages-loading skeleton once AiChat reports ready", () => {
+		const topicStore = new TopicStore()
+		const topic = createTopic()
+		topicStore.setTopics([topic])
+		topicStore.setSelectedTopic(topic)
+
+		const { rerender } = render(
+			<RecordingDetailChatPanel
+				isConversationPanelCollapsed={false}
+				historyOpen={false}
+				onToggleConversationPanel={vi.fn()}
+				onExpandConversationPanel={vi.fn()}
+				onToggleHistory={vi.fn()}
+				topicsLoading={false}
+				topicStore={topicStore}
+				topicActions={{} as never}
+				selectedTopic={topic}
+				project={{ id: "mock-project-001" } as never}
+				workspace={{ id: "mock-workspace-001" } as never}
+				setSelectedTopic={vi.fn()}
+				projectFilesStore={{} as never}
+				mentionPanelStore={{} as never}
+				attachments={[]}
+				attachmentList={[]}
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-chat-skeleton")).toBeInTheDocument()
+
+		aiChatMessagesLoadingMock.loading = false
+		rerender(
+			<RecordingDetailChatPanel
+				isConversationPanelCollapsed={false}
+				historyOpen={false}
+				onToggleConversationPanel={vi.fn()}
+				onExpandConversationPanel={vi.fn()}
+				onToggleHistory={vi.fn()}
+				topicsLoading={false}
+				topicStore={topicStore}
+				topicActions={{} as never}
+				selectedTopic={topic}
+				project={{ id: "mock-project-001" } as never}
+				workspace={{ id: "mock-workspace-001" } as never}
+				setSelectedTopic={vi.fn()}
+				projectFilesStore={{} as never}
+				mentionPanelStore={{} as never}
+				attachments={[]}
+				attachmentList={[]}
+			/>,
+		)
+
+		expect(screen.getByTestId("recording-detail-ai-chat")).toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
 	})
 })

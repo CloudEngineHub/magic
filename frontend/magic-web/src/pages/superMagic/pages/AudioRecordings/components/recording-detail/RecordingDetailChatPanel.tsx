@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import AiChat from "@/components/business/RecordingSummary/components/AiChat"
 import {
@@ -12,7 +13,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { RECORDING_CHAT_HISTORY_WIDTH } from "./recording-detail-layout"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
-import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
+import { RecordingDetailChatSkeleton } from "./RecordingDetailEmptyState"
 
 export interface RecordingDetailChatPanelProps {
 	isConversationPanelCollapsed: boolean
@@ -53,6 +54,20 @@ export default function RecordingDetailChatPanel({
 	attachmentList,
 }: RecordingDetailChatPanelProps) {
 	const { t } = useTranslation("super")
+	const projectId = project?.id ?? null
+
+	// Optimistic barrier: assume messages are loading as soon as a project is available.
+	const [messagesInitialLoading, setMessagesInitialLoading] = useState(() => Boolean(project))
+
+	// Reset the messages-loading overlay when the project identity changes.
+	useEffect(() => {
+		setMessagesInitialLoading(Boolean(projectId))
+	}, [projectId])
+
+	/** Receives the main-site messages hydration barrier from project-detail AiChat. */
+	const handleMessagesInitialLoadingChange = useCallback((loading: boolean) => {
+		setMessagesInitialLoading(loading)
+	}, [])
 
 	// Register the scoped topic-creation listener so employee switching creates and selects a new topic.
 	useCreateTopicListener({
@@ -67,14 +82,10 @@ export default function RecordingDetailChatPanel({
 		onTopicDetailLoaded: topicStore.updateTopic,
 	})
 
-	// Keep the scoped topic status aligned with committed assistant/tool messages.
-	// RecordingSummary does not expose initial message readiness, so disable only the enter-topic sync.
-	useScopedTopicReadProgress({
-		scopeName: "RecordingDetailChatPanel",
-		topicStore,
-		selectedTopic,
-		isSelectedTopicMessagesReady: false,
-	})
+	// Show skeleton while topics bootstrap or messages hydrate; never while the rail is collapsed.
+	const showTopicsBootstrapSkeleton = !isConversationPanelCollapsed && !project && topicsLoading
+	const showMessagesLoadingOverlay =
+		!isConversationPanelCollapsed && Boolean(project) && messagesInitialLoading
 
 	return (
 		<div
@@ -83,7 +94,7 @@ export default function RecordingDetailChatPanel({
 			data-collapsed={String(isConversationPanelCollapsed)}
 		>
 			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-				<div className="flex min-h-0 flex-1 flex-col">
+				<div className="relative flex min-h-0 flex-1 flex-col">
 					{project ? (
 						<AiChat
 							projectFilesStore={projectFilesStore}
@@ -108,12 +119,25 @@ export default function RecordingDetailChatPanel({
 							isConversationPanelCollapsed={isConversationPanelCollapsed}
 							onToggleConversationPanel={onToggleConversationPanel}
 							onExpandConversationPanel={onExpandConversationPanel}
+							onMessagesInitialLoadingChange={handleMessagesInitialLoadingChange}
 						/>
+					) : showTopicsBootstrapSkeleton ? (
+						<RecordingDetailChatSkeleton />
 					) : (
 						<div className="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
 							{topicsLoading ? t("loading") : t("messageHeader.noTopics")}
 						</div>
 					)}
+
+					{/* Keep AiChat mounted underneath so messages/queries can start immediately. */}
+					{showMessagesLoadingOverlay ? (
+						<div
+							className="absolute inset-0 z-10 bg-sidebar"
+							data-testid="recording-detail-chat-skeleton-overlay"
+						>
+							<RecordingDetailChatSkeleton />
+						</div>
+					) : null}
 				</div>
 			</div>
 			{historyOpen ? (

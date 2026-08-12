@@ -72,6 +72,11 @@ export function useRecordingProjectChat({
 				if (disposed) return
 
 				const nextProject = projectResponse as ProjectListItem
+				// Start workspace fetch immediately so message hydration is not blocked on it.
+				const workspacePromise = nextProject.workspace_id
+					? SuperMagicApi.getWorkspaceDetail({ id: nextProject.workspace_id })
+					: Promise.resolve(null)
+
 				let nextTopics = (topicsResponse.list ?? []).map(
 					normalizeTopicHistoryItem,
 				) as Topic[]
@@ -96,21 +101,18 @@ export function useRecordingProjectChat({
 
 				if (resolvedInitialTopic) topicStore.updateTopic(resolvedInitialTopic)
 				topicStore.setSelectedTopic(resolvedInitialTopic)
+				// Publish project/topic first so chat can mount and hydrate messages without waiting for workspace.
 				setProject(nextProject)
+				if (!disposed) setTopicsLoading(false)
 
-				if (nextProject.workspace_id) {
-					const workspaceResponse = await SuperMagicApi.getWorkspaceDetail({
-						id: nextProject.workspace_id,
-					})
-					if (!disposed) setWorkspace((workspaceResponse as Workspace) ?? null)
-				}
+				const workspaceResponse = await workspacePromise
+				if (!disposed) setWorkspace((workspaceResponse as Workspace) ?? null)
 			} catch {
 				if (disposed) return
 				topicStore.reset()
 				setProject(null)
 				setWorkspace(null)
-			} finally {
-				if (!disposed) setTopicsLoading(false)
+				setTopicsLoading(false)
 			}
 		}
 

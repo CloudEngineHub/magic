@@ -12,6 +12,11 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
 
+/**
+ * Lightweight topic-message hook for live recording float panels only.
+ * Recording detail (`projectDetailMode`) uses the main-site useTopicMessages instead;
+ * do not expand this fork to close detail-page hydration gaps.
+ */
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
 	selectedWorkspace: { id: string } | null

@@ -524,7 +524,7 @@ describe("AudioRecordingDetailPage", () => {
 		})
 	})
 
-	it("restores an expanded preference for the detail rail and loading skeleton", () => {
+	it("restores an expanded preference for the detail rail while attachments are still loading", () => {
 		storageMock.getItem.mockImplementation((key: string) =>
 			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY ? "false" : null,
 		)
@@ -543,10 +543,13 @@ describe("AudioRecordingDetailPage", () => {
 		mockDetailData.loading = true
 		render(<AudioRecordingDetailPage />)
 
-		expect(screen.getByTestId("recording-detail-chat-skeleton-rail")).toHaveStyle({
+		// Detail attachment loading no longer swaps the chat rail for a skeleton.
+		expect(screen.getByTestId("recording-detail-chat-rail")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveStyle({
 			width: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
 			minWidth: `${RECORDING_CHAT_EXPANDED_WIDTH}px`,
 		})
+		expect(screen.queryByTestId("recording-detail-chat-skeleton-rail")).not.toBeInTheDocument()
 	})
 
 	it("keeps the persisted conversation preference when switching recordings", () => {
@@ -569,18 +572,22 @@ describe("AudioRecordingDetailPage", () => {
 		expect(storageMock.setItem).not.toHaveBeenCalled()
 	})
 
-	it("hides the conversation skeleton when the persisted preference is collapsed", () => {
+	it("keeps the conversation rail mounted while detail attachments load with a collapsed preference", () => {
 		mockDetailData.loading = true
 
 		render(<AudioRecordingDetailPage />)
 
 		expect(screen.getByTestId("recording-detail-page-skeleton")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-rail")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"true",
+		)
 		expect(screen.queryByTestId("recording-detail-chat-skeleton-rail")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
-		expect(screen.queryByTestId("recording-detail-chat-rail")).not.toBeInTheDocument()
 	})
 
-	it("keeps the conversation skeleton visible while loading with an expanded preference", () => {
+	it("keeps the conversation rail mounted while detail attachments load with an expanded preference", () => {
 		storageMock.getItem.mockImplementation((key: string) =>
 			key === RECORDING_DETAIL_CONVERSATION_PANEL_COLLAPSED_STORAGE_KEY ? "false" : null,
 		)
@@ -589,9 +596,13 @@ describe("AudioRecordingDetailPage", () => {
 		render(<AudioRecordingDetailPage />)
 
 		expect(screen.getByTestId("recording-detail-page-skeleton")).toBeInTheDocument()
-		expect(screen.getByTestId("recording-detail-chat-skeleton-rail")).toBeInTheDocument()
-		expect(screen.getByTestId("recording-detail-chat-skeleton")).toBeInTheDocument()
-		expect(screen.queryByTestId("recording-detail-chat-rail")).not.toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-rail")).toBeInTheDocument()
+		expect(screen.getByTestId("recording-detail-chat-rail")).toHaveAttribute(
+			"data-collapsed",
+			"false",
+		)
+		expect(screen.queryByTestId("recording-detail-chat-skeleton-rail")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("recording-detail-chat-skeleton")).not.toBeInTheDocument()
 	})
 
 	it("selects the project current topic and keeps it while the chat panel is collapsed", async () => {

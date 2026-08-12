@@ -10,8 +10,11 @@ import { initializeService } from "@/services/recordSummary/serviceInstance"
 import Editor from "./components/Editor"
 import { useStyles } from "./styles"
 import { type MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
-import { useTopicMessages } from "./hooks/useTopicMessages"
-import { useEffect, useMemo, useRef, type ReactNode } from "react"
+import { useTopicMessages as useLiveRecordingTopicMessages } from "./hooks/useTopicMessages"
+import { useTopicMessages as useMainTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
+import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
+import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
 import PreviewDetailPopup, {
 	PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
@@ -32,6 +35,7 @@ import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages
 import TopicMessagePanel from "@/pages/superMagic/pages/TopicPage/components/TopicMessagePanel"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/MessageHeader"
+import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 
 /** Normalize relative paths before matching path-only message attachments to workspace files. */
 function normalizeAttachmentPath(path: string | undefined): string {
@@ -66,38 +70,29 @@ export interface AiChatProps {
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
 	trailingActions?: ReactNode
+	/** Reports the main-site messages hydration barrier so the detail rail can overlay a skeleton. */
+	onMessagesInitialLoadingChange?: (loading: boolean) => void
 }
 
-export function AiChat(props: AiChatProps) {
+interface ResolvedAiChatSelection {
+	selectedTopic: Topic | null
+	selectedProject: ProjectListItem | null
+	selectedWorkspace: Workspace | null
+	setSelectedProject: (project: ProjectListItem | null) => void
+	setSelectedTopic: (topic: Topic | null) => void
+	setSelectedWorkspace: (workspace: Workspace | null) => void
+}
+
+/** Resolve optional detail-page overrides against the live recording summary store. */
+function useResolvedAiChatSelection(props: AiChatProps): ResolvedAiChatSelection {
 	const {
-		attachments,
-		attachmentList,
-		checkNowDebounced,
-		recordSummaryFileStore,
-		projectFilesStore,
 		selectedTopic: selectedTopicProp,
 		selectedProject: selectedProjectProp,
 		selectedWorkspace: selectedWorkspaceProp,
 		setSelectedProject = recordingSummaryStore.setProject,
 		setSelectedTopic = recordingSummaryStore.setChatTopic,
 		setSelectedWorkspace = recordingSummaryStore.setWorkspace,
-		useRecordingSync = true,
-		projectDetailMode = false,
-		allowRecordingMode = true,
-		topicStore,
-		topicActions,
-		historyTriggerMode,
-		isHistoryPanelOpen,
-		onToggleHistoryPanel,
-		isConversationPanelCollapsed = false,
-		onToggleConversationPanel,
-		onExpandConversationPanel,
-		trailingActions,
 	} = props
-
-	const recordSummaryService = initializeService()
-	const { styles } = useStyles()
-	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 
 	const selectedTopic =
 		selectedTopicProp !== undefined
@@ -112,18 +107,18 @@ export function AiChat(props: AiChatProps) {
 			? selectedWorkspaceProp
 			: (recordingSummaryStore.businessData.workspace ?? null)
 
-	const scopedMessageSendService = useMemo(
-		() => createMessageSendService({ mentionPanelStore: recordSummaryFileStore }),
-		[recordSummaryFileStore],
-	)
-
-	// 使用消息管理 hook
-	const { messages, showLoading, isShowLoadingInit, handlePullMoreMessage } = useTopicMessages({
+	return {
 		selectedTopic,
+		selectedProject,
 		selectedWorkspace,
-		checkNowDebounced,
-	})
+		setSelectedProject,
+		setSelectedTopic,
+		setSelectedWorkspace,
+	}
+}
 
+/** Keep pending long-memory badges in sync when conversation messages include memory updates. */
+function usePendingMemorySync(messages: SuperMagicMessageItem[]) {
 	const { hasMemoryUpdateMessage } = useMessageChanges(messages)
 
 	useEffect(() => {
@@ -142,58 +137,17 @@ export function AiChat(props: AiChatProps) {
 			console.error(error)
 		}
 	}, [hasMemoryUpdateMessage])
+}
 
-	// Handle interrupt and undo message functionality
-	useInterruptAndUndoMessage({
-		selectedTopic,
-		messages,
-		userInfo: userStore.user.userInfo,
-	})
-
-	// 封装消息发送处理函数
-	const handleSendMsg = useMemoizedFn((content: JSONContent | string, options?: any) => {
-		/**
-		 * 补充 asr_task_key 参数
-		 * 用于录音总结模式，AI 对话功能使用该逻辑
-		 */
-		const _options = merge(options, {
-			extra: {
-				super_agent: {
-					dynamic_params: useRecordingSync
-						? { asr_task_key: recordSummaryService.getCurrentSessionTaskKey() }
-						: undefined,
-				},
-			},
-		})
-
-		// Detail conversations are independent from the live recorder flush lifecycle.
-		if (useRecordingSync) {
-			recordSummaryService.flushNoteUpdate()
-			recordSummaryService.flushTranscriptUpdate()
-		}
-
-		scopedMessageSendService.sendContent({
-			content,
-			showLoading: messages?.length > 1 && showLoading,
-			options: _options,
-			context: resolveMessageSendContext({
-				selectedProject,
-				selectedTopic,
-				selectedWorkspace,
-				setSelectedProject,
-				setSelectedTopic,
-				setSelectedWorkspace,
-				// Detail conversations update both the selected topic and history list atomically.
-				topicStore,
-				updateTopicName: topicActions?.updateTopicName,
-			}),
-		})
-
-		// 延迟200ms通知MessageList组件滚动到底部
-		setTimeout(() => {
-			pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom)
-		}, 200)
-	})
+/** Own file-preview popup refs and path/file open handlers for both chat surfaces. */
+function useAiChatFilePreview(params: {
+	attachments: AttachmentItem[]
+	attachmentList: AttachmentItem[]
+	selectedTopic: Topic | null
+	selectedProject: ProjectListItem | null
+}) {
+	const { attachments, attachmentList, selectedTopic, selectedProject } = params
+	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 
 	const { handleOpenFile, handleNodeFile } = useFileOpen({
 		setUserSelectDetail: (detail) => {
@@ -276,6 +230,285 @@ export function AiChat(props: AiChatProps) {
 		}
 	}, [attachmentList, handleOpenFile])
 
+	const previewPopup = (
+		<PreviewDetailPopup
+			ref={previewDetailPopupRef}
+			setUserSelectDetail={(detail: any) => {
+				previewDetailPopupRef.current?.open(detail, attachments, attachmentList)
+			}}
+			selectedTopic={selectedTopic}
+			selectedProject={selectedProject}
+		/>
+	)
+
+	return {
+		previewDetailPopupRef,
+		onFileClick,
+		handleOpenFile,
+		previewPopup,
+	}
+}
+
+interface ProjectDetailAiChatProps extends AiChatProps {
+	topicStore: TopicStore
+	topicActions: MessageHeaderTopicActions
+}
+
+/**
+ * Recording detail conversation surface.
+ * Uses the main-site message sync stack so in-progress refreshes hydrate with spinner + recovery,
+ * instead of the lighter live-recording fork that skips polling and initial loading semantics.
+ * Wrapped in observer because selection may still fall back to recordingSummaryStore observables.
+ */
+const ProjectDetailAiChat = observer(function ProjectDetailAiChat(props: ProjectDetailAiChatProps) {
+	const {
+		attachments,
+		attachmentList,
+		checkNowDebounced,
+		recordSummaryFileStore,
+		projectFilesStore,
+		useRecordingSync = false,
+		allowRecordingMode = true,
+		topicStore,
+		topicActions,
+		historyTriggerMode,
+		isHistoryPanelOpen,
+		onToggleHistoryPanel,
+		isConversationPanelCollapsed = false,
+		onToggleConversationPanel,
+		onExpandConversationPanel,
+		trailingActions,
+		onMessagesInitialLoadingChange,
+	} = props
+
+	const recordSummaryService = initializeService()
+	const selection = useResolvedAiChatSelection(props)
+	const {
+		selectedTopic,
+		selectedProject,
+		selectedWorkspace,
+		setSelectedProject,
+		setSelectedTopic,
+		setSelectedWorkspace,
+	} = selection
+
+	const scopedMessageSendService = useMemo(
+		() => createMessageSendService({ mentionPanelStore: recordSummaryFileStore }),
+		[recordSummaryFileStore],
+	)
+
+	// Main-site hydration owns WS recovery, polling, and the initial loading barrier.
+	const { handlePullMoreMessage, isMessagesInitialLoading, isSelectedTopicMessagesReady } =
+		useMainTopicMessages({
+			selectedTopic,
+			checkNowDebounced,
+		})
+
+	// Let the recording detail rail overlay a skeleton without unmounting this conversation surface.
+	useLayoutEffect(() => {
+		onMessagesInitialLoadingChange?.(isMessagesInitialLoading)
+	}, [isMessagesInitialLoading, onMessagesInitialLoadingChange])
+
+	// Restore enter-topic read sync now that the main hook exposes message readiness.
+	const { handleTopicMessagesChange } = useScopedTopicReadProgress({
+		scopeName: "RecordingDetailChatPanel",
+		topicStore,
+		selectedTopic,
+		isSelectedTopicMessagesReady,
+	})
+
+	const { messages, showLoading } = useTopicConversationLoading({
+		selectedTopic,
+		onTopicMessagesChange: handleTopicMessagesChange,
+	})
+
+	usePendingMemorySync(messages)
+
+	useInterruptAndUndoMessage({
+		selectedTopic,
+		messages,
+		userInfo: userStore.user.userInfo,
+	})
+
+	const { previewDetailPopupRef, onFileClick, previewPopup } = useAiChatFilePreview({
+		attachments,
+		attachmentList,
+		selectedTopic,
+		selectedProject,
+	})
+
+	const handleSendMsg = useMemoizedFn((content: JSONContent | string, options?: any) => {
+		const _options = merge(options, {
+			extra: {
+				super_agent: {
+					dynamic_params: useRecordingSync
+						? { asr_task_key: recordSummaryService.getCurrentSessionTaskKey() }
+						: undefined,
+				},
+			},
+		})
+
+		if (useRecordingSync) {
+			recordSummaryService.flushNoteUpdate()
+			recordSummaryService.flushTranscriptUpdate()
+		}
+
+		scopedMessageSendService.sendContent({
+			content,
+			showLoading: messages?.length > 1 && showLoading,
+			options: _options,
+			context: resolveMessageSendContext({
+				selectedProject,
+				selectedTopic,
+				selectedWorkspace,
+				setSelectedProject,
+				setSelectedTopic,
+				setSelectedWorkspace,
+				topicStore,
+				updateTopicName: topicActions?.updateTopicName,
+			}),
+		})
+
+		setTimeout(() => {
+			pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom)
+		}, 200)
+	})
+
+	return (
+		<>
+			{/* Recording detail uses the complete project conversation surface with scoped dependencies. */}
+			<TopicMessagePanel
+				selectedProject={selectedProject}
+				selectedWorkspace={selectedWorkspace}
+				selectedTopic={selectedTopic}
+				messages={messages}
+				showLoading={showLoading}
+				isShowLoadingInit={isMessagesInitialLoading}
+				isMessagesLoading={isMessagesInitialLoading}
+				currentTopicStatus={selectedTopic?.task_status}
+				attachments={attachments}
+				handleSendMsg={handleSendMsg}
+				handlePullMoreMessage={handlePullMoreMessage}
+				handleFileClick={(fileId) => onFileClick(fileId)}
+				setUserSelectDetail={(detail) => {
+					previewDetailPopupRef.current?.open(detail, attachments, attachmentList)
+				}}
+				setSelectedTopic={setSelectedTopic}
+				topicActions={topicActions}
+				topicStore={topicStore}
+				projectFilesStore={projectFilesStore}
+				mentionPanelStore={recordSummaryFileStore}
+				allowRecordingMode={allowRecordingMode}
+				historyTriggerMode={historyTriggerMode ?? "layout"}
+				isHistoryPanelOpen={isHistoryPanelOpen}
+				onToggleHistoryPanel={onToggleHistoryPanel}
+				isConversationPanelCollapsed={isConversationPanelCollapsed}
+				onToggleConversationPanel={onToggleConversationPanel}
+				onExpandConversationPanel={onExpandConversationPanel}
+				trailingActions={trailingActions}
+			/>
+			{previewPopup}
+		</>
+	)
+})
+
+/**
+ * Live recording float-panel surface.
+ * Keeps the lighter RecordingSummary message fork so ASR-driven panels stay independent of
+ * the heavier main-site recovery/polling stack.
+ * Must be an observer: live float panels often omit topic props and read recordingSummaryStore.
+ */
+const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatProps) {
+	const {
+		attachments,
+		attachmentList,
+		checkNowDebounced,
+		recordSummaryFileStore,
+		projectFilesStore,
+		useRecordingSync = true,
+	} = props
+
+	const recordSummaryService = initializeService()
+	const { styles } = useStyles()
+	const selection = useResolvedAiChatSelection(props)
+	const {
+		selectedTopic,
+		selectedProject,
+		selectedWorkspace,
+		setSelectedProject,
+		setSelectedTopic,
+		setSelectedWorkspace,
+	} = selection
+
+	const scopedMessageSendService = useMemo(
+		() => createMessageSendService({ mentionPanelStore: recordSummaryFileStore }),
+		[recordSummaryFileStore],
+	)
+
+	// Live float panels continue to use the RecordingSummary fork (no main-site polling).
+	const { messages, showLoading, isShowLoadingInit, handlePullMoreMessage } =
+		useLiveRecordingTopicMessages({
+			selectedTopic,
+			selectedWorkspace,
+			checkNowDebounced,
+		})
+
+	usePendingMemorySync(messages)
+
+	useInterruptAndUndoMessage({
+		selectedTopic,
+		messages,
+		userInfo: userStore.user.userInfo,
+	})
+
+	const { onFileClick, previewPopup } = useAiChatFilePreview({
+		attachments,
+		attachmentList,
+		selectedTopic,
+		selectedProject,
+	})
+
+	const handleSendMsg = useMemoizedFn((content: JSONContent | string, options?: any) => {
+		/**
+		 * 补充 asr_task_key 参数
+		 * 用于录音总结模式，AI 对话功能使用该逻辑
+		 */
+		const _options = merge(options, {
+			extra: {
+				super_agent: {
+					dynamic_params: useRecordingSync
+						? { asr_task_key: recordSummaryService.getCurrentSessionTaskKey() }
+						: undefined,
+				},
+			},
+		})
+
+		// Detail conversations are independent from the live recorder flush lifecycle.
+		if (useRecordingSync) {
+			recordSummaryService.flushNoteUpdate()
+			recordSummaryService.flushTranscriptUpdate()
+		}
+
+		scopedMessageSendService.sendContent({
+			content,
+			showLoading: messages?.length > 1 && showLoading,
+			options: _options,
+			context: resolveMessageSendContext({
+				selectedProject,
+				selectedTopic,
+				selectedWorkspace,
+				setSelectedProject,
+				setSelectedTopic,
+				setSelectedWorkspace,
+			}),
+		})
+
+		// 延迟200ms通知MessageList组件滚动到底部
+		setTimeout(() => {
+			pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom)
+		}, 200)
+	})
+
 	useEffect(() => {
 		if (!useRecordingSync) return
 		if (!selectedProject?.id) {
@@ -318,55 +551,6 @@ export function AiChat(props: AiChatProps) {
 		}
 	}, [projectFilesStore])
 
-	const previewPopup = (
-		<PreviewDetailPopup
-			ref={previewDetailPopupRef}
-			setUserSelectDetail={(detail: any) => {
-				previewDetailPopupRef.current?.open(detail, attachments, attachmentList)
-			}}
-			selectedTopic={selectedTopic}
-			selectedProject={selectedProject}
-		/>
-	)
-
-	if (projectDetailMode && topicStore && topicActions) {
-		return (
-			<>
-				{/* Recording detail uses the complete project conversation surface with scoped dependencies. */}
-				<TopicMessagePanel
-					selectedProject={selectedProject}
-					selectedWorkspace={selectedWorkspace}
-					selectedTopic={selectedTopic}
-					messages={messages}
-					showLoading={showLoading}
-					isShowLoadingInit={isShowLoadingInit}
-					currentTopicStatus={selectedTopic?.task_status}
-					attachments={attachments}
-					handleSendMsg={handleSendMsg}
-					handlePullMoreMessage={handlePullMoreMessage}
-					handleFileClick={(fileId) => onFileClick(fileId)}
-					setUserSelectDetail={(detail) => {
-						previewDetailPopupRef.current?.open(detail, attachments, attachmentList)
-					}}
-					setSelectedTopic={setSelectedTopic}
-					topicActions={topicActions}
-					topicStore={topicStore}
-					projectFilesStore={projectFilesStore}
-					mentionPanelStore={recordSummaryFileStore}
-					allowRecordingMode={allowRecordingMode}
-					historyTriggerMode={historyTriggerMode ?? "layout"}
-					isHistoryPanelOpen={isHistoryPanelOpen}
-					onToggleHistoryPanel={onToggleHistoryPanel}
-					isConversationPanelCollapsed={isConversationPanelCollapsed}
-					onToggleConversationPanel={onToggleConversationPanel}
-					onExpandConversationPanel={onExpandConversationPanel}
-					trailingActions={trailingActions}
-				/>
-				{previewPopup}
-			</>
-		)
-	}
-
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
 			<MessageListProvider value={value}>
@@ -405,6 +589,23 @@ export function AiChat(props: AiChatProps) {
 			{previewPopup}
 		</div>
 	)
+})
+
+/**
+ * Route between the project-detail main-site message stack and the live-recording fork.
+ * Splitting into child components keeps each hook path unconditional.
+ * Store subscription lives on the child surfaces above; this router only selects which one to mount.
+ */
+export function AiChat(props: AiChatProps) {
+	const { projectDetailMode = false, topicStore, topicActions } = props
+
+	if (projectDetailMode && topicStore && topicActions) {
+		return (
+			<ProjectDetailAiChat {...props} topicStore={topicStore} topicActions={topicActions} />
+		)
+	}
+
+	return <LiveRecordingAiChat {...props} />
 }
 
-export default observer(AiChat)
+export default AiChat

@@ -42,7 +42,6 @@ import { RecordingDetailRightPanel } from "./components/recording-detail/Recordi
 import RecordingDetailChatPanel from "./components/recording-detail/RecordingDetailChatPanel"
 import {
 	RecordingDetailEmptyState,
-	RecordingDetailChatSkeleton,
 	RecordingDetailPageSkeleton,
 } from "./components/recording-detail/RecordingDetailEmptyState"
 import { RecordingDetailSpeakerDialog } from "./components/recording-detail/RecordingDetailSpeakerDialog"
@@ -486,21 +485,8 @@ function AudioRecordingDetailPageDesktop() {
 						) : null}
 					</div>
 
-					{/* Skip the chat skeleton when the persisted preference is collapsed to avoid a wide flash. */}
-					{loading && !isConversationPanelCollapsed ? (
-						<div
-							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar"
-							style={{
-								width: RECORDING_CHAT_EXPANDED_WIDTH,
-								minWidth: RECORDING_CHAT_EXPANDED_WIDTH,
-							}}
-							data-testid="recording-detail-chat-skeleton-rail"
-						>
-							<RecordingDetailChatSkeleton />
-						</div>
-					) : null}
-
-					{!loading && !error && !detailUnavailable ? (
+					{/* Mount chat as soon as the page is not fatal; detail attachment loading must not unmount it. */}
+					{!error && !detailUnavailable ? (
 						<div
 							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar transition-[width,min-width] duration-300"
 							style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}
