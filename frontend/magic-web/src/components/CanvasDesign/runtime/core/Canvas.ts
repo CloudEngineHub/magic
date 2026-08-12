@@ -45,6 +45,7 @@ import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollin
 import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerManager"
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
+import { VideoCompositionManager } from "../resources/video-composition/VideoCompositionManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
 import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
@@ -80,6 +81,7 @@ import { ConnectionDragManager } from "../interaction/connection/ConnectionDragM
 import { ConnectionHandleOverlayManager } from "../interaction/connection/ConnectionHandleOverlayManager"
 import { ConnectionAssociationSeedManager } from "../interaction/connection/ConnectionAssociationSeedManager"
 import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
+import { VideoEditInteractionManager } from "../interaction/video-edit/VideoEditInteractionManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import { VideoContinuationManager } from "../interaction/video-continuation/VideoContinuationManager"
 import {
@@ -158,6 +160,7 @@ export class Canvas {
 	public connectionDragManager: ConnectionDragManager
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
 	public storyboardInteractionManager: StoryboardInteractionManager
+	public videoEditInteractionManager: VideoEditInteractionManager
 	public videoContinuationManager: VideoContinuationManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
@@ -182,6 +185,7 @@ export class Canvas {
 	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
+	public videoCompositionManager: VideoCompositionManager
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -324,6 +328,7 @@ export class Canvas {
 		this.videoResourceManager = new VideoResourceManager({
 			canvas: this,
 		})
+		this.videoCompositionManager = new VideoCompositionManager({ canvas: this })
 
 		this.videoPlaybackManager = new VideoPlaybackManager({
 			canvas: this,
@@ -481,6 +486,10 @@ export class Canvas {
 
 		// 分镜内部控件依赖选择工具、权限与 CursorManager，统一在工具初始化后接入。
 		this.storyboardInteractionManager = new StoryboardInteractionManager({
+			canvas: this,
+		})
+
+		this.videoEditInteractionManager = new VideoEditInteractionManager({
 			canvas: this,
 		})
 
@@ -1429,6 +1438,7 @@ export class Canvas {
 		this.extendManager.destroy()
 		this.eraserManager.destroy()
 		this.imageEditingCoordinator.destroy()
+		this.videoCompositionManager?.destroy()
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
@@ -1437,6 +1447,7 @@ export class Canvas {
 		this.imageReplaceController.destroy()
 		this.mediaReplaceController?.destroy()
 		this.storyboardInteractionManager.destroy()
+		this.videoEditInteractionManager.destroy()
 		this.videoContinuationManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信

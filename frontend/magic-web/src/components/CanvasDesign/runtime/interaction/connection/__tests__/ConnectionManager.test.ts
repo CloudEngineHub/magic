@@ -3,7 +3,7 @@ import Konva from "konva"
 import type { Canvas } from "../../../core/Canvas"
 import { EventEmitter } from "../../../core/EventEmitter"
 import { ConnectionManager } from "../ConnectionManager"
-import { ElementTypeEnum, type LayerElement } from "../../../document/types"
+import { ElementTypeEnum, type CanvasConnection, type LayerElement } from "../../../document/types"
 import {
 	CONNECTION_HOVER_LINE_STYLE,
 	CONNECTION_HIT_STYLE,
@@ -58,12 +58,17 @@ function createCanvasStub(
 	const selectionManager = {
 		deselectAll: vi.fn(),
 	}
+	const updateElement = vi.fn((elementId: string, updates: Partial<LayerElement>) => {
+		const current = elementData.get(elementId)
+		if (current) elementData.set(elementId, { ...current, ...updates })
+	})
 	const canvas = {
 		eventEmitter: new EventEmitter(),
 		elementManager: {
 			getElementData: vi.fn((id: string) => elementData.get(id)),
 			isElementVisibleInDataTree: vi.fn((id: string) => visibleSet.has(id)),
 			canParticipateInDocumentRelations: vi.fn((id: string) => documentOwnedIds.has(id)),
+			update: updateElement,
 		},
 		connectionGroup,
 		ensureConnectionGroup: vi.fn(() => connectionGroup),
@@ -97,7 +102,32 @@ function createCanvasStub(
 		connectionGroup,
 		requestLayerDraw,
 		selectionManager,
+		updateElement,
 	}
+}
+
+function createVideoEditElement(
+	id: string,
+	videoSequence: string[],
+	audioSequence: string[] = [],
+): LayerElement {
+	return {
+		id,
+		type: ElementTypeEnum.VideoEdit,
+		x: 0,
+		y: 0,
+		width: 1280,
+		height: 720,
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+		contents: [
+			{
+				contentId: `${id}-content`,
+				videoSequence,
+				audioSequence,
+			},
+		],
+	} as LayerElement
 }
 
 function getLastRenderedConnectionGroup(connectionGroup: {
@@ -677,6 +707,83 @@ describe("ConnectionManager", () => {
 		})
 	})
 
+	it("syncs VideoEdit inputs when connections are added or removed", () => {
+		const { canvas, elementData, documentOwnedIds } = createCanvasStub([
+			"video-1",
+			"video-2",
+			"audio-1",
+			"editor",
+		])
+		;["video-1", "video-2", "audio-1", "editor"].forEach((id) => documentOwnedIds.add(id))
+		elementData.set("video-1", {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 40,
+			activeContentId: "video-1-content",
+			mainContentId: "video-1-content",
+			contents: [{ contentId: "video-1-content", src: "/1.mp4" }],
+		} as LayerElement)
+		elementData.set("video-2", {
+			id: "video-2",
+			type: ElementTypeEnum.Video,
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 40,
+			activeContentId: "video-2-content",
+			mainContentId: "video-2-content",
+			contents: [{ contentId: "video-2-content", src: "/2.mp4" }],
+		} as LayerElement)
+		elementData.set("audio-1", {
+			id: "audio-1",
+			type: ElementTypeEnum.Audio,
+			x: 0,
+			y: 0,
+			width: 100,
+			height: 40,
+			activeContentId: "audio-1-content",
+			mainContentId: "audio-1-content",
+			contents: [{ contentId: "audio-1-content", src: "/voice.wav" }],
+		} as LayerElement)
+		elementData.set("editor", createVideoEditElement("editor", ["video-1"], []))
+		const manager = new ConnectionManager({ canvas })
+
+		const videoConnection = manager.connectElements({
+			sourceElementId: "video-1",
+			targetElementId: "editor",
+		})
+		expect(videoConnection.status).toBe("created")
+		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual(["video-1"])
+
+		const secondVideoConnection = manager.connectElements({
+			sourceElementId: "video-2",
+			targetElementId: "editor",
+		})
+		expect(secondVideoConnection.status).toBe("created")
+		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual([
+			"video-1",
+			"video-2",
+		])
+
+		const audioConnection = manager.connectElements({
+			sourceElementId: "audio-1",
+			targetElementId: "editor",
+		})
+		expect(audioConnection.status).toBe("created")
+		expect((elementData.get("editor") as any).contents[0].audioSequence).toEqual(["audio-1"])
+
+		if (secondVideoConnection.status !== "created") throw new Error("Expected video connection")
+		manager.removeConnection(secondVideoConnection.connectionId)
+		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual(["video-1"])
+
+		if (audioConnection.status !== "created") throw new Error("Expected audio connection")
+		manager.removeConnection(audioConnection.connectionId)
+		expect((elementData.get("editor") as any).contents[0].audioSequence).toEqual([])
+	})
+
 	it("cleans deleted element connections without emitting a separate connection change", () => {
 		const { canvas } = createCanvasStub()
 		const manager = new ConnectionManager({ canvas })
@@ -868,6 +975,32 @@ describe("ConnectionManager", () => {
 		expect(manager.exportConnections()).toHaveLength(2)
 		expect(onConnectionChange).toHaveBeenCalledTimes(1)
 	})
+
+	it("loads a connection with only the supported DSL fields", () => {
+		const { canvas } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		manager.loadDocument({
+			connections: [
+				{
+					id: "storyboard-output",
+					sourceElementId: "source",
+					targetElementId: "target",
+					unsupportedField: true,
+				} as CanvasConnection & { unsupportedField: true },
+			],
+		})
+
+		expect(manager.exportConnections()).toEqual([
+			{
+				id: "storyboard-output",
+				sourceElementId: "source",
+				targetElementId: "target",
+			},
+		])
+		expect(manager.removeConnection("storyboard-output")).toBe(true)
+		expect(manager.exportConnections()).toEqual([])
+	})
+
 	it("rejects reverse connections without changing the existing direction", () => {
 		const { canvas } = createCanvasStub()
 		const manager = new ConnectionManager({ canvas })

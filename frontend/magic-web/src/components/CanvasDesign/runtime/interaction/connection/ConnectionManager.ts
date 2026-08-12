@@ -1,6 +1,13 @@
 import type { Canvas } from "../../core/Canvas"
+import { getActiveContent, updateContent } from "../../document/elementContent"
 import type { CanvasDocumentPatch } from "../../document/patch"
-import { type CanvasConnection, type CanvasDocument } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type CanvasConnection,
+	type CanvasDocument,
+	type LayerElement,
+	type VideoEditElementContent,
+} from "../../document/types"
 import type { Rect } from "../../shared/ids"
 import { generateConnectionId } from "../../shared/ids"
 import { ConnectionHitTestService } from "./ConnectionHitTestService"
@@ -134,6 +141,7 @@ export class ConnectionManager {
 			targetElementId: connection.targetElementId,
 		})
 		this.hitTester.invalidateConnections([id])
+		this.syncVideoEditInputs([connection.targetElementId])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
 		return id
 	}
@@ -175,6 +183,7 @@ export class ConnectionManager {
 			targetElementId,
 		})
 		this.hitTester.invalidateConnections([id])
+		this.syncVideoEditInputs([targetElementId])
 		this.emitChangeAndRender({ changedConnectionIds: [id] })
 		return { status: "created", connectionId: id }
 	}
@@ -240,6 +249,7 @@ export class ConnectionManager {
 			})
 		}
 		this.hitTester.invalidateConnections(connectionIds)
+		this.syncVideoEditInputs(edges.map((edge) => edge.targetElementId))
 		this.emitChangeAndRender({ changedConnectionIds: connectionIds })
 		return { status: "created", connectionIds }
 	}
@@ -329,6 +339,7 @@ export class ConnectionManager {
 		connectionIds: string[],
 		options?: { emitChange?: boolean },
 	): string[] {
+		const removedConnections = this.store.getConnectionsByIds(connectionIds)
 		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return []
@@ -336,6 +347,7 @@ export class ConnectionManager {
 
 		this.hitTester.invalidateConnections(deletedConnectionIds)
 		this.removeSelectedConnectionIds(deletedConnectionIds, { render: false })
+		this.syncVideoEditInputs(removedConnections.map((connection) => connection.targetElementId))
 		if (options?.emitChange === false) {
 			this.rerenderNow()
 			return deletedConnectionIds
@@ -349,6 +361,7 @@ export class ConnectionManager {
 		options?: { emitChange?: boolean },
 	): void {
 		const connectionIds = this.store.getConnectionIdsByElementId(elementId)
+		const removedConnections = this.store.getConnectionsByIds(connectionIds)
 		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return
@@ -356,6 +369,7 @@ export class ConnectionManager {
 
 		this.hitTester.invalidateConnections(deletedConnectionIds)
 		this.removeSelectedConnectionIds(deletedConnectionIds, { render: false })
+		this.syncVideoEditInputs(removedConnections.map((connection) => connection.targetElementId))
 		if (options?.emitChange === false) {
 			this.rerenderNow()
 			return
@@ -364,6 +378,9 @@ export class ConnectionManager {
 	}
 
 	public clear(options?: { emitChange?: boolean }): void {
+		const affectedTargetElementIds = this.store
+			.getConnections()
+			.map((connection) => connection.targetElementId)
 		this.clearSelectedConnections({ render: false })
 		if (this.store.isEmpty()) {
 			this.renderer.clear()
@@ -373,11 +390,80 @@ export class ConnectionManager {
 		const deletedConnectionIds = this.store.getConnectionIds()
 		this.store.clear()
 		this.hitTester.invalidateAll()
+		this.syncVideoEditInputs(affectedTargetElementIds)
 		if (options?.emitChange === false) {
 			this.renderer.clear()
 			return
 		}
 		this.emitChangeAndRender({ deletedConnectionIds })
+	}
+
+	/**
+	 * 连接图是 VideoEditElement 输入成员关系的事实来源。连接增删后，同步编辑节点
+	 * 的成员列表，但保留用户已经调整过的现有顺序；新连接的素材追加到末尾。
+	 */
+	private syncVideoEditInputs(targetElementIds: Iterable<string>): void {
+		const elementManager = this.canvas.elementManager
+		if (typeof elementManager.getElementData !== "function") return
+
+		const uniqueTargetIds = new Set(targetElementIds)
+		uniqueTargetIds.forEach((targetElementId) => {
+			const target = elementManager.getElementData(targetElementId)
+			if (!target || target.type !== ElementTypeEnum.VideoEdit) return
+
+			const content = getActiveContent<VideoEditElementContent>(target)
+			if (!content) return
+
+			const connectedVideoIds: string[] = []
+			const connectedAudioIds: string[] = []
+			const collectSource = (source: LayerElement): void => {
+				if (source.type === ElementTypeEnum.Video) {
+					if (!connectedVideoIds.includes(source.id)) connectedVideoIds.push(source.id)
+					return
+				}
+				if (source.type === ElementTypeEnum.Audio) {
+					if (!connectedAudioIds.includes(source.id)) connectedAudioIds.push(source.id)
+					return
+				}
+				if (source.type !== ElementTypeEnum.Frame && source.type !== ElementTypeEnum.Group)
+					return
+				source.children?.forEach(collectSource)
+			}
+
+			this.store.getUpstreamConnections(targetElementId).forEach((connection) => {
+				const source = elementManager.getElementData(connection.sourceElementId)
+				if (source) collectSource(source)
+			})
+
+			const nextVideoSequence = content.videoSequence.filter((id) =>
+				connectedVideoIds.includes(id),
+			)
+			connectedVideoIds.forEach((id) => {
+				if (!nextVideoSequence.includes(id)) nextVideoSequence.push(id)
+			})
+
+			const currentAudioId = content.audioSequence[0]
+			const nextAudioSequence =
+				currentAudioId && connectedAudioIds.includes(currentAudioId)
+					? [currentAudioId]
+					: connectedAudioIds.slice(0, 1)
+
+			if (
+				content.videoSequence.length === nextVideoSequence.length &&
+				content.videoSequence.every((id, index) => id === nextVideoSequence[index]) &&
+				content.audioSequence.length === nextAudioSequence.length &&
+				content.audioSequence.every((id, index) => id === nextAudioSequence[index])
+			) {
+				return
+			}
+
+			const next = updateContent(target, target.activeContentId, {
+				videoSequence: nextVideoSequence,
+				audioSequence: nextAudioSequence,
+			})
+			if (next === target) return
+			elementManager.update(targetElementId, { contents: next.contents })
+		})
 	}
 
 	public rerender(): void {
