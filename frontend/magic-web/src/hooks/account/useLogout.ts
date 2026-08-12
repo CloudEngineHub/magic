@@ -5,10 +5,8 @@ import { BroadcastChannelSender } from "@/broadcastChannel"
 import { useAccount } from "@/stores/authentication"
 import MagicModal from "@/components/base/MagicModal"
 import { User } from "@/types/user"
-import { LoginValueKey } from "@/pages/login/constants"
 import { history } from "@/routes"
-import { RouteName } from "@/routes/constants"
-import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
+import { routesMatch } from "@/routes/history/helpers"
 import { defaultClusterCode } from "@/routes/helpers"
 import { openLightModal } from "@/utils/openLightModal"
 import { isMobile } from "@/utils/devices"
@@ -16,6 +14,8 @@ import { logger as Logger } from "@/utils/log"
 import useCancelRecord from "@/components/business/RecordingSummary/hooks/useCancelRecord"
 import { appService } from "@/services/app/AppService"
 import { MobileLogoutConfirmPopup } from "./MobileLogoutConfirmPopup"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 const logger = Logger.createLogger("sso")
 
@@ -149,11 +149,10 @@ function useLogout({ onConfirm, onCancel }: UseLogoutProps = {}) {
 						BroadcastChannelSender.deleteAccount(undefined, {
 							navigateToLogin: true,
 						})
-						const searchParams = new URLSearchParams(window.location.search)
-						searchParams.append(LoginValueKey.REDIRECT_URL, window.location.href)
-						history.replace({
-							name: RouteName.Login,
-							query: convertSearchParams(searchParams),
+						authEventBus.emit(AuthEventName.RequestLogout, {
+							reason: "manual",
+							redirect: true,
+							returnTo: window.location.href,
 						})
 					}
 				} catch (error) {

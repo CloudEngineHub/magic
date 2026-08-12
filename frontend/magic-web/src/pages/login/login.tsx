@@ -12,6 +12,7 @@ import MobilePhonePasswordForm from "./components/MobilePhonePasswordForm"
 import { RouteName } from "@/routes/constants"
 import type { UserService } from "@/services/user/UserService"
 import type { LoginService } from "@/services/user/LoginService/LoginService"
+import { authNavigationCoordinator } from "@/services/auth/AuthNavigationCoordinator"
 
 const logger = Logger.createLogger("sso")
 
@@ -46,6 +47,7 @@ function LoginPage() {
 				await service
 					.get<LoginService>("loginService")
 					.magicOrganizationSync(clusterCode || "", access_token)
+				authNavigationCoordinator.reset()
 				redirect()
 			} catch (error: any) {
 				logger.error("error", error)

@@ -12,7 +12,6 @@ import { getHomeURL } from "@/utils/redirect"
 import { history } from "@/routes/history"
 import { matchPath } from "react-router"
 import { LoginValueKey } from "@/pages/login/constants"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import { RouteName } from "@/routes/constants"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { AppInitErrorCode, AppInitializationError, isAuthenticationFailure } from "./errors"
@@ -38,6 +37,8 @@ import { BroadcastChannelSender } from "@/broadcastChannel"
 import { defaultClusterCode } from "@/routes/helpers"
 import { DEFAULT_MAINTENANCE_CONFIG, shouldForceSiteClose } from "@/constants/maintenance"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 interface PlatformServiceFactory {
 	(context: AppServiceContext): Promise<PlatformServiceInterface>
@@ -612,26 +613,14 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	 * @description Redirects to the login page.
 	 */
 	redirectToLogin = () => {
-		if (![RoutePath.Login].includes(window.location.pathname as RoutePath)) {
-			const redirectUrl = new URL(window.location.href).searchParams.get(
-				LoginValueKey.REDIRECT_URL,
-			)
-			this.logger.log("重定向到登录页", {
-				currentPath: window.location.pathname,
-				redirectUrl: redirectUrl ?? window.location.href,
-			})
-			history.replace({
-				name: RouteName.Login,
-				query: convertSearchParams(
-					buildLoginRedirectSearchParams({
-						currentHref: window.location.href,
-						redirectTarget: redirectUrl ?? window.location.href,
-					}),
-				),
-			})
-		} else {
-			this.logger.log("当前已在登录页，无需重定向")
-		}
+		if (window.location.pathname === RoutePath.Login) return
+		this.logger.log("发布登录请求", { currentPath: window.location.pathname })
+		authEventBus.emit(AuthEventName.RequestLogin, {
+			reason: "missing-session",
+			source: "app-init",
+			returnTo: window.location.href,
+			preserveQuery: true,
+		})
 	}
 
 	/**

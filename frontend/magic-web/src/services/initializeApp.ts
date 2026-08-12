@@ -7,8 +7,11 @@ import { OrganizationService } from "@/services/user/OrganizationService"
 import { ConfigService } from "@/services/config/ConfigService"
 import { initialApi } from "@/apis/clients/interceptor"
 import { FlowService } from "./flow"
+import { authNavigationCoordinator } from "./auth/AuthNavigationCoordinator"
 
 export function initializeApp() {
+	// Importing the singleton wires the local auth event bus to the sole login navigator.
+	void authNavigationCoordinator
 	const container = new ServiceContainer()
 
 	// 将 API 初始化延迟到实际创建服务时进行

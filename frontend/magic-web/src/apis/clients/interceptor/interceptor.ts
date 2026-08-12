@@ -5,10 +5,10 @@ import { RoutePath } from "@/constants/routes"
 import type { InterceptorContext } from "../../core/HttpClient"
 import { LoginValueKey } from "@/pages/login/constants"
 import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
-import type { AccountService } from "@/services/user/AccountService"
 import { UrlUtils } from "@/apis/utils"
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { authSessionCoordinator } from "@/services/auth/AuthSessionCoordinator"
 
 /** HTTP status code enum (RFC 7231, RFC 7233, and RFC 7540) */
 const enum HttpStatusCode {
@@ -64,13 +64,19 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 		BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED,
 	])
 
-	/** Handles an invalid login by clearing the login state and redirecting to the login page. */
-	async function unAuthorizedRedirect() {
-		await service.get<AccountService>("accountService").deleteAccount()
-		if (window.location.pathname !== RoutePath.Login) {
-			// Redirect the current route on logout to reset all application state.
-			window.location.replace(genLoginRedirectUrl())
-		}
+	/** Classify the response and hand session cleanup/navigation to the auth coordinators. */
+	async function handleUnauthorized(
+		authorization: string | undefined | null,
+		reason: "token-expired" | "account-unauthorized",
+	) {
+		const user = userStore.account.getAccountByAccessToken(authorization || "")
+		await authSessionCoordinator.invalidate({
+			service,
+			accountId: user?.magic_id,
+			reason,
+			source: "http",
+			returnTo: window.location.href,
+		})
 	}
 
 	return async function unAuthorized({ request, response, http }: InterceptorContext) {
@@ -108,7 +114,12 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 							res.status === HttpStatusCode.Unauthorized) ||
 						loginInvalidCodeSet.has(jsonData?.data?.code)
 					) {
-						await unAuthorizedRedirect()
+						await handleUnauthorized(
+							authorization,
+							jsonData?.data?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
+								? "account-unauthorized"
+								: "token-expired",
+						)
 						throw new Error("Unauthorized")
 					}
 
@@ -124,7 +135,12 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 					}
 				}
 			}
-			await unAuthorizedRedirect()
+			await handleUnauthorized(
+				authorization,
+				response?.data?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
+					? "account-unauthorized"
+					: "token-expired",
+			)
 			throw new Error("Unauthorized")
 		}
 		return { http, request, response }
