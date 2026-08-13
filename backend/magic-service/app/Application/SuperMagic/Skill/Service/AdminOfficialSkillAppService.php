@@ -218,7 +218,7 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
     private function assertOfficialOrganization(RequestContext $requestContext): MagicUserAuthorization
     {
         $authorization = $requestContext->getUserAuthorization();
-        if (! $authorization instanceof MagicUserAuthorization || ! OfficialOrganizationUtil::isOfficialOrganization($authorization->getOrganizationCode())) {
+        if (! OfficialOrganizationUtil::isOfficialOrganization($authorization->getOrganizationCode())) {
             ExceptionBuilder::throw(SkillErrorCode::OFFICIAL_ORGANIZATION_REQUIRED, 'skill.official_organization_required');
         }
         return $authorization;

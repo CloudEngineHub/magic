@@ -88,18 +88,6 @@ class SkillAppService extends AbstractSkillAppService
     private const SKILL_FILE_NAME = 'SKILL.md';
 
     /**
-     * 文件大小限制：20MB
-     * 用于校验上传的压缩包文件大小上限.
-     */
-    private const MAX_FILE_SIZE = 100 * 1024 * 1024;
-
-    /**
-     * 解压后文件总大小限制：20MB
-     * 用于防 Zip Bomb 攻击，校验解压后的文件总大小上限.
-     */
-    private const MAX_EXTRACTED_SIZE = 100 * 1024 * 1024;
-
-    /**
      * import_token 有效期：30分钟（1800秒，文档要求）
      * 用于控制导入第一阶段生成的 token 的有效期
      */
