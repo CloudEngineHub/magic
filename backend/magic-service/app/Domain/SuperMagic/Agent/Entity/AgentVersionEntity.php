@@ -127,8 +127,6 @@ class AgentVersionEntity extends AbstractEntity
 
     protected ?PublishTargetValue $publishTargetValue = null;
 
-    protected ?int $categoryId = null;
-
     /** @var int[] */
     protected array $categoryIds = [];
 
@@ -210,7 +208,6 @@ class AgentVersionEntity extends AbstractEntity
             'review_remark' => $this->reviewRemark,
             'publish_target_type' => $this->publishTargetType->value,
             'publish_target_value' => $this->publishTargetValue?->toArray(),
-            'category_id' => $this->categoryId,
             'category_ids' => $this->categoryIds,
             'version_description_i18n' => $this->versionDescriptionI18n,
             'publisher_user_id' => $this->publisherUserId,
@@ -494,32 +491,16 @@ class AgentVersionEntity extends AbstractEntity
         return $this;
     }
 
-    public function getCategoryId(): ?int
-    {
-        return $this->categoryId;
-    }
-
     /** @return int[] */
     public function getCategoryIds(): array
     {
-        if ($this->categoryIds !== []) {
-            return $this->categoryIds;
-        }
-
-        return $this->categoryId === null ? [] : [$this->categoryId];
-    }
-
-    public function setCategoryId(null|int|string $categoryId): self
-    {
-        $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
-        return $this;
+        return $this->categoryIds;
     }
 
     /** @param array<int, null|int|string> $categoryIds */
     public function setCategoryIds(array $categoryIds): self
     {
         $this->categoryIds = $this->normalizeCategoryIds($categoryIds);
-        $this->categoryId = $this->categoryIds[0] ?? null;
         return $this;
     }
 

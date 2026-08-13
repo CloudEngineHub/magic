@@ -35,6 +35,11 @@ interface SkillVersionRepositoryInterface
     public function findLatestByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity;
 
     /**
+     * 根据 code 查找最近一次发布到市场的版本.
+     */
+    public function findLatestMarketByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity;
+
+    /**
      * 根据 code 查询当前版本或最新版本.
      */
     public function findCurrentOrLatestByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity;

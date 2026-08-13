@@ -144,6 +144,19 @@ class SkillVersionRepository extends AbstractRepository implements SkillVersionR
         return $this->toEntity($model->toArray());
     }
 
+    public function findLatestMarketByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity
+    {
+        $builder = $this->createBuilder($dataIsolation, $this->skillVersionModel::query());
+        $model = $builder
+            ->where('code', $code)
+            ->where('publish_target_type', PublishTargetType::MARKET->value)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'DESC')
+            ->first();
+
+        return $model === null ? null : $this->toEntity($model->toArray());
+    }
+
     public function findCurrentOrLatestByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity
     {
         $builder = $this->createBuilder($dataIsolation, $this->skillVersionModel::query());

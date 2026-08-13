@@ -82,4 +82,9 @@ return [
     'query_codes_item_must_be_string' => 'each item in codes must be a string',
     'query_codes_item_too_long' => 'each code must not exceed 64 characters',
     'export_failed' => 'Skill export failed. Please try again later',
+    'version_required' => 'Version is required',
+    'official_organization_required' => 'Only the official organization can manage official Skills',
+    'official_import_source_required' => 'Exactly one of import_token or file_key is required',
+    'official_import_source_conflict' => 'import_token and file_key cannot be used together',
+    'official_skill_not_found' => 'Official Skill not found',
 ];

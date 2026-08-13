@@ -25,6 +25,9 @@ class PublishSkillRequestDTO extends AbstractRequestDTO
 
     public bool $exportFileFromProject = true;
 
+    /** @var int[] */
+    public array $categoryIds = [];
+
     public function getVersion(): string
     {
         return $this->version;
@@ -75,6 +78,18 @@ class PublishSkillRequestDTO extends AbstractRequestDTO
         $this->exportFileFromProject = $exportFileFromProject;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        return array_values(array_unique(array_map('intval', $this->categoryIds)));
+    }
+
+    /** @param array<int, int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): void
+    {
+        $this->categoryIds = $categoryIds;
+    }
+
     public function toPublishTargetValue(): ?PublishTargetValue
     {
         return PublishTargetValue::fromArray($this->publishTargetValue);
@@ -110,6 +125,8 @@ class PublishSkillRequestDTO extends AbstractRequestDTO
             'publish_target_value.department_ids' => 'nullable|array',
             'publish_target_value.department_ids.*' => 'string|max:64',
             'export_file_from_project' => 'nullable|boolean',
+            'category_ids' => 'exclude_unless:publish_target_type,MARKET|nullable|array|max:100',
+            'category_ids.*' => 'integer|min:1',
         ];
     }
 

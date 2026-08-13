@@ -983,12 +983,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             versionDescriptionI18n: $versionDescriptionI18n,
             publishTargetType: $publishTargetType,
             publishTargetValue: $publishTargetValue,
-            categoryId: $latestVersion?->getCategoryId(),
             categoryIds: $latestVersion === null || $latestVersion->getId() === null
                 ? []
                 : $this->superMagicAgentCategoryRelationDomainService->getVersionCategoryIds(
                     $latestVersion->getId(),
-                    $latestVersion->getCategoryId()
                 ),
         );
     }
@@ -1625,7 +1623,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 continue;
             }
 
-            $version->setCategoryIds($categoryIdsMap[$versionId] ?? $version->getCategoryIds());
+            $version->setCategoryIds($categoryIdsMap[$versionId] ?? []);
         }
     }
 

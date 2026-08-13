@@ -40,6 +40,7 @@ class SkillVersionDomainService
         protected SkillVersionRepositoryInterface $skillVersionRepository,
         protected UserSkillRepositoryInterface $userSkillRepository,
         protected SkillMarketDomainService $skillMarketDomainService,
+        protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
     ) {
     }
 
@@ -187,6 +188,11 @@ class SkillVersionDomainService
         return $this->skillVersionRepository->findLatestByCode($dataIsolation, $code);
     }
 
+    public function findLatestMarketSkillVersionByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity
+    {
+        return $this->skillVersionRepository->findLatestMarketByCode($dataIsolation, $code);
+    }
+
     public function findLatestPublishedSkillVersionByCode(SkillDataIsolation $dataIsolation, string $code): ?SkillVersionEntity
     {
         return $this->skillVersionRepository->findLatestPublishedByCode($dataIsolation, $code);
@@ -276,6 +282,12 @@ class SkillVersionDomainService
             $this->skillVersionRepository->clearCurrentVersion($dataIsolation, $skillEntity->getCode());
             $versionEntity = $this->saveSkillVersion($dataIsolation, $versionEntity);
 
+            $this->skillCategoryRelationDomainService->replaceVersionCategories(
+                $versionEntity->getOrganizationCode(),
+                $versionEntity->getId() ?? 0,
+                []
+            );
+
             $skillEntity->setLatestPublishedAt($versionEntity->getPublishedAt());
             $this->skillRepository->save($dataIsolation, $skillEntity);
 
@@ -290,7 +302,16 @@ class SkillVersionDomainService
         $versionEntity->setPublishedAt(null);
         $versionEntity->setIsCurrentVersion(false);
 
-        return $this->saveSkillVersion($dataIsolation, $versionEntity);
+        $versionEntity = $this->saveSkillVersion($dataIsolation, $versionEntity);
+        if ($publishTargetType === PublishTargetType::MARKET) {
+            $this->skillCategoryRelationDomainService->replaceVersionCategories(
+                $versionEntity->getOrganizationCode(),
+                $versionEntity->getId() ?? 0,
+                $versionEntity->getCategoryIds()
+            );
+        }
+
+        return $versionEntity;
     }
 
     /**
@@ -557,7 +578,6 @@ class SkillVersionDomainService
             'logo' => $skillVersion->getLogo(),
             'publisher_id' => $skillVersion->getCreatorId(),
             'publisher_type' => $publisherType->value,
-            'category_id' => null,
             'publish_status' => PublishStatus::PUBLISHED->value,
             'install_count' => 0,
         ]);

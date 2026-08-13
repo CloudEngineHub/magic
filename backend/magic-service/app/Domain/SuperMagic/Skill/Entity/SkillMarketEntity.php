@@ -72,10 +72,8 @@ class SkillMarketEntity extends AbstractEntity
      */
     protected PublisherType $publisherType = PublisherType::USER;
 
-    /**
-     * @var null|int 分类 ID
-     */
-    protected ?int $categoryId = null;
+    /** @var int[] */
+    protected array $categoryIds = [];
 
     /**
      * @var PublishStatus 发布状态
@@ -139,7 +137,7 @@ class SkillMarketEntity extends AbstractEntity
             'logo' => $this->logo,
             'publisher_id' => $this->publisherId,
             'publisher_type' => $this->publisherType->value,
-            'category_id' => $this->categoryId,
+            'category_ids' => $this->categoryIds,
             'publish_status' => $this->publishStatus->value,
             'install_count' => $this->installCount,
             'sort_order' => $this->sortOrder,
@@ -274,27 +272,25 @@ class SkillMarketEntity extends AbstractEntity
         return $this->publisherType;
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        return $this->categoryIds;
+    }
+
+    /** @param array<int, int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): self
+    {
+        $this->categoryIds = array_values(array_unique(array_map('intval', $categoryIds)));
+        return $this;
+    }
+
     public function setPublisherType(PublisherType|string $publisherType): self
     {
         if ($publisherType instanceof PublisherType) {
             $this->publisherType = $publisherType;
         } else {
             $this->publisherType = PublisherType::from($publisherType);
-        }
-        return $this;
-    }
-
-    public function getCategoryId(): ?int
-    {
-        return $this->categoryId;
-    }
-
-    public function setCategoryId(null|int|string $categoryId): self
-    {
-        if ($categoryId === null) {
-            $this->categoryId = null;
-        } else {
-            $this->categoryId = is_string($categoryId) ? (int) $categoryId : $categoryId;
         }
         return $this;
     }

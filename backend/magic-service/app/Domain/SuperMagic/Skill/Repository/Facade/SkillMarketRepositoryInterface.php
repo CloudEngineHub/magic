@@ -41,6 +41,8 @@ interface SkillMarketRepositoryInterface
      */
     public function findBySkillCode(string $skillCode): ?SkillMarketEntity;
 
+    public function findOfficialBySkillCode(string $organizationCode, string $skillCode): ?SkillMarketEntity;
+
     /**
      * Find the latest published market skill by skill code.
      */
@@ -80,6 +82,7 @@ interface SkillMarketRepositoryInterface
         ?string $packageName,
         ?string $startTime,
         ?string $endTime,
+        array $categoryIds,
         string $orderBy,
         Page $page
     ): array;
@@ -128,7 +131,6 @@ interface SkillMarketRepositoryInterface
      * 按传入字段部分更新市场技能信息.
      *
      * @param array{
-     *     category_id?: null|int,
      *     sort_order?: null|int,
      *     is_featured?: bool,
      *     is_hidden?: bool

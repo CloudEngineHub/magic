@@ -30,6 +30,8 @@ class SkillQueryFormRequest extends FormRequest
             // 市场技能库等场景：按 skill_code 批量过滤（不传则不限定）
             'codes' => 'nullable|array|max:1000',
             'codes.*' => 'nullable|string|max:64',
+            'category_ids' => 'nullable|array|max:100',
+            'category_ids.*' => 'integer|min:1',
         ];
     }
 
@@ -69,6 +71,8 @@ class SkillQueryFormRequest extends FormRequest
             'codes.max' => trans('skill.query_codes_too_many'),
             'codes.*.string' => trans('skill.query_codes_item_must_be_string'),
             'codes.*.max' => trans('skill.query_codes_item_too_long'),
+            'category_ids.array' => trans('validation.array', ['attribute' => 'category_ids']),
+            'category_ids.*.integer' => trans('validation.integer', ['attribute' => 'category_ids']),
         ];
     }
 

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Skill\Facade;
 
+use App\Application\SuperMagic\Skill\Service\AdminSkillCategoryAppService;
 use App\Application\SuperMagic\Skill\Service\SkillMarketAppService;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Infrastructure\Util\Context\RequestContext;
@@ -22,8 +23,15 @@ class SkillMarketApi extends AbstractApi
     public function __construct(
         protected RequestInterface $request,
         protected SkillMarketAppService $skillMarketAppService,
+        protected AdminSkillCategoryAppService $skillCategoryAppService,
     ) {
         parent::__construct($request);
+    }
+
+    public function getCategories(): array
+    {
+        $includeEmpty = filter_var($this->request->input('include_empty', false), FILTER_VALIDATE_BOOLEAN);
+        return ['list' => $this->skillCategoryAppService->getPublicTree($includeEmpty)];
     }
 
     /**

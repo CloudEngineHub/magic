@@ -31,10 +31,13 @@ class SkillMarketListItemDTO implements JsonSerializable
     /** @deprecated 仅序列化为 `user_skill_code`，请改用 `code` */
     private string $userSkillCode;
 
+    /** @deprecated 前端请使用 `name`，后续将移除。 */
     private array $nameI18n;
 
+    /** @deprecated 前端请使用 `description`，后续将移除。 */
     private array $descriptionI18n;
 
+    /** @deprecated 前端请使用 `source`，后续将移除。 */
     private array $sourceI18n;
 
     private string $logo;
@@ -61,6 +64,8 @@ class SkillMarketListItemDTO implements JsonSerializable
 
     private string $description;
 
+    private string $source;
+
     private string $fileKey;
 
     private ?string $fileUrl;
@@ -69,12 +74,15 @@ class SkillMarketListItemDTO implements JsonSerializable
 
     private string $latestVersion;
 
+    private array $categoryIds = [];
+
     public function __construct(
         int $id,
         string $skillCode,
         string $userSkillCode,
         string $name,
         string $description,
+        string $source,
         array $nameI18n,
         array $descriptionI18n,
         array $sourceI18n,
@@ -92,6 +100,7 @@ class SkillMarketListItemDTO implements JsonSerializable
         ?string $fileUrl = null,
         string $packageName = '',
         string $latestVersion = '',
+        array $categoryIds = [],
     ) {
         $this->id = $id;
         $this->code = $skillCode;
@@ -99,6 +108,7 @@ class SkillMarketListItemDTO implements JsonSerializable
         $this->userSkillCode = $userSkillCode;
         $this->name = $name;
         $this->description = $description;
+        $this->source = $source;
         $this->nameI18n = $nameI18n;
         $this->descriptionI18n = $descriptionI18n;
         $this->sourceI18n = $sourceI18n;
@@ -116,6 +126,7 @@ class SkillMarketListItemDTO implements JsonSerializable
         $this->fileUrl = $fileUrl;
         $this->packageName = $packageName;
         $this->latestVersion = $latestVersion;
+        $this->categoryIds = $categoryIds;
     }
 
     public function jsonSerialize(): array
@@ -128,8 +139,12 @@ class SkillMarketListItemDTO implements JsonSerializable
             'user_skill_code' => $this->userSkillCode,
             'name' => $this->name,
             'description' => $this->description,
+            'source' => $this->source,
+            // Deprecated: use `name` instead.
             'name_i18n' => $this->nameI18n,
+            // Deprecated: use `description` instead.
             'description_i18n' => $this->descriptionI18n,
+            // Deprecated: use `source` instead.
             'source_i18n' => $this->sourceI18n,
             'logo' => $this->logo,
             'publisher_type' => $this->publisherType,
@@ -145,6 +160,7 @@ class SkillMarketListItemDTO implements JsonSerializable
             'file_url' => $this->fileUrl,
             'package_name' => $this->packageName,
             'latest_version' => $this->latestVersion,
+            'category_ids' => array_map('strval', $this->categoryIds),
         ];
     }
 }

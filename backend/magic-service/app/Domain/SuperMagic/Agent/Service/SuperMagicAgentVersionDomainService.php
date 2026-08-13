@@ -336,7 +336,7 @@ class SuperMagicAgentVersionDomainService
         $marketEntity->setIcon($versionEntity->getIcon());
         $marketEntity->setPublisherId($versionEntity->getCreator());
         $marketEntity->setPublisherType(PublisherType::USER);
-        $marketEntity->setCategoryId($versionEntity->getCategoryId());
+        $marketEntity->setCategoryIds($this->categoryRelationDomainService->getVersionCategoryIds((int) $versionEntity->getId()));
         $marketEntity->setPublishStatus(PublishStatus::PUBLISHED);
         $marketEntity->setOrganizationCode($versionEntity->getOrganizationCode());
         $marketEntity->setMarketType(AgentMarketType::ORGANIZATION);
@@ -439,7 +439,8 @@ class SuperMagicAgentVersionDomainService
             $storeAgentEntity->setIcon($versionEntity->getIcon());
             $storeAgentEntity->setPublisherId($versionEntity->getCreator());
             $storeAgentEntity->setPublisherType($publisherTypeEnum);
-            $storeAgentEntity->setCategoryId($versionEntity->getCategoryId());
+            $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds((int) $versionEntity->getId());
+            $storeAgentEntity->setCategoryIds($categoryIds);
             $storeAgentEntity->setPublishStatus(PublishStatus::PUBLISHED);
             // 归属组织用于文件等资源上下文，公开性质由 market_type 明确定义。
             $storeAgentEntity->setOrganizationCode($versionEntity->getOrganizationCode());
@@ -465,10 +466,6 @@ class SuperMagicAgentVersionDomainService
 
             $storeAgentEntity = $this->storeAgentRepository->saveOrUpdate($dataIsolation, $storeAgentEntity);
             if ($storeAgentEntity->getId() !== null) {
-                $categoryIds = $this->categoryRelationDomainService->getVersionCategoryIds(
-                    (int) $versionEntity->getId(),
-                    $versionEntity->getCategoryId()
-                );
                 $this->categoryRelationDomainService->replaceMarketCategories(
                     $dataIsolation,
                     $storeAgentEntity->getId(),

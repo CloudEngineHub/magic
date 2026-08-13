@@ -15,6 +15,7 @@ use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
+use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -29,7 +30,8 @@ class SkillMarketAppService extends AbstractSkillAppService
     public function __construct(
         protected SkillMarketDomainService $skillMarketDomainService,
         protected MagicUserDomainService $magicUserDomainService,
-        protected TaskFileDomainService $taskFileDomainService
+        protected TaskFileDomainService $taskFileDomainService,
+        protected SkillCategoryRelationDomainService $skillCategoryRelationDomainService,
     ) {
     }
 
@@ -54,6 +56,7 @@ class SkillMarketAppService extends AbstractSkillAppService
         if ($skillMarket === null) {
             ExceptionBuilder::throw(SkillErrorCode::STORE_SKILL_NOT_FOUND, 'skill.store_skill_not_found');
         }
+        $skillMarket->setCategoryIds($this->skillCategoryRelationDomainService->getMarketCategoryIds($skillMarket->getId() ?? 0));
 
         $skillVersion = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter(
             $skillMarket->getSkillVersionId()
@@ -117,6 +120,11 @@ class SkillMarketAppService extends AbstractSkillAppService
 
         $skillMarketEntities = $result['list'];
         $total = $result['total'];
+
+        $categoryMap = $this->skillCategoryRelationDomainService->getMarketCategoryIdsMap(array_map(static fn (SkillMarketEntity $entity) => (int) $entity->getId(), $skillMarketEntities));
+        foreach ($skillMarketEntities as $entity) {
+            $entity->setCategoryIds($categoryMap[$entity->getId() ?? 0] ?? []);
+        }
 
         if (empty($skillMarketEntities)) {
             return [

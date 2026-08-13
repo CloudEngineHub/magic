@@ -13,12 +13,16 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetValue;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\Core\AbstractEntity;
+use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * Skill version entity.
  */
 class SkillVersionEntity extends AbstractEntity
 {
+    /** @var int[] */
+    protected array $categoryIds = [];
+
     /**
      * @var int 主键 ID（版本ID）
      */
@@ -176,6 +180,19 @@ class SkillVersionEntity extends AbstractEntity
         parent::__construct($data);
     }
 
+    /** @return int[] */
+    public function getCategoryIds(): array
+    {
+        return $this->categoryIds;
+    }
+
+    /** @param array<int, int|string> $categoryIds */
+    public function setCategoryIds(array $categoryIds): self
+    {
+        $this->categoryIds = array_values(array_unique(array_map('intval', $categoryIds)));
+        return $this;
+    }
+
     /**
      * 转换为数组.
      */
@@ -331,6 +348,19 @@ class SkillVersionEntity extends AbstractEntity
     {
         $this->sourceI18n = $sourceI18n;
         return $this;
+    }
+
+    public function getI18nSource(string $language): string
+    {
+        if (empty($this->sourceI18n)) {
+            return '';
+        }
+
+        if (! empty($this->sourceI18n[$language])) {
+            return $this->sourceI18n[$language];
+        }
+
+        return $this->sourceI18n[LanguageEnum::DEFAULT->value] ?? '';
     }
 
     public function getSearchText(): ?string

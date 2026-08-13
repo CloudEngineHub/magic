@@ -82,4 +82,9 @@ return [
     'query_codes_item_must_be_string' => 'codes 中的每一项必须是字符串',
     'query_codes_item_too_long' => '单个 code 长度不能超过 64',
     'export_failed' => '技能导出失败，请稍后重试',
+    'version_required' => '版本号不能为空',
+    'official_organization_required' => '仅官方组织允许维护官方 Skill',
+    'official_import_source_required' => 'import_token 和 file_key 必须传入一个',
+    'official_import_source_conflict' => 'import_token 和 file_key 只能传入一个',
+    'official_skill_not_found' => '官方 Skill 不存在',
 ];

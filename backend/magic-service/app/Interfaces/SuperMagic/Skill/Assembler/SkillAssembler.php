@@ -171,6 +171,7 @@ class SkillAssembler
         ?string $fileUrl = null,
         string $packageName = '',
         string $latestVersion = '',
+        string $source = '',
         array $sourceI18n = [],
     ): SkillMarketListItemDTO {
         $language = CoContext::getLanguage();
@@ -185,6 +186,7 @@ class SkillAssembler
             userSkillCode: $entity->getSkillCode(),
             name: $name,
             description: $description,
+            source: $source,
             nameI18n: $nameI18n,
             descriptionI18n: $descriptionI18n,
             sourceI18n: $sourceI18n,
@@ -202,6 +204,7 @@ class SkillAssembler
             fileUrl: $fileUrl,
             packageName: $packageName,
             latestVersion: $latestVersion,
+            categoryIds: $entity->getCategoryIds(),
         );
     }
 
@@ -293,6 +296,7 @@ class SkillAssembler
             publishTargetType: $version->getPublishTargetType()->value,
             isCurrentVersion: $version->isCurrentVersion(),
             publishedAt: $version->getPublishedAt(),
+            categoryIds: $version->getCategoryIds(),
         );
     }
 
@@ -424,6 +428,7 @@ class SkillAssembler
             $fileUrl = $version?->getFileUrl();
             $packageName = (string) ($version?->getPackageName() ?? '');
             $latestVersion = (string) ($version?->getVersion() ?? '');
+            $source = $version?->getI18nSource(CoContext::getLanguage()) ?? '';
             $sourceI18n = $version?->getSourceI18n() ?? [];
 
             $listItems[] = self::createMarketListItemDTO(
@@ -436,6 +441,7 @@ class SkillAssembler
                 fileUrl: $fileUrl,
                 packageName: $packageName,
                 latestVersion: $latestVersion,
+                source: $source,
                 sourceI18n: $sourceI18n,
             );
         }
@@ -486,6 +492,7 @@ class SkillAssembler
             isAdded: $isAdded,
             isCreator: $isCreator,
             isFeatured: $skillMarket->isFeatured(),
+            categoryIds: $skillMarket->getCategoryIds(),
         );
     }
 

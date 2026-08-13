@@ -60,6 +60,11 @@ class SkillMarketDomainService
         return $this->skillMarketRepository->findBySkillCode($skillCode);
     }
 
+    public function findOfficialSkillBySkillCode(string $organizationCode, string $skillCode): ?SkillMarketEntity
+    {
+        return $this->skillMarketRepository->findOfficialBySkillCode($organizationCode, $skillCode);
+    }
+
     /**
      * Find the latest published market skill by skill code.
      */
@@ -87,6 +92,9 @@ class SkillMarketDomainService
         SkillQuery $query,
         Page $page
     ): array {
+        if ($query->getCategoryIds() !== null && $query->getCategoryIds() !== []) {
+            $query->setCategoryIds($this->skillCategoryRepository->findSelfAndDescendantIds($query->getCategoryIds()));
+        }
         return $this->skillMarketRepository->queries($query, $page);
     }
 
@@ -104,9 +112,13 @@ class SkillMarketDomainService
         ?string $packageName,
         ?string $startTime,
         ?string $endTime,
+        array $categoryIds,
         string $orderBy,
         Page $page
     ): array {
+        if ($categoryIds !== []) {
+            $categoryIds = $this->skillCategoryRepository->findSelfAndDescendantIds($categoryIds);
+        }
         return $this->skillMarketRepository->queryAdminMarkets(
             $publishStatus,
             $organizationCode,
@@ -116,6 +128,7 @@ class SkillMarketDomainService
             $packageName,
             $startTime,
             $endTime,
+            $categoryIds,
             $orderBy,
             $page
         );
@@ -184,7 +197,7 @@ class SkillMarketDomainService
     /**
      * 按传入字段部分更新市场 Skill 信息.
      *
-     * @param array{sort_order?: null|int, is_featured?: bool, is_hidden?: bool, category_id?: null|int} $payload
+     * @param array{sort_order?: null|int, is_featured?: bool, is_hidden?: bool} $payload
      */
     public function updateInfoById(int $id, array $payload): bool
     {

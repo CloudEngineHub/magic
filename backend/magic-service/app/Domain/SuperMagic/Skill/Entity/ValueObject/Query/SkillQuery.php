@@ -24,6 +24,9 @@ class SkillQuery extends AbstractQuery
      */
     protected ?array $codes = null;
 
+    /** @var null|int[] */
+    protected ?array $categoryIds = null;
+
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -68,5 +71,17 @@ class SkillQuery extends AbstractQuery
     public function setCodes(?array $codes): void
     {
         $this->codes = $codes;
+    }
+
+    /** @return null|int[] */
+    public function getCategoryIds(): ?array
+    {
+        return $this->categoryIds;
+    }
+
+    /** @param null|array<int, int|string> $categoryIds */
+    public function setCategoryIds(?array $categoryIds): void
+    {
+        $this->categoryIds = $categoryIds === null ? null : array_values(array_unique(array_map('intval', $categoryIds)));
     }
 }
