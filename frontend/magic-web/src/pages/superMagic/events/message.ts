@@ -53,6 +53,7 @@ export interface SuperMagicAddContentToChatPayload {
 	content?: JSONContent
 	extraData?: {
 		hasInput?: boolean
+		focusAtEnd?: boolean
 	}
 }
 
@@ -78,6 +79,19 @@ export interface SuperMagicCreateNewTopicPayload {
 		shouldClearEditorAfterSend?: SendMessageByContentPayload["shouldClearEditorAfterSend"]
 		extra?: SendMessageByContentPayload["extra"]
 	}
+}
+
+export type SuperMagicWidgetEditorCommandName =
+	| "setInput"
+	| "appendInput"
+	| "clearInput"
+	| "getInput"
+
+/** Carries one Widget-only editor request and returns its plain-text result to the bridge. */
+export interface SuperMagicWidgetEditorCommandPayload {
+	command: SuperMagicWidgetEditorCommandName
+	content?: string
+	respond: (result?: string) => void
 }
 
 /**

@@ -5,7 +5,7 @@ import { CanvasProvider, useCanvas } from "../../../providers/CanvasProvider"
 import { useCanvasEventListeners } from "../useCanvasEventListeners"
 import { EventEmitter } from "../../../../runtime/core/EventEmitter"
 import type { Canvas } from "../../../../runtime/core/Canvas"
-import type { CanvasConnection } from "../../../../runtime/document/types"
+import type { CanvasConnection, CanvasDocument } from "../../../../runtime/document/types"
 import type { CanvasDesignDataPatch } from "../../../../public/props"
 
 const connection: CanvasConnection = {
@@ -33,6 +33,10 @@ function createCanvasStub() {
 	}
 	const elementManager = {
 		exportDocumentPatch: vi.fn(),
+		getTemporaryElementMetadata: vi.fn((elementId: string) => {
+			void elementId
+			return null
+		}),
 	}
 	const canvas = {
 		eventEmitter,
@@ -50,9 +54,11 @@ function createCanvasStub() {
 function TestListener({
 	canvas,
 	onPatch,
+	onChange,
 }: {
 	canvas: Canvas
 	onPatch: (patch: CanvasDesignDataPatch) => void
+	onChange?: (canvasData: CanvasDocument) => void
 }) {
 	const { setCanvas } = useCanvas()
 
@@ -63,6 +69,7 @@ function TestListener({
 
 	useCanvasEventListeners({
 		onCanvasDesignDataPatchChange: onPatch,
+		onCanvasDesignDataChange: onChange,
 	})
 
 	return null
@@ -116,6 +123,112 @@ describe("useCanvasEventListeners connection changes", () => {
 				source: "connection:change",
 				changedConnectionIds: [connection.id],
 			}),
+		)
+	})
+
+	it("does not forward runtime-only generation deletions to the host patch", async () => {
+		const { canvas, elementManager, eventEmitter } = createCanvasStub()
+		elementManager.exportDocumentPatch.mockReturnValue({
+			upserts: [],
+			deletedElementIds: [],
+			changedElementIds: ["persisted-image"],
+		})
+		const onPatch = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("element:deleted")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({
+				type: "element:deleted",
+				data: { elementId: "runtime-result", persistence: "runtime-only" },
+			})
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["persisted-image"], phase: "commit" },
+			})
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(elementManager.exportDocumentPatch).toHaveBeenCalledWith({
+			changedElementIds: ["persisted-image"],
+			deletedElementIds: [],
+			elementNameChanges: undefined,
+			includeTemporary: false,
+		})
+		expect(onPatch).toHaveBeenCalledWith(
+			expect.objectContaining({ deletedElementIds: [] }),
+			expect.anything(),
+		)
+	})
+
+	it("does not schedule a host patch for generation-only element changes", async () => {
+		const { canvas, elementManager, eventEmitter } = createCanvasStub()
+		elementManager.getTemporaryElementMetadata.mockImplementation((elementId: string) =>
+			elementId === "runtime-result"
+				? {
+						kind: "generation-result",
+						historyPolicy: "exclude",
+						clipboardPolicy: "exclude",
+					}
+				: null,
+		)
+		const onPatch = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={onPatch} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("element:change")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({
+				type: "element:change",
+				data: { elementIds: ["runtime-result"], phase: "commit" },
+			})
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(elementManager.exportDocumentPatch).not.toHaveBeenCalled()
+		expect(onPatch).not.toHaveBeenCalled()
+	})
+
+	it("exports the full document when a history restore changes connections", async () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		const onChange = vi.fn()
+
+		render(
+			<CanvasProvider>
+				<TestListener canvas={canvas} onPatch={vi.fn()} onChange={onChange} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => {
+			expect(eventEmitter.listenerCount("document:restored")).toBe(1)
+		})
+
+		vi.useFakeTimers()
+		act(() => {
+			eventEmitter.emit({ type: "document:restored", data: undefined })
+			vi.advanceTimersByTime(121)
+		})
+
+		expect(onChange).toHaveBeenCalledWith(
+			{ elements: [], connections: [connection] },
+			expect.objectContaining({ source: "document:restored" }),
 		)
 	})
 })

@@ -100,7 +100,7 @@ class ShareItemDTO
     public ?string $mainFileName = null;
 
     /**
-     * @var null|string 分享链接（仅当请求中 show_share_url=true 且环境配置了 MAGIC_FRONTEND_DOMAIN 时返回）
+     * @var null|string 分享链接（仅当请求中 show_share_url=true 且环境配置了 MAGIC_WEB_URL 时返回）
      */
     public ?string $shareUrl = null;
 

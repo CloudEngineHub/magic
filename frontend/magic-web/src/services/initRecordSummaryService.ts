@@ -40,6 +40,11 @@ export async function tryRestorePreviousRecordSummarySession({
 		const recordSummaryService = initializeService()
 		await recordSummaryService.tryRestorePreviousSession()
 	} catch (error) {
-		logger.error("恢复录音会话失败", error)
+		logger.error({
+			eventKey: "restore_recording_session_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "恢复录音会话失败",
+		})
 	}
 }

@@ -135,7 +135,7 @@ describe("PPTIncrementalUpdateService", () => {
 		expect(generateSlideScreenshot).toHaveBeenCalledWith(0, "<div>server-new-content</div>")
 	})
 
-	it("uses ensureSlideScreenshot for added slide thumbnails to avoid duplicate generation", async () => {
+	it("keeps added slides idle until active or sidebar demand loads them", async () => {
 		const generateSlideScreenshot = vi.fn(async () => undefined)
 		const ensureSlideScreenshot = vi.fn(async () => undefined)
 		const context = createContext({
@@ -165,8 +165,43 @@ describe("PPTIncrementalUpdateService", () => {
 			context,
 		)
 
-		expect(ensureSlideScreenshot).toHaveBeenCalledWith(1)
+		expect(context.slides[1]?.loadingState).toBe("idle")
+		expect(context.loadSlideContent).not.toHaveBeenCalled()
+		expect(ensureSlideScreenshot).not.toHaveBeenCalled()
 		expect(generateSlideScreenshot).not.toHaveBeenCalled()
+	})
+
+	it("drops an addition when a newer config update supersedes it", async () => {
+		let resolveUrls: (value: Map<string, string>) => void = () => undefined
+		pathMappingService.fetchUrlsForFileIds.mockImplementationOnce(
+			() =>
+				new Promise<Map<string, string>>((resolve) => {
+					resolveUrls = resolve
+				}),
+		)
+		let current = true
+		const context = createContext()
+		context.isCurrent = () => current
+
+		const updatePromise = incrementalUpdateService.applyIncrementalUpdates(
+			{
+				hasChanges: true,
+				added: [{ path: "slide-2.html", index: 1 }],
+				removed: [],
+				reordered: false,
+			},
+			new Set(),
+			["slide-1.html", "slide-2.html"],
+			context,
+		)
+
+		await vi.waitFor(() => expect(pathMappingService.fetchUrlsForFileIds).toHaveBeenCalled())
+		current = false
+		resolveUrls(new Map([["file-2", "https://example.com/new-slide-2"]]))
+		await updatePromise
+
+		expect(context.setSlides).not.toHaveBeenCalled()
+		expect(context.slides).toHaveLength(1)
 	})
 
 	it("detects updated files inside nested attachment items", () => {

@@ -28,6 +28,17 @@ export const generatePlatformPackageApi = (client: HttpClient) => {
 			return client.get<PlatformPackage.ModeDetail>(RequestUrl.getDefaultMode)
 		},
 
+		getDefaultAgentSetting() {
+			return client.get<PlatformPackage.DefaultAgentSetting>(RequestUrl.defaultAgentSetting)
+		},
+
+		updateDefaultAgentSetting(data: PlatformPackage.UpdateDefaultAgentSettingParams) {
+			return client.put<PlatformPackage.DefaultAgentSetting>(
+				RequestUrl.defaultAgentSetting,
+				data,
+			)
+		},
+
 		getModelDetail(id: string) {
 			return client.get<PlatformPackage.ModeDetail>(
 				genRequestUrl(RequestUrl.getModeDetail, { id }),

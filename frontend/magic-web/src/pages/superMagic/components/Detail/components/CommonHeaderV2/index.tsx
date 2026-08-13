@@ -71,7 +71,12 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 	const effectiveShowDownload = useDownloadVisibility(showDownload, isMobile)
-	const { hideShareFile, hideFullscreen } = useFileActionVisibility()
+	const {
+		hideShareFile,
+		hideFullscreen,
+		hideVersionHistory,
+		showShareFileInReadOnly,
+	} = useFileActionVisibility()
 	const headerContainerRef = useRef<HTMLDivElement>(null)
 	const rightActionsContainerRef = useRef<HTMLDivElement>(null)
 	const showButtonText = useContainerShowButtonText(rightActionsContainerRef)
@@ -157,6 +162,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 
 		if (hideShareFile) hideDefaults.add("share")
 		if (hideFullscreen) hideDefaults.add("fullscreen")
+		if (hideVersionHistory) hideDefaults.add("versionMenu")
 
 		if (hideDefaults.size === 0) return actionConfig
 
@@ -164,7 +170,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			...actionConfig,
 			hideDefaults: Array.from(hideDefaults),
 		}
-	}, [actionConfig, hideShareFile, hideFullscreen])
+	}, [actionConfig, hideShareFile, hideFullscreen, hideVersionHistory])
 
 	const actionContext = useMemo(
 		() => ({
@@ -181,7 +187,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			showDownload: effectiveShowDownload,
 			showRefreshButton,
 			isNewestFileVersion,
-			allowEdit,
+			allowEdit: allowEdit || showShareFileInReadOnly,
 			currentFile,
 			attachments,
 			fileContent,
@@ -224,6 +230,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			showButtonText,
 			effectiveShowDownload,
 			showRefreshButton,
+			showShareFileInReadOnly,
 			type,
 			viewMode,
 			getPopupContainer,
@@ -311,7 +318,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 				),
 				onClick: handleLocateFile,
 			},
-			...(isShareRoute ? [] : [historyItem]),
+			...(isShareRoute || hideVersionHistory ? [] : [historyItem]),
 			...(extraMoreMenuItems ?? []),
 		]
 	}, [
@@ -319,6 +326,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		fileVersion,
 		handleChangeFileVersion,
 		handleLocateFile,
+		hideVersionHistory,
 		isShareRoute,
 		onCompareVersion,
 		t,

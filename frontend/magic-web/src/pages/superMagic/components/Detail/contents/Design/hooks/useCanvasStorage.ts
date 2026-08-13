@@ -46,7 +46,7 @@ export function useCanvasStorage(options: UseCanvasStorageOptions): UseCanvasSto
 		[attachmentIndex, designProjectBasePath, flatAttachments],
 	)
 
-	// 获取 storage key（基于目录ID），用于 viewport、expandedElementIds 和 layersCollapsed 的保存
+	// 获取 storage key（基于目录 ID），用于 viewport、图层 UI 和 minimapOpen 等项目级状态。
 	const storageKey = useMemo(() => {
 		return designProjectId ? `MAGIC:supermagic-design:${designProjectId}` : null
 	}, [designProjectId])

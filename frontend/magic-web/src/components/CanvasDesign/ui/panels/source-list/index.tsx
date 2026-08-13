@@ -1,4 +1,4 @@
-import { Link2, Maximize2, PlusIcon, TriangleAlert, X } from "lucide-react"
+import { Link2, Maximize2, PlusIcon, X } from "lucide-react"
 import {
 	Fragment,
 	useCallback,
@@ -14,12 +14,23 @@ import ReferenceMediaPreview from "../../previews/reference-media/index"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn/tooltip"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { Checkbox } from "../../primitives/shadcn/checkbox"
 import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { CropConfig } from "../../../runtime/document/types"
+
+const DEFAULT_OVERLAY_SLOT_ORDINALS: [number, number] = [0, 1]
+
+export interface SourceListSelectionOption {
+	checked: boolean
+	disabled?: boolean
+	ariaLabel: string
+	title?: string
+	onCheckedChange: (checked: boolean) => void
+}
 
 /** 素材槽位：空槽为「+ 标签」；已配置时由列表内置铺满预览与 hover 删除 */
 export interface SourceListSlotOption {
@@ -33,11 +44,15 @@ export interface SourceListSlotOption {
 	/** 已选资源路径，有值时渲染预览 + hover 删除，不再使用默认「+」内容 */
 	resourcePath?: string
 	resourceFileName?: string
+	/** 已配置资源的状态标签，例如首帧/尾帧分配状态 */
+	resourceStatusLabel?: string
 	sourceCrop?: CropConfig
 	/** 只读资源：可预览/移除，但点击槽位不会进入替换选择流程 */
 	readOnly?: boolean
-	statusLabel?: string
-	statusTone?: "neutral" | "warning" | "danger"
+	/** 是否为连线媒体；仅用于在资源左上角显示关联图标 */
+	isLinked?: boolean
+	/** 可选选择能力：用于将槽位作为候选资源，由业务层控制是否参与提交 */
+	selection?: SourceListSelectionOption
 	onRemoveResource?: () => void
 	/** 删除按钮无障碍标签 */
 	removeResourceAriaLabel?: string
@@ -53,6 +68,8 @@ export interface SourceListSlotOption {
 export interface SourceListOverlayOption {
 	kind: "overlay"
 	value: string
+	/** 覆盖层定位的两个槽位序号；未传时默认定位前两个槽位 */
+	betweenSlotOrdinals?: [number, number]
 	render: () => ReactNode
 }
 
@@ -74,6 +91,8 @@ export interface SourceListRenderItemParams {
 	className: string
 	style: CSSProperties
 	content: ReactNode
+	/** SourceList 内置的槽位点击行为；自定义 renderItem 需挂到槽位根节点 */
+	onClick?: () => void
 	/** 有 overlay 且需按槽位定位时，由列表传入并挂到槽位根节点（用于测量两槽中点） */
 	slotRootRef?: RefCallback<HTMLDivElement | null>
 }
@@ -94,20 +113,24 @@ export default function SourceList(props: SourceListProps) {
 	const slotEntries = entries.filter(isSourceListSlotOption)
 	const overlayEntries = entries.filter(isSourceListOverlayOption)
 	const slotCount = slotEntries.length
-	const measureOverlayBetweenFirstTwoSlots = overlayEntries.length > 0 && slotCount >= 2
+	const overlaySlotOrdinals =
+		overlayEntries[0]?.betweenSlotOrdinals ?? DEFAULT_OVERLAY_SLOT_ORDINALS
+	const measureOverlayBetweenSlots =
+		overlayEntries.length > 0 &&
+		overlaySlotOrdinals.every((ordinal) => ordinal >= 0 && ordinal < slotCount)
 
 	const listRef = useRef<HTMLDivElement | null>(null)
 	const slotElRefs = useRef<(HTMLDivElement | null)[]>([])
 	const [overlayPos, setOverlayPos] = useState<{ x: number; y: number } | null>(null)
 
 	const updateOverlayBetweenSlots = useCallback(() => {
-		if (!measureOverlayBetweenFirstTwoSlots) {
+		if (!measureOverlayBetweenSlots) {
 			setOverlayPos(null)
 			return
 		}
 		const list = listRef.current
-		const a = slotElRefs.current[0]
-		const b = slotElRefs.current[1]
+		const a = slotElRefs.current[overlaySlotOrdinals[0]]
+		const b = slotElRefs.current[overlaySlotOrdinals[1]]
 		if (!list || !a || !b) return
 		const lr = list.getBoundingClientRect()
 		const ar = a.getBoundingClientRect()
@@ -115,7 +138,7 @@ export default function SourceList(props: SourceListProps) {
 		const midX = (ar.left + ar.width / 2 + br.left + br.width / 2) / 2 - lr.left
 		const midY = (ar.top + ar.height / 2 + br.top + br.height / 2) / 2 - lr.top
 		setOverlayPos({ x: midX, y: midY })
-	}, [measureOverlayBetweenFirstTwoSlots])
+	}, [measureOverlayBetweenSlots, overlaySlotOrdinals])
 
 	useLayoutEffect(() => {
 		updateOverlayBetweenSlots()
@@ -132,13 +155,13 @@ export default function SourceList(props: SourceListProps) {
 	}, [updateOverlayBetweenSlots, slotCount, overlayEntries.length])
 
 	useEffect(() => {
-		if (!measureOverlayBetweenFirstTwoSlots) return
+		if (!measureOverlayBetweenSlots) return
 		const ro = new ResizeObserver(() => updateOverlayBetweenSlots())
 		const list = listRef.current
 		if (list) ro.observe(list)
 		const observeSlots = () => {
-			const a = slotElRefs.current[0]
-			const b = slotElRefs.current[1]
+			const a = slotElRefs.current[overlaySlotOrdinals[0]]
+			const b = slotElRefs.current[overlaySlotOrdinals[1]]
 			if (a) ro.observe(a)
 			if (b) ro.observe(b)
 		}
@@ -149,7 +172,7 @@ export default function SourceList(props: SourceListProps) {
 			ro.disconnect()
 			window.removeEventListener("resize", updateOverlayBetweenSlots)
 		}
-	}, [measureOverlayBetweenFirstTwoSlots, updateOverlayBetweenSlots])
+	}, [measureOverlayBetweenSlots, overlaySlotOrdinals, updateOverlayBetweenSlots])
 
 	let slotOrdinal = 0
 	return (
@@ -159,7 +182,7 @@ export default function SourceList(props: SourceListProps) {
 					const slotIndexInList = slotOrdinal
 					slotOrdinal += 1
 					const slotRootRef: RefCallback<HTMLDivElement | null> | undefined =
-						measureOverlayBetweenFirstTwoSlots && slotIndexInList <= 1
+						measureOverlayBetweenSlots && overlaySlotOrdinals.includes(slotIndexInList)
 							? (el) => {
 									slotElRefs.current[slotIndexInList] = el
 								}
@@ -198,21 +221,10 @@ export default function SourceList(props: SourceListProps) {
 									crop: entry.sourceCrop,
 								} satisfies MediaResourceFullscreenPreviewItem)
 							: null
-					const statusTone = entry.statusTone ?? "neutral"
-					const statusIcon =
-						entry.statusLabel && statusTone === "neutral" ? (
-							<Link2
-								size={11}
-								className={styles.sourceItemStatusIconSvg}
-								aria-hidden
-							/>
-						) : entry.statusLabel ? (
-							<TriangleAlert
-								size={11}
-								className={styles.sourceItemStatusIconSvg}
-								aria-hidden
-							/>
-						) : null
+					const handleSlotClick =
+						entry.selection && !entry.selection.disabled
+							? () => entry.selection?.onCheckedChange(!entry.selection.checked)
+							: undefined
 					const slotContent = resourcePath ? (
 						<>
 							<div className={styles.sourceItemInnerFilled}>
@@ -225,6 +237,16 @@ export default function SourceList(props: SourceListProps) {
 									sourceCrop={entry.sourceCrop}
 								/>
 							</div>
+							{entry.isLinked ? (
+								<span className={styles.sourceItemLinkedIcon} aria-hidden>
+									<Link2 size={11} className={styles.sourceItemLinkedIconSvg} />
+								</span>
+							) : null}
+							{entry.resourceStatusLabel ? (
+								<span className={styles.sourceItemStatusLabel}>
+									{entry.resourceStatusLabel}
+								</span>
+							) : null}
 							{previewResource && entry.onPreviewResource ? (
 								<button
 									type="button"
@@ -248,14 +270,19 @@ export default function SourceList(props: SourceListProps) {
 									/>
 								</button>
 							) : null}
-							{statusIcon ? (
-								<span
-									className={styles.sourceItemStatusIcon}
-									data-tone={statusTone}
-									aria-label={entry.statusLabel}
-								>
-									{statusIcon}
-								</span>
+							{entry.selection ? (
+								<Checkbox
+									checked={entry.selection.checked}
+									disabled={entry.selection.disabled}
+									className={styles.sourceItemSelectionCheckbox}
+									aria-label={entry.selection.ariaLabel}
+									title={entry.selection.title}
+									onPointerDown={(event) => event.stopPropagation()}
+									onClick={(event) => event.stopPropagation()}
+									onCheckedChange={(checked) =>
+										entry.selection?.onCheckedChange(checked === true)
+									}
+								/>
 							) : null}
 							{entry.onRemoveResource ? (
 								<button
@@ -284,8 +311,7 @@ export default function SourceList(props: SourceListProps) {
 						styles.sourceItem,
 						hasResource && styles.sourceItemHasResource,
 						entry.readOnly && styles.sourceItemReadOnly,
-						entry.statusTone === "danger" && styles.sourceItemDanger,
-						entry.statusTone === "warning" && styles.sourceItemWarning,
+						handleSlotClick && styles.sourceItemSelectable,
 					)
 					const slotItemNode = renderItem ? (
 						renderItem({
@@ -294,34 +320,35 @@ export default function SourceList(props: SourceListProps) {
 							className: slotItemClassName,
 							style: {},
 							content: slotContent,
+							onClick: handleSlotClick,
 							slotRootRef,
 						})
 					) : (
-						<div ref={slotRootRef} className={slotItemClassName}>
+						<div
+							ref={slotRootRef}
+							className={slotItemClassName}
+							onClick={handleSlotClick}
+						>
 							{slotContent}
 						</div>
 					)
 
 					const contentNode = hasResource ? (
 						<Tooltip delayDuration={400}>
-							<TooltipTrigger asChild>{slotItemNode}</TooltipTrigger>
+							<TooltipTrigger asChild>
+								<div className={styles.sourceItemTooltipTrigger}>
+									{slotItemNode}
+								</div>
+							</TooltipTrigger>
 							<TooltipPrimitive.Portal container={portalContainer || undefined}>
 								<TooltipContent
 									side="top"
 									sideOffset={6}
-									className="max-w-[min(20rem,85vw)] border-black bg-black text-white"
+									className="w-max max-w-[85vw] overflow-hidden border-black bg-black text-white"
 								>
-									<span className="block break-all text-left">
+									<span className="block overflow-hidden text-ellipsis whitespace-nowrap text-left">
 										{resourceDisplayName}
 									</span>
-									{entry.statusLabel ? (
-										<span
-											className={styles.sourceItemTooltipStatus}
-											data-tone={statusTone}
-										>
-											{entry.statusLabel}
-										</span>
-									) : null}
 									<TooltipPrimitive.Arrow className="fill-black" />
 								</TooltipContent>
 							</TooltipPrimitive.Portal>

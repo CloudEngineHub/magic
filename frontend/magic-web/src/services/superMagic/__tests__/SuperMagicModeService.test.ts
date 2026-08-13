@@ -4,6 +4,7 @@ import { ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/com
 import { IconType } from "@/pages/superMagic/components/AgentSelector/types"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 vi.mock("@/models/user", () => ({
 	userStore: {
@@ -82,6 +83,7 @@ import superMagicCustomModelService from "../SuperMagicCustomModelService"
 import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
 import { configStore } from "@/models/config"
+import { roleStore } from "@/pages/superMagic/stores/RoleStore"
 
 function createModelItem({
 	id,
@@ -131,6 +133,14 @@ function createCrewList(identifier: string) {
 	} as any
 }
 
+function createModeItem(identifier: string): ModeItem {
+	return createCrewList(identifier).list[0] as ModeItem
+}
+
+function createRoleStore() {
+	return new (roleStore.constructor as new () => typeof roleStore)()
+}
+
 function createModeListStorageKey(lang: string) {
 	return `super_magic/mode_list/test-org/test-user/${lang}`
 }
@@ -170,6 +180,8 @@ describe("SuperMagicModeService", () => {
 			user_id: "test-user",
 		} as any
 		superMagicModeService._modeList = []
+		superMagicModeService._defaultAgentCode = undefined
+		;(superMagicModeService as any)._isModeAvailabilityResolved = false
 		superMagicModeService._modeMap = new Map([
 			[
 				"general",
@@ -297,6 +309,39 @@ describe("SuperMagicModeService", () => {
 		expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("cached-en")
 	})
 
+	it("hydrates cached default agent together with the mode list", async () => {
+		const storageKey = createModeListStorageKey("zh_CN")
+		const general = createModeItem("general")
+		const agentB = createModeItem("agent-b")
+		mockModeListStore.set(storageKey, [general, agentB])
+		window.localStorage.setItem(
+			"super_magic/default_agent_code/test-org/test-user/zh_CN",
+			"agent-b",
+		)
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+
+		await superMagicModeService.hydrateFromStorage(storageKey)
+		const store = createRoleStore()
+
+		expect(superMagicModeService.modeList.map((item) => item.mode.identifier)).toEqual([
+			"general",
+			"agent-b",
+		])
+		expect(superMagicModeService.defaultAgentCode).toBe("agent-b")
+		expect(superMagicModeService.isModeAvailabilityResolved).toBe(true)
+		expect(store.currentRole).toBe("agent-b")
+	})
+
 	it("prefers custom language model over official model", async () => {
 		vi.mocked(superMagicCustomModelService.findMyModelById).mockResolvedValue({
 			id: "custom-1",
@@ -353,6 +398,200 @@ describe("SuperMagicModeService", () => {
 		expect(resolved?.model_name).toBe("Custom Shared Image Model")
 	})
 
+	it("uses default model groups to organize all supported image and video models", () => {
+		const videoFast = createModelItem({
+			id: "video-fast",
+			modelId: "seedance-2-fast",
+			name: "Seedance 2 Fast",
+		})
+		const videoPro = createModelItem({
+			id: "video-pro",
+			modelId: "veo-3-pro",
+			name: "Veo 3 Pro",
+		})
+		const videoExtra = createModelItem({
+			id: "video-extra",
+			modelId: "new-video-model",
+			name: "New Video Model",
+		})
+		const imageFast = createModelItem({
+			id: "image-fast",
+			modelId: "image-fast",
+			name: "Image Fast",
+		})
+		const imagePro = createModelItem({
+			id: "image-pro",
+			modelId: "image-pro",
+			name: "Image Pro",
+		})
+
+		const createGroup = (
+			id: string,
+			name: string,
+			imageModels: ModelItem[],
+			videoModels: ModelItem[],
+		) =>
+			({
+				group: { id, name, sort: 1 },
+				models: [],
+				model_ids: [],
+				image_models: imageModels,
+				image_model_ids: imageModels.map((model) => model.id),
+				video_models: videoModels,
+				video_model_ids: videoModels.map((model) => model.id),
+			}) as any
+
+		const dynamicGroup = createGroup(
+			"dynamic",
+			"测试动态模型",
+			[imageFast, imagePro],
+			[videoFast, videoPro],
+		)
+		const extraGroup = createGroup("extra", "扩展-video", [], [videoExtra])
+		const defaultVideoFastGroup = createGroup("default-fast", "claude-video", [], [videoFast])
+		const defaultVideoProGroup = createGroup("default-pro", "视频", [], [videoPro])
+		const defaultImageFastGroup = createGroup(
+			"default-image-fast",
+			"claude-image",
+			[imageFast],
+			[],
+		)
+		const defaultImageProGroup = createGroup("default-image-pro", "图片", [imagePro], [])
+
+		superMagicModeService._modeList = [
+			{ groups: [dynamicGroup] },
+			{ groups: [extraGroup] },
+		] as any
+		;(superMagicModeService as any)._modeMap.set(TopicMode.Default, {
+			groups: [
+				defaultVideoFastGroup,
+				defaultVideoProGroup,
+				defaultImageFastGroup,
+				defaultImageProGroup,
+			],
+		})
+
+		expect(
+			superMagicModeService
+				.getAllVideoModelGroups()
+				.map((group) => [group.group.name, group.models.map((model) => model.model_id)]),
+		).toEqual([
+			["claude-video", ["seedance-2-fast"]],
+			["视频", ["veo-3-pro"]],
+			["扩展-video", ["new-video-model"]],
+		])
+		expect(
+			superMagicModeService
+				.getAllImageModelGroups()
+				.map((group) => [group.group.name, group.models.map((model) => model.model_id)]),
+		).toEqual([
+			["claude-image", ["image-fast"]],
+			["图片", ["image-pro"]],
+		])
+	})
+	it("prefers the requested mode when it has language models", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+		superMagicModeService._modeMap.set("micro-app", modeWithModels)
+
+		expect(superMagicModeService.resolveLanguageModelMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("falls back when the requested mode has no language models", () => {
+		superMagicModeService._modeMap.set("micro-app", createCrewList("micro-app").list[0])
+
+		expect(superMagicModeService.resolveLanguageModelMode("micro-app", "default")).toBe(
+			"default",
+		)
+	})
+
+	it("keeps the preferred catalog when any model category is available", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		const videoModel = createModelItem({
+			id: "official-video-1",
+			modelId: "shared-video-model",
+			name: "Official Shared Video Model",
+		})
+		superMagicModeService._modeMap.set("default", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group, index) => ({
+				...group,
+				video_models: index === 0 ? [videoModel] : [],
+			})),
+		} as never)
+		superMagicModeService._modeMap.set("micro-app", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group) => ({
+				...group,
+				image_models: [],
+				video_models: [],
+			})),
+		} as never)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("keeps the preferred catalog when only image models are available", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		superMagicModeService._modeMap.set("micro-app", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group) => ({
+				...group,
+				models: [],
+				video_models: [],
+			})),
+		} as never)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("keeps the preferred catalog when only video models are available", () => {
+		const modeWithModels = superMagicModeService._modeMap.get("general")
+		expect(modeWithModels).toBeDefined()
+		if (!modeWithModels) return
+
+		superMagicModeService._modeMap.set("micro-app", {
+			...modeWithModels,
+			groups: modeWithModels.groups.map((group) => ({
+				...group,
+				models: [],
+				image_models: [],
+				video_models: [
+					createModelItem({
+						id: "official-video-1",
+						modelId: "shared-video-model",
+						name: "Official Shared Video Model",
+					}),
+				],
+			})),
+		} as never)
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"micro-app",
+		)
+	})
+
+	it("falls back only when the preferred catalog has no models", () => {
+		superMagicModeService._modeMap.set("micro-app", createCrewList("micro-app").list[0])
+
+		expect(superMagicModeService.resolveModelSelectionMode("micro-app", "default")).toBe(
+			"default",
+		)
+	})
+
 	it("fetches again when force is true despite fresh cache", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [
@@ -386,6 +625,109 @@ describe("SuperMagicModeService", () => {
 		await superMagicModeService.fetchModeList({ force: true })
 
 		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(2)
+	})
+
+	it("stores default_agent_code returned by the featured endpoint", async () => {
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			...createCrewList("general"),
+			default_agent_code: "general",
+		})
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.defaultAgentCode).toBe("general")
+		await vi.waitFor(() => {
+			expect(
+				window.localStorage.getItem(
+					"super_magic/default_agent_code/test-org/test-user/zh_CN",
+				),
+			).toBe("general")
+		})
+	})
+
+	it("reconciles stored C to configured default B after featured refresh removes C", async () => {
+		const general = createModeItem("general")
+		const agentB = createModeItem("agent-b")
+		const agentC = createModeItem("agent-c")
+		superMagicModeService._modeList = [general, agentB, agentC]
+		superMagicModeService._modeMap = new Map(
+			superMagicModeService._modeList.map((item) => [item.mode.identifier, item]),
+		)
+		superMagicModeService._defaultAgentCode = "agent-b"
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+		const store = createRoleStore()
+		expect(store.currentRole).toBe("agent-c")
+
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			list: [general, agentB],
+			models: {},
+			default_agent_code: "agent-b",
+		} as any)
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(store.currentRole).toBe("agent-b")
+	})
+
+	it("reconciles a stored mode after an authoritative empty response", async () => {
+		window.localStorage.setItem(
+			"super_magic/topic_mode_store",
+			JSON.stringify({
+				version: 1,
+				users: {
+					"test-org/test-user": {
+						global: "agent-c",
+					},
+				},
+			}),
+		)
+		const store = createRoleStore()
+
+		expect(store.currentRole).toBe("agent-c")
+
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
+			list: [],
+			total: 0,
+			models: {},
+		})
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.isModeAvailabilityResolved).toBe(true)
+		expect(store.currentRole).toBe("general")
+	})
+
+	it("uses featured is_visible when checking whether a mode can be selected", async () => {
+		const response = createCrewList("hidden-agent")
+		response.list[0].agent.is_visible = false
+		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(response)
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			groups: [],
+			models: {},
+		} as any)
+
+		await superMagicModeService.fetchModeList({ force: true })
+
+		expect(superMagicModeService.isModeValid("hidden-agent")).toBe(true)
+		expect(superMagicModeService.isModeVisible("hidden-agent")).toBe(false)
 	})
 
 	it("reuses fresh mode list in the same user context", async () => {
@@ -496,6 +838,7 @@ describe("SuperMagicModeService", () => {
 	it("treats empty crew list as successful refresh and clears cached state", async () => {
 		const cachedResponse = createCrewList("stale-mode")
 		superMagicModeService._modeList = cachedResponse.list
+		superMagicModeService._defaultAgentCode = "stale-agent"
 		superMagicModeService._modeMap = new Map([
 			[cachedResponse.list[0].mode.identifier, cachedResponse.list[0]],
 		]) as unknown as typeof superMagicModeService._modeMap
@@ -511,6 +854,7 @@ describe("SuperMagicModeService", () => {
 
 		expect(result).toEqual([])
 		expect(superMagicModeService.modeList).toEqual([])
+		expect(superMagicModeService.defaultAgentCode).toBeUndefined()
 		expect(mockModeListStore.get(createModeListStorageKey("zh_CN"))).toEqual([])
 		expect(superMagicModeService._retryTimer).toBeNull()
 		expect(SuperMagicApi.getDefaultModeModelList).not.toHaveBeenCalled()
@@ -566,7 +910,10 @@ describe("SuperMagicModeService", () => {
 
 		vi.mocked(SuperMagicApi.getCrewList)
 			.mockReturnValueOnce(zhRequest.promise)
-			.mockResolvedValueOnce(createCrewList("en-mode"))
+			.mockResolvedValueOnce({
+				...createCrewList("en-mode"),
+				default_agent_code: "en-mode",
+			})
 		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
 			groups: [],
 			models: {},
@@ -575,7 +922,9 @@ describe("SuperMagicModeService", () => {
 		const firstFetchPromise = superMagicModeService.fetchModeList()
 		await flushPendingBootstrap()
 		expect(SuperMagicApi.getCrewList).toHaveBeenCalledTimes(1)
+		superMagicModeService._defaultAgentCode = "previous-agent"
 		;(configStore.i18n as any).displayLanguage = "en_US"
+		await flushPendingBootstrap()
 
 		const secondFetchPromise = superMagicModeService.fetchModeList()
 		await flushPendingBootstrap()
@@ -583,10 +932,14 @@ describe("SuperMagicModeService", () => {
 
 		await secondFetchPromise
 
-		zhRequest.resolve(createCrewList("zh-mode"))
+		zhRequest.resolve({
+			...createCrewList("zh-mode"),
+			default_agent_code: "zh-mode",
+		})
 		await firstFetchPromise
 
 		expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("en-mode")
+		expect(superMagicModeService.defaultAgentCode).toBe("en-mode")
 		expect(mockModeListStore.has(createModeListStorageKey("zh_CN"))).toBe(false)
 		expect(mockModeListStore.get(createModeListStorageKey("en_US"))?.[0]?.mode.identifier).toBe(
 			"en-mode",

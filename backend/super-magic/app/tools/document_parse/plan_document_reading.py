@@ -34,22 +34,17 @@ from .path_utils import (
 class PlanDocumentReadingParams(BaseToolParams):
     output_dir: str = Field(
         ...,
-        description="""<!--zh: 文档解析输出目录的绝对路径，目录中应包含抽样、索引或 chunk 产物-->
-Absolute document output directory containing samples, index, or chunks"""
+        description="Absolute document output directory containing samples, an index, or chunks."
     )
     goal: str = Field(
         "",
-        description="""<!--zh: 当前阅读目标，例如总结全文、查找条款、提取审批意见-->
-Current reading goal, such as summarizing, finding clauses, or extracting decisions"""
+        description="Current reading goal, such as summarizing the document, finding clauses, or extracting decisions."
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class PlanDocumentReading(AbstractFileTool[PlanDocumentReadingParams], WorkspaceTool[PlanDocumentReadingParams]):
-    """<!--zh: 基于已生成的文档产物规划下一步阅读动作。-->
-    Plan the next progressive document reading action."""
-
-    code_mode_only = True
+    """Plan the next progressive reading action from existing document artifacts."""
 
     async def execute(self, tool_context: ToolContext, params: PlanDocumentReadingParams) -> ToolResult:
         """Return the next recommended bounded document reading step."""

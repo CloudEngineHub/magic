@@ -130,4 +130,23 @@ describe("imageReferenceBinding", () => {
 			),
 		).toEqual(["/design/images/a.png"])
 	})
+
+	it("compares reference paths by Canvas canonical identity", () => {
+		const equivalentInfos = [
+			{ path: "./images/a.png", fileName: "a.png", src: "./images/a.png" },
+		]
+		const binding = resolveReferenceBindingState({
+			prompt: "@a.png",
+			referenceFileInfos: equivalentInfos,
+			tokenConfig,
+		})
+
+		expect(binding.explicitPromptReferencePaths).toEqual(["./images/a.png"])
+		expect(pruneProtectedReferencePaths(["/images/a.png"], ["./images/a.png"])).toEqual([
+			"./images/a.png",
+		])
+		expect(unprotectPromptBoundReferencePaths(["./images/a.png"], ["/images/a.png"])).toEqual(
+			[],
+		)
+	})
 })

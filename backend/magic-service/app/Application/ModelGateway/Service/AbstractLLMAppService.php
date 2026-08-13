@@ -13,7 +13,6 @@ use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Application\ModelGateway\Request\ModelGatewayRequestCoContext;
 use App\Domain\Contact\Service\MagicUserDomainService;
-use App\Domain\File\Service\FileCleanupDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ImageGenerate\Contract\WatermarkConfigInterface;
 use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
@@ -66,7 +65,6 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         protected ProviderModelDomainService $providerModelDomainService,
         protected AggregateModelResolverService $aggregateModelResolverService,
         protected ModelGatewayModelAccessService $modelGatewayModelAccessService,
-        protected FileCleanupDomainService $fileCleanupDomainService,
         protected TemporaryFileUrlProxyManager $temporaryFileUrlProxyManager,
     ) {
         $this->logger = $this->loggerFactory->get(static::class);
@@ -140,6 +138,7 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         string $callTime,
         int $responseTime,
         int $operationTime,
+        array $generatedImages,
         int $imageCount = 1,
         array $extraBusinessParams = [],
     ): void {
@@ -182,6 +181,7 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         $event->setSourceId($dataIsolation->getSourceId());
         $event->setSourceType($this->resolveImageOperationSourceType($dataIsolation, $requestDTO));
         $event->setCreatedAt(new DateTime());
+        $event->setGeneratedImages($generatedImages);
         $event->setBusinessParams($businessParams);
 
         AsyncEventUtil::dispatch($event);

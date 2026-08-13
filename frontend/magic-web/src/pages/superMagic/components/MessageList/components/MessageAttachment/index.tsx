@@ -1,6 +1,5 @@
 import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { getFileType, downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
+import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
@@ -12,7 +11,9 @@ import { isEmpty } from "lodash-es"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
-import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
+import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
+import { TopicFileIcon } from "@/pages/superMagic/components/TopicFilesButton/components/TopicFileIcon"
+import { resolveProjectInstructionsFileKind } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 
 export const Attachment = ({
 	attachments,
@@ -27,20 +28,11 @@ export const Attachment = ({
 }) => {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
 	const toggleExpanded = (e: any) => {
 		e.stopPropagation()
 		setExpanded(!expanded)
-	}
-
-	const handleDownload = (file_id: string) => {
-		getTemporaryDownloadUrl({
-			file_ids: [file_id],
-			is_download: true,
-			download_mode: DownloadImageMode.Download,
-		}).then((res: any) => {
-			downloadFileWithAnchor(res[0]?.url)
-		})
 	}
 
 	const displayedAttachments =
@@ -116,6 +108,7 @@ export const Attachment = ({
 					{displayedAttachments?.map((item: AttachmentProps) => {
 						const { display_config } = item
 						const isFolder = item.file_extension === ""
+						const projectInstructionsFileKind = resolveProjectInstructionsFileKind(item)
 						return (
 							<div
 								key={item.file_id}
@@ -144,6 +137,8 @@ export const Attachment = ({
 											height={24}
 											data-testid="message-attachment-image"
 										/>
+									) : projectInstructionsFileKind ? (
+										<TopicFileIcon magicVariant="magic-file-agent" size={24} />
 									) : (
 										<MagicFileIcon
 											type={getAttachmentType(item) || item.file_extension}

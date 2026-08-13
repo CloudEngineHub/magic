@@ -190,6 +190,11 @@ export interface SuperMagicNodeExtraSuperAgent {
 export interface SuperMagicNode {
 	topic_id?: string
 	message_id?: string
+	/**
+	 * 同一逻辑消息的稳定 ID。
+	 * 历史 Final 可能缺失，Store 入口需要用外层 app_message_id 归一化补齐。
+	 */
+	super_message_id?: string
 	task_id?: string
 	type?: string
 	status?: string

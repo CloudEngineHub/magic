@@ -86,6 +86,11 @@ export function areCanvasResourcePathsSame(
 	)
 }
 
+/** 用于跨编辑器、关联媒体与参考资源状态比较的稳定资源身份。 */
+export function getCanvasResourceIdentity(path?: string): string {
+	return path ? toCanonicalCanvasResourcePath(path) : ""
+}
+
 export function toCanvasUploadStoragePath(fileDir: string, fileName: string): string {
 	return joinUploadStoragePathInternal(fileDir, fileName)
 }

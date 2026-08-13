@@ -82,6 +82,21 @@ function escapeHtmlLiteral(raw: string) {
 	return raw.replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
+function getHtmlPreviewViewStateKey(domNode: unknown, code: string) {
+	const positionOffset = (domNode as { position?: { start?: { offset?: unknown } } })?.position
+		?.start?.offset
+	if (typeof positionOffset === "number") return `html-preview-offset-${positionOffset}`
+
+	// Position is normally present on the markdown AST. This compact fallback avoids retaining the
+	// full HTML string in the view-state key for compatibility inputs without source positions.
+	let hash = 2166136261
+	for (let index = 0; index < code.length; index += 1) {
+		hash ^= code.charCodeAt(index)
+		hash = Math.imul(hash, 16777619)
+	}
+	return `html-preview-content-${hash >>> 0}`
+}
+
 // 只转义 fence 外的裸 HTML，避免 XMarkdown 把普通文本里的 HTML 片段当成原生节点直接渲染。
 // 转义后在相邻标签间插入换行、为每行末尾追加两个空格（markdown hard break），保留源码结构。
 function escapeRawHtmlSegment(rawSegment: string) {
@@ -232,6 +247,7 @@ export function useMarkdownComponent({
 
 				return (
 					<HtmlCodeBlockPreview
+						viewStateKey={getHtmlPreviewViewStateKey(domNode, codeBlockInfo.code)}
 						className={typeof preClassName === "string" ? preClassName : undefined}
 						style={normalizedStyle}
 						title={typeof title === "string" ? title : undefined}
@@ -246,7 +262,7 @@ export function useMarkdownComponent({
 			},
 			a: MarkdownLink,
 			img(props: XMarkdownComponentProps) {
-				return <Image alt={props.alt} src={props.src} />
+				return <Image alt={props.alt} src={props.src} title={props.title} />
 			},
 			"file-path"(props: XMarkdownComponentProps) {
 				return <FilePath path={props.path} />

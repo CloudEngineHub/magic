@@ -4,7 +4,7 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
 import { GenerationStatus } from "../../../public/magic-types"
 import { useImageOssSrc } from "../../../app/hooks/resources/useImageOssSrc"
-import { useCanvasEvent } from "../../../app/hooks/canvas"
+import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
@@ -100,8 +100,11 @@ function ActiveImageMessageEditor({
 }: ActiveImageMessageEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
+	const generationRuntime = useGenerationRuntime(imageElement.id)
 
-	const hasGenerateImageRequest = !!imageElement.generateImageRequest
+	const hasGenerateImageRequest = !!(
+		generationRuntime?.generateImageRequest || imageElement.generateImageRequest
+	)
 	const hasResultImage = !!imageElement.src
 	const { hasOssSrc } = useImageOssSrc(imageElement)
 
@@ -124,13 +127,14 @@ function ActiveImageMessageEditor({
 		!!imageElement.imageGenerationTaskMeta &&
 		!hasResultImage &&
 		imageElement.status !== GenerationStatus.Failed
+	const hasRuntimeGenerationAttempt = Boolean(generationRuntime)
 
 	const isGenerating = useMemo(() => {
 		if (!canvas || hasTerminalImageGenerationState) return false
 		const imageInstance = canvas.elementManager.getElementInstance(imageElement.id)
 		if (!(imageInstance instanceof ImageElementClass)) return false
-		return imageInstance.isImageGenerating()
-	}, [canvas, imageElement.id, hasTerminalImageGenerationState])
+		return imageInstance.isImageGenerating() || hasRuntimeGenerationAttempt
+	}, [canvas, imageElement.id, hasTerminalImageGenerationState, hasRuntimeGenerationAttempt])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)

@@ -6,6 +6,8 @@ const validOptions: MagicWidget.MountOptions = {
 		crewId: "crew-001",
 	},
 	auth: {
+		loginStrategy: "private_deployment",
+		deploymentCode: "private-mock",
 		organizationCode: "org-001",
 	},
 	modal: {
@@ -27,9 +29,91 @@ const validOptions: MagicWidget.MountOptions = {
 			},
 		},
 	},
+	config: {
+		layout: "desktop",
+		shell: { appSidebar: false },
+		conversation: { projectFiles: false, topicHistory: true, autoHire: false },
+		responsive: { mobileDetection: "device-and-viewport" },
+	},
 }
 
 void validOptions
+
+// Keep SDK autocomplete aligned with the Magic Web login strategies used by Widget hosts.
+const knownLoginStrategies: MagicWidget.LoginStrategy[] = [
+	"private_deployment",
+	"wechat_official_account",
+]
+
+void knownLoginStrategies
+
+const unsubscribeReady = window.MagicWidget?.on("agent_ready", () => undefined)
+void unsubscribeReady
+// Verifies that the public overload infers a boolean preview state and returns an unsubscribe function.
+const unsubscribePreviewFullscreen = window.MagicWidget?.on(
+	"preview_fullscreen",
+	(isFullscreen) => {
+		const previewFullscreenState: boolean = isFullscreen
+		void previewFullscreenState
+	},
+)
+void unsubscribePreviewFullscreen
+
+const unsubscribeMessageStreamStarted = window.MagicWidget?.on(
+	"message.stream.started",
+	(event) => {
+		const eventType: "message.stream.started" = event.type
+		const meta: Record<string, unknown> = event.meta
+		const payload: unknown = event.payload
+		void eventType
+		void meta
+		void payload
+	},
+)
+void unsubscribeMessageStreamStarted
+
+const unsubscribeToolCallSettled = window.MagicWidget?.on("toolCall.settled", (event) => {
+	const eventType: "toolCall.settled" = event.type
+	const meta: Record<string, unknown> = event.meta
+	const payload: unknown = event.payload
+	void eventType
+	void meta
+	void payload
+})
+void unsubscribeToolCallSettled
+
+const unsubscribeTaskCompleted = window.MagicWidget?.on("task.completed", (event) => {
+	const eventType: "task.completed" = event.type
+	const meta: Record<string, unknown> = event.meta
+	const payload: unknown = event.payload
+	void eventType
+	void meta
+	void payload
+})
+void unsubscribeTaskCompleted
+void window.MagicWidget?.setInput("mock input")
+void window.MagicWidget?.appendInput("mock suffix")
+void window.MagicWidget?.clearInput()
+void window.MagicWidget?.getInput()
+void window.MagicWidget?.sendMessage("mock message")
+void window.MagicWidget?.newConversation()
+void window.MagicWidget?.updateConfig({
+	layout: "mobile",
+	conversation: { topicHistory: false, autoHire: true },
+	responsive: { mobileDetection: "viewport" },
+})
+
+void window.MagicWidget?.updateConfig({
+	responsive: {
+		// @ts-expect-error unsupported detection strategies are rejected by the public contract.
+		mobileDetection: "device-only",
+	},
+})
+
+void window.MagicWidget?.updateConfig({
+	// @ts-expect-error unsupported layouts are rejected by the public configuration contract.
+	layout: "tablet",
+})
 
 const invalidRouteOptions: MagicWidget.MountOptions = {
 	page: {

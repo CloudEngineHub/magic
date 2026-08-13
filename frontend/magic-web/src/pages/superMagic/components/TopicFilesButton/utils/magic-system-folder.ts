@@ -2,6 +2,57 @@ import type { AttachmentItem } from "../hooks/types"
 
 /** Keep in sync with MAGIC_ROOT_DIRECTORY_NAME (identity-markdown.ts). */
 const MAGIC_FOLDER_NAME = ".magic" as const
+const PROJECT_INSTRUCTIONS_FILE_NAME = "AGENTS.md" as const
+
+export interface ProjectInstructionsFileCandidate {
+	readonly is_directory?: boolean
+	readonly name?: string
+	readonly file_name?: string
+	readonly filename?: string
+	readonly display_filename?: string
+	readonly relative_file_path?: string
+	readonly path?: string
+}
+
+export type ProjectInstructionsFileKind = "project" | "magic"
+
+function basenameMatchesProjectInstructionsFile(item: ProjectInstructionsFileCandidate): boolean {
+	const candidates = [item.name, item.file_name, item.filename, item.display_filename]
+	return candidates.some((candidate) => candidate?.trim() === PROJECT_INSTRUCTIONS_FILE_NAME)
+}
+
+function pathLeafSegmentIsProjectInstructionsFile(path?: string): boolean {
+	if (!path) return false
+	const segments = path.replace(/\\/g, "/").split("/").filter(Boolean)
+	return segments[segments.length - 1] === PROJECT_INSTRUCTIONS_FILE_NAME
+}
+
+function pathIsUnderMagicFolder(path?: string): boolean {
+	if (!path) return false
+	return path.replace(/\\/g, "/").split("/").filter(Boolean).includes(MAGIC_FOLDER_NAME)
+}
+
+/**
+ * 区分普通项目规则与 `.magic/AGENTS.md`，避免各文件列表重复猜测路径语义。
+ * 只负责本次新增的 AGENTS.md 分类，不改变现有 `.magic` 文件体系。
+ */
+export function resolveProjectInstructionsFileKind(
+	item: ProjectInstructionsFileCandidate,
+): ProjectInstructionsFileKind | undefined {
+	if (item.is_directory) return undefined
+
+	const isInstructionsFile =
+		basenameMatchesProjectInstructionsFile(item) ||
+		pathLeafSegmentIsProjectInstructionsFile(item.relative_file_path) ||
+		pathLeafSegmentIsProjectInstructionsFile(item.path)
+	if (!isInstructionsFile) return undefined
+
+	if (pathIsUnderMagicFolder(item.relative_file_path) || pathIsUnderMagicFolder(item.path)) {
+		return "magic"
+	}
+
+	return "project"
+}
 
 function basenameMatchesMagicFolder(item: AttachmentItem): boolean {
 	const candidates = [item.name, item.file_name, item.filename, item.display_filename]

@@ -104,7 +104,8 @@ class FileBatchAppService extends AbstractAppService
             $selectedEntities,
             $expandedEntities,
             null,
-            $projectEntity
+            $projectEntity,
+            ! empty($fileIds)
         );
 
         $leafFiles = $packManifest['leaf_files'];
@@ -116,9 +117,13 @@ class FileBatchAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::BATCH_TOO_MANY_FILES);
         }
 
-        $pathMode = 'relative';
         $actualFileIds = $packManifest['unique_leaf_file_ids'];
-        $batchKey = $this->generateBatchKey($actualFileIds, $userId, $requestDTO->getProjectId(), $pathMode);
+        $batchKey = $this->generateBatchKey(
+            $actualFileIds,
+            $userId,
+            $requestDTO->getProjectId(),
+            $packManifest['cache_signature']
+        );
 
         $cachedResponse = $this->handleCachedBatchTask($batchKey, $leafFiles);
         if ($cachedResponse !== null) {
@@ -237,7 +242,8 @@ class FileBatchAppService extends AbstractAppService
             $selectedEntities,
             $expandedEntities,
             $allowedFileIds,
-            $projectEntity
+            $projectEntity,
+            true
         );
 
         $leafFiles = $packManifest['leaf_files'];
@@ -249,12 +255,16 @@ class FileBatchAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::BATCH_TOO_MANY_FILES);
         }
 
-        $pathMode = 'relative';
         $userAuthorization = $requestContext->getUserAuthorization();
         $userId = $userAuthorization->getId();
 
         $actualFileIds = $packManifest['unique_leaf_file_ids'];
-        $batchKey = $this->generateBatchKey($actualFileIds, $userId, (string) $projectId, $pathMode);
+        $batchKey = $this->generateBatchKey(
+            $actualFileIds,
+            $userId,
+            (string) $projectId,
+            $packManifest['cache_signature']
+        );
 
         $cachedResponse = $this->handleCachedBatchTask($batchKey, $leafFiles);
         if ($cachedResponse !== null) {
@@ -423,13 +433,13 @@ class FileBatchAppService extends AbstractAppService
      * @param array $fileIds File ID array
      * @param string $userId User ID
      * @param string $projectId Project ID
-     * @param string $pathMode Path mode (absolute or relative)
+     * @param string $pathSignature Archive path strategy signature
      * @return string Batch key
      */
-    private function generateBatchKey(array $fileIds, string $userId, string $projectId, string $pathMode = 'absolute'): string
+    private function generateBatchKey(array $fileIds, string $userId, string $projectId, string $pathSignature): string
     {
         sort($fileIds);
-        $data = implode(',', $fileIds) . '|' . $userId . '|' . $projectId . '|' . $pathMode;
+        $data = implode(',', $fileIds) . '|' . $userId . '|' . $projectId . '|' . $pathSignature;
         return 'batch_' . md5($data);
     }
 
@@ -449,6 +459,9 @@ class FileBatchAppService extends AbstractAppService
      *   relative_base_path:string,
      *   pack_entries:array<int,string>,
      *   leaf_files:array<int,TaskFileEntity>,
+     *   path_mode:string,
+     *   cache_signature:string,
+     *   selected_nodes:array<int,array{id:int,path:string,is_directory:bool}>,
      *   unique_leaf_file_ids:array<int,int>
      * } $packManifest
      */
@@ -500,7 +513,10 @@ class FileBatchAppService extends AbstractAppService
                 'pack',
                 $packManifest['pack_entries'],
                 $stsTemporaryCredential,
-                [],
+                [
+                    'path_mode' => $packManifest['path_mode'],
+                    'archive_base_path' => $packManifest['relative_base_path'],
+                ],
                 $batchKey,
                 $userId,
                 $organizationCode,
@@ -925,6 +941,9 @@ class FileBatchAppService extends AbstractAppService
      *   relative_base_path:string,
      *   pack_entries:array<int,string>,
      *   leaf_files:array<int,TaskFileEntity>,
+     *   path_mode:string,
+     *   cache_signature:string,
+     *   selected_nodes:array<int,array{id:int,path:string,is_directory:bool}>,
      *   unique_leaf_file_ids:array<int,int>
      * }
      */
@@ -932,15 +951,20 @@ class FileBatchAppService extends AbstractAppService
         array $selectedEntities,
         array $expandedEntities,
         ?array $allowedFileIds,
-        ProjectEntity $projectEntity
+        ProjectEntity $projectEntity,
+        bool $useRelativePaths
     ): array {
         $authorizedEntities = $this->filterAuthorizedEntities($expandedEntities, $allowedFileIds);
         if (empty($authorizedEntities)) {
+            $pathMode = $useRelativePaths ? 'relative_lca' : 'workspace_relative';
             return [
                 'base_path' => $projectEntity->getWorkDir(),
                 'relative_base_path' => '',
                 'pack_entries' => [],
                 'leaf_files' => [],
+                'path_mode' => $pathMode,
+                'cache_signature' => $useRelativePaths ? 'relative_lca_v2||' : 'workspace_relative_v2',
+                'selected_nodes' => [],
                 'unique_leaf_file_ids' => [],
             ];
         }
@@ -953,7 +977,8 @@ class FileBatchAppService extends AbstractAppService
             $authorizedEntities,
             $projectEntity->getId(),
             $projectEntity->getWorkDir(),
-            $fullProjectWorkDir
+            $fullProjectWorkDir,
+            $useRelativePaths
         );
     }
 

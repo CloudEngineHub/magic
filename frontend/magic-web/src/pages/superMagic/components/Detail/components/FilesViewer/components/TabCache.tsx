@@ -35,6 +35,8 @@ interface TabCacheProps {
 	/** When true, content fills the viewer without reserving tab bar height */
 	hideTabBar?: boolean
 	knowledgeBaseData?: KnowledgeBaseTabData
+	/** The tab is rendered inside a stable surface that already owns its geometry. */
+	fillPortalSurface?: boolean
 }
 
 /**
@@ -53,6 +55,7 @@ const TabCache = memo(
 		playbackProps,
 		hideTabBar = false,
 		knowledgeBaseData,
+		fillPortalSurface = false,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
 		const isPlaybackTab = tabType === "playback"
@@ -108,13 +111,15 @@ const TabCache = memo(
 				ref={tabContentRef}
 				className={cn(
 					"left-0 w-full transition-[opacity,visibility] duration-200",
-					isDocumentFlowFullscreen && isActive
-						? FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME
-						: effectiveIsFullscreen
-							? fullscreenTabContentClassName
-							: fillsViewerWithoutTabBar
-								? "absolute top-0 h-full"
-								: "absolute top-11 h-[calc(100%-44px)]",
+					fillPortalSurface
+						? "absolute inset-0 h-full"
+						: isDocumentFlowFullscreen && isActive
+							? FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME
+							: effectiveIsFullscreen
+								? fullscreenTabContentClassName
+								: fillsViewerWithoutTabBar
+									? "absolute top-0 h-full"
+									: "absolute top-11 h-[calc(100%-44px)]",
 					isPlaybackTab ? "z-[9]" : isActive ? "z-10" : "z-0",
 					isActive
 						? "pointer-events-auto visible opacity-100"

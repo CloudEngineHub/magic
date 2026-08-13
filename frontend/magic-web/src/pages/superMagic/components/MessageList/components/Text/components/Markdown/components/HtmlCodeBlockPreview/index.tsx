@@ -19,7 +19,7 @@ import { useHtmlCodeBlockPreviewStreamingScroll } from "./hooks/useHtmlCodeBlock
 import { hasVisibleHtmlPreviewContent } from "./shared"
 import type { HtmlCodeBlockPreviewProps } from "./types"
 import { resolveHtmlPreviewIntrinsicWidthHint } from "./preview-width"
-import { useStreamingCommittedContent } from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tools/WriteFileStreamingContent"
+import { useStreamingCommittedContent } from "@/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/tools/WriteFile/StreamingContent"
 
 function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 	const {
@@ -28,6 +28,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 		title: preTitle,
 		isStreaming = false,
 		isSuspended = false,
+		viewStateKey,
 		codeBlockInfo,
 		previewCode,
 		fullCode,
@@ -94,6 +95,7 @@ function HtmlCodeBlockPreview(props: HtmlCodeBlockPreviewProps) {
 		isStreaming,
 		hasResolvedCode,
 		hasVisiblePreviewContent,
+		viewStateKey,
 	})
 	const getScrollTargetElement = useCallback(() => {
 		if (viewMode === "desktop") return desktopPreviewSurfaceElementRef.current

@@ -22,6 +22,7 @@ import { configStore } from "@/models/config"
 import { HttpClient, type HttpClientParams } from "../core/HttpClient"
 import { StringUtils } from "../utils"
 import { createWaitForAppInitRequestInterceptor } from "./await-app-init"
+import { iframeBusinessErrorInterceptor } from "./iframe-response-interceptor"
 
 class IframeHttpClient extends HttpClient {
 	constructor(props: HttpClientParams) {
@@ -51,6 +52,8 @@ class IframeHttpClient extends HttpClient {
 
 			return config
 		})
+
+		this.addResponseInterceptor(iframeBusinessErrorInterceptor)
 
 		// 仅打印错误日志，不做额外处理（不 toast、不跳转）
 		this.addErrorInterceptor(function errHandler(error) {

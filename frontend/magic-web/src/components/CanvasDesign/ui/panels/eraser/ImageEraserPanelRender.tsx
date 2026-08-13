@@ -29,7 +29,6 @@ import { useCanvasModeUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
-import { GenerationStatus } from "../../../public/magic-types"
 import { Button } from "../../primitives/shadcn/button"
 import { Slider } from "../../primitives/shadcn/slider"
 import styles from "./index.module.css"
@@ -142,6 +141,7 @@ export default function ImageEraserPanelRender() {
 		setIsSubmitting(true)
 
 		let createdElementId: string | undefined
+		let generationAttemptId: string | undefined
 
 		try {
 			const newPosition = calculateNewElementPosition(
@@ -156,6 +156,7 @@ export default function ImageEraserPanelRender() {
 
 			const requestImageId = generateUUID()
 			const placeholderTaskMeta = createEraserTaskMeta({
+				image_id: requestImageId,
 				file_path: erasingImageElement.src,
 				reference_image_options: buildReferenceImageOptions({
 					filePath: erasingImageElement.src,
@@ -174,11 +175,22 @@ export default function ImageEraserPanelRender() {
 				name: `${
 					erasingImageElement.name || erasingImageElementInstance.getRenderName()
 				} ${t("elementTools.imageEraser.title", "橡皮工具")}`,
-				status: GenerationStatus.Pending,
-				imageGenerationTaskMeta: placeholderTaskMeta,
 			}
 
-			canvas.elementManager.create(newImageElement)
+			// 橡皮任务包含本地处理和文件上传，整个提交窗口都不能把占位元素导出。
+			canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
+			generationAttemptId = canvas.generationRuntimeManager.beginAttempt({
+				operation: "image-eraser",
+				originElementId: erasingImageElement.id,
+				phase: "preparing",
+				failurePolicy: "remove-placeholder",
+				targets: [
+					{
+						elementId: createdElementId,
+						imageGenerationTaskMeta: placeholderTaskMeta,
+					},
+				],
+			})
 			canvas.eraserManager.exitEraserMode(false)
 			canvas.selectionManager.select(createdElementId, false)
 
@@ -273,7 +285,14 @@ export default function ImageEraserPanelRender() {
 			}
 		} catch (error) {
 			if (createdElementId) {
-				canvas.elementManager.delete(createdElementId)
+				if (generationAttemptId) {
+					canvas.generationAttemptCoordinator.rejectAttempt(generationAttemptId)
+				} else {
+					canvas.generationAttemptCoordinator.resolveDetachedPlaceholderFailure(
+						createdElementId,
+						"remove-placeholder",
+					)
+				}
 			}
 		} finally {
 			setIsSubmitting(false)

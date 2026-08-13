@@ -3,16 +3,18 @@ import asyncio
 import json
 import os
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any, TextIO
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional, TextIO
+
+from agentlang.logger import get_logger
+from agentlang.path_manager import PathManager
+from agentlang.utils.security import sanitize_log_value
+from agentlang.utils.shadow_code import ShadowCode
 
 from ...interface import StreamingInterface
 from ...models import ChunkData, StreamingResult
 from .config import SocketIODriverConfig
-from agentlang.logger import get_logger
-from agentlang.path_manager import PathManager
-from agentlang.utils.shadow_code import ShadowCode
 
 logger = get_logger(__name__)
 
@@ -128,7 +130,11 @@ class SocketIODriver(StreamingInterface):
                     "request_id": request_id,
                     "message": decoded_message
                 }
-                formatted_data = json.dumps(debug_entry, indent=2, ensure_ascii=False)
+                formatted_data = json.dumps(
+                    sanitize_log_value(debug_entry),
+                    indent=2,
+                    ensure_ascii=False,
+                )
                 self._debug_file.write(formatted_data + "\n")
                 self._debug_file.write("=" * 80 + "\n")  # Separator for readability
                 self._debug_file.flush()

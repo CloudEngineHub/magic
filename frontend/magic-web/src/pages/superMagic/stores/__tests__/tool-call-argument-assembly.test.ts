@@ -14,6 +14,7 @@ import {
 
 const TOPIC_ID = "topic-tool-arguments"
 const CORRELATION_ID = "correlation-tool-arguments"
+const SUPER_MESSAGE_ID = "super-message-tool-arguments"
 const RENDER_SETTLE_MS = 2_500
 
 type ChunkChoice = SuperMagicChunkMessage["super_magic_chunk"]["choices"][number]
@@ -60,6 +61,8 @@ interface StoredAssistantMessage {
 	app_message_id?: string
 	correlation_id?: string
 	role?: string
+	super_message_id?: string
+	superStatus?: string
 	topic_id?: string
 	seq_id?: string
 }
@@ -133,11 +136,15 @@ function createChunk({
 		chat_topic_id: TOPIC_ID,
 		message_id: `completion-${correlationId}`,
 		super_magic_chunk: {
+			super_message_id:
+				correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`,
+			task_id: `task-${correlationId}`,
 			i,
 			usage: null,
 			correlation_id: correlationId,
 			choices: [
 				{
+					...({ index: 0 } as const),
 					finish_reason: finishReason,
 					delta: {
 						content: "",
@@ -169,6 +176,8 @@ function createFinalEnvelope({
 		role: "assistant",
 		topic_id: TOPIC_ID,
 		message_id: `node-${appMessageId}`,
+		super_message_id:
+			correlationId === CORRELATION_ID ? SUPER_MESSAGE_ID : `super-${correlationId}`,
 		correlation_id: correlationId,
 		content: "",
 		reasoning_content: "",
@@ -213,17 +222,17 @@ function createStore(): SuperMagicStore {
 
 function getProjectedNode(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedNode | undefined {
-	const node = store.getMessageNode(correlationId)
+	const node = store.getMessageNode(superMessageId)
 	return node && typeof node === "object" ? (node as ProjectedNode) : undefined
 }
 
 function getProjectedTools(
 	store: SuperMagicStore,
-	correlationId = CORRELATION_ID,
+	superMessageId = SUPER_MESSAGE_ID,
 ): ProjectedToolCall[] {
-	return (getProjectedNode(store, correlationId)?.tool_calls ?? []).filter(
+	return (getProjectedNode(store, superMessageId)?.tool_calls ?? []).filter(
 		(tool): tool is ProjectedToolCall => Boolean(tool && typeof tool === "object"),
 	)
 }
@@ -256,6 +265,26 @@ function getCorrelationMessages(
 		const candidate = message as StoredAssistantMessage
 		return candidate.role === "assistant" && candidate.correlation_id === correlationId
 	}) as StoredAssistantMessage[]
+}
+
+function expectSingleStreamMessage(
+	store: SuperMagicStore,
+	{
+		correlationId = CORRELATION_ID,
+		superMessageId = SUPER_MESSAGE_ID,
+	}: {
+		correlationId?: string
+		superMessageId?: string
+	} = {},
+): void {
+	expect(getCorrelationMessages(store, correlationId)).toEqual([
+		expect.objectContaining({
+			correlation_id: correlationId,
+			role: "assistant",
+			super_message_id: superMessageId,
+			topic_id: TOPIC_ID,
+		}),
+	])
 }
 
 function expectSingleFinalMessage(
@@ -553,32 +582,70 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 
 	it("arguments 重复拼接后仍然是合法 JSON，但业务值错误。", () => {
 		const store = createStore()
-		const canonicalArguments = '{"path":"a.txt"}'
+		const streamedArguments = '{"path":"a.txta.txt"}'
+		const canonicalArguments = '{"path":"canonical.txt"}'
 
 		store.receiveChunk(
 			createChunk({
 				i: 0,
-				toolCalls: [createToolCall({ arguments: '{"path":"a.txta.txt"}' })],
+				toolCalls: [createToolCall({ arguments: '{"path":"' })],
 			}),
 		)
+		store.receiveChunk(createChunk({ i: 1, toolCalls: [createArgumentsFragment("a.txt")] }))
+		store.receiveChunk(createChunk({ i: 2, toolCalls: [createArgumentsFragment('a.txt"}')] }))
+
+		expect(getStreamTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-1",
+				index: 0,
+				function: expect.objectContaining({ arguments: streamedArguments }),
+			}),
+		])
+		expectSingleStreamMessage(store)
+
 		enqueueFinal(store, [createFinalToolCall({ arguments: canonicalArguments })])
 
-		expect(getArguments(getProjectedTools(store)[0])).toBe(canonicalArguments)
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-1",
+				index: 0,
+				function: expect.objectContaining({ arguments: canonicalArguments }),
+			}),
+		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("arguments 重复拼接后变成非法 JSON。", () => {
 		const store = createStore()
-		const canonicalArguments = '{"path":"a.txt"}'
+		const streamedArguments = '{"path":"a.txt"}{"path":"b.txt"}'
+		const canonicalArguments = '{"path":"canonical.txt"}'
 
 		store.receiveChunk(
-			createChunk({ i: 0, toolCalls: [createToolCall({ arguments: canonicalArguments })] }),
+			createChunk({ i: 0, toolCalls: [createToolCall({ arguments: '{"path":"a.txt"}' })] }),
 		)
 		store.receiveChunk(
-			createChunk({ i: 1, toolCalls: [createArgumentsFragment(canonicalArguments)] }),
+			createChunk({ i: 1, toolCalls: [createArgumentsFragment('{"path":"b.txt"}')] }),
 		)
+
+		expect(getStreamTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-1",
+				index: 0,
+				function: expect.objectContaining({ arguments: streamedArguments }),
+			}),
+		])
+		expectSingleStreamMessage(store)
+
 		enqueueFinal(store, [createFinalToolCall({ arguments: canonicalArguments })])
 
-		expect(getArguments(getProjectedTools(store)[0])).toBe(canonicalArguments)
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-1",
+				index: 0,
+				function: expect.objectContaining({ arguments: canonicalArguments }),
+			}),
+		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("arguments 最终只有半个 JSON。", () => {
@@ -782,19 +849,39 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		const store = createStore()
 
 		store.receiveChunk(
-			createChunk({ i: 0, toolCalls: [createToolCall({ id: "tool-a", index: 0 })] }),
+			createChunk({
+				i: 0,
+				toolCalls: [createToolCall({ id: "tool-a", index: 0, arguments: '{"owner":"a"}' })],
+			}),
 		)
 		store.receiveChunk(
-			createChunk({ i: 1, toolCalls: [createToolCall({ id: "tool-b", index: 0 })] }),
+			createChunk({
+				i: 1,
+				toolCalls: [createToolCall({ id: "tool-b", index: 0, arguments: '{"owner":"b"}' })],
+			}),
 		)
 
-		expect
-			.soft(getStreamTools(store))
-			.toEqual([expect.objectContaining({ id: "tool-a", index: 0 })])
+		expect(getStreamToolSlots(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-a",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"owner":"a"}' }),
+			}),
+		])
+		expect(getStreamTools(store)).toEqual([expect.objectContaining({ id: "tool-a", index: 0 })])
+		expectSingleStreamMessage(store)
 
-		enqueueFinal(store, [createFinalToolCall({ id: "tool-b", arguments: "{}" })])
+		enqueueFinal(store, [
+			createFinalToolCall({ id: "tool-b", arguments: '{"owner":"canonical-b"}' }),
+		])
 
-		expect(getProjectedTools(store).map((tool) => tool.id)).toEqual(["tool-b"])
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-b",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"owner":"canonical-b"}' }),
+			}),
+		])
 		expectSingleFinalMessage(store)
 	})
 
@@ -882,6 +969,7 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		const store = createStore()
 		const malformedCorrelation = "correlation-malformed"
 		const validCorrelation = "correlation-valid"
+		const validSuperMessageId = `super-${validCorrelation}`
 
 		store.receiveChunk(
 			createChunk({
@@ -898,14 +986,53 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 		store.receiveChunk(
 			createChunk({
 				correlationId: validCorrelation,
-				toolCalls: [createToolCall({ id: "shared-tool", arguments: "{}" })],
+				i: 0,
+				toolCalls: [
+					createToolCall({ id: "shared-tool", index: 0, arguments: '{"owner":"valid"}' }),
+				],
 			}),
 		)
 
 		expect(getStreamTools(store, malformedCorrelation)).toEqual([])
-		expect(getStreamTools(store, validCorrelation)).toEqual([
-			expect.objectContaining({ id: "shared-tool" }),
+		expect(getStreamToolSlots(store, validCorrelation)).toEqual([
+			expect.objectContaining({
+				id: "shared-tool",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"owner":"valid"}' }),
+			}),
 		])
+		expect(getStreamTools(store, validCorrelation)).toEqual([
+			expect.objectContaining({ id: "shared-tool", index: 0 }),
+		])
+		expect(getCorrelationMessages(store, malformedCorrelation)).toEqual([])
+		expectSingleStreamMessage(store, {
+			correlationId: validCorrelation,
+			superMessageId: validSuperMessageId,
+		})
+
+		enqueueFinal(
+			store,
+			[createFinalToolCall({ id: "shared-tool", arguments: '{"owner":"canonical"}' })],
+			{
+				correlationId: validCorrelation,
+				appMessageId: "final-valid-owner",
+				seqId: "101",
+			},
+		)
+
+		expect(getProjectedTools(store, validSuperMessageId)).toEqual([
+			expect.objectContaining({
+				id: "shared-tool",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"owner":"canonical"}' }),
+			}),
+		])
+		expect(getProjectedTools(store, "super-correlation-malformed")).toEqual([])
+		expectSingleFinalMessage(store, {
+			correlationId: validCorrelation,
+			appMessageId: "final-valid-owner",
+			seqId: "101",
+		})
 	})
 
 	it("工具头重复到达。", () => {
@@ -1011,13 +1138,49 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 	it("匿名槽位在真实工具头到达后升级为真实 id。", () => {
 		const store = createStore()
 
-		store.receiveChunk(createChunk({ i: 0, toolCalls: [createArgumentsFragment("{}", 0)] }))
 		store.receiveChunk(
-			createChunk({ i: 1, toolCalls: [createToolCall({ id: "real-tool", index: 0 })] }),
+			createChunk({
+				i: 0,
+				toolCalls: [createArgumentsFragment('{"source":"anonymous"}', 0)],
+			}),
+		)
+		store.receiveChunk(
+			createChunk({
+				i: 1,
+				toolCalls: [
+					createToolCall({
+						id: "real-tool",
+						index: 0,
+						arguments: '{"source":"header"}',
+					}),
+				],
+			}),
 		)
 
-		expect(getStreamTools(store)).toHaveLength(1)
-		expect(getStreamTools(store)[0]?.id).toBe("real-tool")
+		expect(getStreamToolSlots(store)).toEqual([
+			expect.objectContaining({
+				id: "real-tool",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"source":"anonymous"}' }),
+			}),
+		])
+		expect(getStreamTools(store)).toEqual([
+			expect.objectContaining({ id: "real-tool", index: 0 }),
+		])
+		expectSingleStreamMessage(store)
+
+		enqueueFinal(store, [
+			createFinalToolCall({ id: "real-tool", arguments: '{"source":"canonical"}' }),
+		])
+
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "real-tool",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"source":"canonical"}' }),
+			}),
+		])
+		expectSingleFinalMessage(store)
 	})
 
 	it("Final 数组顺序覆盖流式首现顺序并重建 canonical index。", () => {
@@ -1088,13 +1251,39 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 	it("final message 新增了流式阶段从未出现的工具。", () => {
 		const store = createStore()
 
-		store.receiveChunk(createChunk({ toolCalls: [createToolCall({ id: "tool-a" })] }))
+		store.receiveChunk(
+			createChunk({
+				i: 0,
+				toolCalls: [createToolCall({ id: "tool-a", index: 0, arguments: '{"value":"a"}' })],
+			}),
+		)
+		expect(getStreamToolSlots(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-a",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"value":"a"}' }),
+			}),
+		])
+		expect(getStreamTools(store)).toEqual([expect.objectContaining({ id: "tool-a", index: 0 })])
+		expectSingleStreamMessage(store)
+
 		enqueueFinal(store, [
-			createFinalToolCall({ id: "tool-a" }),
-			createFinalToolCall({ id: "tool-new" }),
+			createFinalToolCall({ id: "tool-a", arguments: '{"value":"canonical-a"}' }),
+			createFinalToolCall({ id: "tool-new", arguments: '{"value":"new"}' }),
 		])
 
-		expect(getProjectedTools(store).map((tool) => tool.id)).toContain("tool-new")
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-a",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"value":"canonical-a"}' }),
+			}),
+			expect.objectContaining({
+				id: "tool-new",
+				index: 1,
+				function: expect.objectContaining({ arguments: '{"value":"new"}' }),
+			}),
+		])
 		expectSingleFinalMessage(store)
 	})
 
@@ -1103,15 +1292,38 @@ describe("SuperMagicStore / Tool call 创建与参数拼接", () => {
 
 		store.receiveChunk(
 			createChunk({
+				i: 0,
 				toolCalls: [
-					createToolCall({ id: "tool-a", index: 0 }),
-					createToolCall({ id: "tool-deleted", index: 1 }),
+					createToolCall({ id: "tool-a", index: 0, arguments: '{"value":"a"}' }),
+					createToolCall({
+						id: "tool-deleted",
+						index: 1,
+						arguments: '{"value":"deleted"}',
+					}),
 				],
 			}),
 		)
-		enqueueFinal(store, [createFinalToolCall({ id: "tool-a" })])
+		expect(getStreamToolSlots(store)).toEqual([
+			expect.objectContaining({ id: "tool-a", index: 0 }),
+			expect.objectContaining({ id: "tool-deleted", index: 1 }),
+		])
+		expect(getStreamTools(store).map(({ id, index }) => ({ id, index }))).toEqual([
+			{ id: "tool-a", index: 0 },
+			{ id: "tool-deleted", index: 1 },
+		])
+		expectSingleStreamMessage(store)
 
-		expect(getProjectedTools(store).map((tool) => tool.id)).not.toContain("tool-deleted")
+		enqueueFinal(store, [
+			createFinalToolCall({ id: "tool-a", arguments: '{"value":"canonical-a"}' }),
+		])
+
+		expect(getProjectedTools(store)).toEqual([
+			expect.objectContaining({
+				id: "tool-a",
+				index: 0,
+				function: expect.objectContaining({ arguments: '{"value":"canonical-a"}' }),
+			}),
+		])
 		expectSingleFinalMessage(store)
 	})
 

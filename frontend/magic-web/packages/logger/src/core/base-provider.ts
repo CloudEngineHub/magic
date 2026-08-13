@@ -16,8 +16,8 @@ export abstract class BaseProvider implements IProvider {
 	abstract stop(): void
 
 	abstract setConfig(config: Record<string, string | null | undefined>): void
-	
-	abstract error(error: any): void
+
+	abstract error(...error: unknown[]): void
 
 	abstract report(value: any): void
 

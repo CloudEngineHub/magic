@@ -66,6 +66,7 @@ import type { DesignDraftReason } from "./utils/designDraftStorage"
 import type { DesignSaveMetadata } from "./managers"
 import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
+import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -251,6 +252,8 @@ function resolveDesignPluginDirectories(options: {
 interface DesignViewerProps {
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
+	/** Project id forwarded by standalone/native preview when no selected topic exists. */
+	projectId?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -280,6 +283,7 @@ function DesignViewer(props: DesignViewerProps) {
 	const {
 		attachments,
 		attachmentList,
+		projectId: projectIdProp,
 		currentFile: currentFileProps,
 		selectedTopic,
 		selectedProject,
@@ -311,8 +315,9 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const hostUiLocale = i18n.resolvedLanguage ?? i18n.language
 
-	// 获取项目 ID
-	const projectId = selectedTopic?.project_id
+	// Native standalone preview has no selected topic, so use the project id
+	// forwarded by Render as its only fallback.
+	const projectId = selectedTopic?.project_id || projectIdProp
 
 	const currentFile = useMemo(() => {
 		const actualCurrentFile = resolveActualDesignCurrentFile({
@@ -433,7 +438,10 @@ function DesignViewer(props: DesignViewerProps) {
 				const nextCanvas = newDesignData.canvas
 				if (nextCanvas) {
 					suppressCanvasDesignChangeEvents(() => {
-						canvasDesignRef.current?.updateData(nextCanvas)
+						canvasDesignRef.current?.updateData(nextCanvas, {
+							elementDetailsProvenance:
+								getHydratedElementDetailsProvenance(newDesignData),
+						})
 					})
 				}
 			},
@@ -452,6 +460,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const {
 		designData,
+		elementDetailsProvenance,
+		setElementDetailsProvenance,
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
@@ -1647,6 +1657,9 @@ function DesignViewer(props: DesignViewerProps) {
 									}}
 									data={{
 										defaultData: designData.canvas,
+										elementDetailsProvenance,
+										onElementDetailsProvenanceChange:
+											setElementDetailsProvenance,
 										onCanvasDesignDataChange: handleCanvasDesignDataChange,
 										onCanvasDesignDataPatchChange:
 											handleCanvasDesignDataPatchChange,

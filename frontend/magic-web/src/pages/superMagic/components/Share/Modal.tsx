@@ -10,9 +10,10 @@ import { createStyles } from "antd-style"
 import type { ShareModalProps } from "./types"
 import { ShareType, ShareMode } from "./types"
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
-import { useResetState, useResponsive, useUpdateEffect } from "ahooks"
+import { useResetState, useUpdateEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import MobileButton from "@/pages/superMagicMobile/components/MobileButton"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconDots, IconX } from "@tabler/icons-react"
@@ -121,8 +122,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 	})
 
 	const [extraData, setExtraData] = useState<any>(undefined) // Start with undefined, let Share component initialize
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const [modalKey, setModalKey] = useState(0)
 	const [actionsPopupVisible, setActionsPopupVisible] = useState(false)
 

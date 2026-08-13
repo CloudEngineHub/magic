@@ -18,6 +18,7 @@ use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
 use App\Application\ModelGateway\Service\VideoOperationAppService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Contract\QueueOperationExecutorInterface;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
 use App\Domain\ModelGateway\Entity\AccessTokenEntity;
@@ -36,6 +37,7 @@ use App\Domain\ModelGateway\Service\VideoBillingDetailsResolver;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
@@ -71,7 +73,6 @@ use Dtyq\CloudFile\Kernel\Struct\ChunkUploadFile;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FilePreSignedUrl;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Hyperf\Amqp\Message\ProducerMessageInterface;
@@ -1102,6 +1103,7 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame(8, $event->getDurationSeconds());
         $this->assertSame('720p', $event->getResolution());
         $this->assertSame('1280x720', $event->getSize());
+        $this->assertNull($event->getGeneratedFileKey());
     }
 
     public function testEnqueueAndGetOperationDispatchesCloudswaySeedanceGeneratedEventWithDefaultBillingDetails(): void
@@ -1898,6 +1900,13 @@ class VideoOperationAppServiceTest extends TestCase
         );
         $this->assertSame('org-test/open/' . $privateStorageHash . '/open/video-generation', $operationRepository->operations['op-3']->getFileDir());
         $this->assertSame('op-3.mp4', $operationRepository->operations['op-3']->getFileName());
+        $this->assertCount(1, $this->eventDispatcher->events);
+        $event = $this->eventDispatcher->events[0];
+        $this->assertInstanceOf(VideoGeneratedEvent::class, $event);
+        $this->assertSame(
+            'org-test/open/' . $privateStorageHash . '/open/video-generation/op-3.mp4',
+            $event->getGeneratedFileKey()
+        );
     }
 
     public function testGetOperationResignsStoredPrivateVideoUrlForSucceededOperation(): void
@@ -2078,6 +2087,43 @@ class VideoOperationAppServiceTest extends TestCase
         } finally {
             $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
         }
+    }
+
+    public function testManagedPollUsesBusinessTokenTypeForApiPlatformSource(): void
+    {
+        $operation = $this->createOperation('op-managed-api-platform-source');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-api-platform-source');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'https://example.com/api-platform-source.mp4',
+                    ],
+                ],
+            ),
+        );
+
+        $isDone = $service->pollOperationById($operation->getId(), [
+            'organization_id' => 'org-test',
+            'access_token_type' => AccessTokenType::User->value,
+        ]);
+
+        $this->assertTrue($isDone);
+        $videoGeneratedEvents = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof VideoGeneratedEvent
+        ));
+        $this->assertCount(1, $videoGeneratedEvents);
+        $event = $videoGeneratedEvents[0];
+        $this->assertSame(ImageGenerateSourceEnum::API_PLATFORM, $event->getSourceType());
     }
 
     public function testGetOperationRejectsFullProviderTaskIdFallbackWhenStoredOperationIsMissing(): void

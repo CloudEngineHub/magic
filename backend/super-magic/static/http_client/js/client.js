@@ -82,24 +82,35 @@ let showRawEvents = localStorage.getItem(RAW_EVENTS_TOGGLE_KEY) === 'true';
 // 消息列表懒加载：恢复/重渲染时只渲染最近一批，滚动到顶部时按需加载历史消息
 // 批次大小按可见消息（非 event 条目）计数，event 条目不计入但随区间一并渲染
 const LAZY_RENDER_BATCH_SIZE = 50;
+const LAZY_RENDER_TRIGGER_TOP_PX = 400;
 let lazyPrependTarget = null;
 const lazyRenderState = {
     renderedFromIndex: 0,
     loadMoreEl: null,
-    observer: null,
     isLoadingMore: false,
+    isAdjustingScroll: false,
+    lastScrollTop: 0,
 };
 
 // 从 beforeIndex 往前找，跳过 event 条目，数够 batchSize 条可见消息后返回起始下标
 function findLazyStartIndex(entries, beforeIndex, batchSize) {
     let count = 0;
+    let startIndex = 0;
     for (let i = beforeIndex - 1; i >= 0; i--) {
         if (entries[i].type !== 'event') {
             count++;
-            if (count >= batchSize) return i;
+            if (count >= batchSize) {
+                startIndex = i;
+                break;
+            }
         }
     }
-    return 0;
+
+    // 批次从完整用户轮次开始，避免同一次工具调用的前后状态被拆成两张卡片。
+    while (startIndex > 0 && entries[startIndex].type !== 'client') {
+        startIndex--;
+    }
+    return startIndex;
 }
 
 function getSystemMessageKey(text) {
@@ -329,7 +340,10 @@ function renderLogEntry(entry) {
         case 'client':    renderClientEntry(entry); break;
         case 'ai':        showAIMessage(entry.content, entry.timestamp, true); break;
         case 'thinking':  showThinkingMessage(entry.content, entry.timestamp, true); break;
-        case 'tool_call': showToolCallMessage(entry.tool, entry.eventType, entry.timestamp, true, { modelContent: entry.modelContent || '' }); break;
+        case 'tool_call': showToolCallMessage(entry.tool, entry.eventType, entry.timestamp, true, {
+            modelContent: entry.modelContent || '',
+            attachments: entry.attachments || entry.tool?.attachments || [],
+        }); break;
         case 'event':     showEventLog(entry.data, true); break;
         case 'system':    showSystemMessage(entry.text, true, { key: entry.key }); break;
     }
@@ -366,6 +380,7 @@ function renderClientEntry(entry, options = {}) {
 
 // DOM 元素
 const serverUrlInput = document.getElementById('serverUrl');
+const authTokenInput = document.getElementById('authToken');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -1877,6 +1892,7 @@ function applyLocalDebugOptions(messageData) {
     if (!messageData || typeof messageData !== 'object') return;
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
         enable_debug_tool_result_content: true,
+        enable_debug_finished_attachments: true,
         client_context: buildLocalDebugClientContext(),
         super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
@@ -2574,6 +2590,18 @@ function initMessageScrollControls() {
     window.addEventListener('resize', updateScrollButtonPosition);
 
     messagesContainer.addEventListener('scroll', () => {
+        const currentScrollTop = messagesContainer.scrollTop;
+        const isScrollingUp = currentScrollTop < lazyRenderState.lastScrollTop;
+        lazyRenderState.lastScrollTop = currentScrollTop;
+
+        if (
+            !isRestoring &&
+            !lazyRenderState.isAdjustingScroll &&
+            isScrollingUp &&
+            currentScrollTop <= LAZY_RENDER_TRIGGER_TOP_PX
+        ) {
+            loadMoreMessages();
+        }
         if (isMessageViewportAtBottom()) {
             hideScrollToLatestButton();
         }
@@ -2676,16 +2704,14 @@ function syncScrollAfterMessageChange(shouldStickToBottom, options = {}) {
 // ─── 消息列表懒加载 ──────────────────────────────────────────────────────────
 
 function resetLazyRenderState() {
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
     if (lazyRenderState.loadMoreEl && lazyRenderState.loadMoreEl.parentNode) {
         lazyRenderState.loadMoreEl.remove();
     }
     lazyRenderState.renderedFromIndex = 0;
     lazyRenderState.loadMoreEl = null;
     lazyRenderState.isLoadingMore = false;
+    lazyRenderState.isAdjustingScroll = false;
+    lazyRenderState.lastScrollTop = messagesContainer ? messagesContainer.scrollTop : 0;
 }
 
 function insertLoadMorePlaceholder(unrenderedCount) {
@@ -2696,16 +2722,31 @@ function insertLoadMorePlaceholder(unrenderedCount) {
     el.addEventListener('click', () => loadMoreMessages());
     messageList.prepend(el);
     lazyRenderState.loadMoreEl = el;
-    setupLoadMoreObserver();
 }
 
-function setupLoadMoreObserver() {
-    if (lazyRenderState.observer) lazyRenderState.observer.disconnect();
-    if (!lazyRenderState.loadMoreEl) return;
-    lazyRenderState.observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) loadMoreMessages();
-    }, { root: messagesContainer, rootMargin: '400px 0px 0px 0px' });
-    lazyRenderState.observer.observe(lazyRenderState.loadMoreEl);
+function captureLazyScrollAnchor() {
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    for (const node of messageList.children) {
+        if (node === lazyRenderState.loadMoreEl) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom > containerTop) {
+            return { node, offsetTop: rect.top - containerTop };
+        }
+    }
+    return null;
+}
+
+function restoreLazyScrollAnchor(anchor) {
+    if (!anchor || !anchor.node.isConnected) return;
+    const containerTop = messagesContainer.getBoundingClientRect().top;
+    const nextOffsetTop = anchor.node.getBoundingClientRect().top - containerTop;
+    lazyRenderState.isAdjustingScroll = true;
+    messagesContainer.scrollTop += nextOffsetTop - anchor.offsetTop;
+    lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+    requestAnimationFrame(() => {
+        lazyRenderState.lastScrollTop = messagesContainer.scrollTop;
+        lazyRenderState.isAdjustingScroll = false;
+    });
 }
 
 function loadMoreMessages() {
@@ -2721,62 +2762,55 @@ function loadMoreMessages() {
     const savedSystems = new Map(systemMessageRegistry);
     const savedEventTrace = eventTraceLog;
     const savedEventTraceSeen = eventTraceObjectSeen;
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = null;
-    eventTraceObjectSeen = new WeakSet();
+    const previousIsRestoring = isRestoring;
+    const previousPrependTarget = lazyPrependTarget;
+    const anchor = captureLazyScrollAnchor();
 
-    // 记录当前滚动高度
-    const prevScrollHeight = messagesContainer.scrollHeight;
+    try {
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = null;
+        eventTraceObjectSeen = new WeakSet();
 
-    // 移除旧的加载占位符（必须在捕获 firstChild 之前，否则锚点失效）
-    if (lazyRenderState.loadMoreEl) {
-        lazyRenderState.loadMoreEl.remove();
-        lazyRenderState.loadMoreEl = null;
+        if (lazyRenderState.loadMoreEl) {
+            lazyRenderState.loadMoreEl.remove();
+            lazyRenderState.loadMoreEl = null;
+        }
+        const firstChild = messageList.firstChild;
+
+        isRestoring = true;
+        lazyPrependTarget = document.createDocumentFragment();
+        for (let i = startIndex; i < endIndex; i++) {
+            renderLogEntry(chatLog[i]);
+        }
+        const fragment = lazyPrependTarget;
+        lazyPrependTarget = null;
+
+        messageList.insertBefore(fragment, firstChild);
+        lazyRenderState.renderedFromIndex = startIndex;
+        if (startIndex > 0) {
+            insertLoadMorePlaceholder(startIndex);
+        }
+        restoreLazyScrollAnchor(anchor);
+    } catch (error) {
+        console.error('加载历史消息失败:', error);
+        if (lazyRenderState.renderedFromIndex > 0 && !lazyRenderState.loadMoreEl) {
+            insertLoadMorePlaceholder(lazyRenderState.renderedFromIndex);
+        }
+    } finally {
+        isRestoring = previousIsRestoring;
+        lazyPrependTarget = previousPrependTarget;
+        streamMessageRegistry.clear();
+        toolCallRegistry.clear();
+        systemMessageRegistry.clear();
+        eventTraceLog = savedEventTrace;
+        eventTraceObjectSeen = savedEventTraceSeen;
+        for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
+        for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
+        for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
+        lazyRenderState.isLoadingMore = false;
     }
-    if (lazyRenderState.observer) {
-        lazyRenderState.observer.disconnect();
-        lazyRenderState.observer = null;
-    }
-
-    // 占位符移除后再取插入锚点
-    const firstChild = messageList.firstChild;
-
-    // 渲染到临时 fragment
-    isRestoring = true;
-    lazyPrependTarget = document.createDocumentFragment();
-    for (let i = startIndex; i < endIndex; i++) {
-        renderLogEntry(chatLog[i]);
-    }
-    const fragment = lazyPrependTarget;
-    lazyPrependTarget = null;
-    isRestoring = false;
-
-    // 恢复原始注册表
-    streamMessageRegistry.clear();
-    toolCallRegistry.clear();
-    systemMessageRegistry.clear();
-    eventTraceLog = savedEventTrace;
-    eventTraceObjectSeen = savedEventTraceSeen;
-    for (const [k, v] of savedStreams) streamMessageRegistry.set(k, v);
-    for (const [k, v] of savedTools) toolCallRegistry.set(k, v);
-    for (const [k, v] of savedSystems) systemMessageRegistry.set(k, v);
-
-    // 插入旧消息到 messageList 头部
-    messageList.insertBefore(fragment, firstChild);
-    lazyRenderState.renderedFromIndex = startIndex;
-
-    // 如果还有更多历史消息，插入新的加载占位符
-    if (startIndex > 0) {
-        insertLoadMorePlaceholder(startIndex);
-    }
-
-    // 保持滚动位置不跳动：补偿新增高度
-    const heightDiff = messagesContainer.scrollHeight - prevScrollHeight;
-    messagesContainer.scrollTop += heightDiff;
-
-    lazyRenderState.isLoadingMore = false;
 }
 
 // ─── 滚动相关 ─────────────────────────────────────────────────────────────────
@@ -3371,7 +3405,21 @@ function connectWebSocket() {
     }
 
     // 构建WebSocket URL
-    const wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+    let wsUrl = serverUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/messages/subscribe';
+
+    // 浏览器 WebSocket 无法设置自定义 header，通过 ?token= 携带鉴权凭证。
+    // 优先取输入框的值，留空时回落到上传配置中的 authorization
+    let authToken = authTokenInput ? authTokenInput.value.trim() : '';
+    if (!authToken) {
+        const uploadedConfig = typeof getUploadedConfig === 'function' ? getUploadedConfig() : null;
+        if (uploadedConfig) {
+            const metadata = uploadedConfig.metadata || {};
+            authToken = uploadedConfig.authorization || metadata.authorization || '';
+        }
+    }
+    if (authToken) {
+        wsUrl += '?token=' + encodeURIComponent(authToken);
+    }
 
     try {
         updateSubscribeButtonState('connecting');
@@ -3827,7 +3875,7 @@ function handleWebSocketMessage(event) {
             }
         } else if (eventType === 'before_tool_call' || eventType === 'after_tool_call') {
             // 工具调用事件 → 紧凑的工具调用块，detail 默认折叠
-            const tool = payload && payload.tool;
+            const tool = payload && normalizeToolAttachments(payload.tool, payload.attachments);
             if (tool) {
                 showToolCallMessage(tool, eventType, payload.send_timestamp, false, {
                     correlationId: payload.correlation_id,
@@ -3861,7 +3909,13 @@ function handleSuperMagicChunkMessage(data) {
     if (!envelope || !envelope.chunk) return false;
 
     const chunk = envelope.chunk;
-    const messageKey = envelope.appMessageId || chunk.id || chunk.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    );
     const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
     for (const choice of choices) {
         const delta = choice && choice.delta ? choice.delta : {};
@@ -3900,12 +3954,13 @@ function isDuplicateSuperMagicChunkDelta(envelope, choice, deltaType) {
     const chunkIndex = chunk.i ?? chunk.chunk_id ?? chunk.index;
     if (chunkIndex === undefined || chunkIndex === null) return false;
 
-    const messageKey =
-        envelope.appMessageId ||
-        chunk.id ||
-        chunk.correlation_id ||
-        chunk.app_message_id ||
-        'unknown';
+    const messageKey = resolveSuperMagicMessageKey(
+        chunk.super_message_id,
+        envelope.appMessageId,
+        chunk.app_message_id,
+        chunk.id,
+        chunk.correlation_id,
+    ) || 'unknown';
     const choiceIndex = choice && choice.index !== undefined ? choice.index : 0;
     const dedupeKey = `${messageKey}:${choiceIndex}:${deltaType}:${chunkIndex}`;
 
@@ -4120,8 +4175,26 @@ function extractSuperMagicChunkEnvelope(data) {
     };
 }
 
+/**
+ * 解析 V2 流式消息与最终消息共享的稳定标识。
+ *
+ * super_message_id 由 Super Magic 生成并由下游透传，不会因消息落库而被覆盖；
+ * 其余标识仅用于兼容旧消息和未携带 super_message_id 的数据。
+ */
+function resolveSuperMagicMessageKey(superMessageId, ...fallbackIds) {
+    const messageId = [superMessageId, ...fallbackIds]
+        .find(value => value !== undefined && value !== null && value !== '');
+    return messageId === undefined ? '' : String(messageId);
+}
+
 function handleSuperMagicMessage(smsg, payload) {
-    const messageKey = smsg.message_id || payload.message_id || smsg.correlation_id || payload.correlation_id || '';
+    const messageKey = resolveSuperMagicMessageKey(
+        smsg.super_message_id,
+        smsg.message_id,
+        payload.message_id,
+        smsg.correlation_id,
+        payload.correlation_id,
+    );
     const isToolRole = smsg.role === 'tool';
     let hasVisibleContent = false;
     let hasReplyContent = false;
@@ -4131,6 +4204,7 @@ function handleSuperMagicMessage(smsg, payload) {
         showThinkingMessage(smsg.reasoning_content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
@@ -4139,17 +4213,24 @@ function handleSuperMagicMessage(smsg, payload) {
         showAIMessage(smsg.content, payload.send_timestamp, false, {
             key: messageKey,
             replace: true,
+            finalize: true,
         });
         hasVisibleContent = true;
         hasReplyContent = true;
     }
 
     const tools = collectToolsFromSuperMagicMessage(smsg, payload);
+    const finishedAttachments = isMainAgentFinished(payload) && Array.isArray(payload.attachments)
+        ? payload.attachments
+        : null;
     for (const item of tools) {
         showToolCallMessage(item.tool, payload.event, payload.send_timestamp, false, {
             correlationId: smsg.correlation_id || payload.correlation_id,
             toolCallId: item.toolCallId,
             modelContent: item.modelContent,
+            attachments: isFinalTaskTool(item.tool)
+                ? (finishedAttachments || [])
+                : undefined,
         });
         if (payload.event === 'before_tool_call') {
             showAssistantActivity('tool');
@@ -4178,19 +4259,53 @@ function isMainAgentFinished(payload) {
 function collectToolsFromSuperMagicMessage(smsg, payload) {
     const tools = [];
     if (smsg.tool) {
-        tools.push({ tool: smsg.tool, toolCallId: smsg.tool_call_id || smsg.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(smsg.tool, smsg.attachments, payload && payload.attachments),
+            toolCallId: smsg.tool_call_id || smsg.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     if (Array.isArray(smsg.tool_calls)) {
         for (const toolCall of smsg.tool_calls) {
             if (toolCall && toolCall.tool) {
-                tools.push({ tool: toolCall.tool, toolCallId: toolCall.id || toolCall.tool.id, modelContent: toolCall.content || '' });
+                tools.push({
+                    tool: normalizeToolAttachments(
+                        toolCall.tool,
+                        toolCall.attachments,
+                        smsg.attachments,
+                        payload && payload.attachments,
+                    ),
+                    toolCallId: toolCall.id || toolCall.tool.id,
+                    modelContent: toolCall.content || '',
+                });
             }
         }
     }
     if (payload && payload.tool) {
-        tools.push({ tool: payload.tool, toolCallId: payload.tool.id, modelContent: smsg.content || '' });
+        tools.push({
+            tool: normalizeToolAttachments(payload.tool, payload.attachments, smsg.attachments),
+            toolCallId: payload.tool.id,
+            modelContent: smsg.content || '',
+        });
     }
     return tools;
+}
+
+function normalizeToolAttachments(tool, ...attachmentSources) {
+    if (!tool || typeof tool !== 'object') return tool;
+    const merged = [];
+    const seen = new Set();
+    for (const source of [tool.attachments, ...attachmentSources]) {
+        if (!Array.isArray(source)) continue;
+        for (const attachment of source) {
+            if (!attachment || typeof attachment !== 'object') continue;
+            const identity = attachment.file_key || attachment.file_url || attachment.filename;
+            if (identity && seen.has(identity)) continue;
+            if (identity) seen.add(identity);
+            merged.push(attachment);
+        }
+    }
+    return merged.length ? { ...tool, attachments: merged } : tool;
 }
 
 // 将文本片段用 marked 渲染为 markdown，marked 不可用时降级为纯文本
@@ -4209,7 +4324,98 @@ function renderMarkdown(text) {
         a.setAttribute('target', '_blank');
         a.setAttribute('rel', 'noopener');
     });
+    enhanceRenderedFilePathMentions(div);
     return div;
+}
+
+/**
+ * 将 Markdown 正文中的文件路径标记渲染为可点击的工作区文件标签。
+ */
+function enhanceRenderedFilePathMentions(root) {
+    if (!root || !root.textContent.includes('[@file_path:')) return;
+    const textNodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent || parent.closest('pre, code, a, button, .ai-file-path-mention')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return node.textContent.includes('[@file_path:')
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT;
+        },
+    });
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(replaceFilePathMentionsInTextNode);
+}
+
+/**
+ * 替换单个文本节点中的文件路径标记，保留标记前后的普通文本。
+ */
+function replaceFilePathMentionsInTextNode(textNode) {
+    const text = textNode.textContent || '';
+    const pattern = /\[@file_path:(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\]]+))\]/g;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+    let hasMatch = false;
+
+    while ((match = pattern.exec(text)) !== null) {
+        const rawPath = match[1] ?? match[2] ?? match[3] ?? '';
+        const filePath = normalizeRenderedFilePath(rawPath, match[1] !== undefined || match[2] !== undefined);
+        if (!filePath) continue;
+        hasMatch = true;
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        fragment.appendChild(createRenderedFilePathMention(filePath));
+        lastIndex = match.index + match[0].length;
+    }
+
+    if (!hasMatch) return;
+    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    textNode.replaceWith(fragment);
+}
+
+/**
+ * 标准化消息正文中的工作区文件路径，内部始终使用相对路径。
+ */
+function normalizeRenderedFilePath(rawPath, isQuoted = false) {
+    let filePath = String(rawPath || '').trim();
+    if (isQuoted) filePath = filePath.replace(/\\(.)/g, '$1');
+    try {
+        filePath = decodeURI(filePath);
+    } catch (_) {
+        // 解码失败时继续使用原始路径。
+    }
+    return filePath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+}
+
+/**
+ * 创建与 magic-web 展示一致的文件路径标签，并复用现有文件预览能力。
+ */
+function createRenderedFilePathMention(filePath) {
+    const mention = document.createElement('span');
+    mention.className = 'ai-file-path-mention';
+    mention.setAttribute('role', 'button');
+    mention.setAttribute('tabindex', '0');
+    mention.title = filePath;
+    mention.textContent = `@${filePath}`;
+
+    const openPreview = () => {
+        void openApiFilePreviewTab({
+            name: getWorkspaceFileBaseName(filePath),
+            path: filePath,
+            type: 'file',
+            size: 0,
+            updated_at: 0,
+        });
+    };
+    mention.addEventListener('click', openPreview);
+    mention.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openPreview();
+    });
+    return mention;
 }
 
 function renderMarkdownContent(text) {
@@ -4335,7 +4541,7 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
         toggleBtn.textContent = showingRaw ? 'MD' : '原文';
     });
 
-    messageState = { messageDiv, renderedView, rawView, content: '' };
+    messageState = { messageDiv, renderedView, rawView, content: '', finalized: false };
     attachCopyButton(actions, () => messageState.content);
     updateAIMessageState(messageState, content, options);
     if (registryKey) {
@@ -4345,11 +4551,20 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateAIMessageState(messageState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(messageState, options)) return;
     const nextContent = options.append ? messageState.content + content : content;
     messageState.content = nextContent;
+    if (options.finalize) messageState.finalized = true;
     messageState.renderedView.replaceChildren(buildRenderedView(nextContent));
     messageState.rawView.textContent = nextContent;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
+}
+
+/**
+ * 判断是否应忽略权威最终消息到达后的迟到流式片段。
+ */
+function shouldIgnoreLateStreamAppend(messageState, options = {}) {
+    return messageState.finalized === true && options.append === true;
 }
 
 // 显示思考过程（折叠展示）
@@ -4386,7 +4601,7 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 
     wrapper.appendChild(summary);
     wrapper.appendChild(detail);
-    thinkingState = { wrapper, detail, content: '' };
+    thinkingState = { wrapper, detail, content: '', finalized: false };
     attachCopyButton(summary, () => thinkingState.content, { compact: true });
     updateThinkingMessageState(thinkingState, content, options);
     if (registryKey) {
@@ -4396,7 +4611,9 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
 }
 
 function updateThinkingMessageState(thinkingState, content, options = {}) {
+    if (shouldIgnoreLateStreamAppend(thinkingState, options)) return;
     thinkingState.content = options.append ? thinkingState.content + content : content;
+    if (options.finalize) thinkingState.finalized = true;
     thinkingState.detail.textContent = thinkingState.content;
     syncScrollAfterMessageChange(isMessageViewportAtBottom());
 }
@@ -4765,6 +4982,7 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
     if (!_noLog) {
         const logEntry = { type: 'tool_call', tool, eventType, timestamp };
         if (options.modelContent) logEntry.modelContent = options.modelContent;
+        if (Array.isArray(options.attachments)) logEntry.attachments = options.attachments;
         pushLog(logEntry);
     }
 
@@ -4818,6 +5036,10 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
     detailEl.className = 'tool-call-detail';
     detailEl.style.display = 'none';
 
+    const attachmentsEl = document.createElement('div');
+    attachmentsEl.className = 'tool-call-attachments';
+    attachmentsEl.style.display = 'none';
+
     header.style.cursor = 'pointer';
     header.addEventListener('click', () => {
         if (toolState.openDetailPreview) {
@@ -4832,8 +5054,21 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
 
     wrapper.appendChild(header);
     wrapper.appendChild(detailEl);
+    wrapper.appendChild(attachmentsEl);
 
-    toolState = { wrapper, header, actionSpan, remarkSpan, timeSpan, arrow, detailEl, copyBtn, openDetailPreview: null, modelContent: '' };
+    toolState = {
+        wrapper,
+        header,
+        actionSpan,
+        remarkSpan,
+        timeSpan,
+        arrow,
+        detailEl,
+        attachmentsEl,
+        copyBtn,
+        openDetailPreview: null,
+        modelContent: '',
+    };
     updateToolCallState(toolState, tool, eventType, timeStr, options);
     if (toolKey) {
         toolCallRegistry.set(toolKey, toolState);
@@ -4891,7 +5126,148 @@ function updateToolCallState(toolState, tool, eventType, timeStr, options = {}) 
     toolState.timeSpan.textContent = timeStr;
 
     updateToolDetailView(toolState, detail, tool, eventType);
+    const attachments = Array.isArray(options.attachments)
+        ? options.attachments
+        : (Array.isArray(tool.attachments) ? tool.attachments : null);
+    if (attachments !== null) {
+        renderToolCallAttachments(toolState.attachmentsEl, attachments);
+    }
     syncScrollAfterMessageChange(shouldStickToBottom);
+}
+
+/**
+ * 渲染工具完成消息携带的附件，严格保留后端数组顺序。
+ */
+function renderToolCallAttachments(container, attachments) {
+    if (!container) return;
+    container.innerHTML = '';
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const title = document.createElement('div');
+    title.className = 'tool-call-attachments-title';
+    title.textContent = `附件（${attachments.length}）`;
+
+    const list = document.createElement('ol');
+    list.className = 'tool-call-attachments-list';
+    attachments.forEach((attachment, index) => {
+        list.appendChild(createToolCallAttachmentItem(attachment, index));
+    });
+
+    container.appendChild(title);
+    container.appendChild(list);
+    container.style.display = '';
+}
+
+/**
+ * 创建单个附件列表项；本地模拟附件复用工作区预览，线上附件使用安全的 HTTP 地址。
+ */
+function createToolCallAttachmentItem(attachment, index) {
+    const item = document.createElement('li');
+    item.className = 'tool-call-attachment-item';
+
+    const localPath = getLocalDebugAttachmentPath(attachment);
+    const fileUrl = getAttachmentHttpUrl(attachment);
+    const canOpen = Boolean(localPath || fileUrl);
+    const content = document.createElement(canOpen ? 'button' : 'div');
+    content.className = `tool-call-attachment-content${canOpen ? ' is-clickable' : ''}`;
+    if (canOpen) content.type = 'button';
+
+    const order = document.createElement('span');
+    order.className = 'tool-call-attachment-order';
+    order.textContent = String(index + 1);
+
+    const text = document.createElement('span');
+    text.className = 'tool-call-attachment-text';
+
+    const name = document.createElement('span');
+    name.className = 'tool-call-attachment-name';
+    name.textContent = getAttachmentDisplayName(attachment, localPath);
+    name.title = name.textContent;
+
+    const metaText = getAttachmentMetaText(attachment);
+    text.appendChild(name);
+    if (metaText) {
+        const meta = document.createElement('span');
+        meta.className = 'tool-call-attachment-meta';
+        meta.textContent = metaText;
+        text.appendChild(meta);
+    }
+
+    content.appendChild(order);
+    content.appendChild(text);
+    if (canOpen) {
+        const action = document.createElement('span');
+        action.className = 'tool-call-attachment-action';
+        action.textContent = localPath ? '预览' : '打开';
+        content.appendChild(action);
+        content.addEventListener('click', () => {
+            if (localPath) {
+                void openApiFilePreviewTab({
+                    name: getAttachmentDisplayName(attachment, localPath),
+                    path: localPath,
+                    type: 'file',
+                    size: Number(attachment?.file_size) || 0,
+                    updated_at: Number(attachment?.timestamp) || 0,
+                });
+                return;
+            }
+            window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        });
+    }
+
+    item.appendChild(content);
+    return item;
+}
+
+/**
+ * 从本地调试附件标识中提取工作区相对路径，不对工作区做额外扫描。
+ */
+function getLocalDebugAttachmentPath(attachment) {
+    const prefix = 'local-debug/workspace/';
+    const fileKey = String(attachment?.file_key || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!fileKey.startsWith(prefix)) return '';
+    return fileKey.slice(prefix.length).replace(/^\/+/, '');
+}
+
+/**
+ * 获取允许在新窗口打开的附件 HTTP 地址。
+ */
+function getAttachmentHttpUrl(attachment) {
+    const value = String(attachment?.file_url || '').trim();
+    if (!value) return '';
+    try {
+        const url = new URL(value, window.location.href);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+    } catch (_) {
+        return '';
+    }
+}
+
+/**
+ * 获取附件展示名称，缺失时依次回退到本地路径和通用名称。
+ */
+function getAttachmentDisplayName(attachment, localPath = '') {
+    return attachment?.display_filename ||
+        attachment?.filename ||
+        getWorkspaceFileBaseName(localPath) ||
+        '未命名附件';
+}
+
+/**
+ * 生成附件扩展名和大小摘要。
+ */
+function getAttachmentMetaText(attachment) {
+    const parts = [];
+    const extension = String(attachment?.file_extension || '').replace(/^\./, '').trim();
+    if (extension) parts.push(extension.toUpperCase());
+    const fileSize = Number(attachment?.file_size);
+    if (Number.isFinite(fileSize) && fileSize >= 0) {
+        parts.push(formatFileSizeBytes(fileSize));
+    }
+    return parts.join(' · ');
 }
 
 function normalizeToolStatus(status, eventType) {
@@ -4934,6 +5310,11 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         return;
     }
 
+    if (detail && detail.type === 'browser' && detail.data) {
+        renderBrowserToolDetail(toolState, detail.data, tool);
+        return;
+    }
+
     if (!detail && toolState.detailEl.textContent) {
         toolState.arrow.style.display = '';
         return;
@@ -4949,6 +5330,107 @@ function updateToolDetailView(toolState, detail, tool, eventType) {
         toolState.detailEl.style.display = 'none';
         toolState.arrow.textContent = '▶';
     }
+}
+
+function renderBrowserToolDetail(toolState, data, tool) {
+    const attachments = Array.isArray(tool.attachments) ? tool.attachments : [];
+    const attachment = attachments.find(item => item && item.file_key === data.file_key);
+    let imageUrl = typeof data.file_url === 'string' ? data.file_url : '';
+    if (!imageUrl && attachment && typeof attachment.file_url === 'string') {
+        imageUrl = attachment.file_url;
+    }
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const summary = browserDetailSummary(data, action, pageTitle);
+    const target = data.target || '';
+    const pageUrl = data.url || '';
+
+    toolState.detailEl.classList.add('tool-call-detail-browser');
+    toolState.detailEl.replaceChildren();
+
+    const meta = document.createElement('div');
+    meta.className = 'browser-tool-detail-meta';
+    const heading = document.createElement('div');
+    heading.className = 'browser-tool-detail-title';
+    heading.textContent = title;
+    meta.appendChild(heading);
+    if (summary) {
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'browser-tool-detail-summary';
+        summaryEl.textContent = summary;
+        meta.appendChild(summaryEl);
+    }
+    if (target) {
+        const targetEl = document.createElement('div');
+        targetEl.className = 'browser-tool-detail-target';
+        targetEl.textContent = `操作对象：${target}`;
+        meta.appendChild(targetEl);
+    }
+    if (pageUrl) {
+        const link = document.createElement('a');
+        link.className = 'browser-tool-detail-url';
+        link.href = pageUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = `页面地址：${pageUrl}`;
+        link.addEventListener('click', event => event.stopPropagation());
+        meta.appendChild(link);
+    }
+    toolState.detailEl.appendChild(meta);
+
+    if (imageUrl) {
+        const image = document.createElement('img');
+        image.className = 'browser-tool-detail-image';
+        image.src = imageUrl;
+        image.alt = title;
+        image.addEventListener('error', () => {
+            image.replaceWith(createBrowserSnapshotPlaceholder('截图已过期或暂时无法加载'));
+        });
+        toolState.detailEl.appendChild(image);
+    }
+
+    const previewMarkdown = buildBrowserDetailMarkdown(data, imageUrl);
+    toolState.arrow.style.display = '';
+    toolState.openDetailPreview = () => openToolDetailPreview(tool, detailFromBrowserData(data), previewMarkdown, toolState.modelContent || '');
+    toolState.detailEl.style.display = 'none';
+    toolState.arrow.textContent = '▶';
+}
+
+function browserDetailSummary(data, action, pageTitle) {
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : '';
+    if (summary) return summary;
+    if (data.status === 'failed') return `${action}未完成，请查看错误信息。`;
+    if (data.target) return `${action}已完成：${data.target}`;
+    if (pageTitle) return `${action}已完成，当前页面为「${pageTitle}」`;
+    if (data.status === 'succeeded') return `${action}已完成。`;
+    return '';
+}
+
+function createBrowserSnapshotPlaceholder(text) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'browser-tool-detail-placeholder';
+    placeholder.textContent = text;
+    return placeholder;
+}
+
+function detailFromBrowserData(data) {
+    return { type: 'browser', data };
+}
+
+function buildBrowserDetailMarkdown(data, imageUrl) {
+    const action = data.action || '网页操作';
+    const pageTitle = data.page_title || '';
+    const title = pageTitle || data.title || action;
+    const lines = [`## ${title}`];
+    const summary = browserDetailSummary(data, action, pageTitle);
+    if (summary) lines.push('', summary);
+    if (data.target) lines.push('', `操作对象：${data.target}`);
+    if (data.url) lines.push('', `<a href="${escapeHtml(data.url)}" target="_blank" rel="noreferrer">${escapeHtml(data.url)}</a>`);
+    if (imageUrl) {
+        lines.push('', `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" style="max-height:720px;max-width:100%;height:auto">`);
+    }
+    return lines.join('\n');
 }
 
 function formatToolDetail(detail) {
@@ -4989,6 +5471,9 @@ function openToolDetailPreview(tool, detail, detailText, modelContent = '') {
 }
 
 function buildToolDetailMarkdown(detail, detailText) {
+    if (detail && typeof detail === 'object' && detail.type === 'browser') {
+        return detailText;
+    }
     if (detail && typeof detail === 'object' && detail.type === 'md') {
         return detailText;
     }
@@ -5015,14 +5500,15 @@ function showEventLog(data, _noLog = false) {
         if (eventLogObjectSeen.has(data)) return;
         eventLogObjectSeen.add(data);
     }
-    if (!_noLog) pushLog({ type: 'event', data });
+    const displayData = sanitizeDebugValue(data);
+    if (!_noLog) pushLog({ type: 'event', data: displayData });
     if (!showRawEvents) return;
     if (data && typeof data === 'object') {
         if (eventTraceObjectSeen.has(data)) return;
         eventTraceObjectSeen.add(data);
     }
-    const eventLabel = getEventTraceLabel(data);
-    const timeStr = getEventTraceTime(data);
+    const eventLabel = getEventTraceLabel(displayData);
+    const timeStr = getEventTraceTime(displayData);
     const shouldStickToBottom = isMessageViewportAtBottom();
 
     const trace = ensureEventTraceLog();
@@ -5045,7 +5531,7 @@ function showEventLog(data, _noLog = false) {
     const detail = document.createElement('pre');
     detail.className = 'event-log-detail';
     detail.style.display = 'none';
-    detail.textContent = JSON.stringify(data, null, 2);
+    detail.textContent = JSON.stringify(displayData, null, 2);
     trace.rawTexts.push(detail.textContent);
     attachCopyButton(summary, () => detail.textContent, { compact: true });
 
@@ -5055,6 +5541,32 @@ function showEventLog(data, _noLog = false) {
     trace.body.scrollTop = trace.body.scrollHeight;
     keepAssistantActivityLast();
     syncScrollAfterMessageChange(shouldStickToBottom, { showLatestButton: true });
+}
+
+function sanitizeDebugValue(value, seen = new WeakSet()) {
+    if (typeof value === 'string') {
+        const marker = ';base64,';
+        const markerIndex = value.indexOf(marker);
+        if (value.startsWith('data:') && markerIndex >= 0) {
+            const prefixEnd = markerIndex + marker.length;
+            return `${value.slice(0, prefixEnd)}<omitted ${value.length - prefixEnd} chars>`;
+        }
+        return value;
+    }
+    if (!value || typeof value !== 'object') return value;
+    if (seen.has(value)) return '<circular>';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        const items = value.map(item => sanitizeDebugValue(item, seen));
+        seen.delete(value);
+        return items;
+    }
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+        result[key] = sanitizeDebugValue(item, seen);
+    }
+    seen.delete(value);
+    return result;
 }
 
 function ensureEventTraceLog() {
@@ -5164,7 +5676,10 @@ function handleWebSocketClose(event) {
     updateSubscribeButtonState('disconnected');
     hideAssistantActivity();
 
-    if (event.wasClean) {
+    if (event.code === 4401 || event.code === 4503) {
+        // 服务端鉴权拒绝：4401 未授权（凭证缺失或不一致），4503 sandbox 未绑定 metadata.json
+        showConnectionStatusMessage(`WebSocket连接被服务端拒绝 (code: ${event.code}): ${event.reason || '鉴权失败'}`);
+    } else if (event.wasClean) {
         showConnectionStatusMessage("WebSocket连接正常关闭");
     } else {
         showConnectionStatusMessage(`WebSocket连接意外断开 (code: ${event.code})`);
@@ -5243,14 +5758,29 @@ function normalizeMentionFilePath(raw) {
 }
 
 /**
- * 从 prompt 解析 [@directory_path:…] / [@file_path:…]，生成 mentions 数组（按出现顺序，按路径去重）。
- * project_file 在本地客户端无服务端 file_id，file_id 置空串，file_key 为 null。
+ * 根据文件树范围生成可插入到消息中的 mention 文本。
+ */
+function buildFiletreeMentionSnippet(kind, path, scope = getActiveFiletreeScope()) {
+    const normalizedPath = kind === 'directory'
+        ? normalizeMentionDirectoryPath(path)
+        : normalizeMentionFilePath(path);
+    if (!normalizedPath) return '';
+    const type = scope === 'memory'
+        ? (kind === 'directory' ? 'memory_directory' : 'memory_file')
+        : (kind === 'directory' ? 'directory_path' : 'file_path');
+    return `[@${type}:${normalizedPath}]${MENTION_PROMPT_SEPARATOR}`;
+}
+
+/**
+ * 从 prompt 解析工作区与长期记忆 mention，生成后端需要的结构化 mentions。
  */
 function parsePromptMentions(prompt) {
     if (!prompt || typeof prompt !== 'string') return [];
     const found = [];
     const dirRe = /\[@directory_path:([^\]]+)\]/g;
     const fileRe = /\[@file_path:([^\]]+)\]/g;
+    const memoryDirRe = /\[@memory_(?:directory|dir):([^\]]+)\]/g;
+    const memoryFileRe = /\[@memory_file:([^\]]+)\]/g;
     let m;
     while ((m = dirRe.exec(prompt)) !== null) {
         const directory_path = normalizeMentionDirectoryPath(m[1]);
@@ -5274,13 +5804,40 @@ function parsePromptMentions(prompt) {
             });
         }
     }
+    while ((m = memoryDirRe.exec(prompt)) !== null) {
+        const directory_path = normalizeMentionDirectoryPath(m[1]);
+        if (directory_path) {
+            found.push({
+                index: m.index,
+                mention: {
+                    type: 'memory_directory',
+                    directory_name: getWorkspaceFileBaseName(directory_path.replace(/\/+$/, '')),
+                    directory_path,
+                },
+            });
+        }
+    }
+    while ((m = memoryFileRe.exec(prompt)) !== null) {
+        const file_path = normalizeMentionFilePath(m[1]);
+        if (file_path) {
+            found.push({
+                index: m.index,
+                mention: {
+                    type: 'memory_file',
+                    file_id: '',
+                    file_name: getWorkspaceFileBaseName(file_path),
+                    file_path,
+                },
+            });
+        }
+    }
     found.sort((a, b) => a.index - b.index);
     const seen = new Set();
     const mentions = [];
     for (const { mention } of found) {
-        const key = mention.type === 'project_directory'
-            ? `d:${mention.directory_path}`
-            : `f:${mention.file_path}`;
+        const key = mention.type === 'project_directory' || mention.type === 'memory_directory'
+            ? `d:${mention.type}:${mention.directory_path}`
+            : `f:${mention.type}:${mention.file_path}`;
         if (seen.has(key)) continue;
         seen.add(key);
         mentions.push(mention);
@@ -5377,13 +5934,13 @@ async function collectWorkspaceMentionPaths(dirHandle, pathPrefix, out) {
     }
 }
 
-function collectApiWorkspaceMentionPaths(entries, out) {
+function collectApiWorkspaceMentionPaths(entries, out, scope = getActiveFiletreeScope()) {
     for (const entry of entries || []) {
         if (!entry || !entry.path) continue;
         const kind = entry.type === 'directory' ? 'directory' : 'file';
-        out.push({ kind, path: entry.path });
+        out.push({ kind, path: entry.path, scope });
         if (kind === 'directory' && Array.isArray(entry.children)) {
-            collectApiWorkspaceMentionPaths(entry.children, out);
+            collectApiWorkspaceMentionPaths(entry.children, out, scope);
         }
     }
 }
@@ -5393,7 +5950,7 @@ async function refreshWorkspaceMentionIndex() {
     const out = [];
     try {
         const data = await debugWorkspaceApi.listTree('', 8);
-        collectApiWorkspaceMentionPaths(data.entries || [], out);
+        collectApiWorkspaceMentionPaths(data.entries || [], out, getActiveFiletreeScope());
         workspaceMentionIndex = out;
     } catch (e) {
         console.warn('构建 @ 路径索引失败', e);
@@ -5482,7 +6039,7 @@ function renderMentionPickerRows(items) {
     if (!items.length) {
         const empty = document.createElement('div');
         empty.className = 'mention-picker-empty';
-        empty.textContent = '没有匹配的工作区路径';
+        empty.textContent = '没有匹配的路径';
         el.appendChild(empty);
         return;
     }
@@ -5513,9 +6070,7 @@ function applyMentionPickerChoice(item) {
     if (!ta || !mentionPickerState.open) return;
     const end = ta.selectionStart ?? ta.value.length;
     const start = mentionPickerState.start;
-    const snippet = item.kind === 'directory'
-        ? `[@directory_path:${normalizeMentionDirectoryPath(item.path)}]${MENTION_PROMPT_SEPARATOR}`
-        : `[@file_path:${normalizeMentionFilePath(item.path)}]${MENTION_PROMPT_SEPARATOR}`;
+    const snippet = buildFiletreeMentionSnippet(item.kind, item.path, item.scope);
     const before = ta.value.slice(0, start);
     const after = ta.value.slice(end);
     ta.value = before + snippet + after;
@@ -5610,6 +6165,13 @@ const filePreviewMeta = document.getElementById('filePreviewMeta');
 const filePreviewClose = document.getElementById('filePreviewClose');
 const filePreviewOpenBtn = document.getElementById('filePreviewOpenBtn');
 const filePreviewRenderBtn = document.getElementById('filePreviewRenderBtn');
+const filePreviewEditBtn = document.getElementById('filePreviewEditBtn');
+const filePreviewSaveBtn = document.getElementById('filePreviewSaveBtn');
+const filePreviewCancelBtn = document.getElementById('filePreviewCancelBtn');
+const filetreeTitle = document.getElementById('filetreeTitle');
+const filetreeScopeTabs = [...document.querySelectorAll('[data-file-scope]')];
+const expandAllTreeBtn = document.getElementById('expandAllTreeBtn');
+const collapseAllTreeBtn = document.getElementById('collapseAllTreeBtn');
 
 /** 媒体/PDF 预览用的 blob URL，关闭或切换预览时需 revoke */
 let filePreviewObjectUrl = null;
@@ -5618,12 +6180,23 @@ let filePreviewObjectUrl = null;
 let currentPreviewFile = null;
 let currentPreviewPath = '';
 let currentPreviewCopyText = '';
+let currentPreviewEditable = false;
+let filePreviewEditMode = false;
+let filePreviewEditDirty = false;
+let filePreviewEditContent = '';
 const filePreviewTabs = new Map();
 let activeFilePreviewPath = '';
 let filePreviewScrollPositions = {};
 let filePreviewScrollSaveFrame = null;
 let isRestoringFilePreviewState = false;
 let workspaceUploadTargetDir = '';
+const FILETREE_SCOPE_KEY = 'httpClient.filetreeScope';
+const FILETREE_SCOPES = {
+    workspace: { title: '工作区文件', rootLabel: '.workspace', uploadLabel: '上传文件到 .workspace 根目录' },
+    memory: { title: '长期记忆文件', rootLabel: '~/.magic/memory', uploadLabel: '上传文件到长期记忆根目录' },
+};
+let activeFiletreeScope = localStorage.getItem(FILETREE_SCOPE_KEY) === 'memory' ? 'memory' : 'workspace';
+const DEFAULT_EXPANDED_DIRECTORY_LIMIT = 15;
 
 const UNSUPPORTED_REMOTE_IMAGE_EXT_RE = /\.(heic|heif|tif|tiff)(?:[?#]|$)/i;
 const DEBUG_WORKSPACE_FILES_API_PREFIX = '/api/v1/debug/workspace-files';
@@ -5633,8 +6206,37 @@ function getDebugWorkspaceApiBase() {
     return `${base}${DEBUG_WORKSPACE_FILES_API_PREFIX}`;
 }
 
-async function requestDebugWorkspaceJson(path, options = {}) {
-    const response = await fetch(`${getDebugWorkspaceApiBase()}${path}`, {
+function getActiveFiletreeScope() {
+    return activeFiletreeScope;
+}
+
+function getActiveFiletreeScopeConfig() {
+    return FILETREE_SCOPES[getActiveFiletreeScope()];
+}
+
+function updateFiletreeScopeUi() {
+    const config = getActiveFiletreeScopeConfig();
+    if (filetreeTitle) filetreeTitle.textContent = config.title;
+    filetreeScopeTabs.forEach((tab) => {
+        const isActive = tab.dataset.fileScope === getActiveFiletreeScope();
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+    });
+    if (uploadWorkspaceBtn) {
+        uploadWorkspaceBtn.title = config.uploadLabel;
+        uploadWorkspaceBtn.setAttribute('aria-label', config.uploadLabel);
+    }
+    if (refreshTreeBtn) refreshTreeBtn.title = `刷新${config.title}`;
+    if (selectWorkspaceBtn) selectWorkspaceBtn.title = `刷新${config.title}`;
+}
+
+function appendFiletreeScope(path, scope = getActiveFiletreeScope()) {
+    const separator = path.includes('?') ? '&' : '?';
+    return `${path}${separator}scope=${encodeURIComponent(scope)}`;
+}
+
+async function requestDebugWorkspaceJson(path, options = {}, scope = getActiveFiletreeScope()) {
+    const response = await fetch(`${getDebugWorkspaceApiBase()}${appendFiletreeScope(path, scope)}`, {
         headers: {
             ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
             ...(options.headers || {}),
@@ -5650,38 +6252,38 @@ async function requestDebugWorkspaceJson(path, options = {}) {
 
 function createDebugWorkspaceApiClient() {
     return {
-        listTree(path = '', depth = 2) {
+        listTree(path = '', depth = 2, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({
                 path: path || '',
                 depth: String(depth),
             });
-            return requestDebugWorkspaceJson(`/tree?${query.toString()}`);
+            return requestDebugWorkspaceJson(`/tree?${query.toString()}`, {}, scope);
         },
-        readFile(path) {
+        readFile(path, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/content', {
                 method: 'POST',
                 body: JSON.stringify({ path }),
-            });
+            }, scope);
         },
-        writeFile(path, content) {
+        writeFile(path, content, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/content', {
                 method: 'PUT',
                 body: JSON.stringify({ path, content, create_parent_dirs: true, overwrite: true }),
-            });
+            }, scope);
         },
-        deletePath(path, recursive = false) {
+        deletePath(path, recursive = false, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('', {
                 method: 'DELETE',
                 body: JSON.stringify({ path, recursive }),
-            });
+            }, scope);
         },
-        movePath(sourcePath, targetPath, overwrite = false) {
+        movePath(sourcePath, targetPath, overwrite = false, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/move', {
                 method: 'POST',
                 body: JSON.stringify({ source_path: sourcePath, target_path: targetPath, overwrite }),
-            });
+            }, scope);
         },
-        uploadFile(targetDir, filename, contentBase64, overwrite = true) {
+        uploadFile(targetDir, filename, contentBase64, overwrite = true, scope = getActiveFiletreeScope()) {
             return requestDebugWorkspaceJson('/upload', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -5690,20 +6292,22 @@ function createDebugWorkspaceApiClient() {
                     content_base64: contentBase64,
                     overwrite,
                 }),
-            });
+            }, scope);
         },
-        rawUrl(path) {
+        rawUrl(path, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({ path });
+            query.set('scope', scope);
             return `${getDebugWorkspaceApiBase()}/raw?${query.toString()}`;
         },
         /** 构造保留目录层级的原始文件地址，供 HTML 相对资源解析使用。 */
-        rawPathUrl(path) {
+        rawPathUrl(path, scope = getActiveFiletreeScope()) {
             const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
             const encodedPath = normalizedPath.split('/').map(encodeURIComponent).join('/');
-            return `${getDebugWorkspaceApiBase()}/raw/${encodedPath}`;
+            return `${getDebugWorkspaceApiBase()}/raw/${encodedPath}?scope=${encodeURIComponent(scope)}`;
         },
-        downloadUrl(path) {
+        downloadUrl(path, scope = getActiveFiletreeScope()) {
             const query = new URLSearchParams({ path });
+            query.set('scope', scope);
             return `${getDebugWorkspaceApiBase()}/download?${query.toString()}`;
         },
     };
@@ -5853,6 +6457,10 @@ function revokeCanvasBlobUrls() {
 }
 
 function hideFilePreview() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     resetActivePreviewSurface();
     setFilePreviewWorkbenchVisible(false);
@@ -5908,13 +6516,13 @@ async function uploadWorkspaceFiles(files, targetDir = '') {
     return uploaded;
 }
 
-async function uploadWorkspaceFilesToDirectory(files, targetDir = '') {
+async function uploadWorkspaceFilesToDirectory(files, targetDir = '', scope = getActiveFiletreeScope()) {
     const list = Array.from(files || []).filter(file => file && file.name);
     const normalizedTargetDir = String(targetDir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     const uploaded = [];
     for (const file of list) {
         const contentBase64 = await fileToBase64(file);
-        const entry = await debugWorkspaceApi.uploadFile(normalizedTargetDir, file.name, contentBase64, true);
+        const entry = await debugWorkspaceApi.uploadFile(normalizedTargetDir, file.name, contentBase64, true, scope);
         uploaded.push(entry);
     }
     return uploaded;
@@ -6085,7 +6693,7 @@ async function uploadFilesFromMessageInput(files, options = {}) {
 
     const uploaded = [];
     for (const item of uploadItems) {
-        const entries = await uploadWorkspaceFilesToDirectory([item.file], item.targetDir);
+        const entries = await uploadWorkspaceFilesToDirectory([item.file], item.targetDir, 'workspace');
         uploaded.push(...entries);
         expandedDirs.add(item.targetDir);
     }
@@ -6114,6 +6722,10 @@ function isWorkspacePreviewPathAffected(targetPath, previewPath) {
 async function deleteWorkspacePath(path, isDir) {
     const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     if (!normalizedPath) return;
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     await debugWorkspaceApi.deletePath(normalizedPath, Boolean(isDir));
     for (const item of [...expandedDirs]) {
         if (item === normalizedPath || item.startsWith(`${normalizedPath}/`)) {
@@ -6639,7 +7251,94 @@ function renderFilePreviewTabs() {
     }
 }
 
-function resetActivePreviewSurface() {
+function hasUnsavedFilePreviewEdits() {
+    return filePreviewEditMode && filePreviewEditDirty;
+}
+
+function updateFilePreviewEditActions() {
+    if (filePreviewEditMode) {
+        if (filePreviewEditBtn) filePreviewEditBtn.style.display = 'none';
+        if (filePreviewSaveBtn) filePreviewSaveBtn.style.display = '';
+        if (filePreviewCancelBtn) filePreviewCancelBtn.style.display = '';
+        return;
+    }
+    if (filePreviewEditBtn) filePreviewEditBtn.style.display = currentPreviewEditable ? '' : 'none';
+    if (filePreviewSaveBtn) filePreviewSaveBtn.style.display = 'none';
+    if (filePreviewCancelBtn) filePreviewCancelBtn.style.display = 'none';
+}
+
+function enterFilePreviewEditMode() {
+    if (!currentPreviewEditable || !filePreviewBody || filePreviewEditMode) return;
+    filePreviewEditMode = true;
+    filePreviewEditDirty = false;
+    filePreviewEditContent = currentPreviewCopyText;
+    resetActivePreviewSurface({ preserveEditState: true });
+    const editor = document.createElement('textarea');
+    editor.className = 'file-preview-editor';
+    editor.value = filePreviewEditContent;
+    editor.setAttribute('aria-label', `编辑 ${currentPreviewPath}`);
+    editor.spellcheck = false;
+    editor.addEventListener('input', () => {
+        filePreviewEditContent = editor.value;
+        filePreviewEditDirty = editor.value !== currentPreviewCopyText;
+        updateFilePreviewEditActions();
+    });
+    editor.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            saveFilePreviewEdits();
+        }
+    });
+    filePreviewBody.appendChild(editor);
+    updateFilePreviewEditActions();
+    editor.focus();
+}
+
+async function saveFilePreviewEdits() {
+    if (!filePreviewEditMode || !currentPreviewPath || !filePreviewEditDirty) return;
+    const path = currentPreviewPath;
+    const content = filePreviewEditContent;
+    if (filePreviewSaveBtn) {
+        filePreviewSaveBtn.disabled = true;
+        filePreviewSaveBtn.textContent = '保存中...';
+    }
+    try {
+        const result = await debugWorkspaceApi.writeFile(path, content);
+        const tab = filePreviewTabs.get(path);
+        if (tab?.entry && result) {
+            tab.entry.size = result.size;
+            tab.entry.updated_at = result.updated_at;
+        }
+        filePreviewEditMode = false;
+        filePreviewEditDirty = false;
+        await renderApiFilePreviewTab(tab || { type: 'api-file', path, entry: { path } });
+        await renderFileTree();
+        await refreshWorkspaceMentionIndex();
+        showSystemMessage(`已保存 ${path}`);
+    } catch (error) {
+        console.error('保存文件失败', error);
+        showSystemMessage(`保存失败：${error.message || error}`);
+    } finally {
+        if (filePreviewSaveBtn) {
+            filePreviewSaveBtn.disabled = false;
+            filePreviewSaveBtn.textContent = '保存';
+        }
+        updateFilePreviewEditActions();
+    }
+}
+
+async function cancelFilePreviewEdits() {
+    if (!filePreviewEditMode) return;
+    const path = currentPreviewPath;
+    const tab = filePreviewTabs.get(path);
+    filePreviewEditMode = false;
+    filePreviewEditDirty = false;
+    await renderApiFilePreviewTab(tab || { type: 'api-file', path, entry: { path } });
+}
+
+function resetActivePreviewSurface(options = {}) {
+    const preservedCopyText = currentPreviewCopyText;
+    const preservedEditable = currentPreviewEditable;
     if (window.MicroAppRuntimeHost) {
         window.MicroAppRuntimeHost.dispose();
     }
@@ -6657,7 +7356,14 @@ function resetActivePreviewSurface() {
     if (filePreviewMeta) filePreviewMeta.innerHTML = '';
     if (filePreviewOpenBtn) filePreviewOpenBtn.style.display = '';
     if (filePreviewRenderBtn) filePreviewRenderBtn.style.display = 'none';
-    currentPreviewCopyText = '';
+    currentPreviewCopyText = options.preserveEditState ? preservedCopyText : '';
+    currentPreviewEditable = options.preserveEditState ? preservedEditable : false;
+    if (!options.preserveEditState) {
+        filePreviewEditMode = false;
+        filePreviewEditDirty = false;
+        filePreviewEditContent = '';
+    }
+    updateFilePreviewEditActions();
 }
 
 function getStoredToolDetailModelRatio() {
@@ -6918,6 +7624,10 @@ function renderToolDetailPreviewTab(tab) {
 }
 
 function closeFilePreviewWorkbench() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return false;
+    }
     persistActiveFilePreviewScroll();
     resetActivePreviewSurface();
     filePreviewTabs.clear();
@@ -6927,9 +7637,14 @@ function closeFilePreviewWorkbench() {
     renderFilePreviewTabs();
     setFilePreviewWorkbenchVisible(false);
     localStorage.removeItem(FILE_PREVIEW_STATE_KEY);
+    return true;
 }
 
 function clearFilePreviewTabs() {
+    if (hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     filePreviewTabs.clear();
     filePreviewScrollPositions = {};
@@ -6961,6 +7676,10 @@ function clearToolDetailPreviewTab() {
 
 function closeFilePreviewTab(filePath) {
     if (!filePreviewTabs.has(filePath)) return;
+    if (filePath === activeFilePreviewPath && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     const wasActive = activeFilePreviewPath === filePath;
     filePreviewTabs.delete(filePath);
@@ -6981,6 +7700,10 @@ function closeFilePreviewTab(filePath) {
 function closeFilePreviewTabs(filePaths, preferredActivePath = '') {
     const targets = new Set(filePaths.filter(path => filePreviewTabs.has(path)));
     if (!targets.size) return;
+    if (targets.has(activeFilePreviewPath) && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     const wasActiveClosed = targets.has(activeFilePreviewPath);
     for (const filePath of targets) {
@@ -7041,6 +7764,11 @@ async function openFilePreviewTab(fileHandle, filePath) {
 async function activateFilePreviewTab(filePath, options = {}) {
     const tab = filePreviewTabs.get(filePath);
     if (!tab) return;
+    if (filePath === activeFilePreviewPath && filePreviewEditMode) return;
+    if (filePath !== activeFilePreviewPath && hasUnsavedFilePreviewEdits()) {
+        showSystemMessage('当前文件有未保存的修改，请先保存或取消编辑');
+        return;
+    }
     persistActiveFilePreviewScroll();
     activeFilePreviewPath = filePath;
     setFilePreviewWorkbenchVisible(true);
@@ -7065,6 +7793,46 @@ let workspaceDirHandle = null;
 let filetreeRefreshTimer = null;
 let selectBtnState = 'default'; // 'default' | 'active' | 'need-auth'
 const expandedDirs = new Set();
+const filetreeExpansionInitializedScopes = new Set();
+let currentFileTreeEntries = [];
+
+function sortFileTreeEntries(entries) {
+    return [...(entries || [])].sort((a, b) => {
+        const aDir = a.type === 'directory';
+        const bDir = b.type === 'directory';
+        if (aDir !== bDir) return aDir ? -1 : 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+}
+
+function collectDirectoryPaths(entries, output = []) {
+    for (const entry of sortFileTreeEntries(entries)) {
+        if (!entry || entry.type !== 'directory' || !entry.path) continue;
+        output.push(entry.path);
+        collectDirectoryPaths(entry.children || [], output);
+    }
+    return output;
+}
+
+function initializeDefaultExpandedDirectories(entries) {
+    const scope = getActiveFiletreeScope();
+    if (filetreeExpansionInitializedScopes.has(scope)) return;
+    filetreeExpansionInitializedScopes.add(scope);
+    expandedDirs.clear();
+    collectDirectoryPaths(entries)
+        .slice(0, DEFAULT_EXPANDED_DIRECTORY_LIMIT)
+        .forEach(path => expandedDirs.add(path));
+}
+
+function expandAllFiletreeDirectories() {
+    collectDirectoryPaths(currentFileTreeEntries).forEach(path => expandedDirs.add(path));
+    renderFileTree();
+}
+
+function collapseAllFiletreeDirectories() {
+    expandedDirs.clear();
+    renderFileTree();
+}
 
 // ── IndexedDB 存取 DirectoryHandle ──
 const IDB_NAME = 'http-client-fs';
@@ -7390,7 +8158,7 @@ async function uploadMicroAppWorkspaceFiles(files) {
         const targetDir = getWorkspaceParentPath(targetPath);
         const filename = getWorkspaceFileBaseName(targetPath) || item.filename || item.file.name;
         const contentBase64 = await fileToBase64(item.file);
-        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true));
+        uploaded.push(await debugWorkspaceApi.uploadFile(targetDir, filename, contentBase64, true, 'workspace'));
         if (targetDir) expandedDirs.add(targetDir);
     }
     await renderFileTree();
@@ -7509,6 +8277,36 @@ function updateSelectBtn(state) {
         selectWorkspaceBtn.title = '加载 .workspace 文件树';
     }
 }
+
+async function switchFiletreeScope(scope) {
+    const normalizedScope = scope === 'memory' ? 'memory' : 'workspace';
+    if (normalizedScope === getActiveFiletreeScope()) return;
+    if (!closeFilePreviewWorkbench()) return;
+    activeFiletreeScope = normalizedScope;
+    localStorage.setItem(FILETREE_SCOPE_KEY, activeFiletreeScope);
+    expandedDirs.clear();
+    filetreeExpansionInitializedScopes.delete(activeFiletreeScope);
+    currentFileTreeEntries = [];
+    updateFiletreeScopeUi();
+    if (filetreeContainer) {
+        filetreeContainer.innerHTML = `<div class="filetree-empty">正在加载${getActiveFiletreeScopeConfig().title}</div>`;
+    }
+    await renderFileTree();
+    await refreshWorkspaceMentionIndex();
+}
+
+updateFiletreeScopeUi();
+
+filetreeScopeTabs.forEach((tab) => {
+    tab.addEventListener('click', async () => {
+        try {
+            await switchFiletreeScope(tab.dataset.fileScope);
+        } catch (error) {
+            console.error('切换文件根目录失败', error);
+            showSystemMessage(`切换失败：${error.message || error}`);
+        }
+    });
+});
 
 // 激活文件树（已有 handle）
 async function activateFiletree(handle, options = {}) {
@@ -7630,6 +8428,14 @@ if (refreshTreeBtn) {
     });
 }
 
+if (expandAllTreeBtn) {
+    expandAllTreeBtn.addEventListener('click', expandAllFiletreeDirectories);
+}
+
+if (collapseAllTreeBtn) {
+    collapseAllTreeBtn.addEventListener('click', collapseAllFiletreeDirectories);
+}
+
 if (uploadWorkspaceBtn) {
     uploadWorkspaceBtn.addEventListener('click', () => openWorkspaceUploadPicker(''));
 }
@@ -7683,6 +8489,18 @@ if (filePreviewClose) {
 
 if (filePreviewOpenBtn) {
     filePreviewOpenBtn.addEventListener('click', () => openCurrentPreviewInNewTab());
+}
+
+if (filePreviewEditBtn) {
+    filePreviewEditBtn.addEventListener('click', enterFilePreviewEditMode);
+}
+
+if (filePreviewSaveBtn) {
+    filePreviewSaveBtn.addEventListener('click', saveFilePreviewEdits);
+}
+
+if (filePreviewCancelBtn) {
+    filePreviewCancelBtn.addEventListener('click', cancelFilePreviewEdits);
 }
 
 async function renderCurrentPreviewAsHtml() {
@@ -7760,6 +8578,8 @@ async function renderApiFilePreviewTab(tab) {
         if (kind === 'html') {
             const data = await debugWorkspaceApi.readFile(filePath);
             currentPreviewCopyText = data.content || '';
+            currentPreviewEditable = true;
+            updateFilePreviewEditActions();
             setMeta('html', []);
             const iframe = document.createElement('iframe');
             iframe.className = 'file-preview-pdf file-preview-html';
@@ -7829,6 +8649,8 @@ async function renderApiFilePreviewTab(tab) {
             const text = data.content || '';
             const lineCount = text.split(/\r\n|\r|\n/).length;
             currentPreviewCopyText = text;
+            currentPreviewEditable = true;
+            updateFilePreviewEditActions();
             setMeta(kind, [
                 { label: '行数', value: String(lineCount) },
                 { label: '字符数', value: String(text.length) },
@@ -7867,6 +8689,8 @@ async function renderFileTree() {
     if (!filetreeContainer) return;
     try {
         const data = await debugWorkspaceApi.listTree('', 8);
+        currentFileTreeEntries = data.entries || [];
+        initializeDefaultExpandedDirectories(currentFileTreeEntries);
         const frag = document.createDocumentFragment();
         await buildApiTreeNodes(data.entries || [], frag, 0);
         filetreeContainer.innerHTML = '';
@@ -7879,24 +8703,21 @@ async function renderFileTree() {
         console.error('渲染文件树失败', e);
         updateSelectBtn('need-auth');
         if (filetreeContainer) {
-            filetreeContainer.innerHTML = '<div class="filetree-empty">无法加载 .workspace 文件树，请确认 super-magic 后端已启动。</div>';
+            filetreeContainer.innerHTML = `<div class="filetree-empty">无法加载${getActiveFiletreeScopeConfig().title}，请确认 super-magic 后端已启动。</div>`;
         }
     }
 }
 
 async function buildApiTreeNodes(entries, container, depth) {
-    const sorted = [...(entries || [])].sort((a, b) => {
-        const aDir = a.type === 'directory';
-        const bDir = b.type === 'directory';
-        if (aDir !== bDir) return aDir ? -1 : 1;
-        return String(a.name || '').localeCompare(String(b.name || ''));
-    });
+    const sorted = sortFileTreeEntries(entries);
 
     for (const entry of sorted) {
         if (!entry || !entry.name) continue;
         const fullPath = entry.path || entry.name;
         const isDir = entry.type === 'directory';
-        const microAppConfig = isDir && hasApiMicroAppConfigFile(entry) ? await readApiMicroAppConfig(fullPath) : null;
+        const microAppConfig = getActiveFiletreeScope() === 'workspace' && isDir && hasApiMicroAppConfigFile(entry)
+            ? await readApiMicroAppConfig(fullPath)
+            : null;
 
         const node = document.createElement('div');
         node.className = `ft-node ${isDir ? 'ft-dir' : 'ft-file'}${microAppConfig ? ' ft-micro-app' : ''}`;
@@ -7987,7 +8808,11 @@ async function buildApiTreeNodes(entries, container, depth) {
                 menuItems.push({
                     label: '引用此目录（插入 @）',
                     onSelect: () => {
-                        insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
+                        insertMentionAtCursor(buildFiletreeMentionSnippet(
+                            'directory',
+                            dirPath,
+                            getActiveFiletreeScope(),
+                        ));
                     },
                 });
                 openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
@@ -8013,7 +8838,11 @@ async function buildApiTreeNodes(entries, container, depth) {
                     {
                         label: '引用此文件（插入 @）',
                         onSelect: () => {
-                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                            insertMentionAtCursor(buildFiletreeMentionSnippet(
+                                'file',
+                                fp,
+                                getActiveFiletreeScope(),
+                            ));
                         },
                     },
                 ]);
@@ -8124,7 +8953,7 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                 menuItems.push({
                     label: '引用此目录（插入 @）',
                     onSelect: () => {
-                        insertMentionAtCursor(`[@directory_path:${dirPath}]${MENTION_PROMPT_SEPARATOR}`);
+                        insertMentionAtCursor(buildFiletreeMentionSnippet('directory', dirPath, 'workspace'));
                     },
                 });
                 openFiletreeContextMenu(e.clientX, e.clientY, menuItems);
@@ -8146,7 +8975,7 @@ async function buildTreeNodes(dirHandle, container, pathPrefix, depth) {
                     {
                         label: '引用此文件（插入 @）',
                         onSelect: () => {
-                            insertMentionAtCursor(`[@file_path:${fp}]${MENTION_PROMPT_SEPARATOR}`);
+                            insertMentionAtCursor(buildFiletreeMentionSnippet('file', fp, 'workspace'));
                         },
                     },
                 ]);

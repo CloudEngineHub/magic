@@ -1,39 +1,39 @@
-# 飞书 / Lark AI 机器人
+# Lark AI Bot
 
-通过飞书长连接模式（WebSocket）接入，支持流式打字效果。
+Connects via Lark Long Connection (WebSocket) mode with streaming typing support.
 
-## 前置条件
+## Prerequisites
 
-在飞书开放平台创建企业自建应用，获取：
-- **App ID**：应用凭证中的 App ID
-- **App Secret**：应用凭证中的 App Secret
+Create an enterprise self-built app on the Lark Open Platform and obtain:
+- **App ID**: The App ID from application credentials
+- **App Secret**: The App Secret from application credentials
 
-同时需要在飞书开放平台完成以下配置：
-1. 「事件订阅」→「长连接（WebSocket）」→ 开启长连接接收事件
-2. 「事件订阅」→ 添加事件 → 搜索并添加「接收消息 v2.0（im.message.receive_v1）」
-3. 「应用权限」→ 申请并开通：`im:message`、`cardkit:card`
+Complete the following configuration on the Lark Open Platform:
+1. Event Subscription → Long Connection (WebSocket) → Enable long connection for receiving events
+2. Event Subscription → Add Event → Search and add "Receive Messages v2.0 (im.message.receive_v1)"
+3. App Permissions → Request and enable: `im:message`, `cardkit:card`
 
-## 凭据收集
+## Credential Collection
 
-依次询问用户：
-1. 「请提供飞书应用的 App ID」
-2. 「请提供对应的 App Secret」
+Ask the user in sequence:
+1. "Please provide the Lark app's App ID"
+2. "Please provide the corresponding App Secret"
 
-## 建立连接
+## Establish Connection
 
-（用 run_sdk_snippet 工具，python_code 参数为：）
+(Use run_sdk_snippet tool, python_code parameter:)
 
 ```
 from sdk.tool import tool
 
 result = tool.call("connect_lark_bot", {
-    "app_id": "<用户提供的 App ID>",
-    "app_secret": "<用户提供的 App Secret>",
+    "app_id": "<App ID provided by user>",
+    "app_secret": "<App Secret provided by user>",
 })
 print(result.content)
 ```
 
-## 结果处理
+## Result Handling
 
-- 成功：「飞书机器人已成功连接，现在可以在飞书中与我对话了，支持流式打字效果」
-- 失败：告知错误，检查 App ID/Secret 是否正确，以及飞书应用权限和事件订阅是否已配置
+- Success: "Lark bot connected successfully. You can now chat with me in Lark with streaming typing support."
+- Failure: Report the error, suggest checking whether App ID/Secret are correct, and whether app permissions and event subscriptions have been configured

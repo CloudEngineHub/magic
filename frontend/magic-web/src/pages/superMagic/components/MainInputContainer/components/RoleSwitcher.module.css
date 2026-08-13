@@ -1,0 +1,66 @@
+.scrollControlFade {
+	position: absolute;
+	inset: 0;
+	background: rgb(var(--background-rgb));
+	-webkit-mask-image: linear-gradient(
+		var(--scroll-control-fade-direction),
+		#000 0%,
+		rgb(0 0 0 / 0.96) 12%,
+		rgb(0 0 0 / 0.86) 24%,
+		rgb(0 0 0 / 0.7) 40%,
+		rgb(0 0 0 / 0.5) 56%,
+		rgb(0 0 0 / 0.3) 68%,
+		rgb(0 0 0 / 0.15) 80%,
+		rgb(0 0 0 / 0.06) 90%,
+		transparent 100%
+	);
+	mask-image: linear-gradient(
+		var(--scroll-control-fade-direction),
+		#000 0%,
+		rgb(0 0 0 / 0.96) 12%,
+		rgb(0 0 0 / 0.86) 24%,
+		rgb(0 0 0 / 0.7) 40%,
+		rgb(0 0 0 / 0.5) 56%,
+		rgb(0 0 0 / 0.3) 68%,
+		rgb(0 0 0 / 0.15) 80%,
+		rgb(0 0 0 / 0.06) 90%,
+		transparent 100%
+	);
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	pointer-events: none;
+}
+
+.scrollControlCornerCover {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.scrollControlCornerCoverLeft {
+	background:
+		radial-gradient(circle at bottom right, transparent 0 19px, rgb(var(--background-rgb)) 20px)
+			top left / 20px 20px no-repeat,
+		radial-gradient(circle at top right, transparent 0 19px, rgb(var(--background-rgb)) 20px)
+			bottom left / 20px 20px no-repeat;
+}
+
+.scrollControlCornerCoverRight {
+	background:
+		radial-gradient(circle at bottom left, transparent 0 19px, rgb(var(--background-rgb)) 20px)
+			top right / 20px 20px no-repeat,
+		radial-gradient(circle at top left, transparent 0 19px, rgb(var(--background-rgb)) 20px)
+			bottom right / 20px 20px no-repeat;
+}
+
+.scrollControlFadeLeft {
+	--scroll-control-fade-direction: to right;
+
+	border-radius: 20px 0 0 20px;
+}
+
+.scrollControlFadeRight {
+	--scroll-control-fade-direction: to left;
+
+	border-radius: 0 20px 20px 0;
+}

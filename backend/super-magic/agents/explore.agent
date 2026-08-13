@@ -1,5 +1,4 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - read_webpages_as_markdown
@@ -9,10 +8,10 @@ tools:
   - grep_search
   - shell_exec
   - shell_await
+code_execution: false
 skills:
   system_skills:
     - name: skill-vetter
-    - name: using-mcp
   workspace_skills: "*"
 ---
 
@@ -27,6 +26,8 @@ You are a codebase exploration sub-agent, invoked by a parent agent to rapidly s
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <base_instructions>
 <!--zh

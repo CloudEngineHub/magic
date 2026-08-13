@@ -2,39 +2,33 @@ import type { TFunction } from "i18next"
 import type { RecycleBin } from "@/apis/modules/recycle-bin"
 import {
 	buildRecycleBinPathLabel,
+	getCategoryByResourceType,
 	getRecycleBinItemTitle,
 	RESOURCE_TYPE,
 	type RecycleBinItem,
 	type ResourceType,
 } from "@/pages/recycleBin/components/recycle-bin-domain"
+import { RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID } from "@/pages/recycleBin/tab-config"
 import type { RecycleBinItemData } from "../components/RecycleBinItem"
 
 export { RESOURCE_TYPE }
 export type { ResourceType }
 
-const RESOURCE_TYPE_TO_TAB: Record<ResourceType, string> = {
-	[RESOURCE_TYPE.WORKSPACE]: "workspaces",
-	[RESOURCE_TYPE.PROJECT]: "projects",
-	[RESOURCE_TYPE.TOPIC]: "topics",
-	[RESOURCE_TYPE.FILE]: "files",
-}
-
-const TAB_KEY_TO_TYPE: Record<string, RecycleBinItemData["type"]> = {
-	workspaces: "workspace",
-	projects: "project",
-	topics: "topic",
-	files: "file",
+function getMobileItemType(
+	resourceType: ResourceType,
+	isDirectory?: boolean,
+): RecycleBinItemData["type"] {
+	if (resourceType === RESOURCE_TYPE.FILE) return isDirectory ? "folder" : "file"
+	if (resourceType === RESOURCE_TYPE.WORKSPACE) return "workspace"
+	if (resourceType === RESOURCE_TYPE.PROJECT) return "project"
+	if (resourceType === RESOURCE_TYPE.TOPIC) return "topic"
+	if (resourceType === RESOURCE_TYPE.MICRO_APP) return "microApp"
+	return "file"
 }
 
 export function mapListItemToItemData(item: RecycleBin.ListItem, t: TFunction): RecycleBinItemData {
 	const resourceType = item.resource_type as ResourceType
-	const tabKey = RESOURCE_TYPE_TO_TAB[resourceType] ?? "files"
-	const type =
-		resourceType === RESOURCE_TYPE.FILE
-			? item.extra_data?.is_directory
-				? "folder"
-				: "file"
-			: (TAB_KEY_TO_TYPE[tabKey] ?? "file")
+	const type = getMobileItemType(resourceType, item.extra_data?.is_directory)
 	const parentInfo = {
 		...item.extra_data?.parent_info,
 		workspace_name:
@@ -76,9 +70,10 @@ export function updateTabCounts(
 		projects: 0,
 		topics: 0,
 		files: 0,
+		microApps: 0,
 	}
 	items.forEach((item) => {
-		const tab = RESOURCE_TYPE_TO_TAB[item.resourceType as ResourceType]
+		const tab = RECYCLE_BIN_RESOURCE_TYPE_TO_TAB_ID[item.resourceType]
 		if (tab) counts[tab] = (counts[tab] ?? 0) + 1
 	})
 	onTabCountChange("all", counts.all)
@@ -86,14 +81,7 @@ export function updateTabCounts(
 	onTabCountChange("projects", counts.projects)
 	onTabCountChange("topics", counts.topics)
 	onTabCountChange("files", counts.files)
-}
-
-const TYPE_TO_CATEGORY: Record<RecycleBinItemData["type"], RecycleBinItem["category"]> = {
-	workspace: "workspaces",
-	project: "projects",
-	topic: "topics",
-	file: "files",
-	folder: "files",
+	onTabCountChange("microApps", counts.microApps)
 }
 
 export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem {
@@ -101,7 +89,7 @@ export function mobileItemDataToDomain(item: RecycleBinItemData): RecycleBinItem
 		id: item.id,
 		resourceId: item.resourceId,
 		resourceType: item.resourceType as ResourceType,
-		category: TYPE_TO_CATEGORY[item.type],
+		category: getCategoryByResourceType(item.resourceType as ResourceType),
 		title: item.title,
 		path: item.path,
 		deletedOn: "",

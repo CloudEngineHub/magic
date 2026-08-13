@@ -8,6 +8,7 @@ import { VIDEO_CONFIG } from "../../elements/video/VideoElement.config"
 import { toCanvasUploadStoragePath } from "../../shared/path/canvasResourcePath"
 import {
 	extractSmartNameFromFileName,
+	isGenerationTaskNotFoundError,
 	shouldContinueGenerationPolling,
 } from "./generationPollingUtils"
 
@@ -117,10 +118,35 @@ export class VideoPollingManager {
 				video_id: videoId,
 			}
 			return await getVideoGenerationResult(params)
-		} catch {
+		} catch (error) {
+			if (isGenerationTaskNotFoundError(error, videoId)) {
+				this.recoverMissingTask(videoId)
+				return undefined
+			}
 			this.handleRecoverablePollingIssue()
 			return undefined
 		}
+	}
+
+	private recoverMissingTask(videoId: string): void {
+		this.stop()
+		const elementData = this.config.getElementData()
+		if (elementData.generateVideoRequest?.video_id !== videoId) return
+
+		this.config.canvas.elementManager.update(
+			this.config.elementId,
+			{
+				generateVideoRequest: undefined,
+				videoGenerationResultMeta: undefined,
+				status: undefined,
+				errorMessage: undefined,
+			},
+			{ silent: false },
+		)
+		this.config.canvas.eventEmitter.emit({
+			type: "element:video:generate-submit-failed",
+			data: { elementId: this.config.elementId },
+		})
 	}
 
 	private buildResultPatch(result: VideoGenerationResultResponse): Partial<VideoElementData> {

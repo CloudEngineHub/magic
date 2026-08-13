@@ -167,6 +167,7 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 
 			pointerPanMoveHandlerRef.current = (ev: PointerEvent) => {
 				if (ev.pointerId !== e.pointerId) return
+				stage.setPointersPositions(ev)
 				const position = {
 					x: stageStart.x + ev.clientX - startClient.x,
 					y: stageStart.y + ev.clientY - startClient.y,

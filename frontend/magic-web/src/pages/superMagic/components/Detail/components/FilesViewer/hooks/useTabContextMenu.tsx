@@ -80,8 +80,14 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 	const getContextMenuItems = (tabId: string): MenuProps["items"] => {
 		const tabIndex = tabs.findIndex((tab) => tab.id === tabId)
 		const tab = tabs[tabIndex]
-		const hasTabsToRight = tabIndex < tabs.length - 1
-		const hasOtherTabs = tabs.length > 1
+		const hasCloseableTabs = tabs.some((item) => item.closeable !== false)
+		const hasCloseableTabsToRight = tabs
+			.slice(tabIndex + 1)
+			.some((item) => item.closeable !== false)
+		const hasCloseableOtherTabs = tabs.some(
+			(item) => item.id !== tabId && item.closeable !== false,
+		)
+		const canCloseTab = tab?.closeable !== false
 		const websiteCommonItems: MenuProps["items"] =
 			tab && isWebsiteTab(tab) && actions.addWebsiteToCommon
 				? [
@@ -109,6 +115,7 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 			{
 				key: "close",
 				label: t("fileViewer.tabs.close"),
+				disabled: !canCloseTab,
 				onClick: () => {
 					actions.closeFileTab(tabId)
 					hideContextMenu()
@@ -125,7 +132,7 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 						/> */}
 					</FlexBox>
 				),
-				disabled: !hasOtherTabs,
+				disabled: !hasCloseableOtherTabs,
 				onClick: () => {
 					actions.closeOtherTabs(tabId)
 					hideContextMenu()
@@ -134,7 +141,7 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 			{
 				key: "closeToRight",
 				label: t("fileViewer.tabs.closeToRight"),
-				disabled: !hasTabsToRight,
+				disabled: !hasCloseableTabsToRight,
 				onClick: () => {
 					actions.closeTabsToRight(tabId)
 					hideContextMenu()
@@ -143,6 +150,7 @@ export function useTabContextMenu({ tabs, actions }: UseTabContextMenuProps) {
 			{
 				key: "closeAll",
 				label: t("fileViewer.tabs.closeAll"),
+				disabled: !hasCloseableTabs,
 				onClick: () => {
 					actions.clearAllTabs()
 					hideContextMenu()

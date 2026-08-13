@@ -68,7 +68,7 @@ final class ImageBase64PassthroughTest extends TestCase
         $apiProperty = new ReflectionProperty(GoogleGeminiModel::class, 'api');
         $apiProperty->setValue($model, $api);
 
-        $method = new ReflectionMethod(GoogleGeminiModel::class, 'processImageEdit');
+        $method = new ReflectionMethod(GoogleGeminiModel::class, 'generateWithReferenceImages');
         $this->assertSame(['ok' => true], $method->invoke($model, [$base64Image], '编辑图片'));
     }
 
@@ -125,7 +125,7 @@ final class ImageBase64PassthroughTest extends TestCase
 
         $reflection = new ReflectionClass(GoogleGeminiModel::class);
         $model = $reflection->newInstanceWithoutConstructor();
-        $method = new ReflectionMethod(GoogleGeminiModel::class, 'formatReferenceImage');
+        $method = new ReflectionMethod(GoogleGeminiModel::class, 'buildGoogleImagePart');
 
         $this->assertSame([
             'type' => 'fileData',

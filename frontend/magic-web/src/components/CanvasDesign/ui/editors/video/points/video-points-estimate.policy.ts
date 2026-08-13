@@ -1,5 +1,5 @@
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
-import { hasVideoGenerationRequestUserIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestEstimateIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
 
 export type VideoPointsEstimateBlockedReason =
 	| "disabled"
@@ -33,7 +33,7 @@ export function resolveVideoPointsEstimateGate(
 	if (!options.hasEstimateVideoPoints) {
 		return { canEstimate: false, blockedReason: "missing_estimator" }
 	}
-	if (!hasVideoGenerationRequestUserIntent(options.request)) {
+	if (!hasVideoGenerationRequestEstimateIntent(options.request)) {
 		return { canEstimate: false, blockedReason: "missing_user_intent" }
 	}
 	if (options.hasPendingResourceDeferrals) {

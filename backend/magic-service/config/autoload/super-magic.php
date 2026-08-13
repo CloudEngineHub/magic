@@ -36,6 +36,12 @@ return [
         'process_mode' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_PROCESS_MODE', 'direct'), // direct OR queue
         'enable_compensate' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_ENABLE_COMPENSATE', false),
     ],
+    'visible_ai_watermark' => [
+        'enabled' => filter_var(
+            \Hyperf\Support\env('SUPER_MAGIC_VISIBLE_AI_WATERMARK_ENABLED', false),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+    ],
     'user_message_queue' => [
         'enabled' => \Hyperf\Support\env('USER_MESSAGE_QUEUE_ENABLED', true),
         'whitelist' => array_filter(explode(',', \Hyperf\Support\env('USER_MESSAGE_QUEUE_WHITELIST', ''))),

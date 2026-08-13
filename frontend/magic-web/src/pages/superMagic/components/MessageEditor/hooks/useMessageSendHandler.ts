@@ -3,17 +3,13 @@ import type { MutableRefObject, RefObject } from "react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { VoiceInputRef } from "@/components/business/VoiceInput"
 import magicToast from "@/components/base/MagicToaster/utils"
-import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import projectFilesStore from "@/stores/projectFiles"
-import { logger as Logger } from "@/utils/log"
 import { replaceSuperPlaceholderToString } from "../extensions/super-placeholder/utils"
 import { serializeInspectorContent } from "../extensions/inspector-detail"
 import type { MessageEditorStore } from "../stores"
-import { ModelStatusEnum, type MessageEditorProps } from "../types"
+import type { MessageEditorProps } from "../types"
 import { isEmptyJSONContent } from "../utils"
 import { transformMarkerImagePathsToWorkspaceAbsolute } from "../utils/mention"
-
-const logger = Logger.createLogger("SuperMagicMessageEditor")
 
 interface UseMessageSendHandlerParams {
 	voiceInputRef: RefObject<VoiceInputRef>
@@ -49,6 +45,12 @@ export default function useMessageSendHandler({
 			return
 		}
 
+		const selectedModel = store.topicModelStore.selectedLanguageModel
+		if (!isEditingQueueItem && !store.topicModelStore.isLanguageModelReady) {
+			magicToast.error(t("messageEditor.pleaseSelectModel"))
+			return
+		}
+
 		if (!canSendMessage) {
 			if (hasLoadingMarker) {
 				magicToast.error(t("messageEditor.waitForMarkerLoad"))
@@ -58,28 +60,6 @@ export default function useMessageSendHandler({
 				magicToast.error(t("messageEditor.waitForFileUpload"))
 			}
 			return
-		}
-
-		let selectedModel = store.topicModelStore.selectedLanguageModel
-			? { ...store.topicModelStore.selectedLanguageModel }
-			: null
-		if (!selectedModel) {
-			logger.error(
-				"fallback to auto model",
-				"current mode list:",
-				superMagicModeService.modeList,
-			)
-			selectedModel = {
-				id: "auto",
-				group_id: "auto",
-				provider_model_id: "auto",
-				model_description: "auto",
-				model_icon: "auto",
-				sort: 0,
-				model_id: "auto",
-				model_name: "auto",
-				model_status: ModelStatusEnum.Normal,
-			}
 		}
 
 		let content
@@ -130,7 +110,7 @@ export default function useMessageSendHandler({
 			value: content,
 			topicMode,
 			mentionItems,
-			selectedModel,
+			selectedModel: selectedModel ? { ...selectedModel } : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
 			selectedVideoModel: store.topicModelStore.selectedVideoModel,
 		})

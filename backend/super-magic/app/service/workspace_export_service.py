@@ -204,6 +204,7 @@ def extract_skill_metadata(workspace_dir: Path) -> Dict[str, Any]:
         return metadata
 
     name    = _get_field(skill_fm, "name")
+    # 兼容社区 skill 仍在使用的 name-cn/description-cn 字段
     name_cn = _get_field(skill_fm, "name-cn", "name_cn")
     name_en = _get_field(skill_fm, "name-en", "name_en")
     metadata["name_i18n"] = _build_i18n(default=name, zh_cn=name_cn, en_us=name_en)

@@ -104,25 +104,7 @@ class RegularCallProcessor:
         request_id: Optional[str],
         elapsed_time: float
     ) -> None:
-        """根据响应内容触发相应的事件。
-
-        事件触发逻辑与流式模式一致：
-        - 场景一：只有 reasoning -> 触发 reasoning REPLY 事件，AFTER_THINK 由 finally 保底
-        - 场景二：只有 content -> 触发 AFTER_THINK + content REPLY 事件
-        - 场景三：只有 tool_calls -> 无 REPLY 事件，AFTER_THINK 由 finally 保底
-        - 场景四：reasoning + tool_calls -> 触发 reasoning REPLY 事件，AFTER_THINK 由 finally 保底
-        - 场景五：content + tool_calls -> 触发 AFTER_THINK + content REPLY 事件
-        - 场景六：reasoning + content -> 触发 reasoning REPLY + AFTER_THINK + content REPLY 事件
-        - 场景七：reasoning + content + tool_calls -> 同场景六
-
-        Args:
-            response: LLM响应
-            agent_context: Agent上下文
-            model_id: 模型ID
-            model_name: 模型名称
-            request_id: 请求ID
-            elapsed_time: 执行时间（毫秒）
-        """
+        """解析完整响应，并按 V1 分阶段或 V2 原子协议触发事件。"""
         try:
             # 获取响应消息
             message = response.choices[0].message if response.choices else None
@@ -144,135 +126,190 @@ class RegularCallProcessor:
                 f"has_reasoning={has_reasoning}, has_content={has_content}, has_tool_calls={has_tool_calls}"
             )
 
-            # 检测 V2 流式降级场景：
-            # V2 流式 chunk 以 request_id 作为 correlation_id 推送前端，
-            # 降级为非流式时需沿用同一 correlation_id，否则前端会将 chunk 和最终消息视为两条独立消息。
-            # 检测条件：CorrelationIdManager 中保存了 stream_fallback_cid（由 processor_manager 在流式启动时写入），
-            # 且无活跃的 AGENT_REPLY correlation（V1 流式失败会留下活跃 correlation，V2 不会触发 BEFORE_AGENT_REPLY 故为空）。
-            from agentlang.event import get_correlation_manager, EventPairType
-            cm = get_correlation_manager()
-            stream_fallback_cid: Optional[str] = None
-            correlation_scope_id = getattr(agent_context, "context_id", None)
-            if not cm.get_active_correlation_id(EventPairType.AGENT_REPLY, correlation_scope_id):
-                stream_fallback_cid = cm.pop_stream_fallback_cid()
-                if stream_fallback_cid:
-                    logger.info(
-                        f"[{request_id}] 检测到 V2 流式降级场景，"
-                        f"非流式回复将复用流式 correlation_id={stream_fallback_cid}"
-                    )
-
-            # ===== 处理 reasoning_content =====
-            if has_reasoning:
-                # 1. 触发 BEFORE_AGENT_THINK（内部会检查是否已在思考中）
-                await ThinkEventManager.trigger_before_think(
-                    agent_context=agent_context,
-                    model_id=model_id,
-                    model_name=model_name
-                )
-                logger.debug(f"[{request_id}] 非流式：检测到 reasoning_content，触发 BEFORE_AGENT_THINK")
-
-                # 2. 触发 before_agent_reply(content_type=reasoning)
-                await ReplyEventManager.trigger_before_reply(
+            if agent_context.get_message_version() == "v2":
+                await RegularCallProcessor._trigger_v2_atomic_reply_event(
+                    response=response,
                     agent_context=agent_context,
                     model_id=model_id,
                     model_name=model_name,
                     request_id=request_id,
-                    use_stream_mode=False,
-                    content_type="reasoning"
+                    elapsed_time=elapsed_time,
+                    has_reasoning=has_reasoning,
+                    has_content=has_content,
+                    has_tool_calls=has_tool_calls,
                 )
+                return
 
-                # 3. 触发 after_agent_reply(content_type=reasoning)
-                # 如果后续还有 content，则 reasoning 不传 response（避免重复 token_usage）
-                # 只有当 reasoning 是最后一个事件时，才传 response
-                await ReplyEventManager.trigger_after_reply(
-                    agent_context=agent_context,
-                    model_id=model_id,
-                    model_name=model_name,
-                    request_id=request_id,
-                    response=response if not has_content else None,
-                    execution_time=elapsed_time,
-                    use_stream_mode=False,
-                    content_type="reasoning",
-                    content=reasoning_content
-                )
-                logger.debug(f"[{request_id}] 非流式：reasoning REPLY 事件已触发")
-
-            # ===== 处理 content（思考结束的唯一标志）=====
-            if has_content:
-                # 1. 触发 AFTER_AGENT_THINK（content 的出现标志着思考结束）
-                await ThinkEventManager.trigger_after_think(
-                    agent_context=agent_context,
-                    model_id=model_id,
-                    model_name=model_name,
-                    request_id=request_id
-                )
-                logger.debug(f"[{request_id}] 非流式：检测到 content，触发 AFTER_AGENT_THINK")
-
-                if stream_fallback_cid:
-                    # V2 流式降级：跳过 trigger_before_reply（V2 中该事件无实际前端消息），
-                    # 直接用原流式 correlation_id 触发 after_agent_reply，保证前端 chunk 与最终消息匹配
-                    await ReplyEventManager.trigger_after_reply(
-                        agent_context=agent_context,
-                        model_id=model_id,
-                        model_name=model_name,
-                        request_id=request_id,
-                        response=response,
-                        execution_time=elapsed_time,
-                        use_stream_mode=False,
-                        content_type="content",
-                        correlation_id=stream_fallback_cid,
-                    )
-                    logger.debug(
-                        f"[{request_id}] 非流式（V2 降级）：content REPLY 事件已触发，"
-                        f"correlation_id={stream_fallback_cid}"
-                    )
-                else:
-                    # 2. 触发 before_agent_reply(content_type=content)
-                    await ReplyEventManager.trigger_before_reply(
-                        agent_context=agent_context,
-                        model_id=model_id,
-                        model_name=model_name,
-                        request_id=request_id,
-                        use_stream_mode=False,
-                        content_type="content"
-                    )
-
-                    # 3. 触发 after_agent_reply(content_type=content)
-                    await ReplyEventManager.trigger_after_reply(
-                        agent_context=agent_context,
-                        model_id=model_id,
-                        model_name=model_name,
-                        request_id=request_id,
-                        response=response,
-                        execution_time=elapsed_time,
-                        use_stream_mode=False,
-                        content_type="content"
-                    )
-                logger.debug(f"[{request_id}] 非流式：content REPLY 事件已触发")
-
-            # ===== 只有 tool_calls 的情况 =====
-            # 没有 reasoning_content，不触发任何 THINK 事件
-            # 注意：不触发 REPLY 事件（无文本内容）
-            if has_tool_calls and not has_reasoning and not has_content:
-                logger.debug(f"[{request_id}] 非流式：只有 tool_calls（无文本内容），不触发任何 THINK 事件")
-
-            # ===== 补充：处理结束时触发 AFTER_AGENT_THINK（如果有思考但未触发）=====
-            # 覆盖场景：
-            # - 场景一：只有 reasoning（无 content，无 tool_calls）
-            # 注意：场景四（reasoning + tool_calls）不在此触发，因为工具调用属于思考过程，
-            #       思考应该持续到下一轮（或者在后续检测到 content 时结束）
-            # 如果已触发过（如场景六/七中检测到 content 时），会自动跳过
-            if has_reasoning and not has_content and not has_tool_calls:
-                await ThinkEventManager.trigger_after_think(
-                    agent_context=agent_context,
-                    model_id=model_id,
-                    model_name=model_name,
-                    request_id=request_id
-                )
-                logger.debug(f"[{request_id}] 非流式：只有 reasoning（无 content，无 tool_calls），触发 AFTER_AGENT_THINK")
-            elif has_reasoning and has_tool_calls and not has_content:
-                logger.debug(f"[{request_id}] 非流式：有 reasoning + tool_calls（无 content），思考继续，不触发 AFTER_AGENT_THINK")
+            await RegularCallProcessor._trigger_v1_phased_reply_events(
+                response=response,
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+                elapsed_time=elapsed_time,
+                reasoning_content=reasoning_content,
+                has_reasoning=has_reasoning,
+                has_content=has_content,
+                has_tool_calls=has_tool_calls,
+            )
 
         except Exception as event_error:
             logger.error(f"[{request_id}] 非流式响应事件触发失败: {event_error}", exc_info=True)
             # 事件触发失败不应该阻止响应返回
+
+    @staticmethod
+    async def _trigger_v2_atomic_reply_event(
+        response: ChatCompletion,
+        agent_context: AgentContextInterface,
+        model_id: str,
+        model_name: str,
+        request_id: Optional[str],
+        elapsed_time: float,
+        has_reasoning: bool,
+        has_content: bool,
+        has_tool_calls: bool,
+    ) -> None:
+        """按 V2 协议用完整 Assistant message 原子触发一次回复完成事件。"""
+        if not (has_reasoning or has_content or has_tool_calls):
+            logger.warning(f"[{request_id}] V2 非流式响应没有有效字段，跳过 Reply 事件")
+            return
+
+        if has_reasoning:
+            await ThinkEventManager.trigger_before_think(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+            )
+            logger.debug(f"[{request_id}] V2 非流式：检测到 reasoning_content，触发 BEFORE_AGENT_THINK")
+
+        if has_content or (has_reasoning and not has_tool_calls):
+            await ThinkEventManager.trigger_after_think(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+            )
+            logger.debug(f"[{request_id}] V2 非流式：触发 AFTER_AGENT_THINK")
+        elif has_reasoning and has_tool_calls:
+            logger.debug(f"[{request_id}] V2 非流式：reasoning + tool_calls，保持思考生命周期")
+
+        correlation_id = RegularCallProcessor._resolve_v2_reply_correlation_id(
+            agent_context=agent_context,
+            request_id=request_id,
+        )
+        await ReplyEventManager.trigger_after_reply(
+            agent_context=agent_context,
+            model_id=model_id,
+            model_name=model_name,
+            request_id=request_id,
+            response=response,
+            execution_time=elapsed_time,
+            use_stream_mode=False,
+            content_type="content",
+            correlation_id=correlation_id,
+        )
+        logger.debug(f"[{request_id}] V2 非流式：原子 AFTER_AGENT_REPLY 已触发，correlation_id={correlation_id}")
+
+    @staticmethod
+    def _resolve_v2_reply_correlation_id(
+        agent_context: AgentContextInterface,
+        request_id: Optional[str],
+    ) -> Optional[str]:
+        """解析 V2 普通非流式或流式降级场景使用的稳定关联 ID。"""
+        from agentlang.event import get_correlation_manager
+
+        correlation_manager = get_correlation_manager()
+        correlation_scope_id = getattr(agent_context, "context_id", None)
+        stream_fallback_cid = correlation_manager.pop_stream_fallback_cid(correlation_scope_id)
+        if stream_fallback_cid:
+            logger.info(
+                f"[{request_id}] V2 非流式回复复用流式 correlation_id={stream_fallback_cid}"
+            )
+            return stream_fallback_cid
+        return request_id
+
+    @staticmethod
+    async def _trigger_v1_phased_reply_events(
+        response: ChatCompletion,
+        agent_context: AgentContextInterface,
+        model_id: str,
+        model_name: str,
+        request_id: Optional[str],
+        elapsed_time: float,
+        reasoning_content: Optional[str],
+        has_reasoning: bool,
+        has_content: bool,
+        has_tool_calls: bool,
+    ) -> None:
+        """保持 V1 reasoning/content 分阶段 Reply 事件语义。"""
+        if has_reasoning:
+            await ThinkEventManager.trigger_before_think(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+            )
+            logger.debug(f"[{request_id}] V1 非流式：检测到 reasoning_content，触发 BEFORE_AGENT_THINK")
+
+            await ReplyEventManager.trigger_before_reply(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+                use_stream_mode=False,
+                content_type="reasoning",
+            )
+            await ReplyEventManager.trigger_after_reply(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+                response=response if not has_content else None,
+                execution_time=elapsed_time,
+                use_stream_mode=False,
+                content_type="reasoning",
+                content=reasoning_content or "",
+            )
+            logger.debug(f"[{request_id}] V1 非流式：reasoning REPLY 事件已触发")
+
+        if has_content:
+            await ThinkEventManager.trigger_after_think(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+            )
+            logger.debug(f"[{request_id}] V1 非流式：检测到 content，触发 AFTER_AGENT_THINK")
+
+            await ReplyEventManager.trigger_before_reply(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+                use_stream_mode=False,
+                content_type="content",
+            )
+            await ReplyEventManager.trigger_after_reply(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+                response=response,
+                execution_time=elapsed_time,
+                use_stream_mode=False,
+                content_type="content",
+            )
+            logger.debug(f"[{request_id}] V1 非流式：content REPLY 事件已触发")
+
+        if has_tool_calls and not has_reasoning and not has_content:
+            logger.debug(f"[{request_id}] V1 非流式：只有 tool_calls，不触发 THINK 或 REPLY 事件")
+
+        if has_reasoning and not has_content and not has_tool_calls:
+            await ThinkEventManager.trigger_after_think(
+                agent_context=agent_context,
+                model_id=model_id,
+                model_name=model_name,
+                request_id=request_id,
+            )
+            logger.debug(f"[{request_id}] V1 非流式：只有 reasoning，触发 AFTER_AGENT_THINK")
+        elif has_reasoning and has_tool_calls and not has_content:
+            logger.debug(f"[{request_id}] V1 非流式：reasoning + tool_calls，保持思考生命周期")

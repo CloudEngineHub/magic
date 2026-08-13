@@ -1,21 +1,11 @@
-import { useCallback } from "react"
-import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/shadcn-ui/button"
 import { Separator } from "@/components/shadcn-ui/separator"
-import {
-	buildMobileFeedbackPrefill,
-	useMobileFeedbackSheet,
-} from "@/layouts/BaseLayoutMobile/components/MobileSettings/feedback-prefill"
-import { MobileSettingsFeedbackSheet } from "@/layouts/BaseLayoutMobile/components/MobileSettings/components/FeedbackSheet"
 import { PointsMenuIcon } from "@/pages/user/pages/my/assets/PointsMenuIcon"
-import { isCommercial, isPrivateDeployment } from "@/utils/env"
 
 import {
 	formatPointsRecordAmount,
 	getPointsRecordDetailMetaRows,
-	getPointsRecordDirection,
 	getPointsRecordListTitle,
 } from "../pointsRecordDisplay"
 import type { PointsRecordItem } from "../types"
@@ -30,27 +20,6 @@ export function MobileSettingsPointsRecordDetailSheet(props: {
 	const { item, open, onClose } = props
 	const { t } = useTranslation(["interface", "super"])
 
-	const buildPrefill = useCallback(() => {
-		if (!item) return undefined
-
-		return buildMobileFeedbackPrefill({
-			scenario: "pointsChange",
-			context: {
-				recordId: item.id,
-				direction: getPointsRecordDirection(item.amount),
-			},
-		})
-	}, [item])
-
-	const canOpenFeedback = useCallback(() => Boolean(item), [item])
-
-	const { feedbackSheetOpen, feedbackPrefill, openFeedbackSheet, closeFeedbackSheet } =
-		useMobileFeedbackSheet({ buildPrefill, canOpen: canOpenFeedback })
-
-	const handleFeedback = useMemoizedFn(() => {
-		openFeedbackSheet()
-	})
-
 	if (!item) return null
 
 	const detailTitle = getPointsRecordListTitle(
@@ -62,7 +31,6 @@ export function MobileSettingsPointsRecordDetailSheet(props: {
 		recordId: t("bonusPointsModal.recordId"),
 		time: t("bonusPointsModal.time"),
 	})
-	const showFeedback = isCommercial() && !isPrivateDeployment()
 
 	return (
 		<>
@@ -102,27 +70,7 @@ export function MobileSettingsPointsRecordDetailSheet(props: {
 						))}
 					</div>
 				</div>
-
-				{showFeedback ? (
-					<div className="flex h-9 w-full shrink-0 items-center justify-center px-8">
-						<Button
-							type="button"
-							variant="ghost"
-							onClick={handleFeedback}
-							className="text-sm font-normal text-foreground"
-							data-testid="mobile-settings-points-record-feedback"
-						>
-							{t("bonusPointsModal.problemFeedback")}
-						</Button>
-					</div>
-				) : null}
 			</MobileSettingsSheetContainer>
-
-			<MobileSettingsFeedbackSheet
-				open={feedbackSheetOpen}
-				onClose={closeFeedbackSheet}
-				prefill={feedbackPrefill}
-			/>
 		</>
 	)
 }

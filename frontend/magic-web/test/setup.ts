@@ -72,6 +72,7 @@ vi.mock("antd", () => {
 		info: vi.fn(),
 		warning: vi.fn(),
 		loading: vi.fn(),
+		config: vi.fn(),
 	}
 
 	mockMessage.useMessage = vi.fn(() => [mockMessage, React.createElement(React.Fragment)])
@@ -119,5 +120,6 @@ vi.mock("antd", () => {
 		Avatar: createMockComponent("Avatar"),
 		Badge: createMockComponent("Badge"),
 		Flex: createMockComponent("Flex"),
+		message: mockMessage,
 	}
 })

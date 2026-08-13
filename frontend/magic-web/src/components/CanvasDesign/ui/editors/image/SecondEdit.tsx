@@ -26,6 +26,7 @@ import ImageEditorSurface from "./ImageEditorSurface"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import type { LinkedEditorInputsState } from "../connection/useLinkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../connection/linkedImageRequest"
+import { createAndSubmitImageGeneration as createAndSubmitNewImageGeneration } from "./submit/createAndSubmitImageGeneration"
 
 interface SecondEditProps {
 	imageElement: ImageElement
@@ -197,36 +198,33 @@ export default function SecondEdit(props: SecondEditProps) {
 				name: "Image",
 			}
 
-			// 创建元素
-			canvas.elementManager.create(newImageElement)
-
-			// 获取新创建的元素实例
-			const newElementInstance = canvas.elementManager.getElementInstance(newElementId)
-			if (!newElementInstance || !(newElementInstance instanceof ImageElementClass)) {
-				return false
-			}
-
-			// 保存新元素的临时配置（清除 prompt / reference_images / reference_image_options）
-			newElementInstance.saveTempGenerateImageRequest({
-				...generateRequest,
-				prompt: "",
-				reference_images: [],
-				reference_image_options: undefined,
-			})
-
 			sendingRef.current = true
 			setIsSending(true)
 			try {
-				canvas.eventEmitter.emit({
-					type: "element:image:generate-submit-started",
-					data: { elementId: props.imageElement.id },
+				const submitted = await createAndSubmitNewImageGeneration({
+					canvas,
+					newImageElement,
+					request: generateRequest,
+					draftRequest: {
+						...generateRequest,
+						prompt: "",
+						reference_images: [],
+						reference_image_options: undefined,
+					},
+					onSubmitStarted: () => {
+						canvas.eventEmitter.emit({
+							type: "element:image:generate-submit-started",
+							data: { elementId: props.imageElement.id },
+						})
+					},
+					onSubmitFailed: () => {
+						canvas.eventEmitter.emit({
+							type: "element:image:generate-submit-failed",
+							data: { elementId: props.imageElement.id },
+						})
+					},
 				})
-				const submitted = await newElementInstance.generateImage(generateRequest)
 				if (!submitted) {
-					canvas.eventEmitter.emit({
-						type: "element:image:generate-submit-failed",
-						data: { elementId: props.imageElement.id },
-					})
 					return false
 				}
 				originalElementInstance.clearTempGenerateImageRequestPrompt()
@@ -240,12 +238,6 @@ export default function SecondEdit(props: SecondEditProps) {
 					canvas.selectionManager.deselectAll()
 				}
 				return true
-			} catch (error) {
-				canvas.eventEmitter.emit({
-					type: "element:image:generate-submit-failed",
-					data: { elementId: props.imageElement.id },
-				})
-				return false
 			} finally {
 				sendingRef.current = false
 				setIsSending(false)

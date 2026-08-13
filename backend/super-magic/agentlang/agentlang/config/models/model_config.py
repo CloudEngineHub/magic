@@ -5,18 +5,22 @@ ModelConfig 是统一的模型配置数据结构，字段对齐 config.yaml。
 ModelConfigUtils 是面向调用方的便捷访问入口，实际查询委托给 ModelConfigManager。
 """
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from agentlang.config.models.model_profile import ModelProfile
+    from agentlang.config.models.provider_config import ProviderConfig, ProviderModelConfig
 
 
 @dataclass
 class ModelConfig:
     """结构化模型配置
 
-    字段对齐 config.yaml 的 models 段，缺失字段留空或使用默认值。
+    运行时统一模型配置，由本地 providers/model_profiles 或管理后台模型列表归一化得到。
     provider_source 标记该配置来自哪个服务商，仅供调试使用。
     """
     # 必填字段
@@ -25,6 +29,7 @@ class ModelConfig:
     provider: str
     api_key: str
     api_base_url: str
+    client_type: str = "openai_chat_completions"
 
     # 模型类型
     type: str = "llm"  # "llm" 或 "embedding"
@@ -38,10 +43,12 @@ class ModelConfig:
     top_p: float = 1.0
 
     # 功能支持
-    supports_tool_use: bool = False
+    supports_tool_use: bool = True
 
     # 可选字段
     stop: Optional[List[str]] = None
+    headers: Dict[str, str] = field(default_factory=dict)
+    query_params: Dict[str, str] = field(default_factory=dict)
     extra_params: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     # 实际解析后的底层模型 ID（动态聚合模型会指向真实的原子模型）
@@ -52,6 +59,10 @@ class ModelConfig:
 
     # 来源服务商标识，仅用于调试
     provider_source: str = ""
+    # 实际服务商 ID，用于区分 config.yaml 内部展开出的多个服务商
+    provider_id: str = ""
+    # 模型条目优先级，同 model_id 冲突时数值越高越优先
+    priority: int = 0
 
     @classmethod
     def from_dict(cls, model_id: str, config_dict: Dict[str, Any], provider_source: str = "") -> "ModelConfig":
@@ -69,6 +80,7 @@ class ModelConfig:
             model_id=model_id,
             name=str(config_dict.get("name", model_id)),
             provider=str(config_dict.get("provider", "openai")),
+            client_type=str(config_dict.get("client_type", "openai_chat_completions")),
             api_key=config_dict.get("api_key", ""),
             api_base_url=config_dict.get("api_base_url", ""),
             type=config_dict.get("type", "llm"),
@@ -76,13 +88,68 @@ class ModelConfig:
             max_output_tokens=int(config_dict.get("max_output_tokens", 4096)),
             temperature=float(config_dict.get("temperature", 0.7)),
             top_p=float(config_dict.get("top_p", 1.0)),
-            supports_tool_use=bool(config_dict.get("supports_tool_use", False)),
+            supports_tool_use=bool(config_dict.get("supports_tool_use", True)),
             stop=config_dict.get("stop"),
+            headers={str(k): str(v) for k, v in _dict_or_empty(config_dict.get("headers")).items()},
+            query_params={str(k): str(v) for k, v in _dict_or_empty(config_dict.get("query_params")).items()},
             extra_params=config_dict.get("extra_params", {}),
             metadata=config_dict.get("metadata", {}),
             resolved_model_id=config_dict.get("resolved_model_id") or None,
             pricing=config_dict.get("pricing", {}),
             provider_source=provider_source,
+            provider_id=str(config_dict.get("provider_id") or provider_source or config_dict.get("provider", "")),
+            priority=int(config_dict.get("priority", 0)),
+        )
+
+    @classmethod
+    def from_provider_model_and_profile(
+        cls,
+        provider: "ProviderConfig",
+        provider_model: "ProviderModelConfig",
+        profile: "ModelProfile",
+        provider_source: str,
+    ) -> "ModelConfig":
+        """由 Provider 调用配置和模型资料合成运行时模型配置。"""
+        request_defaults = {
+            **(provider.request_defaults or {}),
+            **(provider_model.request_defaults or {}),
+        }
+        return cls(
+            model_id=provider_model.model_id,
+            name=provider_model.api_model,
+            provider=provider.provider_id,
+            client_type=provider.client_type,
+            api_key=provider.api_key,
+            api_base_url=provider.base_url,
+            type=profile.type,
+            max_context_tokens=provider_model.max_context_tokens
+            if provider_model.max_context_tokens is not None
+            else profile.max_context_tokens,
+            max_output_tokens=provider_model.max_output_tokens
+            if provider_model.max_output_tokens is not None
+            else profile.max_output_tokens,
+            temperature=float(request_defaults.get("temperature", 0.7)),
+            top_p=float(request_defaults.get("top_p", 1.0)),
+            supports_tool_use=profile.supports_tool_use,
+            stop=request_defaults.get("stop"),
+            pricing=profile.pricing,
+            headers=provider.headers,
+            query_params=provider.query_params,
+            extra_params={
+                **(request_defaults.get("extra_params") or {}),
+                **provider_model.extra_params,
+            },
+            metadata={
+                **profile.metadata,
+                **provider.metadata,
+                **provider_model.metadata,
+                "provider_id": provider.provider_id,
+                "api_model": provider_model.api_model,
+                "profile": profile.model,
+            },
+            provider_source=provider_source,
+            provider_id=provider.provider_id,
+            priority=provider.priority,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -91,6 +158,7 @@ class ModelConfig:
             "model_id": self.model_id,
             "name": self.name,
             "provider": self.provider,
+            "client_type": self.client_type,
             "api_key": self.api_key,
             "api_base_url": self.api_base_url,
             "type": self.type,
@@ -99,10 +167,16 @@ class ModelConfig:
             "temperature": self.temperature,
             "top_p": self.top_p,
             "supports_tool_use": self.supports_tool_use,
+            "provider_id": self.provider_id,
+            "priority": self.priority,
         }
 
         if self.stop:
             result["stop"] = self.stop
+        if self.headers:
+            result["headers"] = self.headers
+        if self.query_params:
+            result["query_params"] = self.query_params
         if self.extra_params:
             result["extra_params"] = self.extra_params
         if self.metadata:
@@ -174,7 +248,7 @@ class ModelConfigUtils:
             return default
         return mc.max_output_tokens
 
-    def supports_tool_use(self, model_id: str, default: bool = False) -> bool:
+    def supports_tool_use(self, model_id: str, default: bool = True) -> bool:
         """检查模型是否支持工具调用"""
         mc = self.get_model_config(model_id)
         if not mc:
@@ -185,3 +259,7 @@ class ModelConfigUtils:
 
 # 全局单例实例
 model_config_utils = ModelConfigUtils()
+
+
+def _dict_or_empty(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}

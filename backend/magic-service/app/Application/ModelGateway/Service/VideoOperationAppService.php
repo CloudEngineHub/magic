@@ -20,6 +20,7 @@ use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
 use App\Domain\ModelGateway\Entity\AccessTokenEntity;
 use App\Domain\ModelGateway\Entity\Dto\CreateVideoDTO;
 use App\Domain\ModelGateway\Entity\Dto\VideoOperationResponseDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\AccessTokenType;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoMediaMetadata;
@@ -672,10 +673,11 @@ readonly class VideoOperationAppService
         $event->setHasAudioOutput($this->resolveHasAudioOutput($operation));
         $event->setProjectId($operation->getProjectId());
         $event->setVideoId($operation->getVideoId());
+        $event->setGeneratedFileKey($this->buildStoredVideoFileKey($operation));
         $event->setTopicId($operation->getTopicId());
         $event->setTaskId($operation->getTaskId());
         $event->setSourceId($operation->getSourceId());
-        $event->setSourceType($this->resolveSourceType($accessTokenEntity, $operation));
+        $event->setSourceType($this->resolveSourceType($accessTokenEntity, $operation, $requestBusinessParams));
         $event->setCreatedAt(new DateTime());
         $event->setVideoReferenceMaterial($referenceMaterial);
         $event->setBusinessParams($businessParams);
@@ -1152,9 +1154,14 @@ readonly class VideoOperationAppService
         }
     }
 
-    private function resolveSourceType(?AccessTokenEntity $accessTokenEntity, VideoQueueOperationEntity $operation): ImageGenerateSourceEnum
-    {
-        if ($accessTokenEntity?->getType()->isUser()) {
+    private function resolveSourceType(
+        ?AccessTokenEntity $accessTokenEntity,
+        VideoQueueOperationEntity $operation,
+        array $requestBusinessParams = []
+    ): ImageGenerateSourceEnum {
+        $accessTokenType = $accessTokenEntity?->getType()->value
+            ?? (string) ($requestBusinessParams['access_token_type'] ?? '');
+        if ($accessTokenType === AccessTokenType::User->value) {
             return ImageGenerateSourceEnum::API_PLATFORM;
         }
 

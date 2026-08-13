@@ -8,8 +8,8 @@ declare(strict_types=1);
 namespace App\Domain\Contact\Entity\ValueObject;
 
 use App\Domain\Contact\Repository\Facade\MagicUserRepositoryInterface;
+use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Infrastructure\Core\AbstractObject;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\AgentDomainService;
 
 /**
  * 数据隔离 SaaS化

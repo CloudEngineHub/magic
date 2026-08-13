@@ -1,5 +1,13 @@
 import { useStyles } from "./styles"
-import { useMemo, useState, createElement, isValidElement, cloneElement, ReactElement } from "react"
+import {
+	useMemo,
+	useState,
+	useRef,
+	createElement,
+	isValidElement,
+	cloneElement,
+	ReactElement,
+} from "react"
 import { MCPPanel } from "./AgentPanel"
 import {
 	/** IconClockPlay, IconMailShare, IconHeart, */ IconX,
@@ -7,8 +15,12 @@ import {
 } from "@tabler/icons-react"
 import type { AgentCommonModalChildrenProps } from "../../AgentCommonModal"
 import { useTranslation } from "react-i18next"
-import { useResponsive } from "ahooks"
 import { Tabs } from "antd-mobile"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { useSize } from "ahooks"
+
+// Switch to the single-column settings shell before the desktop split view becomes cramped.
+const COMPACT_LAYOUT_BREAKPOINT = 760
 
 export const enum PanelType {
 	MCP = "MCP",
@@ -29,8 +41,14 @@ export default function AgentSettings(props: AgentCommonProps) {
 
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("agent")
-	const { md } = useResponsive()
-	const isMobile = !md
+	const isMobile = useIsMobile()
+	const containerRef = useRef<HTMLDivElement>(null)
+	const containerSize = useSize(containerRef)
+	// Measure the actual embedded container so narrow desktop iframes get a usable layout.
+	const isCompactLayout =
+		!isMobile &&
+		containerSize?.width !== undefined &&
+		containerSize.width < COMPACT_LAYOUT_BREAKPOINT
 
 	const [panelType, setPanelType] = useState(defaultPanel || PanelType.MCP)
 
@@ -45,6 +63,7 @@ export default function AgentSettings(props: AgentCommonProps) {
 						onSuccessCallback={onSuccessCallback}
 						storageKey={storageKey}
 						useTempStorage={useTempStorage}
+						compact={isCompactLayout}
 					/>
 				),
 			},
@@ -55,7 +74,7 @@ export default function AgentSettings(props: AgentCommonProps) {
 			// 	component: ScheduledTasksPanel,
 			// },
 		}
-	}, [onSuccessCallback, storageKey, t, useTempStorage])
+	}, [isCompactLayout, onSuccessCallback, storageKey, t, useTempStorage])
 
 	const panel = useMemo(() => {
 		const child: ReactElement<AgentCommonModalChildrenProps> = menu[panelType]?.component
@@ -66,9 +85,12 @@ export default function AgentSettings(props: AgentCommonProps) {
 		)
 	}, [menu, onClose, panelType, styles.wrapper])
 
-	if (isMobile) {
+	if (isMobile || isCompactLayout) {
 		return (
-			<div className={styles.mobileLayout}>
+			<div
+				ref={containerRef}
+				className={cx(styles.mobileLayout, isCompactLayout && styles.compactLayout)}
+			>
 				<div className={styles.mobileHeader}>
 					<Tabs onChange={(e) => setPanelType(e as PanelType)}>
 						{(Object.keys(menu) as Array<keyof typeof menu>).map((key) => {
@@ -100,7 +122,7 @@ export default function AgentSettings(props: AgentCommonProps) {
 	}
 
 	return (
-		<div className={styles.layout}>
+		<div ref={containerRef} className={styles.layout}>
 			<div className={styles.panel}>
 				{/*<div className={styles.panelGroup}>*/}
 				{/*	<div className={styles.panelHeader}>{t("common.settings.title")}</div>*/}

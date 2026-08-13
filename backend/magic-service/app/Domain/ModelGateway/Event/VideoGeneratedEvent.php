@@ -39,6 +39,8 @@ class VideoGeneratedEvent extends AbstractEvent
 
     protected ?string $videoId = null;
 
+    protected ?string $generatedFileKey = null;
+
     protected DateTime $createdAt;
 
     protected ?string $sourceId = null;
@@ -203,6 +205,17 @@ class VideoGeneratedEvent extends AbstractEvent
     {
         $videoId = is_string($videoId) ? trim($videoId) : '';
         $this->videoId = $videoId === '' ? null : $videoId;
+    }
+
+    public function getGeneratedFileKey(): ?string
+    {
+        return $this->generatedFileKey;
+    }
+
+    public function setGeneratedFileKey(?string $generatedFileKey): void
+    {
+        $generatedFileKey = trim((string) $generatedFileKey, '/');
+        $this->generatedFileKey = $generatedFileKey === '' ? null : $generatedFileKey;
     }
 
     public function getCreatedAt(): DateTime

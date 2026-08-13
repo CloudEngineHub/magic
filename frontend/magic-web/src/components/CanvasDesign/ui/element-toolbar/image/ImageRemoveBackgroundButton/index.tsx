@@ -18,7 +18,6 @@ import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
 } from "../../../../runtime/resources/image/imageCropUtils"
-import { GenerationStatus } from "../../../../public/magic-types"
 
 export default function ImageRemoveBackgroundButton() {
 	const { t } = useCanvasDesignI18n()
@@ -83,13 +82,6 @@ export default function ImageRemoveBackgroundButton() {
 		const originalBaseName = selectedImageElement.name || imageElementInstance.getRenderName()
 		const removeBackgroundSuffix = t("elementTools.imageRemoveBackground.title", "去背景")
 		const requestImageId = generateUUID()
-		const placeholderTaskMeta = createRemoveBackgroundTaskMeta({
-			file_path: filePath,
-			reference_image_options: buildReferenceImageOptions({
-				filePath,
-				crop: imageProcessRequestPayload.crop,
-			}),
-		})
 
 		const newImageElement: ImageElement = {
 			id: newElementId,
@@ -100,19 +92,37 @@ export default function ImageRemoveBackgroundButton() {
 			height: selectedImageElement.height ?? 1024,
 			zIndex: newZIndex,
 			name: `${originalBaseName} ${removeBackgroundSuffix}`,
-			status: GenerationStatus.Pending,
-			imageGenerationTaskMeta: placeholderTaskMeta,
 		}
 
-		canvas.elementManager.create(newImageElement)
-
+		// 去背景任务确认前只保留运行时结果占位，避免 Pending 元素进入 DSL。
+		canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
+		const attemptId = canvas.generationRuntimeManager.beginAttempt({
+			operation: "image-remove-background",
+			originElementId: selectedImageElement.id,
+			phase: "submitting",
+			failurePolicy: "remove-placeholder",
+			targets: [
+				{
+					elementId: newElementId,
+					imageGenerationTaskMeta: createRemoveBackgroundTaskMeta({
+						image_id: requestImageId,
+						file_path: filePath,
+						size: imageProcessRequestPayload.size,
+						reference_image_options: buildReferenceImageOptions({
+							filePath,
+							crop: imageProcessRequestPayload.crop,
+						}),
+					}),
+				},
+			],
+		})
 		const newElementInstance = canvas.elementManager.getElementInstance(newElementId)
 		if (!newElementInstance || !(newElementInstance instanceof ImageElementClass)) {
 			canvas.eventEmitter.emit({
 				type: "element:image:generate-submit-failed",
 				data: { elementId: selectedImageElement.id },
 			})
-			canvas.elementManager.delete(newElementId)
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			return
 		}
 
@@ -131,7 +141,6 @@ export default function ImageRemoveBackgroundButton() {
 					type: "element:image:generate-submit-failed",
 					data: { elementId: selectedImageElement.id },
 				})
-				canvas.elementManager.delete(newElementId)
 				return
 			}
 			canvas.selectionManager.select(newElementId, false)
@@ -140,7 +149,7 @@ export default function ImageRemoveBackgroundButton() {
 				type: "element:image:generate-submit-failed",
 				data: { elementId: selectedImageElement.id },
 			})
-			canvas.elementManager.delete(newElementId)
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 		}
 	}, [selectedImageElement, imageElementInstance, canvas, methods, t])
 

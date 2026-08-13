@@ -194,7 +194,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 	}
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="sources-tab">
 			{/* Toolbar */}
 			<div className="flex flex-shrink-0 items-center gap-1 border-b border-border/50 px-2 py-1">
 				{/* View switcher — only shown when processedSourceCode is available */}
@@ -304,7 +304,11 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 			</div>
 
 			{/* Code view */}
-			<div ref={scrollRef} className="min-h-0 flex-1 overflow-auto font-mono text-xs">
+			<div
+				ref={scrollRef}
+				className="min-h-0 flex-1 overflow-auto overscroll-contain font-mono text-xs"
+				data-testid="sources-scroll-container"
+			>
 				<div
 					style={{
 						height: `${virtualizer.getTotalSize()}px`,
@@ -370,7 +374,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 													<mark
 														key={i}
 														className={cn(
-															"rounded-sm px-0",
+															"rounded-sm p-0",
 															isCurrentMatch
 																? "bg-orange-400/80 text-foreground"
 																: "bg-yellow-300/60 text-foreground",
@@ -389,7 +393,7 @@ export function SourcesTab({ sourceCode, rawSourceCode, processedSourceCode }: S
 												seg.type === "added" ? (
 													<mark
 														key={i}
-														className="rounded-sm bg-green-400/40 px-0 text-foreground"
+														className="rounded-sm bg-green-400/40 p-0 text-foreground"
 													>
 														{seg.text}
 													</mark>

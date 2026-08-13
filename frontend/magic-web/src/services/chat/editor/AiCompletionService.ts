@@ -473,47 +473,49 @@ class AiCompletionService {
 		editor: MagicRichEditorRef["editor"] | undefined
 		suggestionText?: string
 	}) => {
-		if (!editor) return
+		if (!editor || this.composition) return false
 
-		return runActiveEditor(editor, (activeEditor) => {
-			// 获取建议词
-			const attr = activeEditor.getAttributes("paragraph")
-			let { suggestion } = attr
+		return (
+			runActiveEditor(editor, (activeEditor) => {
+				// 获取建议词
+				const attr = activeEditor.getAttributes("paragraph")
+				let { suggestion } = attr
 
-			if (suggestionText) {
-				suggestion = suggestionText
-			}
+				if (suggestionText) {
+					suggestion = suggestionText
+				}
 
-			// 加强检查，确保建议词有效
-			// 只有在有有效建议词的情况下才执行操作
-			if (suggestion && typeof suggestion === "string" && suggestion.trim().length > 0) {
-				this.isInsertSuggestionChange = true
-				activeEditor.chain().focus().run()
+				// 加强检查，确保建议词有效
+				// 只有在有有效建议词的情况下才执行操作
+				if (suggestion && typeof suggestion === "string" && suggestion.trim().length > 0) {
+					this.isInsertSuggestionChange = true
+					activeEditor.chain().focus().run()
 
-				const currentPosition = activeEditor.state.selection.head
-				const endPosition = activeEditor.state.doc.content.size - 1
-				activeEditor.commands.focus(endPosition)
+					const currentPosition = activeEditor.state.selection.head
+					const endPosition = activeEditor.state.doc.content.size - 1
+					activeEditor.commands.focus(endPosition)
 
-				activeEditor.commands.insertContent(suggestion)
+					activeEditor.commands.insertContent(suggestion)
 
-				logger.report("suggestion_lifecycle", {
-					action: "accept",
-					suggestionLength: suggestion?.length || 0,
-					cursorPosition: currentPosition,
-				})
+					logger.report("suggestion_lifecycle", {
+						action: "accept",
+						suggestionLength: suggestion?.length || 0,
+						cursorPosition: currentPosition,
+					})
 
-				// 增加Tab键点击次数
-				this.addTabCount()
+					// 增加Tab键点击次数
+					this.addTabCount()
 
-				const isNotLastPosition = currentPosition < endPosition
-				if (isNotLastPosition) activeEditor.commands.focus(currentPosition)
+					const isNotLastPosition = currentPosition < endPosition
+					if (isNotLastPosition) activeEditor.commands.focus(currentPosition)
 
-				this.clearSuggestion()
-			}
+					this.clearSuggestion()
+					return true
+				}
 
-			// 禁用Tab键默认行为
-			return true
-		})
+				return false
+			}) ?? false
+		)
 	}
 
 	/**
@@ -761,8 +763,7 @@ class AiCompletionService {
 				return {
 					Tab: ({ editor }) => {
 						if (!self.enabled) return false
-						self.insertSuggestion({ editor })
-						return true
+						return self.insertSuggestion({ editor })
 					},
 					Escape: () => {
 						if (!self.enabled) return false
@@ -826,8 +827,8 @@ class AiCompletionService {
 	 * 导致 DOM 更新从而打断正在进行的 IME composition（表现为首字母被直接提交）
 	 */
 	onCompositionStart = () => {
-		if (!this.enabled) return
 		this.composition = true
+		if (!this.enabled) return
 
 		// 取消正在进行的请求，但不 dispatch editor transaction
 		if (this.currentRequest) {
@@ -847,8 +848,8 @@ class AiCompletionService {
 	 * 当用户完成输入法输入时触发，重新开始获取建议
 	 */
 	onCompositionEnd = () => {
-		if (!this.enabled) return
 		this.composition = false
+		if (!this.enabled) return
 		// 添加小延迟确保composition状态完全稳定
 		setTimeout(() => {
 			// 再次检查composition状态，确保没有新的composition开始

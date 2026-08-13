@@ -124,6 +124,22 @@ export const RequestUrl = {
 	getDataDashboardMemberSummary: "/api/v1/admin/data-dashboard/member-analysis/summary",
 	/** 数据看板 - 成员分析 Tabs */
 	getDataDashboardMemberTabs: "/api/v1/admin/data-dashboard/member-analysis/tabs",
+	/** 数据看板 - 组织分析 Summary */
+	getDataDashboardOrganizationSummary:
+		"/api/v1/admin/data-dashboard/organization-analysis/summary",
+	/** 数据看板 - 组织分析 Tabs */
+	getDataDashboardOrganizationTabs: "/api/v1/admin/data-dashboard/organization-analysis/tabs",
+	/** 数据看板 - 消耗分析 Summary */
+	getDataDashboardConsumptionSummary: "/api/v1/admin/data-dashboard/consumption-analysis/summary",
+	/** 数据看板 - 创建数字员工分析导出任务 */
+	createDataDashboardAgentExport: "/api/v1/admin/data-dashboard/agent-analysis/export",
+	/** 数据看板 - 创建组织分析导出任务 */
+	createDataDashboardOrganizationExport:
+		"/api/v1/admin/data-dashboard/organization-analysis/export",
+	/** 数据看板 - 创建成员分析导出任务 */
+	createDataDashboardMemberExport: "/api/v1/admin/data-dashboard/member-analysis/export",
+	/** 数据看板 - 查询导出任务 */
+	getDataDashboardExportTask: "/api/v1/admin/export-tasks/${export_id}",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */
@@ -131,6 +147,8 @@ export const RequestUrl = {
 	getModeList: "/api/v1/official/admin/modes",
 	/** 获取默认模式 */
 	getDefaultMode: "/api/v1/official/admin/modes/default",
+	/** 获取、更新平台默认数字员工 */
+	defaultAgentSetting: "/api/v1/official/admin/mode-settings/default-agent",
 	/** 获取模式详情 */
 	getModeDetail: "/api/v1/official/admin/modes/${id}",
 	/** 修改模式状态 */

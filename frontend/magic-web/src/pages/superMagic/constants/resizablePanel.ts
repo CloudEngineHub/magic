@@ -39,6 +39,11 @@ export const DEFAULT_WIDTH = {
 }
 
 /**
+ * 低分辨率布局断点：首次打开 Topic 页面时，优先为中间工作区保留可用空间。
+ */
+export const LOW_RESOLUTION_VIEWPORT_WIDTH_PX = 1280
+
+/**
  * Resize handle 的统一宽度
  */
 export const RESIZABLE_PANEL_HANDLE_WIDTH = 8

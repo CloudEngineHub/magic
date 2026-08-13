@@ -7,13 +7,20 @@ import { useMemo, useState, useCallback } from "react"
 import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import type { GenerateHightImageRequest } from "../../../../public/magic-types"
-import { generateElementId, calculateNewElementPosition } from "../../../../runtime/shared/ids"
+import {
+	generateElementId,
+	calculateNewElementPosition,
+	generateUUID,
+} from "../../../../runtime/shared/ids"
 import SizeSelect from "../../../primitives/custom/SizeSelect/index"
 import SizeInput from "../../size/Size/SizeInput"
 import { Button } from "../../../primitives/shadcn/button"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useImageConvertHightOptions } from "./useImageConvertHightOptions"
-import { getImageGenerationTaskMeta } from "../../../../runtime/resources/image/imageGenerationTaskMeta"
+import {
+	createHighImageTaskMeta,
+	getImageGenerationTaskMeta,
+} from "../../../../runtime/resources/image/imageGenerationTaskMeta"
 import { ImageGenerationTaskTypeMap } from "../../../../public/magic-types"
 import {
 	buildReferenceImageOptions,
@@ -143,6 +150,7 @@ export default function ImageConvertHight() {
 
 		// 生成新元素 ID
 		const newElementId = generateElementId()
+		const requestImageId = generateUUID()
 
 		// 获取下一个 zIndex
 		const newZIndex = canvas.elementManager.getNextZIndexInLevel()
@@ -165,17 +173,8 @@ export default function ImageConvertHight() {
 			name: resolutionScale ? `${originalBaseName} ${resolutionScale}` : originalBaseName,
 		}
 
-		// 创建元素
-		canvas.elementManager.create(newImageElement)
-
-		// 获取新创建的元素实例
-		const newElementInstance = canvas.elementManager.getElementInstance(newElementId)
-		if (!newElementInstance || !(newElementInstance instanceof ImageElementClass)) {
-			return
-		}
-
-		// 构建高清图生成请求参数（selectedResolution 已经是宽x高格式）
 		const hightImageRequest: GenerateHightImageRequest = {
+			image_id: requestImageId,
 			file_path: filePath,
 			size: selectedResolution,
 			reference_image_options: buildReferenceImageOptions({
@@ -184,13 +183,38 @@ export default function ImageConvertHight() {
 			}),
 		}
 
+		// 高清任务确认前只保留运行时结果占位，避免刷新时把无效任务状态导出。
+		canvas.elementManager.createTemporaryElement(newImageElement, { silent: true })
+		const attemptId = canvas.generationRuntimeManager.beginAttempt({
+			operation: "image-high",
+			originElementId: selectedImageElement.id,
+			phase: "submitting",
+			failurePolicy: "remove-placeholder",
+			targets: [
+				{
+					elementId: newElementId,
+					imageGenerationTaskMeta: createHighImageTaskMeta(hightImageRequest),
+				},
+			],
+		})
+		// 获取新创建的元素实例
+		const newElementInstance = canvas.elementManager.getElementInstance(newElementId)
+		if (!newElementInstance || !(newElementInstance instanceof ImageElementClass)) {
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			return
+		}
+
+		// 构建高清图生成请求参数（selectedResolution 已经是宽x高格式）
 		// 调用新元素的 generateHightImage 方法
 		try {
-			await newElementInstance.generateHightImage(hightImageRequest)
+			const submitted = await newElementInstance.generateHightImage(hightImageRequest)
+			if (!submitted) {
+				return
+			}
 			// 清空画布选中状态
 			canvas.selectionManager.deselectAll()
 		} catch (error) {
-			//
+			canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 		}
 	}, [selectedResolution, selectedImageElement, imageElementInstance, resolutionOptions, canvas])
 

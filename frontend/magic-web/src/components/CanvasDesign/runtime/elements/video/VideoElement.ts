@@ -31,7 +31,7 @@ import type {
 	VideoResourceLoadOptions,
 } from "../../resources/video/VideoResourceManager"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
-import { hasVideoGenerationRequestUserIntent } from "../../shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -81,12 +81,19 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}) => void
 	private isRetryEditing = false
+	private generationRuntimeUnsubscribe?: () => void
 
 	constructor(data: VideoElementData, canvas: Canvas) {
 		super(data, canvas)
 		this.setupRetryEditingListeners()
 		this.setupVideoResourceRefreshedListener()
 		this.setupVideoResourceLoadFailedListener()
+		this.generationRuntimeUnsubscribe = this.canvas.generationRuntimeManager.subscribeElement(
+			this.data.id,
+			() => {
+				this.rerenderWhenTransformIdle()
+			},
+		)
 
 		this.pollingManager = new VideoPollingManager({
 			elementId: this.data.id,
@@ -139,6 +146,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
 		this.removeVideoResourceLoadFailedListener()
+		this.generationRuntimeUnsubscribe?.()
+		this.generationRuntimeUnsubscribe = undefined
 		super.destroy()
 	}
 
@@ -159,7 +168,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			!generateVideo ||
 			this.isGenerating ||
 			!request.model_id ||
-			!hasVideoGenerationRequestUserIntent(request)
+			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
@@ -177,25 +186,23 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.tempGenerateVideoRequest?.video_id ||
 				generateUUID(),
 		}
-		const previousStatus = this.data.status
-		const previousErrorMessage = this.data.errorMessage
-		const previousGenerateVideoRequest = this.data.generateVideoRequest
-
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
-		// 先固化已提交配置，让提交等待和后续 processing 阶段都能打开生成记录。
-		this.canvas.elementManager.update(
-			this.data.id,
-			{
-				generateVideoRequest: requestWithId,
-				status: undefined,
-				errorMessage: undefined,
-			},
-			// 接口确认前只更新运行时 UI，避免刷新时恢复出尚未真正创建的任务。
-			{ mode: "data-only", silent: true },
-		)
-		this.isGenerating = true
+		const isGenerationPlaceholder =
+			this.canvas.elementManager.getTemporaryElementMetadata?.(this.data.id)?.kind ===
+			"generation-result"
+		const attemptId = this.canvas.generationRuntimeManager.beginAttempt({
+			operation: "video-generate",
+			originElementId: this.data.id,
+			targets: [
+				{
+					elementId: this.data.id,
+					generateVideoRequest: requestWithId,
+				},
+			],
+			failurePolicy: isGenerationPlaceholder ? "promote-empty" : "restore-existing",
+		})
 		this.rerender()
 		this.canvas.eventEmitter.emit({
 			type: "element:video:generate-submit-started",
@@ -204,19 +211,24 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		try {
 			await generateVideo(requestWithId)
+			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+				return false
+			}
 			this.isGenerating = false
 
-			this.canvas.elementManager.update(
-				this.data.id,
+			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
 				{
-					generateVideoRequest: requestWithId,
-					videoGenerationResultMeta: undefined,
-					status: undefined,
-					errorMessage: undefined,
-					src: undefined,
+					elementId: this.data.id,
+					persistedPatch: {
+						generateVideoRequest: requestWithId,
+						videoGenerationResultMeta: undefined,
+						status: undefined,
+						errorMessage: undefined,
+						src: undefined,
+					},
 				},
-				{ silent: false },
-			)
+			])
+			if (!confirmed) return false
 
 			this.isErrorState = false
 			this.clearTempGenerateVideoRequest()
@@ -224,28 +236,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			this.rerender()
 			return true
 		} catch (error) {
-			this.isGenerating = false
-			const currentElement = this.canvas.elementManager.getElementData(this.data.id)
-			// 只回滚仍属于本次提交的配置，避免覆盖等待期间到达的更新。
-			if (
-				currentElement?.type === ElementTypeEnum.Video &&
-				currentElement.generateVideoRequest === requestWithId
-			) {
-				this.canvas.elementManager.update(
-					this.data.id,
-					{
-						generateVideoRequest: previousGenerateVideoRequest,
-						status: previousStatus,
-						errorMessage: previousErrorMessage,
-					},
-					{ mode: "data-only", silent: true },
-				)
+			if (!this.canvas.generationRuntimeManager.isCurrent(attemptId, this.data.id)) {
+				return false
 			}
-			this.rerender()
+			this.isGenerating = false
 			this.canvas.eventEmitter.emit({
 				type: "element:video:generate-submit-failed",
 				data: { elementId: this.data.id },
 			})
+			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			return false
 		}
 	}
@@ -992,7 +991,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private hasActiveVideoGenerationTask(): boolean {
-		return !!this.data.generateVideoRequest?.video_id
+		return !!this.getActiveGenerateVideoRequest()?.video_id
 	}
 
 	private isActiveGenerationPlaceholder(): boolean {
@@ -1027,7 +1026,15 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private shouldShowInfoButton(): boolean {
-		return !!this.data.generateVideoRequest
+		return !!this.getActiveGenerateVideoRequest()
+	}
+
+	/** 返回当前用于运行时展示的请求；未确认请求不会进入 DSL。 */
+	public getActiveGenerateVideoRequest(): GenerateVideoRequest | undefined {
+		return (
+			this.canvas?.generationRuntimeManager?.getTargetState(this.data.id)
+				?.generateVideoRequest || this.data.generateVideoRequest
+		)
 	}
 
 	private shouldShowFullscreenButton(): boolean {

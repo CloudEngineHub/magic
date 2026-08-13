@@ -258,6 +258,18 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		[flushCanvasDesignDataChange, mergePendingCanvasDataChangeMeta],
 	)
 
+	const filterRuntimeOnlyGenerationElementIds = useCallback(
+		(elementIds?: string[]): string[] | undefined => {
+			if (!elementIds || !canvas) return elementIds
+			return elementIds.filter(
+				(elementId) =>
+					canvas.elementManager.getTemporaryElementMetadata(elementId)?.kind !==
+					"generation-result",
+			)
+		},
+		[canvas],
+	)
+
 	useEffect(() => {
 		return () => {
 			flushCanvasDesignDataChange()
@@ -315,6 +327,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	useCanvasEvents(
 		["element:deleted"] as const,
 		(event) => {
+			if (event.data.persistence === "runtime-only") return
 			pendingDeletedElementIdsRef.current.add(event.data.elementId)
 		},
 		[canvas],
@@ -327,13 +340,27 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 			"canvas:clear",
 			"element:temporary:converted",
 			"connection:change",
+			"document:restored",
 		] as const,
-		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent) => {
+		(changeEvent, clearEvent, temporaryConvertedEvent, connectionEvent, restoredEvent) => {
 			if (changeEvent) {
 				if (changeEvent.data?.phase === "transient") return
+				const changedElementIds = filterRuntimeOnlyGenerationElementIds(
+					changeEvent.data?.elementIds,
+				)
+				const elementNameChanges = changeEvent.data?.nameChanges?.filter(
+					(change) => changedElementIds?.includes(change.elementId) ?? true,
+				)
+				if (
+					changeEvent.data?.elementIds &&
+					changedElementIds?.length === 0 &&
+					!elementNameChanges?.length
+				) {
+					return
+				}
 				scheduleCanvasDesignDataChange("element:change", {
-					changedElementIds: changeEvent.data?.elementIds,
-					elementNameChanges: changeEvent.data?.nameChanges,
+					changedElementIds,
+					elementNameChanges,
 				})
 				return
 			}
@@ -352,9 +379,13 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 					changedConnectionIds: connectionEvent.data.changedConnectionIds,
 					deletedConnectionIds: connectionEvent.data.deletedConnectionIds,
 				})
+				return
+			}
+			if (restoredEvent) {
+				scheduleCanvasDesignDataChange("document:restored")
 			}
 		},
-		[scheduleCanvasDesignDataChange],
+		[filterRuntimeOnlyGenerationElementIds, scheduleCanvasDesignDataChange],
 	)
 
 	// 监听 viewport 变化，保存到 storage

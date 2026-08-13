@@ -60,14 +60,16 @@
 CodeModeOnly 的工具类必须声明：
 
 ```python
-code_mode_only = True
+@tool(code_mode_only=True)
+class InternalWorkflowTool(BaseTool[InternalWorkflowParams]):
+    ...
 ```
 
 运行时要求：
 
-- 框架会把 `code_mode_only = True` 的工具从 LLM tools 列表中排除
+- 框架会把 `@tool(code_mode_only=True)` 的工具从 LLM tools 列表中排除
 - Code Mode 的 `sdk.tool.call(...)` 仍可调用这些工具
-- 如果误把 CodeModeOnly 工具挂到 agent 的 `tools:` 列表，执行层会拦截，工具开发者不需要额外处理
+- 如果误把 CodeModeOnly 工具写进 agent 的 `tools:` 列表，Agent 配置加载会直接失败，必须删除错误挂载后才能运行
 - 对应 Skill 是唯一 Agent-facing 入口，必须完整说明参数、示例、返回结构和常见错误
 
 ---
@@ -86,7 +88,7 @@ Code Mode 通过服务端路由复用了这套机制——模型写代码调工�
 
 双活机制保证了这种切换的零成本：工具提示词完整 → 直接加进工具列表即可，无需补写说明；Skill 完整 → 保持 Code Mode 路径不变。两个方向随时可切，互不影响。
 
-CodeModeOnly 单活不承诺这种切换能力。若未来要改成可直接挂载，必须补齐工具 docstring、参数 description、`get_prompt_hint()`，并移除 `code_mode_only = True`。
+CodeModeOnly 单活不承诺这种切换能力。若未来要改成可直接挂载，必须补齐工具 docstring、参数 description、`get_prompt_hint()`，并移除 `@tool(..., code_mode_only=True)`。
 
 ### 3. 两套信息服务不同读者，且互不相通
 
@@ -161,9 +163,9 @@ skills:
 
 CodeModeOnly 工具只服务 Code Mode，不维护直接挂载入口。实现时按以下清单执行：
 
-- 工具类声明 `code_mode_only = True`
+- 工具注册使用 `@tool(code_mode_only=True)`；不要在类体内手写 `code_mode_only = True`
 - Tool 层保留执行逻辑、参数校验、`get_before_tool_call_friendly_action_and_remark()`、`get_before_tool_detail()`、`get_tool_detail()`
-- Tool 层的 docstring 和参数 description 保留必要语义即可，不需要为直接挂载场景写完整教学提示
+- Tool 层的 class docstring、参数 description 和 `get_prompt_hint()` 使用简洁英文，只保留 SDK Schema 与排障所需语义，不维护 `<!--zh -->` 双语说明
 - Skill 中必须完整写明工具用途、参数、返回值、代码示例、边界条件和常见错误
 - 如果工具会被直接挂载给模型，不能使用 CodeModeOnly，必须改走双活
 
@@ -179,7 +181,7 @@ CodeModeOnly 工具只服务 Code Mode，不维护直接挂载入口。实现时
 
 - 两套信息服务不同的触发场景，一个场景失效不影响另一个
 - 重复的成本是维护时需要同步更新两处；不重复的代价是某一个场景下模型完全失明
-- 如果某个工具确认永久不再直接挂载，应明确标记 `code_mode_only = True`，再压缩工具层提示词
+- 如果某个工具确认永久不再直接挂载，应明确标记 `@tool(code_mode_only=True)`，再压缩工具层提示词
 
 ---
 

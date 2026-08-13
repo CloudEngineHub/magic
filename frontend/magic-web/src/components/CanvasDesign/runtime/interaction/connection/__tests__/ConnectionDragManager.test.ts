@@ -125,7 +125,6 @@ function createCanvasStub() {
 				!!element &&
 				state.visibleIds.has(element.id) &&
 				element.interactionConfig?.connectable !== false &&
-				element.type !== ElementTypeEnum.Frame &&
 				element.type !== ElementTypeEnum.Group,
 		},
 		transformManager: {
@@ -426,7 +425,7 @@ describe("ConnectionDragManager", () => {
 		manager.destroy()
 	})
 
-	it("does not start dragging from non-connectable elements", () => {
+	it("does not start dragging from explicitly disabled elements", () => {
 		const { manager, state } = createCanvasStub()
 
 		state.nonConnectableIds.add("origin")
@@ -441,7 +440,11 @@ describe("ConnectionDragManager", () => {
 			}),
 		).toBe(false)
 
-		state.nonConnectableIds.clear()
+		manager.destroy()
+	})
+
+	it("starts dragging from a frame", () => {
+		const { manager, state } = createCanvasStub()
 		state.elementTypes.set("origin", ElementTypeEnum.Frame)
 		expect(
 			manager.startFromHandle({
@@ -452,66 +455,61 @@ describe("ConnectionDragManager", () => {
 				pointerId: 1,
 				pointerType: "mouse",
 			}),
-		).toBe(false)
+		).toBe(true)
 		manager.destroy()
 	})
 
-	it.each([ElementTypeEnum.Frame, ElementTypeEnum.Group])(
-		"skips %s targets while dragging",
-		(elementType) => {
-			const {
-				connectionManager,
-				controlsLayer,
-				cursorManager,
-				emitInput,
-				getElementNode,
-				manager,
-				state,
-			} = createCanvasStub()
-			state.elementTypes.set("target", elementType)
+	it.each([ElementTypeEnum.Group])("skips %s targets while dragging", (elementType) => {
+		const {
+			connectionManager,
+			controlsLayer,
+			cursorManager,
+			emitInput,
+			getElementNode,
+			manager,
+			state,
+		} = createCanvasStub()
+		state.elementTypes.set("target", elementType)
 
-			manager.startFromHandle({
-				elementId: "origin",
-				side: "right",
-				client: { x: 100, y: 40 },
-				canvasPoint: { x: 110, y: 40 },
-				pointerId: 1,
-				pointerType: "mouse",
-			})
-			emitInput(
-				"move",
-				createInput("move", {
-					client: { x: 230, y: 40 },
-					canvas: { x: 230, y: 40 },
-					target: getElementNode("target"),
-				}),
-			)
+		manager.startFromHandle({
+			elementId: "origin",
+			side: "right",
+			client: { x: 100, y: 40 },
+			canvasPoint: { x: 110, y: 40 },
+			pointerId: 1,
+			pointerType: "mouse",
+		})
+		emitInput(
+			"move",
+			createInput("move", {
+				client: { x: 230, y: 40 },
+				canvas: { x: 230, y: 40 },
+				target: getElementNode("target"),
+			}),
+		)
 
-			expect(
-				getPreviewPath(controlsLayer)?.getAttr("connectionDragPreviewData"),
-			).toMatchObject({
-				targetElementId: null,
-				state: "free",
-				validationReason: null,
-			})
-			expect(getTargetFeedbackRect(controlsLayer)).toBeNull()
-			expect(cursorManager.setTemporary).toHaveBeenLastCalledWith("crosshair")
+		expect(getPreviewPath(controlsLayer)?.getAttr("connectionDragPreviewData")).toMatchObject({
+			targetElementId: null,
+			state: "free",
+			validationReason: null,
+		})
+		expect(getTargetFeedbackRect(controlsLayer)).toBeNull()
+		expect(cursorManager.setTemporary).toHaveBeenLastCalledWith("crosshair")
 
-			emitInput(
-				"up",
-				createInput("up", {
-					client: { x: 230, y: 40 },
-					canvas: { x: 230, y: 40 },
-					target: getElementNode("target"),
-				}),
-			)
+		emitInput(
+			"up",
+			createInput("up", {
+				client: { x: 230, y: 40 },
+				canvas: { x: 230, y: 40 },
+				target: getElementNode("target"),
+			}),
+		)
 
-			expect(connectionManager.connectElements).not.toHaveBeenCalled()
-			manager.destroy()
-		},
-	)
+		expect(connectionManager.connectElements).not.toHaveBeenCalled()
+		manager.destroy()
+	})
 
-	it("skips a Frame target and can resolve the connectable element underneath", () => {
+	it("connects to a frame target instead of resolving an element underneath", () => {
 		const { connectionManager, controlsLayer, emitInput, getElementNode, manager, state } =
 			createCanvasStub()
 		state.elementTypes.set("target", ElementTypeEnum.Frame)
@@ -535,7 +533,7 @@ describe("ConnectionDragManager", () => {
 		)
 
 		expect(getPreviewPath(controlsLayer)?.getAttr("connectionDragPreviewData")).toMatchObject({
-			targetElementId: "other",
+			targetElementId: "target",
 			state: "valid",
 			validationReason: null,
 		})
@@ -551,7 +549,7 @@ describe("ConnectionDragManager", () => {
 
 		expect(connectionManager.connectElements).toHaveBeenCalledWith({
 			sourceElementId: "origin",
-			targetElementId: "other",
+			targetElementId: "target",
 		})
 		manager.destroy()
 	})

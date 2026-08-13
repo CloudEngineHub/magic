@@ -24,6 +24,20 @@ export const useStyles = createStyles(({ prefixCls, css, token, isDarkMode }) =>
 		nameWrapper: css`
 			overflow: hidden;
 		`,
+		/* Keep the two-line model details flexible so long identifiers do not push out the drag handle. */
+		leftModelNameWrapper: css`
+			min-width: 0;
+			flex: 1;
+		`,
+		leftModelItem: css`
+			height: auto;
+			min-height: 64px;
+		`,
+		modelInfo: css`
+			min-width: 0;
+			flex: 1;
+			overflow: hidden;
+		`,
 		name: css`
 			text-overflow: ellipsis;
 			overflow: hidden;
@@ -53,16 +67,20 @@ export const useStyles = createStyles(({ prefixCls, css, token, isDarkMode }) =>
 		`,
 		groupDragOver: css`
 			border-color: ${token.magicColorUsages.primary.default};
-			background-color: ${isDarkMode
-				? token.magicColorUsages.primaryLight.default
-				: token.magicColorScales.brand[0]};
+			background-color: ${
+				isDarkMode
+					? token.magicColorUsages.primaryLight.default
+					: token.magicColorScales.brand[0]
+			};
 			box-shadow: 0 0 0 1px ${token.magicColorUsages.primaryLight.hover};
 		`,
 		groupSortHover: css`
 			border-color: ${token.magicColorUsages.warning.default};
-			background-color: ${isDarkMode
-				? token.magicColorUsages.warningLight.default
-				: token.magicColorScales.yellow[0]};
+			background-color: ${
+				isDarkMode
+					? token.magicColorUsages.warningLight.default
+					: token.magicColorScales.yellow[0]
+			};
 		`,
 		insertHint: css`
 			position: absolute;
@@ -174,12 +192,16 @@ export const useStyles = createStyles(({ prefixCls, css, token, isDarkMode }) =>
 			height: 44px;
 			border-radius: 8px;
 			border: 1px dashed
-				${isDarkMode
-					? token.magicColorUsages.primaryLight.hover
-					: token.magicColorScales.brand[1]};
-			background-color: ${isDarkMode
-				? token.magicColorUsages.primaryLight.default
-				: token.magicColorScales.brand[0]};
+				${
+					isDarkMode
+						? token.magicColorUsages.primaryLight.hover
+						: token.magicColorScales.brand[1]
+				};
+			background-color: ${
+				isDarkMode
+					? token.magicColorUsages.primaryLight.default
+					: token.magicColorScales.brand[0]
+			};
 		`,
 		spin: css`
 			height: 100%;

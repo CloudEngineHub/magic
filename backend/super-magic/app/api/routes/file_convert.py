@@ -425,6 +425,7 @@ async def _perform_conversion_async(request: FileConvertRequest, convert_type: s
                 task_key=task_key,
                 sts_credential=sts_credential_dict,
                 output_name=request.output_name,
+                options=request.options,
             )
         else:
             error_msg = f"不支持的转换类型: {request.convert_type}"

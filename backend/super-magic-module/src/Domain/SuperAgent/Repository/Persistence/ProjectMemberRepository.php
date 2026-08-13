@@ -187,6 +187,12 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             })
             ->where('magic_super_agent_project.user_id', '!=', $userId)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
+            ->whereNotExists(function ($microAppQuery): void {
+                $microAppQuery->select(Db::raw(1))
+                    ->from('magic_super_agent_micro_apps as ma')
+                    ->whereColumn('ma.project_id', 'magic_super_agent_project.id')
+                    ->whereNull('ma.deleted_at');
+            })
             ->whereNull('magic_super_agent_project.deleted_at');
 
         if (! empty($name)) {
@@ -349,6 +355,12 @@ class ProjectMemberRepository implements ProjectMemberRepositoryInterface
             ->where('magic_super_agent_project.user_id', '=', $userId)
             ->where('magic_super_agent_project.user_organization_code', '=', $organizationCode)
             ->where('magic_super_agent_project.is_collaboration_enabled', 1)
+            ->whereNotExists(function ($microAppQuery): void {
+                $microAppQuery->select(Db::raw(1))
+                    ->from('magic_super_agent_micro_apps as ma')
+                    ->whereColumn('ma.project_id', 'magic_super_agent_project.id')
+                    ->whereNull('ma.deleted_at');
+            })
             ->whereNull('magic_super_agent_project.deleted_at');
 
         // 如果有项目名称搜索条件

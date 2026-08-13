@@ -35,13 +35,6 @@ class User(BaseModel):
     departments: Optional[List[Department]] = Field(default_factory=list)
 
 
-class MemoryItem(BaseModel):
-    """长期记忆项"""
-
-    id: str = Field(..., description="记忆的唯一标识ID")
-    content: str = Field(..., description="记忆的内容")
-
-
 class Metadata(BaseModel):
     """元数据信息"""
 
@@ -64,6 +57,42 @@ class Metadata(BaseModel):
         default=None,
         description="是否跳过发送初始化相关的聊天消息（BEFORE_INIT 和 AFTER_INIT 事件的消息），存在且为 true 时才跳过",
     )
+
+
+class SuperMagicWorkspaceContext(BaseModel):
+    """当前项目所属工作区。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicProjectContext(BaseModel):
+    """当前项目。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicTopicContext(BaseModel):
+    """当前话题。"""
+
+    id: str
+    name: str
+
+
+class SuperMagicSandboxContext(BaseModel):
+    """当前逻辑沙盒。"""
+
+    id: str
+
+
+class SuperMagicProductContext(BaseModel):
+    """Super Magic 产品位置上下文。"""
+
+    workspace: Optional[SuperMagicWorkspaceContext] = None
+    project: SuperMagicProjectContext
+    topic: SuperMagicTopicContext
+    sandbox: SuperMagicSandboxContext
 
 
 class ClientMessage(BaseModel):
@@ -106,6 +135,8 @@ class AgentMode(str, Enum):
     TEST = "test"  # 工具模式，使用tool.agent
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
+    MICRO_APP = "micro-app"  # 微应用开发模式，使用micro-app.agent
+    CUSTOM_AGENT = "custom_agent"  # 自定义 Agent 运行模式，需配合 agent_code
     MAGICLAW = "magiclaw"  # Magic Claw 模式，从 agents/claws/<claw_code>/ 编译运行
 
     def get_agent_type(self) -> str:
@@ -122,6 +153,8 @@ class AgentMode(str, Enum):
             AgentMode.TEST: "test",
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",
+            AgentMode.MICRO_APP: "micro-app",  # 微应用开发模式
+            AgentMode.CUSTOM_AGENT: "custom_agent",
             AgentMode.MAGICLAW: "magiclaw",
         }
         return agent_type_mapping.get(self, "magic")
@@ -163,14 +196,18 @@ class ChatClientMessage(ClientMessage):
     remark: Optional[str] = None  # 备注信息，用于中断消息等场景
     mcp_config: Optional[Dict[str, Any]] = None  # MCP 服务器配置，格式与 config/mcp.json 保持一致
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
+        default=None,
+        description="Current Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     channel_context: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Channel-specific payload, owned and interpreted by the originating channel plugin.",
     )
 
-    # 🔥 新增：动态模型选择和配置字段
+    # 文本模型与动态配置字段
     model_id: Optional[str] = Field(
-        default=None, description="动态模型选择：指定本次对话使用的模型ID，会覆盖Agent默认模型选择"
+        default=None, description="文本模型 ID：指定本次对话使用的模型；为空时由模型选择策略决定"
     )
     dynamic_config: Optional[Dict[str, Any]] = Field(
         default=None, description="动态配置（JSON格式），将转换为YAML格式写入config/dynamic_config.yaml"
@@ -293,6 +330,10 @@ class InitClientMessage(ClientMessage):
     )
     sts_token_refresh: Optional[STSTokenRefreshConfig] = None  # STS Token刷新配置，可选字段
     metadata: Optional[Metadata] = None  # 元数据信息，使用强类型
+    super_magic_product_context: Optional[SuperMagicProductContext] = Field(
+        default=None,
+        description="Initial Super Magic workspace, project, topic, and logical sandbox context.",
+    )
     upload_config: Optional[Dict[str, Any]] = None  # 上传配置，可包含平台类型和临时凭证
     magic_service_host: Optional[str] = None  # Magic Service主机地址，可选字段
     magic_service_ws_host: Optional[str] = None  # Magic Service WebSocket主机地址，可选字段
@@ -302,12 +343,8 @@ class InitClientMessage(ClientMessage):
         default=True,
         description="Flag to decide whether remote chat history should be downloaded during initialization",
     )
-    memory: Optional[str] = None  # 长期记忆数据（旧格式，向后兼容），用于传递给 dynamic_context
-    memories: Optional[List[MemoryItem]] = Field(
-        default=None,
-        description="长期记忆数据（新格式），数组格式，每个元素包含 id 和 content 字段"
-    )  # 长期记忆数据，用于传递给 dynamic_context
     dynamic_config: Optional[Dict[str, Any]] = None  # 动态配置（如 message_version），由 PHP 侧 dynamic_params 透传
+    agent_mode: Union[AgentMode, str] = AgentMode.GENERAL  # 沙箱运行模式，决定初始化后的生命周期策略
     agent: Optional["InitAgentConfig"] = Field(
         default=None,
         description="""<!--zh: 自定义 Agent 配置；type 标识类型，profile 携带名称/描述/角色等身份信息。外层 name/description 已废弃，仅做兜底兼容-->

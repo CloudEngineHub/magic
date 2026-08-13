@@ -197,6 +197,35 @@ describe("ConnectionHandleRenderer", () => {
 		).toBe(false)
 	})
 
+	it("keeps a continuous horizontal path from the element bounds into each handle corridor", () => {
+		const renderer = new ConnectionHandleRenderer()
+
+		expect(
+			renderer.isPointInHandleKeepAliveRegion(TEST_RECT, 1, {
+				x: TEST_RECT.x + TEST_RECT.width / 2,
+				y: TEST_RECT.y + TEST_RECT.height / 2,
+			}),
+		).toBe(true)
+		expect(
+			renderer.isPointInHandleKeepAliveRegion(TEST_RECT, 1, {
+				x: TEST_RECT.x - 10,
+				y: TEST_RECT.y + TEST_RECT.height / 2,
+			}),
+		).toBe(true)
+		expect(
+			renderer.isPointInHandleKeepAliveRegion(TEST_RECT, 1, {
+				x: TEST_RECT.x + TEST_RECT.width + 10,
+				y: TEST_RECT.y + TEST_RECT.height / 2,
+			}),
+		).toBe(true)
+		expect(
+			renderer.isPointInHandleKeepAliveRegion(TEST_RECT, 1, {
+				x: TEST_RECT.x + TEST_RECT.width / 2,
+				y: TEST_RECT.y - 1,
+			}),
+		).toBe(false)
+	})
+
 	it("applies hover and active styles without changing handle geometry", () => {
 		const renderer = new ConnectionHandleRenderer()
 		const group = renderer.createOverlay("element-1", TEST_RECT, 1)

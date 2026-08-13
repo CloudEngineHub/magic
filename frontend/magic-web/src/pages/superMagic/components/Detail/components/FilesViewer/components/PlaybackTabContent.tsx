@@ -19,13 +19,21 @@ import BreathingLight from "../resource/breathingLight"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { correctDetailType } from "../utils/preview"
 import { ToolIconBadge } from "../../../../MessageList/components/shared/ToolIconConfig"
+import { DetailType, type DetailBrowserAttachment } from "../../../types"
+import type { FileItem } from "../types"
+
+interface PlaybackDetailWithAttachments {
+	type?: DetailType
+	attachments?: unknown
+}
 
 export interface PlaybackTabContentProps {
 	disPlayDetail: unknown
 	setUserSelectDetail?: (detail: unknown) => void
 	userSelectDetail?: unknown
 	attachments?: unknown[]
-	attachmentList?: any[]
+	attachmentList?: FileItem[]
+	isAwaitingProjectAttachments?: boolean
 	topicId?: string
 	baseShareUrl?: string
 	currentTopicStatus?: TaskStatus
@@ -55,6 +63,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		userSelectDetail,
 		attachments,
 		attachmentList,
+		isAwaitingProjectAttachments,
 		topicId,
 		baseShareUrl,
 		currentTopicStatus,
@@ -130,8 +139,15 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 	const correctedDisPlayDetail = useMemo(() => {
 		return correctDetailType(disPlayDetail, {
 			attachmentList,
+			isAttachmentListReady: isAwaitingProjectAttachments === false,
 		})
-	}, [attachmentList, disPlayDetail])
+	}, [attachmentList, disPlayDetail, isAwaitingProjectAttachments])
+	const browserAttachments = useMemo(() => {
+		const detail = correctedDisPlayDetail as PlaybackDetailWithAttachments | undefined
+		if (detail?.type !== DetailType.Browser) return undefined
+		const value = detail.attachments
+		return Array.isArray(value) ? (value as DetailBrowserAttachment[]) : undefined
+	}, [correctedDisPlayDetail])
 
 	// 获取当前文件的视图模式
 	const { mode: currentFileViewMode, id: detailId } = useMemo(() => {
@@ -274,6 +290,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 					mdToolbarContainer={mdToolbarEl}
 					type={(correctedDisPlayDetail as any)?.type}
 					data={(correctedDisPlayDetail as any)?.data}
+					browserAttachments={browserAttachments}
 					attachments={attachments}
 					setUserSelectDetail={setUserSelectDetail}
 					currentIndex={0}

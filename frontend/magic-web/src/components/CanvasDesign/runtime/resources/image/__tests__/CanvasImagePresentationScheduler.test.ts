@@ -96,8 +96,7 @@ describe("CanvasImagePresentationScheduler", () => {
 
 	function runNextFrame(): void {
 		const nextFrame = frameCallbacks.entries().next().value as
-			| [number, FrameRequestCallback]
-			| undefined
+			[number, FrameRequestCallback] | undefined
 		if (!nextFrame) return
 		const [frameId, callback] = nextFrame
 		frameCallbacks.delete(frameId)
@@ -214,6 +213,10 @@ describe("CanvasImagePresentationScheduler", () => {
 			data: { path: "./images/a.png", resource: createResource("preview") },
 		})
 		scheduler.replaceTargets([createTarget("image-1", "preview", "./images/b.png")], "idle")
+		eventEmitter.emit({
+			type: "resource:image:loaded",
+			data: { path: "./images/a.png", resource: createResource("preview") },
+		})
 		runNextFrame()
 
 		expect(firstConsumer.applyPresentedResource).not.toHaveBeenCalled()

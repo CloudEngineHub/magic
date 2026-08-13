@@ -23,7 +23,7 @@ const DraggableModelItem = ({
 	style,
 	dragOverlay = false,
 }: DraggableModelItemProps) => {
-	const { styles } = useStyles()
+	const { styles, cx } = useStyles()
 
 	const { dragState } = useModeConfigContext()
 
@@ -59,19 +59,25 @@ const DraggableModelItem = ({
 			ref={setNodeRef}
 			justify="space-between"
 			align="center"
-			className={styles.item}
+			className={cx(styles.item, styles.leftModelItem)}
 			style={{ opacity: isDragging ? 0.5 : 1, ...style }}
 			gap={10}
 			{...attributes}
 		>
-			<Flex gap={10} align="center" className={styles.nameWrapper}>
+			<Flex
+				gap={10}
+				align="center"
+				className={cx(styles.nameWrapper, styles.leftModelNameWrapper)}
+			>
 				<MagicAvatar size={24} shape="circle" src={model.icon}>
 					{model?.name}
 				</MagicAvatar>
-				<span className={styles.name}>{model?.name}</span>
-				<span className={styles.desc}>
-					{model?.id === "default" ? model?.description : model?.model_id}
-				</span>
+				<Flex vertical gap={2} className={styles.modelInfo}>
+					<span className={styles.name}>{model?.name}</span>
+					<span className={styles.desc}>
+						{model?.id === "default" ? model?.description : model?.model_id}
+					</span>
+				</Flex>
 			</Flex>
 			{!disableDrag && (
 				<MagicButton

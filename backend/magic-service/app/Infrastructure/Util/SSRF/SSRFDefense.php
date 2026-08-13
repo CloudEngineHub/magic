@@ -26,7 +26,7 @@ class SSRFDefense
     public function __construct(string $url, SSRFDefenseOptions $options)
     {
         if (! $this->isUrl($url)) {
-            throw new SSRFException("[{$url}] not a valid URL");
+            throw new SSRFException("[{$url}] not a valid URL", violation: SSRFViolation::InvalidUrl);
         }
         $this->options = $options;
         $parsedUrl = parse_url($url);
@@ -87,14 +87,14 @@ class SSRFDefense
 
         // 黑名单优先
         if (in_array($this->ip, $this->options->getBlackList())) {
-            throw new SSRFException("{$label} is in black list");
+            throw new SSRFException("{$label} is in black list", violation: SSRFViolation::Blacklisted);
         }
         if (in_array($this->host, $this->options->getBlackList())) {
-            throw new SSRFException("{$label} is in black list");
+            throw new SSRFException("{$label} is in black list", violation: SSRFViolation::Blacklisted);
         }
 
         if (! in_array($this->scheme, $this->options->getAllowProtocols(), true)) {
-            throw new SSRFException("[{$this->scheme}] is not allowed");
+            throw new SSRFException("[{$this->scheme}] is not allowed", violation: SSRFViolation::ProtocolNotAllowed);
         }
 
         if (in_array($this->ip, $this->options->getWhiteList()) || in_array($this->host, $this->options->getWhiteList())) {
@@ -107,13 +107,13 @@ class SSRFDefense
             // Validate if the IP is a public IP
             $ip = filter_var($this->ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
             if ($ip === false) {
-                throw new SSRFException("{$label} is not a public ip");
+                throw new SSRFException("{$label} is not a public ip", violation: SSRFViolation::NonPublicIp);
             }
         }
 
         if (! $allowRedirect) {
             if ($this->isRedirectUrl($this->url)) {
-                throw new SSRFException("[{$label}] cannot be a redirect url");
+                throw new SSRFException("[{$label}] cannot be a redirect url", violation: SSRFViolation::RedirectNotAllowed);
             }
         }
     }
@@ -125,8 +125,8 @@ class SSRFDefense
             $ip = $this->host;
         } elseif (filter_var($this->host, FILTER_VALIDATE_DOMAIN)) {
             $ip = gethostbyname($this->host);
-            if (empty($ip)) {
-                throw new SSRFException("[{$this->host}] parse ip failed");
+            if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+                throw new SSRFException("[{$this->host}] parse ip failed", violation: SSRFViolation::ResolveFailed);
             }
         }
         $this->ip = $ip;

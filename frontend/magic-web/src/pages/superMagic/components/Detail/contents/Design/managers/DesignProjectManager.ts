@@ -47,9 +47,15 @@ import {
 	type DesignDataElementMergeResult,
 } from "../utils/designDataElementMerge"
 import {
+	reconcileElementDetailsProvenance,
 	tryApplyCanvasDocumentPatch,
 	tryMergeCanvasElementsByField,
 } from "@/components/CanvasDesign/runtime/document"
+import {
+	getHydratedElementDetailsProvenance,
+	setHydratedElementDetailsProvenance,
+	transferHydratedElementDetailsProvenance,
+} from "../utils/elementDetailsIo"
 
 type ElementLevelMergeConflictResult = Extract<
 	DesignDataElementMergeResult,
@@ -276,8 +282,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				const { data, version } = await this.versionManager.loadLatest()
 				if (!data) return null
 
+				const clonedData = cloneDeep(data) as DesignData
+				transferHydratedElementDetailsProvenance(data, clonedData)
 				return {
-					data: cloneDeep(data) as DesignData,
+					data: clonedData,
 					version,
 				}
 			} catch {
@@ -365,6 +373,23 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 	private setBaseDesignData(data: DesignData | null): void {
 		this.baseDesignData = data ? (cloneDeep(data) as DesignData) : null
+	}
+
+	private applyElementDetailsProvenance(
+		data: DesignData,
+		...candidateData: Array<DesignData | null | undefined>
+	) {
+		const provenance = reconcileElementDetailsProvenance(
+			data.canvas?.elements,
+			getHydratedElementDetailsProvenance(data),
+			...candidateData.map((candidate) =>
+				candidate ? getHydratedElementDetailsProvenance(candidate) : undefined,
+			),
+			this.stateBag.getElementDetailsProvenance?.(),
+		)
+		setHydratedElementDetailsProvenance(data, provenance)
+		this.stateBag.setters.setElementDetailsProvenance?.(provenance)
+		return provenance
 	}
 
 	private isVersionDataSourceLocked(): boolean {
@@ -1040,6 +1065,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	): void {
 		const localData = this.stateBag.getDesignData()
 		const remoteData = cloneDeep(newData) as DesignData
+		transferHydratedElementDetailsProvenance(newData, remoteData)
 		this.pendingRemoteDesignData = {
 			data: remoteData,
 			updateType,
@@ -1063,6 +1089,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 	): boolean {
 		try {
 			const oldData = this.stateBag.getDesignData()
+			this.applyElementDetailsProvenance(newData, oldData)
 			this.pendingRemoteDesignData = null
 			this.saveManager.cancelAutoSave()
 			this.saveManager.clearRemoteConflict()
@@ -1128,6 +1155,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				mergedData,
 			})
 			const nextDesignData = elementConflictRefresh.localData ?? mergedData
+			this.applyElementDetailsProvenance(nextDesignData, newData, oldData)
 			this.stateBag.setters.setDesignData(nextDesignData)
 			this.setSyncedRemoteBaseDesignData(newData)
 			this.clearBlockingConflictState()
@@ -1169,6 +1197,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				elementConflicts,
 				mergedData,
 			})
+			this.applyElementDetailsProvenance(localData, newData, oldData)
 
 			this.pendingRemoteDesignData = null
 			this.saveManager.cancelAutoSave()
@@ -1215,6 +1244,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				connectionConflicts,
 				mergedData,
 			})
+			this.applyElementDetailsProvenance(localData, newData, oldData)
 
 			this.pendingRemoteDesignData = null
 			this.saveManager.cancelAutoSave()

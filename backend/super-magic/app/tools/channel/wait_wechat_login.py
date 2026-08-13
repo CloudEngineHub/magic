@@ -27,18 +27,13 @@ logger = get_logger(__name__)
 class WaitWechatLoginParams(BaseToolParams):
     timeout_seconds: int = Field(
         default=300,
-        description="""<!--zh: 等待扫码完成的最长秒数，默认 300 秒-->
-Maximum seconds to wait for the QR confirmation. Defaults to 300.""",
+        description="Maximum seconds to wait for QR confirmation. Defaults to 300.",
     )
 
 
-@tool()
+@tool(code_mode_only=True)
 class WaitWechatLogin(BaseTool[WaitWechatLoginParams]):
-    """<!--zh
-    等待微信扫码登录结果。仅供 SDK snippet 调用，不挂载到 LLM。
-    -->
-    Wait for the WeChat QR login result. Intended for SDK snippets only and not exposed as a normal LLM tool.
-    """
+    """Wait for the WeChat QR login result from an SDK snippet."""
 
     def is_visible_in_context(self, agent_context: "AgentContext") -> bool:
         return agent_context.is_interactive_main_agent_context()
@@ -124,9 +119,10 @@ class WaitWechatLogin(BaseTool[WaitWechatLoginParams]):
 
 def _build_qr_refresh_message(qrcode_url: str) -> str:
     return "\n".join([
-        "The previous QR code expired. Reply with the updated content below (no extra prose), "
-        "adapting the heading and description to user preferred language. "
-        "Then immediately call `wait_wechat_login` again.",
+        "The previous QR code expired. Output the updated content below as your reply "
+        "(no extra prose), adapting the heading and description to user preferred language, "
+        "and include another `wait_wechat_login` call in the same reply. "
+        "Do not end your turn after showing the QR — the user's scan would go unanswered.",
         "",
         "---",
         "",

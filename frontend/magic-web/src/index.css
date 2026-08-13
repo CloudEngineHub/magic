@@ -2,6 +2,7 @@
 @import "@/styles/_keyframe-animations.scss";
 @import "@/styles/lucide.css";
 @import "@/styles/tabler-icon.css";
+@import "@/layout/styles/layout-density.css";
 
 /**
  * Import order controls CSS specificity (first has lowest priority):
@@ -73,6 +74,16 @@ html.magic-pure-share-document-flow #root .magic-app {
 	/* Recording detail markdown prose — shared by PC/H5 summary & notes views */
 	.recording-md-prose {
 		@apply max-w-none break-words text-foreground;
+	}
+
+	::highlight(mobile-recording-search) {
+		background: rgb(var(--warning-rgb) / 0.36);
+		color: inherit;
+	}
+
+	::highlight(mobile-recording-search-current) {
+		background: rgb(var(--warning-rgb) / 0.72);
+		color: inherit;
 	}
 
 	.recording-md-prose--desktop {

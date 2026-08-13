@@ -3,6 +3,7 @@ import type { VideoElement } from "../../../runtime/document/types"
 import type { MessageEditorRef } from "../message/MessageEditor"
 import type {
 	GenerateVideoRequest,
+	StoredLinkedFrameBinding,
 	UploadFileResponse,
 	VideoInputMode,
 	VideoInputModeConfig,
@@ -59,11 +60,15 @@ export interface VideoReferenceAssetInfo extends UploadFileResponse {
 	assetType: VideoReferenceAssetKind
 }
 
+/** 首尾帧槽位当前由哪个连线媒体提供，运行时用于展示来源与处理替换。 */
+export type LinkedFrameBinding = StoredLinkedFrameBinding
+
 /** 各互斥输入模式下的暂存配置（切换 Tab 时恢复，发送时仅使用当前模式） */
 export interface VideoModeInputDraft {
 	prompt?: string
 	activeInputTab?: "frame" | "reference"
 	frameImageInfos?: Array<UploadFileResponse | undefined>
+	linkedFrameBindings?: Array<LinkedFrameBinding | undefined>
 	/** 统一承载参考资源（图片/视频/音频） */
 	referenceAssetInfos?: VideoReferenceAssetInfo[]
 }
@@ -90,6 +95,7 @@ export interface VideoEditorConfig {
 	selectedAspectRatio?: string
 	currentFrameImages: Array<string | undefined>
 	frameImageInfos: Array<{ src: string; fileName: string; path: string } | undefined>
+	linkedFrameBindings: Array<LinkedFrameBinding | undefined>
 	currentReferenceImages: string[]
 	protectedReferencePaths: string[]
 	referenceBindingMode: ReferenceBindingMode
@@ -179,6 +185,9 @@ export interface VideoEditorConfig {
 	isRestoringRef: React.RefObject<boolean>
 	handlers: {
 		setPrompt: (prompt: string) => void
+		setLinkedFrameBindings: React.Dispatch<
+			React.SetStateAction<Array<LinkedFrameBinding | undefined>>
+		>
 		setPopoverOpen: (open: boolean) => void
 		setReferenceProjectPanelOpen: (open: boolean) => void
 		handleModelChange: (modelId: string) => void

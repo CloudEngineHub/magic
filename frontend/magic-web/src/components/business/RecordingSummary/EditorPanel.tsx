@@ -41,6 +41,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 		handleUploadFile,
 		isCurrentRecording,
 		isMediaRecorderNotSupported,
+		isModelReady,
 		isOtherTabRecording,
 		isPaused,
 		isRecording,
@@ -112,6 +113,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 				iconSize={iconSize}
 				selectedProjectId={selectedProjectId}
 				isStartingRecord={isStartingRecord}
+				isModelReady={isModelReady}
 				uploading={uploading}
 				uploadProgress={uploadProgress}
 				leftToolbar={leftToolbar}

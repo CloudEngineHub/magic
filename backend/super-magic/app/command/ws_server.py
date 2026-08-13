@@ -18,7 +18,11 @@ from fastapi.staticfiles import StaticFiles
 from uvicorn.config import Config
 from pathlib import Path
 
-from app.api.middleware import RequestLoggingMiddleware, UserAuthorizationMiddleware
+from app.api.middleware import (
+    RequestLoggingMiddleware,
+    UserAuthorizationMiddleware,
+    WebSocketAuthorizationMiddleware,
+)
 from app.api.routes import api_router
 from app.service.agent_dispatcher import AgentDispatcher
 from agentlang.logger import get_logger
@@ -110,6 +114,25 @@ async def cleanup_stale_files_on_startup():
     except Exception as e:
         logger.error(f".visual 目录残留文件清理失败: {e}")
 
+    try:
+        from app.path_manager import PathManager
+        from app.utils.async_file_utils import async_exists, async_rmtree, async_scandir
+
+        background_dir = PathManager.get_background_compact_dir()
+        if await async_exists(background_dir):
+            for entry in await async_scandir(background_dir):
+                if entry.is_dir(follow_symlinks=False):
+                    await async_rmtree(Path(entry.path))
+            logger.info("后台压缩临时目录残留检查完成")
+    except Exception as e:
+        logger.error(f"后台压缩临时目录残留清理失败: {e}")
+
+    try:
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        await ChatHistoryCleanupService().run()
+    except Exception as e:
+        logger.error(f"聊天记录启动统计与清理失败: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """服务生命周期管理"""
@@ -129,14 +152,6 @@ async def lifespan(app: FastAPI):
     # 打印Git commit ID
     # git_commit_id = os.getenv("GIT_COMMIT_ID", "未知")
     # logger.info(f"当前版本Git commit ID: {git_commit_id}")
-
-    # 运行启动时迁移任务
-    try:
-        from app.utils.migration_helper import run_startup_migrations
-        run_startup_migrations()
-        logger.info("启动时迁移任务已启动")
-    except Exception as e:
-        logger.error(f"启动时迁移任务失败: {e}")
 
     # 初始化工具定义缓存；失败时内部回退到运行时工具扫描，不阻塞服务启动。
     try:
@@ -171,10 +186,16 @@ async def lifespan(app: FastAPI):
     await cleanup_stale_files_on_startup()
 
     logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
-    yield
-    # 关闭时
-    logger.info("服务正在关闭...")
-    shutdown_telemetry()
+    try:
+        yield
+    finally:
+        # 关闭时
+        logger.info("服务正在关闭...")
+        from app.service.agent_runtime import AgentRuntime
+        try:
+            await AgentRuntime.get_instance().close_all(reason="service_shutdown")
+        finally:
+            shutdown_telemetry()
 
 def create_app() -> FastAPI:
     """创建并配置FastAPI应用实例"""
@@ -194,6 +215,15 @@ def create_app() -> FastAPI:
     # 这样 UserAuthorizationMiddleware 才会成为最外层，先于 CORS /
     # 日志中间件拒绝未鉴权请求，避免无意义的下游处理。
     app.add_middleware(UserAuthorizationMiddleware)
+
+    # WebSocket 鉴权中间件：BaseHTTPMiddleware 不覆盖 WebSocket scope，
+    # 需要独立的纯 ASGI 中间件。只保护这里显式列出的 WS 路径，
+    # 不影响 HTTP 链和未列出的 WS 端点。凭证口径与 HTTP 侧一致
+    # （User-Authorization header，浏览器客户端可用 ?token= 兜底）。
+    app.add_middleware(
+        WebSocketAuthorizationMiddleware,
+        protected_paths={"/api/v1/messages/subscribe"},
+    )
 
     # 添加请求日志中间件
     app.add_middleware(RequestLoggingMiddleware)

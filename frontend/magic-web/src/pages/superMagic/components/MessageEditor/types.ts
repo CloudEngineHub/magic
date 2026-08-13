@@ -104,6 +104,18 @@ export interface MessageEditorModules {
 	send?: MessageEditorModuleConfig
 }
 
+export interface EditorPromptCarouselConfig {
+	examples: string[]
+	typingIntervalMs?: number
+	holdDurationMs?: number
+	fadeDurationMs?: number
+	clickable?: boolean
+	tabLabel?: string
+	acceptLabel?: string
+	navigationLabel?: string
+	applyAriaLabel?: string
+}
+
 // Component Props
 export interface MessageEditorProps {
 	/** Class name */
@@ -123,6 +135,8 @@ export interface MessageEditorProps {
 	}) => void
 	/** Placeholder */
 	placeholder?: string
+	/** Rotating prompt examples shown while the editor is empty */
+	promptCarousel?: EditorPromptCarouselConfig
 	/** File upload callback */
 	onFileUpload?: (files: FileData[]) => void
 	/** task running state - controls send/interrupt button */
@@ -141,6 +155,8 @@ export interface MessageEditorProps {
 	draftKey?: DraftKey
 	/** Topic mode */
 	topicMode?: TopicMode
+	/** Model catalog mode. Defaults to topicMode when not specified. */
+	modelTopicMode?: TopicMode
 	/** Component size */
 	size?: MessageEditorSize
 	/** Module capability configuration */
@@ -153,6 +169,8 @@ export interface MessageEditorProps {
 	onFocus?: () => void
 	/** Blur callback */
 	onBlur?: () => void
+	/** Fires when editor commands are subscribed and the current draft is restored. */
+	onReady?: () => void
 	/** Mention insert callback (multiple items) */
 	onMentionInsertItems?: (items: any[]) => void
 	/** Select detail callback */

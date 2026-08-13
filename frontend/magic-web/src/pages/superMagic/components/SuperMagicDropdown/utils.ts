@@ -333,6 +333,16 @@ export function calculateContextMenuPosition(
 ): Position {
 	const viewport = getViewportSize()
 	const size = getDropdownSize(sizeConfig)
+	return calculateContextMenuPositionFromSize(mouseX, mouseY, size, viewport)
+}
+
+/** 使用已测量的菜单尺寸计算右键菜单位置。 */
+export function calculateContextMenuPositionFromSize(
+	mouseX: number,
+	mouseY: number,
+	size: { width: number; height: number },
+	viewport: ViewportSize,
+): Position {
 	const margin = DROPDOWN_CONSTANTS.DEFAULT_MARGIN
 
 	// 计算四个可能的位置

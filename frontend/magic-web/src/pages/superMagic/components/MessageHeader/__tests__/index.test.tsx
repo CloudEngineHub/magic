@@ -259,9 +259,7 @@ vi.mock("@/pages/superMagic/utils/resolve-chat-conversation-display-name", () =>
 	}) => {
 		if (project?.workspace_id === chatWorkspaceId) {
 			return (
-				topic?.topic_name?.trim() ||
-				project?.project_name?.trim() ||
-				t("chat.unnamedChat")
+				topic?.topic_name?.trim() || project?.project_name?.trim() || t("chat.unnamedChat")
 			)
 		}
 
@@ -425,6 +423,13 @@ describe("MessageHeader", () => {
 		expect(screen.getByTestId("mock-topic-history-dropdown")).toBeInTheDocument()
 		fireEvent.click(screen.getByTestId("message-header-history-button"))
 		expect(handleToggleHistoryPanel).not.toHaveBeenCalled()
+	})
+
+	it("禁用历史话题能力时不渲染入口", () => {
+		renderComponent({ showTopicHistory: false })
+
+		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("mock-topic-history-dropdown")).not.toBeInTheDocument()
 	})
 
 	it("collapses the history panel together when collapsing the conversation panel", () => {

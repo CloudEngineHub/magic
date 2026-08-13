@@ -9,6 +9,9 @@ import {
 } from "../../../../public/magic-types"
 import { RenderUtils } from "../../../shared/render/RenderUtils"
 import { ElementTypeEnum } from "../../../document/types"
+import { GenerationRuntimeManager } from "../../../generation/GenerationRuntimeManager"
+import { GenerationAttemptCoordinator } from "../../../generation/GenerationAttemptCoordinator"
+import type { Canvas } from "../../../core/Canvas"
 
 function createDeferred() {
 	let resolve!: () => void
@@ -700,7 +703,6 @@ describe("ImageElement mounted image node sync", () => {
 	it("exposes an image generation request while submission is pending", async () => {
 		const deferred = createDeferred()
 		const generateImage = vi.fn(() => deferred.promise)
-		const update = vi.fn()
 		type TestImageData = {
 			id: string
 			type: typeof ElementTypeEnum.Image
@@ -708,6 +710,12 @@ describe("ImageElement mounted image node sync", () => {
 			height: number
 			generateImageRequest?: GenerateImageRequest
 		}
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const commitGenerationTargets = vi.fn(
+			(targets: Array<{ persistedPatch: Partial<TestImageData> }>) => {
+				element.data = { ...element.data, ...targets[0]?.persistedPatch }
+			},
+		)
 		const element = Object.create(ImageElement.prototype) as ImageElement & {
 			data: TestImageData
 			isGenerating: boolean
@@ -715,9 +723,12 @@ describe("ImageElement mounted image node sync", () => {
 			isRetryEditing: boolean
 			canvas: {
 				magicConfigManager: { config: { methods: { generateImage: typeof generateImage } } }
+				generationRuntimeManager: GenerationRuntimeManager
+				generationAttemptCoordinator: GenerationAttemptCoordinator
 				elementManager: {
-					update: typeof update
 					getElementData: () => TestImageData
+					getTemporaryElementMetadata: () => null
+					commitGenerationTargets: typeof commitGenerationTargets
 				}
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
 			}
@@ -736,17 +747,18 @@ describe("ImageElement mounted image node sync", () => {
 		element.isGenerating = false
 		element.isErrorState = false
 		element.isRetryEditing = false
-		update.mockImplementation((_id, updates) => {
-			element.data = { ...element.data, ...updates }
-		})
-		element.canvas = {
+		const canvas = {
 			magicConfigManager: { config: { methods: { generateImage } } },
+			generationRuntimeManager,
 			elementManager: {
-				update,
 				getElementData: () => element.data,
+				getTemporaryElementMetadata: () => null,
+				commitGenerationTargets,
 			},
 			eventEmitter: { emit: vi.fn() },
-		}
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas as typeof element.canvas
 		element.pollingManager = { start: vi.fn() }
 		element.updateImageElementNames = vi.fn()
 		element.createOssSrcPromise = vi.fn()
@@ -759,35 +771,36 @@ describe("ImageElement mounted image node sync", () => {
 		})
 		await Promise.resolve()
 
-		expect(element.data.generateImageRequest).toEqual(
+		expect(element.data.generateImageRequest).toBeUndefined()
+		expect(generationRuntimeManager.getTargetState("image-1")?.generateImageRequest).toEqual(
 			expect.objectContaining({
 				model_id: "image-model",
 				prompt: "A product photo",
 				image_id: expect.any(String),
 			}),
 		)
-		expect(update).toHaveBeenNthCalledWith(
-			1,
-			"image-1",
-			expect.objectContaining({ generateImageRequest: element.data.generateImageRequest }),
-			{ mode: "data-only", silent: true },
-		)
+		expect(element.data).not.toHaveProperty("runtimeGenerateImageRequest")
 		expect(element.rerender).toHaveBeenCalledTimes(1)
 
 		deferred.resolve()
 		await expect(resultPromise).resolves.toBe(true)
-		expect(update).toHaveBeenNthCalledWith(
-			2,
-			"image-1",
-			expect.objectContaining({ generateImageRequest: element.data.generateImageRequest }),
-			{ silent: false },
+		expect(generationRuntimeManager.getTargetState("image-1")).toBeNull()
+		expect(element.data.generateImageRequest).toEqual(
+			expect.objectContaining({ image_id: expect.any(String) }),
 		)
+		expect(commitGenerationTargets).toHaveBeenCalledWith([
+			expect.objectContaining({
+				elementId: "image-1",
+				persistedPatch: expect.objectContaining({
+					generateImageRequest: element.data.generateImageRequest,
+				}),
+			}),
+		])
 	})
 
 	it("exposes a video generation request while submission is pending", async () => {
 		const deferred = createDeferred()
 		const generateVideo = vi.fn(() => deferred.promise)
-		const update = vi.fn()
 		type TestVideoData = {
 			id: string
 			type: typeof ElementTypeEnum.Video
@@ -795,6 +808,12 @@ describe("ImageElement mounted image node sync", () => {
 			height: number
 			generateVideoRequest?: GenerateVideoRequest
 		}
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const commitGenerationTargets = vi.fn(
+			(targets: Array<{ persistedPatch: Partial<TestVideoData> }>) => {
+				element.data = { ...element.data, ...targets[0]?.persistedPatch }
+			},
+		)
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: TestVideoData
 			isGenerating: boolean
@@ -802,9 +821,12 @@ describe("ImageElement mounted image node sync", () => {
 			isRetryEditing: boolean
 			canvas: {
 				magicConfigManager: { config: { methods: { generateVideo: typeof generateVideo } } }
+				generationRuntimeManager: GenerationRuntimeManager
+				generationAttemptCoordinator: GenerationAttemptCoordinator
 				elementManager: {
-					update: typeof update
 					getElementData: () => TestVideoData
+					getTemporaryElementMetadata: () => null
+					commitGenerationTargets: typeof commitGenerationTargets
 				}
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
 			}
@@ -821,17 +843,18 @@ describe("ImageElement mounted image node sync", () => {
 		element.isGenerating = false
 		element.isErrorState = false
 		element.isRetryEditing = false
-		update.mockImplementation((_id, updates) => {
-			element.data = { ...element.data, ...updates }
-		})
-		element.canvas = {
+		const canvas = {
 			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
 			elementManager: {
-				update,
 				getElementData: () => element.data,
+				getTemporaryElementMetadata: () => null,
+				commitGenerationTargets,
 			},
 			eventEmitter: { emit: vi.fn() },
-		}
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas as typeof element.canvas
 		element.pollingManager = { start: vi.fn() }
 		element.clearTempGenerateVideoRequest = vi.fn()
 		element.rerender = vi.fn()
@@ -842,28 +865,30 @@ describe("ImageElement mounted image node sync", () => {
 		})
 		await Promise.resolve()
 
-		expect(element.data.generateVideoRequest).toEqual(
+		expect(element.data.generateVideoRequest).toBeUndefined()
+		expect(generationRuntimeManager.getTargetState("video-1")?.generateVideoRequest).toEqual(
 			expect.objectContaining({
 				model_id: "video-model",
 				prompt: "A product video",
 				video_id: expect.any(String),
 			}),
 		)
-		expect(update).toHaveBeenNthCalledWith(
-			1,
-			"video-1",
-			expect.objectContaining({ generateVideoRequest: element.data.generateVideoRequest }),
-			{ mode: "data-only", silent: true },
-		)
+		expect(element.data).not.toHaveProperty("runtimeGenerateVideoRequest")
 		expect(element.rerender).toHaveBeenCalledTimes(1)
 
 		deferred.resolve()
 		await expect(resultPromise).resolves.toBe(true)
-		expect(update).toHaveBeenNthCalledWith(
-			2,
-			"video-1",
-			expect.objectContaining({ generateVideoRequest: element.data.generateVideoRequest }),
-			{ silent: false },
+		expect(generationRuntimeManager.getTargetState("video-1")).toBeNull()
+		expect(element.data.generateVideoRequest).toEqual(
+			expect.objectContaining({ video_id: expect.any(String) }),
 		)
+		expect(commitGenerationTargets).toHaveBeenCalledWith([
+			expect.objectContaining({
+				elementId: "video-1",
+				persistedPatch: expect.objectContaining({
+					generateVideoRequest: element.data.generateVideoRequest,
+				}),
+			}),
+		])
 	})
 })

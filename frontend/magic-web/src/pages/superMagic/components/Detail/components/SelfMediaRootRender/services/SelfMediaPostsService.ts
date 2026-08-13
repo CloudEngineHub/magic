@@ -273,11 +273,16 @@ export class SelfMediaPostsService {
 		} catch (err) {
 			if (this.disposed) return this.snapshot
 			const code = toErrorCode(err)
-			log.error("❌ 初始化失败", {
-				folderFileId: args.folderFileId,
-				code,
-				durationMs: Date.now() - startedAt,
+			log.error({
+				eventKey: "initialize_failed",
+				errorKind: "render",
 				error: err,
+				message: "❌ 初始化失败",
+				context: {
+					folderFileId: args.folderFileId,
+					code,
+					durationMs: Date.now() - startedAt,
+				},
 			})
 			this.snapshot = {
 				...EMPTY_SNAPSHOT,
@@ -387,12 +392,17 @@ export class SelfMediaPostsService {
 			} catch (err) {
 				failedCount += 1
 				errorAfterReconcile = toErrorCode(err)
-				log.error("❌ 静默重新拉取文章失败", {
-					postKey: key,
-					platform: meta.platform,
-					postId: meta.entry?.id,
-					code: errorAfterReconcile,
+				log.error({
+					eventKey: "reconcile_failed",
+					errorKind: "render",
 					error: err,
+					message: "❌ 静默重新拉取文章失败",
+					context: {
+						postKey: key,
+						platform: meta.platform,
+						postId: meta.entry?.id,
+						code: errorAfterReconcile,
+					},
 				})
 			}
 		}

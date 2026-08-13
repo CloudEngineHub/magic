@@ -10,3 +10,9 @@ export { useSyncActiveState } from "./useSyncActiveState"
 export { useSlideSync } from "./useSlideSync"
 export { useSlideNavigation } from "./useSlideNavigation"
 export { useSlideHandlers } from "./useSlideHandlers"
+export {
+	usePPTLiveRenderCache,
+	getLiveRenderSlideKey,
+	getLiveRenderSlideRevision,
+	reconcileResidentSlideKeys,
+} from "./usePPTLiveRenderCache"

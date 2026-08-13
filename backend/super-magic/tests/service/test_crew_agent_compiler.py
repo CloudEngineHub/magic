@@ -29,7 +29,7 @@ async def test_compile_includes_knowledge_search_tool_by_default(monkeypatch, tm
 
     template_path = tmp_path / "crew.template.agent"
     template_path.write_text(
-        "---\nllm: main_llm\ntools:\n  - web_search\n  - search_knowledge\n---\n<identity>\nCREW_ROLE\n</identity>\n",
+        "---\ntools:\n  - web_search\n  - search_knowledge\n---\n<identity>\nCREW_ROLE\n</identity>\n",
         encoding="utf-8",
     )
     output_path = tmp_path / "compiled.agent"
@@ -71,7 +71,7 @@ async def test_compile_respects_template_defaults_and_tool_overrides(monkeypatch
 
     template_path = tmp_path / "crew.template.agent"
     template_path.write_text(
-        "---\nllm: main_llm\ntools:\n  - web_search\n  - search_knowledge\n  - read_webpages_as_markdown\n  - visual_understanding\n---\n<identity>\nCREW_ROLE\n</identity>\n",
+        "---\ntools:\n  - web_search\n  - search_knowledge\n  - read_webpages_as_markdown\n  - visual_understanding\n---\n<identity>\nCREW_ROLE\n</identity>\n",
         encoding="utf-8",
     )
     output_path = tmp_path / "compiled.agent"

@@ -3,7 +3,7 @@ import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import { GenerationStatus } from "../../../public/magic-types"
-import { useCanvasEvent } from "../../../app/hooks/canvas"
+import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
@@ -97,6 +97,7 @@ function ActiveVideoGenerateEditor({
 }: ActiveVideoGenerateEditorProps) {
 	const { canvas } = useCanvas()
 	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
+	const generationRuntime = useGenerationRuntime(videoElement.id)
 
 	const hasSrc = !!videoElement.src
 	const hasTerminalVideoGenerationState =
@@ -108,8 +109,8 @@ function ActiveVideoGenerateEditor({
 		if (!canvas || hasTerminalVideoGenerationState) return false
 		const videoInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(videoInstance instanceof VideoElementClass)) return false
-		return !!videoInstance.isGenerating
-	}, [canvas, videoElement.id, hasTerminalVideoGenerationState])
+		return !!videoInstance.isGenerating || Boolean(generationRuntime)
+	}, [canvas, videoElement.id, hasTerminalVideoGenerationState, generationRuntime])
 
 	useEffect(() => {
 		setHiddenAfterSubmit(false)
@@ -150,7 +151,9 @@ function ActiveVideoGenerateEditor({
 	const isTemporaryElement =
 		canvas != null ? canvas.elementManager.isTemporary(videoElement.id) : false
 
-	const hasGenerateVideoRequest = !!videoElement.generateVideoRequest
+	const hasGenerateVideoRequest = !!(
+		generationRuntime?.generateVideoRequest || videoElement.generateVideoRequest
+	)
 	const isError = videoElement.status === GenerationStatus.Failed
 	const isRetryEditing = isError && retryEditingElementId === videoElement.id
 

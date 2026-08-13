@@ -8,12 +8,14 @@ const DEFAULT_SKILL_QUERY_KEY = "__default__"
 
 function getSkillQueryKey(topicMode?: string, agentCode?: string) {
 	const normalized = topicMode?.trim()
-	if (!normalized || normalized === "default") return DEFAULT_SKILL_QUERY_KEY
 	if (normalized === TopicMode.CustomAgent) {
 		const code = agentCode?.trim()
 		return code || DEFAULT_SKILL_QUERY_KEY
 	}
-	return normalized
+
+	// Only a custom-agent topic carries an employee code. Other topic modes
+	// (general, chat, data analysis, etc.) must use the default skill list.
+	return DEFAULT_SKILL_QUERY_KEY
 }
 
 function mapSkillToMention(item: SkillDomainItem): MentionItem {

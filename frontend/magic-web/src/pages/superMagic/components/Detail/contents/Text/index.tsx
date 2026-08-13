@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
 import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
-import { useMemoizedFn, useResponsive } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import { shadow } from "@/utils/shadow"
 import AIOptimization from "@/pages/superMagic/components/Detail/components/AIOptimization"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonFooter from "../../components/CommonFooter"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -69,8 +70,7 @@ export default function Text(props: any) {
 		isFromNode,
 		disabledUrlCache: isPlaybackMode,
 	})
-	const responsive = useResponsive()
-	const isMobile = responsive.md === false
+	const isMobile = useIsMobile()
 	const textAreaRef = useRef<any>(null)
 
 	const [content, setContent] = useState<string>("")

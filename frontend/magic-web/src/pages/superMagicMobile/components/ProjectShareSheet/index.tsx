@@ -1,6 +1,4 @@
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
-import ShareModal from "@/pages/superMagic/components/Share/Modal"
-import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { cn } from "@/lib/utils"
 import DefaultOpenFilePicker from "./components/DefaultOpenFilePicker"
 import ProjectShareCreateView from "./components/ProjectShareCreateView"
@@ -8,6 +6,7 @@ import ProjectShareDeleteConfirmView from "./components/ProjectShareDeleteConfir
 import ProjectShareExpiryView from "./components/ProjectShareExpiryView"
 import ProjectShareLinkDetailView from "./components/ProjectShareLinkDetailView"
 import ProjectShareManageView from "./components/ProjectShareManageView"
+import ProjectShareFilePicker from "./components/ProjectShareFilePicker"
 import { ProjectShareSheetFooter } from "./components/ProjectShareSheetFooter"
 import ProjectShareSheetHeader from "./components/ProjectShareSheetHeader"
 import { useProjectShareSheet } from "./hooks/useProjectShareSheet"
@@ -15,6 +14,12 @@ import type { ProjectShareSheetProps, ProjectShareSheetView } from "./types"
 
 /** Views without a fixed footer must pad the scroll area for the home-indicator safe region. */
 const VIEWS_WITHOUT_FOOTER: ProjectShareSheetView[] = ["manage", "expiry", "deleteConfirm"]
+
+/** Async list and edit views keep a moderate minimum height while detail views size to content. */
+const VIEWS_WITH_STABLE_MIN_HEIGHT: ProjectShareSheetView[] = ["manage", "edit"]
+
+/** Caps the minimum on tall screens while scaling it down for shorter mobile viewports. */
+const PROJECT_SHARE_SHEET_MIN_HEIGHT = "min(72dvh, 640px)"
 
 /**
  * 移动端项目分享 Sheet：用单一底部弹层承接原型多视图流程，真实保存/编辑仍复用现有分享弹层能力。
@@ -26,6 +31,9 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 		VIEWS_WITHOUT_FOOTER.includes(controller.view) &&
 			"pb-[max(var(--safe-area-inset-bottom),16px)]",
 	)
+	const stableMinHeight = VIEWS_WITH_STABLE_MIN_HEIGHT.includes(controller.view)
+		? PROJECT_SHARE_SHEET_MIN_HEIGHT
+		: undefined
 
 	return (
 		<>
@@ -46,16 +54,19 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 						background: "#F7F7F6",
 						borderRadius: "14px 14px 0 0",
 						height: "auto",
+						maxHeight: "92dvh",
+						minHeight: stableMinHeight,
 					},
 				}}
 				wrapperStyle={{
 					height: "auto",
 					maxHeight: "92dvh",
-					minHeight: 0,
+					minHeight: stableMinHeight,
 				}}
 			>
 				<div
 					className="flex max-h-[92dvh] min-h-0 flex-col overflow-hidden bg-[#F7F7F6]"
+					style={{ minHeight: stableMinHeight }}
 					data-testid="project-share-sheet-root"
 				>
 					<ProjectShareSheetHeader
@@ -64,7 +75,7 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 					/>
 					<div className="flex min-h-0 flex-1 flex-col">
 						<div className={scrollClassName} data-testid="project-share-sheet-scroll">
-							{controller.view === "create" ? (
+							{controller.view === "create" || controller.view === "edit" ? (
 								<ProjectShareCreateView controller={controller} />
 							) : null}
 							{controller.view === "manage" ? (
@@ -93,18 +104,14 @@ export default function ProjectShareSheet(props: ProjectShareSheetProps) {
 				onSelectFile={controller.selectDefaultOpenFile}
 			/>
 
-			{controller.editResourceId ? (
-				<ShareModal
-					open={Boolean(controller.editResourceId)}
-					onCancel={controller.closeEditModal}
-					onSaveSuccess={controller.closeEditModal}
-					shareMode={controller.shareMode}
+			{controller.fileSelectorOpen ? (
+				<ProjectShareFilePicker
+					open={Boolean(controller.fileSelectorOpen)}
 					attachments={props.attachments}
-					attachmentList={props.attachmentList}
-					projectName={props.projectName}
-					projectId={props.projectId}
-					resourceId={controller.editResourceId}
-					types={[ShareType.PasswordProtected, ShareType.Organization, ShareType.Public]}
+					selectedFileIds={controller.selectedFileIds}
+					defaultOpenFileId={controller.defaultOpenFileId}
+					onClose={controller.closeFileSelector || (() => undefined)}
+					onConfirm={controller.confirmFileSelector || (() => undefined)}
 				/>
 			) : null}
 		</>

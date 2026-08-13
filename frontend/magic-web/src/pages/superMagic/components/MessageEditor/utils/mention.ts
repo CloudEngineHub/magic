@@ -515,6 +515,12 @@ export const isAllowedMention = (
 	attrs: TiptapMentionAttributes,
 	dataService?: DataService | null,
 ) => {
+	if (
+		attrs.type === MentionItemType.MEMORY_FILE ||
+		attrs.type === MentionItemType.MEMORY_DIRECTORY
+	) {
+		return true
+	}
 	if (isPendingProjectReferenceMention(attrs)) return true
 	if (attrs.type === MentionItemType.PROJECT_FILE) {
 		const data = attrs.data as ProjectFileMentionData | undefined

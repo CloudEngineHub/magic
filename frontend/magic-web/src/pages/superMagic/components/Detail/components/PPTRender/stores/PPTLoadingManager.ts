@@ -52,6 +52,8 @@ export class PPTLoadingManager {
 	 * @param slides - Array of slide items
 	 */
 	updateProgress(slides: SlideItem[]): void {
+		// Background lazy loading must not move the ready-state progress back from 100% to 1/200.
+		if (!this.isInitializing) return
 		const percentage = this.calculateLoadingPercentage(slides)
 		runInAction(() => {
 			this.loadingProgress = percentage
@@ -70,7 +72,7 @@ export class PPTLoadingManager {
 
 		runInAction(() => {
 			this.isInitializing = isInitializing
-			// When initialization completes, ensure progress is 100%
+			// Initialization covers metadata plus the first active page, not the whole deck cache.
 			if (!isInitializing) {
 				this.loadingProgress = 100
 			}

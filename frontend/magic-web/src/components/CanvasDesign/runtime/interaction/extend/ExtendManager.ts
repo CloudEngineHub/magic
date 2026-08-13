@@ -70,7 +70,7 @@ export class ExtendManager {
 		}
 		this.elementRerenderedHandler = ({ data }) => {
 			if (data.elementId === this.extendingElementId) {
-				this.rebuildRenderer()
+				this.rebuildRendererOrExit()
 			}
 		}
 
@@ -128,20 +128,43 @@ export class ExtendManager {
 		return calculateNodesRect(nodes, this.canvas.stage, this.canvas.elementManager)
 	}
 
-	private rebuildRenderer(): void {
-		if (!this.extendingElementId) return
+	private rebuildRenderer(): boolean {
+		if (!this.extendingElementId) return false
 
 		if (this.extendRenderer) {
 			this.extendRenderer.destroy()
 			this.extendRenderer = null
 		}
 
-		this.extendRenderer = new ExtendRenderer({
-			canvas: this.canvas,
-			elementId: this.extendingElementId,
-		})
-		this.extendRenderer.render()
+		try {
+			this.extendRenderer = new ExtendRenderer({
+				canvas: this.canvas,
+				elementId: this.extendingElementId,
+			})
+			if (!this.extendRenderer.render()) {
+				this.extendRenderer.destroy()
+				this.extendRenderer = null
+				return false
+			}
+		} catch (error) {
+			this.extendRenderer?.destroy()
+			this.extendRenderer = null
+			throw error
+		}
 		this.emitExtendPosition()
+		return true
+	}
+
+	/** renderer 初始化失败或抛错时统一退出，避免原图、Marker 和模式状态残留。 */
+	private rebuildRendererOrExit(): void {
+		try {
+			if (!this.rebuildRenderer()) {
+				this.exitExtendMode(true)
+			}
+		} catch (error) {
+			this.exitExtendMode(true)
+			throw error
+		}
 	}
 
 	private createInitialSession(imageElement: ImageElement): ExtendSession {
@@ -156,19 +179,16 @@ export class ExtendManager {
 	}
 
 	public enterExtendMode(elementId: string): void {
-		if (this.canvas.cropManager.getCroppingElementId()) {
-			this.canvas.cropManager.cancelCrop()
-		}
-		if (this.canvas.eraserManager.getErasingElementId()) {
-			this.canvas.eraserManager.cancelEraser()
-		}
-
-		if (this.extendingElementId && this.extendingElementId !== elementId) {
-			this.exitExtendMode(true)
-		}
+		if (this.extendingElementId === elementId) return
 
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!elementData || elementData.type !== ElementTypeEnum.Image) return
+
+		this.canvas.imageEditingCoordinator.activate({
+			mode: "extend",
+			elementId,
+			cancel: () => this.cancelExtend(),
+		})
 
 		this.tempSession = this.createInitialSession(elementData as ImageElement)
 
@@ -197,7 +217,7 @@ export class ExtendManager {
 		this.canvas.container.focus()
 
 		this.setupPositionListeners()
-		this.rebuildRenderer()
+		this.rebuildRendererOrExit()
 	}
 
 	public exitExtendMode(shouldRestore: boolean): void {
@@ -215,6 +235,7 @@ export class ExtendManager {
 		this.extendingElementId = null
 		this.tempSession = null
 
+		this.canvas.imageEditingCoordinator.deactivate("extend", elementId)
 		this.canvas.selectionManager.select(elementId, false)
 		this.canvas.eventEmitter.emit({
 			type: "extend:exit",
@@ -296,6 +317,19 @@ export class ExtendManager {
 		height: number
 	} | null {
 		return this.extendRenderer?.getImageBounds() ?? null
+	}
+
+	public getImageOriginInContent(): { x: number; y: number } | null {
+		return this.extendRenderer?.getImageOriginInContent() ?? null
+	}
+
+	public getFrameBounds(): {
+		x: number
+		y: number
+		width: number
+		height: number
+	} | null {
+		return this.extendRenderer?.getBoundingRect() ?? null
 	}
 
 	public destroy(): void {

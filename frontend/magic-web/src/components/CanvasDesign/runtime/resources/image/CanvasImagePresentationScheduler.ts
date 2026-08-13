@@ -155,12 +155,13 @@ export class CanvasImagePresentationScheduler {
 		if (this.destroyed) return
 		const phaseChanged = this.phase !== phase
 		this.phase = phase
-		const nextTargets = new Map<string, InternalPresentationTarget>()
 		const presentationChangedElementIds = new Set<string>()
+		const nextTargetElementIds = new Set<string>()
 
 		// Generation follows presentation semantics, while priority/distance only reorder a
 		// still-valid task. This avoids invalidating every pending item on each pan tick.
 		targets.forEach((target) => {
+			nextTargetElementIds.add(target.elementId)
 			const canonicalPath = this.canonicalPath(target.path)
 			const current = this.targets.get(target.elementId)
 			const presentationChanged =
@@ -170,16 +171,30 @@ export class CanvasImagePresentationScheduler {
 				current.variant !== target.variant
 			const targetChanged =
 				presentationChanged ||
-				current.priority !== target.priority ||
-				current.distanceToViewportCenter !== target.distanceToViewportCenter
-			const generation = presentationChanged ? ++this.generation : current.generation
+				current?.priority !== target.priority ||
+				current?.distanceToViewportCenter !== target.distanceToViewportCenter
+			const generation = presentationChanged ? ++this.generation : (current?.generation ?? 0)
 			if (targetChanged && current) this.stats.targetReplaceCount += 1
 			if (presentationChanged) presentationChangedElementIds.add(target.elementId)
-			nextTargets.set(target.elementId, {
-				...target,
-				canonicalPath,
-				generation,
-			})
+
+			if (current && !presentationChanged) {
+				// Pan/scale usually changes only priority and distance. Keep the target object
+				// stable so high-frequency viewport refreshes do not create avoidable garbage.
+				current.path = target.path
+				current.priority = target.priority
+				current.distanceToViewportCenter = target.distanceToViewportCenter
+			} else {
+				const nextTarget = {
+					...target,
+					canonicalPath,
+					generation,
+				}
+				if (!current || current.canonicalPath !== canonicalPath) {
+					if (current) this.removeTargetFromPathIndex(current)
+					this.addTargetToPathIndex(nextTarget)
+				}
+				this.targets.set(target.elementId, nextTarget)
+			}
 			if (!presentationChanged) {
 				const pendingTask = this.pendingTasks.get(target.elementId)
 				if (pendingTask) {
@@ -190,12 +205,11 @@ export class CanvasImagePresentationScheduler {
 		})
 
 		this.targets.forEach((target, elementId) => {
-			if (nextTargets.has(elementId)) return
+			if (nextTargetElementIds.has(elementId)) return
 			this.dropPendingTask(elementId)
+			this.targets.delete(elementId)
+			this.removeTargetFromPathIndex(target)
 		})
-		this.targets.clear()
-		nextTargets.forEach((target, elementId) => this.targets.set(elementId, target))
-		this.rebuildPathIndex()
 		presentationChangedElementIds.forEach((elementId) => {
 			const target = this.targets.get(elementId)
 			if (target) this.enqueueBestCachedResource(target)
@@ -205,9 +219,11 @@ export class CanvasImagePresentationScheduler {
 
 	public removeTarget(elementId: string): void {
 		if (this.destroyed) return
-		if (!this.targets.delete(elementId)) return
+		const target = this.targets.get(elementId)
+		if (!target) return
+		this.targets.delete(elementId)
 		this.dropPendingTask(elementId)
-		this.rebuildPathIndex()
+		this.removeTargetFromPathIndex(target)
 		this.updateCurrentCounts()
 	}
 
@@ -238,16 +254,22 @@ export class CanvasImagePresentationScheduler {
 		)
 	}
 
-	private rebuildPathIndex(): void {
-		this.targetElementIdsByPath.clear()
-		this.targets.forEach((target) => {
-			let elementIds = this.targetElementIdsByPath.get(target.canonicalPath)
-			if (!elementIds) {
-				elementIds = new Set<string>()
-				this.targetElementIdsByPath.set(target.canonicalPath, elementIds)
-			}
-			elementIds.add(target.elementId)
-		})
+	private addTargetToPathIndex(target: InternalPresentationTarget): void {
+		let elementIds = this.targetElementIdsByPath.get(target.canonicalPath)
+		if (!elementIds) {
+			elementIds = new Set<string>()
+			this.targetElementIdsByPath.set(target.canonicalPath, elementIds)
+		}
+		elementIds.add(target.elementId)
+	}
+
+	private removeTargetFromPathIndex(target: InternalPresentationTarget): void {
+		const elementIds = this.targetElementIdsByPath.get(target.canonicalPath)
+		if (!elementIds) return
+		elementIds.delete(target.elementId)
+		if (elementIds.size === 0) {
+			this.targetElementIdsByPath.delete(target.canonicalPath)
+		}
 	}
 
 	private enqueueBestCachedResource(target: InternalPresentationTarget): void {
@@ -352,8 +374,7 @@ export class CanvasImagePresentationScheduler {
 
 	private getConsumer(elementId: string): ImagePresentationConsumer | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId) as
-			| Partial<ImagePresentationConsumer>
-			| undefined
+			Partial<ImagePresentationConsumer> | undefined
 		if (
 			!element ||
 			typeof element.getDisplayResourceVariant !== "function" ||

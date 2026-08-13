@@ -10,6 +10,7 @@ import inspect
 import re
 import difflib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, Optional, Type, TypeVar, ClassVar, get_args, get_origin, List, Tuple
 
 from pydantic import ConfigDict, ValidationError
@@ -50,6 +51,15 @@ except ImportError:
 T = TypeVar('T', bound=BaseToolParams)
 
 
+@dataclass(frozen=True)
+class ToolForwardRequest:
+    """工具在用户事件触发前请求改派到另一个强类型工具。"""
+
+    target_tool: Type["BaseTool"]
+    params: BaseToolParams
+    warning: str
+
+
 class BaseTool(Generic[T], ABC):
     """工具基类
 
@@ -59,6 +69,7 @@ class BaseTool(Generic[T], ABC):
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     params_class: ClassVar[Type[T]] = None
+    # 实例运行时默认值；工具注册策略由 @tool 写入私有注册元数据。
     code_mode_only: ClassVar[bool] = False
 
     # 配置项
@@ -100,6 +111,14 @@ class BaseTool(Generic[T], ABC):
         """执行前权限检查。返回 None 表示允许；返回 ToolResult 表示拦截并直接回给模型。"""
         return None
 
+    async def resolve_forwarded_tool(
+        self,
+        tool_context: ToolContext,
+        arguments: Dict[str, Any],
+    ) -> Optional[ToolForwardRequest]:
+        """在展示工具调用前判断是否需要改派到其他工具。"""
+        return None
+
     def get_horizon(self, tool_context: "ToolContext") -> "AgentHorizon":
         """从 tool_context 获取当前 agent 的 AgentHorizon 实例。"""
         from app.core.context.agent_context import AgentContext
@@ -113,6 +132,18 @@ class BaseTool(Generic[T], ABC):
         在子类定义时自动执行，确定最终的类级别元数据
         """
         super().__init_subclass__(**kwargs)
+
+        if "code_mode_only" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'code_mode_only' in the class body. "
+                "Use @tool(code_mode_only=True) instead."
+            )
+        if "auto_mount" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} declares 'auto_mount' in the class body. "
+                "Use @tool(auto_mount=AutoMount.<TYPE>) instead."
+            )
+
         logger = get_logger(__name__)
 
         # 确保子类被标记为未注册
@@ -327,10 +358,15 @@ class BaseTool(Generic[T], ABC):
             span._otel_tool_description = tool_description[:500] if tool_description else ""
             span._otel_tool_class = self.__class__.__name__
             span._otel_tool_module = self.__module__
-            span._otel_pending_params = dict(kwargs) if kwargs else {}
+            params_class = self.get_params_class()
+            if isinstance(params_class, type) and issubclass(params_class, BaseToolParams):
+                safe_kwargs = params_class.sanitize_log_arguments(kwargs or {})
+            else:
+                safe_kwargs = {str(key): "<redacted>" for key in (kwargs or {})}
+            span._otel_pending_params = safe_kwargs
 
             # Fill the observation Input column with the tool parameters (Langfuse).
-            set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
+            set_observation_io(span, input_value=safe_kwargs)
 
             return span
         except Exception as e:

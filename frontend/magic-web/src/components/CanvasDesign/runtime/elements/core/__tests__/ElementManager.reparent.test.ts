@@ -39,7 +39,7 @@ function createHarness(options: {
 
 	Object.assign(manager as unknown as Record<string, unknown>, {
 		elements: elementMap,
-		temporaryElements: new Set<string>(),
+		temporaryElements: new Map(),
 		canvas: {
 			contentLayer,
 			permissionManager: {

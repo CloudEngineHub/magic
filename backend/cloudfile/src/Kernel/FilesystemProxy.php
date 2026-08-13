@@ -405,7 +405,7 @@ class FilesystemProxy extends Filesystem
      *
      * @param CredentialPolicy $credentialPolicy 凭证策略
      * @param string $objectKey 对象键
-     * @param array $options 额外选项 (method, expires, filename等)
+     * @param array $options 额外选项 (method, expires, filename, download等)，download 默认为 true
      * @return string 预签名URL
      */
     public function getPreSignedUrlByCredential(CredentialPolicy $credentialPolicy, string $objectKey, array $options = []): string
@@ -491,14 +491,6 @@ class FilesystemProxy extends Filesystem
         return $this->options;
     }
 
-    /**
-     * 合并存储默认 options 与本次调用 options.
-     */
-    private function mergeOptions(array $options = []): array
-    {
-        return array_replace($this->options, $options);
-    }
-
     protected function initSimpleUpload(): void
     {
         foreach ($this->simpleUploadsMap as $platform => $simpleUploadClass) {
@@ -533,6 +525,14 @@ class FilesystemProxy extends Filesystem
             throw new CloudFileException("adapter not found | [{$this->adapterName}]");
         }
         return $this->simpleUploadInstances[$platform];
+    }
+
+    /**
+     * 合并存储默认 options 与本次调用 options.
+     */
+    private function mergeOptions(array $options = []): array
+    {
+        return array_replace($this->options, $options);
     }
 
     /**

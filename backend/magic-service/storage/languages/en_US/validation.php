@@ -5,17 +5,6 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
-    /*
-    |--------------------------------------------------------------------------
-    | Validation Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | The following language lines contain the default error messages used by
-    | the validator class. Some of these rules have multiple versions such
-    | as the size rules. Feel free to tweak each of these messages here.
-    |
-    */
-
     'accepted' => 'The :attribute must be accepted.',
     'accepted_if' => 'The :attribute must be accepted when :other is :value.',
     'active_url' => 'The :attribute is not a valid URL.',
@@ -162,38 +151,76 @@ return [
         'string' => 'The :attribute must be between :min and :max characters when :other is :value.',
         'array' => 'The :attribute must have between :min and :max items when :other is :value.',
     ],
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | Here you may specify custom validation messages for attributes using the
-    | convention "attribute.rule" to name the lines. This makes it quick to
-    | specify a specific custom language line for a given attribute rule.
-    |
-    */
-
     'custom' => [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Attributes
-    |--------------------------------------------------------------------------
-    |
-    | The following language lines are used to swap attribute place-holders
-    | with something more reader friendly such as E-Mail Address instead
-    | of "email". This simply helps us make messages a little cleaner.
-    |
-    */
-
-    'attributes' => [],
+    'attributes' => [
+    ],
     'phone_number' => 'The :attribute must be a valid phone number',
     'telephone_number' => 'The :attribute must be a valid telephone number',
-
     'chinese_word' => 'The :attribute must contain valid characters(chinese/english character, number, underscore)',
     'sequential_array' => 'The :attribute must be sequential array',
+    'file_key_required' => 'File key is required',
+    'file_name_required' => 'File name is required',
+    'file_size_required' => 'File size is required',
+    'project' => [
+        'id' => [
+            'required' => 'Project ID is required',
+            'string' => 'Project ID must be a string',
+        ],
+        'members' => [
+            'required' => 'Members list is required',
+            'array' => 'Members list must be an array',
+            'min' => 'At least one member is required',
+            'max' => 'Cannot have more than :max members',
+        ],
+        'target_type' => [
+            'required' => 'Member type is required',
+            'string' => 'Member type must be a string',
+            'in' => 'Member type must be User or Department',
+        ],
+        'target_id' => [
+            'required' => 'Member ID is required',
+            'string' => 'Member ID must be a string',
+            'max' => 'Member ID cannot exceed :max characters',
+        ],
+    ],
+    'schedule_time' => [
+        'no_repeat' => [
+            'day_required' => 'Day is required for no_repeat type',
+            'time_required' => 'Time is required for no_repeat type',
+            'must_be_future' => 'Scheduled time must be in the future',
+            'must_be_at_least_5_minutes' => 'Scheduled time must be at least 5 minutes from now',
+            'invalid_date_time_format' => 'Invalid date or time format',
+        ],
+        'daily_repeat' => [
+            'time_required' => 'Time is required for daily_repeat type',
+        ],
+        'weekly_repeat' => [
+            'day_required' => 'Day is required for weekly_repeat type',
+            'time_required' => 'Time is required for weekly_repeat type',
+            'day_range' => 'Day must be between 0-6 for weekly_repeat type',
+        ],
+        'monthly_repeat' => [
+            'day_required' => 'Day is required for monthly_repeat type',
+            'time_required' => 'Time is required for monthly_repeat type',
+            'day_range' => 'Day must be between 1-31 for monthly_repeat type',
+        ],
+        'annually_repeat' => [
+            'day_required' => 'Day is required for annually_repeat type',
+            'time_required' => 'Time is required for annually_repeat type',
+        ],
+        'weekday_repeat' => [
+            'time_required' => 'Time is required for weekday_repeat type',
+        ],
+        'custom_repeat' => [
+            'day_required' => 'Day is required for custom_repeat type',
+            'time_required' => 'Time is required for custom_repeat type',
+            'unit_required' => 'Unit is required for custom_repeat type',
+            'interval_required' => 'Interval is required for custom_repeat type',
+            'values_required' => 'Values are required for week and month units in custom_repeat type',
+        ],
+    ],
 ];

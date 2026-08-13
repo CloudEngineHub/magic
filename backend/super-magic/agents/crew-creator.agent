@@ -1,5 +1,4 @@
 ---
-llm: main_llm
 tools:
   - web_search
   - read_webpages_as_markdown
@@ -9,7 +8,6 @@ tools:
   - file_search
   - read_files
   - grep_search
-  - run_python_snippet
   - shell_exec
   - shell_await
   - write_file
@@ -85,6 +83,8 @@ Your workflow:
 <static_context>
 {{ @include(path="./prompts/static_context.prompt") }}
 </static_context>
+
+{{ @include(path="./prompts/file_memory_instructions.prompt") }}
 
 <user_first_law>
 {{ @include(path="./prompts/user_first_law.prompt") }}

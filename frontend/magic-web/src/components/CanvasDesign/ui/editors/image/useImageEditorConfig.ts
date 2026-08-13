@@ -57,8 +57,10 @@ import {
 import {
 	areCanvasResourcePathsSame,
 	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { resolveImageEditorRequestToRestore } from "./image-editor-request-restore"
+import { createCanvasMentionPathMatcher } from "../connection/linkedMediaMentionMatcher"
 
 interface UseImageEditorConfigOptions {
 	imageElement: ImageElement
@@ -342,7 +344,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 			const currentOriginalInfo = elementInstance
 				.getReferenceImageInfos()
-				.find((info) => info.path === originalImageSrc)
+				.find((info) => areCanvasResourcePathsSame(info.path, originalImageSrc))
 
 			elementInstance.setReferenceImageInfos([
 				{
@@ -435,11 +437,16 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		(paths: string[] | undefined): PromptPlaceholderReference[] => {
 			if (!paths || paths.length === 0) return []
 			const pathToFileName = new Map(
-				referenceFileInfos.map((info) => [info.path, info.fileName || ""]),
+				referenceFileInfos.map((info) => [
+					getCanvasResourceIdentity(info.path),
+					info.fileName || "",
+				]),
 			)
 			return paths
 				.map((path) => {
-					const fileName = pathToFileName.get(path) || getCanvasResourceFileName(path)
+					const fileName =
+						pathToFileName.get(getCanvasResourceIdentity(path)) ||
+						getCanvasResourceFileName(path)
 					if (!fileName) return null
 					return { path, fileName }
 				})
@@ -455,7 +462,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			if (!(elementInstance instanceof ImageElementClass)) return false
 
 			const currentInfos = elementInstance.getReferenceImageInfos()
-			if (currentInfos.some((info) => info.path === fileInfo.path)) {
+			if (currentInfos.some((info) => areCanvasResourcePathsSame(info.path, fileInfo.path))) {
 				syncFromElement()
 				return false
 			}
@@ -495,9 +502,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			const previousInfo = currentInfos[slotIndex]
 
 			if (
-				previousInfo?.path === fileInfo.path ||
+				Boolean(
+					previousInfo?.path &&
+					areCanvasResourcePathsSame(previousInfo.path, fileInfo.path),
+				) ||
 				currentInfos.some(
-					(info, index) => index !== slotIndex && info.path === fileInfo.path,
+					(info, index) =>
+						index !== slotIndex && areCanvasResourcePathsSame(info.path, fileInfo.path),
 				)
 			) {
 				if (!options?.retainReferenceSlot) {
@@ -521,7 +532,9 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 			if (previousInfo?.path) {
 				const nextProtectedReferencePaths = protectedReferencePaths.map((path) =>
-					path === previousInfo.path ? normalizedInfo.path : path,
+					areCanvasResourcePathsSame(path, previousInfo.path)
+						? normalizedInfo.path
+						: path,
 				)
 				updateProtectedReferencePaths(
 					pruneProtectedReferencePaths(
@@ -529,8 +542,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						nextProtectedReferencePaths,
 					),
 				)
-				editorFocusRef?.current?.replaceMentionItemByPath(
-					previousInfo.path,
+				editorFocusRef?.current?.replaceMentionItems(
+					createCanvasMentionPathMatcher(previousInfo.path),
 					createReferenceResourcePanelItemFromPath(
 						normalizedInfo.path,
 						normalizedInfo.fileName,
@@ -824,7 +837,9 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			}
 			removeReferenceFile(path)
 			updateProtectedReferencePaths(
-				protectedReferencePaths.filter((protectedPath) => protectedPath !== path),
+				protectedReferencePaths.filter(
+					(protectedPath) => !areCanvasResourcePathsSame(protectedPath, path),
+				),
 			)
 			// 延迟清除删除标记，确保删除操作完成后再允许关闭
 			setTimeout(() => {
@@ -979,12 +994,16 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		cancelPendingDraftPersistence()
 		setPrompt("")
 
-		if (imageModelList.length === 0) return
+		if (imageModelList.length === 0) {
+			return
+		}
 
 		const sourceRequest = imageElement.generateImageRequest
 		const restoredModelId = resolveQuickEditModelId(sourceRequest)
 
-		if (!restoredModelId) return
+		if (!restoredModelId) {
+			return
+		}
 
 		const restoredModel = imageModelList.find((m) => m.model_id === restoredModelId)
 		const shouldSeedQuickEditReference = Boolean(
@@ -1088,13 +1107,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			// 恢复提示词：优先按参考图列表把占位符还原为 @ 文件名；无法匹配的占位符保持原文
 			const restoredReferencePaths = requestToRestore.reference_images || []
 			const restoredPromptReferences = resolvePromptReferencesByPaths(restoredReferencePaths)
-			const restoredPrompt = decodePromptPlaceholdersWithLabels(
+			const promptToRestore = decodePromptPlaceholdersWithLabels(
 				requestToRestore.prompt || "",
 				restoredPromptReferences,
 				resolvePromptPlaceholderDecodeLabels("image", promptPlaceholderTokenConfig),
 				promptPlaceholderTokenConfig,
 			)
-			setPrompt(restoredPrompt)
+			setPrompt(promptToRestore)
 			setSelectedImageGenerationConfig(
 				restoreImageGenerationConfig(
 					getImageGenerationSettings(restoredModel),
@@ -1115,7 +1134,10 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				elementInstance.setReferenceImageInfos(
 					restoredReferenceFileInfos as UploadFileResponse[],
 				)
-				applyBindingStateFromPromptAndReferences(restoredPrompt, restoredReferenceFileInfos)
+				applyBindingStateFromPromptAndReferences(
+					promptToRestore,
+					restoredReferenceFileInfos,
+				)
 			} else {
 				elementInstance.clearReferenceImageInfos()
 				updateProtectedReferencePaths([])

@@ -1059,6 +1059,11 @@ export class ClipboardManager {
 				}
 			}
 
+			elements = this.canvas.elementManager.filterElementsForClipboard(elements)
+			if (elements.length === 0) {
+				return
+			}
+
 			// 复制元素时会异步获取媒体 sourceRef，先展示 loading 避免用户误以为未响应。
 			const copyToast = this.showCopyLoadingToast()
 			let success = false

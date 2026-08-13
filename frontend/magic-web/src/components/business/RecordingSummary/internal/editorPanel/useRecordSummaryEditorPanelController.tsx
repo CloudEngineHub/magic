@@ -22,6 +22,7 @@ import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioSourceType } from "@/services/recordSummary/MediaRecorderService/types/RecorderTypes"
 import { type Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { getEditorPanelMode } from "./getEditorPanelMode"
 import { useRecordingEditorRuntime } from "../editorRuntime"
 import type { RecordSummaryEditorPanelProps, RecordSummaryEditorPanelRef } from "./types"
@@ -87,6 +88,7 @@ export function useRecordSummaryEditorPanelController({
 	})
 
 	const selectedModel = store.topicModelStore.selectedLanguageModel
+	const isModelReady = store.topicModelStore.isLanguageModelReady
 	const [uploadFileId, setUploadFileId] = useState<string | null>(null)
 	const [uploadProgress, setUploadProgress] = useState(0)
 	const [selectedAudioSource, setSelectedAudioSource] = useState<AudioSourceType>("microphone")
@@ -174,7 +176,7 @@ export function useRecordSummaryEditorPanelController({
 	})
 
 	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
-		if (!selectedWorkspace?.id || !selectedModel?.model_id) {
+		if (!isModelReady || !selectedWorkspace?.id || !selectedModel?.model_id) {
 			console.error("workspace, topic, project, model not selected")
 			return
 		}
@@ -203,7 +205,9 @@ export function useRecordSummaryEditorPanelController({
 						project,
 					},
 					{
-						topicMode: selectedProject ? TopicMode.RecordSummary : TopicMode.General,
+						topicMode: selectedProject
+							? TopicMode.RecordSummary
+							: getFallbackTopicModeIdentifier(),
 					},
 				)
 
@@ -352,6 +356,7 @@ export function useRecordSummaryEditorPanelController({
 		handleUploadFile,
 		isCurrentRecording,
 		isMediaRecorderNotSupported: recordSummaryStore.isMediaRecorderNotSupported,
+		isModelReady,
 		isOtherTabRecording: recordSummaryStore.isOtherTabRecording,
 		isPaused: runtime.state.isPaused,
 		isRecording: runtime.state.isRecording,

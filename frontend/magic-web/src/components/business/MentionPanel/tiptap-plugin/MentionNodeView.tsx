@@ -42,7 +42,12 @@ class MentionNodeViewErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: unknown) {
-		logger.error("render error", error)
+		logger.error({
+			eventKey: "mention_node_render_failed",
+			errorKind: "render",
+			error: error,
+			message: "render error",
+		})
 	}
 
 	render() {
@@ -92,7 +97,11 @@ function getMentionNodeDisplayName(attrs?: TiptapMentionAttributes, language?: L
 }
 
 const MentionNodeIcon = memo(({ type, icon }: MentionNodeIconProps) => {
-	if (type === MentionItemType.PROJECT_FILE || type === MentionItemType.UPLOAD_FILE)
+	if (
+		type === MentionItemType.PROJECT_FILE ||
+		type === MentionItemType.UPLOAD_FILE ||
+		type === MentionItemType.MEMORY_FILE
+	)
 		return <MagicFileIcon type={icon} size={16} />
 
 	const imageClassName = mentionIconImageClassNameMap[type]
@@ -207,7 +216,10 @@ function MentionNodeViewInner(props: ReactNodeViewProps) {
 				/>
 			) : (
 				`@${getMentionNodeDisplayName(attrs, options.language)}` +
-				(attrs.type === MentionItemType.FOLDER ? "/" : "")
+				(attrs.type === MentionItemType.FOLDER ||
+				attrs.type === MentionItemType.MEMORY_DIRECTORY
+					? "/"
+					: "")
 			)}
 		</NodeViewWrapper>
 	)

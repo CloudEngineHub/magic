@@ -1,5 +1,6 @@
 import type { HttpClient, RequestConfig } from "@/apis/core/HttpClient"
 import type { SeqRecord } from "@/apis/modules/chat/types"
+import type { FileScope } from "./fileScope"
 import type {
 	CopiedProjectResponse,
 	CopyProjectRequest,
@@ -37,6 +38,8 @@ import { genRequestUrl } from "@/utils/http"
 import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
 import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
+import { generateMicroAppApi } from "./superMagic/microApps"
+import type { MicroAppShareExtra } from "./superMagic/microApps"
 import { buildImageProcessQuery, type ImageProcessOptions } from "@/utils/image-processing"
 import type {
 	SuggestionRelationType,
@@ -66,11 +69,20 @@ export interface SaveFileContentResponse {
 			file_id: string
 			size: number
 			updated_at: string
+			version?: number | null
+			revision?: number
 			shadow_decoded?: boolean
 		}
 		duration_ms: number
 	}>
-	error_files: unknown[]
+	error_files: Array<{
+		index: number
+		file_id: string
+		status: "error"
+		error: string
+		error_code: number
+		duration_ms: number
+	}>
 	completed_at: string
 }
 
@@ -86,6 +98,25 @@ export interface LlmModelTemperature {
 	type: "fixed" | "range"
 	value: number
 }
+
+export type {
+	CreateMicroAppProjectResponse,
+	DeleteMicroAppResponse,
+	MicroAppListItem,
+	MicroAppListResponse,
+	MicroAppListScope,
+	MicroAppMetadata,
+	MicroAppProjectDetail,
+	MicroAppPublishShareRange,
+	MicroAppPublishShareType,
+	MicroAppPublishTarget,
+	MicroAppShareExtra,
+	PublishedMicroAppProjectItem,
+	PublishedMicroAppProjectRecord,
+	PublishedMicroAppProjectsResponse,
+	PublishMicroAppProjectBody,
+	UpdateMicroAppBody,
+} from "./superMagic/microApps"
 
 /** A single LLM model returned by matchLlmModels */
 export interface LlmModelItem {
@@ -224,6 +255,7 @@ export interface GetProjectAttachmentsV2Response {
 
 export interface GetProjectAttachmentsV2Params {
 	projectId: string
+	scope?: FileScope
 	nextParentIds?: ProjectAttachmentsV2NextParentState[] | null
 	parentId?: string | number
 	pageSize?: number
@@ -247,6 +279,11 @@ export interface BatchSavePayload {
 		relative_file_path?: string
 		is_hidden?: boolean
 	}>
+}
+
+export interface ProjectAccessibilityResponse {
+	project_id: string | number
+	required_magic_organization_code: string
 }
 
 function getShareModeRequestConfig(temporaryToken?: string): RequestConfig | undefined {
@@ -725,6 +762,30 @@ export interface GetConvertHightConfigResponse {
 	}
 }
 
+export interface ShareResourceExtra extends MicroAppShareExtra {
+	allow_copy_project_files?: boolean
+	view_file_list?: boolean
+	hide_created_by_super_magic?: boolean
+	show_original_info?: boolean
+	allow_download_project_file?: boolean
+}
+
+export interface ShareResourceSettings {
+	resource_id?: string
+	resource_name?: string
+	project_id?: string
+	project_name?: string
+	default_open_file_id?: string | null
+	file_ids?: string[]
+	share_type?: number
+	share_range?: string | null
+	target_ids?: Array<{ target_type: string; target_id: string }>
+	share_project?: boolean
+	password?: string
+	expire_days?: number | null
+	extra?: ShareResourceExtra
+}
+
 export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
@@ -847,14 +908,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		return fetch.post(`/api/v1/super-agent/file/${file_id}/copy`, requestData)
 	},
 	/**
-	 * @description 批量移动文件或文件夹（支持跨项目）
+	 * @description Move files or folders in batches, including across projects
 	 * @param {object} params
-	 * @param {string[]} params.file_ids 文件ID列表
-	 * @param {string} params.target_parent_id 目标父级ID
-	 * @param {string} params.pre_file_id 前置文件ID
-	 * @param {string} params.project_id 源项目ID
-	 * @param {string} params.target_project_id 目标项目ID
-	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 * @param {string[]} params.file_ids File IDs
+	 * @param {string} params.target_parent_id Target parent folder ID
+	 * @param {string} params.pre_file_id Previous file ID used for ordering
+	 * @param {string} params.project_id Source project ID
+	 * @param {string} params.target_project_id Target project ID
+	 * @param {string[]} params.keep_both_file_ids File IDs that should keep both copies
+	 * @param {boolean} params.preserve_parent_path Whether to preserve the source parent folder path
 	 */
 	moveFiles(params: {
 		file_ids: string[]
@@ -863,18 +925,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_parent_id: string
 		pre_file_id?: string
 		keep_both_file_ids?: string[]
+		preserve_parent_path?: boolean
 	}) {
 		return fetch.post(`/api/v1/super-agent/file/batch-move`, params)
 	},
 	/**
-	 * @description 批量复制文件或文件夹（支持跨项目）
+	 * @description Copy files or folders in batches, including across projects
 	 * @param {object} params
-	 * @param {string[]} params.file_ids 文件ID列表
-	 * @param {string} params.target_parent_id 目标父级ID
-	 * @param {string} params.pre_file_id 前置文件ID
-	 * @param {string} params.project_id 源项目ID
-	 * @param {string} params.target_project_id 目标项目ID
-	 * @param {string[]} params.keep_both_file_ids 保留两者的文件ID列表
+	 * @param {string[]} params.file_ids File IDs
+	 * @param {string} params.target_parent_id Target parent folder ID
+	 * @param {string} params.pre_file_id Previous file ID used for ordering
+	 * @param {string} params.project_id Source project ID
+	 * @param {string} params.target_project_id Target project ID
+	 * @param {string[]} params.keep_both_file_ids File IDs that should keep both copies
+	 * @param {boolean} params.preserve_parent_path Whether to preserve the source parent folder path
 	 */
 	copyFiles(params: {
 		file_ids: string[]
@@ -883,6 +947,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_parent_id: string
 		pre_file_id?: string
 		keep_both_file_ids?: string[]
+		preserve_parent_path?: boolean
 	}) {
 		return fetch.post(`/api/v1/super-agent/file/batch-copy`, params)
 	},
@@ -927,6 +992,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 */
 	copyProject(params: CopyProjectRequest) {
 		return fetch.post<CopiedProjectResponse>(`/api/v1/super-agent/projects/fork`, params)
+	},
+	/**
+	 * @description 获取当前用户对项目的访问权限及其归属组织
+	 */
+	getProjectAccessibility(projectId: string, options?: Omit<RequestConfig, "url">) {
+		return fetch.get<ProjectAccessibilityResponse | null>(
+			`/api/v1/super-agent/projects/${projectId}/accessibility`,
+			options,
+		)
 	},
 
 	/**
@@ -1077,7 +1151,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	// 通过项目id获取附件列表
 	getAttachmentsByProjectId(
-		params: { projectId: string; temporaryToken?: string },
+		params: { projectId: string; temporaryToken?: string; scope?: FileScope },
 		requestConfig?: Omit<RequestConfig, "url" | "body">,
 	) {
 		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
@@ -1087,6 +1161,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 				page: 1,
 				page_size: 999,
 				file_type: ["user_upload", "process", "system_auto_upload", "directory"],
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params?.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
 			{
@@ -1097,13 +1172,14 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	getProjectAttachmentsCount(
-		params: { projectId: string; temporaryToken?: string },
+		params: { projectId: string; temporaryToken?: string; scope?: FileScope },
 		requestConfig?: Omit<RequestConfig, "url" | "body">,
 	) {
 		const projectId = getAttachmentProjectId(params.projectId, params.temporaryToken)
 		return fetch.post<GetProjectAttachmentsCountResponse>(
 			`/api/v1/super-agent/projects/${projectId}/attachments/count`,
 			{
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params.temporaryToken ? { token: params.temporaryToken } : {}),
 			},
 			{
@@ -1122,6 +1198,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			`/api/v2/super-agent/projects/${projectId}/attachments`,
 			{
 				page_size: params.pageSize ?? 1000,
+				...(params.scope ? { scope: params.scope } : {}),
 				...(params.fileType ? { file_type: params.fileType } : {}),
 				...(params.parentId !== undefined && params.parentId !== null
 					? { parent_id: params.parentId }
@@ -1217,6 +1294,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	deleteWorkspace({ id }: { id: string }) {
 		return fetch.delete(
 			`/api/v1/super-agent/workspaces/${id}`,
+			{},
+			{
+				enableRequestUnion: true,
+			},
+		)
+	},
+
+	/**
+	 * Detaches projects/topics from a workspace then deletes the empty workspace shell.
+	 * Used by audio recording groups so deleting a group keeps the underlying recordings.
+	 */
+	detachWorkspace({ id }: { id: string }) {
+		return fetch.put(
+			`/api/v1/super-agent/workspaces/${id}/detach`,
 			{},
 			{
 				enableRequestUnion: true,
@@ -1508,7 +1599,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @param code
 	 */
 	getShareInfoByCode({ code }: { code: string }) {
-		return fetch.get(`/api/v1/share/resources/${code}/setting`)
+		return fetch.get<ShareResourceSettings>(`/api/v1/share/resources/${code}/setting`)
 	},
 
 	/**
@@ -1598,14 +1689,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		topic_id?: string
 		default_open_file_id?: string
 		share_project?: boolean
-		extra?: {
-			allow_copy_project_files?: boolean
-			show_original_info?: boolean
-			view_file_list?: boolean
-			hide_created_by_super_magic?: boolean
-			allow_download_project_file?: boolean
-			pure_mode?: boolean
-		}
+		extra?: ShareResourceExtra
 		project_id?: string
 	}) {
 		return fetch.post("/api/v1/share/resources/create", {
@@ -1878,6 +1962,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 			file_id: string
 			content: any
 			enable_shadow?: boolean
+			expected_revision?: number
 		}>,
 	) {
 		// 将保存过的file_id存入localStorage
@@ -2290,15 +2375,19 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	/**
 	 * @description 创建文件或文件夹
 	 * @param data
+	 * @param config Optional request config
 	 */
-	createFile(data: {
-		project_id: string
-		parent_id?: string | number
-		file_name: string
-		is_directory: boolean
-		ignore_duplicate?: boolean
-	}) {
-		return fetch.post("/api/v1/super-agent/file", data)
+	createFile(
+		data: {
+			project_id: string
+			parent_id?: string | number
+			file_name: string
+			is_directory: boolean
+			ignore_duplicate?: boolean
+		},
+		config?: { enableErrorMessagePrompt?: boolean },
+	) {
+		return fetch.post("/api/v1/super-agent/file", data, config)
 	},
 
 	/**
@@ -2334,18 +2423,20 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	 * @returns 模式列表
 	 */
 	getCrewList() {
-		return fetch.get<WithPage<CrewItemResponse> & { models: Record<string, ModelItem> }>(
-			`/api/v1/super-agents/featured`,
-			{
-				enableRequestUnion: true,
-				headers: {
-					"X-Magic-Image-Process": buildImageProcessQuery({
-						resize: { h: 512, w: 512 },
-						format: "webp",
-					}),
-				},
+		return fetch.get<
+			WithPage<CrewItemResponse> & {
+				models: Record<string, ModelItem>
+				default_agent_code?: string | null
+			}
+		>(`/api/v1/super-agents/featured`, {
+			enableRequestUnion: true,
+			headers: {
+				"X-Magic-Image-Process": buildImageProcessQuery({
+					resize: { h: 512, w: 512 },
+					format: "webp",
+				}),
 			},
-		)
+		})
 	},
 
 	/**
@@ -2477,12 +2568,15 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		message_type: string
 		message_content: any
 	}) {
-		return fetch.post("/api/v1/super-agent/message-queue", {
-			project_id,
-			topic_id,
-			message_type,
-			message_content,
-		})
+		return fetch.post<{ queue_id: string; status: number }>(
+			"/api/v1/super-agent/message-queue",
+			{
+				project_id,
+				topic_id,
+				message_type,
+				message_content,
+			},
+		)
 	},
 
 	/**
@@ -2606,6 +2700,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * Agent列表
+	 * @deprecated 当前主流程已迁移至 v2 智能体列表接口，请勿新增调用。
 	 */
 	getAgentsList() {
 		return fetch.post<SuperMagicAgentListResponse>("/api/v1/super-magic/agents/queries")
@@ -2613,24 +2708,28 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 
 	/**
 	 * 新增/编辑Agent
+	 * @deprecated 当前主流程已迁移至 v2 的创建和更新接口，请勿新增调用。
 	 */
 	editAgent({ data }: { data: any }) {
 		return fetch.post(`/api/v1/super-magic/agents`, data)
 	},
 	/**
 	 * AI优化Agent
+	 * @deprecated 当前主流程已不再使用该接口，请勿新增调用。
 	 */
 	AIOptimizationAgent({ data }: { data: { optimization_type: string; agent: any } }) {
 		return fetch.post(`/api/v1/super-magic/agents/ai-optimize`, data)
 	},
 	/**
 	 * 获取Agent详情
+	 * @deprecated 当前主流程已迁移至 v2 智能体详情接口，请勿新增调用。
 	 */
 	getAgentDetail({ agent_id }: { agent_id: string }) {
 		return fetch.get(`/api/v1/super-magic/agents/${agent_id}`)
 	},
 	/**
 	 * 删除Agent
+	 * @deprecated 当前主流程已迁移至 v2 智能体删除接口，请勿新增调用。
 	 */
 	deleteAgent({ agent_id }: { agent_id: string }) {
 		return fetch.delete(`/api/v1/super-magic/agents/${agent_id}`)
@@ -2936,4 +3035,6 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	getChatWorkspace() {
 		return fetch.get<Workspace>("/api/v1/super-agent/workspaces/app/chat")
 	},
+
+	...generateMicroAppApi(fetch),
 })

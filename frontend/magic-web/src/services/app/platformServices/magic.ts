@@ -26,6 +26,7 @@ import { MobileTabParam } from "@/pages/mobileTabs/constants"
 import { baseHistory } from "@/routes/history"
 import { workspaceStore, projectStore, topicStore } from "@/pages/superMagic/stores/core"
 import { clearChatWorkspaceModuleCache } from "@/pages/superMagic/hooks/useChatWorkspace"
+import { resolveRequiredProjectOrganizationCode } from "@/pages/superMagic/services/projectOrganizationAccess"
 
 export class MagicPlatformService implements PlatformServiceInterface {
 	PlatformType: Platform = Platform.Magic
@@ -180,7 +181,12 @@ export class MagicPlatformService implements PlatformServiceInterface {
 				}
 			}
 		} catch (error) {
-			this.logger.error("切换账户后的初始化流程失败", error)
+			this.logger.error({
+				eventKey: "switch_account_initialize_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "切换账户后的初始化流程失败",
+			})
 		}
 	}
 
@@ -279,6 +285,15 @@ export class MagicPlatformService implements PlatformServiceInterface {
 		topicId?: string
 	}) => {
 		const u = userStore.user.userInfo
+		const requiredOrganizationCode = await resolveRequiredProjectOrganizationCode({
+			projectId,
+			currentOrganizationCode: u?.organization_code,
+			// This check is part of app initialization itself, so it must not wait for app init.
+			requestOptions: { skipAppInitWait: true },
+		})
+
+		if (requiredOrganizationCode) return
+
 		await userStore.initialization.runInitialization(
 			{
 				magicId: u?.magic_id,
@@ -379,7 +394,12 @@ export class MagicPlatformService implements PlatformServiceInterface {
 		try {
 			await this.chatInitPromise
 		} catch (error) {
-			this.logger.error("初始化聊天数据失败", error)
+			this.logger.error({
+				eventKey: "initialize_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "初始化聊天数据失败",
+			})
 			throw error
 		} finally {
 			this.chatInitPromise = null

@@ -1,9 +1,285 @@
 import { describe, expect, it } from "vitest"
+import type { Canvas } from "../../../../runtime/core/Canvas"
 import {
+	type CanvasConnection,
+	ElementTypeEnum,
+	type FrameElement,
+	type LayerElement,
+} from "../../../../runtime/document/types"
+import {
+	collectLinkedFrameSourceElements,
+	collectLinkedEditorSourceElements,
+	createLinkedFrameSourceId,
+	createLinkedUpstreamSourceId,
+	dedupeLinkedMediaItemsByPath,
+	getLinkedMediaReferenceIdentity,
+	mergeLinkedMediaPaths,
 	mergeLinkedMediaReferences,
+	resolveLinkedMediaDisplay,
+	resolveLinkedMediaAssociation,
 	resolveLinkedMediaItems,
+	resolveLinkedMediaPolicySelection,
+	resolveLinkedMediaSelectionDisplay,
+	resolveLinkedEditorInputs,
 	type LinkedEditorMediaCandidate,
+	type ResolveLinkedMediaAssociationOptions,
 } from "../linkedEditorInputs"
+
+function textElement(id: string, text: string, zIndex = 0): LayerElement {
+	return {
+		id,
+		type: ElementTypeEnum.Text,
+		zIndex,
+		content: [{ children: [{ type: "text", text }] }],
+	}
+}
+
+function imageElement(id: string, src: string, zIndex = 0): LayerElement {
+	return { id, type: ElementTypeEnum.Image, zIndex, src }
+}
+
+function videoElement(id: string, src: string, zIndex = 0): LayerElement {
+	return { id, type: ElementTypeEnum.Video, zIndex, src }
+}
+
+function createCanvasStub(elements: LayerElement[], connections: CanvasConnection[]): Canvas {
+	const elementById = new Map(elements.map((element) => [element.id, element]))
+	return {
+		connectionManager: {
+			getUpstreamConnections: (elementId: string) =>
+				connections.filter((connection) => connection.targetElementId === elementId),
+		},
+		elementManager: {
+			getElementData: (elementId: string) => elementById.get(elementId),
+		},
+	} as unknown as Canvas
+}
+
+describe("linked frame source collection", () => {
+	it("recursively collects consumable visible descendants in stable z-index order", () => {
+		const frame: FrameElement = {
+			id: "frame-source",
+			type: ElementTypeEnum.Frame,
+			children: [
+				textElement("text-top", "top", 20),
+				{
+					id: "nested-group",
+					type: ElementTypeEnum.Group,
+					zIndex: 10,
+					children: [imageElement("image", "/images/a.png", 1)],
+				},
+				{ id: "shape", type: ElementTypeEnum.Rectangle, zIndex: 15 },
+				{ ...videoElement("hidden-video", "/videos/a.mp4", 30), visible: false },
+			],
+		}
+
+		expect(
+			collectLinkedFrameSourceElements("frame-connection", frame).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "image"),
+				sourceElementId: "image",
+			},
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "text-top"),
+				sourceElementId: "text-top",
+			},
+		])
+	})
+
+	it("expands an upstream frame and lets a direct element connection win deduplication", () => {
+		const sharedImage = imageElement("shared-image", "/images/shared.png", 1)
+		const frame: FrameElement = {
+			id: "frame-source",
+			type: ElementTypeEnum.Frame,
+			children: [
+				textElement("frame-text", "frame prompt", 0),
+				sharedImage,
+				videoElement("target", "/videos/target.mp4", 2),
+			],
+		}
+		const canvas = createCanvasStub(
+			[frame, sharedImage],
+			[
+				{
+					id: "frame-connection",
+					sourceElementId: frame.id,
+					targetElementId: "target",
+				},
+				{
+					id: "direct-image-connection",
+					sourceElementId: sharedImage.id,
+					targetElementId: "target",
+				},
+			],
+		)
+
+		const result = resolveLinkedEditorInputs({
+			canvas,
+			targetElementId: "target",
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["image", "video"] },
+		})
+
+		expect(result.textConnections).toEqual([
+			{
+				connectionId: createLinkedFrameSourceId("frame-connection", "frame-text"),
+				sourceElementId: "frame-text",
+				text: "frame prompt",
+			},
+		])
+		expect(result.mediaItems).toEqual([
+			expect.objectContaining({
+				connectionId: "direct-image-connection",
+				sourceElementId: "shared-image",
+				path: "/images/shared.png",
+			}),
+		])
+	})
+})
+
+describe("linked upstream source collection", () => {
+	it("keeps the current direct-only behavior when the static mode is direct", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "direct",
+				maxDepth: 2,
+			}).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([{ connectionId: "B-C", sourceElementId: "B" }])
+	})
+
+	it("collects upstream elements breadth-first up to the configured depth", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 2,
+			}).map((item) => ({
+				connectionId: item.connectionId,
+				sourceElementId: item.sourceElementId,
+			})),
+		).toEqual([
+			{ connectionId: "B-C", sourceElementId: "B" },
+			{
+				connectionId: createLinkedUpstreamSourceId("C", "A"),
+				sourceElementId: "A",
+			},
+		])
+	})
+
+	it("continues through non-consumable graph nodes", () => {
+		const elementA = textElement("A", "A")
+		const elementB: LayerElement = { id: "B", type: ElementTypeEnum.Rectangle }
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 2,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["A"])
+	})
+
+	it("deduplicates diamond paths and stops when a cycle reaches the target again", () => {
+		const elementA = textElement("A", "A")
+		const elementB1 = textElement("B1", "B1")
+		const elementB2 = textElement("B2", "B2")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB1, elementB2, elementC],
+			[
+				{ id: "A-B1", sourceElementId: "A", targetElementId: "B1" },
+				{ id: "A-B2", sourceElementId: "A", targetElementId: "B2" },
+				{ id: "B1-C", sourceElementId: "B1", targetElementId: "C" },
+				{ id: "B2-C", sourceElementId: "B2", targetElementId: "C" },
+				{ id: "C-A", sourceElementId: "C", targetElementId: "A" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: 4,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["B1", "B2", "A"])
+	})
+
+	it("supports unlimited upstream depth without looping through a cycle", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+				{ id: "C-A", sourceElementId: "C", targetElementId: "A" },
+			],
+		)
+
+		expect(
+			collectLinkedEditorSourceElements(canvas, "C", {
+				mode: "upstream",
+				maxDepth: Number.POSITIVE_INFINITY,
+			}).map((item) => item.sourceElementId),
+		).toEqual(["B", "A"])
+	})
+
+	it("uses the static unlimited mode in the editor input resolver", () => {
+		const elementA = textElement("A", "A")
+		const elementB = textElement("B", "B")
+		const elementC = videoElement("C", "/videos/c.mp4")
+		const canvas = createCanvasStub(
+			[elementA, elementB, elementC],
+			[
+				{ id: "A-B", sourceElementId: "A", targetElementId: "B" },
+				{ id: "B-C", sourceElementId: "B", targetElementId: "C" },
+			],
+		)
+
+		expect(
+			resolveLinkedEditorInputs({
+				canvas,
+				targetElementId: "C",
+				targetKind: "video",
+			}).textConnections.map((connection) => connection.sourceElementId),
+		).toEqual(["B", "A"])
+	})
+})
 
 describe("resolveLinkedMediaItems", () => {
 	const imageCandidate: LinkedEditorMediaCandidate = {
@@ -56,6 +332,13 @@ describe("resolveLinkedMediaItems", () => {
 				},
 			}),
 		).toEqual([expect.objectContaining({ status: "inactive", reason: "over-limit" })])
+	})
+
+	it("normalizes equivalent resource paths for identity checks", () => {
+		expect(getLinkedMediaReferenceIdentity("./images/source.png")).toBe("images/source.png")
+		expect(mergeLinkedMediaPaths(["./images/source.png"], ["/images/source.png"])).toEqual([
+			"./images/source.png",
+		])
 	})
 
 	it("marks duplicate linked media as inactive", () => {
@@ -159,6 +442,426 @@ describe("mergeLinkedMediaReferences", () => {
 		).toEqual([
 			{ kind: "image", path: "/images/manual.png" },
 			{ kind: "video", path: "/videos/linked.mp4" },
+		])
+	})
+
+	it("prefers linked metadata when manual and linked references share a path", () => {
+		const sourceCrop = { x: 1, y: 2, width: 300, height: 200 }
+		expect(
+			mergeLinkedMediaReferences(
+				[{ kind: "image", path: "./images/source.png" }],
+				[{ kind: "image", path: "/images/source.png", sourceCrop }],
+			),
+		).toEqual([{ kind: "image", path: "/images/source.png", sourceCrop }])
+	})
+})
+
+describe("dedupeLinkedMediaItemsByPath", () => {
+	it("shows one item per resource and keeps the selected connection", () => {
+		const items = dedupeLinkedMediaItemsByPath([
+			{
+				connectionId: "connection-1",
+				sourceElementId: "source-1",
+				kind: "image",
+				path: "./images/shared.png",
+				status: "inactive",
+				selected: false,
+			},
+			{
+				connectionId: "connection-2",
+				sourceElementId: "source-2",
+				kind: "image",
+				path: "/images/shared.png",
+				status: "active",
+				selected: true,
+			},
+		])
+
+		expect(items).toHaveLength(1)
+		expect(items[0]).toEqual(expect.objectContaining({ connectionId: "connection-2" }))
+	})
+})
+
+describe("resolveLinkedMediaDisplay", () => {
+	it("uses the linked card as the single display item for a manually mentioned resource", () => {
+		const linkedItem = {
+			connectionId: "connection-image",
+			sourceElementId: "image-source",
+			kind: "image" as const,
+			path: "/images/shared.png",
+			status: "inactive" as const,
+			selected: false,
+		}
+		const result = resolveLinkedMediaDisplay(
+			[{ path: "./images/shared.png", fileName: "shared.png" }],
+			(item) => item.path,
+			[linkedItem],
+		)
+
+		expect(result.manualItems).toEqual([])
+		expect(result.linkedItems).toEqual([linkedItem])
+	})
+})
+
+describe("resolveLinkedMediaSelectionDisplay", () => {
+	it("keeps a mentioned linked resource checked but allows removing it", () => {
+		expect(
+			resolveLinkedMediaSelectionDisplay({
+				selected: true,
+				selectionDisabledReason: "duplicate",
+			}),
+		).toEqual({ checked: true, disabled: false })
+	})
+
+	it("still disables an unavailable unselected resource", () => {
+		expect(
+			resolveLinkedMediaSelectionDisplay({
+				selected: false,
+				selectionDisabledReason: "over-limit",
+			}),
+		).toEqual({ checked: false, disabled: true })
+	})
+})
+
+describe("resolveLinkedMediaAssociation", () => {
+	it("derives candidate selection from canonical mention paths", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+				},
+			],
+			mentionedPaths: ["/images/source.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items[0]?.selected).toBe(true)
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "./images/source.png", sourceCrop: undefined },
+		])
+	})
+
+	it("keeps unmatched manual references as ordinary active media", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [],
+			mentionedPaths: ["./images/manual.png"],
+			manualReferences: [{ kind: "image", path: "/images/manual.png" }],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items).toEqual([])
+		expect(result.unmatchedManualReferences).toEqual([
+			{ kind: "image", path: "/images/manual.png" },
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/images/manual.png" },
+		])
+	})
+
+	it("keeps one stable candidate for duplicate canonical paths", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-first",
+					sourceElementId: "image-first",
+					kind: "image",
+					path: "./images/source.png",
+				},
+				{
+					connectionId: "connection-second",
+					sourceElementId: "image-second",
+					kind: "image",
+					path: "/images/source.png",
+				},
+			],
+			mentionedPaths: ["images/source.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"] },
+		})
+
+		expect(result.items).toHaveLength(1)
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({ connectionId: "connection-first", selected: true }),
+		)
+	})
+
+	it("keeps a mentioned candidate checked when media policy makes it inactive", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+				},
+			],
+			mentionedPaths: ["/images/source.png"],
+			targetKind: "video",
+			mediaPolicy: { supportedKinds: ["video"] },
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: true,
+				status: "inactive",
+				reason: "unsupported-mode",
+				selectionDisabledReason: undefined,
+			}),
+		)
+		expect(result.activeMediaReferences).toEqual([])
+	})
+
+	it("derives every checkbox from mentions while limits only constrain active media", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-first",
+					sourceElementId: "image-first",
+					kind: "image",
+					path: "./images/first.png",
+				},
+				{
+					connectionId: "connection-second",
+					sourceElementId: "image-second",
+					kind: "image",
+					path: "./images/second.png",
+				},
+			],
+			mentionedPaths: ["/images/first.png", "/images/second.png"],
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+		})
+
+		expect(result.items).toEqual([
+			expect.objectContaining({ connectionId: "connection-first", selected: true }),
+			expect.objectContaining({
+				connectionId: "connection-second",
+				selected: true,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "./images/first.png", sourceCrop: undefined },
+		])
+	})
+
+	it("allows a linked candidate to replace a same-path manual reference when checked", () => {
+		const associationOptions = {
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+					sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+				},
+			],
+			targetKind: "image",
+			mediaPolicy: {
+				supportedKinds: ["image"],
+				manualReferences: [{ kind: "image", path: "/images/source.png" }],
+				maxTotalCount: 1,
+			},
+		} satisfies Omit<ResolveLinkedMediaAssociationOptions, "mentionedPaths">
+		const result = resolveLinkedMediaAssociation({
+			...associationOptions,
+			mentionedPaths: [],
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: false,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		)
+
+		const checkedResult = resolveLinkedMediaAssociation({
+			...associationOptions,
+			mentionedPaths: ["/images/source.png"],
+		})
+		expect(checkedResult.items[0]?.selected).toBe(true)
+		expect(checkedResult.activeMediaReferences).toEqual([
+			{
+				kind: "image",
+				path: "./images/source.png",
+				sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+			},
+		])
+	})
+
+	it("keeps a same-path manual reference active while the linked candidate is unchecked", () => {
+		const result = resolveLinkedMediaAssociation({
+			candidates: [
+				{
+					connectionId: "connection-image",
+					sourceElementId: "image-source",
+					kind: "image",
+					path: "./images/source.png",
+					sourceCrop: { x: 1, y: 2, width: 100, height: 80 },
+				},
+			],
+			mentionedPaths: [],
+			manualReferences: [{ kind: "image", path: "/images/source.png" }],
+			targetKind: "image",
+			mediaPolicy: {
+				supportedKinds: ["image"],
+				maxTotalCount: 1,
+			},
+		})
+
+		expect(result.items[0]).toEqual(
+			expect.objectContaining({
+				selected: false,
+				status: "inactive",
+				selectionDisabledReason: undefined,
+			}),
+		)
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: "/images/source.png" },
+		])
+	})
+})
+
+describe("resolveLinkedMediaPolicySelection", () => {
+	const firstImageCandidate: LinkedEditorMediaCandidate = {
+		connectionId: "connection-image-1",
+		sourceElementId: "image-source-1",
+		kind: "image",
+		path: "/images/source-1.png",
+		fileName: "source-1.png",
+	}
+	const secondImageCandidate: LinkedEditorMediaCandidate = {
+		connectionId: "connection-image-2",
+		sourceElementId: "image-source-2",
+		kind: "image",
+		path: "/images/source-2.png",
+		fileName: "source-2.png",
+	}
+
+	it("keeps linked media unselected by default", () => {
+		const result = resolveLinkedMediaPolicySelection([firstImageCandidate], [], {
+			targetKind: "image",
+			mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+		})
+
+		expect(result.items).toEqual([
+			expect.objectContaining({ selected: false, status: "inactive" }),
+		])
+		expect(result.activeMediaReferences).toEqual([])
+	})
+
+	it("keeps every candidate selectable while no media has been selected", () => {
+		const result = resolveLinkedMediaPolicySelection(
+			[firstImageCandidate, secondImageCandidate],
+			[],
+			{
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+			},
+		)
+
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				connectionId: firstImageCandidate.connectionId,
+				selected: false,
+				selectionDisabledReason: undefined,
+			}),
+			expect.objectContaining({
+				connectionId: secondImageCandidate.connectionId,
+				selected: false,
+				selectionDisabledReason: undefined,
+			}),
+		])
+	})
+
+	it("only includes media selected by the user", () => {
+		const result = resolveLinkedMediaPolicySelection(
+			[firstImageCandidate, secondImageCandidate],
+			[secondImageCandidate.connectionId],
+			{
+				targetKind: "image",
+				mediaPolicy: { supportedKinds: ["image"], maxTotalCount: 1 },
+			},
+		)
+
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				connectionId: firstImageCandidate.connectionId,
+				selected: false,
+				selectionDisabledReason: "over-limit",
+			}),
+			expect.objectContaining({
+				connectionId: secondImageCandidate.connectionId,
+				selected: true,
+				status: "active",
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: secondImageCandidate.path, sourceCrop: undefined },
+		])
+	})
+
+	it("keeps a selected linked resource active when it is also manually mentioned", () => {
+		const sourceCrop = { x: 4, y: 8, width: 200, height: 120 }
+		const result = resolveLinkedMediaPolicySelection(
+			[{ ...firstImageCandidate, sourceCrop }],
+			[firstImageCandidate.connectionId],
+			{
+				targetKind: "image",
+				mediaPolicy: {
+					supportedKinds: ["image"],
+					manualReferences: [{ kind: "image", path: "./images/source-1.png" }],
+					maxTotalCount: 1,
+				},
+			},
+		)
+
+		expect(result.items).toEqual([
+			expect.objectContaining({
+				selected: true,
+				status: "active",
+				sourceCrop,
+			}),
+		])
+		expect(result.activeMediaReferences).toEqual([
+			{ kind: "image", path: firstImageCandidate.path, sourceCrop },
+		])
+	})
+
+	it("restores a retained selection after the media kind becomes supported again", () => {
+		const mentionedConnectionIds = [firstImageCandidate.connectionId]
+		const unsupportedResult = resolveLinkedMediaPolicySelection(
+			[firstImageCandidate],
+			mentionedConnectionIds,
+			{
+				targetKind: "video",
+				mediaPolicy: { supportedKinds: ["video"] },
+			},
+		)
+
+		expect(unsupportedResult.activeMediaReferences).toEqual([])
+
+		const restoredResult = resolveLinkedMediaPolicySelection(
+			[firstImageCandidate],
+			mentionedConnectionIds,
+			{
+				targetKind: "video",
+				mediaPolicy: { supportedKinds: ["image"] },
+			},
+		)
+
+		expect(restoredResult.items).toEqual([
+			expect.objectContaining({ selected: true, status: "active" }),
+		])
+		expect(restoredResult.activeMediaReferences).toEqual([
+			{ kind: "image", path: firstImageCandidate.path, sourceCrop: undefined },
 		])
 	})
 })

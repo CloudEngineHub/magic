@@ -114,13 +114,19 @@ export class DesignLoadManager {
 						}
 
 						// v2：从 sidecar 回填重字段，让画布与生成编辑器拿到完整数据
-						await hydrateDesignDataDetails(parsedData, {
-							attachments,
-							flatAttachments,
-							mainFileId: result.fileId,
-							projectId: projectId ?? undefined,
-						})
+						const elementDetailsProvenance = await hydrateDesignDataDetails(
+							parsedData,
+							{
+								attachments,
+								flatAttachments,
+								mainFileId: result.fileId,
+								projectId: projectId ?? undefined,
+							},
+						)
 
+						this.stateBag.setters.setElementDetailsProvenance?.(
+							elementDetailsProvenance,
+						)
 						this.stateBag.setters.setDesignData(parsedData)
 						this.stateBag.setPrevDesignDataFingerprint(
 							hashDesignDataComparable(parsedData),

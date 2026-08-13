@@ -70,6 +70,7 @@ function mapPanelItemToUserSkillView(skill: SkillPanelItem): UserSkillView {
 }
 
 interface SkillListItemProps {
+	readOnly?: boolean
 	skill: SkillPanelItem
 	isBusy: boolean
 	onInstall: (skillCode: string) => void
@@ -80,6 +81,7 @@ interface SkillListItemProps {
 }
 
 function SkillListItem({
+	readOnly = false,
 	skill,
 	isBusy,
 	onInstall,
@@ -140,36 +142,42 @@ function SkillListItem({
 				</div>
 			</div>
 
-			<div className="relative z-10 shrink-0">
-				{skill.status === "not-installed" && (
-					<Button
-						variant="secondary"
-						size="sm"
-						className="h-9 min-w-[80px]"
-						onClick={() => onInstall(skill.skillCode)}
-						disabled={isBusy}
-						data-testid={`${testIdPrefix}-install-btn`}
-					>
-						{isBusy ? <Loader2 className="size-4 animate-spin" /> : t("skills.install")}
-					</Button>
-				)}
-				{skill.status === "installed" && (
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-9 min-w-[80px] bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
-						onClick={() => onUninstall(skill.skillCode)}
-						disabled={isBusy}
-						data-testid={`${testIdPrefix}-uninstall-btn`}
-					>
-						{isBusy ? (
-							<Loader2 className="size-4 animate-spin" />
-						) : (
-							t("skills.uninstall")
-						)}
-					</Button>
-				)}
-			</div>
+			{readOnly ? null : (
+				<div className="relative z-10 shrink-0">
+					{skill.status === "not-installed" && (
+						<Button
+							variant="secondary"
+							size="sm"
+							className="h-9 min-w-[80px]"
+							onClick={() => onInstall(skill.skillCode)}
+							disabled={isBusy}
+							data-testid={`${testIdPrefix}-install-btn`}
+						>
+							{isBusy ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								t("skills.install")
+							)}
+						</Button>
+					)}
+					{skill.status === "installed" && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-9 min-w-[80px] bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
+							onClick={() => onUninstall(skill.skillCode)}
+							disabled={isBusy}
+							data-testid={`${testIdPrefix}-uninstall-btn`}
+						>
+							{isBusy ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								t("skills.uninstall")
+							)}
+						</Button>
+					)}
+				</div>
+			)}
 		</div>
 	)
 }
@@ -177,6 +185,7 @@ function SkillListItem({
 const SkillListItemMemo = memo(SkillListItem)
 
 export interface SkillsPanelShellProps {
+	readOnly?: boolean
 	onClose: () => void
 	activeTab: CrewSkillsTab
 	setActiveTab: (tab: CrewSkillsTab) => void
@@ -208,6 +217,7 @@ export interface SkillsPanelShellProps {
 }
 
 export function SkillsPanelShell({
+	readOnly = false,
 	onClose,
 	activeTab,
 	setActiveTab,
@@ -273,6 +283,7 @@ export function SkillsPanelShell({
 		: null
 
 	const detailPrimaryAction = useMemo(() => {
+		if (readOnly) return undefined
 		if (!detailSkill) return undefined
 		const code = detailSkill.skillCode
 		const isBusy = busySkills.has(code)
@@ -293,7 +304,7 @@ export function SkillsPanelShell({
 			disabled: isBusy,
 			testId: `${testIdPrefix}-detail-uninstall`,
 		}
-	}, [busySkills, detailSkill, handleInstall, handleUninstall, t, testIdPrefix])
+	}, [busySkills, detailSkill, handleInstall, handleUninstall, readOnly, t, testIdPrefix])
 
 	return (
 		<div
@@ -356,7 +367,7 @@ export function SkillsPanelShell({
 						indicatorClassName="h-[30px] inset-y-[3px]"
 					/>
 
-					{showCreateButton && canCreateSkill ? (
+					{showCreateButton && canCreateSkill && !readOnly ? (
 						<SkillAddDropdown
 							onAddFromLibrary={onAddFromLibrary}
 							onImportSuccess={handleImportSuccess}
@@ -408,6 +419,7 @@ export function SkillsPanelShell({
 								<SkillListItemMemo
 									skill={skill}
 									isBusy={busySkills.has(skill.skillCode)}
+									readOnly={readOnly}
 									onInstall={handleInstall}
 									onUninstall={handleUninstall}
 									onOpenDetail={setDetailSkill}

@@ -21,6 +21,7 @@ import { resolveCrewI18nText } from "@/apis/modules/crew"
 import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Separator } from "@/components/shadcn-ui/separator"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import { MagicDropdown } from "@/components/base/MagicDropdown"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/lib/tiptap-utils"
@@ -58,6 +59,7 @@ import CreateKnowledgeDialog from "../StepDetailPanel/KnowledgeDetailView/compon
 import KnowledgeCard from "../StepDetailPanel/KnowledgeDetailView/components/KnowledgeCard"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { getSceneThemePreviewStyle } from "../common/sceneThemePreview"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 
 interface ConfigStepsPanelProps {
 	onBack: () => void
@@ -133,8 +135,10 @@ function SidebarExpandableItem({
 
 const SidebarKnowledgeList = observer(function SidebarKnowledgeList({
 	onEditKnowledge,
+	readOnly = false,
 }: {
 	onEditKnowledge: (kb: Knowledge.KnowledgeItem) => void
+	readOnly?: boolean
 }) {
 	const { t } = useTranslation("crew/create")
 	const [searchParams] = useSearchParams()
@@ -271,6 +275,7 @@ const SidebarKnowledgeList = observer(function SidebarKnowledgeList({
 							crewCode={crewCode}
 							onEdit={onEditKnowledge}
 							onRefresh={handleRefresh}
+							readOnly={readOnly}
 							index={index}
 						/>
 					</div>
@@ -301,7 +306,11 @@ const SidebarKnowledgeList = observer(function SidebarKnowledgeList({
 	)
 })
 
-const SidebarSkillList = observer(function SidebarSkillList() {
+const SidebarSkillList = observer(function SidebarSkillList({
+	readOnly = false,
+}: {
+	readOnly?: boolean
+}) {
 	const { t, i18n } = useTranslation("crew/create")
 	const { skills } = useCrewEditStore()
 	const [busySkillCodes, setBusySkillCodes] = useState<Set<string>>(new Set())
@@ -317,6 +326,7 @@ const SidebarSkillList = observer(function SidebarSkillList() {
 
 	const handleUninstallSkill = useCallback(
 		async (skillCode: string) => {
+			if (readOnly) return
 			if (busySkillCodes.has(skillCode)) return
 
 			setSkillBusy(skillCode, true)
@@ -342,7 +352,7 @@ const SidebarSkillList = observer(function SidebarSkillList() {
 				setSkillBusy(skillCode, false)
 			}
 		},
-		[busySkillCodes, setSkillBusy, skills],
+		[busySkillCodes, readOnly, setSkillBusy, skills],
 	)
 
 	if (skills.skills.length === 0) {
@@ -357,32 +367,37 @@ const SidebarSkillList = observer(function SidebarSkillList() {
 		<div className="flex flex-col" data-testid="crew-skills-list">
 			{skills.skills.map((skill, index) => {
 				const isBusy = busySkillCodes.has(skill.skill_code)
-				const menuItems = [
-					{
-						key: "uninstall",
-						icon: isBusy ? (
-							<Loader2 className="h-4 w-4 animate-spin" />
-						) : (
-							<Trash2 className="h-4 w-4" />
-						),
-						label: t("skills.uninstall"),
-						danger: true,
-						disabled: isBusy,
-						onClick: () => void handleUninstallSkill(skill.skill_code),
-						"data-testid": `crew-skill-menu-uninstall-${skill.skill_code}`,
-					},
-				]
+				const skillDescription =
+					resolveCrewI18nText(skill.description_i18n, i18n.language) ||
+					t("skills.emptyTitle")
+				const menuItems = readOnly
+					? []
+					: [
+							{
+								key: "uninstall",
+								icon: isBusy ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<Trash2 className="h-4 w-4" />
+								),
+								label: t("skills.uninstall"),
+								danger: true,
+								disabled: isBusy,
+								onClick: () => void handleUninstallSkill(skill.skill_code),
+								"data-testid": `crew-skill-menu-uninstall-${skill.skill_code}`,
+							},
+						]
 
 				return (
 					<div key={skill.skill_code}>
 						{index > 0 && <Separator />}
 						<MagicDropdown
 							menu={{ items: menuItems }}
-							trigger={["contextMenu"]}
+							trigger={readOnly ? [] : ["contextMenu"]}
 							rootClassName="block"
 						>
 							<div
-								className="group flex items-start gap-2.5 px-3 py-3 transition-colors duration-200 ease-out hover:bg-accent/20"
+								className="group flex min-w-0 max-w-full items-start gap-2.5 px-3 py-3 transition-colors duration-200 ease-out hover:bg-accent/20"
 								data-testid={`crew-skill-item-row-${skill.skill_code}`}
 							>
 								<SkillThumbnail
@@ -398,29 +413,34 @@ const SidebarSkillList = observer(function SidebarSkillList() {
 									<p className="truncate text-sm font-medium text-foreground">
 										{resolveCrewI18nText(skill.name_i18n, i18n.language)}
 									</p>
-									<p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
-										{resolveCrewI18nText(
-											skill.description_i18n,
-											i18n.language,
-										) || t("skills.emptyTitle")}
-									</p>
+									<SmartTooltip
+										elementType="div"
+										maxLines={3}
+										className="mt-1 w-full min-w-0 text-xs leading-4 text-muted-foreground"
+										content={skillDescription}
+										data-testid={`crew-skill-description-${skill.skill_code}`}
+									>
+										{skillDescription}
+									</SmartTooltip>
 								</div>
-								<MagicDropdown menu={{ items: menuItems }} trigger={["click"]}>
-									<span>
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-7 shrink-0 rounded-md text-muted-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground"
-											data-testid={`crew-skill-item-more-${skill.skill_code}`}
-										>
-											{isBusy ? (
-												<Loader2 className="size-4 animate-spin" />
-											) : (
-												<MoreHorizontal className="size-4" />
-											)}
-										</Button>
-									</span>
-								</MagicDropdown>
+								{readOnly ? null : (
+									<MagicDropdown menu={{ items: menuItems }} trigger={["click"]}>
+										<span>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-7 shrink-0 rounded-md text-muted-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground"
+												data-testid={`crew-skill-item-more-${skill.skill_code}`}
+											>
+												{isBusy ? (
+													<Loader2 className="size-4 animate-spin" />
+												) : (
+													<MoreHorizontal className="size-4" />
+												)}
+											</Button>
+										</span>
+									</MagicDropdown>
+								)}
 							</div>
 						</MagicDropdown>
 					</div>
@@ -430,7 +450,11 @@ const SidebarSkillList = observer(function SidebarSkillList() {
 	)
 })
 
-const SidebarPlaybookList = observer(function SidebarPlaybookList() {
+const SidebarPlaybookList = observer(function SidebarPlaybookList({
+	readOnly = false,
+}: {
+	readOnly?: boolean
+}) {
 	const { t, i18n } = useTranslation("crew/create")
 	const { layout, playbook } = useCrewEditStore()
 	const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -450,10 +474,12 @@ const SidebarPlaybookList = observer(function SidebarPlaybookList() {
 	}
 
 	function handleToggleScene(sceneId: string) {
+		if (readOnly) return
 		void playbook.toggleSceneEnabled(sceneId)
 	}
 
 	async function handleDeleteScene(sceneId: string) {
+		if (readOnly) return
 		const shouldCloseEditor =
 			layout.activeDetailKey === CREW_EDIT_STEP.Playbook &&
 			activeResolvedPlaybookId === sceneId
@@ -551,57 +577,59 @@ const SidebarPlaybookList = observer(function SidebarPlaybookList() {
 									</p>
 								</div>
 							</button>
-							<MagicDropdown
-								placement="bottomRight"
-								menu={{
-									items: [
-										{
-											key: "edit",
-											icon: <PenLine className="h-4 w-4" />,
-											label: t("playbook.actions.edit"),
-											onClick: () => handleOpenScene(scene.id),
-											"data-testid": `crew-playbook-menu-edit-${scene.id}`,
-										},
-										{
-											key: scene.enabled ? "disable" : "enable",
-											icon: scene.enabled ? (
-												<Pause className="h-4 w-4" />
-											) : (
-												<Play className="h-4 w-4" />
-											),
-											label: scene.enabled
-												? t("playbook.actions.disable")
-												: t("playbook.actions.enable"),
-											onClick: () => handleToggleScene(scene.id),
-											"data-testid": `crew-playbook-menu-toggle-${scene.id}`,
-										},
-										{ type: "divider" },
-										{
-											key: "delete",
-											icon: <Trash2 className="h-4 w-4" />,
-											label: t("playbook.actions.delete"),
-											danger: true,
-											onClick: () => void handleDeleteScene(scene.id),
-											"data-testid": `crew-playbook-menu-delete-${scene.id}`,
-										},
-									],
-								}}
-							>
-								<span>
-									<Button
-										variant="ghost"
-										size="icon"
-										className={cn(
-											"size-7 shrink-0 rounded-md text-muted-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground",
-											activeResolvedPlaybookId === scene.id &&
-												"text-foreground",
-										)}
-										data-testid={`crew-playbook-item-more-${scene.id}`}
-									>
-										<MoreHorizontal className="size-4" />
-									</Button>
-								</span>
-							</MagicDropdown>
+							{readOnly ? null : (
+								<MagicDropdown
+									placement="bottomRight"
+									menu={{
+										items: [
+											{
+												key: "edit",
+												icon: <PenLine className="h-4 w-4" />,
+												label: t("playbook.actions.edit"),
+												onClick: () => handleOpenScene(scene.id),
+												"data-testid": `crew-playbook-menu-edit-${scene.id}`,
+											},
+											{
+												key: scene.enabled ? "disable" : "enable",
+												icon: scene.enabled ? (
+													<Pause className="h-4 w-4" />
+												) : (
+													<Play className="h-4 w-4" />
+												),
+												label: scene.enabled
+													? t("playbook.actions.disable")
+													: t("playbook.actions.enable"),
+												onClick: () => handleToggleScene(scene.id),
+												"data-testid": `crew-playbook-menu-toggle-${scene.id}`,
+											},
+											{ type: "divider" },
+											{
+												key: "delete",
+												icon: <Trash2 className="h-4 w-4" />,
+												label: t("playbook.actions.delete"),
+												danger: true,
+												onClick: () => void handleDeleteScene(scene.id),
+												"data-testid": `crew-playbook-menu-delete-${scene.id}`,
+											},
+										],
+									}}
+								>
+									<span>
+										<Button
+											variant="ghost"
+											size="icon"
+											className={cn(
+												"size-7 shrink-0 rounded-md text-muted-foreground transition-colors duration-200 ease-out hover:bg-accent/30 hover:text-foreground",
+												activeResolvedPlaybookId === scene.id &&
+													"text-foreground",
+											)}
+											data-testid={`crew-playbook-item-more-${scene.id}`}
+										>
+											<MoreHorizontal className="size-4" />
+										</Button>
+									</span>
+								</MagicDropdown>
+							)}
 						</div>
 					</div>
 				)
@@ -644,6 +672,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 		FUNCTION_PERMISSION_CODE.AgentPublish,
 	)
 	const canOpenAgentPublishPanel = canCreateAgent || canPublishAgentTeam
+	const isViewer = isReadOnlyProject(conversation.selectedProject?.user_role)
 	const { avatarUrl } = useMemberDisplay({
 		name_i18n: identity.name_i18n,
 		role_i18n: identity.role_i18n,
@@ -665,6 +694,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 		identity,
 		layout,
 		isInitializing: crewCode == null || initLoading,
+		readOnly: isViewer,
 		projectId: conversation.selectedProject?.id,
 		openPublishingStep: () => handleAdvancedStep(CREW_EDIT_STEP.Publishing),
 	})
@@ -737,6 +767,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 	}
 
 	function handleCreatePlaybook() {
+		if (isViewer) return
 		const scene = playbook.createScene()
 		layout.openPlaybook(scene.id)
 	}
@@ -774,7 +805,12 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 				>
 					<div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
 						{avatarUrl ? (
-							<img src={avatarUrl} alt="" className="h-full w-full object-cover"  data-testid="config-steps-panel-image"/>
+							<img
+								src={avatarUrl}
+								alt=""
+								className="h-full w-full object-cover"
+								data-testid="config-steps-panel-image"
+							/>
 						) : (
 							<RoleIcon className="h-3.5 w-3.5" />
 						)}
@@ -856,7 +892,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 													})}
 												</Badge>
 											)}
-											{canCreateAgent ? (
+											{canCreateAgent && !isViewer ? (
 												<SkillAddDropdown
 													onAddFromLibrary={() =>
 														layout.openSkillsPanel(
@@ -890,7 +926,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 										className="h-full"
 										data-testid="crew-skills-scroll-area"
 									>
-										<SidebarSkillList />
+										<SidebarSkillList readOnly={isViewer} />
 									</ScrollArea>
 								</SidebarExpandableItem>
 							)}
@@ -903,19 +939,21 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 										isActive={isKnowledgeActive}
 										isExpanded={isKnowledgeExpanded}
 										trailing={
-											<Button
-												variant="ghost"
-												size="icon"
-												className="h-6 w-6"
-												onClick={(event) => {
-													event.stopPropagation()
-													setEditingKnowledge(null)
-													setKnowledgeDialogOpen(true)
-												}}
-												data-testid="crew-step-knowledge-base-add"
-											>
-												<Plus className="h-4 w-4" />
-											</Button>
+											isViewer ? null : (
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-6 w-6"
+													onClick={(event) => {
+														event.stopPropagation()
+														setEditingKnowledge(null)
+														setKnowledgeDialogOpen(true)
+													}}
+													data-testid="crew-step-knowledge-base-add"
+												>
+													<Plus className="h-4 w-4" />
+												</Button>
+											)
 										}
 										testId="crew-step-knowledge-base"
 										className={cn(
@@ -936,6 +974,7 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 											data-testid="crew-knowledge-scroll-area"
 										>
 											<SidebarKnowledgeList
+												readOnly={isViewer}
 												onEditKnowledge={(kb) => {
 													setEditingKnowledge(kb)
 													setKnowledgeDialogOpen(true)
@@ -955,19 +994,21 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 										isExpanded={isPlaybookExpanded}
 										// leading={<SlidersHorizontal className="h-4 w-4" />}
 										trailing={
-											<Button
-												variant="ghost"
-												size="icon"
-												className="h-6 w-6"
-												onClick={handleCreatePlaybook}
-												data-testid="crew-step-playbook-add"
-											>
-												<Plus className="h-4 w-4" />
-											</Button>
+											isViewer ? null : (
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-6 w-6"
+													onClick={handleCreatePlaybook}
+													data-testid="crew-step-playbook-add"
+												>
+													<Plus className="h-4 w-4" />
+												</Button>
+											)
 										}
 										testId="crew-scenario-presets-button"
 									>
-										<SidebarPlaybookList />
+										<SidebarPlaybookList readOnly={isViewer} />
 									</SidebarExpandableItem>
 								</>
 							)}
@@ -976,77 +1017,82 @@ function ConfigStepsPanel({ onBack, filesContent }: ConfigStepsPanelProps) {
 				</div>
 			</SidebarSection>
 
-			<SidebarSection testId="crew-sidebar-footer-panel" className="shrink-0">
-				{isCrewStepEnabled(CREW_EDIT_STEP.RunAndDebug) && (
-					<SidebarRow
-						label={t("steps.runAndDebug")}
-						onClick={() => handleAdvancedStep(CREW_EDIT_STEP.RunAndDebug)}
-						isActive={layout.activeDetailKey === CREW_EDIT_STEP.RunAndDebug}
-						leading={<CirclePlay className="h-4 w-4" />}
-						testId="crew-step-run-and-debug"
+			{isViewer ? null : (
+				<SidebarSection testId="crew-sidebar-footer-panel" className="shrink-0">
+					{isCrewStepEnabled(CREW_EDIT_STEP.RunAndDebug) && (
+						<SidebarRow
+							label={t("steps.runAndDebug")}
+							onClick={() => handleAdvancedStep(CREW_EDIT_STEP.RunAndDebug)}
+							isActive={layout.activeDetailKey === CREW_EDIT_STEP.RunAndDebug}
+							leading={<CirclePlay className="h-4 w-4" />}
+							testId="crew-step-run-and-debug"
+						/>
+					)}
+					{isCrewStepEnabled(CREW_EDIT_STEP.RunAndDebug) &&
+						isCrewStepEnabled(CREW_EDIT_STEP.Publishing) && <Separator />}
+					<CrewCollaboratorsEntry
+						crewCode={crewCode}
+						userRole={store.conversation.selectedProject?.user_role}
+						showTrailingSeparator={isCrewStepEnabled(CREW_EDIT_STEP.Publishing)}
 					/>
-				)}
-				{isCrewStepEnabled(CREW_EDIT_STEP.RunAndDebug) &&
-					isCrewStepEnabled(CREW_EDIT_STEP.Publishing) && <Separator />}
-				<CrewCollaboratorsEntry
-					crewCode={crewCode}
-					userRole={store.conversation.selectedProject?.user_role}
-					showTrailingSeparator={isCrewStepEnabled(CREW_EDIT_STEP.Publishing)}
+					{isCrewStepEnabled(CREW_EDIT_STEP.Publishing) && (
+						<SidebarRow
+							label={t("steps.publishing")}
+							onClick={handleOpenPublishing}
+							disabled={!canOpenAgentPublishPanel}
+							hideChevron={!canOpenAgentPublishPanel}
+							isActive={layout.activeDetailKey === CREW_EDIT_STEP.Publishing}
+							leading={<CloudUpload className="h-4 w-4" />}
+							trailing={
+								!canOpenAgentPublishPanel ? (
+									<span
+										className="text-xs text-muted-foreground"
+										data-testid="crew-step-publishing-no-permission"
+									>
+										{t("status.noPublishPermission")}
+									</span>
+								) : (
+									<>
+										{store.hasUnpublishedChanges ? (
+											<Badge
+												variant="secondary"
+												className="h-5 rounded-md bg-amber-500/10 px-2 text-[10px] font-medium text-amber-500"
+											>
+												{t("status.unpublished")}
+											</Badge>
+										) : null}
+										{isPublishingPending ? (
+											<Loader2
+												className="h-4 w-4 animate-spin text-muted-foreground"
+												data-testid="crew-step-publishing-loading"
+											/>
+										) : null}
+									</>
+								)
+							}
+							testId="crew-step-publishing"
+						/>
+					)}
+				</SidebarSection>
+			)}
+			{isViewer ? null : (
+				<CreateKnowledgeDialog
+					open={knowledgeDialogOpen}
+					onOpenChange={(open) => {
+						setKnowledgeDialogOpen(open)
+						if (!open) setEditingKnowledge(null)
+					}}
+					onSuccess={() => void store.knowledge.fetchKnowledgeList(true, true)}
+					editKnowledge={editingKnowledge}
 				/>
-				{isCrewStepEnabled(CREW_EDIT_STEP.Publishing) && (
-					<SidebarRow
-						label={t("steps.publishing")}
-						onClick={handleOpenPublishing}
-						disabled={!canOpenAgentPublishPanel}
-						hideChevron={!canOpenAgentPublishPanel}
-						isActive={layout.activeDetailKey === CREW_EDIT_STEP.Publishing}
-						leading={<CloudUpload className="h-4 w-4" />}
-						trailing={
-							!canOpenAgentPublishPanel ? (
-								<span
-									className="text-xs text-muted-foreground"
-									data-testid="crew-step-publishing-no-permission"
-								>
-									{t("status.noPublishPermission")}
-								</span>
-							) : (
-								<>
-									{store.hasUnpublishedChanges ? (
-										<Badge
-											variant="secondary"
-											className="h-5 rounded-md bg-amber-500/10 px-2 text-[10px] font-medium text-amber-500"
-										>
-											{t("status.unpublished")}
-										</Badge>
-									) : null}
-									{isPublishingPending ? (
-										<Loader2
-											className="h-4 w-4 animate-spin text-muted-foreground"
-											data-testid="crew-step-publishing-loading"
-										/>
-									) : null}
-								</>
-							)
-						}
-						testId="crew-step-publishing"
-					/>
-				)}
-			</SidebarSection>
-			<CreateKnowledgeDialog
-				open={knowledgeDialogOpen}
-				onOpenChange={(open) => {
-					setKnowledgeDialogOpen(open)
-					if (!open) setEditingKnowledge(null)
-				}}
-				onSuccess={() => void store.knowledge.fetchKnowledgeList(true, true)}
-				editKnowledge={editingKnowledge}
-			/>
+			)}
 			<EditCrewDialog
 				open={isCrewIdentityDialogOpen}
 				onOpenChange={handleCrewIdentityDialogOpenChange}
 				onSuccess={handleCrewIdentitySaved}
 				isPrePublishMode={isPublishIdentityDialogOpen}
 				defaultNameRequiredMessage={t("publishNameDialog.required")}
+				readOnly={isViewer}
 			/>
 		</div>
 	)

@@ -89,10 +89,25 @@ export interface DetailTerminalData {
 }
 
 /** 浏览器 Browser */
+export interface DetailBrowserAttachment {
+	file_key?: string
+	file_url?: string
+	file_id?: string | null
+}
+
 export interface DetailBrowserData {
 	url: string
-	screenshot: string
-	preview: string
+	title?: string
+	file_id?: string | null
+	file_key?: string | null
+	screenshot?: string
+	preview?: string
+	action?: string
+	summary?: string
+	detail?: string
+	page_title?: string
+	target?: string
+	status?: "succeeded" | "failed"
 }
 
 /** MD文件 TextEditor */

@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest"
 import type { GenerateVideoRequest } from "../../../public/magic-types"
 import {
+	hasVideoGenerationRequestEstimateIntent,
 	hasVideoGenerationRequestMediaIntent,
-	hasVideoGenerationRequestUserIntent,
+	hasVideoGenerationRequestSubmitIntent,
 } from "../videoGenerationRequestIntent"
 
 describe("videoGenerationRequestIntent", () => {
-	it("requires prompt or media input for user intent", () => {
+	it("requires prompt or media input for estimate intent", () => {
 		expect(
-			hasVideoGenerationRequestUserIntent({
+			hasVideoGenerationRequestEstimateIntent({
 				model_id: "video-model",
 				prompt: " ",
 			}),
 		).toBe(false)
 		expect(
-			hasVideoGenerationRequestUserIntent({
+			hasVideoGenerationRequestEstimateIntent({
 				model_id: "video-model",
 				prompt: "make a launch video",
 			}),
@@ -32,7 +33,25 @@ describe("videoGenerationRequestIntent", () => {
 		}
 
 		expect(hasVideoGenerationRequestMediaIntent(request)).toBe(true)
-		expect(hasVideoGenerationRequestUserIntent(request)).toBe(true)
+		expect(hasVideoGenerationRequestEstimateIntent(request)).toBe(true)
+	})
+
+	it("requires a non-empty prompt for submit intent", () => {
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				model_id: "video-model",
+				prompt: " ",
+				inputs: {
+					reference_videos: [{ uri: "./videos/linked.mp4" }],
+				},
+			}),
+		).toBe(false)
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				model_id: "video-model",
+				prompt: "make a launch video",
+			}),
+		).toBe(true)
 	})
 
 	it("ignores empty media fields and supports legacy request fields", () => {

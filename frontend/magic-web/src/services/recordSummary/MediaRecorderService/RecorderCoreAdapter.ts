@@ -208,7 +208,12 @@ export class RecorderCoreAdapter {
 				state: this.state,
 			})
 		} catch (error) {
-			this.dependencies.logger.error("Failed to start recording:", error)
+			this.dependencies.logger.error({
+				eventKey: "start_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to start recording:",
+			})
 			this.setState("error")
 			await this.cleanup()
 			this.events.onError?.(error as Error)
@@ -248,7 +253,12 @@ export class RecorderCoreAdapter {
 			this.dependencies.logger.log("Recording stopped")
 			this.setState("idle")
 		} catch (error) {
-			this.dependencies.logger.error("Error stopping recording:", error)
+			this.dependencies.logger.error({
+				eventKey: "stopping_recording_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Error stopping recording:",
+			})
 			this.setState("error")
 			this.events.onError?.(
 				new RecorderError("Failed to stop recording", "STOP_FAILED", error as Error),
@@ -412,7 +422,12 @@ export class RecorderCoreAdapter {
 				resumed: wasRecording,
 			})
 		} catch (error) {
-			this.dependencies.logger.error("Failed to switch audio source:", error)
+			this.dependencies.logger.error({
+				eventKey: "switch_audio_source_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch audio source:",
+			})
 
 			// Rollback config to old audio source
 			this.config.audioSource = {
@@ -508,7 +523,12 @@ export class RecorderCoreAdapter {
 				newDeviceId: deviceId,
 			})
 		} catch (error) {
-			this.dependencies.logger.error("Failed to switch microphone device", error)
+			this.dependencies.logger.error({
+				eventKey: "switch_microphone_device_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to switch microphone device",
+			})
 
 			// Rollback to previous deviceId
 			this.config.audioSource = {
@@ -543,10 +563,10 @@ export class RecorderCoreAdapter {
 			state: this.state,
 			session: this.sessionId
 				? {
-					sessionId: this.sessionId,
-					chunkIndex: this.chunkIndex,
-					startTime: Date.now(), // Simplified, should track actual start time
-				}
+						sessionId: this.sessionId,
+						chunkIndex: this.chunkIndex,
+						startTime: Date.now(), // Simplified, should track actual start time
+					}
 				: null,
 			bufferDuration: this.bufferManager?.getDuration() || 0,
 			isPaused: this.state === "paused",
@@ -647,7 +667,12 @@ export class RecorderCoreAdapter {
 
 			this.dependencies.logger.log("RecorderCoreAdapter cleanup completed")
 		} catch (error) {
-			this.dependencies.logger.error("Error during cleanup:", error)
+			this.dependencies.logger.error({
+				eventKey: "cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "Error during cleanup:",
+			})
 		}
 	}
 
@@ -712,7 +737,12 @@ export class RecorderCoreAdapter {
 		} catch (error) {
 			// Don't fallback if permission is denied or fallback is disabled
 			if (this.isPermissionDeniedError(error)) {
-				this.dependencies.logger.error("Permission denied for audio source:", error)
+				this.dependencies.logger.error({
+					eventKey: "permission_denied_audio_source_failed",
+					errorKind: "permission",
+					error: error,
+					message: "Permission denied for audio source:",
+				})
 				throw error
 			}
 
@@ -894,7 +924,12 @@ export class RecorderCoreAdapter {
 					}
 				},
 				(error: Error) => {
-					this.dependencies.logger.error("AudioWorklet error:", error)
+					this.dependencies.logger.error({
+						eventKey: "audio_worklet_failed",
+						errorKind: "worker",
+						error: error,
+						message: "AudioWorklet error:",
+					})
 					this.events.onError?.(error)
 				},
 				(metrics) => {
@@ -954,7 +989,12 @@ export class RecorderCoreAdapter {
 
 			this.dependencies.logger.log("AudioWorklet processing set up successfully")
 		} catch (error) {
-			this.dependencies.logger.error("Failed to set up AudioWorklet processing:", error)
+			this.dependencies.logger.error({
+				eventKey: "audio_worklet_setup_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Failed to set up AudioWorklet processing:",
+			})
 			throw error
 		}
 	}
@@ -1099,7 +1139,12 @@ export class RecorderCoreAdapter {
 
 				this.dependencies.logger.log("ScriptProcessor set up successfully")
 			} catch (error) {
-				this.dependencies.logger.error("Failed to set up ScriptProcessor:", error)
+				this.dependencies.logger.error({
+					eventKey: "set_up_script_processor_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "Failed to set up ScriptProcessor:",
+				})
 			}
 		}
 	}
@@ -1166,7 +1211,12 @@ export class RecorderCoreAdapter {
 			// Notify about chunk ready
 			this.events.onChunkReady?.(storedChunk, currentChunkIndex)
 		} catch (error) {
-			this.dependencies.logger.error("Failed to handle chunk ready:", error)
+			this.dependencies.logger.error({
+				eventKey: "handle_chunk_ready_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to handle chunk ready:",
+			})
 			this.events.onError?.(error as Error)
 		}
 	}
@@ -1253,7 +1303,12 @@ export class RecorderCoreAdapter {
 
 			return hasGetUserMedia && hasAudioContext
 		} catch (error) {
-			logger.error("Error checking browser support:", error)
+			logger.error({
+				eventKey: "checking_browser_support_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Error checking browser support:",
+			})
 			return false
 		}
 	}
@@ -1287,7 +1342,12 @@ export class RecorderCoreAdapter {
 
 			return true
 		} catch (error) {
-			logger.error("Error checking AudioWorklet support:", error)
+			logger.error({
+				eventKey: "checking_audio_worklet_support_failed",
+				errorKind: "worker",
+				error: error,
+				message: "Error checking AudioWorklet support:",
+			})
 			return false
 		}
 	}

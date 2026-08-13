@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 import type { MessageCommittedEvent } from "../contracts/message-committed"
+import type { ToolCallSettledEvent } from "../contracts/tool-call-settled"
 import { createSuperMagicEventEmitter } from "../internal/emitter"
+import type { SuperMagicEventScope } from "../subscribe"
 
 function createMessageCommittedEvent(sequence = 1): MessageCommittedEvent {
 	return {
@@ -23,7 +25,9 @@ function createMessageCommittedEvent(sequence = 1): MessageCommittedEvent {
 				seqId: String(sequence),
 				role: "assistant",
 				type: "super_magic_message",
-				status: "running",
+				imStatus: "read",
+				superStatus: "running",
+				status: "read",
 				sendTime: 1_000,
 			},
 			operation: "insert",
@@ -31,6 +35,53 @@ function createMessageCommittedEvent(sequence = 1): MessageCommittedEvent {
 			changedFields: ["appMessageId", "status"],
 		},
 	}
+}
+
+function createToolCallSettledEvent(sequence = 1, toolCallId = "tool-a"): ToolCallSettledEvent {
+	return {
+		type: "toolCall.settled",
+		meta: {
+			sequence,
+			revision: sequence,
+			occurredAt: 1_000 + sequence,
+			source: "im",
+			topicId: "topic-a",
+			correlationId: "correlation-a",
+			appMessageId: "message-a",
+			toolCallId,
+		},
+		payload: {
+			toolCall: { id: toolCallId, name: "read_file", index: 0 },
+			response: { status: "finished" },
+			strength: "strong",
+			replaceable: false,
+		},
+	}
+}
+
+function expectIndependentScopeFilter(
+	scope: SuperMagicEventScope,
+	matchingMeta: Partial<MessageCommittedEvent["meta"]>,
+	mismatchingMeta: Partial<MessageCommittedEvent["meta"]>,
+): void {
+	const emitter = createSuperMagicEventEmitter()
+	const callback = vi.fn()
+	emitter.subscribe("message.committed", callback, { scope })
+
+	const matchingEvent = {
+		...createMessageCommittedEvent(),
+		meta: { ...createMessageCommittedEvent().meta, ...matchingMeta },
+	}
+	const mismatchingEvent = {
+		...createMessageCommittedEvent(2),
+		meta: { ...createMessageCommittedEvent(2).meta, ...mismatchingMeta },
+	}
+
+	emitter.emit(matchingEvent)
+	emitter.emit(mismatchingEvent)
+
+	expect(callback).toHaveBeenCalledTimes(1)
+	expect(callback).toHaveBeenCalledWith(matchingEvent)
 }
 
 describe("SuperMagic Store event emitter", () => {
@@ -53,24 +104,73 @@ describe("SuperMagic Store event emitter", () => {
 		expect(callback).toHaveBeenCalledTimes(3)
 	})
 
-	it("filters subscriptions by event scope", () => {
+	it("filters subscriptions by topicId match versus mismatch", () => {
+		expectIndependentScopeFilter(
+			{ topicId: "topic-a" },
+			{ topicId: "topic-a" },
+			{ topicId: "topic-b" },
+		)
+	})
+
+	it("filters subscriptions by correlationId match versus mismatch", () => {
+		expectIndependentScopeFilter(
+			{ correlationId: "correlation-a" },
+			{ correlationId: "correlation-a" },
+			{ correlationId: "correlation-b" },
+		)
+	})
+
+	it("filters subscriptions by appMessageId match versus mismatch", () => {
+		expectIndependentScopeFilter(
+			{ appMessageId: "message-a" },
+			{ appMessageId: "message-a" },
+			{ appMessageId: "message-b" },
+		)
+	})
+
+	it("filters subscriptions by toolCallId match versus mismatch", () => {
 		const emitter = createSuperMagicEventEmitter()
 		const callback = vi.fn()
-		emitter.subscribe("message.committed", callback, {
+		emitter.subscribe("toolCall.settled", callback, {
+			scope: { toolCallId: "tool-a" },
+		})
+		const matchingEvent = createToolCallSettledEvent(1, "tool-a")
+
+		emitter.emit(matchingEvent)
+		emitter.emit(createToolCallSettledEvent(2, "tool-b"))
+
+		expect(callback).toHaveBeenCalledTimes(1)
+		expect(callback).toHaveBeenCalledWith(matchingEvent)
+	})
+
+	it("requires every populated scope field to match", () => {
+		const emitter = createSuperMagicEventEmitter()
+		const callback = vi.fn()
+		emitter.subscribe("toolCall.settled", callback, {
 			scope: {
 				topicId: "topic-a",
 				correlationId: "correlation-a",
 				appMessageId: "message-a",
+				toolCallId: "tool-a",
 			},
 		})
+		const matchingEvent = createToolCallSettledEvent(1, "tool-a")
 
-		emitter.emit(createMessageCommittedEvent())
-		emitter.emit({
-			...createMessageCommittedEvent(2),
-			meta: { ...createMessageCommittedEvent(2).meta, topicId: "topic-b" },
-		})
+		emitter.emit(matchingEvent)
+		for (const mismatchingMeta of [
+			{ topicId: "topic-b" },
+			{ correlationId: "correlation-b" },
+			{ appMessageId: "message-b" },
+			{ toolCallId: "tool-b" },
+		]) {
+			emitter.emit({
+				...createToolCallSettledEvent(2, "tool-a"),
+				meta: { ...createToolCallSettledEvent(2, "tool-a").meta, ...mismatchingMeta },
+			})
+		}
 
 		expect(callback).toHaveBeenCalledTimes(1)
+		expect(callback).toHaveBeenCalledWith(matchingEvent)
 	})
 
 	it("evaluates predicate filters after scope matching", () => {

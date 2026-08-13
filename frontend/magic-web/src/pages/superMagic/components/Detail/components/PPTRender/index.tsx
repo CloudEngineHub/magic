@@ -1,9 +1,9 @@
-import { useEffect, useRef, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { ChevronDown, Loader2, PanelLeftOpen, Presentation, Plus } from "lucide-react"
-import PPTSlide from "./PPTSlide"
+import PPTSlide, { type PPTSlideToolbarModel } from "./PPTSlide"
 import PPTSidebar from "./PPTSidebar/index"
 import { PPTControlBar } from "./PPTControlBar"
 import {
@@ -11,7 +11,6 @@ import {
 	useFullscreen,
 	useSlideFileLocator,
 	useCheckBeforeNavigate,
-	useScrollActiveSlideIntoView,
 	usePPTEventBus,
 	usePPTStore,
 	useSyncActiveState,
@@ -19,6 +18,7 @@ import {
 	useSlideNavigation,
 	useSlideHandlers,
 } from "./hooks"
+import { getLiveRenderSlideKey, usePPTLiveRenderCache } from "./hooks/usePPTLiveRenderCache"
 import { useResizableSidebar } from "./hooks/useResizableSidebar"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
@@ -41,10 +41,33 @@ import { cn } from "@/lib/utils"
 import { PPTProvider } from "./contexts/PPTContext"
 import { useContainerShowButtonText } from "@/hooks/useContainerShowButtonText"
 import type { MenuProps } from "antd"
+import { getPPTLiveRenderCacheSize } from "./PPTSidebar/utils/devicePerformance"
+import EditToolbar from "../EditToolbar"
 
 interface ManualSaveResult {
 	fileId?: string
 	cleanContent?: string
+}
+
+export function reconcilePPTSlideToolbarModels(
+	currentModels: Map<string, PPTSlideToolbarModel>,
+	ownerKey: string,
+	model: PPTSlideToolbarModel | null,
+	token: object,
+): Map<string, PPTSlideToolbarModel> {
+	const currentModel = currentModels.get(ownerKey)
+
+	if (model) {
+		if (currentModel === model) return currentModels
+		const nextModels = new Map(currentModels)
+		nextModels.set(ownerKey, model)
+		return nextModels
+	}
+
+	if (!currentModel || currentModel.token !== token) return currentModels
+	const nextModels = new Map(currentModels)
+	nextModels.delete(ownerKey)
+	return nextModels
 }
 
 function getHtmlRelativeFolderPath(fileItem?: { relative_file_path?: string; file_name?: string }) {
@@ -116,6 +139,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 		mainFileId,
 		mainFileName,
 		displayConfig,
+		initialActiveIndex,
 		selectedProject,
 		projectId,
 		allowDownload,
@@ -139,6 +163,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			mainFileId,
 			mainFileName,
 			displayConfig: effectiveDisplayConfig,
+			initialActiveIndex,
 			organizationCode,
 			selectedProjectId: selectedProject?.id,
 			enableCache: true,
@@ -151,6 +176,7 @@ const PPTRender = function PPTRender(props: PPTRenderProps) {
 			mainFileId,
 			mainFileName,
 			effectiveDisplayConfig,
+			initialActiveIndex,
 			organizationCode,
 			selectedProject?.id,
 			allowDownload,
@@ -248,17 +274,19 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		handleSidebarCollapsedChange,
 	} = useSlideHandlers({ store, setIsAnySlideEditing, setIsSidebarCollapsed })
 
-	// 在文件树中定位活动幻灯片，并将缩略图滚动到可见区域
+	// 在文件树中定位活动幻灯片；缩略图滚动由虚拟侧边栏自身负责。
 	useSlideFileLocator({ store })
-	useScrollActiveSlideIntoView({ store })
 
-	// 全屏功能 - 在 usePPTSidebar 之前调用以便后续使用 isFullscreen
-	const { isFullscreen, toggleFullscreen } = useFullscreen({ containerRef })
+	// 这里只表示 PPT 放映全屏。外层 FilesViewer 全屏只放大完整查看界面，不能隐藏侧栏和工具栏。
+	const {
+		isFullscreen: isPresentationFullscreen,
+		toggleFullscreen: togglePresentationFullscreen,
+	} = useFullscreen({ containerRef })
 
-	// 同步全屏状态到 store 以计算 visibleSlides
-	useEffect(() => {
-		store.setFullscreen(isFullscreen)
-	}, [isFullscreen, store])
+	// 先于子组件的被动 effect 同步，避免退出全屏时侧栏恢复请求仍被旧状态丢弃。
+	useLayoutEffect(() => {
+		store.setFullscreen(isPresentationFullscreen)
+	}, [isPresentationFullscreen, store])
 
 	// 订阅下载事件
 	useEffect(() => {
@@ -272,15 +300,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useEffect(() => {
 		const unsubscribe = onFullscreenToggle(() => {
 			if (onFileFullscreen) onFileFullscreen()
-			else toggleFullscreen()
+			else togglePresentationFullscreen()
 		})
 		return unsubscribe
-	}, [onFileFullscreen, toggleFullscreen, onFullscreenToggle])
+	}, [onFileFullscreen, togglePresentationFullscreen, onFullscreenToggle])
 
 	// 发出全屏状态变化事件
 	useEffect(() => {
-		emitFullscreenStateChange(isFullscreen)
-	}, [isFullscreen, emitFullscreenStateChange])
+		emitFullscreenStateChange(isPresentationFullscreen)
+	}, [isPresentationFullscreen, emitFullscreenStateChange])
 
 	// 在移动模式下禁用编辑功能
 	const effectiveAllowEdit = allowEdit && !isMobile
@@ -358,14 +386,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 					changeSlide("next")
 					break
 				case " ":
-					if (isFullscreen) changeSlide("next")
+					if (isPresentationFullscreen) changeSlide("next")
 					break
 			}
 		}
 
 		window.addEventListener("keydown", handleKeyDown)
 		return () => window.removeEventListener("keydown", handleKeyDown)
-	}, [changeSlide, isFullscreen, isAnySlideEditing, isDeleteModalOpen])
+	}, [changeSlide, isPresentationFullscreen, isAnySlideEditing, isDeleteModalOpen])
 
 	// iframe postMessage 导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
 	useEffect(() => {
@@ -396,7 +424,66 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const slideContainerRef = useRef<HTMLDivElement>(null)
 	const shouldShowButtonText = useContainerShowButtonText(slideContainerRef, 700)
 
-	const visibleSlides = store.visibleSlides
+	const [liveRenderCacheSize] = useState(() => getPPTLiveRenderCacheSize())
+	const localRenderScopeId = useId()
+	const liveRenderScopeKey = mainFileId || `local-ppt-render:${localRenderScopeId}`
+	const [toolbarModels, setToolbarModels] = useState<Map<string, PPTSlideToolbarModel>>(
+		() => new Map(),
+	)
+	const toolbarHostRef = useRef<HTMLDivElement>(null)
+	const handleToolbarModelChange = useCallback(
+		(ownerKey: string, model: PPTSlideToolbarModel | null, token: object) => {
+			setToolbarModels((currentModels) =>
+				reconcilePPTSlideToolbarModels(currentModels, ownerKey, model, token),
+			)
+		},
+		[],
+	)
+	const pinnedSlideKeys = store.slides
+		.filter((slide) => {
+			const fileId = store.getFileIdByPath(slide.path)
+			return Boolean(fileId && store.getSlideEditingState(fileId))
+		})
+		.map(getLiveRenderSlideKey)
+	const { residentSlides, presentedKey, pendingKey, warmSlideIndices, onSlideReadyChange } =
+		usePPTLiveRenderCache({
+			slides: store.slides,
+			activeIndex: store.activeIndex,
+			capacity: isPresentationFullscreen
+				? Math.max(5, liveRenderCacheSize)
+				: isMobile
+					? 3
+					: liveRenderCacheSize,
+			neighborRadius: isPresentationFullscreen ? 2 : 1,
+			scopeKey: liveRenderScopeKey,
+			pinnedKeys: pinnedSlideKeys,
+		})
+	const scopedPresentedKey = presentedKey?.startsWith(`${liveRenderScopeKey}::`)
+		? presentedKey
+		: null
+	const presentedToolbarModel = scopedPresentedKey
+		? toolbarModels.get(scopedPresentedKey)
+		: undefined
+
+	useLayoutEffect(() => {
+		const host = toolbarHostRef.current as (HTMLDivElement & { inert?: boolean }) | null
+		if (!host) return
+
+		host.inert = Boolean(pendingKey)
+		if (pendingKey && host.contains(document.activeElement)) {
+			;(document.activeElement as HTMLElement | null)?.blur?.()
+		}
+	}, [pendingKey, presentedToolbarModel])
+	// Normal viewer mode explicitly prepares the two live neighbors without generating screenshots.
+	// Fullscreen already owns a wider adaptive HTML preload window in PPTStore.
+	useEffect(() => {
+		if (isPresentationFullscreen || !store.isAutomaticLoadingEnabled) return
+
+		warmSlideIndices.forEach((index) => {
+			void store.ensureSlideContent(index, "preview")
+		})
+	}, [isPresentationFullscreen, store, store.isAutomaticLoadingEnabled, warmSlideIndices])
+
 	const hasSlides = store.slideUrls.length > 0
 
 	// 识别“待初始化窗口”：slidePaths 已就绪，但 store 还未灌入 slides
@@ -533,12 +620,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				ref={containerRef}
 				data-testid="ppt-render-container"
 				className={
-					isFullscreen
+					isPresentationFullscreen
 						? `fixed inset-0 ${TAILWIND_Z_INDEX_CLASSES.FULLSCREEN.CONTAINER} flex flex-row`
 						: "relative h-full w-full overflow-hidden"
 				}
 			>
-				{isSidebarCollapsed && (
+				{isSidebarCollapsed && !isPresentationFullscreen && (
 					<MagicTooltip title={t("fileViewer.expandSidebar")}>
 						<Button
 							variant="ghost"
@@ -568,14 +655,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							"shrink-0 overflow-hidden",
 							!isResizing && "transition-all duration-300 ease-in-out",
 							isMobile
-								? isSidebarCollapsed || isFullscreen
+								? isSidebarCollapsed || isPresentationFullscreen
 									? "h-0"
 									: "h-[140px]"
 								: "",
 						)}
 						style={{
 							width: !isMobile
-								? isSidebarCollapsed || isFullscreen
+								? isSidebarCollapsed || isPresentationFullscreen
 									? 0
 									: sidebarWidth
 								: undefined,
@@ -599,15 +686,19 @@ const PPTRenderInner = observer(function PPTRenderInner({
 								onAddToNewChat={handleAddToNewChat}
 								mainFileId={mainFileId}
 								isMobile={isMobile}
+								sidebarWidth={sidebarWidth}
 								allowEdit={effectiveAllowEdit}
 								isCollapsed={isSidebarCollapsed}
+								isPreviewLoadingEnabled={
+									!isSidebarCollapsed && !isPresentationFullscreen
+								}
 								onCollapsedChange={handleSidebarCollapsedChange}
 							/>
 						</div>
 					</div>
 
 					{/* 调整宽度的 Handle - 仅在桌面端且侧边栏未折叠/全屏时显示 */}
-					{!isMobile && !isSidebarCollapsed && !isFullscreen && (
+					{!isMobile && !isSidebarCollapsed && !isPresentationFullscreen && (
 						<div
 							data-testid="ppt-render-sidebar-resize-handle"
 							className="absolute bottom-0 top-0 z-20 w-4 -translate-x-1/2 cursor-col-resize bg-transparent"
@@ -623,7 +714,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						className="min-h-0 min-w-0 flex-1"
 					>
 						<div
-							className="relative h-full w-full overflow-hidden"
+							className="relative flex h-full w-full flex-col overflow-hidden"
 							tabIndex={0}
 							aria-label={
 								hasSlides
@@ -631,31 +722,52 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									: t("ppt.noSlidesAvailable")
 							}
 							data-testid="ppt-render-div"
+							data-pending-slide={pendingKey || undefined}
 						>
-							<div className="relative h-full w-full overflow-hidden">
+							{/* 加载状态覆盖工具栏和画布，保持初始化阶段的原有遮罩语义。 */}
+							{isLoadingOverlayVisible && (
+								<div
+									data-testid="ppt-render-loading"
+									className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm"
+								>
+									<div className="flex items-center gap-2">
+										<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+										<TextAnimation dotwaveAnimation>
+											{t("ppt.loading")}
+										</TextAnimation>
+										{store.loadingProgress > 0 && (
+											<p className="text-xs text-muted-foreground">
+												{store.loadingProgress}%
+											</p>
+										)}
+									</div>
+								</div>
+							)}
+
+							{presentedToolbarModel && (
+								<div
+									ref={toolbarHostRef}
+									data-testid="ppt-render-edit-toolbar"
+									data-toolbar-owner={scopedPresentedKey || undefined}
+									aria-busy={Boolean(pendingKey)}
+									className="min-w-0 flex-shrink-0"
+									style={{ pointerEvents: pendingKey ? "none" : "auto" }}
+								>
+									<EditToolbar
+										key={liveRenderScopeKey}
+										{...presentedToolbarModel.props}
+										interactionDisabled={Boolean(pendingKey)}
+									/>
+								</div>
+							)}
+
+							<div
+								data-testid="ppt-render-slide-stage"
+								className="relative min-h-0 w-full flex-1 overflow-hidden"
+							>
 								{/* 调整宽度时覆盖层防止 iframe 拦截鼠标事件 */}
 								{isResizing && (
 									<div className="absolute inset-0 z-50 bg-transparent" />
-								)}
-
-								{/* 加载状态 - 初始化时显示 */}
-								{isLoadingOverlayVisible && (
-									<div
-										data-testid="ppt-render-loading"
-										className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm"
-									>
-										<div className="flex items-center gap-2">
-											<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-											<TextAnimation dotwaveAnimation>
-												{t("ppt.loading")}
-											</TextAnimation>
-											{store.loadingProgress > 0 && (
-												<p className="text-xs text-muted-foreground">
-													{store.loadingProgress}%
-												</p>
-											)}
-										</div>
-									</div>
 								)}
 
 								{isNoSlidesFallbackVisible && (
@@ -689,7 +801,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									</div>
 								)}
 
-								{visibleSlides.map(({ slide, index }) => {
+								{residentSlides.map(({ slide, index, key, revision }) => {
 									const slideFileId = store.getFileIdByPath(slide.path) || ""
 									const slideFileItem = attachmentList?.find(
 										(item) => item.file_id === slideFileId,
@@ -698,18 +810,25 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										getHtmlRelativeFolderPath(slideFileItem)
 									return (
 										<PPTSlide
-											key={slide.id}
+											key={key}
 											index={index}
 											isActive={index === store.activeIndex}
+											isPresented={key === presentedKey}
+											toolbarOwnerKey={key}
+											onToolbarModelChange={handleToolbarModelChange}
 											content={slide.content || ""}
 											rawContent={slide.rawContent || ""}
+											renderRevision={revision}
 											loadingState={slide.loadingState}
 											loadingError={slide.loadingError}
-											isFullscreen={isFullscreen}
+											isFullscreen={isPresentationFullscreen}
 											isPlaybackMode={isPlaybackMode}
 											manualScale={manualScale}
 											onManualScaleChange={handleManualScaleChange}
 											onScaleRatioChange={setActiveSlideScaleRatio}
+											onRenderReadyChange={(ready) =>
+												onSlideReadyChange(key, revision, ready)
+											}
 											saveEditContent={saveEditContent}
 											fileId={slideFileId}
 											projectId={resolvedProjectId}
@@ -766,25 +885,28 @@ const PPTRenderInner = observer(function PPTRenderInner({
 							</div>
 
 							{/* 控制栏 - 在编辑模式和全屏模式下隐藏 */}
-							{!isAnySlideEditing && !isFullscreen && store.isReady && hasSlides && (
-								<PPTControlBar
-									activeIndex={store.activeIndex}
-									totalSlides={store.slideUrls.length}
-									isTransitioning={store.isTransitioning}
-									isMobile={isMobile}
-									isFullscreen={isFullscreen}
-									onPrevSlide={() => changeSlide("prev")}
-									onNextSlide={() => changeSlide("next")}
-									onGoToFirstSlide={goToFirstSlide}
-									onRefreshSlides={handleRefreshAllSlides}
-									onJumpToPage={handleJumpToPage}
-									onToggleFullscreen={toggleFullscreen}
-									scaleRatio={activeSlideScaleRatio}
-									onScaleChange={handleManualScaleChange}
-									onResetScale={() => handleManualScaleChange(null)}
-									t={t}
-								/>
-							)}
+							{!isAnySlideEditing &&
+								!isPresentationFullscreen &&
+								store.isReady &&
+								hasSlides && (
+									<PPTControlBar
+										activeIndex={store.activeIndex}
+										totalSlides={store.slideUrls.length}
+										isTransitioning={store.isTransitioning}
+										isMobile={isMobile}
+										isFullscreen={isPresentationFullscreen}
+										onPrevSlide={() => changeSlide("prev")}
+										onNextSlide={() => changeSlide("next")}
+										onGoToFirstSlide={goToFirstSlide}
+										onRefreshSlides={handleRefreshAllSlides}
+										onJumpToPage={handleJumpToPage}
+										onToggleFullscreen={togglePresentationFullscreen}
+										scaleRatio={activeSlideScaleRatio}
+										onScaleChange={handleManualScaleChange}
+										onResetScale={() => handleManualScaleChange(null)}
+										t={t}
+									/>
+								)}
 						</div>
 					</div>
 				</div>

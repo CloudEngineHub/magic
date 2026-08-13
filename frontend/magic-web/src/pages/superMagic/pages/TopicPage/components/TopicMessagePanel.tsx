@@ -5,7 +5,7 @@ import { observer } from "mobx-react-lite"
 import MessageList, { MessageListProvider } from "../../../components/MessageList"
 import MessageHeader, { type MessageHeaderTopicActions } from "../../../components/MessageHeader"
 import { SuperMagicMessageItem } from "../../../components/MessageList/type"
-import { ProjectListItem, TaskStatus, Topic, TopicMode } from "../../Workspace/types"
+import { ProjectListItem, TaskStatus, Topic, TopicMode, Workspace } from "../../Workspace/types"
 import { cn } from "@/lib/utils"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { topicStore } from "../../../stores/core"
@@ -27,6 +27,7 @@ import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import projectFilesStore from "@/stores/projectFiles"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -74,8 +75,7 @@ function resolveRetrySendParams(
 ): HandleSendParams {
 	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
 	const superAgent = retryPayload.options?.extra?.super_agent as
-		| RetrySendSuperAgentExtra
-		| undefined
+		RetrySendSuperAgentExtra | undefined
 
 	return {
 		value: retryPayload.content,
@@ -90,6 +90,7 @@ function resolveRetrySendParams(
 
 interface TopicMessagePanelProps {
 	selectedProject: ProjectListItem | null
+	selectedWorkspace?: Workspace | null
 	selectedTopic: Topic | null
 	messages: SuperMagicMessageItem[]
 	showLoading: boolean
@@ -113,10 +114,17 @@ interface TopicMessagePanelProps {
 	onToggleHistoryPanel?: () => void
 	/** Injected by singleTopicChat variant for conversation-level overflow actions. */
 	trailingActions?: ReactNode
+	/** Optional scoped stores used by recording detail; normal project pages keep global defaults. */
+	topicStore?: typeof topicStore
+	projectFilesStore?: typeof projectFilesStore
+	mentionPanelStore?: MentionPanelStore
+	/** Controls whether the recording-summary editor can expose recording controls. */
+	allowRecordingMode?: boolean
 }
 
 function TopicMessagePanel({
 	selectedProject,
+	selectedWorkspace,
 	selectedTopic,
 	messages,
 	showLoading,
@@ -139,7 +147,13 @@ function TopicMessagePanel({
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
 	trailingActions,
+	topicStore: topicStoreProp,
+	projectFilesStore: projectFilesStoreProp,
+	mentionPanelStore,
+	allowRecordingMode,
 }: TopicMessagePanelProps) {
+	const scopedTopicStore = topicStoreProp ?? topicStore
+	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
 	// Chat detail route hides branch-topic actions via FileActionVisibilityProvider.
 	const { hideCreateNewTopic } = useFileActionVisibility()
 	const allowTopicBranchActions = !hideCreateNewTopic
@@ -147,7 +161,7 @@ function TopicMessagePanel({
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
 	 */
-	const { topicMode, setTopicMode } = useTopicMode({
+	const { topicMode, setTopicMode, recoverTopicMode } = useTopicMode({
 		selectedTopic,
 		selectedProject,
 	})
@@ -194,7 +208,7 @@ function TopicMessagePanel({
 		}
 
 		const retryPayload = resolveRetryMessagePayload(
-			superMagicStore.getMessageNode(appMessageId),
+			superMagicStore.getMessageNode(message.super_message_id),
 		)
 		if (!retryPayload) return
 		if (!sendRetryMessageRef.current) return
@@ -239,7 +253,7 @@ function TopicMessagePanel({
 			allowCreateNewTopic: allowTopicBranchActions,
 			onTopicSwitch: setSelectedTopic,
 			onRetryOptimisticMessage: handleRetryOptimisticMessage,
-			projectFilesStore,
+			projectFilesStore: scopedProjectFilesStore,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -250,7 +264,13 @@ function TopicMessagePanel({
 					)
 				: undefined,
 		}
-	}, [allowTopicBranchActions, topicModeConfig, setSelectedTopic, handleRetryOptimisticMessage])
+	}, [
+		allowTopicBranchActions,
+		topicModeConfig,
+		setSelectedTopic,
+		handleRetryOptimisticMessage,
+		scopedProjectFilesStore,
+	])
 
 	const messagesWithOptimisticMeta = messages.map((message) => {
 		const optimisticStatus = optimisticMessageStore.getStatus(
@@ -283,7 +303,7 @@ function TopicMessagePanel({
 				"relative z-10 flex h-full flex-col items-center overflow-hidden",
 				!isDraggingPanel && "transition-all duration-300",
 				!isConversationPanelCollapsed && "rounded-lg",
-				isConversationPanelCollapsed ? "px-0 pb-0" : "pb-2",
+				isConversationPanelCollapsed && "px-0 pb-0",
 			)}
 		>
 			<MessageHeader
@@ -292,18 +312,19 @@ function TopicMessagePanel({
 				onExpandConversationPanel={onExpandConversationPanel}
 				detailPanelVisible={detailPanelVisible}
 				selectedProject={selectedProject}
-				topicStore={topicStore}
+				topicStore={scopedTopicStore}
 				topicActions={topicActions}
 				historyTriggerMode={historyTriggerMode}
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={trailingActions}
 			/>
+			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			{selectedTopic && (
 				<div
 					className={cn(
 						"flex h-full w-full flex-col",
-						isConversationPanelCollapsed && "hidden",
+						isConversationPanelCollapsed && "invisible",
 					)}
 				>
 					<MessageListProvider value={value}>
@@ -332,6 +353,7 @@ function TopicMessagePanel({
 						messages={messagesWithOptimisticMeta}
 						showLoading={showLoading}
 						selectedProject={selectedProject}
+						selectedWorkspace={selectedWorkspace}
 						selectedTopic={selectedTopic}
 						setSelectedTopic={setSelectedTopic}
 						onFileClick={handleFileClick}
@@ -345,10 +367,14 @@ function TopicMessagePanel({
 							}
 						}}
 						attachments={attachments}
+						mentionPanelStore={mentionPanelStore}
+						topicStore={scopedTopicStore}
+						allowRecordingMode={allowRecordingMode}
 						isShowLoadingInit={isShowLoadingInit}
 						topicModeLogic={{
 							topicMode,
 							setTopicMode,
+							recoverTopicMode,
 						}}
 						size={detailPanelVisible ? "small" : "default"}
 					/>

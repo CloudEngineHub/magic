@@ -51,6 +51,7 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 			workspace,
 			project,
 			topic,
+			selectedTopic,
 			model,
 			audioSource,
 			sessionId,
@@ -60,6 +61,8 @@ export function useWebRecordingEditorRuntime(): RecordingEditorRuntime {
 				workspace,
 				model,
 				topic,
+				// Keep the recording conversation on the topic created for the audio project.
+				chatTopic: selectedTopic ?? topic,
 				project,
 				audioSource: {
 					source: audioSource,

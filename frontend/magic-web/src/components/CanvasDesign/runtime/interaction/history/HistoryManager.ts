@@ -89,12 +89,19 @@ export class HistoryManager {
 			this.recordHistoryImmediate()
 		})
 
-		this.canvas.eventEmitter.on("element:deleted", () => {
+		this.canvas.eventEmitter.on("element:deleted", ({ data }) => {
+			if (data.persistence === "runtime-only") return
 			this.recordHistoryImmediate()
 		})
 
 		// 监听需要防抖记录历史的事件（更新）
-		this.canvas.eventEmitter.on("element:updated", () => {
+		this.canvas.eventEmitter.on("element:updated", ({ data }) => {
+			if (
+				this.canvas.elementManager.getTemporaryElementMetadata(data.elementId)
+					?.historyPolicy === "exclude"
+			) {
+				return
+			}
 			this.recordHistoryDebounced()
 		})
 
@@ -164,7 +171,7 @@ export class HistoryManager {
 			return
 		}
 
-		// 获取当前文档快照（包含临时元素，以便撤销时能正确恢复）
+		// 获取历史快照：保留上传占位，排除从未被后端确认的生成结果占位。
 		const startedAt = now()
 		const snapshot = this.canvas.exportDocument({ includeTemporary: true })
 		const durationMs = now() - startedAt

@@ -5,7 +5,10 @@ import type { MatchableMentionItem } from "../message/tiptap/contentUtils"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import type { ReferenceResourceFileInfo } from "../message/reference-assets/reference-resource.types"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
 
 interface UseReferenceImagesStateOptions {
 	/** Canvas 实例，用于请求 Resource */
@@ -20,9 +23,21 @@ function isSamePaths(prev: string[], next: string[]): boolean {
 	if (prev === next) return true
 	if (prev.length !== next.length) return false
 	for (let i = 0; i < prev.length; i += 1) {
-		if (prev[i] !== next[i]) return false
+		if (getCanvasResourceIdentity(prev[i]) !== getCanvasResourceIdentity(next[i])) return false
 	}
 	return true
+}
+
+function dedupePathsByIdentity(paths: string[]): string[] {
+	const result: string[] = []
+	const identities = new Set<string>()
+	for (const path of paths) {
+		const identity = getCanvasResourceIdentity(path)
+		if (!identity || identities.has(identity)) continue
+		identities.add(identity)
+		result.push(path)
+	}
+	return result
 }
 
 function isSameReferenceInfos(
@@ -32,7 +47,9 @@ function isSameReferenceInfos(
 	if (prev === next) return true
 	if (prev.length !== next.length) return false
 	for (let i = 0; i < prev.length; i += 1) {
-		if (prev[i]?.path !== next[i]?.path) return false
+		if (getCanvasResourceIdentity(prev[i]?.path) !== getCanvasResourceIdentity(next[i]?.path)) {
+			return false
+		}
 		if ((prev[i]?.src || "") !== (next[i]?.src || "")) return false
 		if ((prev[i]?.fileName || "") !== (next[i]?.fileName || "")) return false
 	}
@@ -121,12 +138,10 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 
@@ -170,12 +185,10 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 
@@ -184,9 +197,7 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		const currentPaths = currentInfos.map((info) => info.path)
 
 		// 如果 paths 完全一致，只需要同步 Resource 信息（不修改 Element）
-		const pathsEqual =
-			referenceFilePaths.length === currentPaths.length &&
-			referenceFilePaths.every((path, index) => path === currentPaths[index])
+		const pathsEqual = isSamePaths(referenceFilePaths, currentPaths)
 
 		if (pathsEqual) {
 			// 只同步 Resource 信息
@@ -196,20 +207,24 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 		// paths 不一致，需要更新 Element
 		// 1. 移除不在新列表中的项
-		const pathsSet = new Set(referenceFilePaths)
-		const pathsToRemove = currentPaths.filter((path) => !pathsSet.has(path))
+		const pathIdentities = new Set(referenceFilePaths.map(getCanvasResourceIdentity))
+		const pathsToRemove = currentPaths.filter(
+			(path) => !pathIdentities.has(getCanvasResourceIdentity(path)),
+		)
 		pathsToRemove.forEach((path) => {
 			elementInstance.removeReferenceImageInfo(path)
 		})
 
 		// 2. 添加新项并重新排序
 		// 构建 path -> info 映射
-		const pathToInfo = new Map(currentInfos.map((info) => [info.path, info]))
+		const pathToInfo = new Map(
+			currentInfos.map((info) => [getCanvasResourceIdentity(info.path), info]),
+		)
 
 		// 按照 referenceFilePaths 的顺序构建新的 infos 列表
 		const reorderedInfos: UploadFileResponse[] = []
 		for (const path of referenceFilePaths) {
-			const existingInfo = pathToInfo.get(path)
+			const existingInfo = pathToInfo.get(getCanvasResourceIdentity(path))
 			if (existingInfo) {
 				// 已存在的项，保留原信息
 				reorderedInfos.push(existingInfo)
@@ -236,7 +251,13 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		(path: string) => {
 			setReferenceFilePaths((prev) => {
 				// 去重
-				if (prev.includes(path)) return prev
+				const identity = getCanvasResourceIdentity(path)
+				if (
+					!identity ||
+					prev.some((item) => getCanvasResourceIdentity(item) === identity)
+				) {
+					return prev
+				}
 				// 检查数量限制
 				if (maxReferenceFiles !== undefined && prev.length >= maxReferenceFiles) {
 					return prev
@@ -251,10 +272,15 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 	const addReferenceFiles = useCallback(
 		(infos: UploadFileResponse[]) => {
 			setReferenceFilePaths((prev) => {
-				const existingPaths = new Set(prev)
+				const existingPathIdentities = new Set(prev.map(getCanvasResourceIdentity))
 				const newPaths = infos
 					.map((info) => info.path)
-					.filter((path) => !existingPaths.has(path))
+					.filter((path) => {
+						const identity = getCanvasResourceIdentity(path)
+						if (!identity || existingPathIdentities.has(identity)) return false
+						existingPathIdentities.add(identity)
+						return true
+					})
 
 				// 检查数量限制
 				if (maxReferenceFiles !== undefined) {
@@ -271,7 +297,10 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 	// 移除参考文件
 	const removeReferenceFile = useCallback((path: string) => {
-		setReferenceFilePaths((prev) => prev.filter((p) => p !== path))
+		const identity = getCanvasResourceIdentity(path)
+		setReferenceFilePaths((prev) =>
+			prev.filter((item) => getCanvasResourceIdentity(item) !== identity),
+		)
 	}, [])
 
 	// 清空所有参考文件
@@ -281,17 +310,19 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 	// 设置参考文件列表（完全替换）
 	const setReferenceFilePathsList = useCallback((paths: string[]) => {
-		setReferenceFilePaths(paths)
+		setReferenceFilePaths(dedupePathsByIdentity(paths))
 	}, [])
 
 	// 确保指定路径在第一个位置
 	const ensureFirstPosition = useCallback((path: string) => {
 		setReferenceFilePaths((prev) => {
+			const identity = getCanvasResourceIdentity(path)
+			if (!identity) return prev
 			// 如果已经在第一个位置，不变
-			if (prev[0] === path) return prev
+			if (getCanvasResourceIdentity(prev[0]) === identity) return prev
 
 			// 移除旧位置，添加到第一个
-			const filtered = prev.filter((p) => p !== path)
+			const filtered = prev.filter((item) => getCanvasResourceIdentity(item) !== identity)
 			return [path, ...filtered]
 		})
 	}, [])

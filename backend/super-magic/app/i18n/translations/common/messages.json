@@ -7,6 +7,26 @@
         "zh_CN": "当前对话上下文已过长，请点击输入框右侧的上下文占比圆环，在弹出的面板中选择“压缩上下文”后再继续。",
         "en_US": "The conversation context is too long. Click the context usage ring on the right side of the input box, choose \"Compact Context\" from the panel, and then continue."
     },
+    "messages.context_window_adjusted": {
+        "zh_CN": "上下文上限已调整为 {context_size}。当前模型最多可设置为 {max_allowed}。",
+        "en_US": "Context limit adjusted to {context_size}. The maximum allowed for the current model is {max_allowed}."
+    },
+    "messages.context_window_invalid_format": {
+        "zh_CN": "请输入要设置的上下文上限，例如 256k、800k 或 200000。",
+        "en_US": "Enter a context limit such as 256k, 800k, or 200000."
+    },
+    "messages.context_window_below_default": {
+        "zh_CN": "上下文上限不能小于系统默认值 {system_default}。",
+        "en_US": "The context limit cannot be smaller than the system default of {system_default}."
+    },
+    "messages.context_window_above_limit": {
+        "zh_CN": "上下文上限不能超过当前模型的可设置上限 {max_allowed}。",
+        "en_US": "The context limit cannot exceed the current model limit of {max_allowed}."
+    },
+    "messages.context_window_no_valid_range": {
+        "zh_CN": "当前模型没有可调整的上下文区间：系统默认值为 {system_default}，当前模型可设置上限为 {max_allowed}。",
+        "en_US": "The current model has no adjustable context range: the system default is {system_default}, while the model limit is {max_allowed}."
+    },
     "messages.agent_suspended": {
         "zh_CN": "当前任务已暂停，请稍后再试。",
         "en_US": "The current task has been suspended. Please try again later."
@@ -36,8 +56,20 @@
         "en_US": "The agent has not been initialized yet. Please initialize the workspace first."
     },
     "messages.agent_load_failed": {
-        "zh_CN": "当前员工加载失败，请确认员工「{agent_code}」存在，并且当前账号有使用权限。",
-        "en_US": "Failed to load employee agent \"{agent_code}\". Check that it exists and that your account has permission to use it."
+        "zh_CN": "员工「{agent_code}」加载失败，请稍后重试；如持续失败，请联系管理员。",
+        "en_US": "Failed to load employee agent \"{agent_code}\". Please try again later; contact an administrator if the problem persists."
+    },
+    "messages.agent_load_access_denied": {
+        "zh_CN": "当前账号无法访问员工「{agent_code}」，请确认员工已发布且账号具有使用权限。",
+        "en_US": "The current account cannot access employee agent \"{agent_code}\". Check that it is published and that the account has permission to use it."
+    },
+    "messages.agent_load_invalid_package": {
+        "zh_CN": "员工「{agent_code}」的配置不完整，暂时无法加载。请重新发布后再试；如仍然失败，请联系管理员。",
+        "en_US": "Employee agent \"{agent_code}\" has an incomplete configuration and cannot be loaded. Republish it and try again; contact an administrator if the problem persists."
+    },
+    "messages.agent_load_fetch_failed": {
+        "zh_CN": "员工「{agent_code}」的数据获取失败，请稍后重试。",
+        "en_US": "Failed to retrieve data for employee agent \"{agent_code}\". Please try again later."
     },
     "messages.internal_dispatch_failed": {
         "zh_CN": "当前请求处理失败，请联系系统管理员。",
@@ -98,6 +130,18 @@
     "agent_profile.skill_creator.description": {
         "zh_CN": "帮助你设计、创建和评测可复用的 AI 技能。",
         "en_US": "Helps you design, create, and evaluate reusable AI skills."
+    },
+    "agent_profile.micro_app.name": {
+        "zh_CN": "微应用专家",
+        "en_US": "Micro App Specialist"
+    },
+    "agent_profile.micro_app.role": {
+        "zh_CN": "HTML 微应用开发专家",
+        "en_US": "HTML Micro-App Development Specialist"
+    },
+    "agent_profile.micro_app.description": {
+        "zh_CN": "帮助你设计、开发和迭代可直接使用的微应用。",
+        "en_US": "Helps you design, build, and improve ready-to-use micro-apps."
     },
     "cron.notify.intro": {
         "zh_CN": "以下定时任务刚刚完成。请保持你当前的人设和说话风格，直接通知用户。根据任务内容（job_body 字段）组织语言，可以带点关怀或实用提示，让回复自然、有温度。不要讨论调度机制、执行细节，或 AI 能做什么不能做什么。\n\n【重要：结果校验】你必须先查看完整结果文件（result_file），判断执行者是否真正完成了任务。偷懒的表现包括：只描述计划但未实际执行、只给出建议而无实际产出、说\"我会…\"却没有交付物、输出明显是敷衍或空洞内容。如果判定为偷懒，立即调用 manage_cron 工具（action=run, job_id=对应任务ID）重新触发一次。注意：每个任务最多只重试一次，如果你在本轮对话中已经对该任务执行过 action=run，则不再重试，直接将结果通知用户即可。",

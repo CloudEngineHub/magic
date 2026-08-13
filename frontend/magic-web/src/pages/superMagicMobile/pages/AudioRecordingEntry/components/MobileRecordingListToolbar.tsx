@@ -82,19 +82,23 @@ export function MobileRecordingListToolbar({
 			<button
 				type="button"
 				onClick={onOpenGroupSheet}
-				className="-ml-2 inline-flex h-full items-center gap-1.5 px-5 active:opacity-70"
+				className="-ml-2 flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden px-5 active:opacity-70"
 				data-testid="mobile-recording-group-trigger"
 			>
-				<span className="font-poppins text-[18px] font-medium leading-7 text-foreground">
+				{/* Keep long group names on one line without displacing the fixed action buttons. */}
+				<span className="min-w-0 truncate font-poppins text-[18px] font-medium leading-7 text-foreground">
 					{displayGroupLabel}
 				</span>
-				<ChevronDown className="size-5 text-foreground" />
-				<span className="ml-1 text-[13px] tabular-nums leading-5 text-muted-foreground">
+				<ChevronDown className="size-5 shrink-0 text-foreground" />
+				<span className="ml-1 shrink-0 text-[13px] tabular-nums leading-5 text-muted-foreground">
 					{groupCount}
 				</span>
 			</button>
 
-			<div className="flex items-center">
+			<div
+				className="flex shrink-0 items-center"
+				data-testid="mobile-recording-toolbar-actions"
+			>
 				<button
 					type="button"
 					onClick={onOpenImportSheet}

@@ -51,8 +51,14 @@ export function hasVideoGenerationRequestMediaIntent(
 	)
 }
 
-export function hasVideoGenerationRequestUserIntent(
+export function hasVideoGenerationRequestEstimateIntent(
 	request: Partial<GenerateVideoRequest> | null | undefined,
 ): boolean {
 	return Boolean(request?.prompt?.trim()) || hasVideoGenerationRequestMediaIntent(request)
+}
+
+export function hasVideoGenerationRequestSubmitIntent(
+	request: Partial<GenerateVideoRequest> | null | undefined,
+): boolean {
+	return Boolean(request?.prompt?.trim())
 }

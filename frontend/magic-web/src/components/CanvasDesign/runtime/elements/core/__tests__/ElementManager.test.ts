@@ -351,18 +351,44 @@ describe("ElementManager container child lifecycle", () => {
 })
 
 describe("ElementManager document patch export", () => {
-	function createPatchManager(elements: LayerElement[], temporaryElementIds: string[] = []) {
+	function createPatchManager(
+		elements: LayerElement[],
+		temporaryElements: Array<{ id: string; kind?: "upload" | "generation-result" }> = [],
+	) {
 		const manager = Object.create(ElementManager.prototype) as {
 			elements: Map<string, { getData: () => LayerElement }>
-			temporaryElements: Set<string>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "upload" | "generation-result"
+					historyPolicy: "include" | "exclude"
+					clipboardPolicy: "include" | "exclude"
+				}
+			>
 			documentIndex: CanvasDocumentIndex
 			exportDocumentPatch: ElementManager["exportDocumentPatch"]
 			exportDocument: ElementManager["exportDocument"]
+			filterElementsForClipboard: ElementManager["filterElementsForClipboard"]
 		}
 		manager.elements = new Map(
 			elements.map((element) => [element.id, { getData: () => element }]),
 		)
-		manager.temporaryElements = new Set(temporaryElementIds)
+		manager.temporaryElements = new Map(
+			temporaryElements.map(({ id, kind = "generation-result" }) => [
+				id,
+				kind === "upload"
+					? {
+							kind,
+							historyPolicy: "include" as const,
+							clipboardPolicy: "include" as const,
+						}
+					: {
+							kind,
+							historyPolicy: "exclude" as const,
+							clipboardPolicy: "exclude" as const,
+						},
+			]),
+		)
 		manager.documentIndex = new CanvasDocumentIndex()
 		return manager
 	}
@@ -413,7 +439,7 @@ describe("ElementManager document patch export", () => {
 
 	it("skips deleted and temporary elements while preserving deleted ids", () => {
 		const temp = { id: "temp-1", type: "rectangle", x: 0, y: 0 } as LayerElement
-		const manager = createPatchManager([temp], ["temp-1"])
+		const manager = createPatchManager([temp], [{ id: "temp-1" }])
 
 		const patch = manager.exportDocumentPatch({
 			changedElementIds: ["deleted-1", "temp-1"],
@@ -452,7 +478,7 @@ describe("ElementManager document patch export", () => {
 			height: 200,
 			children: [tempChild, child],
 		} as LayerElement
-		const manager = createPatchManager([frame, tempChild, child], ["temp-child"])
+		const manager = createPatchManager([frame, tempChild, child], [{ id: "temp-child" }])
 
 		expect(manager.exportDocument()).toEqual({
 			elements: [
@@ -466,14 +492,12 @@ describe("ElementManager document patch export", () => {
 				}),
 			],
 		})
+		// 生成结果占位符即使在历史快照中也必须被排除。
 		expect(manager.exportDocument({ includeTemporary: true })).toEqual({
 			elements: [
 				expect.objectContaining({
 					id: "frame-1",
 					children: [
-						expect.objectContaining({
-							id: "temp-child",
-						}),
 						expect.objectContaining({
 							id: "child-1",
 						}),
@@ -481,5 +505,371 @@ describe("ElementManager document patch export", () => {
 				}),
 			],
 		})
+
+		const uploadManager = createPatchManager(
+			[frame, tempChild, child],
+			[{ id: "temp-child", kind: "upload" }],
+		)
+		expect(uploadManager.exportDocument({ includeTemporary: true })).toEqual({
+			elements: [
+				expect.objectContaining({
+					id: "frame-1",
+					children: [
+						expect.objectContaining({ id: "temp-child" }),
+						expect.objectContaining({ id: "child-1" }),
+					],
+				}),
+			],
+		})
+
+		expect(manager.filterElementsForClipboard([frame])).toEqual([
+			expect.objectContaining({
+				id: "frame-1",
+				children: [expect.objectContaining({ id: "child-1" })],
+			}),
+		])
+		expect(uploadManager.filterElementsForClipboard([frame])).toEqual([
+			expect.objectContaining({
+				id: "frame-1",
+				children: [
+					expect.objectContaining({ id: "temp-child" }),
+					expect.objectContaining({ id: "child-1" }),
+				],
+			}),
+		])
+	})
+})
+
+describe("ElementManager generation target commit", () => {
+	function createCommitManager(elementIds: string[]) {
+		const batchUpdate = vi.fn()
+		const emit = vi.fn()
+		const markGenerateImageRequestAsUser = vi.fn()
+		const temporaryElements = new Map(
+			elementIds.map((elementId) => [
+				elementId,
+				{
+					kind: "generation-result" as const,
+					historyPolicy: "exclude" as const,
+					clipboardPolicy: "exclude" as const,
+				},
+			]),
+		)
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: typeof temporaryElements
+			batchUpdate: typeof batchUpdate
+			canvas: {
+				eventEmitter: { emit: typeof emit }
+				elementDetailsRuntimeManager: {
+					markGenerateImageRequestAsUser: typeof markGenerateImageRequestAsUser
+				}
+			}
+			commitGenerationTargets: ElementManager["commitGenerationTargets"]
+		}
+		manager.elements = new Map(elementIds.map((elementId) => [elementId, {}]))
+		manager.temporaryElements = temporaryElements
+		manager.batchUpdate = batchUpdate
+		manager.canvas = {
+			eventEmitter: { emit },
+			elementDetailsRuntimeManager: { markGenerateImageRequestAsUser },
+		}
+		return {
+			manager,
+			batchUpdate,
+			emit,
+			temporaryElements,
+			markGenerateImageRequestAsUser,
+		}
+	}
+
+	it("validates all targets before one batch update and converts them together", () => {
+		const { manager, batchUpdate, emit, temporaryElements, markGenerateImageRequestAsUser } =
+			createCommitManager(["image-1", "image-2"])
+		batchUpdate.mockImplementation(() => {
+			expect(temporaryElements.has("image-1")).toBe(true)
+			expect(temporaryElements.has("image-2")).toBe(true)
+			expect(emit).not.toHaveBeenCalled()
+		})
+
+		manager.commitGenerationTargets([
+			{
+				elementId: "image-1",
+				persistedPatch: {
+					status: "processing",
+					generateImageRequest: { image_id: "image-task-1" },
+				},
+			},
+			{ elementId: "image-2", persistedPatch: { status: "processing" } },
+		])
+
+		expect(batchUpdate).toHaveBeenCalledTimes(1)
+		expect(batchUpdate).toHaveBeenCalledWith(
+			[
+				{
+					id: "image-1",
+					data: {
+						status: "processing",
+						generateImageRequest: { image_id: "image-task-1" },
+					},
+				},
+				{ id: "image-2", data: { status: "processing" } },
+			],
+			{ silent: false, emitBatchUpdated: false },
+		)
+		expect(temporaryElements.size).toBe(0)
+		expect(emit).toHaveBeenCalledTimes(3)
+		expect(markGenerateImageRequestAsUser).toHaveBeenCalledWith("image-1", "image-task-1")
+		expect(emit).toHaveBeenLastCalledWith({
+			type: "element:batchupdated",
+			data: undefined,
+		})
+	})
+
+	it("does not mutate temporary markers when any target is invalid", () => {
+		const { manager, batchUpdate, temporaryElements } = createCommitManager(["image-1"])
+
+		expect(() =>
+			manager.commitGenerationTargets([
+				{ elementId: "image-1", persistedPatch: { status: "processing" } },
+				{ elementId: "missing", persistedPatch: { status: "processing" } },
+			]),
+		).toThrow("Element missing not found")
+		expect(batchUpdate).not.toHaveBeenCalled()
+		expect(temporaryElements.has("image-1")).toBe(true)
+	})
+
+	it("keeps generation targets temporary when the batch update fails", () => {
+		const { manager, batchUpdate, emit, temporaryElements, markGenerateImageRequestAsUser } =
+			createCommitManager(["image-1", "image-2"])
+		batchUpdate.mockImplementation(() => {
+			throw new Error("update failed")
+		})
+
+		expect(() =>
+			manager.commitGenerationTargets([
+				{ elementId: "image-1", persistedPatch: { status: "processing" } },
+				{ elementId: "image-2", persistedPatch: { status: "processing" } },
+			]),
+		).toThrow("update failed")
+		expect(temporaryElements.has("image-1")).toBe(true)
+		expect(temporaryElements.has("image-2")).toBe(true)
+		expect(markGenerateImageRequestAsUser).not.toHaveBeenCalled()
+		expect(emit).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager batch update completion events", () => {
+	it("does not emit batchupdated when an update throws", () => {
+		const emit = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			batchMode: boolean
+			doUpdate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			canvas: { eventEmitter: { emit: typeof emit } }
+			batchUpdate: ElementManager["batchUpdate"]
+		}
+		manager.elements = new Map([["image-1", {}]])
+		manager.batchMode = false
+		manager.doUpdate = vi.fn(() => {
+			throw new Error("update failed")
+		})
+		manager.flush = vi.fn()
+		manager.canvas = { eventEmitter: { emit } }
+
+		expect(() =>
+			manager.batchUpdate([{ id: "image-1", data: { status: "processing" } }]),
+		).toThrow("update failed")
+		expect(manager.flush).toHaveBeenCalledOnce()
+		expect(emit).not.toHaveBeenCalled()
+	})
+})
+
+describe("ElementManager temporary element creation", () => {
+	function createTemporaryManager() {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: Map<string, unknown>
+			doCreate: ReturnType<typeof vi.fn>
+			doDelete: ReturnType<typeof vi.fn>
+			createTemporaryElement: ElementManager["createTemporaryElement"]
+		}
+		manager.elements = new Map()
+		manager.temporaryElements = new Map()
+		manager.doCreate = vi.fn()
+		manager.doDelete = vi.fn((elementId: string) => {
+			manager.elements.delete(elementId)
+			manager.temporaryElements.delete(elementId)
+		})
+		return manager
+	}
+
+	it("marks an element temporary before creation can emit events", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			expect(manager.temporaryElements.has(element.id)).toBe(true)
+			expect(manager.temporaryElements.get(element.id)).toMatchObject({
+				kind: "generation-result",
+				historyPolicy: "exclude",
+				clipboardPolicy: "exclude",
+			})
+			manager.elements.set(element.id, {})
+		})
+
+		expect(manager.createTemporaryElement(element)).toBe(element.id)
+		expect(manager.doCreate).toHaveBeenCalledWith(element, {})
+	})
+
+	it("removes the temporary marker when creation fails", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			throw new Error("create failed")
+		})
+
+		expect(() => manager.createTemporaryElement(element)).toThrow("create failed")
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("rolls back an element inserted before a later creation step fails", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+		manager.doCreate.mockImplementation(() => {
+			manager.elements.set(element.id, {})
+			throw new Error("mounted failed")
+		})
+
+		expect(() => manager.createTemporaryElement(element)).toThrow("mounted failed")
+		expect(manager.doDelete).toHaveBeenCalledWith(element.id, { suppressEvents: true })
+		expect(manager.elements.has(element.id)).toBe(false)
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+
+	it("removes the temporary marker when no element instance is created", () => {
+		const manager = createTemporaryManager()
+		const element = createElement("temporary-1")
+
+		expect(() => manager.createTemporaryElement(element)).toThrow(
+			"Element temporary-1 could not be created",
+		)
+		expect(manager.temporaryElements.has(element.id)).toBe(false)
+	})
+})
+
+describe("ElementManager runtime-only generation deletion", () => {
+	it("notifies runtime subscribers without emitting a document change", () => {
+		const elementData = createElement("runtime-result")
+		const element = {
+			getData: () => elementData,
+			destroy: vi.fn(),
+		}
+		const runtimeCleanup = vi.fn()
+		const eventEmitter = {
+			emit: vi.fn((event: { type: string; data?: unknown }) => {
+				if (event.type === "element:deleted") runtimeCleanup(event.data)
+			}),
+		}
+		const emitElementChange = vi.fn()
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, typeof element>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "generation-result"
+					historyPolicy: "exclude"
+					clipboardPolicy: "exclude"
+				}
+			>
+			canvas: { eventEmitter: typeof eventEmitter }
+			findParentElement: ReturnType<typeof vi.fn>
+			markDocumentIndexDirty: ReturnType<typeof vi.fn>
+			invalidateGeometryForElement: ReturnType<typeof vi.fn>
+			scheduleContentLayerDraw: ReturnType<typeof vi.fn>
+			emitElementChange: typeof emitElementChange
+			delete: ElementManager["delete"]
+		}
+		manager.elements = new Map([[elementData.id, element]])
+		manager.temporaryElements = new Map([
+			[
+				elementData.id,
+				{
+					kind: "generation-result",
+					historyPolicy: "exclude",
+					clipboardPolicy: "exclude",
+				},
+			],
+		])
+		manager.canvas = { eventEmitter }
+		manager.findParentElement = vi.fn(() => null)
+		manager.markDocumentIndexDirty = vi.fn()
+		manager.invalidateGeometryForElement = vi.fn()
+		manager.scheduleContentLayerDraw = vi.fn()
+		manager.emitElementChange = emitElementChange
+
+		manager.delete(elementData.id)
+
+		expect(element.destroy).toHaveBeenCalledOnce()
+		expect(runtimeCleanup).toHaveBeenCalledWith({
+			elementId: elementData.id,
+			persistence: "runtime-only",
+		})
+		expect(emitElementChange).not.toHaveBeenCalled()
+	})
+
+	it("does not create a history entry when batch deleting only runtime placeholders", () => {
+		const historyManager = {
+			disable: vi.fn(),
+			enable: vi.fn(),
+			recordHistoryImmediate: vi.fn(),
+		}
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, unknown>
+			temporaryElements: Map<
+				string,
+				{
+					kind: "generation-result"
+					historyPolicy: "exclude"
+					clipboardPolicy: "exclude"
+				}
+			>
+			canvas: {
+				historyManager: typeof historyManager
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			isBatchDeleting: boolean
+			pendingBatchDeleteChangeIds: Set<string>
+			isContentLayerDrawDeferred: boolean
+			doDelete: ReturnType<typeof vi.fn>
+			flushDeferredBatchDeleteEffects: ReturnType<typeof vi.fn>
+			batchDelete: ElementManager["batchDelete"]
+		}
+		manager.elements = new Map([["runtime-result", {}]])
+		manager.temporaryElements = new Map([
+			[
+				"runtime-result",
+				{
+					kind: "generation-result",
+					historyPolicy: "exclude",
+					clipboardPolicy: "exclude",
+				},
+			],
+		])
+		manager.canvas = {
+			historyManager,
+			eventEmitter: { emit: vi.fn() },
+		}
+		manager.isBatchDeleting = false
+		manager.pendingBatchDeleteChangeIds = new Set()
+		manager.isContentLayerDrawDeferred = false
+		manager.doDelete = vi.fn()
+		manager.flushDeferredBatchDeleteEffects = vi.fn()
+
+		manager.batchDelete(["runtime-result"])
+
+		expect(manager.doDelete).toHaveBeenCalledWith("runtime-result")
+		expect(historyManager.recordHistoryImmediate).not.toHaveBeenCalled()
+		expect(historyManager.enable).toHaveBeenCalled()
 	})
 })

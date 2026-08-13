@@ -31,13 +31,17 @@ import type {
 } from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
-import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	getCanvasResourceIdentity,
+} from "../../../runtime/shared/path/canvasResourcePath"
 import MessageEditor, { type MessageEditorRef } from "../message/MessageEditor"
 import { useCanvasReferenceMention } from "../message/useCanvasReferenceMention"
 import VideoEditorControls from "./VideoEditorControls"
 import { useVideoEditorConfig } from "./useVideoEditorConfig"
 import {
 	buildReferenceAssetInputs,
+	countVideoReferenceAssetInfosByKind,
 	hasVideoInputs,
 	resolveReferenceAssetLimits,
 	resolveVideoFrameRoleSupport,
@@ -67,12 +71,14 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 import LinkedEditorInputsBar from "../connection/LinkedEditorInputsBar"
 import { composePromptWithLinkedText } from "../connection/linkedTextPrompt"
 import {
+	getLinkedMediaReferenceIdentity,
 	mergeLinkedMediaReferences,
 	type LinkedEditorMediaKind,
+	type LinkedEditorMediaItem,
 	type LinkedEditorMediaPolicy,
 	type LinkedEditorMediaReference,
 } from "../connection/linkedEditorInputs"
-import { useLinkedEditorInputs } from "../connection/useLinkedEditorInputs"
+import { useLinkedMediaAssociationController } from "../connection/useLinkedMediaAssociationController"
 import PromptOptimizationButton from "../prompt-optimization/PromptOptimizationButton"
 import {
 	buildPromptOptimizationUserPrompt,
@@ -91,7 +97,8 @@ import {
 	resolveVideoPromptPlaceholderReferences,
 	type VideoPromptPlaceholderReference,
 } from "./prompt-placeholders/video-prompt-placeholder"
-import { hasVideoGenerationRequestUserIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
+import { hasVideoGenerationRequestSubmitIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
+import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -159,7 +166,8 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		...(syncElementSize !== undefined ? { syncElementSize } : {}),
 	})
 	const { handlers } = config
-	const { buildRequestParams } = handlers
+	const { linkedFrameBindings } = config
+	const { buildRequestParams, replaceFrameImageAt, setLinkedFrameBindings } = handlers
 	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
 		const supportedKinds: LinkedEditorMediaKind[] = []
 		if (config.supportsReferenceImages) supportedKinds.push("image")
@@ -187,11 +195,43 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		config.supportsReferenceImages,
 		config.supportsReferenceVideos,
 	])
-	const linkedEditorInputs = useLinkedEditorInputs({
-		targetElementId: videoElement.id,
-		targetKind: "video",
-		mediaPolicy: linkedMediaPolicy,
-	})
+	const { linkedEditorInputs, handleLinkedMediaSelectionChange, handleMentionChange } =
+		useLinkedMediaAssociationController({
+			targetElementId: videoElement.id,
+			targetKind: "video",
+			mediaPolicy: linkedMediaPolicy,
+			editorRef,
+			onReadyMentionChange: handlers.handleReferenceMentionPathsChange,
+		})
+	const linkedFrameBindingSync = useMemo(
+		() =>
+			synchronizeLinkedFrameBindings({
+				previous: linkedFrameBindings,
+				currentFrameImages: config.currentFrameImages,
+				supportsStartFrame: config.supportsStartFrame,
+				supportsEndFrame: config.supportsEndFrame,
+				linkedMediaItems: linkedEditorInputs.mediaItems,
+			}),
+		[
+			config.currentFrameImages,
+			config.supportsEndFrame,
+			config.supportsStartFrame,
+			linkedEditorInputs.mediaItems,
+			linkedFrameBindings,
+		],
+	)
+	useEffect(() => {
+		if (linkedFrameBindingSync.bindings !== linkedFrameBindings) {
+			setLinkedFrameBindings(linkedFrameBindingSync.bindings)
+		}
+		linkedFrameBindingSync.frameUpdates.forEach((update) => {
+			replaceFrameImageAt(update.slotIndex, {
+				path: update.path,
+				src: update.path,
+				fileName: update.fileName,
+			})
+		})
+	}, [linkedFrameBindingSync, linkedFrameBindings, replaceFrameImageAt, setLinkedFrameBindings])
 	const mergedReferenceAssetInfos = useMemo(
 		() =>
 			mergeLinkedVideoReferenceAssetInfos(
@@ -273,7 +313,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		}
 	}, [estimateModelId, buildRequestParamsWithLinkedInputs])
 	const hasSubmitIntent = useMemo(() => {
-		return hasVideoGenerationRequestUserIntent(buildRequestParamsWithLinkedInputs())
+		return hasVideoGenerationRequestSubmitIntent(buildRequestParamsWithLinkedInputs())
 	}, [buildRequestParamsWithLinkedInputs])
 	const estimateSignature = useMemo(() => {
 		if (!estimateRequest) return null
@@ -389,12 +429,45 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		[config.isUploading, handlers],
 	)
 
-	const handleMentionChange = useCallback(
-		(paths: string[], currentPrompt: string) => {
-			handlers.handleReferenceMentionPathsChange(paths)
-			void currentPrompt
+	const handleLinkedMediaFrameSelect = useCallback(
+		(
+			slotIndex: number,
+			frameRole: "start" | "end",
+			item: LinkedEditorMediaItem & { kind: "image"; path: string },
+		) => {
+			if (!item.path) return
+			const sourceFileName =
+				item.fileName || getCanvasResourceFileName(item.path) || item.path
+			const sourceIdentity = getLinkedMediaReferenceIdentity(item.path)
+			const duplicateSourceFrameIndex = config.currentFrameImages.findIndex(
+				(path, index) =>
+					index !== slotIndex &&
+					Boolean(path) &&
+					getLinkedMediaReferenceIdentity(path) === sourceIdentity,
+			)
+			if (duplicateSourceFrameIndex >= 0) {
+				toast.error(t("videoEditor.frameResourceAlreadyUsed", "该资源已用于其他帧"))
+				return
+			}
+			handlers.replaceFrameImageAt(slotIndex, {
+				path: item.path,
+				src: item.path,
+				fileName: sourceFileName,
+			})
+			setLinkedFrameBindings((previous) => {
+				const next = [...previous]
+				next[slotIndex] = {
+					framePath: item.path,
+					sourceConnectionId: item.connectionId,
+					sourcePath: item.path,
+					sourceKind: "image",
+					sourceFileName,
+					frameRole,
+				}
+				return next
+			})
 		},
-		[handlers],
+		[config.currentFrameImages, handlers, setLinkedFrameBindings, t],
 	)
 
 	const handleProjectSelect = useCallback(
@@ -581,7 +654,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			if (
 				!canvas ||
 				!config.selectedModelId ||
-				!hasVideoGenerationRequestUserIntent(requestParams)
+				!hasVideoGenerationRequestSubmitIntent(requestParams)
 			)
 				return
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
@@ -679,7 +752,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			...(buildRequestParamsWithLinkedInputs(draftRequestParams) as GenerateVideoRequest),
 			video_id: generateUUID(),
 		}
-		if (!hasVideoGenerationRequestUserIntent(requestParams)) return
+		if (!hasVideoGenerationRequestSubmitIntent(requestParams)) return
 		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 		if (!(elementInstance instanceof VideoElementClass)) return
 		await confirmVideoGeneration({
@@ -787,7 +860,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			/>
 			<LinkedEditorInputsBar
 				textConnections={linkedEditorInputs.textConnections}
-				onRemoveConnection={linkedEditorInputs.removeConnection}
+				isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+				onTextConnectionSelectedChange={linkedEditorInputs.setTextConnectionSelected}
+				onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
 			/>
 			<MessageEditor
 				ref={editorRef}
@@ -803,6 +878,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				matchableItems={matchableItems}
 				mentionDataService={mentionDataService}
 				mentionExtension={mentionExtension}
+				mentionItemsReady={config.hasRestoredRef.current}
 				onMentionChange={handleMentionChange}
 				onMentionItemHoverChange={setHoveredMentionPath}
 				mentionEnabled={mentionEnabled}
@@ -818,7 +894,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				onFocusEditor={() => editorRef.current?.focus()}
 				onPreviewMediaResource={onPreviewMediaResource}
 				linkedMediaItems={linkedEditorInputs.mediaItems}
-				onRemoveLinkedConnection={linkedEditorInputs.removeConnection}
+				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
+				linkedFrameBindings={linkedFrameBindings}
+				onLinkedMediaFrameSelect={handleLinkedMediaFrameSelect}
 				renderPromptOptimizationButton={() => (
 					<PromptOptimizationButton
 						buildRequest={buildPromptOptimizationRequest}
@@ -890,7 +968,9 @@ function mergeLinkedVideoReferenceAssetInfos(
 	manualInfos: VideoReferenceAssetInfo[],
 	linkedReferences: LinkedEditorMediaReference[],
 ): VideoReferenceAssetInfo[] {
-	const manualInfoByPath = new Map(manualInfos.map((info) => [info.path, info]))
+	const manualInfoByIdentity = new Map(
+		manualInfos.map((info) => [getLinkedMediaReferenceIdentity(info.path), info]),
+	)
 	return mergeLinkedMediaReferences(
 		manualInfos.map((info) => ({
 			kind: info.assetType,
@@ -899,24 +979,8 @@ function mergeLinkedVideoReferenceAssetInfos(
 		linkedReferences,
 	).map(
 		(reference) =>
-			manualInfoByPath.get(reference.path) ??
+			manualInfoByIdentity.get(getLinkedMediaReferenceIdentity(reference.path)) ??
 			buildVideoReferenceAssetInfoFromReference(reference),
-	)
-}
-
-function countVideoReferenceAssetInfosByKind(assets: VideoReferenceAssetInfo[]): {
-	images: number
-	videos: number
-	audios: number
-} {
-	return assets.reduce(
-		(acc, item) => {
-			if (item.assetType === "image") acc.images += 1
-			if (item.assetType === "video") acc.videos += 1
-			if (item.assetType === "audio") acc.audios += 1
-			return acc
-		},
-		{ images: 0, videos: 0, audios: 0 },
 	)
 }
 
@@ -965,22 +1029,23 @@ function buildVideoPromptOptimizationReferences(options: {
 		promptReferences,
 		promptPlaceholderTokenConfig,
 	} = options
-	const visualIndexByPath = new Map(
-		referenceImages.map((path, index) => [path, index + 1] as const),
+	const visualIndexByIdentity = new Map(
+		referenceImages.map((path, index) => [getCanvasResourceIdentity(path), index + 1] as const),
 	)
-	const promptReferenceByPath = new Map(
-		promptReferences.map((reference) => [reference.path, reference]),
+	const promptReferenceByIdentity = new Map(
+		promptReferences.map((reference) => [getCanvasResourceIdentity(reference.path), reference]),
 	)
 	const references: PromptOptimizationReferenceContext[] = []
-	const referenceByPath = new Map<string, PromptOptimizationReferenceContext>()
+	const referenceByIdentity = new Map<string, PromptOptimizationReferenceContext>()
 
 	const pushReference = (path: string, reference: PromptOptimizationReferenceContext) => {
-		const existing = referenceByPath.get(path)
+		const identity = getCanvasResourceIdentity(path)
+		const existing = referenceByIdentity.get(identity)
 		if (existing) {
 			mergePromptOptimizationReference(existing, reference)
 			return
 		}
-		referenceByPath.set(path, reference)
+		referenceByIdentity.set(identity, reference)
 		references.push(reference)
 	}
 
@@ -993,7 +1058,7 @@ function buildVideoPromptOptimizationReferences(options: {
 			label: getVideoFramePromptOptimizationLabel(frameRole, index),
 			fileName: info.fileName || getFileNameFromPath(info.path),
 			isVisualInput: true,
-			visualReferenceIndex: visualIndexByPath.get(info.path),
+			visualReferenceIndex: visualIndexByIdentity.get(getCanvasResourceIdentity(info.path)),
 			role: getVideoFramePromptOptimizationRole(frameRole),
 		})
 	})
@@ -1005,7 +1070,7 @@ function buildVideoPromptOptimizationReferences(options: {
 	}
 	referenceAssetInfos.forEach((info) => {
 		assetTypeCounters[info.assetType] += 1
-		const promptReference = promptReferenceByPath.get(info.path)
+		const promptReference = promptReferenceByIdentity.get(getCanvasResourceIdentity(info.path))
 		pushReference(info.path, {
 			kind: info.assetType,
 			placeholder: promptReference
@@ -1021,7 +1086,9 @@ function buildVideoPromptOptimizationReferences(options: {
 			fileName: info.fileName || getFileNameFromPath(info.path),
 			isVisualInput: info.assetType === "image",
 			visualReferenceIndex:
-				info.assetType === "image" ? visualIndexByPath.get(info.path) : undefined,
+				info.assetType === "image"
+					? visualIndexByIdentity.get(getCanvasResourceIdentity(info.path))
+					: undefined,
 			role: getVideoAssetPromptOptimizationRole(info.assetType),
 		})
 	})

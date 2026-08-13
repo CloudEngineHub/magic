@@ -2,12 +2,13 @@ import { useMemo, useRef, useState } from "react"
 import { createStyles } from "antd-style"
 import { debounce } from "lodash-es"
 import { IconReload } from "@tabler/icons-react"
-import type { SearchItem, TableButton } from "@admin-components"
 import {
 	getSyncedTimeFilterValue,
 	SearchItemType,
 	StatusTag,
 	TableWithFilters,
+	type SearchItem,
+	type TableButton,
 	type TimeRangeValue,
 } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
@@ -19,6 +20,7 @@ import type { AiManage } from "@admin/types/aiManage"
 import type { PlatformPackage } from "@admin/types/platformPackage"
 import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
+import PublishTargetCell from "../components/PublishTargetCell"
 
 type DataType = AiManage.OrganizationAgentVersionReview
 type ParamsType = AiManage.GetOrganizationAgentVersionReviewListParams
@@ -278,8 +280,14 @@ function AIEmployeeReviewPage() {
 				title: t("publishTargetType"),
 				dataIndex: "publish_target_type",
 				key: "publish_target_type",
-				width: 140,
-				render: (value: string) => publishTargetTypeMap[value] || value || "-",
+				width: 190,
+				render: (value: string, record) => (
+					<PublishTargetCell
+						type={value}
+						typeLabel={publishTargetTypeMap[value] || value || "-"}
+						value={record.publish_target_value}
+					/>
+				),
 			},
 			{
 				title: t("publisher"),

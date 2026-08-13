@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import DefaultTopicModeStorageService from "../DefaultTopicModeStorageService"
-import { TopicMode } from "@/opensource/pages/superMagic/pages/Workspace/types"
-import { platformKey } from "@/opensource/utils/storage"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { platformKey } from "@/utils/storage"
 
 const userKey = "orgA/userA"
 
@@ -54,6 +54,20 @@ describe("DefaultTopicModeStorageService", () => {
 				fallbackMode: TopicMode.General,
 			}),
 		).toBe(TopicMode.General)
+	})
+
+	it("returns undefined for a missing stored value without persisting the fallback", () => {
+		expect(DefaultTopicModeStorageService.getStoredMode({ userKey })).toBeUndefined()
+		expect(localStorage.length).toBe(0)
+	})
+
+	it("reads raw stored preference even when availability changes", () => {
+		DefaultTopicModeStorageService.setMode({
+			userKey,
+			mode: TopicMode.Chat,
+		})
+
+		expect(DefaultTopicModeStorageService.getRawStoredMode({ userKey })).toBe(TopicMode.Chat)
 	})
 
 	it("migrates legacy global and project keys into aggregated store", () => {

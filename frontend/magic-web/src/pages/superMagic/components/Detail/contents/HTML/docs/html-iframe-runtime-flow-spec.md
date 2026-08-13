@@ -78,7 +78,8 @@ flowchart TD
 主 iframe 的 sandbox 属性为：
 
 ```html
-sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
+sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
+allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
 ```
 
 规范要求：不能把同源 `/husky.html` 当作安全隔离方案。涉及非可信 HTML、cookie/storage 隔离或更强安全边界时，应配置跨域 `MAGIC_HTML_SANDBOX_URL`。

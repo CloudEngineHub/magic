@@ -242,4 +242,33 @@ describe("useCrewPublishGuard", () => {
 		expect(openPublishingStep).not.toHaveBeenCalled()
 		expect(identity.ensureIdentityMarkdownFile).not.toHaveBeenCalled()
 	})
+
+	it("does not prepare publishing for viewers", async () => {
+		const identity = createIdentityMock({ hasName: false })
+		const layout = {
+			...createLayoutMock(),
+			activeDetailKey: "Publishing",
+		}
+		const openPublishingStep = vi.fn()
+		const { result } = renderHook(() =>
+			useCrewPublishGuard({
+				identity: identity as unknown as PublishGuardParams["identity"],
+				layout: layout as unknown as PublishGuardParams["layout"],
+				isInitializing: false,
+				readOnly: true,
+				projectId: "project-1",
+				openPublishingStep,
+			}),
+		)
+
+		await act(async () => {
+			result.current.handleOpenPublishing()
+			await result.current.handlePublishIdentitySaved()
+		})
+
+		expect(result.current.isPublishIdentityDialogOpen).toBe(false)
+		expect(openPublishingStep).not.toHaveBeenCalled()
+		expect(identity.ensureIdentityMarkdownFile).not.toHaveBeenCalled()
+		expect(identity.syncI18nFieldsToIdentityMarkdown).not.toHaveBeenCalled()
+	})
 })

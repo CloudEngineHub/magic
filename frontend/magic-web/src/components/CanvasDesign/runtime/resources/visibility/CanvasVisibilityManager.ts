@@ -410,6 +410,25 @@ export class CanvasVisibilityManager {
 		})
 	}
 
+	private readonly handleImageResourceLoadFailed = (event: {
+		data: {
+			path: string
+			reason?: ResourceLoadFailureReason
+			preservePreview?: boolean
+		}
+	}): void => {
+		if (this.destroyed || event.data.reason === "not-found") {
+			return
+		}
+
+		// A transient preview/refresh failure must not permanently poison the visibility
+		// request dedupe state. Do not schedule an immediate retry here: the next normal
+		// visibility refresh (viewport/element/idle) should retry without creating a loop.
+		this.invalidateImageLoadRequest(event.data.path, undefined, "load-failed", {
+			scheduleRefresh: false,
+		})
+	}
+
 	private readonly handleImageVariantLoadFailed = (event: {
 		data: {
 			path: string
@@ -417,7 +436,19 @@ export class CanvasVisibilityManager {
 			reason?: ResourceLoadFailureReason
 		}
 	}): void => {
-		if (this.destroyed || event.data.variant !== "low") {
+		if (this.destroyed) {
+			return
+		}
+
+		if (event.data.variant !== "low") {
+			// preview/full failures are not fallback transitions, so invalidate the exact
+			// failed tier and let the next visibility pass retry it.
+			this.invalidateImageLoadRequest(
+				event.data.path,
+				event.data.variant,
+				"variant-load-failed",
+				{ scheduleRefresh: false },
+			)
 			return
 		}
 
@@ -454,6 +485,10 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.on(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
+		)
+		this.canvas.eventEmitter.on(
+			"resource:image:load-failed",
+			this.handleImageResourceLoadFailed,
 		)
 		this.canvas.eventEmitter.on(
 			"resource:image:variant-load-failed",
@@ -703,6 +738,10 @@ export class CanvasVisibilityManager {
 		this.canvas.eventEmitter.off(
 			"resource:video:load-failed",
 			this.handleVideoResourceLoadFailed,
+		)
+		this.canvas.eventEmitter.off(
+			"resource:image:load-failed",
+			this.handleImageResourceLoadFailed,
 		)
 		this.canvas.eventEmitter.off(
 			"resource:image:variant-load-failed",

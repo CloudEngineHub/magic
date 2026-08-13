@@ -2,6 +2,7 @@ import { makeAutoObservable } from "mobx"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { DEFAULT_TOPIC_ID } from "@/services/superMagic/topicModel/constants"
+import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 
 /**
  * Super Magic Topic Model Store
@@ -35,6 +36,11 @@ class SuperMagicTopicModelStore {
 
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
+	}
+
+	/** Whether the language model for the current context is ready for use */
+	get isLanguageModelReady() {
+		return !this.isLoading && Boolean(this.selectedLanguageModel?.model_id)
 	}
 
 	/**
@@ -82,10 +88,30 @@ class SuperMagicTopicModelStore {
 		topicMode: TopicMode,
 		agentCode?: string | null,
 	) {
-		this.currentTopicId = topicId || ""
-		this.currentProjectId = projectId || ""
+		const nextTopicId = topicId || ""
+		const nextProjectId = projectId || ""
+		const nextAgentCode = agentCode ?? ""
+		const contextChanged =
+			this.currentTopicId !== nextTopicId ||
+			this.currentProjectId !== nextProjectId ||
+			this.currentTopicMode !== topicMode ||
+			this.currentAgentCode !== nextAgentCode
+
+		this.currentTopicId = nextTopicId
+		this.currentProjectId = nextProjectId
 		this.currentTopicMode = topicMode
-		this.currentAgentCode = agentCode ?? ""
+		this.currentAgentCode = nextAgentCode
+
+		if (contextChanged) {
+			this.isLoading = true
+
+			const isWorkspaceHome = !nextTopicId && !nextProjectId
+			if (isWorkspaceHome) {
+				this.selectedLanguageModel = null
+				this.selectedImageModel = null
+				this.selectedVideoModel = null
+			}
+		}
 	}
 
 	/**
@@ -98,7 +124,7 @@ class SuperMagicTopicModelStore {
 		this.isLoading = false
 		this.currentTopicId = DEFAULT_TOPIC_ID
 		this.currentProjectId = ""
-		this.currentTopicMode = "general" as TopicMode
+		this.currentTopicMode = getFallbackTopicModeIdentifier()
 		this.currentAgentCode = ""
 	}
 }

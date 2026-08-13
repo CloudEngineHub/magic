@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Interfaces\KnowledgeBase\Rpc\Service;
 
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAccessAppService;
 use App\Infrastructure\Rpc\Annotation\RpcMethod;
 use App\Infrastructure\Rpc\Annotation\RpcService;
 use App\Infrastructure\Rpc\Method\SvcMethods;
-use Dtyq\SuperMagic\Application\Agent\Service\SuperMagicAgentAccessAppService;
 use Psr\Log\LoggerInterface;
 use Throwable;
 

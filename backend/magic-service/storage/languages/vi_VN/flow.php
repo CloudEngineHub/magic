@@ -214,6 +214,19 @@ return [
         'max_record_error' => 'Số lượng bản ghi tối đa phải là số nguyên từ 0 đến 500',
         'temperature_error' => 'Nhiệt độ phải là số thập phân từ 0 đến 1',
     ],
+    'attachment' => [
+        'invalid_url' => 'URL tệp đính kèm bên ngoài phải là URL HTTP hoặc HTTPS có máy chủ',
+        'blocked' => 'URL tệp đính kèm bên ngoài đã bị chính sách bảo mật SSRF chặn: :reason',
+        'block_reason' => [
+            'invalid_url' => 'định dạng URL không hợp lệ',
+            'blacklisted' => 'địa chỉ đích nằm trong danh sách đen',
+            'protocol_not_allowed' => 'giao thức URL không được phép',
+            'non_public_ip' => 'địa chỉ đích không phải là IP công cộng',
+            'redirect_not_allowed' => 'URL đích có chuyển hướng không được phép',
+            'resolve_failed' => 'không thể phân giải máy chủ đích',
+            'unknown' => 'địa chỉ đích không đáp ứng chính sách bảo mật',
+        ],
+    ],
     'executor' => [
         'unsupported_node_type' => '[:node_type] Loại nút không được hỗ trợ',
         'has_circular_dependencies' => '[:label] Tồn tại phụ thuộc vòng',

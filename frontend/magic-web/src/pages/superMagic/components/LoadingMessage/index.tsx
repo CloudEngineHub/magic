@@ -62,7 +62,7 @@ export default function LoadingMessage({
 					// 过滤条件：有时间戳的消息
 					const hasTimestamp = msg.send_time
 					// 需要显示的消息才需要计算
-					const node = superMagicStore.getMessageNode(msg?.app_message_id)
+					const node = superMagicStore.getMessageNode(msg?.super_message_id)
 					const isMessageShow = !messageFilter(node)
 
 					return hasTimestamp && isMessageShow
@@ -214,7 +214,11 @@ export default function LoadingMessage({
 
 	return (
 		<>
-			<span className="ml-1 inline-flex h-[32px] items-center gap-1" style={style}>
+			<span
+				data-testid="super-magic-message-list-loading"
+				className="ml-1 inline-flex h-[32px] items-center gap-1"
+				style={style}
+			>
 				<Spinner className="animate-spin" size={16} />
 				<span className={loadingMessageTextClass}>{t("ui.thinking")}</span>
 				<span className="ml-1 flex h-12 items-center gap-px text-xs font-normal leading-5 tracking-[0.25px] text-foreground/35">

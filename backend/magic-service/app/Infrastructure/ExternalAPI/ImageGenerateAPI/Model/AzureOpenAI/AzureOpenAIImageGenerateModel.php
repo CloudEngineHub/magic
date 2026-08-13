@@ -99,6 +99,7 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
         } catch (Exception $e) {
             $this->logger->error('Azure OpenAI图像生成：API调用失败', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR);
         }

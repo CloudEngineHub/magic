@@ -23,7 +23,7 @@ class ResourceShareQueryVO
      * @param null|int $projectId Project ID for filtering
      * @param null|bool $shareProject 是否分享整个项目
      * @param array<string> $projectModes Project modes for filtering
-     * @param string $filterType 过滤类型（all=全部, active=分享中, expired=已失效, cancelled=已取消）
+     * @param array<ShareFilterType> $statusFilters 状态筛选集合，空数组表示不限制状态
      */
     public function __construct(
         private ?string $createdUid = null,
@@ -32,7 +32,7 @@ class ResourceShareQueryVO
         private ?int $projectId = null,
         private ?bool $shareProject = null,
         private array $projectModes = [],
-        private string $filterType = ShareFilterType::All->value,
+        private array $statusFilters = [],
     ) {
     }
 
@@ -115,11 +115,13 @@ class ResourceShareQueryVO
     }
 
     /**
-     * 获取过滤类型.
+     * 获取状态筛选集合.
+     *
+     * @return array<ShareFilterType>
      */
-    public function getFilterType(): string
+    public function getStatusFilters(): array
     {
-        return $this->filterType;
+        return $this->statusFilters;
     }
 
     /**
@@ -152,6 +154,18 @@ class ResourceShareQueryVO
             }
         }
 
+        $statusFilters = [];
+        foreach ($data['status_filters'] ?? [] as $statusFilter) {
+            $filterType = $statusFilter instanceof ShareFilterType
+                ? $statusFilter
+                : ShareFilterType::from((string) $statusFilter);
+            if ($filterType === ShareFilterType::All) {
+                $statusFilters = [];
+                break;
+            }
+            $statusFilters[$filterType->value] = $filterType;
+        }
+
         return new self(
             createdUid: $data['created_uid'] ?? null,
             resourceType: $resourceType,
@@ -159,7 +173,7 @@ class ResourceShareQueryVO
             projectId: isset($data['project_id']) ? (int) $data['project_id'] : null,
             shareProject: isset($data['share_project']) ? (bool) $data['share_project'] : null,
             projectModes: $projectModes,
-            filterType: $data['filter_type'] ?? ShareFilterType::All->value,
+            statusFilters: array_values($statusFilters),
         );
     }
 }

@@ -5,6 +5,9 @@
 
 	position: relative;
 	width: max-content;
+
+	/* 横向滚动容器会裁掉负向纵向溢出，为右上角删除按钮预留完整显示空间。 */
+	padding-top: 2px;
 	overflow: visible;
 }
 
@@ -86,12 +89,17 @@
 	cursor: default;
 }
 
-.sourceItemWarning {
-	border-color: rgb(var(--warning-rgb, 245 158 11));
+.sourceItemTooltipTrigger {
+	display: flex;
+	flex-shrink: 0;
+	align-items: flex-start;
+	justify-content: center;
+	width: 48px;
+	height: var(--slot-item-height, 56px);
 }
 
-.sourceItemDanger {
-	border-color: rgb(var(--destructive-rgb));
+.sourceItemSelectable {
+	cursor: pointer;
 }
 
 .sourceItemPreviewable {
@@ -197,7 +205,20 @@
 	color: currentcolor;
 }
 
-.sourceItemStatusIcon {
+.sourceItemSelectionCheckbox {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	z-index: 3;
+	background: var(--base-background, #fff);
+	box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
+}
+
+.sourceItemSelectionCheckbox[data-state="checked"] {
+	background: rgb(var(--primary-rgb));
+}
+
+.sourceItemLinkedIcon {
 	position: absolute;
 	top: 2px;
 	left: 2px;
@@ -210,39 +231,31 @@
 	color: #fafafa;
 	background: rgb(0 0 0 / 56%);
 	border-radius: 999px;
-	box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
 	pointer-events: none;
 }
 
-.sourceItemStatusIcon[data-tone="warning"] {
-	color: #451a03;
-	background: #fbbf24;
-}
-
-.sourceItemStatusIcon[data-tone="danger"] {
-	color: rgb(var(--destructive-foreground-rgb));
-	background: rgb(var(--destructive-rgb));
-}
-
-.sourceItemStatusIconSvg {
+.sourceItemLinkedIconSvg {
 	flex-shrink: 0;
 }
 
-.sourceItemTooltipStatus {
+.sourceItemStatusLabel {
+	position: absolute;
+	right: 2px;
+	bottom: 2px;
+	left: 2px;
+	z-index: 2;
 	display: block;
-	margin-top: 4px;
-	color: rgb(255 255 255 / 72%);
-	font-size: 11px;
-	line-height: 14px;
-	text-align: left;
-}
-
-.sourceItemTooltipStatus[data-tone="warning"] {
-	color: #fde68a;
-}
-
-.sourceItemTooltipStatus[data-tone="danger"] {
-	color: #fecaca;
+	padding: 1px 2px;
+	overflow: hidden;
+	color: #fff;
+	font-size: 9px;
+	line-height: 12px;
+	white-space: nowrap;
+	text-align: center;
+	text-overflow: ellipsis;
+	background: rgb(0 0 0 / 58%);
+	border-radius: 3px;
+	pointer-events: none;
 }
 
 .sourceItemHasResource:hover .sourceItemRemoveButton,

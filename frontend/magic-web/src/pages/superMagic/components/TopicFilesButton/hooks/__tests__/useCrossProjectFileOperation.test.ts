@@ -6,7 +6,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { useCrossProjectFileOperation } from "../useCrossProjectFileOperation"
 import type { AttachmentItem } from "../types"
 import { detectCanvasProjectOperationRisk } from "../../utils/canvasProjectOperationRisk"
-import { resolveSingleHtmlStaticDependencies } from "@/pages/superMagic/utils/htmlStaticDependencies"
+import { resolveSingleDocumentStaticDependencies } from "@/pages/superMagic/utils/staticDependencies"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -47,9 +47,9 @@ vi.mock("../../utils/canvasProjectOperationRisk", () => ({
 		risk.riskTypes.includes("project-entry") ? "open-failure" : "content-loss",
 }))
 
-vi.mock("@/pages/superMagic/utils/htmlStaticDependencies", () => ({
-	resolveSingleHtmlStaticDependencies: vi.fn(),
-	mergeHtmlStaticDependencyFileIds: (
+vi.mock("@/pages/superMagic/utils/staticDependencies", () => ({
+	resolveSingleDocumentStaticDependencies: vi.fn(),
+	mergeStaticDependencyFileIds: (
 		fileIds: string[],
 		dependencyFileIds: string[],
 		includeDependencies: boolean,
@@ -77,11 +77,13 @@ describe("useCrossProjectFileOperation", () => {
 			affectedProjectNames: [],
 		})
 		vi.mocked(SuperMagicApi.moveFile).mockResolvedValue({ status: "success" })
+		vi.mocked(SuperMagicApi.moveFiles).mockResolvedValue({ status: "success" })
 		vi.mocked(SuperMagicApi.copyFiles).mockResolvedValue({ status: "success" })
-		vi.mocked(resolveSingleHtmlStaticDependencies).mockResolvedValue({
-			isHtml: false,
+		vi.mocked(resolveSingleDocumentStaticDependencies).mockResolvedValue({
+			fileType: null,
 			dependencyFileIds: [],
 			dependencyTransferFileIds: [],
+			missingResourcePaths: [],
 		})
 	})
 
@@ -146,8 +148,8 @@ describe("useCrossProjectFileOperation", () => {
 				targetPath: [],
 				targetAttachments: [],
 				sourceAttachments,
-				includeHtmlDependencies: true,
-				htmlDependencyFileIds: ["image-1"],
+				includeDocumentDependencies: true,
+				documentDependencyFileIds: ["image-1"],
 			})
 		})
 
@@ -198,11 +200,88 @@ describe("useCrossProjectFileOperation", () => {
 		vi.useRealTimers()
 	})
 
+	it("preserves parent paths for a cross-project batch move when requested", async () => {
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeMoveOperation({
+				fileIds: ["file-1", "file-2"],
+				targetProjectId: "project-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments: [
+					...sourceAttachments,
+					{
+						file_id: "file-2",
+						file_name: "notes.md",
+						is_directory: false,
+						relative_file_path: "Docs/notes.md",
+					},
+				],
+				includeDocumentDependencies: false,
+				preserveParentPath: true,
+			})
+		})
+
+		expect(SuperMagicApi.moveFiles).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["file-1", "file-2"],
+				preserve_parent_path: true,
+			}),
+		)
+	})
+
+	it("preserves parent paths for a cross-project batch copy when requested", async () => {
+		const { result } = renderHook(() =>
+			useCrossProjectFileOperation({
+				projectId: "project-1",
+				selectedWorkspace: null,
+				selectedProject: null,
+				projects: [],
+			}),
+		)
+
+		await act(async () => {
+			await result.current.executeCopyOperation({
+				fileIds: ["file-1", "file-2"],
+				targetProjectId: "project-2",
+				targetPath: [],
+				targetAttachments: [],
+				sourceAttachments: [
+					...sourceAttachments,
+					{
+						file_id: "file-2",
+						file_name: "notes.md",
+						is_directory: false,
+						relative_file_path: "Docs/notes.md",
+					},
+				],
+				includeDocumentDependencies: false,
+				preserveParentPath: true,
+			})
+		})
+
+		expect(SuperMagicApi.copyFiles).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["file-1", "file-2"],
+				preserve_parent_path: true,
+			}),
+		)
+	})
+
 	it("copies dependency folders when a nested HTML resource needs its directory structure", async () => {
-		vi.mocked(resolveSingleHtmlStaticDependencies).mockResolvedValue({
-			isHtml: true,
+		vi.mocked(resolveSingleDocumentStaticDependencies).mockResolvedValue({
+			fileType: "html",
 			dependencyFileIds: ["image-1"],
 			dependencyTransferFileIds: ["assets-folder"],
+			missingResourcePaths: [],
 		})
 
 		const { result } = renderHook(() =>
@@ -232,7 +311,7 @@ describe("useCrossProjectFileOperation", () => {
 	})
 
 	it("warns when dependency analysis falls back to the selected HTML file", async () => {
-		vi.mocked(resolveSingleHtmlStaticDependencies).mockRejectedValue(
+		vi.mocked(resolveSingleDocumentStaticDependencies).mockRejectedValue(
 			new Error("dependency analysis failed"),
 		)
 
@@ -255,7 +334,7 @@ describe("useCrossProjectFileOperation", () => {
 			})
 		})
 
-		expect(magicToast.warning).toHaveBeenCalledWith("share.htmlDependenciesAnalysisFailed")
+		expect(magicToast.warning).toHaveBeenCalledWith("share.documentDependenciesAnalysisFailed")
 		expect(SuperMagicApi.copyFiles).toHaveBeenCalledWith(
 			expect.objectContaining({ file_ids: ["file-1"] }),
 		)

@@ -50,13 +50,17 @@ vi.mock("../../PPTRender", () => ({
 	default: ({
 		slidePaths,
 		attachments,
+		attachmentList,
 		mainFileId,
+		isFullscreen,
 		onSortSave,
 		openNewTab,
 	}: {
 		slidePaths?: string[]
 		attachments?: Array<{ file_id?: string; relative_file_path?: string }>
+		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
+		isFullscreen?: boolean
 		onSortSave?: (slidePaths: string[]) => void
 		openNewTab?: (fileId: string, path: string) => void
 	}) => (
@@ -66,6 +70,13 @@ vi.mock("../../PPTRender", () => ({
 			data-main-relative-path={
 				attachments?.find((item) => item.file_id === mainFileId)?.relative_file_path
 			}
+			data-attachment-root-ids={JSON.stringify(
+				attachments?.map((item) => item.file_id) || [],
+			)}
+			data-attachment-list-ids={JSON.stringify(
+				attachmentList?.map((item) => item.file_id) || [],
+			)}
+			data-is-fullscreen={String(Boolean(isFullscreen))}
 		>
 			<button
 				type="button"
@@ -105,7 +116,11 @@ function createDeckFiles(magicUpdatedAt: string) {
 	]
 }
 
-function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
+function renderRoot(
+	magicUpdatedAt: string,
+	slides = ["slides/slide-1.html"],
+	options: { isFullscreen?: boolean } = {},
+) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
 	return render(
@@ -120,6 +135,7 @@ function renderRoot(magicUpdatedAt: string, slides = ["slides/slide-1.html"]) {
 				type: "slide",
 				slides,
 			}}
+			isFullscreen={options.isFullscreen}
 			activeFileId="index-file"
 		/>,
 	)
@@ -136,6 +152,17 @@ describe("PPTRootRender", () => {
 			originalSlidesPaths: ["slides/slide-1.html"],
 		})
 		mockState.getFileContentById.mockReset()
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'] }",
+		)
+	})
+
+	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+		})
 	})
 
 	it("keeps PPTRender mounted while magic.project.js reloads in the background", async () => {
@@ -342,6 +369,55 @@ describe("PPTRootRender", () => {
 		})
 	})
 
+	it("keeps nested attachments as a tree while providing a flat attachment list", async () => {
+		const slideFile = {
+			file_id: "slide-file",
+			file_name: "slide-1.html",
+			relative_file_path: "deck/slides/slide-1.html",
+			parent_id: "slides-folder",
+		}
+		const slidesFolder = {
+			file_id: "slides-folder",
+			file_name: "slides",
+			is_directory: true,
+			relative_file_path: "deck/slides",
+			parent_id: "deck-folder",
+			children: [slideFile],
+		}
+		const deckFolder = {
+			file_id: "deck-folder",
+			file_name: "产品方案",
+			is_directory: true,
+			relative_file_path: "deck",
+			display_config: {
+				type: "slide",
+				slides: ["slides/slide-1.html"],
+			},
+			children: [slidesFolder],
+		}
+
+		render(
+			<PPTRootRender
+				data={deckFolder}
+				attachments={[deckFolder]}
+				attachmentList={[deckFolder]}
+				displayConfig={deckFolder.display_config}
+				activeFileId="deck-folder"
+			/>,
+		)
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-attachment-root-ids",
+				JSON.stringify(["deck-folder"]),
+			)
+		})
+		expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+			"data-attachment-list-ids",
+			JSON.stringify(["deck-folder", "slides-folder", "slide-file"]),
+		)
+	})
+
 	it("opens a slide from displayData children in a new tab", async () => {
 		const openFileTab = vi.fn()
 		const slideFile = {
@@ -376,6 +452,10 @@ describe("PPTRootRender", () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId("ppt-render")).not.toBeNull()
 		})
+		expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+			"data-attachment-root-ids",
+			JSON.stringify(["deck-folder"]),
+		)
 
 		fireEvent.click(screen.getByTestId("open-slide-new-tab"))
 

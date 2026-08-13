@@ -27,9 +27,9 @@ import {
 	isNodeSelected,
 } from "@/pages/superMagic/components/TopicFilesButton/hooks/fileSelectionUtils"
 import { canSetAsDefault, hasValidFileForShare } from "./utils"
-import { useResponsive } from "ahooks"
 import { useLocateFile } from "./hooks/useLocateFile"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 export default memo(function FileSelector(props: FileSelectorProps) {
 	const {
@@ -51,7 +51,7 @@ export default memo(function FileSelector(props: FileSelectorProps) {
 	const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
 	const [initialized, setInitialized] = useState(false)
 	const [hoveredItemId, setHoveredItemId] = useState<string | null>(null)
-	const isMobile = useResponsive().md === false
+	const isMobile = useIsMobile()
 	const treeAreaRef = useRef<HTMLDivElement>(null)
 
 	// Filter files based on search

@@ -19,6 +19,7 @@ import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-
 import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
+import { useGenerationRuntime } from "../../../app/hooks/canvas"
 
 interface ImageMessageHistoryRenderProps {
 	imageElement: ImageElement
@@ -32,19 +33,20 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { imageModelList, convertHightConfig } = useMagic()
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
+	const generationRuntime = useGenerationRuntime(imageElement.id)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 
 	// 获取请求信息
-	const request = imageElement.generateImageRequest
+	const request = generationRuntime?.generateImageRequest || imageElement.generateImageRequest
 
-	const imageGenerationTaskMeta = getImageGenerationTaskMeta(imageElement)
+	const imageGenerationTaskMeta =
+		generationRuntime?.imageGenerationTaskMeta || getImageGenerationTaskMeta(imageElement)
 
 	// 获取元素实例以访问 getImageInfo 方法
 	const elementInstance = useMemo(() => {
 		if (!canvas || !imageElement.id) return undefined
 		return canvas.elementManager.getElementInstance(imageElement.id) as
-			| ImageElementClass
-			| undefined
+			ImageElementClass | undefined
 	}, [canvas, imageElement.id])
 
 	// 获取尺寸

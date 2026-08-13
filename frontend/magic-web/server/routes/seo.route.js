@@ -5,8 +5,34 @@ const getClusterConfiguration = require("../apis/getClusterConfiguration")
 const getApprovalShare = require("../apis/getApprovalShare")
 const getFileInfo = require("../apis/getFileInfo")
 const getShareForm = require("../apis/getShareForm")
+const getMicroAppProjectName = require("../apis/getMicroAppProjectName")
 
 class SEO {
+	/** 微应用分享页和编辑页 */
+	async microApp(req, res, next) {
+		const fallbackTitle = req.__("superMagic.microApp")
+		const { appId } = req.params
+		let title = fallbackTitle
+
+		if (appId) {
+			try {
+				const data = await getMicroAppProjectName(appId)
+				const projectName = data?.data?.project_name
+				if (typeof projectName === "string" && projectName.trim()) {
+					title = projectName.trim()
+				}
+			} catch (_) {
+				// Keep the localized fallback when the metadata service is unavailable.
+			}
+		}
+
+		return {
+			title,
+			description: title,
+			keywords: title,
+		}
+	}
+
 	/** 分享话题 */
 	async shareTopic(req, res, next) {
 		const { topicId } = req.params

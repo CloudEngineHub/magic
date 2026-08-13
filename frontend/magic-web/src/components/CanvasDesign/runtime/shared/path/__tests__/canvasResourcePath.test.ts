@@ -29,6 +29,7 @@ describe("canvasResourcePath", () => {
 		expect(toCanonicalCanvasResourcePath("./images/a.png")).toBe("images/a.png")
 		expect(toCanonicalCanvasResourcePath("images/a.png")).toBe("images/a.png")
 		expect(areCanvasResourcePathsSame("./images/a.png", "images/a.png")).toBe(true)
+		expect(areCanvasResourcePathsSame("./images/a.png", "/images/a.png")).toBe(true)
 	})
 
 	it("resolves the same resource across host absolute and DSL forms without cross-canvas fallback", () => {

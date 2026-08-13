@@ -1,6 +1,7 @@
 """mcp_call_tool 工具"""
 
 import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from pydantic import Field
@@ -8,6 +9,7 @@ from pydantic import Field
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.mcp.manager import ensure_server_connected
@@ -21,57 +23,34 @@ logger = get_logger(__name__)
 class McpCallToolParams(BaseToolParams):
     server_name: str = Field(
         ...,
-        description="""<!--zh: 目标 MCP 服务器名称。-->
-Target MCP server name.""",
+        description="Target MCP server name.",
     )
     tool_name: str = Field(
         ...,
-        description="""<!--zh: 要调用的工具名，需与 mcp_list_tools / mcp_get_tool_schema 返回的 name 完全一致。-->
-Name of the tool to invoke. Must match the `name` returned by
-mcp_list_tools / mcp_get_tool_schema exactly.""",
+        description="Tool name returned by mcp_list_tools or mcp_get_tool_schema.",
     )
     tool_params: str = Field(
         ...,
-        description="""<!--zh
-        传给目标工具的参数，必须是 JSON 对象字符串（顶层是 object），如 '{"key": "value"}'。
-        内部会 json.loads 后转发给 MCP 上游工具；结构必须与 mcp_get_tool_schema 返回的 schema 匹配。
-        没有参数时传 '{}'。
-        -->
-        JSON object string forwarded to the target tool, e.g. '{"key": "value"}'.
-        It will be json.loads'd into a dict before being relayed; the parsed
-        shape must match the schema returned by mcp_get_tool_schema. Pass '{}'
-        when the target tool takes no parameters.""",
+        description=(
+            "JSON object string matching mcp_get_tool_schema, for example "
+            "'{\"key\": \"value\"}'. Pass '{}' when the tool has no parameters."
+        ),
     )
     output_file_path: str = Field(
         default="",
-        description="""<!--zh
-        工具结果输出到文件的路径，必须是绝对路径，文件必须是 json 格式，
-        并且具有优雅的目录结构。用于在需要保留详细执行结果或结果可能
-        很大时，将结果作为产物交付；主动传入时建议保存到当前工作区下，
-        便于后续查看和交付。不指定（为空）时，若工具结果过大会自动保存，
-        避免冲击上下文。
-        -->
-        Path to write the tool result to as a JSON file. Must be an absolute
-        path, organized with a tidy directory structure. Use it when you
-        need to keep a detailed execution result or when the result may be
-        large, so that it can be delivered as a proper artifact; when you do
-        set it, prefer a location inside the current workspace so the file
-        is easy to inspect and hand over. Leave empty to skip file delivery;
-        oversized results will still be auto-persisted so they do not flood
-        the context.""",
+        description=(
+            "Optional absolute JSON output path. Successful results are returned inline by default; "
+            "when omitted, results larger than 8 KiB are stored in the capacity-managed .runtime "
+            "directory and may disappear after later eviction or a sandbox restart. To keep a result "
+            "across restarts or deliver it to the user, provide an absolute path inside the current "
+            ".workspace directory."
+        ),
     )
 
 
 @tool(name="mcp_call_tool")
 class McpCallTool(BaseMcpTool[McpCallToolParams]):
-    """<!--zh
-    调用 MCP 服务器上的具体工具，等价于"远程函数调用"。若目标服务器未连接会先按需建连。
-    返回值的 content/data 直接来自上游工具的原始结果。
-    -->
-    Invoke a specific tool on an MCP server, similar to a remote function
-    call. Connects the server on demand when needed. The returned content
-    and data fields come straight from the upstream tool's raw result.
-    """
+    """Invoke an MCP tool, connecting its server when needed."""
 
     async def get_before_tool_call_friendly_action_and_remark(
         self, tool_name: str, tool_context: ToolContext, arguments: Dict[str, Any] = None
@@ -199,6 +178,15 @@ class McpCallTool(BaseMcpTool[McpCallToolParams]):
         if not server_name or not tool_name:
             return ToolResult.error("server_name and tool_name must not be empty.")
 
+        result_saver.trigger_mcp_output_cleanup()
+        requested_output_path = params.output_file_path.strip()
+        if requested_output_path and not Path(requested_output_path).is_absolute():
+            return ToolResult.error(
+                "output_file_path must be an absolute path. To keep the result across sandbox "
+                "restarts or deliver it to the user, use an absolute path inside the current "
+                ".workspace directory."
+            )
+
         ok = await self._ensure_server_in_manager(server_name)
         if not ok:
             return ToolResult.error(f"Unknown MCP server: {server_name}")
@@ -234,12 +222,18 @@ class McpCallTool(BaseMcpTool[McpCallToolParams]):
         # 按需落盘：用户指定路径时作为产物交付，未指定但结果超阈值时自动保存到运行时目录避免冲击上下文
         if result.ok and result_saver.should_save_to_file(result, params.output_file_path):
             try:
+                agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
+                workspace_dir = (
+                    Path(agent_context.get_workspace_dir())
+                    if agent_context is not None
+                    else None
+                )
                 result = await result_saver.save_result_to_file(
                     result=result,
                     output_file_path=params.output_file_path,
                     tool_original_name=tool_name,
-                    tool_full_name=f"{server_name}_{tool_name}",
                     server_name=server_name,
+                    workspace_dir=workspace_dir,
                 )
             except Exception as save_error:
                 # 落盘失败不能吃掉原始调用结果，原始 result 透传供模型继续推理

@@ -18,6 +18,7 @@ from app.infrastructure.storage.types import PlatformType
 from app.path_manager import PathManager
 from app.service.convert_task_manager import task_manager
 from app.service.file_convert.base_convert_service import BaseConvertService, STSTemporaryCredential
+from app.utils.pack_archive_path import normalize_archive_name, resolve_archive_name
 
 
 class PackConvertService(BaseConvertService):
@@ -32,6 +33,7 @@ class PackConvertService(BaseConvertService):
         task_key: Optional[str] = None,
         sts_credential: Optional[Dict[str, Any]] = None,
         output_name: Optional[str] = None,
+        options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         将 file_keys 对应文件打包为 ZIP（保留目录结构）
@@ -41,6 +43,7 @@ class PackConvertService(BaseConvertService):
             task_key: 任务标识符，会在结果中原样返回
             sts_credential: STS 临时凭证，用于上传
             output_name: 输出 zip 文件名（可选，支持不带 .zip）
+            options: 打包路径选项，支持 workspace_relative 和 relative_lca
 
         Returns:
             打包结果字典
@@ -56,7 +59,7 @@ class PackConvertService(BaseConvertService):
 
             zip_name = self._normalize_output_name(output_name)
             zip_path = batch_dir / zip_name
-            archive_entries = self._build_archive_entries(file_path_mapping)
+            archive_entries = self._build_archive_entries(file_path_mapping, options)
 
             loop = asyncio.get_running_loop()
             await asyncio.to_thread(
@@ -211,29 +214,26 @@ class PackConvertService(BaseConvertService):
         """
         规范 ZIP 内路径，确保是安全的相对路径。
         """
-        normalized_key = file_key.replace("\\", "/").strip()
-        if not normalized_key:
-            raise ValueError("file_key 不能为空")
+        return normalize_archive_name(file_key)
 
-        if normalized_key.startswith("/"):
-            raise ValueError(f"file_key 不能是绝对路径: {file_key}")
-
-        parts = [part for part in normalized_key.split("/") if part not in {"", "."}]
-        if not parts:
-            raise ValueError(f"file_key 非法: {file_key}")
-
-        if any(part == ".." for part in parts):
-            raise ValueError(f"file_key 包含非法路径段 '..': {file_key}")
-
-        return "/".join(parts)
-
-    def _build_archive_entries(self, file_path_mapping: Dict[str, Path]) -> List[Tuple[Path, str]]:
+    def _build_archive_entries(
+        self,
+        file_path_mapping: Dict[str, Path],
+        options: Optional[Dict[str, Any]] = None,
+    ) -> List[Tuple[Path, str]]:
         """
         构建 ZIP 条目，确保源文件都在 workspace 内，并保持 file_key 目录结构。
         """
         workspace_dir = PathManager.get_workspace_dir().resolve()
         seen_archive_names = set()
         archive_entries: List[Tuple[Path, str]] = []
+
+        logger.info(
+            "构建ZIP条目: path_mode={}, archive_base_path={}, source_file_count={}",
+            (options or {}).get("path_mode", "workspace_relative"),
+            (options or {}).get("archive_base_path", ""),
+            len(file_path_mapping),
+        )
 
         for file_key, file_path in file_path_mapping.items():
             resolved_path = file_path.resolve()
@@ -242,7 +242,7 @@ class PackConvertService(BaseConvertService):
             except ValueError:
                 raise ValueError(f"file_key 超出 workspace 范围: {file_key}")
 
-            archive_name = self._normalize_archive_name(file_key)
+            archive_name = resolve_archive_name(file_key, options)
             if archive_name in seen_archive_names:
                 raise ValueError(f"检测到重复的打包路径: {archive_name}")
             seen_archive_names.add(archive_name)

@@ -41,6 +41,7 @@ import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { smartRenameTopicIfUnnamed } from "./topicRename"
 import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatConversationNameSync"
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
+import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 
 const logger = Logger.createLogger("messageSendService")
@@ -103,6 +104,7 @@ export interface SendRuntimeContext {
 	selectedWorkspace?: Workspace | null
 	workspaceId?: string
 	updateTopicName?: (topicId: string, topicName: string) => void | Promise<void>
+	refreshProjectAfterTopicRename?: boolean
 	renameProject?: (
 		projectId: string,
 		projectName: string,
@@ -165,7 +167,11 @@ class MessageSendService {
 		const currentTopic = selectedTopic ?? context?.selectedTopic ?? options?._tempTopic ?? null
 
 		if (!currentTopic?.id) {
-			this.deps.logger.error("发送消息 - 未找到选中的话题")
+			this.deps.logger.error({
+				eventKey: "send_message_failed",
+				errorKind: "unknown",
+				message: "发送消息 - 未找到选中的话题",
+			})
 			return false
 		}
 
@@ -189,28 +195,34 @@ class MessageSendService {
 
 		const sendOptions = stripTempOptions(options)
 
-		// 话题名为空时根据内容自动命名
-		if (currentProject && currentTopic) {
-			const userQuestion = generateTextFromJSONContent(resolvedJson)
-
-			void smartRenameTopicIfUnnamed({
-				topic: currentTopic,
-				userQuestion,
-				updateTopicName: context?.updateTopicName,
-			})
-				.then((topicName) => {
-					if (!topicName) return
-
-					this.handleSmartProjectRename({
-						project: currentProject,
-						topicName,
-						context,
+		// 话题名为空时根据内容自动命名，消息发送不等待该任务。
+		// 首页创建场景会登记任务，详情页在任务完成后按需刷新一次项目详情。
+		const renameTask =
+			currentProject && currentTopic
+				? startMessageSendRenameTask({
+						topicId: currentTopic.id,
+						renameTopic: () =>
+							smartRenameTopicIfUnnamed({
+								topic: currentTopic,
+								userQuestion: generateTextFromJSONContent(resolvedJson),
+								updateTopicName: context?.updateTopicName,
+							}),
+						syncProjectName: (topicName) =>
+							this.handleSmartProjectRename({
+								project: currentProject,
+								topicName,
+								context,
+							}),
+						onError: (error) => {
+							this.deps.logger.error({
+								eventKey: "smart_topic_rename_failed",
+								errorKind: "unknown",
+								error,
+								message: "Smart topic rename failed",
+							})
+						},
 					})
-				})
-				.catch((error) => {
-					this.deps.logger.error("Smart topic rename failed", error)
-				})
-		}
+				: undefined
 
 		const mergedSendOptions = merge({}, sendOptions, {
 			extra: {
@@ -284,13 +296,16 @@ class MessageSendService {
 		// 仅当前可见分支仍以 revoked 尾段结束时确认撤回；历史撤回事实不应阻塞新消息。
 		const hasRevokedMessages = projectVisibleMessagesByRevokedTail(
 			this.getMessageList(currentTopic),
-		).some((message) => message?.status === MessageStatus.REVOKED)
+		).some((message) => (message?.imStatus ?? message?.status) === MessageStatus.REVOKED)
 		if (hasRevokedMessages) {
 			const isConfirmed = await this.confirmRevokedMessagesBeforeSend(currentTopic)
 			if (!isConfirmed) return false
 		}
 
 		sendMessage()
+		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
+			trackProjectRenameTask(currentProject.id, renameTask.completion)
+		}
 		if (hasRevokedMessages) {
 			this.deps.pubsub.publish(PubSubEvents.Refresh_Topic_Messages)
 		}
@@ -321,7 +336,11 @@ class MessageSendService {
 
 		try {
 			if (!currentProject?.id || !currentTopic?.id) {
-				this.deps.logger.error("handleSend error: missing project/topic context")
+				this.deps.logger.error({
+					eventKey: "send_project_topic_context_missing",
+					errorKind: "invalid_state",
+					message: "handleSend error: missing project/topic context",
+				})
 				return
 			}
 
@@ -368,7 +387,12 @@ class MessageSendService {
 				currentTopic,
 			}
 		} catch (error) {
-			this.deps.logger.error("handleSend error", error)
+			this.deps.logger.error({
+				eventKey: "handle_send_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "handleSend error",
+			})
 		} finally {
 			setIsSending(false)
 		}
@@ -460,12 +484,17 @@ class MessageSendService {
 			optimisticMessageStore.clearActiveRevokedAnchor(topic.chat_topic_id)
 			return true
 		} catch (error) {
-			this.deps.logger.error("confirm undo message failed", error)
+			this.deps.logger.error({
+				eventKey: "confirm_undo_message_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "confirm undo message failed",
+			})
 			return false
 		}
 	}
 
-	private handleSmartProjectRename({
+	private async handleSmartProjectRename({
 		project,
 		topicName,
 		context,
@@ -478,7 +507,7 @@ class MessageSendService {
 
 		// Chat conversations: topic was already renamed by smartRenameTopic; mirror name on project.
 		if (shouldSyncChatConversationName(project)) {
-			void syncChatProjectNameOnly({
+			await syncChatProjectNameOnly({
 				projectId: project.id,
 				name: topicName,
 			})
@@ -490,7 +519,7 @@ class MessageSendService {
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""
 			if (workspaceId) {
-				void context?.renameProject?.(project.id, topicName, workspaceId)
+				await context?.renameProject?.(project.id, topicName, workspaceId)
 			}
 		}
 	}

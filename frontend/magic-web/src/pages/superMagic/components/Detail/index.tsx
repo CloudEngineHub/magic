@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { observer } from "mobx-react-lite"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 
 // Define the Detail component props interface
 interface DetailProps {
@@ -38,6 +39,14 @@ interface DetailProps {
 	onActiveTabChange?: (tabType: ActiveDetailTabType) => void
 	// Fullscreen change callback
 	onFullscreenChange?: (isFullscreen: boolean) => void
+	/** Selects split, fullscreen, or switchable preview presentation. */
+	previewMode?: MagicWidget.PreviewMode
+	/** Changes whenever the parent starts a new preview session after dismissing the previous one. */
+	previewSessionKey?: number
+	/** Hides the preview surface while preserving cached tabs and renderer state. */
+	onPreviewDismiss?: () => void
+	/** Controls whether project-level preview tabs survive a page remount. */
+	persistFileTabs?: boolean
 	// Topic name for share scenario
 	topicName?: string
 	projectId?: string
@@ -47,6 +56,8 @@ interface DetailProps {
 	showFallbackWhenEmpty?: boolean
 	/** 当前项目文件 tabs 缓存一轮加载结束 */
 	onFileTabsCacheLoaded?: (projectId: string) => void
+	/** File ids whose tabs must remain open in the viewer. */
+	nonClosableFileIds?: string[]
 	/** When false, hides file preview toolbar (CommonHeaderV2) */
 	showFileHeader?: boolean
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
@@ -59,6 +70,8 @@ interface DetailProps {
 	isFullscreen?: boolean
 	/** Overrides default footer visibility (mobile non-share shows footer by default) */
 	showFileFooter?: boolean
+	/** Class name for the detail container */
+	className?: string
 }
 
 // Forward ref type for Detail component
@@ -77,6 +90,10 @@ export interface DetailRef {
 		knowledgeBaseName?: string
 		fileExtension?: string
 	}) => void
+	/** Promotes the active preview without reopening its tab. */
+	enterPreviewFullscreen: () => void
+	/** Restores the active preview without dismissing its cached content. */
+	exitPreviewFullscreen: () => void
 }
 
 const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
@@ -100,17 +117,23 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		onActiveFileChange,
 		onActiveTabChange,
 		onFullscreenChange,
+		previewMode,
+		previewSessionKey,
+		onPreviewDismiss,
+		persistFileTabs,
 		topicName,
 		projectId,
 		allowDownload,
 		showFallbackWhenEmpty,
 		onFileTabsCacheLoaded,
+		nonClosableFileIds,
 		showFileHeader,
 		hideTabBar,
 		forceFullscreenMode,
 		documentFlowFullscreen,
 		isFullscreen = false,
 		showFileFooter: showFileFooterProp,
+		className,
 	} = props
 
 	const filesViewerRef = useRef<FilesViewerRef>(null)
@@ -172,6 +195,12 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				filesViewerRef.current.openKnowledgeBaseTab(data)
 			}
 		},
+		enterPreviewFullscreen: () => {
+			filesViewerRef.current?.enterPreviewFullscreen()
+		},
+		exitPreviewFullscreen: () => {
+			filesViewerRef.current?.exitPreviewFullscreen()
+		},
 	}))
 
 	// Return unified files mode with playback tab
@@ -182,6 +211,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 					? "relative flex min-h-dvh flex-col overflow-visible"
 					: "relative flex h-full flex-col rounded-lg",
 				isFullscreen || documentFlowFullscreen ? "overflow-visible" : "overflow-hidden",
+				className,
 			)}
 		>
 			<FilesViewer
@@ -200,6 +230,10 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				selectedProject={selectedProject}
 				onActiveFileChange={onActiveFileChange}
 				onFullscreenChange={onFullscreenChange}
+				previewMode={previewMode}
+				previewSessionKey={previewSessionKey}
+				onPreviewDismiss={onPreviewDismiss}
+				persistFileTabs={persistFileTabs}
 				openFileTab={openNewTab}
 				activeFileId={activeFileId}
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}
@@ -218,6 +252,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				allowDownload={effectiveAllowDownload}
 				showFallbackWhenEmpty={showFallbackWhenEmpty}
 				onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+				nonClosableFileIds={nonClosableFileIds}
 			/>
 		</div>
 	)

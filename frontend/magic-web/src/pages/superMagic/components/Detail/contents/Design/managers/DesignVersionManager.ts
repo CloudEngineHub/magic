@@ -8,7 +8,13 @@ import {
 	normalizeDesignDataPathsAfterLoad,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { hydrateDesignDataDetails } from "../utils/elementDetailsIo"
+import {
+	getHydratedElementDetailsProvenance,
+	hydrateDesignDataDetails,
+	setHydratedElementDetailsProvenance,
+} from "../utils/elementDetailsIo"
+import { buildInlineElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document/elementDetailsProvenance"
+import { isV2Version } from "../utils/magicProjectCompression"
 import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
 import type { DesignData } from "../types"
 import type { DesignSaveManager } from "./DesignSaveManager"
@@ -54,6 +60,12 @@ export class DesignVersionManager {
 					flatAttachments: this.options.flatAttachments,
 					attachmentIndex: this.options.attachmentIndex,
 				})
+			}
+			if (!isV2Version(data.version)) {
+				setHydratedElementDetailsProvenance(
+					data,
+					buildInlineElementDetailsProvenance(data.canvas?.elements),
+				)
 			}
 		}
 		return data
@@ -120,6 +132,9 @@ export class DesignVersionManager {
 		this.saveManager.clearRemoteConflict()
 		this.stateBag.setters.setConflictState(null)
 		this.stateBag.setters.setIsSaving(false)
+		this.stateBag.setters.setElementDetailsProvenance?.(
+			getHydratedElementDetailsProvenance(parsedDesignData) ?? {},
+		)
 		this.stateBag.setters.setDesignData(parsedDesignData)
 		this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedDesignData))
 		this.stateBag.setters.setIsReadOnly(

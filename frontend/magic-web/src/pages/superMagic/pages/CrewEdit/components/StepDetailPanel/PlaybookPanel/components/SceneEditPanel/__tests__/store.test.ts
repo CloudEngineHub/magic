@@ -33,6 +33,21 @@ function createScene(): SceneItem {
 }
 
 describe("SceneEditStore inspiration defaults", () => {
+	it("ignores all scene mutations in read-only mode", async () => {
+		const scene = createScene()
+		const original = JSON.parse(JSON.stringify(scene)) as SceneItem
+		const store = new SceneEditStore(scene, undefined, true)
+
+		store.updateBasicInfo({ name: "Changed" })
+		store.createInspirationGroup({ group_name: customGroupName }, defaultGroupName)
+		store.createInspirationItem({ label: "Item", prompt: "Prompt" }, "", defaultGroupName)
+		store.updatePresets({ type: "field", field: { items: [] } })
+		store.updateQuickStart({ type: "guide", guide: { items: [] } })
+		await store.save()
+
+		expect(store.scene).toEqual(original)
+	})
+
 	it("creates a stable default group when first item is added", () => {
 		const store = new SceneEditStore(createScene())
 
