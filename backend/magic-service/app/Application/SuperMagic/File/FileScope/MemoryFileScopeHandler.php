@@ -71,7 +71,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
 
         $fileEntities = $this->magicFSFileDomainService->listFilesByParentId(
             (string) $parent->getFileId(),
-            StorageType::WORKSPACE->value,
+            $parent->getSpaceType(),
         );
         $fileEntities = array_values(array_filter(
             $fileEntities,
@@ -245,7 +245,7 @@ final class MemoryFileScopeHandler implements FileScopeHandlerInterface
             (string) $root->getFileId(),
             -1,
             0,
-            StorageType::WORKSPACE->value,
+            $root->getSpaceType(),
         );
 
         return array_values(array_filter(

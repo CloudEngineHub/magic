@@ -64,7 +64,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $result;
     }
 
-    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
     {
         // 如果 ID 列表为空，直接返回空数组
         if (empty($fileIds)) {
@@ -82,8 +82,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 $query->where('project_id', $projectId);
             }
 
-            if ($storageType !== null) {
-                $query->where('storage_type', $storageType);
+            if ($spaceType !== null) {
+                $query->where('space_type', $spaceType);
             }
 
             $models = $query->get();
@@ -857,15 +857,15 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * 根据 parent_id 和 project_id 查找子文件列表.
      * 此查询会使用索引: idx_project_parent_sort (project_id, parent_id, sort, file_id).
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $spaceType = null): array
     {
         $query = $this->model::query()
             ->where('project_id', $projectId)
             ->where('parent_id', $parentId)
             ->whereNull('deleted_at');
 
-        if ($storageType !== null) {
-            $query->where('storage_type', $storageType);
+        if ($spaceType !== null) {
+            $query->where('space_type', $spaceType);
         }
 
         $models = $query->limit($limit)->get();

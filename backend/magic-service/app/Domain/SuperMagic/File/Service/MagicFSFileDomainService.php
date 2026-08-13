@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\File\Service;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
@@ -45,9 +46,9 @@ class MagicFSFileDomainService
      * 根据 parent_id 查询文件列表.
      *
      * @param string $parentId Parent directory ID
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      */
-    public function listFilesByParentId(string $parentId, ?string $storageType = null): array
+    public function listFilesByParentId(string $parentId, ?string $spaceType = null): array
     {
         // 1. 获取 project_id
         $projectId = $this->getProjectIdByParentId($parentId);
@@ -60,7 +61,7 @@ class MagicFSFileDomainService
             $projectId,
             $parentIdInt,
             10000,  // 设置一个较大的限制值，避免意外的无限查询
-            $storageType
+            $spaceType
         );
     }
 
@@ -103,7 +104,7 @@ class MagicFSFileDomainService
                 ['project_id' => $projectId]
             );
         }
-        if ($rootDir->getStorageType() !== StorageType::WORKSPACE) {
+        if ($rootDir->getSpaceType() !== FileSpaceType::PROJECT->value) {
             ExceptionBuilder::throw(
                 MagicFSErrorCode::FILE_NOT_FOUND,
                 'magicfs.project_not_found',
@@ -690,10 +691,10 @@ class MagicFSFileDomainService
      * @param string $fileId 文件ID
      * @param int $depth 递归深度，-1 表示无限深度
      * @param int $currentDepth 当前深度（内部使用）
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      * @return array 文件树数据 [rootFile, childrenMap]
      */
-    public function getFileTree(string $fileId, int $depth = -1, int $currentDepth = 0, ?string $storageType = null): array
+    public function getFileTree(string $fileId, int $depth = -1, int $currentDepth = 0, ?string $spaceType = null): array
     {
         // 1. 获取根文件/目录
         $rootFile = $this->getFileById($fileId);
@@ -711,7 +712,7 @@ class MagicFSFileDomainService
         }
 
         // 4. 一次性查询所有子文件（批量查询，避免 N+1）
-        $allChildren = $this->getAllChildrenByProjectIdAndParentId($projectId, $fileId, $depth, $currentDepth, $storageType);
+        $allChildren = $this->getAllChildrenByProjectIdAndParentId($projectId, $fileId, $depth, $currentDepth, $spaceType);
 
         return [
             'root' => $rootFile,
@@ -880,7 +881,7 @@ class MagicFSFileDomainService
      * @param string $parentId 父文件ID
      * @param int $maxDepth 最大深度
      * @param int $currentDepth 当前深度
-     * @param null|string $storageType Optional storage type filter (e.g. 'workspace'). Null means no filter.
+     * @param null|string $spaceType Optional space type filter (e.g. 'project'). Null means no filter.
      * @return array<TaskFileEntity> 所有子文件数组
      */
     protected function getAllChildrenByProjectIdAndParentId(
@@ -888,7 +889,7 @@ class MagicFSFileDomainService
         string $parentId,
         int $maxDepth = -1,
         int $currentDepth = 0,
-        ?string $storageType = null
+        ?string $spaceType = null
     ): array {
         $maxDepthParam = $maxDepth !== -1 ? $maxDepth : 100;
         $descendantIds = $this->taskFileRepository->getAllDescendantIds(
@@ -904,7 +905,7 @@ class MagicFSFileDomainService
         return $this->taskFileRepository->getFilesByIds(
             $descendantIds,
             $projectId,
-            $storageType
+            $spaceType
         );
     }
 

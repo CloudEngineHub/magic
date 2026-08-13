@@ -33,7 +33,7 @@ interface TaskFileRepositoryInterface
      * 根据ID批量获取文件.
      * @return TaskFileEntity[]
      */
-    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array;
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array;
 
     /**
      * 根据ID批量获取文件.
@@ -289,10 +289,10 @@ interface TaskFileRepositoryInterface
      * @param int $projectId Project ID
      * @param int $parentId Parent directory ID
      * @param int $limit Maximum number of files to return
-     * @param null|string $storageType Optional storage type filter
+     * @param null|string $spaceType Optional space type filter
      * @return TaskFileEntity[] File entity list
      */
-    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $storageType = null): array;
+    public function getChildrenByParentAndProject(int $projectId, int $parentId, int $limit = 500, ?string $spaceType = null): array;
 
     /**
      * Get children files by multiple parent_ids and project_id (batch query).
