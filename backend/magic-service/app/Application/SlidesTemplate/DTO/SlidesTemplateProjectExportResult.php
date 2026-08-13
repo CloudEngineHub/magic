@@ -25,15 +25,20 @@ final class SlidesTemplateProjectExportResult
     }
 
     /** @param array<string, mixed> $metadata */
-    public static function fromSandbox(string $fileKey, array $metadata, int $projectId, int $directoryId): self
-    {
+    public static function fromSandbox(
+        string $code,
+        string $fileKey,
+        array $metadata,
+        int $projectId,
+        int $directoryId,
+    ): self {
         $templateFileKey = trim((string) ($metadata['template_file_key'] ?? $fileKey));
         if ($templateFileKey === '') {
             throw new \RuntimeException('Sandbox export response is missing template_file_key.');
         }
 
         return new self(
-            trim((string) ($metadata['code'] ?? '')),
+            $code,
             self::nullableString($metadata['category_code'] ?? null),
             self::requiredI18n($metadata['label'] ?? null, 'label'),
             self::requiredI18n($metadata['description'] ?? null, 'description'),

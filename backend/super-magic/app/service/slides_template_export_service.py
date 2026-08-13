@@ -16,6 +16,7 @@ MAX_FILE_COUNT = 100
 MAX_DIRECTORY_SIZE_BYTES = 20 * 1024 * 1024
 MAX_PREVIEW_IMAGE_COUNT = 50
 EXCLUDED_ARCHIVE_DIRECTORIES = {"previews", ".template-work"}
+EXCLUDED_ARCHIVE_FILES = {MANIFEST_FILE_NAME}
 
 
 def _upload_dir(upload_config: Dict[str, Any]) -> str:
@@ -101,6 +102,8 @@ def _archive_files(template_dir: Path) -> Iterable[Path]:
         relative_parts = path.relative_to(template_dir).parts
         if relative_parts and relative_parts[0] in EXCLUDED_ARCHIVE_DIRECTORIES:
             continue
+        if path.name in EXCLUDED_ARCHIVE_FILES:
+            continue
         yield path
 
 
@@ -180,10 +183,6 @@ def _validate_manifest_before_upload(
     files_count, total_size = _validate_directory_limits(template_dir)
     local_files = manifest["local_files"]
     backend_fields = manifest["backend_fields"]
-
-    manifest_code = str(backend_fields.get("code") or manifest.get("template_id") or "").strip()
-    if manifest_code and manifest_code != code:
-        raise ValueError("Manifest code must match the requested template code.")
 
     thumbnail_path = str(local_files.get("thumbnail") or "").strip()
     if not thumbnail_path:

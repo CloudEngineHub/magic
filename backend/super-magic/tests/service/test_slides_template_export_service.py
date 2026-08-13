@@ -50,6 +50,7 @@ def _create_template(tmp_path: Path) -> Path:
     (template_dir / "slides" / "slide-1.html").write_text("<html></html>", encoding="utf-8")
     (template_dir / ".template-work" / "debug.json").write_text("{}", encoding="utf-8")
     _write_manifest(template_dir)
+    (template_dir / "template-assets.js").write_text("window.assets = {};", encoding="utf-8")
     return template_dir
 
 
@@ -90,6 +91,8 @@ async def test_export_uploads_public_assets_and_private_archive(monkeypatch, tmp
     with zipfile.ZipFile(captured_zip) as archive:
         names = set(archive.namelist())
     assert "SLIDE-business-report/slides/slide-1.html" in names
+    assert "SLIDE-business-report/template-assets.js" in names
+    assert "SLIDE-business-report/template-assets.json" not in names
     assert all("/previews/" not in name for name in names)
     assert all("/.template-work/" not in name for name in names)
 
@@ -131,22 +134,33 @@ async def test_export_rejects_more_than_fifty_preview_images(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_export_rejects_manifest_code_mismatch(tmp_path):
+async def test_export_ignores_manifest_code_mismatch(tmp_path, monkeypatch):
     template_dir = _create_template(tmp_path)
     manifest_path = template_dir / "template-assets.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["backend_fields"]["code"] = "SLIDE-other-template"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    uploaded = []
 
-    with pytest.raises(ValueError, match="code must match the requested template code"):
-        await export_slides_template(
-            workspace_dir=template_dir,
-            code="SLIDE-business-report",
-            private_upload_config={"dir": "private-prefix"},
-            public_upload_config={"dir": "public-prefix"},
-            archive_root="SLIDE-business-report",
-            file_name="SLIDE-business-report.zip",
-        )
+    async def fake_upload(file_path, file_key, upload_config):
+        uploaded.append(file_key)
+
+    monkeypatch.setattr(
+        "app.service.slides_template_export_service._upload_file",
+        fake_upload,
+    )
+
+    result = await export_slides_template(
+        workspace_dir=template_dir,
+        code="SLIDE-business-report",
+        private_upload_config={"dir": "private-prefix"},
+        public_upload_config={"dir": "public-prefix"},
+        archive_root="SLIDE-business-report",
+        file_name="SLIDE-business-report.zip",
+    )
+
+    assert result["metadata"]["code"] == "SLIDE-business-report"
+    assert uploaded[-1] == "private-prefix/SLIDE-business-report.zip"
 
 
 @pytest.mark.asyncio

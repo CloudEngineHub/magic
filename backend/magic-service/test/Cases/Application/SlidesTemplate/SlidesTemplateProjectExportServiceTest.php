@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Test\Cases\Application\SlidesTemplate;
 
+use App\Application\SlidesTemplate\DTO\SlidesTemplateProjectExportResult;
 use App\Application\SlidesTemplate\Service\SlidesTemplateProjectExportService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
@@ -21,6 +22,24 @@ use ReflectionClass;
  */
 class SlidesTemplateProjectExportServiceTest extends TestCase
 {
+    public function testSandboxManifestCodeIsIgnored(): void
+    {
+        $result = SlidesTemplateProjectExportResult::fromSandbox(
+            'SLIDE-97C53BC2',
+            'ORG-1/open/slide-templates/SLIDE-97C53BC2/0123456789abcdef01234567/template.zip',
+            [
+                'code' => 'PPT-3d-glass-business-report',
+                'label' => ['zh_CN' => '测试模板', 'en_US' => 'Test Template'],
+                'description' => ['zh_CN' => '测试描述', 'en_US' => 'Test Description'],
+                'thumbnail_file_key' => 'thumbnail.png',
+            ],
+            945287050710581249,
+            945287124660424705,
+        );
+
+        $this->assertSame('SLIDE-97C53BC2', $result->toArray()['code']);
+    }
+
     public function testCleanupExportedFilesDeletesPrivateAndPublicDirectories(): void
     {
         $repository = $this->createMock(CloudFileRepositoryInterface::class);

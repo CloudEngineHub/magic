@@ -128,16 +128,13 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             }
 
             $result = SlidesTemplateProjectExportResult::fromSandbox(
+                $code,
                 $response->getFileKey(),
                 $response->getMetadata(),
                 $projectId,
                 $directoryId,
             );
             $payload = $result->toArray();
-            if ($payload['code'] !== '' && $payload['code'] !== $code) {
-                throw new RuntimeException('Sandbox export code does not match requested code.');
-            }
-            $payload['code'] = $code;
             $this->logger->info('Slides template project export completed', [
                 'project_id' => $projectId,
                 'directory_id' => $directoryId,
