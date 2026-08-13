@@ -134,11 +134,15 @@ async def test_export_rejects_more_than_fifty_preview_images(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_export_ignores_manifest_code_mismatch(tmp_path, monkeypatch):
+@pytest.mark.parametrize("field", ["backend_fields", "template_id"])
+async def test_export_ignores_manifest_code_mismatch(tmp_path, monkeypatch, field):
     template_dir = _create_template(tmp_path)
     manifest_path = template_dir / "template-assets.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["backend_fields"]["code"] = "SLIDE-other-template"
+    if field == "backend_fields":
+        manifest["backend_fields"]["code"] = "SLIDE-other-template"
+    else:
+        manifest["template_id"] = "SLIDE-other-template"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     uploaded = []
 
