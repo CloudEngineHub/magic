@@ -1,5 +1,6 @@
 """Canvas V3 实时读写事务管理器。"""
 
+import asyncio
 import inspect
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Optional, Sequence, TypeVar
@@ -27,6 +28,11 @@ from app.utils.async_file_utils import async_read_text, async_write_text_with_re
 
 TransactionResultT = TypeVar("TransactionResultT")
 
+CANVAS_PERSIST_VERIFY_MAX_RETRIES = 20
+CANVAS_PERSIST_VERIFY_RETRY_DELAY_SECONDS = 0.5
+CANVAS_READ_MAX_RETRIES = 20
+CANVAS_READ_RETRY_DELAY_SECONDS = 0.5
+
 
 class CanvasManagerV3(CanvasManagerProtocol):
     """V3 画布实时读写入口，具体实现 CanvasManagerProtocol。"""
@@ -53,11 +59,31 @@ class CanvasManagerV3(CanvasManagerProtocol):
         await write_magic_project_js_v3(self.project_path, config)
 
     async def _read_current_canvas_once(self) -> MagicProjectConfigV3:
-        """执行一次真实文件读取并合并 Content sidecar。"""
-        content = await async_read_text(get_project_file_path(self.project_path))
-        config = V3CanvasCodec.decode(content)
-        await self._sidecar_store.hydrate(config)
-        return config
+        """读取当前画布并合并 Content sidecar，兼容 MagicFS 延迟可见的空文件。"""
+        file_path = get_project_file_path(self.project_path)
+        last_error: Optional[Exception] = None
+        for attempt in range(CANVAS_READ_MAX_RETRIES):
+            try:
+                content = await async_read_text(file_path)
+                if not content or not content.strip():
+                    raise ValueError(f"magic.project.js is empty: {file_path}")
+                config = V3CanvasCodec.decode(content)
+                await self._sidecar_store.hydrate(config)
+                return config
+            except OSError as error:
+                last_error = error
+                if attempt >= CANVAS_READ_MAX_RETRIES - 1:
+                    break
+                await asyncio.sleep(CANVAS_READ_RETRY_DELAY_SECONDS)
+            except ValueError as error:
+                # 只有空文件属于可等待的 MagicFS 可见性延迟；结构错误应立即返回给 Agent 修复。
+                if "magic.project.js is empty" not in str(error):
+                    raise
+                last_error = error
+                if attempt >= CANVAS_READ_MAX_RETRIES - 1:
+                    break
+                await asyncio.sleep(CANVAS_READ_RETRY_DELAY_SECONDS)
+        raise last_error or ValueError(f"无法读取画布文件: {file_path}")
 
     async def read_current_canvas(self, *, use_lock: bool = True) -> MagicProjectConfigV3:
         """实时读取当前 V3 文件，默认参与项目级读写串行。"""
@@ -97,7 +123,11 @@ class CanvasManagerV3(CanvasManagerProtocol):
                 current_config.canvas,
                 existing_element_ids,
             )
-            V3CanvasCodec.validate_document(current_config.canvas)
+            current_warnings = V3CanvasCodec.validate_document(current_config.canvas)
+            # 业务告警不阻塞普通画布写入；查询结果会把告警返回给 Agent，
+            # 具体生成工具在消费受影响的 Storyboard 前再要求先修复。
+            current_config.validation_warnings = current_warnings
+            current_config.canvas.validation_warnings = current_warnings
             await self._persist(current_config, result, verify_content)
 
             if after_write is not None:
@@ -117,7 +147,8 @@ class CanvasManagerV3(CanvasManagerProtocol):
         await self._sidecar_store.persist_from_config(config)
         main_file_config = config.clone()
         self._sidecar_store.strip_heavy_fields(main_file_config)
-        encoded = V3CanvasCodec.encode(main_file_config)
+        # 允许保留可修复业务告警，避免坏分镜阻塞其他节点操作；受影响的生成工具单独提示修复。
+        encoded = V3CanvasCodec.encode(main_file_config, strict=False)
 
         def validate_written_content(content: str) -> bool:
             """验证写后主文件仍是合法 V3，并执行调用方语义校验。"""
@@ -127,6 +158,8 @@ class CanvasManagerV3(CanvasManagerProtocol):
         await async_write_text_with_retry(
             get_project_file_path(self.project_path),
             encoded,
+            max_retries=CANVAS_PERSIST_VERIFY_MAX_RETRIES,
+            retry_delay=CANVAS_PERSIST_VERIFY_RETRY_DELAY_SECONDS,
             content_validator=validate_written_content,
         )
 

@@ -48,9 +48,11 @@ class BaseVideoProductionTool(BaseDesignTool[ParamsT], Generic[ParamsT]):
         tool_context: Optional[ToolContext] = None,
     ) -> Tuple[Optional[Path], Optional[CanvasManagerProtocol], Optional[ToolResult]]:
         """校验项目并返回按项目数据格式选择的统一 Manager。"""
-        resolved_path, error_result = await self._ensure_project_ready(
+        resolved_path, error_result = await self._ensure_project_ready_with_retry(
             project_path,
             require_magic_project_js=True,
+            max_retries=20,
+            retry_delay=0.5,
             tool_context=tool_context,
         )
         if error_result is not None:
@@ -63,8 +65,14 @@ class BaseVideoProductionTool(BaseDesignTool[ParamsT], Generic[ParamsT]):
                 resolved_path,
                 None,
                 ToolResult.error(
-                    "The canvas data could not be read by the available project handler.",
-                    extra_info={"error_type": "design.canvas_data_unreadable"},
+                    "Canvas project read failed and no new project was created. "
+                    f"Inspect the current project with get_canvas_overview or query_canvas_elements, "
+                    f"repair the reported data or wait for MagicFS propagation, then retry. Details: {error}",
+                    extra_info={
+                        "error_type": "design.canvas_data_unreadable",
+                        "project_path": project_path,
+                        "recoverable": True,
+                    },
                 ),
             )
         return resolved_path, manager, None

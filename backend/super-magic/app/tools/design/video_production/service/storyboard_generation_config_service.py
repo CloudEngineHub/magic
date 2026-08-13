@@ -95,6 +95,16 @@ class StoryboardGenerationConfigService:
         raw_config = content.fields.get("generationConfig")
         if not isinstance(raw_config, Mapping):
             raise ValueError(f"Storyboard has no image generation config: {storyboard_element_id}")
+        validation_warnings = list(getattr(canvas, "validation_warnings", []))
+        storyboard_warnings = [
+            warning for warning in validation_warnings
+            if content.content_id in warning
+        ]
+        if storyboard_warnings:
+            raise ValueError(
+                "Storyboard contains repairable data errors. Fix the existing Storyboard Content "
+                "before generating images: " + "; ".join(storyboard_warnings)
+            )
         return cls._parse_storage_config(raw_config, tool_context)
 
     @classmethod

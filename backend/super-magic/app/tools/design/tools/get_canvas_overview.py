@@ -64,6 +64,12 @@ class CanvasOverviewContentPresenter:
             f"Project: {cls._cell(result.project_name)} ({cls._cell(result.project_type)})",
             f"Summary: {result.total_elements} Element(s), {result.total_connections} connection(s).",
         ]
+        if result.validation_warnings:
+            lines.extend([
+                "",
+                "Canvas validation warnings requiring model repair:",
+                *[f"- {warning}" for warning in result.validation_warnings],
+            ])
         if result.elements_by_type:
             type_summary = ", ".join(
                 f"{cls._cell(element_type)}: {count}"

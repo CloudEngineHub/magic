@@ -89,7 +89,7 @@ class V3CanvasCodec:
 
     @classmethod
     def decode(cls, content: str) -> MagicProjectConfigV3:
-        """解析并严格校验 V3 magic.project.js。"""
+        """解析 V3 magic.project.js，并保留可修复业务告警。"""
         envelope = CanvasEnvelopeCodec.decode(content)
         if envelope.get("version") != MAGIC_PROJECT_VERSION_V3:
             raise ValueError("V3 codec only accepts version 3.0.0")
@@ -102,7 +102,7 @@ class V3CanvasCodec:
         if not is_compressed_canvas(encoded_canvas):
             raise ValueError("V3 canvas must use MAGICPROJECTDESIGNDATA compression")
         canvas_data = decompress_canvas_data(encoded_canvas)
-        canvas = cls.decode_canvas(canvas_data)
+        canvas, validation_warnings = cls.decode_canvas(canvas_data)
         extra_data = {
             key: deepcopy(value)
             for key, value in envelope.items()
@@ -114,16 +114,17 @@ class V3CanvasCodec:
             name=name,
             canvas=canvas,
             extra_data=extra_data,
+            validation_warnings=validation_warnings,
         )
 
     @classmethod
-    def encode(cls, config: MagicProjectConfigV3) -> str:
+    def encode(cls, config: MagicProjectConfigV3, *, strict: bool = True) -> str:
         """校验并编码 V3 magic.project.js。"""
         if config.version != MAGIC_PROJECT_VERSION_V3:
             raise ValueError("V3 project version must remain 3.0.0")
         if config.type != "design":
             raise ValueError("V3 project type must remain design")
-        canvas_data = cls.encode_canvas(config.canvas)
+        canvas_data = cls.encode_canvas(config.canvas, strict=strict)
         envelope = {
             **deepcopy(config.extra_data),
             "version": MAGIC_PROJECT_VERSION_V3,
@@ -134,8 +135,8 @@ class V3CanvasCodec:
         return CanvasEnvelopeCodec.encode(envelope)
 
     @classmethod
-    def decode_canvas(cls, data: Dict[str, Any]) -> CanvasDocumentV3:
-        """把解压后的 Canvas 字典解析为领域对象。"""
+    def decode_canvas(cls, data: Dict[str, Any]) -> tuple[CanvasDocumentV3, List[str]]:
+        """把解压后的 Canvas 字典解析为领域对象并返回可修复告警。"""
         if not isinstance(data, dict):
             raise ValueError("V3 canvas must be an object")
         raw_elements = data.get("elements", [])
@@ -159,25 +160,27 @@ class V3CanvasCodec:
                 if key not in {"elements", "connections"}
             },
         )
-        cls.validate_document(canvas)
-        return canvas
+        validation_warnings = cls.validate_document(canvas)
+        canvas.validation_warnings = validation_warnings
+        return canvas, validation_warnings
 
     @classmethod
-    def encode_canvas(cls, canvas: CanvasDocumentV3) -> Dict[str, Any]:
+    def encode_canvas(cls, canvas: CanvasDocumentV3, *, strict: bool = True) -> Dict[str, Any]:
         """校验并转换为可压缩的 Canvas 字典。"""
-        cls.validate_document(canvas)
+        cls.validate_document(canvas, strict=strict)
         return canvas.to_dict()
 
     @classmethod
-    def validate_document(cls, canvas: CanvasDocumentV3) -> None:
-        """校验 Element、Content 与 Connection 的文档级不变量。"""
+    def validate_document(cls, canvas: CanvasDocumentV3, *, strict: bool = False) -> List[str]:
+        """校验文档结构，并将可由 Agent 修复的业务问题转换为告警。"""
+        warnings: List[str] = []
         all_elements = canvas.iter_elements()
         element_ids = [element.id for element in all_elements]
         if len(set(element_ids)) != len(element_ids):
             raise ValueError("V3 element IDs must be unique")
 
         for element in all_elements:
-            cls._validate_element(element)
+            warnings.extend(cls._validate_element(element, strict=strict))
 
         connection_ids: Set[str] = set()
         connection_pairs: Set[frozenset[str]] = set()
@@ -196,6 +199,7 @@ class V3CanvasCodec:
                 raise ValueError("V3 duplicate or reverse duplicate connection is not allowed")
             connection_ids.add(connection.id)
             connection_pairs.add(pair)
+        return warnings
 
     @classmethod
     def _decode_element(cls, data: Any, path: str) -> CanvasElementV3:
@@ -259,7 +263,7 @@ class V3CanvasCodec:
             properties=properties,
             children=children,
         )
-        cls._validate_element(element)
+        cls._validate_element(element, strict=False)
         return element
 
     @classmethod
@@ -284,8 +288,9 @@ class V3CanvasCodec:
         )
 
     @classmethod
-    def _validate_element(cls, element: CanvasElementV3) -> None:
-        """校验单个 V3 Element 与 Content 字段。"""
+    def _validate_element(cls, element: CanvasElementV3, *, strict: bool = True) -> List[str]:
+        """校验单个 V3 Element 与 Content 字段，并返回业务告警。"""
+        warnings: List[str] = []
         if not element.id:
             raise ValueError("V3 element id must be non-empty")
         if element.type not in SUPPORTED_ELEMENT_TYPES:
@@ -311,10 +316,11 @@ class V3CanvasCodec:
                     f"Element {element.id} Content {content.content_id} contains unsupported fields: "
                     f"{sorted(unexpected_fields)}"
                 )
-            cls._validate_content(element.type, content)
+            warnings.extend(cls._validate_content(element.type, content, strict=strict))
 
         if element.type not in {"frame", "group"} and element.children is not None:
             raise ValueError(f"Element {element.id} type {element.type} must not contain children")
+        return warnings
 
     @staticmethod
     def _validate_properties(element: CanvasElementV3) -> None:
@@ -336,8 +342,9 @@ class V3CanvasCodec:
             raise ValueError(f"Element {element.id}.interactionConfig must be an object")
 
     @classmethod
-    def _validate_content(cls, element_type: str, content: ElementContent) -> None:
-        """校验类型相关的 Content 字段。"""
+    def _validate_content(cls, element_type: str, content: ElementContent, *, strict: bool = True) -> List[str]:
+        """校验类型相关的 Content 字段，并返回可修复业务告警。"""
+        warnings: List[str] = []
         fields = content.fields
         for field_name in ("src", "status", "errorMessage", "fill", "stroke"):
             value = fields.get(field_name)
@@ -364,20 +371,22 @@ class V3CanvasCodec:
             if fields.get("defaultStyle") is not None and not isinstance(fields["defaultStyle"], dict):
                 raise ValueError(f"Content {content.content_id}.defaultStyle must be an object")
         elif element_type == "storyboard":
-            cls._validate_storyboard_content(content)
+            warnings.extend(cls._validate_storyboard_content(content, strict=strict))
         elif element_type == "video-edit":
             cls._validate_video_edit_content(content)
+        return warnings
 
     @staticmethod
-    def _validate_storyboard_content(content: ElementContent) -> None:
-        """校验 Storyboard Content。"""
+    def _validate_storyboard_content(content: ElementContent, *, strict: bool = True) -> List[str]:
+        """校验 Storyboard Content，并报告非法镜头时长。"""
+        warnings: List[str] = []
         fields = content.fields
         generation_config = fields.get("generationConfig")
         if generation_config is not None and not isinstance(generation_config, dict):
             raise ValueError(f"Content {content.content_id}.generationConfig must be an object")
         shots = fields.get("shots")
         if shots is None:
-            return
+            return warnings
         if not isinstance(shots, list):
             raise ValueError(f"Content {content.content_id}.shots must be an array")
         shot_ids: Set[str] = set()
@@ -392,7 +401,13 @@ class V3CanvasCodec:
             if not isinstance(shot_id, str) or not shot_id or shot_id in shot_ids:
                 raise ValueError(f"Content {content.content_id} shot id must be unique")
             if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0:
-                raise ValueError(f"Content {content.content_id} shot durationSeconds must be positive")
+                message = (
+                    f"Content {content.content_id} shot {shot_id or '<unknown>'} "
+                    "durationSeconds must be positive; update this Storyboard Content before generation."
+                )
+                if strict:
+                    raise ValueError(message)
+                warnings.append(message)
             if not isinstance(description, str):
                 raise ValueError(f"Content {content.content_id} shot description must be a string")
             if output_id is not None:
@@ -400,6 +415,7 @@ class V3CanvasCodec:
                     raise ValueError(f"Content {content.content_id} shot outputImageElementId must be unique")
                 output_ids.add(output_id)
             shot_ids.add(shot_id)
+        return warnings
 
     @staticmethod
     def _validate_video_edit_content(content: ElementContent) -> None:

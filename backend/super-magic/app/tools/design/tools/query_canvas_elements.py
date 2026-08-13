@@ -55,6 +55,12 @@ class CanvasQueryContentPresenter:
     def render(cls, result: CanvasQueryResult) -> str:
         """输出 Element、Content 和业务字段，不暴露布局及关系维护细节。"""
         lines = [f"Canvas query completed. Matched {len(result.elements)} Element(s)."]
+        if result.validation_warnings:
+            lines.extend([
+                "",
+                "Canvas validation warnings requiring model repair:",
+                *[f"- {warning}" for warning in result.validation_warnings],
+            ])
         if result.missing_element_ids:
             missing_ids = ", ".join(f'"{element_id}"' for element_id in result.missing_element_ids)
             lines.append(f"Element IDs not found: {missing_ids}.")

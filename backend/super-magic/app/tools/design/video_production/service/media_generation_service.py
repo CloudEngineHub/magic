@@ -329,27 +329,55 @@ class MediaGenerationService:
             raise ValueError("Reference media path must not be empty")
 
         raw_path = Path(normalized)
+        project_prefix = project_path.relative_to(workspace_root).as_posix()
+        candidates: list[Path] = []
         if raw_path.is_absolute():
-            candidate = raw_path
-        else:
-            project_prefix = project_path.relative_to(workspace_root).as_posix()
+            # 真正存在的绝对路径只允许位于 workspace 内；不存在的“/项目/文件”
+            # 兼容为模型误写的 workspace-relative 路径，再进入兜底搜索。
+            if await async_is_file(raw_path):
+                candidates.append(raw_path)
+            else:
+                normalized = normalized.lstrip("/")
+                raw_path = Path(normalized)
+
+        if not candidates:
             workspace_candidate = workspace_root / raw_path
             project_candidate = project_path / raw_path
             if normalized == project_prefix or normalized.startswith(f"{project_prefix}/"):
-                candidate = workspace_candidate
-            elif await async_is_file(project_candidate):
-                candidate = project_candidate
+                candidates.append(workspace_candidate)
             else:
-                candidate = workspace_candidate
+                candidates.extend([project_candidate, workspace_candidate])
 
-        resolved = await async_realpath(candidate)
-        try:
-            resolved.relative_to(workspace_root)
-        except ValueError as error:
-            raise ValueError(f"Reference media path is outside the workspace: {value}") from error
-        if not await async_is_file(resolved):
-            raise ValueError(f"Reference media file does not exist in the workspace: {value}")
-        return resolved
+        for candidate in candidates:
+            resolved = await async_realpath(candidate)
+            try:
+                resolved.relative_to(workspace_root)
+            except ValueError as error:
+                raise ValueError(f"Reference media path is outside the workspace: {value}") from error
+            if await async_is_file(resolved):
+                return resolved
+
+        requested_parts = tuple(part for part in normalized.split("/") if part)
+        target_name = requested_parts[-1] if requested_parts else ""
+        suffix_matches: list[Path] = []
+        basename_matches: list[Path] = []
+        for candidate in workspace_root.rglob(target_name):
+            if not await async_is_file(candidate):
+                continue
+            relative_parts = candidate.relative_to(workspace_root).parts
+            if requested_parts and len(relative_parts) >= len(requested_parts):
+                if tuple(relative_parts[-len(requested_parts):]) == requested_parts:
+                    suffix_matches.append(candidate)
+                    continue
+            basename_matches.append(candidate)
+        matches = suffix_matches if len(suffix_matches) == 1 else (
+            basename_matches if len(basename_matches) == 1 else []
+        )
+        if len(matches) == 1:
+            return await async_realpath(matches[0])
+        if suffix_matches or basename_matches:
+            raise ValueError(f"Reference media path has multiple workspace candidates: {value}")
+        raise ValueError(f"Reference media file does not exist in the workspace: {value}")
 
     @staticmethod
     async def _copy_to_project_media(

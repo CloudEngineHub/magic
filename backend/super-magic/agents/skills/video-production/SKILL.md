@@ -14,6 +14,9 @@ description: Use when the user wants to create, continue, revise, or finish a vi
 - Use the user's language for plans, analysis, names, descriptions, prompts, and confirmation text. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
 - Treat current Canvas results as the production source of truth. The Markdown plan is recovery context, not a replacement for querying current Elements.
+- Keep each task bound to its current Canvas project. If any tool fails, do not call `create_canvas`, invent a new project suffix, or change `project_path` to bypass the error.
+- Recover in the current project: read the failure from `result.content`, inspect the referenced Element or Content, repair it with the available tools, and retry only after the repair is complete. If safe recovery is impossible, tell the user the blocking reason and stop; never spend additional generation credits by creating a replacement project.
+- Do not repeat a paid image or video generation call speculatively. After a failure, first inspect and repair the current Canvas state or correct the referenced workspace path; regenerate only when the user has approved the revised generation or the retry is an exact, safe retry of the failed task.
 
 # Production Modes
 

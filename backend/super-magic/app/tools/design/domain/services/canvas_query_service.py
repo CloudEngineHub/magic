@@ -119,6 +119,7 @@ class CanvasQueryService:
             elements=views,
             connections=connections,
             missing_element_ids=missing_element_ids,
+            validation_warnings=list(config.validation_warnings) if isinstance(manager, CanvasManagerV3) else [],
         )
 
     async def overview(
@@ -182,6 +183,7 @@ class CanvasQueryService:
             limit=limit,
             total_pages=total_pages,
             has_more=has_more,
+            validation_warnings=list(config.validation_warnings) if isinstance(manager, CanvasManagerV3) else [],
         )
 
     @staticmethod

@@ -43,6 +43,7 @@ class CanvasQueryResult:
     elements: List[CanvasElementView]
     connections: List[CanvasConnectionView]
     missing_element_ids: List[str]
+    validation_warnings: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -75,3 +76,4 @@ class CanvasOverviewResult:
     limit: int
     total_pages: int
     has_more: bool
+    validation_warnings: List[str] = field(default_factory=list)

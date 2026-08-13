@@ -163,6 +163,7 @@ class CanvasDocumentV3:
     elements: List[CanvasElementV3] = field(default_factory=list)
     connections: List[CanvasConnection] = field(default_factory=list)
     extra_data: Dict[str, Any] = field(default_factory=dict)
+    validation_warnings: List[str] = field(default_factory=list)
 
     def iter_elements(self) -> List[CanvasElementV3]:
         """按文档顺序返回全部 Element，包含被动透传的嵌套节点。"""
@@ -198,6 +199,7 @@ class CanvasDocumentV3:
             elements=[element.clone() for element in self.elements],
             connections=[deepcopy(connection) for connection in self.connections],
             extra_data=deepcopy(self.extra_data),
+            validation_warnings=list(self.validation_warnings),
         )
 
 
@@ -210,6 +212,7 @@ class MagicProjectConfigV3:
     name: str
     canvas: CanvasDocumentV3
     extra_data: Dict[str, Any] = field(default_factory=dict)
+    validation_warnings: List[str] = field(default_factory=list)
 
     def clone(self) -> "MagicProjectConfigV3":
         """返回当前项目配置的深拷贝。"""
@@ -219,4 +222,5 @@ class MagicProjectConfigV3:
             name=self.name,
             canvas=self.canvas.clone(),
             extra_data=deepcopy(self.extra_data),
+            validation_warnings=list(self.validation_warnings),
         )

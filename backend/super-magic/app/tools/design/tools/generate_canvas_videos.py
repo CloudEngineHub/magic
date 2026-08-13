@@ -40,7 +40,7 @@ from app.tools.design.service.local_video_result_sync_service import (
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
 from app.tools.video_generation_utils import VideoInputPayloadBuilder
-from app.utils.async_file_utils import async_exists, async_mkdir
+from app.utils.async_file_utils import async_exists, async_is_file, async_mkdir
 from app.utils.video_logger import get_video_logger
 
 logger = get_video_logger(__name__)
@@ -811,15 +811,56 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         workspace_root: Path,
         project_prefix: str,
     ) -> str:
-        if not path or path.startswith(("http://", "https://")) or Path(path).is_absolute():
+        if not path or path.startswith(("http://", "https://")):
             return path
 
-        normalized = path.lstrip("/")
-        if await async_exists(workspace_root / normalized):
-            return normalized
-        if project_prefix and await async_exists(workspace_root / project_prefix / normalized):
-            return f"{project_prefix}/{normalized}"
-        return normalized
+        normalized = str(path).strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        raw_path = Path(normalized)
+        candidates: list[tuple[Path, str]] = []
+        if raw_path.is_absolute():
+            try:
+                workspace_relative = raw_path.resolve().relative_to(workspace_root.resolve()).as_posix()
+            except ValueError as exc:
+                # 不存在的 /project/file 可能只是模型把 workspace-relative 路径误写成了绝对路径；
+                # 先转为相对路径参与工作区兜底搜索，真实存在的 workspace 外绝对路径仍会被拒绝。
+                if await async_is_file(raw_path):
+                    raise ValueError(f"参考素材必须位于当前 workspace 内: {path}") from exc
+                normalized = normalized.lstrip("/")
+                raw_path = Path(normalized)
+                workspace_relative = normalized
+            candidates.append((raw_path, workspace_relative))
+        else:
+            candidates.extend([
+                (workspace_root / normalized, normalized),
+                (workspace_root / project_prefix / normalized, f"{project_prefix}/{normalized}"),
+            ])
+        for candidate, workspace_relative in candidates:
+            if await async_is_file(candidate):
+                return workspace_relative
+
+        requested_parts = tuple(part for part in normalized.split("/") if part)
+        target_name = requested_parts[-1] if requested_parts else ""
+        suffix_matches: list[Path] = []
+        basename_matches: list[Path] = []
+        for candidate in workspace_root.rglob(target_name):
+            if not await async_is_file(candidate):
+                continue
+            relative_parts = candidate.relative_to(workspace_root).parts
+            if requested_parts and len(relative_parts) >= len(requested_parts):
+                if tuple(relative_parts[-len(requested_parts):]) == requested_parts:
+                    suffix_matches.append(candidate)
+                    continue
+            basename_matches.append(candidate)
+        matches = suffix_matches if len(suffix_matches) == 1 else (
+            basename_matches if len(basename_matches) == 1 else []
+        )
+        if len(matches) == 1:
+            return matches[0].relative_to(workspace_root).as_posix()
+        if suffix_matches or basename_matches:
+            raise ValueError(f"参考素材路径存在多个候选文件，无法安全判断: {path}")
+        raise ValueError(f"参考素材文件不存在于当前 workspace: {path}")
 
     def _build_result_content(
         self,

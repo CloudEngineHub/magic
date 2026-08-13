@@ -128,15 +128,22 @@ class CanvasManager(CanvasManagerProtocol):
 
     async def _read_current_canvas_once(self) -> MagicProjectConfig:
         """执行一次真实文件读取，不做锁编排。"""
-        max_retries = 3
-        retry_delay = 0.2
+        max_retries = 20
+        retry_delay = 0.5
         last_error: Optional[Exception] = None
 
         for attempt in range(max_retries):
             try:
                 return await read_magic_project_js(self.project_path)
-            except Exception as error:  # noqa: BLE001
+            except (OSError, ValueError) as error:
                 last_error = error
+                error_text = str(error).lower()
+                retryable = isinstance(error, OSError) or any(
+                    marker in error_text
+                    for marker in ("is empty", "still being written", "not found")
+                )
+                if not retryable:
+                    raise
                 if attempt == max_retries - 1:
                     break
                 logger.debug(
