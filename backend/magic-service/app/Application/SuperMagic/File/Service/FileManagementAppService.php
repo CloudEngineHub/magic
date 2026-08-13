@@ -578,8 +578,7 @@ class FileManagementAppService extends AbstractAppService
                     TaskFileSource::PROJECT_DIRECTORY,
                     null,
                     false,
-                    0,
-                    $projectId > 0 ? 'project' : 'user',
+                    0
                 );
             } catch (BusinessException $e) {
                 if ($ignoreDuplicate && $e->getCode() === MagicFSErrorCode::FILE_ALREADY_EXISTS->value) {

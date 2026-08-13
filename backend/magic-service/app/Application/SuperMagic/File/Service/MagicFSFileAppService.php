@@ -167,7 +167,8 @@ class MagicFSFileAppService extends AbstractAppService
             $authorization
         );
 
-        // project_id、user_id 和 organization_code 将从父文件或认证信息中自动获取
+        // project_id、user_id 和 organization_code 将从父文件或认证信息中自动获取；
+        // 空间类型由领域层按父目录 space_type 统一解析
         $fileEntity = $this->magicFSFileDomainService->createFile(
             $requestDTO->name,
             $requestDTO->parent_id,
@@ -178,8 +179,7 @@ class MagicFSFileAppService extends AbstractAppService
             null,                                    // source
             $requestDTO->getFileMetadata(),          // 持久化的插件 flag，如 local_shadow
             $requestDTO->getReuseDeletedFileId(),    // rollback 重放时请求复用已软删除同名的 file_id
-            (int) $messageMetadata->getTopicId(),    // 直接透传 topic_id，作为 task 查不到时的 fallback
-            $requestDTO->getSpaceType()              // 空间类型（如 project、user）
+            (int) $messageMetadata->getTopicId()     // 直接透传 topic_id，作为 task 查不到时的 fallback
         );
 
         // Dispatch file uploaded event so downstream subscribers are notified

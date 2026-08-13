@@ -49,4 +49,10 @@ enum MagicFSErrorCode: int
 
     #[ErrorMessage('magicfs.space_type_is_required')]
     case INVALID_SPACE_TYPE = 51311;
+
+    #[ErrorMessage('magicfs.topic_id_required')]
+    case TOPIC_ID_REQUIRED = 51312;
+
+    #[ErrorMessage('magicfs.unsupported_space_type')]
+    case UNSUPPORTED_SPACE_TYPE = 51313;
 }

@@ -15,4 +15,6 @@ return [
     'parent_not_directory' => 'Parent is not a directory',
     'file_already_exists_in_target' => 'A file with the same name already exists in the target directory',
     'space_type_is_required' => 'Space type is required',
+    'topic_id_required' => 'Unable to resolve topic_id for topic space',
+    'unsupported_space_type' => 'Unsupported space type',
 ];
