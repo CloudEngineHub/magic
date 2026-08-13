@@ -1625,6 +1625,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->where('project_id', $projectId)
             ->whereNull('parent_id')
             ->where('is_directory', true)
+            ->where('space_type', FileSpaceType::PROJECT->value)
             ->first();
 
         if (! $model) {
