@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { renderHook } from "@testing-library/react"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"

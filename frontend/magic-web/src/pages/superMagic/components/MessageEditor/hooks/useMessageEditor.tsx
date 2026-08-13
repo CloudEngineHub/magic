@@ -11,7 +11,7 @@ import {
 	PlaceholderExtension,
 	CopyMessageExtension,
 	InspectorDetailExtension,
-} from "..@/infrastructure/editors/tiptap/extensions"
+} from "../extensions"
 import MentionExtension, {
 	Language,
 	type MentionDeletionInput,
@@ -31,7 +31,7 @@ import { isAllowedMention as defaultIsAllowedMention } from "../utils/mention"
 import GlobalMentionPanelStore, {
 	MentionPanelStore,
 } from "@/components/business/MentionPanel/builtin-store"
-import { SUPER_PLACEHOLDER_TYPE } from "..@/infrastructure/editors/tiptap/extensions/super-placeholder/const"
+import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import UploadFileMentionNodeView from "../components/MentionNodes/upload-file/UploadFileMentionNodeView"

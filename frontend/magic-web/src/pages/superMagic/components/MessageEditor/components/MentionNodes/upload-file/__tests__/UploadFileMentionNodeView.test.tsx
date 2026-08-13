@@ -1,5 +1,5 @@
 import type { ComponentProps, ElementType, PropsWithChildren } from "react"
-import { act, render, screen, within } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { act, render, screen, within } from "@testing-library/react"
 import { observable, runInAction } from "mobx"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MentionItemType } from "@/components/business/MentionPanel/types"

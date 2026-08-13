@@ -21,7 +21,7 @@ import {
 } from "./types"
 
 // Suggestion configuration
-import { createMentionPanelSuggestion } from ".@/infrastructure/editors/tiptap/suggestion"
+import { createMentionPanelSuggestion } from "./suggestion"
 import { MentionItemType } from "../types"
 import MentionNodeView from "./MentionNodeView"
 import { runActiveEditor } from "@/utils/tiptapEditorLifecycle"

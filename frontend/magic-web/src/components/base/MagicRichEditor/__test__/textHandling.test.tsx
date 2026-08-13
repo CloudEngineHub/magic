@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest"
-import { render } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { render } from "@testing-library/react"
 import React from "react"
 import "./setup"
 

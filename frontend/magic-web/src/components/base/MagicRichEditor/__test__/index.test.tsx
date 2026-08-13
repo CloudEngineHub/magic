@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, cleanup } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { render, screen, cleanup } from "@testing-library/react"
 import type { ReactNode } from "react"
 import MagicRichEditor from "../index"
 // 导入测试设置

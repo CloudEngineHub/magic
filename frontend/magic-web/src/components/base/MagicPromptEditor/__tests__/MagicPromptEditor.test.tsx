@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { render, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import MagicPromptEditor from "../MagicPromptEditor"

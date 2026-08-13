@@ -1,5 +1,5 @@
 import type { ElementType, PropsWithChildren } from "react"
-import { render, screen } from "@testing-library@/infrastructure/editors/tiptap/react"
+import { render, screen } from "@testing-library/react"
 import type { NodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import { describe, expect, it, vi } from "vitest"
 import { InspectorDetailComponent } from "../component"

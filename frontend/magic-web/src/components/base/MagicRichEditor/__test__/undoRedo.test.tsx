@@ -4,7 +4,7 @@ import {
 	screen,
 	fireEvent,
 	cleanup,
-} from "@testing-library@/infrastructure/editors/tiptap/react"
+} from "@testing-library/react"
 import type { ReactNode } from "react"
 import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import * as TiptapReact from "@/infrastructure/editors/tiptap/react"
