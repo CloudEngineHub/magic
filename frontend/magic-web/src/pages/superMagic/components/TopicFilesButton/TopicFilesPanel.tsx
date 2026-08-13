@@ -8,7 +8,10 @@ import {
 	type ReactNode,
 } from "react"
 import { useTranslation } from "react-i18next"
-import TopicFilesCore, { type TopicFilesCoreRef } from "./TopicFilesCore"
+import TopicFilesCore, {
+	type TopicFilesCoreRef,
+	type TopicFilesExpansionState,
+} from "./TopicFilesCore"
 import { useDownloadAll } from "./useDownloadAll"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import useShareRoute from "../../hooks/useShareRoute"
@@ -92,6 +95,16 @@ export interface TopicFilesPanelRef {
 	uploadFile: () => void
 	uploadFolder: () => void
 	openBatchMoveByFileIds: (fileIds: string[]) => void
+}
+
+const EMPTY_TOPIC_FILES_EXPANSION_STATE: TopicFilesExpansionState = {
+	hasExpandableFolders: false,
+	allFoldersExpanded: false,
+}
+
+interface TopicFilesExpansionSnapshot {
+	ownerId: string
+	state: TopicFilesExpansionState
 }
 
 const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
@@ -353,6 +366,22 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		const coreRef = useRef<TopicFilesCoreRef>(null)
 		const [selectedCount, setSelectedCount] = useState(0)
 		const [totalCount, setTotalCount] = useState(0)
+		const expansionOwnerId = String(selectedProject?.id || projectId || "")
+		const [expansionSnapshot, setExpansionSnapshot] = useState<TopicFilesExpansionSnapshot>({
+			ownerId: expansionOwnerId,
+			state: EMPTY_TOPIC_FILES_EXPANSION_STATE,
+		})
+		// owner 不一致时立即隐藏按钮，等待当前文件树重新上报，避免显示上一个项目的状态。
+		const expansionState =
+			expansionSnapshot.ownerId === expansionOwnerId
+				? expansionSnapshot.state
+				: EMPTY_TOPIC_FILES_EXPANSION_STATE
+		const handleExpansionStateChange = useMemoizedFn((state: TopicFilesExpansionState) => {
+			setExpansionSnapshot({ ownerId: expansionOwnerId, state })
+		})
+		const handleToggleAllFolders = useMemoizedFn(() => {
+			coreRef.current?.toggleAllFolders()
+		})
 
 		// 处理搜索功能 - 切换到搜索模式
 		const handleSearch = () => {
@@ -644,6 +673,12 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 											: undefined
 									}
 									onAddFolder={handleAddFolder}
+									allFoldersExpanded={expansionState.allFoldersExpanded}
+									onToggleAllFolders={
+										expansionState.hasExpandableFolders
+											? handleToggleAllFolders
+											: undefined
+									}
 									onUploadFile={
 										capabilities.upload ? handleUploadFile : undefined
 									}
@@ -677,6 +712,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 								activeFileId={activeFileId}
 								selectedTopic={selectedTopic}
 								isSelectMode={isSelectMode}
+								onExpansionStateChange={
+									isSearchMode ? undefined : handleExpansionStateChange
+								}
 								onSelectionChange={(selectedCount, totalCount) => {
 									setSelectedCount(selectedCount)
 									setTotalCount(totalCount)

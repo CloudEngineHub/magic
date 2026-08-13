@@ -36,15 +36,12 @@ class RollbackService:
         # 添加文件版本服务
         self.file_version_service = FileVersionService()
 
-    async def _reload_main_agent_chat_history(self) -> None:
-        """将磁盘上刚被回滚覆盖的聊天历史重新加载进主 Agent 的内存。
+    async def _reload_main_agent_persistent_state(self) -> None:
+        """将磁盘上刚被回滚覆盖的 ChatHistory 和 Horizon 重新加载到内存。
 
-        checkpoint 回滚只能直接覆盖磁盘上的聊天历史文件；主 Agent 进程内
-        常驻的 ChatHistory 实例因 load() 幂等保护不会主动重读磁盘，这会
-        造成"内存中的历史仍是回滚前旧状态、但文件已是回滚后新状态"的
-        错位。只要此后再追加一条新消息并落盘，旧的内存状态就会覆盖回
-        滚结果（即用户看到的 revoke + commit + 新消息后，被撤回的那轮对
-        话又复活）。
+        checkpoint 会覆盖整个持久目录，但主 Agent 进程内常驻的 ChatHistory
+        和 Horizon 都不会主动重读。只刷新其中一个，另一个后续保存时仍可能
+        用回滚前的内存状态覆盖目标 checkpoint。
 
         仅在 commit_rollback 的成功路径上调用：
         - start_rollback 之后必然走 commit 或 undo，中间不会触发 agent.run，
@@ -63,20 +60,21 @@ class RollbackService:
         dispatcher = AgentDispatcher.get_instance()
         agent_context = dispatcher.agent_context
         if agent_context is None:
-            logger.debug("主 Agent 尚未创建，跳过聊天历史内存重载")
+            logger.debug("主 Agent 尚未创建，跳过持久状态内存重载")
             return
 
         agent = AgentRuntime.get_instance().get_cached_agent(agent_context.context_id)
         if agent is None:
-            logger.debug("主 Agent 尚未创建，跳过聊天历史内存重载")
+            logger.debug("主 Agent 尚未创建，跳过持久状态内存重载")
             return
 
         try:
             await agent.chat_history.reload_from_disk()
-            logger.info(f"已从磁盘重新加载聊天历史: agent_type={agent.agent_name}")
+            await agent_context.horizon.reload_from_store()
+            logger.info(f"已从磁盘重新加载 ChatHistory 和 Horizon: agent_type={agent.agent_name}")
         except Exception as e:
             logger.error(
-                f"从磁盘重新加载聊天历史失败 (agent_type={agent.agent_name}): {e}",
+                f"从磁盘重新加载持久状态失败 (agent_type={agent.agent_name}): {e}",
                 exc_info=True,
             )
 
@@ -176,14 +174,11 @@ class RollbackService:
 
             logger.info("回滚提交成功完成")
 
-            # 在这里重新加载主 Agent 的内存 chat_history。
-            # start_rollback 已经把磁盘上的聊天历史覆盖为目标状态，但内存
-            # 中的 ChatHistory 因 load() 幂等保护未被刷新；若不在此处 reload，
-            # 后续新消息会以陈旧内存为基线再写回磁盘，把刚回滚掉的那轮
-            # 对话又"复活"到历史记录里。
+            # start_rollback 已经用目标 checkpoint 覆盖持久目录，但内存中的
+            # ChatHistory 和 Horizon 都需要切换到同一代状态。
             # 另一条终态路径 undo_rollback 天然一致（内存=磁盘=latest），
             # 因此只需要在 commit 这一个点 reload。
-            await self._reload_main_agent_chat_history()
+            await self._reload_main_agent_persistent_state()
 
         except RollbackException:
             raise

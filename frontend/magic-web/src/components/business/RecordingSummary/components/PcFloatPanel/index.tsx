@@ -546,7 +546,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 													? t("recordingSummary.ui.minimize")
 													: t("recordingSummary.ui.expand")}
 											</button>
-											{isExpanded && !isAudioProjectMode ? (
+											{isExpanded ? (
 												<button
 													type="button"
 													data-testid="record-summary-pc-float-panel-ai-chat-toggle"
@@ -748,7 +748,7 @@ const PcFloatPanel = function PcFloatPanel(props: PcFloatPanelProps) {
 								)}
 							</MagicSplitter>
 						</MagicSplitter.Panel>
-						{expandedAiChat && isExpanded && !isAudioProjectMode ? (
+						{expandedAiChat && isExpanded ? (
 							<MagicSplitter.Panel
 								defaultSize={380}
 								max="50%"

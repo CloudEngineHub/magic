@@ -19,7 +19,7 @@ from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.utils.async_file_utils import (
     async_copy2, async_rmtree, async_mkdir, async_unlink, async_rmdir, async_write_json,
-    async_rename, get_file_id_from_xattr
+    async_rename, async_exists, get_file_id_from_xattr
 )
 from app.core.exceptions import RollbackException, ErrorCode
 from app.path_manager import PathManager
@@ -451,7 +451,7 @@ class RollbackExecutor:
 
             snapshot_dir = self.storage.get_initial_chat_history_snapshots_dir(first_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {first_checkpoint_id} 没有 initial 聊天历史快照，跳过历史回滚")
                 return True
 
@@ -490,7 +490,7 @@ class RollbackExecutor:
 
             snapshot_dir = self.storage.get_latest_chat_history_snapshots_dir(last_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {last_checkpoint_id} 没有 latest 聊天历史快照，跳过历史回滚")
                 return True
 

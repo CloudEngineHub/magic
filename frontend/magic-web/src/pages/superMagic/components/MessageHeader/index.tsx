@@ -75,6 +75,7 @@ interface MessageHeaderProps {
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
+	showTopicHistory?: boolean
 	/** Chat detail injects conversation-level overflow actions (share/rename/save/delete). */
 	trailingActions?: ReactNode
 }
@@ -342,6 +343,7 @@ function MessageHeader({
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
+	showTopicHistory = true,
 	trailingActions,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
@@ -688,9 +690,13 @@ function MessageHeader({
 										</span>
 									</MagicTooltip>
 
-									{renderHistoryTrigger(
-										isConversationPanelCollapsed ? "leftBottom" : "bottomRight",
-									)}
+									{showTopicHistory
+										? renderHistoryTrigger(
+												isConversationPanelCollapsed
+													? "leftBottom"
+													: "bottomRight",
+											)
+										: null}
 								</div>
 							) : null}
 

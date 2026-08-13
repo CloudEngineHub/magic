@@ -1,20 +1,92 @@
-import type { ReactNode } from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import type { MutableRefObject, ReactNode, Ref } from "react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecordingDetailProvider } from "../RecordingDetailProvider"
 import { RecordingDetailTranscriptPanel } from "../RecordingDetailTranscriptPanel"
 
+const scrollToMock = vi.fn()
+const scrollIntoViewMock = vi.fn()
+const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTo")
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+	HTMLElement.prototype,
+	"scrollIntoView",
+)
+
+/** Restores an HTMLElement method after a test replaces it with a deterministic mock. */
+function restoreHTMLElementMethod(
+	name: "scrollTo" | "scrollIntoView",
+	descriptor?: PropertyDescriptor,
+) {
+	if (descriptor) {
+		Object.defineProperty(HTMLElement.prototype, name, descriptor)
+		return
+	}
+	Reflect.deleteProperty(HTMLElement.prototype, name)
+}
+
+/** Creates the DOMRect subset needed for scroll-position calculations. */
+function createRect(top: number, height: number): DOMRect {
+	return {
+		x: 0,
+		y: top,
+		width: 100,
+		height,
+		top,
+		right: 100,
+		bottom: top + height,
+		left: 0,
+		toJSON: () => ({}),
+	}
+}
+
+beforeEach(() => {
+	scrollToMock.mockReset()
+	scrollIntoViewMock.mockReset()
+	// Provide the observer contract used by Radix positioning when the search menu opens.
+	vi.stubGlobal(
+		"ResizeObserver",
+		class ResizeObserverMock {
+			observe = vi.fn()
+			unobserve = vi.fn()
+			disconnect = vi.fn()
+		},
+	)
+	Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+		configurable: true,
+		value: scrollToMock,
+	})
+	Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+		configurable: true,
+		value: scrollIntoViewMock,
+	})
+})
+
+afterEach(() => {
+	vi.useRealTimers()
+	vi.restoreAllMocks()
+	vi.unstubAllGlobals()
+	restoreHTMLElementMethod("scrollTo", originalScrollTo)
+	restoreHTMLElementMethod("scrollIntoView", originalScrollIntoView)
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, params?: { count?: number }) => {
+		t: (
+			key: string,
+			params?: { count?: number; visibleCount?: number; totalCount?: number },
+		) => {
 			const labels: Record<string, string> = {
 				"detail.tabs.transcript": "Transcript",
 				"detail.transcriptSegmentCountSuffix": `${params?.count ?? 0} segments`,
 				"detail.transcriptVisibleCount": `${params?.visibleCount ?? 0}/${params?.totalCount ?? 0} segments`,
 				"detail.emptyTranscriptFiltered": "No transcript in this filter",
+				"detail.emptyTranscriptSearch": "No matching transcript",
 				"detail.speakerFilterAll": "All speakers",
 				"detail.speakerFilterTitle": "Filter speakers",
 				"detail.openSpeakerSettings": "Speakers",
+				"detail.transcriptSearchClear": "Clear transcript search",
+				"detail.transcriptSearchLabel": "Search transcript",
+				"detail.transcriptSearchPlaceholder": "Search transcript content",
 			}
 			return labels[key] ?? key
 		},
@@ -24,12 +96,32 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
 	ScrollEdgeFadeContainer: ({
 		children,
+		scrollPortRef,
 		...props
 	}: {
 		children: ReactNode
+		scrollPortRef?: Ref<HTMLDivElement | null>
 		[key: string]: unknown
 	}) => (
-		<div data-testid="desktop-transcript-scroll-edge-fade" data-props={JSON.stringify(props)}>
+		<div
+			ref={(element) => {
+				if (element) {
+					// Provide stable viewport metrics before the panel effect calculates the centered row position.
+					Object.defineProperties(element, {
+						clientHeight: { configurable: true, value: 200 },
+						scrollHeight: { configurable: true, value: 500 },
+						scrollTop: { configurable: true, writable: true, value: 20 },
+					})
+				}
+				if (typeof scrollPortRef === "function") {
+					scrollPortRef(element)
+				} else if (scrollPortRef) {
+					;(scrollPortRef as MutableRefObject<HTMLDivElement | null>).current = element
+				}
+			}}
+			data-testid="desktop-transcript-scroll-edge-fade"
+			data-props={JSON.stringify(props)}
+		>
 			{children}
 		</div>
 	),
@@ -89,6 +181,7 @@ function renderTranscriptPanel(
 			}}
 		>
 			<RecordingDetailTranscriptPanel
+				searchScopeKey="recording-alpha"
 				segments={[
 					{
 						id: "segment-1",
@@ -110,6 +203,7 @@ function renderTranscriptPanel(
 				availableSpeakerIds={["Speaker-1"]}
 				selectedSpeakerIds={["Speaker-1"]}
 				speakerNameMap={{ "Speaker-1": "Speaker-1" }}
+				totalSegmentsCount={2}
 				onSegmentClick={onSegmentClick}
 				onSelectedSpeakerIdsChange={onSelectedSpeakerIdsChange}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
@@ -122,19 +216,18 @@ function renderTranscriptPanel(
 
 describe("RecordingDetailTranscriptPanel", () => {
 	it("keeps segment rows on the same box model while only emphasizing the active content", () => {
-		const scrollIntoViewMock = vi.fn()
-		const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-			HTMLElement.prototype,
-			"scrollIntoView",
-		)
-		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-			configurable: true,
-			value: scrollIntoViewMock,
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+			if (this.dataset.testid === "desktop-transcript-scroll-edge-fade") {
+				return createRect(100, 200)
+			}
+			if (this.dataset.segmentId === "segment-2") return createRect(250, 40)
+			return createRect(0, 0)
 		})
 
 		renderTranscriptPanel(10)
 
 		const panel = screen.getByTestId("recording-detail-transcript-panel")
+		const scrollPort = screen.getByTestId("desktop-transcript-scroll-edge-fade")
 		const segments = screen.getAllByTestId("recording-detail-transcript-segment")
 		const inactiveSegment = segments[0]
 		const activeSegment = segments[1]
@@ -148,6 +241,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 		const settingsButton = screen.getByTestId("recording-detail-open-speaker-settings")
 		const settingsIcon = screen.getByTestId("recording-detail-speaker-settings-icon")
 		const accessory = screen.getByTestId("recording-detail-open-speaker-filter")
+		const searchButton = screen.getByTestId("recording-detail-open-transcript-search")
 
 		expect(panel).not.toHaveClass("border", "bg-card")
 		expect(title).toHaveTextContent("Transcript")
@@ -158,6 +252,9 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(settingsIcon).toHaveClass("size-4", "shrink-0")
 		expect(settingsIcon).toHaveAttribute("aria-hidden", "true")
 		expect(accessory).toHaveClass("size-8", "rounded-full", "border", "bg-white")
+		expect(searchButton).toHaveClass("size-8", "rounded-full", "border", "bg-white")
+		expect(settingsButton.nextElementSibling).toBe(searchButton)
+		expect(searchButton.nextElementSibling).toBe(accessory)
 		expect(inactiveSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
 		expect(activeSegment).toHaveClass("rounded-xl", "px-2", "py-2.5")
 		expect(inactiveSegment).toHaveClass("px-2")
@@ -170,24 +267,12 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(activeText).toHaveClass("text-foreground")
 		expect(speakerChips[0]).toHaveClass("opacity-70")
 		expect(speakerChips[1]).not.toHaveClass("opacity-70")
-		expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: "center", behavior: "smooth" })
-
-		if (originalScrollIntoView) {
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
-		}
+		expect(scrollToMock).toHaveBeenCalledWith({ top: 90, behavior: "smooth" })
+		expect(scrollToMock.mock.contexts[0]).toBe(scrollPort)
+		expect(scrollIntoViewMock).not.toHaveBeenCalled()
 	})
 
 	it("does not highlight or auto-scroll when playback is paused at a segment time", () => {
-		const scrollIntoViewMock = vi.fn()
-		const originalScrollIntoView = Object.getOwnPropertyDescriptor(
-			HTMLElement.prototype,
-			"scrollIntoView",
-		)
-		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-			configurable: true,
-			value: scrollIntoViewMock,
-		})
-
 		renderTranscriptPanel(10, false)
 
 		const [inactiveTime, pausedTime] = screen.getAllByText(/00:(05|10)/)
@@ -201,11 +286,8 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(pausedText).toHaveClass("text-foreground")
 		expect(speakerChips[0]).not.toHaveClass("opacity-70")
 		expect(speakerChips[1]).not.toHaveClass("opacity-70")
+		expect(scrollToMock).not.toHaveBeenCalled()
 		expect(scrollIntoViewMock).not.toHaveBeenCalled()
-
-		if (originalScrollIntoView) {
-			Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView)
-		}
 	})
 
 	it("keeps row seek and speaker settings interactions separate", () => {
@@ -230,6 +312,162 @@ describe("RecordingDetailTranscriptPanel", () => {
 		expect(onSelectedSpeakerIdsChange).toHaveBeenCalledWith(["Speaker-1"])
 	})
 
+	it("debounces transcript filtering and keeps the query after closing the menu", () => {
+		vi.useFakeTimers()
+		renderTranscriptPanel(0, false)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		expect(screen.getByTestId("recording-detail-transcript-search-menu")).toHaveAttribute(
+			"data-side",
+			"right",
+		)
+		const input = screen.getByTestId("recording-detail-transcript-search-input")
+		fireEvent.change(input, { target: { value: "earlier" } })
+
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+		expect(screen.getByTestId("recording-detail-transcript-search-active")).toBeInTheDocument()
+
+		act(() => {
+			vi.advanceTimersByTime(299)
+		})
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+
+		act(() => {
+			vi.advanceTimersByTime(1)
+		})
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(1)
+		expect(screen.getByTestId("recording-detail-transcript-count")).toHaveTextContent(
+			"1/2 segments",
+		)
+		expect(
+			screen.getByTestId("recording-detail-transcript-search-highlight"),
+		).toHaveTextContent("Earlier")
+		fireEvent.keyDown(input, { key: "Escape" })
+		expect(screen.queryByTestId("recording-detail-transcript-search-menu")).toBeNull()
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(1)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		expect(screen.getByTestId("recording-detail-transcript-search-input")).toHaveValue(
+			"earlier",
+		)
+		fireEvent.click(screen.getByTestId("recording-detail-transcript-search-clear"))
+		expect(screen.getAllByTestId("recording-detail-transcript-segment")).toHaveLength(2)
+		expect(screen.queryByTestId("recording-detail-transcript-search-active")).toBeNull()
+	})
+
+	it("shows a dedicated empty state when debounced text search has no matches", () => {
+		vi.useFakeTimers()
+		renderTranscriptPanel(0, false)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		fireEvent.change(screen.getByTestId("recording-detail-transcript-search-input"), {
+			target: { value: "unmatched phrase" },
+		})
+		act(() => {
+			vi.advanceTimersByTime(300)
+		})
+
+		expect(screen.getByTestId("recording-detail-transcript-search-empty")).toHaveTextContent(
+			"No matching transcript",
+		)
+		expect(screen.getByTestId("recording-detail-transcript-count")).toHaveTextContent(
+			"0/2 segments",
+		)
+	})
+
+	it("clears search state when the recording scope changes", () => {
+		const { rerender } = render(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: false,
+					canRenameProject: false,
+					canDeleteProject: false,
+					canMoveProject: false,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: false,
+					canTriggerSummary: false,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-alpha"
+					segments={[
+						{
+							id: "segment-alpha",
+							start: 3,
+							text: "Synthetic transcript",
+						},
+					]}
+					availableSpeakerIds={[]}
+					playing={false}
+					currentTime={0}
+					selectedSpeakerIds={[]}
+					speakerNameMap={{}}
+					totalSegmentsCount={1}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		fireEvent.keyDown(screen.getByTestId("recording-detail-open-transcript-search"), {
+			key: "Enter",
+		})
+		fireEvent.change(screen.getByTestId("recording-detail-transcript-search-input"), {
+			target: { value: "synthetic" },
+		})
+
+		rerender(
+			<RecordingDetailProvider
+				capabilities={{
+					canEditSpeakers: false,
+					canRenameProject: false,
+					canDeleteProject: false,
+					canMoveProject: false,
+					canExportAudio: true,
+					canExportTranscript: true,
+					canExportNotes: true,
+					canExportSummary: true,
+					canShareProject: false,
+					canTriggerSummary: false,
+				}}
+			>
+				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-beta"
+					segments={[
+						{
+							id: "segment-beta",
+							start: 4,
+							text: "Another synthetic transcript",
+						},
+					]}
+					availableSpeakerIds={[]}
+					playing={false}
+					currentTime={0}
+					selectedSpeakerIds={[]}
+					speakerNameMap={{}}
+					totalSegmentsCount={1}
+					onSegmentClick={vi.fn()}
+					onSelectedSpeakerIdsChange={vi.fn()}
+					onOpenSpeakerSettings={vi.fn()}
+				/>
+			</RecordingDetailProvider>,
+		)
+
+		expect(screen.queryByTestId("recording-detail-transcript-search-menu")).toBeNull()
+		expect(screen.queryByTestId("recording-detail-transcript-search-active")).toBeNull()
+		expect(screen.getByText("Another synthetic transcript")).toBeInTheDocument()
+	})
+
 	it("shows the filtered empty state when transcript exists but the selection hides every row", () => {
 		render(
 			<RecordingDetailProvider
@@ -247,6 +485,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				}}
 			>
 				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-filtered"
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
 					playing={false}
@@ -283,6 +522,7 @@ describe("RecordingDetailTranscriptPanel", () => {
 				}}
 			>
 				<RecordingDetailTranscriptPanel
+					searchScopeKey="recording-filtered"
 					segments={[]}
 					availableSpeakerIds={["Speaker-1"]}
 					playing={false}

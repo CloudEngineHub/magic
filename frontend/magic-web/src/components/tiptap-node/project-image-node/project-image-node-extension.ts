@@ -7,12 +7,19 @@ import { ProjectImageNodeView } from "./project-image-node-view"
 import { parseProjectImageTitle, toMarkdownImageSource } from "./project-image-metadata"
 import { isTempPath } from "./temp-path-utils"
 
+/** Resolves project-relative image paths and optionally reports context readiness changes. */
+export interface ProjectImageUrlResolver {
+	(relativePath: string): string | Promise<string | null> | null
+	isReady?: () => boolean
+	subscribe?: (listener: () => void) => () => void
+}
+
 export interface ProjectImageNodeOptions extends ImageOptions {
 	/**
 	 * URL resolver function to convert relative path to absolute URL
 	 * @required
 	 */
-	urlResolver: (relativePath: string) => string | Promise<string>
+	urlResolver: ProjectImageUrlResolver
 
 	/**
 	 * Error callback

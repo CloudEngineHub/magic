@@ -263,6 +263,8 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 state = await SubagentRuntimeStore.load_state(params.agent_name, params.agent_id)
                 state.agent_name = params.agent_name
                 state.agent_id = params.agent_id
+                state.parent_agent_name = parent.agent_name if parent is not None else None
+                state.parent_agent_id = parent.get_agent_id() if parent is not None else None
                 state.requested_agent_id = requested_agent_id
                 state.resumed = params.resume
                 state.task_label = params.task_label
@@ -305,7 +307,10 @@ class CallSubagent(BaseTool[CallSubagentParams]):
                 target_session = AgentSessionRef(
                     target=target,
                     agent_id=params.agent_id,
-                    chat_history_dir=PathManager.get_subagents_chat_history_dir(),
+                    chat_history_dir=PathManager.get_subagent_chat_history_dir(
+                        target.agent_name,
+                        params.agent_id,
+                    ),
                 )
                 if params.fork:
                     # fork 是“带着父 Agent 当前上下文创建新会话”，不是绑定或覆盖旧会话。
@@ -782,6 +787,8 @@ async def _run_subagent(
         agent.close()
         if current_task is not None:
             await subagent_session_manager.clear_run(agent.agent_name, agent.id, current_task)
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
 
 def _mark_running(state: SubagentSessionState) -> None:

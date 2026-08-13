@@ -69,7 +69,7 @@ function createInspectedElement(): InspectedElementInfo {
 
 describe("inspector-detail transform", () => {
 	it("stores the inspected file mention on the inspector node instead of a standalone paragraph", () => {
-		const content = buildAgentPromptContent(createInspectedElement(), (key) => key, {
+		const content = buildAgentPromptContent(createInspectedElement(), labels.title, {
 			fileId: "file-1",
 			fileName: "index.html",
 			filePath: "/index.html",
@@ -85,7 +85,7 @@ describe("inspector-detail transform", () => {
 	})
 
 	it("preserves resource and DOM context for AI source matching", () => {
-		const content = buildAgentPromptContent(createInspectedElement(), (key) => key)
+		const content = buildAgentPromptContent(createInspectedElement(), labels.title)
 		const attrs = content.content?.[0]?.content?.[0]?.attrs
 
 		expect(attrs?.resource).toBe("images/submit.png")

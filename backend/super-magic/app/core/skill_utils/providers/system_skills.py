@@ -40,6 +40,7 @@ class SystemSkillsProvider(SkillProvider):
     """System skill provider for globally visible and current Crew skills."""
 
     id = SkillProviderId.SYSTEM
+    supports_browse = True
 
     def __init__(
         self,

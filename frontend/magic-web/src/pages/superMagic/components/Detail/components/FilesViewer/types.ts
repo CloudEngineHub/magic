@@ -1,4 +1,5 @@
 import type { ReactNode, CSSProperties } from "react"
+import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
 	ProjectListItem,
@@ -154,6 +155,14 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 	// Fullscreen change callback
 	onFullscreenChange?: (isFullscreen: boolean) => void
+	/** Selects the stable desktop presentation strategy for Widget previews. */
+	previewMode?: MagicWidget.PreviewMode
+	/** Changes whenever the parent starts a new preview session after dismissing the previous one. */
+	previewSessionKey?: number
+	/** Hides the preview surface while preserving its cached tabs and content. */
+	onPreviewDismiss?: () => void
+	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
+	persistFileTabs?: boolean
 
 	// Render component props
 	allowEdit?: boolean
@@ -220,6 +229,10 @@ export interface FilesViewerRef {
 		fileExtension?: string
 	}) => void
 	closeKnowledgeBaseTab: (tabId: string) => void
+	/** Promotes the currently active file or playback tab without recreating it. */
+	enterPreviewFullscreen: () => void
+	/** Restores the current preview to its non-fullscreen layout without dismissing it. */
+	exitPreviewFullscreen: () => void
 }
 
 // Tab component props

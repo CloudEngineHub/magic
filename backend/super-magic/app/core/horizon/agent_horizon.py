@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
+from urllib.parse import urldefrag
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -24,8 +25,9 @@ if TYPE_CHECKING:
 from agentlang.logger import get_logger
 from app.core.horizon.diff_builder import detect_file_changes
 from app.core.horizon.models import (
+    BrowserPageObservation,
     ContextUsage,
-    FileReadRecord,
+    FileContextRecord,
     HorizonState,
     ImageModelState,
     ManualContextWindowState,
@@ -85,7 +87,7 @@ _DIAGNOSTIC_BLOCK_TAGS = (
     "context_usage",
     "model_info",
     "workspace_files_changed",
-    "persistent_memory",
+    "browser_pages_changed",
     "client_context",
     "client_context_changed",
     "client_context_cleared",
@@ -383,7 +385,6 @@ class AgentHorizon:
         # 持久化 state.* 则始终表达模型上次已经看到的 baseline。
         self._workspace_files_current: Optional[str] = None
         self._workspace_entries_current: Optional[list] = None
-        self._memory_current: Optional[str] = None
         self._client_context_current: Optional[str] = None
         self._cli_status_current: Optional[str] = None
         self._language_current: Optional[str] = None
@@ -409,15 +410,46 @@ class AgentHorizon:
         if self._loaded:
             return
         loaded = await self._store.load()
-        if loaded is not None:
-            self._state = loaded
-            # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
-            # baseline 已经在 state.* 里；current 由本轮运行时重新采集，不应从旧进程内存恢复。
-            self._is_first_injection = not loaded.initial_context_injected
-            # 恢复 LLM 模型 baseline，避免重启后误判为"模型变更"
-            self._last_llm_model_id = loaded.llm_model_id
-            self._last_llm_model_name = loaded.llm_model_name
+        self._apply_loaded_state(loaded)
+
+    async def reload_from_store(self) -> None:
+        """持久目录准备或被外部替换后，重新建立内存中的 Horizon baseline。
+
+        ZIP 解压、未来 MagicFS 挂载和 checkpoint 回滚都可能发生在 Horizon
+        对象创建之后。此时不能只修改 `_loaded`，必须同时丢弃旧的运行时 staging，
+        避免恢复前的半成品状态覆盖刚准备好的持久文件。
+        """
+        loaded = await self._store.load()
+        self._apply_loaded_state(loaded)
+        logger.info(
+            "[AgentHorizon] 已从持久存储重新加载: "
+            f"agent_id={self._state.agent_id} "
+            f"restored={loaded is not None} "
+            f"file_records={len(self._state.file_records)}"
+        )
+
+    def _apply_loaded_state(self, loaded: Optional[HorizonState]) -> None:
+        """应用持久 baseline，并清空不属于该 baseline 的运行时状态。"""
+        self._state = loaded if loaded is not None else HorizonState(agent_id=self._store.agent_id)
         self._loaded = True
+
+        # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
+        # baseline 已经在 state.* 里；current 由本轮运行时重新采集，不应从旧进程内存恢复。
+        self._is_first_injection = not self._state.initial_context_injected
+        self._last_llm_model_id = self._state.llm_model_id
+        self._last_llm_model_name = self._state.llm_model_name
+        self._last_llm_model_description = ""
+        self._llm_model_changed = False
+        self._image_model_changed = False
+        self._video_model_changed = False
+        self._context_used = 0
+        self._context_total = 0
+
+        self._workspace_files_current = None
+        self._workspace_entries_current = None
+        self._client_context_current = None
+        self._cli_status_current = None
+        self._language_current = None
 
     async def _save(self) -> None:
         await self._store.save(self._state)
@@ -437,13 +469,17 @@ class AgentHorizon:
         return copy.deepcopy(self._state)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 原 FileTimestampManager 兼容接口
+    # 文件版本基线记录与编辑校验
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def update_timestamp(
-        self, file_path: Union[str, Path], metadata: Optional[dict] = None
+    async def _record_current_file_state(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str,
+        metadata: Optional[dict] = None,
     ) -> None:
-        """写文件后调用，更新校验用 hash/mtime（不存内容快照）。"""
+        """记录文件当前状态，作为后续变化检测和 diff 生成的基线。"""
         await self._ensure_loaded()
         abs_path = _abs(file_path)
         try:
@@ -457,31 +493,70 @@ class AgentHorizon:
                 file_hash = f"__mtime__{stat.mtime}"
 
             ts = max(time.time() * 1000, mtime_ms) + NETWORK_FS_MTIME_BUFFER * 1000
+            file_content, snapshot_mode, snapshot_reason = await _read_file_content_for_snapshot(abs_path)
 
             rec = self._state.file_records.get(abs_path)
             if rec is not None:
                 rec.file_hash = file_hash
                 rec.file_mtime_ms = ts
                 rec.file_size_bytes = size
+                rec.file_content = file_content
+                rec.tool_name = tool_name
+                rec.truncated = False
+                rec.read_at = _iso_now()
+                rec.read_ranges = []
             else:
-                self._state.file_records[abs_path] = FileReadRecord(
+                self._state.file_records[abs_path] = FileContextRecord(
                     path=abs_path,
                     file_hash=file_hash,
                     file_mtime_ms=ts,
                     file_size_bytes=size,
-                    file_content="",
-                    tool_name="write",
+                    file_content=file_content,
+                    tool_name=tool_name,
                     truncated=False,
                     read_at=_iso_now(),
                 )
 
+            existing_meta = self._state.file_records[abs_path].metadata
+            existing_meta["snapshot_mode"] = snapshot_mode
+            if snapshot_reason:
+                existing_meta["snapshot_reason"] = snapshot_reason
+            else:
+                existing_meta.pop("snapshot_reason", None)
             if metadata:
-                existing_meta = self._state.file_records[abs_path].metadata
                 existing_meta.update(metadata)
 
             await self._save()
         except Exception as e:
-            logger.warning(f"[AgentHorizon] update_timestamp 失败 {abs_path}: {e}")
+            logger.warning(f"[AgentHorizon] 记录文件状态失败 {abs_path}: {e}")
+
+    async def record_file_write(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str = "write",
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """写文件成功后记录结果内容，使模型已知版本成为新的变化基线。"""
+        await self._record_current_file_state(
+            file_path,
+            tool_name=tool_name,
+            metadata=metadata,
+        )
+
+    async def record_file_observation(
+        self,
+        file_path: Union[str, Path],
+        *,
+        tool_name: str,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """记录搜索等只读观察涉及的文件，不将其伪装成写入操作。"""
+        await self._record_current_file_state(
+            file_path,
+            tool_name=tool_name,
+            metadata=metadata,
+        )
 
     async def validate_file_not_modified(
         self, file_path: Union[str, Path]
@@ -528,6 +603,11 @@ class AgentHorizon:
         meta = await self.get_metadata(file_path)
         return meta.get(field_name) if meta else None
 
+    async def is_file_tracked(self, file_path: Union[str, Path]) -> bool:
+        """判断文件是否已由 Horizon 接管变化检测。"""
+        await self._ensure_loaded()
+        return _abs(file_path) in self._state.file_records
+
     async def on_context_reset(self) -> None:
         """聊天历史压缩或 /new 后调用，重置与上下文内容相关的所有状态。
 
@@ -535,7 +615,7 @@ class AgentHorizon:
         - image_model / video_model：清空，确保新上下文重新获得模型信息
         - _is_first_injection：重置为 True，下次 build_context_update 输出完整 initial_context
         - pending_notifications：保留，下次 build_context_update 仍会投递到新上下文
-        - workspace_files/memory/language：保留（首次注入时重新全量输出给新上下文）
+        - workspace_files/language：保留（首次注入时重新全量输出给新上下文）
         - process_started_at_ns：保留（进程代次独立于上下文窗口）
         - session 内存计数器：归零
         """
@@ -597,7 +677,7 @@ class AgentHorizon:
             if snapshot_reason:
                 record_metadata["snapshot_reason"] = snapshot_reason
 
-            self._state.file_records[abs_path] = FileReadRecord(
+            self._state.file_records[abs_path] = FileContextRecord(
                 path=abs_path,
                 file_hash=file_hash,
                 file_mtime_ms=ts,
@@ -753,6 +833,96 @@ class AgentHorizon:
         if skill_name not in self._state.loaded_skills:
             self._state.loaded_skills.append(skill_name)
             await self._save()
+
+    async def record_browser_page_observation(
+        self,
+        *,
+        page_id: str,
+        url: str,
+        title: str,
+    ) -> None:
+        """记录模型通过观察工具实际看到的 Browser 页面。"""
+        await self._ensure_loaded()
+        self._state.browser_pages[page_id] = BrowserPageObservation(
+            page_id=page_id,
+            url=url,
+            title=title,
+            observed_at=_iso_now(),
+        )
+        await self._save()
+
+    async def _build_browser_pages_changed_context(
+        self,
+    ) -> tuple[str, dict[str, BrowserPageObservation]]:
+        """比较已观察页面与当前页面，返回变化块和注入后的新 baseline。"""
+        if not self._state.browser_pages or self._agent_context is None:
+            return "", dict(self._state.browser_pages)
+
+        from app.service.browser.browser_runtime_registry import BrowserRuntimeRegistry
+
+        entries = BrowserRuntimeRegistry.get_instance().list(self._agent_context.context_id)
+        current_pages: dict[str, object] = {}
+        complete = True
+        for entry in entries:
+            try:
+                pages = await entry.client.list_pages()
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                complete = False
+                logger.warning(
+                    "[AgentHorizon] Browser 页面漂移检查失败: session_id=%s error=%s",
+                    entry.session.id,
+                    error,
+                )
+                continue
+            current_pages.update({page.id: page for page in pages})
+
+        blocks: list[str] = []
+        next_observations = dict(self._state.browser_pages)
+        for page_id, previous in self._state.browser_pages.items():
+            current = current_pages.get(page_id)
+            if current is None:
+                if complete:
+                    blocks.extend(
+                        (
+                            f'  <page id="{_xml_attr(page_id)}">',
+                            "    <summary>Page closed since your last observation</summary>",
+                            f"    <url>{_xml_text(previous.url)} -&gt; (closed)</url>",
+                            f"    <title>{_xml_text(previous.title)} -&gt; (closed)</title>",
+                            "  </page>",
+                        )
+                    )
+                    next_observations.pop(page_id, None)
+                continue
+
+            current_url = str(getattr(current, "url"))
+            current_title = str(getattr(current, "title"))
+            previous_without_fragment = urldefrag(previous.url).url
+            current_without_fragment = urldefrag(current_url).url
+            if previous.url == current_url and previous.title == current_title:
+                continue
+            next_observations[page_id] = BrowserPageObservation(
+                page_id=page_id,
+                url=current_url,
+                title=current_title,
+                observed_at=_iso_now(),
+            )
+            if previous_without_fragment == current_without_fragment:
+                continue
+            blocks.extend(
+                (
+                    f'  <page id="{_xml_attr(page_id)}">',
+                    "    <summary>Page navigated since your last observation</summary>",
+                    f"    <url>{_xml_text(previous.url)} -&gt; {_xml_text(current_url)}</url>",
+                    f"    <title>{_xml_text(previous.title)} -&gt; {_xml_text(current_title)}</title>",
+                    "  </page>",
+                )
+            )
+
+        if not blocks:
+            return "", next_observations
+        return "\n".join(("<browser_pages_changed>", *blocks, "</browser_pages_changed>")), next_observations
 
     def get_loaded_skills(self) -> list[str]:
         return list(self._state.loaded_skills)
@@ -1012,10 +1182,6 @@ class AgentHorizon:
         entries = self._workspace_entries_current if self._workspace_entries_current is not None else self._state.workspace_entries
         return list(entries)
 
-    def _get_memory_current(self) -> str:
-        """返回本轮暂存或上次已注入的完整记忆上下文字符串。"""
-        return self._memory_current if self._memory_current is not None else self._state.memory
-
     def _get_client_context_current(self) -> str:
         return self._client_context_current if self._client_context_current is not None else self._state.client_context
 
@@ -1033,12 +1199,6 @@ class AgentHorizon:
         if snapshot.display != self._get_workspace_files_current() or new_paths != current_paths:
             self._workspace_files_current = snapshot.display
             self._workspace_entries_current = list(snapshot.entries)
-
-    async def set_memory(self, memory: str) -> None:
-        """更新预组装的记忆上下文字符串，不在 Horizon 内解释或组装内容。"""
-        await self._ensure_loaded()
-        if memory != self._get_memory_current():
-            self._memory_current = memory
 
     async def set_client_context(self, content: str) -> None:
         """更新运行时 current 客户端页面上下文，不直接覆盖持久化 baseline。"""
@@ -1100,7 +1260,7 @@ class AgentHorizon:
         编排所有动态上下文，返回完整的 <system_injected_context> XML 文本，每次调用均输出。
 
         首次注入（_is_first_injection=True）时包含 <initial_context> 全量块：
-          当前时间、运行环境、LLM 模型、图片模型、workspace_files、memory、user_preferred_language
+          当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
 
         后续注入按需包含：
           <current_time>     — 始终输出
@@ -1109,7 +1269,6 @@ class AgentHorizon:
           <context_usage>    — context_total > 0 且达到分段阈值时
           <model_info>       — LLM 模型或图片模型发生变化时
           <workspace_files_changed> — workspace_files 变化时
-          <persistent_memory> — memory 变化时完整输出调用方提供的最新快照
           <local_cli_context_changed> — 本地 CLI 上下文变化时
           <language_changed> — user_preferred_language 变化时
           <file_changes>     — 文件有变化时
@@ -1144,6 +1303,7 @@ class AgentHorizon:
 
         # 文件变化检测
         file_blocks = await detect_file_changes(self._state, current_hashes, current_mtimes)
+        browser_pages_context, next_browser_pages = await self._build_browser_pages_changed_context()
 
         # 通知块
         notif_blocks = [
@@ -1163,7 +1323,6 @@ class AgentHorizon:
 
         current_workspace_files = self._get_workspace_files_current()
         current_workspace_entries = self._get_workspace_entries_current()
-        current_memory = self._get_memory_current()
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
@@ -1222,9 +1381,6 @@ class AgentHorizon:
                     "<!-- Current workspace file list (list_dir(path=\".\")): -->"
                     f"\n<workspace_files>\n{current_workspace_files}\n</workspace_files>"
                 )
-
-            if current_memory:
-                init_parts.append(current_memory)
 
             if current_client_context:
                 init_parts.append(
@@ -1320,10 +1476,6 @@ class AgentHorizon:
                 if diff:
                     parts.append(f"<workspace_files_changed>\n{diff}\n</workspace_files_changed>")
 
-            if self._state.memory != current_memory:
-                if current_memory:
-                    parts.append(current_memory)
-
             if self._state.client_context != current_client_context:
                 if not current_client_context and self._state.client_context:
                     parts.append(
@@ -1368,6 +1520,9 @@ class AgentHorizon:
             parts.append("<file_changes>")
             parts.extend(file_blocks)
             parts.append("</file_changes>")
+
+        if browser_pages_context:
+            parts.append(browser_pages_context)
 
         if notif_blocks:
             parts.append("<notifications>")
@@ -1422,9 +1577,6 @@ class AgentHorizon:
         if self._state.workspace_entries != current_workspace_entries:
             self._state.workspace_entries = list(current_workspace_entries)
             persistence_changed = True
-        if self._state.memory != current_memory:
-            self._state.memory = current_memory
-            persistence_changed = True
         if self._state.client_context != current_client_context:
             self._state.client_context = current_client_context
             persistence_changed = True
@@ -1447,6 +1599,10 @@ class AgentHorizon:
                 )
                 or persistence_changed
             )
+
+        if self._state.browser_pages != next_browser_pages:
+            self._state.browser_pages = next_browser_pages
+            persistence_changed = True
 
         state_changed = bool(file_blocks) or bool(self._state.pending_notifications) or persistence_changed
         for abs_path, (cur_hash, cur_size) in current_hashes.items():

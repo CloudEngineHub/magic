@@ -14,10 +14,12 @@ export class RequestRouter {
       [RemoteMethod.PAGE_NAVIGATE, (params, signal, owner) => this.navigate(params, signal, owner)],
       [RemoteMethod.PAGE_WAIT, (params, signal, owner) => this.wait(params, signal, owner)],
       [RemoteMethod.PAGE_EVALUATE, (params, signal, owner) => this.evaluate(params, signal, owner)],
+      [RemoteMethod.PAGE_ADD_INIT_SCRIPT, (params, signal, owner) => this.addInitScript(params, signal, owner)],
       [RemoteMethod.PAGE_SCREENSHOT, (params, signal, owner) => this.screenshot(params, signal, owner)],
       [RemoteMethod.SCRIPT_REGISTER, (params, signal, owner) => this.registerScript(params, signal, owner)],
       [RemoteMethod.OBSERVATION_ACCESSIBILITY, (params, signal, owner) => this.accessibility(params, signal, owner)],
       [RemoteMethod.OBSERVATION_DOM_SNAPSHOT, (params, signal, owner) => this.domSnapshot(params, signal, owner)],
+      [RemoteMethod.OBSERVATION_OUTLINE, (params, signal, owner) => this.outline(params, signal, owner)],
       [RemoteMethod.ACTION_DISPATCH, (params, signal, owner) => this.dispatchAction(params, signal, owner)],
       [RemoteMethod.DIAGNOSTICS_CONSOLE, (params, _signal, owner) => this.readConsole(params, owner)],
       [RemoteMethod.DIAGNOSTICS_NETWORK, (params, _signal, owner) => this.readNetwork(params, owner)],
@@ -102,6 +104,17 @@ export class RequestRouter {
     };
   }
 
+  async addInitScript(params, signal, owner) {
+    await this.controller.send(
+      requireString(params, "page_token"),
+      owner,
+      "Page.addScriptToEvaluateOnNewDocument",
+      { source: requireString(params, "source") },
+      signal,
+    );
+    return {};
+  }
+
   async screenshot(params, signal, owner) {
     return {
       binary_payload_base64: await this.controller.screenshot(
@@ -134,6 +147,32 @@ export class RequestRouter {
       params.params || { computedStyles: [], includePaintOrder: true, includeDOMRects: true },
       signal,
     );
+  }
+
+  async outline(params, signal, owner) {
+    const pageToken = requireString(params, "page_token");
+    const resolved = await this.controller.send(
+      pageToken,
+      owner,
+      "DOM.resolveNode",
+      { backendNodeId: Number(params.backend_node_id) },
+      signal,
+    );
+    const objectId = resolved?.object?.objectId;
+    if (typeof objectId !== "string" || !objectId) throw new Error("The element ref cannot be resolved");
+    const called = await this.controller.send(
+      pageToken,
+      owner,
+      "Runtime.callFunctionOn",
+      {
+        objectId,
+        functionDeclaration: "function(options) { return globalThis.MagicOutline.read(this, options); }",
+        arguments: [{ value: params.options || {} }],
+        returnByValue: true,
+      },
+      signal,
+    );
+    return { result: called?.result?.value };
   }
 
   async dispatchAction(params, signal, owner) {

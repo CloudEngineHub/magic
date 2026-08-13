@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { RecordingMarkdownContent } from "../RecordingMarkdownContent"
 import { RECORDING_TIME_CHIP_CLASS } from "../recording-markdown-components"
+import { resolveSingleImageUrl } from "@/pages/superMagic/utils/image-url-resolver"
+
+vi.mock("@/pages/superMagic/utils/image-url-resolver", () => ({
+	resolveSingleImageUrl: vi.fn(async (path: string) => `https://tos.invalid/${path}`),
+}))
 
 describe("RecordingMarkdownContent", () => {
 	it("mounts recording-md-prose with desktop modifier by default", () => {
@@ -32,6 +37,34 @@ describe("RecordingMarkdownContent", () => {
 		expect(root).toHaveClass("recording-md-prose--mobile")
 		expect(root).toHaveAttribute("data-layout", "mobile")
 		expect(root.querySelector(".recording-md-table-wrap table")).toBeInTheDocument()
+	})
+
+	it("resolves project-relative images before rendering", async () => {
+		render(
+			<RecordingMarkdownContent
+				content="![mock image](./images/mock-photo.png)"
+				layout="mobile"
+				attachments={[
+					{
+						file_id: "mock-image-file-id",
+						file_name: "mock-photo.png",
+						relative_file_path: "./images/mock-photo.png",
+					},
+				]}
+				relativeFilePath="./notes/mock-note.md"
+			/>,
+		)
+
+		await act(async () => {
+			await vi.waitFor(() => {
+				expect(resolveSingleImageUrl).toHaveBeenCalledWith(
+					"./images/mock-photo.png",
+					expect.any(Array),
+					"./notes/mock-note.md",
+				)
+			})
+		})
+		expect(screen.getByAltText("mock image")).toBeInTheDocument()
 	})
 
 	it("renders time links as light mono chips instead of solid pills", () => {

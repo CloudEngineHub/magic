@@ -6,9 +6,20 @@ from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import ToolDetail
 from app.service.browser import BrowserService
 from app.service.browser.browser_tool_result_builder import BrowserToolResultBuilder
 from app.tools.browser.base import BrowserToolBase
+from app.tools.browser.presentation.interaction import (
+    check_detail,
+    click_detail,
+    fill_detail,
+    hover_detail,
+    press_detail,
+    scroll_detail,
+    select_detail,
+    upload_detail,
+)
 from app.tools.core import BaseToolParams, tool
 from magic_use import ActionKind, ActionRequest
 
@@ -20,7 +31,11 @@ class BrowserRefParams(BaseToolParams):
 
 
 class BrowserFillParams(BrowserRefParams):
-    value: str = Field(..., description="Text to place in the referenced control.")
+    value: str = Field(
+        ...,
+        description="Text to place in the referenced control.",
+        json_schema_extra={"log_sensitive": True},
+    )
 
 
 class BrowserPressParams(BaseToolParams):
@@ -79,6 +94,9 @@ class BrowserClick(BrowserToolBase[BrowserRefParams]):
     operation_key = "browser.click"
     action_kind = ActionKind.CLICK
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, click_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserRefParams) -> ToolResult:
         return await self.execute_state_change(
             tool_context,
@@ -101,6 +119,9 @@ class BrowserFill(BrowserToolBase[BrowserFillParams]):
     name = "browser_fill"
     operation_key = "browser.input_text"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, fill_detail(result, arguments or {}))
+
     async def execute(self, tool_context: ToolContext, params: BrowserFillParams) -> ToolResult:
         async def operation() -> ToolResult:
             result = await BrowserService(tool_context).dispatch_action(
@@ -120,6 +141,9 @@ class BrowserPress(BrowserToolBase[BrowserPressParams]):
 
     name = "browser_press"
     operation_key = "browser.press"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, press_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserPressParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -142,6 +166,9 @@ class BrowserHover(BrowserToolBase[BrowserRefParams]):
     operation_key = "browser.hover"
     action_kind = ActionKind.HOVER
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, hover_detail(result))
+
     async def execute(self, tool_context: ToolContext, params: BrowserRefParams) -> ToolResult:
         return await self.execute_state_change(
             tool_context,
@@ -163,6 +190,9 @@ class BrowserScroll(BrowserToolBase[BrowserScrollParams]):
 
     name = "browser_scroll"
     operation_key = "browser.scroll_to"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, scroll_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserScrollParams) -> ToolResult:
         async def operation() -> ToolResult:
@@ -189,6 +219,9 @@ class BrowserSelect(BrowserToolBase[BrowserSelectParams]):
     name = "browser_select"
     operation_key = "browser.select"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, select_detail(result, arguments or {}))
+
     async def execute(self, tool_context: ToolContext, params: BrowserSelectParams) -> ToolResult:
         async def operation() -> ToolResult:
             result = await BrowserService(tool_context).dispatch_action(
@@ -209,6 +242,9 @@ class BrowserCheck(BrowserToolBase[BrowserCheckParams]):
     name = "browser_check"
     operation_key = "browser.check"
 
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, check_detail(result, arguments or {}))
+
     async def execute(self, tool_context: ToolContext, params: BrowserCheckParams) -> ToolResult:
         async def operation() -> ToolResult:
             result = await BrowserService(tool_context).dispatch_action(
@@ -228,6 +264,9 @@ class BrowserUploadFile(BrowserToolBase[BrowserUploadFileParams]):
 
     name = "browser_upload_file"
     operation_key = "browser.upload_file"
+
+    async def get_tool_detail(self, tool_context: ToolContext, result: ToolResult, arguments: dict[str, object] | None = None) -> ToolDetail:
+        return self.create_browser_tool_detail(result, upload_detail(result, arguments or {}))
 
     async def execute(self, tool_context: ToolContext, params: BrowserUploadFileParams) -> ToolResult:
         async def operation() -> ToolResult:

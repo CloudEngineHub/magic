@@ -6,7 +6,12 @@ from collections.abc import Mapping
 
 from agentlang.tools.tool_result import ToolResult
 from app.i18n import i18n
-from app.tools.browser.presentation.details import BrowserDetailBuilder
+from app.tools.browser.presentation.common import (
+    snapshot_counts,
+    string,
+    target_text,
+    user_error,
+)
 from magic_use.errors import BrowserErrorCode
 from magic_use.models import ActionTarget
 
@@ -44,17 +49,74 @@ class BrowserRemarkBuilder:
                 "action": action,
                 "remark": cls._message("browser.remark.recovering_navigation"),
             }
-        presentation = BrowserDetailBuilder.presentation(
-            action,
-            result,
-            tool_name=tool_name,
-            arguments=arguments,
-        )
         return {
             "tool_name": tool_name,
             "action": action,
-            "remark": presentation.summary,
+            "remark": cls._summary(action, result),
         }
+
+    @classmethod
+    def _summary(cls, action: str, result: ToolResult) -> str:
+        target = target_text(result)
+        if not result.ok:
+            if target:
+                return cls._message(
+                    "browser.detail.failed_target",
+                    action=action,
+                    target=target,
+                    error=user_error(result),
+                )
+            return cls._message("browser.detail.failed", action=action, error=user_error(result))
+        pages = result.data.get("pages")
+        if isinstance(pages, list):
+            return cls._message("browser.detail.pages", count=len(pages))
+        snapshot = result.data.get("snapshot")
+        if isinstance(snapshot, Mapping):
+            _, interactive_count = snapshot_counts(snapshot.get("root_nodes"))
+            suffix = cls._message("browser.detail.truncated") if snapshot.get("truncated") is True else ""
+            return cls._message("browser.detail.snapshot", count=interactive_count, suffix=suffix)
+        console_entries = result.data.get("console_entries")
+        if isinstance(console_entries, list):
+            levels = [
+                string(entry.get("level")).lower()
+                for entry in console_entries
+                if isinstance(entry, Mapping)
+            ]
+            return cls._message(
+                "browser.detail.console",
+                count=len(console_entries),
+                errors=sum(level in {"error", "fatal"} for level in levels),
+                warnings=sum(level in {"warning", "warn"} for level in levels),
+            )
+        network_entries = result.data.get("network_entries")
+        if isinstance(network_entries, list):
+            failed = sum(
+                isinstance(entry, Mapping)
+                and (
+                    entry.get("error")
+                    or (isinstance(entry.get("status"), int) and entry["status"] >= 400)
+                )
+                for entry in network_entries
+            )
+            pending = sum(
+                isinstance(entry, Mapping)
+                and entry.get("status") is None
+                and not entry.get("error")
+                for entry in network_entries
+            )
+            return cls._message(
+                "browser.detail.network",
+                count=len(network_entries),
+                failed=failed,
+                pending=pending,
+            )
+        if target:
+            return cls._message("browser.detail.succeeded_target", action=action, target=target)
+        page = result.data.get("page")
+        page_title = string(page.get("title")).strip() if isinstance(page, Mapping) else ""
+        if page_title:
+            return cls._message("browser.detail.succeeded_page", action=action, page=page_title)
+        return cls._message("browser.detail.succeeded", action=action)
 
     @classmethod
     def _argument_subject(

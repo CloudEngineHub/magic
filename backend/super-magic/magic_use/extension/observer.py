@@ -14,21 +14,24 @@ from magic_use.models import (
     BoundingBox,
     BrowserPage,
     ActionTarget,
-    PageSnapshot,
+    PageElements,
     ScreenshotResult,
-    SnapshotNode,
-    SnapshotOptions,
-    SnapshotScope,
+    ElementNode,
+    ElementQuery,
+    ElementScope,
+    FindQuery,
+    FindResult,
 )
 from magic_use.models.common import JsonValue
 from magic_use.observation import (
     AccessibilityCollector,
     DOMSnapshotCollector,
     PageProbeCollector,
-    SnapshotComposer,
-    SnapshotSourceCollector,
+    ElementComposer,
+    ElementSourceCollector,
+    find_in_elements,
 )
-from magic_use.observation.sources import SnapshotSources
+from magic_use.observation.sources import ElementSources
 from magic_use.remote_protocol import RemoteMethod
 from magic_use.scripts import ScriptInjector, ScriptRegistry
 
@@ -52,15 +55,31 @@ class ChromeExtensionObserver:
         self._resolver = RefResolver(self._refs)
         self._registry = ScriptRegistry()
         self._injector = ScriptInjector(self._registry)
-        self._collector = SnapshotSourceCollector(
+        self._collector = ElementSourceCollector(
             accessibility=AccessibilityCollector(),
             dom_snapshot=DOMSnapshotCollector(),
             page_probe=PageProbeCollector(self._injector),
         )
-        self._composer = SnapshotComposer(self._refs)
-        self._snapshots: dict[str, PageSnapshot] = {}
+        self._composer = ElementComposer(self._refs)
+        self._snapshots: dict[str, PageElements] = {}
 
     async def register_document_scripts(self, peer: ExtensionPeer) -> None:
+        if self._config.scripts.mask_enabled:
+            mask = await self._registry.get("mask")
+            await peer.request(
+                RemoteMethod.SCRIPT_REGISTER,
+                {
+                    "name": mask.name,
+                    "version": mask.version,
+                    "source": mask.source,
+                    "source_hash": mask.source_hash,
+                    "policy": mask.injection_policy.value,
+                    "enabled": True,
+                    "disabled_domains": [],
+                    "session_override": None,
+                },
+                logical_session_id=self._logical_session_id,
+            )
         pure = await self._registry.get("pure")
         config = self._config.scripts.pure
         await peer.request(
@@ -114,21 +133,65 @@ class ChromeExtensionObserver:
         result = await page.evaluate("scope => globalThis.MagicLens.readAsMarkdown(scope)", scope)
         if not isinstance(result, str):
             raise BrowserSDKError(BrowserErrorCode.SNAPSHOT_FAILED, "Lens returned a non-text result")
+        plain_length = await page.evaluate("() => (document.body?.innerText || '').length")
+        if isinstance(plain_length, int) and plain_length > 500 and len(result) < plain_length * 0.2:
+            result += (
+                "\n\n[Most of this page's text is inside forms, buttons, lists, or iframes, "
+                "which this reader skips. This is not a loading delay. "
+                "Use browser_read_html to see the real markup.]"
+            )
         return result
+
+    async def read_html(
+        self,
+        page: BrowserPage,
+        *,
+        ref: str | None,
+        detail: str,
+        max_chars: int,
+    ) -> tuple[str, bool]:
+        page_token = self._pages.require_token(page.id)
+        remote_page = _RemotePage(self, page_token)
+        await self._injector.ensure(remote_page, "outline")
+        options = {"detail": detail, "max_chars": max_chars}
+        if ref is None:
+            result = await remote_page.evaluate(
+                "options => globalThis.MagicOutline.read(document.body, options)",
+                options,
+            )
+        else:
+            record = self._refs.resolve(
+                ref,
+                page_id=page.id,
+                document_generation=page.document_generation,
+            )
+            payload = await self._peer_provider().request(
+                RemoteMethod.OBSERVATION_OUTLINE,
+                {
+                    "page_token": page_token,
+                    "backend_node_id": record.backend_node_id,
+                    "options": options,
+                },
+                logical_session_id=self._logical_session_id,
+            )
+            result = payload.get("result")
+        if not isinstance(result, dict) or not isinstance(result.get("content"), str):
+            raise BrowserSDKError(BrowserErrorCode.SNAPSHOT_FAILED, "HTML outline returned an invalid result")
+        return result["content"], result.get("truncated") is True
 
     async def snapshot(
         self,
         page: BrowserPage,
-        options: SnapshotOptions,
+        options: ElementQuery,
         *,
         update_baseline: bool = True,
-    ) -> PageSnapshot:
+    ) -> PageElements:
         sources = await self.collect_sources(page.id)
-        effective_options = SnapshotOptions(
+        effective_options = ElementQuery(
             scope=options.scope,
             root_ref=options.root_ref,
-            max_nodes=min(options.max_nodes, self._config.snapshot.max_nodes),
-            max_depth=min(options.max_depth, self._config.snapshot.max_depth),
+            max_nodes=min(options.max_nodes, self._config.elements.max_nodes),
+            max_depth=min(options.max_depth, self._config.elements.max_depth),
         )
         previous = self._snapshots.get(page.id)
         projection_scope = self._projection_scope(options.scope, previous)
@@ -150,6 +213,22 @@ class ChromeExtensionObserver:
                 diff=None,
             )
         return snapshot
+
+    async def find(self, page: BrowserPage, query: FindQuery) -> FindResult:
+        sources = await self.collect_sources(page.id)
+        max_nodes = max(1, len(sources.accessibility) + len(sources.dom) + len(sources.probe))
+        elements = self._composer.compose(
+            session_id=page.session_id,
+            page_id=page.id,
+            document_generation=page.document_generation,
+            url=page.url,
+            title=page.title,
+            sources=sources,
+            options=ElementQuery(scope=ElementScope.FULL, max_nodes=max_nodes, max_depth=1_000),
+            previous=None,
+            projection_scope=ElementScope.FULL,
+        )
+        return find_in_elements(elements, query)
 
     async def resolve_ref(self, page: BrowserPage, ref: str) -> ResolvedRef:
         sources = await self.collect_sources(page.id)
@@ -184,7 +263,7 @@ class ChromeExtensionObserver:
             )
         return await self._labeled_screenshot(page, page_token, full_page)
 
-    async def collect_sources(self, page_id: str) -> SnapshotSources:
+    async def collect_sources(self, page_id: str) -> ElementSources:
         page_token = self._pages.require_token(page_id)
         return await self._collector.collect(
             cdp=_RemoteCDPClient(self._peer_provider(), self._logical_session_id, page_token),
@@ -214,7 +293,7 @@ class ChromeExtensionObserver:
             )
         snapshot = await self.snapshot(
             page,
-            SnapshotOptions(scope=SnapshotScope.INTERACTIVE),
+            ElementQuery(scope=ElementScope.INTERACTIVE),
             update_baseline=False,
         )
         marker_items: list[dict[str, JsonValue]] = []
@@ -276,19 +355,19 @@ class ChromeExtensionObserver:
         return base64.b64decode(encoded, validate=True)
 
     @staticmethod
-    def _projection_scope(scope: SnapshotScope, previous: PageSnapshot | None) -> SnapshotScope:
-        if scope is not SnapshotScope.CHANGES:
+    def _projection_scope(scope: ElementScope, previous: PageElements | None) -> ElementScope:
+        if scope is not ElementScope.CHANGES:
             return scope
         if previous is not None and previous.scope in {
-            SnapshotScope.INTERACTIVE,
-            SnapshotScope.VIEWPORT,
-            SnapshotScope.FULL,
+            ElementScope.INTERACTIVE,
+            ElementScope.VIEWPORT,
+            ElementScope.FULL,
         }:
             return previous.scope
-        return SnapshotScope.INTERACTIVE
+        return ElementScope.INTERACTIVE
 
     @staticmethod
-    def _node_for_ref(snapshot: PageSnapshot, ref: str) -> SnapshotNode | None:
+    def _node_for_ref(snapshot: PageElements, ref: str) -> ElementNode | None:
         stack = list(snapshot.root_nodes)
         while stack:
             node = stack.pop()

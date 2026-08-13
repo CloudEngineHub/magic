@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from agentlang.logger import get_logger
 from agentlang.llms.factory import LLMFactory
 from app.i18n import i18n
@@ -16,10 +16,10 @@ logger = get_logger(__name__)
 
 
 # 系统提示模板
-DEFAULT_SYSTEM_PROMPT = """你是一个专业的视觉理解助手，擅长依据用户需求，准确地分析和解释图片内容。
-若用户传入了多张图片并要求你给出每张图片的分析结果而非整体分析结果，你需要确保分析结果与每张图片的对应关系清晰明确。
-用最少的字表达最多的内容，但不丢失任何细节，尽最大努力提高你回答的信息密度。
-当前时间：{current_time}"""
+DEFAULT_SYSTEM_PROMPT = """You are a visual understanding specialist. Analyze and explain image content accurately according to the user's request.
+When the user provides multiple images and requests separate results, clearly associate each result with its corresponding image.
+Be concise and information-dense without omitting relevant details.
+Current time: {current_time}"""
 
 REQUEST_TOO_LARGE_PATTERNS = (
     re.compile(r"\b413\b", re.IGNORECASE),
@@ -45,7 +45,7 @@ class LLMRequestHandler:
             格式化后的系统提示
         """
         if current_time is None:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         return DEFAULT_SYSTEM_PROMPT.format(current_time=current_time)
 

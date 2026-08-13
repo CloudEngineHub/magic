@@ -7,6 +7,7 @@ import {
 	adjustPositionForBoundary,
 	getViewportSize,
 	selectBestPlacement,
+	calculateContextMenuPositionFromSize,
 	type Position,
 	type DropdownSizeConfig,
 } from "./utils"
@@ -96,6 +97,7 @@ export default function useSuperMagicDropdown<T = unknown>({
 	const initialPositionRef = useRef<Position>({ top: 0, left: 0 })
 	const currentItemDataRef = useRef<T | null>(null)
 	const anchorRectRef = useRef<DOMRect | null>(null)
+	const contextMenuPointRef = useRef<{ x: number; y: number } | null>(null)
 	const currentPlacementRef = useRef<DropdownPlacement>("bottom-left")
 
 	// 处理菜单尺寸变化并调整位置
@@ -109,7 +111,15 @@ export default function useSuperMagicDropdown<T = unknown>({
 						currentPlacementRef.current,
 					)
 				: initialPositionRef.current
-		const adjustedPosition = adjustPositionForBoundary(measuredAnchorPosition, size, viewport)
+		const contextMenuPoint = contextMenuPointRef.current
+		const adjustedPosition = contextMenuPoint
+			? calculateContextMenuPositionFromSize(
+					contextMenuPoint.x,
+					contextMenuPoint.y,
+					size,
+					viewport,
+				)
+			: adjustPositionForBoundary(measuredAnchorPosition, size, viewport)
 
 		// 只有当位置需要调整时才更新
 		setDropdownPosition((currentPosition) => {
@@ -186,6 +196,7 @@ export default function useSuperMagicDropdown<T = unknown>({
 			setRenderMenuItems(undefined)
 			stopObservingMenuSize()
 			anchorRectRef.current = null
+			contextMenuPointRef.current = null
 			currentPlacementRef.current = "bottom-left"
 
 			// 调用外部回调
@@ -256,6 +267,7 @@ export default function useSuperMagicDropdown<T = unknown>({
 
 	const onActionClick = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>, itemData: T) => {
+			contextMenuPointRef.current = null
 			// 动态生成 sizeConfig，包含当前的菜单项
 			const dynamicSizeConfig: DropdownSizeConfig = {
 				width,
@@ -298,6 +310,7 @@ export default function useSuperMagicDropdown<T = unknown>({
 			}
 
 			// 动态生成 sizeConfig，包含当前的菜单项
+			contextMenuPointRef.current = { x: event.clientX, y: event.clientY }
 			const dynamicSizeConfig: DropdownSizeConfig = {
 				width,
 				menuItems: getMenuItems ? getMenuItems(itemData) : undefined,

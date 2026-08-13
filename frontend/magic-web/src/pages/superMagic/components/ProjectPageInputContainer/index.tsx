@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import TaskList from "../TaskList"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { observer } from "mobx-react-lite"
-import { MessageEditorSize } from "../MessageEditor/types"
+import type { MessageEditorSize } from "../MessageEditor/types"
 import { roleStore } from "../../stores"
 import useTopicMode from "../../hooks/useTopicMode"
 import MessageQueue from "../MessagePanel/components/MessageQueue"
@@ -13,7 +13,7 @@ import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-
 import { DEFAULT_LAYOUT_CONFIG } from "../MessageEditor/constants/constant"
 import { usePreload } from "../MessagePanel/utils/preload"
 import { useTaskData } from "../../hooks/useTaskData"
-import { ProjectPageInputContainerProps } from "./types"
+import type { ProjectPageInputContainerProps } from "./types"
 import type {
 	SceneEditorContext,
 	SceneEditorNodes,
@@ -55,6 +55,8 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	attachments,
 	isShowLoadingInit = false,
 	mentionPanelStore = GlobalMentionPanelStore,
+	topicStore,
+	allowRecordingMode,
 	topicModeLogic: topicModeLogicProps,
 	modelTopicMode,
 	size = "small",
@@ -229,6 +231,9 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 				editorLayoutConfig ?? (isMobile ? MOBILE_LAYOUT_CONFIG : DEFAULT_LAYOUT_CONFIG),
 			attachments,
 			mentionPanelStore,
+			// Recording detail injects its isolated store so send-time renames never fall back globally.
+			topicStore,
+			allowRecordingMode,
 			onFileClick,
 			onEditorFocus: () => {
 				setIsFocused(true)
@@ -275,6 +280,8 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		isMobile,
 		attachments,
 		mentionPanelStore,
+		topicStore,
+		allowRecordingMode,
 		onFileClick,
 		onMessageSendReady,
 		messageQueue.editingQueueItem,

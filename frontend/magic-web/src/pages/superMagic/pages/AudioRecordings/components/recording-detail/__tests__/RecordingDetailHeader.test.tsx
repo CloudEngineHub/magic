@@ -165,6 +165,12 @@ describe("RecordingDetailHeader action styling", () => {
 		expect(screen.getByTestId("recording-detail-header")).not.toHaveClass("border-b")
 	})
 
+	it("does not render a separate ask AI action in the detail header", () => {
+		render(<RecordingDetailHeader {...baseProps} />)
+
+		expect(screen.queryByTestId("recording-detail-ask-ai")).not.toBeInTheDocument()
+	})
+
 	it("uses prototype-sized bordered triggers for export and share", () => {
 		render(<RecordingDetailHeader {...baseProps} />)
 
