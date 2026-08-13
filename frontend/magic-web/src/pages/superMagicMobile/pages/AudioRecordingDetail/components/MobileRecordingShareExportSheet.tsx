@@ -65,6 +65,7 @@ function ActionRow({
 				disabled={disabled}
 				onClick={onClick}
 				className="flex h-12 w-full items-center gap-3 bg-card px-[14px] text-left transition-opacity active:opacity-60 disabled:opacity-40"
+				data-testid={`mobile-recording-share-${icon}-action`}
 			>
 				<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
 					{normalizedIcon}
