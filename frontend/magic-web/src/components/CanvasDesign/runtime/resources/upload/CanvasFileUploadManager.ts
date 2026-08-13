@@ -16,7 +16,6 @@ import {
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import {
 	generateElementId,
-	generateUniqueElementName,
 	getMediaDimensions,
 	isImageFile,
 	isVideoFile,
@@ -38,7 +37,6 @@ import {
 	updateContent,
 	updateImageContent,
 } from "../../document/elementContent"
-import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
 import { AudioElement as AudioElementClass } from "../../elements/audio/AudioElement"
@@ -634,6 +632,7 @@ export class CanvasFileUploadManager {
 			onUploadComplete?: (result: UploadFileResponse, index: number) => void
 			onUploadFailed?: (error: Error, index: number) => void
 		},
+		options?: { overwrite?: boolean },
 	): Promise<UploadFileResponse[]> {
 		// 检查是否有 uploadFiles 方法
 		const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
@@ -645,7 +644,7 @@ export class CanvasFileUploadManager {
 		const uploadFiles: UploadFile[] = files.map((file, index) => ({
 			file,
 			uploadSubDir: this.getUploadSubDir(file),
-			overwrite: this.getUploadFileOverwrite(file, files),
+			overwrite: options?.overwrite ?? this.getUploadFileOverwrite(file, files),
 			onUploadComplete: (result) => {
 				callbacks?.onUploadComplete?.(normalizeCanvasUploadFileResponsePath(result), index)
 			},
@@ -861,9 +860,7 @@ export class CanvasFileUploadManager {
 			const dimensions = await getMediaDimensions(file)
 			const targetX = position.x - dimensions.width / 2
 			const targetY = position.y - dimensions.height / 2
-			const existingNames = getAllExistingNames(this.canvas.elementManager)
 			const baseName = file.name.replace(/\.[^/.]+$/, "")
-			const uniqueName = generateUniqueElementName(baseName, existingNames)
 			const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
 			const elementId = generateElementId()
 			const isVideo = isVideoFile(file)
@@ -875,7 +872,7 @@ export class CanvasFileUploadManager {
 				{ x: targetX, y: targetY },
 				{ width: dimensions.width, height: dimensions.height },
 				maxZIndex + 1,
-				uniqueName,
+				baseName,
 				elementData,
 				{ status: GenerationStatus.Processing },
 			)
@@ -1313,9 +1310,7 @@ export class CanvasFileUploadManager {
 		const height = elementData?.height ?? 100
 		const targetX = elementData?.x ?? position.x - width / 2
 		const targetY = elementData?.y ?? position.y - height / 2
-		const existingNames = getAllExistingNames(this.canvas.elementManager)
 		const baseName = metadata.filename.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
 		const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
 		const elementId = generateElementId()
 		const batchId = this.currentPendingBatchId ?? this.beginPendingUploadBatch()
@@ -1326,7 +1321,7 @@ export class CanvasFileUploadManager {
 			{ x: targetX, y: targetY },
 			{ width, height },
 			maxZIndex + 1,
-			uniqueName,
+			baseName,
 			elementData,
 			{ status: GenerationStatus.Processing },
 		)

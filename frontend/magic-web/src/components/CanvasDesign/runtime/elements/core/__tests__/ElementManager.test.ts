@@ -68,6 +68,30 @@ function createElement(id: string): LayerElement {
 	}
 }
 
+describe("ElementManager element creation names", () => {
+	it("assigns the next unique name through the public create entry", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			elements: Map<string, { getData: () => LayerElement }>
+			doCreate: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
+			create: ElementManager["create"]
+		}
+		const existing = { ...createElement("existing"), name: "视频合并" }
+		manager.elements = new Map([[existing.id, { getData: () => existing }]])
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			manager.elements.set(element.id, { getData: () => element })
+		})
+		manager.getElementsDict = () => ({ [existing.id]: existing })
+
+		manager.create({ ...createElement("new"), name: "视频合并" })
+
+		expect(manager.doCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ name: "视频合并(1)" }),
+			{},
+		)
+	})
+})
+
 describe("ElementManager drag eligibility", () => {
 	it("keeps the selected element draggable in single selection", () => {
 		const manager = createManager({ selectedIds: ["element-1"] })
@@ -873,6 +897,7 @@ describe("ElementManager temporary element creation", () => {
 			temporaryElements: Map<string, unknown>
 			doCreate: ReturnType<typeof vi.fn>
 			doDelete: ReturnType<typeof vi.fn>
+			getElementsDict: ElementManager["getElementsDict"]
 			createTemporaryElement: ElementManager["createTemporaryElement"]
 		}
 		manager.elements = new Map()
@@ -882,6 +907,7 @@ describe("ElementManager temporary element creation", () => {
 			manager.elements.delete(elementId)
 			manager.temporaryElements.delete(elementId)
 		})
+		manager.getElementsDict = () => ({}) as Record<string, LayerElement>
 		return manager
 	}
 
@@ -895,10 +921,10 @@ describe("ElementManager temporary element creation", () => {
 				historyPolicy: "exclude",
 				clipboardPolicy: "exclude",
 			})
-			manager.elements.set(element.id, {})
+			manager.elements.set(element.id, { getData: () => element })
 		})
 
-		expect(manager.createTemporaryElement(element)).toBe(element.id)
+		expect(manager.createTemporaryElement(element)).toMatchObject({ elementId: element.id })
 		expect(manager.doCreate).toHaveBeenCalledWith(element, {})
 	})
 
@@ -952,6 +978,7 @@ describe("ElementManager temporary element creation", () => {
 		manager.elements = new Map()
 		manager.createTemporaryElement = vi.fn((elementData: LayerElement) => {
 			manager.elements.set(elementData.id, {})
+			return { elementId: elementData.id, element: elementData }
 		})
 		const onUploadComplete = vi.fn()
 

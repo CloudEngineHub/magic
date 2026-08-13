@@ -9,12 +9,10 @@ import {
 	isVideoFile,
 	validateFile,
 	generateElementId,
-	generateUniqueElementName,
 	calculateGridImageLayout,
 	validateCanvasFilePath,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../shared/ids"
-import { getAllExistingNames } from "../../shared/placement/elementUtils"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { AudioElement, ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
@@ -971,7 +969,6 @@ export class DropOverlayManager {
 	 * @param dimensions 图片尺寸
 	 * @param position 位置
 	 * @param zIndex z-index
-	 * @param existingNames 已存在的名称集合
 	 * @returns 创建的元素 ID
 	 */
 	private createImageElement(
@@ -980,13 +977,10 @@ export class DropOverlayManager {
 		dimensions: { width: number; height: number },
 		position: { x: number; y: number },
 		zIndex: number,
-		existingNames: Set<string>,
 	): string {
 		// 从文件路径提取文件名（去掉扩展名）
 		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "image"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
-		existingNames.add(uniqueName)
 
 		// 计算元素位置（图片中心对齐到 position）
 		const targetX = position.x - dimensions.width / 2
@@ -1004,7 +998,7 @@ export class DropOverlayManager {
 			zIndex,
 		) as ImageElement
 		const imageElement = updateContent(
-			{ ...baseElement, name: uniqueName },
+			{ ...baseElement, name: baseName },
 			baseElement.activeContentId ?? undefined,
 			{ src: filePath },
 		)
@@ -1020,7 +1014,6 @@ export class DropOverlayManager {
 	 * @param dimensions 视频尺寸
 	 * @param position 位置
 	 * @param zIndex z-index
-	 * @param existingNames 已存在的名称集合
 	 * @returns 创建的元素 ID
 	 */
 	private createVideoElement(
@@ -1029,12 +1022,9 @@ export class DropOverlayManager {
 		dimensions: { width: number; height: number },
 		position: { x: number; y: number },
 		zIndex: number,
-		existingNames: Set<string>,
 	): string {
 		const fileName = fileInfo.fileName || getCanvasResourceFileName(filePath) || "video"
 		const baseName = fileName.replace(/\.[^/.]+$/, "")
-		const uniqueName = generateUniqueElementName(baseName, existingNames)
-		existingNames.add(uniqueName)
 
 		const targetX = position.x - dimensions.width / 2
 		const targetY = position.y - dimensions.height / 2
@@ -1050,7 +1040,7 @@ export class DropOverlayManager {
 			zIndex,
 		) as VideoElement
 		const videoElement = updateContent(
-			{ ...baseElement, name: uniqueName },
+			{ ...baseElement, name: baseName },
 			baseElement.activeContentId ?? undefined,
 			{ src: filePath },
 		)
@@ -1123,7 +1113,6 @@ export class DropOverlayManager {
 			preparedResources.map(({ dimensions }) => dimensions),
 			anchorPosition,
 		)
-		const existingNames = getAllExistingNames(this.canvas.elementManager)
 		const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
 		const createdElementIds: string[] = []
 
@@ -1142,7 +1131,6 @@ export class DropOverlayManager {
 							dimensions,
 							position,
 							zIndex,
-							existingNames,
 						)
 					} else if (mediaType === "audio") {
 						elementId = this.createAudioElement(filePath, dimensions, position, zIndex)
@@ -1153,7 +1141,6 @@ export class DropOverlayManager {
 							dimensions,
 							position,
 							zIndex,
-							existingNames,
 						)
 					}
 					createdElementIds.push(elementId)

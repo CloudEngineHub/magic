@@ -35,6 +35,8 @@ import {
 } from "../../document/elementContent"
 import type { UploadFileResponse } from "../../../public/magic-types"
 import { validateElementData } from "../../document/validateElement"
+import { generateUniqueElementName } from "../../shared/ids"
+import { getAllExistingNames } from "../../shared/placement/elementUtils"
 
 /**
  * 更新模式
@@ -61,6 +63,11 @@ export interface ElementOperationOptions {
 	skipZIndexReorder?: boolean
 	/** 批量更新成功后是否发送 element:batchupdated；事务调用方可延后到正式提交后发送 */
 	emitBatchUpdated?: boolean
+}
+
+export interface ElementCreateResult<T extends LayerElement = LayerElement> {
+	elementId: string
+	element: T
 }
 
 export interface ElementManagerDocumentPatch {
@@ -175,13 +182,22 @@ export class ElementManager {
 	 * @param options - 操作选项
 	 * @throws 如果元素已存在
 	 */
-	public create(elementData: LayerElement, options?: ElementOperationOptions): void {
+	public create<T extends LayerElement>(
+		elementData: T,
+		options?: ElementOperationOptions,
+	): ElementCreateResult<T> | null {
 		if (this.elements.has(elementData.id)) {
 			throw new Error(
 				`Element ${elementData.id} already exists. Use update() or upsert() instead.`,
 			)
 		}
-		this.doCreate(elementData, options || {})
+		const resolvedElement = this.resolveUniqueElementName(elementData)
+		this.doCreate(resolvedElement, options || {})
+		const createdElement = this.elements.get(resolvedElement.id)?.getData()
+		if (!createdElement) {
+			return null
+		}
+		return { elementId: resolvedElement.id, element: createdElement as T }
 	}
 
 	/**
@@ -192,26 +208,31 @@ export class ElementManager {
 		elementData: LayerElement,
 		options?: ElementOperationOptions,
 		temporaryKind: TemporaryElementKind = "generation-result",
-	): string {
+	): ElementCreateResult {
 		if (this.elements.has(elementData.id)) {
 			throw new Error(`Element ${elementData.id} already exists`)
 		}
 
-		this.markElementTemporary(elementData.id, temporaryKind)
+		const elementWithUniqueName = this.resolveUniqueElementName(elementData)
+		this.markElementTemporary(elementWithUniqueName.id, temporaryKind)
 		try {
-			this.doCreate(elementData, options || {})
-			if (!this.elements.has(elementData.id)) {
-				throw new Error(`Element ${elementData.id} could not be created`)
+			this.doCreate(elementWithUniqueName, options || {})
+			if (!this.elements.has(elementWithUniqueName.id)) {
+				throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
 			}
 		} catch (error) {
-			if (this.elements.has(elementData.id)) {
-				this.doDelete(elementData.id, { suppressEvents: true })
+			if (this.elements.has(elementWithUniqueName.id)) {
+				this.doDelete(elementWithUniqueName.id, { suppressEvents: true })
 			} else {
-				this.temporaryElements.delete(elementData.id)
+				this.temporaryElements.delete(elementWithUniqueName.id)
 			}
 			throw error
 		}
-		return elementData.id
+		const createdElement = this.elements.get(elementWithUniqueName.id)?.getData()
+		if (!createdElement) {
+			throw new Error(`Element ${elementWithUniqueName.id} could not be created`)
+		}
+		return { elementId: elementWithUniqueName.id, element: createdElement }
 	}
 
 	/**
@@ -230,10 +251,10 @@ export class ElementManager {
 		},
 	): string {
 		// 创建元素实例（与正式元素相同的渲染逻辑）
-		this.createTemporaryElement(elementData, { silent: false }, "upload")
+		const createResult = this.createTemporaryElement(elementData, { silent: false }, "upload")
 
 		// 获取元素实例
-		const element = this.elements.get(elementData.id)
+		const element = this.elements.get(createResult.elementId)
 
 		// 如果是 ImageElement，创建 ossSrc Promise
 		if (element instanceof ImageElementClass) {
@@ -244,11 +265,11 @@ export class ElementManager {
 		const { uploadFiles, onUploadComplete, onUploadFailed } = uploadContext
 		if (uploadFiles.length > 0) {
 			this.canvas.canvasFileUploadManager.queueUpload({
-				elementId: elementData.id,
+				elementId: createResult.elementId,
 				file: uploadFiles[0],
 				onUploadComplete: (result) => {
 					// 存储上传结果到元素实例（用于后续处理）
-					const element = this.elements.get(elementData.id)
+					const element = this.elements.get(createResult.elementId)
 					if (
 						element instanceof ImageElementClass ||
 						element instanceof VideoElementClass
@@ -256,16 +277,16 @@ export class ElementManager {
 						element.uploadResult = result
 					}
 					// 触发原始回调
-					onUploadComplete?.(elementData.id, result)
+					onUploadComplete?.(createResult.elementId, result)
 				},
 				onUploadFailed: (error) => {
 					// 触发原始回调
-					onUploadFailed?.(elementData.id, error)
+					onUploadFailed?.(createResult.elementId, error)
 				},
 			})
 		}
 
-		return elementData.id
+		return createResult.elementId
 	}
 
 	/**
@@ -1811,6 +1832,29 @@ export class ElementManager {
 		return dict
 	}
 
+	/** 为通过公开 create 入口进入运行时的新元素统一分配唯一名称。 */
+	private resolveUniqueElementName(elementData: LayerElement): LayerElement {
+		const existingNames = getAllExistingNames(this)
+
+		const resolve = (element: LayerElement): LayerElement => {
+			let resolved = element
+			if (element.name) {
+				const uniqueName = generateUniqueElementName(element.name, existingNames)
+				if (uniqueName !== element.name) resolved = { ...resolved, name: uniqueName }
+				existingNames.add(uniqueName)
+			}
+			if ("children" in element && Array.isArray(element.children)) {
+				const children = element.children.map(resolve)
+				if (children.some((child, index) => child !== element.children?.[index])) {
+					resolved = { ...resolved, children } as LayerElement
+				}
+			}
+			return resolved
+		}
+
+		return resolve(elementData)
+	}
+
 	public exportDocumentPatch(options: {
 		changedElementIds: string[]
 		deletedElementIds?: string[]
@@ -1871,7 +1915,7 @@ export class ElementManager {
 	 * 只更新变化的元素，避免全量重新渲染
 	 * 在加载时创建深拷贝，确保内部数据不受外部影响（如 useImmer 冻结）
 	 */
-	public loadDocumentSmart(doc: CanvasDocument): void {
+	public loadDocumentSmart(doc: CanvasDocument): boolean {
 		// 深拷贝传入的数据，确保内部数据独立，不受外部状态管理工具影响
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		const newElements = docCopy.elements || []
@@ -1975,18 +2019,16 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
-
-			// 触发文档恢复事件，通知所有管理器更新（如 name labels、hover 等）
-			// 因为批量模式不会触发 element:updated 事件，需要手动通知
-			if (
-				toUpdate.length > 0 ||
-				toCreate.length > 0 ||
-				toDelete.length > 0 ||
-				toMoveTopLevel.length > 0
-			) {
-				this.canvas.eventEmitter.emit({ type: "document:restored", data: undefined })
-			}
 		}
+
+		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。
+		// ElementManager 单独恢复时不能保证连接管理器已经切换到同一份文档。
+		return (
+			toUpdate.length > 0 ||
+			toCreate.length > 0 ||
+			toDelete.length > 0 ||
+			toMoveTopLevel.length > 0
+		)
 	}
 
 	private moveElementToContentLayer(elementId: string): void {

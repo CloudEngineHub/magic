@@ -33,8 +33,6 @@ const CONTENT_FIELDS = new Set([
 	"innerRadiusRatio",
 	"generationConfig",
 	"shots",
-	"videoSequence",
-	"audioSequence",
 	"output",
 ])
 

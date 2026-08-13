@@ -27,17 +27,12 @@ import {
 	calculateElementsRect,
 	calculateNodesRect,
 	generateElementId,
-	generateUniqueElementName,
 	isVideoFile,
 	isAudioFile,
 	validateFile,
 } from "../../shared/ids"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
-import {
-	getAllExistingNames,
-	filterRedundantElements,
-	getCanvasCenter,
-} from "../../shared/placement/elementUtils"
+import { filterRedundantElements, getCanvasCenter } from "../../shared/placement/elementUtils"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import {
 	CanvasElementClipboard,
@@ -1473,7 +1468,7 @@ export class ClipboardManager {
 		}
 	}
 
-	private cloneElementForPaste(element: LayerElement, currentNames: Set<string>): LayerElement {
+	private cloneElementForPaste(element: LayerElement): LayerElement {
 		let clonedElement = { ...element, id: generateElementId() } as LayerElement
 		const contentIdMap = new Map<string, string>()
 		clonedElement.contents.forEach((content) => {
@@ -1492,11 +1487,6 @@ export class ClipboardManager {
 				? (contentIdMap.get(mappedElement.mainContentId) ?? mappedElement.mainContentId)
 				: null,
 		} as LayerElement
-
-		if (clonedElement.name) {
-			clonedElement.name = generateUniqueElementName(clonedElement.name, currentNames)
-			currentNames.add(clonedElement.name)
-		}
 
 		return clonedElement
 	}
@@ -1733,7 +1723,6 @@ export class ClipboardManager {
 
 	private async prepareClipboardTreeElement(options: {
 		sourceElement: LayerElement
-		currentNames: Set<string>
 		isRoot: boolean
 		offsetX: number
 		offsetY: number
@@ -1745,7 +1734,6 @@ export class ClipboardManager {
 	}): Promise<PreparedClipboardTreeElement> {
 		const {
 			sourceElement,
-			currentNames,
 			isRoot,
 			offsetX,
 			offsetY,
@@ -1757,7 +1745,7 @@ export class ClipboardManager {
 		} = options
 		let sourceReferenceFailureCount = 0
 		const pendingUploads: ClipboardTreeFileUpload[] = []
-		let finalElement = this.cloneElementForPaste(sourceElement, currentNames)
+		let finalElement = this.cloneElementForPaste(sourceElement)
 
 		if (isRoot) {
 			finalElement = {
@@ -1774,7 +1762,6 @@ export class ClipboardManager {
 			for (const child of sourceElement.children) {
 				const preparedChild = await this.prepareClipboardTreeElement({
 					sourceElement: child,
-					currentNames,
 					isRoot: false,
 					offsetX,
 					offsetY,
@@ -2024,7 +2011,6 @@ export class ClipboardManager {
 				.filter((metadata) => metadata.role === "element-media")
 				.map((metadata) => [metadata.elementId, metadata]),
 		)
-		const currentNames = new Set(getAllExistingNames(this.canvas.elementManager))
 		const maxZIndex = this.canvas.elementManager.getMaxZIndexInLevel()
 		const targetPosition = this.getTargetPosition(position)
 		const { offsetX, offsetY } =
@@ -2054,7 +2040,6 @@ export class ClipboardManager {
 						const rootZIndex = nextZIndex++
 						const preparedTree = await this.prepareClipboardTreeElement({
 							sourceElement: element,
-							currentNames,
 							isRoot: true,
 							offsetX,
 							offsetY,
