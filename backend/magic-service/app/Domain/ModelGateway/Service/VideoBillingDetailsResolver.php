@@ -62,28 +62,17 @@ readonly class VideoBillingDetailsResolver
      */
     public function resolveFromMetadataWithFallback(VideoMediaMetadata $metadata, VideoQueueOperationEntity $operation): array
     {
-        /*$details = $this->resolveFromMetadata($metadata);
+        $details = $this->resolveFromMetadata($metadata);
         $requestedResolution = $this->resolveResolutionCandidate([
             $operation->getRawRequest()['generation']['resolution'] ?? null,
         ]);
         if ($requestedResolution !== null) {
             // 计费档位以请求的统一 resolution 为准，媒体文件尺寸只用于记录实际输出尺寸。
-            // 这样调试文件或 provider 返回的尺寸不会把请求档位错误映射成另一档。
             $details['resolution'] = $requestedResolution;
         }
 
         if ($details['resolution'] === null) {
             $fallbackDetails = $this->resolveFromFallback($operation);
-            $details['resolution'] = $fallbackDetails['resolution'];
-        }*/
-
-        $details = $this->resolveFromMetadata($metadata);
-        if ($details['resolution'] !== null) {
-            return $details;
-        }
-
-        $fallbackDetails = $this->resolveFromFallback($operation);
-        if ($fallbackDetails['resolution'] !== null) {
             $details['resolution'] = $fallbackDetails['resolution'];
         }
 

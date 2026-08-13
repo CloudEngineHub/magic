@@ -587,6 +587,7 @@ readonly class VideoQueueDomainService
         }
 
         $resolution = $this->normalizeOptionalString($generation['resolution'] ?? null);
+        $hasExplicitResolution = $resolution !== null;
         if ($resolution === null) {
             $resolution = $this->inferKelingResolutionFromDimensions($generation);
         }
@@ -597,6 +598,11 @@ readonly class VideoQueueDomainService
 
         $resolution = $this->normalizeResolution($resolution);
         if ($resolution === null || ! array_key_exists($resolution, self::KELING_RESOLUTION_TO_MODE)) {
+            if ($hasExplicitResolution) {
+                // 保留显式非法值，由统一的能力校验生成标准错误。
+                unset($generation['mode']);
+                return $generation;
+            }
             unset($generation['resolution'], $generation['mode']);
             return $generation;
         }
@@ -1134,7 +1140,30 @@ readonly class VideoQueueDomainService
     {
         $supportedResolutions = $this->normalizeStringList($configGeneration['resolutions'] ?? []);
         if ($supportedResolutions === []) {
+            if (array_key_exists('resolution', $generation)) {
+                ExceptionBuilder::throw(
+                    MagicApiErrorCode::ValidateFailed,
+                    'generation.resolution is not supported by this video model'
+                );
+            }
             unset($generation['resolution']);
+            return $generation;
+        }
+
+        // 显式传入的分辨率必须严格匹配模型能力，不能通过最近档位或默认值静默降级。
+        if (array_key_exists('resolution', $generation)) {
+            $resolution = $this->normalizeResolution($generation['resolution']);
+            if ($resolution === null || ! in_array($resolution, $supportedResolutions, true)) {
+                ExceptionBuilder::throw(
+                    MagicApiErrorCode::ValidateFailed,
+                    sprintf(
+                        'generation.resolution must be one of: %s',
+                        implode(', ', $supportedResolutions)
+                    )
+                );
+            }
+
+            $generation['resolution'] = $resolution;
             return $generation;
         }
 
