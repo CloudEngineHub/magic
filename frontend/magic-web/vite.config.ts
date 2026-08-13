@@ -15,6 +15,7 @@ import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base
 import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
 import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
+import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import Inspect from "vite-plugin-inspect"
@@ -323,6 +324,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					"react-dom": "ReactDOM",
 					"lodash-es": "_",
 				}),
+			!isDev && externalGlobalsPlugin(),
 			vitePluginImp({
 				libList: [
 					{
