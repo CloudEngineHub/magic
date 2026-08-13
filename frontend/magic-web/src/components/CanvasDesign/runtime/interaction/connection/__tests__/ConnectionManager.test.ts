@@ -106,11 +106,7 @@ function createCanvasStub(
 	}
 }
 
-function createVideoEditElement(
-	id: string,
-	videoSequence: string[],
-	audioSequence: string[] = [],
-): LayerElement {
+function createVideoEditElement(id: string): LayerElement {
 	return {
 		id,
 		type: ElementTypeEnum.VideoEdit,
@@ -120,13 +116,7 @@ function createVideoEditElement(
 		height: 720,
 		activeContentId: `${id}-content`,
 		mainContentId: `${id}-content`,
-		contents: [
-			{
-				contentId: `${id}-content`,
-				videoSequence,
-				audioSequence,
-			},
-		],
+		contents: [{ contentId: `${id}-content` }],
 	} as LayerElement
 }
 
@@ -748,7 +738,7 @@ describe("ConnectionManager", () => {
 			mainContentId: "audio-1-content",
 			contents: [{ contentId: "audio-1-content", src: "/voice.wav" }],
 		} as LayerElement)
-		elementData.set("editor", createVideoEditElement("editor", ["video-1"], []))
+		elementData.set("editor", createVideoEditElement("editor"))
 		const manager = new ConnectionManager({ canvas })
 
 		const videoConnection = manager.connectElements({
@@ -756,32 +746,24 @@ describe("ConnectionManager", () => {
 			targetElementId: "editor",
 		})
 		expect(videoConnection.status).toBe("created")
-		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual(["video-1"])
 
 		const secondVideoConnection = manager.connectElements({
 			sourceElementId: "video-2",
 			targetElementId: "editor",
 		})
 		expect(secondVideoConnection.status).toBe("created")
-		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual([
-			"video-1",
-			"video-2",
-		])
 
 		const audioConnection = manager.connectElements({
 			sourceElementId: "audio-1",
 			targetElementId: "editor",
 		})
 		expect(audioConnection.status).toBe("created")
-		expect((elementData.get("editor") as any).contents[0].audioSequence).toEqual(["audio-1"])
 
 		if (secondVideoConnection.status !== "created") throw new Error("Expected video connection")
 		manager.removeConnection(secondVideoConnection.connectionId)
-		expect((elementData.get("editor") as any).contents[0].videoSequence).toEqual(["video-1"])
 
 		if (audioConnection.status !== "created") throw new Error("Expected audio connection")
 		manager.removeConnection(audioConnection.connectionId)
-		expect((elementData.get("editor") as any).contents[0].audioSequence).toEqual([])
 	})
 
 	it("cleans deleted element connections without emitting a separate connection change", () => {

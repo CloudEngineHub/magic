@@ -113,10 +113,15 @@ function isValidStoryboardContent(content: Record<string, unknown>): boolean {
 }
 
 function isValidVideoEditContent(content: Record<string, unknown>): boolean {
-	if (!Array.isArray(content.videoSequence) || !Array.isArray(content.audioSequence)) return false
-	for (const sequence of [content.videoSequence, content.audioSequence]) {
-		if (sequence.some((id) => typeof id !== "string" || !id)) return false
-		if (new Set(sequence).size !== sequence.length) return false
+	if (content.videoSequence !== undefined) {
+		if (
+			!Array.isArray(content.videoSequence) ||
+			content.videoSequence.some(
+				(elementId) => typeof elementId !== "string" || elementId.length === 0,
+			)
+		) {
+			return false
+		}
 	}
 	if (content.output === undefined) return true
 	if (!isObject(content.output)) return false

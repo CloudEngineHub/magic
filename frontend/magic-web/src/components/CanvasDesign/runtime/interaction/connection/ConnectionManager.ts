@@ -5,7 +5,6 @@ import {
 	ElementTypeEnum,
 	type CanvasConnection,
 	type CanvasDocument,
-	type LayerElement,
 	type VideoEditElementContent,
 } from "../../document/types"
 import type { Rect } from "../../shared/ids"
@@ -13,10 +12,13 @@ import { generateConnectionId } from "../../shared/ids"
 import { ConnectionHitTestService } from "./ConnectionHitTestService"
 import { ConnectionRenderer } from "./ConnectionRenderer"
 import { ConnectionStore } from "./ConnectionStore"
+import { collectConnectedVideoEditInputs } from "./connectedInputSources"
 
 export class ConnectionManager {
 	private canvas: Canvas
 	private store = new ConnectionStore()
+	/** 仅用于运行时预览的连接，元素转正后才允许进入文档持久化。 */
+	private runtimeConnectionIds = new Set<string>()
 	private selectedConnectionIds: Set<string> = new Set()
 	private selectedElementIdsForConnectionHighlight: Set<string> = new Set()
 	private renderer: ConnectionRenderer
@@ -33,7 +35,11 @@ export class ConnectionManager {
 	}
 
 	public loadDocument(doc: CanvasDocument): void {
+		this.runtimeConnectionIds.clear()
 		this.store.load(this.filterExistingConnections(doc.connections ?? []))
+		this.syncVideoEditInputs(
+			this.store.getConnections().map((connection) => connection.targetElementId),
+		)
 		this.hitTester.invalidateAll()
 		this.selectedElementIdsForConnectionHighlight.clear()
 		this.clearSelectedConnections({ render: false })
@@ -188,6 +194,44 @@ export class ConnectionManager {
 		return { status: "created", connectionId: id }
 	}
 
+	/** 创建仅运行时可见的连接，允许连接到临时元素，但不会写入 DSL。 */
+	public connectRuntimeElements(options: { sourceElementId: string; targetElementId: string }):
+		| { status: "created"; connectionId: string }
+		| {
+				status: "invalid"
+				reason: "self" | "missing-element" | "already-connected" | "reverse-existing"
+		  } {
+		const { sourceElementId, targetElementId } = options
+		if (sourceElementId === targetElementId) return { status: "invalid", reason: "self" }
+		if (!this.hasElement(sourceElementId) || !this.hasElement(targetElementId)) {
+			return { status: "invalid", reason: "missing-element" }
+		}
+		if (this.hasConnection(sourceElementId, targetElementId)) {
+			return { status: "invalid", reason: "already-connected" }
+		}
+		if (this.hasReverseConnection(sourceElementId, targetElementId)) {
+			return { status: "invalid", reason: "reverse-existing" }
+		}
+
+		const connectionId = generateConnectionId()
+		if (!this.store.add({ id: connectionId, sourceElementId, targetElementId })) {
+			return { status: "invalid", reason: "already-connected" }
+		}
+		this.runtimeConnectionIds.add(connectionId)
+		this.hitTester.invalidateConnections([connectionId])
+		this.rerenderNow()
+		return { status: "created", connectionId }
+	}
+
+	/** 将运行时连接升级为正式连接，并触发一次文档变更事件。 */
+	public promoteRuntimeConnection(connectionId: string): boolean {
+		if (!this.runtimeConnectionIds.delete(connectionId)) return false
+		if (!this.store.hasConnectionId(connectionId)) return false
+		this.hitTester.invalidateConnections([connectionId])
+		this.emitChangeAndRender({ changedConnectionIds: [connectionId] })
+		return true
+	}
+
 	/**
 	 * 原子创建多条连接。先对整批边做完整预检，任意一条非法时不修改连接存储，
 	 * 成功时只发出一次 connection:change。
@@ -339,15 +383,20 @@ export class ConnectionManager {
 		connectionIds: string[],
 		options?: { emitChange?: boolean },
 	): string[] {
-		const removedConnections = this.store.getConnectionsByIds(connectionIds)
+		const affectedTargetElementIds = this.store
+			.getConnectionsByIds(connectionIds)
+			.map((connection) => connection.targetElementId)
 		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return []
 		}
+		deletedConnectionIds.forEach((connectionId) =>
+			this.runtimeConnectionIds.delete(connectionId),
+		)
 
 		this.hitTester.invalidateConnections(deletedConnectionIds)
 		this.removeSelectedConnectionIds(deletedConnectionIds, { render: false })
-		this.syncVideoEditInputs(removedConnections.map((connection) => connection.targetElementId))
+		this.syncVideoEditInputs(affectedTargetElementIds)
 		if (options?.emitChange === false) {
 			this.rerenderNow()
 			return deletedConnectionIds
@@ -361,15 +410,20 @@ export class ConnectionManager {
 		options?: { emitChange?: boolean },
 	): void {
 		const connectionIds = this.store.getConnectionIdsByElementId(elementId)
-		const removedConnections = this.store.getConnectionsByIds(connectionIds)
+		const affectedTargetElementIds = this.store
+			.getConnectionsByIds(connectionIds)
+			.map((connection) => connection.targetElementId)
 		const deletedConnectionIds = this.store.removeConnections(connectionIds)
 		if (deletedConnectionIds.length === 0) {
 			return
 		}
+		deletedConnectionIds.forEach((connectionId) =>
+			this.runtimeConnectionIds.delete(connectionId),
+		)
 
 		this.hitTester.invalidateConnections(deletedConnectionIds)
 		this.removeSelectedConnectionIds(deletedConnectionIds, { render: false })
-		this.syncVideoEditInputs(removedConnections.map((connection) => connection.targetElementId))
+		this.syncVideoEditInputs(affectedTargetElementIds)
 		if (options?.emitChange === false) {
 			this.rerenderNow()
 			return
@@ -389,6 +443,7 @@ export class ConnectionManager {
 
 		const deletedConnectionIds = this.store.getConnectionIds()
 		this.store.clear()
+		this.runtimeConnectionIds.clear()
 		this.hitTester.invalidateAll()
 		this.syncVideoEditInputs(affectedTargetElementIds)
 		if (options?.emitChange === false) {
@@ -396,74 +451,6 @@ export class ConnectionManager {
 			return
 		}
 		this.emitChangeAndRender({ deletedConnectionIds })
-	}
-
-	/**
-	 * 连接图是 VideoEditElement 输入成员关系的事实来源。连接增删后，同步编辑节点
-	 * 的成员列表，但保留用户已经调整过的现有顺序；新连接的素材追加到末尾。
-	 */
-	private syncVideoEditInputs(targetElementIds: Iterable<string>): void {
-		const elementManager = this.canvas.elementManager
-		if (typeof elementManager.getElementData !== "function") return
-
-		const uniqueTargetIds = new Set(targetElementIds)
-		uniqueTargetIds.forEach((targetElementId) => {
-			const target = elementManager.getElementData(targetElementId)
-			if (!target || target.type !== ElementTypeEnum.VideoEdit) return
-
-			const content = getActiveContent<VideoEditElementContent>(target)
-			if (!content) return
-
-			const connectedVideoIds: string[] = []
-			const connectedAudioIds: string[] = []
-			const collectSource = (source: LayerElement): void => {
-				if (source.type === ElementTypeEnum.Video) {
-					if (!connectedVideoIds.includes(source.id)) connectedVideoIds.push(source.id)
-					return
-				}
-				if (source.type === ElementTypeEnum.Audio) {
-					if (!connectedAudioIds.includes(source.id)) connectedAudioIds.push(source.id)
-					return
-				}
-				if (source.type !== ElementTypeEnum.Frame && source.type !== ElementTypeEnum.Group)
-					return
-				source.children?.forEach(collectSource)
-			}
-
-			this.store.getUpstreamConnections(targetElementId).forEach((connection) => {
-				const source = elementManager.getElementData(connection.sourceElementId)
-				if (source) collectSource(source)
-			})
-
-			const nextVideoSequence = content.videoSequence.filter((id) =>
-				connectedVideoIds.includes(id),
-			)
-			connectedVideoIds.forEach((id) => {
-				if (!nextVideoSequence.includes(id)) nextVideoSequence.push(id)
-			})
-
-			const currentAudioId = content.audioSequence[0]
-			const nextAudioSequence =
-				currentAudioId && connectedAudioIds.includes(currentAudioId)
-					? [currentAudioId]
-					: connectedAudioIds.slice(0, 1)
-
-			if (
-				content.videoSequence.length === nextVideoSequence.length &&
-				content.videoSequence.every((id, index) => id === nextVideoSequence[index]) &&
-				content.audioSequence.length === nextAudioSequence.length &&
-				content.audioSequence.every((id, index) => id === nextAudioSequence[index])
-			) {
-				return
-			}
-
-			const next = updateContent(target, target.activeContentId, {
-				videoSequence: nextVideoSequence,
-				audioSequence: nextAudioSequence,
-			})
-			if (next === target) return
-			elementManager.update(targetElementId, { contents: next.contents })
-		})
 	}
 
 	public rerender(): void {
@@ -480,6 +467,7 @@ export class ConnectionManager {
 		this.unsubscribers = []
 		this.renderer.destroy()
 		this.store.clear()
+		this.runtimeConnectionIds.clear()
 		this.hitTester.invalidateAll()
 		this.selectedConnectionIds.clear()
 		this.selectedElementIdsForConnectionHighlight.clear()
@@ -768,10 +756,56 @@ export class ConnectionManager {
 		})
 	}
 
+	/**
+	 * Reconciles persisted VideoEdit order with the current connection graph.
+	 * Existing connected videos keep their user order; new connections append.
+	 */
+	private syncVideoEditInputs(targetElementIds: Iterable<string>): void {
+		const elementManager = this.canvas.elementManager
+		const uniqueTargetIds = new Set(targetElementIds)
+		uniqueTargetIds.forEach((targetElementId) => {
+			const target = elementManager.getElementData(targetElementId)
+			if (!target || target.type !== ElementTypeEnum.VideoEdit) return
+
+			const content = getActiveContent<VideoEditElementContent>(target)
+			if (!content) return
+			const connected = collectConnectedVideoEditInputs(this.canvas, targetElementId)
+			const connectedSet = new Set(connected.videoElementIds)
+			const nextVideoSequence: string[] = []
+			;(content.videoSequence ?? []).forEach((elementId) => {
+				if (connectedSet.has(elementId) && !nextVideoSequence.includes(elementId)) {
+					nextVideoSequence.push(elementId)
+				}
+			})
+			connected.videoElementIds.forEach((elementId) => {
+				if (!nextVideoSequence.includes(elementId)) nextVideoSequence.push(elementId)
+			})
+
+			const currentSequence = content.videoSequence ?? []
+			if (
+				currentSequence.length === nextVideoSequence.length &&
+				currentSequence.every((elementId, index) => elementId === nextVideoSequence[index])
+			) {
+				return
+			}
+
+			const next = updateContent(target, target.activeContentId, {
+				videoSequence: nextVideoSequence,
+			})
+			if (next !== target) elementManager.update(targetElementId, { contents: next.contents })
+		})
+	}
+
+	/** Reconciles every VideoEdit after element and connection documents are loaded. */
+	public normalizeVideoEditInputs(): void {
+		this.syncVideoEditInputs(this.canvas.elementManager.getAllElementIds())
+	}
+
 	private getRenderableConnections(): CanvasConnection[] {
 		return this.store.getConnections().filter((connection) => {
 			return (
-				this.canPersistConnection(connection) &&
+				(this.runtimeConnectionIds.has(connection.id) ||
+					this.canPersistConnection(connection)) &&
 				this.isElementVisible(connection.sourceElementId) &&
 				this.isElementVisible(connection.targetElementId)
 			)

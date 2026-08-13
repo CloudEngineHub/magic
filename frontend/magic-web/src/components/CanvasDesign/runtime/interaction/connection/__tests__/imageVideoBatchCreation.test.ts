@@ -124,6 +124,7 @@ function createBatchCanvas(connectionStatus: "created" | "invalid") {
 			create: vi.fn((element: { id: string; children?: Array<{ id: string }> }) => {
 				createdVideoIds.push(element.id)
 				for (const child of element.children ?? []) createdVideoIds.push(child.id)
+				return { elementId: element.id, element }
 			}),
 		},
 		connectionManager: { connectElementsBatch },

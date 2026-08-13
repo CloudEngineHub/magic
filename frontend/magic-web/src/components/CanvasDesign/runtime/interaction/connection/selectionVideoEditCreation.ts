@@ -32,8 +32,6 @@ export function createVideoEditFromSelection(
 				x: context.x,
 				y: context.y,
 				zIndex: canvas.elementManager.getNextZIndexInLevel(),
-				videoSequence: snapshot.videoSequence,
-				audioSequence: snapshot.audioSequence,
 			})
 
 			canvas.elementManager.create(element)

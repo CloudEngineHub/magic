@@ -15,6 +15,12 @@ import type { DesignData } from "../types"
 
 type UnknownRecord = Record<string, unknown>
 
+interface VideoEditLegacyMigrationContext {
+	connections: CanvasConnection[]
+	connectionIds: Set<string>
+	connectionPairs: Set<string>
+}
+
 const LEGACY_COMMON_CONTENT_FIELDS = ["visualUnderstanding"] as const
 
 export interface DesignDataCodecInput {
@@ -64,7 +70,7 @@ const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> 
 		"innerRadiusRatio",
 	],
 	[ElementTypeEnum.Storyboard]: ["generationConfig", "shots"],
-	[ElementTypeEnum.VideoEdit]: ["videoSequence", "audioSequence", "output"],
+	[ElementTypeEnum.VideoEdit]: ["videoSequence", "output"],
 }
 
 function cloneValue<T>(value: T): T {
@@ -100,7 +106,65 @@ function migrateContentList(element: UnknownRecord, elementId: string): UnknownR
 	})
 }
 
-function migrateElementToV3(rawElement: unknown): LayerElement {
+function createConnectionPairKey(sourceElementId: string, targetElementId: string): string {
+	return `${sourceElementId}\u0000${targetElementId}`
+}
+
+function createMigratedConnectionId(
+	targetElementId: string,
+	role: "video" | "audio",
+	index: number,
+	context: VideoEditLegacyMigrationContext,
+): string {
+	const baseId = `${targetElementId}-legacy-${role}-${index + 1}`
+	let id = baseId
+	let suffix = 2
+	while (context.connectionIds.has(id)) id = `${baseId}-${suffix++}`
+	context.connectionIds.add(id)
+	return id
+}
+
+function migrateLegacyVideoEditConnections(
+	elementId: string,
+	contents: UnknownRecord[],
+	context: VideoEditLegacyMigrationContext,
+): void {
+	contents.forEach((content) => {
+		const videoSequence = Array.isArray(content.videoSequence)
+			? content.videoSequence.filter(
+					(id): id is string => typeof id === "string" && id.length > 0,
+				)
+			: []
+		const audioSequence = Array.isArray(content.audioSequence)
+			? content.audioSequence.filter(
+					(id): id is string => typeof id === "string" && id.length > 0,
+				)
+			: []
+
+		for (const [role, sequence] of [
+			["video", videoSequence],
+			["audio", audioSequence.slice(0, 1)],
+		] as const) {
+			sequence.forEach((sourceElementId, index) => {
+				const pairKey = createConnectionPairKey(sourceElementId, elementId)
+				if (context.connectionPairs.has(pairKey)) return
+				context.connectionPairs.add(pairKey)
+				context.connections.push({
+					id: createMigratedConnectionId(elementId, role, index, context),
+					sourceElementId,
+					targetElementId: elementId,
+				})
+			})
+		}
+
+		delete content.audioSequence
+	})
+}
+
+function migrateElementToV3(
+	rawElement: unknown,
+	context: VideoEditLegacyMigrationContext,
+): LayerElement {
 	if (!rawElement || typeof rawElement !== "object" || Array.isArray(rawElement)) {
 		throw new Error("Invalid canvas element")
 	}
@@ -142,6 +206,9 @@ function migrateElementToV3(rawElement: unknown): LayerElement {
 			}
 		})
 	}
+	if (element.type === ElementTypeEnum.VideoEdit) {
+		migrateLegacyVideoEditConnections(elementId, contents, context)
+	}
 
 	const contentIds = new Set(contents.map((content) => String(content.contentId)).filter(Boolean))
 	const activeContentId =
@@ -164,7 +231,7 @@ function migrateElementToV3(rawElement: unknown): LayerElement {
 	}
 
 	if (Array.isArray(migrated.children)) {
-		migrated.children = migrated.children.map((child) => migrateElementToV3(child))
+		migrated.children = migrated.children.map((child) => migrateElementToV3(child, context))
 	}
 
 	validateElementData(migrated)
@@ -178,17 +245,25 @@ function migrateElementToV3(rawElement: unknown): LayerElement {
 export function upgradeDesignDataToV3(designData: DesignData | DesignDataCodecInput): DesignData {
 	const next = cloneValue(designData) as unknown as DesignData
 	if (next.canvas) {
-		const elements = (next.canvas.elements ?? []).map((element) => migrateElementToV3(element))
+		const connections = Array.isArray(next.canvas.connections)
+			? cloneCanvasConnections(next.canvas.connections as CanvasConnection[])
+			: []
+		const migrationContext: VideoEditLegacyMigrationContext = {
+			connections,
+			connectionIds: new Set(connections.map((connection) => connection.id)),
+			connectionPairs: new Set(
+				connections.map((connection) =>
+					createConnectionPairKey(connection.sourceElementId, connection.targetElementId),
+				),
+			),
+		}
+		const elements = (next.canvas.elements ?? []).map((element) =>
+			migrateElementToV3(element, migrationContext),
+		)
 		next.canvas = {
 			...next.canvas,
 			elements,
-			...(Array.isArray(next.canvas.connections)
-				? {
-						connections: cloneCanvasConnections(
-							next.canvas.connections as CanvasConnection[],
-						),
-					}
-				: {}),
+			connections: migrationContext.connections,
 		} satisfies CanvasDocument
 	}
 	next.version = MAGIC_PROJECT_VERSION_V3

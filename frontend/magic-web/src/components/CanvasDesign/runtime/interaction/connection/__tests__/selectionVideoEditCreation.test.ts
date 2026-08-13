@@ -73,8 +73,7 @@ describe("createVideoEditFromSelection", () => {
 			zIndex: 9,
 		})
 		const content = getActiveContent<VideoEditElementContent>(element)
-		expect(content?.videoSequence).toEqual(snapshot.videoSequence)
-		expect(content?.audioSequence).toEqual(snapshot.audioSequence)
+		expect(content).toEqual({ contentId: `${elementId}-content-1` })
 		expect(connectElementsBatch).toHaveBeenCalledWith({
 			edges: [
 				{ sourceElementId: "frame-1", targetElementId: elementId },

@@ -3,13 +3,12 @@ import type { Canvas } from "../../core/Canvas"
 import {
 	ElementTypeEnum,
 	type FrameElement,
-	type LayerElement,
 	type VideoElement as VideoElementData,
 } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
 import { VideoElement } from "../../elements/video/VideoElement"
-import { generateElementId, generateUniqueElementName } from "../../shared/ids"
+import { generateElementId } from "../../shared/ids"
 import type { ConnectionOrigin } from "../../shared/connectionOrigin"
 import { CREATE_ELEMENT_GAP_MIN_CANVAS_PX } from "../../shared/placement/connectionCreatePlacement"
 import {
@@ -37,18 +36,6 @@ type ElementConnectionOrigin = Extract<ConnectionOrigin, { kind: "element" }>
 interface CreatedImageVideoPair {
 	imageElementId: string
 	videoElementId: string
-}
-
-function collectExistingElementNames(canvas: Canvas): Set<string> {
-	const names = new Set<string>()
-	const visit = (elements: LayerElement[]): void => {
-		for (const element of elements) {
-			if (typeof element.name === "string" && element.name) names.add(element.name)
-			if ("children" in element && Array.isArray(element.children)) visit(element.children)
-		}
-	}
-	visit(canvas.elementManager.getAllElements())
-	return names
 }
 
 function createEmptyVideoData(
@@ -367,11 +354,6 @@ export function createStoryboardVideosFromConnection(options: {
 					return videoData
 				})
 
-				const existingNames = collectExistingElementNames(canvas)
-				const frameName = generateUniqueElementName(
-					resolveStoryboardVideoFrameName(canvas),
-					existingNames,
-				)
 				const frameData: FrameElement = {
 					...FrameElementClass.createElementData(
 						generateElementId(),
@@ -381,12 +363,13 @@ export function createStoryboardVideosFromConnection(options: {
 						frameHeight,
 						canvas.elementManager.getNextZIndexInLevel(),
 					),
-					name: frameName,
+					name: resolveStoryboardVideoFrameName(canvas),
 					children: videoChildren,
 				}
 
-				canvas.elementManager.create(frameData)
-				createdFrameId = frameData.id
+				const createResult = canvas.elementManager.create(frameData)
+				if (!createResult) return null
+				createdFrameId = createResult.elementId
 				pairs.forEach((pair) => {
 					applyReferenceVideoDraft(canvas, pair.videoElementId, referenceModel)
 				})

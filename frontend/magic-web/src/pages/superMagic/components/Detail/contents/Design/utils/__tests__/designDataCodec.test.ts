@@ -191,4 +191,54 @@ describe("designDataCodec", () => {
 			mainContentId: null,
 		})
 	})
+
+	it("migrates unpublished video-edit sequences into connections", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "legacy-video-edit",
+			version: MAGIC_PROJECT_VERSION_V3,
+			canvas: {
+				elements: [
+					{
+						id: "video-edit-1",
+						type: ElementTypeEnum.VideoEdit,
+						contents: [
+							{
+								contentId: "video-edit-1-content-1",
+								videoSequence: ["video-1", "video-2"],
+								audioSequence: ["audio-1"],
+								output: { format: "mp4", aspectRatio: "1:1", resolution: "1080P" },
+							},
+						],
+						activeContentId: "video-edit-1-content-1",
+						mainContentId: "video-edit-1-content-1",
+					},
+				],
+			},
+		})
+
+		expect(result.canvas?.elements?.[0]?.contents[0]).toEqual({
+			contentId: "video-edit-1-content-1",
+			videoSequence: ["video-1", "video-2"],
+			output: { format: "mp4", aspectRatio: "1:1", resolution: "1080P" },
+		})
+		expect(result.canvas?.connections).toEqual([
+			{
+				id: "video-edit-1-legacy-video-1",
+				sourceElementId: "video-1",
+				targetElementId: "video-edit-1",
+			},
+			{
+				id: "video-edit-1-legacy-video-2",
+				sourceElementId: "video-2",
+				targetElementId: "video-edit-1",
+			},
+			{
+				id: "video-edit-1-legacy-audio-1",
+				sourceElementId: "audio-1",
+				targetElementId: "video-edit-1",
+			},
+		])
+		validateV3CanvasDocument(result.canvas)
+	})
 })

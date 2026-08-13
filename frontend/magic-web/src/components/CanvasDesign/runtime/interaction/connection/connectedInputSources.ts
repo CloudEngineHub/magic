@@ -127,6 +127,7 @@ function collectDirectConnectedSourceElements(
 	canvas: Canvas,
 	targetElementId: string,
 ): ConnectedInputSourceElement[] {
+	if (!canvas.connectionManager?.getUpstreamConnections) return []
 	const upstreamConnections = canvas.connectionManager.getUpstreamConnections(targetElementId)
 	const result: ConnectedInputSourceElement[] = []
 	const collectedSourceElementIds = new Set<string>()
@@ -314,4 +315,25 @@ export function collectConnectedSourceElements(
 		return collectDirectConnectedSourceElements(canvas, targetElementId)
 	}
 	return collectConnectedUpstreamSourceElements(canvas, targetElementId, config.maxDepth)
+}
+
+/** Collects the media inputs of a video-edit node from the connection graph. */
+export function collectConnectedVideoEditInputs(
+	canvas: Canvas,
+	targetElementId: string,
+): { videoElementIds: string[]; audioElementId?: string } {
+	if (!canvas.connectionManager?.getUpstreamConnections) {
+		return { videoElementIds: [] }
+	}
+	const sources = collectConnectedSourceElements(canvas, targetElementId, {
+		mode: "direct",
+		maxDepth: 1,
+	})
+	return {
+		videoElementIds: sources
+			.filter((source) => source.element.type === ElementTypeEnum.Video)
+			.map((source) => source.sourceElementId),
+		audioElementId: sources.find((source) => source.element.type === ElementTypeEnum.Audio)
+			?.sourceElementId,
+	}
 }

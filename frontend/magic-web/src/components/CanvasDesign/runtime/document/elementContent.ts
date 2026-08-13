@@ -73,7 +73,7 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 		"innerRadiusRatio",
 	],
 	[ElementTypeEnum.Storyboard]: ["generationConfig", "shots"],
-	[ElementTypeEnum.VideoEdit]: ["videoSequence", "audioSequence", "output"],
+	[ElementTypeEnum.VideoEdit]: ["videoSequence", "output"],
 }
 
 export function getElementContentFields(type: string): readonly string[] {

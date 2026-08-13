@@ -423,15 +423,13 @@ export interface VideoEditOutputConfig {
 }
 
 export interface VideoEditElementContent extends ElementContentBase {
-	/** 按编辑顺序排列的已连接视频元素 ID，可为空表示等待连接。 */
-	videoSequence: string[]
-	/** 按混音顺序排列的已连接音频元素 ID；音频输入可选。 */
-	audioSequence: string[]
-	/** 输出规格；任务、错误和生成结果属于运行态，不进入基础 DSL。 */
+	/** 按编辑顺序排列的视频元素 ID；成员资格仍由 CanvasConnection 表达。 */
+	videoSequence?: string[]
+	/** 输出规格；任务、错误和生成结果属于运行态。 */
 	output?: VideoEditOutputConfig
 }
 
-/** 视频编辑节点；输入成员由 CanvasConnection 表达，序列字段只保存用户调整后的顺序。 */
+/** 视频编辑节点；输入成员由 CanvasConnection 表达，顺序由 content.videoSequence 表达。 */
 export interface VideoEditElement extends ContentElementProps<VideoEditElementContent> {
 	type: typeof ElementTypeEnum.VideoEdit
 }

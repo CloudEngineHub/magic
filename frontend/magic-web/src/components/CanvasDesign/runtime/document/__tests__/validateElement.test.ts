@@ -102,8 +102,6 @@ describe("isValidElementData", () => {
 		expect(
 			isValidElementData(
 				contentElement(ElementTypeEnum.VideoEdit, {
-					videoSequence: ["video-s01", "video-s02"],
-					audioSequence: ["audio-narration"],
 					output: { aspectRatio: "9:16", resolution: "1K", format: "mp4" },
 				}),
 			),
@@ -111,16 +109,6 @@ describe("isValidElementData", () => {
 		expect(
 			isValidElementData(
 				contentElement(ElementTypeEnum.VideoEdit, {
-					videoSequence: ["video-s01", "video-s01"],
-					audioSequence: [],
-				}),
-			),
-		).toBe(false)
-		expect(
-			isValidElementData(
-				contentElement(ElementTypeEnum.VideoEdit, {
-					videoSequence: [],
-					audioSequence: [],
 					output: { resolution: 1024 },
 				}),
 			),
