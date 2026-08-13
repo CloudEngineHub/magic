@@ -66,11 +66,15 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
         ]);
 
         return new OfficialSkillImportPreviewDTO(
-            $token,
-            $package->packageName,
-            $package->packageDescription,
-            $isUpdate,
-            $market?->getId()
+            importToken: $token,
+            code: $package->packageName,
+            packageName: $package->packageName,
+            packageDescription: $package->packageDescription,
+            isUpdate: $isUpdate,
+            nameI18n: $market?->getNameI18n() ?? $this->buildDefaultNameI18n($package->packageName),
+            descriptionI18n: $market?->getDescriptionI18n() ?? $this->buildDefaultDescriptionI18n($package->packageDescription),
+            logo: $market?->getLogo() ?? '',
+            marketId: $market?->getId()
         );
     }
 
@@ -111,6 +115,17 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             self::IMPORT_TOKEN_PREFIX,
             $requestDTO->getImportToken()
         );
+    }
+
+    private function buildDefaultNameI18n(string $packageName): array
+    {
+        $name = ucfirst(str_replace(['-', '_'], ' ', $packageName));
+        return ['en_US' => $name];
+    }
+
+    private function buildDefaultDescriptionI18n(string $packageDescription): array
+    {
+        return ['en_US' => $packageDescription];
     }
 
     private function resolvePackage(MagicUserAuthorization $authorization, ImportOfficialSkillRequestDTO $requestDTO): SkillPackageDTO

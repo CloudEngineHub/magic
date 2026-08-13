@@ -59,7 +59,7 @@ Router::addGroup('/api/v1/admin', static function () {
     });
 
     Router::addGroup('/official-skills/import', static function () {
-        Router::post('/parse', [AdminOfficialSkillApi::class, 'parseImport']);
+        Router::post('/parse/file', [AdminOfficialSkillApi::class, 'parseImport']);
         Router::post('', [AdminOfficialSkillApi::class, 'import']);
     });
 }, ['middleware' => [RequestContextMiddleware::class]]);
