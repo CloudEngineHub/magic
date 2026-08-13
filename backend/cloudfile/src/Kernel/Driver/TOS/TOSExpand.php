@@ -19,6 +19,8 @@ use Dtyq\CloudFile\Kernel\Struct\CredentialPolicy;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
+use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
+use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
 use Exception;
 use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\FileAttributes;
@@ -576,17 +578,21 @@ class TOSExpand implements ExpandInterface
         $client = Sts::getInstance();
         $client->setAccessKey($configParser->getAk());
         $client->setSecretKey($configParser->getSk());
-        $body = $client->assumeRole($query)->getContents();
-        $data = json_decode($body, true);
-        if (empty($data['Result']['Credentials'])) {
-            throw new CloudFileException('获取 STS 失败');
-        }
+        $credentials = RetryExecutor::execute(function () use ($client, $query): array {
+            $body = $client->assumeRole($query)->getContents();
+            $data = json_decode($body, true);
+            if (empty($data['Result']['Credentials'])) {
+                throw new CloudFileException('获取 STS 失败，result: ' . ResultFormatter::format($data));
+            }
+
+            return $data['Result']['Credentials'];
+        });
 
         return [
             'host' => $configParser->getEndpoint($this->getBucket()),
             'region' => $configParser->getRegion(),
             'endpoint' => $configParser->getEndpoint(),
-            'credentials' => $data['Result']['Credentials'],
+            'credentials' => $credentials,
             'bucket' => $this->getBucket(),
             'dir' => $credentialPolicy->getDir() ?? '',
             'expires' => $expires,

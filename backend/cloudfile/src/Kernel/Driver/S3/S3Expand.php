@@ -19,6 +19,8 @@ use Dtyq\CloudFile\Kernel\Struct\ChunkDownloadInfo;
 use Dtyq\CloudFile\Kernel\Struct\CredentialPolicy;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
+use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
+use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
 use Exception;
 use GuzzleHttp\Psr7\Utils;
 use League\Flysystem\FileAttributes;
@@ -316,12 +318,19 @@ class S3Expand implements ExpandInterface
             ],
         };
 
-        $result = $stsClient->assumeRole([
-            'RoleArn' => $roleArn,
-            'RoleSessionName' => $roleSessionName,
-            'DurationSeconds' => $expires,
-            'Policy' => json_encode($stsPolicy),
-        ]);
+        $result = RetryExecutor::execute(static function () use ($expires, $roleArn, $roleSessionName, $stsClient, $stsPolicy) {
+            $result = $stsClient->assumeRole([
+                'RoleArn' => $roleArn,
+                'RoleSessionName' => $roleSessionName,
+                'DurationSeconds' => $expires,
+                'Policy' => json_encode($stsPolicy),
+            ]);
+            if (empty($result['Credentials'])) {
+                throw new CloudFileException('获取 STS 失败，result: ' . ResultFormatter::format($result));
+            }
+
+            return $result;
+        });
 
         $credentials = $result['Credentials'];
         $expiration = $credentials['Expiration'];
