@@ -32,13 +32,6 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     private const array SUPPORTED_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'];
 
     /**
-     * 当前按方舟 Seedance 文档支持范围声明，后续如果官方扩容需要同步这里。
-     *
-     * @var list<int>
-     */
-    private const array SUPPORTED_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
-    /**
      * @var list<string>
      */
     private const array PRO_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
@@ -273,28 +266,10 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         $modelVersion = $this->firstNonEmptyString($operation->getModelVersion(), $modelId) ?? $modelId;
         $capabilityProfile = $this->resolveCapabilityProfile($modelVersion, $modelId);
         $generationConfig = $capabilityProfile['generation'];
-        $validationConfig = $capabilityProfile['validation'];
         $payload = [
             'model' => $modelVersion,
-            'task' => $this->firstNonEmptyString($request['task'] ?? null, 'generate') ?? 'generate',
             'content' => $content,
         ];
-        $requestedResolution = $this->firstNonEmptyString($generation['resolution'] ?? null);
-        $resolutionErrorRule = is_string($requestedResolution)
-            ? ($validationConfig['explicit_resolution_errors'][$requestedResolution] ?? null)
-            : null;
-        if (is_array($resolutionErrorRule)) {
-            throw ProviderVideoException::nonRetriable($this->translateError(
-                (string) ($resolutionErrorRule['key'] ?? 'model_resolution_not_supported'),
-                array_merge(
-                    $resolutionErrorRule['replace'] ?? [],
-                    [
-                        'model' => $modelId,
-                        'resolution' => $requestedResolution,
-                    ],
-                ),
-            ));
-        }
 
         $payload['resolution'] = $this->resolveResolution(
             $generation,
@@ -380,6 +355,7 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
                 'camera_fixed',
                 'return_last_frame',
                 'generate_audio',
+                'web_search',
                 'watermark',
                 'enhance_prompt',
             ], true)) {
@@ -754,8 +730,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     {
         return [
             'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-            'durations' => self::SUPPORTED_DURATIONS,
-            'duration_type' => 'options',
+            'duration_type' => 'range',
+            'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
             'default_duration_seconds' => self::DEFAULT_DURATION_SECONDS,
             'default_resolution' => self::DEFAULT_RESOLUTION,
             'supports_seed' => true,
