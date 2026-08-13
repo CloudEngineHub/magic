@@ -199,6 +199,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const [selectedDurationSeconds, setSelectedDurationSeconds] = useState<number | undefined>(
 		undefined,
 	)
+	/** Slider interaction state; unlike selectedDurationSeconds, this is not persisted/submitted. */
+	const [durationDraftSeconds, setDurationDraftSeconds] = useState<number | undefined>(undefined)
 	const [selectedGenerateAudio, setSelectedGenerateAudio] = useState<boolean | undefined>(
 		undefined,
 	)
@@ -668,6 +670,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	useEffect(() => {
+		setDurationDraftSeconds(selectedDurationSeconds)
+	}, [selectedDurationSeconds])
+
+	useEffect(() => {
 		if (supportedResolutionOptions.length === 0) {
 			if (selectedResolution !== undefined) {
 				setSelectedResolution(undefined)
@@ -714,18 +720,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (selectedDurationSeconds !== undefined) {
 				setSelectedDurationSeconds(undefined)
 			}
+			if (durationDraftSeconds !== undefined) {
+				setDurationDraftSeconds(undefined)
+			}
 			return
 		}
 		if (selectedDurationSeconds == null) {
-			setSelectedDurationSeconds(
-				resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints),
-			)
+			const nextDuration = resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints)
+			setSelectedDurationSeconds(nextDuration)
 			return
 		}
 		if (!supportedDurationOptions.includes(selectedDurationSeconds)) {
-			setSelectedDurationSeconds(
-				resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints),
-			)
+			const nextDuration = resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints)
+			setSelectedDurationSeconds(nextDuration)
 		}
 	}, [
 		effectiveGenerationConstraints,
@@ -1199,6 +1206,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		if (!Number.isFinite(seconds)) return
 		setSelectedDurationSeconds(seconds)
 	}, [])
+
+	const handleDurationDraftChange = useCallback((seconds: number) => {
+		if (!Number.isFinite(seconds)) return
+		setDurationDraftSeconds(seconds)
+	}, [])
+
+	const handleDurationPopoverOpenChange = useCallback(
+		(_open: boolean) => {
+			setDurationDraftSeconds(selectedDurationSeconds)
+		},
+		[selectedDurationSeconds],
+	)
 
 	const handleGenerateAudioChange = useCallback((value: boolean) => {
 		setSelectedGenerateAudio(value)
@@ -1905,6 +1924,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleResolutionChange,
 			handleRatioChange,
 			handleDurationChange,
+			handleDurationDraftChange,
+			handleDurationPopoverOpenChange,
 			handleGenerateAudioChange,
 			handleWebSearchChange,
 			handleCompressionQualityChange,
@@ -1971,6 +1992,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedResolution,
 		selectedAspectRatio,
 		selectedDurationSeconds,
+		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
 		selectedCompressionQuality,

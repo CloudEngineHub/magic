@@ -166,6 +166,7 @@ export interface VideoEditorConfig {
 	/** 压缩质量可选值（模型开启 supports_compression_quality 时） */
 	supportedCompressionQualityOptions: string[]
 	selectedDurationSeconds: number | undefined
+	durationDraftSeconds: number | undefined
 	selectedGenerateAudio: boolean | undefined
 	selectedWebSearch: boolean | undefined
 	selectedCompressionQuality: string | undefined
@@ -200,6 +201,8 @@ export interface VideoEditorConfig {
 		handleResolutionChange: (value: string) => void
 		handleRatioChange: (value: string) => void
 		handleDurationChange: (seconds: number) => void
+		handleDurationDraftChange: (seconds: number) => void
+		handleDurationPopoverOpenChange: (open: boolean) => void
 		handleGenerateAudioChange: (value: boolean) => void
 		handleWebSearchChange: (value: boolean) => void
 		handleCompressionQualityChange: (value: string) => void

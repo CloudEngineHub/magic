@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { ChevronsUpDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/shadcn/popover"
 import { Slider } from "@/components/shadcn-ui/slider"
@@ -34,31 +34,27 @@ interface DurationRangeControlProps {
 	label: string
 	value: number | undefined
 	range: VideoGenerationDurationRange
+	onChange: (seconds: number) => void
 	onCommit: (seconds: number) => void
 }
 
-/** Draft during drag; commit only on release so points estimate is not spammed. */
 function DurationRangeControl(props: DurationRangeControlProps) {
-	const { label, value, range, onCommit } = props
-	const [draftSeconds, setDraftSeconds] = useState(value ?? range.min)
-
-	useEffect(() => {
-		if (value != null && Number.isFinite(value)) setDraftSeconds(value)
-	}, [value])
+	const { label, value, range, onChange, onCommit } = props
+	const initialSeconds = value ?? range.min
 
 	return (
 		<>
 			<div className={styles.sectionHeader}>
 				<div className={styles.sectionTitle}>{label}</div>
-				<div className={styles.rangeValue}>{`${draftSeconds}s`}</div>
+				<div className={styles.rangeValue}>{`${initialSeconds}s`}</div>
 			</div>
 			<div className={styles.rangeControl}>
 				<Slider
-					value={[draftSeconds]}
+					value={[initialSeconds]}
 					min={range.min}
 					max={range.max}
 					step={range.step}
-					onValueChange={([next]) => setDraftSeconds(next)}
+					onValueChange={([next]) => onChange(next)}
 					onValueCommit={([next]) => onCommit(next)}
 					aria-label={label}
 				/>
@@ -80,6 +76,7 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		supportedCompressionQualityOptions,
 		selectedResolution,
 		selectedDurationSeconds,
+		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
 		selectedCompressionQuality,
@@ -125,7 +122,7 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		return null
 
 	return (
-		<Popover>
+		<Popover onOpenChange={handlers.handleDurationPopoverOpenChange}>
 			<PopoverTrigger asChild>
 				<button
 					type="button"
@@ -205,8 +202,9 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 						{durationType === "range" && durationRange ? (
 							<DurationRangeControl
 								label={t("videoEditor.duration", "时长")}
-								value={selectedDurationSeconds}
+								value={durationDraftSeconds ?? selectedDurationSeconds}
 								range={durationRange}
+								onChange={handlers.handleDurationDraftChange}
 								onCommit={handlers.handleDurationChange}
 							/>
 						) : (
