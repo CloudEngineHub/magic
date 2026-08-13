@@ -17,6 +17,7 @@ import { SuperMagicApi } from "@/apis"
 import { SuperMagicApiErrorCode } from "@/pages/superMagic/constants/apiErrorCodes"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
+import { getVisibleRecordingAttachmentTree } from "@/components/business/RecordingSummary/utils/recordingImageLookupSnapshot"
 
 import {
 	MobileShellSidebarToggleButton,
@@ -100,9 +101,12 @@ function AudioRecordingEntryPanel() {
 	 */
 	const handleImageUploadSuccess = useMemoizedFn(() => {
 		if (!activeRecordingProjectId) return
-		loadProjectAttachments({ projectId: activeRecordingProjectId }).then(({ tree }) => {
+		loadProjectAttachments({
+			projectId: activeRecordingProjectId,
+			includeHidden: true,
+		}).then(({ tree }) => {
 			setRecordingImageAttachments(tree as unknown as AttachmentFile[])
-			recordingProjectFilesStore.setWorkspaceFileTree(tree)
+			recordingProjectFilesStore.setWorkspaceFileTree(getVisibleRecordingAttachmentTree(tree))
 		})
 	})
 	useProjectAttachmentsChangeRealtime({
@@ -130,11 +134,17 @@ function AudioRecordingEntryPanel() {
 		setRecordingImageAttachments([])
 		setAttachmentsReadyProjectId("")
 		recordingMentionStore.initLoadAttachments(projectId)
-		loadProjectAttachments({ projectId, signal: controller.signal })
+		loadProjectAttachments({
+			projectId,
+			includeHidden: true,
+			signal: controller.signal,
+		})
 			.then(({ tree }) => {
 				if (!controller.signal.aborted) {
 					setRecordingImageAttachments(tree as unknown as AttachmentFile[])
-					recordingProjectFilesStore.setWorkspaceFileTree(tree)
+					recordingProjectFilesStore.setWorkspaceFileTree(
+						getVisibleRecordingAttachmentTree(tree),
+					)
 					setAttachmentsReadyProjectId(projectId)
 				}
 			})
