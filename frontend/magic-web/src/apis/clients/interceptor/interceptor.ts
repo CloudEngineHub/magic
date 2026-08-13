@@ -9,6 +9,7 @@ import { UrlUtils } from "@/apis/utils"
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { authSessionCoordinator } from "@/services/auth/AuthSessionCoordinator"
+import { getAuthFailureReason, isAuthInvalidCode } from "@/services/auth/AuthFailureClassifier"
 
 /** HTTP status code enum (RFC 7231, RFC 7233, and RFC 7540) */
 const enum HttpStatusCode {
@@ -59,12 +60,6 @@ export const genLoginRedirectUrl = () => {
 
 /** Invalid login */
 export function generateUnauthorizedResInterceptor(service: Container) {
-	const loginInvalidCodeSet = new Set([
-		BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION,
-		BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED,
-		BUSINESS_API_ERROR_CODE.USER_NOT_EXIST,
-	])
-
 	/** Classify the response and hand session cleanup/navigation to the auth coordinators. */
 	async function handleUnauthorized(
 		authorization: string | undefined | null,
@@ -85,18 +80,19 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 
 		if (
 			(enableAuthorizationVerification && response.status === HttpStatusCode.Unauthorized) ||
-			loginInvalidCodeSet.has(response?.data?.code)
+			isAuthInvalidCode(response?.data?.code)
 		) {
 			const authorization = request.headers?.get("authorization")
 			const user = userStore.account.getAccountByAccessToken(authorization || "")
 			/** Correct the request domain and retry only when the cluster-code mapping is invalid. */
-			if (user) {
+			if (user && request.authRetryAttempt !== 1) {
 				const baseUrl = http.getBaseURL(user.deployCode)
 				if (baseUrl) {
 					// Return the retried API request.
 					http.setBaseURL(UrlUtils.parse(baseUrl).origin)
 					const res = await http.retry({
 						...request,
+						authRetryAttempt: 1,
 						url: UrlUtils.replaceHostname(
 							request.url as string,
 							UrlUtils.parse(baseUrl).host,
@@ -113,13 +109,12 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 					if (
 						(enableAuthorizationVerification &&
 							res.status === HttpStatusCode.Unauthorized) ||
-						loginInvalidCodeSet.has(jsonData?.code)
+						isAuthInvalidCode(jsonData?.code)
 					) {
+						const reason = getAuthFailureReason(jsonData?.code)
 						await handleUnauthorized(
 							authorization,
-							jsonData?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
-								? "account-unauthorized"
-								: "token-expired",
+							reason === "account-unauthorized" ? reason : "token-expired",
 						)
 						throw new Error("Unauthorized")
 					}
@@ -136,11 +131,10 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 					}
 				}
 			}
+			const reason = getAuthFailureReason(response?.data?.code)
 			await handleUnauthorized(
 				authorization,
-				response?.data?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
-					? "account-unauthorized"
-					: "token-expired",
+				reason === "account-unauthorized" ? reason : "token-expired",
 			)
 			throw new Error("Unauthorized")
 		}

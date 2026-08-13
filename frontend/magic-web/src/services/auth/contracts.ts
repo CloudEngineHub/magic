@@ -127,6 +127,8 @@ export interface AuthSessionInvalidated {
 	eventId: string
 	/** Monotonic generation used to distinguish successive session transitions. */
 	sessionGeneration: number
+	/** Whether local cleanup completed before the lifecycle event was published. */
+	cleanupStatus: "completed" | "partial" | "failed"
 }
 
 // -----------------------------------------------------------------------------

@@ -5,6 +5,9 @@ import { userStore } from "@/models/user"
 import { authEventBus } from "./AuthEventBus"
 import { AuthEventName } from "./AuthEvents"
 import type { AuthIntent, AuthSessionInvalidationRequest } from "./contracts"
+import { logger as Logger } from "@/utils/log"
+
+const logger = Logger.createLogger("AuthSessionCoordinator")
 
 class AuthSessionCoordinator {
 	private readonly inFlight = new Map<string, Promise<void>>()
@@ -17,7 +20,9 @@ class AuthSessionCoordinator {
 		source,
 		returnTo,
 	}: AuthSessionInvalidationRequest & { service: Container }): Promise<void> {
-		const key = `${accountId ?? "current"}:${reason}`
+		// Coalesce HTTP and WebSocket failures for the same active account even when
+		// their server-side reason codes differ during one invalid-session window.
+		const key = accountId ?? userStore.user.userInfo?.magic_id ?? "current"
 		const existing = this.inFlight.get(key)
 		if (existing) return existing
 
@@ -25,7 +30,24 @@ class AuthSessionCoordinator {
 			this.sessionGeneration += 1
 			const currentAccountId = userStore.user.userInfo?.magic_id
 			const targetAccountId = accountId ?? currentAccountId
-			await service.get<AccountService>("accountService").deleteAccount(targetAccountId)
+			let cleanupStatus: "completed" | "partial" | "failed" = "completed"
+			try {
+				const cleanupResult = await service
+					.get<AccountService>("accountService")
+					.invalidateSession({
+						accountId: targetAccountId,
+					})
+				cleanupStatus = cleanupResult.cleanupStatus
+			} catch (error) {
+				cleanupStatus = "failed"
+				logger.error({
+					eventKey: "auth_session_cleanup_failed",
+					errorKind: "lifecycle",
+					error,
+					message: "Failed to clean up an invalid authentication session",
+					context: { source, reason },
+				})
+			}
 			const remainingAccount = userStore.account.accounts[0]
 			let fallbackRestored = false
 			if (targetAccountId === currentAccountId && remainingAccount) {
@@ -40,25 +62,49 @@ class AuthSessionCoordinator {
 				}
 			}
 			const event = {
-				accountId,
+				accountId: targetAccountId,
 				reason,
 				source,
 				eventId: uuidv4(),
 				sessionGeneration: this.sessionGeneration,
+				cleanupStatus,
 			}
-			authEventBus.emit(AuthEventName.SessionInvalidated, event)
-
 			const intent: AuthIntent = {
 				reason: reason === "missing-session" ? "missing-session" : "auth-expired",
 				source,
 				returnTo,
 			}
-			if (
+			const loginRequired =
+				cleanupStatus === "failed" ||
 				userStore.account.accounts.length === 0 ||
 				!userStore.user.authorization ||
 				(targetAccountId === currentAccountId && remainingAccount && !fallbackRestored)
-			) {
-				authEventBus.emit(AuthEventName.LoginRequired, { intent })
+
+			// A faulty observer must not prevent the terminal login-required event.
+			try {
+				authEventBus.emit(AuthEventName.SessionInvalidated, event)
+			} catch (error) {
+				logger.error({
+					eventKey: "auth_session_invalidated_listener_failed",
+					errorKind: "lifecycle",
+					error,
+					message: "An auth session invalidation listener failed",
+					context: { source, reason },
+				})
+			}
+
+			if (loginRequired) {
+				try {
+					authEventBus.emit(AuthEventName.LoginRequired, { intent })
+				} catch (error) {
+					logger.error({
+						eventKey: "auth_login_required_listener_failed",
+						errorKind: "lifecycle",
+						error,
+						message: "An auth login-required listener failed",
+						context: { source, reason },
+					})
+				}
 			}
 		})()
 
