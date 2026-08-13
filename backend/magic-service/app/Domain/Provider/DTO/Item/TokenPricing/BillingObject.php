@@ -107,10 +107,6 @@ final class BillingObject
      */
     public const IMAGE_REFERENCE_INPUT_COUNT_COST = 'image_reference_input_count_cost';
 
-    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT = 'video.reference_image.after_5.count';
-
-    public const VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST = 'video.reference_image.after_5.count.cost';
-
     /**
      * TextTokens 固定对象。
      */
@@ -147,8 +143,6 @@ final class BillingObject
         self::OLD_IMAGE_COUNT_COST,
         self::IMAGE_REFERENCE_INPUT_COUNT,
         self::IMAGE_REFERENCE_INPUT_COUNT_COST,
-        self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT,
-        self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST,
     ];
 
     private const array OLD_IMAGE_OBJECTS = [
@@ -165,6 +159,12 @@ final class BillingObject
      * ImageCount 像素条件对象：image_{lte|gt}_{n}w_pixel_output_count[_cost].
      */
     private const string IMAGE_PIXEL_COUNT_PATTERN = '/^image_(lte|gt)_([1-9]\d*)w_pixel_output_count(?:_cost)?$/';
+
+    /**
+     * 视频参考图片超额计费对象：after_N 表示前 N 张免费，第 N+1 张开始计费。
+     * 同时支持售价对象和成本对象：video.reference_image.after_N.count[.cost]。
+     */
+    private const string VIDEO_REFERENCE_IMAGE_AFTER_COUNT_PATTERN = '/^video\.reference_image\.after_([1-9]\d*)\.count(?:\.cost)?$/';
 
     /**
      * Video 动态对象族：video.{resolution}.{modifier}.{duration|token}[.cost].
@@ -202,6 +202,7 @@ final class BillingObject
 
         if (in_array($normalized, self::STATIC_OBJECTS, true)
             || preg_match(self::IMAGE_COUNT_PATTERN, $normalized) === 1
+            || preg_match(self::VIDEO_REFERENCE_IMAGE_AFTER_COUNT_PATTERN, $normalized) === 1
             || self::parseVideoObjectValue($normalized) !== null) {
             return new self($normalized);
         }
@@ -258,24 +259,33 @@ final class BillingObject
         return self::videoObject($resolution, self::VIDEO_MODIFIER_BASE, self::VIDEO_BILLING_UNIT_DURATION, true);
     }
 
-    public static function videoReferenceImageAfter5Count(): self
+    public static function videoReferenceImageAfterCount(int $freeCount): self
     {
-        return new self(self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT);
+        return new self(sprintf('video.reference_image.after_%d.count', max(1, $freeCount)));
     }
 
-    public static function videoReferenceImageAfter5CountCost(): self
+    public static function videoReferenceImageAfterCountCost(int $freeCount): self
     {
-        return new self(self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST);
+        return new self(sprintf('video.reference_image.after_%d.count.cost', max(1, $freeCount)));
     }
 
-    public function isVideoReferenceImageAfter5CountObject(): bool
+    public function isVideoReferenceImageAfterCountObject(): bool
     {
-        return $this->value === self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT;
+        return $this->getReferenceImageFreeCount() !== null && ! $this->isCostObject();
     }
 
-    public function isVideoReferenceImageAfter5CountCostObject(): bool
+    public function isVideoReferenceImageAfterCountCostObject(): bool
     {
-        return $this->value === self::VIDEO_REFERENCE_IMAGE_AFTER_5_COUNT_COST;
+        return $this->getReferenceImageFreeCount() !== null && $this->isCostObject();
+    }
+
+    public function getReferenceImageFreeCount(): ?int
+    {
+        if (preg_match(self::VIDEO_REFERENCE_IMAGE_AFTER_COUNT_PATTERN, $this->value, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     /**
