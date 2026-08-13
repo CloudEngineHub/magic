@@ -33,7 +33,7 @@ import { convertFileToTabItem } from "@/pages/superMagic/components/Detail/compo
 import MessageListFallback from "./components/MessageListFallback"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import TopicMessagePanel from "@/pages/superMagic/pages/TopicPage/components/TopicMessagePanel"
-import type { TopicStore } from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core/topic"
+import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import type { MessageHeaderTopicActions } from "@/pages/superMagic/components/MessageHeader"
 import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { Spinner } from "@/components/shadcn-ui/spinner"

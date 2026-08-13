@@ -43,7 +43,7 @@ import {
 	MarkdownFrontmatterNode,
 	preprocessMarkdownFrontmatter,
 } from "@/components/tiptap-node/frontmatter-node"
-import { Placeholder } from "@/pages/superMagic/components/MessageEditor@/infrastructure/editors/tiptap/extensions/placeholder"
+import { Placeholder } from "@/pages/superMagic/components/MessageEditor/extensions/placeholder"
 import { TableWithWrapper } from "@/components/tiptap-node/table-node/table-node-extension"
 import { SearchAndReplace as SearchAndReplaceExtension } from "@/components/tiptap-node/search-and-replace-node/search-and-replace-extension"
 

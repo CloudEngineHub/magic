@@ -37,7 +37,7 @@ import {
 	workspaceStore,
 	projectStore,
 	topicStore,
-} from "../../stores@/infrastructure/editors/tiptap/core"
+} from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"

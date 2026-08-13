@@ -21,7 +21,7 @@ import {
 	projectStore,
 	topicStore,
 	workspaceStore,
-} from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core"
+} from "@/pages/superMagic/stores/core"
 import useSharedProjectMode from "@/pages/superMagic/hooks/useSharedProjectMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"

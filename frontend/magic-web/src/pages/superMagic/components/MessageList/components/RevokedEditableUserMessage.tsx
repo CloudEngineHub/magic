@@ -22,7 +22,7 @@ import {
 	projectStore,
 	topicStore,
 	workspaceStore,
-} from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core"
+} from "@/pages/superMagic/stores/core"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import projectFilesStore from "@/stores/projectFiles"
 import { UserMessageCollapsibleRichText } from "@/pages/superMagic/components/MessageList/components/UserMessageCollapsibleRichText"

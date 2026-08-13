@@ -1,7 +1,7 @@
 import type { Node as TiptapNode } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
-import type { Canvas } from "../runtime@/infrastructure/editors/tiptap/core/Canvas"
+import type { Canvas } from "../runtime/core/Canvas"
 import type { MagicConfig } from "./magic-types"
 import type {
 	CanvasDeviceInfo,
@@ -13,7 +13,7 @@ import type {
 	PaddingInsetConfig,
 } from "../runtime/document/types"
 import type { ElementDetailsProvenance } from "../runtime/document/elementDetailsProvenance"
-import type { CanvasElementNameChange } from "../runtime@/infrastructure/editors/tiptap/core/EventEmitter"
+import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
 import type {
 	CanvasDocumentMergeConnectionConflictReason,

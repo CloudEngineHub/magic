@@ -39,7 +39,7 @@ vi.mock("@/pages/superMagic/stores", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagic/stores@/infrastructure/editors/tiptap/core", () => ({
+vi.mock("@/pages/superMagic/stores/core", () => ({
 	projectStore: { selectedProject: null },
 	topicStore: { selectedTopic: null, topics: [] },
 	workspaceStore: { selectedWorkspace: null, firstWorkspace: null },

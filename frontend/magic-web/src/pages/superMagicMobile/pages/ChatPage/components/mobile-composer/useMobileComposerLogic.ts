@@ -46,7 +46,7 @@ import {
 	projectStore,
 	topicStore,
 	workspaceStore,
-} from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core"
+} from "@/pages/superMagic/stores/core"
 import { roleStore } from "@/pages/superMagic/stores"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"

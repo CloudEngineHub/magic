@@ -27,7 +27,7 @@ import type {
 } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
-import { TopicStore } from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core/topic"
+import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 export interface QueueMessageInput {
 	content: JSONContent

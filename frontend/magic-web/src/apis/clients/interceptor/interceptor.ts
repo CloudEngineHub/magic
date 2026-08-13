@@ -112,11 +112,11 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 					if (
 						(enableAuthorizationVerification &&
 							res.status === HttpStatusCode.Unauthorized) ||
-						loginInvalidCodeSet.has(jsonData?.data?.code)
+						loginInvalidCodeSet.has(jsonData?.code)
 					) {
 						await handleUnauthorized(
 							authorization,
-							jsonData?.data?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
+							jsonData?.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
 								? "account-unauthorized"
 								: "token-expired",
 						)

@@ -571,12 +571,18 @@ export class UserService {
 				})
 				.catch(async (err) => {
 					logger.log("ws 登录失败", err)
-					if (err.code === BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED) {
+					if (
+						err.code === BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED ||
+						err.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
+					) {
 						logger.log(err)
 						await authSessionCoordinator.invalidate({
 							service: this.service,
 							accountId: userStore.user.userInfo?.magic_id,
-							reason: "token-expired",
+							reason:
+								err.code === BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION
+									? "account-unauthorized"
+									: "token-expired",
 							source: "websocket",
 							returnTo: window.location.href,
 						})

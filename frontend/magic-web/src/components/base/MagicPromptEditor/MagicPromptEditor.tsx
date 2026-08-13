@@ -12,7 +12,7 @@ import { EditorContent, useEditor, type JSONContent } from "@/infrastructure/edi
 import { Document } from "@/infrastructure/editors/tiptap/extension-document"
 import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
 import { Text } from "@/infrastructure/editors/tiptap/extension-text"
-import { PlaceholderExtension } from "@/pages/superMagic/components/MessageEditor@/infrastructure/editors/tiptap/extensions"
+import { PlaceholderExtension } from "@/pages/superMagic/components/MessageEditor/extensions"
 import { UndoRedo } from "@/infrastructure/editors/tiptap/extensions"
 import { cn } from "@/utils/cn"
 import MentionExtension from "@/components/business/MentionPanel/tiptap-plugin"

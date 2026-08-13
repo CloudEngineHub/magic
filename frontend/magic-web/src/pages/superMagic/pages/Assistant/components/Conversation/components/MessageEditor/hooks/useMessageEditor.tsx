@@ -10,7 +10,7 @@ import {
 	CodeAwarePasteExtension,
 	HardBlock,
 	PlaceholderExtension,
-} from "@/pages/superMagic/components/MessageEditor@/infrastructure/editors/tiptap/extensions"
+} from "@/pages/superMagic/components/MessageEditor/extensions"
 import QuickInstructionExtension from "@/pages/chatNew/components/quick-instruction/extension"
 import { type FileError } from "@/components/base/MagicRichEditor/utils"
 import { useImageExtensions } from "@/components/base/MagicRichEditor/hooks"

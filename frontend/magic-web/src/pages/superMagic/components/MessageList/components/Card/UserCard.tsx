@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, memo, ComponentType } from "react"
 import { useTranslation } from "react-i18next"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
-import { projectStore } from "@/pages/superMagic/stores@/infrastructure/editors/tiptap/core"
+import { projectStore } from "@/pages/superMagic/stores/core"
 import { toJS } from "mobx"
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { useScheduledTasksModifyModal } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduledTasksModifyModal"
