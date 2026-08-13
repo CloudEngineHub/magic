@@ -188,8 +188,10 @@ use App\Domain\ModelGateway\Repository\Facade\ModelConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\MsgLogRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\OrganizationConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\UserConfigRepositoryInterface;
+use App\Domain\ModelGateway\Repository\ImageGenerationTaskRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Persistence\AccessTokenRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ApplicationRepository;
+use App\Domain\ModelGateway\Repository\Persistence\ImageGenerationTaskRepository;
 use App\Domain\ModelGateway\Repository\Persistence\ModelConfigRepository;
 use App\Domain\ModelGateway\Repository\Persistence\MsgLogRepository;
 use App\Domain\ModelGateway\Repository\Persistence\OrganizationConfigRepository;
@@ -351,6 +353,7 @@ $dependencies = [
     SmsInterface::class => VolceApiClient::class,
     LockerInterface::class => RedisLocker::class,
     QueueCoreRepositoryInterface::class => RedisQueueCoreRepository::class,
+    ImageGenerationTaskRepositoryInterface::class => ImageGenerationTaskRepository::class,
     QueueExecutorConfigRepositoryInterface::class => QueueExecutorConfigRepository::class,
     VideoQueueOperationRepositoryInterface::class => RedisVideoQueueOperationRepository::class,
     QueueOperationExecutorInterface::class => VideoProviderOperationExecutor::class,

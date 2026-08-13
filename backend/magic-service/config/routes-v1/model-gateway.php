@@ -34,6 +34,9 @@ Router::addGroup('/v1', function () {
 Router::addGroup('/v2', function () {
     // Image generation endpoint - creates images from text prompts
     Router::post('/images/generations', [OpenAIProxyApi::class, 'textGenerateImageV2']);
+    // Async image generation endpoint - creates a task and returns immediately
+    Router::post('/images/generation-tasks', [ImageProxyApi::class, 'createGenerationTask']);
+    Router::get('/images/generation-tasks/{id}', [ImageProxyApi::class, 'getGenerationTask']);
     // Image edit endpoint - edits images with prompts and optional masks
     Router::post('/images/edits', [OpenAIProxyApi::class, 'imageEditV2']);
     // Image convert-high endpoint - upscales or enhances input images
