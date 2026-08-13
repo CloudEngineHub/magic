@@ -91,7 +91,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         $this->assertTemplateFileKeyHasPrivateUrl($dataIsolation->getCurrentOrganizationCode(), $request->getTemplateFileKey());
         $this->assertThumbnailFileKeyHasPublicUrl($dataIsolation->getCurrentOrganizationCode(), $request->getThumbnailFileKey());
-        $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
+        $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $request->getTagCodes());
         $template = $this->buildEntityFromRequest($request);
         $template->setCode($request->getCode() ?? SlidesTemplateEntity::generateNewCode());
         $template->setSourceType(SlidesTemplateSourceType::Custom);
@@ -123,7 +123,7 @@ class AdminSlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $this->assertCategoryExists($dataIsolation, $request->getCategoryCode());
         $this->assertTemplateFileIsArchive($request->getTemplateFileKey());
         if ($request->hasTagCodes()) {
-            $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $request->getTagCodes());
+            $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $request->getTagCodes());
         }
         $existing = $this->slidesTemplateDomainService->findByIdOrFail($dataIsolation, $id);
         $this->assertTemplateFileKeyHasPrivateUrl($existing->getOrganizationCode(), $request->getTemplateFileKey());

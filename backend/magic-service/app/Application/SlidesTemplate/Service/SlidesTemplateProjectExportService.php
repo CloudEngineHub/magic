@@ -12,6 +12,7 @@ use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
+use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -34,6 +35,8 @@ use RuntimeException;
 
 final class SlidesTemplateProjectExportService extends AbstractAppService
 {
+    private const string EXPORT_DIRECTORY_PREFIX = 'slide-templates';
+
     private const string EXPORT_TYPE = 'slides_template_creator';
 
     private const string EXPORT_PROMPT = 'Slides Template Export Task';
@@ -92,7 +95,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 'mode' => config('super-magic.sandbox.enabled', true) ? 'sandbox' : 'local-direct',
             ]);
 
-            $exportDirectory = 'slide-templates/' . $code . '/' . $exportId;
+            $exportDirectory = $this->buildExportDirectory($code, $exportId);
             $privateConfig = $this->cloudFileRepository->getStsTemporaryCredential(
                 $dataIsolation->getCurrentOrganizationCode(),
                 StorageBucketType::Private,
@@ -146,15 +149,8 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             ]);
             return $payload;
         } catch (\Throwable $throwable) {
-            if ($response?->isSuccess()) {
-                $this->cleanupExportedFiles(
-                    $dataIsolation,
-                    array_merge(
-                        ['template_file_key' => $response->getFileKey()],
-                        $response->getMetadata()
-                    ),
-                    $exportId,
-                );
+            if ($code !== '') {
+                $this->cleanupExportDirectory($dataIsolation, $code, $exportId);
             }
             $this->logger->error('Slides template project export failed', [
                 'project_id' => $projectId,
@@ -172,42 +168,30 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
     /** @param array<string, mixed> $payload */
     public function cleanupExportedFiles(SlidesTemplateDataIsolation $dataIsolation, array $payload, string $exportId): void
     {
-        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
-        $privateKeys = array_values(array_filter([(string) ($payload['template_file_key'] ?? '')]));
-        $publicKeys = array_values(array_filter([
-            (string) ($payload['thumbnail_file_key'] ?? ''),
-            (string) ($payload['collage_file_key'] ?? ''),
-            ...array_map('strval', $payload['preview_image_file_keys'] ?? []),
-        ]));
-        foreach ([
-            [StorageBucketType::Private, $privateKeys],
-            [StorageBucketType::Public, $publicKeys],
-        ] as [$bucket, $keys]) {
-            foreach (array_unique($keys) as $key) {
-                if (! str_contains($key, '/' . $exportId . '/')) {
-                    $this->logger->warning('Slides template export cleanup failed', [
-                        'code' => $payload['code'] ?? null,
-                        'bucket' => $bucket->value,
-                        'file_key' => $key,
-                        'message' => 'File key is outside the current export directory.',
-                    ]);
-                    continue;
-                }
-                try {
-                    if (! $this->cloudFileRepository->deleteFile($organizationCode, $key, $bucket)) {
-                        throw new RuntimeException('Storage delete returned false.');
-                    }
-                } catch (\Throwable $throwable) {
-                    $this->logger->warning('Slides template export cleanup failed', [
-                        'code' => $payload['code'] ?? null,
-                        'bucket' => $bucket->value,
-                        'file_key' => $key,
-                        'exception' => $throwable::class,
-                        'message' => $throwable->getMessage(),
-                    ]);
-                }
-            }
+        $code = trim((string) ($payload['code'] ?? ''));
+        if ($code === '') {
+            $this->logger->warning('Slides template export cleanup skipped', [
+                'export_id' => $exportId,
+                'message' => 'Template code is empty.',
+            ]);
+            return;
         }
+
+        $this->cleanupExportDirectory($dataIsolation, $code, $exportId);
+    }
+
+    public function cleanupPreviousTemplateDirectory(
+        SlidesTemplateDataIsolation $dataIsolation,
+        SlidesTemplateEntity $template,
+        string $currentExportId,
+    ): void {
+        $code = $template->getCode();
+        $previousExportId = $this->resolveExportId($template->getTemplateFileKey(), $code);
+        if ($previousExportId === null || $previousExportId === $currentExportId) {
+            return;
+        }
+
+        $this->cleanupExportDirectory($dataIsolation, $code, $previousExportId);
     }
 
     private function assertTemplateDirectory(int $projectId, int $directoryId): TaskFileEntity
@@ -237,13 +221,6 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             throw new RuntimeException('Unable to resolve Sandbox source path.');
         }
 
-        $this->logger->debug('Slides template export source path resolved from file parent chain', [
-            'project_id' => $project->getId(),
-            'directory_id' => $directory->getFileId(),
-            'directory_file_key' => $directory->getFileKey(),
-            'project_work_dir' => $project->getWorkDir(),
-            'source_path' => $path,
-        ]);
         return $path;
     }
 
@@ -286,5 +263,113 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             return $fallback;
         }
         return $fileName;
+    }
+
+    private function cleanupExportDirectory(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $code,
+        string $exportId,
+    ): void {
+        try {
+            $directory = $this->buildExportDirectory($code, $exportId);
+        } catch (\Throwable $throwable) {
+            $this->logger->warning('Slides template export directory cleanup skipped', [
+                'code' => $code,
+                'export_id' => $exportId,
+                'message' => $throwable->getMessage(),
+            ]);
+            return;
+        }
+
+        foreach ([StorageBucketType::Private, StorageBucketType::Public] as $bucket) {
+            $this->cleanupBucketDirectory($dataIsolation, $directory, $bucket);
+        }
+    }
+
+    private function cleanupBucketDirectory(
+        SlidesTemplateDataIsolation $dataIsolation,
+        string $directory,
+        StorageBucketType $bucket,
+    ): void {
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode();
+        $marker = null;
+        try {
+            $objectKeys = [];
+            do {
+                $options = ['max-keys' => 1000];
+                if ($marker !== null) {
+                    $options['marker'] = $marker;
+                }
+                $result = $this->cloudFileRepository->listObjectsByCredential(
+                    $organizationCode,
+                    $directory,
+                    $bucket,
+                    $options,
+                );
+                $objectKeys = array_merge($objectKeys, array_values(array_filter(array_map(
+                    static fn (array $object): string => (string) ($object['key'] ?? ''),
+                    $result['objects'] ?? [],
+                ))));
+                $marker = ($result['next_marker'] ?? null) ?: null;
+            } while ($marker !== null);
+
+            $objectKeys = array_values(array_unique($objectKeys));
+            $deletedCount = 0;
+            $errorCount = 0;
+            foreach (array_chunk($objectKeys, 1000) as $objectKeyBatch) {
+                $deleteResult = $this->cloudFileRepository->deleteObjectsByCredential(
+                    $directory,
+                    $organizationCode,
+                    $objectKeyBatch,
+                    $bucket,
+                    ['internal_endpoint' => true],
+                );
+                $batchErrors = $deleteResult['errors'] ?? [];
+                $deletedCount += count($deleteResult['deleted'] ?? []);
+                $errorCount += count($batchErrors);
+                if ($batchErrors !== []) {
+                    $this->logger->warning('Slides template export directory cleanup partially failed', [
+                        'directory' => $directory,
+                        'bucket' => $bucket->value,
+                        'deleted_count' => count($deleteResult['deleted'] ?? []),
+                        'error_count' => count($batchErrors),
+                    ]);
+                }
+            }
+
+            $this->logger->info('Slides template export directory cleaned', [
+                'directory' => $directory,
+                'bucket' => $bucket->value,
+                'scanned_count' => count($objectKeys),
+                'deleted_count' => $deletedCount,
+                'error_count' => $errorCount,
+            ]);
+        } catch (\Throwable $throwable) {
+            $this->logger->warning('Slides template export directory cleanup failed', [
+                'directory' => $directory,
+                'bucket' => $bucket->value,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+    }
+
+    private function buildExportDirectory(string $code, string $exportId): string
+    {
+        $code = trim($code);
+        if ($code === '' || str_contains($code, '/') || str_contains($code, '\\')) {
+            throw new RuntimeException('Template code cannot be used as an export directory.');
+        }
+        if (preg_match('/^[a-f0-9]{24}$/', $exportId) !== 1) {
+            throw new RuntimeException('Template export ID is invalid.');
+        }
+        return self::EXPORT_DIRECTORY_PREFIX . '/' . $code . '/' . $exportId;
+    }
+
+    private function resolveExportId(string $fileKey, string $code): ?string
+    {
+        $pattern = '#(?:^|/)' . preg_quote(self::EXPORT_DIRECTORY_PREFIX, '#')
+            . '/' . preg_quote($code, '#') . '/([a-f0-9]{24})(?:/|$)#';
+        return preg_match($pattern, $fileKey, $matches) === 1 ? $matches[1] : null;
     }
 }

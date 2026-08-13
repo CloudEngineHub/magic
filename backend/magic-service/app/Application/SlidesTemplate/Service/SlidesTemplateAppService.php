@@ -136,7 +136,12 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $payload = $this->slidesTemplateProjectExportService->publishFromProjectWorkspace(
             $authorization, $dataIsolation, $request->getProjectId(), $request->getDirectoryId(), $request->getCode(), $exportId
         );
+        $previousTemplate = null;
         try {
+            $previousTemplate = $this->slidesTemplateDomainService->findGloballyByCode($payload['code']);
+            if ($previousTemplate !== null) {
+                $this->slidesTemplateDomainService->assertOwnedByUser($dataIsolation, $previousTemplate);
+            }
             $this->assertOfficialCategory($dataIsolation, $payload['category_code']);
             $this->assertOfficialTags($dataIsolation, $payload['tag_codes']);
             $this->assertTemplateFileIsArchive($payload['template_file_key']);
@@ -149,6 +154,13 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         } catch (\Throwable $throwable) {
             $this->slidesTemplateProjectExportService->cleanupExportedFiles($dataIsolation, $payload, $exportId);
             throw $throwable;
+        }
+        if ($previousTemplate !== null) {
+            $this->slidesTemplateProjectExportService->cleanupPreviousTemplateDirectory(
+                $dataIsolation,
+                $previousTemplate,
+                $exportId,
+            );
         }
         $this->resolveAssetUrls([$saved], false);
         $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, [$saved]);
@@ -280,7 +292,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         if ($codes === []) {
             return;
         }
-        $tags = $this->slidesTemplateTagDomainService->findEnabledByCodesOrFail($dataIsolation, $codes);
+        $tags = $this->slidesTemplateTagDomainService->findEnabledByCodes($dataIsolation, $codes);
         foreach ($tags as $tag) {
             if (! in_array($tag->getOrganizationCode(), $dataIsolation->getOfficialOrganizationCodes(), true)) {
                 ExceptionBuilder::throw(SlidesTemplateErrorCode::TAG_NOT_OFFICIAL);

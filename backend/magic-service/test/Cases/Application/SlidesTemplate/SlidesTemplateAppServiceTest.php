@@ -911,7 +911,7 @@ class SlidesTemplateAppServiceTest extends TestCase
         }
 
         $tagDomainService = $this->createMock(SlidesTemplateTagDomainService::class);
-        $tagDomainService->method('findEnabledByCodesOrFail')->willReturn([]);
+        $tagDomainService->method('findEnabledByCodes')->willReturn([]);
         $tagDomainService->method('fillTemplateTags');
         $tagDomainService->method('syncTemplateTagsByCodes');
         $tagDomainService->method('deleteTemplateTags');
