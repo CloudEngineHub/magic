@@ -18,6 +18,7 @@ import {
 	type SlidesTemplateTagGroupItem,
 	type SlidesTemplateTagItem,
 } from "./slidesTemplateState"
+import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "../../panels/slides-preset/templateMeta"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -455,13 +456,14 @@ export function useSlidesTemplateCatalogState({
 	const serverBackedTemplateOptions = useMemo(() => {
 		const cache = templateOptionCacheRef.current
 		const activeCodes = new Set<string>()
+		const isFeaturedQuery = selectedTagCodes.includes(FEATURED_SLIDES_TEMPLATE_TAG_CODE)
 
 		const options = templates.map((template) => {
 			activeCodes.add(template.code)
 			const cached = cache.get(template.code)
-			if (cached?.source === template) return cached.option
+			if (cached?.source === template && !isFeaturedQuery) return cached.option
 
-			const option = toTemplateOption(template)
+			const option = toTemplateOption(template, { isFeatured: isFeaturedQuery })
 			cache.set(template.code, { source: template, option })
 			return option
 		})
@@ -471,7 +473,7 @@ export function useSlidesTemplateCatalogState({
 		}
 
 		return options
-	}, [templates])
+	}, [selectedTagCodes, templates])
 	const templateOptions = isServerBackedGroup
 		? serverBackedTemplateOptions
 		: (selectedGroup?.children ?? [])

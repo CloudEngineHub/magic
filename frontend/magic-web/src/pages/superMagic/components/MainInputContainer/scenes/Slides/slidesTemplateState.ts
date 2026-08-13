@@ -3,6 +3,7 @@ import {
 	OptionViewType,
 	SkillPanelType,
 	type FieldPanelConfig,
+	type LocaleTextMap,
 	type OptionGroup,
 	type OptionItem,
 	type OptionItemTag,
@@ -53,10 +54,8 @@ export interface SlidesTemplateItem {
 export interface SlidesTemplateItemTag extends OptionItemTag {
 	id: string
 	code: string
-	name_i18n: {
-		zh_CN: string
-		en_US: string
-	}
+	name?: string
+	name_i18n?: LocaleTextMap
 	sort: number
 }
 
@@ -83,6 +82,25 @@ export interface SlidesTemplateListResponse {
 	page: number
 	page_size: number
 	list: SlidesTemplateItem[]
+}
+
+export interface SlidesTemplateLocaleItem {
+	language: string
+	value: string
+}
+
+export type SlidesTemplateResponseText = SlidesTemplateItem["label"] | SlidesTemplateLocaleItem[]
+
+export interface SlidesTemplateRawListResponse {
+	page: number
+	page_size: number
+	list: Array<
+		Omit<SlidesTemplateItem, "label" | "description"> & {
+			label?: SlidesTemplateResponseText | null
+			description?: SlidesTemplateResponseText | null
+			tags?: SlidesTemplateItemTag[]
+		}
+	>
 }
 
 export interface SaveSlidesTemplatePayload {
@@ -120,10 +138,9 @@ export interface SlidesTemplateDetail extends SlidesTemplateItem {
 export interface SlidesTemplateCategoryItem {
 	id: string
 	code: string
-	name_i18n: {
-		zh_CN: string
-		en_US: string
-	}
+	/** 新接口字段。旧的 name_i18n 仅保留类型兼容，不参与展示。 */
+	name?: string
+	name_i18n?: LocaleTextMap
 	sort: number
 	template_count: number
 	is_official: boolean
@@ -156,10 +173,9 @@ export interface SlidesTemplateTagQueryParams {
 export interface SlidesTemplateTagItem {
 	id: string
 	code: string
-	name_i18n: {
-		zh_CN: string
-		en_US: string
-	}
+	/** 新接口字段。旧的 name_i18n 仅保留类型兼容，不参与展示。 */
+	name?: string
+	name_i18n?: LocaleTextMap
 	sort: number
 	template_count: number
 	is_official: boolean
@@ -175,12 +191,20 @@ export interface SlidesTemplateTagListResponse {
 export interface SlidesTemplateTagGroupItem {
 	id: string
 	code: string
-	name_i18n: {
-		zh_CN: string
-		en_US: string
-	}
+	/** 新接口字段。旧的 name_i18n 仅保留类型兼容，不参与展示。 */
+	name?: string
+	name_i18n?: LocaleTextMap
 	sort: number
 	tags: SlidesTemplateTagItem[]
+}
+
+export function getSlidesTemplateName(
+	item: Pick<
+		SlidesTemplateCategoryItem | SlidesTemplateTagItem | SlidesTemplateTagGroupItem,
+		"code" | "name" | "name_i18n"
+	>,
+) {
+	return item.name ?? item.name_i18n ?? item.code
 }
 
 export const ALL_SLIDES_TEMPLATE_GROUP_KEY = "all"
@@ -356,12 +380,9 @@ function groupSlidesTemplatesByTag(
 ): OptionGroup[] {
 	return tags.map((tag) => ({
 		group_key: createSlidesTemplateTagGroupKey(tag.code),
-		group_name: tag.name_i18n,
-		children: templates
-			.filter((template) =>
-				template.tags?.some((templateTag) => templateTag.code === tag.code),
-			)
-			.map(toTemplateOption),
+		group_name: getSlidesTemplateName(tag),
+		// 标签条件由列表接口的 tag_codes 参数在服务端完成，列表响应不包含 tags。
+		children: templates.map(toTemplateOption),
 	}))
 }
 
@@ -380,7 +401,7 @@ function groupSlidesTemplatesByCategory(
 		children.forEach((child) => groupedTemplateCodes.add(String(child.value)))
 		groups.push({
 			group_key: createSlidesTemplateCategoryGroupKey(category.code),
-			group_name: category.name_i18n,
+			group_name: getSlidesTemplateName(category),
 			children,
 		})
 	})
@@ -441,8 +462,10 @@ export function createSlidesFixedSceneConfig(
 	}
 }
 
-export function toTemplateOption(template: SlidesTemplateItem) {
-	const isFeatured = template.tags?.some((tag) => tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE)
+export function toTemplateOption(template: SlidesTemplateItem, options?: { isFeatured?: boolean }) {
+	const isFeatured =
+		options?.isFeatured ??
+		template.tags?.some((tag) => tag.code === FEATURED_SLIDES_TEMPLATE_TAG_CODE)
 	const imageCacheValue = isFeatured
 		? FEATURED_SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
 		: SLIDES_TEMPLATE_IMAGE_CACHE_VALUE
@@ -453,8 +476,8 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		value: template.code,
 		label: template.label,
 		preset_value: {
-			zh_CN: `${template.label.zh_CN}（${template.code}）`,
-			en_US: `${template.label.en_US} (${template.code})`,
+			zh_CN: `${resolveSlidesTemplateText(template.label, "zh_CN")}（${template.code}）`,
+			en_US: `${resolveSlidesTemplateText(template.label, "en_US")} (${template.code})`,
 		},
 		thumbnail_url: markTemplateImageUrl(template.thumbnail_url) ?? undefined,
 		collage_url: markTemplateImageUrl(template.collage_url) ?? undefined,
@@ -469,9 +492,52 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		colors: template.colors ?? [],
 		tags: template.tags ?? [],
 		preview_title: {
-			zh_CN: `${template.label.zh_CN}预览`,
-			en_US: `${template.label.en_US} Preview`,
+			zh_CN: `${resolveSlidesTemplateText(template.label, "zh_CN")}预览`,
+			en_US: `${resolveSlidesTemplateText(template.label, "en_US")} Preview`,
 		},
+	}
+}
+
+function resolveSlidesTemplateText(value: SlidesTemplateResponseText, locale: string): string {
+	if (typeof value === "string") return value
+	if (Array.isArray(value)) {
+		return value.find((item) => item.language === locale)?.value ?? value[0]?.value ?? ""
+	}
+	return value[locale as "zh_CN" | "en_US"] ?? ""
+}
+
+function normalizeSlidesTemplateText(
+	value: SlidesTemplateResponseText | null | undefined,
+): SlidesTemplateItem["label"] {
+	if (typeof value === "string" || value == null) {
+		return { zh_CN: value ?? "", en_US: value ?? "" }
+	}
+	if (!Array.isArray(value)) return value
+
+	return value.reduce(
+		(result, item) => {
+			if (item.language === "zh_CN") result.zh_CN = item.value
+			if (item.language === "en_US") result.en_US = item.value
+			return result
+		},
+		{ zh_CN: "", en_US: "" },
+	)
+}
+
+export function normalizeSlidesTemplateResponse(
+	response: SlidesTemplateRawListResponse,
+): SlidesTemplateListResponse {
+	return {
+		...response,
+		list: (response.list ?? []).map((item) => {
+			const { tags, ...rest } = item
+			void tags
+			return {
+				...rest,
+				label: normalizeSlidesTemplateText(item.label),
+				description: normalizeSlidesTemplateText(item.description),
+			}
+		}),
 	}
 }
 

@@ -55,9 +55,10 @@ import type {
 	SlidesTemplateTagListResponse,
 	SlidesTemplateTagGroupItem,
 	SlidesTemplateTagQueryParams,
-	SlidesTemplateListResponse,
+	SlidesTemplateRawListResponse,
 	SlidesTemplateQueryParams,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { normalizeSlidesTemplateResponse } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 
 /** 保存文件内容的响应 */
 export interface SaveFileContentResponse {
@@ -795,48 +796,60 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		params: SlidesTemplateQueryParams,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
-		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
-			{
-				headers: {
-					...(options?.xMagicImageProcess && {
-						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
-					}),
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates", {}, { scope: "official", ...params }),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
 				},
-			},
-		)
+			)
+			.then(normalizeSlidesTemplateResponse)
 	},
 
 	getFavoriteSlidesTemplates(
 		params: Omit<SlidesTemplateQueryParams, "scope">,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
-		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
-			{
-				headers: {
-					...(options?.xMagicImageProcess && {
-						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
-					}),
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/favorites", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
 				},
-			},
-		)
+			)
+			.then(normalizeSlidesTemplateResponse)
 	},
 
 	getUsedSlidesTemplates(
 		params: Pick<SlidesTemplateQueryParams, "page" | "page_size">,
 		options?: { xMagicImageProcess?: ImageProcessOptions },
 	) {
-		return fetch.get<SlidesTemplateListResponse>(
-			genRequestUrl("/api/v1/slides-templates/used", {}, params),
-			{
-				headers: {
-					...(options?.xMagicImageProcess && {
-						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
-					}),
+		return fetch
+			.get<SlidesTemplateRawListResponse>(
+				genRequestUrl("/api/v1/slides-templates/used", {}, params),
+				{
+					headers: {
+						...(options?.xMagicImageProcess && {
+							"X-Magic-Image-Process": buildImageProcessQuery(
+								options.xMagicImageProcess,
+							),
+						}),
+					},
 				},
-			},
-		)
+			)
+			.then(normalizeSlidesTemplateResponse)
 	},
 
 	getSlidesTemplateCodeAvailability(code: string) {

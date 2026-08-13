@@ -61,7 +61,7 @@ function notifyMySlidesTemplatesChanged() {
 
 export async function createAvailableSlidesTemplateCode() {
 	for (let attempt = 0; attempt < 5; attempt += 1) {
-		const code = `SLIDE-${createRandomUuidV4().replace(/-/g, "").slice(0, 8).toUpperCase()}`
+		const code = `SLIDE-${createRandomUuidV4().replace(/-/g, "").slice(0, 16).toUpperCase()}`
 		const availability = await mySlidesTemplateAdapter.checkByCode({ code })
 		if (availability.status === "UNUSED") return code
 	}

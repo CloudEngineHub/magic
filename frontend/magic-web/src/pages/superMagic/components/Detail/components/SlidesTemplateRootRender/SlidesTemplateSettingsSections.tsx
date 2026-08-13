@@ -20,25 +20,17 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import { Textarea } from "@/components/shadcn-ui/textarea"
+import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import type {
 	SlidesTemplateCategoryItem,
 	SlidesTemplateTagGroupItem,
 } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { getSlidesTemplateName } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 import type {
 	SlidesTemplateSettingsFormErrors,
 	SlidesTemplateSettingsFormState,
 } from "./settingsTypes"
 import type { SlidesTemplateManifestSlide } from "./types"
-
-function getLocalizedName(
-	name: { zh_CN?: string; en_US?: string },
-	language: string,
-	fallback: string,
-) {
-	return language.toLowerCase().startsWith("en")
-		? name.en_US || name.zh_CN || fallback
-		: name.zh_CN || name.en_US || fallback
-}
 
 export function SettingsFieldError({ id, message }: { id: string; message?: string }) {
 	if (!message) return null
@@ -142,7 +134,8 @@ export function SlidesTemplateTaxonomySection({
 	tagGroups,
 	toggleTag,
 }: TaxonomySectionProps) {
-	const { t, i18n } = useTranslation("super")
+	const { t } = useTranslation("super")
+	const lt = useLocaleText()
 	const categoryCodeSet = useMemo(
 		() => new Set(categories.map((category) => category.code)),
 		[categories],
@@ -154,7 +147,6 @@ export function SlidesTemplateTaxonomySection({
 	const unavailableTagCodes = form.tagCodes.filter((code) => !availableTagCodes.has(code))
 	const isCurrentCategoryUnavailable =
 		Boolean(form.categoryCode) && !categoryCodeSet.has(form.categoryCode)
-	const language = i18n?.language || "zh_CN"
 
 	return (
 		<div className="space-y-4">
@@ -211,7 +203,7 @@ export function SlidesTemplateTaxonomySection({
 						) : null}
 						{categories.map((category) => (
 							<SelectItem key={category.code} value={category.code}>
-								{getLocalizedName(category.name_i18n, language, category.code)}
+								{lt(getSlidesTemplateName(category))}
 							</SelectItem>
 						))}
 					</SelectContent>
@@ -228,7 +220,7 @@ export function SlidesTemplateTaxonomySection({
 				{tagGroups.map((group, groupIndex) => (
 					<div key={group.code} className="space-y-2 rounded-lg bg-muted/40 p-3">
 						<div className="text-xs font-medium text-muted-foreground">
-							{getLocalizedName(group.name_i18n, language, group.code)}
+							{lt(getSlidesTemplateName(group))}
 						</div>
 						<div className="flex flex-wrap gap-2">
 							{group.tags.map((tag, tagIndex) => {
@@ -249,9 +241,7 @@ export function SlidesTemplateTaxonomySection({
 												toggleTag(tag.code, value === true)
 											}
 										/>
-										<span>
-											{getLocalizedName(tag.name_i18n, language, tag.code)}
-										</span>
+										<span>{lt(getSlidesTemplateName(tag))}</span>
 									</label>
 								)
 							})}
