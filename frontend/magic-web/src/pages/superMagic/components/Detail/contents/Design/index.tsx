@@ -297,7 +297,9 @@ function DesignViewer(props: DesignViewerProps) {
 		onFullscreen,
 	} = props
 
-	const projectId = selectedTopic?.project_id ?? props.projectId ?? selectedProject?.id
+	// Native standalone preview has no selected topic, so use the project id
+	// forwarded by Render as its only fallback.
+	const projectId = selectedTopic?.project_id ?? projectIdProp ?? selectedProject?.id
 
 	// 文件列表更新处理
 	const { flatAttachments, attachmentsReady, attachmentIndex, updateAttachments } =
@@ -317,10 +319,6 @@ function DesignViewer(props: DesignViewerProps) {
 	const isOffline = online === false
 
 	const hostUiLocale = i18n.resolvedLanguage ?? i18n.language
-
-	// Native standalone preview has no selected topic, so use the project id
-	// forwarded by Render as its only fallback.
-	const projectId = selectedTopic?.project_id || projectIdProp
 
 	const currentFile = useMemo(() => {
 		const actualCurrentFile = resolveActualDesignCurrentFile({
