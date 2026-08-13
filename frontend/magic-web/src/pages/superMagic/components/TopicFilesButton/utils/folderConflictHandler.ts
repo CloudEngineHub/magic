@@ -90,9 +90,36 @@ export function stripTopLevelFolderFromFiles(files: File[]): File[] {
 }
 
 export function extractUploadFileRelativePath(file: File): string {
-	const relativePath = getFileRelativePath(file)
-	const firstSlashIndex = relativePath.indexOf("/")
-	return firstSlashIndex === -1 ? file.name : relativePath.slice(firstSlashIndex + 1)
+	// Folder-merge callers have already removed the uploaded root folder from
+	// webkitRelativePath. Keep the remaining path intact so nested files such as
+	// "分类五/新建文件.md" are compared against the same path in the target folder.
+	return getFileRelativePath(file)
+}
+
+/**
+ * Renames target-upload files while preserving their relative directory paths.
+ *
+ * Example:
+ * Input:  `分类4/新建文件.md` + `{ "分类4/新建文件.md" => "新建文件(1).md" }`
+ * Output: `分类4/新建文件(1).md`
+ */
+export function renameFilesForTargetUpload(files: File[], renameMap: Map<string, string>): File[] {
+	return files.map((file) => {
+		const relativePath = extractUploadFileRelativePath(file)
+		const nextName = renameMap.get(relativePath)
+		if (!nextName || nextName === file.name) return file
+
+		const lastSlashIndex = relativePath.lastIndexOf("/")
+		const nextRelativePath =
+			lastSlashIndex === -1
+				? nextName
+				: `${relativePath.slice(0, lastSlashIndex + 1)}${nextName}`
+		const renamedFile = new File([file], nextName, {
+			type: file.type,
+			lastModified: file.lastModified,
+		})
+		return defineWebkitRelativePath(renamedFile, nextRelativePath)
+	})
 }
 
 function getResolvedAttachmentIndex(

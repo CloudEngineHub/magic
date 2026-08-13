@@ -818,6 +818,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					onCancel={sharedDuplicateHandler.handleFolderConflictCancel}
 					onMerge={sharedDuplicateHandler.handleFolderConflictMerge}
 					onKeepBoth={sharedDuplicateHandler.handleFolderConflictKeepBoth}
+					onReplace={sharedDuplicateHandler.handleFolderConflictReplace}
 				/>
 				{shouldUseProjectDetailMobileView ? (
 					<DuplicateFileModal

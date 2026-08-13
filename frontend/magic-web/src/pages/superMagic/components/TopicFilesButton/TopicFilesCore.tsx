@@ -927,6 +927,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 					onCancel: sharedDuplicateHandler.handleFolderConflictCancel,
 					onMerge: sharedDuplicateHandler.handleFolderConflictMerge,
 					onKeepBoth: sharedDuplicateHandler.handleFolderConflictKeepBoth,
+					onReplace: sharedDuplicateHandler.handleFolderConflictReplace,
 				}
 			: moveFileHook.folderConflictModalVisible
 				? {
@@ -1128,8 +1129,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// 选择处理
 	const handleSelect = useMemoizedFn((selectedKeys: React.Key[]) => {
 		handleTreeSelect(selectedKeys)
-		// 处理文件选择逻辑
-		if (selectedKeys.length > 0) {
+		// In browse mode, tree clicks only update the tree state and must not
+		// add files or folders to the batch selection.
+		if (isSelectMode && selectedKeys.length > 0) {
 			const item = treeIndex.getItemByKey(selectedKeys[0] as string)
 			if (item) {
 				handleItemSelect(item)
