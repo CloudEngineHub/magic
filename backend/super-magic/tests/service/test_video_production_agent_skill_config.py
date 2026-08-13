@@ -80,6 +80,7 @@ def test_video_production_skill_documents_dedicated_canvas_and_media_tools():
     for documented_tool_name in (
         "create_canvas",
         "import_canvas_assets",
+        "get_canvas_overview",
             "query_canvas_elements",
             "repair_video_production_connections",
             "promote_canvas_content",

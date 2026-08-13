@@ -1235,6 +1235,58 @@
         "zh_CN": "画布节点查询失败，请检查项目和节点 ID",
         "en_US": "Canvas element query failed; check the project and Element IDs"
     },
+    "get_canvas_overview.success": {
+        "zh_CN": "画布概览读取完成",
+        "en_US": "Canvas overview completed"
+    },
+    "get_canvas_overview.exception": {
+        "zh_CN": "画布概览读取失败，请检查项目",
+        "en_US": "Canvas overview failed; check the project"
+    },
+    "get_canvas_overview.before": {
+        "zh_CN": "正在读取画布概览（第 {{page}} 页，每页最多 {{limit}} 个节点）",
+        "en_US": "Reading canvas overview (page {{page}}, up to {{limit}} Element(s))"
+    },
+    "get_canvas_overview.after_success": {
+        "zh_CN": "已读取第 {{page}}/{{total_pages}} 页，共 {{returned}} 个节点，是否还有下一页：{{has_more}}",
+        "en_US": "Read page {{page}}/{{total_pages}} with {{returned}} Element(s); more pages: {{has_more}}"
+    },
+    "get_canvas_overview.after_failure": {
+        "zh_CN": "概览读取失败：{{failure}}",
+        "en_US": "Overview failed: {{failure}}"
+    },
+    "get_canvas_overview.more_yes": {
+        "zh_CN": "是",
+        "en_US": "yes"
+    },
+    "get_canvas_overview.more_no": {
+        "zh_CN": "否",
+        "en_US": "no"
+    },
+    "get_canvas_overview.detail_title": {
+        "zh_CN": "画布概览",
+        "en_US": "Canvas Overview"
+    },
+    "get_canvas_overview.detail_project": {
+        "zh_CN": "- 项目：{{project}}",
+        "en_US": "- Project: {{project}}"
+    },
+    "get_canvas_overview.detail_summary": {
+        "zh_CN": "- 节点总数：**{{total}}**，连线总数：**{{connections}}**",
+        "en_US": "- Total Elements: **{{total}}**, Connections: **{{connections}}**"
+    },
+    "get_canvas_overview.detail_page": {
+        "zh_CN": "- 分页：第 **{{page}}/{{total_pages}}** 页，本页 **{{returned}}**，页大小 **{{limit}}**，还有下一页：**{{has_more}}**",
+        "en_US": "- Pagination: **{{page}}/{{total_pages}}**, Current Page **{{returned}}**, Limit **{{limit}}**, More Pages: **{{has_more}}**"
+    },
+    "get_canvas_overview.detail_types": {
+        "zh_CN": "- 类型统计：{{types}}",
+        "en_US": "- Type Distribution: {{types}}"
+    },
+    "get_canvas_overview.detail_failure": {
+        "zh_CN": "- 结果：**{{failure}}**",
+        "en_US": "- Result: **{{failure}}**"
+    },
     "repair_video_production_connections.success": {
         "zh_CN": "视频制作连线修复完成",
         "en_US": "Video production connections repaired"

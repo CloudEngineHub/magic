@@ -43,3 +43,35 @@ class CanvasQueryResult:
     elements: List[CanvasElementView]
     connections: List[CanvasConnectionView]
     missing_element_ids: List[str]
+
+
+@dataclass(frozen=True)
+class CanvasElementOverviewView:
+    """表示概览中的轻量 Element 索引。"""
+
+    element_id: str
+    element_type: str
+    name: str
+    status: Optional[str]
+    content_count: int
+    active_content_id: Optional[str]
+    main_content_id: Optional[str]
+    incoming_element_ids: List[str] = field(default_factory=list)
+    outgoing_element_ids: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CanvasOverviewResult:
+    """表示一次分页画布概览结果。"""
+
+    project_name: str
+    project_type: str
+    total_elements: int
+    total_connections: int
+    elements_by_type: Dict[str, int]
+    elements: List[CanvasElementOverviewView]
+    returned: int
+    page: int
+    limit: int
+    total_pages: int
+    has_more: bool

@@ -315,6 +315,10 @@
         "zh_CN": "查询画布节点",
         "en_US": "Query canvas elements"
     },
+    "get_canvas_overview": {
+        "zh_CN": "查看画布概览",
+        "en_US": "Get canvas overview"
+    },
     "repair_video_production_connections": {
         "zh_CN": "修复视频制作连线",
         "en_US": "Repair video production connections"

@@ -8,7 +8,8 @@ description: Use when the user wants to create, continue, revise, or finish a vi
 - Adapt the workflow to the user's current request and existing results. Do not restart completed stages.
 - Select the production mode from the user's explicit wording. If the user explicitly requests “普通模式” (or an equivalent direct-generation mode), use the ordinary workflow below. If the user explicitly requests “精细模式” (or an equivalent storyboard workflow), use the detailed workflow. If the user does not name a mode, always use the detailed workflow by default.
 - Call Canvas tools through Code Mode with `sdk.tool.call(...)`.
-- Read tool outputs from `result.content`, then carry the returned IDs, media paths, counts, and statuses into the plan and later calls. Do not depend on `result.data`.
+- `magic.project.js` contains compressed internal project data and is not useful for task reasoning. Do not read, parse, or modify this file directly. Inspect and change Canvas state only through the provided Canvas tools.
+- Read tool outputs only from `result.content`, then carry the returned IDs, media paths, counts, statuses, and page numbers into the plan and later calls.
 - Use the user's language for plans, analysis, names, descriptions, prompts, and confirmation text. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.
 - Treat current Canvas results as the production source of truth. The Markdown plan is recovery context, not a replacement for querying current Elements.
@@ -290,6 +291,23 @@ result = tool.call("query_canvas_elements", {
 })
 print(result.content)
 ```
+
+## `get_canvas_overview`
+
+Use this first when you do not know which Elements exist, when resuming an interrupted task, or when the user asks what is currently on the canvas. It returns a lightweight paginated index with compact incoming and outgoing Element connections. Do not expect full prompts, media paths, generation settings, or raw Content fields from it. Use exact IDs from the overview with `query_canvas_elements` for details. If `has_more` is true, request the next page with `page + 1` and the same `limit`.
+
+```python
+from sdk.tool import tool
+
+result = tool.call("get_canvas_overview", {
+    "project_path": "city-travel-short-film",
+    "page": 1,
+    "limit": 50
+})
+print(result.content)
+```
+
+If the returned content says `has_more: true`, call the tool again with `page` incremented by 1 and the same `limit`.
 
 ## `promote_canvas_content`
 

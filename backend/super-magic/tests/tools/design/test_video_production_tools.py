@@ -23,6 +23,10 @@ from app.tools.design.domain.canvas_document import (
 )
 from app.tools.design.domain.content import ElementContent
 from app.tools.design.domain.services.canvas_query_service import CanvasQueryService
+from app.tools.design.domain.services.canvas_query_service import (
+    DEFAULT_OVERVIEW_LIMIT,
+    MAX_OVERVIEW_LIMIT,
+)
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.manager.canvas_manager_v3 import CanvasManagerV3, write_magic_project_js_v3
 from app.tools.design.tools.base_generate_canvas_elements import TaskExecutionResult
@@ -58,6 +62,10 @@ from app.tools.design.tools.promote_canvas_content import (
     PromoteCanvasContentParams,
 )
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements, QueryCanvasElementsParams
+from app.tools.design.tools.get_canvas_overview import (
+    GetCanvasOverview,
+    GetCanvasOverviewParams,
+)
 from app.tools.design.tools.repair_video_production_connections import (
     ConnectionRepairTarget,
     RepairVideoProductionConnections,
@@ -307,6 +315,82 @@ def test_query_canvas_elements_params_only_accept_one_to_ten_exact_ids():
 
     assert params.element_ids == ["element-1", "element-2"]
     assert set(QueryCanvasElementsParams.model_fields) == {"project_path", "element_ids"}
+
+
+def test_get_canvas_overview_params_bound_page_size():
+    """概览参数默认分页，并拒绝超过最大页大小。"""
+    params = GetCanvasOverviewParams(project_path="mock-project")
+    assert params.limit == DEFAULT_OVERVIEW_LIMIT
+    with pytest.raises(ValidationError):
+        GetCanvasOverviewParams(project_path="mock-project", limit=MAX_OVERVIEW_LIMIT + 1)
+
+
+@pytest.mark.asyncio
+async def test_canvas_overview_returns_lightweight_page_and_plain_pagination(workspace: Path):
+    """概览只返回轻量索引，并使用普通页码分页。"""
+    project_name = "overview-project"
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    elements = [
+        _content_element(
+            f"image-{index}",
+            "image",
+            name=f"图片 {index}",
+            fields={"src": f"./images/{index}.png", "status": "completed", "generateImageRequest": {"prompt": "secret"}},
+        )
+        for index in range(3)
+    ]
+    config = _v3_config(*elements)
+    config.canvas.connections.append(
+        CanvasConnection(
+            id="connection-1",
+            source_element_id="image-0",
+            target_element_id="image-1",
+        )
+    )
+    await write_magic_project_js_v3(project_name, config)
+
+    service = CanvasQueryService()
+    first_page = await service.overview(str(workspace / project_name), limit=2)
+    assert first_page.returned == 2
+    assert first_page.has_more
+    assert first_page.elements[0].content_count == 1
+    assert not hasattr(first_page.elements[0], "properties")
+    assert first_page.elements[0].outgoing_element_ids == ["image-1"]
+    assert first_page.elements[1].incoming_element_ids == ["image-0"]
+
+    second_page = await service.overview(
+        str(workspace / project_name),
+        page=2,
+        limit=2,
+    )
+    assert second_page.returned == 1
+    assert not second_page.has_more
+
+
+
+@pytest.mark.asyncio
+async def test_get_canvas_overview_tool_content_is_index_only(workspace: Path):
+    """工具正文包含后续查询所需 ID，但不暴露完整 Content 字段。"""
+    project_name = "overview-tool-project"
+    await async_mkdir(workspace / project_name, parents=True, exist_ok=True)
+    image = _content_element(
+        "image-overview",
+        "image",
+        name="概览图片",
+        fields={"src": "./images/a.png", "status": "completed", "generateImageRequest": {"prompt": "secret"}},
+    )
+    await write_magic_project_js_v3(project_name, _v3_config(image))
+
+    result = await GetCanvasOverview(base_dir=str(workspace)).execute(
+        None,
+        GetCanvasOverviewParams(project_path=project_name, limit=40),
+    )
+    assert result.ok
+    assert "| Element ID | Type | Name | Status | Contents | Active Content | Main Content | Connections |" in result.content
+    assert "`image-overview`" in result.content
+    assert "| `image-overview` | `image` | `概览图片` | `completed` | 1 |" in result.content
+    assert "generateImageRequest" not in result.content
+    assert "./images/a.png" not in result.content
 
 
 @pytest.mark.asyncio

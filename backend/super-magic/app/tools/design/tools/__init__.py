@@ -14,6 +14,7 @@ from app.tools.design.tools.generate_video_production_videos import GenerateVide
 from app.tools.design.tools.import_canvas_assets import ImportCanvasAssets
 from app.tools.design.tools.promote_canvas_content import PromoteCanvasContent
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements
+from app.tools.design.tools.get_canvas_overview import GetCanvasOverview
 from app.tools.design.tools.repair_video_production_connections import (
     RepairVideoProductionConnections,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "ImportCanvasAssets",
     "PromoteCanvasContent",
     "QueryCanvasElements",
+    "GetCanvasOverview",
     "RepairVideoProductionConnections",
     "RestoreCanvasMedia",
     "SearchCanvasImages",

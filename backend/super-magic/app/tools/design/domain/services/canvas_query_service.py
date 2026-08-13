@@ -1,6 +1,7 @@
-"""跨版本画布 Element 精确查询服务。"""
+"""跨版本画布 Element 精确查询和概览服务。"""
 
-from typing import Any, Iterable, List, Sequence
+import math
+from typing import Any, Iterable, List, Optional, Sequence
 
 from app.tools.design.codec.v3_codec import MAGIC_PROJECT_VERSION_V3
 from app.tools.design.domain.canvas_document import CanvasElementV3
@@ -8,6 +9,8 @@ from app.tools.design.domain.query import (
     CanvasConnectionView,
     CanvasContentView,
     CanvasElementView,
+    CanvasElementOverviewView,
+    CanvasOverviewResult,
     CanvasQueryResult,
 )
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
@@ -20,6 +23,8 @@ from app.tools.design.utils.magic_project_design_parser import (
 )
 
 MAX_QUERY_ELEMENT_IDS = 10
+DEFAULT_OVERVIEW_LIMIT = 50
+MAX_OVERVIEW_LIMIT = 100
 
 _LEGACY_CONTENT_FIELDS = (
     "src",
@@ -114,6 +119,106 @@ class CanvasQueryService:
             elements=views,
             connections=connections,
             missing_element_ids=missing_element_ids,
+        )
+
+    async def overview(
+        self,
+        project_path: str,
+        *,
+        page: int = 1,
+        limit: int = DEFAULT_OVERVIEW_LIMIT,
+    ) -> CanvasOverviewResult:
+        """按页返回轻量画布索引。"""
+        if page < 1:
+            raise ValueError("Overview page must be greater than or equal to 1")
+        if limit < 1 or limit > MAX_OVERVIEW_LIMIT:
+            raise ValueError(f"Overview limit must be between 1 and {MAX_OVERVIEW_LIMIT}")
+
+        manager = await get_canvas_manager(project_path)
+        config = await manager.read_current_canvas()
+        if isinstance(manager, CanvasManagerV3):
+            raw_elements = list(config.canvas.iter_elements())
+            total_connections = len(config.canvas.connections)
+            connection_pairs = [
+                (connection.source_element_id, connection.target_element_id)
+                for connection in config.canvas.connections
+            ]
+        else:
+            raw_elements = list(flatten_all_elements(config))
+            total_connections = 0
+            connection_pairs = []
+
+        incoming_by_element: dict[str, list[str]] = {}
+        outgoing_by_element: dict[str, list[str]] = {}
+        for source_element_id, target_element_id in connection_pairs:
+            outgoing_by_element.setdefault(source_element_id, []).append(target_element_id)
+            incoming_by_element.setdefault(target_element_id, []).append(source_element_id)
+
+        overview_elements = [
+            self._view_overview_element(
+                element,
+                incoming_element_ids=incoming_by_element.get(element.id, []),
+                outgoing_element_ids=outgoing_by_element.get(element.id, []),
+            )
+            for element in raw_elements
+        ]
+        total_pages = math.ceil(len(overview_elements) / limit) if overview_elements else 1
+        offset = (page - 1) * limit
+        page_elements = overview_elements[offset : offset + limit]
+        has_more = page < total_pages
+        elements_by_type: dict[str, int] = {}
+        for element in overview_elements:
+            elements_by_type[element.element_type] = elements_by_type.get(element.element_type, 0) + 1
+
+        return CanvasOverviewResult(
+            project_name=config.name or "Untitled",
+            project_type=config.type,
+            total_elements=len(overview_elements),
+            total_connections=total_connections,
+            elements_by_type=dict(sorted(elements_by_type.items())),
+            elements=page_elements,
+            returned=len(page_elements),
+            page=page,
+            limit=limit,
+            total_pages=total_pages,
+            has_more=has_more,
+        )
+
+    @staticmethod
+    def _view_overview_element(
+        element: Any,
+        *,
+        incoming_element_ids: Optional[Sequence[str]] = None,
+        outgoing_element_ids: Optional[Sequence[str]] = None,
+    ) -> CanvasElementOverviewView:
+        """把 Element 转为不包含重字段和布局字段的轻量索引。"""
+        incoming_ids = list(incoming_element_ids or [])
+        outgoing_ids = list(outgoing_element_ids or [])
+        contents = getattr(element, "contents", None)
+        if contents is not None:
+            status = getattr(element, "status", None)
+            return CanvasElementOverviewView(
+                element_id=element.id,
+                element_type=element.type,
+                name=getattr(element, "name", None) or element.id,
+                status=status,
+                content_count=len(contents),
+                active_content_id=getattr(element, "active_content_id", None),
+                main_content_id=getattr(element, "main_content_id", None),
+                incoming_element_ids=incoming_ids,
+                outgoing_element_ids=outgoing_ids,
+            )
+
+        return CanvasElementOverviewView(
+            element_id=element.id,
+            element_type=element.type,
+            name=getattr(element, "name", None) or element.id,
+            status=getattr(element, "status", None),
+            content_count=1,
+            active_content_id=element.id,
+            main_content_id=element.id,
+            incoming_element_ids=incoming_ids,
+            outgoing_element_ids=outgoing_ids,
         )
 
     def _view_v3_element(
