@@ -15,11 +15,14 @@ import {
 	VIDEO_EDIT_ASPECT_RATIOS,
 	VIDEO_EDIT_FORMATS,
 	VIDEO_EDIT_RESOLUTIONS,
+	getVideoEditOutputDimensions,
 } from "../../resources/video-composition/VideoCompositionManager"
 import {
 	StoryboardFieldOverlayHost,
 	type StoryboardSelectOption,
 } from "../storyboard/StoryboardFieldOverlayHost"
+import { VideoEditPlaybackManager } from "./VideoEditPlaybackManager"
+import { collectConnectedVideoEditInputs } from "../connection/connectedInputSources"
 
 export type VideoEditControlState = "idle" | "hover" | "pressed" | "disabled" | "editing"
 
@@ -73,6 +76,7 @@ function isCompositionBusy(elementId: string, canvas: Canvas): boolean {
  */
 export class VideoEditInteractionManager {
 	private readonly canvas: Canvas
+	private readonly playbackManager: VideoEditPlaybackManager
 	private readonly overlayHost: StoryboardFieldOverlayHost
 	private readonly bindings = new Set<VideoEditControlBinding>()
 	private activeBinding: VideoEditControlBinding | null = null
@@ -82,6 +86,9 @@ export class VideoEditInteractionManager {
 
 	constructor(options: { canvas: Canvas }) {
 		this.canvas = options.canvas
+		this.playbackManager =
+			this.canvas.videoEditPlaybackManager ??
+			new VideoEditPlaybackManager({ canvas: this.canvas })
 		this.overlayHost = new StoryboardFieldOverlayHost({ canvas: this.canvas })
 		this.bindCanvasEvents()
 	}
@@ -315,28 +322,29 @@ export class VideoEditInteractionManager {
 	private toggleAudioPlayback(elementId: string): void {
 		const element = this.getVideoEditElement(elementId)
 		if (!element) return
-		const content = getActiveContent<VideoEditElementContent>(element)
-		const audioElementId = content?.audioSequence[0]
+		const audioElementId = collectConnectedVideoEditInputs(
+			this.canvas,
+			elementId,
+		).audioElementId
 		if (!audioElementId) return
 		const audio = this.canvas.elementManager.getElementData(audioElementId)
 		if (!audio || audio.type !== ElementTypeEnum.Audio) return
 		const src = getDownstreamContent<AudioElementContent>(audio)?.src
 		if (!src) return
-		void this.canvas.audioPlaybackManager?.toggle?.(audioElementId, src)
+		void this.playbackManager.toggle(elementId, { audioElementId, path: src })
 	}
 
 	private mergeVideos(elementId: string): void {
-		const snapshot = this.canvas.videoCompositionManager?.getSnapshot?.(elementId)
-		const status = snapshot?.status
-		if (status && ["checking", "preparing", "encoding"].includes(status)) {
-			this.canvas.videoCompositionManager?.cancel?.(elementId)
-			return
-		}
 		const element = this.getVideoEditElement(elementId)
 		if (!element) return
 		const content = getActiveContent<VideoEditElementContent>(element)
-		if (!content || content.videoSequence.length === 0) return
-		const resolution = content.output?.resolution === "720P" ? "720P" : "1080P"
+		const inputs = collectConnectedVideoEditInputs(this.canvas, elementId)
+		if (!content || inputs.videoElementIds.length === 0) return
+		const resolution = VIDEO_EDIT_RESOLUTIONS.includes(
+			content.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number],
+		)
+			? (content.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number])
+			: "1080P"
 		const outputPatch: NonNullable<VideoEditElementContent["output"]> = {
 			...(content.output ?? {}),
 			resolution,
@@ -360,6 +368,11 @@ export class VideoEditInteractionManager {
 		const element = this.getVideoEditElement(binding.elementId)
 		if (!element) return
 		const content = getActiveContent<VideoEditElementContent>(element)
+		const resolution = VIDEO_EDIT_RESOLUTIONS.includes(
+			content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number],
+		)
+			? (content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number])
+			: "1080P"
 		const current =
 			content?.output?.aspectRatio &&
 			VIDEO_EDIT_ASPECT_RATIOS.includes(
@@ -367,7 +380,20 @@ export class VideoEditInteractionManager {
 			)
 				? content.output.aspectRatio
 				: VIDEO_EDIT_ASPECT_RATIOS[0]
-		const options = VIDEO_EDIT_ASPECT_RATIOS.map((value) => ({ label: value, value }))
+		const options = VIDEO_EDIT_ASPECT_RATIOS.map((value) => {
+			const { width, height } = getVideoEditOutputDimensions(value, resolution)
+			const ratio = width / height
+			const baseSize = 16
+			return {
+				label: value,
+				value,
+				secondaryLabel: `${width}x${height}`,
+				preview: {
+					iconWidth: ratio >= 1 ? baseSize : Math.max(8, Math.round(baseSize * ratio)),
+					iconHeight: ratio >= 1 ? Math.max(8, Math.round(baseSize / ratio)) : baseSize,
+				},
+			}
+		})
 		this.mountSelect(binding, {
 			ariaLabel: this.getText("storyboard.aspectRatio", "画面比例"),
 			value: current,
@@ -380,7 +406,11 @@ export class VideoEditInteractionManager {
 		const element = this.getVideoEditElement(binding.elementId)
 		if (!element) return
 		const content = getActiveContent<VideoEditElementContent>(element)
-		const current = content?.output?.resolution === "720P" ? "720P" : "1080P"
+		const current = VIDEO_EDIT_RESOLUTIONS.includes(
+			content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number],
+		)
+			? (content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number])
+			: "1080P"
 		const options = VIDEO_EDIT_RESOLUTIONS.map((value) => ({ label: value, value }))
 		this.mountSelect(binding, {
 			ariaLabel: this.getText("storyboard.resolution", "分辨率"),

@@ -1217,6 +1217,13 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			status === GenerationStatus.Processing ||
 			this.isVideoGenerationPending()
 		) {
+			if (this.canvas.videoCompositionManager?.isComposingResult?.(this.data.id)) {
+				return {
+					stage: "generating",
+					placeholderMode: "loading",
+					text: this.getText("video.merging", "正在合并中..."),
+				}
+			}
 			const isGenerating = this.isActiveGenerationPlaceholder()
 
 			return {

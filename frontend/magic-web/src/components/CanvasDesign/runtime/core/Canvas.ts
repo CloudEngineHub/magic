@@ -82,6 +82,7 @@ import { ConnectionHandleOverlayManager } from "../interaction/connection/Connec
 import { ConnectionAssociationSeedManager } from "../interaction/connection/ConnectionAssociationSeedManager"
 import { StoryboardInteractionManager } from "../interaction/storyboard/StoryboardInteractionManager"
 import { VideoEditInteractionManager } from "../interaction/video-edit/VideoEditInteractionManager"
+import { VideoEditPlaybackManager } from "../interaction/video-edit/VideoEditPlaybackManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import { VideoContinuationManager } from "../interaction/video-continuation/VideoContinuationManager"
 import {
@@ -161,6 +162,7 @@ export class Canvas {
 	public connectionHandleOverlayManager: ConnectionHandleOverlayManager
 	public storyboardInteractionManager: StoryboardInteractionManager
 	public videoEditInteractionManager: VideoEditInteractionManager
+	public videoEditPlaybackManager: VideoEditPlaybackManager
 	public videoContinuationManager: VideoContinuationManager
 	public toolManager: ToolManager
 	public keyboardManager: KeyboardManager
@@ -336,6 +338,7 @@ export class Canvas {
 
 		this.audioResourceManager = new AudioResourceManager({ canvas: this })
 		this.audioPlaybackManager = new AudioPlaybackManager({ canvas: this })
+		this.videoEditPlaybackManager = new VideoEditPlaybackManager({ canvas: this })
 		this.audioWaveformManager = new AudioWaveformManager({ canvas: this })
 		this.audioReplaceController = new AudioReplaceController({ canvas: this })
 		this.imageReplaceController = new ImageReplaceController({ canvas: this })
@@ -987,6 +990,7 @@ export class Canvas {
 
 		this.elementManager.loadDocument(normalizedDoc)
 		this.connectionManager.loadDocument(normalizedDoc)
+		this.connectionManager.normalizeVideoEditInputs?.()
 
 		// 重新启用历史记录
 		this.historyManager.enable()
@@ -1022,18 +1026,19 @@ export class Canvas {
 		const unsubscribeDocumentRestored = this.eventEmitter.on("document:restored", () => {
 			didEmitDocumentRestored = true
 		})
+		let didChangeElements = false
 		try {
-			this.elementManager.loadDocumentSmart(normalizedDoc)
+			didChangeElements = this.elementManager.loadDocumentSmart(normalizedDoc)
 		} finally {
 			unsubscribeDocumentRestored()
 		}
 		this.connectionManager.loadDocument(normalizedDoc)
+		this.connectionManager.normalizeVideoEditInputs?.()
 		const nextConnections = this.connectionManager.exportConnections()
-		if (
-			!didEmitDocumentRestored &&
+		const didChangeConnections =
 			getCanvasConnectionComparable(previousConnections) !==
-				getCanvasConnectionComparable(nextConnections)
-		) {
+			getCanvasConnectionComparable(nextConnections)
+		if (!didEmitDocumentRestored && (didChangeElements || didChangeConnections)) {
 			this.eventEmitter.emit({ type: "document:restored", data: undefined })
 		}
 	}
@@ -1442,6 +1447,7 @@ export class Canvas {
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
+		this.videoEditPlaybackManager.destroy()
 		this.audioPlaybackManager.destroy()
 		this.audioReplaceController.destroy()
 		this.imageReplaceController.destroy()

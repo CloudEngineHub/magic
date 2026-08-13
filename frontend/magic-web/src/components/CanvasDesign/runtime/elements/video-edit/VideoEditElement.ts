@@ -17,12 +17,12 @@ import type {
 	VideoEditControlState,
 } from "../../interaction/video-edit/VideoEditInteractionManager"
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
+import { VideoEditPlaybackManager } from "../../interaction/video-edit/VideoEditPlaybackManager"
 import {
 	VIDEO_EDIT_ASPECT_RATIOS,
 	VIDEO_EDIT_FORMATS,
 	VIDEO_EDIT_RESOLUTIONS,
 	type VideoCompositionSnapshot,
-	type VideoCompositionStatus,
 } from "../../resources/video-composition/VideoCompositionManager"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
@@ -32,6 +32,7 @@ import {
 	type TransformContext,
 } from "../core/BaseElement"
 import { VIDEO_EDIT_CONFIG } from "./VideoEditElement.config"
+import { collectConnectedVideoEditInputs } from "../../interaction/connection/connectedInputSources"
 import {
 	resolveVideoEditElementLayout,
 	type VideoEditElementLayout,
@@ -39,9 +40,7 @@ import {
 } from "./VideoEditElement.layout"
 
 /** 打开 / 更新时始终使用当前默认尺寸，忽略旧 DSL 持久化宽高。 */
-function normalizeVideoEditDisplayDimensions(
-	data: VideoEditElementData,
-): VideoEditElementData {
+function normalizeVideoEditDisplayDimensions(data: VideoEditElementData): VideoEditElementData {
 	return {
 		...data,
 		width: VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
@@ -93,10 +92,6 @@ const NODE_NAMES = {
 	mergeButton: "video-edit-merge-button",
 } as const
 
-/** 与分镜「再次生成」按钮使用的 Lucide `RotateCcw` 图标保持一致。 */
-const LUCIDE_ROTATE_CCW_PATH_D = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5"
-const LUCIDE_ICON_VIEWBOX_SIZE = 24
-
 const EMPTY_PLAYBACK_SNAPSHOT: AudioPlaybackSnapshot = {
 	duration: 0,
 	currentTime: 0,
@@ -128,11 +123,8 @@ interface AudioInputView {
 const EMPTY_COMPOSITION_SNAPSHOT: VideoCompositionSnapshot = {
 	status: "idle",
 	progress: 0,
+	outputCapability: "idle",
 	issues: [],
-}
-
-function isCompositionBusy(status: VideoCompositionStatus): boolean {
-	return ["checking", "preparing", "encoding", "finalizing", "uploading"].includes(status)
 }
 
 function areCompositionSnapshotsEqual(
@@ -143,6 +135,7 @@ function areCompositionSnapshotsEqual(
 		a.status !== b.status ||
 		a.progress !== b.progress ||
 		a.phase !== b.phase ||
+		a.outputCapability !== b.outputCapability ||
 		a.errorMessage !== b.errorMessage ||
 		a.resultElementId !== b.resultElementId ||
 		a.issues.length !== b.issues.length
@@ -176,6 +169,7 @@ function measureTextWidth(text: string, fontSize: number): number {
 		text,
 		fontSize,
 		fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
+		wrap: "none",
 	})
 	return Math.max(1, Math.ceil(probe.width()))
 }
@@ -237,7 +231,8 @@ function resolveAudioProgressRowLayout(
 		measureAudioTimeLabelWidth(timeLabel, layout.fonts.audioDuration),
 		measureAudioTimeLabelWidth(stableLabel, layout.fonts.audioDuration),
 	)
-	const timeWidth = Math.min(layout.audioInfo.width, measuredWidth)
+	// 文案含空格，宽度再加 1px 避免 Konva 按词折行。
+	const timeWidth = Math.min(layout.audioInfo.width, measuredWidth + 1)
 	const timeRight = layout.audioInfo.x + layout.audioInfo.width
 	const timeRect = {
 		x: timeRight - timeWidth,
@@ -247,7 +242,7 @@ function resolveAudioProgressRowLayout(
 	}
 	const sideGap =
 		layout.audioProgress.x - (layout.audioPlayButton.x + layout.audioPlayButton.width)
-	const thumbRadius = Math.max(layout.audioProgress.height * 0.9, 3 * layout.scale)
+	const thumbRadius = Math.max(layout.audioProgressThumbRadius, 3 * layout.scale)
 	const progressStart =
 		layout.audioPlayButton.x + layout.audioPlayButton.width + sideGap + thumbRadius
 	const progressEnd = timeRect.x - sideGap - thumbRadius
@@ -279,8 +274,8 @@ function moveItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T
 }
 
 /**
- * 视频编辑节点：展示有序视频输入、单条音频输入与输出规格。
- * 视频轨道滚动、拖拽态和音频播放状态属于运行态；只有调整后的顺序写回 DSL。
+ * 视频编辑节点：展示连接图中的视频输入、单条音频输入与输出规格。
+ * 视频成员由连接图表达，处理顺序持久化在 active Content 的 videoSequence。
  */
 export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private videoScrollOffset = 0
@@ -298,12 +293,17 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private boundAudioElementId?: string
 	private boundAudioPath?: string
 	private playbackUnsubscribe: () => void = () => undefined
+	private readonly playbackManager: VideoEditPlaybackManager
 	private pendingScrubProgress: number | null = null
 	private scrubStage?: Konva.Stage
 	private scrubWindowCleanup?: () => void
 	private scrubNodeWasDraggable = false
 	private scrubStageWasDraggable = false
 	private sourceElementUpdatedUnsubscribe?: () => void
+	private connectionChangedUnsubscribe?: () => void
+	private elementDeletedUnsubscribe?: () => void
+	private batchElementsDeletedUnsubscribe?: () => void
+	private documentRestoredUnsubscribe?: () => void
 	private compositionUnsubscribe: () => void = () => undefined
 	private compositionSnapshot: VideoCompositionSnapshot = EMPTY_COMPOSITION_SNAPSHOT
 	private previewCanvases = new Map<string, HTMLCanvasElement>()
@@ -314,6 +314,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	constructor(data: VideoEditElementData, canvas: Canvas) {
 		super(normalizeVideoEditDisplayDimensions(data), canvas)
+		this.playbackManager =
+			canvas.videoEditPlaybackManager ?? new VideoEditPlaybackManager({ canvas })
 	}
 
 	public static getDefaultConfig() {
@@ -333,25 +335,23 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		width?: number
 		height?: number
 		videoSequence?: string[]
-		audioSequence?: string[]
 		output?: VideoEditElementContent["output"]
 	}): VideoEditElementData {
 		return {
 			id: options.id,
 			type: ElementTypeEnum.VideoEdit,
+			name: options.name ?? "视频合并",
 			x: options.x,
 			y: options.y,
 			width: options.width ?? VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
 			height: options.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT,
 			zIndex: options.zIndex ?? 0,
-			name: options.name,
 			activeContentId: `${options.id}-content-1`,
 			mainContentId: `${options.id}-content-1`,
 			contents: [
 				{
 					contentId: `${options.id}-content-1`,
-					videoSequence: [...(options.videoSequence ?? [])],
-					audioSequence: [...(options.audioSequence ?? [])],
+					...(options.videoSequence ? { videoSequence: [...options.videoSequence] } : {}),
 					output: options.output ? { ...options.output } : undefined,
 				},
 			],
@@ -374,6 +374,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public render(): Konva.Group {
 		const content = this.getActiveContent<VideoEditElementContent>()
+		const { videoSequence, audioElementId } = this.collectInputs()
 		const width = Math.max(this.data.width ?? VIDEO_EDIT_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT, 1)
 		const layout = this.resolveElementLayout(width, height)
@@ -397,8 +398,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			}),
 		)
 
-		this.renderVideoSection(group, layout, content?.videoSequence ?? [])
-		this.renderAudioSection(group, layout, content?.audioSequence[0])
+		this.renderVideoSection(group, layout, videoSequence)
+		this.renderAudioSection(group, layout, audioElementId)
 		this.renderFooter(group, layout, content)
 
 		this.finalizeNode(group)
@@ -408,20 +409,34 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	public update(newData: VideoEditElementData): boolean {
 		const previousData = this.data
 		const previousContent = this.getActiveContent<VideoEditElementContent>()
-		const previousAudioElementId = previousContent?.audioSequence[0]
+		const previousInputs = this.collectInputs(previousContent)
 		const normalizedData = normalizeVideoEditDisplayDimensions(newData)
 		this.data = normalizedData
 		const nextContent = this.getActiveContent<VideoEditElementContent>()
-		const nextAudioElementId = nextContent?.audioSequence[0]
-		if (previousAudioElementId !== nextAudioElementId) this.bindAudioRuntime()
+		const nextInputs = this.collectInputs(nextContent)
+		if (previousInputs.audioElementId !== nextInputs.audioElementId) this.bindAudioRuntime()
+		const previousSequence = previousContent?.videoSequence ?? []
+		const nextSequence = nextContent?.videoSequence ?? []
+		const sequenceChanged =
+			previousSequence.length !== nextSequence.length ||
+			previousSequence.some((elementId, index) => elementId !== nextSequence[index])
 
 		const needsRerender =
 			previousData.width !== normalizedData.width ||
 			previousData.height !== normalizedData.height ||
-			previousContent?.videoSequence !== nextContent?.videoSequence ||
-			previousContent?.audioSequence !== nextContent?.audioSequence ||
-			previousContent?.output !== nextContent?.output
-		if (previousContent?.videoSequence !== nextContent?.videoSequence) this.loadVideoPreviews()
+			previousContent?.output !== nextContent?.output ||
+			sequenceChanged
+		if (previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",")) {
+			this.loadVideoPreviews()
+		}
+		if (
+			previousContent?.output !== nextContent?.output ||
+			previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",")
+		) {
+			if (this.canvas.videoCompositionManager?.checkOutputCapability) {
+				this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
+			}
+		}
 
 		if (!needsRerender && this.node) {
 			this.updateBaseProps(this.node, normalizedData)
@@ -434,27 +449,73 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.syncInteractionHitTargets()
 		this.bindAudioRuntime()
 		this.bindCompositionRuntime()
+		if (this.canvas.videoCompositionManager?.checkOutputCapability) {
+			this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
+		}
 		this.loadVideoPreviews()
 		if (!this.sourceElementUpdatedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.sourceElementUpdatedUnsubscribe = this.canvas.eventEmitter.on(
 				"element:updated",
 				({ data }) => {
 					if (data.elementId === this.data.id) return
-					const content = this.getActiveContent<VideoEditElementContent>()
+					const inputs = this.collectInputs()
 					if (
-						!content?.videoSequence.includes(data.elementId) &&
-						content?.audioSequence[0] !== data.elementId
+						!inputs.videoSequence.includes(data.elementId) &&
+						inputs.audioElementId !== data.elementId
 					) {
 						return
 					}
-					if (content.videoSequence.includes(data.elementId)) {
+					if (inputs.videoSequence.includes(data.elementId)) {
 						this.loadVideoPreview(data.elementId, true)
 					}
-					if (content.audioSequence[0] === data.elementId) this.bindAudioRuntime(true)
+					if (inputs.audioElementId === data.elementId) this.bindAudioRuntime(true)
+					if (this.canvas.videoCompositionManager?.checkOutputCapability) {
+						this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
+					}
 					this.rerenderWhenTransformIdle()
 				},
 			)
 		}
+		if (!this.connectionChangedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.connectionChangedUnsubscribe = this.canvas.eventEmitter.on(
+				"connection:change",
+				() => this.refreshConnectedInputs(),
+			)
+		}
+		if (!this.elementDeletedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.elementDeletedUnsubscribe = this.canvas.eventEmitter.on("element:deleted", () =>
+				this.refreshConnectedInputs(),
+			)
+		}
+		if (!this.batchElementsDeletedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.batchElementsDeletedUnsubscribe = this.canvas.eventEmitter.on(
+				"element:batchdeleted",
+				() => this.refreshConnectedInputs(),
+			)
+		}
+		if (!this.documentRestoredUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.documentRestoredUnsubscribe = this.canvas.eventEmitter.on(
+				"document:restored",
+				() => this.refreshConnectedInputs(),
+			)
+		}
+	}
+
+	private refreshConnectedInputs(): void {
+		const connectedVideoIds = new Set(this.collectInputs().videoSequence)
+		this.previewControllers.forEach((controller, elementId) => {
+			if (connectedVideoIds.has(elementId)) return
+			controller.abort()
+			this.previewControllers.delete(elementId)
+			this.previewTokens.delete(elementId)
+		})
+		this.previewCanvases.forEach((_poster, elementId) => {
+			if (!connectedVideoIds.has(elementId)) this.previewCanvases.delete(elementId)
+		})
+		this.bindAudioRuntime(true)
+		this.canvas.videoCompositionManager?.checkOutputCapability?.(this.data.id)
+		this.loadVideoPreviews(true)
+		this.rerenderWhenTransformIdle()
 	}
 
 	public override onResourceReferenceResolverChanged(): void {
@@ -466,6 +527,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	public override destroy(): void {
 		this.finishAudioScrub()
 		this.playbackUnsubscribe()
+		this.playbackManager.release(this.data.id)
 		this.compositionUnsubscribe()
 		this.previewControllers.forEach((controller) => controller.abort())
 		this.previewControllers.clear()
@@ -473,6 +535,14 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.previewCanvases.clear()
 		this.sourceElementUpdatedUnsubscribe?.()
 		this.sourceElementUpdatedUnsubscribe = undefined
+		this.connectionChangedUnsubscribe?.()
+		this.connectionChangedUnsubscribe = undefined
+		this.elementDeletedUnsubscribe?.()
+		this.elementDeletedUnsubscribe = undefined
+		this.batchElementsDeletedUnsubscribe?.()
+		this.batchElementsDeletedUnsubscribe = undefined
+		this.documentRestoredUnsubscribe?.()
+		this.documentRestoredUnsubscribe = undefined
 		this.interactionEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
 		this.interactionEventUnsubscribers = []
 		this.canvas.cursorManager?.restoreToolCursor()
@@ -486,9 +556,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const controlHits = node.find(".video-edit-control-hit")
 		// 参数 hit 必须压在全尺寸 hit-area 之上，否则事件会落到可拖拽根节点上。
 		controlHits.forEach((candidate) => candidate.moveToTop())
-		node
-			.find(`.${NODE_NAMES.audioProgressHit}, .${NODE_NAMES.audioProgressThumbHit}`)
-			.forEach((candidate) => candidate.moveToTop())
+		node.find(`.${NODE_NAMES.audioProgressHit}, .${NODE_NAMES.audioProgressThumbHit}`).forEach(
+			(candidate) => candidate.moveToTop(),
+		)
 
 		const manager = this.canvas.videoEditInteractionManager
 		if (manager) {
@@ -984,11 +1054,15 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			handle.listening(shown)
 		}
 		setGripShown(false)
-
 		// 仅允许从 handle 启动拖拽，避免命中层/描边干扰。
 		card.draggable(false)
 		const beginCardDrag = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-			if (isCompositionBusy(this.compositionSnapshot.status)) return
+			if (
+				["checking", "preparing", "encoding", "finalizing", "uploading"].includes(
+					this.compositionSnapshot.status,
+				)
+			)
+				return
 			event.cancelBubble = true
 			event.evt.preventDefault()
 			setGripShown(true)
@@ -1005,7 +1079,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			this.canvas.cursorManager?.restoreToolCursor()
 		})
 
-		const originalX = x
 		card.on("mouseenter", () => {
 			border.stroke(VIDEO_EDIT_CONFIG.ACCENT)
 			setGripShown(true)
@@ -1050,7 +1123,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			this.videoDropTargetIndex = undefined
 			if (targetIndex === index) {
 				this.clearVideoDropPreview(layout, true)
-				card.x(originalX)
+				card.x(x)
 				card.getLayer()?.batchDraw()
 				return
 			}
@@ -1119,6 +1192,115 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		card.add(grip)
 		grip.moveToTop()
 		return { grip, handle }
+	}
+
+	private persistVideoSequence(videoSequence: string[]): void {
+		const content = this.getActiveContent<VideoEditElementContent>()
+		if (!content) return
+		const next = updateContent(this.data, content.contentId, { videoSequence })
+		if (next === this.data) return
+		this.canvas.historyManager?.runTransaction(() => {
+			this.canvas.elementManager.update(this.data.id, { contents: next.contents })
+		})
+	}
+
+	private resolveVideoDropTargetIndex(
+		draggedCard: Konva.Group,
+		videoCount: number,
+		layout: VideoEditElementLayout,
+	): number {
+		const cardPitch = layout.videoCard.width + layout.videoCard.gap
+		return Math.max(0, Math.min(videoCount - 1, Math.round(draggedCard.x() / cardPitch)))
+	}
+
+	private updateVideoDropPreview(
+		draggedCard: Konva.Group,
+		sourceIndex: number,
+		targetIndex: number,
+		layout: VideoEditElementLayout,
+	): void {
+		const track = this.videoTrackGroup
+		if (!track) return
+		const cardPitch = layout.videoCard.width + layout.videoCard.gap
+		if (!this.videoDropPlaceholder) {
+			this.videoDropPlaceholder = new Konva.Rect({
+				width: layout.videoCard.width,
+				height: layout.videoCard.height,
+				fill: VIDEO_EDIT_CONFIG.ACCENT_SOFT,
+				stroke: VIDEO_EDIT_CONFIG.ACCENT,
+				strokeWidth: Math.max(1, layout.scale),
+				dash: [6 * layout.scale, 4 * layout.scale],
+				cornerRadius: Math.max(4, 8 * layout.scale),
+				listening: false,
+				perfectDrawEnabled: false,
+				name: "video-edit-video-drop-placeholder",
+			})
+			track.add(this.videoDropPlaceholder)
+			this.videoDropPlaceholder.moveToBottom()
+		}
+		this.videoDropPlaceholder.x(targetIndex * cardPitch)
+		track.find(`.${NODE_NAMES.videoCard}`).forEach((candidate) => {
+			if (!(candidate instanceof Konva.Group) || candidate === draggedCard) return
+			const originalIndex = candidate.getAttr("videoEditSequenceIndex") as number | undefined
+			if (!Number.isInteger(originalIndex)) return
+			let previewIndex = originalIndex
+			if (
+				sourceIndex < targetIndex &&
+				originalIndex > sourceIndex &&
+				originalIndex <= targetIndex
+			) {
+				previewIndex -= 1
+			} else if (
+				sourceIndex > targetIndex &&
+				originalIndex >= targetIndex &&
+				originalIndex < sourceIndex
+			) {
+				previewIndex += 1
+			}
+			this.moveVideoCardToPreviewPosition(candidate, previewIndex * cardPitch)
+		})
+		track.getLayer()?.batchDraw()
+	}
+
+	private clearVideoDropPreview(
+		layout: VideoEditElementLayout,
+		restoreOriginalPositions: boolean,
+	): void {
+		this.videoDropPlaceholder?.destroy()
+		this.videoDropPlaceholder = undefined
+		if (!restoreOriginalPositions || !this.videoTrackGroup) return
+		const cardPitch = layout.videoCard.width + layout.videoCard.gap
+		this.videoTrackGroup.find(`.${NODE_NAMES.videoCard}`).forEach((candidate) => {
+			if (!(candidate instanceof Konva.Group)) return
+			const originalIndex = candidate.getAttr("videoEditSequenceIndex") as number | undefined
+			if (Number.isInteger(originalIndex)) {
+				this.moveVideoCardToPreviewPosition(candidate, originalIndex * cardPitch)
+			}
+		})
+		this.videoTrackGroup.getLayer()?.batchDraw()
+	}
+
+	private moveVideoCardToPreviewPosition(card: Konva.Group, x: number): void {
+		if (!card.getLayer()) {
+			card.x(x)
+			return
+		}
+		card.to({ x, duration: 0.12 })
+	}
+
+	private autoScrollVideoTrack(draggedCard: Konva.Group): void {
+		if (!this.videoTrackGroup || this.videoScrollMax <= 0) return
+		const viewport = this.videoTrackGroup.getParent()
+		if (!(viewport instanceof Konva.Group)) return
+		const pointer = viewport.getRelativePointerPosition()
+		if (!pointer) return
+		const edge = Math.min(48, viewport.width() * 0.12)
+		const step = Math.max(8, viewport.width() * 0.018)
+		if (pointer.x < edge) {
+			this.setVideoScrollOffset(this.videoScrollOffset - step, draggedCard)
+		} else if (pointer.x > viewport.width() - edge) {
+			this.setVideoScrollOffset(this.videoScrollOffset + step, draggedCard)
+		}
 	}
 
 	private renderAudioSection(
@@ -1250,6 +1432,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				fontSize: layout.fonts.audioDuration,
 				fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
 				fill: VIDEO_EDIT_CONFIG.AUDIO_SECONDARY_TEXT,
+				wrap: "none",
+				ellipsis: true,
 				listening: false,
 				name: NODE_NAMES.audioDuration,
 			}),
@@ -1440,13 +1624,18 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		layout: VideoEditElementLayout,
 		content?: VideoEditElementContent,
 	): void {
-		const videoCount = content?.videoSequence.length ?? 0
+		const { videoSequence } = this.collectInputs()
+		const videoCount = videoSequence.length
 		const outputAspect = VIDEO_EDIT_ASPECT_RATIOS.includes(
 			content?.output?.aspectRatio as (typeof VIDEO_EDIT_ASPECT_RATIOS)[number],
 		)
 			? (content?.output?.aspectRatio ?? "16:9")
-			: this.resolveDefaultAspectRatio(content?.videoSequence[0])
-		const outputResolution = content?.output?.resolution === "720P" ? "720P" : "1080P"
+			: this.resolveDefaultAspectRatio(videoSequence[0])
+		const outputResolution = VIDEO_EDIT_RESOLUTIONS.includes(
+			content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number],
+		)
+			? (content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number])
+			: "1080P"
 		group.add(
 			new Konva.Line({
 				points: [
@@ -1693,8 +1882,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		}
 
 		if (metadata.kind === "merge") {
-			const mergeAgainIcon = metadata.visualNode.findOne(".video-edit-merge-again-icon") as
-				Konva.Path | undefined
 			const idleFill = metadata.idleFill ?? VIDEO_EDIT_CONFIG.ACCENT
 			if (
 				state === "disabled" ||
@@ -1702,16 +1889,12 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			) {
 				background.fill(VIDEO_EDIT_CONFIG.DISABLED_BACKGROUND)
 				text?.fill(VIDEO_EDIT_CONFIG.DISABLED_TEXT)
-				mergeAgainIcon?.stroke(VIDEO_EDIT_CONFIG.DISABLED_TEXT)
 				background.opacity(1)
 				return
 			}
-			background.fill(
-				state === "pressed" ? VIDEO_EDIT_CONFIG.DANGER_PRESSED : idleFill,
-			)
+			background.fill(idleFill)
 			background.opacity(1)
 			text?.fill("#FFFFFF")
-			mergeAgainIcon?.stroke("#FFFFFF")
 			return
 		}
 
@@ -1745,23 +1928,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		videoCount: number,
 	): void {
 		const status = this.compositionSnapshot.status
-		const cancellable = ["checking", "preparing", "encoding"].includes(status)
-		const enabled = videoCount > 0 && !["finalizing", "uploading"].includes(status)
-		const showAgainIcon = status === "completed" && !cancellable
-		const label = cancellable
-			? this.getText("videoEditNode.cancelMerge", "取消")
-			: showAgainIcon
-				? this.getText("videoEditNode.mergeAgain", "再次合并")
-				: status === "error"
-					? this.getText("videoEditNode.retry", "重试")
-					: status === "uploading"
-						? this.getText("videoEditNode.uploading", "上传中")
-						: this.getText("videoEditNode.mergeVideos", "合并视频")
-		const idleFill = enabled
-			? cancellable
-				? VIDEO_EDIT_CONFIG.DANGER_ACTION
-				: VIDEO_EDIT_CONFIG.ACCENT
-			: VIDEO_EDIT_CONFIG.DISABLED_BACKGROUND
+		const outputCapability = this.compositionSnapshot.outputCapability
+		const composing = ["checking", "preparing", "encoding", "finalizing", "uploading"].includes(
+			status,
+		)
+		const enabled = videoCount > 0 && outputCapability === "supported" && !composing
+		const label = this.getText("videoEditNode.mergeVideos", "合并视频")
+		const idleFill = enabled ? VIDEO_EDIT_CONFIG.ACCENT : VIDEO_EDIT_CONFIG.DISABLED_BACKGROUND
 		const textFill = enabled ? "#FFFFFF" : VIDEO_EDIT_CONFIG.DISABLED_TEXT
 		const visual = new Konva.Group({
 			listening: false,
@@ -1793,38 +1966,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			name: "video-edit-control-text",
 		})
 
-		if (showAgainIcon) {
-			const iconSize = Math.max(12, layout.mergeButtonFontSize * 0.7)
-			const iconGap = Math.max(4, layout.scale * 6)
-			const contentWidth = iconSize + iconGap + textNode.width()
-			const contentX = layout.mergeButton.x + (layout.mergeButton.width - contentWidth) / 2
-			textNode.setAttrs({
-				x: contentX + iconSize + iconGap,
-				width: textNode.width(),
-				height: layout.mergeButton.height,
-			})
-			visual.add(
-				new Konva.Path({
-					x: contentX,
-					y: layout.mergeButton.y + (layout.mergeButton.height - iconSize) / 2,
-					data: LUCIDE_ROTATE_CCW_PATH_D,
-					scaleX: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
-					scaleY: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
-					stroke: textFill,
-					strokeWidth: 2,
-					lineCap: "round",
-					lineJoin: "round",
-					listening: false,
-					perfectDrawEnabled: false,
-					name: "video-edit-merge-again-icon",
-				}),
-			)
-		} else {
-			textNode.setAttrs({
-				width: layout.mergeButton.width,
-				height: layout.mergeButton.height,
-			})
-		}
+		textNode.setAttrs({
+			width: layout.mergeButton.width,
+			height: layout.mergeButton.height,
+		})
 		visual.add(textNode)
 		group.add(visual)
 		this.addControlHit(group, {
@@ -1842,14 +1987,17 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!manager?.subscribe) return
 		this.compositionUnsubscribe = manager.subscribe(this.data.id, (snapshot) => {
 			const changed = !areCompositionSnapshotsEqual(this.compositionSnapshot, snapshot)
-			this.compositionSnapshot = snapshot
+			this.compositionSnapshot = {
+				...snapshot,
+				outputCapability: snapshot.outputCapability ?? "supported",
+			}
 			this.canvas.videoEditInteractionManager?.refreshOutputControlStates(this.data.id)
 			if (changed && this.node) this.rerenderWhenTransformIdle()
 		})
 	}
 
 	private loadVideoPreviews(force = false): void {
-		const videoSequence = this.getActiveContent<VideoEditElementContent>()?.videoSequence ?? []
+		const { videoSequence } = this.collectInputs()
 		videoSequence.forEach((elementId) => this.loadVideoPreview(elementId, force))
 	}
 
@@ -1962,117 +2110,22 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			: undefined
 	}
 
-	private persistVideoSequence(videoSequence: string[]): void {
-		const next = updateContent(this.data, this.data.activeContentId, { videoSequence })
-		if (next === this.data) return
-		this.canvas.elementManager.update(
-			this.data.id,
-			{ contents: next.contents },
-			{ silent: false },
-		)
-	}
-
-	private resolveVideoDropTargetIndex(
-		draggedCard: Konva.Group,
-		videoCount: number,
-		layout: VideoEditElementLayout,
-	): number {
-		const cardPitch = layout.videoCard.width + layout.videoCard.gap
-		return Math.max(0, Math.min(videoCount - 1, Math.round(draggedCard.x() / cardPitch)))
-	}
-
-	/**
-	 * 拖动期间为目标位置预留槽位，并将受影响的卡片平移到预览顺序。
-	 * 这样松手前就能看到最终顺序，而不是仅移动被拖拽的卡片。
-	 */
-	private updateVideoDropPreview(
-		draggedCard: Konva.Group,
-		sourceIndex: number,
-		targetIndex: number,
-		layout: VideoEditElementLayout,
-	): void {
-		const track = this.videoTrackGroup
-		if (!track) return
-
-		const cardPitch = layout.videoCard.width + layout.videoCard.gap
-		if (!this.videoDropPlaceholder) {
-			this.videoDropPlaceholder = new Konva.Rect({
-				width: layout.videoCard.width,
-				height: layout.videoCard.height,
-				fill: VIDEO_EDIT_CONFIG.ACCENT_SOFT,
-				stroke: VIDEO_EDIT_CONFIG.ACCENT,
-				strokeWidth: Math.max(1, layout.scale),
-				dash: [6 * layout.scale, 4 * layout.scale],
-				cornerRadius: Math.max(4, 8 * layout.scale),
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "video-edit-video-drop-placeholder",
-			})
-			track.add(this.videoDropPlaceholder)
-			this.videoDropPlaceholder.moveToBottom()
-		}
-		this.videoDropPlaceholder.x(targetIndex * cardPitch)
-
-		track.find(`.${NODE_NAMES.videoCard}`).forEach((candidate) => {
-			if (!(candidate instanceof Konva.Group) || candidate === draggedCard) return
-			const originalIndex = candidate.getAttr("videoEditSequenceIndex") as number | undefined
-			if (!Number.isInteger(originalIndex)) return
-
-			let previewIndex = originalIndex
-			if (sourceIndex < targetIndex && originalIndex > sourceIndex && originalIndex <= targetIndex) {
-				previewIndex -= 1
-			} else if (
-				sourceIndex > targetIndex &&
-				originalIndex >= targetIndex &&
-				originalIndex < sourceIndex
-			) {
-				previewIndex += 1
+	private collectInputs(content = this.getActiveContent<VideoEditElementContent>()): {
+		videoSequence: string[]
+		audioElementId?: string
+	} {
+		const inputs = collectConnectedVideoEditInputs(this.canvas, this.data.id)
+		const connectedSet = new Set(inputs.videoElementIds)
+		const videoSequence: string[] = []
+		;(content?.videoSequence ?? []).forEach((elementId) => {
+			if (connectedSet.has(elementId) && !videoSequence.includes(elementId)) {
+				videoSequence.push(elementId)
 			}
-			this.moveVideoCardToPreviewPosition(candidate, previewIndex * cardPitch)
 		})
-		track.getLayer()?.batchDraw()
-	}
-
-	private clearVideoDropPreview(
-		layout: VideoEditElementLayout,
-		restoreOriginalPositions: boolean,
-	): void {
-		this.videoDropPlaceholder?.destroy()
-		this.videoDropPlaceholder = undefined
-		if (!restoreOriginalPositions || !this.videoTrackGroup) return
-
-		const cardPitch = layout.videoCard.width + layout.videoCard.gap
-		this.videoTrackGroup.find(`.${NODE_NAMES.videoCard}`).forEach((candidate) => {
-			if (!(candidate instanceof Konva.Group)) return
-			const originalIndex = candidate.getAttr("videoEditSequenceIndex") as number | undefined
-			if (!Number.isInteger(originalIndex)) return
-			this.moveVideoCardToPreviewPosition(candidate, originalIndex * cardPitch)
+		inputs.videoElementIds.forEach((elementId) => {
+			if (!videoSequence.includes(elementId)) videoSequence.push(elementId)
 		})
-		this.videoTrackGroup.getLayer()?.batchDraw()
-	}
-
-	private moveVideoCardToPreviewPosition(card: Konva.Group, x: number): void {
-		// 单测与离屏渲染时节点可能尚未挂到 Layer；此时 Konva Tween 会报错。
-		if (!card.getLayer()) {
-			card.x(x)
-			return
-		}
-		card.to({ x, duration: 0.12 })
-	}
-
-	private autoScrollVideoTrack(draggedCard: Konva.Group): void {
-		if (!this.videoTrackGroup || this.videoScrollMax <= 0) return
-		const viewport = this.videoTrackGroup.getParent()
-		if (!(viewport instanceof Konva.Group)) return
-		const pointer = viewport.getRelativePointerPosition()
-		if (!pointer) return
-		const edge = Math.min(48, viewport.width() * 0.12)
-		const step = Math.max(8, viewport.width() * 0.018)
-		if (pointer.x < edge) {
-			this.setVideoScrollOffset(this.videoScrollOffset - step, draggedCard)
-		} else if (pointer.x > viewport.width() - edge) {
-			this.setVideoScrollOffset(this.videoScrollOffset + step, draggedCard)
-		}
+		return { videoSequence, audioElementId: inputs.audioElementId }
 	}
 
 	private setVideoScrollOffset(offset: number, draggedCard?: Konva.Group): void {
@@ -2103,7 +2156,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	private bindAudioRuntime(force = false): void {
-		const audioElementId = this.getActiveContent<VideoEditElementContent>()?.audioSequence[0]
+		const audioElementId = this.collectInputs().audioElementId
 		const audio = audioElementId ? this.resolveAudioInput(audioElementId) : undefined
 		const nextId = audio?.id
 		const nextPath = audio?.src
@@ -2112,18 +2165,19 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 		this.playbackUnsubscribe()
 		this.playbackUnsubscribe = () => undefined
+		this.playbackManager.bindAudio(
+			this.data.id,
+			nextId && nextPath ? { audioElementId: nextId, path: nextPath } : undefined,
+		)
 		this.boundAudioElementId = nextId
 		this.boundAudioPath = nextPath
 		this.playbackSnapshot = EMPTY_PLAYBACK_SNAPSHOT
 
-		if (nextId && this.canvas.audioPlaybackManager?.subscribe) {
-			this.playbackUnsubscribe = this.canvas.audioPlaybackManager.subscribe(
-				nextId,
-				(snapshot) => {
-					this.playbackSnapshot = snapshot
-					this.syncAudioPlaybackNodes()
-				},
-			)
+		if (nextId) {
+			this.playbackUnsubscribe = this.playbackManager.subscribe(this.data.id, (snapshot) => {
+				this.playbackSnapshot = snapshot
+				this.syncAudioPlaybackNodes()
+			})
 		}
 	}
 
@@ -2174,8 +2228,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!track) return
 		const fillWidth = audioProgressRow.progressRect.width * displayedProgress
 		const thumbX = audioProgressRow.progressRect.x + fillWidth
-		const thumbY =
-			audioProgressRow.progressRect.y + audioProgressRow.progressRect.height / 2
+		const thumbY = audioProgressRow.progressRect.y + audioProgressRow.progressRect.height / 2
 		track.setAttrs({
 			x: audioProgressRow.progressRect.x,
 			y: audioProgressRow.progressRect.y,
@@ -2211,7 +2264,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		return (
 			!!this.boundAudioElementId &&
 			!!this.boundAudioPath &&
-			!!this.canvas.audioPlaybackManager &&
+			!!this.playbackManager &&
 			(this.canvas.permissionManager?.canUseSelectionToolAffordance?.() ?? true)
 		)
 	}
@@ -2238,10 +2291,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const audioElementId = this.boundAudioElementId
 		const audioPath = this.boundAudioPath
 		if (audioElementId && audioPath) {
-			void this.canvas.audioPlaybackManager?.prepare?.(audioElementId, audioPath, {
-				source: "interaction",
-				priority: "critical",
-			})
+			void this.playbackManager.prepare(
+				this.data.id,
+				{ audioElementId, path: audioPath },
+				{ source: "interaction", priority: "critical" },
+			)
 		}
 
 		const update = () => this.queueAudioScrubFromPointer(group, track)
@@ -2269,9 +2323,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	private seekBoundAudioProgress(progress: number): void {
-		const elementId = this.boundAudioElementId
-		if (!elementId || !this.canvas.audioPlaybackManager) return
-		this.canvas.audioPlaybackManager.seek(elementId, progress)
+		if (!this.boundAudioElementId) return
+		this.playbackManager.seek(this.data.id, progress)
 	}
 
 	private finishAudioScrub(): void {

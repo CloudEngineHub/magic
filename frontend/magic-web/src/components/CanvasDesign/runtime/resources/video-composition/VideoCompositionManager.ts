@@ -17,17 +17,31 @@ import {
 	type Output as MediabunnyOutput,
 	type Target,
 } from "mediabunny"
-import { getDownstreamContent, getActiveContent } from "../../document/elementContent"
+import { toast } from "sonner"
+import {
+	getDownstreamContent,
+	getActiveContent,
+	updateContent,
+} from "../../document/elementContent"
 import {
 	ElementTypeEnum,
 	type AudioElementContent,
 	type LayerElement,
 	type VideoEditElement,
 	type VideoEditElementContent,
+	type VideoElement as VideoElementData,
 	type VideoElementContent,
 } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
+import { collectConnectedVideoEditInputs } from "../../interaction/connection/connectedInputSources"
 import { generateElementId } from "../../shared/ids"
+import {
+	collectConnectedElementSiblingRects,
+	collectConnectionCreateObstacleRects,
+	resolveConnectedElementCreateTopLeftPoint,
+	resolveConnectionCreateContextWithOriginRect,
+	resolveConnectionCreateGapForElement,
+} from "../../shared/placement/connectionCreatePlacement"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { Canvas } from "../../core/Canvas"
 import { GenerationStatus } from "../../../public/magic-types"
@@ -38,10 +52,20 @@ const AUDIO_CHANNELS = 2
 const MAX_DURATION_SECONDS = 10 * 60
 const AUDIO_CHUNK_SECONDS = 5
 const MAX_BUFFER_FALLBACK_BYTES = 100 * 1024 * 1024
-const RESULT_HORIZONTAL_GAP = 64
+const VIDEO_OUTPUT_QUALITY = new Quality("high")
 
-export const VIDEO_EDIT_ASPECT_RATIOS = ["16:9", "9:16", "1:1"] as const
-export const VIDEO_EDIT_RESOLUTIONS = ["720P", "1080P"] as const
+export const VIDEO_EDIT_ASPECT_RATIOS = [
+	"16:9",
+	"9:16",
+	"1:1",
+	"4:3",
+	"3:4",
+	"4:5",
+	"2:3",
+	"3:2",
+	"21:9",
+] as const
+export const VIDEO_EDIT_RESOLUTIONS = ["360P", "480P", "720P", "1080P", "1440P", "2160P"] as const
 export const VIDEO_EDIT_FORMATS = ["mp4"] as const
 export type VideoEditAspectRatio = (typeof VIDEO_EDIT_ASPECT_RATIOS)[number]
 export type VideoEditResolution = (typeof VIDEO_EDIT_RESOLUTIONS)[number]
@@ -59,6 +83,8 @@ export type VideoCompositionStatus =
 	| "cancelled"
 
 export type VideoCompositionPhase = "checking" | "video" | "audio" | "finalizing" | "uploading"
+
+export type VideoOutputCapabilityStatus = "idle" | "checking" | "supported" | "unsupported"
 
 export type VideoCompositionIssueCode =
 	| "missing-video"
@@ -86,9 +112,11 @@ export interface VideoCompositionSnapshot {
 	status: VideoCompositionStatus
 	progress: number
 	phase?: VideoCompositionPhase
+	outputCapability: VideoOutputCapabilityStatus
 	issues: VideoCompositionIssue[]
 	errorMessage?: string
 	resultElementId?: string
+	resultConnectionId?: string
 }
 
 export type VideoCompositionListener = (snapshot: VideoCompositionSnapshot) => void
@@ -129,6 +157,8 @@ interface CompositionJob {
 	operationId: string
 	controller: AbortController
 	signature: string
+	resultElementId?: string
+	resultDiscarded?: boolean
 	staleInput?: boolean
 	output?: MediabunnyOutput
 	targetCleanup?: () => Promise<void>
@@ -173,6 +203,11 @@ function cloneSnapshot(snapshot: VideoCompositionSnapshot): VideoCompositionSnap
 	}
 }
 
+function normalizeVideoDimension(value: number): number {
+	const rounded = Math.max(2, Math.round(value))
+	return rounded % 2 === 0 ? rounded : rounded - 1
+}
+
 function getAspectRatioValue(aspectRatio: string | undefined): number | null {
 	if (!aspectRatio) return null
 	const [width, height] = aspectRatio.split(":").map(Number)
@@ -197,10 +232,23 @@ function getOutputDimensions(
 	aspectRatio: VideoEditAspectRatio,
 	resolution: VideoEditResolution,
 ): { width: number; height: number } {
-	const longEdge = resolution === "1080P" ? 1080 : 720
-	if (aspectRatio === "9:16") return { width: longEdge, height: (longEdge * 16) / 9 }
-	if (aspectRatio === "1:1") return { width: longEdge, height: longEdge }
-	return { width: (longEdge * 16) / 9, height: longEdge }
+	const baseEdge = Number.parseInt(resolution, 10)
+	const [aspectWidth, aspectHeight] = aspectRatio.split(":").map(Number)
+	if (aspectWidth >= aspectHeight) {
+		return { width: (baseEdge * aspectWidth) / aspectHeight, height: baseEdge }
+	}
+	return { width: baseEdge, height: (baseEdge * aspectHeight) / aspectWidth }
+}
+
+export function getVideoEditOutputDimensions(
+	aspectRatio: VideoEditAspectRatio,
+	resolution: VideoEditResolution,
+): { width: number; height: number } {
+	const dimensions = getOutputDimensions(aspectRatio, resolution)
+	return {
+		width: normalizeVideoDimension(dimensions.width),
+		height: normalizeVideoDimension(dimensions.height),
+	}
 }
 
 function estimateOutputBytes(
@@ -208,7 +256,9 @@ function estimateOutputBytes(
 	duration: number,
 	hasAudio: boolean,
 ): number {
-	const videoBitsPerSecond = output.resolution === "1080P" ? 8_000_000 : 4_000_000
+	const videoBitsPerSecond = Math.round(
+		(Number.parseInt(output.resolution, 10) / 720) ** 2 * 4_000_000,
+	)
 	const audioBitsPerSecond = hasAudio ? 256_000 : 0
 	return Math.ceil(((duration * (videoBitsPerSecond + audioBitsPerSecond)) / 8) * 1.1)
 }
@@ -221,14 +271,16 @@ function normalizeOutput(
 	const aspectRatio = VIDEO_EDIT_ASPECT_RATIOS.includes(requestedAspect as VideoEditAspectRatio)
 		? (requestedAspect as VideoEditAspectRatio)
 		: resolveNearestAspectRatio(firstVideo?.displayWidth ?? 16, firstVideo?.displayHeight ?? 9)
-	const resolution = output?.resolution === "720P" ? "720P" : "1080P"
-	const dimensions = getOutputDimensions(aspectRatio, resolution)
+	const resolution = VIDEO_EDIT_RESOLUTIONS.includes(output?.resolution as VideoEditResolution)
+		? (output?.resolution as VideoEditResolution)
+		: "1080P"
+	const dimensions = getVideoEditOutputDimensions(aspectRatio, resolution)
 	return {
 		aspectRatio,
 		resolution,
 		format: "mp4",
-		width: Math.round(dimensions.width),
-		height: Math.round(dimensions.height),
+		width: dimensions.width,
+		height: dimensions.height,
 	}
 }
 
@@ -245,7 +297,8 @@ function getContentSignature(canvas: Canvas, elementId: string): string | null {
 	if (!element || element.type !== ElementTypeEnum.VideoEdit) return null
 	const content = getActiveContent<VideoEditElementContent>(element)
 	if (!content) return null
-	const videoSources = content.videoSequence.map((sourceId) => {
+	const inputs = collectConnectedVideoEditInputs(canvas, elementId)
+	const videoSources = inputs.videoElementIds.map((sourceId) => {
 		const source = canvas.elementManager.getElementData(sourceId)
 		const sourceContent =
 			source?.type === ElementTypeEnum.Video
@@ -257,18 +310,20 @@ function getContentSignature(canvas: Canvas, elementId: string): string | null {
 			src: sourceContent?.src ?? null,
 		}
 	})
-	const audioSources = content.audioSequence.map((sourceId) => {
-		const source = canvas.elementManager.getElementData(sourceId)
-		const sourceContent =
-			source?.type === ElementTypeEnum.Audio
-				? getDownstreamContent<AudioElementContent>(source)
-				: undefined
-		return {
-			id: sourceId,
-			contentId: sourceContent?.contentId ?? null,
-			src: sourceContent?.src ?? null,
-		}
-	})
+	const audioSources = inputs.audioElementId
+		? [inputs.audioElementId].map((sourceId) => {
+				const source = canvas.elementManager.getElementData(sourceId)
+				const sourceContent =
+					source?.type === ElementTypeEnum.Audio
+						? getDownstreamContent<AudioElementContent>(source)
+						: undefined
+				return {
+					id: sourceId,
+					contentId: sourceContent?.contentId ?? null,
+					src: sourceContent?.src ?? null,
+				}
+			})
+		: []
 	return JSON.stringify({
 		contentId: content.contentId,
 		videoSources,
@@ -293,6 +348,8 @@ export class VideoCompositionManager {
 	private readonly snapshots = new Map<string, VideoCompositionSnapshot>()
 	private readonly listeners = new Map<string, Set<VideoCompositionListener>>()
 	private readonly jobs = new Map<string, CompositionJob>()
+	private readonly outputCapabilityChecks = new Map<string, string>()
+	private readonly outputCapabilityCache = new Map<string, Promise<boolean>>()
 	private destroyed = false
 	private readonly elementUpdatedUnsubscribe: () => void
 	private readonly elementDeletedUnsubscribe: () => void
@@ -312,20 +369,30 @@ export class VideoCompositionManager {
 			"element:deleted",
 			({ data }) => {
 				this.jobs.forEach((job) => {
-					if (
-						job.elementId === data.elementId ||
-						getContentSignature(this.canvas, job.elementId) !== job.signature
-					) {
-						if (getContentSignature(this.canvas, job.elementId) !== job.signature) {
-							job.staleInput = true
+					if (job.resultElementId === data.elementId) {
+						if (!job.resultDiscarded) {
+							job.resultDiscarded = true
+							this.toastCancelled()
 						}
+						this.cancel(job.elementId)
+						return
+					}
+					if (job.elementId === data.elementId) {
+						this.cancel(job.elementId)
+						return
+					}
+					if (getContentSignature(this.canvas, job.elementId) !== job.signature) {
+						job.staleInput = true
 						this.cancel(job.elementId)
 					}
 				})
 			},
 		)
 		this.canvasClearUnsubscribe = this.canvas.eventEmitter.on("canvas:clear", () => {
-			this.jobs.forEach((job) => this.cancel(job.elementId))
+			this.jobs.forEach((job) => {
+				job.resultDiscarded = true
+				this.cancel(job.elementId)
+			})
 		})
 	}
 
@@ -345,32 +412,124 @@ export class VideoCompositionManager {
 			this.snapshots.get(elementId) ?? {
 				status: "idle",
 				progress: 0,
+				outputCapability: "idle",
 				issues: [],
 			},
 		)
+	}
+
+	public checkOutputCapability(elementId: string): Promise<boolean> {
+		const element = this.canvas.elementManager.getElementData(elementId)
+		if (!element || element.type !== ElementTypeEnum.VideoEdit) return Promise.resolve(false)
+		const content = getActiveContent<VideoEditElementContent>(element)
+		if (!content) return Promise.resolve(false)
+		const firstVideoId = collectConnectedVideoEditInputs(this.canvas, elementId)
+			.videoElementIds[0]
+		const firstVideo = firstVideoId
+			? this.canvas.elementManager.getElementData(firstVideoId)
+			: undefined
+		const firstVideoContent =
+			firstVideo?.type === ElementTypeEnum.Video
+				? getDownstreamContent<VideoElementContent>(firstVideo)
+				: undefined
+		const metadata = firstVideoContent?.src
+			? this.canvas.videoResourceManager?.getCachedMetadata?.(firstVideoContent.src)
+			: undefined
+		const output = normalizeOutput(content.output, {
+			displayWidth: metadata?.videoWidth ?? firstVideo?.width ?? 16,
+			displayHeight: metadata?.videoHeight ?? firstVideo?.height ?? 9,
+		})
+		const signature = `${output.format}:avc:${output.width}x${output.height}:high`
+		if (this.outputCapabilityChecks.get(elementId) === signature) {
+			return this.outputCapabilityCache.get(signature) ?? Promise.resolve(false)
+		}
+		this.updateSnapshot(elementId, {
+			outputCapability: "checking",
+		})
+		const promise =
+			this.outputCapabilityCache.get(signature) ??
+			canEncodeVideo("avc", {
+				width: output.width,
+				height: output.height,
+				quality: VIDEO_OUTPUT_QUALITY,
+			}).catch(() => false)
+		this.outputCapabilityCache.set(signature, promise)
+		this.outputCapabilityChecks.set(elementId, signature)
+		void promise.then((supported) => {
+			if (this.outputCapabilityChecks.get(elementId) !== signature || this.destroyed) return
+			const capabilityIssue = supported
+				? undefined
+				: this.issue(
+						"video-encode-unsupported",
+						this.canvas.t?.(
+							"videoEditNode.compositionErrors.videoEncodeUnsupported",
+							"当前浏览器不支持该输出尺寸的 H.264 视频编码",
+						) || "当前浏览器不支持该输出尺寸的 H.264 视频编码",
+					)
+			const snapshot = this.getSnapshot(elementId)
+			this.updateSnapshot(elementId, {
+				outputCapability: supported ? "supported" : "unsupported",
+				issues: capabilityIssue
+					? [
+							...snapshot.issues.filter(
+								(issue) => issue.code !== "video-encode-unsupported",
+							),
+							capabilityIssue,
+						]
+					: snapshot.issues.filter((issue) => issue.code !== "video-encode-unsupported"),
+				errorMessage: capabilityIssue?.message ?? snapshot.errorMessage,
+			})
+		})
+		return promise
+	}
+
+	public isComposingResult(elementId: string): boolean {
+		for (const job of this.jobs.values()) {
+			if (job.resultElementId !== elementId || job.resultDiscarded) continue
+			if (this.getSnapshot(job.elementId).status === "completed") continue
+			return true
+		}
+		return false
 	}
 
 	public async start(elementId: string): Promise<boolean> {
 		if (this.destroyed || this.jobs.has(elementId)) return false
 		const signature = getContentSignature(this.canvas, elementId)
 		if (!signature) {
-			const message =
-				this.canvas.t?.(
-					"videoEditNode.compositionErrors.missingEditor",
-					"找不到视频编辑节点",
-				) || "找不到视频编辑节点"
+			const message = this.translate(
+				"videoEditNode.compositionErrors.missingEditor",
+				"找不到视频编辑节点",
+			)
 			this.updateSnapshot(elementId, {
 				status: "error",
 				progress: 0,
 				issues: [this.issue("missing-source", message)],
 			})
+			this.toastError(message)
 			return false
 		}
+		const editor = this.canvas.elementManager.getElementData(elementId)
+		if (!editor || editor.type !== ElementTypeEnum.VideoEdit) {
+			const message = this.translate(
+				"videoEditNode.compositionErrors.missingEditor",
+				"找不到视频编辑节点",
+			)
+			this.updateSnapshot(elementId, {
+				status: "error",
+				progress: 0,
+				issues: [this.issue("missing-source", message)],
+			})
+			this.toastError(message)
+			return false
+		}
+		if (!(await this.checkOutputCapability(elementId))) return false
+
 		const job: CompositionJob = {
 			elementId,
 			operationId: `${elementId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 			controller: new AbortController(),
 			signature,
+			resultElementId: generateElementId(),
 			inputs: [],
 		}
 		this.jobs.set(elementId, job)
@@ -380,19 +539,51 @@ export class VideoCompositionManager {
 			phase: "checking",
 			issues: [],
 			errorMessage: undefined,
-			resultElementId: undefined,
+			resultElementId: job.resultElementId,
 		})
 
 		try {
+			this.createPlaceholderResult(job, editor)
+		} catch (error) {
+			const message =
+				error instanceof CompositionIssueError
+					? error.issue.message
+					: this.translate(
+							"videoEditNode.compositionErrors.resultElementCreateFailed",
+							"创建合成视频元素失败",
+						)
+			this.jobs.delete(elementId)
+			this.updateSnapshot(elementId, {
+				status: "error",
+				progress: 0,
+				phase: undefined,
+				issues: [this.issue("composition-failed", message)],
+				errorMessage: message,
+				resultElementId: undefined,
+			})
+			this.toastError(message)
+			return false
+		}
+
+		try {
 			const result = await this.run(job)
+			if (!result) {
+				const snapshot = this.getSnapshot(elementId)
+				this.discardUnfinishedResult(job, {
+					toastMessage:
+						snapshot.errorMessage ||
+						snapshot.issues[0]?.message ||
+						this.translate("videoEditNode.mergeFailed", "合并失败"),
+					toastType: "error",
+				})
+			}
 			return result
 		} catch (error) {
 			if (job.staleInput || error instanceof CompositionStaleError) {
-				const message =
-					this.canvas.t?.(
-						"videoEditNode.compositionErrors.staleInput",
-						"输入内容已变化，请重新合并",
-					) || "输入内容已变化，请重新合并"
+				const message = this.translate(
+					"videoEditNode.compositionErrors.staleInput",
+					"输入内容已变化，请重新合并",
+				)
 				const issue = this.issue("stale-input", message)
 				this.updateSnapshot(elementId, {
 					status: "error",
@@ -400,6 +591,10 @@ export class VideoCompositionManager {
 					phase: undefined,
 					issues: [issue],
 					errorMessage: issue.message,
+				})
+				this.discardUnfinishedResult(job, {
+					toastMessage: issue.message,
+					toastType: "error",
 				})
 				return false
 			}
@@ -411,31 +606,31 @@ export class VideoCompositionManager {
 					issues: [],
 					errorMessage: undefined,
 				})
+				this.discardUnfinishedResult(job, {
+					toastMessage: job.resultDiscarded
+						? undefined
+						: this.translate("videoEditNode.mergeCancelled", "已取消合并"),
+				})
 				return false
 			}
-			const genericMessage =
-				this.canvas.t?.(
-					"videoEditNode.compositionErrors.compositionFailed",
-					"视频合成失败，请重试",
-				) || "视频合成失败，请重试"
+			const genericMessage = this.translate(
+				"videoEditNode.compositionErrors.compositionFailed",
+				"视频合成失败，请重试",
+			)
 			const issue =
 				error instanceof CompositionIssueError
 					? error.issue
-					: error instanceof CompositionStaleError
-						? this.issue(
-								"stale-input",
-								this.canvas.t?.(
-									"videoEditNode.compositionErrors.staleInput",
-									"输入内容已变化，请重新合并",
-								) || "输入内容已变化，请重新合并",
-							)
-						: this.issue("composition-failed", genericMessage)
+					: this.issue("composition-failed", genericMessage)
 			this.updateSnapshot(elementId, {
 				status: "error",
 				progress: 0,
 				phase: undefined,
 				issues: [issue],
 				errorMessage: issue.message,
+			})
+			this.discardUnfinishedResult(job, {
+				toastMessage: issue.message,
+				toastType: "error",
 			})
 			return false
 		} finally {
@@ -461,11 +656,16 @@ export class VideoCompositionManager {
 	public destroy(): void {
 		if (this.destroyed) return
 		this.destroyed = true
-		this.jobs.forEach((job) => this.cancel(job.elementId))
+		this.jobs.forEach((job) => {
+			job.resultDiscarded = true
+			this.cancel(job.elementId)
+		})
 		this.elementUpdatedUnsubscribe()
 		this.elementDeletedUnsubscribe()
 		this.canvasClearUnsubscribe()
 		this.listeners.clear()
+		this.outputCapabilityChecks.clear()
+		this.outputCapabilityCache.clear()
 	}
 
 	private async run(job: CompositionJob): Promise<boolean> {
@@ -482,7 +682,8 @@ export class VideoCompositionManager {
 			)
 		}
 		const content = getActiveContent<VideoEditElementContent>(element)
-		if (!content || content.videoSequence.length === 0) {
+		const inputs = collectConnectedVideoEditInputs(this.canvas, job.elementId)
+		if (!content || inputs.videoElementIds.length === 0) {
 			const message =
 				this.canvas.t?.(
 					"videoEditNode.compositionErrors.missingVideo",
@@ -499,19 +700,22 @@ export class VideoCompositionManager {
 
 		const videoSources: CompositionVideoSource[] = []
 		const issues: VideoCompositionIssue[] = []
-		for (const videoElementId of content.videoSequence) {
+		for (const videoElementId of inputs.videoElementIds) {
 			throwIfAborted(job, this.canvas)
 			const result = await this.prepareVideoSource(job, videoElementId)
 			if (result.issue) issues.push(result.issue)
 			if (result.source) videoSources.push(result.source)
 			this.updateSnapshot(job.elementId, {
 				status: "checking",
-				progress: Math.min(0.2, (videoSources.length / content.videoSequence.length) * 0.2),
+				progress: Math.min(
+					0.2,
+					(videoSources.length / inputs.videoElementIds.length) * 0.2,
+				),
 				phase: "checking",
 				issues: [...issues],
 			})
 		}
-		if (issues.length > 0 || videoSources.length !== content.videoSequence.length) {
+		if (issues.length > 0 || videoSources.length !== inputs.videoElementIds.length) {
 			const fallbackMessage =
 				this.canvas.t?.(
 					"videoEditNode.compositionErrors.videoCheckFailed",
@@ -527,7 +731,7 @@ export class VideoCompositionManager {
 			return false
 		}
 
-		const audioElementId = content.audioSequence[0]
+		const audioElementId = inputs.audioElementId
 		let audioSource: CompositionAudioSource | null = null
 		if (audioElementId) {
 			const result = await this.prepareAudioSource(job, audioElementId)
@@ -571,7 +775,13 @@ export class VideoCompositionManager {
 
 		const output = normalizeOutput(content.output, videoSources[0])
 		const hasAudio = videoSources.some((source) => source.audioTrack) || Boolean(audioSource)
-		if (!(await canEncodeVideo("avc", { width: output.width, height: output.height }))) {
+		if (
+			!(await canEncodeVideo("avc", {
+				width: output.width,
+				height: output.height,
+				quality: VIDEO_OUTPUT_QUALITY,
+			}))
+		) {
 			const issue = this.issue(
 				"video-encode-unsupported",
 				this.canvas.t?.(
@@ -623,6 +833,7 @@ export class VideoCompositionManager {
 			job.operationId,
 			job.elementId,
 			estimateOutputBytes(output, totalDuration, hasAudio),
+			this.getCompositionResultFileName(),
 		)
 		job.targetCleanup = targetHandle.cleanup
 		const outputFormat = new Mp4OutputFormat({ fastStart: false })
@@ -643,7 +854,7 @@ export class VideoCompositionManager {
 		}
 		const videoSource = new CanvasSource(canvas, {
 			codec: "avc",
-			quality: new Quality("high"),
+			quality: VIDEO_OUTPUT_QUALITY,
 			keyFrameInterval: 2,
 		})
 		const audioBufferSource = hasAudio
@@ -694,7 +905,12 @@ export class VideoCompositionManager {
 			phase: "uploading",
 			issues: [],
 		})
-		const [uploadResult] = await this.canvas.canvasFileUploadManager.uploadDirect([file])
+		const [uploadResult] = await this.canvas.canvasFileUploadManager.uploadDirect(
+			[file],
+			undefined,
+			undefined,
+			{ overwrite: false },
+		)
 		if (!uploadResult?.path) {
 			throw new CompositionIssueError(
 				this.issue(
@@ -708,14 +924,15 @@ export class VideoCompositionManager {
 		}
 		throwIfAborted(job, this.canvas)
 		this.canvas.videoResourceManager.primeCache(uploadResult.path, uploadResult)
-		const resultElementId = this.createResultElement(element, uploadResult.path, output)
+		this.fulfillResult(job, uploadResult.path)
 		this.updateSnapshot(job.elementId, {
 			status: "completed",
 			progress: 1,
 			phase: undefined,
 			issues: [],
-			resultElementId,
+			resultElementId: job.resultElementId,
 		})
+		if (job.resultElementId) this.canvas.selectionManager.select(job.resultElementId)
 		return true
 	}
 
@@ -1040,7 +1257,7 @@ export class VideoCompositionManager {
 				if (sample) {
 					context.fillStyle = "#000000"
 					context.fillRect(0, 0, output.width, output.height)
-					sample.drawWithFit(context, { fit: "cover" })
+					sample.drawWithFit(context, { fit: "contain" })
 					sample.close()
 					hasFrame = true
 				} else if (!hasFrame) {
@@ -1161,8 +1378,10 @@ export class VideoCompositionManager {
 		operationId: string,
 		elementId: string,
 		estimatedBytes: number,
+		outputFileName: string,
 	): Promise<OutputTargetHandle> {
-		const fileName = `canvas-video-composition-${elementId}-${operationId}.mp4`
+		// 临时存储文件保持唯一；交给上传层的 File 名称使用业务名称。
+		const storageFileName = `canvas-video-composition-${elementId}-${operationId}.mp4`
 		const storage = typeof navigator !== "undefined" ? navigator.storage : undefined
 		const getDirectory =
 			storage &&
@@ -1176,12 +1395,12 @@ export class VideoCompositionManager {
 			try {
 				const root = await getDirectory.call(storage)
 				directory = await root.getDirectoryHandle("video-compositions", { create: true })
-				const handle = await directory.getFileHandle(fileName, { create: true })
+				const handle = await directory.getFileHandle(storageFileName, { create: true })
 				const writable = await handle.createWritable()
 				return {
 					target: new StreamTarget(writable, { chunked: true }),
 					getFile: async () =>
-						new File([await handle.getFile()], fileName, { type: "video/mp4" }),
+						new File([await handle.getFile()], outputFileName, { type: "video/mp4" }),
 					cleanup: async () => {
 						try {
 							await writable.close()
@@ -1189,7 +1408,7 @@ export class VideoCompositionManager {
 							// Output.finalize/cancel may already have closed the writable.
 						}
 						try {
-							await directory?.removeEntry(fileName)
+							await directory?.removeEntry(storageFileName)
 						} catch {
 							// Best-effort cleanup for browsers that remove the temporary file on close.
 						}
@@ -1198,7 +1417,7 @@ export class VideoCompositionManager {
 				}
 			} catch {
 				try {
-					await directory?.removeEntry(fileName)
+					await directory?.removeEntry(storageFileName)
 				} catch {
 					// Fall through to the bounded in-memory target.
 				}
@@ -1220,26 +1439,38 @@ export class VideoCompositionManager {
 		return {
 			target,
 			getFile: async () =>
-				new File([target.buffer ?? new ArrayBuffer(0)], fileName, { type: "video/mp4" }),
+				new File([target.buffer ?? new ArrayBuffer(0)], outputFileName, {
+					type: "video/mp4",
+				}),
 			cleanup: async () => undefined,
 			isBuffered: true,
 		}
 	}
 
-	private createResultElement(
-		videoEdit: VideoEditElement,
-		path: string,
-		output: NormalizedOutput,
-	): string {
+	private createPlaceholderResult(job: CompositionJob, videoEdit: VideoEditElement): void {
+		const elementId = job.resultElementId
+		if (!elementId) {
+			throw new CompositionIssueError(
+				this.issue(
+					"composition-failed",
+					this.translate(
+						"videoEditNode.compositionErrors.resultElementCreateFailed",
+						"创建合成视频元素失败",
+					),
+				),
+			)
+		}
+		const content = getActiveContent<VideoEditElementContent>(videoEdit)
+		const output = normalizeOutput(content?.output)
 		const displayScale = Math.min(1280 / output.width, 720 / output.height)
 		const width = Math.max(320, Math.round(output.width * displayScale))
 		const height = Math.max(180, Math.round(output.height * displayScale))
-		const elementId = generateElementId()
+		const position = this.resolveResultPlacement(videoEdit, { width, height })
 		const result = ElementFactory.createElementData(
 			ElementTypeEnum.Video,
 			elementId,
-			(videoEdit.x ?? 0) + (videoEdit.width ?? 0) + RESULT_HORIZONTAL_GAP,
-			(videoEdit.y ?? 0) + ((videoEdit.height ?? 0) - height) / 2,
+			position.x,
+			position.y,
 			width,
 			height,
 			this.canvas.elementManager.getNextZIndexInLevel(),
@@ -1248,20 +1479,51 @@ export class VideoCompositionManager {
 			throw new CompositionIssueError(
 				this.issue(
 					"composition-failed",
-					this.canvas.t?.(
+					this.translate(
 						"videoEditNode.compositionErrors.resultElementCreateFailed",
 						"创建合成视频元素失败",
-					) || "创建合成视频元素失败",
+					),
 				),
 			)
 		}
 		const contentId = result.activeContentId
-		result.name =
-			this.canvas.t?.("videoEditNode.compositionResultName", "视频编辑-合并结果") ||
-			"视频编辑-合并结果"
-		result.contents = [{ contentId, src: path, status: GenerationStatus.Completed }]
-		this.canvas.elementManager.create(result)
-		this.canvas.selectionManager.select(elementId)
+		result.name = this.getCompositionResultName()
+		result.contents = [{ contentId, status: GenerationStatus.Processing }]
+
+		this.canvas.elementManager.createTemporaryElement(
+			result,
+			{ silent: true },
+			"generation-result",
+		)
+		const connection = this.canvas.connectionManager.connectRuntimeElements({
+			sourceElementId: videoEdit.id,
+			targetElementId: elementId,
+		})
+		if (connection.status !== "created") {
+			this.canvas.elementManager.delete(elementId)
+			throw new CompositionIssueError(
+				this.issue(
+					"composition-failed",
+					this.translate(
+						"videoEditNode.compositionErrors.resultElementCreateFailed",
+						"创建合成视频元素失败",
+					),
+				),
+			)
+		}
+		job.resultConnectionId = connection.connectionId
+		if (!this.canvas.elementManager.hasElement(elementId)) {
+			throw new CompositionIssueError(
+				this.issue(
+					"composition-failed",
+					this.translate(
+						"videoEditNode.compositionErrors.resultElementCreateFailed",
+						"创建合成视频元素失败",
+					),
+				),
+			)
+		}
+
 		requestAnimationFrame(() => {
 			if (!this.canvas.elementManager.hasElement(elementId)) return
 			if (this.canvas.viewportController.isElementInViewport([elementId])) return
@@ -1270,7 +1532,140 @@ export class VideoCompositionManager {
 				padding: { top: 50, right: 50, bottom: 50, left: 100 },
 			})
 		})
-		return elementId
+	}
+
+	private resolveResultPlacement(
+		videoEdit: VideoEditElement,
+		size: { width: number; height: number },
+	): { x: number; y: number } {
+		const originRect = this.canvas.geometryCacheManager.getElementBounds(videoEdit.id) ?? {
+			x: videoEdit.x ?? 0,
+			y: videoEdit.y ?? 0,
+			width: videoEdit.width ?? 0,
+			height: videoEdit.height ?? 0,
+		}
+		const placementContext = resolveConnectionCreateContextWithOriginRect(
+			{
+				originSide: "right",
+				source: "handle",
+				canvasX: originRect.x + originRect.width,
+				canvasY: originRect.y + originRect.height / 2,
+			},
+			originRect,
+		)
+		return resolveConnectedElementCreateTopLeftPoint(
+			placementContext,
+			size,
+			resolveConnectionCreateGapForElement(videoEdit, "right"),
+			{
+				obstacleRects: collectConnectionCreateObstacleRects(this.canvas, {
+					excludeElementIds: [videoEdit.id],
+				}),
+				siblingRects: collectConnectedElementSiblingRects(this.canvas, {
+					originElementId: videoEdit.id,
+					originSide: "right",
+				}),
+			},
+		)
+	}
+
+	private fulfillResult(job: CompositionJob, path: string): void {
+		const resultElementId = job.resultElementId
+		if (!resultElementId || job.resultDiscarded) {
+			throw new CompositionCancelledError()
+		}
+		const element = this.canvas.elementManager.getElementData(resultElementId)
+		if (!element || element.type !== ElementTypeEnum.Video) {
+			throw new CompositionIssueError(
+				this.issue(
+					"composition-failed",
+					this.translate(
+						"videoEditNode.compositionErrors.resultElementCreateFailed",
+						"创建合成视频元素失败",
+					),
+				),
+			)
+		}
+		const video = element as VideoElementData
+		const next = updateContent(video, video.activeContentId, {
+			src: path,
+			status: GenerationStatus.Completed,
+		})
+		const promote = (): boolean => {
+			this.canvas.elementManager.convertToPermament(
+				resultElementId,
+				{ contents: next.contents },
+				{ silent: false },
+			)
+			if (
+				!job.resultConnectionId ||
+				!this.canvas.connectionManager.promoteRuntimeConnection(job.resultConnectionId)
+			) {
+				this.canvas.elementManager.delete(resultElementId)
+				return false
+			}
+			return true
+		}
+		const promoted = this.canvas.historyManager.runTransaction(promote, (result) => result)
+		if (!promoted) {
+			throw new CompositionIssueError(
+				this.issue(
+					"composition-failed",
+					this.translate(
+						"videoEditNode.compositionErrors.resultElementCreateFailed",
+						"创建合成视频元素失败",
+					),
+				),
+			)
+		}
+	}
+
+	private discardUnfinishedResult(
+		job: CompositionJob,
+		options: { toastMessage?: string; toastType?: "error" | "info" },
+	): void {
+		const resultElementId = job.resultElementId
+		if (resultElementId && !job.resultDiscarded) {
+			job.resultDiscarded = true
+			if (job.resultConnectionId) {
+				this.canvas.connectionManager.removeConnections([job.resultConnectionId], {
+					emitChange: false,
+				})
+			}
+			if (this.canvas.elementManager.hasElement(resultElementId)) {
+				this.canvas.elementManager.delete(resultElementId)
+			}
+			if (options.toastMessage) {
+				if (options.toastType === "error") this.toastError(options.toastMessage)
+				else this.toastCancelled(options.toastMessage)
+			}
+		} else if (options.toastMessage && !job.resultDiscarded) {
+			if (options.toastType === "error") this.toastError(options.toastMessage)
+			else this.toastCancelled(options.toastMessage)
+		}
+		this.updateSnapshot(job.elementId, { resultElementId: undefined })
+	}
+
+	private translate(key: string, fallback: string): string {
+		return this.canvas.t?.(key, fallback) || fallback
+	}
+
+	private getCompositionResultName(): string {
+		return (
+			this.translate("videoEditNode.compositionResultName", "合并视频").trim() || "合并视频"
+		)
+	}
+
+	private getCompositionResultFileName(): string {
+		return `${this.getCompositionResultName()}.mp4`
+	}
+
+	private toastError(message: string): void {
+		toast.error(message)
+	}
+
+	private toastCancelled(message?: string): void {
+		toast.info(message ?? this.translate("videoEditNode.mergeCancelled", "已取消合并"))
 	}
 
 	private async disposeJob(job: CompositionJob): Promise<void> {
