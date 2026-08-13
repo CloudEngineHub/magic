@@ -57,7 +57,8 @@ readonly class MiniMaxH3GenerationCapabilityProvider
                 'style_supported' => false,
             ],
             'generation' => [
-                'durations' => range(4, 15),
+                'duration_type' => 'range',
+                'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
                 'resolutions' => ['768p', '2k'],
                 'aspect_ratios' => ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
                 'sizes' => self::SUPPORTED_SIZES,

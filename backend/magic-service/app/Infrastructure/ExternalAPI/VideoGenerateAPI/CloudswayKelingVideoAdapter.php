@@ -88,7 +88,8 @@ readonly class CloudswayKelingVideoAdapter extends AbstractCloudswayVideoAdapter
             ],
             'generation' => [
                 'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-                'durations' => self::SUPPORTED_DURATIONS,
+                'duration_type' => 'range',
+                'durations' => ['min' => 3, 'max' => 15, 'step' => 1],
                 'default_duration_seconds' => 5,
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,

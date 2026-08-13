@@ -98,7 +98,8 @@ readonly class KelingOmniGenerationCapabilityProvider implements KelingGeneratio
             // 生成参数使用当前可灵 Omni 的公开能力边界。
             'generation' => [
                 'aspect_ratios' => ['16:9', '9:16', '1:1'],
-                'durations' => [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                'duration_type' => 'range',
+                'durations' => ['min' => 3, 'max' => 15, 'step' => 1],
                 'default_duration_seconds' => self::DEFAULT_DURATION_SECONDS,
                 'resolutions' => ['720p', '1080p', '4k'],
                 'sizes' => self::SUPPORTED_SIZES,

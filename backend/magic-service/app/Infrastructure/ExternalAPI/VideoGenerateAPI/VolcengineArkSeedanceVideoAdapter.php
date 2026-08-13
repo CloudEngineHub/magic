@@ -702,7 +702,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         if ($this->isSeedanceTwoFastModel($modelVersion, $modelId)) {
             return [
                 'generation' => array_merge($baseGenerationConfig, [
-                    'duration_type' => 'options',
+                    'duration_type' => 'range',
+                    'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
                     'resolutions' => self::FAST_SUPPORTED_RESOLUTIONS,
                     'sizes' => $this->filterSizesByResolution(self::FAST_SUPPORTED_RESOLUTIONS),
                 ]),
@@ -726,7 +727,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
 
         return [
             'generation' => array_merge($baseGenerationConfig, [
-                'duration_type' => 'options',
+                'duration_type' => 'range',
+                'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
                 'resolutions' => self::PRO_SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,
             ]),
@@ -783,10 +785,15 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     private function isSeedanceTwoFastModel(string $modelVersion, string $modelId): bool
     {
         foreach ([$modelVersion, $modelId] as $identifier) {
-            if ($identifier !== ''
-                && (str_contains(strtolower($identifier), 'seedance-2.0-mini')
-                    || str_contains(strtolower($identifier), 'seedance-2.0-fast'))) {
-                return true;
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            foreach (['seedance-2.0-mini', 'seedance-2-0-mini', 'seedance-2.0-fast', 'seedance-2-0-fast'] as $marker) {
+                if (str_contains($normalizedIdentifier, $marker)) {
+                    return true;
+                }
             }
         }
 
@@ -796,7 +803,13 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
     private function isSeedanceTwoPointFiveModel(string $modelVersion, string $modelId): bool
     {
         foreach ([$modelVersion, $modelId] as $identifier) {
-            if ($identifier !== '' && (str_contains(strtolower($identifier), 'seedance-2.5') || str_contains(strtolower($identifier), 'seedance-2-5'))) {
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            if (str_contains($normalizedIdentifier, 'seedance-2.5')
+                || str_contains($normalizedIdentifier, 'seedance-2-5')) {
                 return true;
             }
         }

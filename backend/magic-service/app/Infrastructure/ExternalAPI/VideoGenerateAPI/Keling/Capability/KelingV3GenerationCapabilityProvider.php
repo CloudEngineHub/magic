@@ -94,7 +94,8 @@ readonly class KelingV3GenerationCapabilityProvider implements KelingGenerationC
         return new VideoGenerationConfig([
             'generation' => [
                 'aspect_ratios' => self::SUPPORTED_ASPECT_RATIOS,
-                'durations' => self::SUPPORTED_DURATIONS,
+                'duration_type' => 'range',
+                'durations' => ['min' => 3, 'max' => 15, 'step' => 1],
                 'default_duration_seconds' => self::DEFAULT_DURATION_SECONDS,
                 'resolutions' => self::SUPPORTED_RESOLUTIONS,
                 'sizes' => self::SUPPORTED_SIZES,
