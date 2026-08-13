@@ -11,6 +11,7 @@ use App\Domain\ModelGateway\Entity\Dto\ImageConvertHighDTO;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ImageInput;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Service\ImageGenerationTaskDomainService;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\MagicApiErrorCode;
@@ -20,8 +21,10 @@ use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatRespons
 use App\Infrastructure\Util\SSRF\Exception\SSRFException;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
+use Hyperf\Coroutine\Coroutine;
 use Hyperf\Di\Annotation\Inject;
 use InvalidArgumentException;
+use Throwable;
 
 use function Hyperf\Translation\__;
 
@@ -32,6 +35,34 @@ class ImageLLMAppService extends LLMAppService
 {
     #[Inject]
     protected AiAbilityDomainService $aiAbilityDomainService;
+
+    #[Inject]
+    protected ImageGenerationTaskDomainService $imageGenerationTaskDomainService;
+
+    public function submitGenerationTask(string $accessToken, TextGenerateImageDTO $requestDTO, array $requestPayload): array
+    {
+        $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken(
+            $accessToken,
+            $requestDTO->getBusinessParams()
+        );
+        $task = $this->imageGenerationTaskDomainService->createTask($dataIsolation, $requestDTO, $requestPayload);
+        $taskId = $task->getId();
+
+        Coroutine::create(function () use ($taskId, $requestDTO): void {
+            $this->executeGenerationTask($taskId, $requestDTO);
+        });
+
+        return $task->toResponseArray();
+    }
+
+    public function queryGenerationTask(string $accessToken, string $taskId, array $businessParams = []): array
+    {
+        $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
+        $task = $this->imageGenerationTaskDomainService->getOwnedTask($dataIsolation, $taskId);
+        $this->imageGenerationTaskDomainService->markTimedOutIfNeeded($task);
+
+        return $task->toResponseArray();
+    }
 
     /**
      * Image convert high definition V2 - API endpoint version.
@@ -147,7 +178,6 @@ class ImageLLMAppService extends LLMAppService
 
         return $response;
     }
-
     private function uploadBase64ImageInput(
         ModelGatewayDataIsolation $dataIsolation,
         ImageInput $imageInput,
@@ -170,5 +200,54 @@ class ImageLLMAppService extends LLMAppService
         }
 
         return ImageInput::fromUrl($fileLink->getUrl());
+    }
+
+    private function executeGenerationTask(string $taskId, TextGenerateImageDTO $requestDTO): void
+    {
+        try {
+            $response = $this->textGenerateImageV2($requestDTO);
+            $task = $this->imageGenerationTaskDomainService->getOwnedTask(
+                $this->createModelGatewayDataIsolationByAccessToken(
+                    $requestDTO->getAccessToken(),
+                    $requestDTO->getBusinessParams()
+                ),
+                $taskId
+            );
+
+            if (! $response instanceof OpenAIFormatResponse) {
+                $this->imageGenerationTaskDomainService->finishFailed($task, 'IMAGE_GENERATION_INVALID_RESPONSE', 'image generation response is invalid');
+                return;
+            }
+
+            if ($response->hasError()) {
+                $this->imageGenerationTaskDomainService->finishFailed(
+                    $task,
+                    $response->getProviderErrorCode(),
+                    $response->getProviderErrorMessage() ?? 'image generation failed'
+                );
+                return;
+            }
+
+            $this->imageGenerationTaskDomainService->finishSucceeded($task, $response->toArray());
+        } catch (Throwable $throwable) {
+            $this->logger->error('image generation task failed', [
+                'task_id' => $taskId,
+                'model' => $requestDTO->getModel(),
+                'error' => $throwable->getMessage(),
+            ]);
+            try {
+                $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken(
+                    $requestDTO->getAccessToken(),
+                    $requestDTO->getBusinessParams()
+                );
+                $task = $this->imageGenerationTaskDomainService->getOwnedTask($dataIsolation, $taskId);
+                $this->imageGenerationTaskDomainService->finishFailed($task, $throwable->getCode(), $throwable->getMessage());
+            } catch (Throwable $finishThrowable) {
+                $this->logger->error('image generation task finish failed', [
+                    'task_id' => $taskId,
+                    'error' => $finishThrowable->getMessage(),
+                ]);
+            }
+        }
     }
 }
