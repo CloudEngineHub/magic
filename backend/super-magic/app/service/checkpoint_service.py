@@ -95,20 +95,54 @@ class CheckpointService(Base):
         logger.info("Checkpoint系统初始化完成，当前checkpoint: __INITIAL__")
 
     async def _ensure_clean_state_before_create(self) -> None:
-        """在创建新checkpoint之前确保状态是干净的"""
+        """在创建新 checkpoint 前清理当前分支之后的 checkpoint。"""
+        deleted_checkpoint_ids = await self.discard_future_checkpoints()
+        if deleted_checkpoint_ids:
+            logger.info(f"创建新 checkpoint 前已清理未来 checkpoint: {deleted_checkpoint_ids}")
+
+    async def discard_future_checkpoints(self) -> List[str]:
+        """删除当前 checkpoint 之后的分支，不触发持久状态重载。
+
+        普通消息创建新 checkpoint 时，只需要丢弃用户回滚后遗留的未来分支。
+        该操作不会恢复聊天历史或 Horizon 文件，因此不能复用显式回滚提交的
+        内存重载逻辑。
+
+        Returns:
+            List[str]: 实际从清单中删除的 checkpoint ID 列表。
+
+        Raises:
+            RuntimeError: 当前 checkpoint 或清单状态无效，或者删除操作失败。
+        """
+        current_checkpoint_id = await self.metadata_manager.get_current_checkpoint()
+        if current_checkpoint_id is None:
+            logger.info("当前 checkpoint 未设置，无需清理未来分支")
+            return []
+
+        manifest = await self.metadata_manager.load_checkpoint_manifest()
+        if manifest is None:
+            logger.info("checkpoint 清单不存在，无需清理未来分支")
+            return []
+
+        checkpoint_ids = list(manifest.checkpoints)
         try:
-            logger.info("执行 checkpoint rollback commit 以确保状态干净")
+            current_index = checkpoint_ids.index(current_checkpoint_id)
+        except ValueError as error:
+            raise RuntimeError(f"当前 checkpoint {current_checkpoint_id} 不在清单中") from error
 
-            from app.service.rollback_service import RollbackService
-            rollback_service = RollbackService()
-            await rollback_service.commit_rollback()
+        future_checkpoint_ids = checkpoint_ids[current_index + 1:]
+        if not future_checkpoint_ids:
+            logger.info("当前已是最新 checkpoint，无需清理未来分支")
+            return []
 
-            logger.info("checkpoint rollback commit 执行完成")
+        for checkpoint_id in future_checkpoint_ids:
+            if not await self.storage.delete_checkpoint_directory(checkpoint_id):
+                raise RuntimeError(f"删除未来 checkpoint 目录失败: {checkpoint_id}")
 
-        except Exception as e:
-            # 记录错误但不抛出异常，避免影响 checkpoint 创建
-            logger.error(f"执行 checkpoint rollback commit 时发生错误: {e}")
-            logger.error(f"错误详情: {e}", exc_info=True)
+        if not await self.metadata_manager.remove_from_manifest(future_checkpoint_ids):
+            raise RuntimeError(f"从清单移除未来 checkpoint 失败: {future_checkpoint_ids}")
+
+        logger.info(f"成功清理 {len(future_checkpoint_ids)} 个未来 checkpoint")
+        return future_checkpoint_ids
 
     async def _repair_checkpoint_manifest(self, manifest) -> None:
         """修复损坏的 checkpoint 清单"""
@@ -125,7 +159,7 @@ class CheckpointService(Base):
     async def create_checkpoint(self, message_id: str) -> CheckpointInfo:
         """创建新的checkpoint"""
         try:
-            # 在创建新checkpoint之前，执行rollback commit确保状态干净
+            # 创建新 checkpoint 前只清理未来分支，不执行显式回滚的内存重载
             await self._ensure_clean_state_before_create()
 
             # 检查checkpoint是否已存在
