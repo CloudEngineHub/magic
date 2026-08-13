@@ -221,6 +221,47 @@ describe("SlidesPresetGrid", () => {
 		expect(handleTemplateClick).toHaveBeenCalledWith(mockTemplates[0])
 	})
 
+	it("toggles favorite without selecting the template", () => {
+		const handleTemplateClick = vi.fn()
+		const handleFavoriteToggle = vi.fn()
+		const { rerender } = render(
+			<SlidesPresetGrid
+				templates={mockTemplates}
+				onTemplateClick={handleTemplateClick}
+				onFavoriteToggle={handleFavoriteToggle}
+			/>,
+		)
+
+		fireEvent.click(screen.getAllByTestId("slides-preset-card-favorite-button")[0])
+
+		const favoriteButton = screen.getAllByTestId("slides-preset-card-favorite-button")[0]
+		expect(handleFavoriteToggle).toHaveBeenCalledWith(mockTemplates[0])
+		expect(handleTemplateClick).not.toHaveBeenCalled()
+		expect(favoriteButton).toHaveClass("active:scale-[0.96]")
+		expect(favoriteButton.querySelector("[data-favorite-state]")).toHaveAttribute(
+			"data-favorite-state",
+			"unfavorite",
+		)
+
+		fireEvent.keyDown(favoriteButton, {
+			key: "Enter",
+		})
+		expect(handleTemplateClick).not.toHaveBeenCalled()
+
+		rerender(
+			<SlidesPresetGrid
+				templates={[{ ...mockTemplates[0], is_favorite: true }, mockTemplates[1]]}
+				onTemplateClick={handleTemplateClick}
+				onFavoriteToggle={handleFavoriteToggle}
+			/>,
+		)
+		expect(
+			screen
+				.getAllByTestId("slides-preset-card-favorite-button")[0]
+				.querySelector("[data-favorite-state]"),
+		).toHaveAttribute("data-favorite-state", "favorite")
+	})
+
 	it("restores the selection button and shows selected state", () => {
 		const handleTemplateClick = vi.fn()
 		render(
@@ -510,6 +551,38 @@ describe("SlidesPresetGrid", () => {
 				"src",
 				"https://example.com/academic-collage.png",
 			)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("keeps the current favorite state when hover detail is stale", async () => {
+		const favoriteTemplate = { ...mockTemplates[0], is_favorite: true }
+		const staleDetailTemplate = { ...mockTemplates[0], is_favorite: false }
+		const onPreviewDetailLoad = vi.fn().mockResolvedValue(staleDetailTemplate)
+		const onFavoriteToggle = vi.fn()
+		vi.useFakeTimers()
+
+		try {
+			render(
+				<SlidesPresetGrid
+					templates={[favoriteTemplate, mockTemplates[1]]}
+					onPreviewDetailLoad={onPreviewDetailLoad}
+					onFavoriteToggle={onFavoriteToggle}
+				/>,
+			)
+
+			const firstCard = screen.getAllByTestId("slides-preset-card")[0]
+			fireEvent.mouseEnter(firstCard)
+
+			await act(async () => {
+				vi.advanceTimersByTime(300)
+				await Promise.resolve()
+			})
+
+			const favoriteButton = screen.getAllByTestId("slides-preset-card-favorite-button")[0]
+			expect(favoriteButton).toHaveAttribute("aria-pressed", "true")
+			expect(favoriteButton).toHaveAttribute("aria-label", "mySlidesTemplates.unfavorite")
 		} finally {
 			vi.useRealTimers()
 		}

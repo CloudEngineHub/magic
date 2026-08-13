@@ -14,6 +14,8 @@ interface SlidesPresetGridProps {
 	selectedTemplate?: OptionItem
 	templates: OptionItem[]
 	onTemplateClick?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
+	favoritePendingCodes?: Set<string>
 	className?: string
 	isLoading?: boolean
 	isRefreshing?: boolean
@@ -70,6 +72,8 @@ const SlidesPresetGrid = observer(
 		selectedTemplate,
 		templates,
 		onTemplateClick,
+		onFavoriteToggle,
+		favoritePendingCodes,
 		className,
 		isLoading = false,
 		isRefreshing = false,
@@ -277,7 +281,12 @@ const SlidesPresetGrid = observer(
 					) : null}
 					{templates.map((template) => {
 						const value = localeTextToDisplayString(template.value)
-						const cardTemplate = hoverDetailTemplates.get(value) ?? template
+						const hoverDetailTemplate = hoverDetailTemplates.get(value)
+						// 详情接口只负责补充悬浮预览字段，收藏状态以当前列表数据为准。
+						// 收藏操作可能先于详情请求返回，直接使用旧详情会把乐观状态覆盖掉。
+						const cardTemplate = hoverDetailTemplate
+							? { ...hoverDetailTemplate, is_favorite: template.is_favorite }
+							: template
 
 						return (
 							<motion.div
@@ -305,6 +314,8 @@ const SlidesPresetGrid = observer(
 									template={cardTemplate}
 									isSelected={selectedTemplateValue === value}
 									onClick={onTemplateClick}
+									onFavoriteToggle={onFavoriteToggle}
+									favoritePending={favoritePendingCodes?.has(value)}
 									onPreviewClick={handlePreviewClick}
 									onPreviewPreload={handlePreviewPreload}
 									canUseHoverPreview={canUseHoverPreview}

@@ -113,4 +113,37 @@ describe("SlidesTemplateCoverTile color fallback", () => {
 		expect(actions).toContainElement(screen.getByTestId("slides-template-cover-preview-button"))
 		expect(actions).toContainElement(screen.getByTestId("slides-template-cover-select-button"))
 	})
+
+	it("toggles favorite without selecting or previewing the template", async () => {
+		const { default: SlidesTemplateCoverTile } = await import("../SlidesTemplateCoverTile")
+		const template = { label: "Favorite template", value: "favorite-template" }
+		const onFavoriteToggle = vi.fn()
+		const onPreviewClick = vi.fn()
+		const onSelect = vi.fn()
+
+		render(
+			<SlidesTemplateCoverTile
+				canPreview
+				imageUrl="/favorite.png"
+				isExpanded={false}
+				isSelected={false}
+				onFavoriteToggle={onFavoriteToggle}
+				onPreviewClick={onPreviewClick}
+				onSelect={onSelect}
+				template={template}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-template-cover-favorite-button"))
+
+		expect(onFavoriteToggle).toHaveBeenCalledWith(template)
+		expect(onPreviewClick).not.toHaveBeenCalled()
+		expect(onSelect).not.toHaveBeenCalled()
+
+		fireEvent.keyDown(screen.getByTestId("slides-template-cover-favorite-button"), {
+			key: "Enter",
+		})
+		expect(onPreviewClick).not.toHaveBeenCalled()
+		expect(onSelect).not.toHaveBeenCalled()
+	})
 })

@@ -73,6 +73,8 @@ During authoring, `create_slide_template_project` also creates `<template-id>/.t
 ## Authoring Rules
 
 - Use the declared source canvas from `template.json` with no responsive layout. Default to `1920x1080` only when the source does not provide dimensions, and preserve source ratios such as `1:1`.
+- Preserve the generated slide canvas contract on every page. Each slide must keep one root element in the form `<main class="slide-container" data-width="..." data-height="...">`.
+- Keep `data-width` and `data-height` equal to `template.json.source.canvas.width` and `template.json.source.canvas.height`. When replacing scaffold content, replace only the content inside the root canvas; do not remove or rename the `slide-container` class or either dimension attribute.
 - Make `visual-spec.md` the design contract: palette, typography, spacing, backgrounds, components, chart rules, image treatment, page rhythm, editing guidance, and forbidden patterns.
 - Keep reusable visual-system CSS in `theme.css`; keep page-specific grid, flex, padding, and positioning in each slide HTML file.
 - Use lowercase kebab-case filenames for English-context templates. Chinese-context templates may use concise Chinese semantic filenames such as `封面.html`, while `layout` remains lowercase kebab-case.
@@ -151,8 +153,10 @@ selected = tool.call("select_slide_template_source_assets", {
 - Use the `document-converter` skill through `run_sdk_snippet` to render presentation pages and analyze them with its document-image workflow.
 - Use `visual_understanding` for standalone images and screenshots, not as a replacement for `document-converter` when reading presentation files.
 - Call `visual_understanding_webpage` and `analysis_slide_webpage` only through `run_sdk_snippet` with `sdk.tool.call(...)`; they are not directly mounted on the slide agent.
-- Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML and sampled final slides visually.
-- Use `analysis_slide_webpage` through that Code Mode path for the declared canvas overflow, clipping, scrollbar, and broken-image checks.
+- Use `visual_understanding_webpage` through that Code Mode path to inspect source HTML before finalization. Pass the declared canvas as `viewport_width` and `viewport_height`, with `device_scale_factor: 1`.
+- Use `analysis_slide_webpage` through that Code Mode path for declared-canvas overflow, clipping, scrollbar, and broken-image checks. The tool uses `max_width` and `max_height` as its Browser viewport.
+- After `finalize_slide_template`, use `visual_understanding` on the generated files under `previews/slides/`. These images are the authoritative visual evidence because they are the exact preview artifacts that will be published.
+- Do not install Playwright or Chromium from the Agent. Template finalization uses the configured Super Magic Browser backend automatically.
 - Use `generate_images` only for neutral, non-sensitive visual assets when the source does not provide enough usable imagery.
 - Use `ask_user` only for material decisions such as ambiguous sensitive assets, intentional template updates, or an occupied user-provided target.
 
@@ -162,16 +166,19 @@ For webpage visual QA, call the tools in `run_sdk_snippet` like this:
 run_sdk_snippet(python_code="""
 from sdk.tool import tool
 
+canvas_width = 1920  # Read source.canvas.width from template.json.
+canvas_height = 1080  # Read source.canvas.height from template.json.
 visual_result = tool.call("visual_understanding_webpage", {
     "target": "<template-id>/slides/cover.html",
-    "query": "Review visual hierarchy, readability, composition, canvas usage, and image quality."
+    "query": "Review visual hierarchy, readability, composition, canvas usage, and image quality.",
+    "viewport_width": canvas_width,
+    "viewport_height": canvas_height,
+    "device_scale_factor": 1
 })
 if not visual_result.ok:
     raise SystemExit(visual_result.content)
 print(visual_result.content)
 
-canvas_width = 1920  # Read source.canvas.width from template.json.
-canvas_height = 1080  # Read source.canvas.height from template.json.
 layout_result = tool.call("analysis_slide_webpage", {
     "target": "<template-id>/slides/cover.html",
     "max_width": canvas_width,
@@ -183,6 +190,22 @@ print(layout_result.content)
 """)
 ```
 
+After finalization, visually inspect the exact generated preview instead of recapturing the webpage:
+
+```python
+run_sdk_snippet(python_code="""
+from sdk.tool import tool
+
+result = tool.call("visual_understanding", {
+    "images": ["<template-id>/previews/slides/slide-001.png"],
+    "query": "Review hierarchy, readability, composition, canvas usage, image quality, and background interference."
+})
+if not result.ok:
+    raise SystemExit(result.content)
+print(result.content)
+""")
+```
+
 ## Completion Gate
 
 Do not report completion until:
@@ -191,6 +214,7 @@ Do not report completion until:
 - `category_code` and every `tag_codes` value exist in the bundled taxonomy, and `tag_codes` is non-empty.
 - When a source PPTX was supplied, every extracted source asset has a completed `reuse` or `discard` decision. Only selected assets that are actually referenced by final HTML/CSS may remain under `images/source-assets/`; discarded and unused candidates must not be copied into the final package.
 - Every indexed slide exists, loads `../theme.css`, and resolves local assets.
+- Every indexed slide has exactly one `main.slide-container` root, and its `data-width`/`data-height` values match `template.json.source.canvas`.
 - No legacy conversion residue or forbidden output file remains.
 - `.template-work/` and other intermediate authoring files are absent after successful finalization.
 - Every external converter, extraction, download, and QA artifact path tracked during the task has been deleted without touching the source input or final template files.

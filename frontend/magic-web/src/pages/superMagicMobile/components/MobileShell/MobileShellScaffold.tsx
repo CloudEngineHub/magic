@@ -31,6 +31,7 @@ const SWIPE_SLOP = 8
 const SWIPE_THRESHOLD_RATIO = 0.35
 const SWIPE_FLING_VELOCITY = 0.3
 const SWIPE_MIN_FLING_DISTANCE = 48
+const HORIZONTAL_SCROLL_OVERFLOW_VALUES = new Set(["auto", "scroll", "overlay"])
 type GestureLock = "none" | "horizontal" | "vertical"
 interface SwipeResultInput {
 	startOpen: boolean
@@ -61,6 +62,31 @@ function clampPanelX(panelX: number, sidebarWidth: number): number {
 }
 
 /**
+ * Detects whether the touch started inside a container that can currently scroll horizontally.
+ * Native scrolling keeps gesture ownership even when the container is already at an edge.
+ */
+function hasHorizontallyScrollableAncestor(
+	target: Element,
+	currentShellRoot: HTMLElement,
+): boolean {
+	let currentElement: Element | null = target
+
+	while (currentElement && currentElement !== currentShellRoot) {
+		if (currentElement instanceof HTMLElement) {
+			const { overflowX } = window.getComputedStyle(currentElement)
+			const allowsHorizontalScroll = HORIZONTAL_SCROLL_OVERFLOW_VALUES.has(overflowX)
+			const hasHorizontalOverflow = currentElement.scrollWidth > currentElement.clientWidth
+
+			if (allowsHorizontalScroll && hasHorizontalOverflow) return true
+		}
+
+		currentElement = currentElement.parentElement
+	}
+
+	return false
+}
+
+/**
  * 当存在嵌套壳层时，只允许离触点最近的壳层处理手势，避免内外两层同时跟手移动。
  */
 function shouldHandleTouchByClosestShell(
@@ -68,8 +94,9 @@ function shouldHandleTouchByClosestShell(
 	currentShellRoot: HTMLElement | null,
 ): boolean {
 	if (!currentShellRoot || !(target instanceof Element)) return true
+	if (target.closest("[data-mobile-shell-scaffold]") !== currentShellRoot) return false
 	if (target.closest('[data-mobile-shell-swipe-guard="true"]')) return false
-	return target.closest("[data-mobile-shell-scaffold]") === currentShellRoot
+	return !hasHorizontallyScrollableAncestor(target, currentShellRoot)
 }
 
 function resolveSwipeResult({

@@ -19,8 +19,9 @@ import { buildConcatenatedPresetContent, localeTextToDisplayString } from "../..
 import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "../../panels/slides-preset/templateMeta"
 
 export interface SlidesTemplateItem {
+	id?: string
 	code: string
-	source_type?: "SYSTEM" | "OFFICIAL"
+	source_type?: "SYSTEM" | "OFFICIAL" | "CUSTOM" | "system" | "official" | "custom" | "user"
 	category_code?: string | null
 	label: {
 		zh_CN: string
@@ -31,14 +32,22 @@ export interface SlidesTemplateItem {
 		en_US: string
 	}
 	thumbnail_url?: string | null
+	thumbnail_file_key?: string
 	collage_url?: string | null
+	collage_file_key?: string | null
 	preview_image_urls?: string[]
+	preview_image_file_keys?: string[]
 	preview_url?: string | null
-	sort: number
+	template_file_key?: string
+	sort?: number
+	status?: 0 | 1
 	is_official: boolean
+	is_favorite?: boolean
 	usage_count?: number
 	colors?: string[]
 	tags?: SlidesTemplateItemTag[]
+	created_at?: string | null
+	updated_at?: string | null
 }
 
 export interface SlidesTemplateItemTag extends OptionItemTag {
@@ -52,6 +61,8 @@ export interface SlidesTemplateItemTag extends OptionItemTag {
 }
 
 export interface SlidesTemplateQueryParams {
+	scope?: SlidesTemplateScope
+	code?: string
 	page?: number
 	page_size?: number
 	keyword?: string
@@ -60,10 +71,32 @@ export interface SlidesTemplateQueryParams {
 	tag_match?: SlidesTemplateTagMatch
 }
 
+export type SlidesTemplateScope = "official" | "user" | "all"
+
+export type SlidesTemplateCodeAvailability = "UNUSED" | "OWNED_BY_ME" | "OCCUPIED"
+
+export interface SlidesTemplateCodeAvailabilityResponse {
+	status: SlidesTemplateCodeAvailability
+}
+
 export interface SlidesTemplateListResponse {
 	page: number
 	page_size: number
 	list: SlidesTemplateItem[]
+}
+
+export interface SaveSlidesTemplatePayload {
+	code?: string
+	category_code?: string | null
+	label: SlidesTemplateItem["label"]
+	description: SlidesTemplateItem["description"]
+	thumbnail_file_key: string
+	collage_file_key?: string | null
+	preview_image_file_keys?: string[]
+	template_file_key: string
+	preview_url?: string | null
+	tag_codes?: string[]
+	status?: 0 | 1
 }
 
 export interface SlidesTemplateCountResponse {
@@ -111,6 +144,15 @@ export interface SlidesTemplateCategoryListResponse {
 
 export type SlidesTemplateTagMatch = "any" | "all"
 
+export interface SlidesTemplateTagQueryParams {
+	page?: number
+	page_size?: number
+	keyword?: string
+	category_code?: string
+	tag_codes?: string | string[]
+	tag_match?: SlidesTemplateTagMatch
+}
+
 export interface SlidesTemplateTagItem {
 	id: string
 	code: string
@@ -121,6 +163,13 @@ export interface SlidesTemplateTagItem {
 	sort: number
 	template_count: number
 	is_official: boolean
+}
+
+export interface SlidesTemplateTagListResponse {
+	page: number
+	page_size: number
+	total: number
+	list: SlidesTemplateTagItem[]
 }
 
 export interface SlidesTemplateTagGroupItem {
@@ -414,6 +463,8 @@ export function toTemplateOption(template: SlidesTemplateItem) {
 		description: template.description,
 		preview_url: template.preview_url ?? undefined,
 		usage_count: template.usage_count ?? 0,
+		is_favorite: template.is_favorite ?? false,
+		status: template.status,
 		sort: template.sort,
 		colors: template.colors ?? [],
 		tags: template.tags ?? [],

@@ -32,6 +32,7 @@ Plan the extracted page inventory, then call `create_slide_template_project` to 
 - Copy only assets used by selected template pages.
 - Remove project controllers, `magic.project.js`, `index.html`, `slide-bridge.js`, debug attributes, and unused scripts.
 - Preserve useful `data-slot` attributes and add `data-content-hint` where the editing intent is not obvious.
+- Preserve the generated `main.slide-container` canvas root on every extracted slide. Its `data-width` and `data-height` values must remain equal to `template.json.source.canvas`.
 - Use `source.kind: "derived"` and `source.method: "project-extract"`.
 - Set `source.canvas` to the source project's fixed canvas. Do not replace a square source with the default `1920x1080` canvas.
 - After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed.

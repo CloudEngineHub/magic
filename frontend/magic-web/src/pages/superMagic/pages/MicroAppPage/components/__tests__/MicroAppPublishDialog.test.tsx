@@ -259,6 +259,7 @@ describe("MicroAppPublishDialog", () => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				app_name: "库存管理助手",
 				share_type: ShareType.Public,
+				extra: { pure_mode: false },
 			})
 			expect(onPublishStatusChange).toHaveBeenCalledWith(true)
 		})
@@ -283,6 +284,7 @@ describe("MicroAppPublishDialog", () => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				app_name: "Demo App",
 				share_type: ShareType.Public,
+				extra: { pure_mode: false },
 			})
 		})
 	})
@@ -316,6 +318,7 @@ describe("MicroAppPublishDialog", () => {
 			expect(mocks.publishMicroAppProject).toHaveBeenCalledWith("app-1", {
 				app_name: "Demo App",
 				share_type: ShareType.Public,
+				extra: { pure_mode: false },
 			})
 		})
 	})
@@ -364,6 +367,7 @@ describe("MicroAppPublishDialog", () => {
 				app_name: "Demo App",
 				share_type: ShareType.Public,
 				cover_file_key: null,
+				extra: { pure_mode: false },
 			})
 		})
 	})
@@ -410,6 +414,7 @@ describe("MicroAppPublishDialog", () => {
 				share_type: ShareType.Organization,
 				share_range: "all",
 				cover_file_key: "micro-app/covers/new.png",
+				extra: { pure_mode: false },
 			})
 		})
 	})

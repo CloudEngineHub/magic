@@ -17,6 +17,7 @@ export interface UseMobileRecordingEntryFacadeResult extends UseRecordingEntryFa
 		message: TranscriptMessage[]
 		isExpanded: boolean
 		className?: string
+		mobile?: boolean
 	}>
 }
 

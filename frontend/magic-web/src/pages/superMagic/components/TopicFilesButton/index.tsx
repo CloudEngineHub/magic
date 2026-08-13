@@ -1,4 +1,12 @@
-import { forwardRef, useImperativeHandle, useRef, type ReactNode } from "react"
+import {
+	forwardRef,
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
 import { useStyles } from "./style"
@@ -10,7 +18,13 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { mySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import {
+	createAvailableSlidesTemplateCode,
+	mySlidesTemplateAdapter,
+	type MySlidesTemplatePage,
+} from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import type { SlidesTemplateItem } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./components"
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
 
@@ -113,17 +127,40 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 		const isMobile = useIsMobile()
 		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
 		const panelRef = useRef<TopicFilesPanelRef>(null)
+		const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+		const [saveDialogTemplates, setSaveDialogTemplates] = useState<SlidesTemplateItem[]>([])
+		const [saveDialogTarget, setSaveDialogTarget] = useState<SaveSlidesTemplateTarget>("new")
+		const [saveDialogLoading, setSaveDialogLoading] = useState(false)
+		const [saveDialogSaving, setSaveDialogSaving] = useState(false)
+		const [saveDialogNotice, setSaveDialogNotice] = useState("")
+		const [saveDialogError, setSaveDialogError] = useState("")
+		const [pendingSaveItem, setPendingSaveItem] = useState<AttachmentItem | null>(null)
+
+		const loadSaveDialogTemplates = useCallback(async () => {
+			setSaveDialogLoading(true)
+			setSaveDialogError("")
+			try {
+				const result: MySlidesTemplatePage = await mySlidesTemplateAdapter.listMine({
+					page: 1,
+					pageSize: 100,
+				})
+				setSaveDialogTemplates(result.items)
+			} catch {
+				setSaveDialogError(t("mySlidesTemplates.loadFailedDescription"))
+			} finally {
+				setSaveDialogLoading(false)
+			}
+		}, [t])
+
+		useEffect(() => {
+			if (saveDialogOpen && !saveDialogNotice) void loadSaveDialogTemplates()
+		}, [loadSaveDialogTemplates, saveDialogNotice, saveDialogOpen])
+
 		const handleSaveSlidesTemplate = useMemoizedFn(async (item: AttachmentItem) => {
 			if (onSaveSlidesTemplate) {
 				await onSaveSlidesTemplate(item)
 				return
 			}
-
-			if (!mySlidesTemplateAdapter.enabled) {
-				magicToast.info(t("mySlidesTemplates.saveUnavailable"))
-				return
-			}
-
 			const resolvedProjectId = selectedProject?.id || projectId
 			const folderId = item.file_id
 			if (!resolvedProjectId || !folderId) {
@@ -131,18 +168,48 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 				return
 			}
 
+			setPendingSaveItem(item)
+			setSaveDialogTarget("new")
+			setSaveDialogNotice(
+				mySlidesTemplateAdapter.saveEnabled ? "" : t("mySlidesTemplates.saveUnavailable"),
+			)
+			setSaveDialogError("")
+			setSaveDialogOpen(true)
+		})
+
+		const saveSelectedTemplate = useCallback(async () => {
+			const resolvedProjectId = selectedProject?.id || projectId
+			if (!pendingSaveItem || !resolvedProjectId) return
+			setSaveDialogSaving(true)
 			try {
+				const selectedTemplate = saveDialogTemplates.find(
+					(template) => template.code === saveDialogTarget,
+				)
+				const code =
+					saveDialogTarget === "new"
+						? await createAvailableSlidesTemplateCode()
+						: selectedTemplate?.code
+				if (!code) throw new Error("Selected slide template code is unavailable")
 				await mySlidesTemplateAdapter.saveFromFolder({
 					projectId: resolvedProjectId,
-					folderId,
-					folderName:
-						item.file_name || item.filename || item.name || item.display_filename || "",
+					directoryId: pendingSaveItem.file_id || "",
+					code,
 				})
+				setSaveDialogOpen(false)
 				magicToast.success(t("mySlidesTemplates.saveSuccess"))
 			} catch {
 				magicToast.error(t("mySlidesTemplates.saveFailed"))
+			} finally {
+				setSaveDialogSaving(false)
 			}
-		})
+		}, [
+			pendingSaveItem,
+			projectId,
+			saveDialogTarget,
+			saveDialogTemplates,
+			selectedProject?.id,
+			t,
+		])
 		const handleConvertToSlidesTemplate = useMemoizedFn((item: AttachmentItem) => {
 			if (onConvertToSlidesTemplate) {
 				onConvertToSlidesTemplate(item)
@@ -205,6 +272,22 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}
 					operationRoot={operationRoot}
+				/>
+				<SaveSlidesTemplateDialog
+					open={saveDialogOpen}
+					onOpenChange={setSaveDialogOpen}
+					templates={saveDialogTemplates}
+					selectedTarget={saveDialogTarget}
+					onSelectedTargetChange={setSaveDialogTarget}
+					isLoading={saveDialogLoading}
+					isSaving={saveDialogSaving}
+					notice={saveDialogNotice}
+					error={saveDialogError}
+					onRetry={() => {
+						setSaveDialogNotice("")
+						void loadSaveDialogTemplates()
+					}}
+					onSave={() => void saveSelectedTemplate()}
 				/>
 			</div>
 		)

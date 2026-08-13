@@ -166,7 +166,23 @@ def fix_stringified_json_with_schema(
     return result, fixed_count
 
 
-def preprocess_tool_call_arguments(tool_call) -> bool:
+@dataclass(frozen=True)
+class JsonRepairCandidate:
+    """候选 JSON 修复结果，交由应用层校验后才能采用。"""
+
+    tool_call_id: str
+    tool_name: str
+    original_arguments: str
+    repaired_arguments: str
+    tool_schema: Dict[str, object]
+
+
+def preprocess_tool_call_arguments(
+    tool_call,
+    *,
+    defer_json_repair: bool = False,
+    repair_candidates: List[JsonRepairCandidate] | None = None,
+) -> bool:
     """
     预处理单个工具调用的参数
 
@@ -210,16 +226,25 @@ def preprocess_tool_call_arguments(tool_call) -> bool:
             raise ValueError("Not a dictionary")
     except (json.JSONDecodeError, ValueError):
         logger.info(f"工具 '{tool_name}' 参数预处理：JSON格式需要修复")
-        logger.info(f"[json_repair] 修复前的原始内容: {arguments_str}")
         try:
             tool_arguments_dict = json_repair.repair_json(arguments_str, return_objects=True)
-            repaired_json_str = json.dumps(tool_arguments_dict, ensure_ascii=False, indent=2)
-            logger.info(f"[json_repair] 修复后的结果: {repaired_json_str}")
 
             if not isinstance(tool_arguments_dict, dict):
                 logger.warning(f"工具 '{tool_name}' 参数预处理：修复后仍非字典，设为空对象")
                 tool_call.function.arguments = "{}"
                 return True
+
+            if defer_json_repair:
+                candidate = JsonRepairCandidate(
+                    tool_call_id=str(tool_call.id),
+                    tool_name=tool_name,
+                    original_arguments=arguments_str,
+                    repaired_arguments=json.dumps(tool_arguments_dict, ensure_ascii=False),
+                    tool_schema=_get_tool_schema(tool_name),
+                )
+                if repair_candidates is not None:
+                    repair_candidates.append(candidate)
+                return False
 
             json_was_repaired = True
         except Exception as e:
@@ -243,12 +268,20 @@ def preprocess_tool_call_arguments(tool_call) -> bool:
     return False
 
 
+def _get_tool_schema(tool_name: str) -> Dict[str, object]:
+    from agentlang.tools.metadata_provider import get_tool_param
+
+    tool_param = get_tool_param(tool_name)
+    return tool_param if isinstance(tool_param, dict) else {}
+
+
 @dataclass
 class PreprocessResult:
     """工具参数预处理结果"""
     processed_count: int = 0
     # JSON 无法修复而被置为空 {} 的工具名列表，通常意味着模型输出被截断
     truncated_tool_names: List[str] = field(default_factory=list)
+    json_repair_candidates: List[JsonRepairCandidate] = field(default_factory=list)
 
     @property
     def has_truncation(self) -> bool:
@@ -273,7 +306,11 @@ def preprocess_tool_calls_batch(tool_calls: List) -> PreprocessResult:
             original_args = tool_call.function.arguments
             had_content = original_args and original_args.strip() and original_args != "{}"
 
-            if preprocess_tool_call_arguments(tool_call):
+            if preprocess_tool_call_arguments(
+                tool_call,
+                defer_json_repair=True,
+                repair_candidates=result.json_repair_candidates,
+            ):
                 result.processed_count += 1
                 # 有实际内容但被修复为空 {} → 高度疑似输出截断
                 if had_content and tool_call.function.arguments == "{}":

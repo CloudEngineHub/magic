@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useSlidesTemplateSaveFlow } from "../SlidesTemplateSaveFlow"
-import type { SlidesTemplateManifest, SlidesTemplateProjectContext } from "../types"
+import type { SlidesTemplateProjectContext } from "../types"
 
 const mocks = vi.hoisted(() => ({
-	checkByTemplateId: vi.fn(),
+	adapter: { saveEnabled: true },
+	checkByCode: vi.fn(),
+	createAvailableSlidesTemplateCode: vi.fn(),
+	listMine: vi.fn(),
+	loadDetail: vi.fn(),
 	saveFromFolder: vi.fn(),
 	toastInfo: vi.fn(),
 	toastSuccess: vi.fn(),
@@ -15,9 +19,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/pages/superMagic/services/mySlidesTemplateAdapter", () => ({
 	mySlidesTemplateAdapter: {
 		enabled: true,
-		checkByTemplateId: mocks.checkByTemplateId,
+		get saveEnabled() {
+			return mocks.adapter.saveEnabled
+		},
+		checkByCode: mocks.checkByCode,
+		createAvailableSlidesTemplateCode: mocks.createAvailableSlidesTemplateCode,
+		listMine: mocks.listMine,
+		loadDetail: mocks.loadDetail,
 		saveFromFolder: mocks.saveFromFolder,
 	},
+	createAvailableSlidesTemplateCode: mocks.createAvailableSlidesTemplateCode,
 	MySlidesTemplateAdapterUnavailableError: class extends Error {},
 }))
 
@@ -34,19 +45,8 @@ vi.mock("@/utils/create-random-uuid-v4", () => ({
 }))
 
 vi.mock("react-i18next", () => ({
-	useTranslation: () => ({ t: (key: string) => key }),
+	useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en_US" } }),
 }))
-
-const manifest: SlidesTemplateManifest = {
-	schema_version: "1.0",
-	template_id: "SLIDE-example",
-	category_code: "business",
-	tag_codes: ["featured"],
-	label: { zh_CN: "示例模板", en_US: "Example Template" },
-	description: { zh_CN: "中文描述", en_US: "English description" },
-	files: { slides_dir: "slides" },
-	slides: [{ file: "slides/slide-1.html", title: "One", layout: "cover", description: "First" }],
-}
 
 const project = {
 	rootFileId: "folder-1",
@@ -54,16 +54,10 @@ const project = {
 	root: { file_id: "folder-1", file_name: "示例模板" },
 } as SlidesTemplateProjectContext
 
-function Harness({
-	onManifestSave = vi.fn(),
-}: {
-	onManifestSave?: (manifest: SlidesTemplateManifest) => Promise<void>
-}) {
+function Harness() {
 	const flow = useSlidesTemplateSaveFlow({
-		manifest,
 		project,
 		projectId: "project-1",
-		onManifestSave,
 	})
 	return (
 		<div>
@@ -78,57 +72,81 @@ function Harness({
 describe("useSlidesTemplateSaveFlow", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		mocks.checkByTemplateId.mockResolvedValue({ exists: false })
+		mocks.adapter.saveEnabled = true
+		mocks.checkByCode.mockResolvedValue({ status: "UNUSED" })
+		mocks.createAvailableSlidesTemplateCode.mockResolvedValue("SLIDE-11111111")
+		mocks.listMine.mockResolvedValue({ items: [], page: 1, pageSize: 100, hasMore: false })
+		mocks.loadDetail.mockResolvedValue({ id: "existing-1" })
 		mocks.saveFromFolder.mockResolvedValue({ id: "saved", name: "Saved" })
+	})
+
+	it("shows the save dialog instead of an unavailable toast", async () => {
+		mocks.adapter.saveEnabled = false
+		render(<Harness />)
+		fireEvent.click(screen.getByRole("button", { name: "start" }))
+
+		expect(await screen.findByText("mySlidesTemplates.saveDialog.title")).toBeInTheDocument()
+		expect(screen.getByText("slidesTemplatePreview.save.unavailable")).toBeInTheDocument()
+		expect(mocks.toastInfo).not.toHaveBeenCalled()
 	})
 
 	it("saves directly when the template does not already exist", async () => {
 		render(<Harness />)
 		fireEvent.click(screen.getByRole("button", { name: "start" }))
 
+		await screen.findByText("mySlidesTemplates.saveDialog.title")
+		fireEvent.click(screen.getByRole("button", { name: "mySlidesTemplates.saveDialog.create" }))
 		await waitFor(() =>
-			expect(mocks.saveFromFolder).toHaveBeenCalledWith(
-				expect.objectContaining({ mode: "create" }),
-			),
+			expect(mocks.saveFromFolder).toHaveBeenCalledWith({
+				projectId: "project-1",
+				directoryId: "folder-1",
+				code: "SLIDE-11111111",
+			}),
 		)
 		expect(mocks.toastSuccess).toHaveBeenCalled()
 	})
 
-	it("offers overwrite when the template already exists", async () => {
-		mocks.checkByTemplateId.mockResolvedValueOnce({
-			exists: true,
-			template: { id: "existing-1", name: "Existing" },
+	it("reports a direct upload failure without showing success", async () => {
+		mocks.saveFromFolder.mockRejectedValueOnce(new Error("upload failed"))
+		render(<Harness />)
+		fireEvent.click(screen.getByRole("button", { name: "start" }))
+		await screen.findByText("mySlidesTemplates.saveDialog.title")
+		fireEvent.click(screen.getByRole("button", { name: "mySlidesTemplates.saveDialog.create" }))
+
+		await waitFor(() =>
+			expect(mocks.toastError).toHaveBeenCalledWith("slidesTemplatePreview.save.failed"),
+		)
+		expect(mocks.toastSuccess).not.toHaveBeenCalled()
+	})
+
+	it("uses the selected template code when overwriting", async () => {
+		mocks.listMine.mockResolvedValueOnce({
+			items: [
+				{
+					code: "SLIDE-existing",
+					label: { zh_CN: "已有模板", en_US: "Existing" },
+				},
+			],
+			page: 1,
+			pageSize: 100,
+			hasMore: false,
 		})
 		render(<Harness />)
 		fireEvent.click(screen.getByRole("button", { name: "start" }))
 
-		await screen.findByText("slidesTemplatePreview.save.existingTitle")
+		await screen.findByText("mySlidesTemplates.saveDialog.title")
+		fireEvent.click(screen.getByRole("radio", { name: "Existing" }))
 		fireEvent.click(
-			screen.getByRole("button", { name: "slidesTemplatePreview.save.overwrite" }),
+			screen.getByRole("button", { name: "mySlidesTemplates.saveDialog.overwrite" }),
 		)
 		await waitFor(() =>
 			expect(mocks.saveFromFolder).toHaveBeenCalledWith(
-				expect.objectContaining({ mode: "overwrite", targetId: "existing-1" }),
+				expect.objectContaining({
+					projectId: "project-1",
+					directoryId: "folder-1",
+					code: "SLIDE-existing",
+				}),
 			),
 		)
-	})
-
-	it("rolls back the manifest when save-as fails", async () => {
-		mocks.checkByTemplateId.mockResolvedValueOnce({
-			exists: true,
-			template: { id: "existing-1", name: "Existing" },
-		})
-		mocks.checkByTemplateId.mockResolvedValueOnce({ exists: false })
-		mocks.saveFromFolder.mockRejectedValueOnce(new Error("save failed"))
-		const onManifestSave = vi.fn().mockResolvedValue(undefined)
-		render(<Harness onManifestSave={onManifestSave} />)
-		fireEvent.click(screen.getByRole("button", { name: "start" }))
-		await screen.findByText("slidesTemplatePreview.save.existingTitle")
-		fireEvent.click(screen.getByRole("button", { name: "slidesTemplatePreview.save.saveAs" }))
-		await screen.findByText("slidesTemplatePreview.save.saveAsTitle")
-		fireEvent.click(screen.getByRole("button", { name: "slidesTemplatePreview.save.saveAs" }))
-
-		await waitFor(() => expect(onManifestSave).toHaveBeenCalledTimes(2))
-		expect(onManifestSave.mock.calls[1][0]).toEqual(manifest)
 	})
 })

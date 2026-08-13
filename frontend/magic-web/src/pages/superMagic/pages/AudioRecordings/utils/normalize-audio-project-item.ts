@@ -40,10 +40,8 @@ export function resolveCardStatus(
 		return "summarizing"
 	}
 
-	// 3. Completed states
+	// 3. Keep the explicit legacy summary flag for older flat API responses.
 	if (raw.is_summarized === 1) return "summarized"
-	if (raw.project_status === "finished") return "summarized"
-	if (raw.current_topic_status === "finished") return "summarized"
 
 	// 4. Audio merging phase
 	if (currentPhase === "waiting") {

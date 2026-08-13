@@ -1,16 +1,22 @@
 import { useSize } from "ahooks"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import i18next from "i18next"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { cn } from "@/lib/utils"
+import magicToast from "@/components/base/MagicToaster/utils"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import { useSlidesTemplateCatalogState } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateCatalogState"
-import { ALL_SLIDES_TEMPLATE_GROUP_KEY } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
-import type { MySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import {
+	ALL_SLIDES_TEMPLATE_GROUP_KEY,
+	toTemplateOption,
+} from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import { useSlidesTemplateFavorite } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateFavorite"
+import {
+	mySlidesTemplateAdapter,
+	type MySlidesTemplateAdapter,
+} from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "./SlidesTemplateCanvas"
-import SlidesTemplatePromptDock from "./SlidesTemplatePromptDock"
-import SlidesTemplatesToolbar from "./SlidesTemplatesToolbar"
+import SlidesTemplatesBottomTools from "./SlidesTemplatesBottomTools"
 import { getTemplateCoverUrl, getTemplateKey } from "./canvasInteraction"
 import {
 	getAvailableTemplateColors,
@@ -45,11 +51,18 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 	const lt = useLocaleText()
 	const slidesState = useSlidesTemplateCatalogState({ pageSize: CANVAS_TEMPLATE_PAGE_SIZE })
 	const { loadMore: loadMoreTemplates } = slidesState
+	const setCatalogTemplateFavorite = slidesState.setTemplateFavorite
 	const [publicSearchValue, setPublicSearchValue] = useState(slidesState.keyword)
+	const personalTemplatesAdapter = myTemplatesAdapter ?? mySlidesTemplateAdapter
+	const { pendingCodes: favoritePendingCodes, toggleFavorite } =
+		useSlidesTemplateFavorite(personalTemplatesAdapter)
 	const mySlidesTemplates = useMySlidesTemplates({
-		adapter: myTemplatesAdapter,
+		adapter: personalTemplatesAdapter,
 		groups: slidesState.groups,
 	})
+	const loadMoreMyTemplates = mySlidesTemplates.loadMore
+	const retryLoadMoreMyTemplates = mySlidesTemplates.retryLoadMore
+	const setMyTemplateFavorite = mySlidesTemplates.setTemplateFavorite
 	const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>(null)
 	const [similarColorSource, setSimilarColorSource] = useState<OptionItem | null>(null)
 	const [isInlinePreviewOpen, setIsInlinePreviewOpen] = useState(false)
@@ -61,11 +74,11 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 	const visibleTemplateOptionsRef = useRef(slidesState.templateOptions)
 	const similarColorSourceKeyRef = useRef("")
 	const bottomToolsSize = useSize(bottomToolsRef)
-	const reduceMotion = useReducedMotion()
 	const searchValue = mySlidesTemplates.isSelected
 		? mySlidesTemplates.searchValue
 		: publicSearchValue
-	const hasGroups = mySlidesTemplates.groups.length > 1
+	const toolbarGroups = mySlidesTemplates.groups
+	const hasGroups = toolbarGroups.length > 1
 	const isSimilarColorFilterActive = Boolean(similarColorSource)
 	const colorExtractionVersion = useTemplateColorExtractionVersion(isSimilarColorFilterActive)
 	const isUnfilteredAllTemplatesView =
@@ -133,11 +146,15 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 	const loadTemplateDetail = slidesState.loadTemplateDetail
 	const handleTemplateDetailLoad = useCallback(
 		(template: OptionItem) => {
-			if (mySlidesTemplates.isSelected) return Promise.resolve(template)
 			const code = typeof template.value === "string" ? template.value : ""
+			if (mySlidesTemplates.isSelected) {
+				return code
+					? personalTemplatesAdapter.loadDetail(code).then(toTemplateOption)
+					: Promise.resolve(template)
+			}
 			return code ? loadTemplateDetail(code) : Promise.resolve(template)
 		},
-		[loadTemplateDetail, mySlidesTemplates.isSelected],
+		[loadTemplateDetail, mySlidesTemplates.isSelected, personalTemplatesAdapter],
 	)
 
 	useEffect(() => {
@@ -233,9 +250,24 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 	])
 
 	const handleLoadMoreTemplates = useCallback(() => {
-		if (mySlidesTemplates.isSelected || isSimilarColorFilterActive) return
+		if (mySlidesTemplates.isSelected) {
+			if (mySlidesTemplates.isLoadMoreFailed) {
+				retryLoadMoreMyTemplates()
+				return
+			}
+			loadMoreMyTemplates()
+			return
+		}
+		if (isSimilarColorFilterActive) return
 		loadMoreTemplates()
-	}, [isSimilarColorFilterActive, loadMoreTemplates, mySlidesTemplates.isSelected])
+	}, [
+		isSimilarColorFilterActive,
+		loadMoreTemplates,
+		loadMoreMyTemplates,
+		mySlidesTemplates.isLoadMoreFailed,
+		mySlidesTemplates.isSelected,
+		retryLoadMoreMyTemplates,
+	])
 
 	const canvasTemplateOptions = mySlidesTemplates.isSelected
 		? mySlidesTemplates.templates
@@ -243,8 +275,6 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 			? []
 			: visibleTemplateOptions
 
-	// 服务端筛选只有在新结果真正替换后才递增 templateViewRevision。
-	// 画布复位必须与这次替换同一帧发生，不能在分类按钮或防抖关键词变化时提前复位旧模板。
 	const resetKey = mySlidesTemplates.isSelected
 		? mySlidesTemplates.resetKey
 		: `${slidesState.templateViewRevision}:${
@@ -324,7 +354,39 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 		setSimilarColorSource({ ...template, colors })
 	}, [])
 
+	const handleFavoriteToggle = useCallback(
+		(template: OptionItem) => {
+			const section = mySlidesTemplates.activeSection
+			void toggleFavorite(template, (code, isFavorite, fallbackTemplate) => {
+				setCatalogTemplateFavorite(code, isFavorite)
+				setMyTemplateFavorite(section, code, isFavorite, fallbackTemplate)
+			})
+				.then((isFavorite) => {
+					if (isFavorite === undefined) return
+					magicToast.success(
+						i18next.t(
+							isFavorite
+								? "mySlidesTemplates.favoriteSuccess"
+								: "mySlidesTemplates.unfavoriteSuccess",
+							{ ns: "super" },
+						),
+					)
+				})
+				.catch(() => {
+					magicToast.error(i18next.t("mySlidesTemplates.favoriteFailed", { ns: "super" }))
+				})
+		},
+		[
+			mySlidesTemplates.activeSection,
+			setMyTemplateFavorite,
+			setCatalogTemplateFavorite,
+			toggleFavorite,
+		],
+	)
+
 	function handleGroupChange(groupKey: string) {
+		if (groupKey === MY_SLIDES_TEMPLATES_GROUP_KEY && mySlidesTemplates.isSelected) return
+
 		templateDetailRequestSeqRef.current += 1
 		setSelectedTemplate(null)
 		setSimilarColorSource(null)
@@ -346,6 +408,7 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 					status={mySlidesTemplates.emptyStatus}
 					onRetry={() => void mySlidesTemplates.retry()}
 					bottomInset={(bottomToolsSize?.height ?? 0) + BOTTOM_TOOLS_OFFSET}
+					section={mySlidesTemplates.activeSection}
 				/>
 			) : (
 				<SlidesTemplateCanvas
@@ -353,21 +416,30 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 					enableInfiniteLoop={enableInfiniteLoop}
 					initialAlignment={isSimilarColorFilterActive ? "top" : "center"}
 					templates={canvasTemplateOptions}
+					favoritePendingCodes={favoritePendingCodes}
 					selectedTemplate={selectedTemplate}
 					onTemplateSelect={handleTemplateSelect}
 					hasMore={
-						mySlidesTemplates.isSelected || isSimilarColorFilterActive
-							? false
-							: slidesState.hasMore
+						mySlidesTemplates.isSelected
+							? mySlidesTemplates.hasMore
+							: isSimilarColorFilterActive
+								? false
+								: slidesState.hasMore
 					}
 					isLoading={
 						mySlidesTemplates.isSelected
 							? false
 							: slidesState.isLoading || isInitialPrefetchPending
 					}
-					isLoadingMore={mySlidesTemplates.isSelected ? false : slidesState.isLoadingMore}
+					isLoadingMore={
+						mySlidesTemplates.isSelected
+							? mySlidesTemplates.isLoadingMore
+							: slidesState.isLoadingMore
+					}
 					isRefreshFailed={
-						mySlidesTemplates.isSelected ? false : slidesState.isRefreshFailed
+						mySlidesTemplates.isSelected
+							? mySlidesTemplates.isLoadMoreFailed
+							: slidesState.isRefreshFailed
 					}
 					isRefreshing={mySlidesTemplates.isSelected ? false : slidesState.isRefreshing}
 					onLoadMore={handleLoadMoreTemplates}
@@ -379,111 +451,52 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 					onFindSimilarColors={
 						mySlidesTemplates.isSelected ? undefined : handleFindSimilarColors
 					}
+					onFavoriteToggle={handleFavoriteToggle}
 					onPreviewOpenChange={setIsInlinePreviewOpen}
-					onRetryRefresh={slidesState.retryRefresh}
+					onRetryRefresh={
+						mySlidesTemplates.isSelected
+							? mySlidesTemplates.retryLoadMore
+							: slidesState.retryRefresh
+					}
 					onTemplateDetailLoad={handleTemplateDetailLoad}
 					resetKey={resetKey}
 					viewportInsets={canvasViewportInsets}
 				/>
 			)}
 
-			<AnimatePresence initial={false}>
-				{isInlinePreviewOpen ? null : (
-					<motion.div
-						ref={bottomToolsRef}
-						key="bottom-tools-shell"
-						initial={reduceMotion ? false : { opacity: 0, y: 42, scale: 0.98 }}
-						animate={{ opacity: 1, y: 0, scale: 1 }}
-						exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 42, scale: 0.98 }}
-						transition={
-							reduceMotion
-								? { duration: 0 }
-								: { type: "spring", stiffness: 420, damping: 38, mass: 0.7 }
-						}
-						className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-6"
-						style={{ bottom: BOTTOM_TOOLS_OFFSET }}
-					>
-						<motion.div
-							className={cn(
-								"pointer-events-auto flex w-full max-w-3xl flex-col rounded-2xl bg-zinc-950/[0.42] p-2 shadow-[0_12px_36px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-2xl",
-							)}
-							data-testid="slides-templates-page-bottom-tools"
-						>
-							<div
-								className={cn(
-									"relative grid",
-									selectedTemplate
-										? "grid-rows-[1fr]"
-										: "grid-rows-[0fr] transition-none",
-								)}
-								data-testid="slides-templates-page-prompt-region"
-							>
-								<div className="min-h-0 overflow-hidden">
-									{/* 提前挂载编辑器，首次选择模板时只切换可见性，避免初始化导致整页闪动。 */}
-									<motion.div
-										initial={false}
-										animate={{
-											opacity: selectedTemplate ? 1 : 0,
-											y: selectedTemplate ? 0 : 6,
-										}}
-										transition={
-											reduceMotion
-												? { duration: 0 }
-												: {
-														duration: 0.14,
-														ease: [0.22, 1, 0.36, 1],
-													}
-										}
-										className={cn(
-											"flex flex-col",
-											!selectedTemplate && "pointer-events-none invisible",
-										)}
-										aria-hidden={!selectedTemplate}
-										data-testid="slides-templates-page-prompt-panel"
-									>
-										<SlidesTemplatePromptDock
-											selectedTemplate={selectedTemplate}
-											onFindSimilarColors={
-												mySlidesTemplates.isSelected
-													? undefined
-													: handleFindSimilarColors
-											}
-											onPreviewSelectedTemplate={
-												handlePreviewSelectedTemplate
-											}
-											onClearSelectedTemplate={handleClearSelectedTemplate}
-										/>
-									</motion.div>
-								</div>
-							</div>
-
-							<SlidesTemplatesToolbar
-								className={selectedTemplate ? "mt-2.5" : undefined}
-								groups={mySlidesTemplates.groups}
-								onClearSearch={handleClearSearch}
-								onClearSimilarColors={() => setSimilarColorSource(null)}
-								onCompositionEnd={handleCompositionEnd}
-								onCompositionStart={handleCompositionStart}
-								onFocusRandomTemplate={handleFocusRandomTemplate}
-								onGroupChange={handleGroupChange}
-								onSearchChange={handleSearchChange}
-								randomDisabled={canvasTemplateOptions.length === 0}
-								searchValue={searchValue}
-								selectedGroupKey={
-									mySlidesTemplates.isSelected
-										? MY_SLIDES_TEMPLATES_GROUP_KEY
-										: slidesState.selectedGroupKey
-								}
-								similarColorAmbient={similarColorAmbient}
-								similarColorSourceColors={similarColorSourceColors}
-								similarColorSourceName={similarColorSourceName}
-								showGroups={hasGroups}
-								showSimilarColors={Boolean(similarColorSource)}
-							/>
-						</motion.div>
-					</motion.div>
-				)}
-			</AnimatePresence>
+			<SlidesTemplatesBottomTools
+				bottomOffset={BOTTOM_TOOLS_OFFSET}
+				containerRef={bottomToolsRef}
+				isInlinePreviewOpen={isInlinePreviewOpen}
+				selectedTemplate={selectedTemplate}
+				onClearSelectedTemplate={handleClearSelectedTemplate}
+				onFindSimilarColors={
+					mySlidesTemplates.isSelected ? undefined : handleFindSimilarColors
+				}
+				onPreviewSelectedTemplate={handlePreviewSelectedTemplate}
+				toolbarProps={{
+					activeMyTemplatesSection: mySlidesTemplates.activeSection,
+					groups: toolbarGroups,
+					onClearSearch: handleClearSearch,
+					onClearSimilarColors: () => setSimilarColorSource(null),
+					onCompositionEnd: handleCompositionEnd,
+					onCompositionStart: handleCompositionStart,
+					onFocusRandomTemplate: handleFocusRandomTemplate,
+					onGroupChange: handleGroupChange,
+					onMyTemplatesSectionChange: mySlidesTemplates.setActiveSection,
+					onSearchChange: handleSearchChange,
+					randomDisabled: canvasTemplateOptions.length === 0,
+					searchValue,
+					selectedGroupKey: mySlidesTemplates.isSelected
+						? MY_SLIDES_TEMPLATES_GROUP_KEY
+						: slidesState.selectedGroupKey,
+					similarColorAmbient,
+					similarColorSourceColors,
+					similarColorSourceName,
+					showGroups: hasGroups,
+					showSimilarColors: Boolean(similarColorSource),
+				}}
+			/>
 		</div>
 	)
 }

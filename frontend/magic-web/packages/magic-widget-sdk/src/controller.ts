@@ -2,6 +2,8 @@ import { widgetStyles } from "./styles"
 import type { MagicWidget } from "./types"
 import { getWidgetScriptOrigin } from "./scriptOrigin"
 import { buildWidgetIframeUrl, validateWidgetMountOptions } from "./url"
+import { WidgetBridge, createWidgetCommandError, createWidgetId } from "./bridge"
+import { mergeWidgetConfig, resolveInitialWidgetConfig } from "./config"
 
 const ROOT_ATTRIBUTE = "data-magic-widget-root"
 const TRIGGER_ATTRIBUTE = "data-magic-widget-trigger"
@@ -181,6 +183,65 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	let suppressNextClick = false
 	let closeTimer: number | null = null
 	let openTimer: number | null = null
+	let bridge: WidgetBridge | null = null
+	let instanceId: string | null = null
+	let appOrigin: string | null = null
+	let inlineMode = false
+	let currentConfig: MagicWidget.WidgetConfig = {}
+	let confirmedConfig: MagicWidget.WidgetConfig = {}
+	let configUpdateQueue: Promise<void> = Promise.resolve()
+	let previewFullscreen = false
+	let lifecycleId = 0
+	const agentReadyListeners = new Set<MagicWidget.AgentReadyEventListener>()
+	const previewFullscreenListeners = new Set<MagicWidget.PreviewFullscreenEventListener>()
+	const messageStreamStartedListeners = new Set<
+		MagicWidget.RuntimeEventListener<"message.stream.started">
+	>()
+	const toolCallSettledListeners = new Set<MagicWidget.RuntimeEventListener<"toolCall.settled">>()
+	const taskCompletedListeners = new Set<MagicWidget.RuntimeEventListener<"task.completed">>()
+
+	/** Notifies host subscribers whenever the current iframe editor becomes usable. */
+	const notifyAgentReady = () => {
+		agentReadyListeners.forEach((listener) => {
+			try {
+				listener()
+			} catch (error) {
+				console.error("Magic widget agent_ready listener failed", error)
+			}
+		})
+	}
+
+	/** Routes one validated runtime event to host listeners registered for its exact type. */
+	const notifyRuntimeEvent = (event: MagicWidget.RuntimeEvent) => {
+		if (event.type === "message.stream.started") {
+			messageStreamStartedListeners.forEach((listener) => {
+				try {
+					listener(event)
+				} catch (error) {
+					console.error("Magic widget message.stream.started listener failed", error)
+				}
+			})
+			return
+		}
+		if (event.type === "toolCall.settled") {
+			toolCallSettledListeners.forEach((listener) => {
+				try {
+					listener(event)
+				} catch (error) {
+					console.error("Magic widget toolCall.settled listener failed", error)
+				}
+			})
+			return
+		}
+
+		taskCompletedListeners.forEach((listener) => {
+			try {
+				listener(event)
+			} catch (error) {
+				console.error("Magic widget task.completed listener failed", error)
+			}
+		})
+	}
 
 	const commitPanelDragPosition = (state: DragState) => {
 		state.target.style.left = `${state.currentLeft}px`
@@ -390,8 +451,37 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		closeTimer = null
 	}
 
+	/** Publishes the validated iframe preview state for the embedding host to style. */
+	const setPreviewFullscreen = (isFullscreen: boolean) => {
+		if (previewFullscreen === isFullscreen) return
+		previewFullscreen = isFullscreen
+		previewFullscreenListeners.forEach((listener) => listener(isFullscreen))
+	}
+
+	/** Requests the iframe to dismiss its preview before the host shell restores. */
+	const requestPreviewDismiss = () => {
+		if (!previewFullscreen || !iframe?.contentWindow || !instanceId || !appOrigin) return
+		iframe.contentWindow.postMessage(
+			{
+				protocol: "magic-widget",
+				version: 1,
+				instanceId,
+				type: "ui_command",
+				command: "dismiss_preview",
+			},
+			appOrigin,
+		)
+	}
+
 	const close = () => {
 		if (!modal) return
+		requestPreviewDismiss()
+		setPreviewFullscreen(false)
+		if (inlineMode) {
+			modal.hidden = true
+			modal.setAttribute("data-state", "closed")
+			return
+		}
 		clearOpenTimer()
 		clearCloseTimer()
 		modal.setAttribute("data-state", "closing")
@@ -474,9 +564,19 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		ensureMounted()
 		if (!options || !modal || !iframe) return
 
-		iframe.src = buildWidgetIframeUrl(options, {
-			fallbackAppOrigin: initialWidgetScriptOrigin ?? getWidgetScriptOrigin(),
-		}).toString()
+		if (!iframe.src || iframe.src === "about:blank") {
+			bridge?.reset()
+			iframe.src = buildWidgetIframeUrl(options, {
+				fallbackAppOrigin: appOrigin,
+				instanceId: instanceId ?? undefined,
+				hostOrigin: window.location.origin,
+			}).toString()
+		}
+		if (inlineMode) {
+			modal.hidden = false
+			modal.setAttribute("data-state", "open")
+			return
+		}
 		clearOpenTimer()
 		clearCloseTimer()
 		positionPanel()
@@ -494,11 +594,14 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 	}
 
 	const destroy = () => {
+		lifecycleId += 1
+		setPreviewFullscreen(false)
 		clearOpenTimer()
 		clearCloseTimer()
 		stopDragging()
 		window.removeEventListener("keydown", onKeyDown)
 		window.removeEventListener("resize", onWindowResize)
+		bridge?.destroy()
 		root?.remove()
 		options = null
 		root = null
@@ -508,16 +611,165 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		mask = null
 		panel = null
 		iframe = null
+		bridge = null
+		instanceId = null
+		appOrigin = null
+		inlineMode = false
+		currentConfig = {}
+		confirmedConfig = {}
+		configUpdateQueue = Promise.resolve()
+	}
+
+	/** Validates public text commands before data crosses into the iframe. */
+	const normalizeCommandContent = (content: unknown): string => {
+		if (typeof content !== "string" || !content.trim()) {
+			throw createWidgetCommandError(
+				"INVALID_INPUT",
+				"Magic widget command content must be a non-empty string",
+			)
+		}
+		return content
+	}
+
+	/** Opens a floating widget when necessary and forwards one public text command. */
+	const sendTextCommand = async (
+		command: "setInput" | "appendInput" | "sendMessage",
+		content: unknown,
+	): Promise<void> => {
+		if (!options || !bridge || !iframe) {
+			throw createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first")
+		}
+		const normalizedContent = normalizeCommandContent(content)
+		if (iframe.src === "about:blank" || !iframe.src) open()
+		await bridge.send(command, { content: normalizedContent })
+	}
+
+	/** Sends a command that does not carry text while preserving the shared readiness wait. */
+	const sendNoPayloadCommand = async (
+		command: "clearInput" | "getInput" | "newConversation",
+	): Promise<{ content?: string } | undefined> => {
+		if (!options || !bridge || !iframe) {
+			throw createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first")
+		}
+		if (iframe.src === "about:blank" || !iframe.src) open()
+		return bridge.send(command)
+	}
+
+	/** Subscribes to public lifecycle, UI state, and runtime events. */
+	const on = (
+		event: MagicWidget.EventName,
+		listener:
+			| MagicWidget.AgentReadyEventListener
+			| MagicWidget.PreviewFullscreenEventListener
+			| MagicWidget.RuntimeEventListener<"message.stream.started">
+			| MagicWidget.RuntimeEventListener<"toolCall.settled">
+			| MagicWidget.RuntimeEventListener<"task.completed">,
+	) => {
+		if (typeof listener !== "function") {
+			throw new TypeError("Magic widget event listener must be a function")
+		}
+		if (event === "agent_ready") {
+			agentReadyListeners.add(listener as MagicWidget.AgentReadyEventListener)
+			if (bridge?.isReady())
+				window.queueMicrotask(listener as MagicWidget.AgentReadyEventListener)
+			return () => agentReadyListeners.delete(listener as MagicWidget.AgentReadyEventListener)
+		}
+		if (event === "preview_fullscreen") {
+			const previewListener = listener as MagicWidget.PreviewFullscreenEventListener
+			previewFullscreenListeners.add(previewListener)
+			// Replay the current preview state synchronously so hosts can apply layout before the next paint.
+			previewListener(previewFullscreen)
+			return () => previewFullscreenListeners.delete(previewListener)
+		}
+		if (event === "message.stream.started") {
+			const runtimeListener =
+				listener as MagicWidget.RuntimeEventListener<"message.stream.started">
+			messageStreamStartedListeners.add(runtimeListener)
+			return () => messageStreamStartedListeners.delete(runtimeListener)
+		}
+		if (event === "toolCall.settled") {
+			const runtimeListener = listener as MagicWidget.RuntimeEventListener<"toolCall.settled">
+			toolCallSettledListeners.add(runtimeListener)
+			return () => toolCallSettledListeners.delete(runtimeListener)
+		}
+		if (event === "task.completed") {
+			const runtimeListener = listener as MagicWidget.RuntimeEventListener<"task.completed">
+			taskCompletedListeners.add(runtimeListener)
+			return () => taskCompletedListeners.delete(runtimeListener)
+		}
+
+		throw new TypeError("Magic widget event name is not supported")
+	}
+
+	/** Applies one serialized configuration update while preserving iframe and conversation state. */
+	const updateConfig = (update: Partial<MagicWidget.WidgetConfig>): Promise<void> => {
+		if (!options || !bridge || !iframe) {
+			return Promise.reject(
+				createWidgetCommandError("NOT_MOUNTED", "Magic widget must be mounted first"),
+			)
+		}
+
+		const updateLifecycleId = lifecycleId
+		const task = configUpdateQueue.then(async () => {
+			if (!options || !bridge || !iframe || lifecycleId !== updateLifecycleId) {
+				throw createWidgetCommandError("DESTROYED", "Magic widget was destroyed")
+			}
+
+			const nextConfig = mergeWidgetConfig(currentConfig, update)
+			currentConfig = nextConfig
+			options = { ...options, config: nextConfig }
+
+			// A closed or still-loading iframe consumes the latest snapshot from its initial URL or load sync.
+			if (!bridge.isIframeLoaded()) {
+				confirmedConfig = nextConfig
+				return
+			}
+
+			try {
+				await bridge.sendConfig(nextConfig)
+				if (lifecycleId !== updateLifecycleId) {
+					throw createWidgetCommandError("DESTROYED", "Magic widget was destroyed")
+				}
+				confirmedConfig = nextConfig
+			} catch (error) {
+				if (lifecycleId === updateLifecycleId && options) {
+					currentConfig = confirmedConfig
+					options = { ...options, config: confirmedConfig }
+				}
+				throw error
+			}
+		})
+
+		// Keep later updates serialized even when one caller observes a rejected request.
+		configUpdateQueue = task.catch(() => undefined)
+		return task
 	}
 
 	const mount = (nextOptions: MagicWidget.MountOptions) => {
 		requireDocument()
 		validateWidgetMountOptions(nextOptions)
+		const initialConfig = resolveInitialWidgetConfig(nextOptions.config)
 		destroy()
-		options = nextOptions
+		if (
+			nextOptions.target &&
+			(!nextOptions.target.isConnected || !document.contains(nextOptions.target))
+		) {
+			throw new Error("Magic widget target must be connected to the document")
+		}
+		options = { ...nextOptions, config: initialConfig }
+		currentConfig = initialConfig
+		confirmedConfig = initialConfig
+		inlineMode = Boolean(nextOptions.target)
+		instanceId = createWidgetId("widget")
+		appOrigin = initialWidgetScriptOrigin ?? getWidgetScriptOrigin()
+		if (!appOrigin) throw new Error("Magic widget script origin is required")
 
 		root = document.createElement("div")
 		root.setAttribute(ROOT_ATTRIBUTE, "")
+		if (inlineMode) {
+			root.style.width = "100%"
+			root.style.height = "100%"
+		}
 		setHostVariables(root, nextOptions)
 		applyModalSlotOptions(root, nextOptions, "root")
 		shadowRoot = root.attachShadow({ mode: "open" })
@@ -525,28 +777,31 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		const style = document.createElement("style")
 		style.textContent = widgetStyles
 
-		trigger = document.createElement("button")
-		trigger.type = "button"
-		trigger.className = "magic-widget-trigger"
-		trigger.setAttribute(TRIGGER_ATTRIBUTE, "")
-		trigger.setAttribute("aria-label", "Open Magic")
-		trigger.append(createMessageIcon())
-		trigger.addEventListener("pointerdown", onPointerDown)
-		trigger.addEventListener("click", (event) => {
-			if (suppressNextClick) {
-				event.preventDefault()
-				suppressNextClick = false
-				return
-			}
-			open()
-		})
-		window.addEventListener("resize", onWindowResize)
+		if (!inlineMode) {
+			trigger = document.createElement("button")
+			trigger.type = "button"
+			trigger.className = "magic-widget-trigger"
+			trigger.setAttribute(TRIGGER_ATTRIBUTE, "")
+			trigger.setAttribute("aria-label", "Open Magic")
+			trigger.append(createMessageIcon())
+			trigger.addEventListener("pointerdown", onPointerDown)
+			trigger.addEventListener("click", (event) => {
+				if (suppressNextClick) {
+					event.preventDefault()
+					suppressNextClick = false
+					return
+				}
+				open()
+			})
+			window.addEventListener("resize", onWindowResize)
+		}
 
 		modal = document.createElement("div")
 		modal.className = "magic-widget-layer"
 		modal.setAttribute(PANEL_LAYER_ATTRIBUTE, "")
 		modal.setAttribute("data-state", "closed")
-		modal.hidden = true
+		modal.setAttribute("data-render-mode", inlineMode ? "inline" : "floating")
+		modal.hidden = !inlineMode
 		applyModalSlotOptions(modal, nextOptions, "layer")
 		modal.addEventListener("click", (event) => {
 			if (event.target === modal) close()
@@ -561,8 +816,10 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		panel = document.createElement("section")
 		panel.className = "magic-widget-panel"
 		panel.setAttribute(PANEL_ATTRIBUTE, "")
-		panel.setAttribute("role", "dialog")
-		panel.setAttribute("aria-modal", "true")
+		if (!inlineMode) {
+			panel.setAttribute("role", "dialog")
+			panel.setAttribute("aria-modal", "true")
+		}
 		applyModalSlotOptions(panel, nextOptions, "container")
 
 		const modalTitle = nextOptions.modal?.title ?? "Magic"
@@ -605,10 +862,33 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		}
 
 		body.append(iframe)
-		panel.append(header, body)
-		modal.append(mask, panel)
-		shadowRoot.append(style, trigger, modal)
-		document.body.append(root)
+		if (inlineMode) panel.append(body)
+		else panel.append(header, body)
+		if (inlineMode) modal.append(panel)
+		else modal.append(mask, panel)
+		if (trigger) shadowRoot.append(style, trigger, modal)
+		else shadowRoot.append(style, modal)
+		// Mount the widget root directly into the host target; fullscreen layout is controlled by the host.
+		;(nextOptions.target ?? document.body).append(root)
+		bridge = new WidgetBridge(iframe, appOrigin, instanceId)
+		bridge.onAgentReady(notifyAgentReady)
+		bridge.onPreviewFullscreenChange(setPreviewFullscreen)
+		bridge.onRuntimeEvent(notifyRuntimeEvent)
+		bridge.onConfigReady(() => {
+			if (!bridge || !options) return
+			const loadLifecycleId = lifecycleId
+			const snapshot = currentConfig
+			// The initial query covers first paint; the explicit handshake avoids racing the Provider listener.
+			void bridge
+				.sendConfig(snapshot)
+				.then(() => {
+					if (lifecycleId === loadLifecycleId && currentConfig === snapshot) {
+						confirmedConfig = snapshot
+					}
+				})
+				.catch(() => undefined)
+		})
+		if (inlineMode) open()
 	}
 
 	return {
@@ -616,5 +896,26 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 		open,
 		close,
 		destroy,
+		on,
+		setInput: (content) => sendTextCommand("setInput", content),
+		appendInput: (content) => sendTextCommand("appendInput", content),
+		clearInput: async () => {
+			await sendNoPayloadCommand("clearInput")
+		},
+		getInput: async () => {
+			const result = await sendNoPayloadCommand("getInput")
+			if (typeof result?.content !== "string") {
+				throw createWidgetCommandError(
+					"COMMAND_FAILED",
+					"Magic widget did not return the current input content",
+				)
+			}
+			return result.content
+		},
+		sendMessage: (content) => sendTextCommand("sendMessage", content),
+		newConversation: async () => {
+			await sendNoPayloadCommand("newConversation")
+		},
+		updateConfig,
 	}
 }

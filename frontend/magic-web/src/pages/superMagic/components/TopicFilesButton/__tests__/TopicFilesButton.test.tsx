@@ -27,7 +27,7 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: { error: vi.fn(), info: infoMock, success: vi.fn() },
 }))
 vi.mock("@/pages/superMagic/services/mySlidesTemplateAdapter", () => ({
-	mySlidesTemplateAdapter: { enabled: false },
+	mySlidesTemplateAdapter: { enabled: true, saveEnabled: false },
 }))
 vi.mock("@/pages/superMagic/utils/slidesTemplateActions", () => ({
 	buildConvertToSlidesTemplatePayload: vi.fn(() => payloadMock),
@@ -83,12 +83,14 @@ vi.mock("../TopicFilesPanel", async () => {
 })
 
 describe("TopicFilesButton slide template actions", () => {
-	it("shows the unavailable toast when saving without a configured adapter", () => {
-		render(<TopicFilesButton />)
+	it("shows the save dialog when saving without a configured adapter", async () => {
+		render(<TopicFilesButton projectId="project-1" />)
 
 		fireEvent.click(screen.getByRole("button", { name: "save template" }))
 
-		expect(infoMock).toHaveBeenCalledWith("mySlidesTemplates.saveUnavailable")
+		expect(await screen.findByText("mySlidesTemplates.saveDialog.title")).toBeInTheDocument()
+		expect(screen.getByText("mySlidesTemplates.saveUnavailable")).toBeInTheDocument()
+		expect(infoMock).not.toHaveBeenCalled()
 	})
 
 	it("publishes Create_New_Topic when converting a slide project", () => {

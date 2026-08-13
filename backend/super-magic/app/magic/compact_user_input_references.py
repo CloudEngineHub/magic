@@ -31,7 +31,7 @@ def build_compact_user_input_references(
 ) -> tuple[CompactUserInputReference, ...]:
     refs: list[CompactUserInputReference] = []
     for message in messages:
-        if not _is_real_user_input(message):
+        if not is_real_user_input(message):
             continue
         content = getattr(message, "content", "")
         if not isinstance(content, str):
@@ -101,14 +101,22 @@ def restore_preserved_user_inputs(
     return f"{base_summary}\n\n{section}"
 
 
-def _is_real_user_input(message: object) -> bool:
-    if not isinstance(message, UserMessage):
+def is_real_user_input(message: object) -> bool:
+    """判断消息是否是用户主动输入，而不是运行时注入的 user 消息。"""
+    if isinstance(message, UserMessage):
+        role = message.role
+        show_in_ui = message.show_in_ui
+        source = message.source
+        content = message.content
+    elif isinstance(message, dict):
+        role = message.get("role")
+        show_in_ui = message.get("show_in_ui", True)
+        source = message.get("source")
+        content = message.get("content", "")
+    else:
         return False
-    if getattr(message, "show_in_ui", True) is not True:
+    if role != "user" or show_in_ui is not True or source is not None:
         return False
-    if getattr(message, "source", None) is not None:
-        return False
-    content = getattr(message, "content", "")
     if not isinstance(content, str) or not content.strip():
         return False
     if content.lstrip().startswith("<summary>"):

@@ -1,6 +1,8 @@
 import json
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from PIL import Image
@@ -10,7 +12,6 @@ from pptx.util import Inches
 from agentlang.context.tool_context import ToolContext
 from app.tools.slide_template_builder import CreateSlideTemplateProject, PrepareSlideTemplateSource
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
-from app.tools.slide_template_builder.errors import SlideTemplateBuilderError
 from app.tools.slide_template_builder.models import (
     TemplateCanvas,
     TemplateDescriptionText,
@@ -19,8 +20,13 @@ from app.tools.slide_template_builder.models import (
     TemplateSourceParams,
 )
 from app.tools.slide_template_builder.pptx_structure import extract_pptx_structure
-from app.tools.slide_template_builder.preview import _create_collage, capture_slide
+from app.tools.slide_template_builder.preview import (
+    _SLIDE_INSPECTION_SCRIPT,
+    _create_collage,
+    render_slide_previews,
+)
 from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplateSourceParams
+from magic_use.config import BrowserRuntimeConfig
 
 
 def _params() -> CreateSlideTemplateProjectParams:
@@ -50,37 +56,88 @@ def _write_square_pptx(path: Path) -> None:
     presentation.save(path)
 
 
-class FakePage:
-    def __init__(self, slide_size: tuple[int, int]):
-        self.slide_size = slide_size
-        self.viewport = None
-        self.clip = None
+class FakeBrowserClient:
+    def __init__(self, inspection: dict, screenshot: bytes):
+        self.inspection = inspection
+        self.screenshot_bytes = screenshot
+        self.navigated_urls = []
+        self.closed = False
 
-    async def set_viewport_size(self, viewport):
-        self.viewport = viewport
+    async def list_pages(self):
+        return [SimpleNamespace(id="page-1")]
 
-    async def goto(self, *_args, **_kwargs):
-        return None
+    async def navigate(self, page_id, url):
+        assert page_id == "page-1"
+        self.navigated_urls.append(url)
 
-    async def evaluate(self, expression):
-        if expression == "document.fonts && document.fonts.ready":
+    async def evaluate(self, page_id, expression, argument=None):
+        assert page_id == "page-1"
+        if argument is not None:
+            assert "URL.createObjectURL" in expression
+            return "blob:https://browser.example/rendered-page"
+        if "document.fonts" in expression:
             return None
-        return {
-            "scrollWidth": self.viewport["width"],
-            "scrollHeight": self.viewport["height"],
-            "bodyScrollWidth": self.viewport["width"],
-            "bodyScrollHeight": self.viewport["height"],
-            "brokenImages": [],
-            "slideBounds": {"width": self.slide_size[0], "height": self.slide_size[1]},
-            "viewport": self.viewport,
-        }
+        return self.inspection
 
-    async def wait_for_timeout(self, _timeout):
-        return None
+    async def screenshot(self, page_id):
+        assert page_id == "page-1"
+        return SimpleNamespace(image=self.screenshot_bytes)
 
-    async def screenshot(self, *, clip, **_kwargs):
-        self.clip = clip
-        return b"png"
+    async def close(self):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_render_slide_previews_uses_fixed_canvas_browser_sdk_and_blob_url(tmp_path):
+    template_dir = tmp_path / "SLIDE-square-source"
+    slide_path = template_dir / "slides/封面.html"
+    from app.utils.async_file_utils import async_mkdir, async_write_text
+
+    await async_mkdir(slide_path.parent, parents=True)
+    await async_write_text(slide_path, '<!doctype html><main class="slide"></main>')
+    inspection = {
+        "scrollWidth": 1080,
+        "scrollHeight": 1080,
+        "bodyScrollWidth": 1080,
+        "bodyScrollHeight": 1080,
+        "brokenImages": [],
+        "slideBounds": {"width": 1080, "height": 1080},
+        "viewport": {"width": 1080, "height": 1080},
+    }
+    screenshot = BytesIO()
+    Image.new("RGB", (1080, 1080), "#102a43").save(screenshot, format="PNG")
+    browser = FakeBrowserClient(inspection, screenshot.getvalue())
+    base_config = BrowserRuntimeConfig()
+
+    with (
+        patch(
+            "app.tools.slide_template_builder.preview.BrowserConfigAdapter.build_playwright",
+            new=AsyncMock(return_value=base_config),
+        ) as build_playwright_mock,
+        patch(
+            "app.tools.slide_template_builder.preview.create_browser",
+            new=AsyncMock(return_value=browser),
+        ) as create_browser_mock,
+    ):
+        captures = await render_slide_previews(
+            workspace_dir=tmp_path,
+            template_dir=template_dir,
+            slides=[{"file": "slides/封面.html"}],
+            canvas=TemplateCanvas(width=1080, height=1080),
+        )
+
+    build_playwright_mock.assert_awaited_once_with(
+        str(tmp_path),
+        viewport_width=1080,
+        viewport_height=1080,
+        device_scale_factor=1,
+    )
+    assert create_browser_mock.await_args.args[0] is base_config
+    assert len(captures) == 1
+    assert captures[0].inspection == inspection
+    assert browser.navigated_urls == ["blob:https://browser.example/rendered-page"]
+    assert browser.closed is True
+    assert "document.querySelector('.slide-container, .slide')" in _SLIDE_INSPECTION_SCRIPT
 
 
 @pytest.mark.asyncio
@@ -96,8 +153,11 @@ async def test_create_project_preserves_square_source_canvas(tmp_path):
     template_dir = Path(result.data["template_directory"])
     metadata = json.loads((template_dir / "template.json").read_text())
     assert metadata["source"]["canvas"] == {"width": 1080, "height": 1080}
+    assert result.data["canvas_contract"]["width"] == 1080
+    assert result.data["canvas_contract"]["height"] == 1080
     scaffold = (template_dir / "slides/cover.html").read_text()
     assert 'content="width=1080, height=1080"' in scaffold
+    assert '<main class="slide-container"' in scaffold
     assert 'data-width="1080" data-height="1080"' in scaffold
 
 
@@ -171,27 +231,3 @@ def test_square_collage_does_not_stretch_to_widescreen():
 
     with Image.open(BytesIO(collage)) as image:
         assert image.size == (424, 424)
-
-
-@pytest.mark.asyncio
-async def test_capture_slide_uses_declared_square_canvas(tmp_path):
-    page = FakePage((1080, 1080))
-
-    capture = await capture_slide(
-        page,
-        tmp_path / "cover.html",
-        TemplateCanvas(width=1080, height=1080),
-    )
-
-    assert capture.screenshot == b"png"
-    assert capture.inspection["slideBounds"] == {"width": 1080, "height": 1080}
-    assert page.viewport == {"width": 1080, "height": 1080}
-    assert page.clip == {"x": 0, "y": 0, "width": 1080, "height": 1080}
-
-
-@pytest.mark.asyncio
-async def test_capture_slide_rejects_widescreen_root_on_square_canvas(tmp_path):
-    page = FakePage((1920, 1080))
-
-    with pytest.raises(SlideTemplateBuilderError, match="source.canvas is 1080x1080"):
-        await capture_slide(page, tmp_path / "cover.html", TemplateCanvas(width=1080, height=1080))

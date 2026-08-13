@@ -1,32 +1,46 @@
 import { useCallback, useRef } from "react"
+import type { OptionItem } from "../../panels/types"
+import { mySlidesTemplateAdapter } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import { toTemplateOption } from "./slidesTemplateState"
 import {
 	MY_SLIDES_TEMPLATES_GROUP_KEY,
 	useMySlidesTemplates,
 } from "@/pages/superMagic/pages/SlidesTemplates/useMySlidesTemplates"
 import { useSlidesTemplateCatalogState } from "./useSlidesTemplateCatalogState"
-
-const NOOP = () => undefined
+import { useSlidesTemplateFavorite } from "./useSlidesTemplateFavorite"
 
 export function useSlidesTemplatePanelState() {
 	const catalogState = useSlidesTemplateCatalogState()
 	const mySlidesTemplates = useMySlidesTemplates({ groups: catalogState.groups })
 	const {
+		activeSection: myTemplatesActiveSection,
 		emptyStatus: myTemplatesEmptyStatus,
 		groups,
+		hasMore: myTemplatesHasMore,
 		isSelected: isMyTemplatesSelected,
+		isLoadingMore: isMyTemplatesLoadingMore,
+		isLoadMoreFailed: isMyTemplatesLoadMoreFailed,
 		leave,
+		loadMore: loadMoreMyTemplates,
 		loadMoreSignal,
 		retry: retryMyTemplates,
+		retryLoadMore: retryLoadMoreMyTemplates,
 		searchValue,
 		select,
+		setActiveSection: setMyTemplatesActiveSection,
 		setSearchValue,
+		setTemplateFavorite: setMyTemplateFavorite,
 		templates: myTemplates,
 	} = mySlidesTemplates
 	const {
 		loadTemplateDetail: loadCatalogTemplateDetail,
 		setKeyword: setCatalogKeyword,
+		setSelectedChildTagCodes: setCatalogSelectedChildTagCodes,
 		setSelectedGroupKey: setCatalogSelectedGroupKey,
+		setTemplateFavorite: setCatalogTemplateFavorite,
 	} = catalogState
+	const { pendingCodes: favoritePendingCodes, toggleFavorite } =
+		useSlidesTemplateFavorite(mySlidesTemplateAdapter)
 	const isMyTemplatesSelectedRef = useRef(isMyTemplatesSelected)
 	isMyTemplatesSelectedRef.current = isMyTemplatesSelected
 
@@ -55,17 +69,39 @@ export function useSlidesTemplatePanelState() {
 		[setCatalogKeyword, setSearchValue],
 	)
 
+	const setSelectedChildTagCodes = useCallback(
+		(tagCodes: string[]) => {
+			if (isMyTemplatesSelectedRef.current) leave()
+			setCatalogSelectedChildTagCodes(tagCodes)
+		},
+		[leave, setCatalogSelectedChildTagCodes],
+	)
+
 	const loadTemplateDetail = useCallback(
 		(code: string) => {
 			if (isMyTemplatesSelected) {
-				return Promise.resolve(
-					myTemplates.find((template) => template.value === code) ?? null,
-				)
+				return mySlidesTemplateAdapter.loadDetail(code).then(toTemplateOption)
 			}
 
 			return loadCatalogTemplateDetail(code)
 		},
-		[isMyTemplatesSelected, loadCatalogTemplateDetail, myTemplates],
+		[isMyTemplatesSelected, loadCatalogTemplateDetail],
+	)
+
+	const toggleTemplateFavorite = useCallback(
+		(template: OptionItem) => {
+			const section = myTemplatesActiveSection
+			return toggleFavorite(template, (code, isFavorite, fallbackTemplate) => {
+				setCatalogTemplateFavorite(code, isFavorite)
+				setMyTemplateFavorite(section, code, isFavorite, fallbackTemplate)
+			})
+		},
+		[
+			myTemplatesActiveSection,
+			setCatalogTemplateFavorite,
+			setMyTemplateFavorite,
+			toggleFavorite,
+		],
 	)
 
 	return {
@@ -77,20 +113,28 @@ export function useSlidesTemplatePanelState() {
 		keyword: isMyTemplatesSelected ? searchValue : catalogState.keyword,
 		setKeyword,
 		setSelectedGroupKey,
-		selectedChildTagCodes: isMyTemplatesSelected ? [] : catalogState.selectedChildTagCodes,
-		tagGroups: isMyTemplatesSelected ? [] : catalogState.tagGroups,
+		setSelectedChildTagCodes,
+		selectedChildTagCodes: catalogState.selectedChildTagCodes,
+		tagGroups: catalogState.tagGroups,
+		isTagFilterLoading: catalogState.isTagFilterLoading,
 		templateOptions: isMyTemplatesSelected ? myTemplates : catalogState.templateOptions,
 		total: isMyTemplatesSelected ? myTemplates.length : catalogState.total,
-		hasMore: isMyTemplatesSelected ? false : catalogState.hasMore,
+		hasMore: isMyTemplatesSelected ? myTemplatesHasMore : catalogState.hasMore,
 		isLoading: isMyTemplatesSelected
 			? myTemplatesEmptyStatus === "loading"
 			: catalogState.isLoading,
 		isRefreshing: isMyTemplatesSelected ? false : catalogState.isRefreshing,
-		isLoadingMore: isMyTemplatesSelected ? false : catalogState.isLoadingMore,
-		isLoadMoreFailed: isMyTemplatesSelected ? false : catalogState.isLoadMoreFailed,
+		isLoadingMore: isMyTemplatesSelected
+			? isMyTemplatesLoadingMore
+			: catalogState.isLoadingMore,
+		isLoadMoreFailed: isMyTemplatesSelected
+			? isMyTemplatesLoadMoreFailed
+			: catalogState.isLoadMoreFailed,
 		isRefreshFailed: isMyTemplatesSelected ? false : catalogState.isRefreshFailed,
-		loadMore: isMyTemplatesSelected ? NOOP : catalogState.loadMore,
-		retryLoadMore: isMyTemplatesSelected ? NOOP : catalogState.retryLoadMore,
+		loadMore: isMyTemplatesSelected ? loadMoreMyTemplates : catalogState.loadMore,
+		retryLoadMore: isMyTemplatesSelected
+			? retryLoadMoreMyTemplates
+			: catalogState.retryLoadMore,
 		loadTemplateDetail,
 		loadedTemplateCount: isMyTemplatesSelected
 			? myTemplates.length
@@ -100,7 +144,11 @@ export function useSlidesTemplatePanelState() {
 			: catalogState.templateViewRevision,
 		selectedCategoryCode: isMyTemplatesSelected ? undefined : catalogState.selectedCategoryCode,
 		myTemplatesEmptyStatus,
+		myTemplatesActiveSection,
+		setMyTemplatesActiveSection,
 		retryMyTemplates,
+		favoritePendingCodes,
+		toggleTemplateFavorite,
 	}
 }
 

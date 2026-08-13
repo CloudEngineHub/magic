@@ -91,6 +91,41 @@ def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str
     return category, normalized
 
 
+def _validate_slide_canvas_contract(slide_text: str, slide_file: str, canvas: TemplateCanvas) -> None:
+    roots = []
+    for match in re.finditer(r"<main\b([^>]*)>", slide_text, re.IGNORECASE):
+        attributes = match.group(1)
+        class_match = re.search(r'''\bclass\s*=\s*["']([^"']*)["']''', attributes, re.IGNORECASE)
+        if class_match and "slide-container" in class_match.group(1).split():
+            roots.append(attributes)
+
+    if not roots:
+        for match in re.finditer(r"<[a-z][^>]*>", slide_text, re.IGNORECASE):
+            class_match = re.search(r'''\bclass\s*=\s*["']([^"']*)["']''', match.group(0), re.IGNORECASE)
+            if class_match and {"slide", "ft-canvas"}.intersection(class_match.group(1).split()):
+                return
+        raise SlideTemplateBuilderError(
+            f"Slide must contain a main.slide-container root or a legacy slide canvas: {slide_file}"
+        )
+    if len(roots) != 1:
+        raise SlideTemplateBuilderError(
+            f"Slide must contain exactly one main.slide-container root: {slide_file}"
+        )
+
+    attributes = roots[0]
+    dimensions = {}
+    for name in ("data-width", "data-height"):
+        value_match = re.search(rf'''\b{name}\s*=\s*["']([^"']+)["']''', attributes, re.IGNORECASE)
+        if not value_match:
+            raise SlideTemplateBuilderError(f"Slide canvas must declare {name}: {slide_file}")
+        dimensions[name] = value_match.group(1)
+
+    if dimensions["data-width"] != str(canvas.width) or dimensions["data-height"] != str(canvas.height):
+        raise SlideTemplateBuilderError(
+            f"Slide canvas data-width/data-height must match source.canvas {canvas.width}x{canvas.height}: {slide_file}"
+        )
+
+
 def safe_slide_path(template_dir: Path, relative_path: str) -> Path:
     if not re.fullmatch(SLIDE_FILE_PATTERN, relative_path):
         raise SlideTemplateBuilderError(f"Invalid slide file path: {relative_path}")
@@ -335,6 +370,7 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
             raise SlideTemplateBuilderError(f"Slide must load ../theme.css: {item['file']}")
         if len(re.findall(r'\bdata-slot=["\']', slide_text, re.IGNORECASE)) < 3:
             raise SlideTemplateBuilderError(f"Slide must expose at least three editable data-slot regions: {item['file']}")
+        _validate_slide_canvas_contract(slide_text, item["file"], canvas)
         texts.append(slide_text)
     if any(SCAFFOLD_MARKER in text for text in texts):
         raise SlideTemplateBuilderError("Template scaffold markers remain. Replace every scaffold file before finalizing.")

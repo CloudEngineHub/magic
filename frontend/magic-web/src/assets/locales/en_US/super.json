@@ -234,6 +234,12 @@
 		"workspaceSwitcherPrefix": "Workspace",
 		"workspaceSwitcherRefresh": "Refresh Workspace List"
 	},
+	"browserDetail": {
+		"addressUnavailable": "Address unavailable",
+		"detail": "Details",
+		"screenshot": "Screenshot",
+		"untitledWebpage": "Untitled webpage"
+	},
 	"chat": {
 		"backToChatList": "Back to chat list",
 		"chatNameFieldLabel": "Conversation Name",
@@ -3469,6 +3475,9 @@
 			"coverUpload": "Upload cover",
 			"coverUploadFailed": "Cover upload failed. Please try again.",
 			"description": "After you configure access, others can use this micro app through the published link.",
+			"displaySettings": "Advanced options",
+			"fullScreen": "Fullscreen",
+			"fullScreenDescription": "Hide the access page header so the micro app fills the screen.",
 			"loadFailed": "Failed to load publish settings",
 			"password": "Access password",
 			"passwordHint": "Password must be 4-32 characters.",
@@ -3512,6 +3521,7 @@
 		"safetyCoverAlt": "Cover image for {{appName}}",
 		"safetyDescription": "This micro app was published by a user. The platform cannot guarantee that its content, links, or actions are safe. Continue only if you trust the source.",
 		"safetyDisclaimer": "Continuing does not mean the platform has verified this micro app as safe.",
+		"safetyDoNotRemind": "Don't remind me again",
 		"safetyEyebrow": "Safety reminder",
 		"safetyLeave": "Do not open",
 		"safetyPermissions": "Be cautious when granting camera, microphone, or location access, or when downloading and installing files.",
@@ -3742,9 +3752,11 @@
 		},
 		"recordingEntry": {
 			"active": {
+				"askAi": "Ask AI",
 				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
 				"backAria": "Back to recordings list",
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"camera": "Camera",
 				"cancel": "Cancel recording",
 				"defaultTitle": "Current recording",
 				"enableTranscription": "Enable transcription",
@@ -4042,10 +4054,25 @@
 		"selectMode": "Select Mode"
 	},
 	"mySlidesTemplates": {
-		"convertPrompt": "Please convert this folder into a reusable PPT template.",
-		"emptyDescription": "Templates you create will appear here.",
-		"emptyTitle": "No templates yet",
+		"convertPrompt": "Please convert this folder into a reusable slide template.",
+		"empty": {
+			"created": {
+				"description": "Slide templates you create will appear here.",
+				"title": "No templates created yet"
+			},
+			"favorites": {
+				"description": "Favorite templates to find them here quickly.",
+				"title": "No favorite templates yet"
+			},
+			"used": {
+				"description": "Templates you use will appear here in recent order.",
+				"title": "No recently used templates"
+			}
+		},
 		"entry": "My templates",
+		"favorite": "Favorite template",
+		"favoriteFailed": "Unable to update favorite. Try again later.",
+		"favoriteSuccess": "Template added to favorites",
 		"guide": {
 			"chat": "Create through conversation",
 			"chatDescription": "Describe the template topic and visual style to the PPT expert.",
@@ -4055,10 +4082,31 @@
 		"loadFailedDescription": "Unable to load My templates. Try again.",
 		"loading": "Loading My templates",
 		"retry": "Retry",
+		"saveDialog": {
+			"create": "Save as a new template",
+			"createdTemplates": "Templates I created",
+			"description": "Create a new template or overwrite one you created.",
+			"newDescription": "This will not overwrite an existing template.",
+			"newTemplate": "Save as a new template",
+			"noCreatedTemplates": "You have not created any templates yet",
+			"overwrite": "Overwrite template",
+			"overwriteHint": "This will overwrite “{{name}}”.",
+			"targetLabel": "Save target",
+			"title": "Save to my templates"
+		},
 		"saveFailed": "Unable to save the template. Try again later.",
+		"saveOccupied": "This template code is occupied. Save it as a new template.",
 		"saveSuccess": "Saved to my templates",
 		"saveUnavailable": "Saving to My templates is not available yet",
-		"unavailableDescription": "Saving to My templates is not available yet."
+		"sections": {
+			"created": "Created by me",
+			"favorites": "Favorites",
+			"label": "My templates filters",
+			"used": "Recently used"
+		},
+		"unavailableDescription": "My templates is not available yet.",
+		"unfavorite": "Remove from favorites",
+		"unfavoriteSuccess": "Template removed from favorites"
 	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name) Notification",
@@ -5043,6 +5091,9 @@
 		"noWorkspace": "No Workspace",
 		"onlySelectableAdministratorDocument": "Only Selectable Administrator Document",
 		"pleaseSelectFile": "Please Select File",
+		"preserveParentPath": "Preserve folder hierarchy",
+		"preserveParentPathConfirmTitle": "Confirm cross-project operation",
+		"preserveParentPathDescription": "Recreate the original parent-folder path in the target project. Leave this unchecked to place the items directly in the selected folder.",
 		"projects": "projects",
 		"returnSearch": "Exit Search",
 		"rootDirectory": "Root",
@@ -5906,8 +5957,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI Edit",
-		"addFile": "Add File",
-		"addFolder": "Add Folder",
+		"addFileOrFolder": "Add File/Folder",
 		"aiPick": "AI Pick",
 		"aiPickTooltip": "Click to select a page element and let AI modify it",
 		"batchExportingPdf": "Batch Exporting PDF...",
@@ -5952,6 +6002,7 @@
 			"batchCopy": "Batch Copy",
 			"batchMove": "Batch Move",
 			"cancel": "Cancel",
+			"collapseAll": "Collapse All",
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
@@ -6018,6 +6069,7 @@
 			"downloadPdfRaster": "Download PDF Format (Screenshot)",
 			"downloadPpt": "Download PPT Format",
 			"downloadPptx": "Download PPTX Format (Editable)",
+			"expandAll": "Expand All",
 			"fileExport": {
 				"checkStatusFailed": "Failed to check export status",
 				"emptyFileId": "File ID cannot be empty",

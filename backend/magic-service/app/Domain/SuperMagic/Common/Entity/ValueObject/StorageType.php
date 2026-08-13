@@ -23,7 +23,7 @@ enum StorageType: string
     case TOPIC = 'topic';
 
     /**
-     * 快照存储.
+     * @deprecated 仅用于兼容历史记录，新代码不得写入此类型.
      */
     case SNAPSHOT = 'snapshot';
 

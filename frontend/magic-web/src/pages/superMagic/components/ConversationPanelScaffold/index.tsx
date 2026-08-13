@@ -291,8 +291,7 @@ function ConversationPanelScaffold({
 		<div
 			className={cn(
 				"relative z-10 flex h-full flex-col items-center overflow-hidden transition-all duration-300",
-				!isConversationPanelCollapsed && "rounded-lg",
-				isConversationPanelCollapsed ? "px-0 pb-0" : !isMobile && "pb-2",
+				!isConversationPanelCollapsed ? "rounded-lg" : "px-0 pb-0",
 				className,
 			)}
 			data-testid={rootTestId || `${scope}-panel`}

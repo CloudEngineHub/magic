@@ -10,13 +10,14 @@ from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.tools.slide_template_builder.common import (
     SlideTemplateBuilderError,
     cleanup_template_intermediates,
     resolve_workspace_template_dir,
     validate_template_project,
 )
-from app.tools.slide_template_builder.preview import capture_slide, write_preview_images
+from app.tools.slide_template_builder.preview import render_slide_previews, write_preview_images
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
     async_exists,
@@ -57,39 +58,24 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)
         temp_preview_dir = template_dir / ".previews-tmp"
         preview_dir = template_dir / "previews"
-        browser = None
-        playwright = None
+        keep_alive_task = start_tool_keep_alive(tool_context)
         try:
             validated = await validate_template_project(template_dir)
             if await async_exists(temp_preview_dir):
                 await async_rmtree(temp_preview_dir)
             await async_mkdir(temp_preview_dir / "slides", parents=True, exist_ok=False)
 
-            from playwright.async_api import async_playwright
-
-            playwright = await async_playwright().start()
-            try:
-                browser = await playwright.chromium.launch(headless=True)
-                context = await browser.new_context(
-                    viewport={"width": validated.canvas.width, "height": validated.canvas.height},
-                    device_scale_factor=1,
-                )
-                page = await context.new_page()
-                slide_buffers = []
-                inspections = []
-                for index, slide in enumerate(validated.slides, 1):
-                    slide_path = template_dir / slide["file"]
-                    capture = await capture_slide(page, slide_path, validated.canvas)
-                    slide_buffers.append(capture.screenshot)
-                    inspections.append({"index": index, "file": slide["file"], **capture.inspection})
-                await context.close()
-            finally:
-                if browser is not None:
-                    await browser.close()
-                    browser = None
-                if playwright is not None:
-                    await playwright.stop()
-                    playwright = None
+            captures = await render_slide_previews(
+                workspace_dir=Path(self.base_dir),
+                template_dir=template_dir,
+                slides=validated.slides,
+                canvas=validated.canvas,
+            )
+            slide_buffers = [capture.screenshot for capture in captures]
+            inspections = [
+                {"index": index, "file": slide["file"], **capture.inspection}
+                for index, (slide, capture) in enumerate(zip(validated.slides, captures, strict=True), 1)
+            ]
 
             preview_images = await write_preview_images(
                 temp_preview_dir,
@@ -181,10 +167,7 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
         except Exception as exc:
             return ToolResult.error(f"Failed to finalize slide template: {exc}")
         finally:
-            if browser is not None:
-                await browser.close()
-            if playwright is not None:
-                await playwright.stop()
+            stop_tool_keep_alive(keep_alive_task)
             if await async_exists(temp_preview_dir):
                 await async_rmtree(temp_preview_dir)
 

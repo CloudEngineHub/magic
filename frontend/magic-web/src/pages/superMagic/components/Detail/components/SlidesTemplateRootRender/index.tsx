@@ -80,10 +80,8 @@ function SlidesTemplateReady({ initialProject, props }: SlidesTemplateReadyProps
 		[initialProject, projectId, getManifest, saveManifest],
 	)
 	const { isSaving, startSave, dialogs } = useSlidesTemplateSaveFlow({
-		manifest,
 		project: initialProject,
 		projectId,
-		onManifestSave: saveManifest,
 	})
 	const fallbackName =
 		initialProject.root.file_name ||

@@ -102,7 +102,19 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     assert (template_dir / "slides/cover.html").exists()
     assert (template_dir / WORK_DIR_NAME).is_dir()
     assert result.data["working_directory"] == str(template_dir / WORK_DIR_NAME)
+    assert result.data["canvas_contract"] == {
+        "selector": ".slide-container",
+        "width_attribute": "data-width",
+        "height_attribute": "data-height",
+        "width": 1920,
+        "height": 1080,
+    }
+    assert "main.slide-container" in result.content
+    assert "template.json.source.canvas" in result.content
     assert "slide-template-scaffold" in (template_dir / "theme.css").read_text()
+    scaffold = (template_dir / "slides/cover.html").read_text()
+    assert '<main class="slide-container"' in scaffold
+    assert 'data-width="1920" data-height="1080"' in scaffold
     metadata = json.loads((template_dir / "template.json").read_text())
     assert metadata["template_id"] == result.data["template_id"]
     assert metadata["category_code"] == "PPT-CATE-business-report"
@@ -224,6 +236,28 @@ async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path
     from app.tools.slide_template_builder.common import validate_template_project
 
     with pytest.raises(Exception, match="completed source analysis"):
+        await validate_template_project(template_dir)
+
+
+@pytest.mark.asyncio
+async def test_validate_project_rejects_mismatched_slide_container_dimensions(tmp_path):
+    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
+    assert create_result.ok
+    template_dir = Path(create_result.data["template_directory"])
+    await async_write_text(template_dir / "visual-spec.md", "# Visual Specification\n\nNavy report system.\n")
+    await async_write_text(template_dir / "theme.css", "html, body { margin: 0; }\n")
+    await async_write_text(
+        template_dir / "slides/cover.html",
+        '<!doctype html><html><head><link rel="stylesheet" href="../theme.css"></head>'
+        '<body><main class="slide-container" data-width="1080" data-height="1080">'
+        '<h1 data-slot="title">Business Review</h1><p data-slot="subtitle">Q4</p>'
+        '<span data-slot="meta">Strategy Team</span></main></body></html>',
+    )
+
+    from app.tools.slide_template_builder.common import validate_template_project
+
+    with pytest.raises(Exception, match="must match source.canvas 1920x1080"):
         await validate_template_project(template_dir)
 
 

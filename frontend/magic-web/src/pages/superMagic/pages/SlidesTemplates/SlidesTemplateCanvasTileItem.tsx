@@ -36,12 +36,14 @@ const templateEmphasisVariants: Variants = {
 interface SlidesTemplateCanvasTileItemProps {
 	anchorTileId: string
 	column: number
+	favoritePending?: boolean
 	focusedAnchorTileId: string
 	imageLoading?: "eager" | "lazy"
 	isCanvasFocusSettling: boolean
 	isCanvasMoving: boolean
 	loopState?: SlidesTemplateCanvasTileLoopState
 	onFindSimilarColors?: (template: OptionItem) => void
+	onFavoriteToggle?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -57,12 +59,14 @@ interface SlidesTemplateCanvasTileItemProps {
 function SlidesTemplateCanvasTileItem({
 	anchorTileId,
 	column,
+	favoritePending,
 	focusedAnchorTileId,
 	imageLoading,
 	isCanvasFocusSettling,
 	isCanvasMoving,
 	loopState,
 	onFindSimilarColors,
+	onFavoriteToggle,
 	onPreviewClick,
 	onPreviewIntent,
 	onTemplateSelect,
@@ -95,7 +99,9 @@ function SlidesTemplateCanvasTileItem({
 				isSelected={isSelected}
 				isExpanded={isExpanded}
 				canPreview={previewImageUrls.length > 0}
+				favoritePending={favoritePending}
 				onFindSimilarColors={onFindSimilarColors}
+				onFavoriteToggle={onFavoriteToggle}
 				onSelect={onTemplateSelect}
 				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
@@ -114,7 +120,9 @@ function SlidesTemplateCanvasTileItem({
 					isSelected={isSelected}
 					isExpanded={isExpanded}
 					canPreview={previewImageUrls.length > 0}
+					favoritePending={favoritePending}
 					onFindSimilarColors={onFindSimilarColors}
+					onFavoriteToggle={onFavoriteToggle}
 					onSelect={onTemplateSelect}
 					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
@@ -212,12 +220,14 @@ function areTileItemPropsEqual(
 	return (
 		previous.anchorTileId === next.anchorTileId &&
 		previous.column === next.column &&
+		previous.favoritePending === next.favoritePending &&
 		previous.focusedAnchorTileId === next.focusedAnchorTileId &&
 		previous.imageLoading === next.imageLoading &&
 		previous.isCanvasFocusSettling === next.isCanvasFocusSettling &&
 		previous.isCanvasMoving === next.isCanvasMoving &&
 		previous.loopState === next.loopState &&
 		previous.onFindSimilarColors === next.onFindSimilarColors &&
+		previous.onFavoriteToggle === next.onFavoriteToggle &&
 		previous.onPreviewClick === next.onPreviewClick &&
 		previous.onTemplateSelect === next.onTemplateSelect &&
 		previous.position.x === next.position.x &&

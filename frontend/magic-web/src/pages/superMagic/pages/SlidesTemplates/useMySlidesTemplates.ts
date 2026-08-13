@@ -5,21 +5,32 @@ import type {
 	OptionItem,
 } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { FEATURED_SLIDES_TEMPLATE_TAG_CODE } from "@/pages/superMagic/components/MainInputContainer/panels/slides-preset/templateMeta"
-import { createSlidesTemplateTagGroupKey } from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
+import {
+	createSlidesTemplateTagGroupKey,
+	toTemplateOption,
+	type SlidesTemplateItem,
+} from "@/pages/superMagic/components/MainInputContainer/scenes/Slides/slidesTemplateState"
 import {
 	mySlidesTemplateAdapter,
-	type MySlidesTemplate,
+	subscribeMySlidesTemplatesChanged,
 	type MySlidesTemplateAdapter,
+	type MySlidesTemplatePage,
+	type MySlidesTemplateSection,
 } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
 
 export const MY_SLIDES_TEMPLATES_GROUP_KEY = "__my_slides_templates__"
+export const MY_SLIDES_TEMPLATE_PAGE_SIZE = 40
 
 export type MySlidesTemplatesEmptyStatus = "empty" | "error" | "loading" | "unavailable"
 
 interface MySlidesTemplatesState {
 	status: "error" | "idle" | "loading" | "success" | "unavailable"
 	templates: OptionItem[]
-	revision: number
+	page: number
+	hasMore: boolean
+	isLoadingMore: boolean
+	isLoadMoreFailed: boolean
+	viewRevision: number
 }
 
 interface UseMySlidesTemplatesOptions {
@@ -27,16 +38,20 @@ interface UseMySlidesTemplatesOptions {
 	groups: OptionGroup[]
 }
 
-function toMySlidesTemplateOption(template: MySlidesTemplate): OptionItem {
-	return {
-		value: template.id,
-		label: template.name,
-		description: template.description,
-		thumbnail_url: template.thumbnailUrl,
-		collage_url: template.collageUrl,
-		preview_url: template.previewUrl,
-		preview_image_urls: template.previewImageUrls,
-	}
+const INITIAL_SEARCH_VALUES: Record<MySlidesTemplateSection, string> = {
+	created: "",
+	favorites: "",
+	used: "",
+}
+
+function getSearchText(template: OptionItem): string {
+	const values = [template.value, template.label, template.description]
+	return values
+		.flatMap((value) =>
+			typeof value === "string" ? [value] : Object.values(value ?? {}).filter(Boolean),
+		)
+		.join(" ")
+		.toLocaleLowerCase()
 }
 
 export function useMySlidesTemplates({
@@ -45,58 +60,150 @@ export function useMySlidesTemplates({
 }: UseMySlidesTemplatesOptions) {
 	const { t } = useTranslation("super")
 	const [isSelected, setIsSelected] = useState(false)
-	const [searchValue, setSearchValue] = useState("")
+	const [activeSection, setActiveSection] = useState<MySlidesTemplateSection>("created")
+	const [searchValues, setSearchValues] = useState(INITIAL_SEARCH_VALUES)
 	const [state, setState] = useState<MySlidesTemplatesState>(() => ({
 		status: adapter.enabled ? "idle" : "unavailable",
 		templates: [],
-		revision: 0,
+		page: 0,
+		hasMore: false,
+		isLoadingMore: false,
+		isLoadMoreFailed: false,
+		viewRevision: 0,
 	}))
 	const requestSeqRef = useRef(0)
+	const appendRequestInFlightRef = useRef(false)
+	const pageRef = useRef(0)
+	const activeSectionRef = useRef(activeSection)
+	activeSectionRef.current = activeSection
+	const searchValue = searchValues[activeSection]
 
 	const load = useCallback(
-		async (keyword: string) => {
+		async (options: { mode?: "append" | "replace"; keyword?: string } = {}) => {
 			if (!adapter.enabled) {
 				setState((current) => ({ ...current, status: "unavailable" }))
 				return
 			}
 
+			const mode = options.mode ?? "replace"
+			if (mode === "append" && appendRequestInFlightRef.current) return
+			const keyword = (options.keyword ?? searchValue).trim()
+			if (mode === "replace") pageRef.current = 0
+			const nextPage = mode === "append" ? pageRef.current + 1 : 1
 			const requestSeq = requestSeqRef.current + 1
 			requestSeqRef.current = requestSeq
-			setState((current) => ({ ...current, status: "loading" }))
+			appendRequestInFlightRef.current = mode === "append"
+			setState((current) => ({
+				...current,
+				status: mode === "append" ? current.status : "loading",
+				isLoadingMore: mode === "append",
+				isLoadMoreFailed: false,
+			}))
 
 			try {
-				const result = await adapter.listMine({
-					page: 1,
-					pageSize: 40,
-					keyword: keyword.trim() || undefined,
-				})
+				const params = {
+					page: nextPage,
+					pageSize: MY_SLIDES_TEMPLATE_PAGE_SIZE,
+					keyword: keyword || undefined,
+				}
+				let result: MySlidesTemplatePage
+				if (activeSection === "used" && keyword) {
+					const items: SlidesTemplateItem[] = []
+					const seenCodes = new Set<string>()
+					let usedPage = 1
+					let shouldLoadNextPage = true
+					while (shouldLoadNextPage) {
+						const usedResult = await adapter.listUsed({ page: usedPage, pageSize: 200 })
+						if (requestSeq !== requestSeqRef.current) return
+						let appendedCount = 0
+						usedResult.items.forEach((template) => {
+							if (seenCodes.has(template.code)) return
+							seenCodes.add(template.code)
+							items.push(template)
+							appendedCount += 1
+						})
+						shouldLoadNextPage = usedResult.hasMore && appendedCount > 0
+						if (shouldLoadNextPage) usedPage = usedResult.page + 1
+					}
+					const normalizedKeyword = keyword.toLocaleLowerCase()
+					result = {
+						items: items.filter((template) =>
+							getSearchText(toTemplateOption(template)).includes(normalizedKeyword),
+						),
+						page: 1,
+						pageSize: items.length,
+						hasMore: false,
+					}
+				} else {
+					result = await (activeSection === "created"
+						? adapter.listMine(params)
+						: activeSection === "favorites"
+							? adapter.listFavorites(params)
+							: adapter.listUsed(params))
+				}
 				if (requestSeq !== requestSeqRef.current) return
-				setState((current) => ({
-					status: "success",
-					templates: result.items.map(toMySlidesTemplateOption),
-					revision: current.revision + 1,
-				}))
+
+				const nextTemplates = result.items.map(toTemplateOption)
+
+				setState((current) => {
+					const existingCodes = new Set(
+						current.templates.map((template) => template.value),
+					)
+					return {
+						status: "success",
+						templates:
+							mode === "append"
+								? [
+										...current.templates,
+										...nextTemplates.filter(
+											(template) => !existingCodes.has(template.value),
+										),
+									]
+								: nextTemplates,
+						page: result.page,
+						hasMore: result.hasMore,
+						isLoadingMore: false,
+						isLoadMoreFailed: false,
+						viewRevision:
+							mode === "replace" ? current.viewRevision + 1 : current.viewRevision,
+					}
+				})
+				pageRef.current = result.page
 			} catch {
 				if (requestSeq !== requestSeqRef.current) return
-				setState((current) => ({ ...current, status: "error" }))
+				setState((current) => ({
+					...current,
+					status: mode === "append" ? current.status : "error",
+					isLoadingMore: false,
+					isLoadMoreFailed: mode === "append",
+				}))
+			} finally {
+				if (requestSeq === requestSeqRef.current) {
+					appendRequestInFlightRef.current = false
+				}
 			}
 		},
-		[adapter],
+		[activeSection, adapter, searchValue],
 	)
 
 	useEffect(() => {
 		if (!isSelected) return
-		if (!adapter.enabled) {
-			void load(searchValue)
-			return
-		}
-
 		const delay = requestSeqRef.current === 0 ? 0 : 300
 		const timer = window.setTimeout(() => {
-			void load(searchValue)
+			void load({ keyword: searchValue })
 		}, delay)
 		return () => window.clearTimeout(timer)
-	}, [adapter.enabled, isSelected, load, searchValue])
+	}, [activeSection, isSelected, load, searchValue])
+
+	useEffect(
+		() =>
+			subscribeMySlidesTemplatesChanged(() => {
+				if (isSelected && activeSection === "created") {
+					void load({ keyword: searchValue })
+				}
+			}),
+		[activeSection, isSelected, load, searchValue],
+	)
 
 	const templateGroups = useMemo(() => {
 		const nextGroups = [...groups]
@@ -112,9 +219,70 @@ export function useMySlidesTemplates({
 		})
 		return nextGroups
 	}, [groups, state.templates, t])
+
 	const leave = useCallback(() => setIsSelected(false), [])
 	const select = useCallback(() => setIsSelected(true), [])
-	const retry = useCallback(() => load(searchValue), [load, searchValue])
+	const retry = useCallback(() => load({ keyword: searchValue }), [load, searchValue])
+	const loadMore = useCallback(() => load({ mode: "append" }), [load])
+	const selectSection = useCallback(
+		(section: MySlidesTemplateSection) => {
+			setIsSelected(true)
+			if (section === activeSection) return
+			requestSeqRef.current += 1
+			appendRequestInFlightRef.current = false
+			pageRef.current = 0
+			setActiveSection(section)
+			setState((current) => ({
+				...current,
+				status: "idle",
+				templates: [],
+				page: 0,
+				hasMore: false,
+				isLoadingMore: false,
+				isLoadMoreFailed: false,
+			}))
+		},
+		[activeSection],
+	)
+	const setSearchValue = useCallback((value: string) => {
+		requestSeqRef.current += 1
+		appendRequestInFlightRef.current = false
+		pageRef.current = 0
+		setSearchValues((current) => ({
+			...current,
+			[activeSectionRef.current]: value,
+		}))
+	}, [])
+	const setTemplateFavorite = useCallback(
+		(
+			section: MySlidesTemplateSection,
+			code: string,
+			isFavorite: boolean,
+			fallbackTemplate?: OptionItem,
+		) => {
+			if (activeSectionRef.current !== section) return
+			setState((current) => {
+				const hasTemplate = current.templates.some((template) => template.value === code)
+				const nextTemplates = current.templates.map((template) =>
+					template.value === code ? { ...template, is_favorite: isFavorite } : template,
+				)
+				if (section === "favorites" && !isFavorite) {
+					return {
+						...current,
+						templates: nextTemplates.filter((template) => template.value !== code),
+					}
+				}
+				if (section === "favorites" && isFavorite && !hasTemplate && fallbackTemplate) {
+					return {
+						...current,
+						templates: [{ ...fallbackTemplate, is_favorite: true }, ...nextTemplates],
+					}
+				}
+				return { ...current, templates: nextTemplates }
+			})
+		},
+		[],
+	)
 
 	const emptyStatus: MySlidesTemplatesEmptyStatus | null = (() => {
 		if (!isSelected) return null
@@ -127,16 +295,24 @@ export function useMySlidesTemplates({
 	})()
 
 	return {
+		activeSection,
 		emptyStatus,
 		groups: templateGroups,
+		hasMore: state.hasMore,
+		isLoadingMore: state.isLoadingMore,
+		isLoadMoreFailed: state.isLoadMoreFailed,
 		isSelected,
 		leave,
-		loadMoreSignal: state.revision,
-		resetKey: `my:${state.revision}`,
+		loadMore,
+		loadMoreSignal: state.templates.length,
+		resetKey: `my:${activeSection}:${state.viewRevision}`,
 		retry,
+		retryLoadMore: loadMore,
 		searchValue,
 		select,
+		setActiveSection: selectSection,
 		setSearchValue,
+		setTemplateFavorite,
 		templates: state.templates,
 	}
 }

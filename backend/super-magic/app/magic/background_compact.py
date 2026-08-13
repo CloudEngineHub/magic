@@ -226,6 +226,12 @@ async def start_background_compact(
         IsolatedAgentRunRequest,
         run_compaction_agent,
     )
+    from app.path_manager import PathManager
+    from app.utils.runtime_storage import ensure_runtime_directory
+
+    temporary_dir = await ensure_runtime_directory(
+        PathManager.get_background_compact_dir() / f"{target.agent_name}<{agent_id}>"
+    )
 
     compact_task = asyncio.create_task(
         run_compaction_agent(IsolatedAgentRunRequest(
@@ -235,6 +241,7 @@ async def start_background_compact(
             parent_context=agent_context,
             models=IsolatedAgentModelRequest(text_model_id=model_id),
             snapshot=context_snapshot,
+            chat_history_dir=temporary_dir,
         ))
     )
     state._task = compact_task
