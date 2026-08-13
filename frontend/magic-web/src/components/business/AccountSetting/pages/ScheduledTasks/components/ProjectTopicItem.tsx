@@ -22,12 +22,7 @@ function ProjectTopicItem({ mode, workspaceId, projectId, onSelect }: ProjectTop
 			label={
 				<Flex gap={4} align="center">
 					{t(`accountPanel.timedTasks.${mode}`)}
-					<Form.Item
-						name={`${mode}_enabled`}
-						noStyle
-						valuePropName="checked"
-						initialValue={true}
-					>
+					<Form.Item name={`${mode}_enabled`} noStyle valuePropName="checked">
 						<MagicSwitch size="small" />
 					</Form.Item>
 				</Flex>

@@ -141,6 +141,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			: undefined
 
 		const isAgentUnavailable = useMemo(() => {
+			// Recompute availability when the external mode service publishes a refresh.
+			void agentValidationTick
 			if (superMagicModeService.modeList.length === 0) return false
 
 			return !isAgentSelectionAvailable(topicMode, agentCode)
@@ -410,7 +412,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 					colon={false}
 					requiredMark={customRequiredMark}
 				>
-					<div className="max-h-[65vh] overflow-y-auto p-5">
+					<div className="max-h-[76dvh] overflow-y-auto p-5">
 						<Form.Item
 							label={t("accountPanel.timedTasks.name")}
 							name="task_name"
@@ -467,6 +469,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								showModeToggle
 								enableAiCompletion
 								allowChangeMode
+								modeToggleMobilePosition="bottom"
 								attachments={attachments}
 								size={isMobile ? "mobile" : "default"}
 								containerClassName="border-none"

@@ -12,12 +12,147 @@ import { StatusTag } from "@dtyq/magic-admin/components"
 import InfiniteList from "@/components/base/InfiniteList"
 import { useModalStyles, useStyles } from "../styles"
 import { useTranslation } from "react-i18next"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { generateProjectTopicUrl } from "@/pages/superMagic/utils/project"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 interface RunningRecordProps extends MagicModalProps {
 	taskId: string
 	onClose?: () => void
+}
+
+interface RecordRowProps {
+	item: ScheduledTask.RunningRecord
+	workspacePath: string
+	statusNode: ReactNode
+	onOpenWorkspace: (record: ScheduledTask.RunningRecord) => void
+}
+
+/** Builds the workspace / project / topic breadcrumb shown on each running record. */
+function buildWorkspacePath(
+	item: ScheduledTask.RunningRecord,
+	tSuper: (key: string) => string,
+): string {
+	const workspaceName =
+		item.workspace_id && item.workspace_id !== "0"
+			? (item.workspace_id === SHARE_WORKSPACE_ID
+					? tSuper("workspace.teamSharedWorkspace")
+					: item.workspace_name) || tSuper("workspace.unnamedWorkspace")
+			: tSuper("workspace.unnamedWorkspace")
+
+	return [workspaceName, item.project_name, item.topic_name].filter(Boolean).join(" / ")
+}
+
+/** Renders the clickable workspace breadcrumb that opens the related project/topic. */
+function WorkspacePathTag({
+	item,
+	workspacePath,
+	onOpenWorkspace,
+}: Pick<RecordRowProps, "item" | "workspacePath" | "onOpenWorkspace">) {
+	const { styles } = useStyles()
+
+	return (
+		<Flex
+			gap={4}
+			align="center"
+			className={styles.tag}
+			onClick={() => onOpenWorkspace(item)}
+			data-testid="running-record-path"
+			data-path-layout="chip"
+		>
+			<span className={styles.ellipsisText}>{workspacePath}</span>
+			<span className={styles.tagIcon}>
+				<IconExternalLink size={14} color={colorUsages.text[2]} />
+			</span>
+		</Flex>
+	)
+}
+
+/** Full-width mobile path bar that keeps the breadcrumb on one truncated line. */
+function MobileWorkspacePath({
+	item,
+	workspacePath,
+	onOpenWorkspace,
+}: Pick<RecordRowProps, "item" | "workspacePath" | "onOpenWorkspace">) {
+	const { styles } = useStyles()
+
+	return (
+		<div
+			className={styles.mobilePath}
+			onClick={() => onOpenWorkspace(item)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault()
+					onOpenWorkspace(item)
+				}
+			}}
+			role="button"
+			tabIndex={0}
+			data-testid="running-record-path"
+			data-path-layout="bar"
+		>
+			<span className={styles.mobilePathText}>{workspacePath}</span>
+			<span className={styles.tagIcon}>
+				<IconExternalLink size={16} color={colorUsages.text[2]} />
+			</span>
+		</div>
+	)
+}
+
+/** Desktop table row: time, info, and status stay in dedicated columns without overlapping. */
+function DesktopRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: RecordRowProps) {
+	const { styles } = useStyles()
+
+	return (
+		<Flex
+			className={styles.itemWrapper}
+			align="center"
+			data-testid="running-record-item"
+			data-layout="table"
+		>
+			<div className={styles.timeCol}>
+				{dayjs(item.executed_at).format("YYYY/MM/DD HH:mm")}
+			</div>
+			<Flex vertical gap={4} className={styles.infoCol}>
+				<span className={styles.taskName}>{item.task_name}</span>
+				<WorkspacePathTag
+					item={item}
+					workspacePath={workspacePath}
+					onOpenWorkspace={onOpenWorkspace}
+				/>
+			</Flex>
+			<div className={styles.resultCol}>{statusNode}</div>
+		</Flex>
+	)
+}
+
+/**
+ * Mobile stacked row: time and status share the first line, then title and path
+ * occupy full width so the status badge cannot overlap the breadcrumb.
+ */
+function MobileRecordRow({ item, workspacePath, statusNode, onOpenWorkspace }: RecordRowProps) {
+	const { styles } = useStyles()
+
+	return (
+		<div
+			className={styles.mobileItemWrapper}
+			data-testid="running-record-item"
+			data-layout="stacked"
+		>
+			<div className={styles.mobileMetaRow}>
+				<span className={styles.mobileTime}>
+					{dayjs(item.executed_at).format("YYYY/MM/DD HH:mm")}
+				</span>
+				<div className={styles.mobileStatus}>{statusNode}</div>
+			</div>
+			<span className={styles.mobileTaskName}>{item.task_name}</span>
+			<MobileWorkspacePath
+				item={item}
+				workspacePath={workspacePath}
+				onOpenWorkspace={onOpenWorkspace}
+			/>
+		</div>
+	)
 }
 
 function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
@@ -25,6 +160,7 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 	const { t: tSuper } = useTranslation("super")
 	const { styles } = useStyles()
 	const { styles: modalStyles } = useModalStyles({ runningRecord: true })
+	const isMobile = useIsMobile()
 	const [open, setOpen] = useState(true)
 	const [total, setTotal] = useState(30)
 	const [list, setList] = useState<ScheduledTask.RunningRecord[]>([])
@@ -111,21 +247,31 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 			{...props}
 		>
 			<Flex vertical>
-				<Flex className={styles.headerWrapper} align="center">
-					<span style={{ width: "25%" }}>{t("accountPanel.timedTasks.runningTime")}</span>
-					<span style={{ width: "60%" }}>{t("accountPanel.timedTasks.runningInfo")}</span>
-					<span style={{ width: "15%" }}>
-						{t("accountPanel.timedTasks.runningResult")}
-					</span>
-				</Flex>
+				{isMobile ? null : (
+					<Flex
+						className={styles.headerWrapper}
+						align="center"
+						data-testid="running-record-header"
+					>
+						<span className={styles.timeCol}>
+							{t("accountPanel.timedTasks.runningTime")}
+						</span>
+						<span className={styles.infoCol}>
+							{t("accountPanel.timedTasks.runningInfo")}
+						</span>
+						<span className={styles.resultCol}>
+							{t("accountPanel.timedTasks.runningResult")}
+						</span>
+					</Flex>
+				)}
 				<InfiniteList<ScheduledTask.RunningRecord>
 					list={list}
 					hasMore={list.length < total}
 					isLoading={loading}
 					grid={{ column: 1 }}
 					loadMore={loadMore}
-					itemClassName={styles.listItem}
-					wrapperClassName={styles.listWrapper}
+					itemClassName={isMobile ? styles.mobileListItem : styles.listItem}
+					wrapperClassName={isMobile ? styles.mobileListWrapper : styles.listWrapper}
 					loadingComponent={
 						<Flex justify="center" align="center" gap={4} className={styles.footer}>
 							<IconLoader size={20} />
@@ -140,44 +286,24 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 						</Flex>
 					}
 					renderItem={(item) => {
-						const workspace = [
-							item.workspace_id && item.workspace_id !== "0"
-								? (item.workspace_id === SHARE_WORKSPACE_ID
-									? tSuper("workspace.teamSharedWorkspace")
-									: item.workspace_name) ||
-								tSuper("workspace.unnamedWorkspace")
-								: tSuper("workspace.unnamedWorkspace"),
-							item.project_name,
-							item.topic_name,
-						]
-							.filter(Boolean)
-							.join(" / ")
+						const workspacePath = buildWorkspacePath(item, tSuper)
+						const rowProps: RecordRowProps = {
+							item,
+							workspacePath,
+							statusNode: renderStatus(item.status),
+							onOpenWorkspace: goToWorkspace,
+						}
 
-						return (
-							<Flex
-								className={styles.itemWrapper}
-								justify="space-between"
-								align="center"
-								gap={16}
-								key={`${item.task_name}-${workspace}`}
-							>
-								<div style={{ width: "25%" }}>
-									{dayjs(item.executed_at).format("YYYY/MM/DD HH:mm")}
-								</div>
-								<Flex vertical gap={4} style={{ width: "60%" }}>
-									<span>{item.task_name}</span>
-									<Flex
-										gap={4}
-										align="center"
-										className={styles.tag}
-										onClick={() => goToWorkspace(item)}
-									>
-										<span className={styles.ellipsisText}>{workspace}</span>
-										<IconExternalLink size={14} color={colorUsages.text[2]} />
-									</Flex>
-								</Flex>
-								<div style={{ width: "15%" }}>{renderStatus(item.status)}</div>
-							</Flex>
+						return isMobile ? (
+							<MobileRecordRow
+								key={`${item.task_name}-${workspacePath}`}
+								{...rowProps}
+							/>
+						) : (
+							<DesktopRecordRow
+								key={`${item.task_name}-${workspacePath}`}
+								{...rowProps}
+							/>
 						)
 					}}
 				/>

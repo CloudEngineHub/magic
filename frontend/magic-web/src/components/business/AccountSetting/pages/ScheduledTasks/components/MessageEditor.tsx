@@ -75,6 +75,8 @@ export interface MessageEditorProps {
 	projectFilesStore?: ProjectFilesStore
 	showModeToggle?: boolean
 	allowChangeMode?: boolean
+	/** Controls the mobile edge used by the mode selector owned by this editor. */
+	modeToggleMobilePosition?: "bottom" | "top"
 	enableAiCompletion?: boolean
 	selectedModel?: ModelItem | null
 	selectedImageModel?: StoredModelItem | null
@@ -111,6 +113,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 		projectFilesStore,
 		showModeToggle = false,
 		allowChangeMode = true,
+		modeToggleMobilePosition,
 		enableAiCompletion = false,
 		selectedModel: selectedModelProp = null,
 		selectedImageModel: selectedImageModelProp = null,
@@ -308,6 +311,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(function 
 						topicMode={resolvedTopicMode}
 						agentCode={agentCode}
 						allowChangeMode={allowChangeMode}
+						mobilePopupPosition={modeToggleMobilePosition}
 						onModeChange={setTopicMode}
 					/>
 				) : null}

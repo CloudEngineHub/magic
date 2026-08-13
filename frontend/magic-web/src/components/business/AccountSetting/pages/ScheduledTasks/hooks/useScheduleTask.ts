@@ -46,7 +46,7 @@ export function useScheduleTaskWithModal({
 
 	const { state, openCreateModal, openEditModal, content } = modifyModal
 
-	const { run, loading } = useRequest(
+	const { run, loading, data, error } = useRequest(
 		(args: ScheduledTask.GetListParams) => ScheduledTaskApi.getScheduledTaskList(args),
 		{
 			manual: true,
@@ -185,11 +185,15 @@ export function useScheduleTaskWithModal({
 		}
 	}, [updateTaskList])
 
+	// manual: true starts with loading=false, so callers must not treat "no tasks yet" as empty.
+	const hasFetched = data !== undefined || error !== undefined
+
 	return {
 		tasks,
 		total,
 		params,
 		loading,
+		hasFetched,
 		content,
 		state,
 		run,
