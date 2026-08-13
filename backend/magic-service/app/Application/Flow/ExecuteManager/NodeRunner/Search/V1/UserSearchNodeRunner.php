@@ -127,12 +127,21 @@ class UserSearchNodeRunner extends AbstractSearchNodeRunner
                     ];
                 }
 
+                $workNumber = '';
+                foreach ($userDepartment as $department) {
+                    $employeeNo = $department['employee_no'] ?? '';
+                    if (is_string($employeeNo) && trim($employeeNo) !== '') {
+                        $workNumber = $employeeNo;
+                        break;
+                    }
+                }
+
                 $users[] = [
                     'user_id' => $magicUser->getUserId(),
                     'real_name' => $magicAccount->getRealName(),
                     'position' => $userDepartment[0]['job_title'] ?? '',
                     'phone_number' => $magicAccount->getCountryCode() . $magicAccount->getPhone($phoneDesensitization),
-                    'work_number' => $userDepartment[0]['employee_no'] ?? '',
+                    'work_number' => $workNumber,
                     'departments' => $departmentArray,
                 ];
             }
