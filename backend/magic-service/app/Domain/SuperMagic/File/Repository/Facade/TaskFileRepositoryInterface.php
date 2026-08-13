@@ -9,6 +9,7 @@ namespace App\Domain\SuperMagic\File\Repository\Facade;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 
 interface TaskFileRepositoryInterface
 {
@@ -504,12 +505,13 @@ interface TaskFileRepositoryInterface
     public function transferOwnership(int $projectId, string $fromUserId, string $toUserId): int;
 
     /**
-     * 根据项目ID获取根节点文件.
+     * 根据项目ID和空间类型获取根节点文件.
      *
      * @param int $projectId 项目ID
+     * @param string $spaceType 空间类型，默认 project 空间
      * @return null|TaskFileEntity 根节点文件实体
      */
-    public function getRootFileByProjectId(int $projectId): ?TaskFileEntity;
+    public function getRootFileByProjectId(int $projectId, string $spaceType = FileSpaceType::PROJECT->value): ?TaskFileEntity;
 
     /**
      * Check if a file with the given name exists in a project.

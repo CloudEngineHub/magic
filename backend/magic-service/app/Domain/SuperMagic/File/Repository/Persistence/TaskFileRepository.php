@@ -1614,18 +1614,19 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * 根据项目ID获取根节点文件.
+     * 根据项目ID和空间类型获取根节点文件.
      *
      * @param int $projectId 项目ID
+     * @param string $spaceType 空间类型，默认 project 空间
      * @return null|TaskFileEntity 根节点文件实体
      */
-    public function getRootFileByProjectId(int $projectId): ?TaskFileEntity
+    public function getRootFileByProjectId(int $projectId, string $spaceType = FileSpaceType::PROJECT->value): ?TaskFileEntity
     {
         $model = $this->model::query()
             ->where('project_id', $projectId)
             ->whereNull('parent_id')
             ->where('is_directory', true)
-            ->where('space_type', FileSpaceType::PROJECT->value)
+            ->where('space_type', $spaceType)
             ->first();
 
         if (! $model) {
