@@ -7,9 +7,14 @@ declare(strict_types=1);
 
 namespace Test\Cases\Application\SlidesTemplate;
 
+use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\ModelGateway\Service\SlidesTemplateAppService as ModelGatewaySlidesTemplateAppService;
 use App\Application\SlidesTemplate\Service\AdminSlidesTemplateAppService;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService as PublicSlidesTemplateAppService;
+use App\Application\SlidesTemplate\Service\SlidesTemplateProjectExportService;
+use App\Domain\Audit\ResourceAccess\Service\ResourceAccessLogDomainService;
+use App\Domain\ModelGateway\Entity\Dto\SlidesTemplateFileUrlRequestDTO;
+use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\OrganizationEnvironment\DTO\MagicOrganizationEnvDTO;
 use App\Domain\OrganizationEnvironment\Entity\MagicEnvironmentEntity;
@@ -25,6 +30,7 @@ use App\Domain\SlidesTemplate\Event\SlidesTemplateUsedEvent;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateCategoryDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateColorExtractor;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateDomainService;
+use App\Domain\SlidesTemplate\Service\SlidesTemplateFavoriteDomainService;
 use App\Domain\SlidesTemplate\Service\SlidesTemplateTagDomainService;
 use App\ErrorCode\SlidesTemplateErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
@@ -186,6 +192,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                 $this->callback(static fn (Page $page): bool => $page->getPage() === 1 && $page->getPageNum() === 20 && ! $page->isTotal())
             )
             ->willReturn(['total' => -1, 'list' => []]);
+        $domainService->method('queriesFavorites')->willReturn(['total' => 0, 'list' => []]);
 
         $service = new TestableSlidesTemplateAppService($domainService);
         $result = $service->queries($dataIsolation, $request);
@@ -227,8 +234,11 @@ class SlidesTemplateAppServiceTest extends TestCase
                 'PPT-65f2c8a42d7b0-123456'
             );
 
-        $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $result = $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
+        $service = new TestableModelGatewaySlidesTemplateAppService(
+            $domainService,
+            $this->createMock(PointComponentInterface::class),
+        );
+        $result = $service->getTemplateFileUrl($this->makeFileUrlRequest(), 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertSame($template, $result);
         $this->assertSame('https://signed.example/OFFICIAL_ORG/slides/templates/business.zip', $result->getTemplateFileUrl());
@@ -258,6 +268,7 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->expects($this->once())
             ->method('queries')
             ->willReturn(['total' => 1, 'list' => [$template]]);
+        $domainService->method('queriesFavorites')->willReturn(['total' => 0, 'list' => []]);
 
         $service = new TestableSlidesTemplateAppService($domainService);
         $result = $service->queries($dataIsolation, $request);
@@ -292,6 +303,7 @@ class SlidesTemplateAppServiceTest extends TestCase
                     && $query->getKeyword() === 'report')
             )
             ->willReturn(['total' => 1780, 'total_usage_count' => 245]);
+        $domainService->method('queriesFavorites')->willReturn(['total' => 0, 'list' => []]);
 
         $service = new TestableSlidesTemplateAppService($domainService);
 
@@ -316,25 +328,30 @@ class SlidesTemplateAppServiceTest extends TestCase
         $domainService = $this->createMock(SlidesTemplateDomainService::class);
         $domainService
             ->expects($this->once())
-            ->method('findEnabledByCodeOrFail')
+            ->method('findByCodeOrFail')
             ->with(
                 $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
                     && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),
                 'PPT-65f2c8a42d7b0-123456'
             )
             ->willReturn($template);
+        $domainService->expects($this->once())
+            ->method('assertUserAccessible')
+            ->with($dataIsolation, $template);
 
         $service = new TestableSlidesTemplateAppService($domainService);
         $result = $service->detail($dataIsolation, 'PPT-65f2c8a42d7b0-123456');
 
-        $this->assertSame($template, $result);
-        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/thumbnails/business.png', $template->getThumbnailUrl());
-        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/collages/business.png', $template->getCollageUrl());
+        $this->assertSame(123, $result->getId());
+        $this->assertSame('PPT-65f2c8a42d7b0-123456', $result->getCode());
+        $this->assertSame('OFFICIAL_ORG', $result->getOrganizationCode());
+        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/thumbnails/business.png', $result->getThumbnailUrl());
+        $this->assertSame('https://public.example/OFFICIAL_ORG/slides/collages/business.png', $result->getCollageUrl());
         $this->assertSame([
             'https://public.example/OFFICIAL_ORG/slides/previews/business-1.png',
             'https://public.example/OFFICIAL_ORG/slides/previews/business-2.png',
-        ], $template->getPreviewImageUrls());
-        $this->assertNull($template->getTemplateFileUrl());
+        ], $result->getPreviewImageUrls());
+        $this->assertNull($result->getTemplateFileUrl());
         $this->assertSame([
             ['OFFICIAL_ORG', [
                 'slides/thumbnails/business.png',
@@ -362,8 +379,11 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->method('findEnabledByCodeOrFail')
             ->willReturn($template);
 
-        $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $result = $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
+        $service = new TestableModelGatewaySlidesTemplateAppService(
+            $domainService,
+            $this->createMock(PointComponentInterface::class),
+        );
+        $result = $service->getTemplateFileUrl($this->makeFileUrlRequest(), 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertSame($template, $result);
         $this->assertCount(1, $service->dispatchedEvents);
@@ -394,8 +414,11 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->method('findEnabledByCodeOrFail')
             ->willReturn($template);
 
-        $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $service->getTemplateFileUrl($authorization, 'PPT-65f2c8a42d7b0-123456');
+        $service = new TestableModelGatewaySlidesTemplateAppService(
+            $domainService,
+            $this->createMock(PointComponentInterface::class),
+        );
+        $service->getTemplateFileUrl($this->makeFileUrlRequest('张三'), 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertCount(1, $service->dispatchedEvents);
         $event = $service->dispatchedEvents[0];
@@ -418,8 +441,11 @@ class SlidesTemplateAppServiceTest extends TestCase
             ->method('findEnabledByCodeOrFail')
             ->willReturn($template);
 
-        $service = new TestableModelGatewaySlidesTemplateAppService($domainService);
-        $service->getTemplateFileUrl($this->makeAuthorization('CURRENT_ORG', 'user-1', 'user-1'), 'PPT-65f2c8a42d7b0-123456');
+        $service = new TestableModelGatewaySlidesTemplateAppService(
+            $domainService,
+            $this->createMock(PointComponentInterface::class),
+        );
+        $service->getTemplateFileUrl($this->makeFileUrlRequest(), 'PPT-65f2c8a42d7b0-123456');
 
         $this->assertCount(1, $service->dispatchedEvents);
         $event = $service->dispatchedEvents[0];
@@ -861,6 +887,18 @@ class SlidesTemplateAppServiceTest extends TestCase
         return $authorization;
     }
 
+    private function makeFileUrlRequest(string $userName = 'user-1'): SlidesTemplateFileUrlRequestDTO
+    {
+        $request = new SlidesTemplateFileUrlRequestDTO();
+        $request->setAccessToken('test-token');
+        $request->setBusinessParams([
+            'organization_code' => 'CURRENT_ORG',
+            'user_id' => 'user-1',
+            'user_name' => $userName,
+        ]);
+        return $request;
+    }
+
     private function makeAdminSlidesTemplateAppService(
         SlidesTemplateDomainService $domainService,
         ?SlidesTemplateCategoryDomainService $categoryDomainService = null,
@@ -880,12 +918,14 @@ class SlidesTemplateAppServiceTest extends TestCase
 
         $colorExtractor = $this->createMock(SlidesTemplateColorExtractor::class);
         $colorExtractor->method('extractColors')->willReturn([]);
-
+        /** @var SlidesTemplateFavoriteDomainService $favoriteDomainService */
+        $favoriteDomainService = (new ReflectionClass(SlidesTemplateFavoriteDomainService::class))->newInstanceWithoutConstructor();
         $service = new TestableAdminSlidesTemplateAppService(
             $domainService,
             $categoryDomainService,
             $tagDomainService,
-            $colorExtractor
+            $colorExtractor,
+            $favoriteDomainService,
         );
         $service->missingPublicFileKeys = $missingPublicFileKeys;
         $service->missingPrivateFileKeys = $missingPrivateFileKeys;
@@ -904,6 +944,14 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
         SlidesTemplateDomainService $slidesTemplateDomainService,
         ?SlidesTemplateTagDomainService $slidesTemplateTagDomainService = null,
     ) {
+        /** @var SlidesTemplateCategoryDomainService $categoryDomainService */
+        $categoryDomainService = (new ReflectionClass(SlidesTemplateCategoryDomainService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateFavoriteDomainService $favoriteDomainService */
+        $favoriteDomainService = (new ReflectionClass(SlidesTemplateFavoriteDomainService::class))->newInstanceWithoutConstructor();
+        /** @var ResourceAccessLogDomainService $resourceAccessLogDomainService */
+        $resourceAccessLogDomainService = (new ReflectionClass(ResourceAccessLogDomainService::class))->newInstanceWithoutConstructor();
+        /** @var SlidesTemplateProjectExportService $projectPublishService */
+        $projectPublishService = (new ReflectionClass(SlidesTemplateProjectExportService::class))->newInstanceWithoutConstructor();
         parent::__construct(
             $slidesTemplateDomainService,
             $slidesTemplateTagDomainService ?? new class extends SlidesTemplateTagDomainService {
@@ -914,7 +962,11 @@ class TestableSlidesTemplateAppService extends PublicSlidesTemplateAppService
                 public function fillTemplateTags(SlidesTemplateDataIsolation $dataIsolation, array $templates, ?SlidesTemplateTagStatus $tagStatus = null): void
                 {
                 }
-            }
+            },
+            $categoryDomainService,
+            $favoriteDomainService,
+            $resourceAccessLogDomainService,
+            $projectPublishService,
         );
     }
 
@@ -955,6 +1007,26 @@ class TestableModelGatewaySlidesTemplateAppService extends ModelGatewaySlidesTem
 
     public array $dispatchedEvents = [];
 
+    public function __construct(
+        SlidesTemplateDomainService $slidesTemplateDomainService,
+        PointComponentInterface $pointComponent,
+    ) {
+        $reflection = new ReflectionClass(ModelGatewaySlidesTemplateAppService::class);
+        $reflection->getProperty('slidesTemplateDomainService')->setValue($this, $slidesTemplateDomainService);
+        $reflection->getProperty('pointComponent')->setValue($this, $pointComponent);
+    }
+
+    public function createModelGatewayDataIsolationByAccessToken(string $inputAccessToken, array $businessParams = []): ModelGatewayDataIsolation
+    {
+        $dataIsolation = ModelGatewayDataIsolation::create(
+            (string) ($businessParams['organization_code'] ?? 'CURRENT_ORG'),
+            (string) ($businessParams['user_id'] ?? 'user-1'),
+        );
+        $dataIsolation->setUserName((string) ($businessParams['user_name'] ?? 'user-1'));
+        $dataIsolation->setOfficialOrganizationCodes(['OFFICIAL_ORG']);
+        return $dataIsolation;
+    }
+
     public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
     {
         $this->fileLinkCalls[] = [$organizationCode, $fileLinks];
@@ -971,19 +1043,21 @@ class TestableModelGatewaySlidesTemplateAppService extends ModelGatewaySlidesTem
     }
 
     protected function dispatchSlidesTemplateUsedEvent(
-        MagicUserAuthorization $authorization,
+        ModelGatewayDataIsolation $dataIsolation,
         SlidesTemplateEntity $template,
-        float $startTime
+        float $startTime,
+        array $businessParams = [],
     ): void {
         $requestId = trim(CoContext::getRequestId());
         $this->dispatchedEvents[] = new SlidesTemplateUsedEvent(
-            organizationCode: $authorization->getOrganizationCode(),
+            organizationCode: $dataIsolation->getCurrentOrganizationCode(),
             sourceId: SourceId::SLIDES_TEMPLATE_USE,
             callTime: (int) round($startTime * 1000),
-            userId: $authorization->getId(),
-            userName: $authorization->getNickname(),
+            userId: $dataIsolation->getCurrentUserId(),
+            userName: $dataIsolation->getUserName(),
             requestId: $requestId === '' ? IdGenerator::getUniqueId32() : $requestId,
             template: $template,
+            businessParams: $businessParams,
         );
     }
 }
@@ -1001,6 +1075,16 @@ class TestPublicQuerySlidesTemplateRequest extends PublicQuerySlidesTemplateRequ
     public function getKeyword(): ?string
     {
         return $this->keyword;
+    }
+
+    public function getScope(): string
+    {
+        return 'official';
+    }
+
+    public function getCode(): ?string
+    {
+        return null;
     }
 
     public function getCategoryCode(): ?string
