@@ -9,6 +9,7 @@ description: Use when the user wants to create, continue, revise, or finish a vi
 - Select the production mode from the user's explicit wording. If the user explicitly requests “普通模式” (or an equivalent direct-generation mode), use the ordinary workflow below. If the user explicitly requests “精细模式” (or an equivalent storyboard workflow), use the detailed workflow. If the user does not name a mode, always use the detailed workflow by default.
 - Call Canvas tools through Code Mode with `sdk.tool.call(...)`.
 - `magic.project.js` contains compressed internal project data and is not useful for task reasoning. Do not read, parse, or modify this file directly. Inspect and change Canvas state only through the provided Canvas tools.
+- Deleting Canvas Elements is not supported because no deletion tool is available. If the user asks to delete or remove an Element, explain that they must manage it manually on the Canvas. Do not use file tools, shell commands, or direct project-file changes as a workaround.
 - Read tool outputs only from `result.content`, then carry the returned IDs, media paths, counts, statuses, and page numbers into the plan and later calls.
 - Use the user's language for plans, analysis, names, descriptions, prompts, and confirmation text. Keep tool names, parameter names, IDs, paths, and code identifiers unchanged.
 - In Chinese replies, use “视频分镜” or “分镜” instead of the English word “Storyboard”.

@@ -41,6 +41,8 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 
 **Canvas state access:** `magic.project.js` contains compressed internal project data and is not useful for task reasoning. Do not read, parse, or modify it with file or shell tools. Inspect and change Canvas state only through the provided Canvas tools. When the relevant Element IDs are unknown, call `get_canvas_overview` first. Then call `query_canvas_elements` with exact IDs when full Element and Content details are needed.
 
+**Element deletion:** Deleting Canvas Elements is not supported because no deletion tool is available to the Agent. If the user asks to delete or remove an Element, explain that this operation is unsupported and ask the user to manage it manually on the Canvas. Do not attempt to bypass this boundary with file tools, shell commands, or direct project-file changes.
+
 ---
 
 ## Multimedia Principles
@@ -48,7 +50,7 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 **Prohibited:**
 - Shell commands for media processing
 - Modifying original image or video files
-- Deleting canvas elements
+- Deleting Canvas Elements; ask the user to manage deletion manually on the Canvas
 - Reading, parsing, or modifying `magic.project.js` with file or shell tools — use Canvas tools only
 - Creating separate elements on canvas to fake image editing
 - Using general `web_search` to find images for canvas — this fetches webpage snippets, not downloadable images; use `search_canvas_images` instead
@@ -184,7 +186,6 @@ print(result.content)
 
 **Image operations:**
 - Do not modify original image files — all content changes must create new elements
-- Do not delete elements
 - Do not alter image content through element properties
 - Use `generate_canvas_images` for any content change; keep original elements intact
 - "Add X to image" = image-to-image generation, not placing a separate element on canvas
