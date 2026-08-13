@@ -183,7 +183,10 @@ class RemoteTool(BaseTool):
             arguments = {key: value for key, value in all_params.items()
                         if key in schema_properties}
 
-            logger.info(f"执行远程工具 '{self.get_effective_name()}'，参数: {arguments}")
+            logger.info(
+                f"执行远程工具 '{self.get_effective_name()}'，参数字段: "
+                f"{self.get_params_class().get_log_field_names(arguments)}"
+            )
 
             # 获取 MagicService API
             magic_api = get_magic_service_sdk()

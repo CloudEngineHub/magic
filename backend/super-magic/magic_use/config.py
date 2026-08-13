@@ -28,7 +28,7 @@ class ProxyConfig:
 @dataclass(frozen=True, slots=True)
 class LocalPlaywrightConfig:
     headless: bool = True
-    browser_args: tuple[str, ...] = ()
+    browser_args: tuple[str, ...] = ("--disable-blink-features=AutomationControlled",)
     downloads_path: str | None = None
     proxy: ProxyConfig | None = None
 
@@ -116,13 +116,14 @@ class PureConfig:
 @dataclass(frozen=True, slots=True)
 class BrowserScriptConfig:
     pure: PureConfig = field(default_factory=PureConfig)
+    mask_enabled: bool = True
     lens_enabled: bool = True
     marker_enabled: bool = True
     userscripts: tuple[Userscript, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
-class SnapshotConfig:
+class ElementScanConfig:
     max_nodes: int = 500
     max_depth: int = 30
 
@@ -132,24 +133,31 @@ class SnapshotConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class BrowserArtifactConfig:
-    webp_quality: int = 35
-    webp_min_quality: int = 15
-    webp_quality_step: int = 5
-    max_bytes: int = 128 * 1024
+class BrowserScreenshotConfig:
+    webp_quality: int = 82
+    webp_min_quality: int = 58
+    webp_quality_step: int = 6
+    target_bpp: float = 0.5
+    min_bytes: int = 128 * 1024
+    max_bytes: int = 256 * 1024
     max_width: int = 1600
+    max_height_ratio: float = 1.6
     resize_step: float = 0.85
-    min_dimension: int = 640
+    min_dimension: int = 1280
 
     def __post_init__(self) -> None:
         if not 0 <= self.webp_min_quality <= self.webp_quality <= 100:
             raise BrowserConfigError("Browser WebP quality range is invalid")
-        if self.webp_quality_step < 1 or min(self.max_bytes, self.max_width, self.min_dimension) < 1:
-            raise BrowserConfigError("Browser artifact limits must be positive")
+        if self.webp_quality_step < 1 or min(self.min_bytes, self.max_bytes, self.max_width, self.min_dimension) < 1:
+            raise BrowserConfigError("Browser screenshot limits must be positive")
+        if self.target_bpp <= 0 or self.max_height_ratio <= 0:
+            raise BrowserConfigError("Browser screenshot ratios must be positive")
+        if self.min_bytes > self.max_bytes:
+            raise BrowserConfigError("Browser screenshot minimum bytes cannot exceed maximum bytes")
         if self.max_width < self.min_dimension:
-            raise BrowserConfigError("Browser artifact max width cannot be smaller than its minimum dimension")
+            raise BrowserConfigError("Browser screenshot max width cannot be smaller than its minimum dimension")
         if not 0 < self.resize_step < 1:
-            raise BrowserConfigError("Browser artifact resize step must be between zero and one")
+            raise BrowserConfigError("Browser screenshot resize step must be between zero and one")
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,8 +220,8 @@ class BrowserRuntimeConfig:
     remote_playwright: RemotePlaywrightConfig | None = None
     context: BrowserContextConfig = field(default_factory=BrowserContextConfig)
     scripts: BrowserScriptConfig = field(default_factory=BrowserScriptConfig)
-    snapshot: SnapshotConfig = field(default_factory=SnapshotConfig)
-    artifacts: BrowserArtifactConfig = field(default_factory=BrowserArtifactConfig)
+    elements: ElementScanConfig = field(default_factory=ElementScanConfig)
+    screenshot: BrowserScreenshotConfig = field(default_factory=BrowserScreenshotConfig)
     timeouts: BrowserTimeouts = field(default_factory=BrowserTimeouts)
     lifecycle: BrowserLifecycleConfig = field(default_factory=BrowserLifecycleConfig)
     resources: BrowserResourceLimits = field(default_factory=BrowserResourceLimits)

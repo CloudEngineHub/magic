@@ -670,6 +670,8 @@ class FileStorageListenerService:
             storage_service: The storage service instance.
         """
         try:
+            from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+            await ChatHistoryCleanupService().run()
             # Always archive and upload chat history for the current topic
             logger.info(f"为话题 {topic_id} 处理聊天历史归档")
 

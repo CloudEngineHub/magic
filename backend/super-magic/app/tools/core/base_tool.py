@@ -358,10 +358,15 @@ class BaseTool(Generic[T], ABC):
             span._otel_tool_description = tool_description[:500] if tool_description else ""
             span._otel_tool_class = self.__class__.__name__
             span._otel_tool_module = self.__module__
-            span._otel_pending_params = dict(kwargs) if kwargs else {}
+            params_class = self.get_params_class()
+            if isinstance(params_class, type) and issubclass(params_class, BaseToolParams):
+                safe_kwargs = params_class.sanitize_log_arguments(kwargs or {})
+            else:
+                safe_kwargs = {str(key): "<redacted>" for key in (kwargs or {})}
+            span._otel_pending_params = safe_kwargs
 
             # Fill the observation Input column with the tool parameters (Langfuse).
-            set_observation_io(span, input_value=dict(kwargs) if kwargs else {})
+            set_observation_io(span, input_value=safe_kwargs)
 
             return span
         except Exception as e:

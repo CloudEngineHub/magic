@@ -5,19 +5,20 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from magic_use.interaction.ref_registry import RefRegistry
-from magic_use.models.common import ActionKind, SnapshotScope
+from magic_use.models.common import ActionKind, ElementScope
 from magic_use.models.geometry import BoundingBox, Viewport
 from magic_use.models.refs import ElementRefRecord
-from magic_use.models.snapshot import PageSnapshot, SnapshotNode, SnapshotOptions
-from magic_use.observation.diff import SnapshotDiffer
+from magic_use.models.elements import PageElements, ElementNode, ElementQuery
+from magic_use.observation.diff import ElementDiffer
 from magic_use.observation.sources import (
     AccessibilityNodeSource,
     DOMNodeSource,
     ProbeNodeSource,
-    SnapshotSources,
+    ElementSources,
 )
 
 _REF_ATTRIBUTE_NAMES = {"id", "name", "aria-label", "data-testid", "type"}
+_TEXT_ONLY_ROLES = frozenset({"inlinetextbox", "statictext", "listmarker", "linebreak"})
 
 
 @dataclass(slots=True)
@@ -30,10 +31,10 @@ class _NodeDraft:
     frame_id: str
 
 
-class SnapshotComposer:
-    def __init__(self, refs: RefRegistry, differ: SnapshotDiffer | None = None) -> None:
+class ElementComposer:
+    def __init__(self, refs: RefRegistry, differ: ElementDiffer | None = None) -> None:
         self._refs = refs
-        self._differ = differ or SnapshotDiffer()
+        self._differ = differ or ElementDiffer()
 
     def compose(
         self,
@@ -43,16 +44,16 @@ class SnapshotComposer:
         document_generation: int,
         url: str,
         title: str,
-        sources: SnapshotSources,
-        options: SnapshotOptions,
-        previous: PageSnapshot | None,
-        projection_scope: SnapshotScope | None = None,
-    ) -> PageSnapshot:
+        sources: ElementSources,
+        options: ElementQuery,
+        previous: PageElements | None,
+        projection_scope: ElementScope | None = None,
+    ) -> PageElements:
         self._refs.clear_stale_generations(page_id, document_generation)
         snapshot_id = uuid4().hex
         effective_scope = projection_scope or options.scope
         drafts = self._build_tree(sources)
-        if effective_scope is SnapshotScope.SUBTREE and options.root_ref is not None:
+        if effective_scope is ElementScope.SUBTREE and options.root_ref is not None:
             root_record = self._refs.resolve(
                 options.root_ref,
                 page_id=page_id,
@@ -70,7 +71,7 @@ class SnapshotComposer:
             scope=effective_scope,
             viewport=sources.viewport,
         )
-        nodes: list[SnapshotNode] = []
+        nodes: list[ElementNode] = []
         records: list[ElementRefRecord] = []
         node_record_indices: dict[int, int] = {}
         for draft in drafts:
@@ -95,11 +96,12 @@ class SnapshotComposer:
 
         reconciled_records = self._refs.reconcile(tuple(records))
         node_tuple = tuple(
-            self._apply_reconciled_refs(node, node_record_indices, reconciled_records)
+            child
             for node in nodes
+            for child in self._apply_reconciled_refs(node, node_record_indices, reconciled_records)
         )
-        diff = self._differ.compare(previous, node_tuple) if options.scope is SnapshotScope.CHANGES else None
-        return PageSnapshot(
+        diff = self._differ.compare(previous, node_tuple) if options.scope is ElementScope.CHANGES else None
+        return PageElements(
             id=snapshot_id,
             session_id=session_id,
             page_id=page_id,
@@ -115,7 +117,7 @@ class SnapshotComposer:
             diff=diff,
         )
 
-    def _build_tree(self, sources: SnapshotSources) -> tuple[_NodeDraft, ...]:
+    def _build_tree(self, sources: ElementSources) -> tuple[_NodeDraft, ...]:
         dom_by_backend = {node.backend_node_id: node for node in sources.dom}
         probe_by_dom = self._match_probes(sources.dom, sources.probe, sources.viewport.scroll_x, sources.viewport.scroll_y)
         drafts: dict[str, _NodeDraft] = {}
@@ -204,7 +206,7 @@ class SnapshotComposer:
         depth: int,
         state: "_ComposeState",
         relevant_draft_ids: set[int],
-        scope: SnapshotScope,
+        scope: ElementScope,
         snapshot_id: str,
         session_id: str,
         page_id: str,
@@ -212,7 +214,7 @@ class SnapshotComposer:
         records: list[ElementRefRecord],
         node_record_indices: dict[int, int],
         viewport: Viewport,
-    ) -> SnapshotNode | None:
+    ) -> ElementNode | None:
         if id(draft) not in relevant_draft_ids:
             return None
         if state.count >= state.max_nodes or draft.ax is None:
@@ -243,6 +245,7 @@ class SnapshotComposer:
             visible=visible,
             occluded=occluded,
         )
+        visible_text = self._visible_text(draft)
         include_self = self._include(
             scope=scope,
             role=role,
@@ -252,7 +255,11 @@ class SnapshotComposer:
         )
         state.count += 1
         record_index: int | None = None
-        if include_self and actions and draft.dom is not None:
+        referenceable = bool(actions) or (
+            scope in {ElementScope.FULL, ElementScope.SUBTREE}
+            and role not in _TEXT_ONLY_ROLES
+        )
+        if include_self and referenceable and draft.dom is not None:
             record_index = len(records)
             records.append(
                 ElementRefRecord(
@@ -266,7 +273,7 @@ class SnapshotComposer:
                     object_id=None,
                     role=role,
                     accessible_name=name,
-                    text=draft.dom.node_value,
+                    text=visible_text,
                     attributes=ref_attributes,
                     allowed_actions=frozenset(ActionKind(action) for action in actions),
                     structural_path=draft.structural_path,
@@ -281,7 +288,7 @@ class SnapshotComposer:
                 )
             )
 
-        children: list[SnapshotNode] = []
+        children: list[ElementNode] = []
         if depth == state.max_depth:
             if any(id(child) in relevant_draft_ids for child in draft.children):
                 state.truncated = True
@@ -306,12 +313,12 @@ class SnapshotComposer:
                 if state.count >= state.max_nodes:
                     break
 
-        node = SnapshotNode(
+        node = ElementNode(
             ref=None,
             role=role,
             name=name,
             description=draft.ax.description,
-            text=draft.dom.node_value if draft.dom is not None else "",
+            text=visible_text,
             value=self._safe_value(draft.ax.value, role=role, attributes=ref_attributes),
             states=states,
             actions=actions,
@@ -331,7 +338,7 @@ class SnapshotComposer:
         self,
         roots: tuple[_NodeDraft, ...],
         *,
-        scope: SnapshotScope,
+        scope: ElementScope,
         viewport: Viewport,
     ) -> set[int]:
         relevant: set[int] = set()
@@ -353,7 +360,7 @@ class SnapshotComposer:
         self,
         draft: _NodeDraft,
         *,
-        scope: SnapshotScope,
+        scope: ElementScope,
         viewport: Viewport,
     ) -> bool:
         role = self._role(draft)
@@ -419,17 +426,31 @@ class SnapshotComposer:
     @classmethod
     def _apply_reconciled_refs(
         cls,
-        node: SnapshotNode,
+        node: ElementNode,
         node_record_indices: dict[int, int],
         records: tuple[ElementRefRecord, ...],
-    ) -> SnapshotNode:
+    ) -> tuple[ElementNode, ...]:
         children = tuple(
-            cls._apply_reconciled_refs(child, node_record_indices, records)
-            for child in node.children
+            child
+            for child_node in node.children
+            for child in cls._apply_reconciled_refs(child_node, node_record_indices, records)
         )
         record_index = node_record_indices.get(id(node))
         ref = records[record_index].ref if record_index is not None else None
-        return replace(node, ref=ref, children=children)
+        reconciled = replace(node, ref=ref, children=children)
+        if cls._is_redundant_wrapper(reconciled):
+            return reconciled.children
+        return (reconciled,)
+
+    @staticmethod
+    def _is_redundant_wrapper(node: ElementNode) -> bool:
+        """移除没有名称且只包着一个已有编号子节点的纯包装层。"""
+        return (
+            node.role == "generic"
+            and not node.name
+            and len(node.children) <= 1
+            and all(child.ref is not None for child in node.children)
+        )
 
     @staticmethod
     def _ref_attributes(attributes: dict[str, str]) -> dict[str, str]:
@@ -457,19 +478,37 @@ class SnapshotComposer:
         return frozenset(states)
 
     @staticmethod
+    def _visible_text(draft: _NodeDraft, limit: int = 200) -> str:
+        """聚合 AX 文本子节点，避免读取元素节点恒为空的 DOM nodeValue。"""
+        parts: list[str] = []
+        stack = list(draft.children)
+        length = 0
+        while stack and length < limit:
+            node = stack.pop(0)
+            role = node.ax.role.strip().lower()
+            if role in {"statictext", "inlinetextbox"}:
+                value = " ".join(node.ax.name.split())
+                if value:
+                    parts.append(value)
+                    length += len(value)
+            else:
+                stack.extend(node.children)
+        return " ".join(parts)[:limit].strip()
+
+    @staticmethod
     def _include(
         *,
-        scope: SnapshotScope,
+        scope: ElementScope,
         role: str,
         actions: frozenset[str],
         visible: bool,
         in_viewport: bool,
     ) -> bool:
-        if scope in {SnapshotScope.FULL, SnapshotScope.SUBTREE, SnapshotScope.CHANGES}:
+        if scope in {ElementScope.FULL, ElementScope.SUBTREE, ElementScope.CHANGES}:
             return True
-        if scope is SnapshotScope.VIEWPORT:
+        if scope is ElementScope.VIEWPORT:
             return visible and in_viewport
-        return visible and (bool(actions) or SnapshotComposer._is_interactive_role(role))
+        return visible and (bool(actions) or ElementComposer._is_interactive_role(role))
 
     @staticmethod
     def _is_interactive_role(role: str) -> bool:
@@ -524,7 +563,7 @@ class SnapshotComposer:
             candidates = tuple(
                 dom
                 for dom in unused_dom.values()
-                if dom.node_name == probe.tag and SnapshotComposer._identity_matches(dom, probe)
+                if dom.node_name == probe.tag and ElementComposer._identity_matches(dom, probe)
             )
             if len(candidates) == 1:
                 matched = candidates[0]
@@ -539,7 +578,7 @@ class SnapshotComposer:
                 for dom in unused_dom.values()
                 if dom.node_name == probe.tag
                 and probe.structural_path
-                and SnapshotComposer._path_suffix_matches(dom.structural_path, probe.structural_path)
+                and ElementComposer._path_suffix_matches(dom.structural_path, probe.structural_path)
             )
             if len(path_candidates) == 1:
                 matched = path_candidates[0]
@@ -560,7 +599,7 @@ class SnapshotComposer:
             for dom in unused_dom.values():
                 if dom.bounding_box is None or dom.node_name != probe.tag:
                     continue
-                score = SnapshotComposer._rect_similarity(dom.bounding_box, document_rect)
+                score = ElementComposer._rect_similarity(dom.bounding_box, document_rect)
                 if score > best_score:
                     best_score = score
                     best_dom = dom
@@ -615,7 +654,7 @@ class SnapshotComposer:
         if not node.frame_id:
             node.frame_id = parent_frame_id
         for child in node.children:
-            SnapshotComposer._inherit_frame_id(child, node.frame_id)
+            ElementComposer._inherit_frame_id(child, node.frame_id)
 
 
 @dataclass(slots=True)

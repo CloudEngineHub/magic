@@ -5,6 +5,7 @@
 """
 import asyncio
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from agentlang.logger import get_logger
@@ -76,6 +77,7 @@ class IsolatedAgentRunRequest:
     parent_context: Optional["AgentContext"] = None
     models: IsolatedAgentModelRequest = field(default_factory=IsolatedAgentModelRequest)
     snapshot: Optional["AgentContextSnapshot"] = None
+    chat_history_dir: Optional[Path] = None
 
 
 def apply_isolated_agent_model_selection(
@@ -140,7 +142,15 @@ async def run_compaction_agent(
     request: IsolatedAgentRunRequest,
 ) -> Optional[str]:
     """运行后台压缩 Agent，捕获 compact_chat_history 结果并禁止再次压缩。"""
-    return await _run_isolated_agent(request, capture_compact_history_result=True)
+    try:
+        return await _run_isolated_agent(request, capture_compact_history_result=True)
+    finally:
+        if request.chat_history_dir is not None:
+            from app.utils.async_file_utils import async_rmtree
+            try:
+                await async_rmtree(request.chat_history_dir)
+            except Exception as error:
+                logger.warning(f"后台压缩临时目录删除失败: {error}")
 
 
 async def _run_isolated_agent(
@@ -179,7 +189,9 @@ async def _run_isolated_agent(
     target_session = AgentSessionRef(
         target=request.target,
         agent_id=request.agent_id,
-        chat_history_dir=PathManager.get_subagents_chat_history_dir(),
+        chat_history_dir=request.chat_history_dir or PathManager.get_subagent_chat_history_dir(
+            request.target.agent_name, request.agent_id,
+        ),
     )
     if request.snapshot is not None:
         await AgentContextSnapshotService().materialize(request.snapshot, target_session)
@@ -231,6 +243,7 @@ async def _run_isolated_agent(
                     prompt=request.prompt,
                     handle=handle,
                     capture_compact_history_result=capture_compact_history_result,
+                    chat_history_dir=target_session.chat_history_dir,
                 )
             )
             handle.task = task
@@ -270,7 +283,8 @@ def _inherit_parent_context(
     if org_code := parent.get_organization_code():
         child.set_organization_code(org_code)
     child.set_subagent_depth(depth)
-    child.set_subagent_parent_agent_name(parent.get_agent_name())
+    child.set_subagent_parent_agent_name(parent.agent_name)
+    child.set_subagent_parent_agent_id(parent.get_agent_id())
     # 不继承 streams、task_id、streaming_sinks，保持子 Agent 事件完全隔离
 
 
@@ -310,18 +324,21 @@ async def _run_subagent_task(
     prompt: str,
     handle,
     capture_compact_history_result: bool = False,
+    chat_history_dir: Optional[Path] = None,
 ) -> SubagentSessionState:
     """
     运行 sub-agent 并管理状态持久化。
     与 call_subagent._run_subagent 的区别：无 tool_call_id / mode / cached_tool_result，
     适合系统级调用（不需要工具调用幂等缓存）。
     """
-    state = await SubagentRuntimeStore.load_state(agent.agent_name, agent.id)
+    state = await SubagentRuntimeStore.load_state(agent.agent_name, agent.id, chat_history_dir)
     state.agent_name = agent.agent_name
     state.agent_id = agent.id
+    state.parent_agent_name = agent.agent_context.get_subagent_parent_agent_name()
+    state.parent_agent_id = agent.agent_context.get_subagent_parent_agent_id()
     _mark_running(state)
     async with handle.state_lock:
-        await SubagentRuntimeStore.save_state(state)
+        await SubagentRuntimeStore.save_state(state, chat_history_dir)
     current_task = asyncio.current_task()
 
     try:
@@ -343,7 +360,7 @@ async def _run_subagent_task(
         state.finished_at = utc_now()
         state.active_tool_call_id = None
         async with handle.state_lock:
-            await SubagentRuntimeStore.save_state(state)
+            await SubagentRuntimeStore.save_state(state, chat_history_dir)
         return state
     except asyncio.CancelledError:
         state.status = SubagentStatus.INTERRUPTED
@@ -351,7 +368,7 @@ async def _run_subagent_task(
         state.finished_at = utc_now()
         state.active_tool_call_id = None
         async with handle.state_lock:
-            await SubagentRuntimeStore.save_state(state)
+            await SubagentRuntimeStore.save_state(state, chat_history_dir)
         return state
     except Exception as e:
         state.status = SubagentStatus.ERROR
@@ -359,7 +376,7 @@ async def _run_subagent_task(
         state.finished_at = utc_now()
         state.active_tool_call_id = None
         async with handle.state_lock:
-            await SubagentRuntimeStore.save_state(state)
+            await SubagentRuntimeStore.save_state(state, chat_history_dir)
         logger.exception(f"sub-agent {agent.agent_name}:{agent.id} failed")
         return state
     finally:
@@ -367,10 +384,12 @@ async def _run_subagent_task(
             state.interrupt_requested = True
             state.interrupt_reason = agent.agent_context.get_interruption_reason()
             async with handle.state_lock:
-                await SubagentRuntimeStore.save_state(state)
+                await SubagentRuntimeStore.save_state(state, chat_history_dir)
         agent.close()
         if current_task is not None:
             await subagent_session_manager.clear_run(agent.agent_name, agent.id, current_task)
+        from app.service.chat_history_cleanup_service import ChatHistoryCleanupService
+        ChatHistoryCleanupService.trigger()
 
 
 def _mark_running(state: SubagentSessionState) -> None:

@@ -14,9 +14,11 @@ from magic_use.models import (
     ConsoleEntry,
     DiagnosticBatch,
     NetworkEntry,
-    PageSnapshot,
+    PageElements,
+    FindQuery,
+    FindResult,
     ScreenshotResult,
-    SnapshotOptions,
+    ElementQuery,
     WaitRequest,
 )
 from magic_use.models.common import BrowserBackendKind, JsonValue
@@ -87,12 +89,33 @@ class BrowserClient:
     async def read_page(self, page_id: str, scope: str = "viewport") -> str:
         return await self._backend.read_page(page_id, scope)
 
+    async def read_html(
+        self,
+        page_id: str,
+        *,
+        ref: str | None = None,
+        detail: str = "outline",
+        max_chars: int = 20_000,
+    ) -> tuple[str, bool]:
+        return await self._backend.read_html(
+            page_id,
+            ref=ref,
+            detail=detail,
+            max_chars=max_chars,
+        )
+
+    async def add_init_script(self, page_id: str, source: str) -> None:
+        await self._backend.add_init_script(page_id, source)
+
     async def snapshot(
         self,
         page_id: str,
-        options: SnapshotOptions | None = None,
-    ) -> PageSnapshot:
+        options: ElementQuery | None = None,
+    ) -> PageElements:
         return await self._backend.snapshot(page_id, options)
+
+    async def find(self, page_id: str, query: FindQuery) -> FindResult:
+        return await self._backend.find(page_id, query)
 
     async def describe_ref(self, page_id: str, ref: str) -> ActionTarget:
         return await self._backend.describe_ref(page_id, ref)

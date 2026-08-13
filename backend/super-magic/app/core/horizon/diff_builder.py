@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from agentlang.logger import get_logger
-from app.core.horizon.models import FileReadRecord, HorizonState
+from app.core.horizon.models import FileContextRecord, HorizonState
 from app.utils.async_file_utils import async_try_read_text
 
 logger = get_logger(__name__)
@@ -73,7 +73,7 @@ async def _read_current_file(path: str) -> Optional[str]:
 
 
 async def _build_file_diff_block(
-    record: FileReadRecord,
+    record: FileContextRecord,
     current_file_hash: str,
     current_size: int,
     current_mtime_ms: float,
@@ -88,7 +88,7 @@ async def _build_file_diff_block(
     if not record.file_content:
         return _build_summary_block(
             path_str=path_str,
-            summary="File changed since your last read",
+            summary="This file has changed since your last successful read",
             old_size=record.file_size_bytes,
             new_size=current_size,
             old_mtime_ms=record.file_mtime_ms,
@@ -99,7 +99,7 @@ async def _build_file_diff_block(
     if current_content is None:
         return _build_summary_block(
             path_str=path_str,
-            summary="File changed since your last read; current content could not be read for diff",
+            summary="This file has changed since your last successful read. The current content could not be read, so no diff is available",
             old_size=record.file_size_bytes,
             new_size=current_size,
             old_mtime_ms=record.file_mtime_ms,
@@ -113,7 +113,7 @@ async def _build_file_diff_block(
         # hash 变了但文本相同（理论上罕见），仍然通知
         return _build_summary_block(
             path_str=path_str,
-            summary="File changed since your last read",
+            summary="This file has changed since your last successful read",
             old_size=record.file_size_bytes,
             new_size=current_size,
             old_mtime_ms=record.file_mtime_ms,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { cn } from "@/lib/utils"
@@ -16,6 +16,7 @@ import type { MobileRecordingSourceTab, RecordingTranscriptSegment } from "../ty
 import { parseTranscriptMarkdown } from "../utils/transcript-parser"
 import { formatRecordingTime } from "../utils/time"
 import { MobileRecordingMarkdownContent } from "./MobileRecordingMarkdownContent"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 
 interface MobileRecordingSourcePanelProps {
 	transcriptContent?: string
@@ -30,6 +31,10 @@ interface MobileRecordingSourcePanelProps {
 	onOpenSpeakerSettings: () => void
 	onSeek: (seconds: number) => void
 	onContentScroll?: () => void
+	attachmentTree?: AttachmentFile[]
+	notesFilePath?: string
+	searchScopeRef?: RefObject<HTMLDivElement | null>
+	onActiveTabChange?: (tab: MobileRecordingSourceTab) => void
 }
 
 /** Shows completed source attachments: transcript timeline and readonly notes markdown. */
@@ -46,6 +51,10 @@ export function MobileRecordingSourcePanel({
 	onOpenSpeakerSettings,
 	onSeek,
 	onContentScroll,
+	attachmentTree = [],
+	notesFilePath,
+	searchScopeRef,
+	onActiveTabChange,
 }: MobileRecordingSourcePanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeTab, setActiveTab] = useState<MobileRecordingSourceTab>("transcript")
@@ -82,12 +91,18 @@ export function MobileRecordingSourcePanel({
 					<SourceTabButton
 						active={activeTab === "transcript"}
 						label={t("detail.tabs.transcript")}
-						onClick={() => setActiveTab("transcript")}
+						onClick={() => {
+							setActiveTab("transcript")
+							onActiveTabChange?.("transcript")
+						}}
 					/>
 					<SourceTabButton
 						active={activeTab === "notes"}
 						label={t("detail.tabs.notes")}
-						onClick={() => setActiveTab("notes")}
+						onClick={() => {
+							setActiveTab("notes")
+							onActiveTabChange?.("notes")
+						}}
 					/>
 				</div>
 				{activeTab === "transcript" &&
@@ -114,6 +129,8 @@ export function MobileRecordingSourcePanel({
 				onScroll={onContentScroll}
 			>
 				<div
+					ref={searchScopeRef}
+					data-search-scope="mobile-recording-source"
 					className={cn(
 						"flex min-h-full flex-col",
 						// Keep both source tabs on the same height chain so their empty states
@@ -145,6 +162,8 @@ export function MobileRecordingSourcePanel({
 								speakerNameMap={speakerNameMap}
 								onSpeakerClick={onOpenSpeakerSettings}
 								onTimeClick={onSeek}
+								attachments={attachmentTree}
+								relativeFilePath={notesFilePath}
 							/>
 						</div>
 					) : (
@@ -219,7 +238,7 @@ function TranscriptList({
 	}
 
 	return (
-		<div className="flex flex-col gap-7">
+		<div className="flex flex-col gap-3">
 			{segments.map((segment) => {
 				const active =
 					playing &&

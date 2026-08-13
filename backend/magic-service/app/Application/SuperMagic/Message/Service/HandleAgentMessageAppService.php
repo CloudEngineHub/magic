@@ -42,7 +42,6 @@ use App\Infrastructure\SuperMagic\Utils\TaskEventUtil;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
 use App\Infrastructure\SuperMagic\Utils\ToolProcessor;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
-use App\Infrastructure\SuperMagic\Utils\WorkFileUtil;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\SuperMagic\Message\DTO\TopicTaskMessageDTO;
 use Dtyq\AsyncEvent\AsyncEventUtil;
@@ -778,9 +777,8 @@ class HandleAgentMessageAppService extends AbstractAppService
                     $type,
                     $fileKey
                 ));
-                $storageType = WorkFileUtil::isSnapshotFile($fileKey)
-                    ? StorageType::SNAPSHOT->value
-                    : StorageType::WORKSPACE->value;
+                $storageType = StorageType::tryFrom((string) ($attachment['storage_type'] ?? ''))?->value
+                    ?? StorageType::WORKSPACE->value;
                 $taskFileEntity = $this->convertAttachmentToTaskFileEntity($attachment, $task, $dataIsolation, $type);
                 $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(
                     new UpsertProjectFileNodeDTO(
@@ -941,6 +939,7 @@ class HandleAgentMessageAppService extends AbstractAppService
 
             // Modify tool data structure
             $tool['detail']['data']['file_id'] = (string) $fileId;
+            $tool['detail']['data']['storage_type'] = StorageType::TOPIC->value;
             $tool['detail']['data']['content'] = ''; // Clear content
             $tool['detail']['data']['file_extension'] = $fileExtension;
 

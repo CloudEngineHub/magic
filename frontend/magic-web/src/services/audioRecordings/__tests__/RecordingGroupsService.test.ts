@@ -9,6 +9,7 @@ vi.mock("@/apis", () => ({
 		createWorkspace: vi.fn(),
 		editWorkspace: vi.fn(),
 		deleteWorkspace: vi.fn(),
+		detachWorkspace: vi.fn(),
 	},
 }))
 
@@ -70,5 +71,16 @@ describe("RecordingGroupsService", () => {
 		})
 		expect(result.id).toBe("workspace-created-1")
 		expect(result.isVirtual).toBe(false)
+	})
+
+	it("deletes groups through detach so recordings stay ungrouped", async () => {
+		vi.mocked(SuperMagicApi.detachWorkspace).mockResolvedValue(undefined)
+
+		await service.deleteGroup("workspace-mock-detach-1")
+
+		expect(SuperMagicApi.detachWorkspace).toHaveBeenCalledWith({
+			id: "workspace-mock-detach-1",
+		})
+		expect(SuperMagicApi.deleteWorkspace).not.toHaveBeenCalled()
 	})
 })

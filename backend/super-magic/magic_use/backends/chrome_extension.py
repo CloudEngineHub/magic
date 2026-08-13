@@ -36,12 +36,14 @@ from magic_use.models import (
     ElementRefRecord,
     NavigationResult,
     NetworkEntry,
-    PageSnapshot,
+    PageElements,
     ScreenshotResult,
     SessionState,
-    SnapshotNode,
-    SnapshotOptions,
-    SnapshotScope,
+    ElementNode,
+    ElementQuery,
+    ElementScope,
+    FindQuery,
+    FindResult,
     WaitConditionKind,
     WaitRequest,
 )
@@ -297,14 +299,42 @@ class ChromeExtensionBackend:
         await self._prepare_peer()
         return await self._observer.read_page(page_id, scope)
 
+    async def read_html(
+        self,
+        page_id: str,
+        *,
+        ref: str | None = None,
+        detail: str = "outline",
+        max_chars: int = 20_000,
+    ) -> tuple[str, bool]:
+        await self._prepare_peer()
+        return await self._observer.read_html(
+            await self._describe_page(page_id),
+            ref=ref,
+            detail=detail,
+            max_chars=max_chars,
+        )
+
+    async def add_init_script(self, page_id: str, source: str) -> None:
+        peer = await self._prepare_peer()
+        await peer.request(
+            RemoteMethod.PAGE_ADD_INIT_SCRIPT,
+            {"page_token": self._pages.require_token(page_id), "source": source},
+            logical_session_id=self._session_id,
+        )
+
     async def snapshot(
         self,
         page_id: str,
-        options: SnapshotOptions | None = None,
-    ) -> PageSnapshot:
+        options: ElementQuery | None = None,
+    ) -> PageElements:
         await self._prepare_peer()
         page = await self._describe_page(page_id)
-        return await self._observer.snapshot(page, options or SnapshotOptions())
+        return await self._observer.snapshot(page, options or ElementQuery())
+
+    async def find(self, page_id: str, query: FindQuery) -> FindResult:
+        await self._prepare_peer()
+        return await self._observer.find(await self._describe_page(page_id), query)
 
     async def describe_ref(self, page_id: str, ref: str) -> ActionTarget:
         await self._prepare_peer()
@@ -356,7 +386,7 @@ class ChromeExtensionBackend:
         try:
             changed = await self._observer.snapshot(
                 page_after,
-                SnapshotOptions(scope=SnapshotScope.CHANGES),
+                ElementQuery(scope=ElementScope.CHANGES),
                 update_baseline=False,
             )
             snapshot_diff = changed.diff
@@ -499,7 +529,7 @@ class ChromeExtensionBackend:
         while True:
             snapshot = await self._observer.snapshot(
                 await self._describe_page(page_id),
-                SnapshotOptions(scope=SnapshotScope.INTERACTIVE),
+                ElementQuery(scope=ElementScope.INTERACTIVE),
                 update_baseline=False,
             )
             node = self._find_ref(snapshot, request.value or "")
@@ -584,7 +614,7 @@ class ChromeExtensionBackend:
         task.exception()
 
     @staticmethod
-    def _find_ref(snapshot: PageSnapshot, ref: str) -> SnapshotNode | None:
+    def _find_ref(snapshot: PageElements, ref: str) -> ElementNode | None:
         stack = list(snapshot.root_nodes)
         while stack:
             node = stack.pop()
@@ -594,7 +624,7 @@ class ChromeExtensionBackend:
         return None
 
     @staticmethod
-    def _ref_state_matches(node: SnapshotNode | None, expected_state: str) -> bool:
+    def _ref_state_matches(node: ElementNode | None, expected_state: str) -> bool:
         if expected_state == "detached":
             return node is None
         if node is None:

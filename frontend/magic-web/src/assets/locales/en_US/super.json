@@ -234,6 +234,12 @@
 		"workspaceSwitcherPrefix": "Workspace",
 		"workspaceSwitcherRefresh": "Refresh Workspace List"
 	},
+	"browserDetail": {
+		"addressUnavailable": "Address unavailable",
+		"detail": "Details",
+		"screenshot": "Screenshot",
+		"untitledWebpage": "Untitled webpage"
+	},
 	"chat": {
 		"backToChatList": "Back to chat list",
 		"chatNameFieldLabel": "Conversation Name",
@@ -3469,6 +3475,9 @@
 			"coverUpload": "Upload cover",
 			"coverUploadFailed": "Cover upload failed. Please try again.",
 			"description": "After you configure access, others can use this micro app through the published link.",
+			"displaySettings": "Advanced options",
+			"fullScreen": "Fullscreen",
+			"fullScreenDescription": "Hide the access page header so the micro app fills the screen.",
 			"loadFailed": "Failed to load publish settings",
 			"password": "Access password",
 			"passwordHint": "Password must be 4-32 characters.",
@@ -3512,6 +3521,7 @@
 		"safetyCoverAlt": "Cover image for {{appName}}",
 		"safetyDescription": "This micro app was published by a user. The platform cannot guarantee that its content, links, or actions are safe. Continue only if you trust the source.",
 		"safetyDisclaimer": "Continuing does not mean the platform has verified this micro app as safe.",
+		"safetyDoNotRemind": "Don't remind me again",
 		"safetyEyebrow": "Safety reminder",
 		"safetyLeave": "Do not open",
 		"safetyPermissions": "Be cautious when granting camera, microphone, or location access, or when downloading and installing files.",
@@ -3742,9 +3752,11 @@
 		},
 		"recordingEntry": {
 			"active": {
+				"askAi": "Ask AI",
 				"audioSourceUnavailable": "No usable audio input is available. Please check your microphone device and try again.",
 				"backAria": "Back to recordings list",
 				"browserNotSupported": "This browser does not support recording yet. Please switch to a browser with microphone support.",
+				"camera": "Camera",
 				"cancel": "Cancel recording",
 				"defaultTitle": "Current recording",
 				"enableTranscription": "Enable transcription",
@@ -5079,6 +5091,9 @@
 		"noWorkspace": "No Workspace",
 		"onlySelectableAdministratorDocument": "Only Selectable Administrator Document",
 		"pleaseSelectFile": "Please Select File",
+		"preserveParentPath": "Preserve folder hierarchy",
+		"preserveParentPathConfirmTitle": "Confirm cross-project operation",
+		"preserveParentPathDescription": "Recreate the original parent-folder path in the target project. Leave this unchecked to place the items directly in the selected folder.",
 		"projects": "projects",
 		"returnSearch": "Exit Search",
 		"rootDirectory": "Root",
@@ -5942,8 +5957,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI Edit",
-		"addFile": "Add File",
-		"addFolder": "Add Folder",
+		"addFileOrFolder": "Add File/Folder",
 		"aiPick": "AI Pick",
 		"aiPickTooltip": "Click to select a page element and let AI modify it",
 		"batchExportingPdf": "Batch Exporting PDF...",
@@ -5988,6 +6002,7 @@
 			"batchCopy": "Batch Copy",
 			"batchMove": "Batch Move",
 			"cancel": "Cancel",
+			"collapseAll": "Collapse All",
 			"confirmBatchDelete": "Confirm Delete {{count}} Files?",
 			"confirmBatchDeleteWithFolders": "Selection includes folders, subfiles not selected will also be deleted",
 			"confirmBatchDeleteWithMagicSystemFolder": "Your selection includes the .magic system folder. After deletion, some capabilities may stop working and this cannot be undone. Proceed with caution.",
@@ -6054,6 +6069,7 @@
 			"downloadPdfRaster": "Download PDF Format (Screenshot)",
 			"downloadPpt": "Download PPT Format",
 			"downloadPptx": "Download PPTX Format (Editable)",
+			"expandAll": "Expand All",
 			"fileExport": {
 				"checkStatusFailed": "Failed to check export status",
 				"emptyFileId": "File ID cannot be empty",

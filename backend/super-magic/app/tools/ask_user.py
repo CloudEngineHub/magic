@@ -226,6 +226,19 @@ Use the `default` attribute to set a fallback when the user times out or skips.
             ),
         }
 
+    async def execute(
+        self,
+        tool_context: ToolContext,
+        params: AskUserParams,
+    ) -> ToolResult:
+        if not tool_context.arguments.get("parsed_questions"):
+            return ToolResult.error(
+                "The ask_user arguments contain no valid <question> element. "
+                "Retry with one or more valid question blocks.",
+                use_custom_remark=False,
+            )
+        return await super().execute(tool_context, params)
+
     def build_result_builder(self, tool_data: dict) -> ResultBuilder:
         """返回将用户回答转为模型上下文的闭包。
 

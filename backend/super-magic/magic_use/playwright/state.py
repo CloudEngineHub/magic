@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from playwright.async_api import CDPSession, Page
@@ -18,6 +18,7 @@ class PlaywrightPageHandle:
     expires_at: datetime
     resource_warning: str | None = None
     readiness: PageReadiness = PageReadiness.LOADING
+    url_history: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

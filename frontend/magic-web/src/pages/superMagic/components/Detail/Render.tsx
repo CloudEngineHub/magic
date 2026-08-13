@@ -767,7 +767,7 @@ export default function Render(props: any) {
 		onPrevious,
 		onNext,
 		onFullscreen,
-		onDownload,
+		onDownload: onDownload ?? exportFile,
 		totalFiles,
 		hasUserSelectDetail,
 		isFromNode,

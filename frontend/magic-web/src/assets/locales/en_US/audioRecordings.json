@@ -68,6 +68,7 @@
 		"emptySummaryFile": "This content has not been generated yet",
 		"emptyTranscript": "No transcript yet",
 		"emptyTranscriptFiltered": "No transcript matches this filter",
+		"emptyTranscriptSearch": "No matching transcript",
 		"entryNotFound": "Recording entry file not found",
 		"export": "Export",
 		"exportAll": "Export all",
@@ -82,7 +83,9 @@
 		"exportUnavailable": "Only original recording export is available right now",
 		"loadFailed": "Failed to load. Please try again.",
 		"loading": "Loading recording detail...",
+		"newTopic": "New topic",
 		"noExportFilesSelected": "Please select at least one item to export",
+		"noTopics": "No topics yet",
 		"notSummarized": "No summary yet",
 		"notSummarizedHint": "Generate a summary to extract key points, minutes, and deeper insights.",
 		"openProject": "View project",
@@ -102,6 +105,12 @@
 			"waveformSeekAria": "Playback progress on waveform; drag or use arrow keys to seek"
 		},
 		"relatedDialogue": "Related dialogue",
+		"searchContent": "Search content",
+		"searchContentClear": "Clear search query",
+		"searchContentClose": "Close content search",
+		"searchContentNext": "Next match",
+		"searchContentPlaceholder": "Search current content",
+		"searchContentPrevious": "Previous match",
 		"share": "Share",
 		"shareAndExport": "Share & Export",
 		"shareCreate": "Create share",
@@ -123,6 +132,7 @@
 		"summarizing": "Summarizing",
 		"summarizingHint": "All summary views will appear when it is ready.",
 		"tabs": {
+			"ai": "Ask AI",
 			"followup": "Follow-up",
 			"highlights": "Highlights",
 			"insights": "Insights",
@@ -137,8 +147,12 @@
 			"topics": "Topics",
 			"transcript": "Transcript"
 		},
+		"topicListTitle": "Topics",
 		"topicSummary": "Key points",
 		"transcriptCount": "Transcript · {{count}} segments",
+		"transcriptSearchClear": "Clear transcript search",
+		"transcriptSearchLabel": "Search transcript",
+		"transcriptSearchPlaceholder": "Search transcript content",
 		"transcriptSegmentCountSuffix": "{{count}} segments",
 		"transcriptVisibleCount": "{{visibleCount}}/{{totalCount}} segments",
 		"untitled": "Untitled recording"
@@ -160,6 +174,9 @@
 		"summaryDone": "Summarized",
 		"summaryNotDone": "Not summarized",
 		"summaryStatus": "Summary status"
+	},
+	"import": {
+		"doNotRefreshTip": "Please don't refresh until the import finishes. Switching to other pages won't interrupt it."
 	},
 	"listCount": "Recordings · {{count}}",
 	"loading": "Loading...",

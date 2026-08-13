@@ -1952,8 +1952,8 @@ class TaskFileDomainService
      */
     public function findOrCreateProjectRootDirectory(int $projectId, string $workDir, string $userId, string $organizationCode, string $projectOrganizationCode, TaskFileSource $source = TaskFileSource::PROJECT_DIRECTORY): int
     {
-        // Look for existing root directory (parent_id IS NULL and is_directory = true)
-        $rootDir = $this->findDirectoryByParentIdAndName(null, '/', $projectId);
+        // 按完整根目录条件精确查询，不能扫描 parent_id=NULL 的全部同级记录。
+        $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
 
         if ($rootDir !== null) {
             return $rootDir->getFileId();
@@ -3025,11 +3025,7 @@ class TaskFileDomainService
         $dirEntity->setIsDirectory(true);
         $dirEntity->setParentId($parentId);
         $dirEntity->setSource($source);
-        if (WorkFileUtil::isSnapshotFile($fileKey)) {
-            $dirEntity->setStorageType(StorageType::SNAPSHOT);
-        } else {
-            $dirEntity->setStorageType(StorageType::WORKSPACE);
-        }
+        $dirEntity->setStorageType(StorageType::WORKSPACE);
         $dirEntity->setIsHidden($this->determineIsHidden($dirName, $parentId, $projectId));
         $dirEntity->setSort(0);
 
@@ -3421,12 +3417,7 @@ class TaskFileDomainService
             $fileEntity->setFileSize(! empty($taskFileEntity->getFileSize()) ? $taskFileEntity->getFileSize() : 0);
 
             if ($dto->getStorageTypeOverride() === '') {
-                $incomingStorageType = $taskFileEntity->getStorageType();
-                if ($incomingStorageType->value === StorageType::WORKSPACE->value && WorkFileUtil::isSnapshotFile($fileKey)) {
-                    $fileEntity->setStorageType(StorageType::SNAPSHOT);
-                } else {
-                    $fileEntity->setStorageType($incomingStorageType);
-                }
+                $fileEntity->setStorageType($taskFileEntity->getStorageType());
             } else {
                 $fileEntity->setStorageType($dto->getStorageTypeOverride());
             }

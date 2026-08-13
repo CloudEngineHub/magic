@@ -10,6 +10,8 @@ namespace HyperfTest\Cases\Infrastructure\Design;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
+use App\Infrastructure\Design\DesignVideoPromptReferenceRewriter;
 use App\Infrastructure\Design\VideoGatewayPayloadBuilder;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +21,27 @@ use PHPUnit\Framework\TestCase;
  */
 class VideoGatewayPayloadBuilderTest extends TestCase
 {
+    public function testBuildPassesBase64ReferenceImagesAndFramesWithoutResolvingWorkspaceFiles(): void
+    {
+        $builder = $this->createBuilder();
+        $referenceImage = 'data:image/png;base64,' . base64_encode('mock-image');
+        $frame = 'data:image/jpeg;base64,' . base64_encode('mock-frame');
+
+        $entity = new DesignGenerationTaskEntity();
+        $entity->setOrganizationCode('org');
+        $entity->setProjectId(1001);
+        $entity->setRequestPayload(['prompt' => 'make a video']);
+        $entity->setInputPayload([
+            'reference_images' => [['uri' => $referenceImage, 'type' => 'asset']],
+            'frames' => [['role' => 'start', 'uri' => $frame]],
+        ]);
+
+        $payload = $builder->build($entity);
+
+        $this->assertSame($referenceImage, $payload['inputs']['reference_images'][0]['uri']);
+        $this->assertSame($frame, $payload['inputs']['frames'][0]['uri']);
+    }
+
     public function testBuildConvertsReferenceImagesAndFramesToDataUrlByDefault(): void
     {
         $builder = $this->createBuilder(
@@ -284,7 +307,11 @@ class VideoGatewayPayloadBuilderTest extends TestCase
      */
     private function createBuilder(array $links = [], array $downloads = []): VideoGatewayPayloadBuilder
     {
-        return new VideoGatewayPayloadBuilder($this->createFileDomainService($links, $downloads));
+        return new VideoGatewayPayloadBuilder(
+            $this->createFileDomainService($links, $downloads),
+            $this->createMock(TaskFileDomainService::class),
+            new DesignVideoPromptReferenceRewriter(),
+        );
     }
 
     /**
