@@ -501,6 +501,7 @@ readonly class VideoQueueDomainService
             'sample_count' => $this->normalizeNullableInt($requestData['generation']['sample_count'] ?? null),
             'camera_fixed' => $this->normalizeOptionalBool($requestData['generation']['camera_fixed'] ?? null),
             'return_last_frame' => $this->normalizeOptionalBool($requestData['generation']['return_last_frame'] ?? null),
+            'web_search' => $this->normalizeOptionalBool($requestData['generation']['web_search'] ?? null),
         ], static fn (mixed $value): bool => $value !== null && $value !== '');
         $generation = $this->normalizeProviderSpecificGeneration(
             $generation,
@@ -665,8 +666,13 @@ readonly class VideoQueueDomainService
         if (! ($configGeneration['supports_negative_prompt'] ?? false)) {
             unset($generation['negative_prompt']);
         }
-        if (! ($configGeneration['supports_generate_audio'] ?? false)) {
+        $audioConfig = is_array($configGeneration['generate_audio'] ?? null) ? $configGeneration['generate_audio'] : null;
+        if ($audioConfig === null && ! ($configGeneration['supports_generate_audio'] ?? false)) {
             unset($generation['generate_audio']);
+        }
+        $webSearchConfig = is_array($configGeneration['web_search'] ?? null) ? $configGeneration['web_search'] : null;
+        if ($webSearchConfig === null) {
+            unset($generation['web_search']);
         }
         if (! ($configGeneration['supports_enhance_prompt'] ?? false)) {
             unset($generation['enhance_prompt']);
@@ -1155,24 +1161,7 @@ readonly class VideoQueueDomainService
      */
     private function normalizeSupportedDuration(array $generation, array $configGeneration): array
     {
-        $supportedDurations = $this->normalizeIntList($configGeneration['durations'] ?? []);
-        if ($supportedDurations === []) {
-            unset($generation['duration_seconds']);
-            return $generation;
-        }
-
-        $defaultDuration = $this->normalizeNullableInt($configGeneration['default_duration_seconds'] ?? null);
-        if (! array_key_exists('duration_seconds', $generation)) {
-            return $generation;
-        }
-
-        $duration = $this->coerceIntToSupportedList($generation['duration_seconds'], $supportedDurations, $defaultDuration);
-        if ($duration === null || $duration <= 0) {
-            unset($generation['duration_seconds']);
-            return $generation;
-        }
-
-        $generation['duration_seconds'] = $duration;
+        // duration_type/durations 是 Provider 能力原样下发的元数据；队列层只透传请求时长。
         return $generation;
     }
 
@@ -1302,42 +1291,6 @@ readonly class VideoQueueDomainService
         }
 
         return null;
-    }
-
-    /**
-     * @param list<int> $supportedValues
-     */
-    private function coerceIntToSupportedList(mixed $value, array $supportedValues, ?int $defaultValue): ?int
-    {
-        if ($supportedValues === []) {
-            return null;
-        }
-
-        $normalized = $this->normalizeNullableInt($value);
-        if ($normalized === null) {
-            return $defaultValue;
-        }
-
-        return $this->nearestInt($normalized, $supportedValues) ?? $defaultValue;
-    }
-
-    /**
-     * @param list<int> $supportedValues
-     */
-    private function nearestInt(int $value, array $supportedValues): ?int
-    {
-        sort($supportedValues);
-        $nearest = null;
-        $nearestDistance = null;
-        foreach ($supportedValues as $supportedValue) {
-            $distance = abs($supportedValue - $value);
-            if ($nearestDistance === null || $distance < $nearestDistance || ($distance === $nearestDistance && $supportedValue < $nearest)) {
-                $nearest = $supportedValue;
-                $nearestDistance = $distance;
-            }
-        }
-
-        return $nearest;
     }
 
     /**

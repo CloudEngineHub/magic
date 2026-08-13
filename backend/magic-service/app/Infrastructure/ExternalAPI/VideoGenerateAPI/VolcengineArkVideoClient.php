@@ -94,7 +94,7 @@ readonly class VolcengineArkVideoClient
             $response = match ($method) {
                 'post' => $this->createClient()->post($normalizedBaseUrl . $normalizedPath, $requestOptions),
                 'get' => $this->createClient()->get($normalizedBaseUrl . $normalizedPath, $requestOptions),
-                default => throw new ProviderVideoException(sprintf('unsupported volcengine ark video method %s', $method)),
+                default => throw ProviderVideoException::nonRetriable(sprintf('unsupported volcengine ark video method %s', $method)),
             };
             $data = Json::decode((string) $response->getBody());
         } catch (RequestException $exception) {
@@ -120,7 +120,12 @@ readonly class VolcengineArkVideoClient
             } catch (Throwable $throwable) {
             }
 
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($errorMessage), $exception);
+            throw ProviderVideoException::retriable(
+                $this->formatRequestExceptionMessage($errorMessage),
+                $exception,
+            );
+        } catch (ProviderVideoException $exception) {
+            throw $exception;
         } catch (Throwable $throwable) {
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
@@ -132,11 +137,14 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
-            throw new ProviderVideoException(sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(sprintf('volcengine ark video %s returned invalid json', $method));
+            throw ProviderVideoException::retriable(sprintf('volcengine ark video %s returned invalid json', $method));
         }
 
         $this->logger->info('volcengine ark video response', [

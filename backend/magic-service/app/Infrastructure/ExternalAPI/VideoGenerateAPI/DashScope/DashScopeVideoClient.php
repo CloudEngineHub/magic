@@ -133,13 +133,19 @@ readonly class DashScopeVideoClient
         try {
             $data = $request();
         } catch (RequestException $exception) {
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($exception, $action), $exception);
+            throw ProviderVideoException::retriable(
+                $this->formatRequestExceptionMessage($exception, $action),
+                $exception,
+            );
         } catch (Throwable $throwable) {
-            throw new ProviderVideoException(sprintf('dashscope video %s failed: %s', $action, $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('dashscope video %s failed: %s', $action, $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(sprintf('dashscope video %s returned invalid json', $action));
+            throw ProviderVideoException::retriable(sprintf('dashscope video %s returned invalid json', $action));
         }
 
         $this->assertProviderSuccess($data, $action);
@@ -159,7 +165,7 @@ readonly class DashScopeVideoClient
         }
 
         $message = $this->extractProviderMessage($data) ?? 'unknown provider error';
-        throw new ProviderVideoException(sprintf('dashscope video %s failed: %s', $action, $message));
+        throw ProviderVideoException::retriable(sprintf('dashscope video %s failed: %s', $action, $message));
     }
 
     private function formatRequestExceptionMessage(RequestException $exception, string $action): string

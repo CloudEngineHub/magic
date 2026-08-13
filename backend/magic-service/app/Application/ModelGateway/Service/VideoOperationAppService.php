@@ -281,7 +281,6 @@ readonly class VideoOperationAppService
             $dataIsolation,
             $operationId,
             $businessParams,
-            failOnProviderQueryException: false,
         );
         if ($operation === null) {
             return true;
@@ -342,7 +341,6 @@ readonly class VideoOperationAppService
                         [],
                         $newOperation->getOrganizationCode(),
                         $newOperation->getUserId(),
-                        false,
                     );
                 } catch (Throwable $throwable) {
                     $this->logger->warning('video active operation recovery query failed', [
@@ -407,7 +405,6 @@ readonly class VideoOperationAppService
         array $businessParams = [],
         ?string $organizationCode = null,
         ?string $userId = null,
-        bool $failOnProviderQueryException = true,
     ): ?VideoQueueOperationEntity {
         return $this->withOperationLock($operationId, function () use (
             $dataIsolation,
@@ -415,7 +412,6 @@ readonly class VideoOperationAppService
             $businessParams,
             $organizationCode,
             $userId,
-            $failOnProviderQueryException,
         ): ?VideoQueueOperationEntity {
             $operation = $this->videoQueueDomainService->findOperation($operationId);
             if ($operation === null) {
@@ -428,7 +424,7 @@ readonly class VideoOperationAppService
                 ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'video task not found');
             }
 
-            $this->syncOperationFromProvider($dataIsolation, $operation, $businessParams, $failOnProviderQueryException);
+            $this->syncOperationFromProvider($dataIsolation, $operation, $businessParams);
             return $operation;
         });
     }
@@ -437,7 +433,6 @@ readonly class VideoOperationAppService
         ModelGatewayDataIsolation $dataIsolation,
         VideoQueueOperationEntity $operation,
         array $businessParams = [],
-        bool $failOnProviderQueryException = true,
     ): void {
         $providerTaskId = $operation->getProviderTaskId();
         if (! is_string($providerTaskId) || $providerTaskId === '' || $operation->getStatus()->isDone()) {
@@ -488,7 +483,7 @@ readonly class VideoOperationAppService
                 $this->videoQueueDomainService->releaseUserActiveOperationIfDone($operation);
             }
         } catch (ProviderVideoException $throwable) {
-            if (! $failOnProviderQueryException) {
+            if ($throwable->isRetriable()) {
                 throw $throwable;
             }
             $this->logger->warning('video provider query failed', [
@@ -579,9 +574,9 @@ readonly class VideoOperationAppService
             $videoGenerationConfig
         );
         $outputDetails = $this->videoBillingDetailsResolver->resolveFromRequest($normalizedRequest, $videoGenerationConfig);
-        $referenceVideos = is_array($normalizedRequest['inputs']['reference_videos'] ?? null)
-            ? $normalizedRequest['inputs']['reference_videos']
-            : [];
+        $referenceVideos = is_array($normalizedRequest['inputs']['reference_videos'] ?? null) ? $normalizedRequest['inputs']['reference_videos'] : [];
+        $inputMedia = is_array($normalizedRequest['inputs'] ?? null) ? $normalizedRequest['inputs'] : [];
+
         $inputMetadata = $this->resolveEstimateInputMetadata($dataIsolation, $requestDTO, $referenceVideos);
         $hasAudioOutput = $this->videoGenerationConfigDomainService->resolveHasAudioOutput(
             $modelVersion,
@@ -601,6 +596,8 @@ readonly class VideoOperationAppService
             (int) $inputMetadata['reference_video_count'] > 0,
             $requestDTO->getBusinessParams(),
             $hasAudioOutput,
+            $inputMedia,
+            $providerCode->value,
         );
     }
 
@@ -651,7 +648,7 @@ readonly class VideoOperationAppService
             $operation,
             $requestBusinessParams,
         );
-        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($operation);
+        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($dataIsolation, $operation);
         if ($usageTokens['completion_tokens'] !== null) {
             $businessParams['completion_tokens'] = $usageTokens['completion_tokens'];
         }
@@ -1361,11 +1358,14 @@ readonly class VideoOperationAppService
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
-    private function resolveVideoReferenceMaterialContext(VideoQueueOperationEntity $operation): array
-    {
+    private function resolveVideoReferenceMaterialContext(
+        ModelGatewayDataIsolation $dataIsolation,
+        VideoQueueOperationEntity $operation
+    ): array {
         $raw = $operation->getRawRequest();
         $inputs = is_array($raw['inputs'] ?? null) ? $raw['inputs'] : [];
         $inputMode = isset($raw['input_mode']) ? trim((string) $raw['input_mode']) : '';
@@ -1373,12 +1373,22 @@ readonly class VideoOperationAppService
         $images = is_array($inputs['reference_images'] ?? null) ? $inputs['reference_images'] : [];
         $videos = is_array($inputs['reference_videos'] ?? null) ? $inputs['reference_videos'] : [];
         $audios = is_array($inputs['reference_audios'] ?? null) ? $inputs['reference_audios'] : [];
+        $inputVideoDurationSeconds = 0;
+        if ($videos !== []) {
+            $metadata = $this->videoInputMediaMetadataResolver->resolve(
+                $dataIsolation,
+                $operation->getProjectId(),
+                $videos,
+            );
+            $inputVideoDurationSeconds = (int) ($metadata['total_duration_seconds'] ?? 0);
+        }
 
         return [
             'input_mode' => $inputMode === '' ? null : $inputMode,
             'reference_image_count' => count($images),
             'reference_video_count' => count($videos),
             'reference_audio_count' => count($audios),
+            'input_video_duration_seconds' => $inputVideoDurationSeconds,
         ];
     }
 }

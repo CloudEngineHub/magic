@@ -8,6 +8,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from openai.types.chat import ChatCompletion
@@ -21,6 +22,27 @@ logger = get_logger(__name__)
 ENABLE_LLM_SUCCESS_REQUEST_LOG = os.getenv(
     "ENABLE_LLM_SUCCESS_REQUEST_LOG", "false"
 ).lower() in ("true", "1", "yes", "on")
+
+# llm_request 目录最多保留的日志文件数；0 表示不限制（本地开发可用）
+LLM_REQUEST_LOG_MAX_FILES_ENV = "LLM_REQUEST_LOG_MAX_FILES"
+_DEFAULT_LLM_REQUEST_LOG_MAX_FILES = 10
+LLM_REQUEST_LOG_DIR_NAME = "llm_request"
+
+
+def _get_llm_request_log_max_files() -> int:
+    """解析 LLM 请求日志保留上限，非法值回退到默认值。"""
+    raw = os.getenv(LLM_REQUEST_LOG_MAX_FILES_ENV, str(_DEFAULT_LLM_REQUEST_LOG_MAX_FILES))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Invalid %s=%r, using default %s",
+            LLM_REQUEST_LOG_MAX_FILES_ENV,
+            raw,
+            _DEFAULT_LLM_REQUEST_LOG_MAX_FILES,
+        )
+        return _DEFAULT_LLM_REQUEST_LOG_MAX_FILES
+    return max(0, value)
 
 def _sanitize_for_filename(value: str) -> str:
     """将输入字符串转换为可安全用于单个文件名片段的值。"""
@@ -62,6 +84,7 @@ async def save_llm_debug_log(
     注意：
         - 失败的请求总是记录日志
         - 成功的请求只在 ENABLE_LLM_SUCCESS_REQUEST_LOG 环境变量开启时记录
+        - 无论是否写入日志，请求结束后都会异步检查并清理积压日志
 
     Args:
         debug_info: LLM 调试信息
@@ -82,9 +105,11 @@ async def save_llm_debug_log(
 
         # 创建聊天历史目录下的 llm_request 子目录
         from agentlang.path_manager import PathManager
+        from app.utils.async_file_utils import async_mkdir, async_write_text
+
         chat_history_dir = PathManager.get_chat_history_dir()
-        llm_request_dir = chat_history_dir / "llm_request"
-        llm_request_dir.mkdir(exist_ok=True)
+        llm_request_dir = chat_history_dir / LLM_REQUEST_LOG_DIR_NAME
+        await async_mkdir(llm_request_dir, parents=True, exist_ok=True)
 
         # 计算耗时（毫秒）
         duration_ms = _calculate_duration_ms(start_timestamp, end_timestamp)
@@ -108,13 +133,54 @@ async def save_llm_debug_log(
         )
 
         # 写入文件
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(log_content)
+        await async_write_text(file_path, log_content)
 
         logger.debug(f"已保存调试日志: {file_path}")
 
     except Exception as e:
         logger.warning(f"保存 LLM 调试日志时出错: {e}")
+    finally:
+        await prune_llm_request_logs_if_needed()
+
+
+async def prune_llm_request_logs_if_needed() -> None:
+    """按配置保留 llm_request 目录下最新的日志文件，清理更旧和积压文件。"""
+    max_files = _get_llm_request_log_max_files()
+    if max_files <= 0:
+        return
+
+    try:
+        from agentlang.path_manager import PathManager
+
+        chat_history_dir = PathManager.get_chat_history_dir()
+        llm_request_dir = chat_history_dir / LLM_REQUEST_LOG_DIR_NAME
+        await _prune_llm_request_logs(llm_request_dir, max_files)
+    except Exception as e:
+        logger.warning("清理 LLM 请求日志时出错: %s", e)
+
+
+async def _prune_llm_request_logs(llm_request_dir: Path, max_files: int) -> None:
+    """保留目录下最新的 max_files 个 .log 文件，删除更旧的。"""
+    if max_files <= 0:
+        return
+
+    try:
+        from app.utils.async_file_utils import async_scandir, async_unlink
+
+        entries = await async_scandir(llm_request_dir)
+        log_entries = [
+            entry for entry in entries
+            if entry.is_file() and entry.name.endswith(".log")
+        ]
+        if len(log_entries) <= max_files:
+            return
+
+        log_entries.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
+        for entry in log_entries[max_files:]:
+            await async_unlink(entry.path)
+            logger.debug("已淘汰最老 LLM 请求日志: %s", entry.path)
+    except Exception as e:
+        logger.warning("清理 LLM 请求日志时出错: %s", e)
 
 
 def _calculate_duration_ms(

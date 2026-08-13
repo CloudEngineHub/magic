@@ -49,6 +49,18 @@ class VolcengineArkSeedanceVideoAdapterTest extends TestCase
         $this->assertSame(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'], $generation['aspect_ratios']);
         $this->assertSame([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], $generation['durations']);
         $this->assertSame(['480p', '720p', '1080p'], $generation['resolutions']);
+        $this->assertTrue($generation['supports_seed']);
+        $this->assertTrue($generation['supports_generate_audio']);
+        foreach ([
+            'supports_negative_prompt',
+            'supports_person_generation',
+            'supports_enhance_prompt',
+            'supports_compression_quality',
+            'supports_resize_mode',
+            'supports_sample_count',
+        ] as $unsupportedCapability) {
+            $this->assertArrayNotHasKey($unsupportedCapability, $generation);
+        }
         $this->assertCount(18, $generation['sizes']);
         $this->assertSame([
             'label' => '16:9',
