@@ -963,6 +963,7 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		target_parent_id: string
 		pre_file_id?: string
 		keep_both_file_ids?: string[]
+		preserve_parent_path?: boolean
 	}) {
 		const { shareCode, ...requestData } = params
 		return fetch.post(`/api/v1/share/resources/${shareCode}/files/batch-copy`, requestData)
