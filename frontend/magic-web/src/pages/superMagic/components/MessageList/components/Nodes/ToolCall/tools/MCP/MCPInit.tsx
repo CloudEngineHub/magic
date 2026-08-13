@@ -1,4 +1,4 @@
-import { memo, useMemo, Suspense, lazy } from "react"
+import { memo, useMemo, Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import type { NodeProps } from "../../../types"
@@ -9,13 +9,7 @@ import { defaultOpen } from "../../config"
 import { useToggleWithScrollPreserve } from "../../../shared/hooks/useToggleWithScrollPreserve"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 import { customTheme, syntaxCustomStyle, syntaxLineNumberStyle } from "./syntaxConfig"
-
-const loadSyntaxHighlighter = () =>
-	import("react-syntax-highlighter").then((module) => ({
-		default: module.Prism,
-	}))
-
-const SyntaxHighlighter = lazy(loadSyntaxHighlighter)
+import { McpSyntaxHighlighter as SyntaxHighlighter } from "@/infrastructure/vendors/react-syntax-highlighter/mcp"
 
 interface MCPToolResult {
 	name: string

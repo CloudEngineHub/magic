@@ -1,4 +1,4 @@
-import { Suspense, lazy, memo, type ClipboardEvent, type ReactNode } from "react"
+import { Suspense, memo, type ClipboardEvent, type ReactNode } from "react"
 import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import type { FileItem } from "@/pages/superMagic/pages/Workspace/types"
 import { cn } from "@/utils/cn"
@@ -14,13 +14,10 @@ import {
 	syntaxCustomStyle,
 	syntaxLineNumberStyle,
 } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/tools/MCP/syntaxConfig"
-
-const loadSyntaxHighlighter = () =>
-	import("react-syntax-highlighter").then((module) => ({
-		default: module.Prism,
-	}))
-
-const SyntaxHighlighter = lazy(loadSyntaxHighlighter)
+import {
+	McpSyntaxHighlighter as SyntaxHighlighter,
+	preloadMcpSyntaxHighlighter,
+} from "@/infrastructure/vendors/react-syntax-highlighter/mcp"
 
 interface ToolDataLike {
 	id?: string
@@ -112,7 +109,7 @@ function MCPToolNode(props: MCPToolProps) {
 	})
 
 	const preloadSyntax = useMemoizedFn(() => {
-		void loadSyntaxHighlighter()
+		preloadMcpSyntaxHighlighter()
 	})
 
 	const handleCopy = useMemoizedFn((e: ClipboardEvent<HTMLDivElement>) => {
