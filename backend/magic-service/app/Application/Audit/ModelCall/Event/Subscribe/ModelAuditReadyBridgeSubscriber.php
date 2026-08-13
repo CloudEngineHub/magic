@@ -209,8 +209,11 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
 
         $usage = [
             'count' => (int) ($businessParams['image_count'] ?? 0),
+            'image_count' => (int) ($businessParams['image_count'] ?? $event->getImageCount()),
             'output_image_count' => (int) ($businessParams['image_count'] ?? 0),
             'reference_image_count' => (int) ($businessParams['reference_image_count'] ?? $event->getReferenceImageCount()),
+            'resolution' => $event->getResolution(),
+            'size' => $event->getImageSize(),
         ];
         $tokenUsage = $event->getUsage();
         if ($tokenUsage === null || $tokenUsage->getTotalTokens() <= 0) {
@@ -285,7 +288,12 @@ class ModelAuditReadyBridgeSubscriber implements ListenerInterface
         $usage = [
             'count' => 1,
             'duration_seconds' => $event->getDurationSeconds(),
+            'resolution' => $event->getResolution(),
+            'size' => $event->getSize(),
+            'width' => $event->getWidth(),
+            'height' => $event->getHeight(),
             'has_audio_output' => $event->hasAudioOutput(),
+            ...$event->getVideoReferenceMaterial(),
         ];
         $completionTokens = $event->getCompletionTokens();
         $totalTokens = $event->getTotalTokens();
