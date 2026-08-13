@@ -101,4 +101,11 @@ return [
     'project_template_file_too_large' => '模板目录总大小不能超过 20MB',
     'project_template_too_many_files' => '模板目录文件数量不能超过 100 个',
     'project_template_too_many_preview_images' => '预览图数量不能超过 50 张',
+    'project_template_export_failed' => '幻灯片模板导出失败',
+    'project_template_code_required' => '幻灯片模板编码不能为空',
+    'project_template_source_path_invalid' => '幻灯片模板源目录路径无效',
+    'project_template_topic_required' => '项目缺少可用于模板导出的主题',
+    'project_template_topic_invalid' => '项目主题无效，无法导出幻灯片模板',
+    'project_template_export_id_invalid' => '幻灯片模板导出标识无效',
+    'project_template_export_directory_invalid' => '幻灯片模板导出目录无效',
 ];

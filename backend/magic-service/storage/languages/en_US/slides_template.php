@@ -101,4 +101,11 @@ return [
     'project_template_file_too_large' => 'The total size of the template directory cannot exceed 20MB',
     'project_template_too_many_files' => 'The template directory cannot contain more than 100 files',
     'project_template_too_many_preview_images' => 'The number of preview images cannot exceed 50',
+    'project_template_export_failed' => 'Failed to export the slide template',
+    'project_template_code_required' => 'Slide template code cannot be empty',
+    'project_template_source_path_invalid' => 'Slide template source directory path is invalid',
+    'project_template_topic_required' => 'The project has no topic available for template export',
+    'project_template_topic_invalid' => 'The project topic is invalid for slide template export',
+    'project_template_export_id_invalid' => 'Slide template export identifier is invalid',
+    'project_template_export_directory_invalid' => 'Slide template export directory is invalid',
 ];

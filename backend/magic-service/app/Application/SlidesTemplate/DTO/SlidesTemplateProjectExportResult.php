@@ -7,7 +7,8 @@ declare(strict_types=1);
 
 namespace App\Application\SlidesTemplate\DTO;
 
-use RuntimeException;
+use App\ErrorCode\SlidesTemplateErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 
 final class SlidesTemplateProjectExportResult
 {
@@ -36,7 +37,7 @@ final class SlidesTemplateProjectExportResult
     ): self {
         $templateFileKey = trim((string) ($metadata['template_file_key'] ?? $fileKey));
         if ($templateFileKey === '') {
-            throw new RuntimeException('Sandbox export response is missing template_file_key.');
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID);
         }
 
         return new self(
@@ -82,7 +83,10 @@ final class SlidesTemplateProjectExportResult
     {
         $value = trim((string) $value);
         if ($value === '') {
-            throw new RuntimeException("Sandbox export response is missing {$field}.");
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID,
+                replace: ['field' => $field],
+            );
         }
         return $value;
     }
@@ -91,14 +95,20 @@ final class SlidesTemplateProjectExportResult
     private static function requiredI18n(mixed $value, string $field): array
     {
         if (! is_array($value)) {
-            throw new RuntimeException("Sandbox export response is missing {$field}.");
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID,
+                replace: ['field' => $field],
+            );
         }
         $result = [
             'zh_CN' => trim((string) ($value['zh_CN'] ?? '')),
             'en_US' => trim((string) ($value['en_US'] ?? '')),
         ];
         if ($result['zh_CN'] === '' || $result['en_US'] === '') {
-            throw new RuntimeException("Sandbox export response has invalid {$field}.");
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID,
+                replace: ['field' => $field],
+            );
         }
         return $result;
     }
@@ -107,7 +117,7 @@ final class SlidesTemplateProjectExportResult
     private static function stringList(mixed $value): array
     {
         if (! is_array($value)) {
-            throw new RuntimeException('Sandbox export response has invalid string list.');
+            ExceptionBuilder::throw(SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID);
         }
         return array_values(array_filter(array_map(
             static fn (mixed $item): string => trim((string) $item),

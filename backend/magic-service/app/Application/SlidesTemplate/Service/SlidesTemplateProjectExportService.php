@@ -31,7 +31,6 @@ use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
 
 final class SlidesTemplateProjectExportService extends AbstractAppService
@@ -83,7 +82,10 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             if ($code === '') {
                 $code = basename($sourcePath);
                 if ($code === '') {
-                    throw new RuntimeException('Template code is required when the directory name is unavailable.');
+                    ExceptionBuilder::throw(
+                        SlidesTemplateErrorCode::VALIDATE_FAILED,
+                        'slides_template.project_template_code_required',
+                    );
                 }
             }
 
@@ -125,7 +127,16 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 $request,
             );
             if (! $response->isSuccess()) {
-                throw new RuntimeException('Slides template Sandbox export failed: ' . $response->getMessage());
+                $this->logger->error('Slides template Sandbox export returned failure', [
+                    'project_id' => $projectId,
+                    'directory_id' => $directoryId,
+                    'sandbox_id' => $sandboxId,
+                    'code' => $code,
+                    'message' => $response->getMessage(),
+                ]);
+                ExceptionBuilder::throw(
+                    SlidesTemplateErrorCode::PROJECT_TEMPLATE_EXPORT_FAILED,
+                );
             }
 
             $result = SlidesTemplateProjectExportResult::fromSandbox(
@@ -216,7 +227,10 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
         $fileMap = RelativeFilePathUtil::indexByFileId($allFiles);
         $path = trim(str_replace('\\', '/', RelativeFilePathUtil::buildPathByParentChain($directory, $fileMap)), '/');
         if ($path === '') {
-            throw new RuntimeException('Unable to resolve Sandbox source path.');
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::PROJECT_TEMPLATE_DIRECTORY_INVALID,
+                'slides_template.project_template_source_path_invalid',
+            );
         }
 
         return $path;
@@ -233,11 +247,17 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
 
         $topicId = $project->getCurrentTopicId();
         if (empty($topicId)) {
-            throw new RuntimeException('Project topic is required for Sandbox export.');
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::VALIDATE_FAILED,
+                'slides_template.project_template_topic_required',
+            );
         }
         $topic = $this->topicDomainService->getTopicById($topicId);
         if ($topic === null || $topic->getProjectId() !== $project->getId()) {
-            throw new RuntimeException('Project topic is invalid for Sandbox export.');
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::VALIDATE_FAILED,
+                'slides_template.project_template_topic_invalid',
+            );
         }
         $sandboxId = (string) $topic->getSandboxId();
         if ($sandboxId === (string) $topic->getId()) {
@@ -356,10 +376,16 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
     {
         $code = trim($code);
         if ($code === '' || str_contains($code, '/') || str_contains($code, '\\')) {
-            throw new RuntimeException('Template code cannot be used as an export directory.');
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::VALIDATE_FAILED,
+                'slides_template.project_template_export_directory_invalid',
+            );
         }
         if (preg_match('/^[a-f0-9]{24}$/', $exportId) !== 1) {
-            throw new RuntimeException('Template export ID is invalid.');
+            ExceptionBuilder::throw(
+                SlidesTemplateErrorCode::VALIDATE_FAILED,
+                'slides_template.project_template_export_id_invalid',
+            );
         }
         return self::EXPORT_DIRECTORY_PREFIX . '/' . $code . '/' . $exportId;
     }

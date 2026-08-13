@@ -12,6 +12,8 @@ use App\Application\SlidesTemplate\Service\SlidesTemplateProjectExportService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
+use App\ErrorCode\SlidesTemplateErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -38,6 +40,20 @@ class SlidesTemplateProjectExportServiceTest extends TestCase
         );
 
         $this->assertSame('SLIDE-97C53BC2', $result->toArray()['code']);
+    }
+
+    public function testInvalidSandboxManifestUsesBusinessErrorCode(): void
+    {
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(SlidesTemplateErrorCode::PROJECT_TEMPLATE_MANIFEST_INVALID->value);
+
+        SlidesTemplateProjectExportResult::fromSandbox(
+            'SLIDE-97C53BC2',
+            'template.zip',
+            ['label' => ['zh_CN' => '测试模板', 'en_US' => 'Test Template']],
+            1,
+            2,
+        );
     }
 
     public function testCleanupExportedFilesDeletesPrivateAndPublicDirectories(): void

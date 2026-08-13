@@ -85,4 +85,7 @@ enum SlidesTemplateErrorCode: int
 
     #[ErrorMessage('slides_template.project_template_too_many_preview_images')]
     case PROJECT_TEMPLATE_TOO_MANY_PREVIEW_IMAGES = 47023;
+
+    #[ErrorMessage('slides_template.project_template_export_failed')]
+    case PROJECT_TEMPLATE_EXPORT_FAILED = 47024;
 }
