@@ -1,12 +1,18 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace Test\Cases\Infrastructure\SuperMagic\Workspace;
 
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Workspace\Request\ExportWorkspaceRequest;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * @internal
+ */
 final class ExportWorkspaceRequestTest extends TestCase
 {
     public function testSerializesPublicUploadConfigOnlyWhenProvided(): void

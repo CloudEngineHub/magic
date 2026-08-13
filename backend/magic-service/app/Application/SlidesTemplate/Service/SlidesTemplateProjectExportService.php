@@ -32,6 +32,7 @@ use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
+use Throwable;
 
 final class SlidesTemplateProjectExportService extends AbstractAppService
 {
@@ -40,6 +41,8 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
     private const string EXPORT_TYPE = 'slides_template_creator';
 
     private const string EXPORT_PROMPT = 'Slides Template Export Task';
+
+    private LoggerInterface $logger;
 
     public function __construct(
         private readonly TaskFileDomainService $taskFileDomainService,
@@ -52,8 +55,6 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
     ) {
         $this->logger = $loggerFactory->get('slides-template');
     }
-
-    private LoggerInterface $logger;
 
     public function publishFromProjectWorkspace(
         MagicUserAuthorization $authorization,
@@ -145,7 +146,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 'duration_ms' => (int) ((microtime(true) - $startedAt) * 1000),
             ]);
             return $payload;
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             if ($code !== '') {
                 $this->cleanupExportDirectory($dataIsolation, $code, $exportId);
             }
@@ -269,7 +270,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
     ): void {
         try {
             $directory = $this->buildExportDirectory($code, $exportId);
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             $this->logger->warning('Slides template export directory cleanup skipped', [
                 'code' => $code,
                 'export_id' => $exportId,
@@ -341,7 +342,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
                 'deleted_count' => $deletedCount,
                 'error_count' => $errorCount,
             ]);
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             $this->logger->warning('Slides template export directory cleanup failed', [
                 'directory' => $directory,
                 'bucket' => $bucket->value,

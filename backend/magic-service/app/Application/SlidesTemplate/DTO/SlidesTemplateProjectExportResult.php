@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Application\SlidesTemplate\DTO;
 
+use RuntimeException;
+
 final class SlidesTemplateProjectExportResult
 {
     public function __construct(
@@ -34,7 +36,7 @@ final class SlidesTemplateProjectExportResult
     ): self {
         $templateFileKey = trim((string) ($metadata['template_file_key'] ?? $fileKey));
         if ($templateFileKey === '') {
-            throw new \RuntimeException('Sandbox export response is missing template_file_key.');
+            throw new RuntimeException('Sandbox export response is missing template_file_key.');
         }
 
         return new self(
@@ -80,7 +82,7 @@ final class SlidesTemplateProjectExportResult
     {
         $value = trim((string) $value);
         if ($value === '') {
-            throw new \RuntimeException("Sandbox export response is missing {$field}.");
+            throw new RuntimeException("Sandbox export response is missing {$field}.");
         }
         return $value;
     }
@@ -89,14 +91,14 @@ final class SlidesTemplateProjectExportResult
     private static function requiredI18n(mixed $value, string $field): array
     {
         if (! is_array($value)) {
-            throw new \RuntimeException("Sandbox export response is missing {$field}.");
+            throw new RuntimeException("Sandbox export response is missing {$field}.");
         }
         $result = [
             'zh_CN' => trim((string) ($value['zh_CN'] ?? '')),
             'en_US' => trim((string) ($value['en_US'] ?? '')),
         ];
         if ($result['zh_CN'] === '' || $result['en_US'] === '') {
-            throw new \RuntimeException("Sandbox export response has invalid {$field}.");
+            throw new RuntimeException("Sandbox export response has invalid {$field}.");
         }
         return $result;
     }
@@ -105,7 +107,7 @@ final class SlidesTemplateProjectExportResult
     private static function stringList(mixed $value): array
     {
         if (! is_array($value)) {
-            throw new \RuntimeException('Sandbox export response has invalid string list.');
+            throw new RuntimeException('Sandbox export response has invalid string list.');
         }
         return array_values(array_filter(array_map(
             static fn (mixed $item): string => trim((string) $item),

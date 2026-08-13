@@ -31,6 +31,7 @@ use App\Interfaces\SlidesTemplate\DTO\Request\QueryUsedSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveUserSlidesTemplateRequest;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Qbhy\HyperfAuth\Authenticatable;
+use Throwable;
 
 class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
 {
@@ -134,7 +135,12 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $dataIsolation->setContainOfficialOrganization(true);
         $exportId = bin2hex(random_bytes(12));
         $payload = $this->slidesTemplateProjectExportService->publishFromProjectWorkspace(
-            $authorization, $dataIsolation, $request->getProjectId(), $request->getDirectoryId(), $request->getCode(), $exportId
+            $authorization,
+            $dataIsolation,
+            $request->getProjectId(),
+            $request->getDirectoryId(),
+            $request->getCode(),
+            $exportId
         );
         $previousTemplate = null;
         try {
@@ -151,7 +157,7 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             $entity = new SlidesTemplateEntity();
             $entity->setCode($payload['code'])->setCategoryCode($payload['category_code'])->setLabel($payload['label'])->setDescription($payload['description'])->setThumbnailFileKey($payload['thumbnail_file_key'])->setCollageFileKey($payload['collage_file_key'])->setPreviewImageFileKeys($payload['preview_image_file_keys'])->setTemplateFileKey($payload['template_file_key'])->setProjectId($payload['project_id'])->setProjectDirectoryId($payload['project_directory_id']);
             $saved = $this->slidesTemplateDomainService->saveUserTemplate($dataIsolation, $entity, null, $payload['tag_codes']);
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             $this->slidesTemplateProjectExportService->cleanupExportedFiles($dataIsolation, $payload, $exportId);
             throw $throwable;
         }
