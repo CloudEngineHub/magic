@@ -14,6 +14,7 @@ type TargetPath =
 			base: string
 			subDirectory?: string
 			componentNameFormatter?: (componentName: string) => string
+			query?: string
 	  }
 
 interface TransformBaseImportsOptions {
@@ -82,15 +83,21 @@ export default function vitePluginTransformBaseImports(
 				const namedBindings = statement.importClause.namedBindings
 				if (!namedBindings || !isNamedImports(namedBindings)) continue
 
-				const valueSpecifiers = namedBindings.elements.filter((element) => !element.isTypeOnly)
-				const typeSpecifiers = namedBindings.elements.filter((element) => element.isTypeOnly)
+				const valueSpecifiers = namedBindings.elements.filter(
+					(element) => !element.isTypeOnly,
+				)
+				const typeSpecifiers = namedBindings.elements.filter(
+					(element) => element.isTypeOnly,
+				)
 				if (valueSpecifiers.length === 0) continue
 
 				hasChanges = true
 
 				const nextImports: string[] = []
 				if (statement.importClause.name) {
-					nextImports.push(`import ${statement.importClause.name.text} from "${importPath}"`)
+					nextImports.push(
+						`import ${statement.importClause.name.text} from "${importPath}"`,
+					)
 				}
 
 				if (typeSpecifiers.length > 0) {
@@ -109,6 +116,7 @@ export default function vitePluginTransformBaseImports(
 						`import ${localName} from "${buildImportPath({
 							base: importPath,
 							subDirectory: target.subDirectory,
+							query: target.query,
 							componentName: target.componentNameFormatter
 								? target.componentNameFormatter(importedName)
 								: importedName,
@@ -148,6 +156,7 @@ function normalizeTargetPaths(paths?: TransformBaseImportsOptions["paths"]) {
 			base: path.base,
 			subDirectory: path.subDirectory || "",
 			componentNameFormatter: path.componentNameFormatter,
+			query: path.query,
 		}
 	})
 }
@@ -156,13 +165,15 @@ function buildImportPath({
 	base,
 	subDirectory,
 	componentName,
+	query,
 }: {
 	base: string
 	subDirectory?: string
 	componentName: string
+	query?: string
 }): string {
 	const prefix = subDirectory ? `${subDirectory.replace(/\/$/, "")}/` : ""
-	return `${base}/${prefix}${componentName}`
+	return `${base}/${prefix}${componentName}${query ? `?${query.replace(/^\?/, "")}` : ""}`
 }
 
 function getScriptKindFromId(id: string): ScriptKind {
