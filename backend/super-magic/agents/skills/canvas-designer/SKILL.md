@@ -39,6 +39,8 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 
 **Mentioned project (`[@design_canvas_project:path]`):** When the user message contains a `[@design_canvas_project:path]` mention, the `path` after the colon is the exact `project_path` to use in all canvas tool calls. Use it verbatim — do not truncate, shorten, or rename. Do not call `create_canvas` to make a new project; proceed directly with the mentioned path. The path is workspace-relative and may span multiple levels (e.g. `folder-a/folder-b/my-project`).
 
+**Canvas state access:** `magic.project.js` contains compressed internal project data and is not useful for task reasoning. Do not read, parse, or modify it with file or shell tools. Inspect and change Canvas state only through the provided Canvas tools. When the relevant Element IDs are unknown, call `get_canvas_overview` first. Then call `query_canvas_elements` with exact IDs when full Element and Content details are needed.
+
 ---
 
 ## Multimedia Principles
@@ -47,7 +49,7 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 - Shell commands for media processing
 - Modifying original image or video files
 - Deleting canvas elements
-- Using file tools (`write_file`, `edit_file`, shell) on `magic.project.js` — use canvas tools only
+- Reading, parsing, or modifying `magic.project.js` with file or shell tools — use Canvas tools only
 - Creating separate elements on canvas to fake image editing
 - Using general `web_search` to find images for canvas — this fetches webpage snippets, not downloadable images; use `search_canvas_images` instead
 
@@ -66,6 +68,49 @@ Design projects are uniquely identified by `project_path`. All canvas tools requ
 ---
 
 ## Core Tools
+
+### get_canvas_overview
+
+Use this first when the Element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. It returns a lightweight Element index with compact incoming and outgoing relations. It does not return full Content fields, generation prompts, or media paths.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `project_path` | Yes | Canvas project path |
+| `page` | No | 1-based page number; defaults to `1` |
+| `limit` | No | Elements per page; defaults to `50` and must be between `1` and `100` |
+
+```python
+result = tool.call('get_canvas_overview', {
+    "project_path": "my-design",
+    "page": 1,
+    "limit": 50
+})
+print(result.content)
+```
+
+Read the overview only from `result.content`. If it reports `has_more: true`, increment `page` and keep the same `limit`.
+
+### query_canvas_elements
+
+Use this after obtaining exact Element IDs from a mention, an earlier tool result, or `get_canvas_overview`. It returns the complete current Element and Content details needed by later Canvas operations. Query between 1 and 10 exact IDs at a time; do not guess IDs or use names as substitutes.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `project_path` | Yes | Canvas project path |
+| `element_ids` | Yes | List of 1 to 10 exact Element IDs |
+
+```python
+result = tool.call('query_canvas_elements', {
+    "project_path": "my-design",
+    "element_ids": [
+        "element-747400000000000001",
+        "element-747400000000000002"
+    ]
+})
+print(result.content)
+```
+
+Read the query result only from `result.content` and reuse the returned IDs and media paths exactly in later tool calls.
 
 ### create_canvas
 

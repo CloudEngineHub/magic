@@ -122,7 +122,7 @@ class CanvasQueryContentPresenter:
         return json.dumps(str(value), ensure_ascii=False)
 
 
-# 完整的模型侧使用规范位于 agents/skills/video-production/SKILL.md。
+# 完整的模型侧使用规范位于 video-production 与 canvas-designer Skill。
 @tool(code_mode_only=True)
 class QueryCanvasElements(BaseVideoProductionTool[QueryCanvasElementsParams]):
     """批量查询 Canvas Element。"""
