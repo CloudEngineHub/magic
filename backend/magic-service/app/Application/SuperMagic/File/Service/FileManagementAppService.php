@@ -19,6 +19,7 @@ use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
 use App\Domain\SuperMagic\File\Constant\ProjectFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Event\AttachmentsProcessedEvent;
@@ -327,7 +328,7 @@ class FileManagementAppService extends AbstractAppService
                     operatorUserId: $dataIsolation->getCurrentUserId(),
                     operatorOrganizationCode: $dataIsolation->getCurrentOrganizationCode(),
                     taskFileEntity: $taskFileEntity,
-                    storageTypeOverride: StorageType::WORKSPACE->value,
+                    storageTypeOverride: FileSpaceType::resolveStorageType($taskFileEntity->getSpaceType())->value,
                     isHidden: $requestDTO->getIsHidden()
                 )
             );
@@ -2888,7 +2889,7 @@ class FileManagementAppService extends AbstractAppService
                             operatorUserId: $authorization->getId(),
                             operatorOrganizationCode: $organizationCode,
                             taskFileEntity: $taskFileEntity,
-                            storageTypeOverride: StorageType::WORKSPACE->value,
+                            storageTypeOverride: FileSpaceType::resolveStorageType($taskFileEntity->getSpaceType())->value,
                         ),
                     );
                     $relativePath = $this->buildRelativeFilePathForEntity($savedEntity, 0);

@@ -475,9 +475,10 @@ class MagicFSFileAppService extends AbstractAppService
      * MagicFS 只承载文件系统命名空间（project/user/topic）的文件；
      * 消息内容、快照等内部资源不属于文件系统命名空间。
      *
-     * 判据使用 space_type：storage_type 是历史遗留的物理存储归类字段，
-     * 与文件系统命名空间并不一一对应（如 user 空间文件的 storage_type 也是
-     * workspace），不再作为命名空间校验依据。
+     * 判据使用 space_type：storage_type 是历史遗留的物理存储归类字段（已标记废弃，
+     * 后续废除），与文件系统命名空间并非一一对应，不再作为命名空间校验依据。
+     * 过渡期由 FileSpaceType::toStorageType() 建立映射：user→user、topic→topic、
+     * 其余（project）→workspace，保证新写入两字段一致，但鉴权仍以 space_type 为准。
      */
     protected function assertMountableSpaceFile(TaskFileEntity $fileEntity): void
     {

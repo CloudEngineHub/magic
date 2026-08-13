@@ -306,6 +306,11 @@ class WarmPoolSandboxDomainService
             'sandbox_id' => $sandboxId,
             'user_id' => $userId,
             'project_id' => $projectId,
+            'space_ids' => [
+                'project' => $projectSpaceRootFileId,
+                'user' => $userSpaceRootFileId,
+                'topic' => $topicSpaceRootFileId,
+            ],
         ]);
 
         try {

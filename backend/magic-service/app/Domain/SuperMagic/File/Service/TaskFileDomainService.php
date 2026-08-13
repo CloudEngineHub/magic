@@ -2064,7 +2064,7 @@ class TaskFileDomainService
             $rootDirEntity->setIsDirectory(true);
             $rootDirEntity->setParentId(null);
             $rootDirEntity->setSource(TaskFileSource::AGENT);
-            $rootDirEntity->setStorageType(StorageType::WORKSPACE);
+            $rootDirEntity->setStorageType(FileSpaceType::USER->toStorageType());
             $rootDirEntity->setIsHidden(true);
             $rootDirEntity->setSort(0);
             $rootDirEntity->setSpaceType(FileSpaceType::USER->value);
@@ -2150,7 +2150,7 @@ class TaskFileDomainService
             $entity->setParentId(null);
             $entity->setSource(TaskFileSource::AGENT);
             $entity->setSpaceType(FileSpaceType::TOPIC->value);
-            $entity->setStorageType(StorageType::TOPIC);
+            $entity->setStorageType(FileSpaceType::TOPIC->toStorageType());
             $entity->setSort(0);
             $now = date('Y-m-d H:i:s');
             $entity->setCreatedAt($now);
@@ -3459,6 +3459,7 @@ class TaskFileDomainService
                 $fileEntity->setCreatedAt($currentTime);
                 $fileEntity->setTopicId($taskFileEntity->getTopicId());
                 $fileEntity->setTaskId($taskFileEntity->getTaskId());
+                $fileEntity->setSpaceType($taskFileEntity->getSpaceType());
                 $fileEntity->setSource($source);
                 $fileEntity->setLatestVersion(1);
                 $fileEntity->setMetadataVersion(1);

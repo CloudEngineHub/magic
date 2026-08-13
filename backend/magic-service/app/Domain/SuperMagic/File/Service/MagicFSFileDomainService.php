@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\File\Service;
 
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
-use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
@@ -245,15 +244,15 @@ class MagicFSFileDomainService
         $entity->setFileSize(0);
         $entity->setIsDirectory($isDirectory);
         $entity->setParentId($parentIdInt);
-        $entity->setStorageType(StorageType::WORKSPACE);
+
+        // 空间类型：优先取调用方传入的 space_type，缺省为 project。
+        // storage_type 是历史遗留字段（逐步废除），过渡期由 space_type 推导，保证两字段一致。
+        $effectiveSpaceType = $spaceType !== '' ? $spaceType : FileSpaceType::PROJECT->value;
+        $entity->setSpaceType($effectiveSpaceType);
+        $entity->setStorageType(FileSpaceType::resolveStorageType($effectiveSpaceType));
         $entity->setSource($source ?? TaskFileSource::AGENT);
         $entity->setLatestVersion(1);
         $entity->setMetadataVersion(1);
-
-        // 设置空间类型（如 project、user）
-        if ($spaceType !== '') {
-            $entity->setSpaceType($spaceType);
-        }
 
         // 设置排序值（如果提供了 sortValue）
         if ($sortValue !== null) {

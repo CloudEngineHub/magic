@@ -748,59 +748,6 @@ class AsrFileAppService extends AbstractAppService
     }
 
     /**
-     * 兜底：合并/总结阶段长时间停留在进行中时，将阶段标记为失败（Redis + DB 双写）.
-     *
-     * 时间基准使用 audio project 行的 updated_at：阶段卡死时该行不会再被写入，
-     * 因此 updated_at 近似等于阶段开始时间。任何失败只记录日志，不影响查询响应。
-     */
-    private function failStaleInProgressPhase(AsrTaskStatusDTO $taskStatus, AudioProjectEntity $audioProject): void
-    {
-        try {
-            if ($taskStatus->phaseStatus !== AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS) {
-                return;
-            }
-
-            if (! in_array($taskStatus->currentPhase, [
-                AsrTaskStatusDTO::PHASE_MERGING,
-                AsrTaskStatusDTO::PHASE_SUMMARIZING,
-            ], true)) {
-                return;
-            }
-
-            $updatedAt = $audioProject->getUpdatedAt();
-            if (empty($updatedAt)) {
-                return;
-            }
-
-            $updatedTimestamp = strtotime($updatedAt);
-            if ($updatedTimestamp === false || time() - $updatedTimestamp <= self::PHASE_STALE_TIMEOUT_SECONDS) {
-                return;
-            }
-
-            $errorMessage = 'Processing timeout: phase in_progress exceeded 4 hours';
-            $this->logger->warning('检测到阶段处理超时，标记为失败', [
-                'task_key' => $taskStatus->taskKey,
-                'project_id' => $taskStatus->projectId,
-                'current_phase' => $taskStatus->currentPhase,
-                'updated_at' => $updatedAt,
-            ]);
-
-            if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING) {
-                $this->asrTaskDomainService->failMergingPhase($taskStatus, $errorMessage);
-            } else {
-                $this->asrTaskDomainService->failSummarizingPhase($taskStatus, $errorMessage);
-            }
-        } catch (Throwable $e) {
-            $this->logger->error('阶段超时兜底处理失败', [
-                'task_key' => $taskStatus->taskKey,
-                'project_id' => $taskStatus->projectId,
-                'current_phase' => $taskStatus->currentPhase,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
      * Manually trigger summary.
      */
     public function triggerSummary(
@@ -1722,6 +1669,59 @@ class AsrFileAppService extends AbstractAppService
         }
 
         return ['tasks' => $results];
+    }
+
+    /**
+     * 兜底：合并/总结阶段长时间停留在进行中时，将阶段标记为失败（Redis + DB 双写）.
+     *
+     * 时间基准使用 audio project 行的 updated_at：阶段卡死时该行不会再被写入，
+     * 因此 updated_at 近似等于阶段开始时间。任何失败只记录日志，不影响查询响应。
+     */
+    private function failStaleInProgressPhase(AsrTaskStatusDTO $taskStatus, AudioProjectEntity $audioProject): void
+    {
+        try {
+            if ($taskStatus->phaseStatus !== AsrTaskStatusDTO::PHASE_STATUS_IN_PROGRESS) {
+                return;
+            }
+
+            if (! in_array($taskStatus->currentPhase, [
+                AsrTaskStatusDTO::PHASE_MERGING,
+                AsrTaskStatusDTO::PHASE_SUMMARIZING,
+            ], true)) {
+                return;
+            }
+
+            $updatedAt = $audioProject->getUpdatedAt();
+            if (empty($updatedAt)) {
+                return;
+            }
+
+            $updatedTimestamp = strtotime($updatedAt);
+            if ($updatedTimestamp === false || time() - $updatedTimestamp <= self::PHASE_STALE_TIMEOUT_SECONDS) {
+                return;
+            }
+
+            $errorMessage = 'Processing timeout: phase in_progress exceeded 4 hours';
+            $this->logger->warning('检测到阶段处理超时，标记为失败', [
+                'task_key' => $taskStatus->taskKey,
+                'project_id' => $taskStatus->projectId,
+                'current_phase' => $taskStatus->currentPhase,
+                'updated_at' => $updatedAt,
+            ]);
+
+            if ($taskStatus->currentPhase === AsrTaskStatusDTO::PHASE_MERGING) {
+                $this->asrTaskDomainService->failMergingPhase($taskStatus, $errorMessage);
+            } else {
+                $this->asrTaskDomainService->failSummarizingPhase($taskStatus, $errorMessage);
+            }
+        } catch (Throwable $e) {
+            $this->logger->error('阶段超时兜底处理失败', [
+                'task_key' => $taskStatus->taskKey,
+                'project_id' => $taskStatus->projectId,
+                'current_phase' => $taskStatus->currentPhase,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function persistSandboxMergeCheckpoint(
