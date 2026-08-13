@@ -62,6 +62,7 @@ export function generateUnauthorizedResInterceptor(service: Container) {
 	const loginInvalidCodeSet = new Set([
 		BUSINESS_API_ERROR_CODE.ACCOUNT_NO_PERMISSION,
 		BUSINESS_API_ERROR_CODE.USER_TOKEN_EXPIRED,
+		BUSINESS_API_ERROR_CODE.USER_NOT_EXIST,
 	])
 
 	/** Classify the response and hand session cleanup/navigation to the auth coordinators. */
