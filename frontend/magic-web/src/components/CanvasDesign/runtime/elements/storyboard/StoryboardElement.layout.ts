@@ -28,14 +28,14 @@ export const STORYBOARD_LAYOUT_DESIGN = {
 	modelIconSize: 32,
 	addShotHeight: 92,
 	footerButtonWidth: 220,
-	footerButtonHeight: 92,
+	footerButtonHeight: 84,
 	// 分镜卡片固定内容高度：头区 + 描述区按大字阶留足输入空间。
 	shotMinimumHeight: 400,
 	shotHeaderHeight: 92,
 	shotGenerateWidth: 220,
 	/** 删除是轻量幽灵图标；命中区仍由交互层扩至 32/44。 */
 	shotDeleteSize: 48,
-	shotControlHeight: 76,
+	shotControlHeight: 68,
 	/** 对齐视频编辑“主标题 + 次信息”的紧凑固定标题列。 */
 	shotTitleWidth: 160,
 	shotStatusWidth: 160,
@@ -181,8 +181,7 @@ function resolveParameterLayout(options: {
 		responsive,
 	} = options
 	const { design } = responsive
-	const horizontalPadding =
-		STORYBOARD_LAYOUT_DESIGN.parameterHorizontalPadding * rootScale
+	const horizontalPadding = STORYBOARD_LAYOUT_DESIGN.parameterHorizontalPadding * rootScale
 	const suffixGap = design.gap.control
 	const suffixIconSize = STORYBOARD_LAYOUT_DESIGN.parameterSuffixIconSize * rootScale
 	const modelIconSize = STORYBOARD_LAYOUT_DESIGN.modelIconSize * rootScale
@@ -455,12 +454,12 @@ export function resolveStoryboardElementLayout(
 	const titleToListGap = design.gap.content
 	const shotListTop = titleRect.y + titleRect.height + titleToListGap
 
-	const footerButtonHeight =
-		px(STORYBOARD_LAYOUT_DESIGN.footerButtonHeight) * controlDensity
+	const footerButtonHeight = px(STORYBOARD_LAYOUT_DESIGN.footerButtonHeight) * controlDensity
 	const addShotHeight = px(STORYBOARD_LAYOUT_DESIGN.addShotHeight) * controlDensity
-	// 添加分镜 ↔ 全部生成 ↔ 底边使用同一 gap，避免“全部生成”上下留白不一致。
-	const footerGap = design.space.md
-	const footerHeight = addShotHeight + footerGap + footerButtonHeight + footerGap
+	// 全部生成贴 contentRect 底；与添加分镜的间距等于元素 padding，
+	// 这样按钮到元素底边不再多叠一段 gap。
+	const footerGap = padding
+	const footerHeight = addShotHeight + footerGap + footerButtonHeight
 	const footerContainerY = Math.min(shotListTop, contentRect.y + contentRect.height)
 	const footerContainer = {
 		x: contentRect.x,

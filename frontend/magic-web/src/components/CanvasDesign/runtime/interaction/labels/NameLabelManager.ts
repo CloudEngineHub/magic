@@ -171,10 +171,6 @@ export class NameLabelManager extends BaseLabelManager {
 			return false
 		}
 
-		if (element?.getData().type === ElementTypeEnum.Audio) {
-			return null
-		}
-
 		// 如果基础可见性为 false，不需要检查自定义逻辑
 		if (!baseVisibility) {
 			return null

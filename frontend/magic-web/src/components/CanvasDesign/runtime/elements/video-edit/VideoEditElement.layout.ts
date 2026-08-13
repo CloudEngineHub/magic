@@ -17,9 +17,10 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 	audioSectionMinHeight: 160,
 	audioRowHeight: 92,
 	audioPlayButtonSize: 56,
-	audioProgressHeight: 8,
-	/** 时长列最大宽度；实际渲染会按文案收紧并右对齐。 */
-	audioInfoWidth: 160,
+	audioProgressHeight: 14,
+	audioProgressThumbRadius: 14,
+	/** 时长列最大宽度（容纳 caption 28 的 `M:SS / M:SS`）；实际渲染会按文案收紧并右对齐。 */
+	audioInfoWidth: 240,
 	/** 未提供 sectionTitles 时的标题列回退宽度。 */
 	sectionTitleWidth: 200,
 	// 与分镜参数行一致：固定控件尺寸，不随 footer 剩余空间拉伸。
@@ -31,7 +32,7 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 	footerParameterHorizontalPadding: 20,
 	footerParameterSuffixIconSize: 16,
 	mergeButtonWidth: 200,
-	mergeButtonHeight: 92,
+	mergeButtonHeight: 84,
 } as const
 
 export interface VideoEditLayoutOptions {
@@ -83,6 +84,7 @@ export interface VideoEditElementLayout {
 	audioRow: LayoutRect
 	audioPlayButton: LayoutRect
 	audioProgress: LayoutRect
+	audioProgressThumbRadius: number
 	audioInfo: LayoutRect
 	footer: LayoutRect
 	footerOutput: LayoutRect
@@ -420,7 +422,11 @@ export function resolveVideoEditElementLayout(
 	}
 	const audioProgressHeight = Math.min(
 		px(VIDEO_EDIT_LAYOUT_DESIGN.audioProgressHeight),
-		Math.max(2, audioRow.height * 0.18),
+		Math.max(2, audioRow.height * 0.22),
+	)
+	const audioProgressThumbRadius = Math.min(
+		px(VIDEO_EDIT_LAYOUT_DESIGN.audioProgressThumbRadius),
+		Math.max(audioProgressHeight, audioRow.height * 0.28),
 	)
 	// 进度条左右使用同一间距：播放按钮 | gap | 进度条 | gap | 时长
 	const audioProgressStart = audioPlayButton.x + audioPlayButton.width + resolvedAudioGap
@@ -566,6 +572,7 @@ export function resolveVideoEditElementLayout(
 		audioRow,
 		audioPlayButton,
 		audioProgress,
+		audioProgressThumbRadius,
 		audioInfo,
 		footer,
 		footerOutput,

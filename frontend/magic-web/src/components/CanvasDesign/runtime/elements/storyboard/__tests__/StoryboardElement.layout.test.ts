@@ -44,6 +44,13 @@ describe("resolveStoryboardElementLayout", () => {
 		expect(layout.footer.rect.y + layout.footer.rect.height).toBeCloseTo(
 			layout.contentRect.y + layout.contentRect.height,
 		)
+		const generateAllBottomGap =
+			layout.height - (layout.footer.generateAllRect.y + layout.footer.generateAllRect.height)
+		const generateAllTopGap =
+			layout.footer.generateAllRect.y -
+			(layout.footer.addShotRect.y + layout.footer.addShotRect.height)
+		expect(generateAllBottomGap).toBeCloseTo(layout.padding)
+		expect(generateAllTopGap).toBeCloseTo(layout.padding)
 	})
 
 	it("keeps the same shot card height when the list has extra vertical space", () => {

@@ -75,7 +75,7 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("does not hide audio labels when the text exceeds the element width", () => {
+	it("hides audio labels when the text exceeds the element width", () => {
 		const getBoundingRect = () => ({ x: 0, y: 0, width: 100, height: 100 })
 		const elements = new Map<string, TestElement>([
 			[
@@ -95,7 +95,7 @@ describe("NameLabelManager visibility", () => {
 		])
 		const manager = createManager(elements)
 
-		expect(manager.getTooWideLabelVisibility("audio-1")).toBeNull()
+		expect(manager.getTooWideLabelVisibility("audio-1")).toBe(false)
 		expect(manager.getTooWideLabelVisibility("image-1")).toBe(false)
 
 		manager.destroy()

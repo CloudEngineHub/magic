@@ -27,7 +27,7 @@ describe("VideoEditElement layout", () => {
 		expect(layout.audioSection.y).toBe(layout.videoSection.height)
 		expect(layout.footer.y).toBe(layout.audioSection.y + layout.audioSection.height)
 		expect(layout.footer.y + layout.footer.height).toBeCloseTo(1080)
-		expect(layout.videoCard.width).toBeCloseTo(450)
+		expect(layout.videoCard.width).toBeCloseTo(560)
 		expect(layout.audioPlayButton.x).toBeLessThan(layout.audioProgress.x)
 		expect(layout.audioProgress.x + layout.audioProgress.width).toBeLessThan(layout.audioInfo.x)
 		const progressGapLeft =
@@ -41,9 +41,9 @@ describe("VideoEditElement layout", () => {
 		expect(layout.audioTitle.y - layout.audioSection.y).toBeCloseTo(24)
 		expect(layout.videoTitle.x).toBeCloseTo(layout.audioTitle.x)
 		expect(layout.videoTitle.width).toBeCloseTo(layout.audioTitle.width)
-		expect(layout.videoViewport.y - (layout.videoTitle.y + layout.videoTitle.height)).toBeCloseTo(
-			24,
-		)
+		expect(
+			layout.videoViewport.y - (layout.videoTitle.y + layout.videoTitle.height),
+		).toBeCloseTo(24)
 		expect(
 			layout.audioPlaceholder.y - (layout.audioTitle.y + layout.audioTitle.height),
 		).toBeCloseTo(24)
@@ -57,14 +57,14 @@ describe("VideoEditElement layout", () => {
 		)
 		expect(layout.audioPlaceholder.height).toBeGreaterThan(layout.audioRow.height)
 		// 视频 / 页脚按内容定高；音频吃剩余高度并贴底。
-		expect(layout.videoCard.width).toBeCloseTo(450)
-		expect(layout.videoCard.height).toBeCloseTo(450)
+		expect(layout.videoCard.width).toBeCloseTo(560)
+		expect(layout.videoCard.height).toBeCloseTo(560)
 		expect(layout.videoCard.width).toBeCloseTo(layout.videoCard.height)
 		expect(layout.videoCardViewport.height).toBeCloseTo(layout.videoCard.height)
 		// 区块标题、右侧次要信息与卡片信息统一使用 caption。
 		const headingHeight = Math.max(28 * 1.35, 24)
 		expect(layout.videoTitle.height).toBeCloseTo(headingHeight)
-		expect(layout.videoSection.height).toBeCloseTo(24 + headingHeight + 24 + 450 + 24)
+		expect(layout.videoSection.height).toBeCloseTo(24 + headingHeight + 24 + 560 + 24)
 		expect(layout.fonts.title).toBeCloseTo(28)
 		expect(layout.fonts.count).toBeCloseTo(28)
 		expect(layout.fonts.cardName).toBeCloseTo(28)
@@ -78,7 +78,7 @@ describe("VideoEditElement layout", () => {
 			1080 - layout.videoSection.height - layout.footer.height,
 		)
 		expect(layout.footer.height).toBeLessThan(layout.audioSection.height)
-		expect(layout.mergeButton.height).toBeCloseTo(92)
+		expect(layout.mergeButton.height).toBeCloseTo(84)
 		expect(layout.mergeButtonFontSize).toBeCloseTo(28)
 		expect(layout.videoCard.gripSize).toBeCloseTo(48)
 	})
@@ -139,7 +139,7 @@ describe("VideoEditElement layout", () => {
 		expect(layout.footerParameterRows.resolution.rect.width).toBeCloseTo(
 			layout.footerParameterRows.format.rect.width,
 		)
-		expect(layout.footerParameterRows.aspectRatio.rect.height).toBeCloseTo(
+		expect(layout.footerParameterRows.aspectRatio.rect.height).toBeGreaterThan(
 			layout.mergeButton.height,
 		)
 		expect(layout.videoCard.height).toBeLessThanOrEqual(layout.videoCardViewport.height)

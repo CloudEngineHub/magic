@@ -16,6 +16,7 @@ import type {
 	StoryboardSelectPresentation,
 } from "../../interaction/storyboard/StoryboardInteractionManager"
 import { generateUUID } from "../../shared/ids"
+import { ELEMENT_DESIGN_TOKENS } from "../../shared/layout/ElementDesignTokens"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import {
 	BaseElement,
@@ -111,9 +112,7 @@ function resolveAspectRatio(config?: StoryboardGenerationConfig): string {
 }
 
 /** 打开 / 更新时使用当前默认宽度，高度至少容纳全部镜头。 */
-function normalizeStoryboardDisplayDimensions(
-	data: StoryboardElementData,
-): StoryboardElementData {
+function normalizeStoryboardDisplayDimensions(data: StoryboardElementData): StoryboardElementData {
 	const content = getActiveContent<StoryboardElementContent>(data)
 	const shotCount = content?.shots?.length ?? 0
 	const width = STORYBOARD_CONFIG.DEFAULT_WIDTH
@@ -216,14 +215,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				perfectDrawEnabled: false,
 				name: "storyboard-background",
 			}),
-			createInsetStrokeRect(
-				{ width, height },
-				frameStrokeWidth,
-				{
-					stroke: STORYBOARD_CONFIG.BORDER,
-					name: "storyboard-background-border",
-				},
-			),
+			createInsetStrokeRect({ width, height }, frameStrokeWidth, {
+				stroke: STORYBOARD_CONFIG.BORDER,
+				name: "storyboard-background-border",
+			}),
 		)
 
 		this.renderParameters(group, layout)
@@ -666,8 +661,8 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}),
 		)
 		if (generated) {
-			const iconSize = 14 * controls.scale
-			const iconGap = 6 * controls.scale
+			const iconSize = generateFontSize
+			const iconGap = ELEMENT_DESIGN_TOKENS.gap.control * controls.scale
 			const contentWidth = iconSize + iconGap + generateTextNode.width()
 			const contentX =
 				controls.generateRect.x + (controls.generateRect.width - contentWidth) / 2

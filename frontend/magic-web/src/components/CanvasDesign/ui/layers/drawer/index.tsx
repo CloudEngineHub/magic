@@ -4,6 +4,7 @@ import IconButton from "../../primitives/custom/IconButton/index"
 import {
 	Eye,
 	EyeClosed,
+	Film,
 	Folder,
 	LockKeyhole,
 	LockOpen,
@@ -273,6 +274,9 @@ export default function LayersDrawer() {
 					break
 				case ElementTypeEnum.Video:
 					iconContent = <Video size={16} className={styles.layerNodeVideoIcon} />
+					break
+				case ElementTypeEnum.VideoEdit:
+					iconContent = <Film size={16} className={styles.layerNodeVideoIcon} />
 					break
 				case ElementTypeEnum.Audio:
 					iconContent = <Mic size={16} className={styles.layerNodeVideoIcon} />
