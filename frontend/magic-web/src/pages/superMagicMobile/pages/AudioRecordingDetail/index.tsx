@@ -1038,6 +1038,8 @@ export default function MobileAudioRecordingDetailPage() {
 									isEmptyStatus
 									createTopic={createTopicForComposer}
 									onSendSuccess={handleComposerSendSuccess}
+									// Detail Ask AI stays in text-editing mode even for the recording-summary agent.
+									allowRecordingMode={false}
 								/>
 							</div>
 						) : null}
