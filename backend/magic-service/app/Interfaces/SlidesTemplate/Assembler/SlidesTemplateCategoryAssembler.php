@@ -9,6 +9,7 @@ namespace App\Interfaces\SlidesTemplate\Assembler;
 
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateCategoryEntity;
 use App\Infrastructure\Core\ValueObject\Page;
+use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateCategoryItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\AdminSlidesTemplateCategorySummaryDTO;
@@ -70,6 +71,7 @@ class SlidesTemplateCategoryAssembler
     {
         $dto->setId($category->getId());
         $dto->setCode($category->getCode());
+        $dto->setName($category->getI18nName(CoContext::getLanguage()));
         $dto->setNameI18n(I18nTextDTO::fromArray($category->getNameI18n()));
         $dto->setSort($category->getSort());
         $dto->setIsOfficial(OfficialOrganizationUtil::isOfficialOrganization($category->getOrganizationCode()));
