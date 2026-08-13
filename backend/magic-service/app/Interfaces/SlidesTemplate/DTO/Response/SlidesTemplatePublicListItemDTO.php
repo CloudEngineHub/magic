@@ -45,8 +45,6 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
 
     public ?string $updatedAt = null;
 
-    public array $tags = [];
-
     public function __construct(?array $data = null)
     {
         $this->setLabel(null);
@@ -203,15 +201,5 @@ class SlidesTemplatePublicListItemDTO extends AbstractDTO
     public function setUpdatedAt(?string $updatedAt): void
     {
         $this->updatedAt = $updatedAt;
-    }
-
-    public function getTags(): array
-    {
-        return $this->tags;
-    }
-
-    public function setTags(array $tags): void
-    {
-        $this->tags = array_values($tags);
     }
 }

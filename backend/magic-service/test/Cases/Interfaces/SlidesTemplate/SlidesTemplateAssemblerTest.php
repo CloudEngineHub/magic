@@ -122,7 +122,6 @@ class SlidesTemplateAssemblerTest extends TestCase
                 'status' => 1,
                 'created_at' => null,
                 'updated_at' => null,
-                'tags' => [],
             ]],
         ], $dto->toArray());
     }
@@ -178,6 +177,7 @@ class SlidesTemplateAssemblerTest extends TestCase
 
         self::assertInstanceOf(UsedSlidesTemplatePublicListItemDTO::class, $dto->getList()[0]);
         self::assertSame('2026-08-11 10:00:00', $dto->toArray()['list'][0]['latest_used_at']);
+        self::assertArrayNotHasKey('tags', $dto->toArray()['list'][0]);
         self::assertArrayNotHasKey('latest_used_at', SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(1, 20))->toArray()['list'][0]);
     }
 

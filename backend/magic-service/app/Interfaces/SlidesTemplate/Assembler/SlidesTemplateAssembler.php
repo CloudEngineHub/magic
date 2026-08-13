@@ -142,10 +142,6 @@ class SlidesTemplateAssembler
         $dto->setStatus($template->getStatus()->value);
         $dto->setCreatedAt($template->getCreatedAt());
         $dto->setUpdatedAt($template->getUpdatedAt());
-        $dto->setTags(array_map(
-            static fn ($tag) => SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag),
-            $template->getTags()
-        ));
         return $dto;
     }
 
@@ -280,10 +276,6 @@ class SlidesTemplateAssembler
         $dto->setStatus($template->getStatus()->value);
         $dto->setCreatedAt($template->getCreatedAt());
         $dto->setUpdatedAt($template->getUpdatedAt());
-        $dto->setTags(array_map(
-            static fn ($tag) => SlidesTemplateTagAssembler::createSimplePublicItemDTO($tag),
-            $template->getTags()
-        ));
     }
 
     private static function isOfficialTemplate(SlidesTemplateEntity $template): bool

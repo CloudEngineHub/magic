@@ -58,7 +58,6 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page->setTotal(false);
         $result = $this->slidesTemplateDomainService->queries($dataIsolation, $query, $page);
         $this->resolveListImageUrls($result['list']);
-        $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, $result['list']);
 
         return [
             'page' => $page,
@@ -184,7 +183,6 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
         $page->setTotal(false);
         $result = $this->slidesTemplateDomainService->queriesFavorites($dataIsolation, $query, $page);
         $this->resolveListImageUrls($result['list']);
-        $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, $result['list']);
         return ['page' => $page, 'list' => $result['list'], 'favorite_codes' => $this->codes($result['list'])];
     }
 
@@ -219,7 +217,6 @@ class SlidesTemplateAppService extends AbstractSlidesTemplateAppService
             }
         }
         $this->resolveListImageUrls($list);
-        $this->slidesTemplateTagDomainService->fillTemplateTags($dataIsolation, $list);
         return [
             'page' => $page,
             'list' => $list,
