@@ -36,12 +36,10 @@ import { ElementFactory } from "../../elements/core/ElementFactory"
 import { collectConnectedVideoEditInputs } from "../../interaction/connection/connectedInputSources"
 import { generateElementId } from "../../shared/ids"
 import {
-	collectConnectedElementSiblingRects,
 	collectConnectionCreateObstacleRects,
-	resolveConnectedElementCreateTopLeftPoint,
-	resolveConnectionCreateContextWithOriginRect,
 	resolveConnectionCreateGapForElement,
 } from "../../shared/placement/connectionCreatePlacement"
+import { resolveConnectedPlacement } from "../../shared/placement/placementEngine"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { Canvas } from "../../core/Canvas"
 import { GenerationStatus } from "../../../public/magic-types"
@@ -1544,26 +1542,22 @@ export class VideoCompositionManager {
 			width: videoEdit.width ?? 0,
 			height: videoEdit.height ?? 0,
 		}
-		const placementContext = resolveConnectionCreateContextWithOriginRect(
+		return resolveConnectedPlacement(
+			this.canvas,
 			{
 				originSide: "right",
 				source: "handle",
 				canvasX: originRect.x + originRect.width,
 				canvasY: originRect.y + originRect.height / 2,
 			},
-			originRect,
-		)
-		return resolveConnectedElementCreateTopLeftPoint(
-			placementContext,
 			size,
-			resolveConnectionCreateGapForElement(videoEdit, "right"),
 			{
+				output: "top-left",
+				originElementId: videoEdit.id,
+				originRect,
+				gap: resolveConnectionCreateGapForElement(videoEdit, "right"),
 				obstacleRects: collectConnectionCreateObstacleRects(this.canvas, {
 					excludeElementIds: [videoEdit.id],
-				}),
-				siblingRects: collectConnectedElementSiblingRects(this.canvas, {
-					originElementId: videoEdit.id,
-					originSide: "right",
 				}),
 			},
 		)

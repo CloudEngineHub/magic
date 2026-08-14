@@ -40,14 +40,10 @@ import {
 } from "../../../runtime/shared/connectionOrigin"
 import {
 	CREATE_ELEMENT_GAP_MIN_CANVAS_PX,
-	collectConnectedElementSiblingRects,
-	collectConnectionCreateObstacleRects,
-	resolveConnectionCreateContextWithOriginRect,
 	resolveConnectionCreateGapForElement,
-	resolveConnectedElementCreateCenterPoint,
-	resolveConnectedElementCreateTopLeftPoint,
 	type ConnectionCreatePlacementContext,
 } from "../../../runtime/shared/placement/connectionCreatePlacement"
+import { resolveConnectedPlacement } from "../../../runtime/shared/placement/placementEngine"
 
 type DefaultConnectionMenuCreateKind = "text" | "image-generator" | "video-generator"
 type ConnectionMenuCreateKind = DefaultConnectionMenuCreateKind | "storyboard"
@@ -117,19 +113,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 
 	const resolveCreatePlacementContext = useCallback(
 		(context: ConnectionMenuContext): ConnectionCreatePlacementContext => {
-			const placementContext = getPlacementContext(context)
-			if (!canvas || context.source !== "handle") return placementContext
-			if (context.origin.kind === "selection") {
-				return resolveConnectionCreateContextWithOriginRect(
-					placementContext,
-					context.origin.boundingRect,
-				)
-			}
-
-			return resolveConnectionCreateContextWithOriginRect(
-				placementContext,
-				canvas.geometryCacheManager.getElementBounds(context.origin.elementId),
-			)
+			return getPlacementContext(context)
 		},
 		[canvas],
 	)
@@ -139,47 +123,34 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 			context: ConnectionMenuContext,
 			size: { width: number; height: number },
 		): { x: number; y: number } => {
-			const placementContext = resolveCreatePlacementContext(context)
-			return resolveConnectedElementCreateCenterPoint(
-				placementContext,
-				size,
-				resolveCreateGap(context),
-				{
-					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
-					siblingRects:
-						canvas && context.origin.kind === "element"
-							? collectConnectedElementSiblingRects(canvas, {
-									originElementId: context.origin.elementId,
-									originSide: context.origin.side,
-								})
-							: [],
-				},
-			)
+			if (!canvas) return { x: context.canvasX, y: context.canvasY }
+			return resolveConnectedPlacement(canvas, resolveCreatePlacementContext(context), size, {
+				output: "center",
+				originElementId:
+					context.origin.kind === "element" ? context.origin.elementId : undefined,
+				originRect:
+					context.origin.kind === "selection"
+						? context.origin.boundingRect
+						: canvas.geometryCacheManager.getElementBounds(context.origin.elementId),
+				gap: resolveCreateGap(context),
+			})
 		},
 		[canvas, resolveCreateGap, resolveCreatePlacementContext],
 	)
 
 	const resolveCreateTopLeftPoint = useCallback(
-		(
-			context: ConnectionMenuContext,
-			size: { width: number; height: number },
-		): { x: number; y: number } => {
-			const placementContext = resolveCreatePlacementContext(context)
-			return resolveConnectedElementCreateTopLeftPoint(
-				placementContext,
-				size,
-				resolveCreateGap(context),
-				{
-					obstacleRects: canvas ? collectConnectionCreateObstacleRects(canvas) : [],
-					siblingRects:
-						canvas && context.origin.kind === "element"
-							? collectConnectedElementSiblingRects(canvas, {
-									originElementId: context.origin.elementId,
-									originSide: context.origin.side,
-								})
-							: [],
-				},
-			)
+		(context: ConnectionMenuContext, size: { width: number; height: number }) => {
+			if (!canvas) return { x: context.canvasX, y: context.canvasY }
+			return resolveConnectedPlacement(canvas, resolveCreatePlacementContext(context), size, {
+				output: "top-left",
+				originElementId:
+					context.origin.kind === "element" ? context.origin.elementId : undefined,
+				originRect:
+					context.origin.kind === "selection"
+						? context.origin.boundingRect
+						: canvas.geometryCacheManager.getElementBounds(context.origin.elementId),
+				gap: resolveCreateGap(context),
+			})
 		},
 		[canvas, resolveCreateGap, resolveCreatePlacementContext],
 	)

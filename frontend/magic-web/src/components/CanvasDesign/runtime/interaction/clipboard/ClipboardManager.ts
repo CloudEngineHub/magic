@@ -23,7 +23,6 @@ import { GenerationStatus, type UploadFileResponse } from "../../../public/magic
 import { toast } from "sonner"
 import {
 	getMediaDimensions,
-	calculateGridImageLayout,
 	calculateElementsRect,
 	calculateNodesRect,
 	generateElementId,
@@ -33,6 +32,7 @@ import {
 } from "../../shared/ids"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import { filterRedundantElements, getCanvasCenter } from "../../shared/placement/elementUtils"
+import { resolveGridPlacements } from "../../shared/placement/placementEngine"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import {
 	CanvasElementClipboard,
@@ -2179,7 +2179,7 @@ export class ClipboardManager {
 								: getMediaDimensions(file),
 						),
 					)
-					const positions = calculateGridImageLayout(mediaDimensions, anchorPosition)
+					const positions = resolveGridPlacements(mediaDimensions, anchorPosition)
 
 					const createdElementIds: string[] = []
 					for (let i = 0; i < files.length; i++) {

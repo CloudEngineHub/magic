@@ -4,15 +4,7 @@ import { ElementTypeEnum, type AudioElement } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import { generateElementId } from "../../shared/ids"
-import {
-	collectObstacleRects,
-	findNextImageVideoPlaceholderPositionNearViewport,
-} from "../../shared/placement/findNonOverlappingPlacement"
-import {
-	getCanvasCenter,
-	getResolvedMediaPlacementConfig,
-	getViewportCanvasRect,
-} from "../../shared/placement/elementUtils"
+import { resolveNearestFreeMediaPlacement } from "../../shared/placement/placementEngine"
 
 export interface AudioGeneratorToolOptions extends ToolOptions {}
 
@@ -59,22 +51,7 @@ export class AudioGeneratorTool extends BaseTool {
 	/** 从工具栏在当前 viewport 附近创建空音频节点。 */
 	public createAudioAtCenter(): void {
 		const size = this.getAudioElementSize()
-		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
-		const obstacles = collectObstacleRects(
-			this.canvas.elementManager.getAllElements(),
-			(element) =>
-				this.canvas.permissionManager.isVisible(element) &&
-				!this.canvas.permissionManager.isLocked(element),
-		)
-		const position = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-			elementWidth: size.width,
-			elementHeight: size.height,
-			viewportRect: getViewportCanvasRect(this.canvas),
-			anchor: getCanvasCenter(this.canvas),
-			spacing: mediaPlacementConfig.spacing,
-			maxPerRow: mediaPlacementConfig.maxPerRow,
-			maxSearchRings: mediaPlacementConfig.maxSearchRings,
-		})
+		const position = resolveNearestFreeMediaPlacement(this.canvas, size)
 
 		this.createAudioElementAt(position.x, position.y)
 	}

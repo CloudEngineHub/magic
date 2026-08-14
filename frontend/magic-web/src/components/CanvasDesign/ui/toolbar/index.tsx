@@ -40,15 +40,7 @@ import {
 	validateFile,
 } from "../../runtime/shared/ids"
 import { AUDIO_CONFIG } from "../../runtime/elements/audio/AudioElement.config"
-import {
-	collectObstacleRects,
-	findNextImageVideoPlaceholderPositionNearViewport,
-} from "../../runtime/shared/placement/findNonOverlappingPlacement"
-import {
-	getCanvasCenter,
-	getResolvedMediaPlacementConfig,
-	getViewportCanvasRect,
-} from "../../runtime/shared/placement/elementUtils"
+import { resolveNearestFreeMediaPlacement } from "../../runtime/shared/placement/placementEngine"
 
 /**
  * 将 BaseTool 转换为 ToolType
@@ -128,24 +120,10 @@ export default function Tools() {
 		async (file: File) => {
 			if (!canvas) return null
 
-			const obstacles = collectObstacleRects(canvas.elementManager.getAllElements(), (el) => {
-				return (
-					canvas.permissionManager.isVisible(el) && !canvas.permissionManager.isLocked(el)
-				)
-			})
 			const { width, height } = isAudioFile(file)
 				? { width: AUDIO_CONFIG.DEFAULT_WIDTH, height: AUDIO_CONFIG.DEFAULT_HEIGHT }
 				: await getMediaDimensions(file)
-			const mediaPlacementConfig = getResolvedMediaPlacementConfig(canvas)
-			const targetPosition = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-				elementWidth: width,
-				elementHeight: height,
-				viewportRect: getViewportCanvasRect(canvas),
-				anchor: getCanvasCenter(canvas),
-				spacing: mediaPlacementConfig.spacing,
-				maxPerRow: mediaPlacementConfig.maxPerRow,
-				maxSearchRings: mediaPlacementConfig.maxSearchRings,
-			})
+			const targetPosition = resolveNearestFreeMediaPlacement(canvas, { width, height })
 
 			return {
 				x: targetPosition.x + width / 2,

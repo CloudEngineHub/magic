@@ -16,7 +16,10 @@ import { CONNECTION_CREATE_NODE_SPACING } from "../../../../../runtime/shared/pl
 
 const mockCompleteImagePrompt = vi.fn()
 const mockElementManagerCreate = vi.fn()
-const mockConnectElements = vi.fn()
+const mockConnectElements = vi.fn(() => ({
+	status: "created",
+	connectionId: "connection-1" as const,
+}))
 const mockSelectMultiple = vi.fn()
 
 let mockSelectedElements: ImageElement[] = []
@@ -171,6 +174,9 @@ describe("image prompt text element helpers", () => {
 			connectionManager: {
 				connectElements: mockConnectElements,
 			},
+			historyManager: {
+				runTransaction: (callback: () => unknown) => callback(),
+			},
 			selectionManager: {
 				selectMultiple: mockSelectMultiple,
 			},
@@ -294,6 +300,9 @@ describe("ImagePromptExtractionButton", () => {
 			},
 			connectionManager: {
 				connectElements: mockConnectElements,
+			},
+			historyManager: {
+				runTransaction: (callback: () => unknown) => callback(),
 			},
 			selectionManager: {
 				selectMultiple: mockSelectMultiple,

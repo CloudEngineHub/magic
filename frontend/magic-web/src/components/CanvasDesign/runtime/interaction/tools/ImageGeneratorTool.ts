@@ -2,16 +2,11 @@ import Konva from "konva"
 import { BaseTool, type ToolOptions, type ToolMetadata } from "./BaseTool"
 import { ElementTypeEnum, type ImageElement } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
-import { calculateHorizontalImageLayout, generateElementId } from "../../shared/ids"
+import { generateElementId } from "../../shared/ids"
 import {
-	collectObstacleRects,
-	findNextImageVideoPlaceholderPositionNearViewport,
-} from "../../shared/placement/findNonOverlappingPlacement"
-import {
-	getCanvasCenter,
-	getResolvedMediaPlacementConfig,
-	getViewportCanvasRect,
-} from "../../shared/placement/elementUtils"
+	resolveHorizontalPlacements,
+	resolveNearestFreeMediaPlacement,
+} from "../../shared/placement/placementEngine"
 import type { ImageModelItem } from "../../../public/magic-types"
 
 /**
@@ -195,26 +190,7 @@ export class ImageGeneratorTool extends BaseTool {
 		const imageWidth = defaultSize?.width
 		const imageHeight = defaultSize?.height
 		const imageSize = this.getImageElementSize(imageWidth, imageHeight)
-		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
-
-		const obstacles = collectObstacleRects(
-			this.canvas.elementManager.getAllElements(),
-			(el) => {
-				return (
-					this.canvas.permissionManager.isVisible(el) &&
-					!this.canvas.permissionManager.isLocked(el)
-				)
-			},
-		)
-		const position = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-			elementWidth: imageSize.width,
-			elementHeight: imageSize.height,
-			viewportRect: getViewportCanvasRect(this.canvas),
-			anchor: getCanvasCenter(this.canvas),
-			spacing: mediaPlacementConfig.spacing,
-			maxPerRow: mediaPlacementConfig.maxPerRow,
-			maxSearchRings: mediaPlacementConfig.maxSearchRings,
-		})
+		const position = resolveNearestFreeMediaPlacement(this.canvas, imageSize)
 
 		// 在找到的位置创建图像元素
 		this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height)
@@ -240,25 +216,7 @@ export class ImageGeneratorTool extends BaseTool {
 
 	public createImageElementNearViewport(width?: number, height?: number): string {
 		const imageSize = this.getImageElementSize(width, height)
-		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
-		const obstacles = collectObstacleRects(
-			this.canvas.elementManager.getAllElements(),
-			(el) => {
-				return (
-					this.canvas.permissionManager.isVisible(el) &&
-					!this.canvas.permissionManager.isLocked(el)
-				)
-			},
-		)
-		const position = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-			elementWidth: imageSize.width,
-			elementHeight: imageSize.height,
-			viewportRect: getViewportCanvasRect(this.canvas),
-			anchor: getCanvasCenter(this.canvas),
-			spacing: mediaPlacementConfig.spacing,
-			maxPerRow: mediaPlacementConfig.maxPerRow,
-			maxSearchRings: mediaPlacementConfig.maxSearchRings,
-		})
+		const position = resolveNearestFreeMediaPlacement(this.canvas, imageSize)
 
 		return this.createImageElementAt(position.x, position.y, imageSize.width, imageSize.height)
 	}
@@ -270,26 +228,8 @@ export class ImageGeneratorTool extends BaseTool {
 	): string[] {
 		const nextCount = Math.max(1, count)
 		const imageSize = this.getImageElementSize(width, height)
-		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
-		const obstacles = collectObstacleRects(
-			this.canvas.elementManager.getAllElements(),
-			(el) => {
-				return (
-					this.canvas.permissionManager.isVisible(el) &&
-					!this.canvas.permissionManager.isLocked(el)
-				)
-			},
-		)
-		const firstPosition = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-			elementWidth: imageSize.width,
-			elementHeight: imageSize.height,
-			viewportRect: getViewportCanvasRect(this.canvas),
-			anchor: getCanvasCenter(this.canvas),
-			spacing: mediaPlacementConfig.spacing,
-			maxPerRow: mediaPlacementConfig.maxPerRow,
-			maxSearchRings: mediaPlacementConfig.maxSearchRings,
-		})
-		const positions = calculateHorizontalImageLayout(
+		const firstPosition = resolveNearestFreeMediaPlacement(this.canvas, imageSize)
+		const positions = resolveHorizontalPlacements(
 			Array.from({ length: nextCount }, () => imageSize),
 			{
 				x: firstPosition.x + imageSize.width / 2,

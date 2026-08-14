@@ -11,11 +11,8 @@ import { LoaderCircle, Pencil, RotateCcw, SquarePen } from "lucide-react"
 import { type MessageEditorRef } from "../message/MessageEditor"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { ElementFactory } from "../../../runtime/elements/core/ElementFactory"
-import {
-	generateElementId,
-	calculateNewElementPosition,
-	getDefaultImageSize,
-} from "../../../runtime/shared/ids"
+import { generateElementId, getDefaultImageSize } from "../../../runtime/shared/ids"
+import { resolveDerivedRightPlacement } from "../../../runtime/shared/placement/placementEngine"
 import { getCanvasResourceFileName } from "../../../runtime/shared/path/canvasResourcePath"
 import { getImageProcessRequestPayload } from "../../../runtime/resources/image/imageCropUtils"
 import type { GenerateImageRequest } from "../../../public/magic-types"
@@ -128,7 +125,7 @@ export default function SecondEdit(props: SecondEditProps) {
 			const NEW_ELEMENT_SPACING = 0
 
 			// 计算新元素的位置（放在原元素右边，顶部对齐）
-			const newPosition = calculateNewElementPosition(
+			const newPosition = resolveDerivedRightPlacement(
 				props.imageElement,
 				originalElementInstance,
 				canvas.elementManager,

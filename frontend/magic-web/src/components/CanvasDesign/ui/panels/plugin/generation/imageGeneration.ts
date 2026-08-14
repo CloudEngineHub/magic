@@ -16,9 +16,9 @@ import type {
 import type { PluginGenerateAndPlaceParams } from "../runtime-protocol/v1/index"
 import {
 	collectObstacleRects,
-	findGeneratedMediaGridPositions,
 	layerElementToObstacleRect,
 } from "../../../../runtime/shared/placement/findNonOverlappingPlacement"
+import { findGeneratedMediaGridPositions } from "../../../../runtime/shared/placement/placementEngine"
 import {
 	ElementTypeEnum,
 	type ImageElement,

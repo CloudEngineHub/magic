@@ -14,6 +14,7 @@ import type { Canvas } from "../core/Canvas"
 import { ImageElement as ImageElementClass } from "../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../elements/video/VideoElement"
 import { getActiveContent, getActiveImageContent } from "../document/elementContent"
+import { resolveGridPlacements, resolveHorizontalPlacements } from "./placement/placementMath"
 
 /**
  * 矩形边界
@@ -896,32 +897,7 @@ export function calculateHorizontalImageLayout(
 	anchorPosition: { x: number; y: number },
 	spacing: number = 0,
 ): Array<{ x: number; y: number }> {
-	if (imageDimensions.length === 0) {
-		return []
-	}
-
-	const firstImageDimensions = imageDimensions[0]
-	const firstImageWidth = firstImageDimensions.width
-	const firstImageHeight = firstImageDimensions.height
-
-	// 第一个图片的顶部位置（顶部对齐）
-	const topY = anchorPosition.y - firstImageHeight / 2
-
-	// 第一个图片的左边缘从锚点位置开始
-	let currentLeftEdge = anchorPosition.x - firstImageWidth / 2
-
-	// 计算每个图片的中心位置
-	return imageDimensions.map((dimensions) => {
-		// 计算当前图片的中心位置
-		const centerX = currentLeftEdge + dimensions.width / 2
-		// 计算当前图片的中心 Y（顶部对齐：顶部 + 当前图片高度的一半）
-		const centerY = topY + dimensions.height / 2
-
-		// 更新下一个图片的左边缘位置（当前图片右边缘 + 间距）
-		currentLeftEdge += dimensions.width + spacing
-
-		return { x: centerX, y: centerY }
-	})
+	return resolveHorizontalPlacements(imageDimensions, anchorPosition, spacing)
 }
 
 /**
@@ -939,48 +915,7 @@ export function calculateGridImageLayout(
 	spacing: number = 200,
 	maxPerRow: number = 4,
 ): Array<{ x: number; y: number }> {
-	if (imageDimensions.length === 0) {
-		return []
-	}
-
-	const positions: Array<{ x: number; y: number }> = []
-
-	// 将元素分成多行
-	const rows: Array<Array<{ width: number; height: number; originalIndex: number }>> = []
-	for (let i = 0; i < imageDimensions.length; i++) {
-		const rowIndex = Math.floor(i / maxPerRow)
-		if (!rows[rowIndex]) {
-			rows[rowIndex] = []
-		}
-		rows[rowIndex].push({ ...imageDimensions[i], originalIndex: i })
-	}
-
-	// 第一个元素的中心对齐 anchorPosition，计算左上角起始点
-	const firstWidth = imageDimensions[0].width
-	const firstHeight = imageDimensions[0].height
-	const startX = anchorPosition.x - firstWidth / 2
-	const startY = anchorPosition.y - firstHeight / 2
-
-	let currentY = startY
-
-	for (const row of rows) {
-		let currentX = startX
-		let rowMaxHeight = 0
-
-		for (const item of row) {
-			// 中心位置
-			const centerX = currentX + item.width / 2
-			const centerY = currentY + item.height / 2
-			positions[item.originalIndex] = { x: centerX, y: centerY }
-
-			currentX += item.width + spacing
-			rowMaxHeight = Math.max(rowMaxHeight, item.height)
-		}
-
-		currentY += rowMaxHeight + spacing
-	}
-
-	return positions
+	return resolveGridPlacements(imageDimensions, anchorPosition, { spacing, maxPerRow })
 }
 
 /**
@@ -1084,48 +1019,6 @@ export function generateUniqueElementName(baseName: string, existingNames: Set<s
 	}
 
 	return newName
-}
-
-/**
- * 计算新元素的位置（放在原元素右边，顶部对齐）
- * @param originalElement 原元素数据
- * @param originalElementInstance 原元素实例（需要 getBoundingRect 方法）
- * @param elementManager 元素管理器（用于查找父元素）
- * @param spacing 新元素与原元素之间的间距，默认为 0
- * @returns 新元素的位置坐标，如果无法计算则返回 null
- */
-export function calculateNewElementPosition(
-	originalElement: LayerElement,
-	originalElementInstance: { getBoundingRect: () => Rect | null },
-	elementManager: { findParentIdForElement: (id: string) => string | undefined },
-	spacing: number = 0,
-): { x: number; y: number } | null {
-	// 获取原图片的位置和尺寸
-	const originalWidth = originalElement.width ?? 1024
-
-	// 检查原图片是否在 Frame 里面
-	const parentId = elementManager.findParentIdForElement(originalElement.id)
-	let newX: number
-	let newY: number
-
-	if (parentId) {
-		// 原图片在 Frame 里，需要使用画布绝对坐标
-		const boundingRect = originalElementInstance.getBoundingRect()
-		if (!boundingRect) {
-			return null
-		}
-		// 新元素放在原图片右边，顶部对齐（使用画布绝对坐标）
-		newX = boundingRect.x + boundingRect.width + spacing
-		newY = boundingRect.y // 顶部对齐
-	} else {
-		// 原图片不在 Frame 里，直接使用相对坐标
-		const originalX = originalElement.x ?? 0
-		const originalY = originalElement.y ?? 0
-		newX = originalX + originalWidth + spacing
-		newY = originalY // 顶部对齐
-	}
-
-	return { x: newX, y: newY }
 }
 
 /**

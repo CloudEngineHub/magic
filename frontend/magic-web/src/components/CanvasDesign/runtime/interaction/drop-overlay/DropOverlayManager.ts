@@ -9,7 +9,6 @@ import {
 	isVideoFile,
 	validateFile,
 	generateElementId,
-	calculateGridImageLayout,
 	validateCanvasFilePath,
 	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../shared/ids"
@@ -20,6 +19,7 @@ import { updateContent } from "../../document/elementContent"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { toast } from "sonner"
+import { resolveGridPlacements } from "../../shared/placement/placementEngine"
 
 /**
  * 拖拽类型
@@ -1109,7 +1109,7 @@ export class DropOverlayManager {
 			return
 		}
 
-		const positions = calculateGridImageLayout(
+		const positions = resolveGridPlacements(
 			preparedResources.map(({ dimensions }) => dimensions),
 			anchorPosition,
 		)

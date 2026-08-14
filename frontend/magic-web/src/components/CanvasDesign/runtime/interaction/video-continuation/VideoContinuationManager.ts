@@ -7,12 +7,10 @@ import { VideoElement } from "../../elements/video/VideoElement"
 import { extractVideoTailFrame } from "../../resources/video/VideoFrameExtractor"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import {
-	collectConnectedElementSiblingRects,
 	collectConnectionCreateObstacleRects,
-	resolveConnectionCreateContextWithOriginRect,
 	resolveConnectionCreateGapForElement,
-	resolveConnectedElementCreateCenterPoint,
 } from "../../shared/placement/connectionCreatePlacement"
+import { resolveConnectedPlacement } from "../../shared/placement/placementEngine"
 import {
 	resolveVideoContinuationModel,
 	type ResolvedVideoContinuationModel,
@@ -293,25 +291,21 @@ export class VideoContinuationManager {
 
 					let createdElementId: string | null = null
 					try {
-						const placementContext = resolveConnectionCreateContextWithOriginRect(
+						const point = resolveConnectedPlacement(
+							this.canvas,
 							{
 								originSide: "right",
 								source: "handle",
 								canvasX: sourceRect.x + sourceRect.width,
 								canvasY: sourceRect.y + sourceRect.height / 2,
 							},
-							sourceRect,
-						)
-						const point = resolveConnectedElementCreateCenterPoint(
-							placementContext,
 							size,
-							resolveConnectionCreateGapForElement(sourceData, "right"),
 							{
+								output: "center",
+								originElementId: item.source.elementId,
+								originRect: sourceRect,
+								gap: resolveConnectionCreateGapForElement(sourceData, "right"),
 								obstacleRects: obstacles,
-								siblingRects: collectConnectedElementSiblingRects(this.canvas, {
-									originElementId: item.source.elementId,
-									originSide: "right",
-								}),
 							},
 						)
 						createdElementId = videoTool.createVideoAtCanvasPoint(

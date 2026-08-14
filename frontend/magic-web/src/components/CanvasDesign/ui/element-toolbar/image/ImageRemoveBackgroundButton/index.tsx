@@ -10,11 +10,8 @@ import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
 import { createRemoveBackgroundTaskMeta } from "../../../../runtime/resources/image/imageGenerationTaskMeta"
-import {
-	generateElementId,
-	calculateNewElementPosition,
-	generateUUID,
-} from "../../../../runtime/shared/ids"
+import { generateElementId, generateUUID } from "../../../../runtime/shared/ids"
+import { resolveDerivedRightPlacement } from "../../../../runtime/shared/placement/placementEngine"
 import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
@@ -72,7 +69,7 @@ export default function ImageRemoveBackgroundButton() {
 			},
 		})
 
-		const newPosition = calculateNewElementPosition(
+		const newPosition = resolveDerivedRightPlacement(
 			selectedImageElement,
 			imageElementInstance,
 			canvas.elementManager,

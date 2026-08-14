@@ -3,15 +3,7 @@ import { BaseTool, type ToolMetadata, type ToolOptions } from "./BaseTool"
 import { ElementTypeEnum, type VideoElement } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { generateElementId } from "../../shared/ids"
-import {
-	collectObstacleRects,
-	findNextImageVideoPlaceholderPositionNearViewport,
-} from "../../shared/placement/findNonOverlappingPlacement"
-import {
-	getCanvasCenter,
-	getResolvedMediaPlacementConfig,
-	getViewportCanvasRect,
-} from "../../shared/placement/elementUtils"
+import { resolveNearestFreeMediaPlacement } from "../../shared/placement/placementEngine"
 import type {
 	DefaultGenerateVideoConfig,
 	VideoGenerationSizeOption,
@@ -93,26 +85,7 @@ export class VideoGeneratorTool extends BaseTool {
 		const videoWidth = defaultSize?.width
 		const videoHeight = defaultSize?.height
 		const videoSize = this.getVideoElementSize(videoWidth, videoHeight)
-		const mediaPlacementConfig = getResolvedMediaPlacementConfig(this.canvas)
-
-		const obstacles = collectObstacleRects(
-			this.canvas.elementManager.getAllElements(),
-			(el) => {
-				return (
-					this.canvas.permissionManager.isVisible(el) &&
-					!this.canvas.permissionManager.isLocked(el)
-				)
-			},
-		)
-		const position = findNextImageVideoPlaceholderPositionNearViewport(obstacles, {
-			elementWidth: videoSize.width,
-			elementHeight: videoSize.height,
-			viewportRect: getViewportCanvasRect(this.canvas),
-			anchor: getCanvasCenter(this.canvas),
-			spacing: mediaPlacementConfig.spacing,
-			maxPerRow: mediaPlacementConfig.maxPerRow,
-			maxSearchRings: mediaPlacementConfig.maxSearchRings,
-		})
+		const position = resolveNearestFreeMediaPlacement(this.canvas, videoSize)
 
 		this.createVideoElementAt(position.x, position.y, videoSize.width, videoSize.height)
 	}

@@ -8,11 +8,8 @@ import { ElementTypeEnum, type ImageElement } from "../../../../runtime/document
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
 import type { GenerateHightImageRequest } from "../../../../public/magic-types"
-import {
-	generateElementId,
-	calculateNewElementPosition,
-	generateUUID,
-} from "../../../../runtime/shared/ids"
+import { generateElementId, generateUUID } from "../../../../runtime/shared/ids"
+import { resolveDerivedRightPlacement } from "../../../../runtime/shared/placement/placementEngine"
 import SizeSelect from "../../../primitives/custom/SizeSelect/index"
 import SizeInput from "../../size/Size/SizeInput"
 import { Button } from "../../../primitives/shadcn/button"
@@ -139,7 +136,7 @@ export default function ImageConvertHight() {
 		const NEW_ELEMENT_SPACING = 0
 
 		// 计算新元素的位置（放在原元素右边，顶部对齐）
-		const newPosition = calculateNewElementPosition(
+		const newPosition = resolveDerivedRightPlacement(
 			selectedImageElement,
 			imageElementInstance,
 			canvas.elementManager,

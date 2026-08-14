@@ -2,7 +2,8 @@ import type { Canvas } from "../../../../runtime/core/Canvas"
 import { VideoElement as VideoElementClass } from "../../../../runtime/elements/video/VideoElement"
 import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document/types"
 import { ElementFactory } from "../../../../runtime/elements/core/ElementFactory"
-import { calculateNewElementPosition, generateElementId } from "../../../../runtime/shared/ids"
+import { generateElementId } from "../../../../runtime/shared/ids"
+import { resolveDerivedRightPlacement } from "../../../../runtime/shared/placement/placementEngine"
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
 import { calculateCanvasSizeFromAspectRatio } from "../generation/video-editor-config.generation"
 import { hasVideoGenerationRequestSubmitIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
@@ -27,7 +28,7 @@ export async function createAndSubmitVideoGeneration(
 		return false
 	}
 
-	const newPosition = calculateNewElementPosition(
+	const newPosition = resolveDerivedRightPlacement(
 		sourceVideoElement,
 		sourceElementInstance,
 		canvas.elementManager,

@@ -14,12 +14,13 @@ import {
 } from "../../../../runtime/text/richText"
 import { measureRichTextLayout } from "../../../../runtime/text/layout"
 import {
-	collectConnectedElementSiblingRects,
 	collectConnectionCreateObstacleRects,
+	collectConnectedElementSiblingRects,
 	resolveConnectionCreateGapForElement,
-	resolveConnectedElementCreateTopLeftPoint,
 	type ConnectionCreatePlacementContext,
 } from "../../../../runtime/shared/placement/connectionCreatePlacement"
+import { resolveConnectedPlacement } from "../../../../runtime/shared/placement/placementEngine"
+import { createElementFromElementConnection } from "../../../../runtime/interaction/connection/elementConnectionCreation"
 
 const IMAGE_PROMPT_TEXT_LINE_HEIGHT = 1.45
 
@@ -98,11 +99,13 @@ export function buildImagePromptTextElementData(
 		canvasX: sourceRect.x + sourceRect.width,
 		canvasY: sourceRect.y + sourceRect.height / 2,
 	}
-	const point = resolveConnectedElementCreateTopLeftPoint(
+	const point = resolveConnectedPlacement(
+		undefined,
 		placementContext,
 		{ width, height },
-		resolveConnectionCreateGapForElement(options.imageElement, "right"),
 		{
+			output: "top-left",
+			gap: resolveConnectionCreateGapForElement(options.imageElement, "right"),
 			obstacleRects: options.obstacleRects,
 			siblingRects: options.siblingRects,
 		},
@@ -160,9 +163,18 @@ export function createImagePromptTextElement(options: {
 		}),
 	})
 
-	canvas.elementManager.create(result.element)
-	canvas.connectionManager.connectElements(result.connection)
-	canvas.selectionManager.selectMultiple([result.element.id])
+	const createdElementId = createElementFromElementConnection({
+		canvas,
+		origin: { kind: "element", elementId: imageElement.id, side: "right" },
+		createElement: () => {
+			canvas.elementManager.create(result.element)
+			return result.element.id
+		},
+		afterConnect: ({ createdElementId: elementId }) => {
+			canvas.selectionManager.selectMultiple([elementId])
+		},
+	})
+	if (!createdElementId) return null
 
 	if (typeof requestAnimationFrame !== "undefined") {
 		requestAnimationFrame(() => {

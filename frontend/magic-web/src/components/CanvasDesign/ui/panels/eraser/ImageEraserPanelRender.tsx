@@ -18,11 +18,8 @@ import {
 	buildReferenceImageOptions,
 	getImageProcessRequestPayload,
 } from "../../../runtime/resources/image/imageCropUtils"
-import {
-	calculateNewElementPosition,
-	generateElementId,
-	generateUUID,
-} from "../../../runtime/shared/ids"
+import { generateElementId, generateUUID } from "../../../runtime/shared/ids"
+import { resolveDerivedRightPlacement } from "../../../runtime/shared/placement/placementEngine"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
@@ -149,7 +146,7 @@ export default function ImageEraserPanelRender() {
 		let generationAttemptId: string | undefined
 
 		try {
-			const newPosition = calculateNewElementPosition(
+			const newPosition = resolveDerivedRightPlacement(
 				erasingImageElement,
 				erasingImageElementInstance,
 				canvas.elementManager,
