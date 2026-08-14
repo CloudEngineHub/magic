@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax;
 
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoOperationStatus;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
@@ -167,6 +168,11 @@ class MiniMaxH3VideoAdapterTest extends TestCase
             ],
             'generation' => ['resolution' => '768p', 'duration_seconds' => 5, 'aspect_ratio' => '16:9'],
         ]));
+    }
+
+    public function testAdapterSupportsConnectivityTest(): void
+    {
+        $this->assertInstanceOf(VideoGenerationConnectivityTestableInterface::class, $this->createAdapter());
     }
 
     private function createAdapter(): MiniMaxH3VideoAdapter

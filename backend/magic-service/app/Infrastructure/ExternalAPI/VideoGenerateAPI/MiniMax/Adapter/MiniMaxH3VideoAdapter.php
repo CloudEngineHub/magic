@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -17,7 +17,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
 
-readonly class MiniMaxH3VideoAdapter implements VideoGenerationProviderAdapterInterface
+readonly class MiniMaxH3VideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     public function __construct(
         private MiniMaxH3GenerationCapabilityProvider $capabilityProvider,
@@ -127,6 +127,11 @@ readonly class MiniMaxH3VideoAdapter implements VideoGenerationProviderAdapterIn
                 'message' => (string) ($task['error']['message'] ?? 'MiniMax H3 generation failed'),
             ] : null,
         ];
+    }
+
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        return $this->transport->testConnection($config, $modelVersion);
     }
 
     private function appendMedia(array &$content, array $items, string $type, string $role): void
