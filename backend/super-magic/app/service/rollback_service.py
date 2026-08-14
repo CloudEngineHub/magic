@@ -168,9 +168,7 @@ class RollbackService:
         try:
             logger.info("开始提交回滚操作，清理后续checkpoint")
 
-            success = await self.rollback_executor.commit_rollback()
-            if not success:
-                raise RollbackException(ErrorCode.ROLLBACK_GENERAL_ERROR, "提交回滚操作失败")
+            await self.checkpoint_service.discard_future_checkpoints()
 
             logger.info("回滚提交成功完成")
 

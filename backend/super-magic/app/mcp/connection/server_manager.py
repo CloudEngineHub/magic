@@ -373,7 +373,7 @@ class MCPServerManager:
         区分业务逻辑错误（返回给 LLM 处理）和系统错误（返回 error 状态）。
         """
         if not isinstance(raw, dict):
-            return ToolResult(content=str(raw))
+            return ToolResult(content=self._normalize_content(raw))
 
         content = raw.get("content", [])
         is_error = raw.get("isError", False)
@@ -381,16 +381,57 @@ class MCPServerManager:
         if is_error:
             error_msg = self._extract_text_content(content) or "MCP 工具执行失败"
             if self._is_system_error(error_msg):
-                return ToolResult.error(error_msg)  # type: ignore
+                return ToolResult.error(self._normalize_content(error_msg))  # type: ignore
             # 业务逻辑错误作为正常内容返回给 LLM
-            return ToolResult(content=error_msg)
+            return ToolResult(content=self._normalize_content(error_msg))
 
         if isinstance(content, list) and content:
             text_contents = self._collect_text_items(content)
-            merged = self._merge_text_contents(text_contents)
-            return ToolResult(content=merged or str(raw))
+            if not text_contents:
+                return ToolResult(
+                    content=self._normalize_content(self._serialize_raw_result(raw))
+                )
+            merged = (
+                text_contents[0]
+                if len(text_contents) == 1
+                else self._merge_text_contents(text_contents)
+            )
+            return ToolResult(content=self._normalize_content(merged if merged else ""))
 
-        return ToolResult(content=str(raw))
+        if content == []:
+            return ToolResult(content=self._normalize_content(""))
+
+        if isinstance(content, str):
+            return ToolResult(content=self._normalize_content(content))
+
+        return ToolResult(
+            content=self._normalize_content(self._serialize_raw_result(raw))
+        )
+
+    @staticmethod
+    def _normalize_content(content: Any) -> str:
+        """仅将非 JSON 的 MCP 返回内容包装成 JSON 字符串。"""
+        if isinstance(content, str):
+            try:
+                json.loads(content)
+                return content
+            except (json.JSONDecodeError, TypeError):
+                return json.dumps({"content": content}, ensure_ascii=False)
+
+        try:
+            return json.dumps(content, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return json.dumps({"content": str(content)}, ensure_ascii=False)
+
+    @staticmethod
+    def _serialize_raw_result(raw: Any) -> str:
+        """将无标准 content 的 MCP 原始结果序列化为稳定字符串。"""
+        if isinstance(raw, str):
+            return raw
+        try:
+            return json.dumps(raw, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(raw)
 
     def _extract_text_content(self, content: Any) -> str:
         """从 content 列表中提取文本内容并拼接"""
