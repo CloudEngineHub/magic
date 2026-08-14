@@ -249,7 +249,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 
 	/* 获取额外按钮 */
 	const getExtra = useMemoizedFn((key) => {
-		if (!isOfficial && hasEditRight) {
+		if (hasEditRight) {
 			return (
 				<MagicButton
 					type="default"
@@ -290,14 +290,12 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 									align="center"
 									style={{ flexShrink: 0 }}
 								>
-									{!isOfficial && (
-										<TestConnection
-											key={item.id}
-											ref={(node) => bindTestConnectionRef(item.id, node)}
-											data={item}
-											isOfficialOrg={isOfficialOrg}
-										/>
-									)}
+									<TestConnection
+										key={item.id}
+										ref={(node) => bindTestConnectionRef(item.id, node)}
+										data={item}
+										isOfficialOrg={isOfficialOrg}
+									/>
 									<MagicSwitch
 										size={isMobile ? "small" : "default"}
 										loading={isMutating && currentModel?.id === item.id}
@@ -305,7 +303,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 										disabled={!hasEditRight}
 										onChange={(checked) => onChangeStatus(checked, item)}
 									/>
-									{!isOfficial && hasEditRight && (
+									{hasEditRight && (
 										<>
 											<MagicButton
 												size={isMobile ? "small" : "middle"}
