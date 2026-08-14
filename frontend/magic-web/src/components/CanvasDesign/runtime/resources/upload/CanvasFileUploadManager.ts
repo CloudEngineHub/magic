@@ -226,7 +226,7 @@ function createUploadElementData(
 	position: { x: number; y: number },
 	size: { width: number; height: number },
 	zIndex: number,
-	name?: string,
+	name: string | undefined,
 	elementData:
 		| Partial<ImageElementData>
 		| Partial<VideoElementData>

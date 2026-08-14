@@ -70,6 +70,12 @@ export interface ElementCreateResult<T extends LayerElement = LayerElement> {
 	element: T
 }
 
+export interface ElementLoadIssue {
+	elementId: string
+	elementType: LayerElement["type"]
+	message: string
+}
+
 export interface ElementManagerDocumentPatch {
 	upserts: Array<{ element: LayerElement; parentId: string | null }>
 	deletedElementIds: string[]
@@ -147,6 +153,7 @@ export class ElementManager {
 	private elementListeningDisabled = false
 	private viewportGestureUnsubscribe?: () => void
 	private batchMode = false
+	private lastLoadIssues: ElementLoadIssue[] = []
 	private isBatchDeleting = false
 	private pendingBatchDeleteChangeIds: Set<string> = new Set()
 	private isContentLayerDrawDeferred = false
@@ -587,12 +594,35 @@ export class ElementManager {
 	 */
 	public replaceAll(elementsData: LayerElement[]): void {
 		this.clear()
+		this.lastLoadIssues = []
 		this.batchMode = true
 		try {
 			// 规范化 zIndex：按原有顺序排序后，重新分配连续的 zIndex
 			const normalizedElements = this.normalizeZIndex(elementsData)
 			normalizedElements.forEach((elementData) => {
-				this.doCreate(elementData, { batch: true })
+				const pendingEventCount = this.pendingEvents.length
+				try {
+					this.doCreate(elementData, { batch: true })
+				} catch (error) {
+					// 丢弃该元素失败前产生的批量事件，避免 flush 时发布半成品状态。
+					this.pendingEvents.length = pendingEventCount
+
+					// 单个元素渲染失败不应阻断其他元素和连接的加载。
+					// 如果元素已经部分挂载，先回滚其运行时实例，避免留下半成品。
+					if (this.elements.has(elementData.id)) {
+						try {
+							this.doDelete(elementData.id, { suppressEvents: true })
+						} catch {
+							// 保留原始加载错误，避免清理失败覆盖根因。
+						}
+					}
+
+					this.lastLoadIssues.push({
+						elementId: elementData.id,
+						elementType: elementData.type,
+						message: error instanceof Error ? error.message : String(error),
+					})
+				}
 			})
 		} finally {
 			this.batchMode = false
@@ -600,6 +630,11 @@ export class ElementManager {
 			// 重新排列顶层元素的渲染顺序，确保 Konva 节点顺序与 zIndex 一致
 			this.reorderTopLevelElements()
 		}
+	}
+
+	/** 获取最近一次批量加载中失败的元素。 */
+	public getLastLoadIssues(): ElementLoadIssue[] {
+		return [...this.lastLoadIssues]
 	}
 
 	/**

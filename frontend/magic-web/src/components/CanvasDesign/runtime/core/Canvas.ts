@@ -987,13 +987,14 @@ export class Canvas {
 
 		// 禁用历史记录，避免在加载时记录
 		this.historyManager.disable()
-
-		this.elementManager.loadDocument(normalizedDoc)
-		this.connectionManager.loadDocument(normalizedDoc)
-		this.connectionManager.normalizeVideoEditInputs?.()
-
-		// 重新启用历史记录
-		this.historyManager.enable()
+		try {
+			this.elementManager.loadDocument(normalizedDoc)
+			this.connectionManager.loadDocument(normalizedDoc)
+			this.connectionManager.normalizeVideoEditInputs?.()
+		} finally {
+			// 即使某个加载阶段出现未预期异常，也不能让历史记录永久保持禁用。
+			this.historyManager.enable()
+		}
 
 		// 记录初始状态
 		this.historyManager.recordHistoryImmediate()

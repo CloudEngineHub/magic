@@ -92,6 +92,44 @@ describe("ElementManager element creation names", () => {
 	})
 })
 
+describe("ElementManager document loading", () => {
+	it("continues loading after one element fails and records the issue", () => {
+		const manager = Object.create(ElementManager.prototype) as unknown as {
+			batchMode: boolean
+			elements: Map<string, unknown>
+			pendingEvents: unknown[]
+			clear: ReturnType<typeof vi.fn>
+			doCreate: ReturnType<typeof vi.fn>
+			flush: ReturnType<typeof vi.fn>
+			reorderTopLevelElements: ReturnType<typeof vi.fn>
+			replaceAll: ElementManager["replaceAll"]
+			getLastLoadIssues: ElementManager["getLastLoadIssues"]
+		}
+		manager.batchMode = false
+		manager.elements = new Map()
+		manager.pendingEvents = []
+		manager.clear = vi.fn()
+		manager.doCreate = vi.fn((element: LayerElement) => {
+			if (element.id === "broken") throw new Error("invalid video size")
+		})
+		manager.flush = vi.fn()
+		manager.reorderTopLevelElements = vi.fn()
+
+		manager.replaceAll([createElement("first"), createElement("broken"), createElement("last")])
+
+		expect(manager.doCreate).toHaveBeenCalledTimes(3)
+		expect(manager.getLastLoadIssues()).toEqual([
+			{
+				elementId: "broken",
+				elementType: "rectangle",
+				message: "invalid video size",
+			},
+		])
+		expect(manager.flush).toHaveBeenCalledOnce()
+		expect(manager.reorderTopLevelElements).toHaveBeenCalledOnce()
+	})
+})
+
 describe("ElementManager drag eligibility", () => {
 	it("keeps the selected element draggable in single selection", () => {
 		const manager = createManager({ selectedIds: ["element-1"] })
