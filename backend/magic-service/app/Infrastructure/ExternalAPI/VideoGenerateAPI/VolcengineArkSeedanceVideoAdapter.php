@@ -645,11 +645,6 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
         return di(TranslatorInterface::class)->trans('video.input_modes.' . $key, $replace);
     }
 
-    private function translateError(string $key, array $replace = []): string
-    {
-        return (string) di(TranslatorInterface::class)->trans('video.errors.' . $key, $replace);
-    }
-
     /**
      * @return array{
      *   generation: array{
