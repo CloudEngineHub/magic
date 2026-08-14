@@ -23,9 +23,10 @@ export interface UseVideoEditorConfigOptions {
 	messageEditorRef?: React.RefObject<MessageEditorRef | null>
 	/**
 	 * 首次恢复：preferDraft 合并临时草稿与已保存请求；
-	 * originalRequestOnly 忽略临时草稿与各模式缓存，仅以 generateVideoRequest 为准（成片后「重新生成」）。
+	 * originalRequestOnly 忽略临时草稿与各模式缓存，仅以 generateVideoRequest 为准（成片后「重新生成」）；
+	 * quickEdit 以当前视频作为唯一 reference_videos 初始化快捷编辑。
 	 */
-	restoreOnMount?: "preferDraft" | "originalRequestOnly"
+	restoreOnMount?: "preferDraft" | "originalRequestOnly" | "quickEdit"
 	/** 尺寸选择变化时是否同步更新当前 videoElement；结果态重新编辑生成新元素时应关闭 */
 	syncElementSize?: boolean
 }
@@ -238,6 +239,8 @@ export interface VideoEditorConfig {
 		cancelPendingDraftPersistence: () => void
 		/** 清除临时草稿后，将 UI 完整恢复为元素上的 generateVideoRequest */
 		restoreOriginalGenerateVideoRequestToUi: () => void
+		/** 快捷编辑：清空草稿并以当前视频作为唯一 reference_videos */
+		restoreQuickEditConfigToUi: () => void
 		triggerFileSelect: () => void
 		uploadReferenceFiles: (files: File[]) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void

@@ -689,6 +689,7 @@
 		"promptPlaceholderReferenceImageTokenLabel": "Image",
 		"promptPlaceholderReferenceVideoTokenLabel": "Video",
 		"quality": "Quality",
+		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
 		"referenceAsset": "Omni Mode",
 		"referenceAssetTotalMaxReached": "Up to {{max}} reference assets are allowed",

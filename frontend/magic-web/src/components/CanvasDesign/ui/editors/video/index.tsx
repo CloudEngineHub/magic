@@ -184,8 +184,7 @@ function ActiveVideoGenerateEditor({
 		!hiddenAfterSubmit &&
 		!isGenerating
 
-	const showResultSecondEdit =
-		hasSrc && hasGenerateVideoRequest && !isDragging && !isGenerating && !isTemporaryElement
+	const showResultSecondEdit = hasSrc && !isDragging && !isGenerating && !isTemporaryElement
 
 	const resultSecondEditNode = showResultSecondEdit ? (
 		<VideoSecondEdit

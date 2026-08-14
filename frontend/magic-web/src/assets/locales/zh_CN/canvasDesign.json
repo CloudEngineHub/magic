@@ -689,6 +689,7 @@
 		"promptPlaceholderReferenceImageTokenLabel": "图片",
 		"promptPlaceholderReferenceVideoTokenLabel": "视频",
 		"quality": "画质",
+		"quickEdit": "快捷编辑",
 		"reEditFromSaved": "重新编辑",
 		"referenceAsset": "全能模式",
 		"referenceAssetTotalMaxReached": "参考素材最多可上传 {{max}} 个",

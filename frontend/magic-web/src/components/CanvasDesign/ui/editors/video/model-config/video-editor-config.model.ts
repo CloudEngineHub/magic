@@ -94,6 +94,59 @@ export function getInputModeConfig(
 	return undefined
 }
 
+export interface ResolvedVideoReferenceVideoModel {
+	model: VideoModelItem
+	inputMode: VideoInputMode
+	task: GenerateVideoRequest["task"]
+	maxReferenceVideos: number
+}
+
+const VIDEO_REFERENCE_MODE_ORDER = VIDEO_INPUT_MODE_ORDER
+
+/** 找到至少允许一个 reference_videos 的模型和 input_mode，供视频快捷编辑使用。 */
+export function resolveVideoReferenceVideoModel(
+	videoModelList: VideoModelItem[],
+	preferredModelId?: string,
+): ResolvedVideoReferenceVideoModel | null {
+	const models = [
+		...(preferredModelId
+			? videoModelList.filter((model) => model.model_id === preferredModelId)
+			: []),
+		...videoModelList.filter((model) => model.model_id !== preferredModelId),
+	]
+
+	for (const model of models) {
+		const modes = getAvailableInputModes(model)
+		for (const inputMode of VIDEO_REFERENCE_MODE_ORDER) {
+			if (!modes.includes(inputMode)) continue
+			const modeConfig = getInputModeConfig(model, inputMode)
+			if (!modeConfig?.supported_fields?.includes("reference_videos")) continue
+
+			const initialReferenceVideos: VideoReferenceAssetInfo[] = [
+				{
+					path: "__quick_edit_video__",
+					src: "__quick_edit_video__",
+					fileName: "",
+					assetType: "video",
+				},
+			]
+			const limits = resolveReferenceAssetLimits(modeConfig, initialReferenceVideos)
+			if (validateReferenceAssetsByLimits(modeConfig, initialReferenceVideos).length > 0) {
+				continue
+			}
+
+			return {
+				model,
+				inputMode,
+				task: modeConfig.task ?? (inputMode === "video_edit" ? "edit" : "generate"),
+				maxReferenceVideos: limits.reference_videos.max,
+			}
+		}
+	}
+
+	return null
+}
+
 /** 与 `getMaxFrameCount` / UI 槽位一致：无下发或空数组时默认开放首尾帧 */
 function getEffectiveFrameRoles(
 	modeConfig: VideoInputModeConfig | undefined,

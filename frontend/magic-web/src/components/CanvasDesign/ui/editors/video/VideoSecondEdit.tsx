@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEventListener, useLatest } from "ahooks"
 import { LoaderCircle, RotateCcw, SquarePen } from "lucide-react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type { Canvas } from "../../../runtime/core/Canvas"
-import type { VideoElement } from "../../../runtime/document/types"
+import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
 import { useElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
@@ -17,6 +18,9 @@ import type { GenerateVideoRequest } from "../../../public/magic-types"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { getActiveContent } from "../../../runtime/document/elementContent"
 import { useIsMediaReplacing } from "../../../app/hooks/canvas"
+import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
+import { isEditorInteractiveKeyboardTarget } from "../keyboard"
+import { resolveVideoReferenceVideoModel } from "./model-config/video-editor-config.model"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -64,15 +68,23 @@ async function waitForPendingVideoGenerationResources(
 export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement } = props
 	const { canvas } = useCanvas()
-	const { methods, getCachedVideoPointsEstimate, getVideoPointsEstimate } = useMagic()
+	const { methods, videoModelList, getCachedVideoPointsEstimate, getVideoPointsEstimate } =
+		useMagic()
 	const { t } = useCanvasDesignI18n()
-	const [isEditing, setIsEditing] = useState(false)
+	const { selectedElements } = useCanvasUI()
+	const [editingMode, setEditingMode] = useState<"quick-edit" | "re-edit" | null>(null)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
 	const isReplacing = useIsMediaReplacing(videoElement.id)
+	const isMediaResourcePreviewOpen = props.isMediaResourcePreviewOpen ?? false
 	const videoContent = getActiveContent(videoElement)
 	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
 	const confirmVideoGeneration = useVideoPointsConfirm()
+	const quickEditModel = resolveVideoReferenceVideoModel(
+		videoModelList,
+		savedGenerateVideoRequest?.model_id,
+	)
+	const canQuickEdit = Boolean(videoContent?.src && quickEditModel)
 
 	const handleStartRegenerate = useCallback(() => {
 		if (!canvas || !savedGenerateVideoRequest) return
@@ -81,8 +93,39 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		if (inst instanceof VideoElementClass) {
 			inst.clearTempGenerateVideoRequest()
 		}
-		setIsEditing(true)
+		setEditingMode("re-edit")
 	}, [canvas, savedGenerateVideoRequest, videoElement.id])
+
+	const handleStartQuickEdit = useCallback(() => {
+		if (!canvas || !canQuickEdit) return
+		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
+		setEditingMode("quick-edit")
+	}, [canQuickEdit, canvas, videoElement.id])
+
+	const isEditingRef = useLatest(editingMode !== null)
+	const selectedElementsRef = useLatest(selectedElements)
+	const handleStartQuickEditRef = useLatest(handleStartQuickEdit)
+
+	useEventListener(
+		"keydown",
+		(event: KeyboardEvent) => {
+			if (isEditingRef.current || isReplacing || isMediaResourcePreviewOpen || !canQuickEdit)
+				return
+			if (
+				!selectedElementsRef.current.some(
+					(element) =>
+						element?.type === ElementTypeEnum.Video && element.id === videoElement.id,
+				)
+			) {
+				return
+			}
+			if (isEditorInteractiveKeyboardTarget(event.target)) return
+			if (event.key !== "Tab" || event.shiftKey) return
+			event.preventDefault()
+			handleStartQuickEditRef.current()
+		},
+		{ target: window },
+	)
 
 	const handleGenerateAgain = useCallback(async () => {
 		const generateVideoRequest = savedGenerateVideoRequest
@@ -171,7 +214,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
 
 	useEffect(() => {
-		if (isReplacing) setIsEditing(false)
+		if (isReplacing) setEditingMode(null)
 	}, [isReplacing])
 
 	const resultActionSection = useMemo(
@@ -180,28 +223,46 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			elementId: videoElement.id,
 			order: 10,
 			group: "result-actions",
-			visible: !isEditing && !isReplacing && canRestore,
+			visible:
+				!editingMode &&
+				!isReplacing &&
+				!isMediaResourcePreviewOpen &&
+				(canRestore || canQuickEdit),
 			items: [
-				{
-					id: "re-edit",
-					group: "edit",
-					icon: <SquarePen size={14} />,
-					label: t("videoEditor.reEditFromSaved", "重新编辑"),
-					onClick: handleStartRegenerate,
-				},
-				{
-					id: "generate-again",
-					group: "generation",
-					icon: generateAgainBusy ? (
-						<LoaderCircle size={14} className="animate-spin" />
-					) : (
-						<RotateCcw size={14} />
-					),
-					label: t("videoEditor.generateAgain", "再次生成"),
-					disabled: generateAgainBusy,
-					loading: generateAgainBusy,
-					onClick: handleGenerateAgain,
-				},
+				canQuickEdit
+					? {
+							id: "quick-edit",
+							group: "quick-edit",
+							icon: <SquarePen size={14} />,
+							label: t("videoEditor.quickEdit", "快捷编辑"),
+							shortcut: "Tab",
+							onClick: handleStartQuickEdit,
+						}
+					: null,
+				canRestore
+					? {
+							id: "re-edit",
+							group: "edit",
+							icon: <SquarePen size={14} />,
+							label: t("videoEditor.reEditFromSaved", "重新编辑"),
+							onClick: handleStartRegenerate,
+						}
+					: null,
+				canRestore
+					? {
+							id: "generate-again",
+							group: "generation",
+							icon: generateAgainBusy ? (
+								<LoaderCircle size={14} className="animate-spin" />
+							) : (
+								<RotateCcw size={14} />
+							),
+							label: t("videoEditor.generateAgain", "再次生成"),
+							disabled: generateAgainBusy,
+							loading: generateAgainBusy,
+							onClick: handleGenerateAgain,
+						}
+					: null,
 			],
 		}),
 		[
@@ -209,8 +270,11 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			generateAgainBusy,
 			handleGenerateAgain,
 			handleStartRegenerate,
-			isEditing,
+			editingMode,
+			canQuickEdit,
 			isReplacing,
+			handleStartQuickEdit,
+			isMediaResourcePreviewOpen,
 			t,
 			videoElement.id,
 		],
@@ -219,22 +283,18 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 
 	if (isReplacing) return null
 
-	if (!isEditing) {
-		if (!canRestore) {
-			return null
-		}
-		return null
-	}
+	if (!editingMode) return null
 
 	return (
 		<VideoGenerateEditorRender
-			key={`${videoElement.id}-from-result`}
+			key={`${videoElement.id}-from-result-${editingMode}`}
 			videoElement={videoElement}
 			autoFocus
 			autoFocusAtDocumentEnd
-			restoreOnMount="originalRequestOnly"
-			submitTarget="current-content"
+			restoreOnMount={editingMode === "quick-edit" ? "quickEdit" : "originalRequestOnly"}
+			submitTarget={editingMode === "quick-edit" ? "new-element" : "current-content"}
 			syncElementSize={false}
+			onGenerateSubmitSucceeded={() => setEditingMode(null)}
 			onPreviewMediaResource={props.onPreviewMediaResource}
 			isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
 		/>

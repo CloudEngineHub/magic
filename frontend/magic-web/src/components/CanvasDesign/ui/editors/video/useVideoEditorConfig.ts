@@ -19,7 +19,7 @@ import {
 	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
 import { useFileInput } from "../message/useFileInput"
-import { removeMentionFromString } from "../message/tiptap/contentUtils"
+import { removeMentionFromString, appendMentionToString } from "../message/tiptap/contentUtils"
 import {
 	resolvePromptPlaceholderTokenConfig,
 	type PromptPlaceholderTokenConfig,
@@ -69,6 +69,7 @@ import {
 	resolveSelectableInputModeForAvailableModes,
 	resolveInputSubTabForAvailableTabs,
 	resolveReferenceAssetType,
+	resolveVideoReferenceVideoModel,
 } from "./model-config/video-editor-config.model"
 import type {
 	LinkedFrameBinding,
@@ -236,6 +237,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		startSlot: number
 	} | null>(null)
 	const modeDraftCacheRef = useRef<Partial<Record<VideoInputMode, VideoModeInputDraft>>>({})
+	const restoreModeRef = useRef<"normal" | "quickEdit">("normal")
 
 	const selectedModel = useMemo(() => {
 		return videoModelList.find((model) => model.model_id === selectedModelId)
@@ -1622,15 +1624,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 		isRestoringRef.current = true
 		try {
+			const isQuickEdit =
+				restoreOnMount === "quickEdit" || restoreModeRef.current === "quickEdit"
 			const fromElementDrafts =
-				restoreOnMount === "originalRequestOnly"
+				isQuickEdit || restoreOnMount === "originalRequestOnly"
 					? undefined
 					: elementInstance.getModeInputDrafts()
 			modeDraftCacheRef.current = cloneModeDraftCache(
 				(fromElementDrafts ?? {}) as Partial<Record<VideoInputMode, VideoModeInputDraft>>,
 			)
 			const tempRequest =
-				restoreOnMount === "originalRequestOnly"
+				isQuickEdit || restoreOnMount === "originalRequestOnly"
 					? undefined
 					: elementInstance.getTempGenerateVideoRequest()
 			const currentRequest = savedRequest
@@ -1646,23 +1650,44 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
 				DefaultGenerateVideoConfig | undefined
+			const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
+			const quickEditModel = isQuickEdit
+				? resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)
+				: null
+			if (isQuickEdit && !quickEditModel) return
 			const config = requestToRestore || defaultConfig
 			const modelId =
-				config?.model_id &&
+				quickEditModel?.model.model_id ||
+				(config?.model_id &&
 				videoModelList.some((model) => model.model_id === config.model_id)
 					? config.model_id
-					: videoModelList[0]?.model_id
+					: videoModelList[0]?.model_id)
 			const fallbackModel =
 				videoModelList.find((model) => model.model_id === modelId) || videoModelList[0]
 
 			if (modelId) {
 				setSelectedModelId(modelId)
 			}
-			const restoredInputMode = resolveInputModeFromRequest(requestToRestore, fallbackModel)
+			const restoredInputMode =
+				quickEditModel?.inputMode ??
+				resolveInputModeFromRequest(requestToRestore, fallbackModel)
 			setSelectedInputMode(restoredInputMode)
 			const restoredModeConfig = getInputModeConfig(fallbackModel, restoredInputMode)
+			const currentVideoPath = getActiveContent(videoElement)?.src
+			const currentVideoFileName = currentVideoPath
+				? getCanvasResourceFileName(currentVideoPath) || currentVideoPath
+				: ""
 			const restoredReferenceInfos = clampReferenceAssetsToLimits(
-				buildReferenceAssetInfos(requestToRestore?.inputs),
+				isQuickEdit && currentVideoPath
+					? [
+							{
+								path: currentVideoPath,
+								src: currentVideoPath,
+								fileName: currentVideoFileName,
+								assetType: "video" as const,
+							},
+						]
+					: buildReferenceAssetInfos(requestToRestore?.inputs),
 				restoredModeConfig,
 			)
 			const restoredVariantCode = resolveReferenceAssetLimits(
@@ -1674,7 +1699,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			)
 			const resolvedSelection = resolveVideoGenerationSelection(
 				fallbackModel,
-				config?.generation,
+				isQuickEdit ? undefined : config?.generation,
 				mergeVideoGenerationConstraints(
 					restoredModeConfig?.generation_constraints,
 					restoredVariantConfig?.generation_constraints,
@@ -1689,7 +1714,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			)
 			const fallbackDurations = buildVideoDurationOptions(fallbackModel, fallbackConstraints)
 			const fallbackGen = fallbackModel?.video_generation_config?.generation
-			const fromTempDuration = requestToRestore?.generation?.duration_seconds
+			const fromTempDuration = isQuickEdit
+				? undefined
+				: requestToRestore?.generation?.duration_seconds
 			const resolvedDuration =
 				fromTempDuration != null && fallbackDurations.includes(fromTempDuration)
 					? fromTempDuration
@@ -1701,7 +1728,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				fallbackGen.compression_quality_options?.length
 					? fallbackGen.compression_quality_options.filter(Boolean)
 					: []
-			const fromTempQuality = requestToRestore?.generation?.compression_quality
+			const fromTempQuality = isQuickEdit
+				? undefined
+				: requestToRestore?.generation?.compression_quality
 			setSelectedCompressionQuality(
 				fromTempQuality && qualityOpts.includes(fromTempQuality)
 					? fromTempQuality
@@ -1710,22 +1739,26 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (!modeDraftCacheRef.current[restoredInputMode]) {
 				const draftFromRequest = buildModeDraftFromRequest(
 					restoredInputMode,
-					requestToRestore,
+					isQuickEdit ? undefined : requestToRestore,
 					fallbackModel,
 				)
-				const draftFromRequestReferenceInfos = draftFromRequest.referenceAssetInfos ?? []
+				const draftFromRequestReferenceInfos = isQuickEdit
+					? restoredReferenceInfos
+					: (draftFromRequest.referenceAssetInfos ?? [])
 				modeDraftCacheRef.current = mergeCurrentUiIntoModeDraftCache(
 					modeDraftCacheRef.current,
 					restoredInputMode,
-					draftFromRequest.prompt ?? "",
-					resolveModeDraftInputTab(
-						restoredInputMode,
-						fallbackModel,
-						draftFromRequest.activeInputTab,
-					),
-					draftFromRequest.frameImageInfos ?? [],
+					isQuickEdit ? "" : (draftFromRequest.prompt ?? ""),
+					isQuickEdit
+						? "reference"
+						: resolveModeDraftInputTab(
+								restoredInputMode,
+								fallbackModel,
+								draftFromRequest.activeInputTab,
+							),
+					isQuickEdit ? [] : (draftFromRequest.frameImageInfos ?? []),
 					draftFromRequestReferenceInfos,
-					draftFromRequest.linkedFrameBindings ?? [],
+					isQuickEdit ? [] : (draftFromRequest.linkedFrameBindings ?? []),
 				)
 			}
 			const restoredModeDraft = getModeDraftForView(
@@ -1733,16 +1766,27 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				fallbackModel,
 				modeDraftCacheRef.current,
 			)
-			const restoredReferenceInfosForDraft = restoredModeDraft.referenceAssetInfos ?? []
-			const restoredFrameInfosForDraft = restoredModeDraft.frameImageInfos ?? []
-			const restoredLinkedFrameBindings = restoredModeDraft.linkedFrameBindings ?? []
-			const restoredActiveInputTabForDraft = resolveModeDraftInputTab(
-				restoredInputMode,
-				fallbackModel,
-				restoredModeDraft.activeInputTab,
-			)
-			const rawRestoredPrompt =
-				requestToRestore?.prompt && requestToRestore.prompt.trim().length > 0
+			const restoredReferenceInfosForDraft = isQuickEdit
+				? restoredReferenceInfos
+				: (restoredModeDraft.referenceAssetInfos ?? [])
+			const restoredFrameInfosForDraft = isQuickEdit
+				? []
+				: (restoredModeDraft.frameImageInfos ?? [])
+			const restoredLinkedFrameBindings = isQuickEdit
+				? []
+				: (restoredModeDraft.linkedFrameBindings ?? [])
+			const restoredActiveInputTabForDraft = isQuickEdit
+				? "reference"
+				: resolveModeDraftInputTab(
+						restoredInputMode,
+						fallbackModel,
+						restoredModeDraft.activeInputTab,
+					)
+			const rawRestoredPrompt = isQuickEdit
+				? currentVideoPath
+					? appendMentionToString("", currentVideoPath, currentVideoFileName)
+					: ""
+				: requestToRestore?.prompt && requestToRestore.prompt.trim().length > 0
 					? requestToRestore.prompt
 					: (restoredModeDraft.prompt ?? "")
 			const promptToRestore = decodeVideoPromptPlaceholdersToMentions(
@@ -1789,7 +1833,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		getModeDraftForView,
 		applyBindingStateFromPromptAndReferences,
 		videoElement.id,
+		videoElement,
 		savedRequest,
+		selectedModelId,
 		videoModelList,
 		resolveModeDraftInputTab,
 		promptPlaceholderTokenConfig,
@@ -1808,8 +1854,32 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		lastPersistedDraftRef.current = ""
 		modeDraftCacheRef.current = {}
 		hasRestoredRef.current = false
+		restoreModeRef.current = "normal"
 		restoreConfig()
 	}, [canvas, videoElement.id, savedRequest, cancelPendingDraftPersistence, restoreConfig])
+
+	const restoreQuickEditConfigToUi = useCallback(() => {
+		if (!canvas || !getActiveContent(videoElement)?.src) return
+		const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
+		if (!resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)) return
+		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
+		if (!(elementInstance instanceof VideoElementClass)) return
+
+		cancelPendingDraftPersistence()
+		elementInstance.clearTempGenerateVideoRequest()
+		lastPersistedDraftRef.current = ""
+		modeDraftCacheRef.current = {}
+		hasRestoredRef.current = false
+		restoreModeRef.current = "quickEdit"
+		restoreConfig()
+	}, [
+		canvas,
+		cancelPendingDraftPersistence,
+		restoreConfig,
+		selectedModelId,
+		videoElement,
+		videoModelList,
+	])
 
 	useEffect(() => {
 		if (
@@ -1919,6 +1989,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			saveDraftRequest,
 			cancelPendingDraftPersistence,
 			restoreOriginalGenerateVideoRequestToUi,
+			restoreQuickEditConfigToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
 			handleFileChange,
@@ -1947,6 +2018,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			saveDraftRequest,
 			cancelPendingDraftPersistence,
 			restoreOriginalGenerateVideoRequestToUi,
+			restoreQuickEditConfigToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
 			handleFileChange,
