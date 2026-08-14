@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 from agentlang.config.config import config
 from agentlang.logger import get_logger
+from app.tools.video_generation_utils.provider_asset_uri import is_provider_asset_uri
 from app.tools.visual_understanding_utils.image_conversion_utils import (
     convert_unsupported_format_to_jpeg,
     local_file_to_base64,
@@ -41,6 +42,9 @@ class VideoInputPayloadBuilder:
 
     async def build_image_input(self, source_path: str) -> Dict[str, Any]:
         """将单个本地图片转换为 magic-service 的 Base64 输入结构。"""
+        if is_provider_asset_uri(source_path):
+            # 供应商素材库中的 URI 不属于 workspace 文件，必须原样交给 magic-service。
+            return {"uri": str(source_path).strip()}
         resolved_path = self._resolve_path(source_path)
         if not resolved_path.is_file():
             raise FileNotFoundError(f"视频参考图片不存在: {source_path}")

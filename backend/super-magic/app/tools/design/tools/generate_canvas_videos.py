@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
-from math import isfinite
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Literal, Optional
 
@@ -25,6 +25,10 @@ from app.i18n import i18n
 from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.core import BaseToolParams, tool
+from app.tools.design.service.local_video_result_sync_service import (
+    LocalVideoResultSyncRequest,
+    LocalVideoResultSyncService,
+)
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
     ElementDetail,
@@ -33,14 +37,10 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskPlaceholderInfo,
 )
 from app.tools.media_generator.factory import get_video_generator
-from app.tools.design.service.local_video_result_sync_service import (
-    LocalVideoResultSyncRequest,
-    LocalVideoResultSyncService,
-)
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
-from app.tools.video_generation_utils import VideoInputPayloadBuilder
-from app.utils.async_file_utils import async_exists, async_is_file, async_mkdir
+from app.tools.video_generation_utils import VideoInputPayloadBuilder, is_provider_asset_uri
+from app.utils.async_file_utils import async_is_file, async_mkdir
 from app.utils.video_logger import get_video_logger
 
 logger = get_video_logger(__name__)
@@ -814,6 +814,10 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         if not path or path.startswith(("http://", "https://")):
             return path
 
+        if is_provider_asset_uri(path):
+            # 供应商素材 URI 不对应本地文件，保留原值供后端 provider 解析。
+            return str(path).strip()
+
         normalized = str(path).strip().replace("\\", "/")
         while normalized.startswith("./"):
             normalized = normalized[2:]
@@ -1202,6 +1206,9 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         path = (path or "").strip()
         if not path:
             raise ValueError("参考素材路径不能为空")
+        if is_provider_asset_uri(path):
+            # provider 资产不是 workspace 文件，不能附加项目路径或转换为文件 URL。
+            return path
         if path.startswith(("http://", "https://")):
             raise ValueError(f"后台托管的视频任务暂不支持外部 URL 参考素材: {path}")
 

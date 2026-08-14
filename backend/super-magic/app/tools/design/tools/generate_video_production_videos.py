@@ -28,6 +28,7 @@ from app.tools.design.video_production.service.media_generation_service import (
     PreparedMediaSource,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+from app.tools.video_generation_utils import is_provider_asset_uri
 
 SdkSnippetTimeoutRegistry.register("generate_video_production_videos", min_timeout=600)
 
@@ -136,24 +137,27 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
                     *[
                         MediaSourceInput(path=path, media_type=MediaSourceType.IMAGE)
                         for path in task.reference_image_paths
+                        if not is_provider_asset_uri(path)
                     ],
                     *[
                         MediaSourceInput(path=path, media_type=MediaSourceType.VIDEO)
                         for path in task.reference_video_paths
+                        if not is_provider_asset_uri(path)
                     ],
                     *[
                         MediaSourceInput(path=path, media_type=MediaSourceType.AUDIO)
                         for path in task.reference_audio_paths
+                        if not is_provider_asset_uri(path)
                     ],
                 ]
-                if task.frame_start_path:
+                if task.frame_start_path and not is_provider_asset_uri(task.frame_start_path):
                     source_inputs.append(
                         MediaSourceInput(
                             path=task.frame_start_path,
                             media_type=MediaSourceType.IMAGE,
                         )
                     )
-                if task.frame_end_path:
+                if task.frame_end_path and not is_provider_asset_uri(task.frame_end_path):
                     source_inputs.append(
                         MediaSourceInput(
                             path=task.frame_end_path,
@@ -201,26 +205,32 @@ class GenerateVideoProductionVideos(BaseVideoProductionMediaTool[GenerateVideoPr
         for source_input, prepared_source in zip(source_inputs, prepared_sources, strict=True):
             paths_by_key[(source_input.media_type, source_input.path)] = prepared_source.generation_path
 
+        def resolve_path(media_type: MediaSourceType, path: str) -> str:
+            """将本地素材替换为准备后的路径，供应商资产 URI 保持不变。"""
+            if is_provider_asset_uri(path):
+                return path
+            return paths_by_key[(media_type, path)]
+
         values = task.model_dump(exclude={"source_element_ids"})
         values["reference_image_paths"] = [
-            paths_by_key[(MediaSourceType.IMAGE, path)]
+            resolve_path(MediaSourceType.IMAGE, path)
             for path in task.reference_image_paths
         ]
         values["reference_video_paths"] = [
-            paths_by_key[(MediaSourceType.VIDEO, path)]
+            resolve_path(MediaSourceType.VIDEO, path)
             for path in task.reference_video_paths
         ]
         values["reference_audio_paths"] = [
-            paths_by_key[(MediaSourceType.AUDIO, path)]
+            resolve_path(MediaSourceType.AUDIO, path)
             for path in task.reference_audio_paths
         ]
         values["frame_start_path"] = (
-            paths_by_key[(MediaSourceType.IMAGE, task.frame_start_path)]
+            resolve_path(MediaSourceType.IMAGE, task.frame_start_path)
             if task.frame_start_path
             else ""
         )
         values["frame_end_path"] = (
-            paths_by_key[(MediaSourceType.IMAGE, task.frame_end_path)]
+            resolve_path(MediaSourceType.IMAGE, task.frame_end_path)
             if task.frame_end_path
             else ""
         )

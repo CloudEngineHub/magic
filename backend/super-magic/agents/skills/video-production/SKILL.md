@@ -145,6 +145,7 @@ Apply one versioning contract to generated images and videos:
 - When the user submits multiple compatible assets for one result, use all of them by default when they are relevant to generation. This does not mean that every referenced asset should become a direct Canvas connection.
 - Exclude a submitted asset only when the user explicitly asks to ignore it or its media type cannot be used by the current generation tool; if relevance is unclear, ask before omitting it.
 - Before each generation call, verify that every used asset appears in the appropriate reference path array, then separately verify that `source_element_ids` contains only the intended direct business predecessors.
+- Only Seedance-series video models currently support provider-managed assets. When the current model is a Seedance model, a reference array may contain a URI such as `asset://virtual-human-asset-id`. Keep it as generation input, bind it with the corresponding prompt token, and do not import it into Canvas or add a synthetic Element ID for it. For other video models, use a workspace-relative media path.
 - When updating an existing Element, omit `source_element_ids` to preserve its current upstream relations.
 - Pass `source_element_ids=[]` only when the user intentionally removes managed upstream relations.
 - Do not manage relation IDs or placement values.
@@ -470,6 +471,8 @@ For every requested `shot_id`, verify that `result.content` reports a successful
 
 Each task generates one shot video. First inspect the current `<media_model_info>` and use the model's exact mode name, task, duration, resolution, and aspect-ratio values. Bind reference tokens by array order: `reference_image_paths[0]` is `[image1]`, `reference_video_paths[0]` is `[video1]`, and `reference_audio_paths[0]` is `[audio1]`.
 
+Reference arrays accept workspace-relative media paths. Only Seedance-series video models currently support provider-managed asset URIs such as `asset://virtual-human-asset-id`; do not use this format with other video models. A provider asset URI is only a generation reference: it is not a Canvas Element, does not need to be imported, and must not be added to `source_element_ids`.
+
 ### Detailed use case: animate a confirmed first frame
 
 Use `image_reference` when the first frame is a visual reference and the prompt should describe motion while preserving the image's subject and style. Do not use an invented mode such as `first_frame`; if the model requires start/end keyframes, use the keyframe example below instead.
@@ -493,6 +496,26 @@ result = tool.call("generate_video_production_videos", {
         "source_element_ids": [
             "element-747400000000000006"
         ]
+    }]
+})
+print(result.content)
+```
+
+### Detailed use case: use a virtual human asset
+
+```python
+result = tool.call("generate_video_production_videos", {
+    "project_path": "virtual-human-product-video",
+    "model_id": "model-from-media-model-info",
+    "tasks": [{
+        "name": "Virtual human product introduction",
+        "prompt": "The virtual human in [image1] faces the camera and introduces the product with natural hand gestures, stable framing, clear facial expression, and no added text.",
+        "aspect_ratio": "16:9",
+        "input_mode": "image_reference",
+        "task": "generate",
+        "reference_image_paths": ["asset://virtual-human-asset-id"],
+        "duration_seconds": 5,
+        "resolution": "720p"
     }]
 })
 print(result.content)

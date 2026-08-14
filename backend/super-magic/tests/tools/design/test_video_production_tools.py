@@ -22,10 +22,10 @@ from app.tools.design.domain.canvas_document import (
     MagicProjectConfigV3,
 )
 from app.tools.design.domain.content import ElementContent
-from app.tools.design.domain.services.canvas_query_service import CanvasQueryService
 from app.tools.design.domain.services.canvas_query_service import (
     DEFAULT_OVERVIEW_LIMIT,
     MAX_OVERVIEW_LIMIT,
+    CanvasQueryService,
 )
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.manager.canvas_manager_v3 import CanvasManagerV3, write_magic_project_js_v3
@@ -53,6 +53,10 @@ from app.tools.design.tools.generate_video_production_videos import (
     GenerateVideoProductionVideosParams,
     VideoProductionVideoTask,
 )
+from app.tools.design.tools.get_canvas_overview import (
+    GetCanvasOverview,
+    GetCanvasOverviewParams,
+)
 from app.tools.design.tools.import_canvas_assets import (
     ImportCanvasAssets,
     ImportCanvasAssetsParams,
@@ -62,10 +66,6 @@ from app.tools.design.tools.promote_canvas_content import (
     PromoteCanvasContentParams,
 )
 from app.tools.design.tools.query_canvas_elements import QueryCanvasElements, QueryCanvasElementsParams
-from app.tools.design.tools.get_canvas_overview import (
-    GetCanvasOverview,
-    GetCanvasOverviewParams,
-)
 from app.tools.design.tools.repair_video_production_connections import (
     ConnectionRepairTarget,
     RepairVideoProductionConnections,
@@ -121,6 +121,23 @@ def _v3_config(*elements: CanvasElementV3) -> MagicProjectConfigV3:
         name="视频制作模拟项目",
         canvas=CanvasDocumentV3(elements=list(elements)),
     )
+
+
+def test_video_production_task_preserves_provider_asset_uri_without_canvas_source():
+    """视频制作专用工具应直接透传供应商资产，不为其创建画布来源。"""
+    task = VideoProductionVideoTask(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像介绍",
+        reference_image_paths=["asset://virtual-human-asset-id"],
+    )
+
+    normalized = GenerateVideoProductionVideos._build_generation_task(
+        task,
+        source_inputs=[],
+        prepared_sources=[],
+    )
+
+    assert normalized.reference_image_paths == ["asset://virtual-human-asset-id"]
 
 
 def _legacy_config(version: str, name: str) -> MagicProjectConfig:

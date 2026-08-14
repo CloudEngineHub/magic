@@ -44,6 +44,16 @@ When using reference assets, bind them inside `prompt` by list order:
 
 Use these tokens next to the subject, action, or source media they control. Do not put file paths in `prompt`; file paths still belong in the reference path arrays.
 
+## Provider-managed reference assets
+
+Only Seedance-series video models currently support provider-managed assets. When using a Seedance model, a reference array may contain its URI directly, for example `asset://virtual-human-asset-id`. Use this for assets such as a virtual human portrait when the user provides or selects the provider asset ID. For other video models, use a workspace-relative media path.
+
+- Keep the URI in the appropriate reference array, such as `reference_image_paths`.
+- Still bind it by array order in the prompt, for example `[image1]`.
+- Do not try to read the URI as a workspace file, copy it into the project, or create a Canvas Element only for the URI.
+- Do not treat an external asset URI as a workspace file or as a Canvas asset node.
+- Use this form only when the current model context supports the asset; otherwise ask the user for a workspace file or another supported input.
+
 ## Recommended Prompt Content
 Treat the prompt as a concise creative brief, not a list of keywords. Use this order and include only details supported by the user's request:
 
@@ -97,6 +107,27 @@ result = tool.call('generate_canvas_videos', {
     }]
 })
 print(result)
+```
+
+## Virtual human asset example
+
+```python
+from sdk.tool import tool
+
+result = tool.call('generate_canvas_videos', {
+    "project_path": "virtual-human-product-video",
+    "model_id": "model-from-media-model-info",
+    "action": "estimate_points",
+    "tasks": [{
+        "name": "Virtual human product introduction",
+        "prompt": "The virtual human in [image1] faces the camera and introduces the product with natural hand gestures, stable framing, clear facial expression, and no added text.",
+        "reference_image_paths": ["asset://virtual-human-asset-id"],
+        "aspect_ratio": "16:9",
+        "resolution": "720p",
+        "duration_seconds": 5
+    }]
+})
+print(result.content)
 ```
 
 ## Video Edit Mode Example

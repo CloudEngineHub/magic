@@ -19,6 +19,7 @@ from app.tools.design.tools.generate_canvas_videos import (
     VideoTaskSpec,
 )
 from app.tools.media_generator.video_base import VideoGenerationResponse
+from app.tools.video_generation_utils import VideoInputPayloadBuilder
 
 
 class _FakeMagicServiceResponse:
@@ -934,6 +935,39 @@ def test_generate_canvas_videos_request_infers_omni_reference_for_references():
         "reference_audios": [],
         "frames": [],
     }
+
+
+def test_generate_canvas_videos_preserves_provider_asset_uri():
+    """供应商素材 URI 应保持原值，不应被拼接为项目文件路径。"""
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="虚拟人像 [image1] 面向镜头介绍产品。",
+        name="虚拟人像介绍",
+        reference_image_paths=["asset://virtual-human-asset-id"],
+    )
+
+    payload = tool._build_design_video_request(
+        task=task,
+        project_id="123",
+        video_id="video-test-asset",
+        model_id="mock-video-model",
+        file_dir="/virtual-human-product-video/videos/",
+        relative_project_path="virtual-human-product-video",
+    )
+
+    assert payload["inputs"]["reference_images"] == [
+        {"uri": "asset://virtual-human-asset-id"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_video_input_payload_builder_preserves_provider_asset_uri(tmp_path):
+    """启用 Base64 参考图转换时也不能把供应商 URI 当成本地文件。"""
+    builder = VideoInputPayloadBuilder(tmp_path)
+
+    result = await builder.build_image_input("asset://virtual-human-asset-id")
+
+    assert result == {"uri": "asset://virtual-human-asset-id"}
 
 
 @pytest.mark.asyncio
