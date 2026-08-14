@@ -22,6 +22,7 @@ from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.path_manager import PathManager
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.entity.tool.tool_result_types import ImageToolResult
 from app.i18n import i18n
@@ -483,7 +484,7 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
         save_path = await resolve_safe_save_path(save_dir, filename_stem, extension)
 
         async with self._file_versioning_context(
-            tool_context, save_path, update_timestamp=False
+            tool_context, save_path, track_in_horizon=False
         ) as file_existed:
             await async_copy2(image.temp_file_path, save_path)
 
@@ -542,10 +543,20 @@ class GenerateImages(AbstractFileTool[GenerateImagesParams], WorkspaceTool[Gener
             logger.error(f"验证图片路径失败 {first_image_path}: {e}")
             return None
 
-        file_name = os.path.basename(first_image_path)
+        try:
+            relative_file_path = safe_path.relative_to(self.base_dir).as_posix()
+        except ValueError:
+            logger.error(f"生成图片不在当前工作区内: {safe_path}")
+            return None
+
         return ToolDetail(
             type=DisplayType.IMAGE,
-            data=FileContent(file_name=file_name, content=file_name),
+            data=FileContent(
+                file_name=safe_path.name,
+                content="",
+                relative_file_path=relative_file_path,
+                storage_type=AttachmentStorageType.WORKSPACE,
+            ),
         )
 
     def _get_remark_content(

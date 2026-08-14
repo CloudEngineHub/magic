@@ -20,3 +20,4 @@ class BrowserPage:
     expires_at: datetime | None = None
     resource_warning: str | None = None
     readiness: PageReadiness = PageReadiness.UNKNOWN
+    redirect_chain: tuple[str, ...] = ()

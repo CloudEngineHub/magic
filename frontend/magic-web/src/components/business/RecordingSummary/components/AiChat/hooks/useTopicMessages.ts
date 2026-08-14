@@ -12,6 +12,11 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { SuperMagicApi } from "@/apis"
 
+/**
+ * Lightweight topic-message hook for live recording float panels only.
+ * Recording detail (`projectDetailMode`) uses the main-site useTopicMessages instead;
+ * do not expand this fork to close detail-page hydration gaps.
+ */
 interface UseTopicMessagesParams {
 	selectedTopic: Topic | null
 	selectedWorkspace: { id: string } | null
@@ -22,6 +27,8 @@ interface UseTopicMessagesReturn {
 	messages: any[]
 	showLoading: boolean
 	isShowLoadingInit: boolean
+	/** True until the first history pull for the active topic settles. */
+	isMessagesInitialLoading: boolean
 	handlePullMoreMessage: (topicInfo: Topic | null, callback?: () => void) => void
 	updateTopicMessages: (options?: { writeIntent?: MessageWriteIntent }) => void
 }
@@ -50,7 +57,8 @@ const FULL_TOPIC_SYNC_MESSAGE_COUNT = 100
 
 export function useTopicMessages({
 	selectedTopic,
-	selectedWorkspace,
+	// Workspace may be null for ungrouped recordings; do not gate hydration on it.
+	selectedWorkspace: _selectedWorkspace,
 	checkNowDebounced,
 }: UseTopicMessagesParams): UseTopicMessagesReturn {
 	const topicNotHaveMoreMessageMap = useRef<Record<string, boolean>>({})
@@ -61,6 +69,13 @@ export function useTopicMessages({
 	selectedTopicRef.current = selectedTopic
 	const [showLoading, setShowLoading] = useState(false)
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
+	const [isMessagesInitialLoading, setIsMessagesInitialLoading] = useState(() =>
+		Boolean(
+			selectedTopic?.id &&
+			selectedTopic?.chat_topic_id &&
+			selectedTopic?.chat_conversation_id,
+		),
+	)
 
 	// Clean up on unmount
 	useEffect(() => {
@@ -242,10 +257,14 @@ export function useTopicMessages({
 
 	const updateTopicMessages = useMemoizedFn(
 		({ writeIntent = "replace" }: { writeIntent?: MessageWriteIntent } = {}) => {
-			if (selectedTopic?.id && selectedWorkspace?.id) {
+			if (
+				selectedTopic?.id &&
+				selectedTopic?.chat_topic_id &&
+				selectedTopic?.chat_conversation_id
+			) {
 				pullMessage({
-					conversation_id: selectedTopic?.chat_conversation_id,
-					chat_topic_id: selectedTopic?.chat_topic_id,
+					conversation_id: selectedTopic.chat_conversation_id,
+					chat_topic_id: selectedTopic.chat_topic_id,
 					page_token: "",
 					order: "desc",
 					limit: FULL_TOPIC_SYNC_MESSAGE_COUNT,
@@ -258,11 +277,11 @@ export function useTopicMessages({
 
 	const handlePullMoreMessage = useMemoizedFn(
 		(topicInfo: Topic | null, callback?: () => void) => {
-			if (selectedWorkspace?.id && topicInfo) {
+			if (topicInfo?.chat_topic_id && topicInfo?.chat_conversation_id) {
 				pullMessage({
 					conversation_id: topicInfo.chat_conversation_id,
 					chat_topic_id: topicInfo.chat_topic_id,
-					page_token: topicPageTokenMap.current[topicInfo?.chat_topic_id] || "",
+					page_token: topicPageTokenMap.current[topicInfo.chat_topic_id] || "",
 					order: "desc",
 					limit: 100,
 					updatePageToken: true,
@@ -298,13 +317,17 @@ export function useTopicMessages({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedTopic])
 
-	// Update messages when topic changes
+	// Update messages when topic changes (chat ids only; workspace may be null).
 	useEffect(() => {
 		const topicId = selectedTopic?.chat_topic_id
-		if (!selectedWorkspace?.id || !selectedTopic?.id || !topicId) {
+		const conversationId = selectedTopic?.chat_conversation_id
+		if (!selectedTopic?.id || !topicId || !conversationId) {
+			setIsMessagesInitialLoading(false)
 			superMagicStore.setActiveTopicId(null)
 			return
 		}
+
+		setIsMessagesInitialLoading(true)
 
 		// 与主 SuperMagic 页面保持同一激活顺序：先冻结 StreamState 投影，再切换
 		// active Topic，避免后台 chunk 在 User 历史写入前创建低 seq Assistant 卡。
@@ -314,7 +337,7 @@ export function useTopicMessages({
 		superMagicStore.setActiveTopicId(topicId)
 
 		void pullMessage({
-			conversation_id: selectedTopic.chat_conversation_id,
+			conversation_id: conversationId,
 			chat_topic_id: topicId,
 			page_token: "",
 			order: "desc",
@@ -348,6 +371,7 @@ export function useTopicMessages({
 			.finally(() => {
 				if (activationTopicSyncRef.current !== inFlightSync) return
 				activationTopicSyncRef.current = null
+				setIsMessagesInitialLoading(false)
 				if (getTopicRecoveryStatus(topicId).hasScheduled) resumeTopicRecovery(topicId)
 			})
 
@@ -361,13 +385,12 @@ export function useTopicMessages({
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
-		selectedWorkspace?.id,
 	])
 
 	useEffect(() => {
 		const topicId = selectedTopic?.chat_topic_id
 		const conversationId = selectedTopic?.chat_conversation_id
-		if (!selectedWorkspace?.id || !topicId || !conversationId) return
+		if (!topicId || !conversationId) return
 
 		return registerStreamRecoveryOwner({
 			ownerToken: recoveryOwnerTokenRef.current,
@@ -389,7 +412,6 @@ export function useTopicMessages({
 		selectedTopic?.chat_conversation_id,
 		selectedTopic?.chat_topic_id,
 		selectedTopic?.id,
-		selectedWorkspace?.id,
 	])
 
 	// Handle message refresh after revoke
@@ -420,8 +442,9 @@ export function useTopicMessages({
 						(message) => message.role !== "user",
 					)
 					const lastMessage = topicMessages?.[topicMessages.length - 1]
+					// Assistant and tool nodes are keyed by the canonical super message identity.
 					const lastMessageNode = superMagicStore.getMessageNode(
-						lastMessageWithRole?.app_message_id,
+						lastMessageWithRole?.super_message_id,
 					)
 
 					const isLoading =
@@ -445,6 +468,7 @@ export function useTopicMessages({
 		messages,
 		showLoading,
 		isShowLoadingInit,
+		isMessagesInitialLoading,
 		handlePullMoreMessage,
 		updateTopicMessages,
 	}

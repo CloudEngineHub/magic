@@ -3,6 +3,12 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/lib/utils"
+import {
+	RECORDING_DETAIL_SUMMARY_MIN_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH,
+	RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH,
+	RECORDING_DETAIL_WORKBENCH_MIN_WIDTH,
+} from "./recording-detail-layout"
 
 export type RecordingDetailEmptyVariant =
 	| "pageLoading"
@@ -166,6 +172,14 @@ const TRANSCRIPT_SEGMENT_SKELETONS = [
 	{ bodyLines: ["w-[72%]"] },
 ] as const
 
+/** Four alternating message placeholders matching the compact chat loading state. */
+const CHAT_MESSAGE_SKELETONS = [
+	{ alignment: "end", bubbleWidth: "w-[78%]", lines: ["w-full"] },
+	{ alignment: "start", bubbleWidth: "w-[88%]", lines: ["w-full", "w-[82%]"] },
+	{ alignment: "end", bubbleWidth: "w-[68%]", lines: ["w-full", "w-[74%]"] },
+	{ alignment: "start", bubbleWidth: "w-[82%]", lines: ["w-full", "w-[68%]"] },
+] as const
+
 /** Skeleton placeholder aligned with the collapsed RecordingDetailAudioBar layout. */
 function RecordingDetailPlayerSkeleton() {
 	return (
@@ -247,20 +261,123 @@ function RecordingDetailRightPanelSkeleton() {
 	)
 }
 
-/** Dual-column skeleton with shimmer and fade-in while the detail data hook is loading. */
+/** Skeleton placeholder aligned with the desktop recording conversation rail. */
+export function RecordingDetailChatSkeleton() {
+	return (
+		<div
+			className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar"
+			data-testid="recording-detail-chat-skeleton"
+		>
+			<div
+				className="flex shrink-0 items-center justify-between px-4 py-3"
+				data-testid="recording-detail-chat-header-skeleton"
+			>
+				<div className="flex min-w-0 items-center gap-2">
+					<Skeleton className="size-5 shrink-0 rounded-sm" />
+					<Skeleton className="h-4 w-28 rounded-sm" />
+				</div>
+				<div className="flex items-center gap-2">
+					<Skeleton className="size-6 shrink-0 rounded-md" />
+					<Skeleton className="size-6 shrink-0 rounded-md" />
+					<Skeleton className="size-6 shrink-0 rounded-md" />
+				</div>
+			</div>
+			<div className="flex min-h-0 flex-1 flex-col gap-8 overflow-hidden px-4 py-6">
+				{CHAT_MESSAGE_SKELETONS.map((message, messageIndex) => (
+					<div
+						key={messageIndex}
+						data-testid="recording-detail-chat-message-skeleton"
+						className={cn(
+							"flex gap-2",
+							message.alignment === "end" ? "justify-end" : "justify-start",
+						)}
+					>
+						{message.alignment === "start" ? (
+							<Skeleton
+								className="size-7 shrink-0 rounded-full"
+								data-testid="recording-detail-chat-avatar-skeleton"
+							/>
+						) : null}
+						<div
+							className={cn(
+								"flex max-w-[88%] flex-col gap-2 rounded-2xl px-3 py-3",
+								message.bubbleWidth,
+								"bg-background/70",
+							)}
+						>
+							{message.lines.map((lineWidth, lineIndex) => (
+								<Skeleton
+									key={lineIndex}
+									className={cn("h-3 rounded-sm", lineWidth)}
+								/>
+							))}
+						</div>
+						{message.alignment === "end" ? (
+							<Skeleton
+								className="size-7 shrink-0 rounded-full"
+								data-testid="recording-detail-chat-avatar-skeleton"
+							/>
+						) : null}
+					</div>
+				))}
+			</div>
+			<div className="shrink-0 p-3">
+				<div
+					className="rounded-2xl border border-border/70 bg-background p-3"
+					data-testid="recording-detail-chat-composer-skeleton"
+				>
+					<div className="flex items-start gap-2">
+						<Skeleton className="size-7 shrink-0 rounded-lg" />
+						<div className="flex min-w-0 flex-1 flex-col gap-2 pt-0.5">
+							<Skeleton className="h-3 w-24 rounded-sm" />
+							<Skeleton className="h-3 w-[78%] rounded-sm" />
+							<Skeleton className="h-3 w-[58%] rounded-sm" />
+						</div>
+					</div>
+					<div className="mt-5 flex items-center justify-between gap-3">
+						<Skeleton
+							className="h-8 w-32 rounded-lg"
+							data-testid="recording-detail-chat-input-skeleton"
+						/>
+						<div className="flex items-center gap-2">
+							<Skeleton className="size-8 rounded-lg" />
+							<Skeleton className="size-8 rounded-lg" />
+							<Skeleton className="size-8 rounded-lg" />
+							<Skeleton
+								className="size-8 rounded-lg"
+								data-testid="recording-detail-chat-send-skeleton"
+							/>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	)
+}
+
+/** Three-column skeleton with shimmer and fade-in while the detail data hook is loading. */
 export function RecordingDetailPageSkeleton() {
 	return (
 		<div
-			className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)] gap-6 px-8 pb-8 duration-300 animate-in fade-in"
-			role="status"
-			aria-busy="true"
-			data-testid="recording-detail-page-skeleton"
+			className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin]"
+			data-testid="recording-detail-page-skeleton-scroll"
 		>
-			<div className="flex min-h-0 flex-col gap-4">
-				<RecordingDetailPlayerSkeleton />
-				<RecordingDetailTranscriptSkeleton />
+			<div
+				className="grid h-full min-h-0 w-full gap-6 px-8 pb-8 duration-300 animate-in fade-in"
+				style={{
+					minWidth: RECORDING_DETAIL_WORKBENCH_MIN_WIDTH,
+					gridTemplateColumns: `minmax(${RECORDING_DETAIL_TRANSCRIPT_MIN_WIDTH}px, ${RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH}px) minmax(${RECORDING_DETAIL_SUMMARY_MIN_WIDTH}px, 1fr)`,
+				}}
+				role="status"
+				aria-busy="true"
+				data-testid="recording-detail-page-skeleton"
+			>
+				<div className="flex min-h-0 flex-col gap-4">
+					<RecordingDetailPlayerSkeleton />
+					<RecordingDetailTranscriptSkeleton />
+				</div>
+				<RecordingDetailRightPanelSkeleton />
 			</div>
-			<RecordingDetailRightPanelSkeleton />
 		</div>
 	)
 }

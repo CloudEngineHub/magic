@@ -64,7 +64,7 @@ class TerminalToolDetailGenerator:
             elif stdout:
                 output = stdout
             else:
-                output = "Execution failed, no output"
+                output = result.content or "Execution failed, no output"
 
         # 如果有 Python 代码，伪装成命令行执行的形式
         if python_code:

@@ -5,16 +5,17 @@ const CrewConversationStoreContext = createContext<CrewConversationStore | null>
 
 export function CrewConversationStoreProvider({
 	code,
+	autoHire,
 	children,
-}: PropsWithChildren<{ code?: string }>) {
+}: PropsWithChildren<{ code?: string; autoHire?: boolean }>) {
 	const [store] = useState(() => new CrewConversationStore())
 
 	useEffect(() => {
-		void store.bootstrap(code)
+		void store.bootstrap(code, { autoHire })
 		return () => {
 			store.dispose()
 		}
-	}, [code, store])
+	}, [autoHire, code, store])
 
 	return (
 		<CrewConversationStoreContext.Provider value={store}>

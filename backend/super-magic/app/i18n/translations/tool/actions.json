@@ -512,8 +512,8 @@
         "en_US": "List local skills"
     },
     "find_skills.online": {
-        "zh_CN": "搜索互联网技能",
-        "en_US": "Search online skills"
+        "zh_CN": "搜索技能市场",
+        "en_US": "Search skill marketplace"
     },
     "install_skills": {
         "zh_CN": "安装技能",

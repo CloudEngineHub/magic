@@ -1,0 +1,112 @@
+import { describe, expect, it } from "vitest"
+import {
+	mergeWidgetConfig,
+	normalizeWidgetConfig,
+	resolveInitialWidgetConfig,
+} from "../src/config"
+
+describe("Widget config", () => {
+	it("uses the legacy mobile layout and viewport semantics as initial defaults", () => {
+		expect(resolveInitialWidgetConfig(undefined)).toEqual({
+			layout: "mobile",
+			responsive: { mobileDetection: "viewport" },
+		})
+	})
+
+	it("keeps explicit initial layout and responsive overrides", () => {
+		expect(
+			resolveInitialWidgetConfig({
+				layout: "desktop",
+				responsive: { mobileDetection: "device-and-viewport" },
+			}),
+		).toEqual({
+			layout: "desktop",
+			responsive: { mobileDetection: "device-and-viewport" },
+		})
+	})
+
+	it("normalizes the supported layout and visibility fields", () => {
+		expect(
+			normalizeWidgetConfig({
+				layout: "desktop",
+				shell: { appSidebar: false },
+				responsive: { mobileDetection: "device-and-viewport" },
+				conversation: {
+					projectFiles: false,
+					topicHistory: true,
+					autoHire: false,
+					previewMode: "fullscreen",
+				},
+			}),
+		).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
+			conversation: {
+				projectFiles: false,
+				topicHistory: true,
+				autoHire: false,
+				previewMode: "fullscreen",
+			},
+		})
+	})
+
+	it("merges nested updates without dropping previously confirmed fields", () => {
+		expect(
+			mergeWidgetConfig(
+				{
+					layout: "desktop",
+					shell: { appSidebar: false },
+					responsive: { mobileDetection: "viewport" },
+					conversation: { projectFiles: false },
+				},
+				{
+					conversation: {
+						topicHistory: true,
+						autoHire: false,
+						previewMode: "switchable",
+					},
+					responsive: { mobileDetection: "device-and-viewport" },
+				},
+			),
+		).toEqual({
+			layout: "desktop",
+			shell: { appSidebar: false },
+			responsive: { mobileDetection: "device-and-viewport" },
+			conversation: {
+				projectFiles: false,
+				topicHistory: true,
+				autoHire: false,
+				previewMode: "switchable",
+			},
+		})
+	})
+
+	it("rejects invalid and undeclared configuration fields", () => {
+		expect(() => normalizeWidgetConfig({ layout: "tablet" })).toThrow(/config\.layout/)
+		expect(() => normalizeWidgetConfig({ shell: { globalNotice: false } })).toThrow(
+			/globalNotice/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { projectFiles: "no" } })).toThrow(
+			/projectFiles/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { autoHire: "yes" } })).toThrow(
+			/autoHire/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { previewMode: "overlay" } })).toThrow(
+			/previewMode/,
+		)
+		expect(() => normalizeWidgetConfig({ conversation: { previewMode: true } })).toThrow(
+			/previewMode/,
+		)
+		expect(() =>
+			normalizeWidgetConfig({ responsive: { mobileDetection: "device-only" } }),
+		).toThrow(/mobileDetection/)
+		expect(() => normalizeWidgetConfig({ responsive: { mobileDetection: true } })).toThrow(
+			/mobileDetection/,
+		)
+		expect(() => normalizeWidgetConfig({ responsive: { breakpoint: 640 } })).toThrow(
+			/breakpoint/,
+		)
+	})
+})

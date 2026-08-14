@@ -137,6 +137,49 @@ describe("RecordingSummary useTopicMessages", () => {
 		)
 	})
 
+	it("hydrates history when selectedWorkspace is null but chat ids are valid", async () => {
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic(),
+				selectedWorkspace: null,
+				checkNowDebounced: vi.fn(),
+			}),
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				chat_topic_id: "chat-topic-1",
+				conversation_id: "conversation-1",
+			}),
+		)
+	})
+
+	it("skips history pull when chat ids are missing", async () => {
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({
+					chat_topic_id: "",
+					chat_conversation_id: "",
+				}),
+				selectedWorkspace: { id: "workspace-1" },
+				checkNowDebounced: vi.fn(),
+			}),
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.setActiveTopicId).toHaveBeenCalledWith(null)
+	})
+
 	it("does not replace when the server cannot prove the recovered Topic snapshot", async () => {
 		renderHook(() =>
 			useTopicMessages({

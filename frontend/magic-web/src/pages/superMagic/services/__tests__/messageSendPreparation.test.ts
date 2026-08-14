@@ -3,8 +3,10 @@ import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/
 import {
 	ensureProjectForMessageContext,
 	preparePanelSend,
+	resolveMessageSendContext,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {},
@@ -232,6 +234,26 @@ describe("messageSendPreparation", () => {
 				agent_code: undefined,
 			}),
 		)
+	})
+
+	it("updates both scoped topic projections after smart rename", async () => {
+		const scopedTopicStore = new TopicStore()
+		const topic = {
+			id: "topic-scoped",
+			project_id: "project-scoped",
+			topic_name: "",
+		} as Topic
+		scopedTopicStore.setTopics([topic])
+		scopedTopicStore.setSelectedTopic(topic)
+
+		const context = resolveMessageSendContext({
+			selectedTopic: topic,
+			topicStore: scopedTopicStore,
+		})
+		await context.updateTopicName?.(topic.id, "Renamed mock topic")
+
+		expect(scopedTopicStore.selectedTopic?.topic_name).toBe("Renamed mock topic")
+		expect(scopedTopicStore.topics[0]?.topic_name).toBe("Renamed mock topic")
 	})
 
 	it("should create a fresh topic when the selected topic belongs to another project", async () => {

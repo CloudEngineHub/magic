@@ -46,7 +46,8 @@ export interface KnowledgeBaseTabItem {
 	create_at: number
 }
 
-function buildKnowledgeBaseTabId(data: KnowledgeBaseTabData) {
+/** Builds the stable identifier shared by knowledge-base tab creation and preview state. */
+export function buildKnowledgeBaseTabId(data: KnowledgeBaseTabData) {
 	return `${KNOWLEDGE_BASE_TAB_ID_PREFIX}${data.knowledgeBaseId}_${data.documentCode || data.fileKey || data.title}`
 }
 

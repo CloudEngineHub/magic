@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from agentlang.event.data import AfterMainAgentRunEventData, BeforeMainAgentRunEventData
+from agentlang.event.data import AfterMainAgentRunEventData
 from agentlang.event.event import Event, EventType
 from agentlang.interface.context import AgentContextInterface
 from agentlang.logger import get_logger
@@ -25,28 +25,16 @@ class MemoryListenerService:
 
     @classmethod
     def register_standard_listeners(cls, agent_context: "AgentContext") -> None:
-        """注册运行前记忆注入和运行后提取预留事件。"""
+        """注册运行后记忆提取预留事件。"""
         from app.service.agent_event.base_listener_service import BaseListenerService
 
         BaseListenerService.register_listeners(
             agent_context,
             {
-                EventType.BEFORE_MAIN_AGENT_RUN: cls._handle_before_main_agent_run,
                 EventType.AFTER_MAIN_AGENT_RUN: cls._handle_after_main_agent_run,
             },
         )
         logger.info("已注册文件记忆生命周期事件监听器")
-
-    @classmethod
-    async def _handle_before_main_agent_run(
-        cls,
-        event: Event[BeforeMainAgentRunEventData],
-    ) -> None:
-        """在主 Agent 运行前加载核心记忆并写入 Horizon。"""
-        agent_context = cls._resolve_agent_context(event.data.agent_context)
-        if agent_context is None or not cls._is_enabled(agent_context):
-            return
-        await cls._get_lifecycle_coordinator().before_run(agent_context)
 
     @classmethod
     async def _handle_after_main_agent_run(

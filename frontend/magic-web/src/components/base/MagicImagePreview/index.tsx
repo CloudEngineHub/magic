@@ -24,6 +24,7 @@ import useScale, {
 	type WheelZoomChange,
 } from "./hooks/useScale"
 import useContentFitScale from "./hooks/useContentFitScale"
+import useVectorContentLayout from "./hooks/useVectorContentLayout"
 import useRotate from "./hooks/useRotate"
 import useOffset, { calculateZoomAnchoredOffset } from "./hooks/useOffset"
 import useStyles from "./styles"
@@ -52,6 +53,8 @@ interface Props extends HTMLAttributes<HTMLImageElement> {
 	toolContainerClassName?: string
 	onDownload?: (mode?: DownloadImageMode) => void
 	isAIImage?: boolean
+	/** Vector content is resized at layout time to remain sharp while zooming. */
+	contentType?: "raster" | "vector"
 }
 
 /**
@@ -76,6 +79,7 @@ const MagicImagePreview = (props: Props) => {
 		toolContainerClassName,
 		onDownload,
 		isAIImage = false,
+		contentType = "raster",
 		...rest
 	} = props
 	const { styles, cx } = useStyles()
@@ -115,6 +119,8 @@ const MagicImagePreview = (props: Props) => {
 		})
 	const { rotate, rotateImage } = useRotate()
 	const previewContentKey = useMemo(() => src ?? getPreviewContentKey(children), [children, src])
+	const isVectorContent = contentType === "vector"
+	useVectorContentLayout(contentRef, isVectorContent, scale, previewContentKey)
 	const sliderValue = useMemo(
 		() => scaleToSliderValue(scale, minScale, MAX_SCALE),
 		[minScale, scale],
@@ -175,7 +181,11 @@ const MagicImagePreview = (props: Props) => {
 					className={cx(styles.imageWrapper, className)}
 					draggable={false}
 					style={{
-						transform: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
+						transform: isVectorContent
+							? `translate(${offset.x}px, ${offset.y}px) rotate(${rotate}deg)`
+							: `translate3d(${offset.x}px, ${offset.y}px, 0) rotate(${rotate}deg) scale(${transformScale})`,
+						willChange: isVectorContent ? "auto" : undefined,
+						backfaceVisibility: isVectorContent ? "visible" : undefined,
 					}}
 					{...rest}
 				>

@@ -42,6 +42,8 @@ class FileDownloadUrlHelper
         switch (strtolower($downloadMode)) {
             case 'preview':
             case 'inline':
+                $urlOptions['download'] = false;
+                // no break
             case 'normal_download':
                 // Preview mode: inline if previewable, otherwise force download
                 if (ContentTypeUtil::isPreviewable($filename)) {

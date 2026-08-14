@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 import { useOrganization } from "@/models/user/hooks/useOrganization"
+import { MAGIC_WIDGET_DISMISS_PREVIEW_EVENT } from "@/providers/MagicWidgetProvider/config"
 
 // Types
 import type {
@@ -29,10 +30,15 @@ import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import mentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { usePlaybackTab } from "./usePlaybackTab"
-import { useKnowledgeBaseTab, type KnowledgeBaseTabItem } from "./useKnowledgeBaseTab"
+import {
+	buildKnowledgeBaseTabId,
+	useKnowledgeBaseTab,
+	type KnowledgeBaseTabItem,
+} from "./useKnowledgeBaseTab"
 import { detectContentTypeRender } from "../utils/preview"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { manualPerfLogger, measureManualPerfOperation } from "@/utils/manualPerfLogger"
+import { resolvePreviewExitAction, shouldAutoEnterPreviewFullscreen } from "../utils/previewMode"
 import {
 	normalizeAttachmentPath,
 	isStandalonePreviewFile,
@@ -95,7 +101,8 @@ function normalizeFileItemForTab(fileItem: unknown): {
 	}
 
 	const recordDisplayConfig = sourceRecord.display_config as
-		FileItem["display_config"] | undefined
+		| FileItem["display_config"]
+		| undefined
 	let hiddenPreviewPolicy = recordDisplayConfig
 	if (sourceRecord.is_hidden === true) {
 		hiddenPreviewPolicy = {
@@ -167,6 +174,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 		projectId,
 		onFileTabsCacheLoaded,
 		nonClosableFileIds,
+		previewMode = "split",
+		previewSessionKey = 0,
+		onPreviewDismiss,
+		persistFileTabs = true,
 	} = props
 	const nonClosableFileIdsKey = (nonClosableFileIds || []).map(String).sort().join("|")
 	const nonClosableFileIdSet = useMemo(
@@ -200,6 +211,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const [error] = useState<string>()
 	const [favoriteFiles, setFavoriteFiles] = useState<Set<string>>(new Set())
 	const [fullscreenFileId, setFullscreenFileId] = useState<string | null>(null)
+	const activePreviewModeRef = useRef(previewMode)
 
 	// 拖拽相关状态
 	const [draggedTab, setDraggedTab] = useState<TabItem | null>(null)
@@ -234,6 +246,18 @@ export function useFilesViewer(props: FilesViewerProps) {
 		hasActiveFileTab, // 传递当前是否有激活的文件tab
 	})
 
+	/** Keeps the active preview inside one fullscreen shell without re-entering during tab switches. */
+	const activatePreviewFullscreen = useMemoizedFn((tabId: string, allowAutomaticEntry = true) => {
+		if (fullscreenFileId) {
+			setFullscreenFileId(tabId)
+			return
+		}
+		if (allowAutomaticEntry && shouldAutoEnterPreviewFullscreen(previewMode)) {
+			activePreviewModeRef.current = previewMode
+			setFullscreenFileId(tabId)
+		}
+	})
+
 	// 使用知识库Tab hook
 	const {
 		knowledgeBaseTabs,
@@ -266,24 +290,28 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 如果需要激活playbackTab，则将所有文件tab设置为非激活状态
 			if (shouldActivate) {
 				dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
+				// Only an explicit tool-preview action may automatically promote playback fullscreen.
+				activatePreviewFullscreen(PLAYBACK_TAB_ID, forceActivate === true)
 			}
 
 			// 打开playback tab
 			openPlaybackTabOriginal(options)
 		},
-		[openPlaybackTabOriginal, hasActiveFileTab, setUserSelectDetail],
+		[openPlaybackTabOriginal, hasActiveFileTab, setUserSelectDetail, activatePreviewFullscreen],
 	)
 
 	// 包装openKnowledgeBaseTab，打开知识库tab时取消其他文件tab的激活
 	const openKnowledgeBaseTab = useCallback(
 		(data: Parameters<typeof openKnowledgeBaseTabOriginal>[0]) => {
+			// Keep knowledge-base previews in the configured fullscreen shell when required.
+			activatePreviewFullscreen(buildKnowledgeBaseTabId(data))
 			// 取消所有文件tab的激活
 			dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
 			// 无条件取消playback tab的激活（updatePlaybackTab 内部已做幂等处理）
 			updatePlaybackTab({ active: false })
 			openKnowledgeBaseTabOriginal(data)
 		},
-		[openKnowledgeBaseTabOriginal, updatePlaybackTab],
+		[openKnowledgeBaseTabOriginal, updatePlaybackTab, activatePreviewFullscreen],
 	)
 
 	// Use ref to track clearing state to avoid race conditions
@@ -514,6 +542,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				},
 			})
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId: newTab.id } })
+			activatePreviewFullscreen(newTab.id)
 			notifyActiveFileOpen(openedFileId)
 			return
 		}
@@ -526,6 +555,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
+		activatePreviewFullscreen(newTab.id)
 		notifyActiveFileOpen(openedFileId)
 	})
 
@@ -535,13 +565,16 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 		deactivateAllKnowledgeBaseTabs()
 
-		dispatchTabs({
-			type: TabActionType.ADD_TAB,
-			payload: { tab: buildWebsiteTab(preset) },
-		})
+		const websiteTab = buildWebsiteTab(preset)
+		dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: websiteTab } })
+		activatePreviewFullscreen(websiteTab.id)
 	})
 
 	const closeFileTab = useMemoizedFn((tabId: string) => {
+		if (fullscreenFileId === tabId) {
+			// Closing the preview is an explicit request to restore the inline host layout.
+			setFullscreenFileId(null)
+		}
 		// 如果是关闭playback tab
 		if (tabId === PLAYBACK_TAB_ID) {
 			closePlaybackTab()
@@ -624,6 +657,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			// 激活playback tab
 			if (playbackTab) {
 				updatePlaybackTab({ active: true })
+				activatePreviewFullscreen(PLAYBACK_TAB_ID)
 			}
 		} else if (isKnowledgeBaseTab(tabId)) {
 			// 切换到知识库tab
@@ -632,6 +666,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			dispatchTabs({ type: TabActionType.DEACTIVATE_ALL })
 			updatePlaybackTab({ active: false })
 			openKnowledgeBaseTabOriginal(kbTab.data)
+			activatePreviewFullscreen(kbTab.id)
 		} else {
 			// 切换到文件tab时，将playback tab和知识库tabs设置为非激活状态
 			if (playbackTab?.active) {
@@ -639,6 +674,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 			}
 			deactivateAllKnowledgeBaseTabs()
 			dispatchTabs({ type: TabActionType.SWITCH_TAB, payload: { tabId } })
+			activatePreviewFullscreen(tabId)
 		}
 	})
 
@@ -648,6 +684,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		dispatchTabs({ type: TabActionType.CLEAR_TABS })
 		// 同时关闭 playbackTab
 		closePlaybackTab()
+		setFullscreenFileId(null)
 	}, [dispatchTabs, closePlaybackTab])
 
 	// 关闭指定 tab 外的所有 tab
@@ -727,13 +764,38 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const handleFileFullscreen = useMemoizedFn((fileId: string) => {
 		if (fullscreenFileId === fileId) {
 			setFullscreenFileId(null)
+			if (resolvePreviewExitAction(activePreviewModeRef.current) === "dismiss") {
+				onPreviewDismiss?.()
+			}
 		} else {
+			activePreviewModeRef.current = previewMode
 			setFullscreenFileId(fileId)
 		}
 	})
 
+	/** Promotes the active preview tab without reopening or replacing its cached renderer. */
+	const enterPreviewFullscreen = useMemoizedFn(() => {
+		if (!activeTab?.id) return
+		activePreviewModeRef.current = previewMode
+		setFullscreenFileId(activeTab.id)
+	})
+
+	/** Restores the current preview layout without applying mode-specific dismissal behavior. */
+	const exitPreviewFullscreen = useMemoizedFn(() => {
+		setFullscreenFileId(null)
+	})
+
+	/** Dismisses the preview surface while retaining tabs for a later reopen. */
+	const dismissPreview = useMemoizedFn(() => {
+		setFullscreenFileId(null)
+		onPreviewDismiss?.()
+	})
+
 	const handleExitFullscreen = useMemoizedFn(() => {
 		setFullscreenFileId(null)
+		if (resolvePreviewExitAction(activePreviewModeRef.current) === "dismiss") {
+			onPreviewDismiss?.()
+		}
 	})
 
 	// 拖拽处理函数
@@ -913,8 +975,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Exit_Fullscreen, handleExitFullscreen)
+		window.addEventListener(MAGIC_WIDGET_DISMISS_PREVIEW_EVENT, dismissPreview)
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Exit_Fullscreen, handleExitFullscreen)
+			window.removeEventListener(MAGIC_WIDGET_DISMISS_PREVIEW_EVENT, dismissPreview)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
@@ -939,6 +1003,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// 加载缓存状态
 	useEffect(() => {
 		if (cacheLoaded || isRestoringCacheRef.current || !selectedProject?.id || isShareRoute) {
+			return
+		}
+
+		if (!persistFileTabs) {
+			// Embedded preview sessions must always start from the conversation surface.
+			setCacheLoaded(true)
+			notifyFileTabsCacheLoaded(selectedProject.id)
 			return
 		}
 
@@ -1135,6 +1206,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList,
 		isAwaitingProjectAttachments,
 		isShareRoute,
+		persistFileTabs,
 	])
 
 	useEffect(() => {
@@ -1367,7 +1439,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	// 保存文件状态到缓存
 	const saveCacheState = useCallback(async () => {
-		if (!organizationCode || !selectedProject?.id || !cacheLoaded || isProjectSwitching) {
+		if (
+			!persistFileTabs ||
+			!organizationCode ||
+			!selectedProject?.id ||
+			!cacheLoaded ||
+			isProjectSwitching
+		) {
 			return
 		}
 
@@ -1452,6 +1530,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		isProjectSwitching,
 		projectStateRepository,
 		playbackTab,
+		persistFileTabs,
 	])
 
 	// 当 tabs 状态变化时保存缓存
@@ -1570,7 +1649,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		lastNotifiedTabTypeRef.current = currentActiveTabType
 		onActiveTabChange(currentActiveTabType)
-	}, [activeTabType, onActiveTabChange])
+	}, [activeTabType, onActiveTabChange, previewSessionKey])
 
 	// 执行 tab 打开后的回调
 	useEffect(() => {
@@ -1604,6 +1683,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		fileList,
 		loading,
 		isRestoringFileTabs: Boolean(activeTab?.isLoading),
+		isAwaitingProjectAttachments,
 		error,
 		favoriteFiles,
 		fullscreenFileId,
@@ -1644,6 +1724,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 		handleShare,
 		handleFileFullscreen,
 		handleExitFullscreen,
+		enterPreviewFullscreen,
+		exitPreviewFullscreen,
 		getFileDetail,
 
 		// Computed props for Render component
