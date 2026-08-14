@@ -3,6 +3,17 @@ export { EditorStore } from "./EditorStore"
 export { DraftStore } from "./DraftStore"
 export { FileUploadStore } from "./FileUploadStore"
 export { MessageEditorStore } from "./MessageEditorStore"
+export {
+	VideoProductionConfigStore,
+	resolveVideoProductionCapabilities,
+} from "./VideoProductionConfigStore"
+export type {
+	VideoProductionCapabilities,
+	VideoProductionConfig,
+	VideoProductionDurationCapabilities,
+	VideoProductionGenerationMode,
+	VideoProductionSendSnapshot,
+} from "./VideoProductionConfigStore"
 
 // Export context and hooks
 export {

@@ -3062,6 +3062,17 @@
 		"superPlaceholderEmpty": "Please fill in the required field: {{placeholders}}",
 		"taskRunningError": "Task is running, please stop it before sending a new message",
 		"validationFailed": "Validation failed, please try again",
+		"videoProductionConfig": {
+			"aspectRatio": "Aspect ratio",
+			"detailed": "Detailed",
+			"detailedDescription": "More planning and refinement for complex creations",
+			"duration": "Duration",
+			"generation": "Generate",
+			"normal": "Normal",
+			"normalDescription": "Fewer questions and faster output for simple requests",
+			"resolution": "Resolution",
+			"skill": "Video skill"
+		},
 		"waitForFileUpload": "Please wait for file upload to complete",
 		"waitForMarkerLoad": "Please wait for marker recognition to complete before sending"
 	},

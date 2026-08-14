@@ -461,6 +461,11 @@ export const MessageEditorContainer = observer(
 						selectedModel: models.selectedModel,
 						selectedImageModel: models.selectedImageModel,
 						selectedVideoModel: models.selectedVideoModel,
+						videoProductionSnapshot:
+							data.videoProductionSnapshot ??
+							store.videoProductionConfigStore?.createSendSnapshot?.(
+								models.selectedVideoModel,
+							),
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,

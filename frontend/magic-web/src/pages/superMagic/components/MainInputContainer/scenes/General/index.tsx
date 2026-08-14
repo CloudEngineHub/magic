@@ -8,6 +8,7 @@ import DefaultMessageEditorContainer from "../../components/editors/DefaultMessa
 import { ScenePanelComponentBaseProps } from "../../types"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant, useSceneStateStore } from "../../stores"
+import VideoProductionConfigPanel from "../../components/VideoProductionConfigPanel"
 
 interface GeneralInputContainerProps extends ScenePanelComponentBaseProps {
 	scenes: SceneItem[] | undefined
@@ -57,10 +58,17 @@ function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralIn
 							exit={SCENE_ANIMATION_CONFIG.exit}
 							transition={SCENE_ANIMATION_CONFIG.transition}
 						>
-							<DefaultMessageEditorContainer
-								editorContext={editorContext}
-								editorNodes={editorNodes}
-							/>
+							<div className="flex flex-col gap-2">
+								<DefaultMessageEditorContainer
+									editorContext={editorContext}
+									editorNodes={editorNodes}
+								/>
+								<VideoProductionConfigPanel
+									topicMode={editorContext?.topicMode}
+									agentCode={editorContext?.agentCode}
+									selectedTopic={editorContext?.selectedTopic}
+								/>
+							</div>
 						</motion.div>
 					</AnimatePresence>,
 					editorPortalTarget,

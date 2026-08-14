@@ -46,6 +46,7 @@ export default function useMessageSendHandler({
 		}
 
 		const selectedModel = store.topicModelStore.selectedLanguageModel
+		const selectedVideoModel = store.topicModelStore.selectedVideoModel
 		if (!isEditingQueueItem && !store.topicModelStore.isLanguageModelReady) {
 			magicToast.error(t("messageEditor.pleaseSelectModel"))
 			return
@@ -112,7 +113,9 @@ export default function useMessageSendHandler({
 			mentionItems,
 			selectedModel: selectedModel ? { ...selectedModel } : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
-			selectedVideoModel: store.topicModelStore.selectedVideoModel,
+			selectedVideoModel,
+			videoProductionSnapshot:
+				store.videoProductionConfigStore?.createSendSnapshot?.(selectedVideoModel),
 		})
 
 		store.draftStore.createSentDraft({

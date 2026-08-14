@@ -18,6 +18,7 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import SlidesTemplateHomeSelectionPreview from "../Slides/SlidesTemplateHomeSelectionPreview"
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant } from "../../stores"
+import VideoProductionConfigPanel from "../../components/VideoProductionConfigPanel"
 
 interface DefaultInputContainerProps extends ScenePanelComponentBaseProps {}
 
@@ -143,6 +144,11 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 								editorNodes={editorNodes}
 							/>
 						</div>
+						<VideoProductionConfigPanel
+							topicMode={editorContext.topicMode}
+							agentCode={editorContext.agentCode}
+							selectedTopic={editorContext.selectedTopic}
+						/>
 						{isSlidesMode ? (
 							<SlidesTemplateHomeSelectionPreview
 								template={selectedSlidesTemplate}

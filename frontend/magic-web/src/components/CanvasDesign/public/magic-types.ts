@@ -289,6 +289,21 @@ export interface VideoGenerationSizeOption {
 	resolution: string
 }
 
+/** 视频生成时长范围（秒） */
+export interface VideoGenerationDurationRange {
+	min: number
+	max: number
+	step?: number
+}
+
+export type VideoGenerationDurations = number[] | VideoGenerationDurationRange
+
+export interface VideoGenerationSwitchConfig {
+	type: "switch"
+	default: boolean
+	name: string
+	description?: string
+}
 /**
  * 视频模型元数据：能力、可选生成参数与约束
  */
@@ -301,8 +316,10 @@ export interface VideoGenerationConfig {
 	generation?: {
 		/** 可选宽高比列表，如 16:9 */
 		aspect_ratios?: string[]
-		/** 可选时长（秒） */
-		durations?: number[]
+		/** 可选时长（秒）；离散选项或范围 */
+		durations?: VideoGenerationDurations
+		/** 时长选择模式；未下发时由 durations 结构推导 */
+		duration_type?: "options" | "range"
 		/** 默认时长（秒） */
 		default_duration_seconds?: number
 		/** 可选分辨率列表，如 1080p */

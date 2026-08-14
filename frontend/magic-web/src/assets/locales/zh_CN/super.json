@@ -3063,6 +3063,17 @@
 		"superPlaceholderEmpty": "请填写必填项：{{placeholders}}",
 		"taskRunningError": "任务进行中，终止后再发新消息",
 		"validationFailed": "验证失败，请重试",
+		"videoProductionConfig": {
+			"aspectRatio": "画幅",
+			"detailed": "精细",
+			"detailedDescription": "多确认、细拆，适合长视频和复杂创作",
+			"duration": "时长",
+			"generation": "生成",
+			"normal": "普通",
+			"normalDescription": "少问、快做，适合短视频和简单需求",
+			"resolution": "清晰度",
+			"skill": "视频技能"
+		},
 		"waitForFileUpload": "请等待文件上传完成",
 		"waitForMarkerLoad": "请等待标记识别完成后再发送"
 	},

@@ -6,6 +6,8 @@ import type {
 } from "../../../../public/magic-types"
 import type { VideoEditorConfig } from "../video-editor-config.types"
 
+type VideoGenerationConfigModel = Pick<VideoModelItem, "video_generation_config">
+
 function dedupeStringArray(values: string[]): string[] {
 	return Array.from(new Set(values.filter(Boolean)))
 }
@@ -37,7 +39,7 @@ function normalizeConstraintSizes(
 }
 
 function getFilteredVideoGenerationSizes(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
 ): Array<VideoGenerationSizeOption & { width: number; height: number }> {
 	const sourceSizes =
@@ -57,7 +59,7 @@ function getFilteredVideoGenerationSizes(
 }
 
 function getFilteredGenerationResolutions(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
 ): string[] {
 	const generationSizes = getFilteredVideoGenerationSizes(model, constraints)
@@ -72,7 +74,7 @@ function getFilteredGenerationResolutions(
 }
 
 function getFilteredGenerationAspectRatios(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
 ): string[] {
 	const generationSizes = getFilteredVideoGenerationSizes(model, constraints)
@@ -87,7 +89,7 @@ function getFilteredGenerationAspectRatios(
 }
 
 export function buildVideoDurationOptions(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
 ): number[] {
 	const configuredDurations = model?.video_generation_config?.generation?.durations
@@ -131,7 +133,7 @@ export function buildAspectRatioPreviewSize(aspectRatio: string): {
 }
 
 export function buildVideoResolutionOptions(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	constraints?: VideoGenerationConstraints,
 ): VideoEditorConfig["supportedResolutionOptions"] {
 	const generationSizes = getFilteredVideoGenerationSizes(model, constraints)
@@ -165,7 +167,7 @@ export function buildVideoResolutionOptions(
 }
 
 export function buildVideoAspectRatioOptions(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	selectedResolution?: string,
 	constraints?: VideoGenerationConstraints,
 ): VideoEditorConfig["supportedAspectRatioOptions"] {
@@ -208,7 +210,7 @@ export function buildVideoAspectRatioOptions(
 }
 
 export function resolveVideoGenerationSelection(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	generation?: Partial<NonNullable<GenerateVideoRequest["generation"]>>,
 	constraints?: VideoGenerationConstraints,
 ): {
@@ -265,7 +267,7 @@ export function resolveVideoGenerationSelection(
 
 /** 换模型时：若旧分辨率/比例在新模型中仍合法则尽量保留，否则再退回默认 */
 export function resolveVideoGenerationSelectionPreserving(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 	prev: { resolution?: string; aspectRatio?: string },
 	constraints?: VideoGenerationConstraints,
 ): {
@@ -361,7 +363,7 @@ export function resolveVideoGenerationSelectionPreserving(
 }
 
 export function getNormalizedVideoGenerationSizes(
-	model: VideoModelItem | undefined,
+	model: VideoGenerationConfigModel | undefined,
 ): Array<VideoGenerationSizeOption & { width: number; height: number }> {
 	const sizes = model?.video_generation_config?.generation?.sizes || []
 	return sizes

@@ -17,6 +17,7 @@ import { platformKey } from "@/utils/storage"
 import { userStore } from "@/models/user"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import type { VideoProductionSendSnapshot } from "../../MessageEditor/stores/VideoProductionConfigStore"
 
 // Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
 const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
@@ -28,6 +29,7 @@ export interface QueuedMessage {
 	selectedModel?: ModelItem
 	selectedImageModel?: ModelItem
 	selectedVideoModel?: ModelItem
+	videoProductionSnapshot?: VideoProductionSendSnapshot
 	topicMode?: TopicMode
 	agentCode?: string
 	timestamp: number
@@ -793,6 +795,7 @@ function useMessageQueue({
 			selectedModel?: ModelItem | null
 			selectedImageModel?: ModelItem | null
 			selectedVideoModel?: ModelItem | null
+			videoProductionSnapshot?: VideoProductionSendSnapshot
 			topicMode?: TopicMode
 			agentCode?: string | null
 		}) => {
@@ -814,6 +817,7 @@ function useMessageQueue({
 					selectedModel: params.selectedModel ?? undefined,
 					selectedImageModel: params.selectedImageModel ?? undefined,
 					selectedVideoModel: params.selectedVideoModel ?? undefined,
+					videoProductionSnapshot: params.videoProductionSnapshot,
 					topicMode: params.topicMode,
 					agentCode: selectedAgentCode,
 					clientSyncId: localQueueId,
