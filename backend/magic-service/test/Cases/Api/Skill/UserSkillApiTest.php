@@ -1767,6 +1767,19 @@ class UserSkillApiTest extends AbstractApiTest
         $this->assertArrayHasKey('page', $defaultResponse['data']);
         $this->assertArrayHasKey('page_size', $defaultResponse['data']);
 
+        // 测试字符串分类 ID 筛选
+        $stringCategoryResponse = $this->post(
+            '/api/v1/skill-market/queries',
+            [
+                'page' => 1,
+                'page_size' => 20,
+                'category_ids' => ['1', '2'],
+            ],
+            $this->getCommonHeaders()
+        );
+        $this->assertEquals(1000, $stringCategoryResponse['code']);
+        $this->assertIsInt($stringCategoryResponse['data']['total']);
+
         // 测试排序：已添加的技能应该排在最前面
         $sortedResponse = $this->post(
             '/api/v1/skill-market/queries',

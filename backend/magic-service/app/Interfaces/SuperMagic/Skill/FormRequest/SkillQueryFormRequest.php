@@ -31,7 +31,7 @@ class SkillQueryFormRequest extends FormRequest
             'codes' => 'nullable|array|max:1000',
             'codes.*' => 'nullable|string|max:64',
             'category_ids' => 'nullable|array|max:100',
-            'category_ids.*' => 'integer|min:1',
+            'category_ids.*' => 'string|max:64|regex:/^\d+$/',
         ];
     }
 
@@ -72,7 +72,8 @@ class SkillQueryFormRequest extends FormRequest
             'codes.*.string' => trans('skill.query_codes_item_must_be_string'),
             'codes.*.max' => trans('skill.query_codes_item_too_long'),
             'category_ids.array' => trans('validation.array', ['attribute' => 'category_ids']),
-            'category_ids.*.integer' => trans('validation.integer', ['attribute' => 'category_ids']),
+            'category_ids.*.string' => trans('validation.string', ['attribute' => 'category_ids']),
+            'category_ids.*.regex' => trans('validation.regex', ['attribute' => 'category_ids']),
         ];
     }
 

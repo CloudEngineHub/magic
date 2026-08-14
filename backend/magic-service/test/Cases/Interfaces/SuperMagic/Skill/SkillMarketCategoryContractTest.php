@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Skill\Service\AdminSkillCategoryAppService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
@@ -20,6 +21,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\PublisherInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
+use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use PHPUnit\Framework\TestCase;
@@ -64,6 +66,23 @@ final class SkillMarketCategoryContractTest extends TestCase
             $rules['category_ids']
         );
         $this->assertSame('integer|min:1', $rules['category_ids.*']);
+    }
+
+    public function testMarketQueryAcceptsStringCategoryIds(): void
+    {
+        $request = (new ReflectionClass(SkillQueryFormRequest::class))->newInstanceWithoutConstructor();
+
+        $this->assertSame('nullable|array|max:100', $request->rules()['category_ids']);
+        $this->assertSame('string|max:64|regex:/^\d+$/', $request->rules()['category_ids.*']);
+        $this->assertArrayHasKey('category_ids.*.string', $request->messages());
+        $this->assertArrayHasKey('category_ids.*.regex', $request->messages());
+    }
+
+    public function testMarketQueryNormalizesStringCategoryIdsToIntegers(): void
+    {
+        $query = new SkillQuery(['category_ids' => ['10001', '10002']]);
+
+        $this->assertSame([10001, 10002], $query->getCategoryIds());
     }
 
     public function testUpdateMarketRequestDoesNotExposeSingleCategoryId(): void
