@@ -403,17 +403,3 @@
 .reference-image-delete:hover {
 	background: var(--base-sidebar-accent, #f5f5f5);
 }
-
-.reference-image-tooltip {
-	z-index: 2 !important;
-	padding: 0 !important;
-	overflow: hidden;
-	border-radius: var(--border-radius-rounded-sm, 6px);
-}
-
-.reference-image-tooltip-preview {
-	display: block;
-	width: auto;
-	height: auto;
-	object-fit: contain;
-}

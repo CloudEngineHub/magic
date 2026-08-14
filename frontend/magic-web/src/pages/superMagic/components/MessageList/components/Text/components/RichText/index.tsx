@@ -31,7 +31,14 @@ const scheduleMicrotask =
 
 const RichText = memo(
 	function RichText(props: RichTextProps) {
-		const { content, className, style, onFileClick, markerClickScene = "messageList" } = props
+		const {
+			content,
+			className,
+			style,
+			onFileClick,
+			markerClickScene = "messageList",
+			fileMentionRenderConfig,
+		} = props
 		const { projectFilesStore } = useMessageListContext()
 
 		const scene = markerClickScene
@@ -54,6 +61,7 @@ const RichText = memo(
 							markerClickScene={scene}
 							messageContent={content}
 							projectFilesStore={projectFilesStore}
+							fileMentionRenderConfig={fileMentionRenderConfig}
 						/>,
 					)
 
@@ -337,7 +345,8 @@ const RichText = memo(
 			prev.content === next.content &&
 			prev.className === next.className &&
 			prev.onFileClick === next.onFileClick &&
-			prev.markerClickScene === next.markerClickScene
+			prev.markerClickScene === next.markerClickScene &&
+			prev.fileMentionRenderConfig === next.fileMentionRenderConfig
 		)
 	},
 )

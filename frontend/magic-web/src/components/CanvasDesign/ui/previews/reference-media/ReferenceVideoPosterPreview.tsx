@@ -1,16 +1,14 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
+import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { ReferenceSlotVideoIcon } from "../../primitives/icons/index"
 import styles from "../../editors/message/index.module.css"
 import { useReferenceVideoPoster } from "./useReferenceVideoPoster"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn/tooltip"
+import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
 import { calculateTooltipBoundedPreviewSize } from "../../../runtime/resources/image/imagePreviewUtils"
-import { useTouchTooltipTrigger } from "./useTouchTooltipTrigger"
-import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
-import { ReferenceMediaTooltipHeader } from "./ReferenceMediaTooltipHeader"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 
 export interface ReferenceVideoPosterPreviewProps {
 	fileName: string
@@ -31,25 +29,17 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 		enableTooltip = false,
 		tooltipSide = "top",
 	} = props
-	const portalContainer = usePortalContainer()
 	const { loadState, posterClone, ossSrc } = useReferenceVideoPoster(path)
+	const { t } = useCanvasDesignI18n()
+	const portalContainer = usePortalContainer()
 	const canvasRef = useRef<HTMLCanvasElement>(null)
-	const tooltipVideoRef = useRef<HTMLVideoElement>(null)
 	const [open, setOpen] = useState(false)
-	const [videoReady, setVideoReady] = useState(false)
-	const previewSize = useMemo(
-		() =>
-			posterClone
-				? calculateTooltipBoundedPreviewSize(
-						{
-							naturalWidth: posterClone.width,
-							naturalHeight: posterClone.height,
-						},
-						REFERENCE_MEDIA_TOOLTIP_MAX_SIZE,
-					)
-				: {},
-		[posterClone],
-	)
+	const previewSize = posterClone
+		? calculateTooltipBoundedPreviewSize(
+				{ naturalWidth: posterClone.width, naturalHeight: posterClone.height },
+				REFERENCE_MEDIA_TOOLTIP_MAX_SIZE,
+			)
+		: undefined
 
 	useLayoutEffect(() => {
 		const el = canvasRef.current
@@ -64,16 +54,7 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 
 	const handleOpenChange = useCallback((nextOpen: boolean) => {
 		setOpen(nextOpen)
-		if (!nextOpen) {
-			setVideoReady(false)
-			tooltipVideoRef.current?.pause()
-		}
 	}, [])
-	const handleTooltipClose = useCallback(() => handleOpenChange(false), [handleOpenChange])
-	const { handlePointerDown, handleClick, handlePointerCancel } = useTouchTooltipTrigger(
-		() => handleOpenChange(true),
-		{ open, onClose: handleTooltipClose },
-	)
 
 	const previewWrapperClass = cn(
 		styles.referenceImagePreview,
@@ -99,72 +80,52 @@ export function ReferenceVideoPosterPreview(props: ReferenceVideoPosterPreviewPr
 			/>
 		)
 
-	const trigger = (
-		<div
-			className={previewWrapperClass}
-			data-reference-media-tooltip-trigger={enableTooltip ? "" : undefined}
-			onPointerDown={enableTooltip ? handlePointerDown : undefined}
-			onClick={enableTooltip ? handleClick : undefined}
-			onPointerCancel={enableTooltip ? handlePointerCancel : undefined}
-		>
-			{previewContent}
-		</div>
-	)
+	const trigger = <div className={previewWrapperClass}>{previewContent}</div>
 
 	if (!enableTooltip) return trigger
 
-	const tooltipWidth = previewSize.width || REFERENCE_MEDIA_TOOLTIP_MAX_SIZE
-	const tooltipHeight =
-		previewSize.height || Math.round(REFERENCE_MEDIA_TOOLTIP_MAX_SIZE * (9 / 16))
-
 	return (
-		<Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={250}>
-			<TooltipTrigger asChild>{trigger}</TooltipTrigger>
-			<TooltipPrimitive.Portal container={portalContainer || undefined}>
-				<TooltipContent
-					data-reference-media-tooltip-content=""
-					side={tooltipSide}
-					sideOffset={8}
-					className={styles.referenceMediaTooltip}
-				>
-					<div className={styles.referenceMediaTooltipBody}>
-						<div
-							className={styles.referenceMediaTooltipVideoViewport}
-							style={{ width: tooltipWidth, height: tooltipHeight }}
-						>
-							<ReferenceMediaTooltipHeader fileName={fileName} />
-							{ossSrc ? (
-								<video
-									ref={tooltipVideoRef}
-									src={ossSrc}
-									muted
-									loop
-									autoPlay
-									playsInline
-									preload="auto"
-									aria-label={fileName}
-									className={styles.referenceMediaTooltipVideo}
-									onCanPlay={() => setVideoReady(true)}
-									onError={() => setVideoReady(false)}
-								/>
-							) : null}
-							{!videoReady && posterClone ? (
-								<canvas
-									className={styles.referenceMediaTooltipPoster}
-									ref={(node) => {
-										if (!node) return
-										node.width = posterClone.width
-										node.height = posterClone.height
-										const context = node.getContext("2d")
-										context?.drawImage(posterClone, 0, 0)
-									}}
-									aria-label={fileName}
-								/>
-							) : null}
-						</div>
-					</div>
-				</TooltipContent>
-			</TooltipPrimitive.Portal>
-		</Tooltip>
+		<MediaPreviewTooltip
+			mediaType="video"
+			fileName={fileName}
+			previewUrl={ossSrc}
+			maxWidth={REFERENCE_MEDIA_TOOLTIP_MAX_SIZE}
+			maxHeight={REFERENCE_MEDIA_TOOLTIP_MAX_SIZE}
+			previewSize={previewSize?.width && previewSize.height ? previewSize : undefined}
+			open={open}
+			onOpenChange={handleOpenChange}
+			enableTouchTrigger
+			container={portalContainer}
+			poster={
+				posterClone ? (
+					<canvas
+						className="absolute inset-0 block h-full w-full object-contain"
+						ref={(node) => {
+							if (!node) return
+							node.width = posterClone.width
+							node.height = posterClone.height
+							const context = node.getContext("2d")
+							context?.drawImage(posterClone, 0, 0)
+						}}
+						aria-label={fileName}
+					/>
+				) : undefined
+			}
+			isLoading={loadState === "loading"}
+			hasError={loadState === "error" && !posterClone}
+			errorMessage={t(
+				"mediaResourceFullscreenPreview.videoLoadFailed",
+				"视频加载失败，请稍后重试",
+			)}
+			closeLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
+			audioLabels={{
+				play: t("video.fullscreen.play", "播放"),
+				pause: t("video.fullscreen.pause", "暂停"),
+				progress: t("video.fullscreen.progress", "播放进度"),
+			}}
+			side={tooltipSide}
+		>
+			{trigger}
+		</MediaPreviewTooltip>
 	)
 }

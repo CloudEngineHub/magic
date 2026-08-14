@@ -1,7 +1,5 @@
-import { useCallback, useMemo, type CSSProperties } from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../primitives/shadcn/tooltip"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
 import { useReferenceImageUrls } from "../../../app/hooks/resources/useReferenceImageUrls"
 import { ImagePlus, LoaderCircle } from "lucide-react"
 import {
@@ -16,10 +14,9 @@ import { cn } from "../../../runtime/shared/lib/utils"
 import styles from "../../editors/message/index.module.css"
 import type { ReferenceMediaPreviewProps } from "./types"
 import { useObserveBoxSize } from "./useObserveBoxSize"
-import { useTouchTooltipTrigger } from "./useTouchTooltipTrigger"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { REFERENCE_MEDIA_TOOLTIP_MAX_SIZE } from "./constants"
-import { ReferenceMediaTooltipHeader } from "./ReferenceMediaTooltipHeader"
+import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
 
 export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 	const {
@@ -36,8 +33,9 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 	const tooltipMaxSize = enableTooltip
 		? REFERENCE_MEDIA_TOOLTIP_MAX_SIZE
 		: TOOLTIP_PREVIEW_MIN_SIZE
-	const portalContainer = usePortalContainer()
 	const { t } = useCanvasDesignI18n()
+	const [previewContentError, setPreviewContentError] = useState(false)
+	const portalContainer = usePortalContainer()
 	const {
 		lowUrl,
 		fullUrl,
@@ -48,11 +46,7 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		open,
 		handleOpenChange,
 	} = useReferenceImageUrls(path, { eagerFullUrl: !!inlineOriginal })
-	const handleTooltipClose = useCallback(() => handleOpenChange(false), [handleOpenChange])
-	const { handlePointerDown, handleClick, handlePointerCancel } = useTouchTooltipTrigger(
-		() => handleOpenChange(true),
-		{ open, onClose: handleTooltipClose },
-	)
+	useEffect(() => setPreviewContentError(false), [fullUrl])
 
 	const previewSize = useMemo(() => {
 		if (!imageInfo) {
@@ -164,21 +158,9 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		</>
 	)
 
-	const triggerHandlers = showTooltip
-		? {
-				onPointerDown: handlePointerDown,
-				onClick: handleClick,
-				onPointerCancel: handlePointerCancel,
-			}
-		: undefined
 	const inlinePreview = (
-		<div
-			ref={inlineBoxRef}
-			className={previewWrapperClass}
-			data-reference-media-tooltip-trigger={showTooltip ? "" : undefined}
-			{...triggerHandlers}
-		>
-			{renderPreviewInner(inlineCroppedStyle)}
+		<div ref={inlineOriginal ? inlineBoxRef : previewBoxRef} className={previewWrapperClass}>
+			{renderPreviewInner(inlineOriginal ? inlineCroppedStyle : previewCroppedStyle)}
 		</div>
 	)
 
@@ -186,157 +168,51 @@ export function ReferenceImageLowPreview(props: ReferenceMediaPreviewProps) {
 		return inlinePreview
 	}
 
-	const tooltipPreview = (
-		<TooltipContent
-			data-reference-media-tooltip-content=""
-			side={enableTooltip ? (tooltipSide ?? "top") : (tooltipSide ?? "left")}
-			sideOffset={8}
-			className={enableTooltip ? styles.referenceMediaTooltip : styles.referenceImageTooltip}
-			style={{
-				...(previewSize.width ? { width: previewSize.width } : {}),
-				maxWidth: tooltipMaxSize,
-				maxHeight: tooltipMaxSize,
-			}}
-		>
-			{enableTooltip ? (
-				<div className={styles.referenceMediaTooltipBody}>
-					<div
-						className={styles.referenceMediaTooltipImageViewport}
-						style={{ width: tooltipW, height: tooltipH }}
-					>
-						<ReferenceMediaTooltipHeader
-							fileName={fileName}
-							onClose={handleTooltipClose}
-							closeAriaLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
-						/>
-						{isFullUrlLoading ? (
-							<div className={styles.referenceMediaTooltipLoading}>
-								<LoaderCircle size={16} className={styles.loadingIcon} />
-							</div>
-						) : fullUrl ? (
-							tooltipCroppedStyle ? (
-								<img
-									src={fullUrl}
-									alt={fileName}
-									className={styles.referenceImageTooltipPreview}
-									style={{
-										...tooltipCroppedStyle,
-										maxWidth: "none",
-										maxHeight: "none",
-									}}
-								/>
-							) : (
-								<img
-									src={fullUrl}
-									alt={fileName}
-									className={styles.referenceImageTooltipPreview}
-									style={{
-										width: tooltipW,
-										height: tooltipH,
-										maxWidth: "none",
-										maxHeight: "none",
-									}}
-								/>
-							)
-						) : (
-							<div className={styles.referenceMediaTooltipError}>
-								{t(
-									"mediaResourceFullscreenPreview.imageLoadFailed",
-									"图片加载失败",
-								)}
-							</div>
-						)}
-					</div>
-				</div>
-			) : isFullUrlLoading ? (
-				<div
-					style={{
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						width: previewSize.width || tooltipMaxSize,
-						height: previewSize.height || tooltipMaxSize,
-					}}
-				>
-					<LoaderCircle
-						size={16}
-						className={styles.loadingIcon}
-						style={{ animation: "spin 1s linear infinite" }}
-					/>
-				</div>
-			) : (
-				fullUrl && (
-					<div
-						style={{
-							position: "relative",
-							overflow: "hidden",
-							width: tooltipW,
-							height: tooltipH,
-						}}
-					>
-						{tooltipCroppedStyle ? (
-							<img
-								src={fullUrl}
-								alt={fileName}
-								className={styles.referenceImageTooltipPreview}
-								style={{
-									...tooltipCroppedStyle,
-									maxWidth: "none",
-									maxHeight: "none",
-								}}
-							/>
-						) : (
-							<img
-								src={fullUrl}
-								alt={fileName}
-								className={styles.referenceImageTooltipPreview}
-								style={{
-									...(previewSize.width ? previewSize : {}),
-									maxWidth: tooltipMaxSize,
-									maxHeight: tooltipMaxSize,
-								}}
-							/>
-						)}
-					</div>
-				)
-			)}
-		</TooltipContent>
-	)
+	if (!showTooltip) return inlinePreview
 
-	if (inlineOriginal) {
-		return (
-			<Tooltip
-				open={open}
-				onOpenChange={handleOpenChange}
-				delayDuration={enableTooltip ? 250 : undefined}
-			>
-				<TooltipTrigger asChild>{inlinePreview}</TooltipTrigger>
-				<TooltipPrimitive.Portal container={portalContainer || undefined}>
-					{tooltipPreview}
-				</TooltipPrimitive.Portal>
-			</Tooltip>
-		)
-	}
+	const previewContent = fullUrl ? (
+		<div
+			className="relative overflow-hidden bg-black"
+			style={{ width: tooltipW, height: tooltipH }}
+		>
+			<img
+				src={fullUrl}
+				alt={fileName}
+				className="block object-contain"
+				style={{
+					...(tooltipCroppedStyle || { width: tooltipW, height: tooltipH }),
+					maxWidth: "none",
+					maxHeight: "none",
+				}}
+				onError={() => setPreviewContentError(true)}
+			/>
+		</div>
+	) : undefined
 
 	return (
-		<Tooltip
+		<MediaPreviewTooltip
+			mediaType="image"
+			fileName={fileName}
+			previewUrl={fullUrl}
+			isLoading={isFullUrlLoading}
+			hasError={hasError || previewContentError || (!isFullUrlLoading && !fullUrl)}
+			errorMessage={t("mediaResourceFullscreenPreview.imageLoadFailed", "图片加载失败")}
+			closeLabel={t("mediaResourceFullscreenPreview.close", "关闭预览")}
+			audioLabels={{
+				play: t("video.fullscreen.play", "播放"),
+				pause: t("video.fullscreen.pause", "暂停"),
+				progress: t("video.fullscreen.progress", "播放进度"),
+			}}
+			maxWidth={tooltipW}
+			maxHeight={tooltipH}
+			side={tooltipSide ?? "top"}
 			open={open}
 			onOpenChange={handleOpenChange}
-			delayDuration={enableTooltip ? 250 : undefined}
+			enableTouchTrigger
+			container={portalContainer}
+			previewContent={previewContent}
 		>
-			<TooltipTrigger asChild>
-				<div
-					ref={previewBoxRef}
-					className={previewWrapperClass}
-					data-reference-media-tooltip-trigger=""
-					{...triggerHandlers}
-				>
-					{renderPreviewInner(previewCroppedStyle)}
-				</div>
-			</TooltipTrigger>
-			<TooltipPrimitive.Portal container={portalContainer || undefined}>
-				{tooltipPreview}
-			</TooltipPrimitive.Portal>
-		</Tooltip>
+			{inlinePreview}
+		</MediaPreviewTooltip>
 	)
 }

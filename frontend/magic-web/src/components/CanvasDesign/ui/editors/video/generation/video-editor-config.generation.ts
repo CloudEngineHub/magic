@@ -90,11 +90,12 @@ export function buildVideoDurationOptions(
 	model: VideoModelItem | undefined,
 	constraints?: VideoGenerationConstraints,
 ): number[] {
-	const topLevelDurations = (model?.video_generation_config?.generation?.durations || []).filter(
-		(value) => typeof value === "number" && Number.isFinite(value),
-	)
+	const configuredDurations = model?.video_generation_config?.generation?.durations
+	const topLevelDurations = (
+		Array.isArray(configuredDurations) ? configuredDurations : []
+	).filter((value) => typeof value === "number" && Number.isFinite(value))
 	if (constraints?.durations === undefined) return Array.from(new Set(topLevelDurations))
-	if (constraints.durations.length === 0) return []
+	if (!Array.isArray(constraints.durations) || constraints.durations.length === 0) return []
 	return constraints.durations.filter((duration) => topLevelDurations.includes(duration))
 }
 

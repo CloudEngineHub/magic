@@ -139,7 +139,7 @@ describe("Reference media SourceList tooltip", () => {
 		)
 	})
 
-	it("opens the custom audio player, starts playback, and closes outside", async () => {
+	it("opens the custom audio player without autoplay and closes outside", async () => {
 		const { container } = renderWithTooltipProvider(
 			<ReferenceAudioPreview fileName="audio.mp3" path="./audios/audio.mp3" enableTooltip />,
 		)
@@ -159,24 +159,24 @@ describe("Reference media SourceList tooltip", () => {
 
 		if (!audio) throw new Error("Audio element not found")
 		fireEvent.canPlay(audio)
-		await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce())
-		await waitFor(() =>
-			expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument(),
-		)
-		vi.mocked(HTMLMediaElement.prototype.play).mockClear()
+		expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
 		Object.defineProperty(audio, "duration", { configurable: true, value: 120 })
 		fireEvent.durationChange(audio)
 		expect(progress).toHaveAttribute("max", "120")
 		expect(tooltip).toHaveTextContent("0:00 / 2:00")
 
+		fireEvent.click(playButton)
+		expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce()
+		fireEvent.play(audio)
+		await waitFor(() =>
+			expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument(),
+		)
+
 		fireEvent.click(screen.getByRole("button", { name: "暂停" }))
 		expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled()
 		fireEvent.pause(audio)
 
-		fireEvent.click(playButton)
-		expect(HTMLMediaElement.prototype.play).toHaveBeenCalled()
-		fireEvent.play(audio)
-		expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "播放" })).toBeInTheDocument()
 
 		fireEvent.change(progress, { target: { value: "30" } })
 		expect(audio.currentTime).toBe(30)
@@ -209,5 +209,19 @@ describe("Reference media SourceList tooltip", () => {
 		fireEvent.pointerDown(document.body)
 		expect(pause).toHaveBeenCalled()
 		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+	})
+
+	it("keeps rendering while the video poster dimensions are not ready", () => {
+		mocks.posterClone = null
+
+		expect(() =>
+			renderWithTooltipProvider(
+				<ReferenceVideoPosterPreview
+					fileName="video.mp4"
+					path="./videos/video.mp4"
+					enableTooltip
+				/>,
+			),
+		).not.toThrow()
 	})
 })
