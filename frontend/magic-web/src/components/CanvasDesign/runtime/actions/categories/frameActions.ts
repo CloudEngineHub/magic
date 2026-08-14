@@ -38,7 +38,11 @@ export const frameActions: UserAction[] = [
 			return !isParentFrame
 		},
 		execute: (canvas, options?: FrameCreateActionOptions) => {
-			canvas.frameManager.createFrame(options?.boundsExpansion ?? 0)
+			if (options?.boundsExpansion === undefined) {
+				canvas.frameManager.createFrame()
+				return
+			}
+			canvas.frameManager.createFrame(options.boundsExpansion)
 		},
 	} satisfies UserAction<"frame.create", FrameCreateActionOptions>,
 	{

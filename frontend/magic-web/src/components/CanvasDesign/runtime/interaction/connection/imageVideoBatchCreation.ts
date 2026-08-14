@@ -1,12 +1,7 @@
 import type { VideoModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
-import {
-	ElementTypeEnum,
-	type FrameElement,
-	type VideoElement as VideoElementData,
-} from "../../document/types"
+import { ElementTypeEnum, type VideoElement as VideoElementData } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
-import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
 import { VideoElement } from "../../elements/video/VideoElement"
 import { generateElementId } from "../../shared/ids"
 import type { ConnectionOrigin } from "../../shared/connectionOrigin"
@@ -21,9 +16,9 @@ import {
 	resolveImageReferenceVideoModel,
 	type ResolvedImageReferenceVideoModel,
 } from "./imageVideoReferenceModel"
+import { createContentFrameData, resolveFrameContentLayout } from "../frame/frameCreation"
 
 const COLUMN_GAP = 64
-const FRAME_PADDING = 100
 const FRAME_GAP = 50
 const FRAME_HORIZONTAL_GAP = 120
 
@@ -162,9 +157,8 @@ function getChildrenOffset(heights: number[], index: number): number {
 	return heights.slice(0, index).reduce((total, height) => total + height + FRAME_GAP, 0)
 }
 
-function getFrameHeight(heights: number[]): number {
+function getFrameContentHeight(heights: number[]): number {
 	return (
-		FRAME_PADDING * 2 +
 		heights.reduce((total, height) => total + height, 0) +
 		Math.max(0, heights.length - 1) * FRAME_GAP
 	)
@@ -324,11 +318,13 @@ export function createStoryboardVideosFromConnection(options: {
 	const videoTool = canvas.toolManager.getVideoGeneratorTool()
 	const size = videoTool.getVideoElementSizeForModelList([referenceModel.model])
 	const heights = imageElementIds.map(() => size.height)
-	const frameWidth = size.width + FRAME_PADDING * 2
-	const frameHeight = getFrameHeight(heights)
+	const frameLayout = resolveFrameContentLayout({
+		width: size.width,
+		height: getFrameContentHeight(heights),
+	})
 	const frameOrigin = {
 		x: (sourceFrame.x ?? 0) + (sourceFrame.width ?? 0) + FRAME_HORIZONTAL_GAP,
-		y: (sourceFrame.y ?? 0) + (sourceFrame.height ?? 0) / 2 - frameHeight / 2,
+		y: (sourceFrame.y ?? 0) + (sourceFrame.height ?? 0) / 2 - frameLayout.height / 2,
 	}
 
 	const created = canvas.historyManager.runTransaction(
@@ -344,8 +340,8 @@ export function createStoryboardVideosFromConnection(options: {
 			try {
 				const videoChildren = imageElementIds.map((imageElementId, index) => {
 					const videoData = createEmptyVideoData(canvas, {
-						x: FRAME_PADDING,
-						y: FRAME_PADDING + getChildrenOffset(heights, index),
+						x: frameLayout.padding,
+						y: frameLayout.padding + getChildrenOffset(heights, index),
 						width: size.width,
 						height: size.height,
 						zIndex: imageElementIds.length - index,
@@ -354,18 +350,17 @@ export function createStoryboardVideosFromConnection(options: {
 					return videoData
 				})
 
-				const frameData: FrameElement = {
-					...FrameElementClass.createElementData(
-						generateElementId(),
-						frameOrigin.x,
-						frameOrigin.y,
-						frameWidth,
-						frameHeight,
-						canvas.elementManager.getNextZIndexInLevel(),
-					),
+				const { frameData } = createContentFrameData({
+					id: generateElementId(),
+					x: frameOrigin.x,
+					y: frameOrigin.y,
+					width: size.width,
+					height: getFrameContentHeight(heights),
+					zIndex: canvas.elementManager.getNextZIndexInLevel(),
 					name: resolveStoryboardVideoFrameName(canvas),
 					children: videoChildren,
-				}
+					padding: frameLayout.padding,
+				})
 
 				const createResult = canvas.elementManager.create(frameData)
 				if (!createResult) return null

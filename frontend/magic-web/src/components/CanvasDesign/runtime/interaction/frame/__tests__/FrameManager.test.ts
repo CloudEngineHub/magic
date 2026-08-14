@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest"
 import type { Canvas } from "../../../core/Canvas"
 import type { LayerElement } from "../../../document/types"
 import { FrameManager } from "../FrameManager"
+import { resolveFrameContentLayout } from "../frameCreation"
 
 describe("FrameManager frame creation", () => {
-	it("expands the created frame bounds without moving selected content", () => {
+	it("uses 5% of the final frame long edge as the default padding", () => {
 		const elements = new Map<string, LayerElement>([
 			[
 				"first",
@@ -92,31 +93,49 @@ describe("FrameManager frame creation", () => {
 		} as unknown as Canvas
 		const manager = new FrameManager({ canvas })
 
-		const frameId = manager.createFrame(24)
+		const frameId = manager.createFrame()
 
 		expect(createdFrameData).toEqual(
 			expect.objectContaining({
 				id: frameId,
 				type: "frame",
-				x: 76,
-				y: 176,
-				width: 278,
-				height: 148,
 				children: [],
 			}),
 		)
-		expect(nodes.get("first")?.position()).toEqual({ x: 24, y: 24 })
-		expect(nodes.get("second")?.position()).toEqual({ x: 174, y: 84 })
+		expect(createdFrameData?.x).toBeCloseTo(87.2222222)
+		expect(createdFrameData?.y).toBeCloseTo(187.2222222)
+		expect(createdFrameData?.width).toBeCloseTo(255.5555556)
+		expect(createdFrameData?.height).toBeCloseTo(125.5555556)
+		expect(nodes.get("first")?.position().x).toBeCloseTo(12.7777778)
+		expect(nodes.get("first")?.position().y).toBeCloseTo(12.7777778)
+		expect(nodes.get("second")?.position().x).toBeCloseTo(162.7777778)
+		expect(nodes.get("second")?.position().y).toBeCloseTo(72.7777778)
 		expect(update).toHaveBeenCalledWith(
 			frameId,
 			expect.objectContaining({
 				children: [
-					expect.objectContaining({ id: "second", x: 174, y: 84 }),
-					expect.objectContaining({ id: "first", x: 24, y: 24 }),
+					expect.objectContaining({
+						id: "second",
+						x: expect.closeTo(162.7777778),
+						y: expect.closeTo(72.7777778),
+					}),
+					expect.objectContaining({
+						id: "first",
+						x: expect.closeTo(12.7777778),
+						y: expect.closeTo(12.7777778),
+					}),
 				],
 			}),
 		)
 		expect(emit).toHaveBeenCalledWith({ type: "frame:created", data: { frameId } })
+	})
+
+	it("uses the content height when it is the long edge", () => {
+		expect(resolveFrameContentLayout({ width: 100, height: 200 })).toEqual({
+			padding: 200 / 18,
+			width: 100 + (200 / 18) * 2,
+			height: 200 + (200 / 18) * 2,
+		})
 	})
 })
 

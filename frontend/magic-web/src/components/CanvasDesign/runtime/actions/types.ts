@@ -31,7 +31,7 @@ export interface EditActionOptions {
  * 创建画框操作的选项
  */
 export interface FrameCreateActionOptions {
-	/** 创建时向选中内容边界四周扩展的画布单位，不代表 Frame 的持久化 padding */
+	/** 显式覆盖默认的 10% 内容边距；未传入时由 Frame 创建入口自动计算 */
 	boundsExpansion?: number
 }
 

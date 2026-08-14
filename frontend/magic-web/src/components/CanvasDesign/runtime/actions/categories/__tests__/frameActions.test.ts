@@ -48,12 +48,12 @@ describe("frameActions", () => {
 		expect(createFrame).toHaveBeenCalledWith(24)
 	})
 
-	it("keeps the existing zero-expansion behavior for callers without options", () => {
+	it("uses the default frame padding when callers omit options", () => {
 		const action = getCreateFrameAction()
 		const { canvas, createFrame } = createCanvas()
 
 		action.execute(canvas)
 
-		expect(createFrame).toHaveBeenCalledWith(0)
+		expect(createFrame).toHaveBeenCalledWith()
 	})
 })

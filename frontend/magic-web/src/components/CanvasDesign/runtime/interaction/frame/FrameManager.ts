@@ -4,6 +4,7 @@ import type { LayerElement, FrameElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import { generateElementId, calculateElementsRect } from "../../shared/ids"
 import { FrameElement as FrameElementClass } from "../../elements/frame/FrameElement"
+import { createContentFrameData, resolveFrameContentLayout } from "./frameCreation"
 
 /**
  * 画框管理器
@@ -373,10 +374,10 @@ export class FrameManager {
 	/**
 	 * 创建画框
 	 * 将选中的元素组合成一个画框
-	 * @param boundsExpansion - 创建时向选中内容边界四周扩展的画布单位
+	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为新画框长边的 5%
 	 * @returns 创建的画框 ID，如果创建失败返回 null
 	 */
-	public createFrame(boundsExpansion: number = 0): string | null {
+	public createFrame(boundsExpansion?: number): string | null {
 		const selectedIds = this.canvas.selectionManager.getSelectedIds()
 		if (selectedIds.length === 0) {
 			return null
@@ -406,25 +407,24 @@ export class FrameManager {
 			return null
 		}
 
-		// 计算画框的位置和尺寸，宽高向上取整
-		const frameX = rect.x - boundsExpansion
-		const frameY = rect.y - boundsExpansion
-		const frameWidth = Math.ceil(rect.width + boundsExpansion * 2)
-		const frameHeight = Math.ceil(rect.height + boundsExpansion * 2)
+		const layout = resolveFrameContentLayout(rect, { padding: boundsExpansion })
+		const frameX = rect.x - layout.padding
+		const frameY = rect.y - layout.padding
 
 		// 获取选中元素的最大 zIndex，Frame 将使用这个位置
 		const maxSelectedZIndex = Math.max(...selectedElements.map((el) => el.zIndex ?? 0))
 
 		// 创建新的 Frame 元素数据
 		const frameId = generateElementId()
-		const frameData: FrameElement = FrameElementClass.createElementData(
-			frameId,
-			frameX,
-			frameY,
-			frameWidth,
-			frameHeight,
-			maxSelectedZIndex, // Frame 使用选中元素的最大 zIndex
-		)
+		const { frameData } = createContentFrameData({
+			id: frameId,
+			x: frameX,
+			y: frameY,
+			width: rect.width,
+			height: rect.height,
+			zIndex: maxSelectedZIndex,
+			padding: layout.padding,
+		})
 
 		// 禁用历史记录，避免子元素更新时记录多次
 		const historyManager = this.canvas.historyManager
