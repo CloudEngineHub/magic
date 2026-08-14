@@ -162,6 +162,8 @@ class LocalVideoResultSyncService:
                 request.element_id,
                 {
                     "status": "failed",
+                    "width": float(request.width),
+                    "height": float(request.height),
                     "errorMessage": error_message[:300],
                 },
                 config=config,

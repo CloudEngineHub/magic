@@ -719,7 +719,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         idx: int,
         element_id: str,
     ) -> Dict[str, Any]:
+        width, height = task.canvas_dimensions
         return {
+            # 预占位阶段就修复或补齐 Element 尺寸，确保 processing/failed 状态也能正常渲染。
+            "width": float(width),
+            "height": float(height),
             "generateVideoRequest": self._build_initial_design_video_request(
                 task,
                 self._ensure_task_video_id(idx),

@@ -139,7 +139,11 @@ class VideoCompositionService:
             element = CanvasElementV3(
                 id=element_id,
                 type="video",
-                properties={"name": result_name},
+                properties={
+                    "name": result_name,
+                    "width": input_spec.output_width,
+                    "height": input_spec.output_height,
+                },
                 contents=[
                     ElementContent(
                         content_id=content_id,
@@ -154,6 +158,7 @@ class VideoCompositionService:
             if element.type != "video":
                 raise ValueError(f"Result Element is not a Video Element: {element.id}")
             element.properties["name"] = result_name
+            self._set_output_dimensions(element, input_spec)
             content_id = CanvasIdGenerator.generate_content_id(
                 element.id,
                 [content.content_id for content in element.contents],
@@ -191,6 +196,7 @@ class VideoCompositionService:
         element = canvas.get_element(preparation.result_element_id)
         if element is None or element.type != "video":
             raise ValueError(f"Result Video Element does not exist: {preparation.result_element_id}")
+        VideoCompositionService._set_output_dimensions(element, preparation.input_spec)
         ContentService.update_content(
             element,
             preparation.result_content_id,
@@ -213,6 +219,7 @@ class VideoCompositionService:
         element = canvas.get_element(preparation.result_element_id)
         if element is None or element.type != "video":
             return
+        VideoCompositionService._set_output_dimensions(element, preparation.input_spec)
         content = element.get_content(preparation.result_content_id)
         if content is None:
             return
@@ -224,6 +231,15 @@ class VideoCompositionService:
                 "errorMessage": error_message[:300],
             },
         )
+
+    @staticmethod
+    def _set_output_dimensions(
+        element: CanvasElementV3,
+        input_spec: CompositionInputSpec,
+    ) -> None:
+        """把合成输出规格持久化为结果 Video Element 的展示尺寸。"""
+        element.properties["width"] = input_spec.output_width
+        element.properties["height"] = input_spec.output_height
 
     @classmethod
     def _resolve_dimensions(cls, aspect_ratio: str, resolution: str) -> tuple[int, int]:

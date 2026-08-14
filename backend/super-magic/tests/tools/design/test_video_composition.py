@@ -148,6 +148,8 @@ def test_composition_service_uses_sequences_and_writes_result_lifecycle():
     assert input_spec.video_sources == ["./videos/two.mp4", "./videos/one.mp4"]
     assert (input_spec.output_width, input_spec.output_height) == (720, 1280)
     result_element = config.canvas.get_element(preparation.result_element_id)
+    assert result_element.properties["width"] == 720
+    assert result_element.properties["height"] == 1280
     result_content = result_element.get_content(preparation.result_content_id)
     assert result_content.fields["status"] == "completed"
     assert result_content.fields["src"] == "./videos/final.mp4"
@@ -164,6 +166,53 @@ def test_composition_service_uses_sequences_and_writes_result_lifecycle():
         and connection.locked
         for connection in config.canvas.connections
     )
+
+
+def test_composition_service_preserves_dimensions_for_failed_result():
+    """合成失败时，processing 占位节点仍保留最终输出尺寸。"""
+    config = _composition_config()
+    service = VideoCompositionService()
+
+    preparation = service.prepare_result(
+        config.canvas,
+        video_edit_element_id="video-edit-1",
+        result_name="模拟失败视频",
+        result_element_id=None,
+        relative_output_path="./videos/failed.mp4",
+    )
+    service.mark_failed(config.canvas, preparation, "mock composition failure")
+
+    result_element = config.canvas.get_element(preparation.result_element_id)
+    assert result_element.properties["width"] == 720
+    assert result_element.properties["height"] == 1280
+    result_content = result_element.get_content(preparation.result_content_id)
+    assert result_content.fields["status"] == "failed"
+
+
+def test_composition_service_repairs_dimensions_on_existing_result_element():
+    """复用缺少尺寸的结果 Element 时，预占位阶段应补齐输出尺寸。"""
+    config = _composition_config()
+    existing = _element(
+        "result-video-1",
+        "video",
+        name="旧结果视频",
+        fields={"src": "./videos/old.mp4", "status": "completed"},
+    )
+    existing.properties.pop("width")
+    existing.properties.pop("height")
+    config.canvas.elements.append(existing)
+
+    preparation = VideoCompositionService().prepare_result(
+        config.canvas,
+        video_edit_element_id="video-edit-1",
+        result_name="更新后的结果视频",
+        result_element_id="result-video-1",
+        relative_output_path="./videos/retry.mp4",
+    )
+
+    result_element = config.canvas.get_element(preparation.result_element_id)
+    assert result_element.properties["width"] == 720
+    assert result_element.properties["height"] == 1280
 
 
 def test_composition_service_rejects_sequence_without_connection():

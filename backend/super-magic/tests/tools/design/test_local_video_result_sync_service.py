@@ -138,5 +138,10 @@ async def test_mark_failed_updates_exact_content_without_switching_active_conten
     manager.update_element.assert_awaited_once()
     args, kwargs = manager.update_element.await_args
     assert args[0] == "element-1"
-    assert args[1] == {"status": "failed", "errorMessage": "远端任务失败"}
+    assert args[1] == {
+        "status": "failed",
+        "width": 1280.0,
+        "height": 720.0,
+        "errorMessage": "远端任务失败",
+    }
     assert kwargs["content_id"] == "element-1-content-2"
