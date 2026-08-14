@@ -34,17 +34,15 @@ class VolcengineArkVideoClientTest extends TestCase
         $clientFactory = $this->createMock(ClientFactory::class);
         $clientFactory->expects($this->once())
             ->method('create')
-            ->with([
-                'timeout' => 180,
-                'verify' => false,
-            ])
+            ->with(['timeout' => 180])
             ->willReturn($httpClient);
 
+        $logger = new VolcengineArkRecordingLogger();
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->expects($this->once())
             ->method('get')
             ->with(VolcengineArkVideoClient::class)
-            ->willReturn(new VolcengineArkRecordingLogger());
+            ->willReturn($logger);
 
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
@@ -56,6 +54,8 @@ class VolcengineArkVideoClientTest extends TestCase
         );
 
         $this->assertSame('task-1', $response['id']);
+        $this->assertSame(['model' => 'doubao-seedance-2-0-fast-260128'], $logger->records[0]['context']['payload']);
+        $this->assertSame(['id' => 'task-1'], $logger->records[1]['context']['response']);
     }
 
     public function testPostReturnsGenericFriendlyMessageForUnmappedArkError(): void
@@ -246,6 +246,10 @@ class VolcengineArkVideoClientTest extends TestCase
         $this->assertSame('req-ark-200', $logger->records[1]['context']['provider_request_id']);
         $this->assertIsInt($logger->records[1]['context']['elapsed_ms']);
         $this->assertGreaterThanOrEqual(0, $logger->records[1]['context']['elapsed_ms']);
+        $this->assertSame([
+            'id' => 'task-1',
+            'status' => 'running',
+        ], $logger->records[1]['context']['response']);
     }
 
     /**

@@ -23,7 +23,7 @@ use Psr\Log\AbstractLogger;
  */
 class MiniMaxVideoClientTest extends TestCase
 {
-    public function testPostLogsPayloadAndResponse(): void
+    public function testPostLogsRedactedRequestAndResponseSummaries(): void
     {
         $httpClient = $this->createMock(Client::class);
         $httpClient->expects($this->once())
@@ -43,7 +43,7 @@ class MiniMaxVideoClientTest extends TestCase
         $clientFactory = $this->createMock(ClientFactory::class);
         $clientFactory->expects($this->once())
             ->method('create')
-            ->with(['timeout' => 30, 'verify' => false])
+            ->with(['timeout' => 180])
             ->willReturn($httpClient);
 
         $logger = new MiniMaxRecordingLogger();
@@ -75,16 +75,21 @@ class MiniMaxVideoClientTest extends TestCase
         $this->assertSame('task-123', $response['task_id']);
         $this->assertCount(2, $logger->records);
         $this->assertSame('minimax video request', $logger->records[0]['message']);
-        $this->assertSame($prompt, $logger->records[0]['context']['payload']['content'][0]['text']);
-        $this->assertSame(
-            'data:image/png;base64,very-sensitive-base64-content',
-            $logger->records[0]['context']['payload']['content'][1]['image_url']['url'],
-        );
+        $payloadLog = $logger->records[0]['context']['payload'];
+        $this->assertSame('MiniMax-H3', $payloadLog['model']);
+        $this->assertSame($prompt, $payloadLog['content'][0]['text']);
+        $imageUrl = $payloadLog['content'][1]['image_url']['url'];
+        $this->assertSame('data_uri', $imageUrl['type']);
+        $this->assertSame('image/png', $imageUrl['mime_type']);
+        $this->assertSame(strlen('very-sensitive-base64-content'), $imageUrl['base64_length']);
         $this->assertSame('minimax video response', $logger->records[1]['message']);
         $this->assertSame(200, $logger->records[1]['context']['http_status']);
         $this->assertSame('request-123', $logger->records[1]['context']['provider_request_id']);
+        $this->assertSame(['task_id' => 'task-123'], $logger->records[1]['context']['response']);
         $this->assertArrayNotHasKey('base_url', $logger->records[1]['context']);
         $this->assertArrayNotHasKey('elapsed_ms', $logger->records[1]['context']);
+        $serializedLogs = json_encode($logger->records, JSON_THROW_ON_ERROR);
+        $this->assertStringNotContainsString('very-sensitive-base64-content', $serializedLogs);
     }
 
     public function testGetErrorLogsHttpStatus(): void

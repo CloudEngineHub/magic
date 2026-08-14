@@ -9,6 +9,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope;
 
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
@@ -33,12 +34,12 @@ readonly class DashScopeVideoClient
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
-        $sanitizedLogContext = $this->sanitizeForLog($logContext);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
         $this->logger->info('dashscope video post request', [
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'payload' => $this->sanitizeForLog($payload),
+            'payload' => PayloadLogSanitizer::sanitizeValue($payload),
         ]);
 
         try {
@@ -70,7 +71,7 @@ readonly class DashScopeVideoClient
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'response' => $this->sanitizeForLog($data),
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
@@ -80,7 +81,7 @@ readonly class DashScopeVideoClient
     {
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
-        $sanitizedLogContext = $this->sanitizeForLog($logContext);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
         $this->logger->info('dashscope video get request', [
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
@@ -114,7 +115,7 @@ readonly class DashScopeVideoClient
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
             'context' => $sanitizedLogContext,
-            'response' => $this->sanitizeForLog($data),
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
@@ -189,7 +190,7 @@ readonly class DashScopeVideoClient
             $action,
             $statusCode,
             $reason,
-            $this->sanitizeResponseBody($body),
+            PayloadLogSanitizer::sanitizeResponseBody($body),
         );
     }
 
@@ -223,24 +224,5 @@ readonly class DashScopeVideoClient
         }
 
         return null;
-    }
-
-    private function sanitizeForLog(mixed $value): mixed
-    {
-        if (! is_array($value)) {
-            return $value;
-        }
-
-        $sanitized = [];
-        foreach ($value as $key => $item) {
-            $sanitized[$key] = is_array($item) ? $this->sanitizeForLog($item) : $item;
-        }
-
-        return $sanitized;
-    }
-
-    private function sanitizeResponseBody(string $body): string
-    {
-        return strlen($body) > 1024 ? substr($body, 0, 1024) . '...(truncated)' : $body;
     }
 }

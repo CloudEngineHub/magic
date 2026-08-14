@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
@@ -75,13 +76,14 @@ readonly class VolcengineArkVideoClient
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
         $startedAt = microtime(true);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
 
         $this->logger->info('volcengine ark video request', [
             'method' => $method,
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
-            'context' => $logContext,
-            'payload' => $options['json'] ?? null,
+            'context' => $sanitizedLogContext,
+            'payload' => is_array($options['json'] ?? null) ? PayloadLogSanitizer::sanitizeValue($options['json']) : null,
         ]);
 
         try {
@@ -104,7 +106,7 @@ readonly class VolcengineArkVideoClient
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
-                'context' => $logContext,
+                'context' => $sanitizedLogContext,
                 'http_status' => $response?->getStatusCode(),
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
@@ -131,7 +133,7 @@ readonly class VolcengineArkVideoClient
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
-                'context' => $logContext,
+                'context' => $sanitizedLogContext,
                 'http_status' => null,
                 'provider_request_id' => null,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
@@ -151,10 +153,11 @@ readonly class VolcengineArkVideoClient
             'method' => $method,
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
-            'context' => $logContext,
+            'context' => $sanitizedLogContext,
             'http_status' => $response->getStatusCode(),
+            'provider_request_id' => $response->getHeaderLine('x-tt-logid'),
             'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
-            'response' => $data,
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;

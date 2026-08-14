@@ -9,6 +9,7 @@ namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax;
 
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\ProviderVideoException;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
@@ -47,7 +48,7 @@ readonly class MiniMaxVideoClient
         $this->logger->info('minimax video request', [
             'method' => $normalizedMethod,
             'path' => $normalizedPath,
-            'payload' => $payload,
+            'payload' => PayloadLogSanitizer::sanitizeValue($payload),
         ]);
 
         try {
@@ -109,7 +110,7 @@ readonly class MiniMaxVideoClient
             'path' => $normalizedPath,
             'http_status' => $response->getStatusCode(),
             'provider_request_id' => $this->resolveProviderRequestId($data, $response->getHeaderLine('x-request-id')),
-            'response' => $data,
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;
