@@ -19,9 +19,8 @@ class SkillMarketFeaturedQueryFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'limit' => 'nullable|integer|min:1|max:20',
-            'exclude_codes' => 'nullable|array',
-            'exclude_codes.*' => 'string',
+            'page' => 'nullable|integer|min:1',
+            'page_size' => 'nullable|integer|min:1|max:1000',
         ];
     }
 
@@ -31,11 +30,11 @@ class SkillMarketFeaturedQueryFormRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'limit.integer' => trans('validation.integer', ['attribute' => 'limit']),
-            'limit.min' => trans('validation.min.numeric', ['attribute' => 'limit', 'min' => 1]),
-            'limit.max' => trans('validation.max.numeric', ['attribute' => 'limit', 'max' => 20]),
-            'exclude_codes.array' => trans('validation.array', ['attribute' => 'exclude_codes']),
-            'exclude_codes.*.string' => trans('validation.string', ['attribute' => 'exclude_codes']),
+            'page.integer' => trans('validation.integer', ['attribute' => 'page']),
+            'page.min' => trans('validation.min.numeric', ['attribute' => 'page', 'min' => 1]),
+            'page_size.integer' => trans('validation.integer', ['attribute' => 'page_size']),
+            'page_size.min' => trans('validation.min.numeric', ['attribute' => 'page_size', 'min' => 1]),
+            'page_size.max' => trans('validation.max.numeric', ['attribute' => 'page_size', 'max' => 1000]),
         ];
     }
 

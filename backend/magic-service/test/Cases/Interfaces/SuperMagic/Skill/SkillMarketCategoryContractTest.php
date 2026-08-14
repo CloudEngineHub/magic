@@ -16,11 +16,11 @@ use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
-use App\Interfaces\SuperMagic\Skill\DTO\Response\FeaturedSkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OrganizationInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublisherInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillMarketFeaturedQueryFormRequest;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
@@ -87,25 +87,23 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame([10001, 10002], $query->getCategoryIds());
     }
 
-    public function testFeaturedQueryValidatesLimitAndExcludeCodes(): void
+    public function testFeaturedQueryValidatesPageAndPageSize(): void
     {
         $request = (new ReflectionClass(SkillMarketFeaturedQueryFormRequest::class))->newInstanceWithoutConstructor();
 
-        $this->assertSame('nullable|integer|min:1|max:20', $request->rules()['limit']);
-        $this->assertSame('nullable|array', $request->rules()['exclude_codes']);
-        $this->assertSame('string', $request->rules()['exclude_codes.*']);
+        $this->assertSame('nullable|integer|min:1', $request->rules()['page']);
+        $this->assertSame('nullable|integer|min:1|max:1000', $request->rules()['page_size']);
     }
 
-    public function testFeaturedResponseSerializesCounts(): void
+    public function testFeaturedResponseSerializesPagination(): void
     {
-        $response = new FeaturedSkillMarketListResponseDTO([], 20, 10, 0, false);
+        $response = new SkillMarketListResponseDTO([], 1, 10, 17);
 
         $this->assertSame([
             'list' => [],
-            'requested_count' => 20,
-            'returned_count' => 10,
-            'remaining_count' => 0,
-            'has_more' => false,
+            'page' => 1,
+            'page_size' => 10,
+            'total' => 17,
         ], $response->jsonSerialize());
     }
 

@@ -66,26 +66,22 @@ class SkillMarketApi extends AbstractApi
     /**
      * 获取市场精选技能列表.
      */
-    public function featuredQueries(RequestContext $requestContext, SkillMarketFeaturedQueryFormRequest $request)
+    public function featured(RequestContext $requestContext, SkillMarketFeaturedQueryFormRequest $request)
     {
         $requestContext->setUserAuthorization($this->getAuthorization());
 
-        $requestData = $request->validated();
-        $limit = isset($requestData['limit']) ? (int) $requestData['limit'] : 10;
-        $excludeCodes = $requestData['exclude_codes'] ?? [];
+        $page = $this->createPage();
+        $result = $this->skillMarketAppService->featuredQueries($requestContext, $page);
 
-        $result = $this->skillMarketAppService->featuredQueries($requestContext, $limit, $excludeCodes);
-
-        return SkillAssembler::createFeaturedMarketListResponseDTO(
+        return SkillAssembler::createMarketListResponseDTO(
             $result['list'],
             $result['userSkills'],
             $result['publisherUserMap'],
             $this->getAuthorization()->getId(),
-            $result['skillVersionMap'],
-            $result['requestedCount'],
-            $result['returnedCount'],
-            $result['remainingCount'],
-            $result['hasMore']
+            $page->getPage(),
+            $page->getPageNum(),
+            $result['total'],
+            $result['skillVersionMap'] ?? []
         );
     }
 

@@ -18,7 +18,7 @@ Router::addGroup('/api/v1', static function () {
         Router::post('/queries', [SkillMarketApi::class, 'queries']);
 
         // 获取市场精选技能列表
-        Router::post('/featured/queries', [SkillMarketApi::class, 'featuredQueries']);
+        Router::post('/featured', [SkillMarketApi::class, 'featured']);
 
         // 获取市场技能分类树
         Router::get('/categories', [SkillMarketApi::class, 'getCategories']);

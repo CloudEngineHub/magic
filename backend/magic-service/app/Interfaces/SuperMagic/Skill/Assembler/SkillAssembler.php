@@ -18,7 +18,6 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
-use App\Interfaces\SuperMagic\Skill\DTO\Response\FeaturedSkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionsResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublishSkillResponseDTO;
@@ -412,42 +411,6 @@ class SkillAssembler
             page: $page,
             pageSize: $pageSize,
             total: $total
-        );
-    }
-
-    /**
-     * 创建市场精选技能列表响应 DTO.
-     *
-     * @param array<string, SkillEntity> $userSkills 用户已添加的技能映射（key 为 skillCode）
-     * @param array<string, MagicUserEntity> $publisherUserMap 发布者用户信息映射（key 为 publisherId）
-     * @param array<string, SkillVersionEntity> $skillVersionMap key 为 skill_code
-     * @return FeaturedSkillMarketListResponseDTO 市场精选技能列表响应 DTO
-     */
-    public static function createFeaturedMarketListResponseDTO(
-        array $skillMarketEntities,
-        array $userSkills,
-        array $publisherUserMap,
-        string $currentUserId,
-        array $skillVersionMap,
-        int $requestedCount,
-        int $returnedCount,
-        int $remainingCount,
-        bool $hasMore
-    ): FeaturedSkillMarketListResponseDTO {
-        $listItems = self::createMarketListItems(
-            $skillMarketEntities,
-            $userSkills,
-            $publisherUserMap,
-            $currentUserId,
-            $skillVersionMap
-        );
-
-        return new FeaturedSkillMarketListResponseDTO(
-            list: $listItems,
-            requestedCount: $requestedCount,
-            returnedCount: $returnedCount,
-            remainingCount: $remainingCount,
-            hasMore: $hasMore
         );
     }
 

@@ -130,38 +130,28 @@ class SkillMarketAppService extends AbstractSkillAppService
     /**
      * 获取市场精选技能列表.
      *
-     * @param int $limit 返回条数
-     * @param string[] $excludeCodes 需要排除的 skill_code
+     * @param Page $page 分页对象
      * @return array{
      *     list: SkillMarketEntity[],
-     *     requestedCount: int,
-     *     returnedCount: int,
-     *     remainingCount: int,
-     *     hasMore: bool,
+     *     total: int,
      *     userSkills: array<string, SkillEntity>,
      *     publisherUserMap: array<string, MagicUserEntity>,
      *     skillVersionMap: array<string, SkillVersionEntity>
      * }
      */
-    public function featuredQueries(RequestContext $requestContext, int $limit, array $excludeCodes): array
+    public function featuredQueries(RequestContext $requestContext, Page $page): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
         $dataIsolation->disabled();
 
-        $excludeCodes = array_values(array_unique(array_filter($excludeCodes, static fn ($code) => $code !== '' && $code !== null)));
-        $result = $this->skillMarketDomainService->queryFeatured($excludeCodes, $limit);
+        $result = $this->skillMarketDomainService->queryFeatured($page);
 
         $data = $this->resolveMarketListData($dataIsolation, $result['list']);
-        $returnedCount = count($result['list']);
-        $remainingCount = max(0, $result['total'] - $returnedCount);
 
         return [
             'list' => $result['list'],
-            'requestedCount' => $limit,
-            'returnedCount' => $returnedCount,
-            'remainingCount' => $remainingCount,
-            'hasMore' => $remainingCount > 0,
+            'total' => $result['total'],
         ] + $data;
     }
 
