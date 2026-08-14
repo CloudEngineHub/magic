@@ -10,7 +10,6 @@ import { SaveUploadFileToProjectResponse } from "../../utils/api"
 import { AttachmentItem } from "../TopicFilesButton/hooks"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
-import type { VideoProductionSendSnapshot } from "./stores/VideoProductionConfigStore"
 
 // Re-export ModelSwitch types for unified type imports
 export type {
@@ -131,7 +130,6 @@ export interface MessageEditorProps {
 		selectedModel?: ModelItem | null
 		selectedImageModel?: ModelItem | null
 		selectedVideoModel?: ModelItem | null
-		videoProductionSnapshot?: VideoProductionSendSnapshot
 		shouldClearEditorAfterSend?: boolean
 		extra?: Record<string, unknown>
 	}) => void
@@ -221,7 +219,6 @@ export interface SendMessageByContentPayload {
 	selectedModel?: ModelItem | null
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null
-	videoProductionSnapshot?: VideoProductionSendSnapshot
 	shouldClearEditorAfterSend?: boolean
 	extra?: Record<string, unknown>
 }

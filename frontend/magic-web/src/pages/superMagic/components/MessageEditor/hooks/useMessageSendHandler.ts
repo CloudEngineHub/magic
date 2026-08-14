@@ -114,8 +114,6 @@ export default function useMessageSendHandler({
 			selectedModel: selectedModel ? { ...selectedModel } : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
 			selectedVideoModel,
-			videoProductionSnapshot:
-				store.videoProductionConfigStore?.createSendSnapshot?.(selectedVideoModel),
 		})
 
 		store.draftStore.createSentDraft({

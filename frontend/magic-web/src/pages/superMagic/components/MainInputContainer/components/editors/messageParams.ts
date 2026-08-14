@@ -14,7 +14,6 @@ export function buildQueueMessageInput(
 		selectedModel: params.selectedModel,
 		selectedImageModel: params.selectedImageModel,
 		selectedVideoModel: params.selectedVideoModel,
-		videoProductionSnapshot: params.videoProductionSnapshot,
 		topicMode: params.topicMode,
 		agentCode: typeof agentCode === "string" ? agentCode : null,
 	}

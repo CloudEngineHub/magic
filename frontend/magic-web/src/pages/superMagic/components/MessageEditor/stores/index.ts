@@ -12,7 +12,6 @@ export type {
 	VideoProductionConfig,
 	VideoProductionDurationCapabilities,
 	VideoProductionGenerationMode,
-	VideoProductionSendSnapshot,
 } from "./VideoProductionConfigStore"
 
 // Export context and hooks

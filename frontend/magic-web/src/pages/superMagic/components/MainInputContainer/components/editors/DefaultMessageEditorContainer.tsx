@@ -36,7 +36,6 @@ import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
-import { useOptionalMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -52,7 +51,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const lt = useLocaleText()
 	const isMobile = useIsMobile()
 	const sceneStateStore = useOptionalSceneStateStore()
-	const storeForVideoProduction = useOptionalMessageEditorStore()
 
 	const internalEditorRef = useRef<MessageEditorRef>(null)
 	const tiptapEditorRef = (editorRef ??
@@ -225,11 +223,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					? extra
 					: undefined,
 		}
-		const videoProductionSnapshot = params.videoProductionSnapshot
-		const paramsWithVideoSnapshot: HandleSendParams = videoProductionSnapshot
-			? { ...normalizedParams, videoProductionSnapshot }
-			: normalizedParams
-
 		if (queueContext?.editingQueueItem) {
 			if (!params.queueId || params.queueId === queueContext.editingQueueItem.id) {
 				queueContext.finishEditQueueItem(nextValue, params.mentionItems)
@@ -249,7 +242,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		// 队列发送和直接发送必须使用同一份业务参数。微应用、Skill、员工等场景会通过
 		// mergeSendParams 修正 topicMode / extra；如果在加入队列后才合并，队列消息会退回默认模式。
 		const defaultParams: HandleSendParams = {
-			...paramsWithVideoSnapshot,
+			...normalizedParams,
 			value: nextValue ?? params.value,
 		}
 		const customParamsPatch = editorContext?.mergeSendParams?.({
@@ -275,9 +268,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
 				return false
 			}
-			if (finalParams.videoProductionSnapshot) {
-				storeForVideoProduction?.videoProductionConfigStore.clearCurrentConfig()
-			}
+			sceneStateStore?.incrementSendCount()
 			setFocused(false)
 			return true
 		}
@@ -347,9 +338,6 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			})
 
 			if (sendResult) {
-				if (finalParams.videoProductionSnapshot) {
-					storeForVideoProduction?.videoProductionConfigStore.clearCurrentConfig()
-				}
 				editorContext?.onSendSuccess?.({
 					currentProject: sendResult.currentProject ?? null,
 					currentTopic: sendResult.currentTopic ?? null,

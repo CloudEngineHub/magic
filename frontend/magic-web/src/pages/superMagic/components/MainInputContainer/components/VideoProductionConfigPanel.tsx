@@ -1,9 +1,9 @@
-import { BookOpen, ChevronDown } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { observer } from "mobx-react-lite"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { userStore } from "@/models/user"
 import { useOptionalMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
+import { VideoProductionConfigStore } from "@/pages/superMagic/components/MessageEditor/stores/VideoProductionConfigStore"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import {
 	Select,
@@ -13,10 +13,12 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import {
-	VIDEO_PRODUCTION_AGENT_CODE,
+	VIDEO_PRODUCTION_SUFFIX_SOURCE,
+	buildVideoProductionPresetContent,
 	isVideoProductionContext,
 } from "../utils/videoProductionConfig"
 import AIAutoSelectVisual from "../scenes/Slides/AIAutoSelectVisual"
+import { useOptionalSceneStateStore } from "../stores"
 
 interface VideoProductionConfigPanelProps {
 	topicMode?: string
@@ -31,31 +33,71 @@ function VideoProductionConfigPanel({
 }: VideoProductionConfigPanelProps) {
 	const { t } = useTranslation("super")
 	const store = useOptionalMessageEditorStore()
+	const sceneStateStore = useOptionalSceneStateStore()
 	const isVisible = isVideoProductionContext({ topicMode, agentCode, selectedTopic })
-	const expertCode = VIDEO_PRODUCTION_AGENT_CODE
-	const userId = userStore.user.userInfo?.magic_id || userStore.user.userInfo?.user_id
 	const selectedVideoModel = store?.topicModelStore.selectedVideoModel
+	const configStore = useMemo(() => new VideoProductionConfigStore(), [])
+	const capabilities = configStore.capabilities
+	const config = configStore.config
 	const [isGenerationPopoverOpen, setIsGenerationPopoverOpen] = useState(false)
 	const [isDurationPopoverOpen, setIsDurationPopoverOpen] = useState(false)
 
 	useEffect(() => {
 		if (!store) return
 		if (!isVisible) {
-			store.videoProductionConfigStore.deactivate()
+			configStore.deactivate()
 			return
 		}
-		store.videoProductionConfigStore.setContext({
-			userId,
-			agentCode: expertCode,
+		configStore.setContext({
 			model: selectedVideoModel,
 		})
-		return () => store.videoProductionConfigStore.deactivate()
-	}, [expertCode, isVisible, selectedVideoModel, store, userId])
+		return () => configStore.deactivate()
+	}, [configStore, isVisible, selectedVideoModel, store])
+
+	useEffect(() => {
+		if (!sceneStateStore) return
+		if (!isVisible || !store) {
+			sceneStateStore.setPresetSuffixContentForSource(
+				VIDEO_PRODUCTION_SUFFIX_SOURCE,
+				undefined,
+			)
+			return
+		}
+
+		sceneStateStore.setPresetSuffixContentForSource(
+			VIDEO_PRODUCTION_SUFFIX_SOURCE,
+			buildVideoProductionPresetContent({
+				generationMode: t(`messageEditor.videoProductionConfig.${config.generationMode}`),
+				aspectRatio: config.aspectRatio,
+				durationSeconds: config.durationSeconds,
+				resolution: config.resolution,
+				showAspectRatio: capabilities.showAspectRatio,
+				showDuration: capabilities.showDuration,
+				showResolution: capabilities.showResolution,
+				labels: {
+					generation: t("messageEditor.videoProductionConfig.generation"),
+					aspectRatio: t("messageEditor.videoProductionConfig.aspectRatio"),
+					duration: t("messageEditor.videoProductionConfig.duration"),
+					resolution: t("messageEditor.videoProductionConfig.resolution"),
+				},
+			}),
+		)
+
+		return () => {
+			sceneStateStore.setPresetSuffixContentForSource(
+				VIDEO_PRODUCTION_SUFFIX_SOURCE,
+				undefined,
+			)
+		}
+	}, [capabilities, config, isVisible, sceneStateStore, store, t])
+
+	const sendCount = sceneStateStore?.sendCount
+	useEffect(() => {
+		if (!sendCount) return
+		configStore.clearCurrentConfig()
+	}, [configStore, sendCount])
 
 	if (!isVisible || !store) return null
-
-	const configStore = store.videoProductionConfigStore
-	const { capabilities, config } = configStore
 
 	const triggerClass =
 		"flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-full border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs outline-none transition-[color,box-shadow] hover:bg-muted focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0 dark:bg-input/30 dark:hover:bg-input/50"
@@ -72,17 +114,20 @@ function VideoProductionConfigPanel({
 		>
 			<AIAutoSelectVisual />
 			<div className="relative z-10 flex w-full items-center justify-between gap-4">
-				<button
-					type="button"
-					className="flex h-9 items-center gap-2 rounded-xl border border-border bg-white/75 px-3 text-sm font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:cursor-default disabled:opacity-100"
-					aria-label={t("messageEditor.videoProductionConfig.skill")}
-					data-testid="video-production-skill"
-				>
-					<BookOpen className="size-4" />
-					{t("messageEditor.videoProductionConfig.skill")}
-				</button>
+				{/*
+				 * 产品暂时隐藏 skill 入口；保留实现和空 options 状态，后续确认接入来源后可直接恢复。
+				 * <button
+				 * 	type="button"
+				 * 	className="flex h-9 items-center gap-2 rounded-xl border border-border bg-white/75 px-3 text-sm font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white disabled:cursor-default disabled:opacity-100"
+				 * 	aria-label={t("messageEditor.videoProductionConfig.skill")}
+				 * 	data-testid="video-production-skill"
+				 * >
+				 * 	<BookOpen className="size-4" />
+				 * 	{t("messageEditor.videoProductionConfig.skill")}
+				 * </button>
+				 */}
 
-				<div className="flex items-center gap-4">
+				<div className="ml-auto flex items-center gap-4">
 					{capabilities.showAspectRatio && (
 						<label className={fieldClass}>
 							<span className="text-sm font-normal text-foreground">

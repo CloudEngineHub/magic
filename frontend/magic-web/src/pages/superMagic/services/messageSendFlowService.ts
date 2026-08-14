@@ -27,7 +27,6 @@ import {
 } from "../components/MessageEditor/utils"
 import { transformMentions } from "../components/MessageEditor/utils/mention"
 import type { ModelItem } from "../components/MessageEditor/types"
-import type { VideoProductionSendSnapshot } from "../components/MessageEditor/stores/VideoProductionConfigStore"
 import type { SendMessageOptions } from "../components/MessagePanel/types"
 import {
 	MessageStatus,
@@ -53,7 +52,6 @@ export interface HandleSendParams {
 	selectedModel?: ModelItem | null
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null
-	videoProductionSnapshot?: VideoProductionSendSnapshot
 	topicMode?: TopicMode
 	isFromQueue?: boolean
 	queueId?: string

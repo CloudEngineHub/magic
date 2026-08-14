@@ -6,7 +6,6 @@ import { EditorStore } from "../EditorStore"
 import { DraftStore } from "../DraftStore"
 import { FileUploadStore } from "../FileUploadStore"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
-import { VideoProductionConfigStore } from "../VideoProductionConfigStore"
 
 /**
  * MessageEditorStore - Root store for MessageEditor
@@ -31,7 +30,6 @@ export class MessageEditorStore {
 	draftStore: DraftStore
 	fileUploadStore: FileUploadStore
 	topicModelStore: ReturnType<typeof createSuperMagicTopicModelStore>
-	videoProductionConfigStore: VideoProductionConfigStore
 
 	// Global states
 	isSending = false
@@ -46,7 +44,6 @@ export class MessageEditorStore {
 			projectFilesStore: options.projectFilesStore,
 		})
 		this.topicModelStore = options.topicModelStore ?? createSuperMagicTopicModelStore()
-		this.videoProductionConfigStore = new VideoProductionConfigStore()
 		// Note: config parameter will be added in Phase 2 for fileUploadStore
 		if (options.mentionPanelStore) {
 			this.draftStore.setMentionPanelStore(options.mentionPanelStore)

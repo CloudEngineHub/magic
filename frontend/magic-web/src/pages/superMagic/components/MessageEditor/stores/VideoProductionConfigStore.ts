@@ -20,11 +20,6 @@ export interface VideoProductionConfig {
 	resolution?: string
 }
 
-export interface VideoProductionSendSnapshot {
-	modelId: string
-	config: Readonly<VideoProductionConfig>
-}
-
 export interface VideoProductionDurationCapabilities {
 	type: "options" | "range"
 	options: number[]
@@ -51,7 +46,6 @@ export interface ResolveVideoProductionCapabilitiesParams {
 	selectedResolution?: string
 }
 
-const STORAGE_PREFIX = "super_magic/video-production-config/v1"
 const EMPTY_CONFIG: VideoProductionConfig = { generationMode: "normal" }
 
 function asCanvasVideoModel(model?: ModelItem | null): VideoModelItem | undefined {
@@ -86,22 +80,13 @@ function getDurationCapabilities(
 	}
 	const generation = model?.video_generation_config?.generation
 	const rawDurations = generation?.durations
-	if (generation?.duration_type === "range" || (!Array.isArray(rawDurations) && rawDurations)) {
-		const range = Array.isArray(rawDurations)
-			? rawDurations.length > 0
-				? {
-						min: Math.min(...rawDurations),
-						max: Math.max(...rawDurations),
-						step: 1,
-					}
-				: undefined
-			: rawDurations
+	if (generation?.duration_type === "range" && rawDurations && !Array.isArray(rawDurations)) {
 		return {
 			type: "range" as const,
 			options: [],
-			min: range?.min,
-			max: range?.max,
-			step: range?.step ?? 1,
+			min: rawDurations.min,
+			max: rawDurations.max,
+			step: rawDurations.step ?? 1,
 		}
 	}
 	return {
@@ -170,53 +155,30 @@ export function resolveVideoProductionCapabilities({
 	}
 }
 
-function getStorageKey(userId: string, agentCode: string, modelId: string) {
-	return `${STORAGE_PREFIX}/${encodeURIComponent(userId || "anonymous")}/${encodeURIComponent(agentCode || "video-production")}/${encodeURIComponent(modelId)}`
-}
-
-function readCachedConfig(key: string): Partial<VideoProductionConfig> | undefined {
-	if (typeof localStorage === "undefined") return undefined
-	try {
-		const value = JSON.parse(localStorage.getItem(key) || "null")
-		return value && typeof value === "object" ? value : undefined
-	} catch {
-		return undefined
-	}
-}
-
-function writeCachedConfig(key: string, config: VideoProductionConfig) {
-	if (typeof localStorage === "undefined") return
-	try {
-		localStorage.setItem(key, JSON.stringify(config))
-	} catch {
-		// Storage can be unavailable in private browsing; UI state remains usable.
-	}
-}
-
 function mergeValidConfig(
-	cached: Partial<VideoProductionConfig> | undefined,
+	current: Partial<VideoProductionConfig> | undefined,
 	capabilities: VideoProductionCapabilities,
 ): VideoProductionConfig {
 	const next: VideoProductionConfig = {
-		generationMode: cached?.generationMode === "detailed" ? "detailed" : "normal",
+		generationMode: current?.generationMode === "detailed" ? "detailed" : "normal",
 	}
-	if (typeof cached?.skillId === "string" && cached.skillId) next.skillId = cached.skillId
+	if (typeof current?.skillId === "string" && current.skillId) next.skillId = current.skillId
 	if (capabilities.showAspectRatio) {
 		next.aspectRatio = capabilities.aspectRatioOptions.some(
-			(item) => item.value === cached?.aspectRatio,
+			(item) => item.value === current?.aspectRatio,
 		)
-			? cached?.aspectRatio
+			? current?.aspectRatio
 			: capabilities.defaults.aspectRatio
 	}
 	if (capabilities.showResolution) {
 		next.resolution = capabilities.resolutionOptions.some(
-			(item) => item.value === cached?.resolution,
+			(item) => item.value === current?.resolution,
 		)
-			? cached?.resolution
+			? current?.resolution
 			: capabilities.defaults.resolution
 	}
 	if (capabilities.showDuration) {
-		const duration = cached?.durationSeconds
+		const duration = current?.durationSeconds
 		if (capabilities.duration.type === "options") {
 			next.durationSeconds = capabilities.duration.options.includes(duration ?? NaN)
 				? duration
@@ -244,60 +206,25 @@ export class VideoProductionConfigStore {
 		inputMode: "standard",
 	})
 	currentModelId = ""
-	private contextKey = ""
-	private userId = "anonymous"
-	private agentCode = "video-production"
 	private model?: ModelItem | null
 	private modelSignature = ""
 	private active = false
 
 	constructor() {
-		makeAutoObservable(this, { contextKey: false }, { autoBind: true })
+		makeAutoObservable(this, {}, { autoBind: true })
 	}
 
-	setContext({
-		userId,
-		agentCode,
-		model,
-	}: {
-		userId?: string | null
-		agentCode?: string | null
-		model?: ModelItem | null
-	}) {
+	setContext({ model }: { model?: ModelItem | null }) {
 		const nextModelId = model?.model_id || ""
-		const nextUserId = userId || "anonymous"
-		const nextAgentCode = agentCode || "video-production"
-		const nextContextKey = `${nextUserId}/${nextAgentCode}/${nextModelId}`
 		const nextModelSignature = JSON.stringify(model?.video_generation_config ?? null)
 		const modelChanged = this.modelSignature !== nextModelSignature
-		if (nextContextKey === this.contextKey && !modelChanged && this.active) return
+		if (nextModelId === this.currentModelId && !modelChanged && this.active) return
 		this.active = true
-		this.contextKey = nextContextKey
-		this.userId = nextUserId
-		this.agentCode = nextAgentCode
 		this.model = model
 		this.modelSignature = nextModelSignature
 		this.currentModelId = nextModelId
 		this.capabilities = resolveVideoProductionCapabilities({ model, inputMode: "standard" })
-		const cached = nextModelId
-			? readCachedConfig(getStorageKey(nextUserId, nextAgentCode, nextModelId))
-			: undefined
-		const cachedResolutionIsValid = this.capabilities.resolutionOptions.some(
-			(option) => option.value === cached?.resolution,
-		)
-		if (
-			cachedResolutionIsValid &&
-			cached?.resolution !== this.capabilities.defaults.resolution
-		) {
-			this.capabilities = resolveVideoProductionCapabilities({
-				model,
-				inputMode: "standard",
-				selectedResolution: cached.resolution,
-			})
-		}
-		this.config = mergeValidConfig(cached, this.capabilities)
-		if (nextModelId)
-			writeCachedConfig(getStorageKey(nextUserId, nextAgentCode, nextModelId), this.config)
+		this.config = mergeValidConfig(undefined, this.capabilities)
 	}
 
 	deactivate() {
@@ -313,24 +240,9 @@ export class VideoProductionConfigStore {
 		})
 		this.capabilities = nextCapabilities
 		this.config = mergeValidConfig(candidate, nextCapabilities)
-		if (this.contextKey && this.currentModelId) {
-			writeCachedConfig(
-				getStorageKey(this.userId, this.agentCode, this.currentModelId),
-				this.config,
-			)
-		}
 	}
 
 	clearCurrentConfig() {
 		this.config = { ...this.capabilities.defaults }
-	}
-
-	createSendSnapshot(model?: ModelItem | null): VideoProductionSendSnapshot | undefined {
-		const modelId = model?.model_id || this.currentModelId
-		if (!this.active || !modelId) return undefined
-		return Object.freeze({
-			modelId,
-			config: Object.freeze({ ...this.config }),
-		})
 	}
 }

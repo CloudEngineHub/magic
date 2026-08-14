@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import type { ModelItem } from "../../components/ModelSwitch/types"
 import { ModelStatusEnum } from "../../components/ModelSwitch/types"
 import {
@@ -25,11 +25,6 @@ function createModel(
 }
 
 describe("VideoProductionConfigStore", () => {
-	beforeEach(() => {
-		localStorage.clear()
-		vi.restoreAllMocks()
-	})
-
 	it("resolves sizes, defaults, and range durations", () => {
 		const model = createModel("range-model", {
 			aspect_ratios: ["16:9", "9:16"],
@@ -103,7 +98,7 @@ describe("VideoProductionConfigStore", () => {
 		expect(capabilities.duration).toMatchObject({ type: "options", options: [15] })
 	})
 
-	it("keeps caches isolated and rejects stale values", () => {
+	it("resets to the active model defaults when switching models", () => {
 		const modelA = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [4, 8],
@@ -115,49 +110,33 @@ describe("VideoProductionConfigStore", () => {
 			resolutions: ["1080p"],
 		})
 		const store = new VideoProductionConfigStore()
-		store.setContext({ userId: "user-1", agentCode: "video-production", model: modelA })
+		store.setContext({ model: modelA })
 		store.setConfig({ durationSeconds: 8 })
-		store.setContext({ userId: "user-1", agentCode: "video-production", model: modelB })
+		store.setContext({ model: modelB })
 		expect(store.config).toMatchObject({
 			aspectRatio: "9:16",
 			durationSeconds: 6,
 			resolution: "1080p",
 		})
-		store.setContext({ userId: "user-1", agentCode: "video-production", model: modelA })
-		expect(store.config.durationSeconds).toBe(8)
+		store.setContext({ model: modelA })
+		expect(store.config.durationSeconds).toBe(4)
 	})
 
-	it("creates an immutable snapshot only in the active expert context", () => {
-		const model = createModel("model-a", { durations: [4] })
-		const store = new VideoProductionConfigStore()
-		expect(store.createSendSnapshot(model)).toBeUndefined()
-		store.setContext({ userId: "user-1", agentCode: "video-production", model })
-		const snapshot = store.createSendSnapshot(model)
-		expect(snapshot?.modelId).toBe("model-a")
-		expect(Object.isFrozen(snapshot)).toBe(true)
-		expect(Object.isFrozen(snapshot?.config)).toBe(true)
-	})
-
-	it("restores a cached value only when it remains valid for the current model", () => {
+	it("does not restore a prior selection after recreating the store", () => {
 		const model = createModel("model-a", {
 			aspect_ratios: ["16:9"],
 			durations: [5, 10],
 			resolutions: ["720p"],
 		})
 		const store = new VideoProductionConfigStore()
-		store.setContext({ userId: "user-1", model })
+		store.setContext({ model })
 		store.setConfig({ generationMode: "detailed", durationSeconds: 10 })
 
-		const restored = new VideoProductionConfigStore()
-		restored.setContext({ userId: "user-1", model })
-		expect(restored.config).toMatchObject({ generationMode: "detailed", durationSeconds: 10 })
+		const nextStore = new VideoProductionConfigStore()
+		nextStore.setContext({ model })
+		expect(nextStore.config).toMatchObject({ generationMode: "normal", durationSeconds: 5 })
 
-		localStorage.setItem(
-			"super_magic/video-production-config/v1/user-1/video-production/model-a",
-			JSON.stringify({ generationMode: "detailed", durationSeconds: 99 }),
-		)
-		const staleCacheStore = new VideoProductionConfigStore()
-		staleCacheStore.setContext({ userId: "user-1", model })
-		expect(staleCacheStore.config.durationSeconds).toBe(5)
+		store.clearCurrentConfig()
+		expect(store.config.durationSeconds).toBe(5)
 	})
 })

@@ -28,7 +28,6 @@ import type {
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { QueuedMessage } from "@/pages/superMagic/components/MessagePanel/hooks/useMessageQueue"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
-import type { VideoProductionSendSnapshot } from "@/pages/superMagic/components/MessageEditor/stores/VideoProductionConfigStore"
 
 export interface QueueMessageInput {
 	content: JSONContent
@@ -36,7 +35,6 @@ export interface QueueMessageInput {
 	selectedModel?: ModelItem | null
 	selectedImageModel?: ModelItem | null
 	selectedVideoModel?: ModelItem | null
-	videoProductionSnapshot?: VideoProductionSendSnapshot
 	topicMode?: TopicMode
 	agentCode?: string | null
 }
