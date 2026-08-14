@@ -11,6 +11,7 @@ use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Util\File\ImageBase64DataUriParser;
+use App\Infrastructure\Util\File\ProviderAssetUri;
 
 final class DesignVideoInputPayloadPreparer
 {
@@ -24,7 +25,7 @@ final class DesignVideoInputPayloadPreparer
     }
 
     /**
-     * 将视频输入素材整理为统一 payload，并拒绝空路径、外部 URL 和目录穿越路径。
+     * 将视频输入素材整理为统一 payload，并拒绝空路径、非受控外部 URL 和目录穿越路径。
      *
      * @return array<string, mixed>
      */
@@ -47,14 +48,14 @@ final class DesignVideoInputPayloadPreparer
         $referenceVideos = [];
         foreach ($dto->getReferenceVideos() as $referenceVideo) {
             $referenceVideos[] = [
-                'uri' => self::normalizePath((string) ($referenceVideo['uri'] ?? ''), false, 'reference_videos.uri'),
+                'uri' => self::normalizeInputUri((string) ($referenceVideo['uri'] ?? ''), 'reference_videos.uri'),
             ];
         }
 
         $referenceAudios = [];
         foreach ($dto->getReferenceAudios() as $referenceAudio) {
             $referenceAudios[] = [
-                'uri' => self::normalizePath((string) ($referenceAudio['uri'] ?? ''), false, 'reference_audios.uri'),
+                'uri' => self::normalizeInputUri((string) ($referenceAudio['uri'] ?? ''), 'reference_audios.uri'),
             ];
         }
 
@@ -141,6 +142,18 @@ final class DesignVideoInputPayloadPreparer
             return sprintf('data:%s;base64,%s', ImageBase64DataUriParser::normalizeMimeType($mimeType), $base64Data);
         }
 
-        return self::normalizePath((string) ($input['uri'] ?? ''), false, $label . '.uri');
+        return self::normalizeInputUri((string) ($input['uri'] ?? ''), $label . '.uri');
+    }
+
+    /**
+     * 规范化模型输入 URI，同时保留受控的 provider 素材 URI。
+     */
+    private static function normalizeInputUri(string $uri, string $label): string
+    {
+        if (ProviderAssetUri::isValid($uri)) {
+            return trim($uri);
+        }
+
+        return self::normalizePath($uri, false, $label);
     }
 }
