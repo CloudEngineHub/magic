@@ -239,13 +239,21 @@ interface TaskFileRepositoryInterface
 
     /**
      * 获取指定父目录下的最小排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMinSortByParentId(?int $parentId, int $projectId): ?int;
+    public function getMinSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取指定父目录下的最大排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getMaxSortByParentId(?int $parentId, int $projectId): ?int;
+    public function getMaxSortByParentId(?int $parentId, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取指定文件的排序值.
@@ -254,13 +262,24 @@ interface TaskFileRepositoryInterface
 
     /**
      * 获取指定排序值之后的下一个排序值.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $currentSort 当前排序值
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId): ?int;
+    public function getNextSortAfter(?int $parentId, int $currentSort, int $projectId, ?string $spaceType = null): ?int;
 
     /**
      * 获取同一父目录下的所有兄弟节点.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $projectId 项目ID
+     * @param string $orderBy 排序字段
+     * @param string $direction 排序方向
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC'): array;
+    public function getSiblingsByParentId(?int $parentId, int $projectId, string $orderBy = 'sort', string $direction = 'ASC', ?string $spaceType = null): array;
 
     public function getSiblingCountByParentId(int $parentId, int $projectId): int;
 

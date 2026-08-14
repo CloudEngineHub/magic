@@ -309,15 +309,19 @@ class FileManagementAppService extends AbstractAppService
                 $taskFileEntity->setSpaceType('user');
             }
 
-            // 通过领域服务计算排序值
-            $sortValue = $this->taskFileDomainService->calculateSortForNewFile(
-                ! empty($requestDTO->getParentId()) ? (int) $requestDTO->getParentId() : null,
-                (int) $requestDTO->getPreFileId(),
-                $projectId
-            );
-
-            // 设置排序值
-            $taskFileEntity->setSort($sortValue);
+            // saveFile 已不再使用 sort 字段，跳过排序值计算，实体保持默认 sort。
+            // 若后续恢复使用：根层级（无 parentId）的项目空间文件需按 space_type=project 过滤，
+            // 避免 topic 空间的 .topic 根节点混入项目根层级的排序计算
+            // $sortSpaceType = empty($requestDTO->getParentId()) && $taskFileEntity->getSpaceType() === FileSpaceType::PROJECT->value
+            //     ? FileSpaceType::PROJECT->value
+            //     : null;
+            // $sortValue = $this->taskFileDomainService->calculateSortForNewFile(
+            //     ! empty($requestDTO->getParentId()) ? (int) $requestDTO->getParentId() : null,
+            //     (int) $requestDTO->getPreFileId(),
+            //     $projectId,
+            //     $sortSpaceType
+            // );
+            // $taskFileEntity->setSort($sortValue);
 
             // 调用领域服务保存文件
             $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(

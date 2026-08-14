@@ -1701,11 +1701,16 @@ class TaskFileDomainService
 
     /**
      * 为新文件计算排序值（领域逻辑）.
+     *
+     * @param null|int $parentId 父目录ID，null 表示根层级
+     * @param int $preFileId 前置文件ID，0表示插入第一位，-1表示插入末尾
+     * @param int $projectId 项目ID
+     * @param null|string $spaceType 空间类型过滤，null 不过滤（保持原行为）
      */
-    public function calculateSortForNewFile(?int $parentId, int $preFileId, int $projectId): int
+    public function calculateSortForNewFile(?int $parentId, int $preFileId, int $projectId, ?string $spaceType = null): int
     {
         // Use FileSortUtil for consistent sorting logic
-        return FileSortUtil::calculateSortValue($this->taskFileRepository, $parentId, $preFileId, $projectId);
+        return FileSortUtil::calculateSortValue($this->taskFileRepository, $parentId, $preFileId, $projectId, $spaceType);
     }
 
     /**
