@@ -48,6 +48,50 @@ describe("designDataCodec", () => {
 		validateV3CanvasDocument(result.canvas)
 	})
 
+	it("normalizes nullable media error messages during migration", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "nullable-media-error",
+			version: MAGIC_PROJECT_VERSION_V3,
+			canvas: {
+				elements: [
+					{
+						id: "image-1",
+						type: ElementTypeEnum.Image,
+						contents: [
+							{
+								contentId: "image-1-content-1",
+								src: "./images/a.png",
+								status: "completed",
+								errorMessage: null,
+							},
+						],
+						activeContentId: "image-1-content-1",
+						mainContentId: "image-1-content-1",
+					},
+					{
+						id: "video-1",
+						type: ElementTypeEnum.Video,
+						contents: [
+							{
+								contentId: "video-1-content-1",
+								src: "./videos/a.mp4",
+								status: "completed",
+								errorMessage: null,
+							},
+						],
+						activeContentId: "video-1-content-1",
+						mainContentId: "video-1-content-1",
+					},
+				],
+			},
+		})
+
+		expect(result.canvas?.elements?.[0]?.contents[0]).not.toHaveProperty("errorMessage")
+		expect(result.canvas?.elements?.[1]?.contents[0]).not.toHaveProperty("errorMessage")
+		validateV3CanvasDocument(result.canvas)
+	})
+
 	it("migrates nested Frame/Group children and keeps node identity stable", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",

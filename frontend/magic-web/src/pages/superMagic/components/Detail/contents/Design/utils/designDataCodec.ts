@@ -99,6 +99,12 @@ function migrateContentList(element: UnknownRecord, elementId: string): UnknownR
 		const content =
 			rawContent && typeof rawContent === "object" ? { ...(rawContent as UnknownRecord) } : {}
 		const contentId = readContentId(content, `${elementId}-content-${index + 1}`)
+		if (
+			(element.type === ElementTypeEnum.Image || element.type === ElementTypeEnum.Video) &&
+			content.errorMessage === null
+		) {
+			delete content.errorMessage
+		}
 		delete content.id
 		delete content.type
 		content.contentId = contentId
