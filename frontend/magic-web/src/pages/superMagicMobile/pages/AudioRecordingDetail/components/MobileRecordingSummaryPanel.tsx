@@ -1,5 +1,4 @@
-import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react"
 import { AlignLeft, Network } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
@@ -24,6 +23,9 @@ interface MobileRecordingSummaryPanelProps {
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 	onContentScroll?: () => void
+	searchScopeRef?: RefObject<HTMLDivElement | null>
+	searchActive?: boolean
+	onActiveTypeChange?: (type: string) => void
 }
 
 /** Renders dynamic completed-summary tabs from the project file map. */
@@ -36,11 +38,18 @@ export function MobileRecordingSummaryPanel({
 	onOpenSpeakerSettings,
 	onTimeClick,
 	onContentScroll,
+	searchScopeRef,
+	searchActive = false,
+	onActiveTypeChange,
 }: MobileRecordingSummaryPanelProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [activeType, setActiveType] = useState<string>(summaryFiles[0]?.type ?? "")
 	const activeFile = summaryFiles.find((file) => file.type === activeType) ?? summaryFiles[0]
 	const content = activeFile ? summaryContent[activeFile.type] : undefined
+
+	useEffect(() => {
+		onActiveTypeChange?.(activeFile?.type ?? "")
+	}, [activeFile?.type, onActiveTypeChange])
 
 	if (summaryFiles.length === 0) {
 		return (
@@ -61,7 +70,10 @@ export function MobileRecordingSummaryPanel({
 							active={file.type === activeFile?.type}
 							label={resolveSummaryTypeLabel(file.type, t)}
 							type={file.type}
-							onClick={() => setActiveType(file.type)}
+							onClick={() => {
+								setActiveType(file.type)
+								onActiveTypeChange?.(file.type)
+							}}
 						/>
 					))}
 				</div>
@@ -98,7 +110,12 @@ export function MobileRecordingSummaryPanel({
 					contentDeps={[activeType, summaryFiles.length, Boolean(content?.trim())]}
 					onScroll={onContentScroll}
 				>
-					<div className="min-h-full" style={{ paddingBottom: scrollPaddingBottom }}>
+					<div
+						ref={searchScopeRef}
+						data-search-scope="mobile-recording-summary"
+						className="min-h-full"
+						style={{ paddingBottom: scrollPaddingBottom }}
+					>
 						{activeFile ? (
 							<SummaryContent
 								file={activeFile}
@@ -106,6 +123,7 @@ export function MobileRecordingSummaryPanel({
 								attachmentList={attachmentList}
 								emptyText={t("detail.emptySummaryFile")}
 								scrollPaddingBottom={scrollPaddingBottom}
+								searchActive={searchActive}
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={onOpenSpeakerSettings}
 								onTimeClick={onTimeClick}
@@ -154,6 +172,7 @@ function SummaryContent({
 	attachmentList,
 	emptyText,
 	scrollPaddingBottom,
+	searchActive,
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
@@ -163,6 +182,7 @@ function SummaryContent({
 	attachmentList: AttachmentItem[]
 	emptyText: string
 	scrollPaddingBottom: number
+	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
@@ -191,6 +211,7 @@ function SummaryContent({
 			<MindmapContent
 				content={content}
 				scrollPaddingBottom={scrollPaddingBottom}
+				searchActive={searchActive}
 				speakerNameMap={speakerNameMap}
 				onOpenSpeakerSettings={onOpenSpeakerSettings}
 				onTimeClick={onTimeClick}
@@ -267,17 +288,23 @@ function MetricsHtmlContent({
 function MindmapContent({
 	content,
 	scrollPaddingBottom,
+	searchActive,
 	speakerNameMap,
 	onOpenSpeakerSettings,
 	onTimeClick,
 }: {
 	content: string
 	scrollPaddingBottom: number
+	searchActive: boolean
 	speakerNameMap: Record<string, string>
 	onOpenSpeakerSettings: () => void
 	onTimeClick: (seconds: number, end?: number) => void
 }) {
 	const [viewMode, setViewMode] = useState<"map" | "markdown">("map")
+
+	useEffect(() => {
+		if (searchActive) setViewMode("markdown")
+	}, [searchActive])
 	const mindmapCanvasContent = useMemo(
 		() => resolveMarkdownSpeakerLabels(content, speakerNameMap),
 		[content, speakerNameMap],
@@ -343,6 +370,7 @@ function MindmapViewSwitch({
 		<div
 			className="fixed right-4 z-20 inline-flex rounded-2xl bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
 			style={{ bottom }}
+			data-search-exclude="true"
 		>
 			<button
 				type="button"

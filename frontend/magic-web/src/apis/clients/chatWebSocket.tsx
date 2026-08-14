@@ -283,7 +283,12 @@ export class ChatWebSocket extends EventBus {
 
 				const onError = (e: Event) => {
 					cleanup()
-					logger.error("连接失败 (error)", e)
+					logger.error({
+						eventKey: "connect_failed",
+						errorKind: "network",
+						error: e,
+						message: "连接失败 (error)",
+					})
 					if (
 						that.socket &&
 						that.socket.readyState !== WebSocketReadyState.CLOSED &&
@@ -306,7 +311,11 @@ export class ChatWebSocket extends EventBus {
 
 				// 设置连接超时，防止 socket 挂起
 				connectTimer = setTimeout(() => {
-					logger.error("连接超时")
+					logger.error({
+						eventKey: "connect_timeout",
+						errorKind: "timeout",
+						message: "连接超时",
+					})
 					cleanup()
 					if (that.socket && that.socket.readyState === WebSocketReadyState.CONNECTING) {
 						that.socket.close()
@@ -314,7 +323,12 @@ export class ChatWebSocket extends EventBus {
 					resolve(null)
 				}, 10000)
 			} catch (error) {
-				logger.error("连接异常:", error)
+				logger.error({
+					eventKey: "connect_failed",
+					errorKind: "network",
+					error: error,
+					message: "连接异常:",
+				})
 				resolve(null)
 			}
 		})
@@ -382,11 +396,16 @@ export class ChatWebSocket extends EventBus {
 	 * 处理连接错误事件
 	 */
 	private handleError = (error: Event) => {
-		logger.error("WebSocket连接错误", {
-			error,
-			readyState: this.socket?.readyState,
-			url: this.socket?.url,
-			reconnectAttempts: this.reconnectAttempts,
+		logger.error({
+			eventKey: "web_socket_connect_failed",
+			errorKind: "network",
+			error: error,
+			message: "WebSocket连接错误",
+			context: {
+				readyState: this.socket?.readyState,
+				url: this.socket?.url,
+				reconnectAttempts: this.reconnectAttempts,
+			},
 		})
 		this.emit("error", error)
 	}
@@ -412,7 +431,12 @@ export class ChatWebSocket extends EventBus {
 					break
 			}
 		} catch (error) {
-			logger.error("onmessage error:", error)
+			logger.error({
+				eventKey: "onmessage_failed",
+				errorKind: "network",
+				error: error,
+				message: "onmessage error:",
+			})
 		}
 	}
 
@@ -717,7 +741,13 @@ export class ChatWebSocket extends EventBus {
 								})
 							} else {
 								cleanup()
-								logger.error("ws response error:", data)
+								logger.error({
+									eventKey: "ws_response_failed",
+									errorKind: "network",
+									message: "ws response error:",
+									// WebSocket 响应可能包含业务正文，只保留受控状态码。
+									context: { data },
+								})
 								reject(data)
 							}
 						}
@@ -869,7 +899,12 @@ export class ChatWebSocket extends EventBus {
 									})
 								} else {
 									cleanup()
-									logger.error("业务层错误", response)
+									logger.error({
+										eventKey: "handler_failed",
+										errorKind: "network",
+										error: response,
+										message: "业务层错误",
+									})
 									reject(response[0].data)
 								}
 							}

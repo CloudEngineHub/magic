@@ -40,7 +40,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 			const config = await this.get(ConfigType.Theme)
 			return config?.value as ThemeMode
 		} catch (error) {
-			logger.error("getThemeConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "get_theme_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getThemeConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 			return Storage.get(`${ConfigRepository.tableName}:${ConfigType.Theme}`)?.value
 		}
 	}
@@ -57,7 +63,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 				value: theme,
 			})
 		} catch (error) {
-			logger.error("setThemeConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "set_theme_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setThemeConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 		} finally {
 			const value = Storage.get(`${ConfigRepository.tableName}:${ConfigType.Theme}`)
 			Storage.set(`${ConfigRepository.tableName}:${ConfigType.Theme}`, {
@@ -87,12 +99,24 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 					}
 				}
 			} catch (error) {
-				logger.error("getLocaleConfigByAppSDKError", ConfigRepository.tableName, error)
+				logger.error({
+					eventKey: "get_locale_config_by_app_sdk_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "getLocaleConfigByAppSDKError",
+					context: { tableName: ConfigRepository.tableName },
+				})
 			}
 			const config = await this.get(ConfigType.I18n)
 			return config?.value as string
 		} catch (error) {
-			logger.error("getLocaleConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "get_locale_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getLocaleConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 			return Storage.get(`${ConfigRepository.tableName}:${ConfigType.I18n}`)?.value
 		}
 	}
@@ -109,7 +133,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 				value: locale,
 			})
 		} catch (error) {
-			logger.error("setLocaleConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "set_locale_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setLocaleConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 		} finally {
 			const value = Storage.get(`${ConfigRepository.tableName}:${ConfigType.I18n}`)
 			Storage.set(`${ConfigRepository.tableName}:${ConfigType.I18n}`, {
@@ -128,7 +158,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 			const config = await this.get(ConfigType.Cluster)
 			return config?.value as string
 		} catch (error) {
-			logger.error("getClusterConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "get_cluster_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getClusterConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 			return Storage.get(`${ConfigRepository.tableName}:${ConfigType.Cluster}`)?.value
 		}
 	}
@@ -145,7 +181,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 				value: cluster,
 			})
 		} catch (error) {
-			logger.error("setClusterConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "set_cluster_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setClusterConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 		} finally {
 			const value = Storage.get(`${ConfigRepository.tableName}:${ConfigType.Cluster}`)
 			Storage.set(`${ConfigRepository.tableName}:${ConfigType.Cluster}`, {
@@ -164,7 +206,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 			const config = await this.get(ConfigType.clusterCodeCache)
 			return config?.value as string
 		} catch (error) {
-			logger.error("getClusterCacheConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "get_cluster_cache_config_failed",
+				errorKind: "storage",
+				error: error,
+				message: "getClusterCacheConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 			return Storage.get(`${ConfigRepository.tableName}:${ConfigType.clusterCodeCache}`)
 				?.value
 		}
@@ -182,7 +230,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 				value: cluster,
 			})
 		} catch (error) {
-			logger.error("setClusterCacheConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "set_cluster_cache_config_failed",
+				errorKind: "storage",
+				error: error,
+				message: "setClusterCacheConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 		} finally {
 			const value = Storage.get(
 				`${ConfigRepository.tableName}:${ConfigType.clusterCodeCache}`,
@@ -203,7 +257,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 			const config = await this.get(ConfigType.FontScale)
 			return config?.value ? Number(config.value) : undefined
 		} catch (error) {
-			logger.error("getFontScaleConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "get_font_scale_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "getFontScaleConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 			const cached = Storage.get(`${ConfigRepository.tableName}:${ConfigType.FontScale}`)
 			return cached?.value ? Number(cached.value) : undefined
 		}
@@ -221,7 +281,13 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 				value: scale.toString(),
 			})
 		} catch (error) {
-			logger.error("setFontScaleConfigError", ConfigRepository.tableName, error)
+			logger.error({
+				eventKey: "set_font_scale_config_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "setFontScaleConfigError",
+				context: { tableName: ConfigRepository.tableName },
+			})
 		} finally {
 			const value = Storage.get(`${ConfigRepository.tableName}:${ConfigType.FontScale}`)
 			Storage.set(`${ConfigRepository.tableName}:${ConfigType.FontScale}`, {

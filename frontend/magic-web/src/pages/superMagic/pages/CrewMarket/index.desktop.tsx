@@ -1,13 +1,14 @@
 import { useRef } from "react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import EmployeeMarketDesktop from "./employee-market/EmployeeMarketDesktop"
+import MarketBackToTopButton from "./components/MarketBackToTopButton"
 
 function CrewMarketPage() {
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
 
 	return (
 		<div
-			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
+			className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xs"
 			data-testid="crew-market-page"
 		>
 			<ScrollArea
@@ -20,6 +21,10 @@ function CrewMarketPage() {
 					</div>
 				</div>
 			</ScrollArea>
+			<MarketBackToTopButton
+				viewportRef={scrollViewportRef}
+				testId="crew-market-back-to-top"
+			/>
 		</div>
 	)
 }

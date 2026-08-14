@@ -1,4 +1,4 @@
-from app.tools.browser.debugging import BrowserEvaluate, BrowserReadConsole, BrowserReadNetwork
+from app.tools.browser.debugging import BrowserAddInitScript, BrowserEvaluate, BrowserReadConsole, BrowserReadNetwork
 from app.tools.browser.interaction import (
     BrowserCheck,
     BrowserClick,
@@ -12,9 +12,11 @@ from app.tools.browser.interaction import (
 from app.tools.browser.navigation import BrowserKeepAlive, BrowserNavigate, BrowserWait
 from app.tools.browser.observation import (
     BrowserFindVisual,
+    BrowserFind,
+    BrowserReadHtml,
     BrowserReadPage,
     BrowserScreenshot,
-    BrowserSnapshot,
+    BrowserListElements,
     BrowserVisualQuery,
 )
 from app.tools.browser.session import (
@@ -27,12 +29,14 @@ from app.tools.browser.session import (
 
 __all__ = [
     "BrowserActivatePage",
+    "BrowserAddInitScript",
     "BrowserCheck",
     "BrowserClick",
     "BrowserClosePage",
     "BrowserEvaluate",
     "BrowserFill",
     "BrowserFindVisual",
+    "BrowserFind",
     "BrowserHover",
     "BrowserKeepAlive",
     "BrowserListPages",
@@ -41,12 +45,13 @@ __all__ = [
     "BrowserOpenPage",
     "BrowserPress",
     "BrowserReadConsole",
+    "BrowserReadHtml",
     "BrowserReadNetwork",
     "BrowserReadPage",
     "BrowserScreenshot",
     "BrowserScroll",
     "BrowserSelect",
-    "BrowserSnapshot",
+    "BrowserListElements",
     "BrowserUploadFile",
     "BrowserVisualQuery",
     "BrowserWait",

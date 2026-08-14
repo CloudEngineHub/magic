@@ -63,6 +63,11 @@ export class DraftStore {
 		this.draftKey = draftKey
 	}
 
+	/** Enables normal draft saving when the initial restore is skipped or fails. */
+	markDraftReady() {
+		this.isDraftReady = true
+	}
+
 	setClearContentHandler(handler: () => void) {
 		this.clearContentHandler = handler
 	}
@@ -292,7 +297,6 @@ export class DraftStore {
 		} catch (error) {
 			console.error("Failed to preload mention list:", error)
 		}
-
 		if (replaceDirectly ? draft.value : true) {
 			await syncDraftMarkersToSuperMagicManager(draft)
 

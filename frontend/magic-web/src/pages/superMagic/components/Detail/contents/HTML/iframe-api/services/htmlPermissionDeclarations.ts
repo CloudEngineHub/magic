@@ -27,7 +27,7 @@ export function createEmptyHtmlPermissionDeclaration(): HtmlPermissionDeclaratio
 
 export function hasManageableHtmlPermissionDeclarations(appConfig: HTMLAppConfig | null): boolean {
 	const declaration = analyzeHtmlPermissionDeclarations(appConfig)
-	return declaration.declaredScopes.length > 0 || declaration.unsupportedScopes.length > 0
+	return declaration.declaredScopes.length > 0
 }
 
 export function analyzeHtmlPermissionDeclarations(

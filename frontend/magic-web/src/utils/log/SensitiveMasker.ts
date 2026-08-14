@@ -8,6 +8,8 @@ interface SensitiveDataConfig {
 	}>
 	/** 需要脱敏的 key */
 	keys?: string[]
+	/** 结构化协议中必须原样保留的字段名 */
+	whitelistKeys?: string[]
 	/** 脱敏后的替换字符 */
 	replacement: string
 	/** 保留前几位 */
@@ -111,6 +113,7 @@ export class SensitiveMasker {
 			"api_key",
 			"apikey",
 		],
+		whitelistKeys: ["eventKey"],
 		replacement: "[REDACTED]",
 		preserveStart: 4,
 		preserveEnd: 4,
@@ -179,6 +182,17 @@ export class SensitiveMasker {
 			const sanitized: Record<string, any> = {}
 
 			for (const [key, value] of Object.entries(data)) {
+				// 仅字符串协议标识可跳过字段名脱敏，复合值仍需递归处理内部敏感字段。
+				if (
+					typeof value === "string" &&
+					SensitiveMasker.config.whitelistKeys?.some(
+						(whitelistKey) => key.toLowerCase() === whitelistKey.toLowerCase(),
+					)
+				) {
+					sanitized[key] = value
+					continue
+				}
+
 				// 检查是否需要脱敏
 				if (
 					SensitiveMasker.config.keys?.some((sensitiveKey) =>

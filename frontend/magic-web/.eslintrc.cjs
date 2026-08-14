@@ -4,7 +4,11 @@ const path = require("path")
 
 module.exports = {
 	root: true,
-	ignorePatterns: ["src/pages/superMagic/components/Detail/contents/HTML/templates/**"],
+	ignorePatterns: [
+		"src/pages/superMagic/components/Detail/contents/HTML/templates/**",
+		"src/pages/superMagic/stores/test.ts",
+		"src/pages/superMagic/components/MessageList/components/Nodes/MessageNode/tool-call/preview/__tests__/readFilesMockStream.test.ts",
+	],
 	extends: [
 		"@dtyq/eslint-config/base",
 		"@dtyq/eslint-config/typescript",

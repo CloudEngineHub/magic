@@ -6,7 +6,7 @@ import { MCPTool } from "./tools/MCP"
 import type { ToolCallRendererProps } from "./types"
 
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
-const MicroAppPlanToolCall = lazy(() => import("../tools/microAppPlan"))
+const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
 
 export function ToolCallRenderer({
 	toolCall,

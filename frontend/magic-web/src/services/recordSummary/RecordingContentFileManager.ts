@@ -116,7 +116,12 @@ export class RecordingContentFileManager {
 				await this.tokenManager.getToken(sessionId, topicId)
 				presetFiles = this.tokenManager.getPresetFiles(sessionId)
 			} catch (error) {
-				logger.error("Failed to fetch preset files from backend", error)
+				logger.error({
+					eventKey: "fetch_preset_files_backend_failed",
+					errorKind: "network",
+					error: error,
+					message: "Failed to fetch preset files from backend",
+				})
 			}
 		}
 
@@ -146,7 +151,12 @@ export class RecordingContentFileManager {
 				hiddenDirId =
 					this.tokenManager.getDirectories(sessionId)?.asr_hidden_dir?.directory_id
 			} catch (error) {
-				logger.error("Failed to refresh token for ASR display directory", error)
+				logger.error({
+					eventKey: "asr_display_directory_token_refresh_failed",
+					errorKind: "permission",
+					error: error,
+					message: "Failed to refresh token for ASR display directory",
+				})
 			}
 		}
 
@@ -291,7 +301,12 @@ export class RecordingContentFileManager {
 				recordSummaryStore.setUpdateNoteStatus("idle")
 			}, 2000)
 		} catch (error) {
-			logger.error("Failed to flush note update", error)
+			logger.error({
+				eventKey: "flush_note_update_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to flush note update",
+			})
 			this.noteFile.pendingContent = content
 			recordSummaryStore.setUpdateNoteStatus("error")
 		}
@@ -320,7 +335,12 @@ export class RecordingContentFileManager {
 		try {
 			await this.uploadTranscriptFile(content)
 		} catch (error) {
-			logger.error("Failed to flush transcript update", error)
+			logger.error({
+				eventKey: "flush_transcript_update_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to flush transcript update",
+			})
 		}
 	}
 
@@ -385,7 +405,12 @@ export class RecordingContentFileManager {
 
 			logger.log(`Note file uploaded successfully: ${uploadResult.fileKey}`)
 		} catch (error) {
-			logger.error("Failed to upload note file", error)
+			logger.error({
+				eventKey: "upload_note_file_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to upload note file",
+			})
 			this.events.onUploadError?.(ContentFileType.Note, error as Error)
 			throw error
 		} finally {
@@ -433,7 +458,12 @@ export class RecordingContentFileManager {
 
 			logger.log(`Transcript file uploaded successfully: ${uploadResult.fileKey}`)
 		} catch (error) {
-			logger.error("Failed to upload transcript file", error)
+			logger.error({
+				eventKey: "upload_transcript_file_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to upload transcript file",
+			})
 			this.events.onUploadError?.(ContentFileType.Transcript, error as Error)
 			throw error
 		} finally {
@@ -576,7 +606,12 @@ export class RecordingContentFileManager {
 		try {
 			await Promise.all([this.flushNoteUpdate(), this.flushTranscriptUpdate()])
 		} catch (error) {
-			logger.error("Failed to flush pending updates during dispose", error)
+			logger.error({
+				eventKey: "flush_pending_updates_dispose_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "Failed to flush pending updates during dispose",
+			})
 		}
 
 		// Reset state

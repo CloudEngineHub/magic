@@ -12,8 +12,8 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\ImageGenerationEntity;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
+use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Infrastructure\ExternalAPI\ImageGenerateAPI\Response\OpenAIFormatResponse;
-use Dtyq\SuperMagic\Domain\SuperAgent\Service\TaskFileDomainService;
 
 /**
  * 设计侧「文生图 / 图生图统一入口」异步任务：按实体中的 model 与 prompt，拼接参考图 URL，调用 textGenerateImageV2；输出文件名由 Tool 按 prompt/Agent 生成（本类默认不提供规则名）。

@@ -27,12 +27,12 @@ use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\ModelFilter\OrganizationBasedModelFilterInterface;
 use App\Domain\Provider\Service\ProviderConfigDomainService;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
 use App\Infrastructure\Core\Traits\HasLogger;
 use App\Infrastructure\Util\File\EasyFileTools;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
-use Dtyq\SuperMagic\Domain\Agent\Entity\SuperMagicAgentEntity;
 
 /**
  * Mode 应用层公共基类。

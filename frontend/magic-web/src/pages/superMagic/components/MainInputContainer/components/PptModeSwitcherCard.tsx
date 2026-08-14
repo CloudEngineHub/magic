@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type MouseEvent } from "react"
+import { useRef, useState, type DragEvent, type MouseEvent, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/shadcn-ui/button"
@@ -22,11 +22,15 @@ import styles from "./PptModeSwitcherCard.module.css"
 // Local fallback preview slides shown behind the PPT crew pill.
 const PPT_PREVIEW_IMAGES = [pptSlide1, pptSlide2, pptSlide3] as const
 const DELIVERED_COUNT_MARKER = "__DELIVERED_COUNT__"
+const PPT_PREVIEW_EDGE_INSET_PX = 32
+const PPT_PREVIEW_MIN_INTERSECTION_RATIO = 0.8
+const PPT_PREVIEW_VISIBILITY_THRESHOLDS = [0, PPT_PREVIEW_MIN_INTERSECTION_RATIO, 1]
 
 interface PptModeSwitcherCardProps {
 	modeItem: ModeItem
 	isSelected: boolean
 	onSelect: () => void
+	scrollContainerRef?: RefObject<HTMLDivElement | null>
 }
 
 /**
@@ -37,21 +41,32 @@ export default function PptModeSwitcherCard({
 	modeItem,
 	isSelected,
 	onSelect,
+	scrollContainerRef,
 }: PptModeSwitcherCardProps) {
 	const { t } = useTranslation("crew/market")
 	const [isHovered, setIsHovered] = useState(false)
 	const [isFocused, setIsFocused] = useState(false)
 	const cardRef = useRef<HTMLDivElement>(null)
 	const isVisible = useElementVisibility(cardRef)
+	const isPreviewInSafeArea = useElementVisibility(cardRef, {
+		enabled: Boolean(scrollContainerRef),
+		initialVisible: true,
+		minimumIntersectionRatio: PPT_PREVIEW_MIN_INTERSECTION_RATIO,
+		rootMargin: `0px -${PPT_PREVIEW_EDGE_INSET_PX}px`,
+		rootRef: scrollContainerRef,
+		threshold: PPT_PREVIEW_VISIBILITY_THRESHOLDS,
+	})
 	const slidesTemplateStatistics = useSlidesTemplateStatistics({ enabled: isVisible })
 	const templateTotalUsageCount = slidesTemplateStatistics?.templateTotalUsageCount
 	const isUsageCountPulsing = useAnimatedNumberPulse(templateTotalUsageCount)
 	const isExpanded = isSelected || isHovered || isFocused
+	const isPreviewHidden = !isPreviewInSafeArea
+	const isPreviewExpanded = isExpanded && !isPreviewHidden
 	const pillAccentState = isHovered ? "hovered" : isSelected ? "selected" : "idle"
 	const modeName = modeItem.mode.name || t("detailDialog.emptyName")
 	const deliveredText = isPrivateDeployment()
-		? t("pptEmployee.deliveredPrivate", { count: DELIVERED_COUNT_MARKER })
-		: t("pptEmployee.delivered", { count: DELIVERED_COUNT_MARKER })
+		? t("pptEmployee.deliveredPrivate", { marker: DELIVERED_COUNT_MARKER })
+		: t("pptEmployee.delivered", { marker: DELIVERED_COUNT_MARKER })
 	const deliveredMarkerIndex = deliveredText.indexOf(DELIVERED_COUNT_MARKER)
 	const deliveredPrefix =
 		deliveredMarkerIndex >= 0 ? deliveredText.slice(0, deliveredMarkerIndex).trim() : ""
@@ -80,14 +95,17 @@ export default function PptModeSwitcherCard({
 			ref={cardRef}
 			className="relative flex h-10 shrink-0 items-end justify-center"
 			data-expanded={isExpanded}
+			data-preview-hidden={isPreviewHidden}
 			data-testid="ppt-mode-switcher-card"
 		>
 			<div
 				className={cn(
-					"absolute bottom-9 left-1/2 h-[30px] w-[112px] origin-bottom -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out",
-					isExpanded
-						? "translate-y-0.5 scale-100 opacity-100"
-						: "translate-y-1 scale-[0.78] opacity-70",
+					"absolute bottom-9 left-1/2 h-[30px] w-[112px] origin-bottom -translate-x-1/2 transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
+					isPreviewHidden
+						? "pointer-events-none translate-y-5 scale-[0.56] opacity-0"
+						: isPreviewExpanded
+							? "translate-y-0.5 scale-100 opacity-100"
+							: "translate-y-1 scale-[0.78] opacity-70",
 				)}
 				aria-hidden
 				data-testid="ppt-mode-switcher-preview"
@@ -100,22 +118,22 @@ export default function PptModeSwitcherCard({
 							key={src}
 							className={cn(
 								styles.previewFrame,
-								isExpanded && styles.previewFrameExpanded,
+								isPreviewExpanded && styles.previewFrameExpanded,
 								"absolute top-0 h-7 w-[50px] cursor-grab transition-transform duration-300 ease-out active:cursor-grabbing",
 								index === 0 &&
-									(isExpanded
+									(isPreviewExpanded
 										? "left-0 top-px -translate-x-2 -rotate-[18deg]"
 										: "left-0 top-px -rotate-[12.69deg]"),
 								index === 1 &&
-									(isExpanded
+									(isPreviewExpanded
 										? "left-[25.69px] translate-x-[3px] rotate-0"
 										: "left-[25.69px] rotate-[15deg]"),
 								index === 2 &&
-									(isExpanded
+									(isPreviewExpanded
 										? "left-[57px] top-px translate-x-2 rotate-[18deg]"
 										: "left-[57px] top-px -rotate-[12.69deg]"),
 							)}
-							data-active={isExpanded}
+							data-active={isPreviewExpanded}
 							data-preview-index={index}
 							data-testid="ppt-mode-switcher-preview-frame"
 							draggable

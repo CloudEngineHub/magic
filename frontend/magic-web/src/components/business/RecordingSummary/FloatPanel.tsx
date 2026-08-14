@@ -64,6 +64,8 @@ export function RecordingSummaryFloatPanel() {
 	const isOnMobileRecordingDetailRoute =
 		isMobile &&
 		matchPath(`/:clusterCode${RoutePath.AudioRecordingDetail}`, location.pathname) != null
+	const isManagedByMobileRecordingPage =
+		isOnMobileRecordingsListRoute || isOnMobileRecordingDetailRoute
 
 	const editorRef = useRef<SimpleEditorRef>(null)
 	// Create projectFilesStore for managing workspace files
@@ -78,6 +80,16 @@ export function RecordingSummaryFloatPanel() {
 	const [attachments, _setAttachments] = useState<any[]>([])
 	const [attachmentList, _setAttachmentList] = useState<any[]>([])
 	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
+	/** Project id whose attachments fetch has settled; gates note image URL resolution after refresh. */
+	const [attachmentsReadyProjectId, setAttachmentsReadyProjectId] = useState("")
+
+	/**
+	 * Marks attachment context ready for the active project after a settled load.
+	 */
+	const markAttachmentsReady = useMemoizedFn((projectId: string | undefined) => {
+		if (!projectId) return
+		setAttachmentsReadyProjectId(projectId)
+	})
 
 	// Sync attachments with projectFilesStore
 	const setAttachments = useMemoizedFn((newAttachments: any[]) => {
@@ -103,6 +115,7 @@ export function RecordingSummaryFloatPanel() {
 		currentContent: currentNoteContent,
 		onAttachmentsChange: ({ tree }) => {
 			setAttachments(tree)
+			markAttachmentsReady(recordingSummaryStore.businessData.project?.id)
 		},
 		onMergedResult: (mergedContent) => {
 			runActiveEditor(editorRef?.current?.editor, (editor) => {
@@ -121,6 +134,7 @@ export function RecordingSummaryFloatPanel() {
 		) => {
 			if (!selectedProject?.id) {
 				setAttachments([])
+				setAttachmentsReadyProjectId("")
 				projectFilesStore.setWorkspaceFileTree([])
 				return
 			}
@@ -134,7 +148,16 @@ export function RecordingSummaryFloatPanel() {
 					.then((res: any) => {
 						setAttachments(res?.tree || [])
 						recordSummaryFileStore.finishLoadAttachmentsPromise(selectedProject?.id)
+						markAttachmentsReady(selectedProject?.id)
 						callback?.(res)
+					})
+					.catch((error: unknown) => {
+						console.error("Failed to fetch attachments:", error)
+						setAttachments([])
+						projectFilesStore.setWorkspaceFileTree([])
+						// Settle readiness even on failure so images do not spin forever.
+						markAttachmentsReady(selectedProject?.id)
+						callback?.({ tree: [], list: [] })
 					})
 					.finally(() => {
 						pubsub.publish(PubSubEvents.Update_Attachments_Loading, false)
@@ -143,6 +166,7 @@ export function RecordingSummaryFloatPanel() {
 				console.error("Failed to fetch attachments:", error)
 				setAttachments([])
 				projectFilesStore.setWorkspaceFileTree([])
+				markAttachmentsReady(selectedProject?.id)
 				callback?.({ tree: [], list: [] })
 			}
 		},
@@ -276,10 +300,12 @@ export function RecordingSummaryFloatPanel() {
 
 	useProjectAttachmentsChangeRealtime({
 		projectId: selectedProjectId,
+		enabled: !isManagedByMobileRecordingPage,
 		store: projectFilesStore,
 		onAttachmentsChange: useMemoizedFn(({ tree, list }) => {
 			_setAttachments(tree)
 			_setAttachmentList(list)
+			markAttachmentsReady(selectedProjectId)
 			void checkNoteFileChange(list)
 		}),
 		onFallbackError: useMemoizedFn((error: unknown) => {
@@ -289,7 +315,10 @@ export function RecordingSummaryFloatPanel() {
 
 	// Initialize attachments when project changes
 	useEffect(() => {
+		if (isManagedByMobileRecordingPage) return
 		const selectedProject = recordingSummaryStore.businessData.project
+		// Reset readiness when switching projects after restore/remount.
+		setAttachmentsReadyProjectId("")
 		if (selectedProjectId && selectedProject) {
 			projectFilesStore.setSelectedProject(selectedProject)
 			// Initialize attachment loading promise
@@ -305,7 +334,13 @@ export function RecordingSummaryFloatPanel() {
 				}
 			})
 		}
-	}, [selectedProjectId, projectFilesStore, recordSummaryFileStore, updateAttachments])
+	}, [
+		isManagedByMobileRecordingPage,
+		selectedProjectId,
+		projectFilesStore,
+		recordSummaryFileStore,
+		updateAttachments,
+	])
 
 	// Get preset files (note and transcript) for current recording session
 	const presetFiles = recordSummaryService.getPresetFiles()
@@ -323,7 +358,7 @@ export function RecordingSummaryFloatPanel() {
 	// Get note file path (use preset file path directly)
 	const noteFilePath = noteFile?.file_path ? `/${noteFile.file_path}` : ""
 
-	// Cache for images folder file_id — avoids re-creating on every upload within the same session
+	/** Cache for images folder file_id — avoids re-creating on every upload within the same session */
 	const imagesFolderIdRef = useRef<string | undefined>(undefined)
 
 	/**
@@ -344,12 +379,16 @@ export function RecordingSummaryFloatPanel() {
 		const folderName = folderPath.split("/").filter(Boolean).pop() || "images"
 
 		try {
-			const result = await SuperMagicApi.createFile({
-				project_id: selectedProjectId,
-				parent_id: displayDirId,
-				file_name: folderName,
-				is_directory: true,
-			})
+			const result = await SuperMagicApi.createFile(
+				{
+					project_id: selectedProjectId,
+					parent_id: displayDirId,
+					file_name: folderName,
+					is_directory: true,
+				},
+				// Suppress toast when concurrent uploads hit an already-created images folder.
+				{ enableErrorMessagePrompt: false },
+			)
 			const folderId = (result as any)?.file_id as string | undefined
 			if (folderId) imagesFolderIdRef.current = folderId
 			return folderId
@@ -368,11 +407,14 @@ export function RecordingSummaryFloatPanel() {
 		}
 	})
 
-	// URL resolver for project images - converts relative paths to download URLs
-	// Uses shared utility functions for consistent image resolution across the app
+	// URL resolver for project images - converts relative paths to download URLs.
+	// Gate on attachments readiness so refresh restore does not resolve against an empty tree.
 	const { urlResolver } = useImageUrlResolver({
 		attachments,
 		relativeFilePath: noteFilePath,
+		isReady:
+			Boolean(selectedProjectId && noteFilePath) &&
+			attachmentsReadyProjectId === selectedProjectId,
 	})
 
 	const isExpanded = recordingSummaryStore.isExpanded

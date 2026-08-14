@@ -22,11 +22,17 @@ class PathManager(BasePathManager):
         .project_schemas/    ← 项目架构（应用层，预创建）
         .client_message/     ← 客户端消息（应用层，预创建）
         .mcp/                ← MCP 配置（应用层，预创建）
-        .runtime/            ← 运行时数据（应用层，按需创建）
-            bg_shell/        ← 后台 shell 任务日志（按需创建）
+        .runtime/            ← sandbox 本地运行数据（应用管理清理，按需创建）
+            snippets/       ← Run Python / SDK 短期执行脚本
+            bg_shell/       ← 后台 shell 任务日志
+            mcp_outputs/    ← MCP 自动大结果
+            oauth2/         ← OAuth2 local callback
+            verification/   ← 验证脚本产物
+            background_compact/ ← 后台压缩临时上下文
+            llm_request/    ← LLM 调试日志
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
-        .workspace/          ← 工作区（父类管理）
+        .workspace/          ← MagicFS 云端持久工作区（父类管理）
             .asr_states/     ← ASR 状态（按需创建）
             .magic/          ← Magic 配置（按需创建）
                 config/      ← Magic 全局配置
@@ -42,6 +48,12 @@ class PathManager(BasePathManager):
     - 应用层预创建目录仅以 `_ensure_app_directories_exist()` 中显式创建的目录为准
     - 未在该方法中创建的目录一律视为按需创建，首次写入时由调用方自行创建
     - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
+
+    持久化边界：
+    - `.chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
+    - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
+    - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
+    - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
     """
 
     # ── project_root 下 ───────────────────────────────────────────────────────
@@ -80,9 +92,11 @@ class PathManager(BasePathManager):
     # 浏览器存储状态文件：project_root/.browser/storage_state.json（由父类目录承载）
     _browser_storage_state_file: ClassVar[Optional[Path]] = None
 
-    # 运行时数据目录：project_root/.runtime（按需创建）
+    # sandbox 本地运行数据目录：project_root/.runtime（按需创建，由各 owner 清理）
     _runtime_dir_name: ClassVar[str] = ".runtime"
     _runtime_dir: ClassVar[Optional[Path]] = None
+    _background_compact_dir_name: ClassVar[str] = "background_compact"
+    _llm_request_dir_name: ClassVar[str] = "llm_request"
 
     # 后台 shell 任务日志目录：project_root/.runtime/bg_shell（按需创建）
     _bg_shell_dir_name: ClassVar[str] = "bg_shell"
@@ -430,10 +444,16 @@ class PathManager(BasePathManager):
         return cls.get_chat_history_dir() / "subagents"
 
     @classmethod
+    def get_subagent_chat_history_dir(cls, agent_name: str, agent_id: str) -> Path:
+        """获取指定子 Agent 的独立聊天记录目录。"""
+        cls._ensure_app_initialization()
+        return cls.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>"
+
+    @classmethod
     def get_subagent_chat_session_file(cls, agent_name: str, agent_id: str) -> Path:
         """获取指定子 Agent 会话的 .session.json 文件路径。"""
         cls._ensure_app_initialization()
-        return cls.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.session.json"
+        return cls.get_subagent_chat_history_dir(agent_name, agent_id) / f"{agent_name}<{agent_id}>.session.json"
 
     @classmethod
     def get_asr_states_dir(cls) -> Path:
@@ -571,9 +591,21 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_runtime_dir(cls) -> Path:
-        """获取运行时数据目录（project_root/.runtime，按需创建）"""
+        """获取 sandbox 本地运行数据目录（project_root/.runtime，按需创建）。"""
         cls._ensure_app_initialization()
         return cls._runtime_dir
+
+    @classmethod
+    def get_background_compact_dir(cls) -> Path:
+        """获取后台压缩临时目录。"""
+        cls._ensure_app_initialization()
+        return cls.get_runtime_dir() / cls._background_compact_dir_name
+
+    @classmethod
+    def get_llm_request_dir(cls) -> Path:
+        """获取 LLM 调试日志临时目录。"""
+        cls._ensure_app_initialization()
+        return cls.get_runtime_dir() / cls._llm_request_dir_name
 
     @classmethod
     def get_bg_shell_dir(cls) -> Path:

@@ -188,14 +188,20 @@ export async function insertSlide(params: {
 			;(error as { code?: string }).code = "INVALID_FOLDER_STRUCTURE"
 
 			// Log error with context
-			pptLogger.error("Failed to determine parent directory for new slide", error, {
-				operation: "insertSlide",
-				metadata: {
-					projectId,
-					magicProjectFileId,
-					hadAttachments: !!attachments,
-					attachmentsCount: attachments?.length || 0,
-					fallbackParentId: parentId,
+			pptLogger.error({
+				eventKey: "new_slide_parent_directory_resolution_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to determine parent directory for new slide",
+				context: {
+					operation: "insertSlide",
+					metadata: {
+						projectId,
+						magicProjectFileId,
+						hadAttachments: !!attachments,
+						attachmentsCount: attachments?.length || 0,
+						fallbackParentId: parentId,
+					},
 				},
 			})
 
@@ -248,12 +254,18 @@ export async function insertSlide(params: {
 			const error = new Error("Failed to create new slide file")
 
 			// Log error with context
-			pptLogger.error("Failed to create slide file", error, {
-				operation: "insertSlide",
-				metadata: {
-					projectId,
-					parentId: correctParentId,
-					fileName,
+			pptLogger.error({
+				eventKey: "create_slide_file_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to create slide file",
+				context: {
+					operation: "insertSlide",
+					metadata: {
+						projectId,
+						parentId: correctParentId,
+						fileName,
+					},
 				},
 			})
 
@@ -300,14 +312,20 @@ export async function insertSlide(params: {
 		return { newFilePath, newSlides, newFileId: newFile.file_id, insertIndex, newFile }
 	} catch (error) {
 		// Log error with full context
-		pptLogger.error("Insert slide operation failed", error, {
-			operation: "insertSlide",
-			metadata: {
-				projectId,
-				position,
-				direction,
-				currentSlidesCount: currentSlides.length,
-				magicProjectFileId,
+		pptLogger.error({
+			eventKey: "insert_slide_operation_failed",
+			errorKind: "unknown",
+			error: error,
+			message: "Insert slide operation failed",
+			context: {
+				operation: "insertSlide",
+				metadata: {
+					projectId,
+					position,
+					direction,
+					currentSlidesCount: currentSlides.length,
+					magicProjectFileId,
+				},
 			},
 		})
 		throw error

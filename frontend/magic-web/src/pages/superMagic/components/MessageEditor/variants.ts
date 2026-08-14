@@ -11,7 +11,10 @@ const messageEditorContentPlaceholderClasses =
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none [&_.ProseMirror_.is-editor-empty:first-child::before]:float-left [&_.ProseMirror_.is-editor-empty:first-child::before]:h-0 [&_.ProseMirror_.is-editor-empty:first-child::before]:text-muted-foreground [&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]"
 
 const messageEditorContentMentionClasses =
-	"[&_.ProseMirror_.magic-mention]:mx-0.5 [&_.ProseMirror_.magic-mention]:inline [&_.ProseMirror_.magic-mention]:cursor-pointer [&_.ProseMirror_.magic-mention]:overflow-hidden [&_.ProseMirror_.magic-mention]:text-ellipsis [&_.ProseMirror_.magic-mention]:rounded [&_.ProseMirror_.magic-mention]:bg-primary/10 [&_.ProseMirror_.magic-mention]:bg-primary-10 [&_.ProseMirror_.magic-mention]:px-1 [&_.ProseMirror_.magic-mention]:py-0.5 [&_.ProseMirror_.magic-mention]:align-middle [&_.ProseMirror_.magic-mention]:text-xs [&_.ProseMirror_.magic-mention]:font-normal [&_.ProseMirror_.magic-mention]:leading-5 [&_.ProseMirror_.magic-mention]:text-primary"
+	"[&_.ProseMirror_.magic-mention]:mx-0.5 [&_.ProseMirror_.magic-mention]:inline [&_.ProseMirror_.magic-mention]:cursor-pointer [&_.ProseMirror_.magic-mention]:overflow-hidden [&_.ProseMirror_.magic-mention]:text-ellipsis [&_.ProseMirror_.magic-mention]:rounded [&_.ProseMirror_.magic-mention]:bg-primary/10 [&_.ProseMirror_.magic-mention]:bg-primary-10 [&_.ProseMirror_.magic-mention]:px-1 [&_.ProseMirror_.magic-mention]:py-0.5 [&_.ProseMirror_.magic-mention]:!align-baseline [&_.ProseMirror_.magic-mention]:text-xs [&_.ProseMirror_.magic-mention]:font-normal [&_.ProseMirror_.magic-mention]:leading-[inherit] [&_.ProseMirror_.magic-mention]:text-primary"
+
+const messageEditorProjectFileMentionAlignmentClasses =
+	"[&_.ProseMirror_.magic-mention[data-type='project_file']]:relative [&_.ProseMirror_.magic-mention[data-type='project_file']]:-top-px [&_.ProseMirror_.magic-mention[data-type='project_file']]:leading-[inherit]"
 
 const messageEditorContentParagraphClasses =
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:whitespace-pre-wrap [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:leading-[1.5]"
@@ -78,9 +81,20 @@ export const messageEditorContentVariants = cva(
 	{
 		variants: {
 			size: {
-				default: "",
-				small: "min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
-				mobile: "min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
+				default: cn(
+					messageEditorProjectFileMentionAlignmentClasses,
+					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[14px]",
+				),
+				small: cn(
+					"min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
+					messageEditorProjectFileMentionAlignmentClasses,
+					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[13px]",
+				),
+				mobile: cn(
+					"min-h-[78px] text-[13px] leading-4 [&_.ProseMirror]:min-h-[34px]",
+					messageEditorProjectFileMentionAlignmentClasses,
+					"[&_.ProseMirror_.magic-mention[data-type='project_file']]:!text-[13px]",
+				),
 			},
 		},
 		defaultVariants: {

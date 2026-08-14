@@ -18,7 +18,7 @@ class AttachmentStorageType(str, Enum):
 
     WORKSPACE = "workspace"
     TOPIC = "topic"
-    SNAPSHOT = "snapshot"
+    SNAPSHOT = "snapshot"  # 已废弃，仅用于兼容历史数据，新代码不得写入
     OBJECT_STORAGE = "object_storage"
 
 

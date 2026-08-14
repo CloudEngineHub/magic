@@ -209,6 +209,15 @@
 	"pleaseSelectMember": "请选择用户",
 	"pleaseSelectPlaceholder": "请选择{{name}}",
 	"prePage": "上一页",
+	"publishTarget": {
+		"departmentCount": "{{count}} 个部门",
+		"departments": "部门",
+		"details": "发布对象明细",
+		"empty": "暂无明细",
+		"memberCount": "{{count}} 位成员",
+		"members": "成员",
+		"view": "查看名单"
+	},
 	"search": "搜索选项",
 	"slidesTemplate": {
 		"addButton": "新增模板",

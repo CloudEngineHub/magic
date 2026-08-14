@@ -7,27 +7,20 @@ from typing import TYPE_CHECKING
 from agentlang.event.data import AfterMainAgentRunEventData
 from agentlang.event.event import Event
 from app.service.memory.runtime.lifecycle.memory_after_run_service import MemoryAfterRunService
-from app.service.memory.runtime.lifecycle.memory_before_run_service import MemoryBeforeRunService
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
 
 
 class MemoryLifecycleCoordinator:
-    """组合主 Agent 运行前后的文件记忆生命周期能力。"""
+    """编排主 Agent 运行后的文件记忆扩展能力。"""
 
     def __init__(
         self,
-        before_run_service: MemoryBeforeRunService | None = None,
         after_run_service: MemoryAfterRunService | None = None,
     ) -> None:
-        """初始化运行前后服务，便于独立测试和后续替换。"""
-        self._before_run_service = before_run_service or MemoryBeforeRunService()
+        """初始化回合后服务，便于独立测试和后续替换。"""
         self._after_run_service = after_run_service or MemoryAfterRunService()
-
-    async def before_run(self, agent_context: "AgentContext") -> None:
-        """执行主 Agent 运行前的核心记忆注入。"""
-        await self._before_run_service.handle(agent_context)
 
     async def after_run(
         self,

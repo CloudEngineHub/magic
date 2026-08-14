@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Util;
 
+use App\ErrorCode\SkillErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use Dtyq\SuperMagic\ErrorCode\SkillErrorCode;
 use Hyperf\Logger\LoggerFactory;
 use RuntimeException;
 use Throwable;

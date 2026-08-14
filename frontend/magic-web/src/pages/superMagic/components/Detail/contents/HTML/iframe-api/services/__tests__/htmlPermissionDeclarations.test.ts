@@ -32,13 +32,18 @@ describe("hasManageableHtmlPermissionDeclarations", () => {
 				permissions: { userInfo: { scopes: ["user.profile.identity"] } },
 			}),
 		).toBe(true)
+		expect(
+			hasManageableHtmlPermissionDeclarations({
+				permissions: { scopes: ["llm.use", "future.scope"] as never },
+			}),
+		).toBe(true)
 	})
 
-	it("returns true for unsupported declarations so diagnostics remain accessible", () => {
+	it("returns false when the app only declares unregistered permissions", () => {
 		expect(
 			hasManageableHtmlPermissionDeclarations({
 				permissions: { scopes: ["future.scope"] as never },
 			}),
-		).toBe(true)
+		).toBe(false)
 	})
 })

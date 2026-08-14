@@ -44,13 +44,21 @@ export function useInspectorToolbarMode(
 
 		if (currentMode === "appendToEditor") {
 			// Append inspector-detail rich node to the current editor
-			const content = buildAgentPromptContent(elementInspector.selectedElement, t, fileInfo)
+			const content = buildAgentPromptContent(
+				elementInspector.selectedElement,
+				t("stylePanel.inspector.agentPromptTitle"),
+				fileInfo,
+			)
 			pubsub.publish(PubSubEvents.Append_Suggestion_To_Editor, content)
 			return
 		}
 
 		// toolbar mode — create new topic with rich content
-		const content = buildAgentPromptContent(elementInspector.selectedElement, t, fileInfo)
+		const content = buildAgentPromptContent(
+			elementInspector.selectedElement,
+			t("stylePanel.inspector.agentPromptTitle"),
+			fileInfo,
+		)
 
 		// In crew/skill/MagiClaw scenarios there's no Create_New_Topic listener;
 		// fall back to setting the input message directly in the current editor.

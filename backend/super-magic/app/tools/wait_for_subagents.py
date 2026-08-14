@@ -528,7 +528,7 @@ async def _get_initial_message_counts(
     for task, (agent_name, agent_id) in task_refs.items():
         if task.done():
             continue
-        chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
+        chat_file = PathManager.get_subagent_chat_history_dir(agent_name, agent_id) / f"{agent_name}<{agent_id}>.json"
         try:
             if await async_exists(chat_file):
                 data = await async_read_json(chat_file)
@@ -553,7 +553,7 @@ async def _scan_messages_for_pattern(
     for task, (agent_name, agent_id) in task_refs.items():
         if task.done():
             continue
-        chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
+        chat_file = PathManager.get_subagent_chat_history_dir(agent_name, agent_id) / f"{agent_name}<{agent_id}>.json"
         try:
             if not await async_exists(chat_file):
                 continue
@@ -586,7 +586,7 @@ async def _scan_messages_for_pattern(
 
 async def _get_last_assistant_message(agent_name: str, agent_id: str) -> Optional[str]:
     """从子 Agent 的聊天历史文件中读取最后一条有内容的 assistant 消息，用于超时时的进度快照。"""
-    chat_file = PathManager.get_subagents_chat_history_dir() / f"{agent_name}<{agent_id}>.json"
+    chat_file = PathManager.get_subagent_chat_history_dir(agent_name, agent_id) / f"{agent_name}<{agent_id}>.json"
     try:
         if not await async_exists(chat_file):
             return None

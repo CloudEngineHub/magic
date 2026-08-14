@@ -51,7 +51,8 @@ export interface RecordingEditorRuntimeState {
 }
 
 export interface RecordingEditorStartParams {
-	workspace: Workspace
+	/** Nullable so audio recordings can start from All / Ungrouped without a workspace shell */
+	workspace: Workspace | null
 	project: ProjectListItem
 	topic: Topic | null
 	selectedTopic: Topic | null

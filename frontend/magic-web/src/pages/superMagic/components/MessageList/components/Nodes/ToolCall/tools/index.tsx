@@ -45,5 +45,5 @@ export const ToolsMap: Record<string, ComponentType<any>> = {
 	todo_write: lazy(() => import("./TodoWrite")),
 	todo_update: lazy(() => import("./TodoWrite")),
 	ask_user: lazy(() => import("../../AskUser")),
-	micro_app_plan: lazy(() => import("../../MessageNode/tools/microAppPlan")),
+	micro_app_plan: lazy(() => import("../../MessageNode/tool-call/tools/MicroAppPlan")),
 }

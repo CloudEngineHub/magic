@@ -66,7 +66,7 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 		const status = summarizing ? "generating" : summaryFailed ? "failed" : "pending"
 		return (
 			<div
-				className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+				className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 				data-testid="recording-detail-right-panel"
 			>
 				<RecordingDetailSummaryState
@@ -80,7 +80,10 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	if (tabs.length === 0) {
 		return (
-			<div className="flex h-full min-h-[560px] items-center justify-center rounded-[22px] border border-border bg-card shadow-sm">
+			<div
+				className="flex h-full min-h-0 items-center justify-center rounded-[22px] border border-border bg-card shadow-sm"
+				data-testid="recording-detail-right-panel"
+			>
 				<RecordingDetailEmptyState variant="noSummary" />
 			</div>
 		)
@@ -90,7 +93,8 @@ export const RecordingDetailRightPanel = memo(function RecordingDetailRightPanel
 
 	return (
 		<div
-			className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
+			// The panel must shrink with the workbench so focused transcript rows cannot scroll the horizontal viewport vertically.
+			className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-sm"
 			data-testid="recording-detail-right-panel"
 		>
 			<RecordingDetailTabStrip

@@ -256,6 +256,35 @@ describe("ProjectShareCreateView", () => {
 		expect(openDefaultOpenFilePicker).toHaveBeenCalledTimes(1)
 	})
 
+	it("编辑文件分享时在已选文件行提供编辑图标", () => {
+		const openFileSelector = vi.fn()
+
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					mode: "file",
+					isEditing: true,
+					openFileSelector,
+					selectedFileCount: 1,
+					selectedFileHierarchy: [
+						{
+							id: "fictional-selected-file",
+							name: "fictional-selected.html",
+							isDirectory: false,
+							children: [],
+						},
+					],
+				})}
+			/>,
+		)
+
+		fireEvent.click(
+			screen.getByTestId("project-share-sheet-selected-files-trigger-edit-button"),
+		)
+
+		expect(openFileSelector).toHaveBeenCalledTimes(1)
+	})
+
 	it("项目模式也展示默认打开文件并支持点击打开选择器", () => {
 		const openDefaultOpenFilePicker = vi.fn()
 

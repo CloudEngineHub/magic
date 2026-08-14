@@ -11,7 +11,7 @@ use App\Application\Speech\DTO\AsrTaskStatusDTO;
 use App\Application\Speech\Service\AsrFileAppService;
 use App\Domain\Asr\Constants\AsrConfig;
 use App\Domain\Asr\Constants\AsrRedisKeys;
-use Dtyq\SuperMagic\Domain\SuperAgent\Repository\Facade\AudioProjectRepositoryInterface;
+use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\Crontab\Annotation\Crontab;
 use Hyperf\Logger\LoggerFactory;

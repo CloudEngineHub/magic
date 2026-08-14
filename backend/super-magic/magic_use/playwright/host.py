@@ -12,7 +12,9 @@ from magic_use.config import BrowserContextConfig, BrowserRuntimeConfig
 from magic_use.errors import BrowserConnectionError, BrowserErrorCode, BrowserSDKError
 from magic_use.models.common import BrowserBackendKind, BrowserName
 from magic_use.playwright.context_lease import PlaywrightContextLease
+from magic_use.playwright.fingerprint import UserAgentOverride, resolve_user_agent_override
 from magic_use.playwright.health import RemotePlaywrightHealthChecker
+from magic_use.scripts import ScriptRegistry
 from magic_use.userscripts import UserscriptRegistry
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,7 @@ class PlaywrightHost:
         self._on_idle = on_idle
         self._started = False
         self._closed = False
+        self._user_agent_override: UserAgentOverride | None = None
 
     @property
     def browser(self) -> Browser:
@@ -91,6 +94,10 @@ class PlaywrightHost:
     @property
     def page_count(self) -> int:
         return sum(state.page_count for state in self._leases.values())
+
+    @property
+    def user_agent_override(self) -> UserAgentOverride | None:
+        return self._user_agent_override
 
     async def acquire_context(
         self,
@@ -114,6 +121,9 @@ class PlaywrightHost:
             if context_options is not None:
                 options.update(context_options)
             context = await self.browser.new_context(**options)
+            if config.scripts.mask_enabled:
+                mask = await ScriptRegistry().get("mask")
+                await context.add_init_script(script=mask.source)
             userscripts = UserscriptRegistry(config.scripts.userscripts)
             for source in userscripts.document_start_sources():
                 await context.add_init_script(script=source)
@@ -247,11 +257,14 @@ class PlaywrightHost:
                         raise BrowserConnectionError(f"Remote Playwright connection failed: {error}") from error
                     await asyncio.sleep(remote.retry_interval_seconds)
         self.browser.on("disconnected", self._on_disconnected)
+        if self.key.browser_name is BrowserName.CHROMIUM:
+            self._user_agent_override = await resolve_user_agent_override(self.browser)
         self._started = True
 
     def _on_disconnected(self) -> None:
         self._started = False
         self._browser = None
+        self._user_agent_override = None
         for state in tuple(self._leases.values()):
             if state.disconnect_handler is not None:
                 state.disconnect_handler()

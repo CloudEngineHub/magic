@@ -1,14 +1,181 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
 	findFileByName,
 	findFileByPath,
 	extractFileName,
 	parseImageSize,
 	normalizeImagePath,
+	escapeDangerousInvisibleHtmlTags,
 	type AttachmentFile,
 } from "../utils"
 
 describe("Markdown Utils", () => {
+	describe("escapeDangerousInvisibleHtmlTags", () => {
+		it("escapes invisible or executable HTML tags", () => {
+			expect(escapeDangerousInvisibleHtmlTags("before <script>alert(1)</script> after")).toBe(
+				"before <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> after",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("<style>body { color: red }</style>")).toBe(
+				"<pre><code>&lt;style&gt;body { color: red }&lt;/style&gt;</code></pre>",
+			)
+		})
+
+		it("renders complete multiline HTML blocks as code", () => {
+			const markdown = '<script>\n# heading\nconst html = "<div>example</div>"\n</script>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				'<pre><code>&lt;script&gt;\n# heading\nconst html = "&lt;div&gt;example&lt;/div&gt;"\n&lt;/script&gt;</code></pre>',
+			)
+		})
+
+		it("does not alter fenced code blocks", () => {
+			const markdown = "```html\n<script>alert(1)</script>\n```"
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+		})
+
+		it("leaves ordinary HTML untouched", () => {
+			expect(escapeDangerousInvisibleHtmlTags("<div>visible</div>")).toBe(
+				"<div>visible</div>",
+			)
+		})
+
+		it("does not alter inline or indented code", () => {
+			expect(escapeDangerousInvisibleHtmlTags("`<script>alert(1)</script>`")).toBe(
+				"`<script>alert(1)</script>`",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("    <script>alert(1)</script>")).toBe(
+				"    <script>alert(1)</script>",
+			)
+		})
+
+		it("uses markdown-it semantics for unmatched backticks and invalid fences", () => {
+			expect(escapeDangerousInvisibleHtmlTags("unclosed `\n<script>x</script>")).toBe(
+				"unclosed `\n<pre><code>&lt;script&gt;x&lt;/script&gt;</code></pre>",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("```bad```\n<script>x</script>")).toBe(
+				"```bad```\n<pre><code>&lt;script&gt;x&lt;/script&gt;</code></pre>",
+			)
+		})
+
+		it("preserves blockquote and list prefixes around dangerous HTML blocks", () => {
+			expect(escapeDangerousInvisibleHtmlTags("> <script>\n> # x\n> </script>")).toBe(
+				"> <pre><code>&lt;script&gt;\n> # x\n> &lt;/script&gt;</code></pre>",
+			)
+			expect(escapeDangerousInvisibleHtmlTags("- <style>\n  # x\n  </style>")).toBe(
+				"- <pre><code>&lt;style&gt;\n  # x\n  &lt;/style&gt;</code></pre>",
+			)
+		})
+
+		it("renders raw HTML with executable attributes or protocols as code", () => {
+			expect(escapeDangerousInvisibleHtmlTags('<div onclick="run()">text</div>')).toBe(
+				'<pre><code>&lt;div onclick="run()"&gt;text&lt;/div&gt;</code></pre>',
+			)
+			expect(
+				escapeDangerousInvisibleHtmlTags(
+					'before <a href="javascript:alert(1)">click</a> after',
+				),
+			).toBe('before <code>&lt;a href="javascript:alert(1)"&gt;click&lt;/a&gt;</code> after')
+		})
+
+		it("renders any inline style as code to prevent UI overlay injection", () => {
+			const markdown =
+				'<div style="position:fixed;inset:0;z-index:2147483647;background:white">login</div>'
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				'<pre><code>&lt;div style="position:fixed;inset:0;z-index:2147483647;background:white"&gt;login&lt;/div&gt;</code></pre>',
+			)
+			expect(escapeDangerousInvisibleHtmlTags('<span style="color:red">text</span>')).toBe(
+				'<code>&lt;span style="color:red"&gt;text&lt;/span&gt;</code>',
+			)
+		})
+
+		it.each([
+			"java&#x73;cript:alert(1)",
+			"jav&#97;script:alert(1)",
+			"java&#10;script:alert(1)",
+			"javascript&#58;alert(1)",
+			"JaVaScRiPt:alert(1)",
+			"vb&#x73;cript:msgbox(1)",
+			"data&#58;text/html,<script>alert(1)</script>",
+		])("decodes and blocks dangerous raw HTML URL %s", (href) => {
+			const markdown = `before <a href="${href}">click</a> after`
+			const escapedHref = href
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;")
+			expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(
+				`before <code>&lt;a href="${escapedHref}"&gt;click&lt;/a&gt;</code> after`,
+			)
+		})
+
+		it("leaves safe raw HTML links untouched", () => {
+			for (const href of [
+				"https://example.com",
+				"http://example.com",
+				"/docs/page.md",
+				"../page.md#section",
+				"mailto:user@example.com",
+			]) {
+				const markdown = `<a href="${href}">example</a>`
+				expect(escapeDangerousInvisibleHtmlTags(markdown)).toBe(markdown)
+			}
+		})
+
+		it("renders SVG SMIL and MathML as code instead of allowing raw namespaces", () => {
+			const svg =
+				'<svg><a><animate attributeName="href" values="javascript:alert(1)" /></a><text>click</text></svg>'
+			expect(escapeDangerousInvisibleHtmlTags(svg)).toBe(
+				`<code>${svg
+					.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;")}</code>`,
+			)
+			expect(escapeDangerousInvisibleHtmlTags("<math><mi>x</mi></math>")).toBe(
+				"<code>&lt;math&gt;&lt;mi&gt;x&lt;/mi&gt;&lt;/math&gt;</code>",
+			)
+		})
+
+		it("falls back to one bounded code block for excessive repeated raw HTML", () => {
+			const markdown = Array.from(
+				{ length: 1100 },
+				() => '<a href="javascript:alert(1)">x</a>',
+			).join(" ")
+			const result = escapeDangerousInvisibleHtmlTags(markdown)
+
+			expect(result.startsWith("<pre><code>")).toBe(true)
+			expect(result).not.toContain('<a href="javascript:alert(1)">')
+		})
+
+		it("checks raw HTML workload limits before DOM risk analysis", () => {
+			const parseSpy = vi.spyOn(DOMParser.prototype, "parseFromString")
+			try {
+				const markdown = Array.from(
+					{ length: 10000 },
+					() => '<span style="color:red">x</span>',
+				).join(" ")
+				const result = escapeDangerousInvisibleHtmlTags(markdown)
+
+				expect(markdown.length).toBeLessThan(4 * 1024 * 1024)
+				expect(result.startsWith("<pre><code>")).toBe(true)
+				expect(parseSpy).not.toHaveBeenCalled()
+			} finally {
+				parseSpy.mockRestore()
+			}
+		})
+
+		it("caches repeated raw HTML risk decisions", () => {
+			const parseSpy = vi.spyOn(DOMParser.prototype, "parseFromString")
+			try {
+				const markdown = Array.from(
+					{ length: 100 },
+					() => '<span style="color:red">x</span>',
+				).join(" ")
+				escapeDangerousInvisibleHtmlTags(markdown)
+
+				expect(parseSpy).toHaveBeenCalledTimes(1)
+			} finally {
+				parseSpy.mockRestore()
+			}
+		})
+	})
 	describe("findFileByName", () => {
 		it("should find file in flat array", () => {
 			const files: AttachmentFile[] = [

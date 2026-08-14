@@ -143,7 +143,7 @@ class OAuth2TokenService:
             return await self._check_saved_authorization(app_name, subject)
         state = session.state
         if await self._session_store.is_expired(session):
-            await self._session_store.delete(app_name, state)
+            await self._delete_authorization_state(app_name, state)
             saved_result = await self._check_saved_authorization(app_name, subject)
             if saved_result.status != "not_authorized":
                 return saved_result
@@ -163,8 +163,10 @@ class OAuth2TokenService:
                 "Authorization callback has not arrived.",
             )
         if callback.status in {OAuth2CallbackStatus.DENIED, OAuth2CallbackStatus.FAILED, OAuth2CallbackStatus.EXPIRED}:
+            await self._delete_authorization_state(app_name, state)
             return OAuth2AuthorizationCheckResult(callback.status.value, app_name, subject, callback.message)
         if callback.payload is None:
+            await self._delete_authorization_state(app_name, state)
             return OAuth2AuthorizationCheckResult(
                 "failed",
                 app_name,
@@ -181,8 +183,7 @@ class OAuth2TokenService:
         )
         credential = OAuth2Credential.from_token(app.app_name, session.subject or subject, token, timezone_name)
         await self._credential_store.save(credential, timezone_name)
-        await self._session_store.delete(app.app_name, state)
-        await self._callback_relay.delete_callback(state)
+        await self._delete_authorization_state(app.app_name, state)
         return OAuth2AuthorizationCheckResult(
             "authorized",
             app.app_name,
@@ -246,6 +247,11 @@ class OAuth2TokenService:
             subject,
             "OAuth2 authorization exists but the saved token is expired and cannot be refreshed.",
         )
+
+    async def _delete_authorization_state(self, app_name: str, state: str) -> None:
+        """同步删除授权 session 与本地或远端 callback。"""
+        await self._session_store.delete(app_name, state)
+        await self._callback_relay.delete_callback(state)
 
     def _start_authorization_polling(self, session: OAuth2AuthorizationSession, timezone_name: str) -> bool:
         """为单个授权 session 启动后台轮询。"""

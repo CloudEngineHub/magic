@@ -15,9 +15,12 @@ import type { JSONContent } from "@tiptap/react"
 import { useTranslation } from "react-i18next"
 import { Crosshair, X, Copy, MousePointer, Send } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
-import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { InspectedElementInfo, InspectedElementRect } from "./types"
+import { getInspectorOverlayScale, toInspectorOverlayRect } from "./geometry"
+import { buildAgentPromptContent } from "./agentPrompt"
+import { formatElementSize, getShortSelector } from "./format"
+
+export { buildAgentPromptContent } from "./agentPrompt"
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -42,19 +45,6 @@ interface ElementInspectorOverlayProps {
 	hideInfoCard?: boolean
 	/** Scale ratio of the iframe (for coordinate conversion) */
 	scaleRatio?: number
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getShortSelector(info: InspectedElementInfo): string {
-	let s = info.tagName
-	if (info.id) s += `#${info.id}`
-	if (info.classList.length > 0) s += `.${info.classList.slice(0, 2).join(".")}`
-	return s
-}
-
-function formatSize(w: number, h: number): string {
-	return `${Math.round(w)} × ${Math.round(h)}`
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -108,6 +98,20 @@ export function ElementInspectorOverlay({
 		}
 	}, [iframeRef, active, hoveredElement])
 
+	const getOverlayGeometry = useCallback(() => {
+		const iframe = iframeRef.current
+		const parent = overlayRef.current?.parentElement
+		if (!iframe || !parent) return null
+
+		return {
+			iframeRect: iframe.getBoundingClientRect(),
+			iframeSize: { width: iframe.clientWidth, height: iframe.clientHeight },
+			containerRect: parent.getBoundingClientRect(),
+			containerSize: { width: parent.clientWidth, height: parent.clientHeight },
+			fallbackScale: scaleRatio,
+		}
+	}, [iframeRef, scaleRatio])
+
 	/**
 	 * Convert an iframe-viewport-relative rect to overlay-relative coordinates.
 	 * Uses live DOM measurements to handle:
@@ -116,36 +120,17 @@ export function ElementInspectorOverlay({
 	 */
 	const toOverlayRect = useCallback(
 		(rect: InspectedElementRect) => {
-			const iframe = iframeRef.current
-			const parent = overlayRef.current?.parentElement
-			if (!iframe || !parent) return null
-			const parentRect = parent.getBoundingClientRect()
-			const ifRect = iframe.getBoundingClientRect()
-			// Auto-detect effective scale from visual vs layout dimensions
-			const effectiveScale =
-				scaleRatio !== 1
-					? scaleRatio
-					: iframe.clientWidth > 0
-						? ifRect.width / iframe.clientWidth
-						: 1
-			return {
-				left: ifRect.left - parentRect.left + rect.left * effectiveScale,
-				top: ifRect.top - parentRect.top + rect.top * effectiveScale,
-				width: rect.width * effectiveScale,
-				height: rect.height * effectiveScale,
-			}
+			const geometry = getOverlayGeometry()
+			return geometry ? toInspectorOverlayRect(rect, geometry) : null
 		},
-		[iframeRef, scaleRatio],
+		[getOverlayGeometry],
 	)
 
-	/** Get the current effective scale ratio (auto-detected or from prop) */
-	const getEffectiveScale = useCallback(() => {
-		const iframe = iframeRef.current
-		if (!iframe) return scaleRatio
-		const ifRect = iframe.getBoundingClientRect()
-		if (scaleRatio !== 1) return scaleRatio
-		return iframe.clientWidth > 0 ? ifRect.width / iframe.clientWidth : 1
-	}, [iframeRef, scaleRatio])
+	/** Get the iframe scale relative to the overlay's coordinate system. */
+	const getOverlayScale = useCallback(() => {
+		const geometry = getOverlayGeometry()
+		return geometry ? getInspectorOverlayScale(geometry) : { x: scaleRatio, y: scaleRatio }
+	}, [getOverlayGeometry, scaleRatio])
 
 	const hoverBox = useMemo(
 		() => (hoveredElement ? toOverlayRect(hoveredElement.rect) : null),
@@ -158,9 +143,9 @@ export function ElementInspectorOverlay({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[selectedElement, toOverlayRect, iframeRect],
 	)
-
 	// Don't render anything if not active and no selection
 	if (!active && !selectedElement) return null
+	const overlayScale = getOverlayScale()
 
 	return (
 		<div
@@ -197,19 +182,16 @@ export function ElementInspectorOverlay({
 						<div
 							className="pointer-events-none absolute"
 							style={{
-								left:
-									hoverBox.left -
-									hoveredElement.padding.left * getEffectiveScale(),
-								top:
-									hoverBox.top - hoveredElement.padding.top * getEffectiveScale(),
+								left: hoverBox.left - hoveredElement.padding.left * overlayScale.x,
+								top: hoverBox.top - hoveredElement.padding.top * overlayScale.y,
 								width:
 									hoverBox.width +
 									(hoveredElement.padding.left + hoveredElement.padding.right) *
-										getEffectiveScale(),
+										overlayScale.x,
 								height:
 									hoverBox.height +
 									(hoveredElement.padding.top + hoveredElement.padding.bottom) *
-										getEffectiveScale(),
+										overlayScale.y,
 								backgroundColor: "rgba(147, 196, 125, 0.3)",
 								transition: "all 50ms ease-out",
 								zIndex: -1,
@@ -272,7 +254,7 @@ function HoverLabel({
 	containerWidth: number
 }) {
 	const label = getShortSelector(info)
-	const size = formatSize(info.rect.width, info.rect.height)
+	const size = formatElementSize(info.rect.width, info.rect.height)
 	const labelWidth = 240
 
 	// Position label above the element if there's space, else below
@@ -300,112 +282,6 @@ function HoverLabel({
 }
 
 // ─── Element Info Card ───────────────────────────────────────────────────────
-
-/**
- * Build a TipTap JSONContent for the chat input.
- * Scenario: user wants to modify an element's style.
- * Includes selector, size, key computed styles, and optional text content
- * as context, followed by a super-placeholder for the user's description.
- */
-export function buildAgentPromptContent(
-	info: InspectedElementInfo,
-	t: (key: string) => string,
-	fileInfo?: { fileId: string; fileName: string; filePath: string },
-): JSONContent {
-	const paragraphs: JSONContent[] = []
-	const fileMention = fileInfo
-		? {
-				type: MentionItemType.PROJECT_FILE,
-				data: {
-					file_id: fileInfo.fileId,
-					file_name: fileInfo.fileName,
-					file_path: fileInfo.filePath,
-					file_extension: fileInfo.fileName.includes(".")
-						? (fileInfo.fileName.split(".").pop() ?? "")
-						: "",
-				},
-			}
-		: null
-
-	// Intro — insert an inspector-detail node that the editor will render as a collapsible panel
-	const KEY_STYLE_PROPS = [
-		"display",
-		"position",
-		"width",
-		"height",
-		"color",
-		"backgroundColor",
-		"fontSize",
-		"fontFamily",
-		"margin",
-		"padding",
-		"border",
-		"borderRadius",
-		"flexDirection",
-		"alignItems",
-		"justifyContent",
-		"gap",
-		"overflow",
-		"zIndex",
-	] as const
-	const styleLines = KEY_STYLE_PROPS.flatMap((prop) => {
-		const value = info.computedStyles[prop as keyof typeof info.computedStyles]
-		if (
-			value &&
-			value !== "none" &&
-			value !== "normal" &&
-			value !== "auto" &&
-			value !== "0px"
-		) {
-			return [`${prop}: ${value}`]
-		}
-		return []
-	})
-
-	const sizeStr = `${Math.round(info.rect.width)} × ${Math.round(info.rect.height)} px`
-	const computedStylesObj: Record<string, string> = {}
-	for (const line of styleLines) {
-		const idx = line.indexOf(": ")
-		if (idx > 0) {
-			computedStylesObj[line.slice(0, idx)] = line.slice(idx + 2)
-		}
-	}
-	const textPreview = info.textContent
-		? info.textContent.length > 60
-			? `${info.textContent.slice(0, 60)}…`
-			: info.textContent
-		: ""
-	const elementAttributes = JSON.stringify(info.attributes ?? {})
-	const domContext = JSON.stringify(info.domContext ?? {})
-	const elementHtml = info.elementHtml ?? ""
-
-	// Inspector detail node (title is stored in attrs for serialization/rendering)
-	paragraphs.push({
-		type: "paragraph",
-		content: [
-			{
-				type: INSPECTOR_DETAIL_TYPE,
-				attrs: {
-					title: t("stylePanel.inspector.agentPromptTitle"),
-					selector: info.selector,
-					tagName: info.tagName,
-					size: sizeStr,
-					computedStyles: JSON.stringify(computedStylesObj),
-					styleCount: styleLines.length,
-					textContent: textPreview,
-					elementAttributes,
-					resource: info.resource ?? "",
-					domContext,
-					elementHtml,
-					selectorMatchCount: info.selectorMatchCount ?? -1,
-					fileMention,
-				},
-			},
-		],
-	})
-
-	return { type: "doc", content: paragraphs }
-}
 
 function ElementInfoCard({
 	info,
@@ -455,7 +331,7 @@ function ElementInfoCard({
 	}
 
 	const handleSendToAgent = () => {
-		onSendToAgent?.(buildAgentPromptContent(info, t))
+		onSendToAgent?.(buildAgentPromptContent(info, t("stylePanel.inspector.agentPromptTitle")))
 	}
 
 	const importantStyles = [
@@ -497,7 +373,7 @@ function ElementInfoCard({
 				<div className="mb-1.5">
 					<span className="text-muted-foreground">{t("stylePanel.inspector.size")}:</span>{" "}
 					<span className="font-mono">
-						{formatSize(info.rect.width, info.rect.height)}
+						{formatElementSize(info.rect.width, info.rect.height)}
 					</span>
 				</div>
 

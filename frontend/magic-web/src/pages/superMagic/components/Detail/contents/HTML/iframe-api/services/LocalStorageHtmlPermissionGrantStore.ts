@@ -39,8 +39,7 @@ export interface HtmlPermissionGrantFallbackSnapshot {
 }
 
 export type HtmlPermissionAuthorityLockResult<T> =
-	| { acquired: true; value: T }
-	| { acquired: false }
+	{ acquired: true; value: T } | { acquired: false }
 
 const EMPTY_FALLBACK_DATA: HtmlPermissionGrantFallbackSnapshot = {
 	version: 1,

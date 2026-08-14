@@ -39,7 +39,12 @@ function useSandboxPreWarm({
 			}
 
 			SuperMagicApi.preWarmSandbox(params).catch((error) => {
-				logger.error("preWarmSandbox error", error)
+				logger.error({
+					eventKey: "pre_warm_sandbox_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "preWarmSandbox error",
+				})
 			})
 		}),
 		{

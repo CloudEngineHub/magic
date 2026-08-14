@@ -106,6 +106,7 @@ const FilesViewer = memo(
 				tabs,
 				activeTab,
 				isRestoringFileTabs,
+				isAwaitingProjectAttachments,
 				openFileTab,
 				openWebsiteTab,
 				closeFileTab,
@@ -131,6 +132,8 @@ const FilesViewer = memo(
 				isKnowledgeBaseTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				getCheckBeforeClose,
 			} = useFilesViewer(props)
 
@@ -296,6 +299,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				// Website tab相关方法
 				openWebsiteTab,
 			}))
@@ -303,7 +308,7 @@ const FilesViewer = memo(
 			// Notify parent about fullscreen state changes via callback
 			useEffect(() => {
 				props.onFullscreenChange?.(Boolean(props.forceFullscreenMode) || !!fullscreenFileId)
-			}, [fullscreenFileId, props])
+			}, [fullscreenFileId, props.forceFullscreenMode, props.onFullscreenChange])
 
 			// 监听activeTab变化，自动滚动到对应位置
 			useEffect(() => {
@@ -496,6 +501,7 @@ const FilesViewer = memo(
 								userSelectDetail: props.userSelectDetail,
 								attachments: props.attachments,
 								attachmentList: props.attachmentList,
+								isAwaitingProjectAttachments,
 								topicId: props.topicId,
 								baseShareUrl: props.baseShareUrl,
 								currentTopicStatus: props.currentTopicStatus,
