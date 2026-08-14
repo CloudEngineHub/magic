@@ -3,9 +3,8 @@ import { getNodeSchema, getNodeVersion, judgeIsVariableNode } from "@/MagicFlow/
 import { getFormTypeToTitle } from "@/MagicJsonSchemaEditor/constants"
 import { getCurrentTypeFromString } from "@/common/BaseUI/DropdownRenderer/Reference/components/Transformer/helpers"
 import { useNodeMap } from "@/common/context/NodeMap/useResize"
-import { IconClose } from "@douyinfe/semi-icons"
+import { IconVariable, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
-import { Icon } from "@iconify/react"
 import { useMemoizedFn } from "ahooks"
 import i18next from "i18next"
 import { get } from "lodash-es"
@@ -116,7 +115,7 @@ export function LabelNode({ config, selected, deleteFn, wrapperWidth }: LabelNod
 					/
 				</span>
 				<span className="field-label" {...datasetProps}>
-					<Icon icon="tabler:variable" className="icon-variable" {...datasetProps} />
+					<IconVariable className="icon-variable" {...datasetProps} />
 
 					<span className="title" {...datasetProps}>
 						{currentValue?.title}
@@ -165,7 +164,7 @@ export function LabelNode({ config, selected, deleteFn, wrapperWidth }: LabelNod
 				className={beforeClassName}
 			>
 				{ValueComp}
-				{!disabled && <IconClose onClick={() => deleteFn(config)} />}
+				{!disabled && <IconX size={14} stroke={1.8} onClick={() => deleteFn(config)} />}
 			</LabelNodeStyle>
 		</Tooltip>
 	)

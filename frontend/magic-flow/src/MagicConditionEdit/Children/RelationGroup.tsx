@@ -1,5 +1,5 @@
 /* eslint-disable react/react-in-jsx-scope */
-import { PlusCircleFilled } from "@ant-design/icons"
+import { IconCirclePlusFilled } from "@tabler/icons-react"
 import classname from "clsx"
 import i18next from "i18next"
 import { isEmpty, uniqueId } from "lodash-es"
@@ -114,7 +114,7 @@ export function RelationGroup({
 						: i18next.t("common.or", { ns: "magicFlow" })}
 				</div>
 				<div className="add">
-					<PlusCircleFilled className="icon" onClick={handleAddConditionItem} />
+					<IconCirclePlusFilled size={16} className="icon" onClick={handleAddConditionItem} />
 				</div>
 			</div>
 			<div

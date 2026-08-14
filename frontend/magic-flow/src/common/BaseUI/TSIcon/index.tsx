@@ -1,9 +1,28 @@
-import { createFromIconfontCN } from "@ant-design/icons"
+import {
+	IconArrowLeft,
+	IconArrowRight,
+	IconCheck,
+	IconCode,
+	IconDots,
+	IconLogin2,
+	type IconProps,
+} from "@tabler/icons-react"
+import React from "react"
 
-export default createFromIconfontCN({
-	scriptUrl: "//lf1-cdn-tos.bytegoofy.com/obj/iconpark/svg_12224_334.c14ca5367f128232a6fd5d77d35f6135.js",
-	extraCommonProps: {
-		width: "100%",
-		height: "100%"
-	}
-})
+const icons = {
+	"ts-arrow-left": IconArrowLeft,
+	"ts-arrow-right": IconArrowRight,
+	"ts-check-line": IconCheck,
+	"ts-code": IconCode,
+	"ts-more-dot": IconDots,
+	"ts-subtask": IconLogin2,
+} as const
+
+type TSIconProps = Omit<IconProps, "type"> & {
+	type: keyof typeof icons
+}
+
+export default function TSIcon({ type, ...props }: TSIconProps) {
+	const Icon = icons[type]
+	return <Icon size={props.size ?? 18} {...props} />
+}
