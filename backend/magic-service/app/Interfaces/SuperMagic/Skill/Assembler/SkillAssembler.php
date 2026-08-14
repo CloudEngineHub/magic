@@ -18,6 +18,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
+use App\Interfaces\SuperMagic\Skill\DTO\Response\FeaturedSkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\LatestPublishedSkillVersionsResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublishSkillResponseDTO;
@@ -398,6 +399,115 @@ class SkillAssembler
         int $total,
         array $skillVersionMap = []
     ): SkillMarketListResponseDTO {
+        $listItems = self::createMarketListItems(
+            $skillMarketEntities,
+            $userSkills,
+            $publisherUserMap,
+            $currentUserId,
+            $skillVersionMap
+        );
+
+        return new SkillMarketListResponseDTO(
+            list: $listItems,
+            page: $page,
+            pageSize: $pageSize,
+            total: $total
+        );
+    }
+
+    /**
+     * 创建市场精选技能列表响应 DTO.
+     *
+     * @param array<string, SkillEntity> $userSkills 用户已添加的技能映射（key 为 skillCode）
+     * @param array<string, MagicUserEntity> $publisherUserMap 发布者用户信息映射（key 为 publisherId）
+     * @param array<string, SkillVersionEntity> $skillVersionMap key 为 skill_code
+     * @return FeaturedSkillMarketListResponseDTO 市场精选技能列表响应 DTO
+     */
+    public static function createFeaturedMarketListResponseDTO(
+        array $skillMarketEntities,
+        array $userSkills,
+        array $publisherUserMap,
+        string $currentUserId,
+        array $skillVersionMap,
+        int $requestedCount,
+        int $returnedCount,
+        int $remainingCount,
+        bool $hasMore
+    ): FeaturedSkillMarketListResponseDTO {
+        $listItems = self::createMarketListItems(
+            $skillMarketEntities,
+            $userSkills,
+            $publisherUserMap,
+            $currentUserId,
+            $skillVersionMap
+        );
+
+        return new FeaturedSkillMarketListResponseDTO(
+            list: $listItems,
+            requestedCount: $requestedCount,
+            returnedCount: $returnedCount,
+            remainingCount: $remainingCount,
+            hasMore: $hasMore
+        );
+    }
+
+    /**
+     * Build the market detail DTO from the market snapshot and version snapshot.
+     */
+    public static function createMarketDetailResponseDTO(
+        SkillMarketEntity $skillMarket,
+        SkillVersionEntity $skillVersion,
+        bool $isAdded,
+        bool $isCreator,
+        ?MagicUserEntity $publisherUser = null,
+        string $skillFileUrl = ''
+    ): SkillMarketDetailResponseDTO {
+        $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
+        $nameI18n = $skillMarket->getNameI18n() ?? $skillVersion->getNameI18n();
+        $descriptionI18n = $skillMarket->getDescriptionI18n() ?? $skillVersion->getDescriptionI18n() ?? [];
+        $sourceI18n = $skillVersion->getSourceI18n() ?? [];
+
+        return new SkillMarketDetailResponseDTO(
+            code: $skillMarket->getSkillCode(),
+            name: self::resolveLocalizedText($nameI18n, $language),
+            description: self::resolveLocalizedText($descriptionI18n, $language),
+            source: self::resolveLocalizedText($sourceI18n, $language),
+            nameI18n: $nameI18n,
+            descriptionI18n: $descriptionI18n,
+            sourceI18n: $sourceI18n,
+            skillFileUrl: $skillFileUrl,
+            versionCode: $skillVersion->getVersion(),
+            packageName: $skillVersion->getPackageName(),
+            versionCreatedAt: $skillVersion->getCreatedAt() ?? '',
+            logo: $skillMarket->getLogo() ?? $skillVersion->getLogo() ?? '',
+            publisherType: $skillMarket->getPublisherType()->value,
+            publisher: self::buildPublisher(
+                $skillMarket->getPublisherType(),
+                $skillMarket->getPublisherId(),
+                $publisherUser
+            ),
+            isAdded: $isAdded,
+            isCreator: $isCreator,
+            isFeatured: $skillMarket->isFeatured(),
+            categoryIds: $skillMarket->getCategoryIds(),
+        );
+    }
+
+    /**
+     * 组装市场技能列表项.
+     *
+     * @param array<string, SkillEntity> $userSkills 用户已添加的技能映射（key 为 skillCode）
+     * @param array<string, MagicUserEntity> $publisherUserMap 发布者用户信息映射（key 为 publisherId）
+     * @param array<string, SkillVersionEntity> $skillVersionMap key 为 skill_code
+     * @return SkillMarketListItemDTO[]
+     */
+    private static function createMarketListItems(
+        array $skillMarketEntities,
+        array $userSkills,
+        array $publisherUserMap,
+        string $currentUserId,
+        array $skillVersionMap
+    ): array {
         $listItems = [];
         foreach ($skillMarketEntities as $skillMarketEntity) {
             $skillCode = $skillMarketEntity->getSkillCode();
@@ -446,54 +556,7 @@ class SkillAssembler
             );
         }
 
-        return new SkillMarketListResponseDTO(
-            list: $listItems,
-            page: $page,
-            pageSize: $pageSize,
-            total: $total
-        );
-    }
-
-    /**
-     * Build the market detail DTO from the market snapshot and version snapshot.
-     */
-    public static function createMarketDetailResponseDTO(
-        SkillMarketEntity $skillMarket,
-        SkillVersionEntity $skillVersion,
-        bool $isAdded,
-        bool $isCreator,
-        ?MagicUserEntity $publisherUser = null,
-        string $skillFileUrl = ''
-    ): SkillMarketDetailResponseDTO {
-        $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
-        $nameI18n = $skillMarket->getNameI18n() ?? $skillVersion->getNameI18n();
-        $descriptionI18n = $skillMarket->getDescriptionI18n() ?? $skillVersion->getDescriptionI18n() ?? [];
-        $sourceI18n = $skillVersion->getSourceI18n() ?? [];
-
-        return new SkillMarketDetailResponseDTO(
-            code: $skillMarket->getSkillCode(),
-            name: self::resolveLocalizedText($nameI18n, $language),
-            description: self::resolveLocalizedText($descriptionI18n, $language),
-            source: self::resolveLocalizedText($sourceI18n, $language),
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
-            sourceI18n: $sourceI18n,
-            skillFileUrl: $skillFileUrl,
-            versionCode: $skillVersion->getVersion(),
-            packageName: $skillVersion->getPackageName(),
-            versionCreatedAt: $skillVersion->getCreatedAt() ?? '',
-            logo: $skillMarket->getLogo() ?? $skillVersion->getLogo() ?? '',
-            publisherType: $skillMarket->getPublisherType()->value,
-            publisher: self::buildPublisher(
-                $skillMarket->getPublisherType(),
-                $skillMarket->getPublisherId(),
-                $publisherUser
-            ),
-            isAdded: $isAdded,
-            isCreator: $isCreator,
-            isFeatured: $skillMarket->isFeatured(),
-            categoryIds: $skillMarket->getCategoryIds(),
-        );
+        return $listItems;
     }
 
     /**

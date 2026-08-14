@@ -99,6 +99,18 @@ class SkillMarketDomainService
     }
 
     /**
+     * 查询市场精选技能列表.
+     *
+     * @param string[] $excludeCodes 需要排除的 skill_code
+     * @param int $limit 返回条数
+     * @return array{total: int, list: SkillMarketEntity[]} 总数和随机精选列表
+     */
+    public function queryFeatured(array $excludeCodes, int $limit): array
+    {
+        return $this->skillMarketRepository->queryFeatured($excludeCodes, $limit);
+    }
+
+    /**
      * 管理后台查询市场技能列表.
      *
      * @return array{total: int, list: SkillMarketEntity[]}

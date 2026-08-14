@@ -15,6 +15,7 @@ use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryRelationDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\ErrorCode\SkillErrorCode;
@@ -118,9 +119,60 @@ class SkillMarketAppService extends AbstractSkillAppService
         // 查询市场技能列表（包含总数）
         $result = $this->skillMarketDomainService->queries($query, $page);
 
-        $skillMarketEntities = $result['list'];
-        $total = $result['total'];
+        $data = $this->resolveMarketListData($dataIsolation, $result['list']);
 
+        return [
+            'list' => $result['list'],
+            'total' => $result['total'],
+        ] + $data;
+    }
+
+    /**
+     * 获取市场精选技能列表.
+     *
+     * @param int $limit 返回条数
+     * @param string[] $excludeCodes 需要排除的 skill_code
+     * @return array{
+     *     list: SkillMarketEntity[],
+     *     requestedCount: int,
+     *     returnedCount: int,
+     *     remainingCount: int,
+     *     hasMore: bool,
+     *     userSkills: array<string, SkillEntity>,
+     *     publisherUserMap: array<string, MagicUserEntity>,
+     *     skillVersionMap: array<string, SkillVersionEntity>
+     * }
+     */
+    public function featuredQueries(RequestContext $requestContext, int $limit, array $excludeCodes): array
+    {
+        $userAuthorization = $requestContext->getUserAuthorization();
+        $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
+        $dataIsolation->disabled();
+
+        $excludeCodes = array_values(array_unique(array_filter($excludeCodes, static fn ($code) => $code !== '' && $code !== null)));
+        $result = $this->skillMarketDomainService->queryFeatured($excludeCodes, $limit);
+
+        $data = $this->resolveMarketListData($dataIsolation, $result['list']);
+        $returnedCount = count($result['list']);
+        $remainingCount = max(0, $result['total'] - $returnedCount);
+
+        return [
+            'list' => $result['list'],
+            'requestedCount' => $limit,
+            'returnedCount' => $returnedCount,
+            'remainingCount' => $remainingCount,
+            'hasMore' => $remainingCount > 0,
+        ] + $data;
+    }
+
+    /**
+     * 填充市场列表展示所需的分类、用户技能、版本、发布者和资源 URL.
+     *
+     * @param SkillMarketEntity[] $skillMarketEntities 市场技能实体
+     * @return array{userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>}
+     */
+    private function resolveMarketListData(SkillDataIsolation $dataIsolation, array $skillMarketEntities): array
+    {
         $categoryMap = $this->skillCategoryRelationDomainService->getMarketCategoryIdsMap(array_map(static fn (SkillMarketEntity $entity) => (int) $entity->getId(), $skillMarketEntities));
         foreach ($skillMarketEntities as $entity) {
             $entity->setCategoryIds($categoryMap[$entity->getId() ?? 0] ?? []);
@@ -128,8 +180,6 @@ class SkillMarketAppService extends AbstractSkillAppService
 
         if (empty($skillMarketEntities)) {
             return [
-                'list' => [],
-                'total' => $total,
                 'userSkills' => [],
                 'publisherUserMap' => [],
                 'skillVersionMap' => [],
@@ -164,8 +214,6 @@ class SkillMarketAppService extends AbstractSkillAppService
         }
 
         return [
-            'list' => $skillMarketEntities,
-            'total' => $total,
             'userSkills' => $userSkillsMap,
             'publisherUserMap' => $publisherUserMap,
             'skillVersionMap' => $skillVersionMap,

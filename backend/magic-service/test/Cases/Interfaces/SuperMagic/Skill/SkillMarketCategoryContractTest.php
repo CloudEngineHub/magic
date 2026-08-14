@@ -16,11 +16,13 @@ use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Response\FeaturedSkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OrganizationInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublisherInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
+use App\Interfaces\SuperMagic\Skill\FormRequest\SkillMarketFeaturedQueryFormRequest;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
@@ -83,6 +85,28 @@ final class SkillMarketCategoryContractTest extends TestCase
         $query = new SkillQuery(['category_ids' => ['10001', '10002']]);
 
         $this->assertSame([10001, 10002], $query->getCategoryIds());
+    }
+
+    public function testFeaturedQueryValidatesLimitAndExcludeCodes(): void
+    {
+        $request = (new ReflectionClass(SkillMarketFeaturedQueryFormRequest::class))->newInstanceWithoutConstructor();
+
+        $this->assertSame('nullable|integer|min:1|max:20', $request->rules()['limit']);
+        $this->assertSame('nullable|array', $request->rules()['exclude_codes']);
+        $this->assertSame('string', $request->rules()['exclude_codes.*']);
+    }
+
+    public function testFeaturedResponseSerializesCounts(): void
+    {
+        $response = new FeaturedSkillMarketListResponseDTO([], 20, 10, 0, false);
+
+        $this->assertSame([
+            'list' => [],
+            'requested_count' => 20,
+            'returned_count' => 10,
+            'remaining_count' => 0,
+            'has_more' => false,
+        ], $response->jsonSerialize());
     }
 
     public function testUpdateMarketRequestDoesNotExposeSingleCategoryId(): void
