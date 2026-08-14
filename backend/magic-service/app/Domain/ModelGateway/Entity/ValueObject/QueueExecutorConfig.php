@@ -20,7 +20,7 @@ readonly class QueueExecutorConfig
 
     public function getBaseUrl(): string
     {
-        return $this->baseUrl;
+        return rtrim($this->baseUrl, '/');
     }
 
     public function getApiKey(): string
