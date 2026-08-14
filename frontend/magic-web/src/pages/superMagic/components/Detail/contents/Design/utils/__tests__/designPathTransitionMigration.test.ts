@@ -47,6 +47,17 @@ function getImageSrc(data: DesignData): string {
 }
 
 describe("design path transition migration", () => {
+	it("preserves opaque asset references", () => {
+		const data = designWithImagePath("asset://virtual-human-asset-id")
+
+		migrateLoadedDesignDataPaths(data, {
+			designProjectBasePath: DESIGN_A,
+			flatAttachments: [],
+		})
+
+		expect(getImageSrc(data)).toBe("asset://virtual-human-asset-id")
+	})
+
 	it("repairs a legacy bare resource only when the current design owns it", () => {
 		const data = designWithImagePath("images/cat.png")
 

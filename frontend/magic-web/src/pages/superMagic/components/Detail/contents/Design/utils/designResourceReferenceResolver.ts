@@ -6,6 +6,7 @@ import type {
 	ResolvedCanvasResourceReference,
 } from "@/components/CanvasDesign/public/resource-reference"
 import {
+	isOpaqueAssetReference,
 	isRemoteOrSpecialPath,
 	normalizePathSeparators,
 	stripPathEdgeSlashes,
@@ -149,11 +150,33 @@ function createExternalResolution(
 	}
 }
 
+function createOpaqueAssetResolution(
+	input: CanvasResourceReferenceInput,
+	rawReference: string,
+): CanvasResourceReferenceResolution {
+	const value = rawReference.trim()
+	if (!value || !isOpaqueAssetReference(value)) {
+		return createFailure(input, "invalid", { reason: "invalid-external-url" })
+	}
+
+	return {
+		status: "resolved",
+		resourceKind: "opaque-asset",
+		rawReference,
+		storagePath: value,
+		identity: `opaque-asset:${value}`,
+		candidates: [],
+		legacyRecovered: false,
+		resolutionSource: "opaque-asset",
+	}
+}
+
 function resolvePrivateUploadPathReference(
 	input: Extract<CanvasResourceReferenceInput, { namespace: "private-upload-path" }>,
 ): CanvasResourceReferenceResolution {
 	const rawPath = input.path.trim()
 	if (!rawPath) return createFailure(input, "invalid", { reason: "empty-reference" })
+	if (isOpaqueAssetReference(rawPath)) return createOpaqueAssetResolution(input, input.path)
 	if (isRemoteOrSpecialPath(rawPath)) return createExternalResolution(input, input.path)
 
 	const normalizedRawPath = normalizePathSeparators(rawPath)
@@ -319,6 +342,7 @@ function resolveCanvasStorageReference(
 ): CanvasResourceReferenceResolution {
 	const rawPath = input.path.trim()
 	if (!rawPath) return createFailure(input, "invalid", { reason: "empty-reference" })
+	if (isOpaqueAssetReference(rawPath)) return createOpaqueAssetResolution(input, input.path)
 	if (isRemoteOrSpecialPath(rawPath)) return createExternalResolution(input, input.path)
 
 	if (LEGACY_FILE_ID_PATTERN.test(rawPath)) {
@@ -383,6 +407,7 @@ function resolveWorkspacePathReference(
 ): CanvasResourceReferenceResolution {
 	const rawPath = input.path.trim()
 	if (!rawPath) return createFailure(input, "invalid", { reason: "empty-reference" })
+	if (isOpaqueAssetReference(rawPath)) return createOpaqueAssetResolution(input, input.path)
 	if (isRemoteOrSpecialPath(rawPath)) return createExternalResolution(input, input.path)
 
 	const normalized = toCanonicalRelativePath(rawPath, "missing-workspace-path")
@@ -453,6 +478,17 @@ export function resolveDesignCanvasResourceWorkspacePath(
 	return resolution.status === "resolved" && resolution.resourceKind === "workspace-file"
 		? resolution.workspacePath
 		: undefined
+}
+
+/** Resolve a Canvas-stored resource to the URI accepted by generation APIs. */
+export function resolveDesignCanvasResourceApiUri(
+	path: string,
+	ctx: DesignResourceReferenceResolverContext,
+): string | undefined {
+	const resolution = resolveDesignCanvasResourceReference(path, ctx)
+	if (resolution.status !== "resolved") return undefined
+	if (resolution.resourceKind === "opaque-asset") return resolution.storagePath
+	return resolution.resourceKind === "workspace-file" ? resolution.workspacePath : undefined
 }
 
 /** Persist a known workspace path using the same resolver that owns resource identity. */

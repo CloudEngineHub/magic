@@ -27,7 +27,7 @@ import { useTranslation } from "react-i18next"
 import { resolveDesignImagesFileDirWithSlash } from "./resolveDesignImagesFileDirWithSlash"
 import { toCanvasGenerateHightImageResponse } from "./useHighImageGeneration"
 import {
-	resolveDesignCanvasResourceWorkspacePath,
+	resolveDesignCanvasResourceApiUri,
 	resolveDesignWorkspaceStoragePath,
 } from "../utils/designResourceReferenceResolver"
 import {
@@ -393,7 +393,7 @@ function resolveReferenceImagePath(params: {
 	getErrorMessage: () => string
 }): string {
 	const { imagePath, designProjectBasePath, flatAttachments, getErrorMessage } = params
-	const resolved = resolveDesignCanvasResourceWorkspacePath(imagePath, {
+	const resolved = resolveDesignCanvasResourceApiUri(imagePath, {
 		designProjectBasePath,
 		flatAttachments,
 	})

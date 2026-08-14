@@ -8,6 +8,7 @@ import { buildDesignAttachmentIndex } from "../designAttachmentIndex"
 import {
 	buildDesignResourceReferenceResolverRevision,
 	resolveDesignCanvasResourceFileItem,
+	resolveDesignCanvasResourceApiUri,
 	resolveDesignCanvasResourceWorkspacePath,
 	resolveDesignResourceReference,
 	resolveDesignWorkspaceStoragePath,
@@ -54,6 +55,26 @@ function expectResolved(
 }
 
 describe("designResourceReferenceResolver", () => {
+	it("preserves opaque asset references for generation API URIs", () => {
+		const result = resolveDesignResourceReference(
+			{ namespace: "canvas-storage", path: "asset://virtual-human-asset-id" },
+			context(),
+		)
+
+		expect(result).toMatchObject({
+			status: "resolved",
+			resourceKind: "opaque-asset",
+			storagePath: "asset://virtual-human-asset-id",
+			identity: "opaque-asset:asset://virtual-human-asset-id",
+		})
+		expect(resolveDesignCanvasResourceApiUri("asset://virtual-human-asset-id", context())).toBe(
+			"asset://virtual-human-asset-id",
+		)
+		expect(
+			resolveDesignCanvasResourceWorkspacePath("asset://virtual-human-asset-id", context()),
+		).toBeUndefined()
+	})
+
 	it("builds a project/canvas-scoped resolver revision from identity semantics only", () => {
 		const firstIndex = buildDesignAttachmentIndex([
 			{

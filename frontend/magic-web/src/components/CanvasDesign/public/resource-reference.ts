@@ -45,7 +45,7 @@ export type CanvasResourceReferenceFailureReason =
 
 export interface ResolvedCanvasResourceReference {
 	status: "resolved"
-	resourceKind: "workspace-file" | "private-upload" | "external"
+	resourceKind: "workspace-file" | "private-upload" | "external" | "opaque-asset"
 	/** Original value supplied by the caller, retained for diagnostics only. */
 	rawReference: string
 	/** Canonical logical workspace location. Workspace paths always start with `/`. */
@@ -67,6 +67,7 @@ export interface ResolvedCanvasResourceReference {
 		| "legacy-recovery"
 		| "private-upload-path"
 		| "external"
+		| "opaque-asset"
 }
 
 export interface UnresolvedCanvasResourceReference {

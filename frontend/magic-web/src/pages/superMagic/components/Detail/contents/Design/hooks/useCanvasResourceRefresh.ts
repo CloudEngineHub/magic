@@ -261,7 +261,11 @@ function addCanvasResourceSnapshot(params: {
 		},
 		{ requireAttachment: true },
 	)
-	if (resolution.status === "resolved" && resolution.resourceKind === "external") return
+	if (
+		resolution.status === "resolved" &&
+		(resolution.resourceKind === "external" || resolution.resourceKind === "opaque-asset")
+	)
+		return
 
 	const resolvedPath =
 		resolution.status === "resolved" && resolution.workspacePath

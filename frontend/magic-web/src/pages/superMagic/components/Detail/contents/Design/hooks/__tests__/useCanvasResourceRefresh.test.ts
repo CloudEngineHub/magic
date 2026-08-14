@@ -50,6 +50,13 @@ function buildSnapshot(
 }
 
 describe("useCanvasResourceRefresh snapshots", () => {
+	it("silently ignores opaque asset references", () => {
+		const snapshot = buildSnapshot(canvasWithImages("asset://virtual-human-asset-id"), [])
+
+		expect(snapshot.items.size).toBe(0)
+		expect(snapshot.itemsByReference.size).toBe(0)
+	})
+
 	it("deduplicates current-canvas aliases without crossing workspace roots", () => {
 		const flatAttachments = [
 			attachment("canvas-a", "画布A/images/shared.png"),

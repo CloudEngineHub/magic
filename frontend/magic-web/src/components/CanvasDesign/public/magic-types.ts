@@ -372,7 +372,7 @@ export interface GenerateVideoFrameInput {
 
 /** 参考图输入项 */
 export interface GenerateVideoReferenceImageInput {
-	/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
+	/** 资源 URI；工作区路径发请求时还原为绝对路径，opaque asset URI 原样透传 */
 	uri: string
 	/** 参考图类型，如 asset / style */
 	reference_type?: VideoReferenceImageType

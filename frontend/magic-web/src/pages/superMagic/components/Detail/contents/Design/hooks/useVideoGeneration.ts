@@ -19,7 +19,7 @@ import type {
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import {
-	resolveDesignCanvasResourceWorkspacePath,
+	resolveDesignCanvasResourceApiUri,
 	resolveDesignWorkspaceStoragePath,
 } from "../utils/designResourceReferenceResolver"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
@@ -306,7 +306,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					frames: inputs.frames.map((frame) => ({
 						...frame,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							frame.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -319,7 +319,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_images: inputs.reference_images.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -332,7 +332,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_videos: inputs.reference_videos.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -345,7 +345,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					reference_audios: inputs.reference_audios.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -358,7 +358,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					video: {
 						...inputs.video,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							inputs.video.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -371,7 +371,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					mask: {
 						...inputs.mask,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							inputs.mask.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -384,7 +384,7 @@ function normalizeGenerateVideoInputs(
 			? {
 					audio: inputs.audio.map((item) => ({
 						...item,
-						uri: ensureDesignAbsolutePath(
+						uri: ensureDesignResourceUri(
 							item.uri,
 							designProjectBasePath,
 							flatAttachments,
@@ -396,14 +396,14 @@ function normalizeGenerateVideoInputs(
 	}
 }
 
-function ensureDesignAbsolutePath(
+function ensureDesignResourceUri(
 	path: string,
 	designProjectBasePath?: string,
 	flatAttachments?: FileItem[],
 	pathUnresolvedMessage?: string,
 ): string {
 	if (!path) return path
-	const resolved = resolveDesignCanvasResourceWorkspacePath(path, {
+	const resolved = resolveDesignCanvasResourceApiUri(path, {
 		designProjectBasePath,
 		flatAttachments,
 	})

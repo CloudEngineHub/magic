@@ -6,12 +6,23 @@ import {
 	getCanvasResourceAvailability,
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
+	isOpaqueAssetReference,
 	normalizeCanvasUploadFileResponsePath,
 	resolveCanvasGeneratedResourceStoragePath,
 	resolveCanvasStorageResourceReference,
 } from "../canvasResourcePath"
 
 describe("canvasResourcePath", () => {
+	it("recognizes opaque asset references without changing their spelling", () => {
+		expect(isOpaqueAssetReference("asset://virtual-human-asset-id")).toBe(true)
+		expect(isOpaqueAssetReference("asset:/virtual-human-asset-id")).toBe(false)
+		expect(
+			normalizeCanvasUploadFileResponsePath({
+				path: "asset://virtual-human-asset-id",
+			}),
+		).toEqual({ path: "asset://virtual-human-asset-id" })
+	})
+
 	it("keeps unresolved identities exact when no host resolver is available", () => {
 		expect(getCanvasResourceReferenceIdentity("./images/a.png")).toBe(
 			"unresolved:./images/a.png",
