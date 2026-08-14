@@ -72,10 +72,10 @@ final class SkillMarketCategoryContractTest extends TestCase
     {
         $request = (new ReflectionClass(SkillQueryFormRequest::class))->newInstanceWithoutConstructor();
 
-        $this->assertSame('nullable|array|max:100', $request->rules()['category_ids']);
-        $this->assertSame('string|max:64|regex:/^\d+$/', $request->rules()['category_ids.*']);
+        $this->assertSame('nullable|array', $request->rules()['category_ids']);
+        $this->assertSame('string', $request->rules()['category_ids.*']);
         $this->assertArrayHasKey('category_ids.*.string', $request->messages());
-        $this->assertArrayHasKey('category_ids.*.regex', $request->messages());
+        $this->assertArrayNotHasKey('category_ids.*.regex', $request->messages());
     }
 
     public function testMarketQueryNormalizesStringCategoryIdsToIntegers(): void
