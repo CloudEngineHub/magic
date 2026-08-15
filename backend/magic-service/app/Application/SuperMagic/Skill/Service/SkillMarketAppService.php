@@ -133,6 +133,7 @@ class SkillMarketAppService extends AbstractSkillAppService
      * 获取市场精选技能列表.
      *
      * @param Page $page 分页对象
+     * @param string[] $excludeCodes 需要排除的 skill_code 列表
      * @return array{
      *     list: SkillMarketEntity[],
      *     userSkills: array<string, SkillEntity>,
@@ -141,13 +142,13 @@ class SkillMarketAppService extends AbstractSkillAppService
      *     total?: int
      * }
      */
-    public function featuredQueries(RequestContext $requestContext, Page $page): array
+    public function featuredQueries(RequestContext $requestContext, Page $page, array $excludeCodes = []): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
         $dataIsolation->disabled();
 
-        $result = $this->skillMarketDomainService->queryFeatured($page);
+        $result = $this->skillMarketDomainService->queryFeatured($page, $excludeCodes);
 
         $data = $this->resolveMarketListData($dataIsolation, $result['list']);
 

@@ -665,6 +665,7 @@ class SkillAppService extends AbstractSkillAppService
 
         $publishType = PublishType::fromPublishTargetType($latestVersionEntity?->getPublishTargetType());
         $allowedPublishTargetTypes = $this->resolveAllowedPublishTargetTypes($dataIsolation, $publishType);
+        $language = CoContext::getLanguage();
 
         return new SkillDetailResponseDTO(
             $skillEntity->getId(),
@@ -674,6 +675,9 @@ class SkillAppService extends AbstractSkillAppService
             $skillEntity->getSourceType()->value,
             $skillEntity->getIsEnabled() ? 1 : 0,
             $skillEntity->getPinnedAt(),
+            $skillEntity->getI18nName($language),
+            $skillEntity->getI18nDescription($language),
+            $skillEntity->getI18nSource($language),
             $skillEntity->getNameI18n(),
             $skillEntity->getDescriptionI18n() ?? [],
             $skillEntity->getSourceI18n() ?? [],

@@ -21,6 +21,8 @@ class SkillMarketFeaturedQueryFormRequest extends FormRequest
         return [
             'page' => 'nullable|integer|min:1',
             'page_size' => 'nullable|integer|min:1|max:1000',
+            'exclude_codes' => 'nullable|array',
+            'exclude_codes.*' => 'string',
         ];
     }
 
@@ -35,6 +37,8 @@ class SkillMarketFeaturedQueryFormRequest extends FormRequest
             'page_size.integer' => trans('validation.integer', ['attribute' => 'page_size']),
             'page_size.min' => trans('validation.min.numeric', ['attribute' => 'page_size', 'min' => 1]),
             'page_size.max' => trans('validation.max.numeric', ['attribute' => 'page_size', 'max' => 1000]),
+            'exclude_codes.array' => trans('validation.array', ['attribute' => 'exclude_codes']),
+            'exclude_codes.*.string' => trans('validation.string', ['attribute' => 'exclude_codes']),
         ];
     }
 

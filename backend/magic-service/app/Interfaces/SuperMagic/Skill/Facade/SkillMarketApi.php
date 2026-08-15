@@ -75,7 +75,8 @@ class SkillMarketApi extends AbstractApi
         $page = $this->createPage();
         // 前台精选列表不使用 total，跳过总数统计
         $page->setTotal(false);
-        $result = $this->skillMarketAppService->featuredQueries($requestContext, $page);
+        $excludeCodes = $request->validated()['exclude_codes'] ?? [];
+        $result = $this->skillMarketAppService->featuredQueries($requestContext, $page, $excludeCodes);
 
         return SkillAssembler::createMarketListResponseDTO(
             $result['list'],

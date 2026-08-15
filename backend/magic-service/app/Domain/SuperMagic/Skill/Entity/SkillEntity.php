@@ -525,4 +525,27 @@ class SkillEntity extends AbstractEntity
 
         return '';
     }
+
+    /**
+     * 获取国际化来源.
+     *
+     * @param string $language 语言代码
+     * @return string 来源，优先返回当前语言，其次 default，都没有则返回空字符串
+     */
+    public function getI18nSource(string $language): string
+    {
+        if (empty($this->sourceI18n)) {
+            return '';
+        }
+
+        if (! empty($this->sourceI18n[$language])) {
+            return $this->sourceI18n[$language];
+        }
+
+        if (! empty($this->sourceI18n[LanguageEnum::DEFAULT->value])) {
+            return $this->sourceI18n[LanguageEnum::DEFAULT->value];
+        }
+
+        return '';
+    }
 }

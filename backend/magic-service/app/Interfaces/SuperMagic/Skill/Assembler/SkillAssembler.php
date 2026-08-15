@@ -113,6 +113,8 @@ class SkillAssembler
 
     public static function createDetailResponseDTO(SkillEntity $entity, bool $withFileUrl = false): SkillDetailResponseDTO
     {
+        $language = CoContext::getLanguage();
+
         return new SkillDetailResponseDTO(
             $entity->getId() ?? 0,
             $entity->getCode(),
@@ -121,6 +123,9 @@ class SkillAssembler
             $entity->getSourceType()->value,
             $entity->getIsEnabled() ? 1 : 0,
             $entity->getPinnedAt(),
+            $entity->getI18nName($language),
+            $entity->getI18nDescription($language),
+            $entity->getI18nSource($language),
             $entity->getNameI18n(),
             $entity->getDescriptionI18n() ?? [],
             $entity->getSourceI18n() ?? [],

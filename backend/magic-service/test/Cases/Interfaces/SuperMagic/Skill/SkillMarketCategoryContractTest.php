@@ -114,6 +114,10 @@ final class SkillMarketCategoryContractTest extends TestCase
 
         $this->assertSame('nullable|integer|min:1', $request->rules()['page']);
         $this->assertSame('nullable|integer|min:1|max:1000', $request->rules()['page_size']);
+        $this->assertSame('nullable|array', $request->rules()['exclude_codes']);
+        $this->assertSame('string', $request->rules()['exclude_codes.*']);
+        $this->assertArrayHasKey('exclude_codes.array', $request->messages());
+        $this->assertArrayHasKey('exclude_codes.*.string', $request->messages());
     }
 
     public function testFeaturedResponseSerializesPagination(): void
