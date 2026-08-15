@@ -8,13 +8,14 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\Skill\Entity;
 
 use App\Infrastructure\Core\AbstractEntity;
-use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * Skill 分类实体.
  */
 class SkillCategoryEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID
      */
@@ -106,11 +107,7 @@ class SkillCategoryEntity extends AbstractEntity
 
     public function getI18nName(string $language): string
     {
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        return $this->nameI18n[LanguageEnum::DEFAULT->value] ?? '';
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     public function getParentId(): int

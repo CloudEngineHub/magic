@@ -13,13 +13,14 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishTargetValue;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\ReviewStatus;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\Core\AbstractEntity;
-use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * Skill version entity.
  */
 class SkillVersionEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /** @var int[] */
     protected array $categoryIds = [];
 
@@ -330,15 +331,7 @@ class SkillVersionEntity extends AbstractEntity
 
     public function getI18nName(string $language): string
     {
-        if (empty($this->nameI18n)) {
-            return '';
-        }
-
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        return $this->nameI18n[LanguageEnum::DEFAULT->value] ?? '';
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     public function getDescriptionI18n(): ?array
@@ -354,15 +347,7 @@ class SkillVersionEntity extends AbstractEntity
 
     public function getI18nDescription(string $language): string
     {
-        if (empty($this->descriptionI18n)) {
-            return '';
-        }
-
-        if (! empty($this->descriptionI18n[$language])) {
-            return $this->descriptionI18n[$language];
-        }
-
-        return $this->descriptionI18n[LanguageEnum::DEFAULT->value] ?? '';
+        return $this->resolveI18nText($this->descriptionI18n, $language);
     }
 
     public function getSourceI18n(): ?array
@@ -378,15 +363,7 @@ class SkillVersionEntity extends AbstractEntity
 
     public function getI18nSource(string $language): string
     {
-        if (empty($this->sourceI18n)) {
-            return '';
-        }
-
-        if (! empty($this->sourceI18n[$language])) {
-            return $this->sourceI18n[$language];
-        }
-
-        return $this->sourceI18n[LanguageEnum::DEFAULT->value] ?? '';
+        return $this->resolveI18nText($this->sourceI18n, $language);
     }
 
     public function getSearchText(): ?string

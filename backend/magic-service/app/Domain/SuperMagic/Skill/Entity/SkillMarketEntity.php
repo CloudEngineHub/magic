@@ -10,13 +10,14 @@ namespace App\Domain\SuperMagic\Skill\Entity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublisherType;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\PublishStatus;
 use App\Infrastructure\Core\AbstractEntity;
-use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * 市场 Skill 实体.
  */
 class SkillMarketEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID
      */
@@ -415,19 +416,7 @@ class SkillMarketEntity extends AbstractEntity
      */
     public function getI18nName(string $language): string
     {
-        if (empty($this->nameI18n)) {
-            return '';
-        }
-
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        if (! empty($this->nameI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->nameI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     /**
@@ -438,18 +427,6 @@ class SkillMarketEntity extends AbstractEntity
      */
     public function getI18nDescription(string $language): string
     {
-        if (empty($this->descriptionI18n)) {
-            return '';
-        }
-
-        if (! empty($this->descriptionI18n[$language])) {
-            return $this->descriptionI18n[$language];
-        }
-
-        if (! empty($this->descriptionI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->descriptionI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->descriptionI18n, $language);
     }
 }

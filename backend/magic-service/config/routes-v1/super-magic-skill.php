@@ -20,7 +20,7 @@ Router::addGroup('/api/v1', static function () {
         // 获取市场技能分类树
         Router::get('/categories', [SkillMarketApi::class, 'getCategories']);
 
-        // 获取市场技能详情1
+        // 获取市场技能详情
         Router::get('/{code}', [SkillMarketApi::class, 'show']);
     });
 

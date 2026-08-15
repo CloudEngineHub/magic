@@ -9,13 +9,14 @@ namespace App\Domain\SuperMagic\Skill\Entity;
 
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\Core\AbstractEntity;
-use App\Infrastructure\ExternalAPI\Sms\Enum\LanguageEnum;
 
 /**
  * Skill base entity.
  */
 class SkillEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     /**
      * @var int 主键 ID
      */
@@ -492,15 +493,7 @@ class SkillEntity extends AbstractEntity
      */
     public function getI18nName(string $language): string
     {
-        if (! empty($this->nameI18n[$language])) {
-            return $this->nameI18n[$language];
-        }
-
-        if (! empty($this->nameI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->nameI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     /**
@@ -511,19 +504,7 @@ class SkillEntity extends AbstractEntity
      */
     public function getI18nDescription(string $language): string
     {
-        if (empty($this->descriptionI18n)) {
-            return '';
-        }
-
-        if (! empty($this->descriptionI18n[$language])) {
-            return $this->descriptionI18n[$language];
-        }
-
-        if (! empty($this->descriptionI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->descriptionI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->descriptionI18n, $language);
     }
 
     /**
@@ -534,18 +515,6 @@ class SkillEntity extends AbstractEntity
      */
     public function getI18nSource(string $language): string
     {
-        if (empty($this->sourceI18n)) {
-            return '';
-        }
-
-        if (! empty($this->sourceI18n[$language])) {
-            return $this->sourceI18n[$language];
-        }
-
-        if (! empty($this->sourceI18n[LanguageEnum::DEFAULT->value])) {
-            return $this->sourceI18n[LanguageEnum::DEFAULT->value];
-        }
-
-        return '';
+        return $this->resolveI18nText($this->sourceI18n, $language);
     }
 }

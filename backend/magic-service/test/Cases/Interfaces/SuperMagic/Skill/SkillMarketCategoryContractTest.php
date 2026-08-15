@@ -233,6 +233,31 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('Version source', $payload['source']);
     }
 
+    public function testI18nGettersCoerceNonStringValuesToDefault(): void
+    {
+        $version = new SkillVersionEntity([
+            'code' => 'skill-code',
+            'version' => '1.0.0',
+            'package_name' => 'package',
+            'name_i18n' => [
+                'zh_CN' => 123,
+                'default' => 'Default name',
+            ],
+            'description_i18n' => [
+                'zh_CN' => null,
+                'default' => 'Default description',
+            ],
+            'source_i18n' => [
+                'zh_CN' => [],
+                'default' => 'Default source',
+            ],
+        ]);
+
+        $this->assertSame('Default name', $version->getI18nName('zh_CN'));
+        $this->assertSame('Default description', $version->getI18nDescription('zh_CN'));
+        $this->assertSame('Default source', $version->getI18nSource('zh_CN'));
+    }
+
     public function testMarketListItemUsesPassedLanguageWithoutReadingContext(): void
     {
         CoContext::setLanguage('zh_CN');
