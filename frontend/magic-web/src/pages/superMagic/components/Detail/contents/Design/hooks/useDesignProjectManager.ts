@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react"
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { produce } from "immer"
 import { useImmer } from "use-immer"
@@ -41,9 +41,9 @@ export interface UseDesignProjectManagerReturn {
 	manualSave: () => Promise<void>
 	syncDesignData: (newDesignData: DesignData) => void
 
-	loadFromRemote: () => Promise<void>
-	reloadPreservingLocalDraft: () => Promise<void>
-	reloadDiscardingLocalDraft: () => Promise<void>
+	loadFromRemote: () => Promise<boolean>
+	reloadPreservingLocalDraft: () => Promise<boolean>
+	reloadDiscardingLocalDraft: () => Promise<boolean>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -200,7 +200,7 @@ export function useDesignProjectManager(
 
 	const manager = managerRef.current
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		manager.updateOptions({ ...options, getT: () => t })
 	}, [manager, options, t])
 
@@ -243,6 +243,16 @@ export function useDesignProjectManager(
 		return fileVersion === fileVersionsList[0].version
 	}, [fileVersion, fileVersionsList])
 
+	const loadFromRemote = useCallback(() => manager.loadFromRemote(), [manager])
+	const reloadPreservingLocalDraft = useCallback(
+		() => manager.reloadPreservingLocalDraft(),
+		[manager],
+	)
+	const reloadDiscardingLocalDraft = useCallback(
+		() => manager.reloadDiscardingLocalDraft(),
+		[manager],
+	)
+
 	return {
 		magicProjectJsFileId,
 		designData,
@@ -264,9 +274,9 @@ export function useDesignProjectManager(
 		manualSave: () => manager.manualSave(),
 		syncDesignData: (data) => manager.syncDesignData(data),
 
-		loadFromRemote: () => manager.loadFromRemote(),
-		reloadPreservingLocalDraft: () => manager.reloadPreservingLocalDraft(),
-		reloadDiscardingLocalDraft: () => manager.reloadDiscardingLocalDraft(),
+		loadFromRemote,
+		reloadPreservingLocalDraft,
+		reloadDiscardingLocalDraft,
 
 		saveToRemote: () => manager.saveToRemote(),
 		generateContent: (data) => manager.generateContent(data),
