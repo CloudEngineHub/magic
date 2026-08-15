@@ -48,6 +48,8 @@ class SkillMarketApi extends AbstractApi
         $requestData = $request->validated();
         $query = new SkillQuery($requestData);
         $page = $this->createPage();
+        // 前台列表不使用 total，跳过总数统计
+        $page->setTotal(false);
 
         $result = $this->skillMarketAppService->queries($requestContext, $query, $page);
 
@@ -58,7 +60,7 @@ class SkillMarketApi extends AbstractApi
             $this->getAuthorization()->getId(),
             $page->getPage(),
             $page->getPageNum(),
-            $result['total'],
+            $result['total'] ?? null,
             $result['skillVersionMap'] ?? []
         );
     }

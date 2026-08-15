@@ -100,7 +100,7 @@ class SkillMarketAppService extends AbstractSkillAppService
      * @param RequestContext $requestContext 请求上下文
      * @param SkillQuery $query 查询对象
      * @param Page $page 分页对象
-     * @return array{list: SkillMarketEntity[], total: int, userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>} 市场技能列表结果
+     * @return array{list: SkillMarketEntity[], userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>, total?: int} 市场技能列表结果
      */
     public function queries(RequestContext $requestContext, SkillQuery $query, Page $page): array
     {
@@ -121,10 +121,12 @@ class SkillMarketAppService extends AbstractSkillAppService
 
         $data = $this->resolveMarketListData($dataIsolation, $result['list']);
 
-        return [
-            'list' => $result['list'],
-            'total' => $result['total'],
-        ] + $data;
+        $resultData = ['list' => $result['list']] + $data;
+        if ($page->isTotal()) {
+            $resultData['total'] = $result['total'];
+        }
+
+        return $resultData;
     }
 
     /**

@@ -61,7 +61,7 @@ interface SkillMarketRepositoryInterface
      *
      * @param SkillQuery $query 查询对象
      * @param Page $page 分页对象
-     * @return array{total: int, list: SkillMarketEntity[]} 总数和市场技能实体数组
+     * @return array{total: int, list: SkillMarketEntity[]} 总数（未请求时为 -1）和市场技能实体数组
      */
     public function queries(
         SkillQuery $query,

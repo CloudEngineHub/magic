@@ -386,7 +386,7 @@ class SkillAssembler
      * @param array<string, SkillVersionEntity> $skillVersionMap key 为 skill_version_id（已解析 file_url）
      * @param int $page 当前页码
      * @param int $pageSize 每页数量
-     * @param int $total 总记录数
+     * @param null|int $total 总记录数（不需要时传 null）
      * @return SkillMarketListResponseDTO 市场技能列表响应 DTO
      */
     public static function createMarketListResponseDTO(
@@ -396,7 +396,7 @@ class SkillAssembler
         string $currentUserId,
         int $page,
         int $pageSize,
-        int $total,
+        ?int $total = null,
         array $skillVersionMap = []
     ): SkillMarketListResponseDTO {
         $listItems = self::createMarketListItems(

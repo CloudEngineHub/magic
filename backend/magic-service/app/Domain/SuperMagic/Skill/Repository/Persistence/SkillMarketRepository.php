@@ -188,8 +188,11 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
 
         $this->applyCategoryFilter($builder, $query->getCategoryIds() ?? [], 'magic_skill_market.id');
 
-        // 先查询总数
-        $total = $builder->count();
+        // 不需要 total 时跳过 count，减少一次聚合查询
+        $total = -1;
+        if ($page->isTotal()) {
+            $total = $builder->count();
+        }
 
         // 排序：精选优先，其次 sort_order 非空优先且数值越大越靠前；为空时回落按 id
         $builder->orderBy('is_featured', 'DESC');

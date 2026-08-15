@@ -126,6 +126,17 @@ final class SkillMarketCategoryContractTest extends TestCase
         ], $response->jsonSerialize());
     }
 
+    public function testMarketQueryResponseOmitsTotalWhenNotRequested(): void
+    {
+        $response = new SkillMarketListResponseDTO([], 1, 10);
+
+        $this->assertSame([
+            'list' => [],
+            'page' => 1,
+            'page_size' => 10,
+        ], $response->jsonSerialize());
+    }
+
     public function testUpdateMarketRequestDoesNotExposeSingleCategoryId(): void
     {
         $reflection = new ReflectionClass(UpdateSkillMarketRequestAdminDTO::class);
