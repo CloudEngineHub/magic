@@ -87,6 +87,19 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame([10001, 10002], $query->getCategoryIds());
     }
 
+    public function testMarketQueryAcceptsFeaturedFilter(): void
+    {
+        $request = (new ReflectionClass(SkillQueryFormRequest::class))->newInstanceWithoutConstructor();
+        $this->assertSame('nullable|boolean', $request->rules()['is_featured']);
+        $this->assertArrayHasKey('is_featured.boolean', $request->messages());
+
+        $query = new SkillQuery(['is_featured' => 'true']);
+        $this->assertTrue($query->getIsFeatured());
+
+        $query = new SkillQuery(['is_featured' => false]);
+        $this->assertFalse($query->getIsFeatured());
+    }
+
     public function testFeaturedQueryValidatesPageAndPageSize(): void
     {
         $request = (new ReflectionClass(SkillMarketFeaturedQueryFormRequest::class))->newInstanceWithoutConstructor();
@@ -232,12 +245,14 @@ final class SkillMarketCategoryContractTest extends TestCase
             isFeatured: false,
             createdAt: '',
             updatedAt: '',
+            installCount: 42,
         ))->jsonSerialize();
 
         $this->assertSame('Skill source', $payload['source']);
         $this->assertSame(['default' => 'Skill name'], $payload['name_i18n']);
         $this->assertSame(['default' => 'Skill description'], $payload['description_i18n']);
         $this->assertSame(['default' => 'Skill source'], $payload['source_i18n']);
+        $this->assertSame(42, $payload['install_count']);
     }
 
     /**

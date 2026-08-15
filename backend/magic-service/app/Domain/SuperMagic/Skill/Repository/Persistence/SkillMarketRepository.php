@@ -182,6 +182,10 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             $builder->where('publisher_type', $publisherType);
         }
 
+        if ($query->getIsFeatured() !== null) {
+            $builder->where('is_featured', $query->getIsFeatured());
+        }
+
         $this->applyCategoryFilter($builder, $query->getCategoryIds() ?? [], 'magic_skill_market.id');
 
         // 先查询总数

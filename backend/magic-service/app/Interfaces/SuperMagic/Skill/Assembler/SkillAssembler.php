@@ -204,6 +204,7 @@ class SkillAssembler
             fileUrl: $fileUrl,
             packageName: $packageName,
             latestVersion: $latestVersion,
+            installCount: $entity->getInstallCount(),
             categoryIds: $entity->getCategoryIds(),
         );
     }

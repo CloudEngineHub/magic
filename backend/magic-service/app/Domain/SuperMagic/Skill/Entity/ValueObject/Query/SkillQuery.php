@@ -27,6 +27,8 @@ class SkillQuery extends AbstractQuery
     /** @var null|int[] */
     protected ?array $categoryIds = null;
 
+    protected ?bool $isFeatured = null;
+
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -83,5 +85,15 @@ class SkillQuery extends AbstractQuery
     public function setCategoryIds(?array $categoryIds): void
     {
         $this->categoryIds = $categoryIds === null ? null : array_values(array_unique(array_map('intval', $categoryIds)));
+    }
+
+    public function getIsFeatured(): ?bool
+    {
+        return $this->isFeatured;
+    }
+
+    public function setIsFeatured(mixed $isFeatured): void
+    {
+        $this->isFeatured = $isFeatured === null ? null : filter_var($isFeatured, FILTER_VALIDATE_BOOLEAN);
     }
 }
