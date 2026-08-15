@@ -93,7 +93,13 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('nullable|boolean', $request->rules()['is_featured']);
         $this->assertArrayHasKey('is_featured.boolean', $request->messages());
 
-        $query = new SkillQuery(['is_featured' => 'true']);
+        $query = new SkillQuery([]);
+        $this->assertNull($query->getIsFeatured());
+
+        $query = new SkillQuery(['is_featured' => '0']);
+        $this->assertFalse($query->getIsFeatured());
+
+        $query = new SkillQuery(['is_featured' => '1']);
         $this->assertTrue($query->getIsFeatured());
 
         $query = new SkillQuery(['is_featured' => false]);
