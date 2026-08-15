@@ -45,11 +45,6 @@ class SkillAssembler
         ?Operation $operation = null
     ): SkillListItemDTO {
         $language = CoContext::getLanguage();
-        $nameI18n = $entity->getNameI18n() ?? [];
-        $descriptionI18n = $entity->getDescriptionI18n() ?? [];
-        $sourceI18n = $entity->getSourceI18n() ?? [];
-        $name = $entity->getI18nName($language);
-        $description = $entity->getI18nDescription($language);
 
         $creatorInfo = [
             'id' => (string) ($creator?->getId() ?? ''),
@@ -59,11 +54,11 @@ class SkillAssembler
         return new SkillListItemDTO(
             id: $entity->getCode(),
             code: $entity->getCode(),
-            name: $name,
-            description: $description,
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
-            sourceI18n: $sourceI18n,
+            name: $entity->getI18nName($language),
+            description: $entity->getI18nDescription($language),
+            nameI18n: $entity->getNameI18n() ?? [],
+            descriptionI18n: $entity->getDescriptionI18n() ?? [],
+            sourceI18n: $entity->getSourceI18n() ?? [],
             logo: $entity->getLogo() ?? '',
             sourceType: $entity->getSourceType()->value,
             isEnabled: $entity->getIsEnabled() ? 1 : 0,
@@ -87,11 +82,6 @@ class SkillAssembler
         ?array $publisher = null
     ): SkillListItemDTO {
         $language = CoContext::getLanguage();
-        $nameI18n = $entity->getNameI18n() ?? [];
-        $descriptionI18n = $entity->getDescriptionI18n() ?? [];
-        $sourceI18n = $entity->getSourceI18n() ?? [];
-        $name = $nameI18n[$language] ?? '';
-        $description = $descriptionI18n[$language] ?? '';
 
         $creatorInfo = [
             'id' => (string) ($creator?->getId() ?: ''),
@@ -101,11 +91,11 @@ class SkillAssembler
         return new SkillListItemDTO(
             id: $entity->getCode(),
             code: $entity->getCode(),
-            name: $name,
-            description: $description,
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
-            sourceI18n: $sourceI18n,
+            name: $entity->getI18nName($language),
+            description: $entity->getI18nDescription($language),
+            nameI18n: $entity->getNameI18n() ?? [],
+            descriptionI18n: $entity->getDescriptionI18n() ?? [],
+            sourceI18n: $entity->getSourceI18n() ?? [],
             logo: $entity->getLogo() ?? '',
             sourceType: $sourceType ?? $entity->getSourceType()->value,
             isEnabled: 1,
@@ -175,20 +165,16 @@ class SkillAssembler
         array $sourceI18n = [],
     ): SkillMarketListItemDTO {
         $language = CoContext::getLanguage();
-        $nameI18n = $entity->getNameI18n() ?? [];
-        $descriptionI18n = $entity->getDescriptionI18n() ?? [];
-        $name = $entity->getI18nName($language);
-        $description = $entity->getI18nDescription($language);
 
         return new SkillMarketListItemDTO(
             id: $entity->getId() ?? 0,
             skillCode: $entity->getSkillCode(),
             userSkillCode: $entity->getSkillCode(),
-            name: $name,
-            description: $description,
+            name: $entity->getI18nName($language),
+            description: $entity->getI18nDescription($language),
             source: $source,
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
+            nameI18n: $entity->getNameI18n() ?? [],
+            descriptionI18n: $entity->getDescriptionI18n() ?? [],
             sourceI18n: $sourceI18n,
             logo: $entity->getLogo() ?? '',
             publisherType: $entity->getPublisherType()->value,
@@ -320,10 +306,10 @@ class SkillAssembler
                 code: $version->getCode(),
                 packageName: $version->getPackageName(),
                 version: $version->getVersion(),
-                name: $version->getNameI18n()[$language] ?? '',
-                description: $version->getDescriptionI18n()[$language] ?? '',
+                name: $version->getI18nName($language),
+                description: $version->getI18nDescription($language),
                 nameI18n: $version->getNameI18n(),
-                descriptionI18n: $version->getDescriptionI18n(),
+                descriptionI18n: $version->getDescriptionI18n() ?: [],
                 logo: $version->getLogo() ?? '',
                 fileKey: $withFileUrl ? $version->getFileKey() : null,
                 fileUrl: $withFileUrl ? $version->getFileUrl() : null,
@@ -427,18 +413,15 @@ class SkillAssembler
         string $skillFileUrl = ''
     ): SkillMarketDetailResponseDTO {
         $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
-        $nameI18n = $skillMarket->getNameI18n() ?? $skillVersion->getNameI18n();
-        $descriptionI18n = $skillMarket->getDescriptionI18n() ?? $skillVersion->getDescriptionI18n() ?? [];
-        $sourceI18n = $skillVersion->getSourceI18n() ?? [];
 
         return new SkillMarketDetailResponseDTO(
             code: $skillMarket->getSkillCode(),
-            name: self::resolveLocalizedText($nameI18n, $language),
-            description: self::resolveLocalizedText($descriptionI18n, $language),
-            source: self::resolveLocalizedText($sourceI18n, $language),
-            nameI18n: $nameI18n,
-            descriptionI18n: $descriptionI18n,
-            sourceI18n: $sourceI18n,
+            name: $skillVersion->getI18nName($language),
+            description: $skillVersion->getI18nDescription($language),
+            source: $skillVersion->getI18nSource($language),
+            nameI18n: $skillVersion->getNameI18n(),
+            descriptionI18n: $skillVersion->getDescriptionI18n() ?: [],
+            sourceI18n: $skillVersion->getSourceI18n() ?: [],
             skillFileUrl: $skillFileUrl,
             versionCode: $skillVersion->getVersion(),
             packageName: $skillVersion->getPackageName(),
@@ -502,8 +485,6 @@ class SkillAssembler
             $fileUrl = $version?->getFileUrl();
             $packageName = (string) ($version?->getPackageName() ?? '');
             $latestVersion = (string) ($version?->getVersion() ?? '');
-            $source = $version?->getI18nSource(CoContext::getLanguage()) ?? '';
-            $sourceI18n = $version?->getSourceI18n() ?? [];
 
             $listItems[] = self::createMarketListItemDTO(
                 $skillMarketEntity,
@@ -515,8 +496,8 @@ class SkillAssembler
                 fileUrl: $fileUrl,
                 packageName: $packageName,
                 latestVersion: $latestVersion,
-                source: $source,
-                sourceI18n: $sourceI18n,
+                source: $version?->getI18nSource(CoContext::getLanguage()) ?? '',
+                sourceI18n: $version?->getSourceI18n() ?? [],
             );
         }
 
@@ -606,18 +587,5 @@ class SkillAssembler
         }
 
         return $defaultSourceType;
-    }
-
-    /**
-     * Resolve the current language text with a default-language fallback.
-     */
-    private static function resolveLocalizedText(?array $i18n, string $language): string
-    {
-        if ($i18n === null || $i18n === []) {
-            return '';
-        }
-
-        $localizedValue = $i18n[$language] ?? $i18n[LanguageEnum::DEFAULT->value] ?? null;
-        return is_string($localizedValue) ? $localizedValue : '';
     }
 }

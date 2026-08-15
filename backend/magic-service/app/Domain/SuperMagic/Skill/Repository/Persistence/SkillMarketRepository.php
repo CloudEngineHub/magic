@@ -153,7 +153,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
     /**
      * 查询市场技能列表（支持分页、关键词搜索、发布者类型筛选）.
      *
-     * @return array{total: int, list: SkillMarketEntity[]}
+     * @return array{total: ?int, list: SkillMarketEntity[]}
      */
     public function queries(
         SkillQuery $query,
@@ -189,7 +189,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         $this->applyCategoryFilter($builder, $query->getCategoryIds() ?? [], 'magic_skill_market.id');
 
         // 不需要 total 时跳过 count，减少一次聚合查询
-        $total = -1;
+        $total = null;
         if ($page->isTotal()) {
             $total = $builder->count();
         }
@@ -218,7 +218,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
      * 查询市场精选技能列表.
      *
      * @param Page $page 分页对象
-     * @return array{total: int, list: SkillMarketEntity[]} 总数和精选列表
+     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和精选列表
      */
     public function queryFeatured(Page $page): array
     {
@@ -227,7 +227,11 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             ->where('is_hidden', false)
             ->where('is_featured', true);
 
-        $total = $builder->count();
+        // 不需要 total 时跳过 count，减少一次聚合查询
+        $total = null;
+        if ($page->isTotal()) {
+            $total = $builder->count();
+        }
 
         $builder->orderBy('sort_order', 'DESC');
         $builder->orderBy('id', 'DESC');

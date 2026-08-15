@@ -86,7 +86,7 @@ class SkillMarketDomainService
      *
      * @param SkillQuery $query 查询对象
      * @param Page $page 分页对象
-     * @return array{total: int, list: SkillMarketEntity[]} 总数（未请求时为 -1）和市场技能实体数组
+     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和市场技能实体数组
      */
     public function queries(
         SkillQuery $query,
@@ -102,7 +102,7 @@ class SkillMarketDomainService
      * 查询市场精选技能列表.
      *
      * @param Page $page 分页对象
-     * @return array{total: int, list: SkillMarketEntity[]} 总数和精选列表
+     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和精选列表
      */
     public function queryFeatured(Page $page): array
     {

@@ -11,9 +11,11 @@ use App\Application\SuperMagic\Skill\Service\AdminSkillCategoryAppService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillMarketEntity;
+use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
+use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OrganizationInfoAdminDTO;
@@ -135,6 +137,78 @@ final class SkillMarketCategoryContractTest extends TestCase
             'page' => 1,
             'page_size' => 10,
         ], $response->jsonSerialize());
+    }
+
+    public function testMarketDetailResolvesI18nWithLanguageAndDefaultFallback(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $market = new SkillMarketEntity([
+            'skill_code' => 'skill-code',
+            'name_i18n' => [],
+            'description_i18n' => [],
+            'publisher_id' => 'publisher',
+        ]);
+        $version = new SkillVersionEntity([
+            'code' => 'skill-code',
+            'version' => '1.0.0',
+            'package_name' => 'package',
+            'name_i18n' => [
+                'default' => 'Default name',
+                'zh_CN' => '中文名称',
+            ],
+            'description_i18n' => [
+                'default' => 'Default description',
+                'zh_CN' => '中文描述',
+            ],
+            'source_i18n' => [
+                'default' => 'Default source',
+                'zh_CN' => '中文来源',
+            ],
+        ]);
+
+        $this->assertSame('中文名称', $version->getI18nName('zh_CN'));
+        $this->assertSame('Default name', $version->getI18nName('en_US'));
+        $this->assertSame('中文描述', $version->getI18nDescription('zh_CN'));
+        $this->assertSame('Default description', $version->getI18nDescription('en_US'));
+
+        $payload = SkillAssembler::createMarketDetailResponseDTO($market, $version, false, false, null, '')->jsonSerialize();
+        $this->assertSame('中文名称', $payload['name']);
+        $this->assertSame('中文描述', $payload['description']);
+        $this->assertSame('中文来源', $payload['source']);
+
+        CoContext::setLanguage('en_US');
+        $payload = SkillAssembler::createMarketDetailResponseDTO($market, $version, false, false, null, '')->jsonSerialize();
+        $this->assertSame('Default name', $payload['name']);
+        $this->assertSame('Default description', $payload['description']);
+        $this->assertSame('Default source', $payload['source']);
+    }
+
+    public function testMarketInstalledListItemResolvesI18nWithDefaultFallback(): void
+    {
+        $version = new SkillVersionEntity([
+            'code' => 'skill-code',
+            'creator_id' => 'creator',
+            'version' => '1.0.0',
+            'package_name' => 'package',
+            'name_i18n' => [
+                'default' => 'Default name',
+                'zh_CN' => '中文名称',
+            ],
+            'description_i18n' => [
+                'default' => 'Default description',
+                'zh_CN' => '中文描述',
+            ],
+        ]);
+
+        CoContext::setLanguage('zh_CN');
+        $payload = SkillAssembler::createListItemDTOFromVersion($version, 'MARKET')->jsonSerialize();
+        $this->assertSame('中文名称', $payload['name']);
+        $this->assertSame('中文描述', $payload['description']);
+
+        CoContext::setLanguage('en_US');
+        $payload = SkillAssembler::createListItemDTOFromVersion($version, 'MARKET')->jsonSerialize();
+        $this->assertSame('Default name', $payload['name']);
+        $this->assertSame('Default description', $payload['description']);
     }
 
     public function testUpdateMarketRequestDoesNotExposeSingleCategoryId(): void
@@ -262,7 +336,10 @@ final class SkillMarketCategoryContractTest extends TestCase
             isFeatured: false,
             createdAt: '',
             updatedAt: '',
+            fileKey: 'temp/skills/example.zip',
+            fileUrl: 'https://example.com/skill.zip',
             installCount: 42,
+            categoryIds: [10, 20],
         ))->jsonSerialize();
 
         $this->assertSame('Skill source', $payload['source']);
@@ -270,6 +347,9 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame(['default' => 'Skill description'], $payload['description_i18n']);
         $this->assertSame(['default' => 'Skill source'], $payload['source_i18n']);
         $this->assertSame(42, $payload['install_count']);
+        $this->assertArrayNotHasKey('file_key', $payload);
+        $this->assertArrayNotHasKey('file_url', $payload);
+        $this->assertArrayNotHasKey('category_ids', $payload);
     }
 
     /**

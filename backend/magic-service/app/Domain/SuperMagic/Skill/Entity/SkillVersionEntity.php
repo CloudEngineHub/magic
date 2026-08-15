@@ -328,6 +328,19 @@ class SkillVersionEntity extends AbstractEntity
         return $this;
     }
 
+    public function getI18nName(string $language): string
+    {
+        if (empty($this->nameI18n)) {
+            return '';
+        }
+
+        if (! empty($this->nameI18n[$language])) {
+            return $this->nameI18n[$language];
+        }
+
+        return $this->nameI18n[LanguageEnum::DEFAULT->value] ?? '';
+    }
+
     public function getDescriptionI18n(): ?array
     {
         return $this->descriptionI18n;
@@ -337,6 +350,19 @@ class SkillVersionEntity extends AbstractEntity
     {
         $this->descriptionI18n = $descriptionI18n;
         return $this;
+    }
+
+    public function getI18nDescription(string $language): string
+    {
+        if (empty($this->descriptionI18n)) {
+            return '';
+        }
+
+        if (! empty($this->descriptionI18n[$language])) {
+            return $this->descriptionI18n[$language];
+        }
+
+        return $this->descriptionI18n[LanguageEnum::DEFAULT->value] ?? '';
     }
 
     public function getSourceI18n(): ?array

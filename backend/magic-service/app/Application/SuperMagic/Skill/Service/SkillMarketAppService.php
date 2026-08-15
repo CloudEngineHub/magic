@@ -135,10 +135,10 @@ class SkillMarketAppService extends AbstractSkillAppService
      * @param Page $page 分页对象
      * @return array{
      *     list: SkillMarketEntity[],
-     *     total: int,
      *     userSkills: array<string, SkillEntity>,
      *     publisherUserMap: array<string, MagicUserEntity>,
-     *     skillVersionMap: array<string, SkillVersionEntity>
+     *     skillVersionMap: array<string, SkillVersionEntity>,
+     *     total?: int
      * }
      */
     public function featuredQueries(RequestContext $requestContext, Page $page): array
@@ -151,14 +151,16 @@ class SkillMarketAppService extends AbstractSkillAppService
 
         $data = $this->resolveMarketListData($dataIsolation, $result['list']);
 
-        return [
-            'list' => $result['list'],
-            'total' => $result['total'],
-        ] + $data;
+        $resultData = ['list' => $result['list']] + $data;
+        if ($page->isTotal()) {
+            $resultData['total'] = $result['total'];
+        }
+
+        return $resultData;
     }
 
     /**
-     * 填充市场列表展示所需的分类、用户技能、版本、发布者和资源 URL.
+     * 填充市场列表展示所需的分类、用户技能、版本和发布者.
      *
      * @param SkillMarketEntity[] $skillMarketEntities 市场技能实体
      * @return array{userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>}
@@ -182,8 +184,6 @@ class SkillMarketAppService extends AbstractSkillAppService
         $skillCodes = array_map(fn ($entity) => $entity->getSkillCode(), $skillMarketEntities);
         $userSkillsMap = $this->skillDomainService->findByVersionCodes($dataIsolation, $skillCodes);
         $skillVersionMap = $this->skillVersionDomainService->findSkillCurrentOrLatestByCodes($dataIsolation, $skillCodes);
-
-        $this->updateSkillVersionAssetUrls($dataIsolation, array_values($skillVersionMap));
 
         // 批量更新 logo URL（如果存储的是路径，需要转换为完整URL）
         $this->updateSkillMarketLogoUrl($dataIsolation, $skillMarketEntities);

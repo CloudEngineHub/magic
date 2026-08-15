@@ -160,12 +160,9 @@ class SkillMarketListItemDTO implements JsonSerializable
             'is_featured' => $this->isFeatured,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
-            'file_key' => $this->fileKey,
-            'file_url' => $this->fileUrl,
             'package_name' => $this->packageName,
             'latest_version' => $this->latestVersion,
             'install_count' => $this->installCount,
-            'category_ids' => array_map('strval', $this->categoryIds),
         ];
     }
 }
