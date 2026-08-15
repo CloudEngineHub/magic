@@ -96,9 +96,9 @@ async def maybe_auto_connect_im_channels_for_local_dev() -> None:
             )
             return
 
-        from app.channel.startup import auto_connect_channels_for_current_sandbox
+        from app.channel.startup import auto_connect_channels_for_current_topic
 
-        await auto_connect_channels_for_current_sandbox()
+        await auto_connect_channels_for_current_topic()
         logger.info(f"{_LOCAL_IM_AUTO_CONNECT_ENV}=true，已触发本地 IM 渠道自动连接")
     except Exception as e:
         logger.warning(f"本地 IM 渠道自动连接失败，不影响 ws-server 启动: {e}")

@@ -502,6 +502,26 @@ class InitClientMessageUtil:
         return env_sandbox_id
 
     @classmethod
+    def get_topic_id(cls) -> str:
+        """从正式产品上下文读取稳定话题 ID，并兼容旧 metadata 字段。"""
+        try:
+            config_data = cls.get_full_config()
+            product_context = config_data.get("super_magic_product_context")
+            if isinstance(product_context, dict):
+                topic = product_context.get("topic")
+                if isinstance(topic, dict):
+                    topic_id = str(topic.get("id") or "").strip()
+                    if topic_id:
+                        return topic_id
+
+            metadata = config_data.get("metadata")
+            if isinstance(metadata, dict):
+                return str(metadata.get("topic_id") or "").strip()
+        except Exception as e:
+            logger.info(f"Failed to get topic_id from initialization config: {e}")
+        return ""
+
+    @classmethod
     def get_platform_type(cls) -> Optional[str]:
         """
         从 init_client_message 获取平台类型
