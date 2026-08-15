@@ -154,6 +154,8 @@ class SkillAssembler
      * @param array $publisher 发布者信息
      * @param string $fileKey 版本文件 key
      * @param null|string $fileUrl 版本文件下载 URL
+     * @param null|SkillVersionEntity $version 关联的技能版本，用于补齐来源、包名与版本信息
+     * @param null|string $language 语言代码，不传时从上下文读取
      * @return SkillMarketListItemDTO 响应含 `code`；`skill_code`/`user_skill_code` 为兼容字段（与 `code` 同值）
      */
     public static function createMarketListItemDTO(
@@ -166,10 +168,10 @@ class SkillAssembler
         ?string $fileUrl = null,
         string $packageName = '',
         string $latestVersion = '',
-        string $source = '',
-        array $sourceI18n = [],
+        ?SkillVersionEntity $version = null,
+        ?string $language = null,
     ): SkillMarketListItemDTO {
-        $language = CoContext::getLanguage();
+        $language ??= CoContext::getLanguage();
 
         return new SkillMarketListItemDTO(
             id: $entity->getId() ?? 0,
@@ -177,10 +179,10 @@ class SkillAssembler
             userSkillCode: $entity->getSkillCode(),
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
-            source: $source,
+            source: $version?->getI18nSource($language) ?? '',
             nameI18n: $entity->getNameI18n() ?? [],
             descriptionI18n: $entity->getDescriptionI18n() ?? [],
-            sourceI18n: $sourceI18n,
+            sourceI18n: $version?->getSourceI18n() ?? [],
             logo: $entity->getLogo() ?? '',
             publisherType: $entity->getPublisherType()->value,
             publisher: $publisher,
@@ -196,7 +198,6 @@ class SkillAssembler
             packageName: $packageName,
             latestVersion: $latestVersion,
             installCount: $entity->getInstallCount(),
-            categoryIds: $entity->getCategoryIds(),
         );
     }
 
@@ -418,15 +419,18 @@ class SkillAssembler
         string $skillFileUrl = ''
     ): SkillMarketDetailResponseDTO {
         $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
+        $nameI18n = $skillMarket->getNameI18n() ?: $skillVersion->getNameI18n();
+        $descriptionI18n = $skillMarket->getDescriptionI18n() ?: $skillVersion->getDescriptionI18n() ?: [];
+        $sourceI18n = $skillVersion->getSourceI18n() ?: [];
 
         return new SkillMarketDetailResponseDTO(
             code: $skillMarket->getSkillCode(),
-            name: $skillVersion->getI18nName($language),
-            description: $skillVersion->getI18nDescription($language),
+            name: $skillMarket->getI18nName($language) ?: $skillVersion->getI18nName($language),
+            description: $skillMarket->getI18nDescription($language) ?: $skillVersion->getI18nDescription($language),
             source: $skillVersion->getI18nSource($language),
-            nameI18n: $skillVersion->getNameI18n(),
-            descriptionI18n: $skillVersion->getDescriptionI18n() ?: [],
-            sourceI18n: $skillVersion->getSourceI18n() ?: [],
+            nameI18n: $nameI18n,
+            descriptionI18n: $descriptionI18n,
+            sourceI18n: $sourceI18n,
             skillFileUrl: $skillFileUrl,
             versionCode: $skillVersion->getVersion(),
             packageName: $skillVersion->getPackageName(),
@@ -461,6 +465,7 @@ class SkillAssembler
         array $skillVersionMap
     ): array {
         $listItems = [];
+        $language = CoContext::getLanguage();
         foreach ($skillMarketEntities as $skillMarketEntity) {
             $skillCode = $skillMarketEntity->getSkillCode();
             $userSkill = $userSkills[$skillCode] ?? null;
@@ -501,8 +506,8 @@ class SkillAssembler
                 fileUrl: $fileUrl,
                 packageName: $packageName,
                 latestVersion: $latestVersion,
-                source: $version?->getI18nSource(CoContext::getLanguage()) ?? '',
-                sourceI18n: $version?->getSourceI18n() ?? [],
+                version: $version,
+                language: $language,
             );
         }
 

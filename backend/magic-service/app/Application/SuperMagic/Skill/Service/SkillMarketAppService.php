@@ -161,7 +161,7 @@ class SkillMarketAppService extends AbstractSkillAppService
     }
 
     /**
-     * 填充市场列表展示所需的分类、用户技能、版本和发布者.
+     * 填充市场列表展示所需的分类、用户技能、版本、发布者和资源 URL.
      *
      * @param SkillMarketEntity[] $skillMarketEntities 市场技能实体
      * @return array{userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>}
@@ -185,6 +185,8 @@ class SkillMarketAppService extends AbstractSkillAppService
         $skillCodes = array_map(fn ($entity) => $entity->getSkillCode(), $skillMarketEntities);
         $userSkillsMap = $this->skillDomainService->findByVersionCodes($dataIsolation, $skillCodes);
         $skillVersionMap = $this->skillVersionDomainService->findSkillCurrentOrLatestByCodes($dataIsolation, $skillCodes);
+
+        $this->updateSkillVersionAssetUrls($dataIsolation, array_values($skillVersionMap));
 
         // 批量更新 logo URL（如果存储的是路径，需要转换为完整URL）
         $this->updateSkillMarketLogoUrl($dataIsolation, $skillMarketEntities);

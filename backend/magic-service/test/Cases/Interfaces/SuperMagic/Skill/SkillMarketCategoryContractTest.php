@@ -104,6 +104,15 @@ final class SkillMarketCategoryContractTest extends TestCase
         $query = new SkillQuery(['is_featured' => '1']);
         $this->assertTrue($query->getIsFeatured());
 
+        $query = new SkillQuery(['is_featured' => 0]);
+        $this->assertFalse($query->getIsFeatured());
+
+        $query = new SkillQuery(['is_featured' => 1]);
+        $this->assertTrue($query->getIsFeatured());
+
+        $query = new SkillQuery(['is_featured' => true]);
+        $this->assertTrue($query->getIsFeatured());
+
         $query = new SkillQuery(['is_featured' => false]);
         $this->assertFalse($query->getIsFeatured());
     }
@@ -114,10 +123,12 @@ final class SkillMarketCategoryContractTest extends TestCase
 
         $this->assertSame('nullable|integer|min:1', $request->rules()['page']);
         $this->assertSame('nullable|integer|min:1|max:1000', $request->rules()['page_size']);
-        $this->assertSame('nullable|array', $request->rules()['exclude_codes']);
-        $this->assertSame('string', $request->rules()['exclude_codes.*']);
+        $this->assertSame('nullable|array|max:200', $request->rules()['exclude_codes']);
+        $this->assertSame('nullable|string|max:64', $request->rules()['exclude_codes.*']);
         $this->assertArrayHasKey('exclude_codes.array', $request->messages());
+        $this->assertArrayHasKey('exclude_codes.max', $request->messages());
         $this->assertArrayHasKey('exclude_codes.*.string', $request->messages());
+        $this->assertArrayHasKey('exclude_codes.*.max', $request->messages());
     }
 
     public function testFeaturedResponseSerializesPagination(): void
@@ -185,6 +196,91 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame('Default name', $payload['name']);
         $this->assertSame('Default description', $payload['description']);
         $this->assertSame('Default source', $payload['source']);
+    }
+
+    public function testMarketDetailPrefersMarketSnapshotI18nOverVersion(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $market = new SkillMarketEntity([
+            'skill_code' => 'skill-code',
+            'publisher_id' => 'publisher',
+            'name_i18n' => [
+                'default' => 'Market default name',
+                'zh_CN' => '市场名称',
+            ],
+            'description_i18n' => [
+                'default' => 'Market default description',
+                'zh_CN' => '市场描述',
+            ],
+        ]);
+        $version = new SkillVersionEntity([
+            'code' => 'skill-code',
+            'version' => '1.0.0',
+            'package_name' => 'package',
+            'name_i18n' => [
+                'default' => 'Version default name',
+                'zh_CN' => '版本名称',
+            ],
+            'description_i18n' => [
+                'default' => 'Version default description',
+                'zh_CN' => '版本描述',
+            ],
+            'source_i18n' => [
+                'default' => 'Version source',
+                'zh_CN' => '版本来源',
+            ],
+        ]);
+
+        $payload = SkillAssembler::createMarketDetailResponseDTO($market, $version, false, false, null, '')->jsonSerialize();
+
+        $this->assertSame('市场名称', $payload['name']);
+        $this->assertSame('市场描述', $payload['description']);
+        $this->assertSame('版本来源', $payload['source']);
+        $this->assertSame($market->getNameI18n(), $payload['name_i18n']);
+        $this->assertSame($market->getDescriptionI18n(), $payload['description_i18n']);
+        $this->assertSame($version->getSourceI18n(), $payload['source_i18n']);
+
+        CoContext::setLanguage('en_US');
+        $payload = SkillAssembler::createMarketDetailResponseDTO($market, $version, false, false, null, '')->jsonSerialize();
+
+        $this->assertSame('Market default name', $payload['name']);
+        $this->assertSame('Market default description', $payload['description']);
+        $this->assertSame('Version source', $payload['source']);
+    }
+
+    public function testMarketListItemUsesPassedLanguageWithoutReadingContext(): void
+    {
+        CoContext::setLanguage('zh_CN');
+        $market = new SkillMarketEntity([
+            'organization_code' => 'org',
+            'skill_code' => 'skill-code',
+            'skill_version_id' => 1,
+            'publisher_id' => 'publisher',
+            'name_i18n' => [
+                'default' => 'Default name',
+                'en_US' => 'English name',
+            ],
+            'description_i18n' => [
+                'default' => 'Default description',
+                'en_US' => 'English description',
+            ],
+        ]);
+        $version = new SkillVersionEntity([
+            'code' => 'skill-code',
+            'version' => '1.0.0',
+            'package_name' => 'package',
+            'source_i18n' => [
+                'default' => 'Default source',
+                'en_US' => 'English source',
+            ],
+        ]);
+
+        $payload = SkillAssembler::createMarketListItemDTO($market, version: $version, language: 'en_US')->jsonSerialize();
+
+        $this->assertSame('English name', $payload['name']);
+        $this->assertSame('English description', $payload['description']);
+        $this->assertSame('English source', $payload['source']);
+        $this->assertSame(['default' => 'Default source', 'en_US' => 'English source'], $payload['source_i18n']);
     }
 
     public function testMarketInstalledListItemResolvesI18nWithDefaultFallback(): void
@@ -343,7 +439,6 @@ final class SkillMarketCategoryContractTest extends TestCase
             fileKey: 'temp/skills/example.zip',
             fileUrl: 'https://example.com/skill.zip',
             installCount: 42,
-            categoryIds: [10, 20],
         ))->jsonSerialize();
 
         $this->assertSame('Skill source', $payload['source']);
@@ -351,8 +446,8 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertSame(['default' => 'Skill description'], $payload['description_i18n']);
         $this->assertSame(['default' => 'Skill source'], $payload['source_i18n']);
         $this->assertSame(42, $payload['install_count']);
-        $this->assertArrayNotHasKey('file_key', $payload);
-        $this->assertArrayNotHasKey('file_url', $payload);
+        $this->assertSame('temp/skills/example.zip', $payload['file_key']);
+        $this->assertSame('https://example.com/skill.zip', $payload['file_url']);
         $this->assertArrayNotHasKey('category_ids', $payload);
     }
 

@@ -76,8 +76,6 @@ class SkillMarketListItemDTO implements JsonSerializable
 
     private int $installCount;
 
-    private array $categoryIds = [];
-
     public function __construct(
         int $id,
         string $skillCode,
@@ -103,7 +101,6 @@ class SkillMarketListItemDTO implements JsonSerializable
         string $packageName = '',
         string $latestVersion = '',
         int $installCount = 0,
-        array $categoryIds = [],
     ) {
         $this->id = $id;
         $this->code = $skillCode;
@@ -130,7 +127,6 @@ class SkillMarketListItemDTO implements JsonSerializable
         $this->packageName = $packageName;
         $this->latestVersion = $latestVersion;
         $this->installCount = $installCount;
-        $this->categoryIds = $categoryIds;
     }
 
     public function jsonSerialize(): array
@@ -160,6 +156,8 @@ class SkillMarketListItemDTO implements JsonSerializable
             'is_featured' => $this->isFeatured,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
+            'file_key' => $this->fileKey,
+            'file_url' => $this->fileUrl,
             'package_name' => $this->packageName,
             'latest_version' => $this->latestVersion,
             'install_count' => $this->installCount,
