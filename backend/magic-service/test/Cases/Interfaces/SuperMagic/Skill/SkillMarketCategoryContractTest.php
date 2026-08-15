@@ -24,7 +24,6 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillMarketListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
-use App\Interfaces\SuperMagic\Skill\FormRequest\SkillMarketFeaturedQueryFormRequest;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
@@ -115,20 +114,6 @@ final class SkillMarketCategoryContractTest extends TestCase
 
         $query = new SkillQuery(['is_featured' => false]);
         $this->assertFalse($query->getIsFeatured());
-    }
-
-    public function testFeaturedQueryValidatesPageAndPageSize(): void
-    {
-        $request = (new ReflectionClass(SkillMarketFeaturedQueryFormRequest::class))->newInstanceWithoutConstructor();
-
-        $this->assertSame('nullable|integer|min:1', $request->rules()['page']);
-        $this->assertSame('nullable|integer|min:1|max:1000', $request->rules()['page_size']);
-        $this->assertSame('nullable|array|max:200', $request->rules()['exclude_codes']);
-        $this->assertSame('nullable|string|max:64', $request->rules()['exclude_codes.*']);
-        $this->assertArrayHasKey('exclude_codes.array', $request->messages());
-        $this->assertArrayHasKey('exclude_codes.max', $request->messages());
-        $this->assertArrayHasKey('exclude_codes.*.string', $request->messages());
-        $this->assertArrayHasKey('exclude_codes.*.max', $request->messages());
     }
 
     public function testFeaturedResponseSerializesPagination(): void
@@ -298,17 +283,23 @@ final class SkillMarketCategoryContractTest extends TestCase
                 'default' => 'Default description',
                 'zh_CN' => '中文描述',
             ],
+            'source_i18n' => [
+                'default' => 'Default source',
+                'zh_CN' => '中文来源',
+            ],
         ]);
 
         CoContext::setLanguage('zh_CN');
         $payload = SkillAssembler::createListItemDTOFromVersion($version, 'MARKET')->jsonSerialize();
         $this->assertSame('中文名称', $payload['name']);
         $this->assertSame('中文描述', $payload['description']);
+        $this->assertSame('中文来源', $payload['source']);
 
         CoContext::setLanguage('en_US');
         $payload = SkillAssembler::createListItemDTOFromVersion($version, 'MARKET')->jsonSerialize();
         $this->assertSame('Default name', $payload['name']);
         $this->assertSame('Default description', $payload['description']);
+        $this->assertSame('Default source', $payload['source']);
     }
 
     public function testUpdateMarketRequestDoesNotExposeSingleCategoryId(): void

@@ -215,47 +215,6 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
     }
 
     /**
-     * 查询市场精选技能列表.
-     *
-     * @param Page $page 分页对象
-     * @param string[] $excludeCodes 需要排除的 skill_code 列表
-     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和精选列表
-     */
-    public function queryFeatured(Page $page, array $excludeCodes = []): array
-    {
-        $builder = $this->skillMarketModel::query()
-            ->where('publish_status', PublishStatus::PUBLISHED->value)
-            ->where('is_hidden', false)
-            ->where('is_featured', true);
-
-        if (! empty($excludeCodes)) {
-            $builder->whereNotIn('skill_code', $excludeCodes);
-        }
-
-        // 不需要 total 时跳过 count，减少一次聚合查询
-        $total = null;
-        if ($page->isTotal()) {
-            $total = $builder->count();
-        }
-
-        $builder->orderBy('sort_order', 'DESC');
-        $builder->orderBy('id', 'DESC');
-
-        $offset = ($page->getPage() - 1) * $page->getPageNum();
-        $models = $builder->offset($offset)->limit($page->getPageNum())->get();
-
-        $list = [];
-        foreach ($models as $model) {
-            $list[] = $this->toEntity($model->toArray());
-        }
-
-        return [
-            'total' => $total,
-            'list' => $list,
-        ];
-    }
-
-    /**
      * @return array{total: int, list: SkillMarketEntity[]}
      */
     public function queryAdminMarkets(

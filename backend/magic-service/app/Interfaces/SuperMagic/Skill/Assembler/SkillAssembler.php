@@ -44,7 +44,7 @@ class SkillAssembler
         ?SkillVersionEntity $latestVersionEntity = null,
         ?Operation $operation = null
     ): SkillListItemDTO {
-        $language = CoContext::getLanguage();
+        $language = self::getLanguage();
 
         $creatorInfo = [
             'id' => (string) ($creator?->getId() ?? ''),
@@ -56,6 +56,7 @@ class SkillAssembler
             code: $entity->getCode(),
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
+            source: $entity->getI18nSource($language),
             nameI18n: $entity->getNameI18n() ?? [],
             descriptionI18n: $entity->getDescriptionI18n() ?? [],
             sourceI18n: $entity->getSourceI18n() ?? [],
@@ -81,7 +82,7 @@ class SkillAssembler
         ?string $publisherType = null,
         ?array $publisher = null
     ): SkillListItemDTO {
-        $language = CoContext::getLanguage();
+        $language = self::getLanguage();
 
         $creatorInfo = [
             'id' => (string) ($creator?->getId() ?: ''),
@@ -93,6 +94,7 @@ class SkillAssembler
             code: $entity->getCode(),
             name: $entity->getI18nName($language),
             description: $entity->getI18nDescription($language),
+            source: $entity->getI18nSource($language),
             nameI18n: $entity->getNameI18n() ?? [],
             descriptionI18n: $entity->getDescriptionI18n() ?? [],
             sourceI18n: $entity->getSourceI18n() ?? [],
@@ -113,7 +115,7 @@ class SkillAssembler
 
     public static function createDetailResponseDTO(SkillEntity $entity, bool $withFileUrl = false): SkillDetailResponseDTO
     {
-        $language = CoContext::getLanguage();
+        $language = self::getLanguage();
 
         return new SkillDetailResponseDTO(
             $entity->getId() ?? 0,
@@ -171,7 +173,7 @@ class SkillAssembler
         ?SkillVersionEntity $version = null,
         ?string $language = null,
     ): SkillMarketListItemDTO {
-        $language ??= CoContext::getLanguage();
+        $language ??= self::getLanguage();
 
         return new SkillMarketListItemDTO(
             id: $entity->getId() ?? 0,
@@ -303,7 +305,7 @@ class SkillAssembler
         int $total,
         bool $withFileUrl = false,
     ): LatestPublishedSkillVersionsResponseDTO {
-        $language = CoContext::getLanguage();
+        $language = self::getLanguage();
         $list = [];
 
         foreach ($versions as $version) {
@@ -418,7 +420,7 @@ class SkillAssembler
         ?MagicUserEntity $publisherUser = null,
         string $skillFileUrl = ''
     ): SkillMarketDetailResponseDTO {
-        $language = CoContext::getLanguage() ?: LanguageEnum::EN_US->value;
+        $language = self::getLanguage();
         $nameI18n = $skillMarket->getNameI18n() ?: $skillVersion->getNameI18n();
         $descriptionI18n = $skillMarket->getDescriptionI18n() ?: $skillVersion->getDescriptionI18n() ?: [];
         $sourceI18n = $skillVersion->getSourceI18n() ?: [];
@@ -450,6 +452,14 @@ class SkillAssembler
     }
 
     /**
+     * 统一获取当前语言，空上下文时回退到多语言默认键.
+     */
+    private static function getLanguage(): string
+    {
+        return CoContext::getLanguage() ?: LanguageEnum::DEFAULT->value;
+    }
+
+    /**
      * 组装市场技能列表项.
      *
      * @param array<string, SkillEntity> $userSkills 用户已添加的技能映射（key 为 skillCode）
@@ -465,7 +475,7 @@ class SkillAssembler
         array $skillVersionMap
     ): array {
         $listItems = [];
-        $language = CoContext::getLanguage();
+        $language = self::getLanguage();
         foreach ($skillMarketEntities as $skillMarketEntity) {
             $skillCode = $skillMarketEntity->getSkillCode();
             $userSkill = $userSkills[$skillCode] ?? null;

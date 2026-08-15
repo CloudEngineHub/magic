@@ -13,7 +13,6 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Infrastructure\Util\Context\RequestContext;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
-use App\Interfaces\SuperMagic\Skill\FormRequest\SkillMarketFeaturedQueryFormRequest;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -51,32 +50,8 @@ class SkillMarketApi extends AbstractApi
         // 前台列表不使用 total，跳过总数统计
         $page->setTotal(false);
 
-        $result = $this->skillMarketAppService->queries($requestContext, $query, $page);
-
-        return SkillAssembler::createMarketListResponseDTO(
-            $result['list'],
-            $result['userSkills'],
-            $result['publisherUserMap'],
-            $this->getAuthorization()->getId(),
-            $page->getPage(),
-            $page->getPageNum(),
-            $result['total'] ?? null,
-            $result['skillVersionMap'] ?? []
-        );
-    }
-
-    /**
-     * 获取市场精选技能列表.
-     */
-    public function featured(RequestContext $requestContext, SkillMarketFeaturedQueryFormRequest $request)
-    {
-        $requestContext->setUserAuthorization($this->getAuthorization());
-
-        $page = $this->createPage();
-        // 前台精选列表不使用 total，跳过总数统计
-        $page->setTotal(false);
-        $excludeCodes = $request->validated()['exclude_codes'] ?? [];
-        $result = $this->skillMarketAppService->featuredQueries($requestContext, $page, $excludeCodes);
+        // 市场技能列表不返回 file_url，避免批量加载文件链接
+        $result = $this->skillMarketAppService->queries($requestContext, $query, $page, false);
 
         return SkillAssembler::createMarketListResponseDTO(
             $result['list'],

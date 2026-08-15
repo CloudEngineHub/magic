@@ -100,9 +100,10 @@ class SkillMarketAppService extends AbstractSkillAppService
      * @param RequestContext $requestContext 请求上下文
      * @param SkillQuery $query 查询对象
      * @param Page $page 分页对象
+     * @param bool $withFileUrl 是否加载版本文件 URL
      * @return array{list: SkillMarketEntity[], userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>, total?: int} 市场技能列表结果
      */
-    public function queries(RequestContext $requestContext, SkillQuery $query, Page $page): array
+    public function queries(RequestContext $requestContext, SkillQuery $query, Page $page, bool $withFileUrl = true): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
 
@@ -119,38 +120,7 @@ class SkillMarketAppService extends AbstractSkillAppService
         // 查询市场技能列表（包含总数）
         $result = $this->skillMarketDomainService->queries($query, $page);
 
-        $data = $this->resolveMarketListData($dataIsolation, $result['list']);
-
-        $resultData = ['list' => $result['list']] + $data;
-        if ($page->isTotal()) {
-            $resultData['total'] = $result['total'];
-        }
-
-        return $resultData;
-    }
-
-    /**
-     * 获取市场精选技能列表.
-     *
-     * @param Page $page 分页对象
-     * @param string[] $excludeCodes 需要排除的 skill_code 列表
-     * @return array{
-     *     list: SkillMarketEntity[],
-     *     userSkills: array<string, SkillEntity>,
-     *     publisherUserMap: array<string, MagicUserEntity>,
-     *     skillVersionMap: array<string, SkillVersionEntity>,
-     *     total?: int
-     * }
-     */
-    public function featuredQueries(RequestContext $requestContext, Page $page, array $excludeCodes = []): array
-    {
-        $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = $this->createSkillDataIsolation($userAuthorization);
-        $dataIsolation->disabled();
-
-        $result = $this->skillMarketDomainService->queryFeatured($page, $excludeCodes);
-
-        $data = $this->resolveMarketListData($dataIsolation, $result['list']);
+        $data = $this->resolveMarketListData($dataIsolation, $result['list'], $withFileUrl);
 
         $resultData = ['list' => $result['list']] + $data;
         if ($page->isTotal()) {
@@ -164,15 +134,11 @@ class SkillMarketAppService extends AbstractSkillAppService
      * 填充市场列表展示所需的分类、用户技能、版本、发布者和资源 URL.
      *
      * @param SkillMarketEntity[] $skillMarketEntities 市场技能实体
+     * @param bool $withFileUrl 是否加载版本文件 URL
      * @return array{userSkills: array<string, SkillEntity>, publisherUserMap: array<string, MagicUserEntity>, skillVersionMap: array<string, SkillVersionEntity>}
      */
-    private function resolveMarketListData(SkillDataIsolation $dataIsolation, array $skillMarketEntities): array
+    private function resolveMarketListData(SkillDataIsolation $dataIsolation, array $skillMarketEntities, bool $withFileUrl = true): array
     {
-        $categoryMap = $this->skillCategoryRelationDomainService->getMarketCategoryIdsMap(array_map(static fn (SkillMarketEntity $entity) => (int) $entity->getId(), $skillMarketEntities));
-        foreach ($skillMarketEntities as $entity) {
-            $entity->setCategoryIds($categoryMap[$entity->getId() ?? 0] ?? []);
-        }
-
         if (empty($skillMarketEntities)) {
             return [
                 'userSkills' => [],
@@ -186,7 +152,9 @@ class SkillMarketAppService extends AbstractSkillAppService
         $userSkillsMap = $this->skillDomainService->findByVersionCodes($dataIsolation, $skillCodes);
         $skillVersionMap = $this->skillVersionDomainService->findSkillCurrentOrLatestByCodes($dataIsolation, $skillCodes);
 
-        $this->updateSkillVersionAssetUrls($dataIsolation, array_values($skillVersionMap));
+        if ($withFileUrl) {
+            $this->updateSkillVersionAssetUrls($dataIsolation, array_values($skillVersionMap));
+        }
 
         // 批量更新 logo URL（如果存储的是路径，需要转换为完整URL）
         $this->updateSkillMarketLogoUrl($dataIsolation, $skillMarketEntities);

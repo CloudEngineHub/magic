@@ -99,18 +99,6 @@ class SkillMarketDomainService
     }
 
     /**
-     * 查询市场精选技能列表.
-     *
-     * @param Page $page 分页对象
-     * @param string[] $excludeCodes 需要排除的 skill_code 列表
-     * @return array{total: ?int, list: SkillMarketEntity[]} 总数（未请求时为 null）和精选列表
-     */
-    public function queryFeatured(Page $page, array $excludeCodes = []): array
-    {
-        return $this->skillMarketRepository->queryFeatured($page, $excludeCodes);
-    }
-
-    /**
      * 管理后台查询市场技能列表.
      *
      * @return array{total: int, list: SkillMarketEntity[]}
