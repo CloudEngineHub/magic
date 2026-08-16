@@ -82,10 +82,11 @@ readonly class KelingOmniGenerationCapabilityProvider implements KelingGeneratio
         $normalizedModelId = strtolower(trim($modelId));
         if ($normalizedModelId !== '') {
             return in_array($normalizedModelId, self::MODEL_IDS, true)
-                || in_array(strtolower(trim($modelVersion)), self::MODEL_VERSIONS, true);
+                || in_array($modelId, self::MODEL_IDS, true);
         }
 
-        return in_array(strtolower(trim($modelVersion)), self::MODEL_VERSIONS, true);
+        return in_array(strtolower(trim($modelVersion)), self::MODEL_VERSIONS, true)
+            || in_array($modelVersion, self::MODEL_VERSIONS, true);
     }
 
     public function resolveGenerationConfig(string $modelVersion, string $modelId): ?VideoGenerationConfig
