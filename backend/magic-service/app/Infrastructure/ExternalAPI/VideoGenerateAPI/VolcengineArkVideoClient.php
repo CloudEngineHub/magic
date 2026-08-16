@@ -102,12 +102,13 @@ readonly class VolcengineArkVideoClient
         } catch (RequestException $exception) {
             $response = $exception->getResponse();
             $errorMessage = trim((string) $response?->getBody());
+            $httpStatus = $response?->getStatusCode();
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
                 'context' => $sanitizedLogContext,
-                'http_status' => $response?->getStatusCode(),
+                'http_status' => $httpStatus,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
@@ -115,7 +116,7 @@ readonly class VolcengineArkVideoClient
             // 如果id没有找到，则需要返回异常
             try {
                 $errorMessageArr = Json::decode($errorMessage);
-                if (in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound', 'InvalidParameter'])) {
+                if (in_array($httpStatus, [404, 400]) || in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound', 'InvalidParameter'])) {
                     $errorMessageArr['status'] = 'error';
                     return $errorMessageArr;
                 }
