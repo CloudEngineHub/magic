@@ -80,13 +80,16 @@ readonly class KelingOmniGenerationCapabilityProvider implements KelingGeneratio
     public function supportsModel(string $modelVersion, string $modelId): bool
     {
         $normalizedModelId = strtolower(trim($modelId));
+        $normalizedModelVersion = strtolower(trim($modelVersion));
+        $normalizedModelIds = array_map('strtolower', self::MODEL_IDS);
+        $normalizedModelVersions = array_map('strtolower', self::MODEL_VERSIONS);
+
         if ($normalizedModelId !== '') {
-            return in_array($normalizedModelId, self::MODEL_IDS, true)
-                || in_array($modelId, self::MODEL_IDS, true);
+            return in_array($normalizedModelId, $normalizedModelIds, true)
+                || in_array($normalizedModelVersion, $normalizedModelVersions, true);
         }
 
-        return in_array(strtolower(trim($modelVersion)), self::MODEL_VERSIONS, true)
-            || in_array($modelVersion, self::MODEL_VERSIONS, true);
+        return in_array($normalizedModelVersion, $normalizedModelVersions, true);
     }
 
     public function resolveGenerationConfig(string $modelVersion, string $modelId): ?VideoGenerationConfig
