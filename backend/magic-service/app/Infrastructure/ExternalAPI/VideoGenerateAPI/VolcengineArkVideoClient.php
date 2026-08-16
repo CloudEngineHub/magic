@@ -115,7 +115,7 @@ readonly class VolcengineArkVideoClient
             // 如果id没有找到，则需要返回异常
             try {
                 $errorMessageArr = Json::decode($errorMessage);
-                if (in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound'])) {
+                if (in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound', 'InvalidParameter'])) {
                     $errorMessageArr['status'] = 'error';
                     return $errorMessageArr;
                 }

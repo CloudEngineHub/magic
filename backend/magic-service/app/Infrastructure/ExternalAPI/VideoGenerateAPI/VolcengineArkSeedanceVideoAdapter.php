@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
-use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
 use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
@@ -16,7 +16,7 @@ use Hyperf\Contract\TranslatorInterface;
 
 use function Hyperf\Translation\__;
 
-readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProviderAdapterInterface
+readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConnectivityTestableInterface
 {
     // 对齐方舟 Seedance 当前文档里的默认时长，缺省时我们按 5 秒回填。
     private const int DEFAULT_DURATION_SECONDS = 5;
@@ -469,6 +469,35 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationProvi
                 'provider_code' => null,
             ],
         ];
+    }
+
+    /**
+     * 执行连通性测试。
+     *
+     * 使用真实模型版本提交非法分辨率，只有命中预期参数校验错误才视为连通成功。
+     */
+    public function testConnection(QueueExecutorConfig $config, string $modelVersion): bool
+    {
+        $payload = [
+            'model' => $modelVersion,
+            'content' => [['type' => 'text', 'text' => 'connectivity-test']],
+            'resolution' => '720p',
+            'duration' => 0,
+            'ratio' => '1:1',
+        ];
+
+        $result = $this->client->post(
+            $config->getBaseUrl(),
+            $config->getApiKey(),
+            '/contents/generations/tasks',
+            $payload,
+            ['connectivity_test' => true],
+        );
+        if (isset($result['status'], $result['error']['code']) && $result['status'] === 'error' && $result['error']['code'] === 'InvalidParameter') {
+            return true;
+        }
+
+        throw ProviderVideoException::nonRetriable($result['error']['message']);
     }
 
     /**
