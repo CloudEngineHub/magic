@@ -182,7 +182,6 @@ class PathManager:
         cls._workspace_dir.mkdir(exist_ok=True)
         cls._browser_data_dir.mkdir(exist_ok=True)
         cls._cache_dir.mkdir(exist_ok=True)
-        cls._chat_history_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def get_project_root(cls) -> Path:
@@ -248,7 +247,6 @@ class PathManager:
     def get_topic_dir(cls) -> Path:
         """获取话题持久化目录路径。"""
         cls._ensure_initialization()
-        cls._topic_dir.mkdir(parents=True, exist_ok=True)
         return cls._topic_dir
 
     @classmethod
