@@ -66,6 +66,7 @@ db.sqlite3-journal
 .env.test.local
 .env.production.local
 .output/
+.topic/
 .chat_history/
 .workspace/
 .mount/
@@ -82,7 +83,6 @@ config/config.local.yaml
 config/dynamic_config.yaml
 .client_message/
 config/tool_definitions.json
-.checkpoints/
 .cursor/
 .refers/
 .user/
@@ -118,3 +118,4 @@ Makefile
 
 /skills
 /scripts/test*
+.checkpoints/

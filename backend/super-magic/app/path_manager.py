@@ -17,7 +17,9 @@ class PathManager(BasePathManager):
     - project_root/          ← 项目根目录
         .browser/            ← 浏览器数据（父类管理）
         .cache/              ← 缓存（父类管理）
-        .chat_history/       ← 聊天记录（父类管理）
+        .topic/              ← 话题持久状态（父类管理）
+            chat_history/    ← 聊天记录
+            checkpoints/     ← checkpoint 自身
         .credentials/        ← 凭证（应用层，预创建）
         .project_schemas/    ← 项目架构（应用层，预创建）
         .client_message/     ← 客户端消息（应用层，预创建）
@@ -31,7 +33,6 @@ class PathManager(BasePathManager):
             background_compact/ ← 后台压缩临时上下文
             llm_request/    ← LLM 调试日志
         app/i18n/            ← 语言翻译（源码只读目录）
-        .checkpoints/        ← 检查点（getter 内按需创建）
         .workspace/          ← MagicFS 云端持久工作区（父类管理）
             .asr_states/     ← ASR 状态（按需创建）
             .magic/          ← Magic 配置（按需创建）
@@ -50,10 +51,10 @@ class PathManager(BasePathManager):
     - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
 
     持久化边界：
-    - `.chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
+    - `.topic/chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
     - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
-    - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
+    - `.topic/checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
     """
 
     # ── project_root 下 ───────────────────────────────────────────────────────
@@ -123,6 +124,7 @@ class PathManager(BasePathManager):
     # 临时目录：.workspace/.tmp（按需创建）
     _tmp_dir_name: ClassVar[str] = ".tmp"
     _tmp_dir: ClassVar[Optional[Path]] = None
+    _checkpoints_dir_name: ClassVar[str] = "checkpoints"
 
 
     @classmethod
@@ -402,19 +404,23 @@ class PathManager(BasePathManager):
     @classmethod
     def get_checkpoints_dir(cls) -> Path:
         """
-        获取检查点存储目录（project_root/.checkpoints）。
+        获取检查点存储目录（project_root/.topic/checkpoints）。
 
         注意：此方法会在返回前创建目录，历史遗留行为，勿仿照。
         """
         cls._ensure_app_initialization()
-        checkpoint_dir = cls.get_project_root() / ".checkpoints"
-        checkpoint_dir.mkdir(exist_ok=True)
+        checkpoint_dir = cls.get_topic_dir() / cls._checkpoints_dir_name
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
         return checkpoint_dir
+
+    @classmethod
+    def get_checkpoints_dir_name(cls) -> str:
+        return cls._checkpoints_dir_name
 
     @classmethod
     def get_checkpoint_dir(cls, checkpoint_id: str) -> Path:
         """
-        获取检查点实例目录（project_root/.checkpoints/{checkpoint_id}）。
+        获取检查点实例目录（project_root/.topic/checkpoints/{checkpoint_id}）。
 
         注意：此方法会在返回前创建目录，历史遗留行为，勿仿照。
         """
@@ -427,7 +433,7 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_todos_file(cls) -> Path:
-        """获取全局 todo 文件路径（.chat_history/todos.json，由父类管理的 chat_history_dir 承载）"""
+        """获取全局 todo 文件路径（.topic/chat_history/todos.json）。"""
         cls._ensure_app_initialization()
         return cls.get_chat_history_dir() / "todos.json"
 
@@ -439,7 +445,7 @@ class PathManager(BasePathManager):
 
     @classmethod
     def get_subagents_chat_history_dir(cls) -> Path:
-        """获取子 Agent 聊天记录目录路径（.chat_history/subagents）"""
+        """获取子 Agent 聊天记录目录路径（.topic/chat_history/subagents）。"""
         cls._ensure_app_initialization()
         return cls.get_chat_history_dir() / "subagents"
 

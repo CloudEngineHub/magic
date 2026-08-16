@@ -1,7 +1,7 @@
 """AgentHorizon 的 JSON 持久化。
 
 文件命名规则与 ChatHistory 一致：
-  .chat_history/{agent_name}<{agent_id}>.horizon.json
+  .topic/chat_history/{agent_name}<{agent_id}>.horizon.json
 
 正常保存和 fork 写入共用同一套 codec：
 

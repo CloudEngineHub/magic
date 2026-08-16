@@ -160,8 +160,14 @@ class AgentContext(BaseAgentContext):
             self.set_chat_history_dir(chat_history_dir)
         except Exception as e:
             logger.warning(f"无法获取聊天历史目录: {e}")
-            chat_history_dir = os.path.join(os.getcwd(), ".chat_history")
+            chat_history_dir = os.path.join(os.getcwd(), ".topic", "chat_history")
             self.set_chat_history_dir(chat_history_dir)
+
+        # 迁移兼容状态：由启动阶段的 topic 持久化状态机设置，默认保守地关闭。
+        # 待旧归档迁移和持久卷灰度验证完成后，可移除这两个组件级状态及其上传门控兼容逻辑。
+        self._chat_history_persisted = False
+        self._checkpoints_persisted = False
+        self._topic_persistence_healthy = False
 
         # 设置默认代理名称
         self.set_agent_name("magic")
@@ -214,6 +220,24 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_id(self) -> Optional[str]:
         """获取父 Agent ID；主 Agent 返回 None。"""
         return self._subagent_parent_agent_id
+
+    def mark_chat_history_persisted(self) -> None:
+        self._chat_history_persisted = True
+
+    def is_chat_history_persisted(self) -> bool:
+        return self._chat_history_persisted
+
+    def mark_checkpoints_persisted(self) -> None:
+        self._checkpoints_persisted = True
+
+    def is_checkpoints_persisted(self) -> bool:
+        return self._checkpoints_persisted
+
+    def set_topic_persistence_healthy(self, healthy: bool) -> None:
+        self._topic_persistence_healthy = bool(healthy)
+
+    def is_topic_persistence_healthy(self) -> bool:
+        return self._topic_persistence_healthy
 
     def set_agent_id(self, agent_id: str) -> None:
         """设置运行时 agent_id，并同步更新依赖该 ID 的上下文设施。"""

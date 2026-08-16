@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import time
 import traceback
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -43,6 +44,7 @@ from app.infrastructure.storage.factory import StorageFactory
 from app.infrastructure.storage.types import StorageResponse
 from app.path_manager import PathManager
 from app.service.agent_event.base_listener_service import BaseListenerService
+from app.service.topic_persistence import should_upload_component
 from app.utils.init_client_message_util import InitClientMessageUtil
 from app.utils.path_utils import get_workspace_dir, get_storage_dir, get_storage_dir_with_fallback
 
@@ -493,17 +495,30 @@ class FileStorageListenerService:
             # Get directory paths
             chat_history_dir = PathManager.get_chat_history_dir()
             workspace_dir = PathManager.get_workspace_dir()
-            topic_id = agent_context.get_metadata().get("topic_id")
+            metadata = agent_context.get_metadata()
+            topic_id = metadata.get("topic_id") or metadata.get("chat_topic_id")
 
             if not topic_id:
                 logger.error("无法获取topic_id，无法进行分离式打包")
+                return
+
+            persistence_healthy = agent_context.is_topic_persistence_healthy()
+            upload_chat_history = should_upload_component(
+                persistence_healthy=persistence_healthy,
+                component_persisted=agent_context.is_chat_history_persisted(),
+            )
+            upload_checkpoints = should_upload_component(
+                persistence_healthy=persistence_healthy,
+                component_persisted=agent_context.is_checkpoints_persisted(),
+            )
+            if not upload_chat_history and not upload_checkpoints:
+                logger.info("topic 数据已由健康持久卷分别持久化，跳过 zip 上传")
                 return
 
             # Load local manifest to check current state
             # local_manifest = FileStorageListenerService._load_local_manifest()
 
             # Initialize storage service
-            metadata = agent_context.get_metadata()
             sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
             platform_type = agent_context.get_init_client_message_platform_type()
 
@@ -526,15 +541,21 @@ class FileStorageListenerService:
             #     project_archive_info = local_manifest or ProjectArchiveInfo(archives={})
 
             # Process and upload chat history archive
-            await FileStorageListenerService._process_chat_history_archive(
-                chat_history_dir, topic_id, storage_service
-            )
+            if upload_chat_history:
+                await FileStorageListenerService._process_chat_history_archive(
+                    chat_history_dir, topic_id, storage_service
+                )
+            else:
+                logger.info("聊天历史已由持久卷持久化，跳过归档上传")
 
             # Process and upload checkpoints archive
-            checkpoints_dir = PathManager.get_checkpoints_dir()
-            await FileStorageListenerService._process_checkpoints_archive(
-                str(checkpoints_dir), topic_id, storage_service
-            )
+            if upload_checkpoints:
+                checkpoints_dir = PathManager.get_checkpoints_dir()
+                await FileStorageListenerService._process_checkpoints_archive(
+                    str(checkpoints_dir), topic_id, storage_service
+                )
+            else:
+                logger.info("checkpoints 已由持久卷持久化，跳过归档上传")
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
@@ -679,7 +700,19 @@ class FileStorageListenerService:
             with tempfile.TemporaryDirectory() as temp_dir:
                 archive_name = f"chat_history_{topic_id}"
                 archive_path = os.path.join(temp_dir, archive_name)
-                zip_path = shutil.make_archive(archive_path, 'zip', chat_history_dir)
+                zip_path = f"{archive_path}.zip"
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_ref:
+                    source_dir = Path(chat_history_dir)
+                    for root, dirnames, filenames in os.walk(source_dir):
+                        dirnames[:] = [dirname for dirname in dirnames if dirname != "llm_request"]
+                        root_path = Path(root)
+                        relative_root = root_path.relative_to(source_dir)
+                        for dirname in dirnames:
+                            arcname = (relative_root / dirname).as_posix() + "/"
+                            zip_ref.writestr(arcname, "")
+                        for filename in filenames:
+                            file_path = root_path / filename
+                            zip_ref.write(file_path, (relative_root / filename).as_posix())
                 logger.info(f"聊天历史已压缩到: {zip_path}")
 
                 # Determine the directory path for upload

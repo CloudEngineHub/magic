@@ -500,7 +500,7 @@ class AgentDispatcher(Base):
                 logger.debug(f"从上次 dispatch 快照恢复 agent 配置失败: {e}")
 
     async def _save_last_dispatch_message(self, message: ChatClientMessage) -> None:
-        """保存本次 dispatch 的完整消息快照到文件（.chat_history/last_dispatch_message.json）。"""
+        """保存本次 dispatch 的完整消息快照到文件（.topic/chat_history/last_dispatch_message.json）。"""
         from app.utils.async_file_utils import async_write_json
         new_data = self._remove_model_selection_fields(message.model_dump(mode="json"))
         # 合并策略：以上次快照为基础，新值非 None 才覆盖，防止空值抹掉已存的有效配置

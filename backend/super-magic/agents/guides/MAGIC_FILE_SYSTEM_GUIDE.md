@@ -5,43 +5,41 @@
 ## 四条基本规则
 
 ```text
-.chat_history/  = 话题的持久状态，需要 checkpoint 和归档
+.topic/chat_history/  = 话题的持久状态，需要 checkpoint 和归档
 .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
 .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
-.checkpoints/   = checkpoint 自身，不能复制进自己
+.topic/checkpoints/   = checkpoint 自身，不能复制进自己
 ```
 
 这四个目录不是同一层级的不同叫法，而是四种不同的数据责任：
 
-- `.chat_history/` 保存 Agent 继续理解和恢复一个话题所需的持久数据。
+- `.topic/chat_history/` 保存 Agent 继续理解和恢复一个话题所需的持久数据。
 - `.runtime/` 保存进程运行期间的临时文件、调试日志和可重新计算结果。
 - `.workspace/` 保存用户需要长期保留、下载或继续编辑的文件。
-- `.checkpoints/` 保存文件 checkpoint 和聊天记录快照本身。
+- `.topic/checkpoints/` 保存文件 checkpoint 和聊天记录快照本身。
 
 ## 目标目录结构
 
 ```text
 project_root/
-├── .chat_history/                         话题持久状态
-│   ├── magic<main>.json                   主 Agent 聊天记录
-│   ├── magic<main>.session.json           主 Agent 会话配置和运行状态
-│   ├── magic<main>.horizon.json           主 Agent Horizon 持久状态
-│   ├── magic<main>.token_usage.json       主 Agent token 使用记录
-│   ├── magic<main>.tools.json             主 Agent 能力盘点输入
-│   ├── compacted/                         压缩前历史
-│   │   ├── magic<main>_20260809102030.json
-│   │   └── magic<main>_20260809164500.json
-│   └── subagents/                          子 Agent 持久状态
-│       ├── magic<research-01>/
-│       │   ├── magic<research-01>.json
-│       │   ├── magic<research-01>.session.json
-│       │   ├── magic<research-01>.horizon.json
-│       │   └── magic<research-01>.token_usage.json
-│       └── explore<check-02>/
-│           ├── explore<check-02>.json
-│           ├── explore<check-02>.session.json
-│           ├── explore<check-02>.horizon.json
-│           └── explore<check-02>.token_usage.json
+├── .topic/                                 话题持久卷
+│   ├── chat_history/                       话题持久状态
+│   │   ├── magic<main>.json                主 Agent 聊天记录
+│   │   ├── magic<main>.session.json        主 Agent 会话配置和运行状态
+│   │   ├── magic<main>.horizon.json        主 Agent Horizon 持久状态
+│   │   ├── magic<main>.token_usage.json    主 Agent token 使用记录
+│   │   ├── magic<main>.tools.json          主 Agent 能力盘点输入
+│   │   ├── compacted/                      压缩前历史
+│   │   └── subagents/                      子 Agent 持久状态
+│   └── checkpoints/                        checkpoint 自身
+│       ├── checkpoint_manifest.json
+│       └── <checkpoint-id>/
+│           ├── file_snapshots/             用户文件快照
+│           ├── initial_chat_history_snapshots/
+│           │   └── .topic/chat_history/ 的完整内容
+│           ├── latest_chat_history_snapshots/
+│           │   └── .topic/chat_history/ 的完整内容
+│           └── checkpoint_info.json
 │
 ├── .runtime/                              可重新生成的运行数据
 │   ├── background_compact/                后台压缩临时上下文
@@ -49,22 +47,14 @@ project_root/
 │   ├── bg_shell/                          后台 shell 日志
 │   └── mcp_outputs/                       MCP 自动保存的大结果
 │
-├── .workspace/                            用户文件
-│   ├── .magic/                            工作区级 Agent、Skill、cron 配置
-│   └── ...                                 用户创建或需要保留的文件
-│
-└── .checkpoints/                          checkpoint 自身
-    ├── checkpoint_manifest.json
-    └── <checkpoint-id>/
-        ├── file_snapshots/                用户文件快照
-        ├── initial_chat_history_snapshots/
-        │   └── .chat_history/ 的完整内容
-        ├── latest_chat_history_snapshots/
-        │   └── .chat_history/ 的完整内容
-        └── checkpoint_info.json
+└── .workspace/                            用户文件
+    ├── .magic/                            工作区级 Agent、Skill、cron 配置
+    └── ...                                 用户创建或需要保留的文件
 ```
 
 ## checkpoint 边界
+
+`.topic/` 由基础设施在容器启动阶段通过 agfs-fuse 挂载为当前 topic 的持久卷。应用层不重复判断操作系统挂载点，只检查 `.topic/chat_history/` 和 `.topic/checkpoints/` 是否可用，并通过各自的持久化状态判断是否跳过 zip；状态未确认或恢复失败时继续使用 zip 下载/上传兜底。
 
 checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话题的持久状态，不只代表主 Agent 的三个文件。
 
@@ -78,23 +68,23 @@ checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话�
 
 - `.runtime/` 下的临时上下文、LLM 调试日志、后台 shell 日志和 MCP 大结果。
 - `.workspace/` 下的用户文件；这些文件由 `file_snapshots/` 的现有机制负责。
-- `.checkpoints/` 本身；checkpoint 不能把自己再次复制进聊天记录快照。
+- `.topic/checkpoints/` 本身；checkpoint 不能把自己再次复制进聊天记录快照。
 
-回滚 `.chat_history/` 时，目标目录必须与目标 checkpoint 的目录状态一致：目标 checkpoint 之后创建的压缩前历史和子 Agent 文件会被删除，目标 checkpoint 中存在的内容会被恢复。
+回滚 `.topic/chat_history/` 时，目标目录必须与目标 checkpoint 的目录状态一致：目标 checkpoint 之后创建的压缩前历史和子 Agent 文件会被删除，目标 checkpoint 中存在的内容会被恢复。
 
 ## 文件放置判断
 
 | 问题 | 放置位置 |
 |---|---|
-| Agent 之后还需要从中恢复话题或查找历史吗？ | `.chat_history/` |
+| Agent 之后还需要从中恢复话题或查找历史吗？ | `.topic/chat_history/` |
 | 进程结束后能否重新生成，或只是调试、临时、中间结果？ | `.runtime/` |
 | 用户需要长期保留、下载或继续编辑吗？ | `.workspace/` |
-| 它是 checkpoint 的索引、快照或文件操作记录吗？ | `.checkpoints/` |
+| 它是 checkpoint 的索引、快照或文件操作记录吗？ | `.topic/checkpoints/` |
 
 如果一个文件同时满足多类描述，优先按它的持久责任放置，而不是按生成它的 Agent 放置。例如：
 
-- 后台压缩 Agent 的临时 history 放 `.runtime/background_compact/`，不放 `.chat_history/subagents/`。
-- 压缩前的主 Agent 完整历史是用户话题的可检索证据，放 `.chat_history/compacted/`，并随 checkpoint 恢复。
+- 后台压缩 Agent 的临时 history 放 `.runtime/background_compact/`，不放 `.topic/chat_history/subagents/`。
+- 压缩前的主 Agent 完整历史是用户话题的可检索证据，放 `.topic/chat_history/compacted/`，并随 checkpoint 恢复。
 - LLM 请求调试日志放 `.runtime/llm_request/`，不进入聊天历史归档或 checkpoint。
 
 ## subagent 目录和父 Agent
@@ -102,7 +92,7 @@ checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话�
 `subagents/` 的目录只说明「这一组文件属于谁」：
 
 ```text
-.chat_history/subagents/
+.topic/chat_history/subagents/
 ├── magic<research-01>/
 └── explore<check-02>/
 ```
@@ -122,6 +112,6 @@ checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话�
 
 - 新增目录 getter 前，先确认数据责任，避免复制已有职责。
 - 异步运行时代码中的文件操作必须使用 `app/utils/async_file_utils.py`。
-- 可重新生成的数据不得写入 `.chat_history/` 或 `.workspace/`。
+- 可重新生成的数据不得写入 `.topic/chat_history/` 或 `.workspace/`。
 - 需要修改 checkpoint 边界时，必须同步更新 `ChatHistorySnapshotManager` 的模块注释、本文和相关方案。
 - 不要为聊天记录新增 `manifest`、`bundle`、`segment`、`transcript` 等项目未采用的抽象；使用现有目录、文件名和 `.session.json`。
