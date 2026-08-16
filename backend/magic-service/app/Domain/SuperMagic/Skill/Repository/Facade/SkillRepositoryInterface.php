@@ -153,4 +153,26 @@ interface SkillRepositoryInterface
     public function updateUpdatedAtByProjectId(SkillDataIsolation $dataIsolation, int $projectId): bool;
 
     public function findUserSkillsByIds(SkillDataIsolation $dataIsolation, array $skillIds): array;
+
+    /**
+     * 查询本地 ZIP 导入的 Skill，用于一次性清理历史多语言数据.
+     *
+     * @return array{total: int, list: SkillEntity[]}
+     */
+    public function findLocalUploadSkillsForI18nCleanup(
+        SkillDataIsolation $dataIsolation,
+        ?string $skillCode,
+        int $page,
+        int $pageSize
+    ): array;
+
+    /**
+     * 仅更新 Skill 的名称和描述多语言字段.
+     */
+    public function updateNameAndDescriptionI18n(
+        SkillDataIsolation $dataIsolation,
+        string $skillCode,
+        array $nameI18n,
+        ?array $descriptionI18n
+    ): bool;
 }
