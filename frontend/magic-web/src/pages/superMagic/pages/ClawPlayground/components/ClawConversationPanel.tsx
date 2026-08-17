@@ -24,7 +24,7 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { shouldCheckAttachmentsOnTaskStatus } from "@/pages/superMagic/services/topicStatusSyncService"
-import { type TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
@@ -99,6 +99,7 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode: clawCode,
 		isTaskRunning: showLoading,
+		isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})

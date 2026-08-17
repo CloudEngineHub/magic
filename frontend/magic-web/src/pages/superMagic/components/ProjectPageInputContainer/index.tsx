@@ -120,6 +120,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
 		isEmptyStatus,
 		isShowLoadingInit,
 	})

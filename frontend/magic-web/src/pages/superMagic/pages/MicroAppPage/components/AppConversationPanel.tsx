@@ -17,7 +17,7 @@ import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSe
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import { TaskStatus, type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { userStore } from "@/models/user"
@@ -115,6 +115,7 @@ function AppConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})

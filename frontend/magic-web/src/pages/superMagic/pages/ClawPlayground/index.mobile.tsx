@@ -153,6 +153,7 @@ const ClawMobileConversationPanel = observer(
 				topicId: selectedTopic?.id,
 				agentCode: clawCode,
 				isTaskRunning: showLoading,
+				isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
 				isEmptyStatus: false,
 				isShowLoadingInit: isMessagesInitialLoading,
 			})

@@ -117,6 +117,7 @@ function CrewConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode,
 		isTaskRunning: showLoading,
+		isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
