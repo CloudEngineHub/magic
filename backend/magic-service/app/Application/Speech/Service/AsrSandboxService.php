@@ -715,10 +715,10 @@ class AsrSandboxService extends AbstractAppService
             $actualSandboxId = $this->agentDomainService->ensureSandboxInitialized(
                 $dataIsolation,
                 $agentContext,
+                // ASR 属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
                 new SandboxRootFileIds(
                     (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
-                    (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode),
-                    (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $userId, $organizationCode, $projectEntity->getUserOrganizationCode())
+                    (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($userId, $organizationCode)
                 )
             );
 

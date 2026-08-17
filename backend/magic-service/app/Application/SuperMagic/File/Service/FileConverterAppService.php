@@ -289,15 +289,7 @@ class FileConverterAppService extends AbstractAppService
             $topicId = ! empty($validFiles) && $validFiles[0]->getTopicId() > 0
                 ? (int) $validFiles[0]->getTopicId()
                 : 0;
-            $topicRootFileId = $topicId > 0
-                ? (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory(
-                    (int) $projectId,
-                    $topicId,
-                    $userId,
-                    $userAuthorization->getOrganizationCode(),
-                    $projectEntity->getUserOrganizationCode()
-                )
-                : '';
+            // 文件转换属于工具执行场景，不挂载 .topic 话题目录（topicSpaceRootFileId 传空）
             // Ensure sandbox is running via domain service (App layer orchestration).
             $actualSandboxId = $this->agentDomainService->ensureSandboxRunning(
                 $dataIsolation,
@@ -305,7 +297,7 @@ class FileConverterAppService extends AbstractAppService
                 $projectId,
                 $fullWorkdir,
                 $rootFileId,
-                $topicRootFileId
+                ''
             );
 
             // Create file conversion request

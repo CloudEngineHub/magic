@@ -2329,10 +2329,10 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
             $contactDataIsolation,
             $agentContext,
+            // Agent 发布属于工具执行场景，不挂载 .topic 话题目录，只挂 project/user 空间
             new SandboxRootFileIds(
                 (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
-                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode()),
-                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($contactDataIsolation->getCurrentUserId(), $contactDataIsolation->getCurrentOrganizationCode())
             )
         );
 
