@@ -4,6 +4,7 @@ import type { Canvas } from "../../../core/Canvas"
 import { exportCanvasDocument } from "../../../document/exportDocument"
 import { ElementTypeEnum, type CanvasConnection } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
+import { EventEmitter } from "../../../core/EventEmitter"
 import { ElementFactory } from "../../core/ElementFactory"
 import { STORYBOARD_CONFIG } from "../StoryboardElement.config"
 import {
@@ -48,6 +49,10 @@ function createCanvasMock(
 			getDownstreamConnections: vi.fn((elementId: string) =>
 				connections.filter((connection) => connection.sourceElementId === elementId),
 			),
+		},
+		transformManager: {
+			isTransformInteractionActive: vi.fn(() => false),
+			isTransforming: vi.fn(() => false),
 		},
 	} as unknown as Canvas
 }
@@ -272,6 +277,79 @@ describe("StoryboardElement", () => {
 		expect(disconnectedGroup.find("Text").map((node) => (node as Konva.Text).text())).toEqual(
 			expect.arrayContaining(["未生成", "生成"]),
 		)
+	})
+
+	it("renders a read-only storyboard without editing affordances", () => {
+		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+			clearRect: vi.fn(),
+			fillRect: vi.fn(),
+			getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
+			measureText: vi.fn((text: string) => ({ width: text.length * 8 })),
+		} as unknown as CanvasRenderingContext2D)
+		const canvas = createCanvasMock(
+			undefined,
+			["image-output"],
+			[
+				{
+					id: "storyboard-output",
+					sourceElementId: "storyboard-1",
+					targetElementId: "image-output",
+				},
+			],
+		)
+		canvas.readonly = true
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({
+				id: "storyboard-1",
+				x: 0,
+				y: 0,
+				generationConfig: {
+					model_id: "gpt-image-2",
+					image_generation_config: { aspect_ratio: "16:9" },
+					resolution: "1K",
+				},
+				shots: [{ id: "shot-1", description: "", outputImageElementId: "image-output" }],
+			}),
+			canvas,
+		)
+
+		const group = element.render()
+		const texts = group.find("Text").map((node) => (node as Konva.Text).text())
+
+		expect(group.find(".storyboard-control-hit")).toHaveLength(0)
+		expect(group.find(".storyboard-control-suffix")).toHaveLength(0)
+		expect(group.findOne(".storyboard-generate-all")).toBeUndefined()
+		expect(group.findOne(".storyboard-generate-again-icon")).toBeUndefined()
+		expect(group.find(".storyboard-control-icon")).toHaveLength(0)
+		expect(texts).toEqual(expect.arrayContaining(["已生成", "暂无描述"]))
+		expect(texts).not.toEqual(expect.arrayContaining(["生成", "再次生成", "添加分镜"]))
+		expect(group.size()).toEqual({
+			width: STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			height: STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+		})
+	})
+
+	it("rerenders storyboard controls when readonly changes at runtime", () => {
+		const eventEmitter = new EventEmitter()
+		const canvas = createCanvasMock()
+		canvas.eventEmitter = eventEmitter
+		const element = new StoryboardElement(
+			StoryboardElement.createElementData({ id: "storyboard-toggle", x: 0, y: 0 }),
+			canvas,
+		)
+		element.render()
+		element.onMounted()
+		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
+
+		canvas.readonly = true
+		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		expect(element.getNode()?.find(".storyboard-control-hit")).toHaveLength(0)
+
+		canvas.readonly = false
+		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		expect(element.getNode()?.find(".storyboard-control-hit").length).toBeGreaterThan(0)
+		element.destroy()
+		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
 	})
 
 	it("renders the selected model icon from runtime metadata without persisting it", () => {

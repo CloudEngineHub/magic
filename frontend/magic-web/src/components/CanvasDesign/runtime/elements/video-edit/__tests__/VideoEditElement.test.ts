@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import Konva from "konva"
+import type { Canvas } from "../../../core/Canvas"
 import { exportCanvasDocument } from "../../../document/exportDocument"
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import { TransformBehavior } from "../../../interaction/transform/TransformManager"
@@ -64,6 +65,10 @@ function createCanvasMock(
 			getPreviewResource: options?.getPreviewResource,
 			needsResourceReload: vi.fn(() => false),
 			getCachedMetadata: vi.fn(() => null),
+		},
+		transformManager: {
+			isTransformInteractionActive: vi.fn(() => false),
+			isTransforming: vi.fn(() => false),
 		},
 	} as never
 }
@@ -302,7 +307,7 @@ describe("VideoEditElement", () => {
 		const audio = createAudioSource("audio-1", "./audios/旁白.wav")
 		const eventEmitter = new EventEmitter()
 		let connectedSources: LayerElement[] = [video, audio]
-		const canvas = createCanvasMock([video, audio]) as any
+		const canvas = createCanvasMock([video, audio]) as unknown as Canvas
 		canvas.eventEmitter = eventEmitter
 		canvas.connectionManager.getUpstreamConnections = vi.fn((targetElementId: string) =>
 			targetElementId === "video-edit-1"
@@ -364,6 +369,81 @@ describe("VideoEditElement", () => {
 		).toBe("MP4")
 		expect(node.find(".video-edit-control-hit")).toHaveLength(4)
 		expect(bindControl).toHaveBeenCalledTimes(4)
+	})
+
+	it("renders read-only output settings without edit or reorder affordances", () => {
+		mockCanvasRenderingContext()
+		const videos = [
+			createVideoSource("video-1", "开场", "./videos/1.mp4"),
+			createVideoSource("video-2", "介绍", "./videos/2.mp4"),
+		]
+		const audio = createAudioSource("audio-1", "./audios/旁白.wav")
+		const eventEmitter = new EventEmitter()
+		const canvas = createCanvasMock([...videos, audio]) as unknown as Canvas
+		canvas.readonly = true
+		canvas.eventEmitter = eventEmitter
+		const element = new VideoEditElement(
+			VideoEditElement.createElementData({
+				id: "video-edit-readonly",
+				x: 0,
+				y: 0,
+				output: { aspectRatio: "9:16", resolution: "1K", format: "mp4" },
+			}),
+			canvas,
+		)
+
+		const node = element.render()
+		const controlHits = node.find(".video-edit-control-hit")
+		const controlActions = controlHits.map(
+			(hit) => hit.getAttr("videoEditControlMetadata")?.action,
+		)
+
+		expect(node.findOne(".video-edit-merge-button")).toBeUndefined()
+		expect(node.find(".video-edit-control-suffix")).toHaveLength(0)
+		expect(node.findOne(".video-edit-video-card-grip")).toBeUndefined()
+		expect(node.findOne(".video-edit-video-card-drag-handle")).toBeUndefined()
+		expect(node.findOne(".video-edit-video-drop-placeholder")).toBeUndefined()
+		expect(controlActions).toEqual([{ type: "toggle-audio-playback" }])
+		expect(node.findOne(".video-edit-audio-progress-hit")?.listening()).toBe(true)
+		expect(node.findOne(".video-edit-audio-progress-thumb-hit")?.listening()).toBe(true)
+		expect(node.findOne(".video-edit-video-viewport")?.listening()).toBe(true)
+		expect(node.find(".video-edit-video-card")).toHaveLength(2)
+		expect(node.size()).toEqual({
+			width: VIDEO_EDIT_CONFIG.DEFAULT_WIDTH,
+			height: VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT,
+		})
+	})
+
+	it("rerenders video edit controls when readonly changes at runtime", () => {
+		mockCanvasRenderingContext()
+		const video = createVideoSource("video-1", "开场", "./videos/1.mp4")
+		const audio = createAudioSource("audio-1", "./audios/旁白.wav")
+		const eventEmitter = new EventEmitter()
+		const canvas = createCanvasMock([video, audio]) as unknown as Canvas
+		canvas.eventEmitter = eventEmitter
+		const element = new VideoEditElement(
+			VideoEditElement.createElementData({ id: "video-edit-toggle", x: 0, y: 0 }),
+			canvas,
+		)
+		element.render()
+		element.onMounted()
+		expect(element.getNode()?.findOne(".video-edit-merge-button")).toBeDefined()
+		expect(element.getNode()?.find(".video-edit-control-suffix")).toHaveLength(3)
+
+		canvas.readonly = true
+		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: true } })
+		expect(element.getNode()?.findOne(".video-edit-merge-button")).toBeUndefined()
+		expect(element.getNode()?.find(".video-edit-control-suffix")).toHaveLength(0)
+		expect(element.getNode()?.findOne(".video-edit-video-card-grip")).toBeUndefined()
+		expect(element.getNode()?.findOne(".video-edit-audio-play-button")).toBeDefined()
+
+		canvas.readonly = false
+		eventEmitter.emit({ type: "canvas:readonly", data: { readonly: false } })
+		expect(element.getNode()?.findOne(".video-edit-merge-button")).toBeDefined()
+		expect(element.getNode()?.find(".video-edit-control-suffix")).toHaveLength(3)
+		expect(element.getNode()?.findOne(".video-edit-video-card-grip")).toBeDefined()
+		element.destroy()
+		expect(eventEmitter.listenerCount("canvas:readonly")).toBe(0)
 	})
 
 	it("keeps the merge label and disables composition while a job is running", () => {

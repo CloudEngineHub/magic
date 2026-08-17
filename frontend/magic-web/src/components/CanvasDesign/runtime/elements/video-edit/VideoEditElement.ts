@@ -311,6 +311,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private previewTokens = new Map<string, number>()
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
+	private readonlyChangedUnsubscribe?: () => void
 
 	constructor(data: VideoEditElementData, canvas: Canvas) {
 		super(normalizeVideoEditDisplayDimensions(data), canvas)
@@ -446,6 +447,11 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 	public override onMounted(): void {
 		super.onMounted()
+		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {
+				this.rerenderWhenTransformIdle()
+			})
+		}
 		this.syncInteractionHitTargets()
 		this.bindAudioRuntime()
 		this.bindCompositionRuntime()
@@ -525,6 +531,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	public override destroy(): void {
+		this.readonlyChangedUnsubscribe?.()
+		this.readonlyChangedUnsubscribe = undefined
 		this.finishAudioScrub()
 		this.playbackUnsubscribe()
 		this.playbackManager.release(this.data.id)
@@ -1047,17 +1055,20 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			border,
 		)
 
-		const { grip, handle } = this.renderGrip(card, layout)
+		const gripAndHandle = this.canvas.readonly ? null : this.renderGrip(card, layout)
+		const grip = gripAndHandle?.grip
+		const handle = gripAndHandle?.handle
 		const setGripShown = (shown: boolean) => {
-			grip.visible(shown)
-			grip.listening(shown)
-			handle.listening(shown)
+			grip?.visible(shown)
+			grip?.listening(shown)
+			handle?.listening(shown)
 		}
 		setGripShown(false)
 		// 仅允许从 handle 启动拖拽，避免命中层/描边干扰。
 		card.draggable(false)
 		const beginCardDrag = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			if (
+				this.canvas.readonly ||
 				["checking", "preparing", "encoding", "finalizing", "uploading"].includes(
 					this.compositionSnapshot.status,
 				)
@@ -1069,15 +1080,17 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			card.draggable(true)
 			card.startDrag()
 		}
-		handle.on("mousedown", beginCardDrag)
-		handle.on("touchstart", beginCardDrag)
-		handle.on("mouseenter", () => {
-			this.canvas.cursorManager?.setTemporary("grab")
-		})
-		handle.on("mouseleave", () => {
-			if (card.isDragging()) return
-			this.canvas.cursorManager?.restoreToolCursor()
-		})
+		if (handle) {
+			handle.on("mousedown", beginCardDrag)
+			handle.on("touchstart", beginCardDrag)
+			handle.on("mouseenter", () => {
+				this.canvas.cursorManager?.setTemporary("grab")
+			})
+			handle.on("mouseleave", () => {
+				if (card.isDragging()) return
+				this.canvas.cursorManager?.restoreToolCursor()
+			})
+		}
 
 		card.on("mouseenter", () => {
 			border.stroke(VIDEO_EDIT_CONFIG.ACCENT)
@@ -1650,7 +1663,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			}),
 		)
 		// 合并按钮先渲染，参数行 hit 后渲染，避免按钮层挡住下拉点击。
-		this.renderMergeButton(group, layout, videoCount)
+		if (!this.canvas.readonly) this.renderMergeButton(group, layout, videoCount)
 		this.renderOutputControls(group, layout, content, outputAspect, outputResolution)
 	}
 
@@ -1741,27 +1754,31 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				wrap: "none",
 				name: "video-edit-control-text",
 			}),
-			this.createSelectSuffix(row),
+			...(this.canvas.readonly ? [] : [this.createSelectSuffix(row)]),
 		)
-		const overlayAnchor = new Konva.Rect({
-			...row.triggerRect,
-			listening: false,
-		})
-		visual.add(overlayAnchor)
+		const overlayAnchor = this.canvas.readonly
+			? undefined
+			: new Konva.Rect({
+					...row.triggerRect,
+					listening: false,
+				})
+		if (overlayAnchor) visual.add(overlayAnchor)
 		group.add(visual)
-		this.addControlHit(group, {
-			action,
-			kind: "parameter",
-			visualNode: visual,
-			overlayAnchorNode: overlayAnchor,
-			selectPresentation: {
-				fontSize: row.fontSize,
-				horizontalPadding: row.horizontalPadding,
-				suffixGap: row.suffixGap,
-				suffixIconSize: row.suffixIconSize,
-			},
-			baseBounds: row.rect,
-		})
+		if (!this.canvas.readonly) {
+			this.addControlHit(group, {
+				action,
+				kind: "parameter",
+				visualNode: visual,
+				overlayAnchorNode: overlayAnchor,
+				selectPresentation: {
+					fontSize: row.fontSize,
+					horizontalPadding: row.horizontalPadding,
+					suffixGap: row.suffixGap,
+					suffixIconSize: row.suffixIconSize,
+				},
+				baseBounds: row.rect,
+			})
+		}
 	}
 
 	private createSelectSuffix(row: VideoEditFooterParameterLayout): Konva.Line {

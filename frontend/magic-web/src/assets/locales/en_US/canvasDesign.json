@@ -528,6 +528,7 @@
 		"imageModel": "Image model",
 		"menuName": "Create storyboard",
 		"modelUnavailable": "No image model is available",
+		"noDescription": "No description",
 		"notGenerated": "Not generated",
 		"pointsCost": "Costs {{count}} points",
 		"referenceLimit": "This model supports up to {{count}} reference images",

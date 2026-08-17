@@ -542,6 +542,7 @@
 		"imageModel": "图片模型",
 		"menuName": "制作分镜",
 		"modelUnavailable": "当前没有可用的图片模型",
+		"noDescription": "暂无描述",
 		"notGenerated": "未生成",
 		"pointsCost": "消耗 {{count}} 点",
 		"referenceLimit": "当前模型最多支持 {{count}} 张参考图，请减少左侧连接图片",

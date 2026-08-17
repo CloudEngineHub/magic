@@ -133,6 +133,7 @@ function normalizeStoryboardDisplayDimensions(data: StoryboardElementData): Stor
 export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
+	private readonlyChangedUnsubscribe?: () => void
 
 	constructor(data: StoryboardElementData, canvas: Canvas) {
 		super(normalizeStoryboardDisplayDimensions(data), canvas)
@@ -248,7 +249,18 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	}
 
 	public override onMounted(): void {
+		if (!this.readonlyChangedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.readonlyChangedUnsubscribe = this.canvas.eventEmitter.on("canvas:readonly", () => {
+				this.rerenderWhenTransformIdle()
+			})
+		}
 		this.syncInteractionHitTargets()
+	}
+
+	public override destroy(): void {
+		this.readonlyChangedUnsubscribe?.()
+		this.readonlyChangedUnsubscribe = undefined
+		super.destroy()
 	}
 
 	protected override setupNodeListeners(node: Konva.Node): void {
@@ -427,13 +439,15 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				wrap: "none",
 				name: "storyboard-control-text",
 			}),
-			this.createSelectSuffix(row),
+			...(this.canvas.readonly ? [] : [this.createSelectSuffix(row)]),
 		)
-		const overlayAnchor = new Konva.Rect({
-			...row.triggerRect,
-			listening: false,
-		})
-		visual.add(overlayAnchor)
+		const overlayAnchor = this.canvas.readonly
+			? undefined
+			: new Konva.Rect({
+					...row.triggerRect,
+					listening: false,
+				})
+		if (overlayAnchor) visual.add(overlayAnchor)
 		group.add(visual)
 		if (iconUrl && row.modelIconRect && typeof Image !== "undefined") {
 			const iconImage = new Image()
@@ -453,22 +467,24 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}
 			iconImage.src = iconUrl
 		}
-		this.addControlHit(group, {
-			action,
-			kind: "parameter",
-			visualNode: visual,
-			overlayAnchorNode: overlayAnchor,
-			selectPresentation: {
-				fontSize: row.fontSize,
-				horizontalPadding: row.horizontalPadding,
-				suffixGap: row.suffixGap,
-				suffixIconSize: row.suffixIconSize,
-				modelIconUrl: iconUrl,
-				modelIconSize: row.modelIconRect?.width,
-				modelIconGap: row.modelIconGap,
-			},
-			baseBounds: row.rect,
-		})
+		if (!this.canvas.readonly) {
+			this.addControlHit(group, {
+				action,
+				kind: "parameter",
+				visualNode: visual,
+				overlayAnchorNode: overlayAnchor,
+				selectPresentation: {
+					fontSize: row.fontSize,
+					horizontalPadding: row.horizontalPadding,
+					suffixGap: row.suffixGap,
+					suffixIconSize: row.suffixIconSize,
+					modelIconUrl: iconUrl,
+					modelIconSize: row.modelIconRect?.width,
+					modelIconGap: row.modelIconGap,
+				},
+				baseBounds: row.rect,
+			})
+		}
 	}
 
 	private createSelectSuffix(row: StoryboardParameterLayout): Konva.Line {
@@ -631,127 +647,129 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			)
 		}
 
-		const generateVisual = new Konva.Group({ listening: false })
-		const generateText = generated
-			? this.getText("storyboard.regenerate", "再次生成")
-			: this.getText("storyboard.generate", "生成")
-		const generateFontSize = Math.min(layout.smallFontSize, controls.generateRect.height)
-		const generateTextNode = new Konva.Text({
-			x: controls.generateRect.x,
-			y: controls.generateRect.y,
-			text: generateText,
-			align: "center",
-			verticalAlign: "middle",
-			fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-			fontSize: generateFontSize,
-			fontStyle: "bold",
-			fill: "#FFFFFF",
-			listening: false,
-			perfectDrawEnabled: false,
-			name: "storyboard-control-text",
-		})
-		generateVisual.add(
-			new Konva.Rect({
-				...controls.generateRect,
-				fill: STORYBOARD_CONFIG.ACCENT,
-				cornerRadius: 8 * controls.scale,
+		if (!this.canvas.readonly) {
+			const generateVisual = new Konva.Group({ listening: false })
+			const generateText = generated
+				? this.getText("storyboard.regenerate", "再次生成")
+				: this.getText("storyboard.generate", "生成")
+			const generateFontSize = Math.min(layout.smallFontSize, controls.generateRect.height)
+			const generateTextNode = new Konva.Text({
+				x: controls.generateRect.x,
+				y: controls.generateRect.y,
+				text: generateText,
+				align: "center",
+				verticalAlign: "middle",
+				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
+				fontSize: generateFontSize,
+				fontStyle: "bold",
+				fill: "#FFFFFF",
 				listening: false,
 				perfectDrawEnabled: false,
-				name: "storyboard-control-background",
-			}),
-		)
-		if (generated) {
-			const iconSize = generateFontSize
-			const iconGap = ELEMENT_DESIGN_TOKENS.gap.control * controls.scale
-			const contentWidth = iconSize + iconGap + generateTextNode.width()
-			const contentX =
-				controls.generateRect.x + (controls.generateRect.width - contentWidth) / 2
-			generateTextNode.setAttrs({
-				x: contentX + iconSize + iconGap,
-				width: generateTextNode.width(),
-				height: controls.generateRect.height,
+				name: "storyboard-control-text",
 			})
 			generateVisual.add(
-				new Konva.Path({
-					x: contentX,
-					y: controls.generateRect.y + (controls.generateRect.height - iconSize) / 2,
-					data: LUCIDE_ROTATE_CCW_PATH_D,
-					scaleX: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
-					scaleY: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
-					stroke: "#FFFFFF",
-					strokeWidth: 2,
-					lineCap: "round",
-					lineJoin: "round",
-					fillEnabled: false,
+				new Konva.Rect({
+					...controls.generateRect,
+					fill: STORYBOARD_CONFIG.ACCENT,
+					cornerRadius: 8 * controls.scale,
 					listening: false,
 					perfectDrawEnabled: false,
-					name: "storyboard-generate-again-icon",
+					name: "storyboard-control-background",
 				}),
 			)
-		} else {
-			generateTextNode.setAttrs({
-				width: controls.generateRect.width,
-				height: controls.generateRect.height,
+			if (generated) {
+				const iconSize = generateFontSize
+				const iconGap = ELEMENT_DESIGN_TOKENS.gap.control * controls.scale
+				const contentWidth = iconSize + iconGap + generateTextNode.width()
+				const contentX =
+					controls.generateRect.x + (controls.generateRect.width - contentWidth) / 2
+				generateTextNode.setAttrs({
+					x: contentX + iconSize + iconGap,
+					width: generateTextNode.width(),
+					height: controls.generateRect.height,
+				})
+				generateVisual.add(
+					new Konva.Path({
+						x: contentX,
+						y: controls.generateRect.y + (controls.generateRect.height - iconSize) / 2,
+						data: LUCIDE_ROTATE_CCW_PATH_D,
+						scaleX: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
+						scaleY: iconSize / LUCIDE_ICON_VIEWBOX_SIZE,
+						stroke: "#FFFFFF",
+						strokeWidth: 2,
+						lineCap: "round",
+						lineJoin: "round",
+						fillEnabled: false,
+						listening: false,
+						perfectDrawEnabled: false,
+						name: "storyboard-generate-again-icon",
+					}),
+				)
+			} else {
+				generateTextNode.setAttrs({
+					width: controls.generateRect.width,
+					height: controls.generateRect.height,
+				})
+			}
+			generateVisual.add(generateTextNode)
+			group.add(generateVisual)
+			this.addControlHit(group, {
+				action: { type: "generate-shot", shotId: shot.id },
+				kind: "generate",
+				visualNode: generateVisual,
+				baseBounds: controls.generateRect,
+			})
+
+			const deleteVisual = new Konva.Group({ listening: false })
+			const deleteCenterX = controls.deleteRect.x + controls.deleteRect.width / 2
+			const deleteCenterY = controls.deleteRect.y + controls.deleteRect.height / 2
+			const closeHalfSize = 5 * controls.scale
+			deleteVisual.add(
+				new Konva.Rect({
+					...controls.deleteRect,
+					fill: "rgba(255, 255, 255, 0)",
+					cornerRadius: 8 * controls.scale,
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-control-background",
+				}),
+				new Konva.Line({
+					points: [
+						deleteCenterX - closeHalfSize,
+						deleteCenterY - closeHalfSize,
+						deleteCenterX + closeHalfSize,
+						deleteCenterY + closeHalfSize,
+					],
+					stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
+					strokeWidth: Math.max(1.5, 1.8 * controls.scale),
+					lineCap: "round",
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-control-icon",
+				}),
+				new Konva.Line({
+					points: [
+						deleteCenterX + closeHalfSize,
+						deleteCenterY - closeHalfSize,
+						deleteCenterX - closeHalfSize,
+						deleteCenterY + closeHalfSize,
+					],
+					stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
+					strokeWidth: Math.max(1.5, 1.8 * controls.scale),
+					lineCap: "round",
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-control-icon",
+				}),
+			)
+			group.add(deleteVisual)
+			this.addControlHit(group, {
+				action: { type: "delete-shot", shotId: shot.id },
+				kind: "delete",
+				visualNode: deleteVisual,
+				baseBounds: controls.deleteRect,
 			})
 		}
-		generateVisual.add(generateTextNode)
-		group.add(generateVisual)
-		this.addControlHit(group, {
-			action: { type: "generate-shot", shotId: shot.id },
-			kind: "generate",
-			visualNode: generateVisual,
-			baseBounds: controls.generateRect,
-		})
-
-		const deleteVisual = new Konva.Group({ listening: false })
-		const deleteCenterX = controls.deleteRect.x + controls.deleteRect.width / 2
-		const deleteCenterY = controls.deleteRect.y + controls.deleteRect.height / 2
-		const closeHalfSize = 5 * controls.scale
-		deleteVisual.add(
-			new Konva.Rect({
-				...controls.deleteRect,
-				fill: "rgba(255, 255, 255, 0)",
-				cornerRadius: 8 * controls.scale,
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-background",
-			}),
-			new Konva.Line({
-				points: [
-					deleteCenterX - closeHalfSize,
-					deleteCenterY - closeHalfSize,
-					deleteCenterX + closeHalfSize,
-					deleteCenterY + closeHalfSize,
-				],
-				stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
-				strokeWidth: Math.max(1.5, 1.8 * controls.scale),
-				lineCap: "round",
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-icon",
-			}),
-			new Konva.Line({
-				points: [
-					deleteCenterX + closeHalfSize,
-					deleteCenterY - closeHalfSize,
-					deleteCenterX - closeHalfSize,
-					deleteCenterY + closeHalfSize,
-				],
-				stroke: STORYBOARD_CONFIG.SECONDARY_TEXT,
-				strokeWidth: Math.max(1.5, 1.8 * controls.scale),
-				lineCap: "round",
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-icon",
-			}),
-		)
-		group.add(deleteVisual)
-		this.addControlHit(group, {
-			action: { type: "delete-shot", shotId: shot.id },
-			kind: "delete",
-			visualNode: deleteVisual,
-			baseBounds: controls.deleteRect,
-		})
 
 		const descriptionVisual = new Konva.Group({ listening: false })
 		const descriptionCornerRadius = 9 * controls.scale
@@ -776,7 +794,9 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				...descriptionTextRect,
 				text:
 					shot.description ||
-					this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述"),
+					(this.canvas.readonly
+						? this.getText("storyboard.noDescription", "暂无描述")
+						: this.getText("storyboard.descriptionPlaceholder", "请输入分镜画面描述")),
 				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
 				fontSize: layout.smallFontSize,
 				lineHeight: 1.45,
@@ -791,18 +811,20 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			}),
 		)
 		group.add(descriptionVisual)
-		this.addControlHit(group, {
-			action: { type: "edit-description", shotId: shot.id },
-			kind: "description",
-			visualNode: descriptionVisual,
-			overlayAnchorNode: descriptionBackground,
-			editorPresentation: {
-				fontSize: layout.smallFontSize,
-				paddingX: Math.max(0, descriptionTextRect.x - descriptionRect.x),
-				paddingY: Math.max(0, descriptionTextRect.y - descriptionRect.y),
-			},
-			baseBounds: descriptionRect,
-		})
+		if (!this.canvas.readonly) {
+			this.addControlHit(group, {
+				action: { type: "edit-description", shotId: shot.id },
+				kind: "description",
+				visualNode: descriptionVisual,
+				overlayAnchorNode: descriptionBackground,
+				editorPresentation: {
+					fontSize: layout.smallFontSize,
+					paddingX: Math.max(0, descriptionTextRect.x - descriptionRect.x),
+					paddingY: Math.max(0, descriptionTextRect.y - descriptionRect.y),
+				},
+				baseBounds: descriptionRect,
+			})
+		}
 	}
 
 	private renderFooter(group: Konva.Group, layout: StoryboardElementLayout): void {
@@ -815,42 +837,44 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			clipHeight: footer.rect.height,
 		})
 		group.add(footerGroup)
-		const addVisual = new Konva.Group({ listening: false })
-		addVisual.add(
-			new Konva.Rect({
-				...footer.addShotRect,
-				fill: STORYBOARD_CONFIG.BACKGROUND,
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-background",
-			}),
-			createInsetStrokeRect(footer.addShotRect, footer.strokeWidth, {
-				stroke: STORYBOARD_CONFIG.BORDER,
-				dash: [7 * layout.scale, 7 * layout.scale],
-				cornerRadius: 10 * layout.scale,
-				name: "storyboard-control-border",
-			}),
-			new Konva.Text({
-				...footer.addShotRect,
-				text: `＋ ${this.getText("storyboard.addShot", "添加分镜")}`,
-				align: "center",
-				verticalAlign: "middle",
-				fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
-				fontSize: layout.valueFontSize,
-				fontStyle: "bold",
-				fill: STORYBOARD_CONFIG.SECONDARY_TEXT,
-				listening: false,
-				perfectDrawEnabled: false,
-				name: "storyboard-control-text",
-			}),
-		)
-		footerGroup.add(addVisual)
-		this.addControlHit(footerGroup, {
-			action: { type: "add-shot" },
-			kind: "add",
-			visualNode: addVisual,
-			baseBounds: footer.addShotRect,
-		})
+		if (!this.canvas.readonly) {
+			const addVisual = new Konva.Group({ listening: false })
+			addVisual.add(
+				new Konva.Rect({
+					...footer.addShotRect,
+					fill: STORYBOARD_CONFIG.BACKGROUND,
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-control-background",
+				}),
+				createInsetStrokeRect(footer.addShotRect, footer.strokeWidth, {
+					stroke: STORYBOARD_CONFIG.BORDER,
+					dash: [7 * layout.scale, 7 * layout.scale],
+					cornerRadius: 10 * layout.scale,
+					name: "storyboard-control-border",
+				}),
+				new Konva.Text({
+					...footer.addShotRect,
+					text: `＋ ${this.getText("storyboard.addShot", "添加分镜")}`,
+					align: "center",
+					verticalAlign: "middle",
+					fontFamily: STORYBOARD_CONFIG.FONT_FAMILY,
+					fontSize: layout.valueFontSize,
+					fontStyle: "bold",
+					fill: STORYBOARD_CONFIG.SECONDARY_TEXT,
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-control-text",
+				}),
+			)
+			footerGroup.add(addVisual)
+			this.addControlHit(footerGroup, {
+				action: { type: "add-shot" },
+				kind: "add",
+				visualNode: addVisual,
+				baseBounds: footer.addShotRect,
+			})
+		}
 
 		// TODO: 接入图片生成积分计算接口后，在这里注入批量生成的实际 points。
 		// 当前没有可靠的计费接口，不能用分镜数量或其他字段伪造积分，因此暂不渲染。
@@ -880,6 +904,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				}),
 			)
 		}
+		if (this.canvas.readonly) return
 		const generateAllVisual = new Konva.Group({ listening: false })
 		generateAllVisual.add(
 			new Konva.Rect({
