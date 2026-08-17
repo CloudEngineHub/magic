@@ -221,7 +221,7 @@ return [
         ],
         [
             'code' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
-            'label' => '可灵视频按规格与输入条件时长计费',
+            'label' => '可灵视频按分辨率与输入条件视频时长计费',
             'category' => Category::VGM->value,
             'billing_type' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
             'items' => [
@@ -293,7 +293,7 @@ return [
         ],
         [
             'code' => BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value,
-            'label' => '火山视频按分辨率与参考视频 Token 矩阵计费',
+            'label' => '火山方舟 Seedance 视频按分辨率与参考视频 Token 计费',
             'category' => Category::VGM->value,
             'billing_type' => BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value,
             'items' => [
@@ -365,7 +365,7 @@ return [
         ],
         [
             'code' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
-            'label' => 'MiniMax H3 视频媒体用量计费',
+            'label' => 'MiniMax H3 视频按分辨率与媒体时长计费',
             'category' => Category::VGM->value,
             'billing_type' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
             'items' => [
