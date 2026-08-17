@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\SlidesTemplate\Facade;
 
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
+use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
 use App\Infrastructure\Core\AbstractApi;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
@@ -30,7 +31,12 @@ class SlidesTemplateApi extends AbstractApi
         $request->validated();
         $result = $this->slidesTemplateAppService->queries($this->getAuthorization(), $request);
 
-        return SlidesTemplateAssembler::createPublicListPageDTO($result['list'], $result['page'], $result['favorite_codes'] ?? [])->toArray();
+        return SlidesTemplateAssembler::createPublicListPageDTO(
+            $result['list'],
+            $result['page'],
+            $result['favorite_codes'] ?? [],
+            $request->getScope() === SlidesTemplateQueryScope::User->value
+        )->toArray();
     }
 
     public function count(PublicQuerySlidesTemplateRequest $request): array

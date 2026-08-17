@@ -126,6 +126,26 @@ class SlidesTemplateAssemblerTest extends TestCase
         ], $dto->toArray());
     }
 
+    public function testCreateUserTemplatePageDTOIncludesProjectNavigationFieldsOnlyForUserScope(): void
+    {
+        $template = $this->makeTemplate()
+            ->setProjectId('935281873559658498')
+            ->setProjectDirectoryId('945653402610257921');
+
+        $publicItem = SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(1, 20))->toArray()['list'][0];
+        $userItem = SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(1, 20), [], true)->toArray()['list'][0];
+
+        self::assertArrayNotHasKey('project', $publicItem);
+        self::assertSame([
+            'id' => '935281873559658498',
+            'directory_id' => '945653402610257921',
+        ], $userItem['project']);
+
+        $template->setProjectId(null)->setProjectDirectoryId(null);
+        $userItemWithoutProject = SlidesTemplateAssembler::createPublicListPageDTO([$template], new Page(1, 20), [], true)->toArray()['list'][0];
+        self::assertNull($userItemWithoutProject['project']);
+    }
+
     public function testCreatePublicDetailDTOReturnsPublicAssetsWithoutTemplateFileUrl(): void
     {
         $template = $this->makeTemplate();

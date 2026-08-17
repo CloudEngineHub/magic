@@ -25,6 +25,7 @@ use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicListItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\UsedSlidesTemplatePublicListItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\UserSlidesTemplatePublicListItemDTO;
 
 class SlidesTemplateAssembler
 {
@@ -76,25 +77,38 @@ class SlidesTemplateAssembler
     /**
      * @param SlidesTemplateEntity[] $templates
      */
-    public static function createPublicListPageDTO(array $templates, Page $page, array $favoriteCodes = []): SlidesTemplateListPageDTO
-    {
+    public static function createPublicListPageDTO(
+        array $templates,
+        Page $page,
+        array $favoriteCodes = [],
+        bool $includeProjectContext = false
+    ): SlidesTemplateListPageDTO {
         return new SlidesTemplateListPageDTO(
             $page->getPage(),
             $page->getPageNum(),
             array_map(
                 static fn (SlidesTemplateEntity $template): SlidesTemplatePublicListItemDTO => self::createPublicListItemDTO(
                     $template,
-                    isset($favoriteCodes[$template->getCode()])
+                    isset($favoriteCodes[$template->getCode()]),
+                    $includeProjectContext
                 ),
                 $templates
             )
         );
     }
 
-    public static function createPublicListItemDTO(SlidesTemplateEntity $template, bool $isFavorite = false): SlidesTemplatePublicListItemDTO
-    {
-        $dto = new SlidesTemplatePublicListItemDTO();
+    public static function createPublicListItemDTO(
+        SlidesTemplateEntity $template,
+        bool $isFavorite = false,
+        bool $includeProjectContext = false
+    ): SlidesTemplatePublicListItemDTO {
+        $dto = $includeProjectContext
+            ? new UserSlidesTemplatePublicListItemDTO()
+            : new SlidesTemplatePublicListItemDTO();
         self::fillPublicListItemDTO($dto, $template, $isFavorite);
+        if ($dto instanceof UserSlidesTemplatePublicListItemDTO) {
+            $dto->setProject($template->getProjectId(), $template->getProjectDirectoryId());
+        }
         return $dto;
     }
 
