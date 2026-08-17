@@ -26,7 +26,6 @@ interface OfficialModelConfigProps {
 	/** 官方同步模型只读展示字段 */
 	readOnlyModelFields?: {
 		modelId?: string
-		modelVersion?: string
 	}
 }
 
@@ -172,18 +171,9 @@ const OfficialModelConfig = ({
 		return (
 			<Flex gap={10} vertical>
 				{readOnlyModelFields && (
-					<>
-						<Form.Item label={t("form.modelId")} className={styles.formItem}>
-							<Input readOnly disabled value={readOnlyModelFields.modelId ?? ""} />
-						</Form.Item>
-						<Form.Item label={t("form.modelName")} className={styles.formItem}>
-							<Input
-								readOnly
-								disabled
-								value={readOnlyModelFields.modelVersion ?? ""}
-							/>
-						</Form.Item>
-					</>
+					<Form.Item label={t("form.modelId")} className={styles.formItem}>
+						<Input readOnly disabled value={readOnlyModelFields.modelId ?? ""} />
+					</Form.Item>
 				)}
 				{loadWeightField}
 			</Flex>

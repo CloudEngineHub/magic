@@ -537,7 +537,7 @@ export const AddModelModal = memo(
 					centered
 					open={open}
 					title={title}
-					width={860}
+					width={isOfficialSyncedEdit ? 600 : 860}
 					onOk={onInnerOk}
 					onCancel={onInnerCancel}
 					afterClose={innerAfterClose}
@@ -561,7 +561,6 @@ export const AddModelModal = memo(
 									loadWeightOnly
 									readOnlyModelFields={{
 										modelId: info?.model_id,
-										modelVersion: info?.model_version,
 									}}
 								/>
 							</MagicSuspense>
