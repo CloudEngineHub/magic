@@ -28,6 +28,7 @@ import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/type
 import projectFilesStore from "@/stores/projectFiles"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
+import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -297,13 +298,71 @@ function TopicMessagePanel({
 		})
 	})
 
+	const messageListNode = (
+		<MessageListProvider value={value}>
+			<MessageList
+				data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
+				setSelectedDetail={setUserSelectDetail}
+				selectedTopic={selectedTopic}
+				handlePullMoreMessage={handlePullMoreMessage}
+				showLoading={showLoading}
+				currentTopicStatus={currentTopicStatus}
+				handleSendMsg={handleSendMsg}
+				onFileClick={handleFileClick}
+				isMessagesLoading={isMessagesLoading}
+				enableRevokedUserMessageReedit
+				topicModelStore={topicModelStore}
+				enableExport
+				exportTitle={selectedTopic?.topic_name}
+			/>
+		</MessageListProvider>
+	)
+
+	const inputNode = (
+		<ProjectPageInputContainer
+			className="mx-auto max-w-3xl rounded-2xl"
+			classNames={{
+				editorInnerWrapper: "border border-border",
+				editor: "border-none",
+				editorWrapper: "flex flex-col",
+			}}
+			messages={messagesWithOptimisticMeta}
+			showLoading={showLoading}
+			selectedProject={selectedProject}
+			selectedWorkspace={selectedWorkspace}
+			selectedTopic={selectedTopic}
+			setSelectedTopic={setSelectedTopic}
+			onFileClick={handleFileClick}
+			onMessageSendReady={(sendMessage, prevSendMessage) => {
+				// Only update ref if it still points to the old instance (or is a new registration); prevents stale cleanup from clearing newly registered functions.
+				if (
+					prevSendMessage === undefined ||
+					sendRetryMessageRef.current === prevSendMessage
+				) {
+					sendRetryMessageRef.current = sendMessage
+				}
+			}}
+			attachments={attachments}
+			mentionPanelStore={mentionPanelStore}
+			topicStore={scopedTopicStore}
+			allowRecordingMode={allowRecordingMode}
+			isShowLoadingInit={isShowLoadingInit}
+			topicModeLogic={{
+				topicMode,
+				setTopicMode,
+				recoverTopicMode,
+			}}
+			size={detailPanelVisible ? "small" : "default"}
+		/>
+	)
+
 	return (
 		<div
 			className={cn(
-				"relative z-10 flex h-full flex-col items-center overflow-hidden",
+				"relative z-10 flex h-full min-h-0 flex-col items-center overflow-hidden",
 				!isDraggingPanel && "transition-all duration-300",
 				!isConversationPanelCollapsed && "rounded-lg",
-				isConversationPanelCollapsed && "px-0 pb-0",
+				isConversationPanelCollapsed ? "px-0 pb-0" : "pb-2",
 			)}
 		>
 			<MessageHeader
@@ -321,64 +380,11 @@ function TopicMessagePanel({
 			/>
 			{/* Keep the scroll viewport in layout so native scroll anchoring preserves the reading position. */}
 			{selectedTopic && (
-				<div
-					className={cn(
-						"flex h-full w-full flex-col",
-						isConversationPanelCollapsed && "invisible",
-					)}
-				>
-					<MessageListProvider value={value}>
-						<MessageList
-							data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
-							setSelectedDetail={setUserSelectDetail}
-							selectedTopic={selectedTopic}
-							handlePullMoreMessage={handlePullMoreMessage}
-							showLoading={showLoading}
-							currentTopicStatus={currentTopicStatus}
-							handleSendMsg={handleSendMsg}
-							onFileClick={handleFileClick}
-							isMessagesLoading={isMessagesLoading}
-							enableRevokedUserMessageReedit
-							topicModelStore={topicModelStore}
-							enableExport
-							exportTitle={selectedTopic?.topic_name}
-						/>
-					</MessageListProvider>
-					<ProjectPageInputContainer
-						className="mx-auto max-w-3xl rounded-2xl"
-						classNames={{
-							editorInnerWrapper: "border border-border",
-							editor: "border-none",
-						}}
-						messages={messagesWithOptimisticMeta}
-						showLoading={showLoading}
-						selectedProject={selectedProject}
-						selectedWorkspace={selectedWorkspace}
-						selectedTopic={selectedTopic}
-						setSelectedTopic={setSelectedTopic}
-						onFileClick={handleFileClick}
-						onMessageSendReady={(sendMessage, prevSendMessage) => {
-							// Only update ref if it still points to the old instance (or is a new registration); prevents stale cleanup from clearing newly registered functions.
-							if (
-								prevSendMessage === undefined ||
-								sendRetryMessageRef.current === prevSendMessage
-							) {
-								sendRetryMessageRef.current = sendMessage
-							}
-						}}
-						attachments={attachments}
-						mentionPanelStore={mentionPanelStore}
-						topicStore={scopedTopicStore}
-						allowRecordingMode={allowRecordingMode}
-						isShowLoadingInit={isShowLoadingInit}
-						topicModeLogic={{
-							topicMode,
-							setTopicMode,
-							recoverTopicMode,
-						}}
-						size={detailPanelVisible ? "small" : "default"}
-					/>
-				</div>
+				<ChatProjectMessageLayout
+					messageList={messageListNode}
+					input={inputNode}
+					isConversationPanelCollapsed={isConversationPanelCollapsed}
+				/>
 			)}
 		</div>
 	)

@@ -32,6 +32,7 @@ import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
 
@@ -47,6 +48,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const lt = useLocaleText()
 	const isMobile = useIsMobile()
 	const sceneStateStore = useOptionalSceneStateStore()
+	const inputLayout = useConversationInputLayout()
+	// Only fixed conversation panels ask the shared editor to occupy all available height.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 
 	const internalEditorRef = useRef<MessageEditorRef>(null)
 	const tiptapEditorRef = (editorRef ??
@@ -433,14 +437,20 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		() =>
 			editorContext
 				? {
-						className: editorContext.className,
+						className: cn(
+							editorContext.className,
+							shouldFillHeight && "h-full min-h-0",
+						),
 						containerClassName: cn(
 							editorContext.containerClassName,
+							shouldFillHeight && "h-full min-h-0",
+							// Let the shared resize controller own the desktop editor ceiling.
+							shouldFillHeight && "!max-h-none",
 							"border border-border",
 						),
 					}
 				: {},
-		[editorContext],
+		[editorContext, shouldFillHeight],
 	)
 
 	return (

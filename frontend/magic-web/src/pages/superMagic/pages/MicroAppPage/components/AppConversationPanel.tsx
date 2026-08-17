@@ -292,7 +292,8 @@ function AppConversationPanel({
 			emptyHero={<AppConversationEmptyState variant="hero" className="w-full" />}
 			emptyCompact={<AppConversationEmptyState variant="compact" />}
 			editor={
-				<div className="flex flex-col gap-1.5">
+				<div className="flex h-full min-h-0 w-full flex-col gap-1.5">
+					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					{/* <div className="flex px-1">
 						<MicroAppIssuePromptPanel variant="desktop" />
 					</div> */}
