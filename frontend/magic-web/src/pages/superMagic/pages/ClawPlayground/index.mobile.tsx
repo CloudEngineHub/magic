@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import { JSONContent } from "@tiptap/react"
+import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { Loader2 } from "lucide-react"

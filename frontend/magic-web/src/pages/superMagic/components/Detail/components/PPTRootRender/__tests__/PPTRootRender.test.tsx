@@ -25,7 +25,7 @@ vi.mock("@/components/base/MagicSpin", () => ({
 	default: () => <div data-testid="magic-spin" />,
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classNames: Array<string | false | null | undefined>) =>
 		classNames.filter(Boolean).join(" "),
 }))

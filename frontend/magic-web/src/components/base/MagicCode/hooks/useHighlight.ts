@@ -1,7 +1,7 @@
-import { type Highlighter } from "shiki"
+import { type Highlighter } from "@/infrastructure/vendors/shiki"
 import useSWR from "swr"
-import { loadShiki } from "@/lib/shiki"
-import { loadShikiTransformers } from "@/lib/shikijs-transformers"
+import { loadShiki } from "@/infrastructure/vendors/shiki"
+import { loadShikiTransformers } from "@/infrastructure/vendors/shikijs-transformers"
 
 import { FALLBACK_LANG } from "@/utils/markdown"
 import { themeConfig } from "../configs/theme"

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Search, UsersRound, X } from "lucide-react"
 import { useDebounce } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import {
 	filterTranscriptSegmentsBySearchQuery,

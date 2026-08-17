@@ -2,7 +2,7 @@ import { FileAudio, FileText, Loader2, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	RECORDING_DETAIL_SUMMARY_MIN_WIDTH,
 	RECORDING_DETAIL_TRANSCRIPT_MAX_WIDTH,

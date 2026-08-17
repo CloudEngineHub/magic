@@ -1,5 +1,5 @@
 import type { ThirdPartyLoginStrategy } from "../../types"
-import { loadWecomSDK } from "@/lib/wecom"
+import { loadWecomSDK } from "@/infrastructure/external-sdk/wecom"
 
 /** Is it a Wecom environment */
 export async function isWecom() {

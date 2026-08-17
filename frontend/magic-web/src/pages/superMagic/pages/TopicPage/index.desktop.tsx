@@ -6,7 +6,7 @@ import Detail, { type DetailRef } from "../../components/Detail"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import projectFilesStore from "@/stores/projectFiles"
 import { filterClickableMessageWithoutRevoked } from "../../utils/handleMessage"
@@ -33,7 +33,11 @@ import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermission
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import { SuperMagicApi } from "@/apis"
-import { workspaceStore, projectStore, topicStore } from "../../stores/core"
+import {
+	workspaceStore,
+	projectStore,
+	topicStore,
+} from "../../stores/core"
 import SuperMagicService, { loadProjectAttachments } from "../../services"
 import { userStore } from "@/models/user"
 import { useInterruptAndUndoMessage } from "../../hooks/useInterruptAndUndoMessage"
@@ -60,7 +64,7 @@ import { messageSendService } from "../../services/messageSendFlowService"
 import { isReadOnlyProject } from "../../utils/permission"
 import { MessageHeaderTopicHistoryPanel } from "../../components/MessageHeader"
 import topicReadProgressService from "../../services/topicReadProgressService"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 

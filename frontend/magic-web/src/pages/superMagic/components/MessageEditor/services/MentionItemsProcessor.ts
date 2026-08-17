@@ -21,7 +21,7 @@ import {
 } from "../utils/mention"
 import { superMagicUploadTokenService } from "./UploadTokenService"
 import { MentionItemsStatistics } from "./types"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { loadProjectAttachments } from "@/pages/superMagic/services"

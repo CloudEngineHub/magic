@@ -1,5 +1,8 @@
-import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion"
-import type { Editor, ReactNodeViewProps } from "@tiptap/react"
+import type {
+	SuggestionKeyDownProps,
+	SuggestionProps,
+} from "@/infrastructure/editors/tiptap/suggestion"
+import type { Editor, ReactNodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import type { ComponentType } from "react"
 import type {
 	McpMentionData,
@@ -343,7 +346,7 @@ export function getMentionIcon(attrs: TiptapMentionAttributes | null | undefined
 }
 
 // Command type declarations
-declare module "@tiptap/react" {
+declare module "@/infrastructure/editors/tiptap/react" {
 	interface Commands<ReturnType> {
 		mention: {
 			updateMentionLanguage: (language: string) => ReturnType
@@ -355,7 +358,7 @@ declare module "@tiptap/react" {
 }
 
 // Storage type declarations
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Storage {
 		mention?: {
 			language: Language

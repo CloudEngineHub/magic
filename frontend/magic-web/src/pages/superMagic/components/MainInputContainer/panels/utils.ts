@@ -1,5 +1,5 @@
 import i18n from "i18next"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
 	DEFAULT_LOCALE_KEY,
 	OptionViewType,

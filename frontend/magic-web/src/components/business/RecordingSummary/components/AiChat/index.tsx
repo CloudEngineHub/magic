@@ -23,7 +23,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { merge } from "lodash-es"
 import { useMessageChanges } from "@/pages/superMagic/hooks/useMessageChanges"
 import { LongMemory } from "@/types/longMemory"
@@ -447,12 +447,17 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 	)
 
 	// Live float panels continue to use the RecordingSummary fork (no main-site polling).
-	const { messages, showLoading, isShowLoadingInit, isMessagesInitialLoading, handlePullMoreMessage } =
-		useLiveRecordingTopicMessages({
-			selectedTopic,
-			selectedWorkspace,
-			checkNowDebounced,
-		})
+	const {
+		messages,
+		showLoading,
+		isShowLoadingInit,
+		isMessagesInitialLoading,
+		handlePullMoreMessage,
+	} = useLiveRecordingTopicMessages({
+		selectedTopic,
+		selectedWorkspace,
+		checkNowDebounced,
+	})
 
 	usePendingMemorySync(messages)
 

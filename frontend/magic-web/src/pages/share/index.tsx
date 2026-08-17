@@ -4,7 +4,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router"
@@ -18,9 +18,9 @@ import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import { history } from "@/routes/history"
-import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 import { useTokenRefreshPolling } from "./hooks/useTokenRefreshPolling"
 import WorkspaceButton from "./components/WorkspaceButton"
 import { formatCopyProjectCount } from "@/utils/format"
@@ -653,14 +653,11 @@ function Share() {
 		if (!isLogined) {
 			const currentHref = window.location.href
 			clearWindowData()
-			history.replace({
-				name: RouteName.Login,
-				query: convertSearchParams(
-					buildLoginRedirectSearchParams({
-						currentHref,
-						redirectTarget: currentHref,
-					}),
-				),
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "share-access-required",
+				source: "share",
+				returnTo: currentHref,
+				preserveQuery: true,
 			})
 			return
 		}
@@ -713,11 +710,11 @@ function Share() {
 			urlSearchParams.toString() +
 			window.location.hash
 		if (!isLogined) {
-			navigate({
-				name: RouteName.Login,
-				query: {
-					redirect: encodeURIComponent(newFullPath),
-				},
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "share-access-required",
+				source: "share",
+				returnTo: newFullPath,
+				preserveQuery: true,
 			})
 			return
 		}
@@ -979,7 +976,12 @@ function Share() {
 								className="h-8 rounded-lg px-5 py-1.5"
 								onClick={() => {
 									clearWindowData()
-									history.replace({ name: RouteName.Login })
+									authEventBus.emit(AuthEventName.RequestLogin, {
+										reason: "manual",
+										source: "share",
+										returnTo: window.location.href,
+										preserveQuery: true,
+									})
 								}}
 								data-testid="share-login-button"
 							>

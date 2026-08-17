@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { SendMessageByContentPayload } from "@/pages/superMagic/components/MessageEditor/types"
 import {
 	MentionItemType,
@@ -82,10 +82,7 @@ export interface SuperMagicCreateNewTopicPayload {
 }
 
 export type SuperMagicWidgetEditorCommandName =
-	| "setInput"
-	| "appendInput"
-	| "clearInput"
-	| "getInput"
+	"setInput" | "appendInput" | "clearInput" | "getInput"
 
 /** Carries one Widget-only editor request and returns its plain-text result to the bridge. */
 export interface SuperMagicWidgetEditorCommandPayload {

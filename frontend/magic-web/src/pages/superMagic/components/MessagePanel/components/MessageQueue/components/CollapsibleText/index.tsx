@@ -1,7 +1,7 @@
 import { cx } from "antd-style"
 import RichText from "@/pages/superMagic/components/MessageList/components/Text/components/RichText"
 import { useStyles } from "./styles"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import SuperTooltip from "@/pages/superMagic/components/SuperTooltip"
 
 export interface CollapsibleTextProps {

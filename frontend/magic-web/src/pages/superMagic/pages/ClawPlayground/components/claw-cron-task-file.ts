@@ -1,5 +1,5 @@
 import yaml from "js-yaml"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { loadProjectAttachments } from "@/pages/superMagic/services"

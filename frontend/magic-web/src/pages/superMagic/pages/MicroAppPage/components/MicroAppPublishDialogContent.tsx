@@ -9,7 +9,7 @@ import { Label } from "@/components/shadcn-ui/label"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Switch } from "@/components/shadcn-ui/switch"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	ShareRangeField,
 	ShareTypeField,

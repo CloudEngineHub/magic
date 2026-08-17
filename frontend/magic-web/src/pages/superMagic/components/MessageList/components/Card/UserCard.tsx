@@ -11,16 +11,16 @@ import { useDebounceFn, useMemoizedFn } from "ahooks"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { ScheduledTaskApi, SuperMagicApi } from "@/apis"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { Editor } from "@tiptap/core"
-import { Document } from "@tiptap/extension-document"
-import { Paragraph } from "@tiptap/extension-paragraph"
-import { Text as TiptapText } from "@tiptap/extension-text"
+import { Editor } from "@/infrastructure/editors/tiptap/core"
+import { Document } from "@/infrastructure/editors/tiptap/extension-document"
+import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
+import { Text as TiptapText } from "@/infrastructure/editors/tiptap/extension-text"
 import { HardBlock } from "@/pages/superMagic/components/MessageEditor/extensions"
 import { copyWithMetadata } from "@/utils/clipboard-helpers"
 import { MessageStatus, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
 import MentionExtension from "@/components/business/MentionPanel/tiptap-plugin"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { MagicDropdown, MagicModal } from "@/components/base"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -45,7 +45,7 @@ const enum MenuKey {
 	/** Export the conversation. */
 	ExportConversation = "3",
 	/** Report the conversation round. */
-	ReportConversationRound = "4"
+	ReportConversationRound = "4",
 }
 
 /** Base styles for undo/menu buttons (Antd Button overrides) */
@@ -158,7 +158,7 @@ export function withUserNode<
 					),
 					"data-testid": "assistant-round-log-report-menu-item",
 					visible: true,
-				}
+				},
 			].filter((o) => o.visible)
 		}, [t, allowScheduleTaskCreate, allowUserMessageCopy, allowExport, onExportRequest])
 

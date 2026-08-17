@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { INSPECTOR_DETAIL_MARKER, INSPECTOR_DETAIL_TYPE } from "./const"
 

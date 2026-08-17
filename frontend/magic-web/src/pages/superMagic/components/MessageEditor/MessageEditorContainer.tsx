@@ -1,4 +1,4 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { forwardRef, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useAsyncEffect, useMemoizedFn } from "ahooks"

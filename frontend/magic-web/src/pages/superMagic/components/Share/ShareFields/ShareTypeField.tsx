@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { userStore } from "@/models/user"
 import publicIcon from "../svg/public.svg"
 import protectedIcon from "../svg/protected.svg"

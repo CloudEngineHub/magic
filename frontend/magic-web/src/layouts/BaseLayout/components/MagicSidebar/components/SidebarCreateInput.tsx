@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { shouldSuppressInputAutoFocusInMagicApp } from "@/utils/inputFocusPolicy"
 
 type SidebarCreateInputSize = "sm" | "md"

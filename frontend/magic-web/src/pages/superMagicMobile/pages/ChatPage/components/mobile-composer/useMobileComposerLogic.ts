@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
-import type { JSONContent } from "@tiptap/core"
-import type { Editor } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import { useAsyncEffect, useCreation, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type {
@@ -42,7 +42,11 @@ import { createMessageSendService } from "@/pages/superMagic/services/messageSen
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import { preparePanelSend } from "@/pages/superMagic/services/messageSendPreparation"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import {
+	projectStore,
+	topicStore,
+	workspaceStore,
+} from "@/pages/superMagic/stores/core"
 import { roleStore } from "@/pages/superMagic/stores"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"

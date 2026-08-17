@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react"
 import { ChevronRight, ChevronDown, Crosshair } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	MentionItemType,
 	type ProjectFileMentionData,

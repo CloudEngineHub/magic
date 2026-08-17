@@ -1,6 +1,6 @@
 import ErrorContent from "@/common/BaseUI/ErrorComponent/ErrorComponent"
 import clsx from "clsx"
-import _ from "lodash"
+import { omit } from "lodash-es"
 import React, { useImperativeHandle, useMemo } from "react"
 import { ErrorBoundary } from "react-error-boundary"
 import { Edge, ReactFlowProvider } from "reactflow"
@@ -169,7 +169,7 @@ const MagicFlowComponent = React.forwardRef(
 					...flow,
 					nodes: nodes.map((n) => {
 						const node = nodeConfig?.[n.node_id] || {}
-						const omitKeysNode = _.omit(node, omitNodeKeys)
+						const omitKeysNode = omit(node, omitNodeKeys)
 						return omitKeysNode
 					}),
 					edges,

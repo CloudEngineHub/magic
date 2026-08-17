@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createWebSocketRecordMetadata,
@@ -53,6 +53,7 @@ export type {
 	MessageItem,
 	RawSuperMagicMessageNode,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
@@ -111,6 +112,7 @@ import type {
 	RawSuperMagicIMMessage,
 	RawSuperMagicMessageSequence,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	PendingUserMessageEnvelope,
 	ServerMessagesConfirmedPayload,
 	SuperMagicStoreCallbackRegistrar,
@@ -410,7 +412,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** Parent projections subscribe only to Topic membership, never to streamed row payloads. */
 	private topicMessageMembershipRevisions = new Map<string, number>()
 	/** Topic-scoped canonical node sidecar prevents same SuperMessage IDs colliding across Topics. */
-	private topicMessageNodes = new Map<string, Map<string, unknown>>()
+	private topicMessageNodes = new Map<string, Map<string, SuperMagicStoreMessageNode>>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
 	// 消息缓冲区
@@ -419,7 +421,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		{ isProcessing: boolean; messages: RawSuperMagicMessageEnvelope[] }
 	> = new Map()
 	// 消息内容（卡片形式）
-	messageMap: Map<string, unknown> = new Map()
+	messageMap: Map<string, SuperMagicStoreMessageNode> = new Map()
 	// 工具调用响应最新态（key: <topic_id, tool.id>）
 	toolResponseMap: Map<string, Map<string, ToolResponseState>> = new Map()
 	/** 话题消息元数据 */
@@ -547,14 +549,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return `${topicId}\u0000${superMessageId}`
 	}
 
-	private setTopicMessageNode(topicId: string, superMessageId: string, node: unknown) {
+	private setTopicMessageNode(
+		topicId: string,
+		superMessageId: string,
+		node: SuperMagicStoreMessageNode,
+	) {
 		if (!topicId || !superMessageId) return
-		const nodes = this.topicMessageNodes.get(topicId) || new Map<string, unknown>()
+		const nodes =
+			this.topicMessageNodes.get(topicId) || new Map<string, SuperMagicStoreMessageNode>()
 		nodes.set(superMessageId, node)
 		this.topicMessageNodes.set(topicId, nodes)
 	}
 
-	getTopicMessageNode(topicId: string, superMessageId?: string) {
+	getTopicMessageNode(
+		topicId: string,
+		superMessageId?: string,
+	): SuperMagicStoreMessageNode | undefined {
 		if (!topicId || !superMessageId) return undefined
 		return this.topicMessageNodes.get(topicId)?.get(superMessageId)
 	}
@@ -8133,7 +8143,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * @param superMessageId Store/UI 统一消息身份
 	 * @returns 消息节点
 	 */
-	getMessageNode(superMessageId?: string) {
+	getMessageNode(superMessageId?: string): SuperMagicStoreMessageNode | undefined {
 		return this.messageMap.get(superMessageId || "")
 	}
 

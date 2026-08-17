@@ -4,7 +4,7 @@ import * as React from "react"
 // PROJECT OVERRIDE — radix-ui barrel; retain when merging alert-dialog.
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {

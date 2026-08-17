@@ -67,7 +67,7 @@ enum NodeType {
 - @feb/user-selector
 - ahooks
 - swr
-- lodash
+- lodash-es
 - react
 - antd
 
@@ -88,4 +88,3 @@ enum NodeType {
 ## UI图
 
 ![MemberDepartmentSelector 组件效果图](./member-department-selector-demo.png)
-

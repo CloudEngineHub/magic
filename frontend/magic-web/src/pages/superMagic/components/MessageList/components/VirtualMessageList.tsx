@@ -1,7 +1,7 @@
 import { memo, type MutableRefObject, type ReactNode, useMemo } from "react"
 import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
 import MessageRenderErrorBoundary from "./MessageRenderErrorBoundary"

@@ -27,7 +27,7 @@ import {
 	SearchModeHeader,
 } from "./components"
 import { useFileReplace } from "./hooks/useFileReplace"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"

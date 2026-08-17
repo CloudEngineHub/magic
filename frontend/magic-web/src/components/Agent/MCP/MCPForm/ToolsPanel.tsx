@@ -14,7 +14,7 @@ import AgentToolForm from "@/components/Agent/AgentTools/AgentToolForm"
 import AgentTools from "@/components/Agent/AgentTools/AgentTools"
 import { openCreateToolsetModal } from "@/components/business/CreateToolsetModal/openCreateToolsetModal"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 

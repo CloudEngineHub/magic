@@ -1,6 +1,6 @@
 import { NodeSchema, NodeWidget } from "@/MagicFlow/register/node"
 import { IconArrowLeftFromArc, IconArrowsSplit2, IconBrain, IconRepeat, IconRepeatOff, IconTimeline, IconVariable } from "@tabler/icons-react"
-import _ from "lodash"
+import { get, pick } from "lodash-es"
 import React from "react"
 import { customNodeType, templateMap } from "../constants"
 import { nodeComponentVersionMap } from "../nodes"
@@ -153,13 +153,13 @@ export const generateNodeVersionSchema = () => {
 					(versionTemplate, [version, nodeSchema]) => {
 						/** 需要进行版本化的配置 */
                         // @ts-ignore
-						const versionConfig = _.pick(nodeSchema as NodeSchema, [
+						const versionConfig = pick(nodeSchema as NodeSchema, [
 							"input",
 							"output",
 							"params",
 						])
 						/** 拿到具体版本的组件 */
-						const versionComp = _.get(nodeComponentVersionMap, [nodeType, version])
+						const versionComp = get(nodeComponentVersionMap, [nodeType, version])
 						versionTemplate[version] = {
 							schema: {
 								...commonSchemaConfigMap[nodeType],

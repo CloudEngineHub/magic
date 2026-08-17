@@ -8,7 +8,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import projectFilesStore from "@/stores/projectFiles"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ProjectFilePickerContent from "./ProjectFilePickerContent"
 import { selfMediaOverlayStyles } from "../../../selfMediaOverlayStyles"
 import { useDropZone } from "../../lib/useDropZone"

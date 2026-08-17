@@ -3,7 +3,7 @@ import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface SlidesTemplateMobileFilterPopupAction {
 	label: string

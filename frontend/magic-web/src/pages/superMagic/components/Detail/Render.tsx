@@ -30,7 +30,7 @@ import {
 } from "./contents/HTML/utils/slide-dimensions"
 import { ossUploadService } from "@/stores/folderUpload/uploadService"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
 import { unshadow } from "@/utils/shadow"
 import {

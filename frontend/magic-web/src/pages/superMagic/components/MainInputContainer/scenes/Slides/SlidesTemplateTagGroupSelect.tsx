@@ -10,7 +10,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useLocaleText } from "../../panels/hooks/useLocaleText"
 import SlidesTemplateMobileFilterOption from "./SlidesTemplateMobileFilterOption"
 import type { SlidesTemplateTagGroupItem } from "./slidesTemplateState"

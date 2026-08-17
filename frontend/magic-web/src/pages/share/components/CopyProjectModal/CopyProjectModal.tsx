@@ -7,7 +7,7 @@ import type { CopyProjectModalProps, WorkspaceOption } from "./types"
 import { SuperMagicApi } from "@/apis"
 import folderIcon from "@/pages/share/components/CopyProjectModal/assets/folder.svg"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { WorkspaceStatus } from "@/pages/superMagic/pages/Workspace/types"
 
 function CopyProjectModal({ open, onCancel, projectData, onCopySuccess }: CopyProjectModalProps) {

@@ -1,7 +1,7 @@
 import { useMemo, type MouseEvent } from "react"
 import MarkdownComponent from "../../../Text/components/Markdown"
 import { CitationCard } from "../../../Citations"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { extractCitations, trimIncompleteCitationTag } from "@/pages/superMagic/utils/citations"
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"

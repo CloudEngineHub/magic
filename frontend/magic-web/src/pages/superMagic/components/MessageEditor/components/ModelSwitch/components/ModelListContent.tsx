@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { SearchX, Sparkles } from "lucide-react"
 import { MyModelsList } from "./MyModelsList"
 import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"

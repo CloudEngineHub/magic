@@ -11,7 +11,7 @@ import {
 	X,
 } from "lucide-react"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Trans, useTranslation } from "react-i18next"
 import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"

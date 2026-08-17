@@ -1,4 +1,4 @@
-import dayjs from "dayjs"
+import dayjs from "@admin/infrastructure/vendors/dayjs"
 import type { TimeRangeValue } from "@admin-components"
 import type { DataDashboard } from "@admin/types/datadashboard"
 import type { TreeNode } from "@dtyq/user-selector"

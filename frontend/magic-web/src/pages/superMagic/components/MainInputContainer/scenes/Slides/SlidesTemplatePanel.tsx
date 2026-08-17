@@ -7,7 +7,7 @@ import {
 	type MouseEvent,
 	type PointerEvent,
 } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"

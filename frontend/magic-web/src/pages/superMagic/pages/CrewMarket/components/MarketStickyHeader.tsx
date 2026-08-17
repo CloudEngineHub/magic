@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type HTMLAttributes, type RefObject } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface MarketStickyHeaderProps extends HTMLAttributes<HTMLDivElement> {
 	scrollViewportRef?: RefObject<HTMLDivElement | null>

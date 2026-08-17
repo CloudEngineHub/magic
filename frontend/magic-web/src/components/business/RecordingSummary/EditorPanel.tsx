@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle } from "react"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import "./EditorPanelAnimations.css"
 import { BlockedStateView } from "@/components/business/RecordingSummary/internal/editorPanel/BlockedStateView"
 import { IdleStateView } from "@/components/business/RecordingSummary/internal/editorPanel/IdleStateView"

@@ -14,7 +14,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/shadcn-ui/radio-group"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ASK_USER_CONFIRM_VALUE } from "@/pages/superMagic/components/MessageList/utils/askUserConstants"
 import type { AskUserLocale } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {

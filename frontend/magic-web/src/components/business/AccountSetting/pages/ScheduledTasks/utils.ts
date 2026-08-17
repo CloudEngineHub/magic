@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { DEFAULT_TIME, WEEKDAY_LABELS } from "./constants"
 import { Weekday, type ScheduleConfig, type ScheduleFormValues } from "./types"

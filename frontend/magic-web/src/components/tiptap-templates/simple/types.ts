@@ -1,5 +1,10 @@
-import type { Content, EditorEvents, AnyExtension, Editor } from "@tiptap/react"
-import type { CharacterCountOptions } from "@tiptap/extensions"
+import type {
+	Content,
+	EditorEvents,
+	AnyExtension,
+	Editor,
+} from "@/infrastructure/editors/tiptap/react"
+import type { CharacterCountOptions } from "@/infrastructure/editors/tiptap/extensions"
 import type { SlashDropdownMenuProps } from "@/components/tiptap-ui-primitive/SlashDropdownMenu"
 
 export interface SimpleEditorProps {

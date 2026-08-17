@@ -19,7 +19,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Input } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type {
 	AudioProjectSortBy,
 	AudioProjectSortOrder,
