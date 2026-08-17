@@ -3,9 +3,13 @@ import imageBackgroundLoading from "../../../assets/image/image-background-loadi
 import imageBackgroundUnselected from "../../../assets/image/image-background-unselected.jpg"
 import imageIconError from "../../../assets/image/image-icon-error.png"
 import { VIDEO_CONFIG, VIDEO_PLACEHOLDER } from "./VideoElement.config"
-import { resolveImageControlCanvasOffset } from "../image/ImageElement.config"
+import { LAYOUT, resolveImageControlCanvasOffset } from "../image/ImageElement.config"
 import { layoutLucideSolidPlayPath } from "./videoPlayIconPath"
 import { RenderUtils } from "../../shared/render/RenderUtils"
+import {
+	applyPlaceholderTextLayout,
+	createPlaceholderTextNode,
+} from "../../shared/render/placeholderTextLayout"
 import { ImageStaticLoader } from "../../resources/image/ImageStaticLoader"
 import type { Canvas } from "../../core/Canvas"
 import type {
@@ -59,7 +63,10 @@ export class VideoRenderer {
 	private previewMetadata?: LoadedVideoMetadata
 	private placeholderContentGroup?: Konva.Group
 	private placeholderLayout?: {
+		text: string
+		textColor: string
 		textWidth: number
+		nodeWidth: number
 		textHeight: number
 		backgroundWidth: number
 		backgroundHeight: number
@@ -846,10 +853,8 @@ export class VideoRenderer {
 		}
 
 		const inverseScale = RenderUtils.getInverseScale(parentGroup)
-		const { textWidth, textHeight, backgroundWidth, backgroundHeight, withBackground } =
-			this.placeholderLayout
+		const { text, textColor, withBackground } = this.placeholderLayout
 		const iconSize = VIDEO_CONFIG.PLACEHOLDER_PLAY_ICON_SIZE
-		const textBlockHeight = withBackground ? backgroundHeight : textHeight
 		const { iconTextSpacing } = VIDEO_PLACEHOLDER.layout
 		const textNode = this.placeholderContentGroup.findOne<Konva.Text>(".video-placeholder-text")
 		const backgroundNode = this.placeholderContentGroup.findOne<Konva.Rect>(
@@ -860,38 +865,103 @@ export class VideoRenderer {
 			return
 		}
 
-		const scaledBackgroundWidth = backgroundWidth * inverseScale.x
-		const scaledIconHeight = iconSize * inverseScale.y
-		const scaledTextBlockHeight = textBlockHeight * inverseScale.y
-		const scaledSpacing = iconTextSpacing * inverseScale.y
+		let textResult = createPlaceholderTextNode({
+			text,
+			availableWidth: width,
+			inverseScaleX: inverseScale.x,
+			fontSize: VIDEO_PLACEHOLDER.layout.textFontSize,
+			fontFamily: VIDEO_PLACEHOLDER.layout.textFontFamily,
+			paddingX: withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingX : 0,
+			paddingY: withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingY : 0,
+			fill: textColor,
+			name: "video-placeholder-text",
+		})
+		const getTextBlockHeight = (): number =>
+			withBackground ? textResult.layout.backgroundHeight : textResult.layout.textHeight
+		const totalContentHeight = (): number => iconSize + iconTextSpacing + getTextBlockHeight()
+		const availableHeight = Math.max(1, height - 32)
+		const resolveFitScale = (contentHeight: number): number => {
+			const scaledHeight = contentHeight * inverseScale.y
+			if (scaledHeight <= availableHeight) return 1
+			return Math.max(LAYOUT.MIN_CONTENT_SCALE, availableHeight / scaledHeight)
+		}
+		let fitScale = resolveFitScale(totalContentHeight())
+		if (
+			fitScale === LAYOUT.MIN_CONTENT_SCALE &&
+			totalContentHeight() * inverseScale.y > availableHeight
+		) {
+			const occupiedHeight = iconSize + iconTextSpacing
+			const maxTextHeight = Math.max(
+				1,
+				availableHeight / (inverseScale.y * LAYOUT.MIN_CONTENT_SCALE) -
+					occupiedHeight -
+					(withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingY * 2 : 0),
+			)
+			textResult = createPlaceholderTextNode({
+				text,
+				availableWidth: width,
+				inverseScaleX: inverseScale.x,
+				fontSize: VIDEO_PLACEHOLDER.layout.textFontSize,
+				fontFamily: VIDEO_PLACEHOLDER.layout.textFontFamily,
+				maxHeight: maxTextHeight,
+				paddingX: withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingX : 0,
+				paddingY: withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingY : 0,
+				fill: textColor,
+				name: "video-placeholder-text",
+			})
+			fitScale = resolveFitScale(totalContentHeight())
+		}
+
+		const effectiveScale = {
+			x: inverseScale.x * fitScale,
+			y: inverseScale.y * fitScale,
+		}
+		const backgroundWidth = textResult.layout.backgroundWidth
+		const backgroundHeight = textResult.layout.backgroundHeight
+		const scaledBackgroundWidth = backgroundWidth * effectiveScale.x
+		const scaledIconHeight = iconSize * effectiveScale.y
+		const scaledTextBlockHeight = getTextBlockHeight() * effectiveScale.y
+		const scaledSpacing = iconTextSpacing * effectiveScale.y
 		const totalHeight = scaledIconHeight + scaledSpacing + scaledTextBlockHeight
 		const topY = height / 2 - totalHeight / 2
 		layoutLucideSolidPlayPath(this.placeholderTriangleNode, 0, 0, iconSize)
-		this.placeholderTriangleGroup.scale(inverseScale)
+		this.placeholderTriangleGroup.scale(effectiveScale)
 		this.placeholderTriangleGroup.position({
 			x: width / 2,
 			y: topY + scaledIconHeight / 2,
 		})
 
 		if (backgroundNode) {
+			backgroundNode.width(backgroundWidth)
+			backgroundNode.height(backgroundHeight)
 			backgroundNode.position({
 				x: 0,
 				y: 0,
 			})
 		}
 
+		applyPlaceholderTextLayout(textNode, textResult)
 		textNode.position({
 			x: backgroundNode
-				? VIDEO_PLACEHOLDER.layout.textPaddingX
-				: (backgroundWidth - textWidth) / 2,
+				? VIDEO_PLACEHOLDER.layout.textPaddingX +
+					(textResult.layout.textWidth - textResult.layout.nodeWidth) / 2
+				: (textResult.layout.textWidth - textResult.layout.nodeWidth) / 2,
 			y: withBackground ? VIDEO_PLACEHOLDER.layout.textPaddingY : 0,
 		})
 
-		this.placeholderContentGroup.scale(inverseScale)
+		this.placeholderContentGroup.scale(effectiveScale)
 		this.placeholderContentGroup.position({
 			x: width / 2 - scaledBackgroundWidth / 2,
 			y: topY + scaledIconHeight + scaledSpacing,
 		})
+		this.placeholderLayout = {
+			...this.placeholderLayout,
+			textWidth: textResult.layout.textWidth,
+			nodeWidth: textResult.layout.nodeWidth,
+			textHeight: textResult.layout.textHeight,
+			backgroundWidth,
+			backgroundHeight,
+		}
 	}
 
 	private createPlaceholderContent(
@@ -903,7 +973,6 @@ export class VideoRenderer {
 	): Konva.Group {
 		void width
 		void height
-
 		const { layout, colors, textBackgroundCornerRadius } = VIDEO_PLACEHOLDER
 		const textMeasureNode = new Konva.Text({
 			text,
@@ -921,7 +990,10 @@ export class VideoRenderer {
 			: textHeight
 
 		this.placeholderLayout = {
+			text,
+			textColor,
 			textWidth,
+			nodeWidth: textWidth,
 			textHeight,
 			backgroundWidth,
 			backgroundHeight,
@@ -952,6 +1024,8 @@ export class VideoRenderer {
 				text,
 				fontSize: layout.textFontSize,
 				fontFamily: layout.textFontFamily,
+				wrap: "char",
+				align: "center",
 				fill: textColor,
 				listening: false,
 				name: "video-placeholder-text",
