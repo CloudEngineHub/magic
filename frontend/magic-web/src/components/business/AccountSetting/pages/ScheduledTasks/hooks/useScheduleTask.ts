@@ -8,7 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ScheduledTask } from "@/types/scheduledTask"
 import mcpTempStorage from "../store/MCPTempStorage"
 import { useScheduledTasksModifyModal } from "./useScheduledTasksModifyModal"
-import { JSONContent } from "@tiptap/react"
+import { prepareScheduledTaskRunNow } from "../utils/runScheduledTaskNow"
 import type { ScheduledTasksModifyModalController } from "../types/ScheduledTasksModify"
 
 interface UseScheduleTaskProps {
@@ -158,19 +158,22 @@ export function useScheduleTaskWithModal({
 		})
 	})
 
-	const runNow = async (task: ScheduledTask.Task) => {
+	const runNow = useMemoizedFn(async (task: ScheduledTask.Task) => {
 		const detail = await ScheduledTaskApi.getScheduledTaskDetails(task.id)
 		if (!detail) return
 
-		const { message_content } = detail
-		const content = JSON.parse(message_content.content) as JSONContent
+		try {
+			const payload = await prepareScheduledTaskRunNow(detail)
+			if (!payload) {
+				magicToast.error(t("accountPanel.timedTasks.promptRequired"))
+				return
+			}
 
-		pubsub.publish(PubSubEvents.Create_New_Topic, {
-			afterCreate: {
-				content,
-			},
-		})
-	}
+			pubsub.publish(PubSubEvents.Create_New_Topic, payload)
+		} catch (error) {
+			console.error("runNow error:", error)
+		}
+	})
 
 	useMount(() => {
 		if (!isScroll) {
