@@ -590,6 +590,8 @@ function Share() {
 			}),
 		[attachments, data?.data?.project_mode, projectId],
 	)
+	// Keep the mobile audio share route on the flex height chain so its inner content viewport can scroll.
+	const isMobileAudioShareLayout = isMobile && shouldRenderAudioShareShell
 
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
@@ -825,7 +827,10 @@ function Share() {
 				shareDisplayOptions.documentFlowFullscreen
 					? "box-border flex min-h-dvh w-full flex-col overflow-visible bg-muted dark:bg-muted"
 					: "box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
-				"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
+				!isMobileAudioShareLayout &&
+					"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
+				isMobileAudioShareLayout &&
+					"max-md:flex max-md:min-h-0 max-md:bg-white dark:max-md:bg-card",
 				isFileShare && "max-md:pb-0",
 				!isFileShare && "pb-[50px]",
 				isImmersiveFullscreen && "max-md:bg-transparent dark:max-md:bg-transparent",
@@ -989,7 +994,9 @@ function Share() {
 					"relative max-md:w-full",
 					shareDisplayOptions.documentFlowFullscreen
 						? "min-h-dvh overflow-visible"
-						: "h-full overflow-hidden",
+						: isMobileAudioShareLayout
+							? "min-h-0 flex-1 overflow-hidden"
+							: "h-full overflow-hidden",
 				)}
 				data-testid="share-content-container"
 			>

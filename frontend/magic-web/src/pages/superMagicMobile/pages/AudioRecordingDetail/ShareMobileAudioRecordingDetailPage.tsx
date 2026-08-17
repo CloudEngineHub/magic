@@ -193,7 +193,8 @@ export default function ShareMobileAudioRecordingDetailPage({
 				</h1>
 			</div>
 
-			<div className="min-h-0 flex-1">
+			{/* Establish a finite flex column so the panel's sole inner scroll port can resolve its height. */}
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{activeTab === "source" ? (
 					<MobileRecordingSourcePanel
 						transcriptContent={texts.transcript?.content}
