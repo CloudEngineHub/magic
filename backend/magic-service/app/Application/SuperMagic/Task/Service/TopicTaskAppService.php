@@ -581,7 +581,7 @@ class TopicTaskAppService extends AbstractAppService
                         // Create file record
                         $storageType = StorageType::tryFrom(
                             (string) ($fileInfoMap[$missingFileKey]['storage_type'] ?? '')
-                        )?->value ?? StorageType::WORKSPACE->value;
+                        )->value ?? StorageType::WORKSPACE->value;
                         $fileInfoMap[$missingFileKey]['storage_type'] = $storageType;
                         $fallbackFileEntity = $this->taskFileDomainService->convertMessageAttachmentToTaskFileEntity($fileInfoMap[$missingFileKey], $task);
                         $this->logger->debug(sprintf(
