@@ -42,11 +42,7 @@ import { createMessageSendService } from "@/pages/superMagic/services/messageSen
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import { preparePanelSend } from "@/pages/superMagic/services/messageSendPreparation"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
-import {
-	projectStore,
-	topicStore,
-	workspaceStore,
-} from "@/pages/superMagic/stores/core"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import { roleStore } from "@/pages/superMagic/stores"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
@@ -58,6 +54,10 @@ import {
 import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
+import {
+	buildQueueMessageInput,
+	mergeSceneClientContext,
+} from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
@@ -410,28 +410,6 @@ export default function useMobileComposerLogic({
 		try {
 			const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 			const showLoading = editorContext.showLoading ?? false
-			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
-				queueContext.addToQueue({
-					content: nextValue ?? params.value,
-					mentionItems: params.mentionItems,
-					selectedModel: params.selectedModel,
-					selectedImageModel: params.selectedImageModel,
-					selectedVideoModel: params.selectedVideoModel,
-					topicMode: params.topicMode,
-				})
-				clearContentAfterSend()
-				setIsComposerFocused(false)
-				return
-			}
-
-			if (
-				!editorContext.selectedWorkspace &&
-				!workspaceStore.selectedWorkspace &&
-				selectedWorkspace
-			) {
-				effectiveSetSelectedWorkspace(selectedWorkspace)
-			}
-
 			const defaultParams: HandleSendParams = {
 				...params,
 				value: nextValue ?? params.value,
@@ -449,9 +427,30 @@ export default function useMobileComposerLogic({
 			const finalParams = customParamsPatch
 				? { ...defaultParams, ...customParamsPatch }
 				: defaultParams
+			const finalParamsWithClientContext: HandleSendParams = {
+				...finalParams,
+				extra: mergeSceneClientContext(finalParams.extra, sceneStateStore?.clientContext),
+			}
+
+			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
+				queueContext.addToQueue(
+					buildQueueMessageInput(finalParamsWithClientContext, params.value),
+				)
+				clearContentAfterSend()
+				setIsComposerFocused(false)
+				return
+			}
+
+			if (
+				!editorContext.selectedWorkspace &&
+				!workspaceStore.selectedWorkspace &&
+				selectedWorkspace
+			) {
+				effectiveSetSelectedWorkspace(selectedWorkspace)
+			}
 
 			const preparedSend = await preparePanelSend({
-				params: finalParams,
+				params: finalParamsWithClientContext,
 				context: {
 					selectedProject,
 					selectedTopic,

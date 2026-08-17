@@ -67,6 +67,7 @@ function GeneralInputContainer({ scenes, editorContext, editorNodes }: GeneralIn
 									topicMode={editorContext?.topicMode}
 									agentCode={editorContext?.agentCode}
 									selectedTopic={editorContext?.selectedTopic}
+									messagesLength={editorContext?.messagesLength}
 								/>
 							</div>
 						</motion.div>

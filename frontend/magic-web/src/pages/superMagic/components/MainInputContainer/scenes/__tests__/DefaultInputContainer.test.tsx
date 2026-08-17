@@ -32,6 +32,7 @@ vi.mock("../../hooks", () => ({
 
 vi.mock("../../stores", () => ({
 	useOptionalScenePanelVariant: () => ScenePanelVariant.TopicPage,
+	useOptionalSceneStateStore: () => null,
 }))
 
 vi.mock("../../components/editors/DefaultMessageEditorContainer", () => ({

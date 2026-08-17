@@ -1,7 +1,7 @@
-import type { JSONContent } from "@tiptap/core"
+import type { SceneClientContextPayload } from "../stores/SceneStateStore"
 
 export const VIDEO_PRODUCTION_AGENT_CODE = "video-production"
-export const VIDEO_PRODUCTION_SUFFIX_SOURCE = "video-production-config"
+export const VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE = "video-production-config"
 
 export interface VideoProductionContextLike {
 	topicMode?: string
@@ -16,7 +16,7 @@ export function isVideoProductionContext(context?: VideoProductionContextLike): 
 	)
 }
 
-export interface VideoProductionPresetContentInput {
+export interface VideoProductionClientContextInput {
 	generationMode?: string
 	aspectRatio?: string
 	durationSeconds?: number
@@ -32,13 +32,13 @@ export interface VideoProductionPresetContentInput {
 	}
 }
 
-/** Build the selected video configuration as a prompt suffix, following PPT's send path. */
-export function buildVideoProductionPresetContent(
-	input: VideoProductionPresetContentInput,
-): JSONContent | undefined {
+/** Build the selected video configuration as natural-language client context. */
+export function buildVideoProductionClientContext(
+	input: VideoProductionClientContextInput,
+): SceneClientContextPayload | undefined {
 	const labels = {
 		generation: "generation",
-		aspectRatio: "aspectRatio",
+		aspectRatio: "aspect ratio",
 		duration: "duration",
 		resolution: "resolution",
 		...input.labels,
@@ -59,12 +59,9 @@ export function buildVideoProductionPresetContent(
 	if (segments.length === 0) return undefined
 
 	return {
-		type: "doc",
-		content: [
-			{
-				type: "paragraph",
-				content: [{ type: "text", text: `${segments.join("; ")}.` }],
-			},
-		],
+		version: "1.0.0",
+		data: {
+			content: `${segments.join("; ")}.`,
+		},
 	}
 }

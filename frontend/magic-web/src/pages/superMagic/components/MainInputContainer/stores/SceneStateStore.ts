@@ -3,6 +3,13 @@ import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SceneItem } from "@/pages/superMagic/types/skill"
 import { SceneConfigStore, sceneConfigStore } from "./SceneConfigStore"
 
+export interface SceneClientContextPayload {
+	version: string
+	data: {
+		content: string
+	}
+}
+
 /**
  * Stable scope for template panels: topicMode, topic id, agent (order matters).
  * Uses ASCII record sep to avoid clashes with ids.
@@ -14,8 +21,10 @@ export function buildTopicInputScopeKey(topicMode: string, topicId = "", agentCo
 class SceneStateStore {
 	currentScene: SceneItem | null = null
 	presetSuffixContent: JSONContent | undefined = undefined
+	clientContext: SceneClientContextPayload | undefined = undefined
 	sendCount = 0
 	private presetSuffixContentSources = new Map<string, JSONContent | undefined>()
+	private clientContextSources = new Map<string, SceneClientContextPayload>()
 
 	/**
 	 * Bumped when input is bound to a new scope (topicMode, topic, agent).
@@ -60,6 +69,7 @@ class SceneStateStore {
 
 		this.inputScopeKey = scopeKey
 		this.clearPresetSuffixContentSources()
+		this.clearClientContextSources()
 	}
 
 	setPresetSuffixContent(content: JSONContent | undefined) {
@@ -75,6 +85,24 @@ class SceneStateStore {
 		this.presetSuffixContent = joinPresetSuffixContentSources(this.presetSuffixContentSources)
 	}
 
+	setClientContextForSource(sourceKey: string, content: SceneClientContextPayload | undefined) {
+		if (content?.data?.content) {
+			this.clientContextSources.set(sourceKey, content)
+		} else {
+			this.clientContextSources.delete(sourceKey)
+		}
+
+		const contents = Array.from(this.clientContextSources.values())
+			.map((source) => source.data.content.trim())
+			.filter(Boolean)
+		this.clientContext = contents.length
+			? {
+					version: "1.0.0",
+					data: { content: contents.join("\n\n") },
+				}
+			: undefined
+	}
+
 	incrementSendCount() {
 		this.sendCount += 1
 	}
@@ -82,6 +110,7 @@ class SceneStateStore {
 	setCurrentScene(scene: SceneItem | null) {
 		this.currentScene = scene
 		this.clearPresetSuffixContentSources()
+		this.clearClientContextSources()
 		if (scene) {
 			this.configStore.fetchSkillConfigs(scene.id)
 		}
@@ -90,6 +119,7 @@ class SceneStateStore {
 	resetState() {
 		this.currentScene = null
 		this.clearPresetSuffixContentSources()
+		this.clearClientContextSources()
 		this.inputScopeKey = ""
 		this.configStore.clearCache()
 	}
@@ -97,6 +127,11 @@ class SceneStateStore {
 	private clearPresetSuffixContentSources() {
 		this.presetSuffixContentSources.clear()
 		this.presetSuffixContent = undefined
+	}
+
+	private clearClientContextSources() {
+		this.clientContextSources.clear()
+		this.clientContext = undefined
 	}
 }
 

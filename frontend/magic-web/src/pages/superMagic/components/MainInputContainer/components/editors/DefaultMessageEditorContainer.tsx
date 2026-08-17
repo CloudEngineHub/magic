@@ -17,11 +17,7 @@ import {
 	preparePanelSend,
 } from "@/pages/superMagic/services/messageSendPreparation"
 import { roleStore } from "@/pages/superMagic/stores"
-import {
-	projectStore,
-	topicStore,
-	workspaceStore,
-} from "@/pages/superMagic/stores/core"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import useSharedProjectMode from "@/pages/superMagic/hooks/useSharedProjectMode"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import useSandboxPreWarm from "@/pages/superMagic/components/MessagePanel/hooks/useSandboxPreWarm"
@@ -34,7 +30,7 @@ import { cn } from "@/utils/cn"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
-import { buildQueueMessageInput } from "./messageParams"
+import { buildQueueMessageInput, mergeSceneClientContext } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 const ERR_QUEUE_ADD_FAILED = "queue_add_failed"
@@ -248,9 +244,13 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const customParamsPatch = editorContext?.mergeSendParams?.({
 			defaultParams,
 		})
-		const finalParams = customParamsPatch
+		const mergedParams = customParamsPatch
 			? { ...defaultParams, ...customParamsPatch }
 			: defaultParams
+		const finalParams: HandleSendParams = {
+			...mergedParams,
+			extra: mergeSceneClientContext(mergedParams.extra, sceneStateStore?.clientContext),
+		}
 
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 

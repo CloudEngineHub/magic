@@ -17,6 +17,7 @@ import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/co
 import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { SceneItem } from "@/pages/superMagic/types/skill"
+import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import MobileComposerAddSheet from "./MobileComposerAddSheet"
 import MobileComposerAttachments from "./MobileComposerAttachments"
@@ -487,9 +488,22 @@ function MobileComposerComponent({
 			</Button>
 		</div>
 	)
-	const headerScenePanelsNode = shouldRenderPanelsInHeader ? (
-		<MobileScenePanels editorContext={editorContext} compact />
-	) : null
+	const shouldShowVideoProductionConfigInHeader =
+		(editorContext.messagesLength ?? 0) === 0 &&
+		isVideoProductionContext({
+			topicMode: editorContext.topicMode,
+			agentCode: editorContext.agentCode,
+			selectedTopic: editorContext.selectedTopic,
+		})
+	const headerScenePanelsNode =
+		shouldRenderPanelsInHeader || shouldShowVideoProductionConfigInHeader ? (
+			<MobileScenePanels
+				editorContext={editorContext}
+				compact
+				renderScenePanels={shouldRenderPanelsInHeader}
+				includeVideoProductionConfig
+			/>
+		) : null
 
 	const composerInnerContent = (
 		<div className="relative">
@@ -630,9 +644,10 @@ function MobileComposerComponent({
 				data-testid="mobile-composer-card"
 			>
 				<div className="border-b border-border px-3 pb-2 pt-2 [&:empty]:hidden">
-					{shouldRenderPanelsInHeader ? null : (
-						<MobileScenePanels editorContext={editorContext} />
-					)}
+					<MobileScenePanels
+						editorContext={editorContext}
+						renderScenePanels={!shouldRenderPanelsInHeader}
+					/>
 				</div>
 				{composerInnerContent}
 			</div>
