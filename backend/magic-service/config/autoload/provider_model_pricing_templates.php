@@ -345,6 +345,22 @@ return [
                     'billing_object' => BillingObject::videoReferenceVideoTokenCost('1080p')->value,
                     'label' => '1080P 参考视频 Token 成本',
                 ],
+                [
+                    'billing_object' => BillingObject::videoToken('4k')->value,
+                    'label' => '4K 无参考视频 Token',
+                ],
+                [
+                    'billing_object' => BillingObject::videoTokenCost('4k')->value,
+                    'label' => '4K 无参考视频 Token 成本',
+                ],
+                [
+                    'billing_object' => BillingObject::videoReferenceVideoToken('4k')->value,
+                    'label' => '4K 参考视频 Token',
+                ],
+                [
+                    'billing_object' => BillingObject::videoReferenceVideoTokenCost('4k')->value,
+                    'label' => '4K 参考视频 Token 成本',
+                ],
             ],
         ],
         [

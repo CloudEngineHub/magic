@@ -34,7 +34,21 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
     /**
      * @var list<string>
      */
-    private const array PRO_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
+    private const array PRO_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p', '4k'];
+
+    /**
+     * 非 Seedance 2.0 Pro 视频模型的兼容分辨率，不开放 4K。
+     *
+     * @var list<string>
+     */
+    private const array STANDARD_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
+
+    /**
+     * Seedance 2.5 当前支持到 1080p，但不开放 4K。
+     *
+     * @var list<string>
+     */
+    private const array TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS = ['480p', '720p', '1080p'];
 
     /**
      * 目前根据 provider 实际返回，Seedance 2.0 Fast 的 t2v 仅开放到 720p。
@@ -68,12 +82,12 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
         ['label' => '3:4', 'value' => '1252x1668', 'width' => 1252, 'height' => 1668, 'resolution' => '1080p'],
         ['label' => '9:16', 'value' => '1080x1920', 'width' => 1080, 'height' => 1920, 'resolution' => '1080p'],
         ['label' => '21:9', 'value' => '2205x945', 'width' => 2205, 'height' => 945, 'resolution' => '1080p'],
-        //        ['label' => '16:9', 'value' => '3840x2160', 'width' => 3840, 'height' => 2160, 'resolution' => '4k'],
-        //        ['label' => '4:3', 'value' => '3328x2496', 'width' => 3328, 'height' => 2496, 'resolution' => '4k'],
-        //        ['label' => '1:1', 'value' => '2880x2880', 'width' => 2880, 'height' => 2880, 'resolution' => '4k'],
-        //        ['label' => '3:4', 'value' => '2496x3328', 'width' => 2496, 'height' => 3328, 'resolution' => '4k'],
-        //        ['label' => '9:16', 'value' => '2160x3840', 'width' => 2160, 'height' => 3840, 'resolution' => '4k'],
-        //        ['label' => '21:9', 'value' => '4410x1890', 'width' => 4410, 'height' => 1890, 'resolution' => '4k'],
+        ['label' => '16:9', 'value' => '3840x2160', 'width' => 3840, 'height' => 2160, 'resolution' => '4k'],
+        ['label' => '4:3', 'value' => '3328x2496', 'width' => 3328, 'height' => 2496, 'resolution' => '4k'],
+        ['label' => '1:1', 'value' => '2880x2880', 'width' => 2880, 'height' => 2880, 'resolution' => '4k'],
+        ['label' => '3:4', 'value' => '2496x3328', 'width' => 2496, 'height' => 3328, 'resolution' => '4k'],
+        ['label' => '9:16', 'value' => '2160x3840', 'width' => 2160, 'height' => 3840, 'resolution' => '4k'],
+        ['label' => '21:9', 'value' => '4410x1890', 'width' => 4410, 'height' => 1890, 'resolution' => '4k'],
     ];
 
     public function __construct(
@@ -717,10 +731,23 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 'generation' => array_merge($baseGenerationConfig, [
                     'duration_type' => 'range',
                     'durations' => ['min' => 4, 'max' => 30, 'step' => 1],
-                    'resolutions' => self::FAST_SUPPORTED_RESOLUTIONS,
-                    'sizes' => $this->filterSizesByResolution(self::FAST_SUPPORTED_RESOLUTIONS),
+                    'resolutions' => self::TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS,
+                    'sizes' => $this->filterSizesByResolution(self::TWO_POINT_FIVE_SUPPORTED_RESOLUTIONS),
                 ]),
                 'reference_limits' => ['images' => 30, 'videos' => 10, 'audios' => 10],
+                'validation' => [],
+            ];
+        }
+
+        if ($this->isSeedanceTwoProModel($modelVersion, $modelId)) {
+            return [
+                'generation' => array_merge($baseGenerationConfig, [
+                    'duration_type' => 'range',
+                    'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
+                    'resolutions' => self::PRO_SUPPORTED_RESOLUTIONS,
+                    'sizes' => self::SUPPORTED_SIZES,
+                ]),
+                'reference_limits' => ['images' => 9, 'videos' => 3, 'audios' => 3],
                 'validation' => [],
             ];
         }
@@ -729,8 +756,8 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             'generation' => array_merge($baseGenerationConfig, [
                 'duration_type' => 'range',
                 'durations' => ['min' => 4, 'max' => 15, 'step' => 1],
-                'resolutions' => self::PRO_SUPPORTED_RESOLUTIONS,
-                'sizes' => self::SUPPORTED_SIZES,
+                'resolutions' => self::STANDARD_SUPPORTED_RESOLUTIONS,
+                'sizes' => $this->filterSizesByResolution(self::STANDARD_SUPPORTED_RESOLUTIONS),
             ]),
             'reference_limits' => ['images' => 9, 'videos' => 3, 'audios' => 3],
             'validation' => [],
@@ -811,6 +838,23 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             if (str_contains($normalizedIdentifier, 'seedance-2.5')
                 || str_contains($normalizedIdentifier, 'seedance-2-5')) {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isSeedanceTwoProModel(string $modelVersion, string $modelId): bool
+    {
+        foreach ([$modelVersion, $modelId] as $identifier) {
+            $normalizedIdentifier = strtolower(trim($identifier));
+            if ($normalizedIdentifier === '' || ! str_contains($normalizedIdentifier, 'seedance-')) {
+                continue;
+            }
+
+            if (str_contains($normalizedIdentifier, 'seedance-2.0')
+                || str_contains($normalizedIdentifier, 'seedance-2-0')) {
+                return ! $this->isSeedanceTwoFastModel($modelVersion, $modelId);
             }
         }
 
