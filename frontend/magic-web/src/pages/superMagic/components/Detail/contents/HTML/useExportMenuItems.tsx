@@ -1,11 +1,5 @@
 import MagicDropdown from "@/components/base/MagicDropdown"
-import {
-	IconDownload,
-	IconFile,
-	IconFileTypePdf,
-	IconFileTypePpt,
-	IconPhoto,
-} from "@tabler/icons-react"
+import { IconFile, IconFileTypePdf, IconFileTypePpt, IconPhoto } from "@tabler/icons-react"
 import { MenuProps } from "antd"
 import { createStyles } from "antd-style"
 import { useMemo } from "react"
@@ -27,12 +21,10 @@ const useStyles = createStyles(({ css, token }) => ({
 export function useExportMenuItems({
 	handleExportSource,
 	handleExportPDF,
-	handleExportPPT,
 	handleExportImage,
 	handleExportRasterPdf,
 	isExporting = false,
 	showButtonText = true,
-	supportPPT = true,
 	handleExportPptx,
 	showExportPptx = false,
 	showExportImage = false,
@@ -41,12 +33,10 @@ export function useExportMenuItems({
 }: {
 	handleExportSource: () => void
 	handleExportPDF: () => void
-	handleExportPPT?: () => void
 	handleExportImage?: (format: ImageExportFormat) => void
 	handleExportRasterPdf?: (pageMode: "fit" | "paginate") => void
 	isExporting?: boolean
 	showButtonText?: boolean
-	supportPPT?: boolean
 	handleExportPptx?: () => void
 	showExportPptx?: boolean
 	showExportImage?: boolean
@@ -125,20 +115,9 @@ export function useExportMenuItems({
 						},
 					]
 				: []),
-			...(supportPPT && handleExportPPT
-				? [
-						{
-							key: "ppt",
-							label: t("topicFiles.exportPpt"),
-							icon: <IconFileTypePpt size={16} stroke={1.5} />,
-							onClick: handleExportPPT,
-						},
-					]
-				: []),
 		],
 		[
 			handleExportPDF,
-			handleExportPPT,
 			handleExportPptx,
 			handleExportImage,
 			handleExportRasterPdf,
@@ -147,7 +126,6 @@ export function useExportMenuItems({
 			showExportRasterPdf,
 			showExportPptx,
 			showExportImage,
-			supportPPT,
 			t,
 		],
 	)

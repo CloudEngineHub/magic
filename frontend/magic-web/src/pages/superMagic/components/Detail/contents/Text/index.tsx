@@ -205,7 +205,6 @@ export default function Text(props: any) {
 		handleExportImage,
 		isExporting: isExporting || isExportingImage,
 		showButtonText: true,
-		supportPPT: false,
 		showExportImage: true,
 		showExportPdf: false,
 	})

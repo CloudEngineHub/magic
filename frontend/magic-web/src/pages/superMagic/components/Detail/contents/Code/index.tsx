@@ -219,7 +219,6 @@ export default function CodeViewer(props: any) {
 		handleExportImage,
 		isExporting: isExporting || isExportingImage,
 		showButtonText: true,
-		supportPPT: false,
 		showExportImage: true,
 		showExportPdf: false,
 	})

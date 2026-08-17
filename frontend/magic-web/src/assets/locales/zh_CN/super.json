@@ -5044,7 +5044,7 @@
 		"exportPdfPaginationTitle": "选择 PDF 导出方式",
 		"exportPdfRaster": "下载 PDF 格式（截图版）",
 		"exportPpt": "下载 PPT 格式",
-		"exportPptx": "下载 PPT 格式（可编辑）",
+		"exportPptx": "下载 PPTX 格式（可编辑）",
 		"exportSource": "下载原始文件",
 		"exportSuccess": "导出成功",
 		"exporting": "导出中",

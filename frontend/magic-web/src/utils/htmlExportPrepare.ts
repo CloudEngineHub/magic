@@ -39,7 +39,7 @@ export interface PrepareHtmlPagesForExportOptions extends Omit<
 	PrepareHtmlForExportOptions,
 	"content"
 > {
-	pages: string[]
+	pages: Iterable<string> | AsyncIterable<string>
 	signal?: AbortSignal
 }
 
@@ -277,17 +277,19 @@ export async function* iteratePreparedHtmlPages(
 	options: PrepareHtmlPagesForExportOptions,
 ): AsyncIterable<PreparedHtmlPage> {
 	const { pages, signal, ...pageOptions } = options
-	for (let index = 0; index < pages.length; index += 1) {
+	let index = 0
+	for await (const page of pages) {
 		throwIfAborted(signal)
 		const html = await waitForAbortable(
 			prepareHtmlForExport({
 				...pageOptions,
-				content: pages[index],
+				content: page,
 			}),
 			signal,
 		)
 		throwIfAborted(signal)
 		yield { index, html }
+		index += 1
 	}
 }
 

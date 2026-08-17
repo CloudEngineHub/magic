@@ -528,7 +528,7 @@ function buildArtifact(
 /**
  * Runs one client-side export per logical target and returns one browser artifact.
  * This module deliberately owns no toast, selection state, or backend conversion task;
- * the legacy menu remains a thin adapter while the exporter stays reusable elsewhere.
+ * menu and batch callers share the same streaming exporter.
  */
 export async function runClientBatchDocumentExport(
 	options: ClientBatchExportRunOptions,

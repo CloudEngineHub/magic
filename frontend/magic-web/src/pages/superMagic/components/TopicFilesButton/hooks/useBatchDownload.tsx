@@ -352,10 +352,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		}
 	}
 
-	const handleExportPdfOrPpt = async (convert_type = "pdf") => {
+	const handleExportDocument = async (format: "pdf" | "pptx" = "pdf") => {
 		if (!canDownload || selectedItems.size === 0) return
-		const convertType = convert_type as "pdf" | "ppt"
-		const format = convertType === "pdf" ? "pdf" : "pptx"
 		// Always resolve against the complete attachment tree. The filtered tree can omit
 		// folder resources while a search is active, which would produce incomplete exports.
 		const sourceItems = attachments.length > 0 ? attachments : filteredFiles
@@ -396,9 +394,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		const toastId = createRandomUuidV4()
 		const exportController = format === "pptx" ? new AbortController() : null
 		const exportText =
-			convertType === "pdf"
-				? t("topicFiles.batchExportingPdf")
-				: t("topicFiles.batchExportingPpt")
+			format === "pdf" ? t("topicFiles.batchExportingPdf") : t("topicFiles.batchExportingPpt")
 		const getExportToastContent = (progressText: string) =>
 			exportController
 				? createElement(
@@ -461,8 +457,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 			}
 
 			if (result.artifact) {
-				// PDF and compatibility paths still return one in-memory artifact. Streaming
-				// PPTX paths have already committed their files to the selected destination.
+				// PDF paths return one in-memory artifact. Streaming PPTX paths have already
+				// committed their files to the selected destination.
 				const downloadResult = await downloadBlobFile(
 					result.artifact.blob,
 					result.artifact.fileName,
@@ -595,7 +591,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 										<span>{t("topicFiles.exportPdf")}</span>
 									</div>
 								),
-								onClick: () => handleExportPdfOrPpt("pdf"),
+								onClick: () => handleExportDocument("pdf"),
 								disabled: batchLoading,
 							},
 							{
@@ -603,10 +599,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 								label: (
 									<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 										<IconFileTypePpt size={16} stroke={1.5} />
-										<span>{t("topicFiles.exportPpt")}</span>
+										<span>{t("topicFiles.exportPptx")}</span>
 									</div>
 								),
-								onClick: () => handleExportPdfOrPpt("ppt"),
+								onClick: () => handleExportDocument("pptx"),
 								disabled: batchLoading,
 							},
 						],
@@ -638,7 +634,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 									<span>{t("topicFiles.exportPdf")}</span>
 								</div>
 							),
-							onClick: () => handleExportPdfOrPpt("pdf"),
+							onClick: () => handleExportDocument("pdf"),
 							disabled: batchLoading,
 						},
 						{
@@ -646,10 +642,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 							label: (
 								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 									<IconFileTypePpt size={16} stroke={1.5} />
-									<span>{t("topicFiles.exportPpt")}</span>
+									<span>{t("topicFiles.exportPptx")}</span>
 								</div>
 							),
-							onClick: () => handleExportPdfOrPpt("ppt"),
+							onClick: () => handleExportDocument("pptx"),
 							disabled: batchLoading,
 						},
 					]
@@ -730,7 +726,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 		// 处理函数
 		handleBatchDownload,
-		handleExportPdfOrPpt,
+		handleExportDocument,
 		handleBatchDelete,
 		handleMobileBatchDelete,
 		handleBatchShare,

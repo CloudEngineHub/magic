@@ -35,7 +35,7 @@ export interface PPTRootRenderProps {
 	isPlaybackMode?: boolean
 	exportFile?: (fileId: string, fileVersion?: number) => void
 	exportPdf?: (fileId: string) => void
-	exportPpt?: (fileId: string) => void
+	exportPptx?: (fileId: string) => void
 	onActiveFileChange?: (fileId: string | null) => void
 	isTabActive?: boolean
 	allowDownload?: boolean

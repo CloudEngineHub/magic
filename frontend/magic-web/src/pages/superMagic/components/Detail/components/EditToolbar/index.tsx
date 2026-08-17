@@ -38,6 +38,7 @@ import {
 	formatPptxStreamingProgress,
 	openPptxDestination,
 	PptxExportUnavailableError,
+	supportsPptxFileStreaming,
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 
@@ -189,12 +190,8 @@ function EditToolbar({
 	// Try to get PPT store if available (only in PPT context)
 	const pptStore = usePPTStoreOptional()
 
-	// Get page info from PPT store if available
-	const currentPageIndex = pptStore?.activeIndex
-	const totalPages = pptStore?.slidePaths.length
-
 	// File export hook
-	const { isExporting, exportFile, exportPdf, exportPpt } = useFileExport({
+	const { isExporting, exportFile, exportPptx } = useFileExport({
 		attachments: attachmentList,
 		selectedProject: resolvedProjectId ? { id: resolvedProjectId } : undefined,
 		projectId: resolvedProjectId,
@@ -410,23 +407,44 @@ function EditToolbar({
 		const defaultName =
 			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
-		const targetSlides = slidePaths?.length
-			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
-			: pptStore.slides
+		const selectedPathSet = slidePaths?.length ? new Set(slidePaths) : null
+		const selectedSlides = pptStore.slides.filter(
+			(slide) => !selectedPathSet || selectedPathSet.has(slide.path),
+		)
+		const firstSlide = selectedSlides[0]
+		const pageCount = selectedSlides.length
 
-		if (!targetSlides.length) {
+		if (!firstSlide || pageCount === 0) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
 		}
 
-		const htmlSlides = targetSlides.map((slide) => slide.content ?? "")
-		const pptxConfig = createPptxSlideConfig(
-			resolvePptScaleContentDimensions(targetSlides[0]?.content, targetSlides[0]?.rawContent),
-		)
+		const ensureSlideContent = async (slide: (typeof pptStore.slides)[number]) => {
+			if (slide.loadingState === "loaded" && slide.content?.trim()) {
+				return slide.content
+			}
+
+			const slideIndex = pptStore.slides.indexOf(slide)
+			const fileId =
+				pptStore.getFileIdByPath(slide.path) || pptStore.tryExtractAndMapFileId(slide.path)
+			const content = fileId
+				? await pptStore.loadSlideContentByFileId(fileId, {
+						path: slide.path,
+						url: slide.url,
+						indexHint: slideIndex,
+					})
+				: await pptStore.loadSlideContent(slide.url || "", slideIndex)
+
+			if (!content?.trim()) {
+				throw new Error(`Slide content is unavailable for export: ${slide.path}`)
+			}
+			return content
+		}
+
 		const toastId = createRandomUuidV4()
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		try {
-			assertPptxExportAvailable({ pageCount: htmlSlides.length })
+			assertPptxExportAvailable({ pageCount })
 			destinationLease = await openPptxDestination({ suggestedName: defaultName })
 		} catch (error) {
 			const isUnavailable = error instanceof PptxExportUnavailableError
@@ -435,7 +453,7 @@ function EditToolbar({
 			)
 			reportPptxExportError(error, {
 				fileName: defaultName,
-				slideCount: htmlSlides.length,
+				slideCount: pageCount,
 				source: "EditToolbar.destination",
 			})
 			return
@@ -468,16 +486,25 @@ function EditToolbar({
 			const streamingHandle = startPptxStreamingExportFromFactory(
 				(signal) =>
 					iteratePreparedHtmlPages({
-						pages: htmlSlides,
+						pages: (async function* iterateSelectedSlides() {
+							for (const slide of selectedSlides) {
+								if (signal.aborted) return
+								const content = await ensureSlideContent(slide)
+								if (signal.aborted) return
+								yield content
+							}
+						})(),
 						signal,
 					}),
-				{
+				(firstPage) => ({
 					fileName: defaultName,
 					destination,
 					outputPolicy: "file-stream",
-					pageCount: htmlSlides.length,
-					config: pptxConfig,
-					skipFailedPages: true,
+					pageCount,
+					config: createPptxSlideConfig(
+						resolvePptScaleContentDimensions(firstPage.html, firstSlide.rawContent),
+					),
+					skipFailedPages: false,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",
@@ -491,9 +518,14 @@ function EditToolbar({
 							duration: 0,
 						})
 					},
-				},
+				}),
 			)
 			cancelExport = streamingHandle.cancel
+			magicToast.loading({
+				key: toastId,
+				content: getExportToastContent(t("topicFiles.exporting")),
+				duration: 0,
+			})
 
 			setIsEditableExporting(true)
 			streamingHandle.promise
@@ -521,7 +553,7 @@ function EditToolbar({
 						})
 						reportPptxExportError(error, {
 							fileName: defaultName,
-							slideCount: htmlSlides.length,
+							slideCount: pageCount,
 							source: "EditToolbar.streaming",
 						})
 					}
@@ -717,84 +749,16 @@ function EditToolbar({
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
-							supportPPT={true}
-							supportCurrentPage={!!pptStore}
+							supportPptx={supportsPptxFileStreaming()}
 							supportSpecificPages={!!pptStore}
 							slides={pptStore?.slides}
-							currentPageIndex={currentPageIndex}
-							totalPages={totalPages}
-							onExportSource={() => {
-								if (!mainFileId) return
-
-								const currentFile = attachmentList?.find(
-									(item: AttachmentItem) => item.file_id === mainFileId,
-								)
-
-								// 如果当前文件是文件夹，直接下载文件夹
-								if (currentFile?.is_directory) {
-									exportFile([mainFileId])
-									return
-								}
-
-								// 检查是否有父文件夹
-								const parentFileId = currentFile?.parent_id
-								if (parentFileId) {
-									const parentFile = attachmentList?.find(
-										(item: AttachmentItem) => item.file_id === parentFileId,
-									)
-									// 如果父文件是文件夹，下载整个文件夹
-									if (parentFile?.is_directory) {
-										exportFile([parentFileId])
-										return
-									}
-								}
-
-								// 默认下载当前文件
-								exportFile([mainFileId])
-							}}
-							onExportPDF={() => {
-								if (pptStore) {
-									exportPdfByPaths({})
-								} else {
-									exportPdf([mainFileId || ""])
-								}
-							}}
-							onExportPPT={() => exportPpt([mainFileId || ""])}
-							onExportEditablePPT={() => exportEditablePptByPaths({})}
-							onExportCurrentSource={() => {
-								if (fileId)
-									exportFile(
-										[fileId],
-										fileVersion ? { [fileId]: fileVersion } : undefined,
-									)
-							}}
-							onExportCurrentPDF={() => {
-								const currentSlide = pptStore?.slides[currentPageIndex || 0]
-								if (currentSlide?.path) {
-									exportPdfByPaths({ slidePaths: [currentSlide.path] })
-								} else if (fileId) {
-									exportPdf([fileId])
-								}
-							}}
-							onExportCurrentPPT={() => {
-								if (fileId) exportPpt([fileId])
-							}}
-							onExportCurrentEditablePPT={() => {
-								const currentSlide = pptStore?.slides[currentPageIndex || 0]
-								if (!currentSlide?.path) return
-								exportEditablePptByPaths({
-									slidePaths: [currentSlide.path],
-								})
+							onExportPptx={() => {
+								if (pptStore) exportEditablePptByPaths({})
+								else void exportPptx([mainFileId || ""])
 							}}
 							onExportSpecificPages={(
 								filePaths: string[],
-								format:
-									| "source"
-									| "pdf"
-									| "ppt"
-									| "pptx"
-									| "image_png"
-									| "image_jpeg",
+								format: "source" | "pdf" | "pptx" | "image_png" | "image_jpeg",
 							) => {
 								if (!filePaths.length) return
 
@@ -815,21 +779,12 @@ function EditToolbar({
 									return
 								}
 
-								const fileIds =
-									filePaths
+								if (format === "source") {
+									const fileIds = filePaths
 										.map((filePath) => pptStore?.getFileIdByPath(filePath))
-										.filter(
-											(fileId): fileId is string => fileId !== undefined,
-										) ?? []
-
-								if (!fileIds.length) return
-
-								const exportHandlers = {
-									source: () => exportFile(fileIds),
-									ppt: () => exportPpt(fileIds),
+										.filter((fileId): fileId is string => fileId !== undefined)
+									if (fileIds.length) exportFile(fileIds)
 								}
-
-								exportHandlers[format]?.()
 							}}
 							onGenerateScreenshot={
 								pptStore

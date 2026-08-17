@@ -838,7 +838,7 @@ async function createStagingStore(
 	const presentation = createPresentation(input.config) as unknown as StreamingPptxWithStaging
 	if (typeof presentation.createOpfsStagingStore !== "function") {
 		throw new Error(
-			"PptxGenJS createOpfsStagingStore() is unavailable; install the Phase 3 streaming runtime.",
+			"PptxGenJS v5 createOpfsStagingStore() is unavailable; use the streaming-only runtime.",
 		)
 	}
 	return presentation.createOpfsStagingStore({ sessionId })

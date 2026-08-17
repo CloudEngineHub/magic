@@ -7,7 +7,6 @@ import { UploadSource, useFileUpload } from "../../MessageEditor/hooks/useFileUp
 import { handleShareFunction } from "../../../utils/share"
 import { ShareType, ResourceType } from "../../Share/types"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
-import { exportSingleFileToPpt } from "../utils/exportSingleFile"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import { ROOT_FILE_ID } from "../constant"
@@ -1166,34 +1165,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		[t, attachments],
 	)
 
-	// 下载PPT格式
-	const handleDownloadPpt = useCallback(
-		(item: AttachmentItem) => {
-			if (item.file_id) {
-				const onStart = () => {
-					setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
-				}
-				const onEnd = () => {
-					setExportingFiles((prev) => {
-						const newSet = new Set(prev)
-						newSet.delete(item.file_id || "")
-						return newSet
-					})
-				}
-				exportSingleFileToPpt({
-					fileId: item.file_id,
-					projectId,
-					t,
-					onStart,
-					onEnd,
-					onError: onEnd,
-				})
-			}
-		},
-		[projectId, t],
-	)
-
-	// 导出可编辑PPTX（前端 html2pptx，通过 prepareExportSlides 服务准备数据）
+	// 导出 PPTX（前端 html2pptx streaming-only）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
 			if (!item.file_id) return
@@ -1789,7 +1761,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleDownloadFile,

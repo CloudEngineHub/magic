@@ -2236,23 +2236,6 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 	},
 
 	/**
-	 * @description 导出pdf或者ppt
-	 * @param data
-	 */
-	exportPdfOrPpt(data: {
-		file_ids: string[]
-		project_id?: string
-		is_debug?: boolean
-		convert_type?: "pdf" | "ppt"
-	}) {
-		return fetch.post("/api/v1/super-agent/file-convert/create", {
-			...data,
-			// @ts-ignore
-			token: window.temporary_token,
-		})
-	},
-
-	/**
 	 * @description 创建文件或文件夹
 	 * @param data
 	 */
@@ -2264,18 +2247,6 @@ export const generateSuperMagicApi = (fetch: HttpClient) => ({
 		ignore_duplicate?: boolean
 	}) {
 		return fetch.post("/api/v1/super-agent/file", data)
-	},
-
-	/**
-	 * @description 查询文件导出pdf或者ppt的状态
-	 * @param task_key
-	 */
-	checkExportPdfOrPptStatus(task_key: string) {
-		const token = (window as any).temporary_token
-		const url = token
-			? `/api/v1/super-agent/file-convert/check?task_key=${task_key}&token=${token}`
-			: `/api/v1/super-agent/file-convert/check?task_key=${task_key}`
-		return fetch.get(url)
 	},
 
 	/**

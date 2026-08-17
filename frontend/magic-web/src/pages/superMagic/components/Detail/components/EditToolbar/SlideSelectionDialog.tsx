@@ -22,7 +22,7 @@ import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slid
 
 import { Image as ImageIcon } from "lucide-react"
 
-export type ExportFormat = "source" | "pdf" | "ppt" | "pptx" | "image_png" | "image_jpeg"
+export type ExportFormat = "source" | "pdf" | "pptx" | "image_png" | "image_jpeg"
 
 interface SlideSelectionDialogProps {
 	/** 是否打开对话框 */
@@ -37,8 +37,8 @@ interface SlideSelectionDialogProps {
 	isExporting?: boolean
 	/** 生成截图回调 */
 	onGenerateScreenshot?: (index: number) => Promise<void>
-	/** 是否支持导出PPT */
-	supportPPT?: boolean
+	/** 是否支持导出 PPTX */
+	supportPptx?: boolean
 }
 
 function SlideSelectionDialog({
@@ -48,11 +48,11 @@ function SlideSelectionDialog({
 	onConfirm,
 	isExporting = false,
 	onGenerateScreenshot,
-	supportPPT = true,
+	supportPptx = true,
 }: SlideSelectionDialogProps) {
 	const { t } = useTranslation("super")
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-	const [exportFormat, setExportFormat] = useState<ExportFormat>(supportPPT ? "pptx" : "pdf")
+	const [exportFormat, setExportFormat] = useState<ExportFormat>(supportPptx ? "pptx" : "pdf")
 	// 延后渲染列表，先让对话框壳出现，减轻首屏卡顿
 	const [contentReady, setContentReady] = useState(false)
 
@@ -148,7 +148,7 @@ function SlideSelectionDialog({
 	// 重置选择并关闭
 	function handleClose() {
 		setSelectedIds(new Set())
-		setExportFormat(supportPPT ? "ppt" : "pdf")
+		setExportFormat(supportPptx ? "pptx" : "pdf")
 		onOpenChange(false)
 	}
 
@@ -285,7 +285,7 @@ function SlideSelectionDialog({
 						onValueChange={(value) => setExportFormat(value as ExportFormat)}
 						className="mt-2 flex flex-wrap gap-x-4 gap-y-2"
 					>
-						{supportPPT && (
+						{supportPptx && (
 							<>
 								<div className="flex items-center space-x-2">
 									<RadioGroupItem value="pptx" id="format-pptx" />
@@ -295,16 +295,6 @@ function SlideSelectionDialog({
 									>
 										<TSIcon type="ts-ppt-file" size="16" />
 										{t("topicFiles.exportPptx")}
-									</Label>
-								</div>
-								<div className="flex items-center space-x-2">
-									<RadioGroupItem value="ppt" id="format-ppt" />
-									<Label
-										htmlFor="format-ppt"
-										className="flex cursor-pointer items-center gap-2 text-sm font-normal"
-									>
-										<TSIcon type="ts-ppt-file" size="16" />
-										{t("topicFiles.ppt")}
 									</Label>
 								</div>
 							</>

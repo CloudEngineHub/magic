@@ -42,7 +42,7 @@ export interface PackagingWorkerPort {
 }
 
 export interface PackagingWorkerFactoryOptions {
-	/** Injected for tests and hosts whose pptxgenjs package is patched at runtime. */
+	/** Injected for tests and hosts that provide a custom PptxGenJS presentation factory. */
 	createPresentation?: (config: SlideConfig) => Pptx | Promise<Pptx>
 	postMessage?: PackagingWorkerPort["postMessage"]
 	ackWindow?: number
@@ -66,7 +66,7 @@ type WorkerState =
 /**
  * Build the protocol handler separately from the global Worker entrypoint. This
  * keeps ordering, ACK, and cancellation rules testable without constructing a
- * browser Worker or requiring a patched PptxGenJS package in Node.
+ * browser Worker or requiring the PptxGenJS v5 streaming runtime in Node.
  */
 export function createStreamingPackagingWorkerHandler(
 	options: PackagingWorkerFactoryOptions = {},
@@ -160,7 +160,7 @@ export function createStreamingPackagingWorkerHandler(
 			}
 			if (typeof presentation.beginStreaming !== "function") {
 				throw new Error(
-					"PptxGenJS beginStreaming() is unavailable; install the Phase 3 patched runtime or inject a streaming presentation factory",
+					"PptxGenJS v5 beginStreaming() is unavailable; use the streaming-only runtime or inject a streaming presentation factory",
 				)
 			}
 			session = await presentation.beginStreaming({

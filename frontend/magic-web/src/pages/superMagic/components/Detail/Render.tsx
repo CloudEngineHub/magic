@@ -1,12 +1,9 @@
 import ContentRenderer from "./components/ContentRenderer"
 import { SuperMagicApi } from "@/apis"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef } from "react"
 import { useDeepCompareEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { exportSingleFileToPpt } from "@/pages/superMagic/components/TopicFilesButton/utils/exportSingleFile"
-import { getExportAllFileIds } from "./contents/HTML/utils"
-import MagicProgressToast from "@/components/base/MagicProgressToast"
 import useEditMode from "./hooks/useEditMode"
 import useCheckBeforeCloseWithSave from "./hooks/useCheckBeforeCloseWithSave"
 import { useSyncCustomProjectFolderNameBeforeSave } from "./hooks/useSyncCustomProjectFolderNameBeforeSave"
@@ -118,8 +115,6 @@ export default function Render(props: any) {
 		currentFileData: data,
 	})
 
-	const [exportProgress, setExportProgress] = useState(0)
-	const [isExporting, setIsExporting] = useState(false)
 	const shouldRefreshAfterSave = useRef(false)
 
 	// 订阅进入编辑状态事件
@@ -289,36 +284,6 @@ export default function Render(props: any) {
 		}).then((res: any) => {
 			downloadFileWithAnchor(res[0]?.url)
 		})
-		// const fileIds = getExportAllFileIds(fileId, attachments)
-		// batchExportFile({
-		// 	projectId: selectedProject?.id,
-		// 	fileIds,
-		// 	t,
-		// 	onStart: startExport,
-		// 	onEnd: endExport,
-		// 	onProgress,
-		// 	onError,
-		// })
-	}
-	const startExport = () => {
-		setIsExporting(true)
-		setExportProgress(0)
-	}
-	const onProgress = (progress: number) => {
-		setExportProgress(Math.round(progress))
-	}
-	const endExport = () => {
-		setExportProgress(100)
-		setTimeout(() => {
-			setIsExporting(false)
-			setExportProgress(0)
-			// magicToast.success(t("topicFiles.exportSuccess"))
-		}, 500)
-	}
-	const onError = () => {
-		setIsExporting(false)
-		setExportProgress(0)
-		magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 	}
 
 	const exportPdf = async (fileId: string) => {
@@ -501,20 +466,6 @@ export default function Render(props: any) {
 			})
 		}
 	}
-	const exportPpt = async (fileId: string) => {
-		const fileIds = getExportAllFileIds(fileId, attachments)
-		fileIds?.length > 0 &&
-			exportSingleFileToPpt({
-				fileId: fileId,
-				projectId: selectedProject?.id || projectId,
-				t,
-				onStart: startExport,
-				onEnd: endExport,
-				onProgress,
-				onError,
-			})
-	}
-
 	const exportPptx = async (fileId: string) => {
 		if (!fileId) return
 
@@ -742,10 +693,8 @@ export default function Render(props: any) {
 		exportFile,
 		exportPdf,
 		exportRasterPdf,
-		exportPpt,
 		exportPptx,
 		exportImage,
-		isExporting,
 		selectedProject,
 		selectedTopic,
 		showFileHeader,
@@ -782,17 +731,6 @@ export default function Render(props: any) {
 					<ContentRenderer type={type} data={data} commonProps={commonProps} />
 				</Suspense>
 			</div>
-
-			{/* 使用封装的进度条组件 */}
-			<MagicProgressToast
-				visible={isExporting}
-				progress={exportProgress}
-				text={t("topicFiles.exportingTip")}
-				position="top"
-				width={280}
-				showPercentage={true}
-				progressHeight={4}
-			/>
 		</>
 	)
 }

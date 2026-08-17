@@ -29,7 +29,6 @@ export function menuItemsIncludeNoWaterMarkDownload(items: MobileDownloadMenuIte
 export interface SingleFileDownloadHandlers {
 	handleDownloadOriginal: (item: AttachmentItem, mode?: DownloadImageMode) => void
 	handleDownloadPdf: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
-	handleDownloadPpt: (item: AttachmentItem) => void
 	handleDownloadPptx: (item: AttachmentItem, folderChildren?: AttachmentItem[]) => void
 	handleDownloadImage?: (item: AttachmentItem, format: "png" | "jpeg") => void
 	handleDownloadNoWaterMark?: (item: AttachmentItem) => void
@@ -64,7 +63,6 @@ export function buildSingleFileDownloadMenu({
 	const {
 		handleDownloadOriginal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleDownloadNoWaterMark,
@@ -82,15 +80,6 @@ export function buildSingleFileDownloadMenu({
 				key: "downloadPdf",
 				label: t("topicFiles.contextMenu.downloadPdf"),
 				onClick: () => handleDownloadPdf(item, item.children || []),
-			},
-			{
-				key: "downloadPpt",
-				label: t("topicFiles.contextMenu.downloadPpt"),
-				onClick: () => {
-					const appEntryFile = getAppEntryFile(item.children || [], item.display_config)
-					if (appEntryFile) handleDownloadPpt(appEntryFile)
-					else message.error(t("topicFiles.entryFileNotFound"))
-				},
 			},
 			{
 				key: "downloadPptx",
@@ -179,18 +168,11 @@ export function buildSingleFileDownloadMenu({
 		}
 
 		if (canConvertToPPTX) {
-			items.push(
-				{
-					key: "downloadPpt",
-					label: t("topicFiles.contextMenu.downloadPpt"),
-					onClick: () => handleDownloadPpt(item),
-				},
-				{
-					key: "downloadPptx",
-					label: t("topicFiles.contextMenu.downloadPptx"),
-					onClick: () => handleDownloadPptx(item, item.children || []),
-				},
-			)
+			items.push({
+				key: "downloadPptx",
+				label: t("topicFiles.contextMenu.downloadPptx"),
+				onClick: () => handleDownloadPptx(item, item.children || []),
+			})
 		}
 
 		if (canConvertToImage && handleDownloadImage) {

@@ -96,7 +96,7 @@ interface PPTRenderProps {
 	}: {
 		fileId: string
 		fileVersion?: number
-		type?: "file" | "pdf" | "ppt"
+		type?: "file" | "pdf" | "pptx"
 	}) => void
 	onFullscreen?: () => void
 	isTabActive?: boolean

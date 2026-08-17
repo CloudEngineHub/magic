@@ -124,7 +124,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		isPlaybackMode,
 		exportFile,
 		exportPdf,
-		exportPpt,
+		exportPptx,
 		allowDownload,
 		projectId,
 		onRegisterCheckBeforeClose,
@@ -368,14 +368,14 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		}: {
 			fileId: string
 			fileVersion?: number
-			type?: "file" | "pdf" | "ppt"
+			type?: "file" | "pdf" | "pptx"
 		}) => {
 			if (type === "file") {
 				exportFile?.(fileId, fileVersion)
 			} else if (type === "pdf") {
 				exportPdf?.(fileId)
-			} else if (type === "ppt") {
-				exportPpt?.(fileId)
+			} else if (type === "pptx") {
+				exportPptx?.(fileId)
 			}
 		},
 	)

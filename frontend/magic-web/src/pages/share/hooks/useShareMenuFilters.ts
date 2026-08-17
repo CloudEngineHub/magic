@@ -40,7 +40,7 @@ function useShareMenuFilters({ allowDownloadProjectFile }: UseShareMenuFiltersPr
 					key === "downloadOriginal" ||
 					key === "downloadFolder" ||
 					key === "downloadPdf" ||
-					key === "downloadPpt" ||
+					key === "downloadPptx" ||
 					key === "downloadImage" ||
 					key === "downloadImageNoWaterMark"
 				)
