@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "../../hooks/types"
+import { detectDuplicateFiles } from "../duplicateFileHandler"
 import {
 	detectDuplicateFilesInTarget,
 	renameFilesForTargetUpload,
@@ -43,6 +44,13 @@ const attachments: AttachmentItem[] = [
 ]
 
 describe("folder merge duplicate paths", () => {
+	it("keeps regular folder uploads matched relative to their target folder", () => {
+		const files = [createUploadFile("新建文件.md", "新闻报道/新建文件.md")]
+		const duplicates = detectDuplicateFiles(files, "新闻报道", attachments)
+
+		expect(Array.from(duplicates.keys())).toEqual(["新建文件.md"])
+	})
+
 	it("detects root and nested duplicates after removing the uploaded root folder", () => {
 		const files = stripTopLevelFolderFromFiles([
 			createUploadFile("新建文件.md", "新闻报道/新建文件.md"),

@@ -89,10 +89,8 @@ export function stripTopLevelFolderFromFiles(files: File[]): File[] {
 	})
 }
 
-export function extractUploadFileRelativePath(file: File): string {
-	// Folder-merge callers have already removed the uploaded root folder from
-	// webkitRelativePath. Keep the remaining path intact so nested files such as
-	// "分类五/新建文件.md" are compared against the same path in the target folder.
+export function extractTargetUploadRelativePath(file: File): string {
+	// Target-folder uploads already have their root folder removed.
 	return getFileRelativePath(file)
 }
 
@@ -105,7 +103,7 @@ export function extractUploadFileRelativePath(file: File): string {
  */
 export function renameFilesForTargetUpload(files: File[], renameMap: Map<string, string>): File[] {
 	return files.map((file) => {
-		const relativePath = extractUploadFileRelativePath(file)
+		const relativePath = extractTargetUploadRelativePath(file)
 		const nextName = renameMap.get(relativePath)
 		if (!nextName || nextName === file.name) return file
 
@@ -243,7 +241,7 @@ export function detectDuplicateFilesInTarget(
 	const duplicates = new Map<string, File>()
 
 	files.forEach((file) => {
-		const relativePath = extractUploadFileRelativePath(file)
+		const relativePath = extractTargetUploadRelativePath(file)
 		if (existingPaths.has(relativePath)) {
 			duplicates.set(relativePath, file)
 		}
