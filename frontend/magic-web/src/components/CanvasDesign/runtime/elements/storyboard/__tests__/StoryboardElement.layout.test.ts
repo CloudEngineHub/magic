@@ -31,6 +31,7 @@ describe("resolveStoryboardElementLayout", () => {
 		expect(layout.labelFontSize).toBe(28)
 		expect(layout.shotFontSize).toBe(28)
 		expect(layout.shotSmallFontSize).toBe(28)
+		expect(shot?.headerRect.height).toBe(STORYBOARD_LAYOUT_DESIGN.shotHeaderHeight)
 		expect(layout.parameterRows.stacked).toBe(false)
 		expect(
 			layout.parameterRows.aspectRatio.rect.y -

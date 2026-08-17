@@ -31,7 +31,7 @@ export const STORYBOARD_LAYOUT_DESIGN = {
 	footerButtonHeight: 84,
 	// 分镜卡片固定内容高度：头区 + 描述区按大字阶留足输入空间。
 	shotMinimumHeight: 400,
-	shotHeaderHeight: 92,
+	shotHeaderHeight: 76,
 	shotGenerateWidth: 220,
 	/** 删除是轻量幽灵图标；命中区仍由交互层扩至 32/44。 */
 	shotDeleteSize: 48,

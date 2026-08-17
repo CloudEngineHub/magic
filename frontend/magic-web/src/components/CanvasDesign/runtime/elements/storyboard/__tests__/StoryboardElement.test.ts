@@ -187,6 +187,7 @@ describe("StoryboardElement", () => {
 		const texts = group.find("Text").map((node) => (node as Konva.Text).text())
 		const generateAll = group.findOne(".storyboard-generate-all") as Konva.Rect
 		const shotBackground = group.findOne(".storyboard-shot-shot-1") as Konva.Rect
+		const shotSurface = group.findOne(".storyboard-shot-background") as Konva.Rect
 		const generateAgainIcon = group.findOne(".storyboard-generate-again-icon") as Konva.Path
 		const modelHit = group.find(".storyboard-control-hit").find((node) => {
 			const metadata = node.getAttr("storyboardControlMetadata") as
@@ -204,6 +205,7 @@ describe("StoryboardElement", () => {
 		expect(group.findOne(".hit-area")).toBeTruthy()
 		expect(group.findOne(".storyboard-shot-shot-1")).toBeTruthy()
 		expect(shotBackground.strokeWidth()).toBe(Math.max(1, layout.scale))
+		expect(shotSurface.cornerRadius()).toBe(layout.shotLayouts[0]?.cornerRadius)
 		expect(group.findOne(".storyboard-duration-background")).toBeUndefined()
 		expect(group.find(".storyboard-control-hit").length).toBeGreaterThanOrEqual(8)
 		expect(group.find(".storyboard-control-hit").every((node) => node.listening())).toBe(true)

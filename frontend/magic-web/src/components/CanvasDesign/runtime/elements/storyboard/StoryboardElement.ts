@@ -587,8 +587,10 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			new Konva.Rect({
 				...rect,
 				fill: STORYBOARD_CONFIG.SURFACE,
+				cornerRadius: layout.cornerRadius,
 				listening: false,
 				perfectDrawEnabled: false,
+				name: "storyboard-shot-background",
 			}),
 			createInsetStrokeRect(rect, layout.strokeWidth, {
 				stroke: STORYBOARD_CONFIG.BORDER,
