@@ -1,5 +1,5 @@
 import { Empty, Flex, message } from "antd"
-import { memo, useEffect, useState, useMemo, useRef } from "react"
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { IconPlus, IconEdit, IconTrash, IconCopy } from "@tabler/icons-react"
 import { useMemoizedFn, useRequest } from "ahooks"
@@ -45,7 +45,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 	const { AIManageApi } = useApis()
 	const { isOfficialOrg } = useAdminStore()
 
-	const [models, setModels] = useState<AiManage.ModelInfo[]>([])
+	const [models, setModels] = useState<AiManage.ModelInfo[]>(() => data?.models ?? [])
 	const [currentModel, setCurrentModel] = useState<AiManage.ModelInfo | null>(null)
 	const testConnectionRefMap = useRef<Record<string, TestConnectionRef | null>>({})
 
@@ -64,11 +64,9 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 	/* 大语言模型 */
 	const isLLM = data?.category === AiModel.ServiceProviderCategory.LLM
 
-	useEffect(() => {
-		if (data) {
-			setModels(data.models)
-		}
-	}, [data])
+	useLayoutEffect(() => {
+		setModels(data?.models ?? [])
+	}, [data?.id, data?.models])
 
 	/* 模型类型组映射 */
 	const ModelTypeGroupMap: Record<AiModel.ModelTypeGroup, string> = useMemo(
@@ -319,18 +317,14 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 												<>
 													<MagicButton
 														size={isMobile ? "small" : "middle"}
-														icon={
-															<IconCopy size={isMobile ? 16 : 20} />
-														}
+														icon={<IconCopy size={isMobile ? 16 : 20} />}
 														className={styles.button}
 														onClick={() => copyModel(item)}
 													/>
 													<MagicButton
 														danger
 														size={isMobile ? "small" : "middle"}
-														icon={
-															<IconTrash size={isMobile ? 16 : 20} />
-														}
+														icon={<IconTrash size={isMobile ? 16 : 20} />}
 														className={styles.button}
 														onClick={() => onDeleteModel(item)}
 													/>
