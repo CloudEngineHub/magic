@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Dtyq\CloudFile\Kernel\Driver\FileService;
 
 use Dtyq\CloudFile\Kernel\Struct\CredentialPolicy;
+use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
 use Dtyq\SdkBase\Kernel\Constant\RequestMethod;
 use Dtyq\SdkBase\SdkBase;
 use GuzzleHttp\RequestOptions;
@@ -169,7 +170,8 @@ class FileServiceApi
             $this->sdkContainer->getExceptionBuilder()->throw(500, 'Response data parse error');
         }
         if (! isset($result['code']) || $result['code'] !== 1000) {
-            $this->sdkContainer->getExceptionBuilder()->throw((int) $result['code'], $result['message'] ?? 'Unknown error');
+            $message = ($result['message'] ?? 'Unknown error') . '，result: ' . ResultFormatter::format($result);
+            $this->sdkContainer->getExceptionBuilder()->throw((int) ($result['code'] ?? 500), $message);
         }
 
         return $result['data'] ?? [];

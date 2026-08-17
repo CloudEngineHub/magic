@@ -133,13 +133,16 @@ class LLMAppService extends AbstractLLMAppService
         bool $withDynamicModels = false
     ): array {
         $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
+        $accessContext = $withDynamicModels
+            ? $this->modelGatewayModelAccessService->resolveAccessContext($dataIsolation)
+            : null;
 
         $models = match ($type) {
-            ModelListType::CHAT => $this->modelGatewayMapper->getChatModels($dataIsolation, $withDynamicModels),
-            ModelListType::EMBEDDING => $this->modelGatewayMapper->getEmbeddingModels($dataIsolation, $withDynamicModels),
-            ModelListType::IMAGE => $this->modelGatewayMapper->getImageModels($dataIsolation, $withDynamicModels),
-            ModelListType::VIDEO => $this->modelGatewayMapper->getVideoModels($dataIsolation, $withDynamicModels),
-            default => $this->modelGatewayMapper->getAllModels($dataIsolation, $withDynamicModels),
+            ModelListType::CHAT => $this->modelGatewayMapper->getChatModels($dataIsolation, $withDynamicModels, $accessContext),
+            ModelListType::EMBEDDING => $this->modelGatewayMapper->getEmbeddingModels($dataIsolation, $withDynamicModels, $accessContext),
+            ModelListType::IMAGE => $this->modelGatewayMapper->getImageModels($dataIsolation, $withDynamicModels, $accessContext),
+            ModelListType::VIDEO => $this->modelGatewayMapper->getVideoModels($dataIsolation, $withDynamicModels, $accessContext),
+            default => $this->modelGatewayMapper->getAllModels($dataIsolation, $withDynamicModels, $accessContext),
         };
 
         if ($withInfo) {

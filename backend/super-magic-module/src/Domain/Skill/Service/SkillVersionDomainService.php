@@ -569,6 +569,8 @@ class SkillVersionDomainService
         SkillVersionEntity $skillVersion,
         ?string $reviewRemark = null
     ): void {
+        // 平台审核接口允许跨组织审核，拒绝保存时与通过流程保持一致。
+        $dataIsolation->disabled();
         $skillVersion->setReviewStatus(ReviewStatus::REJECTED);
         $skillVersion->setReviewRemark($reviewRemark);
         $this->saveSkillVersion($dataIsolation, $skillVersion);
