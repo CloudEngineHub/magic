@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\File\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\Common\Event\DeleteEventSource;
 use App\Domain\SuperMagic\File\Constant\TopicFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
@@ -107,6 +108,18 @@ class TaskFileDomainService
     public function getById(int $id): ?TaskFileEntity
     {
         return $this->taskFileRepository->getById($id);
+    }
+
+    public function isProjectSpaceFile(TaskFileEntity $fileEntity): bool
+    {
+        return $fileEntity->getSpaceType() === FileSpaceType::PROJECT->value;
+    }
+
+    public function shouldEnterRecycleBin(TaskFileEntity $fileEntity, DeleteEventSource $source): bool
+    {
+        return $fileEntity->getFileId() > 0
+            && $this->isProjectSpaceFile($fileEntity)
+            && in_array($source, [DeleteEventSource::User, DeleteEventSource::Agent], true);
     }
 
     /**
@@ -400,11 +413,12 @@ class TaskFileDomainService
      *
      * @param array $fileIds 文件ID数组
      * @param int $projectId 项目ID（可选，用于过滤）
+     * @param null|string $spaceType 文件空间类型（可选，用于过滤）
      * @return TaskFileEntity[] 文件实体列表
      */
-    public function getFilesByIds(array $fileIds, int $projectId = 0): array
+    public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $spaceType = null): array
     {
-        return $this->taskFileRepository->getFilesByIds($fileIds, $projectId);
+        return $this->taskFileRepository->getFilesByIds($fileIds, $projectId, $spaceType);
     }
 
     /**

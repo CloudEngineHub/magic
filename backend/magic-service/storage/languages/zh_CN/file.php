@@ -47,6 +47,7 @@ return [
 
     // File version related
     'cannot_version_directory' => '无法为目录创建版本',
+    'cannot_version_file' => '无法为该空间文件创建版本',
     'version_create_failed' => '创建文件版本失败',
     'access_denied' => '访问被拒绝',
 

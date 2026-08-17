@@ -1957,13 +1957,17 @@ class FileManagementAppService extends AbstractAppService
             Db::beginTransaction();
             try {
                 // 6. Create version snapshot (before replacement)
-                $versionEntity = $this->taskFileVersionDomainService->createFileVersion(
-                    $storageOrganizationCode,
-                    $fileEntity,
-                    $isCrossTypeReplace ? 2 : 1  // Cross-type replace uses special marker
-                );
+                $versionEntity = null;
+                $canCreateVersion = $this->taskFileVersionDomainService->canCreateVersion($fileEntity);
+                if ($canCreateVersion) {
+                    $versionEntity = $this->taskFileVersionDomainService->createFileVersion(
+                        $storageOrganizationCode,
+                        $fileEntity,
+                        $isCrossTypeReplace ? 2 : 1  // Cross-type replace uses special marker
+                    );
+                }
 
-                if (empty($versionEntity)) {
+                if ($canCreateVersion && empty($versionEntity)) {
                     $this->logger->warning('Failed to create version snapshot before replace', [
                         'file_id' => $fileId,
                     ]);

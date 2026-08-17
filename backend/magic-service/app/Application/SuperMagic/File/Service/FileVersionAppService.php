@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\File\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileChangeOrigin;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileVersionDomainService;
@@ -67,6 +68,10 @@ class FileVersionAppService extends AbstractAppService
         // 验证文件是否为目录
         if ($fileEntity->getIsDirectory()) {
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_version_directory');
+        }
+
+        if (! $this->taskFileVersionDomainService->canCreateVersion($fileEntity)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_version_file');
         }
 
         $projectEntity = $this->projectDomainService->getProjectNotUserId($fileEntity->getProjectId());
@@ -223,17 +228,21 @@ class FileVersionAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, 'file.file_not_found');
         }
 
+        // 验证文件是否为目录
+        if ($fileEntity->getIsDirectory()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_rollback_directory');
+        }
+
+        if (! $this->taskFileVersionDomainService->canCreateVersion($fileEntity)) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_version_file');
+        }
+
         // 验证项目权限
         $projectEntity = $this->getAccessibleProject(
             $fileEntity->getProjectId(),
             $dataIsolation->getCurrentUserId(),
             $dataIsolation->getCurrentOrganizationCode()
         );
-
-        // 验证文件是否为目录
-        if ($fileEntity->getIsDirectory()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.cannot_rollback_directory');
-        }
 
         $newVersionEntity = $this->taskFileVersionDomainService->rollbackFileToVersion(
             $projectEntity->getUserOrganizationCode(),
@@ -262,7 +271,8 @@ class FileVersionAppService extends AbstractAppService
         $this->eventDispatcher->dispatch(new FileContentSavedEvent(
             $fileEntity,
             $userAuthorization->getId(),
-            $userAuthorization->getOrganizationCode()
+            $userAuthorization->getOrganizationCode(),
+            FileChangeOrigin::VERSION_ROLLBACK
         ));
 
         return RollbackFileToVersionResponseDTO::createEmpty();

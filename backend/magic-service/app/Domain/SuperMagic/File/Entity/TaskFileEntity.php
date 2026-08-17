@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\File\Entity;
 
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Infrastructure\Core\AbstractEntity;
 
@@ -122,7 +123,8 @@ class TaskFileEntity extends AbstractEntity
      */
     public function shouldCreateVersionCopy(): bool
     {
-        return $this->isProjectFile();
+        return $this->getSpaceType() === FileSpaceType::PROJECT->value
+            && ! $this->getIsDirectory();
     }
 
     public function getTopicId(): int

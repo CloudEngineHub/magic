@@ -36,11 +36,12 @@ class TaskFileVersionDomainService
      */
     public function createFileVersion(string $projectOrganizationCode, TaskFileEntity $fileEntity, int $editType = 1): ?TaskFileVersionEntity
     {
-        // 仅对非目录文件创建版本
-        if ($fileEntity->getIsDirectory()) {
-            $this->logger->info('Skipping version creation for directory file', [
+        if (! $this->canCreateVersion($fileEntity)) {
+            $this->logger->info('Skipping version creation for ineligible file', [
                 'file_id' => $fileEntity->getFileId(),
                 'file_name' => $fileEntity->getFileName(),
+                'space_type' => $fileEntity->getSpaceType(),
+                'is_directory' => $fileEntity->getIsDirectory(),
             ]);
             return null;
         }
@@ -94,6 +95,16 @@ class TaskFileVersionDomainService
         ]);
 
         return $savedEntity;
+    }
+
+    public function canCreateVersion(TaskFileEntity $fileEntity): bool
+    {
+        return $fileEntity->shouldCreateVersionCopy();
+    }
+
+    public function shouldEnterRecycleBin(TaskFileVersionEntity $versionEntity): bool
+    {
+        return false;
     }
 
     /**
@@ -165,6 +176,10 @@ class TaskFileVersionDomainService
      */
     public function rollbackFileToVersion(string $projectOrganizationCode, TaskFileEntity $fileEntity, int $targetVersion): ?TaskFileVersionEntity
     {
+        if (! $this->canCreateVersion($fileEntity)) {
+            return null;
+        }
+
         $fileId = $fileEntity->getFileId();
 
         $this->logger->info('Starting file rollback to version', [

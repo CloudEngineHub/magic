@@ -1259,7 +1259,7 @@ class FileProcessAppService extends AbstractAppService
             ['size' => $result['size']]
         );
 
-        if (! $taskFileEntity->isProjectFile()) {
+        if (! $this->taskFileDomainService->isProjectSpaceFile($taskFileEntity)) {
             return $nextRevision;
         }
 
