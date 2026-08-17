@@ -40,6 +40,10 @@ export const RendererWrapper = styled.div`
             width: 12px;
             height: 100%;
             margin-left: 4px;
+
+            &:not(.magic-tree-switcher-noop):hover::before {
+                background-color: transparent;
+            }
         }
         .magic-tree-treenode {
             margin: 0 0 4px 0;
