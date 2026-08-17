@@ -9,6 +9,8 @@ ASR 音频合并服务时间配置
 - 任务清理时间
 """
 
+import os
+
 
 class AsrTimeConfig:
     """
@@ -62,6 +64,14 @@ class AsrTimeConfig:
     MAX_UNSTABLE_FILE_TIMEOUT: int = 30
 
     # ==================== FFmpeg 操作配置 ====================
+
+    # Ogg/Opus 独立分片的 -c copy 拼接必须经过真实客户端样本验证后再开启。
+    OGG_COPY_CONCAT_ENABLED: bool = os.getenv("ASR_OGG_COPY_CONCAT_ENABLED", "0").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    OGG_REENCODE_BITRATE: str = os.getenv("ASR_OGG_REENCODE_BITRATE", "32k")
 
     # FFmpeg 命令超时时间：执行 FFmpeg 合并命令的最大等待时间
     # 默认 300 秒（5分钟）

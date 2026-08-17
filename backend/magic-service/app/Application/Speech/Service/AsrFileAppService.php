@@ -1815,6 +1815,21 @@ class AsrFileAppService extends AbstractAppService
         $this->syncAsrRecoverableContextToDatabase($taskStatus);
     }
 
+    /**
+     * 构建期望音频文件名的候选列表.
+     *
+     * 产物扩展名跟随任务分片格式（ogg 任务产出 .ogg，wav 任务产出 .wav），
+     * 而任务状态中的 expectedAudioFileName 固定以 .wav 写入，恢复查找时需兼容两种后缀。
+     *
+     * @return array<int, string>
+     */
+    private function buildExpectedAudioFileNameCandidates(string $expectedAudioFileName): array
+    {
+        $baseName = (string) preg_replace('/\.(wav|ogg)$/i', '', $expectedAudioFileName);
+
+        return array_values(array_unique([$expectedAudioFileName, $baseName . '.wav', $baseName . '.ogg']));
+    }
+
     private function completeRecoverFromExistingAudioFileIfPossible(AsrTaskStatusDTO $taskStatus): bool
     {
         if (! empty($taskStatus->audioFileId)) {
@@ -1846,11 +1861,28 @@ class AsrFileAppService extends AbstractAppService
         $lookupStrategy = null;
         if (! empty($taskStatus->displayDirectoryId) && ! empty($taskStatus->expectedAudioFileName)) {
             $lookupStrategy = 'parent_id_and_name';
-            $audioFile = $this->taskFileDomainService->getByProjectParentAndName(
-                (int) $taskStatus->projectId,
-                (int) $taskStatus->displayDirectoryId,
-                $taskStatus->expectedAudioFileName
-            );
+            // 音频产物扩展名跟随任务分片格式（wav/ogg），按候选名查找并拒绝双文件歧义
+            $matches = [];
+            foreach ($this->buildExpectedAudioFileNameCandidates($taskStatus->expectedAudioFileName) as $candidateName) {
+                $candidate = $this->taskFileDomainService->getByProjectParentAndName(
+                    (int) $taskStatus->projectId,
+                    (int) $taskStatus->displayDirectoryId,
+                    $candidateName
+                );
+                if ($candidate !== null) {
+                    $matches[] = $candidate;
+                }
+            }
+            if (count($matches) > 1) {
+                $this->logger->warning('恢复 finish-recording 时发现多个候选音频文件，停止自动恢复', [
+                    'task_key' => $taskStatus->taskKey,
+                    'project_id' => $taskStatus->projectId,
+                    'display_directory_id' => $taskStatus->displayDirectoryId,
+                    'candidates' => array_map(static fn ($file) => $file->getFileName(), $matches),
+                ]);
+                return false;
+            }
+            $audioFile = $matches[0] ?? null;
         } elseif (! empty($taskStatus->filePath)) {
             $lookupStrategy = 'historical_relative_path';
             $relativePath = $this->normalizeWorkspaceRelativePath($taskStatus->filePath);

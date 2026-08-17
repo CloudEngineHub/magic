@@ -5,10 +5,12 @@ import shutil
 import time
 from pathlib import Path
 from typing import Optional
+
 from loguru import logger
-from app.service.asr.asr_time_config import asr_time_config
-from app.service.asr.asr_size_config import asr_size_config
+
 from app.service.asr.asr_base import AsrServiceBase, ReadJsonOptions
+from app.service.asr.asr_size_config import asr_size_config
+from app.service.asr.asr_time_config import asr_time_config
 
 
 class AsrLocalWorkspaceProxy(AsrServiceBase):
@@ -34,7 +36,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
     # Metadata 结构示例:
     # {
     #   "task_key": "uuid-string",
-    #   "last_index": 5,          # 当前 merged.wav 包含的最大文件索引 (即已合并 0.wav ... 5.wav)
+    #   "last_index": 5,          # 当前 merged.{ext} 包含的最大文件索引 (即已合并 0.{ext} ... 5.{ext})
     #   "timestamp": 1234567890.1 # 最后更新时间戳
     # }
 
@@ -66,9 +68,11 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             # 如果无法获取项目根目录，使用当前工作目录
             return str(Path.cwd() / ".local_cache" / "asr_workspace")
 
-    def __init__(self, task_key: str, remote_dir: Path, local_base_dir: str = None):
+    def __init__(self, task_key: str, remote_dir: Path, local_base_dir: str = None, audio_format: str = None):
         self.task_key = task_key
         self.remote_dir = remote_dir
+        # 任务音频格式决定 merged 文件名（merged.wav / merged.ogg），None 回退 wav 兼容历史任务
+        self.merged_filename = self.get_merged_filename(audio_format)
 
         # 如果未指定 local_base_dir，使用默认值
         if local_base_dir is None:
@@ -395,7 +399,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
         5. 如果都不存在，返回 (False, -1)
         """
         try:
-            remote_merged = self.remote_dir / self.MERGED_WAV_FILENAME
+            remote_merged = self.remote_dir / self.merged_filename
             remote_metadata = self.remote_dir / self.METADATA_FILE
 
             merged_exists = await asyncio.to_thread(remote_merged.exists)
@@ -410,13 +414,13 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             if merged_exists != metadata_exists:
                 logger.warning(
                     f"{self.LOG_PREFIX} ⚠️ task_key={self.task_key} "
-                    f"Remote 检查点数据不一致 ({self.MERGED_WAV_FILENAME}={merged_exists}, metadata={metadata_exists})"
+                    f"Remote 检查点数据不一致 ({self.merged_filename}={merged_exists}, metadata={metadata_exists})"
                 )
 
                 # 删除存在的文件
                 if merged_exists:
                     await asyncio.to_thread(remote_merged.unlink, missing_ok=True)
-                    logger.info(f"{self.LOG_PREFIX} 🗑️ 已删除不一致的 {self.MERGED_WAV_FILENAME}")
+                    logger.info(f"{self.LOG_PREFIX} 🗑️ 已删除不一致的 {self.merged_filename}")
 
                 if metadata_exists:
                     await asyncio.to_thread(remote_metadata.unlink, missing_ok=True)
@@ -457,18 +461,18 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
                 await asyncio.to_thread(remote_metadata.unlink, missing_ok=True)
                 return False, -1
 
-            # 3.2 验证 merged.wav 文件大小
+            # 3.2 验证 merged 文件大小
             merged_size = await asyncio.to_thread(lambda: remote_merged.stat().st_size)
             if merged_size == 0:
                 logger.warning(
-                    f"{self.LOG_PREFIX} ⚠️ task_key={self.task_key} {self.MERGED_WAV_FILENAME} 大小为 0，删除检查点文件"
+                    f"{self.LOG_PREFIX} ⚠️ task_key={self.task_key} {self.merged_filename} 大小为 0，删除检查点文件"
                 )
                 await asyncio.to_thread(remote_merged.unlink, missing_ok=True)
                 await asyncio.to_thread(remote_metadata.unlink, missing_ok=True)
                 return False, -1
 
             # 3.3 检查本地缓存是否与 Remote 一致（仅首次运行时）
-            local_merged = self.local_dir / self.MERGED_WAV_FILENAME
+            local_merged = self.local_dir / self.merged_filename
             local_metadata = self.local_dir / self.METADATA_FILE
 
             need_sync = True
@@ -527,7 +531,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
                 )
 
                 if not is_ready:
-                    logger.warning(f"{self.LOG_PREFIX} ⚠️ {self.MERGED_WAV_FILENAME} 不可用: {reason}，删除检查点")
+                    logger.warning(f"{self.LOG_PREFIX} ⚠️ {self.merged_filename} 不可用: {reason}，删除检查点")
                     await asyncio.to_thread(remote_merged.unlink, missing_ok=True)
                     await asyncio.to_thread(remote_metadata.unlink, missing_ok=True)
                     return False, -1
@@ -546,7 +550,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             logger.error(f"{self.LOG_PREFIX} ❌ task_key={self.task_key} 验证检查点失败: {e}")
             # 发生异常，安全起见删除检查点文件
             try:
-                await asyncio.to_thread((self.remote_dir / self.MERGED_WAV_FILENAME).unlink, missing_ok=True)
+                await asyncio.to_thread((self.remote_dir / self.merged_filename).unlink, missing_ok=True)
                 await asyncio.to_thread((self.remote_dir / self.METADATA_FILE).unlink, missing_ok=True)
             except OSError:
                 # 文件删除失败，忽略错误（已经是清理操作）

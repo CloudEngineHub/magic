@@ -6,22 +6,26 @@ ASR 音频合并任务管理器
 """
 
 import asyncio
-from functools import lru_cache
 import json
 import os
 import threading
 from datetime import datetime, timedelta
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional, TypeVar, Union
 from uuid import uuid4
+
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.path_manager import PathManager
-from app.service.asr.asr_time_config import asr_time_config
 from app.service.asr.asr_base import AsrServiceBase, ReadJsonOptions
-
+from app.service.asr.asr_time_config import asr_time_config
+from app.service.asr.asr_utils import (
+    resolve_audio_format_from_directory,
+    validate_audio_format_for_write,
+)
 
 T = TypeVar("T")
 
@@ -46,6 +50,8 @@ class AsrTaskResult(BaseModel):
     task_key: str
     status: AsrTaskStatus
     source_dir: str
+    audio_format: Optional[str] = None  # 任务音频分片格式（wav/ogg），首次扫描确定后不再变更；None 按 wav 兼容历史任务
+    audio_format_error: Optional[str] = None  # 格式冲突/实际编码校验错误，阻止任务正常完成
     target_dir: Optional[str] = None  # 创建时可选，完成时必填
     intelligent_title: Optional[str] = None  # 智能标题，完成时必填
     file_path: Optional[str] = None  # 音频文件路径（向后兼容）
@@ -694,6 +700,42 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         return await self._atomic_update_state(task_key, updater, "更新任务进度失败")
 
+    async def set_audio_format(self, task_key: str, audio_format: str) -> bool:
+        """
+        设置任务音频格式（原子性操作，仅首次生效）
+
+        任务级格式钉住：已确定格式的任务不会被改写，避免运行中被异格式分片带偏。
+
+        Args:
+            task_key: 任务标识符
+            audio_format: 音频格式（仅支持 wav/ogg，非法值抛出 ValueError）
+
+        Returns:
+            bool: 是否更新成功
+        """
+        normalized = validate_audio_format_for_write(audio_format)
+
+        def updater(state: TaskState) -> TaskState:
+            """仅在格式未确定时写入"""
+            if state.task.audio_format:
+                return state
+            state = self._apply_state_updates(state, task_updates={"audio_format": normalized})
+            logger.info(f"🎵 {AsrMergeTaskManager.LOG_PREFIX} 任务音频格式已钉住: {task_key} -> {normalized}")
+            return state
+
+        return await self._atomic_update_state(task_key, updater, "设置音频格式失败")
+
+    async def set_audio_format_error(self, task_key: str, error_message: str) -> bool:
+        """Persist a format error so finish cannot silently complete a bad task."""
+        message = (error_message or "audio format validation failed").strip()
+
+        def updater(state: TaskState) -> TaskState:
+            if state.task.audio_format_error == message:
+                return state
+            return self._apply_state_updates(state, task_updates={"audio_format_error": message})
+
+        return await self._atomic_update_state(task_key, updater, "记录音频格式错误失败")
+
     async def mark_upload_completed(self, task_key: str, file_shard_count: Optional[int] = None) -> bool:
         """
         标记用户已告知上传完成（原子性操作）
@@ -1159,6 +1201,14 @@ class AsrMergeTaskManager(AsrServiceBase):
         if not progress or not progress.upload_completed:
             return False
 
+        task = await self.get_task(task_key)
+        if task and task.audio_format_error:
+            logger.warning(
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 存在音频格式错误，阻止完成: "
+                f"{task.audio_format_error}"
+            )
+            return False
+
         # 2. 计算“要求数量”：以客户端声明数量和本轮扫描数量中的较大值为准
         required_file_count = max(scanned_file_count, progress.file_shard_count if progress.file_shard_count >= 0 else 0)
 
@@ -1194,12 +1244,19 @@ class AsrMergeTaskManager(AsrServiceBase):
             )
             return False
 
-        # 5. 验证 merged.wav 是否存在且稳定（轻量级检查，不阻塞）
-        merged_file = source_dir / self.MERGED_WAV_FILENAME
+        # 5. 验证 merged 文件是否存在且稳定（轻量级检查，不阻塞）
+        try:
+            resolved_format = resolve_audio_format_from_directory(source_dir, task.audio_format if task else None)
+        except ValueError as exc:
+            logger.warning(f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} merged 格式冲突: {exc}")
+            await self.set_audio_format_error(task_key, str(exc))
+            return False
+        merged_filename = self.get_merged_filename(resolved_format or (task.audio_format if task else None))
+        merged_file = source_dir / merged_filename
         if not await asyncio.to_thread(merged_file.exists):
             logger.warning(
                 f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} "
-                f"完成判定已触发但 {self.MERGED_WAV_FILENAME} 不存在"
+                f"完成判定已触发但 {merged_filename} 不存在"
             )
             return False
 
@@ -1211,12 +1268,12 @@ class AsrMergeTaskManager(AsrServiceBase):
             if file_size < asr_size_config.AUDIO_FILE_MIN_SIZE:
                 logger.warning(
                     f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} "
-                    f"{self.MERGED_WAV_FILENAME} 大小异常: {file_size}B < {asr_size_config.AUDIO_FILE_MIN_SIZE}B"
+                    f"{merged_filename} 大小异常: {file_size}B < {asr_size_config.AUDIO_FILE_MIN_SIZE}B"
                 )
                 return False
         except Exception as e:
             logger.warning(
-                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 无法获取 {self.MERGED_WAV_FILENAME} 大小: {e}"
+                f"{AsrMergeTaskManager.LOG_PREFIX} ⚠️ task_key={task_key} 无法获取 {merged_filename} 大小: {e}"
             )
             return False
 
