@@ -525,6 +525,8 @@
 		"aiSearchPlaceholder": "Search skills, capabilities, or use cases",
 		"allSkills": "All Skills",
 		"authorFallback": "Username",
+		"categoriesLoadFailed": "Failed to load categories",
+		"category": "Category",
 		"community": "Community",
 		"createMenu": {
 			"createViaChat": "Create via Chat",

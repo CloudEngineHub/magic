@@ -5,6 +5,7 @@ import { StoreSkillsStore } from ".."
 
 vi.mock("@/services/skills/SkillsService", () => ({
 	skillsService: {
+		getSkillMarketCategories: vi.fn(),
 		getStoreSkills: vi.fn(),
 		addSkillFromStore: vi.fn(),
 		upgradeSkill: vi.fn(),
@@ -67,6 +68,38 @@ describe("StoreSkillsStore", () => {
 			is_featured: undefined,
 		})
 		expect(store.keyword).toBe("")
+	})
+
+	it("loads empty categories explicitly with include_empty enabled", async () => {
+		const store = new StoreSkillsStore()
+		vi.mocked(skillsService.getSkillMarketCategories).mockResolvedValueOnce([])
+
+		await store.fetchCategories()
+
+		expect(skillsService.getSkillMarketCategories).toHaveBeenCalledWith({
+			include_empty: true,
+		})
+		expect(store.categories).toEqual([])
+		expect(store.categoriesLoading).toBe(false)
+		expect(store.categoriesError).toBe(false)
+	})
+
+	it("resets pagination and requests the selected category as a string id", async () => {
+		const store = new StoreSkillsStore()
+		vi.mocked(skillsService.getStoreSkills).mockResolvedValueOnce(createPage([], 1))
+
+		await store.setCategoryIds(["10001"])
+
+		expect(skillsService.getStoreSkills).toHaveBeenCalledWith({
+			page: 1,
+			page_size: 20,
+			keyword: undefined,
+			publisher_type: undefined,
+			category_ids: ["10001"],
+			is_featured: undefined,
+		})
+		expect(store.categoryIds).toEqual(["10001"])
+		expect(store.page).toBe(1)
 	})
 
 	it("keeps query filters while loading a full next page", async () => {

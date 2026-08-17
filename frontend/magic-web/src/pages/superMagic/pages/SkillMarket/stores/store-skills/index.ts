@@ -1,7 +1,7 @@
 import { makeAutoObservable, runInAction } from "mobx"
 import { skillsService } from "@/services/skills/SkillsService"
 import type { GetStoreSkillsParams, SkillPublisherType } from "@/apis/modules/skills"
-import type { StoreSkillView } from "@/services/skills/SkillsService"
+import type { SkillMarketCategoryView, StoreSkillView } from "@/services/skills/SkillsService"
 import {
 	appendUniqueById,
 	beginPageRequest,
@@ -34,6 +34,7 @@ function getUniqueSkillCopies(
 export class StoreSkillsStore {
 	list: StoreSkillView[] = []
 	featuredList: StoreSkillView[] = []
+	categories: SkillMarketCategoryView[] = []
 	featuredPage = 1
 	featuredLastPage?: number
 	page = 1
@@ -47,9 +48,12 @@ export class StoreSkillsStore {
 	loadingMore = false
 	featuredLoading = false
 	featuredError = false
+	categoriesLoading = false
+	categoriesError = false
 	addingSkillIds = new Set<string>()
 	private fetchRequestId = 0
 	private featuredRequestId = 0
+	private categoryRequestId = 0
 
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
@@ -61,6 +65,33 @@ export class StoreSkillsStore {
 
 	get canRefreshFeatured() {
 		return this.featuredError || (this.featuredList.length > 0 && this.featuredLastPage !== 1)
+	}
+
+	async fetchCategories() {
+		const requestId = ++this.categoryRequestId
+		this.categoriesLoading = true
+		this.categoriesError = false
+
+		try {
+			const categories = await skillsService.getSkillMarketCategories({
+				include_empty: true,
+			})
+			if (requestId !== this.categoryRequestId) return
+			runInAction(() => {
+				this.categories = categories
+				this.categoriesLoading = false
+			})
+		} catch {
+			if (requestId !== this.categoryRequestId) return
+			runInAction(() => {
+				this.categoriesLoading = false
+				this.categoriesError = true
+			})
+		}
+	}
+
+	setCategoryIds(categoryIds: string[]) {
+		return this.fetchSkills({ page: 1, category_ids: categoryIds })
 	}
 
 	isAddingSkill(id: string) {
@@ -274,11 +305,13 @@ export class StoreSkillsStore {
 			is_featured: this.isFeatured,
 		})
 		void this.fetchFeaturedSkills()
+		void this.fetchCategories()
 	}
 
 	reset() {
 		this.list = []
 		this.featuredList = []
+		this.categories = []
 		this.featuredPage = 1
 		this.featuredLastPage = undefined
 		this.page = 1
@@ -292,8 +325,11 @@ export class StoreSkillsStore {
 		this.loadingMore = false
 		this.featuredLoading = false
 		this.featuredError = false
+		this.categoriesLoading = false
+		this.categoriesError = false
 		this.addingSkillIds.clear()
 		this.fetchRequestId += 1
 		this.featuredRequestId += 1
+		this.categoryRequestId += 1
 	}
 }

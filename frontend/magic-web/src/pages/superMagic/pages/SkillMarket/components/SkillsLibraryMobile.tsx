@@ -16,6 +16,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { StoreSkillCardMobile } from "./StoreSkillCardMobile"
 import { StoreSkillsStore } from "../stores/store-skills"
+import SkillCategoryFilter from "./SkillCategoryFilter"
 import { ViewTransitionPresets } from "@/types/viewTransition"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 
@@ -37,6 +38,7 @@ function SkillsLibraryMobile() {
 
 	useEffect(() => {
 		void skillsStore.fetchSkills()
+		void skillsStore.fetchCategories()
 		return () => skillsStore.reset()
 	}, [skillsStore])
 
@@ -204,10 +206,18 @@ function SkillsLibraryMobile() {
 			</Sheet>
 
 			<ScrollArea
-				className="min-h-0 flex-1 [&_[data-slot='scroll-area-viewport']>div]:!block"
+				className="min-h-0 flex-1 [&_[data-slot='scroll-area-scrollbar']]:hidden [&_[data-slot='scroll-area-viewport']>div]:!block"
 				viewportRef={scrollViewportRef}
 			>
 				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
+					<SkillCategoryFilter
+						categories={skillsStore.categories}
+						selectedCategoryIds={skillsStore.categoryIds}
+						loading={skillsStore.categoriesLoading}
+						error={skillsStore.categoriesError}
+						onChange={skillsStore.setCategoryIds}
+					/>
+
 					{skillsStore.loading && skillsStore.list.length === 0 ? (
 						<div
 							className="flex items-center justify-center py-16"

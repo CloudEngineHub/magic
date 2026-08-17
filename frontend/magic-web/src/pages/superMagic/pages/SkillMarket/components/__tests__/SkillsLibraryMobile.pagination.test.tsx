@@ -76,6 +76,7 @@ vi.mock("@/routes/constants", () => ({
 
 vi.mock("@/services/skills/SkillsService", () => ({
 	skillsService: {
+		getSkillMarketCategories: vi.fn().mockResolvedValue([]),
 		getStoreSkills: (...args: unknown[]) => getStoreSkillsMock(...args),
 		getUserSkillIdMapByCodes: (...args: unknown[]) => getUserSkillIdMapByCodesMock(...args),
 		addSkillFromStore: vi.fn(),

@@ -524,6 +524,8 @@
 		"aiSearchPlaceholder": "搜索技能、能力或使用场景",
 		"allSkills": "全部技能",
 		"authorFallback": "用户名",
+		"categoriesLoadFailed": "分类加载失败",
+		"category": "分类",
 		"community": "社区",
 		"createMenu": {
 			"createViaChat": "通过对话创建",

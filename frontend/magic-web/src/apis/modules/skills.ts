@@ -72,6 +72,29 @@ export interface GetStoreSkillsParams {
 	is_featured?: boolean | 0 | 1 | null
 }
 
+/** Single skill-market category node. */
+export interface SkillMarketCategoryItem {
+	id: string
+	parent_id: string
+	name: string
+	logo: string | null
+	sort_order: number
+	status: number
+	skill_count: number
+	children?: SkillMarketCategoryItem[]
+}
+
+/** Query params for getting skill-market categories. */
+export interface GetSkillMarketCategoriesParams {
+	/** Return categories even when they currently contain no visible skills. */
+	include_empty?: boolean | 0 | 1
+}
+
+/** Response data for skill-market categories. */
+export interface GetSkillMarketCategoriesResponse {
+	list: SkillMarketCategoryItem[]
+}
+
 /** Single store skill item */
 export interface StoreSkillItem {
 	id: string
@@ -436,6 +459,22 @@ export interface UpdateSkillInfoParams {
 // ======================== API Generator ========================
 
 export const generateSkillsApi = (fetch: HttpClient) => ({
+	/**
+	 * Get the skill-market category tree.
+	 * Empty categories are intentionally included for the library filter UI.
+	 */
+	getSkillMarketCategories(params: GetSkillMarketCategoriesParams = {}) {
+		return fetch.get<GetSkillMarketCategoriesResponse>(
+			genRequestUrl(
+				"/api/v1/skill-market/categories",
+				{},
+				{
+					include_empty: params.include_empty ?? true,
+				},
+			),
+		)
+	},
+
 	/**
 	 * Get store skills list (marketplace).
 	 * Endpoint: POST /api/v1/skill-market/queries

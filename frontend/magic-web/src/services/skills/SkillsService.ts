@@ -5,6 +5,7 @@ import type { CollaboratorPermission } from "@/pages/superMagic/types/collaborat
 import { resolveLocalizedText } from "@/utils/locale"
 import type {
 	CreateSkillResponse,
+	GetSkillMarketCategoriesParams,
 	GetSkillVersionsParams,
 	GetSkillLastVersionsParams,
 	GetSkillsParams,
@@ -16,6 +17,7 @@ import type {
 	PublishSkillPrefillResponse,
 	PublishSkillResponse,
 	SkillDetailResponse,
+	SkillMarketCategoryItem,
 	SkillMarketDetailResponse,
 	SkillI18nText,
 	SkillItem,
@@ -41,6 +43,14 @@ export interface StoreSkillsPage<T> {
 	list: T[]
 	page: number
 	pageSize: number
+}
+
+export interface SkillMarketCategoryView {
+	id: string
+	name: string
+	logo?: string
+	sortOrder: number
+	skillCount: number
 }
 
 export interface StoreSkillView {
@@ -109,6 +119,15 @@ export interface SkillDetailView {
 export type UserSkillsListScope = "created" | "team-shared" | "market-installed"
 
 export class SkillsService {
+	async getSkillMarketCategories(
+		params: GetSkillMarketCategoriesParams = {},
+	): Promise<SkillMarketCategoryView[]> {
+		const data = await SkillsApi.getSkillMarketCategories({
+			include_empty: params.include_empty ?? true,
+		})
+		return data.list.map((item) => this.mapSkillMarketCategory(item))
+	}
+
 	async getStoreSkills(
 		params: GetStoreSkillsParams = {},
 	): Promise<StoreSkillsPage<StoreSkillView>> {
@@ -242,6 +261,16 @@ export class SkillsService {
 			publisherType: item.publisher_type,
 			needUpgrade: item.need_upgrade,
 			updatedAt: this.formatDateTime(item.updated_at),
+		}
+	}
+
+	private mapSkillMarketCategory(item: SkillMarketCategoryItem): SkillMarketCategoryView {
+		return {
+			id: String(item.id),
+			name: item.name,
+			logo: item.logo || undefined,
+			sortOrder: item.sort_order,
+			skillCount: item.skill_count,
 		}
 	}
 

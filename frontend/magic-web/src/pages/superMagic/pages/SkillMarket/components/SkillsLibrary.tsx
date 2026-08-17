@@ -28,6 +28,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 import { StoreSkillsStore } from "../stores/store-skills"
 import SkillCard from "./SkillCard"
+import SkillCategoryFilter from "./SkillCategoryFilter"
 
 const SKILLS_SEARCH_DEBOUNCE_MS = 300
 const SKILLS_SEARCH_THROTTLE_MS = 400
@@ -69,6 +70,7 @@ function SkillsLibrary({
 
 	useEffect(() => {
 		void skillsStore.fetchFeaturedSkills()
+		void skillsStore.fetchCategories()
 	}, [skillsStore])
 
 	useEffect(() => {
@@ -329,11 +331,13 @@ function SkillsLibrary({
 			) : null}
 
 			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
-				<div className="flex items-end border-b border-border">
-					<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">
-						{t("skillsLibrary.allSkills")}
-					</h2>
-				</div>
+				<SkillCategoryFilter
+					categories={skillsStore.categories}
+					selectedCategoryIds={skillsStore.categoryIds}
+					loading={skillsStore.categoriesLoading}
+					error={skillsStore.categoriesError}
+					onChange={skillsStore.setCategoryIds}
+				/>
 
 				{skillsStore.loading && skillsStore.list.length === 0 ? (
 					<div

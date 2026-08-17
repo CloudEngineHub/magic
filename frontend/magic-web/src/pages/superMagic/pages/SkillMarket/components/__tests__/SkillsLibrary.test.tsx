@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 
 const getStoreSkillsMock = vi.fn()
+const getSkillMarketCategoriesMock = vi.fn()
 const skillCardRenderMock = vi.fn()
 const skillDetailDialogRenderMock = vi.fn()
 
@@ -16,6 +17,9 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) =>
 			({
+				"skillsLibrary.allSkills": "All Skills",
+				"skillsLibrary.category": "Category",
+				"skillsLibrary.categoriesLoadFailed": "Failed to load categories",
 				"skillsLibrary.featuredSkills": "Featured Skills",
 				"skillsLibrary.retryFeatured": "Retry",
 				"skillsLibrary.refreshFeatured": "Refresh",
@@ -124,6 +128,7 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 
 vi.mock("@/services/skills/SkillsService", () => ({
 	skillsService: {
+		getSkillMarketCategories: (...args: unknown[]) => getSkillMarketCategoriesMock(...args),
 		getStoreSkills: (...args: unknown[]) => getStoreSkillsMock(...args),
 		addSkillFromStore: vi.fn(),
 		upgradeSkill: vi.fn(),
@@ -174,6 +179,47 @@ describe("SkillsLibrary", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		getStoreSkillsMock.mockReset()
+		getSkillMarketCategoriesMock.mockReset()
+		getSkillMarketCategoriesMock.mockResolvedValue([])
+	})
+
+	it("uses the all-skills tab when the category endpoint is empty", async () => {
+		getStoreSkillsMock.mockResolvedValue(createPage([], 1, 20))
+
+		render(<SkillsLibrary />)
+
+		expect(await screen.findByRole("tab", { name: "All Skills" })).toBeInTheDocument()
+		expect(screen.queryByRole("tab", { name: "All", exact: true })).not.toBeInTheDocument()
+	})
+
+	it("includes empty categories and filters the skill list by string id", async () => {
+		getSkillMarketCategoriesMock.mockResolvedValueOnce([
+			{
+				id: "10001",
+				name: "Productivity",
+				sortOrder: 100,
+				skillCount: 0,
+			},
+		])
+		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
+			Promise.resolve(createPage([], 1, is_featured === 1 ? 3 : 20)),
+		)
+
+		render(<SkillsLibrary />)
+
+		expect(await screen.findByRole("tab", { name: "Productivity" })).toBeInTheDocument()
+		expect(getSkillMarketCategoriesMock).toHaveBeenCalledWith({ include_empty: true })
+
+		fireEvent.click(screen.getByRole("tab", { name: "Productivity" }))
+
+		await waitFor(() => {
+			expect(getStoreSkillsMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					page: 1,
+					category_ids: ["10001"],
+				}),
+			)
+		})
 	})
 
 	it("opens the clicked featured object when the main list contains another object with the same id", async () => {
