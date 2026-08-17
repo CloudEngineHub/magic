@@ -71,8 +71,8 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
             packageName: $package->packageName,
             packageDescription: $package->packageDescription,
             isUpdate: $isUpdate,
-            nameI18n: $market?->getNameI18n() ?? $this->buildDefaultNameI18n($package->packageName),
-            descriptionI18n: $market?->getDescriptionI18n() ?? $this->buildDefaultDescriptionI18n($package->packageDescription),
+            nameI18n: $this->buildDefaultNameI18n($package->packageName),
+            descriptionI18n: $this->buildDefaultDescriptionI18n($package->packageDescription),
             logo: $market?->getLogo() ?? '',
             marketId: $market?->getId()
         );
@@ -119,13 +119,12 @@ final class AdminOfficialSkillAppService extends AbstractSkillAppService
 
     private function buildDefaultNameI18n(string $packageName): array
     {
-        $name = ucfirst(str_replace(['-', '_'], ' ', $packageName));
-        return ['en_US' => $name];
+        return ['default' => $packageName];
     }
 
     private function buildDefaultDescriptionI18n(string $packageDescription): array
     {
-        return ['en_US' => $packageDescription];
+        return ['default' => $packageDescription];
     }
 
     private function resolvePackage(MagicUserAuthorization $authorization, ImportOfficialSkillRequestDTO $requestDTO): SkillPackageDTO

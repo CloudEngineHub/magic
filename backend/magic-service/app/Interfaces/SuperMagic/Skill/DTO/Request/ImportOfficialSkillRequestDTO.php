@@ -106,9 +106,9 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
             'file_key' => 'nullable|string',
             'version' => 'required|string|max:32',
             'name_i18n' => 'required|array',
-            'name_i18n.en_US' => 'required|string',
+            'name_i18n.default' => 'required|string',
             'description_i18n' => 'required|array',
-            'description_i18n.en_US' => 'required|string',
+            'description_i18n.default' => 'required|string',
             'source_i18n' => 'nullable|array',
             'logo' => 'nullable|string',
             'category_ids' => 'nullable|array',
@@ -124,8 +124,8 @@ class ImportOfficialSkillRequestDTO extends AbstractRequestDTO
     {
         return [
             'version.required' => __('skill.version_required'),
-            'name_i18n.en_US.required' => __('skill.name_i18n_en_required'),
-            'description_i18n.en_US.required' => __('skill.description_i18n_en_required'),
+            'name_i18n.default.required' => __('skill.name_i18n_default_required'),
+            'description_i18n.default.required' => __('skill.description_i18n_default_required'),
         ];
     }
 
