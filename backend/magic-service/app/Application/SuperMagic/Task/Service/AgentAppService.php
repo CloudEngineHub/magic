@@ -103,6 +103,7 @@ readonly class AgentAppService
      * 启动沙箱：直接走创建+初始化流程，不删除已有沙箱，不检查镜像版本.
      *
      * 正确流程：createSandbox → initAgent → waitForWorkspaceReady。
+     * 启动时不发送初始化消息（skipInitMessages），与 restart/upgrade 行为一致。
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
@@ -114,7 +115,7 @@ readonly class AgentAppService
             'topic_id' => $topicId,
         ]);
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId);
+        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
     }
 
     /**
