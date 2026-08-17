@@ -559,6 +559,10 @@ export const AddModelModal = memo(
 									pricingTemplates={pricingTemplates}
 									loading={false}
 									loadWeightOnly
+									readOnlyModelFields={{
+										modelId: info?.model_id,
+										modelVersion: info?.model_version,
+									}}
 								/>
 							</MagicSuspense>
 						) : (

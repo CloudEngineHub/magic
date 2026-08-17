@@ -1,5 +1,5 @@
 import { lazy, memo, useMemo } from "react"
-import { Flex, Form, message } from "antd"
+import { Flex, Form, Input, message } from "antd"
 import { useTranslation } from "react-i18next"
 import { MagicSelect, MagicSuspense } from "@admin-components"
 import { AiManage } from "@admin/types/aiManage"
@@ -23,6 +23,11 @@ interface OfficialModelConfigProps {
 	loading?: boolean
 	/** 仅展示负载权重（官方同步模型） */
 	loadWeightOnly?: boolean
+	/** 官方同步模型只读展示字段 */
+	readOnlyModelFields?: {
+		modelId?: string
+		modelVersion?: string
+	}
 }
 
 const OfficialModelConfig = ({
@@ -30,6 +35,7 @@ const OfficialModelConfig = ({
 	pricingTemplates,
 	loading = false,
 	loadWeightOnly = false,
+	readOnlyModelFields,
 }: OfficialModelConfigProps) => {
 	const { t } = useTranslation("admin/ai/model")
 	const { styles } = useStyles()
@@ -164,8 +170,21 @@ const OfficialModelConfig = ({
 
 	if (loadWeightOnly) {
 		return (
-			<Flex gap={10} vertical className={styles.officialModelConfig}>
-				<div className={styles.title}>{t("form.officialModelConfig")}</div>
+			<Flex gap={10} vertical>
+				{readOnlyModelFields && (
+					<>
+						<Form.Item label={t("form.modelId")} className={styles.formItem}>
+							<Input readOnly disabled value={readOnlyModelFields.modelId ?? ""} />
+						</Form.Item>
+						<Form.Item label={t("form.modelName")} className={styles.formItem}>
+							<Input
+								readOnly
+								disabled
+								value={readOnlyModelFields.modelVersion ?? ""}
+							/>
+						</Form.Item>
+					</>
+				)}
 				{loadWeightField}
 			</Flex>
 		)
