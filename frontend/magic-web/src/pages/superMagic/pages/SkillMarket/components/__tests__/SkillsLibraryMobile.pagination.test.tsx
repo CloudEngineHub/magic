@@ -95,23 +95,20 @@ describe("SkillsLibraryMobile pagination", () => {
 		vi.clearAllMocks()
 		getStoreSkillsMock
 			.mockResolvedValueOnce({
-				list: [
-					{
-						id: "skill-1",
-						storeSkillId: "store-skill-1",
-						skillCode: "skill.code.1",
-						name: "Skill 1",
-						description: "First skill",
-						isFeatured: false,
-						status: "not-added",
-						publisherType: "OFFICIAL",
-						needUpgrade: false,
-						updatedAt: "2026-03-23 10:00:00",
-					},
-				],
+				list: Array.from({ length: 20 }, (_, index) => ({
+					id: `skill-${index + 1}`,
+					storeSkillId: `store-skill-${index + 1}`,
+					skillCode: `skill.code.${index + 1}`,
+					name: `Skill ${index + 1}`,
+					description: "First skill",
+					isFeatured: false,
+					status: "not-added" as const,
+					publisherType: "OFFICIAL" as const,
+					needUpgrade: false,
+					updatedAt: "2026-03-23 10:00:00",
+				})),
 				page: 1,
 				pageSize: 20,
-				total: 40,
 			})
 			.mockResolvedValueOnce({
 				list: [
@@ -130,7 +127,6 @@ describe("SkillsLibraryMobile pagination", () => {
 				],
 				page: 2,
 				pageSize: 20,
-				total: 40,
 			})
 		getUserSkillIdMapByCodesMock.mockResolvedValue(new Map())
 	})
@@ -190,7 +186,7 @@ describe("SkillsLibraryMobile pagination", () => {
 			page_size: 20,
 			keyword: undefined,
 		})
-		expect(observe).toHaveBeenCalledTimes(1)
-		expect(disconnect).not.toHaveBeenCalled()
+		expect(observe).toHaveBeenCalled()
+		expect(disconnect).toHaveBeenCalled()
 	})
 })

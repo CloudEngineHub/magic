@@ -6,7 +6,7 @@ import { StoreSkillCardMobile } from "../StoreSkillCardMobile"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, params?: { dateTime?: string }) => {
+		t: (key: string, params?: { dateTime?: string; formattedCount?: string }) => {
 			switch (key) {
 				case "skillsLibrary.addToMySkills":
 					return "Add to My Skills"
@@ -16,6 +16,8 @@ vi.mock("react-i18next", () => ({
 					return "Upgrade"
 				case "skillsLibrary.updatedAt":
 					return `Updated ${params?.dateTime ?? ""}`.trim()
+				case "skillsLibrary.installCount":
+					return `${params?.formattedCount ?? ""} installs`.trim()
 				case "skillsLibrary.official":
 					return "Official"
 				case "employeeCard.officialBuiltin":
@@ -50,6 +52,7 @@ function createSkill(overrides: Partial<StoreSkillView> = {}) {
 		description: "Skill description",
 		thumbnail: undefined,
 		isFeatured: false,
+		installCount: 234,
 		latestVersion: "v1.0.0",
 		status: "not-added",
 		authorName: undefined,
@@ -131,5 +134,23 @@ describe("StoreSkillCardMobile", () => {
 		render(<StoreSkillCardMobile skill={skill} language="en_US" />)
 
 		expect(screen.getByText("Official Built-in")).toBeInTheDocument()
+	})
+
+	it("shows install count alongside publisher and updated time", () => {
+		const skill = createSkill()
+
+		render(<StoreSkillCardMobile skill={skill} language="en_US" />)
+
+		expect(screen.getByTestId("skills-library-mobile-card-install-count")).toHaveTextContent(
+			"234 installs",
+		)
+	})
+
+	it("does not show a featured badge on the card", () => {
+		const skill = createSkill({ isFeatured: true })
+
+		render(<StoreSkillCardMobile skill={skill} language="en_US" />)
+
+		expect(screen.queryByTestId("skills-library-mobile-card-featured")).not.toBeInTheDocument()
 	})
 })

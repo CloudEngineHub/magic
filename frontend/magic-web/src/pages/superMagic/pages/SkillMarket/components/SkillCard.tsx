@@ -10,6 +10,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/lib/utils"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import { normalizeLocale } from "@/utils/locale"
+import { formatSkillInstallCount } from "./skill-card-formatters"
 import { isOfficialStoreSkillPublisher } from "./skill-publisher"
 
 export type SkillStatus = "added" | "not-added"
@@ -27,12 +28,14 @@ export interface SkillCardData {
 	authorName?: string
 	publisherType?: SkillPublisherType
 	needUpgrade?: boolean
+	installCount?: number
 	updatedAt: string
 }
 
 interface SkillCardProps {
 	skill: SkillCardData
 	isAdding?: boolean
+	showFeaturedTag?: boolean
 	onAdd?: (id: string) => void
 	onOpenDetail?: (skill: SkillCardData) => void
 }
@@ -53,7 +56,13 @@ function formatSkillUpdatedDateTime(value: string, i18nLanguage: string) {
 	}
 }
 
-function SkillCard({ skill, isAdding = false, onAdd, onOpenDetail }: SkillCardProps) {
+function SkillCard({
+	skill,
+	isAdding = false,
+	showFeaturedTag = false,
+	onAdd,
+	onOpenDetail,
+}: SkillCardProps) {
 	const { t, i18n } = useTranslation("crew/market")
 	const isAdded = skill.status === "added"
 	const isOfficialPublisher = isOfficialStoreSkillPublisher(skill.publisherType)
@@ -74,6 +83,7 @@ function SkillCard({ skill, isAdding = false, onAdd, onOpenDetail }: SkillCardPr
 			}),
 		[skill.updatedAt, t, i18n.language],
 	)
+	const installCount = formatSkillInstallCount(skill.installCount, i18n.language)
 
 	return (
 		<article
@@ -121,6 +131,15 @@ function SkillCard({ skill, isAdding = false, onAdd, onOpenDetail }: SkillCardPr
 									{sourceLabel}
 								</Badge>
 							) : null}
+							{showFeaturedTag ? (
+								<Badge
+									variant="outline"
+									className="shrink-0 rounded-md border-transparent bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 hover:bg-orange-500/10 dark:text-orange-300"
+									data-testid="skill-card-featured"
+								>
+									{t("skillsLibrary.featured")}
+								</Badge>
+							) : null}
 						</div>
 					</div>
 				</div>
@@ -135,12 +154,26 @@ function SkillCard({ skill, isAdding = false, onAdd, onOpenDetail }: SkillCardPr
 					{skill.description}
 				</SmartTooltip>
 
-				<span
-					className="mt-auto min-w-0 truncate text-right text-[11px] text-muted-foreground/70"
-					data-testid="skill-card-updated-at"
-				>
-					{updatedAtLabel}
-				</span>
+				<div className="mt-auto flex min-w-0 items-center justify-between gap-2">
+					{installCount ? (
+						<span
+							className="min-w-0 truncate text-[11px] text-muted-foreground/80"
+							data-testid="skill-card-install-count"
+						>
+							{t("skillsLibrary.installCount", {
+								formattedCount: installCount,
+							})}
+						</span>
+					) : (
+						<span aria-hidden="true" />
+					)}
+					<span
+						className="min-w-0 truncate text-right text-[11px] text-muted-foreground/70"
+						data-testid="skill-card-updated-at"
+					>
+						{updatedAtLabel}
+					</span>
+				</div>
 			</div>
 
 			<Button

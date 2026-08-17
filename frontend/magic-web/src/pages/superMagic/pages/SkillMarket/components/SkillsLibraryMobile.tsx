@@ -29,6 +29,11 @@ function SkillsLibraryMobile() {
 	const [searchOpen, setSearchOpen] = useState(false)
 	const [queryDraft, setQueryDraft] = useState("")
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
+	const hasActiveFilters =
+		Boolean(skillsStore.keyword) ||
+		skillsStore.categoryIds.length > 0 ||
+		skillsStore.publisherType != null ||
+		skillsStore.isFeatured != null
 
 	useEffect(() => {
 		void skillsStore.fetchSkills()
@@ -215,7 +220,7 @@ function SkillsLibraryMobile() {
 							className="flex items-center justify-center py-16 text-sm text-muted-foreground"
 							data-testid="skills-library-mobile-empty"
 						>
-							{skillsStore.keyword ? t("noResults") : t("skillsLibrary.noMoreData")}
+							{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
 						</div>
 					) : (
 						<div

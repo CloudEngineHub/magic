@@ -4,7 +4,7 @@ import SkillCard, { type SkillCardData } from "../SkillCard"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, params?: { dateTime?: string }) => {
+		t: (key: string, params?: { dateTime?: string; formattedCount?: string }) => {
 			switch (key) {
 				case "skillsLibrary.addToMySkills":
 					return "添加到我的技能"
@@ -16,6 +16,10 @@ vi.mock("react-i18next", () => ({
 					return "社区"
 				case "skillsLibrary.updatedAt":
 					return `更新于 ${params?.dateTime ?? ""}`.trim()
+				case "skillsLibrary.installCount":
+					return `${params?.formattedCount ?? ""} 次安装`.trim()
+				case "skillsLibrary.featured":
+					return "精选"
 				default:
 					return key
 			}
@@ -37,6 +41,7 @@ function createSkill(overrides: Partial<SkillCardData> = {}): SkillCardData {
 		isFeatured: true,
 		status: "not-added",
 		publisherType: "OFFICIAL",
+		installCount: 1234,
 		updatedAt: "2026-08-09 14:30",
 		...overrides,
 	}
@@ -51,10 +56,18 @@ describe("SkillCard", () => {
 		expect(screen.getByTestId("skill-card-updated-at")).toHaveTextContent(
 			"更新于 2026年8月9日 14:30",
 		)
+		expect(screen.getByTestId("skill-card-install-count")).toHaveTextContent("1,234 次安装")
+		expect(screen.queryByTestId("skill-card-featured")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("skill-card-category")).not.toBeInTheDocument()
 	})
 
-	it("shows a community label without inventing unsupported category metadata", () => {
+	it("shows the featured tag only when rendered inside the featured section", () => {
+		render(<SkillCard skill={createSkill()} showFeaturedTag />)
+
+		expect(screen.getByTestId("skill-card-featured")).toHaveTextContent("精选")
+	})
+
+	it("shows a community label without inventing category metadata", () => {
 		render(<SkillCard skill={createSkill({ publisherType: "USER" })} />)
 
 		expect(screen.getByTestId("skill-card-source-badge")).toHaveTextContent("社区")

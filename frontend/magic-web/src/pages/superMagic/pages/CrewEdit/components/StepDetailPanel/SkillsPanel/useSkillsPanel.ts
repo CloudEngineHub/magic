@@ -100,14 +100,23 @@ function resolveLocalizedText(
 	return resolveLocaleText(textObj, language)
 }
 
+function resolveStoreSkillCode(item: StoreSkillItem): string {
+	return item.code || item.skill_code || item.package_name || String(item.id)
+}
+
 function mapStoreSkill(item: StoreSkillItem, language: string): SkillPanelItem {
 	return {
 		id: item.id,
-		skillCode: item.skill_code,
+		skillCode: resolveStoreSkillCode(item),
 		userSkillCode: item.user_skill_code ?? undefined,
 		isInUserLibrary: item.is_added,
-		name: resolveLocalizedText(item.name_i18n, language),
-		description: resolveLocalizedText(item.description_i18n, language),
+		name:
+			item.name?.trim() ||
+			resolveLocalizedText(item.name_i18n, language) ||
+			item.package_name ||
+			resolveStoreSkillCode(item),
+		description:
+			item.description?.trim() || resolveLocalizedText(item.description_i18n, language),
 		logo: item.logo,
 		sourceType: undefined,
 		status: "not-installed",
@@ -229,10 +238,18 @@ export function useSkillsPanel({
 				})
 				const nextItems = res.list.map((item) => mapStoreSkill(item, language))
 				setRawLibrary((prev) => (append ? [...prev, ...nextItems] : nextItems))
+				const legacyTotal =
+					"total" in res && typeof res.total === "number" ? res.total : undefined
+				const pageSize = res.page_size || SKILLS_PANEL_PAGE_SIZE
+				const inferredTotal =
+					legacyTotal ??
+					(res.list.length < pageSize
+						? (page - 1) * pageSize + res.list.length
+						: page * pageSize + 1)
 				updatePaginationState("library", (state) => ({
 					...state,
 					page: res.page,
-					total: res.total,
+					total: inferredTotal,
 				}))
 			} catch {
 				// Non-critical; list stays empty
@@ -390,7 +407,7 @@ export function useSkillsPanel({
 					)
 
 					const updatedSkill = refreshed.list.find(
-						(item) => item.skill_code === skillCode,
+						(item) => resolveStoreSkillCode(item) === skillCode,
 					)
 					agentSkillId = updatedSkill?.user_skill_code ?? skillCode
 				} else {

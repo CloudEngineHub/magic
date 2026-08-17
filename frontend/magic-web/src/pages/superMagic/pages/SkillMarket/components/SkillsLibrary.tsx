@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { RefObject } from "react"
 import { useDebounce, useThrottle } from "ahooks"
-import { Check, ChevronDown, Loader2, Plus, Search } from "lucide-react"
+import { Check, ChevronDown, Loader2, Plus, RefreshCw, Search } from "lucide-react"
 import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -27,11 +27,10 @@ import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import type { StoreSkillView } from "@/services/skills/SkillsService"
 import { StoreSkillsStore } from "../stores/store-skills"
-import SkillCard, { type SkillCardData } from "./SkillCard"
+import SkillCard from "./SkillCard"
 
 const SKILLS_SEARCH_DEBOUNCE_MS = 300
 const SKILLS_SEARCH_THROTTLE_MS = 400
-const FEATURED_SKILL_LIMIT = 3
 
 interface SkillsLibraryProps {
 	hideMarketingHeadline?: boolean
@@ -44,7 +43,7 @@ function SkillsLibrary({
 	skillGridClassName,
 	scrollViewportRef,
 }: SkillsLibraryProps) {
-	const { t, i18n } = useTranslation("crew/market")
+	const { t } = useTranslation("crew/market")
 	const navigate = useNavigate()
 	const skillsStore = useMemo(() => new StoreSkillsStore(), [])
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
@@ -59,18 +58,18 @@ function SkillsLibrary({
 		wait: SKILLS_SEARCH_THROTTLE_MS,
 	})
 	const gridClass = skillGridClassName ?? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
-	const formattedTotal = useMemo(() => {
-		const locale = i18n.language.replace("_", "-")
-		return new Intl.NumberFormat(locale).format(skillsStore.total)
-	}, [i18n.language, skillsStore.total])
-	// The API already sorts featured entries first, but has no dedicated featured pagination.
-	// Only expose the featured records from the loaded first page and do not fake rotation.
-	const featuredSkills = useMemo(() => {
-		if (searchQuery.trim() || skillsStore.keyword) return []
-		return skillsStore.list.filter((skill) => skill.isFeatured).slice(0, FEATURED_SKILL_LIMIT)
-	}, [searchQuery, skillsStore.keyword, skillsStore.list])
-
+	const hasActiveFilters =
+		Boolean(searchQuery.trim()) ||
+		Boolean(skillsStore.keyword) ||
+		skillsStore.categoryIds.length > 0 ||
+		skillsStore.publisherType != null ||
+		skillsStore.isFeatured != null
+	const showFeaturedSection = !hasActiveFilters
 	useEffect(() => () => skillsStore.reset(), [skillsStore])
+
+	useEffect(() => {
+		void skillsStore.fetchFeaturedSkills()
+	}, [skillsStore])
 
 	useEffect(() => {
 		return reaction(
@@ -109,13 +108,13 @@ function SkillsLibrary({
 		[skillsStore, t],
 	)
 
-	const handleOpenDetail = useCallback(
-		(skill: SkillCardData) => {
-			const fromStore = skillsStore.list.find((item) => item.id === skill.id)
-			if (fromStore) setSelectedSkill(fromStore)
-		},
-		[skillsStore],
-	)
+	const handleRefreshFeatured = useCallback(() => {
+		void skillsStore.fetchNextFeaturedSkills()
+	}, [skillsStore])
+
+	const handleOpenDetail = useCallback((skill: StoreSkillView) => {
+		setSelectedSkill(skill)
+	}, [])
 
 	function handleMySkills() {
 		navigate({ name: RouteName.MySkills })
@@ -260,44 +259,80 @@ function SkillsLibrary({
 				</div>
 			</header>
 
-			{featuredSkills.length > 0 ? (
-				<section
-					className="flex min-w-0 flex-col gap-4"
-					data-testid="featured-skills-section"
-				>
-					<h2 className="text-xl font-semibold tracking-[-0.025em] text-foreground">
-						{t("skillsLibrary.featuredSkills")}
-					</h2>
-					<div className={gridClass} data-testid="featured-skill-card-grid">
-						{featuredSkills.map((skill) => (
-							<SkillCard
-								key={`featured-${skill.id}`}
-								skill={skill}
-								isAdding={skillsStore.isAddingSkill(skill.id)}
-								onAdd={handleAdd}
-								onOpenDetail={handleOpenDetail}
+			{showFeaturedSection &&
+			(skillsStore.featuredLoading ||
+				skillsStore.featuredError ||
+				skillsStore.featuredList.length > 0) ? (
+				<section className="flex min-w-0 flex-col" data-testid="featured-skills-section">
+					<div className="flex items-end justify-between border-b border-border">
+						<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">
+							{t("skillsLibrary.featuredSkills")}
+						</h2>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="mb-1 h-8 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
+							disabled={
+								skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
+							}
+							onClick={handleRefreshFeatured}
+							data-testid="featured-skills-refresh"
+						>
+							<RefreshCw
+								className={cn(
+									"size-3.5",
+									skillsStore.featuredLoading && "animate-spin",
+								)}
+								aria-hidden
 							/>
-						))}
+							{skillsStore.featuredError
+								? t("skillsLibrary.retryFeatured")
+								: t("skillsLibrary.refreshFeatured")}
+						</Button>
 					</div>
+
+					{skillsStore.featuredError ? (
+						<div
+							className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+							role="status"
+							data-testid="featured-skills-error"
+						>
+							{t("skillsLibrary.featuredLoadFailed")}
+						</div>
+					) : null}
+
+					{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
+						<div
+							className="flex items-center justify-center py-10"
+							data-testid="featured-skills-loading"
+						>
+							<Loader2 className="size-5 animate-spin text-muted-foreground" />
+						</div>
+					) : skillsStore.featuredList.length > 0 ? (
+						<div
+							className={cn(gridClass, "mt-4")}
+							data-testid="featured-skill-card-grid"
+						>
+							{skillsStore.featuredList.map((skill) => (
+								<SkillCard
+									key={`featured-${skill.id}`}
+									skill={skill}
+									showFeaturedTag
+									isAdding={skillsStore.isAddingSkill(skill.id)}
+									onAdd={handleAdd}
+									onOpenDetail={() => handleOpenDetail(skill)}
+								/>
+							))}
+						</div>
+					) : null}
 				</section>
 			) : null}
 
 			<section className="flex min-w-0 flex-col" data-testid="all-skills-section">
-				<div className="flex items-end justify-between border-b border-border">
+				<div className="flex items-end border-b border-border">
 					<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">
 						{t("skillsLibrary.allSkills")}
 					</h2>
-					<span className="pb-3 text-xs text-muted-foreground">
-						{skillsStore.total === 1
-							? t("skillsLibrary.skillCountOne", {
-									count: formattedTotal,
-									defaultValue: "共 {{count}} 个技能",
-								})
-							: t("skillsLibrary.skillCount", {
-									count: formattedTotal,
-									defaultValue: "共 {{count}} 个技能",
-								})}
-					</span>
 				</div>
 
 				{skillsStore.loading && skillsStore.list.length === 0 ? (
@@ -312,7 +347,7 @@ function SkillsLibrary({
 						className="flex items-center justify-center py-16 text-sm text-muted-foreground"
 						data-testid="skills-library-empty"
 					>
-						{skillsStore.keyword ? t("noResults") : t("skillsLibrary.noMoreData")}
+						{hasActiveFilters ? t("noResults") : t("skillsLibrary.noMoreData")}
 					</div>
 				) : (
 					<div className={cn(gridClass, "mt-4")} data-testid="skill-card-grid">
@@ -322,7 +357,7 @@ function SkillsLibrary({
 								skill={skill}
 								isAdding={skillsStore.isAddingSkill(skill.id)}
 								onAdd={handleAdd}
-								onOpenDetail={handleOpenDetail}
+								onOpenDetail={() => handleOpenDetail(skill)}
 							/>
 						))}
 					</div>

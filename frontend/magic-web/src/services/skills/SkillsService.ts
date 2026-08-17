@@ -36,6 +36,13 @@ export interface PagedSkills<T> {
 	total: number
 }
 
+/** Paginated response for the public Skill market list. */
+export interface StoreSkillsPage<T> {
+	list: T[]
+	page: number
+	pageSize: number
+}
+
 export interface StoreSkillView {
 	id: string
 	storeSkillId: string
@@ -44,8 +51,10 @@ export interface StoreSkillView {
 	packageName?: string
 	name: string
 	description: string
+	source?: string
 	thumbnail?: string
 	isFeatured: boolean
+	installCount?: number
 	latestVersion?: string
 	status: "added" | "not-added"
 	authorName?: string
@@ -92,6 +101,7 @@ export interface SkillDetailView {
 	publisherName?: string | null
 	skillFileUrl?: string | null
 	isFeatured: boolean
+	categoryIds?: string[]
 	isAdded?: boolean
 	isCreator?: boolean
 }
@@ -99,13 +109,14 @@ export interface SkillDetailView {
 export type UserSkillsListScope = "created" | "team-shared" | "market-installed"
 
 export class SkillsService {
-	async getStoreSkills(params: GetStoreSkillsParams = {}): Promise<PagedSkills<StoreSkillView>> {
+	async getStoreSkills(
+		params: GetStoreSkillsParams = {},
+	): Promise<StoreSkillsPage<StoreSkillView>> {
 		const data = await SkillsApi.getStoreSkills(params)
 		return {
 			list: data.list.map((item) => this.mapStoreSkill(item)),
 			page: data.page,
 			pageSize: data.page_size,
-			total: data.total,
 		}
 	}
 
@@ -211,13 +222,20 @@ export class SkillsService {
 		return {
 			id: String(item.id),
 			storeSkillId: item.id,
-			skillCode: item.skill_code,
+			skillCode: item.code || item.skill_code || item.package_name || String(item.id),
 			packageName: item.package_name?.trim() || undefined,
 			userSkillCode: item.user_skill_code,
-			name: this.mapI18nText(item.name_i18n),
-			description: this.mapI18nText(item.description_i18n),
+			name:
+				item.name?.trim() ||
+				item.package_name?.trim() ||
+				item.code ||
+				item.skill_code ||
+				"",
+			description: item.description?.trim() || "",
+			source: item.source?.trim() || undefined,
 			thumbnail: item.logo || undefined,
 			isFeatured: Boolean(item.is_featured),
+			installCount: typeof item.install_count === "number" ? item.install_count : undefined,
 			latestVersion: item.latest_version || undefined,
 			status: item.is_added ? "added" : "not-added",
 			authorName: item.publisher?.name,
@@ -295,21 +313,18 @@ export class SkillsService {
 
 		return {
 			code: detail.code,
-			name:
-				detail.name ||
-				this.mapI18nText(detail.name_i18n) ||
-				detail.package_name ||
-				detail.code,
-			description: detail.description || this.mapI18nText(detail.description_i18n) || "",
+			name: detail.name?.trim() || detail.package_name || detail.code,
+			description: detail.description?.trim() || "",
 			logo: detail.logo,
 			packageName: detail.package_name?.trim() || undefined,
 			versionCode: detail.version_code?.trim() || undefined,
 			updatedAt: detail.version_created_at,
-			sourceLabel: detail.source || this.mapI18nText(detail.source_i18n) || undefined,
+			sourceLabel: detail.source?.trim() || undefined,
 			publisherType: detail.publisher_type,
 			publisherName: publisherName || undefined,
 			skillFileUrl: detail.skill_file_url?.trim() || undefined,
 			isFeatured: Boolean(detail.is_featured),
+			categoryIds: detail.category_ids ?? [],
 			isAdded: detail.is_added,
 			isCreator: detail.is_creator,
 		}
