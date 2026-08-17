@@ -588,7 +588,7 @@ const SHA256_ROUND_CONSTANTS = new Uint32Array([
 	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ])
 
-class IncrementalSha256 {
+export class IncrementalSha256 {
 	private readonly state = new Uint32Array(SHA256_INITIAL_STATE)
 	private readonly block = new Uint8Array(64)
 	private readonly words = new Uint32Array(64)

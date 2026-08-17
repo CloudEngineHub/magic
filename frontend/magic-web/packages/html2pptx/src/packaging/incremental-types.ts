@@ -1,18 +1,11 @@
 import type { EmbedFontInput } from "../api/font"
-import type {
-	ExportProgress,
-	GeneratedPPTX,
-	PptxOutputSink,
-	ResourceLoadError,
-	SlideConfig,
-} from "../api/options"
+import type { ExportProgress, PptxOutputSink, SlideConfig } from "../api/options"
 import type { SerializablePPTNode } from "../ir/serialize"
 
 /**
  * The streaming package is deliberately described locally instead of importing
- * the optional PptxGenJS Phase 3 declarations.  The published OSS dependency
- * may still be an older 4.x build, while the enterprise application can inject
- * a patched runtime exposing `beginStreaming()`.
+ * the PptxGenJS v5 declarations. The protocol stays narrow so it can cross a
+ * browser Worker boundary without importing Node-only implementation details.
  */
 export interface StreamingPlannedSlide {
 	readonly key: string
@@ -59,13 +52,13 @@ export interface StreamingCommitSlidePayload {
 
 export interface StreamingSlideCommitSummary {
 	readonly manifest?: unknown
-	readonly bytesWritten: number
+	readonly bytesWritten: bigint
 }
 
 export interface StreamingExportSummary {
 	readonly slideCount: number
 	readonly mediaPartCount: number
-	readonly bytesWritten: number
+	readonly bytesWritten: bigint
 }
 
 export type StreamingOutputSink = PptxOutputSink
@@ -135,7 +128,7 @@ export interface StreamingPresentationPackager {
 	readonly ready: Promise<void>
 	commitSlide(payload: StreamingCommitSlidePayload): Promise<StreamingSlideCommitSummary>
 	commitSlides(
-		batch: IncrementalSlideBatch,
+		batch: StreamingSlideBatch,
 		batchIndex?: number,
 	): Promise<readonly StreamingSlideCommitSummary[]>
 	finalize(): Promise<StreamingExportSummary>
@@ -143,69 +136,10 @@ export interface StreamingPresentationPackager {
 	dispose(): void
 }
 
-export interface IncrementalSlideBatch {
+export interface StreamingSlideBatch {
 	slides: SerializablePPTNode[][]
 	slideBackgrounds: (string | null)[]
 }
-
-export interface CreateIncrementalPresentationPackagerInput {
-	/** Initial layout used while pages are appended. */
-	initialConfig?: SlideConfig
-	/** Auto-size may replace the presentation layout once the maximum width is known. */
-	allowLayoutChange?: boolean
-	fileName: string
-	signal: AbortSignal
-	onResourceError?: (error: ResourceLoadError) => void
-	download: boolean
-}
-
-export interface FinalizeIncrementalPresentationInput {
-	config: SlideConfig
-	embedFonts?: EmbedFontInput[]
-}
-
-export interface IncrementalPresentationPackager {
-	appendSlides(batch: IncrementalSlideBatch, batchIndex: number): Promise<void>
-	finalize(input: FinalizeIncrementalPresentationInput): Promise<GeneratedPPTX | void>
-	/** Must synchronously cause every pending append/finalize promise to settle. */
-	dispose(): void
-}
-
-export type IncrementalPackagingWorkerRequest =
-	| {
-			type: "start"
-			payload: {
-				initialConfig?: SlideConfig
-				allowLayoutChange?: boolean
-				fileName: string
-			}
-	  }
-	| {
-			type: "append-slides"
-			requestId: number
-			batchIndex: number
-			payload: IncrementalSlideBatch
-	  }
-	| {
-			type: "finalize"
-			requestId: number
-			payload: FinalizeIncrementalPresentationInput
-	  }
-
-export type IncrementalPackagingWorkerResponse =
-	| { type: "ready" }
-	| {
-			type: "slides-appended"
-			requestId: number
-			resourceErrors?: ResourceLoadError[]
-	  }
-	| {
-			type: "success"
-			requestId: number
-			buffer: ArrayBuffer
-			resourceErrors?: ResourceLoadError[]
-	  }
-	| { type: "error"; requestId?: number; error: string }
 
 export interface SerializedStreamingError {
 	readonly name: string

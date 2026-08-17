@@ -102,7 +102,7 @@ class ProtocolWorker {
 			this.emit({
 				type: "slide-committed",
 				requestId: request.requestId,
-				summary: { bytesWritten: 0 },
+				summary: { bytesWritten: 0n },
 			})
 			return
 		}
@@ -110,7 +110,7 @@ class ProtocolWorker {
 			this.emit({
 				type: "completed",
 				requestId: request.requestId,
-				summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0 },
+				summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0n },
 			})
 			return
 		}

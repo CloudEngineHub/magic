@@ -79,7 +79,7 @@ describe("pptService lazy export providers", () => {
 		await expect(iterator.next()).rejects.toMatchObject({ name: "AbortError" })
 	})
 
-	it("keeps ordinary per-page failures compatible by yielding an empty page", async () => {
+	it("skips an ordinary per-page failure without yielding a blank page", async () => {
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		mocks.loadSlide.mockRejectedValue(new Error("load failed"))
 		const iterator = iterateExportSlides({
@@ -88,10 +88,35 @@ describe("pptService lazy export providers", () => {
 			mainFileId: "main",
 		})[Symbol.asyncIterator]()
 
-		await expect(iterator.next()).resolves.toEqual({
-			done: false,
-			value: { index: 0, key: slidePath, html: "" },
-		})
+		await expect(iterator.next()).rejects.toThrow("No exportable slides could be prepared")
+		expect(consoleError).toHaveBeenCalled()
+	})
+
+	it("keeps successful pages when another page fails to prepare", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const secondSlidePath = "./slides/slide-2.html"
+		const attachments = [
+			...attachmentList,
+			{
+				file_id: "slide-2",
+				file_name: "slide-2.html",
+				relative_file_path: "/deck/slides/slide-2.html",
+			},
+		]
+		mocks.loadSlide
+			.mockRejectedValueOnce(new Error("load failed"))
+			.mockResolvedValueOnce("<main>second</main>")
+
+		const pages = []
+		for await (const page of iterateExportSlides({
+			slidePaths: [slidePath, secondSlidePath],
+			attachmentList: attachments,
+			mainFileId: "main",
+		})) {
+			pages.push(page)
+		}
+
+		expect(pages).toEqual([{ index: 1, key: secondSlidePath, html: "<main>second</main>" }])
 		expect(consoleError).toHaveBeenCalled()
 	})
 })

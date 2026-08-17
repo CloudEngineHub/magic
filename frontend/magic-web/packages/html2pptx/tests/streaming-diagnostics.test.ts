@@ -24,9 +24,9 @@ describe("streaming export diagnostics", () => {
 		const packager = {
 			state: "accepting-slides" as const,
 			ready: Promise.resolve(),
-			commitSlide: vi.fn(async () => ({ bytesWritten: 1, manifest: {} })),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 1n, manifest: {} })),
 			commitSlides: vi.fn(),
-			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 64 })),
+			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 64n })),
 			abort: vi.fn(async () => undefined),
 			dispose: vi.fn(),
 		}
@@ -64,7 +64,10 @@ describe("streaming export diagnostics", () => {
 			},
 		})
 
-		const error = await exporter(["page"]).promise.catch((value) => value)
+		const missingDestinationOptions = undefined as unknown as Parameters<typeof exporter>[1]
+		const error = await exporter(["page"], missingDestinationOptions).promise.catch(
+			(value) => value,
+		)
 		const diagnostic = getPptxExportDiagnostic(error)
 
 		expect(diagnostic).toMatchObject({

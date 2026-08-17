@@ -369,12 +369,15 @@ export async function* iterateExportSlides(
 		displayConfig,
 	})
 
+	let preparedPageCount = 0
+	let skippedPageCount = 0
 	for (let index = 0; index < slidePaths.length; index += 1) {
 		throwIfAborted(signal)
 		const path = slidePaths[index]
 		const url = pathToUrl.get(path)
 		if (!url) {
-			yield { index, key: path, html: "" }
+			skippedPageCount += 1
+			console.error(`[pptService] No download URL was available for slide ${index}:`, path)
 			continue
 		}
 
@@ -421,12 +424,17 @@ export async function* iterateExportSlides(
 				signal,
 			)
 			throwIfAborted(signal)
+			preparedPageCount += 1
 			yield { index, key: path, html: processed }
 		} catch (error) {
 			if (signal?.aborted || isAbortError(error)) throw createAbortError(signal, error)
 			console.error(`[pptService] Failed to prepare slide ${index}:`, error)
-			yield { index, key: path, html: "" }
+			skippedPageCount += 1
 		}
+	}
+
+	if (preparedPageCount === 0 && skippedPageCount > 0) {
+		throw new Error("No exportable slides could be prepared")
 	}
 }
 

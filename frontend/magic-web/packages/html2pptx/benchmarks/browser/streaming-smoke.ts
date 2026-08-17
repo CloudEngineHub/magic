@@ -142,7 +142,7 @@ function assertSmokeResult(
 			`Archive contains ${result.slideXmlCount} slide XML parts; missing ${result.missingSlideNumbers.join(", ")}`,
 		)
 	}
-	if (result.summary.bytesWritten !== result.fileBytes) {
+	if (BigInt(result.summary.bytesWritten) !== BigInt(result.fileBytes)) {
 		throw new Error(
 			`Summary bytes (${result.summary.bytesWritten}) differ from OPFS file bytes (${result.fileBytes})`,
 		)

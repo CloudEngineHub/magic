@@ -8,6 +8,11 @@ import { drawImage } from "../src/drawer/drawImage"
 import type { ElementNode } from "../src/ir/dom"
 import type { PPTImageNode, PPTNodeBase } from "../src/ir/node"
 import { parseImage } from "../src/parsers/parseImage"
+import {
+	asStreamingPptxPresentation,
+	concatPptxChunks,
+	createCollectingPptxDestination,
+} from "./streaming-test-utils"
 
 const config: SlideConfig = {
 	htmlWidth: 1920,
@@ -60,8 +65,9 @@ describe("image sizing", () => {
 
 		drawImage(slide, node)
 
-		const output = await pptx.write({ outputType: "arraybuffer" })
-		const zip = await JSZip.loadAsync(output as ArrayBuffer)
+		const { destination, chunks } = createCollectingPptxDestination()
+		await asStreamingPptxPresentation(pptx).writeTo({ destination })
+		const zip = await JSZip.loadAsync(concatPptxChunks(chunks))
 		const slideXml = await zip.file("ppt/slides/slide1.xml")?.async("string")
 		if (!slideXml) throw new Error("slide1.xml is required")
 

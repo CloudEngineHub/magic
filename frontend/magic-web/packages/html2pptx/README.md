@@ -60,8 +60,11 @@ published package. Its Node and Chromium runners can be type-checked with
 Application code consumes the package only through its public package name:
 
 ```ts
-import { exportPPTX } from "@magic/html2pptx"
+import { exportPPTXStreaming } from "@magic/html2pptx"
 ```
+
+Version 2 removes the buffered `exportPPTX` and `generatePPTX` APIs. All exports must provide a
+caller-owned destination and use `exportPPTXStreaming`; there is no Blob or in-memory fallback.
 
 The package must be built before a workspace consumer resolves its `dist` exports. Commercial
 applications may compose their own integration around these public exports, but no commercial
@@ -70,12 +73,9 @@ source or build configuration is part of this open-source package.
 ## Large-export runtime requirements
 
 `exportPPTXStreaming` is the forward-only large-export API. Its built-in packaging path requires
-the patched PptxGenJS streaming runtime to provide `beginStreaming()`, `writeTo()`, and
-`createOpfsStagingStore()`. The current package metadata still declares `pptxgenjs: ^4.0.1` for
-compatibility; the stock npm `pptxgenjs@4.0.1` does not provide this complete runtime. Until a
-compatible PptxGenJS release and peer range are published, applications must install/use the
-matching patched PptxGenJS build or inject an equivalent runtime through the package runtime
-hooks. This README intentionally does not change the version or peer dependency.
+the PptxGenJS v5 streaming runtime to provide `beginStreaming()`, `writeTo()`, and
+`createOpfsStagingStore()`. Applications must use the PptxGenJS v5 build selected by this branch
+or inject an equivalent runtime through the package runtime hooks.
 
 ### Packaging Worker URL
 

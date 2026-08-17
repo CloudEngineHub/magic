@@ -23,24 +23,23 @@ describe("PPTX export strategy", () => {
 		).toBe("full-stage")
 	})
 
-	it("uses the legacy route only for a safe small export", () => {
+	it("returns unavailable instead of falling back when file streaming is unavailable", () => {
 		expect(
 			resolvePptxExportStrategy({ pageCount: 20, fileStreamingAvailable: false }),
 		).toMatchObject({
-			route: "legacy",
+			route: "unavailable",
+			reasonCode: "file-stream-unavailable",
 			isLargeExport: false,
-			legacyFallbackAllowed: true,
 		})
 	})
 
 	it("returns a structured unavailable reason instead of buffering a large export", () => {
 		expect(
-			resolvePptxExportStrategy({ pageCount: 300, fileStreamingAvailable: false }),
+			resolvePptxExportStrategy({ hasLargeMedia: true, fileStreamingAvailable: false }),
 		).toMatchObject({
 			route: "unavailable",
 			reasonCode: "file-stream-unavailable",
 			isLargeExport: true,
-			legacyFallbackAllowed: false,
 		})
 	})
 
@@ -58,16 +57,6 @@ describe("PPTX export strategy", () => {
 		})
 	})
 
-	it("does not let forceLegacy send a large export through the memory path", () => {
-		expect(
-			resolvePptxExportStrategy({
-				pageCount: 300,
-				fileStreamingAvailable: true,
-				flags: { forceLegacy: true },
-			}),
-		).toMatchObject({ route: "unavailable", reasonCode: "legacy-not-safe" })
-	})
-
 	it("merges stored and runtime flags with explicit overrides taking precedence", () => {
 		localStorage.setItem(
 			PPTX_EXPORT_FLAGS_STORAGE_KEY,
@@ -75,13 +64,13 @@ describe("PPTX export strategy", () => {
 		)
 		Object.defineProperty(globalThis, "__MAGIC_PPTX_EXPORT_FLAGS__", {
 			configurable: true,
-			value: { streamingOutputSink: true, forceLegacy: true },
+			value: { streamingOutputSink: true, zipJsPackageWriter: false },
 		})
 
-		expect(resolvePptxExportFeatureFlags({ forceLegacy: false })).toMatchObject({
+		expect(resolvePptxExportFeatureFlags({ zipJsPackageWriter: true })).toMatchObject({
 			streamingOutputSink: true,
 			zip64: false,
-			forceLegacy: false,
+			zipJsPackageWriter: true,
 		})
 	})
 })

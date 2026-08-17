@@ -14,41 +14,28 @@ export interface PptxExportFeatureFlags {
 	zipJsPackageWriter: boolean
 	/** Allows archives that may cross ZIP32 boundaries. */
 	zip64: boolean
-	/** Emergency route to the legacy memory API for safe small exports only. */
-	forceLegacy: boolean
-	/** Whether a small export may use the old Blob/memory route when streaming is unavailable. */
-	legacyFallback: boolean
 }
 
 export const DEFAULT_PPTX_EXPORT_FEATURE_FLAGS: Readonly<PptxExportFeatureFlags> = {
 	streamingOutputSink: true,
 	zipJsPackageWriter: true,
 	zip64: true,
-	forceLegacy: false,
-	legacyFallback: true,
 }
 
-/** Thresholds only choose a safe execution path; they never reject a large cumulative export. */
+/** ZIP capability threshold used to decide whether the streaming writer must use ZIP64. */
 export const PPTX_EXPORT_ROUTING_LIMITS = {
-	legacyMaxPages: 200,
-	legacyMaxEstimatedBytes: 500 * 1024 * 1024,
-	legacyMaxMediaBytes: 100 * 1024 * 1024,
 	zip32MaxBytes: 4 * 1024 * 1024 * 1024,
 } as const
 
 export type PptxMediaSourceReliability = "local" | "stable-url" | "signed-url" | "unknown"
 
-export type PptxExportRoute = "streaming" | "legacy" | "unavailable"
+export type PptxExportRoute = "streaming" | "unavailable"
 export type PptxExportStrategyReasonCode =
 	| "streaming"
-	| "legacy-small-export"
-	| "forced-legacy"
 	| "streaming-disabled"
 	| "zipjs-disabled"
 	| "zip64-disabled"
 	| "file-stream-unavailable"
-	| "legacy-not-safe"
-	| "memory-output-requested"
 
 export type ResolvedPptxMediaPolicyMode = Exclude<NonNullable<MediaPolicy["mode"]>, "auto">
 
@@ -75,7 +62,6 @@ export interface PptxExportStrategyDecision {
 	mediaPolicyMode: ResolvedPptxMediaPolicyMode
 	fileStreamingAvailable: boolean
 	featureFlags: PptxExportFeatureFlags
-	legacyFallbackAllowed: boolean
 }
 
 /**
@@ -122,104 +108,16 @@ export function resolvePptxExportStrategy(
 ): PptxExportStrategyDecision {
 	const featureFlags = resolvePptxExportFeatureFlags(input.flags)
 	const fileStreamingAvailable = input.fileStreamingAvailable ?? detectFileStreamingCapability()
-	const estimatedBytes = toFiniteNumber(input.estimatedBytes)
-	const largestMediaBytes = toFiniteNumber(input.largestMediaBytes)
 	const isLargeExport =
-		(input.pageCount !== undefined &&
-			input.pageCount > PPTX_EXPORT_ROUTING_LIMITS.legacyMaxPages) ||
-		(estimatedBytes !== undefined &&
-			estimatedBytes > PPTX_EXPORT_ROUTING_LIMITS.legacyMaxEstimatedBytes) ||
-		(largestMediaBytes !== undefined &&
-			largestMediaBytes > PPTX_EXPORT_ROUTING_LIMITS.legacyMaxMediaBytes) ||
-		input.hasLargeMedia === true
-	const requiresZip64 =
-		(estimatedBytes !== undefined &&
-			estimatedBytes >= PPTX_EXPORT_ROUTING_LIMITS.zip32MaxBytes) ||
-		(largestMediaBytes !== undefined &&
-			largestMediaBytes >= PPTX_EXPORT_ROUTING_LIMITS.zip32MaxBytes) ||
-		isLargeExport
+		input.hasLargeMedia === true ||
+		isAtLeastZip32(input.estimatedBytes) ||
+		isAtLeastZip32(input.largestMediaBytes)
+	const requiresZip64 = isLargeExport
 	const mediaPolicyMode = resolvePptxMediaPolicyMode({
 		requested: input.requestedMediaPolicy,
 		mediaSource: input.mediaSource,
 		requiresReplay: input.requiresReplay ?? isLargeExport,
 	})
-	const legacyFallbackAllowed = featureFlags.legacyFallback && !isLargeExport && !requiresZip64
-
-	if (featureFlags.forceLegacy) {
-		if (legacyFallbackAllowed) {
-			return createDecision({
-				route: "legacy",
-				reasonCode: "forced-legacy",
-				reason: "Legacy PPTX export was forced by the active feature flag.",
-				isLargeExport,
-				requiresZip64,
-				mediaPolicyMode,
-				fileStreamingAvailable,
-				featureFlags,
-				legacyFallbackAllowed,
-			})
-		}
-		return createDecision({
-			route: "unavailable",
-			reasonCode: "legacy-not-safe",
-			reason: "The legacy in-memory PPTX path is not safe for this export size.",
-			isLargeExport,
-			requiresZip64,
-			mediaPolicyMode,
-			fileStreamingAvailable,
-			featureFlags,
-			legacyFallbackAllowed,
-		})
-	}
-
-	if (input.outputPolicy === "memory" && isLargeExport) {
-		return createDecision({
-			route: "unavailable",
-			reasonCode: "memory-output-requested",
-			reason: "Large PPTX exports require a caller-owned streaming destination.",
-			isLargeExport,
-			requiresZip64,
-			mediaPolicyMode,
-			fileStreamingAvailable,
-			featureFlags,
-			legacyFallbackAllowed,
-		})
-	}
-
-	if (!isLargeExport) {
-		if (
-			featureFlags.streamingOutputSink &&
-			fileStreamingAvailable &&
-			featureFlags.zipJsPackageWriter
-		) {
-			return createDecision({
-				route: "streaming",
-				reasonCode: "streaming",
-				reason: "The browser and active feature flags support streaming PPTX output.",
-				isLargeExport,
-				requiresZip64,
-				mediaPolicyMode,
-				fileStreamingAvailable,
-				featureFlags,
-				legacyFallbackAllowed,
-			})
-		}
-		if (featureFlags.legacyFallback) {
-			return createDecision({
-				route: "legacy",
-				reasonCode: featureFlags.streamingOutputSink
-					? "file-stream-unavailable"
-					: "streaming-disabled",
-				reason: "A safe small export may use the legacy in-memory path.",
-				isLargeExport,
-				requiresZip64,
-				mediaPolicyMode,
-				fileStreamingAvailable,
-				featureFlags,
-				legacyFallbackAllowed,
-			})
-		}
-	}
 
 	if (!featureFlags.streamingOutputSink) {
 		return unavailableDecision(
@@ -230,7 +128,6 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
-			legacyFallbackAllowed,
 		)
 	}
 	if (!featureFlags.zipJsPackageWriter) {
@@ -242,7 +139,6 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
-			legacyFallbackAllowed,
 		)
 	}
 	if (requiresZip64 && !featureFlags.zip64) {
@@ -254,7 +150,6 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
-			legacyFallbackAllowed,
 		)
 	}
 	if (!fileStreamingAvailable) {
@@ -266,7 +161,6 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
-			legacyFallbackAllowed,
 		)
 	}
 
@@ -279,26 +173,17 @@ export function resolvePptxExportStrategy(
 		mediaPolicyMode,
 		fileStreamingAvailable,
 		featureFlags,
-		legacyFallbackAllowed,
 	})
 }
 
 function unavailableDecision(
-	reasonCode: Exclude<
-		PptxExportStrategyReasonCode,
-		| "streaming"
-		| "legacy-small-export"
-		| "forced-legacy"
-		| "legacy-not-safe"
-		| "memory-output-requested"
-	>,
+	reasonCode: Exclude<PptxExportStrategyReasonCode, "streaming">,
 	reason: string,
 	isLargeExport: boolean,
 	requiresZip64: boolean,
 	mediaPolicyMode: ResolvedPptxMediaPolicyMode,
 	fileStreamingAvailable: boolean,
 	featureFlags: PptxExportFeatureFlags,
-	legacyFallbackAllowed: boolean,
 ): PptxExportStrategyDecision {
 	return createDecision({
 		route: "unavailable",
@@ -309,7 +194,6 @@ function unavailableDecision(
 		mediaPolicyMode,
 		fileStreamingAvailable,
 		featureFlags,
-		legacyFallbackAllowed,
 	})
 }
 
@@ -321,12 +205,15 @@ function createDecision(
 	return decision
 }
 
-function toFiniteNumber(value?: number | bigint): number | undefined {
+function isAtLeastZip32(value?: number | bigint): boolean {
 	if (typeof value === "bigint") {
-		const numberValue = Number(value)
-		return Number.isFinite(numberValue) ? numberValue : undefined
+		return value >= BigInt(PPTX_EXPORT_ROUTING_LIMITS.zip32MaxBytes)
 	}
-	return value !== undefined && Number.isFinite(value) && value >= 0 ? value : undefined
+	return (
+		typeof value === "number" &&
+		Number.isFinite(value) &&
+		value >= PPTX_EXPORT_ROUTING_LIMITS.zip32MaxBytes
+	)
 }
 
 function detectFileStreamingCapability(): boolean {
@@ -354,13 +241,7 @@ function sanitizeFlags(value: unknown): Partial<PptxExportFeatureFlags> {
 	if (!value || typeof value !== "object") return {}
 	const source = value as Record<string, unknown>
 	const flags: Partial<PptxExportFeatureFlags> = {}
-	for (const key of [
-		"streamingOutputSink",
-		"zipJsPackageWriter",
-		"zip64",
-		"forceLegacy",
-		"legacyFallback",
-	] as const) {
+	for (const key of ["streamingOutputSink", "zipJsPackageWriter", "zip64"] as const) {
 		if (typeof source[key] === "boolean") flags[key] = source[key]
 	}
 	return flags

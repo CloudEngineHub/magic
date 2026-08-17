@@ -87,9 +87,11 @@ pnpm exec tsx benchmarks/browser/streaming-smoke.ts --slides 300 --media
 Two independent benchmark layers are provided:
 
 - `node/run.ts`: packaging-only benchmark built from deterministic PPT IR. It measures creation of
-  the PptxGenJS presentation, drawing nodes, and the final `write(arraybuffer)` call.
+  the PptxGenJS presentation, drawing nodes, and the destination-first `writeTo()` call. Output is
+  consumed by a counting/hash sink so the benchmark does not request a final in-memory artifact.
 - `browser/run.ts`: Chromium end-to-end benchmark. It runs real iframe rendering, resource loading,
-  DOM-to-IR conversion, packaging, Blob creation, and artifact hashing through `generatePPTX`.
+  DOM-to-IR conversion, Packaging Worker streaming, sink writes, and artifact hashing through
+  `exportPPTXStreaming()`.
 
 The first fixture set intentionally covers `text`, `image-reuse`, `image-unique`, and `mixed`.
 Audio/video and multi-GB fixture suites are not part of this first harness. They should be added as

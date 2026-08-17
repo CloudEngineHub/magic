@@ -3,6 +3,7 @@ import type { SandboxInstance } from "../src/sandbox"
 import {
 	createPptxStreamingExporter,
 	type ExportProgress,
+	type PptxDestination,
 	type StreamingExportTaskInput,
 } from "../src"
 
@@ -16,11 +17,19 @@ function createSandboxStub() {
 	} satisfies SandboxInstance
 }
 
+function createDestination(): PptxDestination {
+	return {
+		kind: "sink-proxy",
+		sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+	}
+}
+
 describe("streaming export API", () => {
 	it("normalizes compatibility inputs lazily for the injected streaming runtime", async () => {
 		const sandbox = createSandboxStub()
 		const progress: ExportProgress[] = []
 		const workerUrl = new URL("https://cdn.example.test/html2pptx/packaging-worker.js")
+		const destination = createDestination()
 		let task: StreamingExportTaskInput | undefined
 		const exportStreaming = vi.fn(async (input: StreamingExportTaskInput) => {
 			task = input
@@ -34,7 +43,7 @@ describe("streaming export API", () => {
 				fileName: input.fileName,
 				pageCount: pages.length,
 				mediaPartCount: 1,
-				bytesWritten: 4096,
+				bytesWritten: 4096n,
 				durationMs: 25,
 			}
 		})
@@ -46,6 +55,7 @@ describe("streaming export API", () => {
 		const handle = exporter(["first", { index: 7, html: "second", key: "business-page" }], {
 			fileName: "large.pptx",
 			outputPolicy: "file-stream",
+			destination,
 			workerUrl,
 			onProgress: (value) => progress.push(value),
 		})
@@ -54,16 +64,17 @@ describe("streaming export API", () => {
 			fileName: "large.pptx",
 			pageCount: 2,
 			mediaPartCount: 1,
-			bytesWritten: 4096,
+			bytesWritten: 4096n,
 			durationMs: 25,
 		})
 		expect(exportStreaming).toHaveBeenCalledOnce()
 		expect(task?.pageCount).toBe(2)
 		expect(task?.outputPolicy).toBe("file-stream")
+		expect(task?.destination).toBe(destination)
 		expect(task?.workerUrl).toBe(workerUrl)
 		expect(progress).toEqual([
 			{ phase: "preflight", pageCount: 2 },
-			{ phase: "completed", pageCount: 2, bytesWritten: 4096 },
+			{ phase: "completed", pageCount: 2, bytesWritten: 4096n },
 		])
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
 	})
@@ -74,9 +85,9 @@ describe("streaming export API", () => {
 		const packager = {
 			state: "accepting-slides" as const,
 			ready: Promise.resolve(),
-			commitSlide: vi.fn(async () => ({ bytesWritten: 1, manifest: {} })),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 1n, manifest: {} })),
 			commitSlides: vi.fn(),
-			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1 })),
+			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1n })),
 			abort: vi.fn(async () => undefined),
 			dispose: vi.fn(),
 		}
@@ -96,12 +107,9 @@ describe("streaming export API", () => {
 
 		const handle = exporter(["page"], {
 			workerUrl,
-			destination: {
-				kind: "sink-proxy",
-				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
-			},
+			destination: createDestination(),
 		})
-		await expect(handle.promise).resolves.toMatchObject({ pageCount: 1, bytesWritten: 1 })
+		await expect(handle.promise).resolves.toMatchObject({ pageCount: 1, bytesWritten: 1n })
 		expect(createPackager).toHaveBeenCalledWith(expect.objectContaining({ workerUrl }))
 		expect(packager.commitSlide).toHaveBeenCalledOnce()
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
@@ -123,11 +131,41 @@ describe("streaming export API", () => {
 			},
 		})
 
-		const handle = exporter(["page"])
+		const handle = exporter(["page"], { destination: createDestination() })
 		handle.cancel()
 
 		await expect(handle.promise).rejects.toMatchObject({ name: "AbortError" })
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
+	})
+
+	it("rejects before an injected runner can bypass the destination gate", async () => {
+		const exportStreaming = vi.fn(async (_input: StreamingExportTaskInput) => ({
+			fileName: "should-not-complete.pptx",
+			pageCount: 1,
+			mediaPartCount: 0,
+			bytesWritten: 1n,
+			durationMs: 1,
+		}))
+		const exporter = createPptxStreamingExporter({ pipeline: { exportStreaming } })
+		const optionsWithoutDestination = {
+			fileName: "missing-destination.pptx",
+			outputPolicy: "file-stream",
+		} as unknown as Parameters<typeof exporter>[1]
+
+		const handle = exporter(["page"], optionsWithoutDestination)
+
+		await expect(handle.promise).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "preflight-rejected",
+			diagnostic: {
+				details: {
+					issues: expect.arrayContaining([
+						expect.objectContaining({ code: "destination-required" }),
+					]),
+				},
+			},
+		})
+		expect(exportStreaming).not.toHaveBeenCalled()
 	})
 
 	it("aborts the selected destination when setup fails before the runner starts", async () => {
@@ -156,7 +194,7 @@ describe("streaming export API", () => {
 			fileName: "completed.pptx",
 			pageCount: 1,
 			mediaPartCount: 0,
-			bytesWritten: 1024,
+			bytesWritten: 1024n,
 			durationMs: 10,
 		}
 		const exporter = createPptxStreamingExporter({
@@ -166,7 +204,7 @@ describe("streaming export API", () => {
 			},
 		})
 
-		const handle = exporter(["page"])
+		const handle = exporter(["page"], { destination: createDestination() })
 		handle.cancel()
 
 		await expect(handle.promise).resolves.toEqual(summary)

@@ -6,7 +6,7 @@ const pptLogger = logger.createLogger("html2pptx")
 /**
  * 将项目 Logger 适配为 html2pptx ExternalLogger 接口。
  *
- * 传入 exportPPTX 后，包内部所有日志会经过此适配器：
+ * 传入 destination-first streaming 导出后，包内部所有日志会经过此适配器：
  * - warn / error 进入项目日志管道 → APM 上报
  * - info 进入日志管道（INFO 级别，不触发 APM error 上报）
  * - debug 仅在开发环境打到 console
@@ -59,7 +59,8 @@ export function reportPptxExportError(error: unknown, context?: Record<string, u
 				cancelled: diagnostic?.cancelled,
 				pageIndex: diagnostic?.pageIndex,
 				pageCount: diagnostic?.pageCount,
-				bytesWritten: diagnostic?.bytesWritten,
+				// BigInt is used internally so ZIP64 counters stay exact; logs cross a JSON boundary.
+				bytesWritten: diagnostic?.bytesWritten?.toString(),
 				outputPolicy: diagnostic?.outputPolicy,
 				mediaPolicyMode: diagnostic?.mediaPolicyMode,
 				zipMode: diagnostic?.zipMode,
@@ -286,7 +287,7 @@ class PptxDebugger {
 			msg.includes("[html2pptx") ||
 			msg.includes("[pptFont") ||
 			msg.includes("font") ||
-			msg.includes("exportPPTX")
+			msg.includes("exportPPTXStreaming")
 		)
 	}
 

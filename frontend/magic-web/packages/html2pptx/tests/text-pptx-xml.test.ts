@@ -3,6 +3,11 @@ import PptxGenJS from "pptxgenjs"
 import { describe, expect, it } from "vitest"
 import { drawText } from "../src/drawer/drawText"
 import type { PPTTextNode } from "../src/ir/node"
+import {
+	asStreamingPptxPresentation,
+	concatPptxChunks,
+	createCollectingPptxDestination,
+} from "./streaming-test-utils"
 
 describe("PowerPoint text XML", () => {
 	it("writes the HTML frame exactly and locks browser lines with a soft break", async () => {
@@ -30,8 +35,9 @@ describe("PowerPoint text XML", () => {
 		}
 		drawText(slide, node)
 
-		const output = await pptx.write({ outputType: "arraybuffer" })
-		const zip = await JSZip.loadAsync(output as ArrayBuffer)
+		const { destination, chunks } = createCollectingPptxDestination()
+		await asStreamingPptxPresentation(pptx).writeTo({ destination })
+		const zip = await JSZip.loadAsync(concatPptxChunks(chunks))
 		const slideXml = await zip.file("ppt/slides/slide1.xml")?.async("string")
 		if (!slideXml) throw new Error("slide1.xml is required")
 

@@ -20,7 +20,6 @@ import useFileExport from "../../hooks/useFileExport"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import usePPTStoreOptional from "./usePPTStoreOptional"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { exportPPTX } from "@magic/html2pptx"
 import { exportHtmlToImage } from "@magic-web/html2image"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
@@ -35,10 +34,11 @@ import {
 } from "@/pages/superMagic/services/documentExport"
 import { iteratePreparedHtmlPages } from "@/utils/htmlExportPrepare"
 import {
+	assertPptxExportAvailable,
 	formatPptxStreamingProgress,
 	openPptxDestination,
+	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
-	supportsPptxFileStreaming,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 
 interface EditToolbarProps {
@@ -424,14 +424,15 @@ function EditToolbar({
 			resolvePptScaleContentDimensions(targetSlides[0]?.content, targetSlides[0]?.rawContent),
 		)
 		const toastId = createRandomUuidV4()
-		const canStreamToFile = supportsPptxFileStreaming()
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		try {
-			destinationLease = canStreamToFile
-				? await openPptxDestination({ suggestedName: defaultName })
-				: null
+			assertPptxExportAvailable({ pageCount: htmlSlides.length })
+			destinationLease = await openPptxDestination({ suggestedName: defaultName })
 		} catch (error) {
-			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
+			const isUnavailable = error instanceof PptxExportUnavailableError
+			magicToast.error(
+				isUnavailable ? error.message : t("topicFiles.contextMenu.fileExport.exportFailed"),
+			)
 			reportPptxExportError(error, {
 				fileName: defaultName,
 				slideCount: htmlSlides.length,
@@ -439,8 +440,7 @@ function EditToolbar({
 			})
 			return
 		}
-		if (canStreamToFile && !destinationLease) return
-		let exportHandle: ReturnType<typeof exportPPTX> | null = null
+		if (!destinationLease) return
 		let cancelExport: (() => void) | null = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
 
@@ -463,7 +463,7 @@ function EditToolbar({
 
 		const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 
-		if (destinationLease) {
+		{
 			const destination = destinationLease.destination
 			const streamingHandle = startPptxStreamingExportFromFactory(
 				(signal) =>
@@ -531,60 +531,6 @@ function EditToolbar({
 				})
 			return
 		}
-
-		exportHandle = exportPPTX(htmlSlides, {
-			fileName: defaultName,
-			skipFailedPages: true,
-			config: pptxConfig,
-			fontResolver: pptFontResolver,
-			logger: pptxExternalLogger,
-			logLevel: "warn",
-			onResourceLoadError: resourceErrors.onResourceLoadError,
-			onSlideProgress: ({ index, total }) => {
-				const progress = total > 1 ? ` (${index + 1}/${total})` : ""
-				magicToast.loading({
-					key: toastId,
-					content: getExportToastContent(`${t("topicFiles.exporting")}${progress}`),
-					duration: 0,
-				})
-			},
-		})
-		cancelExport = exportHandle.cancel
-
-		setIsEditableExporting(true)
-
-		exportHandle.promise
-			.then(() => {
-				magicToast.success({
-					key: toastId,
-					content: t("topicFiles.exportSuccess"),
-					duration: 1000,
-				})
-			})
-			.catch((error: unknown) => {
-				const isAbort = (error as { name?: string } | null)?.name === "AbortError"
-				if (isAbort) {
-					magicToast.info({
-						key: toastId,
-						content: t("topicFiles.exportCancel"),
-						duration: 1000,
-					})
-				} else {
-					magicToast.error({
-						key: toastId,
-						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-						duration: 1000,
-					})
-					reportPptxExportError(error, {
-						fileName: defaultName,
-						slideCount: htmlSlides?.length,
-						source: "EditToolbar",
-					})
-				}
-			})
-			.finally(() => {
-				setIsEditableExporting(false)
-			})
 	}
 
 	// File sharing hook

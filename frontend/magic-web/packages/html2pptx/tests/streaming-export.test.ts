@@ -5,6 +5,8 @@ import type { MediaSourceDescriptor } from "../src/media/source-descriptor"
 import type { StreamingStagingStore } from "../src/runtime"
 import { runStreamingExport } from "../src/pipeline/streaming-export"
 import type { StreamingExportTaskInput } from "../src"
+import { isExportFidelityError, isPptxExportError } from "../src/errors"
+import { MAX_PPT_PAGE_PX } from "../src/shared/unit"
 
 const config = {
 	htmlWidth: 1280,
@@ -89,12 +91,12 @@ function createMediaNodeWithCoverBytes(): PPTNode {
 }
 
 function createPackagerFactory(options: {
-	finalize?: () => Promise<{ slideCount: number; mediaPartCount: number; bytesWritten: number }>
+	finalize?: () => Promise<{ slideCount: number; mediaPartCount: number; bytesWritten: bigint }>
 	commit?: (nodes: SerializablePPTNode[]) => void | Promise<void>
 }) {
 	const commitSlide = vi.fn(async ({ nodes }: { nodes: SerializablePPTNode[] }) => {
 		await options.commit?.(nodes)
-		return { bytesWritten: 1, manifest: {} }
+		return { bytesWritten: 1n, manifest: {} }
 	})
 	const packager = {
 		state: "accepting-slides" as const,
@@ -106,7 +108,7 @@ function createPackagerFactory(options: {
 			(async () => ({
 				slideCount: commitSlide.mock.calls.length,
 				mediaPartCount: 0,
-				bytesWritten: 1,
+				bytesWritten: 1n,
 			})),
 		abort: vi.fn(async () => undefined),
 		dispose: vi.fn(),
@@ -250,7 +252,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3 }),
+			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3n }),
 		})
 		const input = createBaseInput({
 			pageCount: 3,
@@ -298,7 +300,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1 }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1n }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -341,7 +343,7 @@ describe("runStreamingExport", () => {
 					committedKinds.push(image.source?.kind ?? "")
 				}
 			},
-			finalize: async () => ({ slideCount: 2, mediaPartCount: 1, bytesWritten: 2 }),
+			finalize: async () => ({ slideCount: 2, mediaPartCount: 1, bytesWritten: 2n }),
 		})
 		const input = createBaseInput({
 			pageCount: 2,
@@ -448,7 +450,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3 }),
+			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3n }),
 		})
 		const input = createBaseInput({
 			pageCount: 3,
@@ -483,7 +485,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKeys.push(image.source?.key ?? "")
 			},
-			finalize: async () => ({ slideCount: 300, mediaPartCount: 1, bytesWritten: 300 }),
+			finalize: async () => ({ slideCount: 300, mediaPartCount: 1, bytesWritten: 300n }),
 		})
 		const input = createBaseInput({
 			pageCount: 300,
@@ -561,7 +563,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1 }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1n }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -595,7 +597,7 @@ describe("runStreamingExport", () => {
 					committedKinds.push(`cover:${media.coverSource?.kind ?? ""}`)
 				}
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 2, bytesWritten: 1 }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 2, bytesWritten: 1n }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -700,7 +702,7 @@ describe("runStreamingExport", () => {
 	it("keeps staged data after success when cleanup is on-error", async () => {
 		const store = new FakeStagingStore()
 		const { factory } = createPackagerFactory({
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1 }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1n }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -738,6 +740,59 @@ describe("runStreamingExport", () => {
 
 		await expect(runStreamingExport(input)).rejects.toThrow("prepare failed")
 		expect(createPackager).not.toHaveBeenCalled()
+		expect(destination.sink.abort).toHaveBeenCalledOnce()
+		expect(store.cleanupCalls).toHaveLength(1)
+	})
+
+	it("does not skip an auto-size page that exceeds the PowerPoint width limit", async () => {
+		const destination = createSinkDestination()
+		const store = new FakeStagingStore()
+		const factory = vi.fn()
+		const tooWide = MAX_PPT_PAGE_PX + 1
+		const input = createBaseInput({
+			pageCount: 2,
+			pages: (async function* () {
+				yield { index: 0, html: "valid-page" }
+				yield { index: 1, html: "too-wide-page" }
+			})(),
+			autoSize: true,
+			skipFailedPages: true,
+			destination,
+			pipeline: {
+				prepareSlideNodes: vi.fn(async ({ html }: { html: string }) => ({
+					pptNodes: [createShapeNode()],
+					totalWidth: html === "too-wide-page" ? tooWide : 1280,
+					totalHeight: 720,
+					bodyBackground: null,
+				})),
+				createStreamingPresentationPackager: factory,
+				createStreamingStagingStore: () => store,
+			},
+			stagingPolicy: { mode: "opfs", cleanup: "always" },
+		})
+
+		const rejected = runStreamingExport(input)
+		await expect(rejected).rejects.toMatchObject({
+			name: "PptxExportError",
+			code: "fidelity-failed",
+			diagnostic: {
+				phase: "prepare-page",
+				pageIndex: 1,
+				code: "fidelity-failed",
+			},
+		})
+		try {
+			await rejected
+		} catch (error) {
+			expect(isPptxExportError(error)).toBe(true)
+			if (isPptxExportError(error)) {
+				expect(isExportFidelityError(error.sourceError)).toBe(true)
+				if (isExportFidelityError(error.sourceError)) {
+					expect(error.sourceError.kind).toBe("page-size")
+				}
+			}
+		}
+		expect(factory).not.toHaveBeenCalled()
 		expect(destination.sink.abort).toHaveBeenCalledOnce()
 		expect(store.cleanupCalls).toHaveLength(1)
 	})
@@ -785,7 +840,7 @@ describe("runStreamingExport", () => {
 				expect(retainedArrays.every((array) => array.length === 0)).toBe(true)
 				retainedArrays.push(nodes)
 			},
-			finalize: async () => ({ slideCount: 300, mediaPartCount: 0, bytesWritten: 300 }),
+			finalize: async () => ({ slideCount: 300, mediaPartCount: 0, bytesWritten: 300n }),
 		})
 		const input = createBaseInput({
 			pageCount: 300,

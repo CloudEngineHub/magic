@@ -21,7 +21,6 @@ import { useDuplicateFileHandler } from "./useDuplicateFileHandler"
 import { useMemoizedFn } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { uploadLogger } from "../utils/uploadLogger"
-import { exportPPTX } from "@magic/html2pptx"
 import {
 	prepareExportSlides,
 	iterateExportSlides,
@@ -51,11 +50,12 @@ import {
 import type { DownloadProgressController } from "@/pages/superMagic/hooks/useDownloadProgress"
 import { Button } from "antd"
 import {
+	assertPptxExportAvailable,
 	formatPptxStreamingProgress,
 	iteratePreparedPptxPages,
 	openPptxDestination,
+	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
-	supportsPptxFileStreaming,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
@@ -1211,10 +1211,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				: []
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
-			const canStreamToFile = supportsPptxFileStreaming()
 			let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 
-			let exportHandle: ReturnType<typeof exportPPTX> | null = null
 			let cancelExport: (() => void) | null = null
 			const resourceErrors = createPptxResourceErrorCollector(t)
 			const getExportToastContent = (progressText: string) =>
@@ -1236,14 +1234,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
-				destinationLease = canStreamToFile
-					? await openPptxDestination({
-							suggestedName: String(
-								mergedDisplayConfig?.name || item.file_name || "export",
-							).replace(/\.html?$/i, ""),
-						})
-					: null
-				if (canStreamToFile && !destinationLease) return
+				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
+				destinationLease = await openPptxDestination({
+					suggestedName: String(
+						mergedDisplayConfig?.name || item.file_name || "export",
+					).replace(/\.html?$/i, ""),
+				})
+				if (!destinationLease) return
 
 				magicToast.loading({
 					key: toastId,
@@ -1251,7 +1248,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					duration: 0,
 				})
 
-				if (destinationLease) {
+				{
 					const attachmentScope = folderChildren?.length
 						? folderChildren
 						: (attachments ?? [])
@@ -1324,72 +1321,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					})
 					return
 				}
-
-				const result = isSingleFile
-					? await prepareSingleSlideExport({
-							fileId: item.file_id,
-							fileName: item.file_name,
-							attachmentList: attachments ?? [],
-						})
-					: await prepareExportSlides({
-							slidePaths,
-							attachmentList: folderChildren?.length
-								? folderChildren
-								: (attachments ?? []),
-							mainFileId: item.file_id,
-							mainFileName: item.file_name,
-							displayConfig: mergedDisplayConfig,
-						})
-
-				if (!result.htmlSlides.some(Boolean)) {
-					magicToast.error({
-						key: toastId,
-						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-						duration: 1000,
-					})
-					return
-				}
-
-				const preparedHtmlSlides = await prepareHtmlPagesForExport({
-					pages: result.htmlSlides,
-					attachments: attachments ?? [],
-					fileId: item.file_id,
-					fileName: item.file_name,
-					attachmentList: attachments ?? [],
-					displayConfig: mergedDisplayConfig,
-				})
-				const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
-				const pptxConfig = createPptxSlideConfig(
-					resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
-				)
-
-				exportHandle = exportPPTX(preparedHtmlSlides, {
-					fileName: result.fileName,
-					skipFailedPages: true,
-					autoSize,
-					config: pptxConfig,
-					fontResolver: pptFontResolver,
-					logger: pptxExternalLogger,
-					logLevel: "warn",
-					onResourceLoadError: resourceErrors.onResourceLoadError,
-					onSlideProgress: ({ index, total }) => {
-						const progress = total > 1 ? ` (${index + 1}/${total})` : ""
-						magicToast.loading({
-							key: toastId,
-							content: `${t("topicFiles.exporting")}${progress}`,
-							duration: 0,
-						})
-					},
-				})
-				cancelExport = exportHandle.cancel
-
-				await exportHandle.promise
-
-				magicToast.success({
-					key: toastId,
-					content: t("topicFiles.exportSuccess"),
-					duration: 1000,
-				})
 			} catch (error: unknown) {
 				await destinationLease?.abort(error).catch(() => undefined)
 				const isAbort = (error as { name?: string } | null)?.name === "AbortError"
@@ -1402,8 +1333,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				} else {
 					magicToast.error({
 						key: toastId,
-						content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-						duration: 1000,
+						content:
+							error instanceof PptxExportUnavailableError
+								? error.message
+								: t("topicFiles.contextMenu.fileExport.exportFailed"),
+						duration: error instanceof PptxExportUnavailableError ? 3000 : 1000,
 					})
 					reportPptxExportError(error, {
 						fileId: item.file_id,

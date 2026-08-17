@@ -24,7 +24,7 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 	const warnings: PreflightIssue[] = []
 	const errors: PreflightIssue[] = []
 	const pageCount = normalizePageCount(options.pageCount)
-	const outputPolicy = normalizeOutputPolicy(options.outputPolicy, options.destination)
+	const outputPolicy = normalizeOutputPolicy(options.outputPolicy)
 	const requiresOpfs =
 		options.requiresOpfs === true ||
 		options.stagingPolicy?.mode === "opfs" ||
@@ -32,13 +32,6 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 		options.mediaPolicy?.mode === "full-stage"
 	const requiresSlidePlan = options.requiresSlidePlan === true
 
-	if (outputPolicy === "memory") {
-		errors.push({
-			code: "memory-output-not-supported",
-			message: "Large streaming exports require a caller-owned file or stream destination.",
-			severity: "error",
-		})
-	}
 	if (!options.destination) {
 		errors.push({
 			code: "destination-required",
@@ -121,10 +114,11 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 
 function normalizeOutputPolicy(
 	policy: LargeExportOutputPolicy | undefined,
-	destination: PptxDestination | undefined,
 ): Exclude<LargeExportOutputPolicy, "auto"> {
-	if (policy === "memory") return "memory"
-	return destination ? "file-stream" : "memory"
+	if (policy && policy !== "file-stream") {
+		throw new RangeError("Only the file-stream output policy is supported")
+	}
+	return "file-stream"
 }
 
 function normalizePageCount(value?: number): number | undefined {

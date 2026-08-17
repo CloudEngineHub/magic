@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { PptxDestination } from "@magic/html2pptx"
 
 const mocks = vi.hoisted(() => ({
 	exportPPTXStreaming: vi.fn(),
@@ -17,16 +18,25 @@ import {
 	resolvePptScaleContentDimensions,
 } from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
 import {
+	assertPptxExportAvailable,
 	ensurePptxFileName,
 	formatPptxStreamingProgress,
 	openPptxDestination,
 	peekAndReplayAsyncIterable,
 	peekStreamingPage,
+	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
 	supportsPptxFileStreaming,
 } from "../pptxStreamingExport"
 
 const originalPicker = Object.getOwnPropertyDescriptor(globalThis, "showSaveFilePicker")
+
+function createDestination(): PptxDestination {
+	return {
+		kind: "sink-proxy",
+		sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+	}
+}
 
 beforeEach(() => {
 	mocks.exportPPTXStreaming.mockReset()
@@ -52,6 +62,23 @@ describe("pptxStreamingExport", () => {
 		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
 		expect(supportsPptxFileStreaming()).toBe(false)
 		await expect(openPptxDestination({ suggestedName: "deck" })).resolves.toBeNull()
+	})
+
+	it("throws a structured unavailable error instead of allowing a memory fallback", () => {
+		Reflect.deleteProperty(globalThis, "showSaveFilePicker")
+
+		expect(() => assertPptxExportAvailable({ pageCount: 1 })).toThrow(
+			PptxExportUnavailableError,
+		)
+		try {
+			assertPptxExportAvailable({ pageCount: 1 })
+		} catch (error) {
+			expect(error).toMatchObject({
+				name: "PptxExportUnavailableError",
+				code: "file-stream-unavailable",
+				decision: { route: "unavailable" },
+			})
+		}
 	})
 
 	it("opens one final destination and adapts it to an ACK sink", async () => {
@@ -210,6 +237,8 @@ describe("pptxStreamingExport", () => {
 			'<main class="ft-canvas" style="width: 1080px; height: 1920px">portrait</main>'
 		const resolver = vi.fn((firstPage: { html: string }) => ({
 			fileName: "portrait",
+			destination: createDestination(),
+			outputPolicy: "file-stream" as const,
 			config: createPptxSlideConfig(resolvePptScaleContentDimensions(firstPage.html)),
 		}))
 
@@ -252,6 +281,8 @@ describe("pptxStreamingExport", () => {
 				yield "<main>image</main>"
 			},
 			{
+				destination: createDestination(),
+				outputPolicy: "file-stream",
 				imagePolicy: { maxPixels: 100 },
 			},
 		)
@@ -271,7 +302,7 @@ describe("pptxStreamingExport", () => {
 					next: async () => ({ done: true, value: undefined }),
 				}),
 			}),
-			{},
+			{ destination: createDestination(), outputPolicy: "file-stream" },
 		)
 
 		await expect(handle.promise).rejects.toThrow("PPTX page source did not yield any pages")
@@ -284,28 +315,34 @@ describe("pptxStreamingExport", () => {
 		const providerStarted = new Promise<void>((resolve) => {
 			markProviderStarted = resolve
 		})
-		const handle = startPptxStreamingExportFromFactory((signal) => {
-			const waitingSource: AsyncIterable<string> = {
-				[Symbol.asyncIterator]() {
-					return {
-						next: () => {
-							markProviderStarted?.()
-							return new Promise<IteratorResult<string>>((_, reject) => {
-								signal.addEventListener(
-									"abort",
-									() => {
-										providerAbortObserved = true
-										reject(signal.reason)
-									},
-									{ once: true },
-								)
-							})
-						},
-					}
-				},
-			}
-			return waitingSource
-		}, {})
+		const handle = startPptxStreamingExportFromFactory(
+			(signal) => {
+				const waitingSource: AsyncIterable<string> = {
+					[Symbol.asyncIterator]() {
+						return {
+							next: () => {
+								markProviderStarted?.()
+								return new Promise<IteratorResult<string>>((_, reject) => {
+									signal.addEventListener(
+										"abort",
+										() => {
+											providerAbortObserved = true
+											reject(signal.reason)
+										},
+										{ once: true },
+									)
+								})
+							},
+						}
+					},
+				}
+				return waitingSource
+			},
+			{
+				destination: createDestination(),
+				outputPolicy: "file-stream",
+			},
+		)
 		const rejection = expect(handle.promise).rejects.toMatchObject({ name: "AbortError" })
 		await providerStarted
 
@@ -343,9 +380,15 @@ describe("pptxStreamingExport", () => {
 				rejectInner = reject
 			}),
 		}))
-		const handle = startPptxStreamingExportFromFactory(async function* () {
-			yield "<main>first</main>"
-		}, {})
+		const handle = startPptxStreamingExportFromFactory(
+			async function* () {
+				yield "<main>first</main>"
+			},
+			{
+				destination: createDestination(),
+				outputPolicy: "file-stream",
+			},
+		)
 		await vi.waitFor(() => expect(mocks.exportPPTXStreaming).toHaveBeenCalledOnce())
 		const rejection = expect(handle.promise).rejects.toMatchObject({ name: "AbortError" })
 

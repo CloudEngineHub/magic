@@ -183,7 +183,7 @@ export function createPptxDestinationLease(writable: WritablePptxFile): PptxDest
 				await writable.close()
 				settled = true
 			} finally {
-				if (closeOperation === operation) closeOperation = null
+				closeOperation = null
 			}
 		})()
 		closeOperation = operation
@@ -202,7 +202,7 @@ export function createPptxDestinationLease(writable: WritablePptxFile): PptxDest
 				await writable.abort(reason)
 				settled = true
 			} finally {
-				if (abortOperation === operation) abortOperation = null
+				abortOperation = null
 			}
 		})()
 		abortOperation = operation
@@ -264,7 +264,7 @@ export function startPptxStreamingExportFromFactory(
 		peeked = null
 
 		try {
-			let resolverPage = firstPage
+			let resolverPage: StreamingHtmlPage | null = firstPage
 			if (!resolverPage) throw new Error("PPTX page source did not yield any pages")
 			let options: LargeExportOptions
 			if (typeof optionsOrResolver === "function") {

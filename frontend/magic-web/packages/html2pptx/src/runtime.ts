@@ -1,8 +1,7 @@
-import type { EmbedFontInput, UsedFont } from "./api/font"
-import type { GeneratedPPTX, ResourceLoadError, SlideConfig } from "./api/options"
+import type { EmbedFontInput } from "./api/font"
+import type { ResourceLoadError, SlideConfig } from "./api/options"
 import type { ElementNode } from "./ir/dom"
 import type { PPTNode } from "./ir/node"
-import type { PackagePresentationInput, SerializablePPTNode } from "./ir/serialize"
 import type { IconBackup } from "./materialize/pseudo-icon"
 import type { MediaSourceDescriptor } from "./media/source-descriptor"
 import type { ImageTransformDescriptor } from "./media/image-preflight"
@@ -13,9 +12,7 @@ import type {
 } from "./sandbox/htmlRenderSandbox"
 import type { TextMergeMode } from "./pipeline/text-merge-mode"
 import type {
-	CreateIncrementalPresentationPackagerInput,
 	CreateStreamingPresentationPackagerInput,
-	IncrementalPresentationPackager,
 	StreamingPresentationPackager,
 } from "./packaging/incremental-types"
 
@@ -86,18 +83,6 @@ export interface ExportPipelineRuntime extends RenderSlideRuntime {
 	/** Optional descriptor-only image conversion hook used when imagePolicy requests transform. */
 	transformImageDescriptor?: ImageTransformDescriptor
 	prepareSlideNodes?: (input: PrepareSlideNodesInput) => Promise<PrepareSlideNodesResult>
-	detectFontsFromNodes?: (slides: SerializablePPTNode[][]) => UsedFont[]
-	packagePresentationInWorker?: (
-		input: PackagePresentationInput & {
-			signal: AbortSignal
-			onResourceError?: (error: ResourceLoadError) => void
-			/** False returns an artifact instead of triggering a browser download. */
-			download?: boolean
-		},
-	) => Promise<GeneratedPPTX | void>
-	createIncrementalPresentationPackager?: (
-		input: CreateIncrementalPresentationPackagerInput,
-	) => IncrementalPresentationPackager | null
 	/**
 	 * Optional Phase 4 Packaging Worker hook. The host creates this only after a
 	 * complete PptxGenJS SlidePlan/CapacityPlan is available.

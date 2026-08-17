@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
 import { performance } from "node:perf_hooks"
+import { Writable } from "node:stream"
 import { drawByRegistry } from "../../src/registry/drawer-registry"
 import type { SerializablePPTNode } from "../../src/ir/serialize"
 import type { Pptx } from "../../src/ir/node"
@@ -17,6 +18,11 @@ import { createScenarioSlides } from "./scenarios"
 
 const require = createRequire(import.meta.url)
 const PptxGenJS = require("pptxgenjs") as new () => Pptx
+type StreamingPptx = Pptx & {
+	writeTo(options: {
+		destination: NodeJS.WritableStream
+	}): Promise<{ bytesWritten: bigint; entryCount: bigint }>
+}
 const SLIDE_CONFIG = {
 	htmlWidth: 1920,
 	htmlHeight: 1080,
@@ -62,20 +68,32 @@ async function runPackagingIteration(
 			memory.observe()
 		}
 
-		const output = await presentation.write({ outputType: "arraybuffer" })
+		const hash = includeHash ? createHash("sha256") : undefined
+		let streamedBytes = 0
+		const destination = new Writable({
+			write(chunk: Buffer | string, _encoding, callback) {
+				const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk
+				streamedBytes += bytes.byteLength
+				hash?.update(bytes)
+				callback()
+			},
+		})
+		const result = await (presentation as StreamingPptx).writeTo({ destination })
+		if (result.bytesWritten !== BigInt(streamedBytes)) {
+			throw new Error(
+				`Streaming byte count mismatch: sink=${streamedBytes}, writer=${result.bytesWritten}`,
+			)
+		}
 		const durationMs = performance.now() - startedAt
-		const outputBytes = toUint8Array(output)
 		memory.observe()
 		const memoryPeak = memory.stop()
-		const artifactSha256 = includeHash
-			? createHash("sha256").update(outputBytes).digest("hex")
-			: "warmup-not-hashed"
+		const artifactSha256 = hash?.digest("hex") ?? "warmup-not-hashed"
 
 		return {
 			status: "success",
 			iteration,
 			durationMs,
-			outputBytes: outputBytes.byteLength,
+			outputBytes: streamedBytes,
 			artifactSha256,
 			sampledBaselineHeapBytes: memoryPeak.baselineHeapBytes,
 			sampledBaselineRssBytes: memoryPeak.baselineRssBytes,
@@ -109,13 +127,6 @@ function createBenchPresentation(): Pptx {
 	})
 	presentation.layout = "HTML2PPTX_BENCHMARK"
 	return presentation
-}
-
-function toUint8Array(output: unknown): Uint8Array {
-	if (output instanceof Uint8Array) return output
-	if (output instanceof ArrayBuffer) return new Uint8Array(output)
-	if (Buffer.isBuffer(output)) return output
-	throw new Error(`Unexpected PptxGenJS output type: ${typeof output}`)
 }
 
 function collectGarbage(): void {

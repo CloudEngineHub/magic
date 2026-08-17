@@ -275,7 +275,7 @@
 		"pdf-lib": "^1.17.1",
 		"polished": "^4.3.1",
 		"pptx-preview": "^1.0.7",
-		"pptxgenjs": "^4.0.1",
+		"pptxgenjs": "file:../../../../PptxGenJS",
 		"prismjs": "^1.30.0",
 		"prosemirror-model": "^1.25.0",
 		"prosemirror-state": "^1.4.3",
@@ -444,15 +444,7 @@
 	},
 	"pnpm": {
 		"patchedDependencies": {
-			"pptxgenjs@4.0.1": "patches/pptxgenjs@4.0.1.patch",
 			"tiptap-markdown@0.9.0": "patches/tiptap-markdown.patch"
-		},
-		"packageExtensions": {
-			"pptxgenjs@4.0.1": {
-				"dependencies": {
-					"@zip.js/zip.js": "2.8.34"
-				}
-			}
 		}
 	},
 	"msw": {

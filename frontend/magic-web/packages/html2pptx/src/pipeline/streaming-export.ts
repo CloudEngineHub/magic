@@ -29,6 +29,7 @@ import {
 } from "../packaging"
 import { createPresentation, ensureFileName } from "../packaging/pptx-document"
 import {
+	ExportFidelityError,
 	isExportFidelityError,
 	isPptxExportError,
 	PptxExportError,
@@ -68,7 +69,7 @@ interface ExportDiagnosticState {
 	phase: ExportFailurePhase
 	pageIndex?: number
 	pageCount?: number
-	bytesWritten?: number
+	bytesWritten?: bigint
 }
 
 /** Default Phase 4 HTML -> IR -> Packaging Worker streaming runner. */
@@ -321,8 +322,9 @@ async function runStagedStreamingExport(
 			try {
 				const result = await prepareStreamingPage(input, page.html)
 				if (input.autoSize && result.totalWidth > MAX_PPT_PAGE_PX) {
-					throw new Error(
+					throw new ExportFidelityError(
 						`[exportPPTXStreaming] Page ${page.index + 1} width ${result.totalWidth}px exceeds PowerPoint's ${MAX_PPT_PAGE_PX}px limit.`,
+						"page-size",
 					)
 				}
 				measuredMaxWidth = Math.max(measuredMaxWidth, result.totalWidth)

@@ -1,11 +1,25 @@
-import { generatePPTX } from "@html2pptx-benchmark-target"
+import { exportPPTXStreaming } from "@html2pptx-benchmark-target"
 import { createBrowserScenarioSlides } from "./scenarios"
+import { IncrementalSha256, sha256Blob } from "./streaming-smoke-support"
 import type { ScenarioName, ScenarioShape } from "../shared/types"
 
 interface BrowserRunInput {
 	scenario: ScenarioName
 	shape: ScenarioShape
 	iteration: number
+}
+
+interface BrowserBenchmarkSink {
+	write(chunk: Uint8Array): void | Promise<void>
+	close(): void | Promise<void>
+	abort?(reason?: unknown): void | Promise<void>
+}
+
+interface BrowserBenchmarkDestination {
+	destination: BrowserBenchmarkSink
+	bytesWritten(): number
+	readSha256(): Promise<string>
+	cleanup(): Promise<void>
 }
 
 export interface BrowserRunSample {
@@ -51,40 +65,100 @@ async function runBenchmark(input: BrowserRunInput): Promise<BrowserRunSample> {
 	try {
 		let slideProgressEvents = 0
 		const startedAt = performance.now()
-		const output = await generatePPTX(htmlSlides, {
-			fileName: `html2pptx-${input.scenario}.pptx`,
-			logLevel: "error",
-			onSlideProgress: () => {
-				slideProgressEvents += 1
-			},
-		}).promise
-		const durationMs = performance.now() - startedAt
-		const sampledExportPeakJsHeapBytes = heap.currentPeak()
-		const longTaskSummary = longTasks.stop()
-		const hashStartedAt = performance.now()
-		const artifactSha256 = await sha256(output.data)
-		const hashDurationMs = performance.now() - hashStartedAt
-		const heapSummary = heap.stop()
+		const output = await createBrowserBenchmarkDestination()
+		try {
+			const summary = await exportPPTXStreaming(htmlSlides, {
+				fileName: `html2pptx-${input.scenario}.pptx`,
+				logLevel: "error",
+				destination: output.destination,
+				onProgress: (progress) => {
+					if (progress.phase === "prepare-page") slideProgressEvents += 1
+				},
+			}).promise
+			const durationMs = performance.now() - startedAt
+			const sampledExportPeakJsHeapBytes = heap.currentPeak()
+			const longTaskSummary = longTasks.stop()
+			const hashStartedAt = performance.now()
+			const artifactSha256 = await output.readSha256()
+			const hashDurationMs = performance.now() - hashStartedAt
+			const heapSummary = heap.stop()
 
-		return {
-			status: "ok",
-			iteration: input.iteration,
-			durationMs,
-			outputBytes: output.data.size,
-			artifactSha256,
-			hashDurationMs,
-			sampledBaselineJsHeapBytes: heapSummary.baseline,
-			sampledExportPeakJsHeapBytes,
-			sampledPeakJsHeapBytes: heapSummary.peak,
-			heapSampleIntervalMs: heapSummary.sampleIntervalMs,
-			longTaskCount: longTaskSummary.count,
-			longTaskTotalMs: longTaskSummary.totalMs,
-			longTaskMaxMs: longTaskSummary.maxMs,
-			slideProgressEvents,
+			return {
+				status: "ok",
+				iteration: input.iteration,
+				durationMs,
+				outputBytes: output.bytesWritten(),
+				artifactSha256,
+				hashDurationMs,
+				sampledBaselineJsHeapBytes: heapSummary.baseline,
+				sampledExportPeakJsHeapBytes,
+				sampledPeakJsHeapBytes: heapSummary.peak,
+				heapSampleIntervalMs: heapSummary.sampleIntervalMs,
+				longTaskCount: longTaskSummary.count,
+				longTaskTotalMs: longTaskSummary.totalMs,
+				longTaskMaxMs: longTaskSummary.maxMs,
+				slideProgressEvents,
+			}
+		} finally {
+			await output.cleanup()
 		}
 	} finally {
 		heap.stop()
 		longTasks.stop()
+	}
+}
+
+async function createBrowserBenchmarkDestination(): Promise<BrowserBenchmarkDestination> {
+	const storage = navigator.storage as StorageManager & {
+		getDirectory?: () => Promise<FileSystemDirectoryHandle>
+	}
+	if (typeof storage.getDirectory === "function") {
+		try {
+			const root = await storage.getDirectory()
+			const fileName = `html2pptx-browser-${crypto.randomUUID()}.pptx`
+			const fileHandle = await root.getFileHandle(fileName, { create: true })
+			const writable = await fileHandle.createWritable({ keepExistingData: false })
+			let bytes = 0
+			return {
+				destination: {
+					write: async (chunk) => {
+						await writable.write(chunk)
+						bytes += chunk.byteLength
+					},
+					close: () => writable.close(),
+					abort: (reason) => writable.abort(reason),
+				},
+				bytesWritten: () => bytes,
+				readSha256: async () => {
+					const file = await fileHandle.getFile()
+					return (await sha256Blob(file)).sha256
+				},
+				cleanup: () => root.removeEntry(fileName).catch(() => undefined),
+			}
+		} catch {
+			// Fall through to the bounded counting/hash sink when OPFS setup is
+			// unavailable (for example, private browsing or exhausted quota).
+		}
+	}
+
+	const hash = new IncrementalSha256()
+	let bytes = 0
+	let aborted = false
+	return {
+		destination: {
+			write(chunk) {
+				if (aborted) throw new Error("Benchmark destination was aborted")
+				bytes += chunk.byteLength
+				hash.update(chunk)
+			},
+			close() {},
+			abort() {
+				aborted = true
+			},
+		},
+		bytesWritten: () => bytes,
+		readSha256: async () => hash.digestHex(),
+		cleanup: async () => undefined,
 	}
 }
 
@@ -144,9 +218,4 @@ function startLongTaskObserver(): {
 			}
 		},
 	}
-}
-
-async function sha256(blob: Blob): Promise<string> {
-	const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())
-	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
 }

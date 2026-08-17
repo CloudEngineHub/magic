@@ -1,7 +1,7 @@
 # 纯客户端超大 PPTX 导出方案
 
 **日期：** 2026-07-30
-**状态：** 待评审
+**状态：** 开源 streaming-only 实现已完成，待依赖发布与真机验收
 **目标读者：** 产品、架构、前端及客户端研发
 
 ## 1. 背景与目标
@@ -92,7 +92,7 @@ zip.js 生成 ZIP32 / ZIP64
 | 最终输出 | 导出开始时选择保存位置，之后持续写入本地文件，不生成完整 Blob |
 | 页面处理 | 每次只准备和提交一页，写完立即释放 DOM、IR 和临时对象 |
 | 页面就绪 | 将每页固定等待改为事件驱动判断，仅保留有上限的超时兜底 |
-| PptxGenJS | 增加逐页流式会话，旧 API 继续兼容小文件 |
+| PptxGenJS | v5 只提供 destination-first 逐页流式会话，删除旧输出 API |
 | 媒体输入 | 支持 File、Blob、ReadableStream、OPFS 文件等二进制 Source，不再依赖 base64 |
 | ZIP 引擎 | PPTX 外层包和图表内嵌 XLSX 全面统一到 zip.js，迁移后删除 JSZip |
 | ZIP64 | 文件可能跨越经典 ZIP 边界时，在开始写入前选择 ZIP64 |
@@ -131,7 +131,7 @@ PPTX 本质上是 ZIP 格式的 OOXML 文件，ZIP 无法去掉。zip.js 能够�
 | 单张超大图片无需转换 | 可以直接透传 |
 | 单张超大图片必须缩放或转格式 | 受解码内存限制，需要预检、降级或拒绝转换 |
 | 浏览器内通用视频转码 | 不支持 |
-| 只有 Blob 下载能力 | 只支持受控小文件，不属于多 GB 正式路径 |
+| 只有 Blob 下载能力 | 返回 unavailable，不进入 PPTX 导出 |
 | 磁盘空间或文件系统能力不足 | 无法完成，需要明确提示 |
 
 ZIP64 解决的是 ZIP 容器限制，不代表任意 PowerPoint 版本都能流畅打开任意大小的文件。产品应只对经过验证的 Windows/macOS PowerPoint 版本和媒体格式做兼容承诺。
@@ -144,7 +144,7 @@ ZIP64 解决的是 ZIP 容器限制，不代表任意 PowerPoint 版本都能流
 2. **验证流式 ZIP**：完成 zip.js 文件直写，验证单 entry 和总文件跨 4GiB，以及 8GB、20GB 长时间写入。
 3. **改造 PptxGenJS**：增加二进制媒体 Source、逐页提交、媒体去重和 ZIP64 输出，删除 JSZip 运行时。
 4. **接入 magic-web**：改为逐页处理和事件驱动页面就绪，加入 Worker 背压、一次点击、进度、取消和清理。
-5. **兼容与灰度**：在低性能设备和 Windows/macOS PowerPoint 上验证，再从内部数据逐步扩大到真实业务。
+5. **验收与发布**：在低性能设备和 Windows/macOS PowerPoint 上验证；PptxGenJS v5 发布前，Magic 只能使用本机联调依赖。
 
 ## 9. 验收标准
 

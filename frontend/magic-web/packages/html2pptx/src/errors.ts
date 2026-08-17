@@ -1,6 +1,6 @@
 import type { ExportFailureCode, ExportFailureDiagnostic, ExportFailurePhase } from "./api/options"
 
-export type ExportFidelityFailureKind = "script" | "render-timeout" | "capture"
+export type ExportFidelityFailureKind = "script" | "render-timeout" | "capture" | "page-size"
 
 /**
  * A fidelity failure means continuing would produce a PPTX with missing or incomplete content.
@@ -75,7 +75,7 @@ export interface PptxExportErrorContext {
 	fileName?: string
 	pageIndex?: number
 	pageCount?: number
-	bytesWritten?: number
+	bytesWritten?: bigint
 	outputPolicy?: ExportFailureDiagnostic["outputPolicy"]
 	mediaPolicyMode?: ExportFailureDiagnostic["mediaPolicyMode"]
 	zipMode?: ExportFailureDiagnostic["zipMode"]

@@ -1,8 +1,32 @@
 # 纯客户端超大 PPTX 导出执行计划
 
 **日期：** 2026-07-30
-**状态：** 待排期
+**状态：** 主体实现完成，进入发布阻塞清理与真机验收（开源分支）
 **对应方案：** [纯客户端超大 PPTX 导出方案](./2026-07-30-pure-client-large-pptx-export-design.md)
+
+## 当前执行状态（2026-08-17）
+
+本计划最初用于指导大版本迁移，代码主链路目前已经落地在开源分支
+`feat/html2ppt-upgrade-open`。当前交付口径是 **streaming-only**：PptxGenJS v5
+和 `@magic/html2pptx` v2 不再保留完整 PPTX 的 Blob、ArrayBuffer、Buffer 聚合输出，
+也不再通过 legacy/forceLegacy/fallback 路由切回旧实现。
+
+已完成的代码级工作：
+
+- PptxGenJS v5 已删除 buffered presentation export、旧 Blob/Buffer API 和 JSZip 运行时打包路径，统一使用 zip.js 流式写出。
+- html2pptx v2 已删除旧 packaging/pipeline 文件，只保留 `exportPPTXStreaming`，并强制调用方在异步工作开始前提供 destination。
+- Magic 页面处理、Worker/OPFS 暂存、背压、取消、失败清理、BigInt 字节计数和超宽 autoSize 页失败语义已接入并有回归测试。
+- 普通页面源失败不会再被转换为空白成功页；全部页面失败会显式失败。
+- 开源分支的技术方案与技术附录已同步到当前架构；商业化分支 `feat/html2ppt-upgrade-en` 不在本次变更范围内。
+
+尚未满足正式发布条件的事项：
+
+1. PptxGenJS v5 尚未发布到 registry，Magic 仍使用本机 `file:` 依赖，不能直接用于 CI、Docker 或干净 checkout。
+2. 需要完成固定 commit/registry 依赖替换并重新生成冻结 lockfile。
+3. 需要完成低性能设备、Windows/macOS PowerPoint、ZIP64 和多 GB 长测验收。
+4. 需要修正 Docker build context 与 pnpm 版本固定，随后再进行开源分支的发布检查。
+
+因此，当前分支可称为“源码迁移与本机集成完成”，不能称为“可直接发布版本”。
 
 ## 1. 项目目标
 
@@ -25,22 +49,22 @@
 ## 2. 执行顺序
 
 ```text
-阶段 0：建立基线和埋点
+阶段 0：建立基线和埋点（代码级完成）
         ↓
-阶段 1：zip.js / 浏览器写盘 / ZIP64 POC
+阶段 1：zip.js / 浏览器写盘 / ZIP64 POC（代码级完成，长测待验收）
         ↓
-阶段 2：PptxGenJS Writer 与媒体模型改造
+阶段 2：PptxGenJS Writer 与媒体模型改造（完成）
         ↓
-阶段 3：逐页 StreamingSession
+阶段 3：逐页 StreamingSession（完成）
         ↓
-阶段 4：magic-web 接入
+阶段 4：magic-web 接入（完成）
         ↓
-阶段 5：完整兼容与性能验收
+阶段 5：完整兼容与性能验收（进行中）
         ↓
 阶段 6：灰度发布
 ```
 
-阶段 1 未通过前，不进入 PptxGenJS 大规模重构。
+阶段 1 的代码门禁已经通过，因此已进入阶段 5；尚未完成的是跨平台、低性能设备和多 GB 长测门禁。
 
 ## 3. 阶段 0：建立基线和埋点
 
@@ -81,6 +105,7 @@
 ## 4. 阶段 1：关键能力 POC
 
 **预计时间：** 5～7 个工作日
+**当前状态：** 代码验证完成；浏览器真机、PowerPoint 和 ZIP64 长测待完成。
 
 ### POC 1：zip.js 流式 Writer
 
@@ -130,13 +155,14 @@
 ## 5. 阶段 2：PptxGenJS 基础改造
 
 **预计时间：** 8～12 个工作日
+**当前状态：** 已完成，PptxGenJS v5 分支已提交本地实现。
 
 ### 第一步：引入中立接口
 
 - `ByteSource`：文本、Uint8Array、Blob/File、ReadableStream、URL、OPFS 文件。
 - `OutputSink`：文件流、Worker Sink、Node stream、兼容 Memory Sink。
 - `PackageWriter`：add、close、abort、progress。
-- 先保留 JSZip adapter，确保现有 API 和产物不变。
+- 运行时统一使用 zip.js；JSZip 仅可作为测试夹具或 XML 断言依赖，不再作为 PPTX 运行时 adapter。
 
 ### 第二步：拆分导出逻辑
 
@@ -153,9 +179,9 @@
 
 ### 第四步：增加新输出 API
 
-- 新增 `writeTo(sink)`，真正流式写目标文件。
-- 旧 `write()`、`writeFile()`、`stream()` 暂时保留兼容。
-- 大文件调用旧 Blob/Buffer API 时明确提示改用流式接口。
+- `writeTo(sink)` 和 `beginStreaming()` 构成 v5 的 destination-first 流式接口。
+- 删除 `write()`、`writeFile()`、`stream()` 及其 Blob/ArrayBuffer/Buffer 返回路径，不保留旧小文件兼容输出。
+- 只有媒体输入仍可接受 Blob/File/受限 ArrayBuffer；这不代表保留旧 PPTX 输出实现。
 
 ### 退出条件
 
@@ -167,6 +193,7 @@
 ## 6. 阶段 3：逐页 StreamingSession
 
 **预计时间：** 7～10 个工作日
+**当前状态：** 已完成代码实现和单元/集成测试。
 
 ### 工作内容
 
@@ -193,6 +220,7 @@
 ## 7. 阶段 4：magic-web 接入
 
 **预计时间：** 7～10 个工作日
+**当前状态：** 已完成代码接入；仍需真机性能数据验证目标是否达标。
 
 ### 工作内容
 
@@ -215,6 +243,7 @@
 ## 8. 阶段 5：完整兼容与验收
 
 **预计时间：** 7～10 个工作日
+**当前状态：** 进行中，是当前唯一的功能发布门禁阶段。
 
 ### 补齐能力
 
@@ -253,9 +282,10 @@
 ### 必须保留
 
 - zip.js 和 streaming feature flag。
-- 旧小文件兼容路径。
 - ZIP64 独立开关。
 - 紧急关闭和版本回滚能力。
+
+feature flag 只控制 streaming-only 能力是否可用，不得再承担切换到旧 Blob/Buffer 实现的职责。
 
 ### 立即暂停或回滚条件
 
@@ -278,14 +308,13 @@
 
 研发主链路预计 6～8 周，之后需要至少 2～3 周灰度观察。POC 结果、复杂图表/字体兼容情况以及 zip.js 是否需要维护内部 fork，会影响最终工期。
 
-## 11. 立即开始的第一周任务
+## 11. 当前执行队列
 
-1. 冻结 current/candidate commit 和测试设备。
-2. 完成分阶段耗时、Heap、RSS、首字节和失败阶段埋点。
-3. 固化 S1～S5 数据集和 benchmark 脚本。
-4. 在浏览器复验 zip.js 的 89MB 图片与 213MB 视频打包结果。
-5. 完成一次点击 FileSystemWritable 写盘 POC。
-6. 启动 >4GiB archive 和单 entry >4GiB 的 ZIP64 文件生成。
-7. 周末评审 POC 结果，决定是否进入 PptxGenJS 主重构。
+1. 整理并冻结开源侧 API/测试变更，完成 typecheck、测试、构建和静态旧 API 扫描。
+2. 等 PptxGenJS v5 发布或取得可复现的 Git commit 后，替换 Magic 两处本机 `file:` 依赖并重新生成冻结 lockfile。
+3. 修正 Docker build context（锁文件、workspace 配置、仓库内 eslint 和固定 pnpm 版本），在干净 checkout 中执行安装与构建。
+4. 固化 S1～S7 数据集，完成低性能设备、浏览器 OPFS、ZIP64、取消/磁盘写满和 Worker 异常验收。
+5. 使用 Windows/macOS 认证版本 PowerPoint 打开、保存、重新打开生成文件，确认无修复提示。
+6. 记录 P50/P95、峰值 Heap、首字节时间和成功率；只有全部门禁通过后，才进入灰度发布。
 
-第一周的唯一目标是消除底层不确定性，不开始大规模业务代码迁移。
+在上述依赖发布和真机验收完成前，不推送 PptxGenJS 分支，也不把当前本机联调状态标记为正式发布版本。

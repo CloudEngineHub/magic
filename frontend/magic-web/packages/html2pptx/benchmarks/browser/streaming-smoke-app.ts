@@ -12,7 +12,7 @@ export interface StreamingSmokeResult {
 	summary: {
 		pageCount: number
 		mediaPartCount: number
-		bytesWritten: number
+		bytesWritten: string
 		durationMs: number
 	}
 	fileBytes: number
@@ -154,7 +154,7 @@ async function runStreamingSmoke(input: StreamingSmokeInput): Promise<StreamingS
 			summary: {
 				pageCount: summary.pageCount,
 				mediaPartCount: summary.mediaPartCount,
-				bytesWritten: summary.bytesWritten,
+				bytesWritten: summary.bytesWritten.toString(),
 				durationMs: summary.durationMs,
 			},
 			fileBytes: file.size,

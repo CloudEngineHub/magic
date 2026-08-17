@@ -1,6 +1,6 @@
 import type {
 	CreateStreamingPresentationPackagerInput,
-	IncrementalSlideBatch,
+	StreamingSlideBatch,
 	SerializedStreamingError,
 	StreamingCommitSlidePayload,
 	StreamingExportSummary,
@@ -12,6 +12,8 @@ import type {
 	StreamingWorkerLike,
 } from "./incremental-types"
 import { descriptorTransferables } from "../media/source-descriptor"
+// Vite's worker URL query requires the source extension before `?worker&url`.
+// eslint-disable-next-line import/extensions
 import defaultPackagingWorkerUrl from "../workers/packaging-worker.ts?worker&url"
 
 type PendingRequest = {
@@ -311,7 +313,7 @@ export function createStreamingPresentationPackager(
 	}
 
 	function commitSlides(
-		batch: IncrementalSlideBatch,
+		batch: StreamingSlideBatch,
 		batchIndex?: number,
 	): Promise<readonly StreamingSlideCommitSummary[]> {
 		if (batch.slides.length !== batch.slideBackgrounds.length) {
@@ -617,14 +619,14 @@ function parseWorkerResponse(value: unknown): StreamingPackagingWorkerResponse {
 
 function requireSlideCommitSummary(value: unknown): void {
 	const summary = requireRecord(value, "Packaging Worker slide summary")
-	requireNonNegativeFiniteNumber(summary.bytesWritten, "slide summary bytesWritten")
+	requireNonNegativeBigInt(summary.bytesWritten, "slide summary bytesWritten")
 }
 
 function requireExportSummary(value: unknown): void {
 	const summary = requireRecord(value, "Packaging Worker export summary")
 	requireNonNegativeSafeInteger(summary.slideCount, "export summary slideCount")
 	requireNonNegativeSafeInteger(summary.mediaPartCount, "export summary mediaPartCount")
-	requireNonNegativeFiniteNumber(summary.bytesWritten, "export summary bytesWritten")
+	requireNonNegativeBigInt(summary.bytesWritten, "export summary bytesWritten")
 }
 
 function requireSerializedError(value: unknown): void {
@@ -652,7 +654,7 @@ function requireProgress(value: unknown): void {
 	}
 	for (const field of ["bytesRead", "bytesWritten", "estimatedTotalBytes"] as const) {
 		if (progress[field] !== undefined) {
-			requireNonNegativeFiniteNumber(progress[field], `progress ${field}`)
+			requireNonNegativeBigInt(progress[field], `progress ${field}`)
 		}
 	}
 }
@@ -677,9 +679,9 @@ function requireNonNegativeSafeInteger(value: unknown, label: string): void {
 	}
 }
 
-function requireNonNegativeFiniteNumber(value: unknown, label: string): void {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-		throw new Error(`Packaging Worker ${label} must be a non-negative finite number`)
+function requireNonNegativeBigInt(value: unknown, label: string): void {
+	if (typeof value !== "bigint" || value < 0n) {
+		throw new Error(`Packaging Worker ${label} must be a non-negative bigint`)
 	}
 }
 

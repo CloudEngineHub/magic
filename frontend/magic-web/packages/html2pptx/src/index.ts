@@ -1,10 +1,6 @@
 import type {
-	ExportOptions,
-	ExportHandle,
 	ExportProgress,
 	ExportSummary,
-	GeneratedPPTX,
-	GenerateHandle,
 	LargeExportOptions,
 	PptxDestination,
 	ResourceLoadError,
@@ -17,9 +13,9 @@ import { configureLogger, resetLogger } from "./logger"
 import { createAbortError } from "./sandbox/abort"
 import { HtmlRenderSandbox, type SandboxInstance } from "./sandbox"
 import { DEFAULT_CONFIG } from "./shared/unit"
-import { runExport } from "./pipeline/export-slides"
 import { runStreamingExport } from "./pipeline/streaming-export"
 import type { Html2PptxRuntime } from "./runtime"
+import { normalizePptxExportError } from "./errors"
 
 /** Input contract for the optional runtime-owned large export implementation. */
 export interface StreamingExportTaskInput {
@@ -36,7 +32,7 @@ export interface StreamingExportTaskInput {
 	fontResolver?: LargeExportOptions["fontResolver"]
 	fontMissPolicy?: LargeExportOptions["fontMissPolicy"]
 	outputPolicy?: LargeExportOptions["outputPolicy"]
-	destination?: PptxDestination
+	destination: PptxDestination
 	workerUrl?: LargeExportOptions["workerUrl"]
 	mediaPolicy?: LargeExportOptions["mediaPolicy"]
 	imagePolicy?: LargeExportOptions["imagePolicy"]
@@ -52,86 +48,24 @@ export type StreamingExportRunner = (input: StreamingExportTaskInput) => Promise
 export interface StreamingExportPipelineRuntime {
 	/** Preferred hook name. It must consume pages serially and close/abort the destination. */
 	exportStreaming?: StreamingExportRunner
-	/** Compatibility alias while downstream pipeline wiring is being migrated. */
-	runStreamingExport?: StreamingExportRunner
 }
 
 export type Html2PptxStreamingRuntime = Omit<Html2PptxRuntime, "pipeline"> & {
 	pipeline?: NonNullable<Html2PptxRuntime["pipeline"]> & StreamingExportPipelineRuntime
 }
 
-function getExportConfig(options?: LargeExportOptions) {
+function getStreamingExportConfig(options?: LargeExportOptions) {
 	return { ...DEFAULT_CONFIG, ...options?.config }
 }
 
-/** Create a cancellable PPTX generator that returns a Blob instead of downloading it. */
-export function createPptxGenerator(runtime: Html2PptxRuntime = {}) {
-	return function generatePPTX(
-		content: string | string[],
-		options?: ExportOptions,
-	): GenerateHandle {
-		const controller = new AbortController()
-		const promise = runExportPipeline(content, options, controller.signal, runtime, true).then(
-			(output) => {
-				if (!output) throw new Error("[generatePPTX] No PPTX artifact was produced")
-				return output
-			},
-		)
-		return { promise, cancel: () => controller.abort() }
-	}
-}
-
-/** Generate a PPTX artifact without triggering a browser download. */
-export const generatePPTX = createPptxGenerator()
-
 /**
- * Export HTML as a PPTX file
- *
- * Supports concurrent exports: each call returns an independent { promise, cancel } pair.
- *
- * @param content - HTML content string, or an array of HTML pages
- * @param options - export options
- * @returns ExportHandle - promise waits for completion, and cancel() aborts this export
- *
- * @example
- * ```ts
- * // Basic usage
- * const { promise } = exportPPTX('<div class="slide">...</div>')
- * await promise
- *
- * // Use console logging
- * exportPPTX(html, { logger: console })
- *
- * // Only collect warn and above
- * exportPPTX(html, { logger: console, logLevel: "warn" })
- *
- * // Concurrent exports with independent cancellation
- * const exportA = exportPPTX(htmlA)
- * const exportB = exportPPTX(htmlB, { fileName: "b.pptx" })
- * exportA.cancel()
- * await exportB.promise
- * ```
- */
-export function createPptxExporter(runtime: Html2PptxRuntime = {}) {
-	return function exportPPTX(content: string | string[], options?: ExportOptions): ExportHandle {
-		const controller = new AbortController()
-		const promise = runExportPipeline(content, options, controller.signal, runtime, false).then(
-			() => undefined,
-		)
-		return { promise, cancel: () => controller.abort() }
-	}
-}
-
-export const exportPPTX = createPptxExporter()
-
-/**
- * Create a cancellable forward-only exporter. Unlike exportPPTX(), this entry never
+ * Create a cancellable destination-first exporter. This entry never
  * buffers an AsyncIterable into string[] and never falls back to a final Blob.
  */
 export function createPptxStreamingExporter(runtime: Html2PptxStreamingRuntime = {}) {
 	return function exportPPTXStreaming(
 		content: StreamingExportContent,
-		options?: LargeExportOptions,
+		options: LargeExportOptions,
 	): StreamingExportHandle {
 		const controller = new AbortController()
 		const promise = runStreamingExportPipeline(content, options, controller.signal, runtime)
@@ -144,7 +78,7 @@ export const exportPPTXStreaming = createPptxStreamingExporter()
 
 async function runStreamingExportPipeline(
 	content: StreamingExportContent,
-	options: LargeExportOptions | undefined,
+	options: LargeExportOptions,
 	signal: AbortSignal,
 	runtime: Html2PptxStreamingRuntime,
 ): Promise<ExportSummary> {
@@ -156,16 +90,16 @@ async function runStreamingExportPipeline(
 	let sandbox: SandboxInstance | undefined
 	let runnerOwnsDestination = false
 	try {
-		const runner =
-			runtime.pipeline?.exportStreaming ??
-			runtime.pipeline?.runStreamingExport ??
-			runStreamingExport
-
 		throwIfStreamingAborted(signal)
-		const config = getExportConfig(options)
+		const config = getStreamingExportConfig(options)
 		const fileName = options?.fileName ?? "export.pptx"
 		const pageCount = options?.pageCount ?? getKnownStreamingPageCount(content)
 		options?.onProgress?.({ phase: "preflight", pageCount })
+
+		// Validate the host-selected destination before resolving an injected runner. Otherwise a
+		// custom runtime could bypass the built-in preflight gate and report a false success.
+		const destination = requireStreamingDestination(options, pageCount)
+		const runner = runtime.pipeline?.exportStreaming ?? runStreamingExport
 
 		sandbox = runtime.createSandbox
 			? runtime.createSandbox(config)
@@ -187,7 +121,7 @@ async function runStreamingExportPipeline(
 			fontResolver: options?.fontResolver,
 			fontMissPolicy: options?.fontMissPolicy,
 			outputPolicy: options?.outputPolicy,
-			destination: options?.destination,
+			destination,
 			workerUrl: options?.workerUrl,
 			mediaPolicy: options?.mediaPolicy,
 			imagePolicy: options?.imagePolicy,
@@ -214,6 +148,31 @@ async function runStreamingExportPipeline(
 		sandbox?.destroy()
 		if (options?.logLevel || options?.logger) resetLogger()
 	}
+}
+
+/** Keep the public destination contract strict while preserving the structured preflight error. */
+function requireStreamingDestination(
+	options: LargeExportOptions | undefined,
+	pageCount: number | undefined,
+): PptxDestination {
+	const destination = options?.destination
+	if (destination) return destination
+
+	throw normalizePptxExportError(
+		new Error(
+			"[exportPPTXStreaming] Preflight failed: Choose a save destination before starting a large export.",
+		),
+		{
+			phase: "preflight",
+			code: "preflight-rejected",
+			fileName: options?.fileName ?? "export.pptx",
+			pageCount,
+			outputPolicy: "file-stream",
+			details: {
+				issues: [{ code: "destination-required", severity: "error" }],
+			},
+		},
+	)
 }
 
 /** Abort a selected destination if setup fails before the streaming runner takes ownership. */
@@ -300,56 +259,8 @@ function throwIfStreamingAborted(signal: AbortSignal): void {
 	if (signal.aborted) throw createAbortError()
 }
 
-async function runExportPipeline(
-	content: string | string[],
-	options: ExportOptions | undefined,
-	signal: AbortSignal,
-	runtime: Html2PptxRuntime,
-	collectOutput: boolean,
-): Promise<GeneratedPPTX | void> {
-	configureLogger({
-		minLevel: options?.logLevel,
-		logger: options?.logger,
-	})
-
-	const config = { ...DEFAULT_CONFIG, ...options?.config }
-	const fileName = options?.fileName ?? "export.pptx"
-	const htmlSlides = Array.isArray(content) ? content : [content]
-
-	const sandbox = runtime.createSandbox
-		? runtime.createSandbox(config)
-		: new HtmlRenderSandbox(config, {
-				ReadyController: runtime.sandboxReadyController,
-			})
-	try {
-		return await runExport({
-			config,
-			fileName,
-			htmlSlides,
-			sandbox,
-			skipFailedPages: options?.skipFailedPages ?? false,
-			autoSize: options?.autoSize ?? false,
-			onSlideProgress: options?.onSlideProgress,
-			onResourceError: options?.onResourceLoadError,
-			fontResolver: options?.fontResolver,
-			fontMissPolicy: options?.fontMissPolicy,
-			collectOutput,
-			signal,
-			runtime: runtime.pipeline,
-		})
-	} finally {
-		sandbox.destroy()
-		if (options?.logLevel || options?.logger) resetLogger()
-	}
-}
-
 export type {
 	SlideConfig,
-	ExportOptions,
-	ExportPageContext,
-	ExportHandle,
-	GeneratedPPTX,
-	GenerateHandle,
 	ResourceLoadError,
 	ExportPhase,
 	ExportPreflightResult,
@@ -361,7 +272,6 @@ export type {
 	ExportFailurePhase,
 	ByteCount,
 	CapacityConfidence,
-	LargeExportHandle,
 	LargeExportOptions,
 	LargeExportOutputPolicy,
 	MediaPolicy,

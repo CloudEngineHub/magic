@@ -20,7 +20,6 @@ import {
 	iterateSingleExportSlide,
 	prepareSingleSlideExport,
 } from "@/pages/superMagic/services/pptService"
-import { exportPPTX } from "@magic/html2pptx"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import { createPptxResourceErrorCollector } from "@/pages/superMagic/utils/pptxResourceErrors"
 import { isFileInPPTMode } from "./utils/file"
@@ -42,9 +41,10 @@ import {
 import {
 	formatPptxStreamingProgress,
 	iteratePreparedPptxPages,
+	assertPptxExportAvailable,
 	openPptxDestination,
+	PptxExportUnavailableError,
 	startPptxStreamingExportFromFactory,
-	supportsPptxFileStreaming,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 
 export default function Render(props: any) {
@@ -519,7 +519,6 @@ export default function Render(props: any) {
 		if (!fileId) return
 
 		const toastId = createRandomUuidV4()
-		let exportHandle: ReturnType<typeof exportPPTX> | null = null
 		let cancelExport: (() => void) | null = null
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
@@ -551,20 +550,16 @@ export default function Render(props: any) {
 			const fileItem = attachmentList?.find((item: any) => item.file_id === fileId)
 			const sourceFileName = fileItem?.file_name || data?.file_name
 			const exportFileName = String(sourceFileName || "export").replace(/\.html?$/i, "")
-			const canStreamToFile = supportsPptxFileStreaming()
-			destinationLease = canStreamToFile
-				? await openPptxDestination({
-						suggestedName: exportFileName,
-					})
-				: null
-			if (canStreamToFile && !destinationLease) {
+			assertPptxExportAvailable({ pageCount: 1 })
+			destinationLease = await openPptxDestination({ suggestedName: exportFileName })
+			if (!destinationLease) {
 				magicToast.destroy(toastId)
 				return
 			}
 			const autoSize = !isFileInPPTMode(fileId, attachmentList ?? [])
 			const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 
-			if (destinationLease) {
+			{
 				const destination = destinationLease.destination
 				const streamingHandle = startPptxStreamingExportFromFactory(
 					(signal) =>
@@ -621,54 +616,10 @@ export default function Render(props: any) {
 				})
 				return
 			}
-
-			const result = await prepareSingleSlideExport({
-				fileId,
-				fileName: sourceFileName,
-				attachmentList: attachments ?? [],
-			})
-
-			if (!result.htmlSlides.some(Boolean)) {
-				magicToast.error({
-					key: toastId,
-					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-					duration: 1000,
-				})
-				return
-			}
-
-			const preparedHtmlSlides = await prepareHtmlPagesForExport({
-				pages: result.htmlSlides,
-				attachments: attachments ?? [],
-				fileId,
-				fileName: sourceFileName,
-				attachmentList: attachments ?? [],
-				displayConfig,
-			})
-			const pptxConfig = createPptxSlideConfig(
-				resolvePptScaleContentDimensions(preparedHtmlSlides[0]),
-			)
-			exportHandle = exportPPTX(preparedHtmlSlides, {
-				fileName: result.fileName,
-				skipFailedPages: true,
-				autoSize,
-				config: pptxConfig,
-				fontResolver: pptFontResolver,
-				logger: pptxExternalLogger,
-				logLevel: "warn",
-				onResourceLoadError: resourceErrors.onResourceLoadError,
-			})
-			cancelExport = exportHandle.cancel
-			await exportHandle.promise
-
-			magicToast.success({
-				key: toastId,
-				content: t("topicFiles.exportSuccess"),
-				duration: 1000,
-			})
 		} catch (error: unknown) {
 			await destinationLease?.abort(error).catch(() => undefined)
 			const isAbort = (error as { name?: string } | null)?.name === "AbortError"
+			const isUnavailable = error instanceof PptxExportUnavailableError
 			if (isAbort) {
 				magicToast.info({
 					key: toastId,
@@ -678,8 +629,10 @@ export default function Render(props: any) {
 			} else {
 				magicToast.error({
 					key: toastId,
-					content: t("topicFiles.contextMenu.fileExport.exportFailed"),
-					duration: 1000,
+					content: isUnavailable
+						? error.message
+						: t("topicFiles.contextMenu.fileExport.exportFailed"),
+					duration: isUnavailable ? 3000 : 1000,
 				})
 				reportPptxExportError(error, { fileId, source: "Render" })
 			}

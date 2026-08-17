@@ -61,12 +61,7 @@ overrides:
   katex: 0.16.21
   marked: 15.0.12
 
-packageExtensionsChecksum: sha256-/kocMmG7xdHA+JKNa7auEutv4KgaI5NEq4QiWBafbnM=
-
 patchedDependencies:
-  pptxgenjs@4.0.1:
-    hash: 65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb
-    path: patches/pptxgenjs@4.0.1.patch
   tiptap-markdown@0.9.0:
     hash: dff3f968e3e70a1e0f1d3b502ab6441e71149a5ca5125a8c10915c43448d90f5
     path: patches/tiptap-markdown.patch
@@ -661,8 +656,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7
       pptxgenjs:
-        specifier: ^4.0.1
-        version: 4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb)
+        specifier: file:../../../../PptxGenJS
+        version: file:../../../../PptxGenJS
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -1177,9 +1172,12 @@ importers:
       '@zumer/snapdom':
         specifier: ^2.0.2
         version: 2.0.2
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       pptxgenjs:
-        specifier: ^4.0.1
-        version: 4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb)
+        specifier: file:../../../../../../PptxGenJS
+        version: file:../../../../PptxGenJS
       puppeteer:
         specifier: 24.32.0
         version: 24.32.0(typescript@5.8.3)
@@ -10180,9 +10178,6 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
-  https@1.0.0:
-    resolution: {integrity: sha512-4EC57ddXrkaF0x83Oj8sM6SLQHAWXw90Skqu2M4AEWENZ3F02dFJE/GARA8igO79tcgYqGrD7ae4f5L3um2lgg==}
-
   human-signals@2.1.0:
     resolution: {integrity: sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==}
     engines: {node: '>=10.17.0'}
@@ -10237,11 +10232,6 @@ packages:
   image-size@0.5.5:
     resolution: {integrity: sha512-6TDAlDPZxUFCv+fuOkIoXT/V/f3Qbq8e37p+YOiYrUv3v9cc3/6x78VdfPgFVaB9dZYeLUfKgHRebpkm/oP2VQ==}
     engines: {node: '>=0.10.0'}
-    hasBin: true
-
-  image-size@1.2.1:
-    resolution: {integrity: sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==}
-    engines: {node: '>=16.x'}
     hasBin: true
 
   immediate@3.0.6:
@@ -13178,8 +13168,9 @@ packages:
   pptx-preview@1.0.7:
     resolution: {integrity: sha512-YByocJuyxAR4YB4Q3+VAxdLfEvA5LojG1gAJsx2Mw0QU5FJPps/2fkJOupJ6oBbA+KdWRpuAk6G6T34rKCHVxw==}
 
-  pptxgenjs@4.0.1:
-    resolution: {integrity: sha512-TeJISr8wouAuXw4C1F/mC33xbZs/FuEG6nH9FG1Zj+nuPcGMP5YRHl6X+j3HSUnS1f3at6k75ZZXPMZlA5Lj9A==}
+  pptxgenjs@file:../../../../PptxGenJS:
+    resolution: {directory: ../../../../PptxGenJS, type: directory}
+    engines: {node: '>=18'}
 
   preact@10.12.1:
     resolution: {integrity: sha512-l8386ixSsBdbreOAkqtrwqHwdvR35ID8c3rKPa8lCWuO86dBi32QWHV4vfsZK1utLLFMvw+Z5Ad4XLkZzchscg==}
@@ -13401,9 +13392,6 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
-
-  queue@6.0.2:
-    resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
@@ -28781,8 +28769,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  https@1.0.0: {}
-
   human-signals@2.1.0: {}
 
   human-signals@5.0.0: {}
@@ -28823,10 +28809,6 @@ snapshots:
 
   image-size@0.5.5:
     optional: true
-
-  image-size@1.2.1:
-    dependencies:
-      queue: 6.0.2
 
   immediate@3.0.6: {}
 
@@ -32193,13 +32175,9 @@ snapshots:
       tslib: 2.8.1
       uuid: 10.0.0
 
-  pptxgenjs@4.0.1(patch_hash=65a7042ac5bea92012158431bd30e42fdc75e83661a31449255da2c8ad0a31cb):
+  pptxgenjs@file:../../../../PptxGenJS:
     dependencies:
-      '@types/node': 22.16.4
       '@zip.js/zip.js': 2.8.34
-      https: 1.0.0
-      image-size: 1.2.1
-      jszip: 3.10.1
 
   preact@10.12.1: {}
 
@@ -32490,10 +32468,6 @@ snapshots:
   queue-lit@1.5.2: {}
 
   queue-microtask@1.2.3: {}
-
-  queue@6.0.2:
-    dependencies:
-      inherits: 2.0.4
 
   quick-format-unescaped@4.0.4: {}
 
