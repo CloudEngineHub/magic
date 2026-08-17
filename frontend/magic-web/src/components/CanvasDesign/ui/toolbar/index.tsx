@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import { ImageSparkles } from "../primitives/icons/index"
 import styles from "./index.module.css"
-import { useLayersUI } from "../../app/providers/LayersUIProvider"
 import { useCanvas } from "../../app/providers/CanvasProvider"
 import { useState, useCallback, useRef, type ChangeEvent } from "react"
 import { useCanvasEvent, useCanvasEventOnce } from "../../app/hooks/canvas"
@@ -71,7 +70,6 @@ function toolToToolType(tool: BaseTool | null): ToolType | null {
 
 export default function Tools() {
 	const { t } = useCanvasDesignI18n()
-	const layersState = useLayersUI()
 	const { canvas } = useCanvas()
 	const { imageModelList, permissions, videoModelList } = useMagic()
 	const portalContainer = usePortalContainer()
@@ -207,12 +205,6 @@ export default function Tools() {
 			value: ToolTypeEnum.Hand,
 			shortcut: ["H", t("tools.space", "空格")],
 		},
-		{
-			label: t("tools.text", "文本"),
-			icon: Type,
-			value: ToolTypeEnum.Text,
-			shortcut: ["T"],
-		},
 		// {
 		// 	label: "形状",
 		// 	children: [
@@ -245,6 +237,12 @@ export default function Tools() {
 		// 	shortcut: ["F"],
 		// },
 		Divider,
+		{
+			label: t("tools.text", "文本"),
+			icon: Type,
+			value: ToolTypeEnum.Text,
+			shortcut: ["T"],
+		},
 		{
 			label: t("tools.imageGenerator", "图像生成"),
 			icon: ImageSparkles,
@@ -287,14 +285,7 @@ export default function Tools() {
 	const canShowDesignPluginEntry = permissions?.showPluginEntry === true
 
 	return (
-		<div
-			className={styles.tools}
-			style={{
-				left: layersState.collapsed ? 8 : layersState.width + 16,
-				transition: layersState.transitionAnimation,
-			}}
-			data-canvas-ui-component
-		>
+		<div className={styles.tools} data-canvas-ui-component>
 			<input
 				ref={imageUploadInputRef}
 				type="file"
@@ -333,7 +324,7 @@ export default function Tools() {
 				if (!IconComponent) return null
 
 				return (
-					<Tooltip key={item.value}>
+					<Tooltip delayDuration={0} key={item.value}>
 						<TooltipTrigger>
 							<IconButton
 								className={styles.toolItem}
@@ -347,7 +338,7 @@ export default function Tools() {
 						</TooltipTrigger>
 						<TooltipPrimitive.Portal container={portalContainer || undefined}>
 							<TooltipContent
-								side="right"
+								side="top"
 								sideOffset={8}
 								className="border-black bg-black"
 							>

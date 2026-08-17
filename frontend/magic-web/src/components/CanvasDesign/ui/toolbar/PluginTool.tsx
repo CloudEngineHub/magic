@@ -126,34 +126,40 @@ export default function PluginTool() {
 
 	const label = t("tools.plugins", "插件")
 	const emptyCategoryLabel = t("tools.pluginCategoryEmpty", "该分类下暂无插件")
+	const isPluginListPanelOpen = open
+	const pluginTrigger = (
+		<PopoverTrigger asChild>
+			<div>
+				<IconButton className={styles.toolItem} selected={open}>
+					<Puzzle size={16} />
+				</IconButton>
+			</div>
+		</PopoverTrigger>
+	)
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger asChild>
-						<div>
-							<IconButton className={styles.toolItem} selected={open}>
-								<Puzzle size={16} />
-							</IconButton>
-						</div>
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipPrimitive.Portal container={portalContainer || undefined}>
-					<TooltipContent side="right" sideOffset={8} className="border-black bg-black">
-						<div>
-							<span className={styles.tooltipLabel}>{label}</span>
-						</div>
-						<TooltipPrimitive.Arrow className="fill-black" />
-					</TooltipContent>
-				</TooltipPrimitive.Portal>
-			</Tooltip>
+			{isPluginListPanelOpen ? (
+				pluginTrigger
+			) : (
+				<Tooltip delayDuration={0}>
+					<TooltipTrigger asChild>{pluginTrigger}</TooltipTrigger>
+					<TooltipPrimitive.Portal container={portalContainer || undefined}>
+						<TooltipContent side="top" sideOffset={8} className="border-black bg-black">
+							<div>
+								<span className={styles.tooltipLabel}>{label}</span>
+							</div>
+							<TooltipPrimitive.Arrow className="fill-black" />
+						</TooltipContent>
+					</TooltipPrimitive.Portal>
+				</Tooltip>
+			)}
 
 			<PopoverContent
-				align="center"
-				side="right"
+				align="end"
+				side="top"
 				sideOffset={8}
-				className="border-base-border w-[30rem] bg-white p-0"
+				className="border-base-border w-[30rem] overflow-hidden bg-white p-0"
 				data-canvas-plugin-list-panel
 			>
 				<div className={styles.pluginPanel}>
@@ -241,7 +247,7 @@ export default function PluginTool() {
 										}
 
 										return (
-											<Tooltip key={plugin.name}>
+											<Tooltip delayDuration={200} key={plugin.name}>
 												<TooltipTrigger asChild>
 													{pluginButton}
 												</TooltipTrigger>
