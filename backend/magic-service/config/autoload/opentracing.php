@@ -31,6 +31,7 @@ function multiCloudAdapter(string $endpointUrl): string
 }
 
 $endpointUrl = multiCloudAdapter(env('ZIPKIN_ENDPOINT_URL', ''));
+$httpPort = (int) env('HTTP_PORT', 9501);
 
 return [
     'default' => env('TRACER_DRIVER', 'zipkin'),
@@ -53,7 +54,7 @@ return [
                 // Hyperf will detect the system info automatically as the value if ipv4, ipv6, port is null
                 'ipv4' => '0.0.0.0',
                 'ipv6' => null,
-                'port' => 9501,
+                'port' => $httpPort,
             ],
             'options' => [
                 'endpoint_url' => $endpointUrl,
@@ -69,7 +70,7 @@ return [
                 // Hyperf will detect the system info automatically as the value if ipv4, ipv6, port is null
                 'ipv4' => '0.0.0.0',
                 'ipv6' => null,
-                'port' => 9501,
+                'port' => $httpPort,
             ],
             'options' => [
                 'endpoint_url' => $endpointUrl,

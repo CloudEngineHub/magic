@@ -6,6 +6,7 @@ import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
+import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
 import type { TopicFilesSpaceConfig } from "./file-space"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
@@ -24,6 +25,9 @@ export interface TopicFilesButtonProps {
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	activeFileId?: string | null
 	selectedTopic?: any
 	allowEdit?: boolean
@@ -44,6 +48,8 @@ export interface TopicFilesButtonProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读场景复制文件到当前用户的项目
+	allowCopyTo?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
@@ -74,6 +80,9 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			setUserSelectDetail,
 			onFileClick,
 			projectId,
+			shareCode,
+			sharePassword,
+			onCrossProjectOperationSuccess,
 			activeFileId,
 			selectedTopic,
 			allowEdit = true,
@@ -88,6 +97,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterMenuItems,
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
+			allowCopyTo = false,
 			resolveTopicFileRowDecoration,
 			mobileViewVariant = "default",
 			refreshAttachments,
@@ -134,6 +144,9 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					setUserSelectDetail={setUserSelectDetail}
 					onFileClick={onFileClick}
 					projectId={projectId}
+					shareCode={shareCode}
+					sharePassword={sharePassword}
+					onCrossProjectOperationSuccess={onCrossProjectOperationSuccess}
 					activeFileId={activeFileId}
 					selectedTopic={selectedTopic}
 					allowEdit={allowEdit}
@@ -148,6 +161,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					filterMenuItems={filterMenuItems}
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 					allowDownload={effectiveAllowDownload}
+					allowCopyTo={allowCopyTo}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					mobileViewVariant={mobileViewVariant}
 					refreshAttachments={refreshAttachments}

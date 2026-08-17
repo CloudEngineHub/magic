@@ -22,6 +22,8 @@ use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FileMetadata;
 use Dtyq\CloudFile\Kernel\Struct\ImageProcessOptions;
 use Dtyq\CloudFile\Kernel\Utils\EasyFileTools;
+use Dtyq\CloudFile\Kernel\Utils\ResultFormatter;
+use Dtyq\CloudFile\Kernel\Utils\RetryExecutor;
 use Exception;
 use InvalidArgumentException;
 use League\Flysystem\FileAttributes;
@@ -589,15 +591,22 @@ class OSSExpand implements ExpandInterface
             ],
         };
 
-        $sts = Sts::v20150401()->assumeRole([
-            'query' => [
-                'RegionId' => $stsRegion,
-                'RoleArn' => $config['role_arn'],
-                'RoleSessionName' => $roleSessionName,
-                'DurationSeconds' => $expires,
-                'Policy' => json_encode($stsPolicy),
-            ],
-        ])->request()->toArray();
+        $sts = RetryExecutor::execute(static function () use ($config, $expires, $roleSessionName, $stsPolicy, $stsRegion): array {
+            $result = Sts::v20150401()->assumeRole([
+                'query' => [
+                    'RegionId' => $stsRegion,
+                    'RoleArn' => $config['role_arn'],
+                    'RoleSessionName' => $roleSessionName,
+                    'DurationSeconds' => $expires,
+                    'Policy' => json_encode($stsPolicy),
+                ],
+            ])->request()->toArray();
+            if (empty($result['Credentials'])) {
+                throw new CloudFileException('获取 STS 失败，result: ' . ResultFormatter::format($result));
+            }
+
+            return $result;
+        });
 
         return [
             'region' => 'oss-' . $stsRegion,

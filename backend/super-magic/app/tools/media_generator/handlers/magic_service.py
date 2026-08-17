@@ -1,11 +1,13 @@
 """magic-service 图片生成驱动
 
-通过 magic-service API 的 /images/generations 和 /images/edits 端点生成图片。
+通过 magic-service API 的 /images/generation-tasks 端点异步生成图片。
 """
 
+import asyncio
 import dataclasses
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -33,10 +35,14 @@ class _ImageApiPayload:
     images: List[str]
     n: int
     size: Optional[str] = None
+    sequential_image_generation: str = "auto"
 
 
 class MagicServiceHandler(BaseImageGeneratorHandler):
     """magic-service 图片生成驱动"""
+
+    _POLL_INTERVAL_SECONDS = 5
+    _POLL_TIMEOUT_SECONDS = 1220
 
     def __init__(self, api_base_url: str, access_key: str) -> None:
         super().__init__()
@@ -74,16 +80,13 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
         )
         return headers
 
-    async def _call_api(self, endpoint: str, payload: _ImageApiPayload) -> list[str]:
-        """
-        调用 magic-service 图片生成 API，返回图片 URL 列表。
-        支持新格式响应（{"created": ..., "data": [...], "usage": {...}}）。
-        """
-        url = f"{self._api_base_url.rstrip('/')}/images/{endpoint}"
+    async def _call_api(self, payload: _ImageApiPayload) -> list[str]:
+        """调用 magic-service 异步图片生成 API，轮询完成后返回图片 URL 列表。"""
+        url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks"
         headers = self._build_api_headers()
         payload_dict = dataclasses.asdict(payload)
 
-        logger.info(f"调用 magic-service API: {url}, payload: {payload_dict}")
+        logger.info(f"提交 magic-service 图片生成任务: {url}, payload: {payload_dict}")
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -97,15 +100,62 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
 
                 response_data = await response.json()
                 logger.info(
-                    f"magic-service API response: {json.dumps({'headers': dict(response.headers), 'body': response_data}, ensure_ascii=False)}"
+                    f"magic-service 图片生成任务提交响应: {json.dumps({'headers': dict(response.headers), 'body': response_data}, ensure_ascii=False)}"
                 )
+                if not isinstance(response_data, dict):
+                    raise Exception(
+                        f"Unexpected generation task response format. "
+                        f"Expected dict, got: {type(response_data).__name__}"
+                    )
 
-                if isinstance(response_data, dict) and "data" in response_data:
-                    # 优先检查 provider 级别的明确错误（内容审核、参数非法等），此类错误不应重试
-                    provider_error_code = response_data.get("provider_error_code")
-                    provider_error_message = response_data.get("provider_error_message") or "unknown provider error"
+                task_id = str(response_data.get("id") or "").strip()
+                if not task_id:
+                    raise ValueError("magic-service image generation task response missing id")
+
+            deadline = time.monotonic() + self._POLL_TIMEOUT_SECONDS
+            query_url = f"{self._api_base_url.rstrip('/')}/images/generation-tasks/{task_id}"
+
+            while True:
+                async with session.get(
+                    query_url, headers=headers, timeout=300
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(
+                            f"Generation task query failed, status code: {response.status}, error: {error_text}"
+                        )
+
+                    task_data = await response.json()
+                    logger.info(
+                        f"magic-service 图片生成任务查询响应: {json.dumps({'task_id': task_id, 'body': task_data}, ensure_ascii=False)}"
+                    )
+                    if not isinstance(task_data, dict):
+                        raise Exception(
+                            f"Unexpected generation task query response format. "
+                            f"Expected dict, got: {type(task_data).__name__}"
+                        )
+
+                status = str(task_data.get("status") or "").strip().lower()
+                if status == "failed":
+                    error = task_data.get("error") if isinstance(task_data.get("error"), dict) else {}
+                    code = error.get("code")
+                    message = error.get("message") or "image generation failed"
+                    raise Exception(f"Image generation task failed: {message} (code={code})")
+
+                if status == "succeeded":
+                    response_payload = task_data.get("response")
+                    if not isinstance(response_payload, dict):
+                        raise Exception("Image generation task succeeded without response payload")
+
+                    if "data" not in response_payload:
+                        raise Exception(
+                            f"Unexpected API response format. Expected dict with 'data' key. "
+                            f"Response: {str(response_payload)[:200]}"
+                        )
+
+                    provider_error_code = response_payload.get("provider_error_code")
+                    provider_error_message = response_payload.get("provider_error_message") or "unknown provider error"
                     if provider_error_code:
-                        # 过滤掉错误信息中的真实 URL，避免暴露内部服务地址
                         sanitized_message = re.sub(
                             r"https?://[^\s`'\"]+",
                             "[hidden]",
@@ -116,7 +166,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                             provider_error_code=provider_error_code,
                         )
 
-                    data_array = response_data.get("data", [])
+                    data_array = response_payload.get("data", [])
                     image_urls = [
                         item["url"]
                         for item in data_array
@@ -127,18 +177,19 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
                             "Image generation service returned no image URLs. "
                             "This is a transient service error; retry the same request once."
                         )
+
                     logger.info(f"成功解析 {len(image_urls)} 个图片 URL")
                     return image_urls
 
-                raise Exception(
-                    f"Unexpected API response format. Expected dict with 'data' key, "
-                    f"got: {type(response_data).__name__}. Response: {str(response_data)[:200]}"
-                )
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"Image generation task polling timeout after {self._POLL_TIMEOUT_SECONDS}s: {task_id}"
+                    )
+
+                await asyncio.sleep(self._POLL_INTERVAL_SECONDS)
 
     async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
-        """调用 magic-service API 生成图片，下载到临时文件后返回。"""
-        endpoint = "edits" if request.reference_image_urls else "generations"
-
+        """调用 magic-service 异步图片生成 API，下载到临时文件后返回。"""
         payload = _ImageApiPayload(
             model=request.model,
             prompt=request.prompt,
@@ -147,7 +198,7 @@ class MagicServiceHandler(BaseImageGeneratorHandler):
             n=1,
         )
 
-        image_urls = await self._call_api(endpoint, payload)
+        image_urls = await self._call_api(payload)
         if not image_urls:
             raise ValueError("API returned no image URLs")
 
