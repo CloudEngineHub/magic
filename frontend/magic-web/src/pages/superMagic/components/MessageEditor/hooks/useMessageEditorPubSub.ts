@@ -157,9 +157,11 @@ function useMessageEditorPubSub({
 		}
 	}, [activeEditorRef])
 
-	const handleAddContent = useMemoizedFn((data: AddContentPayload) => {
+	const applyAddContentPayload = useMemoizedFn((data: AddContentPayload) => {
 		const { content, extraData } = data
-		if (content) updateContent(content)
+		if (content) {
+			updateContent(content)
+		}
 		if (extraData?.hasInput) {
 			runActiveEditor(activeEditorRef.current, (activeEditor) => {
 				activeEditor.commands.focusFirstSuperPlaceholder?.()
@@ -171,6 +173,13 @@ function useMessageEditorPubSub({
 		} else {
 			safeEditorFocus(activeEditorRef.current)
 		}
+	})
+
+	const handleAddContent = useMemoizedFn((data: AddContentPayload) => {
+		// Wait for draft restore on new topics so loadLatestDraft clear does not wipe prefilled content.
+		void draftStore.waitForLoadDraft().then(() => {
+			applyAddContentPayload(data)
+		})
 	})
 
 	useEffect(() => {

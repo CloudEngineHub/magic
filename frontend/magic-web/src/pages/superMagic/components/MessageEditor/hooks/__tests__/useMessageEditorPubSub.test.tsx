@@ -126,4 +126,42 @@ describe("useMessageEditorPubSub", () => {
 
 		unmount()
 	})
+
+	it("waits for draft load before applying Add_Content_To_Chat", async () => {
+		let resolveDraftLoad: (() => void) | undefined
+		const draftLoadPromise = new Promise<void>((resolve) => {
+			resolveDraftLoad = resolve
+		})
+		const draftStore = {
+			waitForLoadDraft: vi.fn(() => draftLoadPromise),
+		} as unknown as DraftStore
+		const updateContent = vi.fn()
+		const { unmount } = renderHook(() =>
+			useMessageEditorPubSub({
+				editor: null,
+				isMobile: true,
+				draftStore,
+				updateContent,
+				enableMessageSendByContent: true,
+				onSendMessageByContent: vi.fn(),
+			}),
+		)
+
+		const scheduledContent: JSONContent = {
+			type: "doc",
+			content: [{ type: "paragraph", content: [{ type: "text", text: "scheduled task" }] }],
+		}
+
+		pubsub.publish(PubSubEvents.Add_Content_To_Chat, { content: scheduledContent })
+		expect(draftStore.waitForLoadDraft).toHaveBeenCalledTimes(1)
+		expect(updateContent).not.toHaveBeenCalled()
+
+		resolveDraftLoad?.()
+		await draftLoadPromise
+		await Promise.resolve()
+
+		expect(updateContent).toHaveBeenCalledWith(scheduledContent)
+
+		unmount()
+	})
 })
