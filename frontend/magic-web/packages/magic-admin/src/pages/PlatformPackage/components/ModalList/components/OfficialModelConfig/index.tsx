@@ -21,12 +21,15 @@ interface OfficialModelConfigProps {
 	category: AiModel.ServiceProviderCategory
 	pricingTemplates: NormalizedPricingTemplate[]
 	loading?: boolean
+	/** 仅展示负载权重（官方同步模型） */
+	loadWeightOnly?: boolean
 }
 
 const OfficialModelConfig = ({
 	category,
 	pricingTemplates,
 	loading = false,
+	loadWeightOnly = false,
 }: OfficialModelConfigProps) => {
 	const { t } = useTranslation("admin/ai/model")
 	const { styles } = useStyles()
@@ -143,23 +146,36 @@ const OfficialModelConfig = ({
 		))
 	}
 
+	const loadWeightField = (
+		<InputPrice
+			name="load_balancing_weight"
+			label={t("form.loadWeight")}
+			desc={t("form.loadWeightDesc")}
+			rules={[{ required: false, message: "" }]}
+			withSwitch={false}
+			inputNumberProps={{
+				min: 0,
+				max: 100,
+				precision: 0,
+				placeholder: t("form.loadWeightPlaceholder"),
+			}}
+		/>
+	)
+
+	if (loadWeightOnly) {
+		return (
+			<Flex gap={10} vertical className={styles.officialModelConfig}>
+				<div className={styles.title}>{t("form.officialModelConfig")}</div>
+				{loadWeightField}
+			</Flex>
+		)
+	}
+
 	return (
 		<Flex gap={10} vertical className={styles.officialModelConfig}>
 			<div className={styles.title}>{t("form.officialModelConfig")}</div>
 			{/* 负载权重 */}
-			<InputPrice
-				name="load_balancing_weight"
-				label={t("form.loadWeight")}
-				desc={t("form.loadWeightDesc")}
-				rules={[{ required: false, message: "" }]}
-				withSwitch={false}
-				inputNumberProps={{
-					min: 0,
-					max: 100,
-					precision: 0,
-					placeholder: t("form.loadWeightPlaceholder"),
-				}}
-			/>
+			{loadWeightField}
 
 			{/* 官方模型费用 */}
 			<div className={styles.title}>{t("form.officialModelPrice")}</div>

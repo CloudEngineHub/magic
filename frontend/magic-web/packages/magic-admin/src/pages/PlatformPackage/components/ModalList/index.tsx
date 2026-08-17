@@ -59,6 +59,8 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 
 	/* 是否为官方服务商 */
 	const isOfficial = data?.provider_type === AiModel.ProviderType.Official
+	/* 官方组织下的官方模型由平台自动同步，不可创建、复制、删除 */
+	const isOfficialSyncedModels = Boolean(isOfficialOrg && isOfficial)
 	/* 大语言模型 */
 	const isLLM = data?.category === AiModel.ServiceProviderCategory.LLM
 
@@ -201,6 +203,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 				}
 			})
 		}
+		if (isOfficialSyncedModels) return
 		MagicModal.confirm({
 			centered: true,
 			title: t("testConnection"),
@@ -224,6 +227,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 			serviceId: data?.id,
 			category: data?.category,
 			providerCode: data?.provider_code,
+			isOfficialProvider: isOfficial,
 			rawInfo: item,
 			modelType,
 			actionType,
@@ -249,7 +253,7 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 
 	/* 获取额外按钮 */
 	const getExtra = useMemoizedFn((key) => {
-		if (hasEditRight) {
+		if (hasEditRight && !isOfficialSyncedModels) {
 			return (
 				<MagicButton
 					type="default"
@@ -311,19 +315,27 @@ const ModalList = ({ data, hasEditRight, setData }: ModalListProps) => {
 												className={styles.button}
 												onClick={() => editModel(item)}
 											/>
-											<MagicButton
-												size={isMobile ? "small" : "middle"}
-												icon={<IconCopy size={isMobile ? 16 : 20} />}
-												className={styles.button}
-												onClick={() => copyModel(item)}
-											/>
-											<MagicButton
-												danger
-												size={isMobile ? "small" : "middle"}
-												icon={<IconTrash size={isMobile ? 16 : 20} />}
-												className={styles.button}
-												onClick={() => onDeleteModel(item)}
-											/>
+											{!isOfficialSyncedModels && (
+												<>
+													<MagicButton
+														size={isMobile ? "small" : "middle"}
+														icon={
+															<IconCopy size={isMobile ? 16 : 20} />
+														}
+														className={styles.button}
+														onClick={() => copyModel(item)}
+													/>
+													<MagicButton
+														danger
+														size={isMobile ? "small" : "middle"}
+														icon={
+															<IconTrash size={isMobile ? 16 : 20} />
+														}
+														className={styles.button}
+														onClick={() => onDeleteModel(item)}
+													/>
+												</>
+											)}
 										</>
 									)}
 								</Flex>
