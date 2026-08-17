@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { ScheduledTaskApi } from "@/apis"
@@ -45,6 +45,7 @@ export function useScheduleTaskWithModal({
 	})
 
 	const { state, openCreateModal, openEditModal, content } = modifyModal
+	const isSavingRef = useRef(false)
 
 	const { run, loading } = useRequest(
 		(args: ScheduledTask.GetListParams) => ScheduledTaskApi.getScheduledTaskList(args),
@@ -82,26 +83,28 @@ export function useScheduleTaskWithModal({
 	})
 
 	const onSaveTask = useMemoizedFn(
-		(taskData: ScheduledTask.UpdateTask, callback?: () => void) => {
+		async (taskData: ScheduledTask.UpdateTask, callback?: () => void) => {
+			if (isSavingRef.current) return
+
+			isSavingRef.current = true
 			try {
 				if (state.mode === "edit" && state.editingTask) {
-					ScheduledTaskApi.updateScheduledTask(
+					await ScheduledTaskApi.updateScheduledTask(
 						state.editingTask.id as string,
 						taskData,
-					).then(() => {
-						magicToast.success(t("accountPanel.timedTasks.editSuccess"))
-						updateTaskList()
-						callback?.()
-					})
+					)
+					magicToast.success(t("accountPanel.timedTasks.editSuccess"))
 				} else {
-					ScheduledTaskApi.createScheduledTask(taskData).then(() => {
-						magicToast.success(t("accountPanel.timedTasks.createSuccess"))
-						updateTaskList()
-						callback?.()
-					})
+					await ScheduledTaskApi.createScheduledTask(taskData)
+					magicToast.success(t("accountPanel.timedTasks.createSuccess"))
 				}
+
+				updateTaskList()
+				callback?.()
 			} catch (error) {
 				console.error("onSaveTask error:", error)
+			} finally {
+				isSavingRef.current = false
 			}
 		},
 	)

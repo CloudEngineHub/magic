@@ -8,7 +8,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react"
-import { useMemoizedFn, useUpdateEffect } from "ahooks"
+import { useDebounceFn, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
 import dayjs from "@/lib/dayjs"
@@ -79,8 +79,10 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 		const isMobile = useIsMobile()
 		const tiptapEditorRef = useRef<MessageEditorRef>(null)
 		const timeRef = useRef<NodeJS.Timeout | null>(null)
+		const isSubmittingRef = useRef(false)
 		const [form] = Form.useForm<ScheduledTask.UpdateTask>()
 		const [loading, setLoading] = useState(mode === "edit" || !!initialValues)
+		const [submitting, setSubmitting] = useState(false)
 		const [promptRequired, setPromptRequired] = useState(false)
 		const [topicMode, setTopicMode] = useState<TopicMode>(
 			() => resolveDefaultAgentSelection().modeIdentifier as TopicMode,
@@ -157,7 +159,12 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 			</div>
 		)
 
-		const onOk = useMemoizedFn(async () => {
+		const submitTask = useMemoizedFn(async () => {
+			if (isSubmittingRef.current) return
+
+			isSubmittingRef.current = true
+			setSubmitting(true)
+
 			try {
 				if (isAgentUnavailable) {
 					magicToast.error(t("accountPanel.timedTasks.agentUnavailable"))
@@ -194,7 +201,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 					},
 				}
 
-				onSubmit?.({
+				await onSubmit?.({
 					task_name: values.task_name,
 					workspace_id: values.workspace_id,
 					project_id: values.project_id ?? "",
@@ -224,7 +231,16 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				const firstErrorField = errorFields?.find((field) => field.errors.length > 0)
 				if (firstErrorField?.name?.length) form.scrollToField(firstErrorField.name)
 				if (firstErrorField?.errors?.[0]) magicToast.error(firstErrorField.errors[0])
+			} finally {
+				isSubmittingRef.current = false
+				setSubmitting(false)
 			}
+		})
+
+		const { run: onOk } = useDebounceFn(submitTask, {
+			wait: 300,
+			leading: true,
+			trailing: false,
 		})
 
 		function onCancel() {
@@ -565,7 +581,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 							</Button>
 							<Button
 								onClick={onOk}
-								disabled={isAgentUnavailable}
+								disabled={isAgentUnavailable || submitting}
 								data-testid="scheduled-task-submit"
 							>
 								{mode === "create"
