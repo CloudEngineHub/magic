@@ -47,6 +47,8 @@ function MagicDatePickerMobile({
 		}
 		return placeholder || t("magicDatePicker.selectDate")
 	}, [selectedDate, format, placeholder, t])
+	// Apply muted styling only while no date has actually been selected.
+	const isPlaceholder = selectedDate == null
 
 	// Handle confirm
 	const handleConfirm = (date: Date | null) => {
@@ -81,13 +83,13 @@ function MagicDatePickerMobile({
 				onClick={() => !disabled && setVisible(true)}
 				disabled={disabled}
 				className={cn(
-					"shadow-xs flex h-9 w-fit items-center justify-between gap-2 whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-[color,box-shadow] focus-visible:ring-ring/50",
+					"flex h-9 w-fit items-center justify-between gap-2 whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-ring/50",
 					"focus-visible:border-ring focus-visible:ring-[3px]",
 					"disabled:cursor-not-allowed disabled:opacity-50",
-					"data-[placeholder]:text-muted-foreground",
+					"text-foreground data-[placeholder=true]:text-muted-foreground",
 					className,
 				)}
-				data-placeholder={!displayText || displayText === placeholder}
+				data-placeholder={isPlaceholder ? "true" : undefined}
 			>
 				<CalendarIcon className="size-4 opacity-50" />
 				<span className="line-clamp-1">{displayText}</span>

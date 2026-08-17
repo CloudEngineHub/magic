@@ -427,6 +427,8 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 						>
 							<Input
 								data-testid="scheduled-task-name"
+								// Match the mobile task form typography with the other 14px controls.
+								className={isMobile ? "text-sm" : undefined}
 								placeholder={t("accountPanel.timedTasks.namePlaceholder")}
 							/>
 						</Form.Item>
@@ -457,6 +459,9 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								ref={tiptapEditorRef}
 								className={cn(
 									"rounded-md border border-border",
+									// Target ProseMirror directly so typography styles cannot restore the 13px mobile variant.
+									isMobile &&
+										"text-sm leading-5 [&_.ProseMirror]:!text-sm [&_.ProseMirror]:!leading-5",
 									promptRequired && "border-destructive",
 								)}
 								placeholder={tSuper("messageEditor.placeholderTask")}
@@ -503,6 +508,7 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 								mode="topic"
 								workspaceId={workspaceId}
 								projectId={projectId}
+								autoSelectFirstOption={isMobile && mode === "create"}
 								onSelect={handleTopicSelect}
 							/>
 						) : null}
