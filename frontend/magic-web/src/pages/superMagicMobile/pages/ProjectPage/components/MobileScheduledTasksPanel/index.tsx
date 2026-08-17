@@ -8,7 +8,7 @@ import { Spinner } from "@/components/shadcn-ui/spinner"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
 import { useScheduleTask } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduleTask"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useSuperMagicDropdown from "@/pages/superMagic/components/SuperMagicDropdown/useSuperMagicDropdown"
 import { ScheduledTask } from "@/types/scheduledTask"
 
