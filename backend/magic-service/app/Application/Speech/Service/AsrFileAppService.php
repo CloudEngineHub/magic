@@ -1811,7 +1811,9 @@ class AsrFileAppService extends AbstractAppService
     private function setFinishRecoverableContext(AsrTaskStatusDTO $taskStatus, string $fileTitle): void
     {
         $taskStatus->finishOutputFilename = $fileTitle;
-        $taskStatus->expectedAudioFileName = $fileTitle . '.wav';
+        if (! empty($taskStatus->audioFormat)) {
+            $taskStatus->expectedAudioFileName = $fileTitle . '.' . $taskStatus->audioFormat;
+        }
         $this->syncAsrRecoverableContextToDatabase($taskStatus);
     }
 

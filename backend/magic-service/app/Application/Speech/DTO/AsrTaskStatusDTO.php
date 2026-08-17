@@ -40,6 +40,8 @@ class AsrTaskStatusDTO
     // 文件ID（数据库中的实际ID）
     public ?string $audioFileId = null; // 音频文件ID（写入magic_super_agent_task_files表后返回的ID）
 
+    public ?string $audioFormat = null; // 任务音频格式（录音任务仅支持 wav/ogg）
+
     // note 文件信息
     public ?string $noteFileName = null; // note文件名（与音频文件在同一目录，为空表示无笔记文件）
 
@@ -148,6 +150,7 @@ class AsrTaskStatusDTO
         $this->status = AsrTaskStatusEnum::fromString($data['status'] ?? 'failed');
         $this->filePath = self::getStringValue($data, ['file_path', 'filePath', 'file_name', 'fileName']);
         $this->audioFileId = self::getStringValue($data, ['audio_file_id', 'audioFileId']);
+        $this->audioFormat = self::getStringValue($data, ['audio_format', 'audioFormat']);
         $this->noteFileName = self::getStringValue($data, ['note_file_name', 'noteFileName']);
         $this->noteFileId = self::getStringValue($data, ['note_file_id', 'noteFileId']);
         $this->markerFileName = self::getStringValue($data, ['marker_file_name', 'markerFileName']);
@@ -230,6 +233,7 @@ class AsrTaskStatusDTO
             'status' => $this->status->value,
             'file_path' => $this->filePath,
             'audio_file_id' => $this->audioFileId,
+            'audio_format' => $this->audioFormat,
             'note_file_name' => $this->noteFileName,
             'note_file_id' => $this->noteFileId,
             'marker_file_name' => $this->markerFileName,

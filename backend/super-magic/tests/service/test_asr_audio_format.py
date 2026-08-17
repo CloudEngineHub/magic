@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from app.api.http_dto.asr_dto import AsrTaskResponse
 from app.service.asr.asr_base import AsrServiceBase
 from app.service.asr.asr_file_detector import AsrFileDetector
 from app.service.asr.asr_merge_operations import AsrMergeOperations
@@ -52,6 +53,10 @@ class TestNormalizeAudioFormat:
     def test_empty_format_is_rejected_when_pinning(self):
         with pytest.raises(ValueError, match="Audio format is required"):
             validate_audio_format_for_write(None)
+
+    def test_task_response_exposes_audio_format(self):
+        response = AsrTaskResponse(status="running", task_key="task-1", audio_format="ogg")
+        assert response.model_dump()["audio_format"] == "ogg"
 
 
 class TestBuildMergedFilename:

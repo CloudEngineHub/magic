@@ -235,6 +235,34 @@ class AudioProjectDomainService
     }
 
     /**
+     * Persist an audio format without allowing a task to switch formats.
+     */
+    public function setAudioFormat(int $projectId, string $audioFormat): bool
+    {
+        $format = strtolower(ltrim(trim($audioFormat), '.'));
+        if ($format === '' || ! preg_match('/^[a-z0-9]{1,16}$/', $format)) {
+            throw new \InvalidArgumentException('Invalid audio format');
+        }
+
+        $audioProject = $this->getAudioProjectByProjectId($projectId);
+        if ($audioProject === null) {
+            return false;
+        }
+
+        $existing = $audioProject->getAudioFormat();
+        if ($existing !== null && strtolower($existing) !== $format) {
+            throw new \InvalidArgumentException(sprintf(
+                'Audio format conflict: existing=%s, requested=%s',
+                $existing,
+                $format
+            ));
+        }
+
+        $this->audioProjectRepository->setAudioFormatIfUnset($projectId, $format);
+        return true;
+    }
+
+    /**
      * Deep-merge audio project extra data without touching other columns.
      */
     public function mergeAudioProjectExtra(int $projectId, array $extraPatch): bool

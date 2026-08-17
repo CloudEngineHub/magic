@@ -15,6 +15,7 @@ use App\Application\Speech\Enum\SandboxAsrStatusEnum;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Asr\Constants\AsrConfig;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Asr\Service\AsrTaskDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\InitializationMetadataDTO;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
@@ -52,6 +53,7 @@ class AsrSandboxService extends AbstractAppService
         private readonly AgentDomainService $agentDomainService,
         private readonly TopicDomainService $topicDomainService,
         private readonly TaskDomainService $taskDomainService,
+        private readonly AsrTaskDomainService $asrTaskDomainService,
     ) {
     }
 
@@ -120,6 +122,8 @@ class AsrSandboxService extends AbstractAppService
         if (! $response->isSuccess()) {
             ExceptionBuilder::throw(AsrErrorCode::SandboxTaskCreationFailed, '', ['message' => $response->message]);
         }
+
+        $this->syncAudioFormatFromResponse($taskStatus, $response);
 
         $taskStatus->sandboxTaskCreated = true;
 
@@ -587,6 +591,8 @@ class AsrSandboxService extends AbstractAppService
         float $finishStartTime,
         int $attempt
     ): ?AsrSandboxMergeResultDTO {
+        $this->syncAudioFormatFromResponse($taskStatus, $response);
+
         // 检查是否为完成状态（包含 completed 和 finished）
         if ($status->isCompleted()) {
             // 计算总耗时
@@ -619,6 +625,16 @@ class AsrSandboxService extends AbstractAppService
         }
 
         return null;
+    }
+
+    private function syncAudioFormatFromResponse(AsrTaskStatusDTO $taskStatus, AsrRecorderResponse $response): void
+    {
+        $audioFormat = $response->getAudioFormat();
+        if ($audioFormat === null) {
+            return;
+        }
+
+        $this->asrTaskDomainService->setAudioFormat($taskStatus, $audioFormat);
     }
 
     /**

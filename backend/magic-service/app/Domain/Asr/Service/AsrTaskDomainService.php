@@ -21,6 +21,8 @@ use Hyperf\Redis\Redis;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function sprintf;
+
 /**
  * ASR 任务领域服务
  * 负责 ASR 任务状态的业务逻辑.
@@ -133,6 +135,44 @@ readonly class AsrTaskDomainService
     public function saveTaskStatus(AsrTaskStatusDTO $taskStatus, int $ttl = 604800): void
     {
         $this->asrTaskRepository->save($taskStatus, $ttl);
+    }
+
+    /**
+     * Persist and cache the task audio format without allowing format changes.
+     */
+    public function setAudioFormat(AsrTaskStatusDTO $taskStatus, string $audioFormat): void
+    {
+        $format = strtolower(ltrim(trim($audioFormat), '.'));
+        if (! in_array($format, ['wav', 'ogg'], true)) {
+            throw new \InvalidArgumentException(sprintf('Unsupported ASR audio format: %s', $audioFormat));
+        }
+
+        if (! empty($taskStatus->audioFormat) && $taskStatus->audioFormat !== $format) {
+            throw new \InvalidArgumentException(sprintf(
+                'ASR task audio format conflict: existing=%s, requested=%s',
+                $taskStatus->audioFormat,
+                $format
+            ));
+        }
+
+        if (! empty($taskStatus->projectId)) {
+            $this->audioProjectRepository->setAudioFormatIfUnset((int) $taskStatus->projectId, $format);
+            $audioProject = $this->audioProjectRepository->findByProjectId((int) $taskStatus->projectId);
+            if ($audioProject === null) {
+                throw new \RuntimeException('Audio project not found while persisting audio format');
+            }
+            $persisted = $audioProject->getAudioFormat();
+            if ($persisted !== null && $persisted !== $format) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Persisted ASR audio format conflict: existing=%s, requested=%s',
+                    $persisted,
+                    $format
+                ));
+            }
+        }
+
+        $taskStatus->audioFormat = $format;
+        $this->saveTaskStatus($taskStatus);
     }
 
     /**
@@ -519,6 +559,7 @@ readonly class AsrTaskDomainService
             'phase_percent' => $audioProject->getPhasePercent(),
             'phase_error' => $audioProject->getPhaseError(),
             'audio_file_id' => $audioFileId === null ? null : (string) $audioFileId,
+            'audio_format' => $audioProject->getAudioFormat(),
             'sandbox_topic_id' => $sandbox['sandbox_topic_id'] ?? null,
             'sandbox_id' => $sandbox['sandbox_id'] ?? null,
             'sandbox_task_created' => $sandbox['sandbox_task_created'] ?? ! empty($sandbox['sandbox_id'] ?? null),

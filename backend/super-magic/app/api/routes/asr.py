@@ -38,6 +38,7 @@ def _build_task_response(task: AsrTaskResult) -> AsrTaskResponse:
     return AsrTaskResponse(
         status=task.status,
         task_key=task.task_key,
+        audio_format=task.audio_format,
         intelligent_title=task.intelligent_title,
         error_message=task.error_message or task.audio_format_error,
         files=task.files,
@@ -366,6 +367,7 @@ async def _check_and_return_task_status(
     response_data = AsrTaskResponse(
         status=existing_task.status,
         task_key=task_key,
+        audio_format=existing_task.audio_format,
         intelligent_title=intelligent_title or existing_task.intelligent_title,
         error_message=existing_task.audio_format_error,
         files=files_info,
@@ -490,6 +492,7 @@ async def create_asr_task(
             response_data = AsrTaskResponse(
                 status=AsrTaskStatus.RUNNING,
                 task_key=request.task_key,
+                audio_format=None,
                 intelligent_title=None,
                 error_message=None,
                 files=None,
@@ -741,6 +744,7 @@ async def cancel_asr_task(
             response_data = AsrTaskResponse(
                 status=AsrTaskStatus.CANCELED,
                 task_key=task_key,
+                audio_format=existing_task.audio_format,
                 intelligent_title=None,
                 error_message=None,
                 files=None,
