@@ -10,6 +10,7 @@ vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 
 const snapdomMocks = vi.hoisted(() => {
 	let counter = 0
+	let capturedImageSources: string[] = []
 
 	return {
 		toWebp: vi.fn(async () => {
@@ -18,20 +19,31 @@ const snapdomMocks = vi.hoisted(() => {
 		}),
 		resetCounter: () => {
 			counter = 0
+			capturedImageSources = []
 		},
+		captureImageSources: (target: Element) => {
+			capturedImageSources = Array.from(target.querySelectorAll<HTMLImageElement>("img")).map(
+				(image) => image.src,
+			)
+		},
+		getCapturedImageSources: () => capturedImageSources,
 	}
 })
 
 // Mock snapdom
 vi.mock("@zumer/snapdom", () => ({
-	snapdom: vi.fn().mockResolvedValue({
-		toWebp: snapdomMocks.toWebp,
+	snapdom: vi.fn(async (target: Element) => {
+		snapdomMocks.captureImageSources(target)
+		return {
+			toWebp: snapdomMocks.toWebp,
+		}
 	}),
 }))
 
 // Mock URL.createObjectURL and revokeObjectURL
 global.URL.createObjectURL = vi.fn(() => "blob:mock-url-" + Math.random())
 global.URL.revokeObjectURL = vi.fn()
+const originalFetch = global.fetch
 
 describe("SlideScreenshotService", () => {
 	let service: SlideScreenshotService
@@ -44,6 +56,7 @@ describe("SlideScreenshotService", () => {
 
 	afterEach(() => {
 		service.dispose()
+		global.fetch = originalFetch
 	})
 
 	describe("generateScreenshot", () => {
@@ -84,6 +97,30 @@ describe("SlideScreenshotService", () => {
 				backgroundColor: "#ffffff",
 				embedFonts: true,
 			})
+		})
+
+		it("refreshes cross-origin images before snapDOM reads their pixels", async () => {
+			const imageBlob = new window.Blob(["image-data"], { type: "image/webp" })
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				blob: vi.fn().mockResolvedValue(imageBlob),
+			} as unknown as Response)
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledWith(imageUrl, {
+				cache: "reload",
+				credentials: "omit",
+				mode: "cors",
+				signal: expect.any(AbortSignal),
+			})
+			expect(snapdomMocks.getCapturedImageSources()).toEqual([
+				expect.stringMatching(/^data:image\/webp;base64,/),
+			])
 		})
 
 		it("uses the slide container dimensions for portrait thumbnails", async () => {
