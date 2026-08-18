@@ -50,6 +50,11 @@ interface InFlightScreenshotGeneration {
 	scheduledGeneration: ScheduledScreenshotGeneration<string>
 }
 
+interface InlineCrossOriginImagesResult {
+	restore: () => void
+	inlinedCount: number
+}
+
 export type SlideScreenshotRequestKind = "preview" | "required"
 
 /**
@@ -663,11 +668,14 @@ export class SlideScreenshotService {
 				})
 
 				if (usedFallbackImage && this.hasCrossOriginImagesForSnapdom(screenshotTarget)) {
-					restoreImageSources = await this.inlineCrossOriginImagesForSnapdom(
+					const inlineResult = await this.inlineCrossOriginImagesForSnapdom(
 						screenshotTarget,
 						signal,
 					)
-					result = await captureWithSnapdom(() => undefined)
+					restoreImageSources = inlineResult.restore
+					if (inlineResult.inlinedCount > 0) {
+						result = await captureWithSnapdom(() => undefined)
+					}
 				}
 
 				this.throwIfAborted(signal)
@@ -1103,7 +1111,7 @@ export class SlideScreenshotService {
 	private async inlineCrossOriginImagesForSnapdom(
 		target: HTMLElement,
 		signal: AbortSignal,
-	): Promise<() => void> {
+	): Promise<InlineCrossOriginImagesResult> {
 		const restorations: Array<() => void> = []
 		const entries = Array.from(this.collectCrossOriginImagesByUrl(target).entries())
 		let isRestored = false
@@ -1129,7 +1137,10 @@ export class SlideScreenshotService {
 					),
 				)
 			}
-			return restore
+			return {
+				restore,
+				inlinedCount: restorations.length,
+			}
 		} catch (error) {
 			restore()
 			throw error
@@ -1167,7 +1178,11 @@ export class SlideScreenshotService {
 			})
 			if (!response.ok) return
 
-			const dataUrl = await this.readBlobAsDataUrl(await response.blob(), signal)
+			const blob = await response.blob()
+			const mimeType = blob.type.toLowerCase()
+			if (mimeType && !mimeType.startsWith("image/")) return
+
+			const dataUrl = await this.readBlobAsDataUrl(blob, signal)
 			if (!dataUrl.startsWith("data:")) return
 
 			await Promise.all(
@@ -1240,16 +1255,47 @@ export class SlideScreenshotService {
 	}
 
 	private readBlobAsDataUrl(blob: Blob, signal: AbortSignal): Promise<string> {
-		return this.waitForAbortableOperation(
-			new Promise<string>((resolve, reject) => {
-				const reader = new FileReader()
-				reader.onload = () => resolve(String(reader.result ?? ""))
-				reader.onerror = () =>
-					reject(reader.error ?? new Error("Failed to read image blob"))
+		return new Promise<string>((resolve, reject) => {
+			const reader = new FileReader()
+			let settled = false
+			let abortedBySignal = false
+			const cleanup = () => signal.removeEventListener("abort", handleAbort)
+			const settle = (callback: () => void) => {
+				if (settled) return
+				settled = true
+				cleanup()
+				callback()
+			}
+			const handleAbort = () => {
+				abortedBySignal = true
+				try {
+					reader.abort()
+				} catch {
+					// Ignore abort calls when the FileReader has already completed.
+				}
+				settle(() => reject(this.getAbortReason(signal)))
+			}
+
+			if (signal.aborted) {
+				handleAbort()
+				return
+			}
+
+			signal.addEventListener("abort", handleAbort, { once: true })
+			reader.onload = () => settle(() => resolve(String(reader.result ?? "")))
+			reader.onerror = () =>
+				settle(() => reject(reader.error ?? new Error("Failed to read image blob")))
+			reader.onabort = () => {
+				if (abortedBySignal) return
+				settle(() => reject(new Error("Image blob read was aborted")))
+			}
+
+			try {
 				reader.readAsDataURL(blob)
-			}),
-			signal,
-		)
+			} catch (error) {
+				settle(() => reject(error))
+			}
+		})
 	}
 
 	private restoreAttribute(element: Element, name: string, value: string | null): void {

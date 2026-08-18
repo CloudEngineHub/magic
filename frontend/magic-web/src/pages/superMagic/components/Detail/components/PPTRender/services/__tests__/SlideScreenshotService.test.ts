@@ -149,6 +149,81 @@ describe("SlideScreenshotService", () => {
 			expect(snapdom).toHaveBeenCalledTimes(1)
 		})
 
+		it("keeps the first fallback when cross-origin refresh fails", async () => {
+			global.fetch = vi.fn().mockRejectedValue(new TypeError("CORS request failed"))
+			snapdomMocks.triggerFallbackOnNextCapture()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledTimes(1)
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("does not inline a non-image response", async () => {
+			const responseBlob = new window.Blob(["not-an-image"], { type: "text/html" })
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				blob: vi.fn().mockResolvedValue(responseBlob),
+			} as unknown as Response)
+			snapdomMocks.triggerFallbackOnNextCapture()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).toHaveBeenCalledTimes(1)
+			expect(snapdom).toHaveBeenCalledTimes(1)
+		})
+
+		it("aborts FileReader when the image refresh is cancelled", async () => {
+			type ReaderHandler = (() => void) | null
+			const abortReader = vi.fn()
+			const originalFileReader = global.FileReader
+			class ControlledFileReader {
+				result: string | ArrayBuffer | null = null
+				error: DOMException | null = null
+				onload: ReaderHandler = null
+				onerror: ReaderHandler = null
+				onabort: ReaderHandler = null
+
+				readAsDataURL(blob: Blob): void {
+					void blob
+				}
+
+				abort(): void {
+					abortReader()
+					this.onabort?.()
+				}
+			}
+
+			vi.stubGlobal("FileReader", ControlledFileReader as unknown as typeof FileReader)
+			try {
+				const controller = new AbortController()
+				const readBlobAsDataUrl = (
+					service as unknown as {
+						readBlobAsDataUrl: (blob: Blob, signal: AbortSignal) => Promise<string>
+					}
+				).readBlobAsDataUrl.bind(service)
+				const reading = readBlobAsDataUrl(
+					new window.Blob(["image-data"], { type: "image/webp" }),
+					controller.signal,
+				)
+
+				controller.abort()
+
+				await expect(reading).rejects.toMatchObject({ name: "AbortError" })
+				expect(abortReader).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.stubGlobal("FileReader", originalFileReader)
+			}
+		})
+
 		it("uses the slide container dimensions for portrait thumbnails", async () => {
 			const content = `
 				<div class="slide-container" data-width="1080" data-height="1920">
