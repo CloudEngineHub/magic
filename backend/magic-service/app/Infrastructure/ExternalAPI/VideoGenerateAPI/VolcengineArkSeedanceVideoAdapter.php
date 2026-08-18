@@ -12,6 +12,8 @@ use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoGenerationConfig;
 use App\Domain\ModelGateway\Entity\VideoQueueOperationEntity;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Prompt\AtStylePromptReferenceFormatter;
+use GuzzleHttp\Exception\RequestException;
+use Hyperf\Codec\Json;
 use Hyperf\Contract\TranslatorInterface;
 
 use function Hyperf\Translation\__;
@@ -500,15 +502,22 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
             'ratio' => '1:1',
         ];
 
-        $result = $this->client->post(
-            $config->getBaseUrl(),
-            $config->getApiKey(),
-            '/contents/generations/tasks',
-            $payload,
-            ['connectivity_test' => true],
-        );
-        if (isset($result['status'], $result['error']['code']) && $result['status'] === 'error' && $result['error']['code'] === 'InvalidParameter') {
-            return true;
+        try {
+            $this->client->requestJson(
+                'post',
+                $config->getBaseUrl(),
+                $config->getApiKey(),
+                '/contents/generations/tasks',
+                $payload,
+                ['connectivity_test' => true],
+            );
+        } catch (RequestException $exception) {
+            $response = $exception->getResponse();
+            $errorMessage = trim((string) $response?->getBody());
+            $result = Json::decode($errorMessage);
+            if ($result['error']['code'] === 'InvalidParameter') {
+                return true;
+            }
         }
 
         throw ProviderVideoException::nonRetriable($result['error']['message']);
