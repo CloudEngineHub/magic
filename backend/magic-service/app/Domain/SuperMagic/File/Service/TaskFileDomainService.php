@@ -2238,7 +2238,7 @@ class TaskFileDomainService
             return [];
         }
 
-        $result = [];
+        $preparedFiles = [];
         foreach ($fileEntities as $fileEntity) {
             // 跳过目录
             if ($fileEntity->getIsDirectory()) {
@@ -2264,19 +2264,58 @@ class TaskFileDomainService
                     $fileEntity->setFileKey($versionEntity->getFileKey());
                 }
 
-                $result[] = $this->generateFileUrlForEntity(
-                    $projectEntity->getUserOrganizationCode(),
-                    $fileEntity,
+                $urlOptions = $this->prepareFileUrlOptions(
+                    $fileEntity->getFileName(),
                     $downloadMode,
-                    (string) $fileEntity->getFileId(),
                     $addWatermark,
-                    false
+                    $fileEntity
                 );
+                $urlOptions['method'] = 'GET';
+                $urlOptions['expires'] = self::URL_EXPIRES;
+
+                $preparedFiles[] = [
+                    'file_id' => (string) $fileEntity->getFileId(),
+                    'object_key' => $fileEntity->getFileKey(),
+                    'options' => $urlOptions,
+                ];
             } catch (Throwable $e) {
                 // 获取URL失败，记录日志并跳过
                 $this->logger->error(sprintf('获取文件URL失败, file_id:%d, err：%s', $fileEntity->getFileId(), $e->getMessage()));
+            }
+        }
+
+        if ($preparedFiles === []) {
+            return [];
+        }
+
+        try {
+            $urls = $this->cloudFileRepository->getPreSignedUrlsByCredential(
+                $projectEntity->getUserOrganizationCode(),
+                array_map(static fn (array $file): array => [
+                    'object_key' => $file['object_key'],
+                    'options' => $file['options'],
+                ], $preparedFiles),
+                StorageBucketType::SandBox,
+                7200,
+                ['cache' => false]
+            );
+        } catch (Throwable $e) {
+            $this->logger->error(sprintf('批量获取文件URL失败, project_id:%d, err：%s', $projectId, $e->getMessage()));
+            return [];
+        }
+
+        $result = [];
+        foreach ($preparedFiles as $preparedFile) {
+            $url = $urls[$preparedFile['object_key']] ?? null;
+            if (! is_string($url) || $url === '') {
                 continue;
             }
+
+            $result[] = [
+                'file_id' => $preparedFile['file_id'],
+                'url' => $url,
+                'expires_at' => date('Y-m-d H:i:s', time() + self::URL_EXPIRES),
+            ];
         }
 
         return $result;

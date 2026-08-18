@@ -2749,6 +2749,25 @@ final class InMemoryCloudFileRepository implements CloudFileRepositoryInterface
         return 'https://cdn.example.com/' . ltrim($objectKey, '/');
     }
 
+    public function getPreSignedUrlsByCredential(
+        string $organizationCode,
+        array $items,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        int $credentialExpires = 7200,
+        array $options = []
+    ): array {
+        $urls = [];
+        foreach ($items as $item) {
+            $objectKey = is_array($item) ? (string) ($item['object_key'] ?? '') : (string) $item;
+            if ($objectKey === '') {
+                continue;
+            }
+            $urls[$objectKey] = $this->getPreSignedUrlByCredential($organizationCode, $objectKey, $bucketType, $options);
+        }
+
+        return $urls;
+    }
+
     public function deleteObjectsByCredential(string $prefix, string $organizationCode, array $objectKeys, StorageBucketType $bucketType = StorageBucketType::Private, array $options = []): array
     {
         return [];
