@@ -1,6 +1,7 @@
 import { EXPRESSION_VALUE, InputExpressionValue } from "@/MagicExpressionWidget/types"
 import { DataSourceOption } from "@/common/BaseUI/DropdownRenderer/Reference"
 import ErrorContent from "@/common/BaseUI/ErrorComponent/ErrorComponent"
+import TablerIconGlobalStyle from "@/common/BaseUI/TablerIconGlobalStyle"
 import { ConfigProvider, message } from "antd"
 import i18next from "i18next"
 import { assignIn, cloneDeep, get, isEmpty, isEqual, isPlainObject, set } from "lodash-es"
@@ -515,6 +516,7 @@ function CustomConditionContainer(
 				return <ErrorContent />
 			}}
 		>
+			<TablerIconGlobalStyle />
 			<ConfigProvider prefixCls={CLASSNAME_PREFIX}>
 				<CustomConditionContainerStyle>
 					<GlobalProvider

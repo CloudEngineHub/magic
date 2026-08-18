@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { CanvasElementClipboard } from "../clipboard/CanvasElementClipboard"
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 
@@ -37,5 +37,18 @@ describe("CanvasElementClipboard", () => {
 
 		expect(canvasFile?.metadata).toBe(elementMetadata)
 		expect(canvasFile?.file.name).toBe("image.png")
+	})
+
+	it("reads the browser clipboard only once when no CanvasDesign bundle exists", async () => {
+		const read = vi.fn().mockResolvedValue([])
+
+		await expect(
+			CanvasElementClipboard.parseClipboardContent(undefined, {
+				read,
+				readText: vi.fn().mockResolvedValue(""),
+			}),
+		).resolves.toEqual({ type: "empty" })
+
+		expect(read).toHaveBeenCalledTimes(1)
 	})
 })

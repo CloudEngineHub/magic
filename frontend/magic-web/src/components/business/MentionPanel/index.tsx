@@ -332,7 +332,10 @@ const MentionPanel = observer(
 			}
 		}, [defaultConfig, panelHeight])
 
-		// Auto-scroll to selected item when selectedIndex changes
+		// Auto-scroll when the selected item or the logical list changes. The list can
+		// also be refreshed asynchronously while the user is scrolling; tying this
+		// effect to `state.items.length` would scroll the list back to the selected
+		// item (usually index 0) and overwrite the user's scroll position.
 		useEffect(() => {
 			if (state.selectedIndex < 0) {
 				return
@@ -352,7 +355,7 @@ const MentionPanel = observer(
 			return () => {
 				cancelAnimationFrame(frame)
 			}
-		}, [isGalleryMode, state.selectedIndex, state.items.length])
+		}, [isGalleryMode, navigationSignature, state.searchQuery, state.selectedIndex])
 
 		const togglePendingForItem = useCallback(
 			async (item: MentionItem) => {

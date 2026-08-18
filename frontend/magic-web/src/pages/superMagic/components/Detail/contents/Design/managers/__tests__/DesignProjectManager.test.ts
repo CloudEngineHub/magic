@@ -209,10 +209,16 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("force reloads remote data while preserving local draft recovery", async () => {
 		const { manager } = createManager()
 		const managerInternals = manager as unknown as {
-			loadManager: { resetAndReload: () => Promise<void> }
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
 			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
 		}
-		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(true)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
 		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
 
 		await manager.reloadPreservingLocalDraft()
@@ -225,10 +231,16 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("force reloads remote data while discarding local drafts for data source switches", async () => {
 		const { manager } = createManager()
 		const managerInternals = manager as unknown as {
-			loadManager: { resetAndReload: () => Promise<void> }
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
 			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
 		}
-		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(undefined)
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(true)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
 		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
 
 		await manager.reloadDiscardingLocalDraft()
@@ -236,6 +248,52 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.loadManager.resetAndReload).toHaveBeenCalledTimes(1)
 		expect(deleteDesignDraft).toHaveBeenCalledTimes(1)
 		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+	})
+
+	it("keeps the initial loading state when remote reload does not produce trusted data", async () => {
+		const { manager, stateBag } = createManager()
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				resetAndReload: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.resetAndReload = vi.fn().mockResolvedValue(false)
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn().mockReturnValue(true)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		const didLoad = await manager.reloadPreservingLocalDraft()
+
+		expect(didLoad).toBe(false)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+		expect(stateBag.setters.setIsInitialLoading).toHaveBeenLastCalledWith(true)
+	})
+
+	it("does not restore a draft after the loaded request becomes stale", async () => {
+		const { manager, stateBag } = createManager()
+		let isCurrentLoad = true
+		const managerInternals = manager as unknown as {
+			loadManager: {
+				loadFromRemote: () => Promise<boolean>
+				getCurrentLoadIdentity: () => string | null
+				isCurrentLoadIdentity: (identity: string | null) => boolean
+			}
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+		}
+		managerInternals.loadManager.getCurrentLoadIdentity = vi.fn().mockReturnValue("request-a")
+		managerInternals.loadManager.loadFromRemote = vi.fn().mockImplementation(async () => {
+			isCurrentLoad = false
+			return true
+		})
+		managerInternals.loadManager.isCurrentLoadIdentity = vi.fn(() => isCurrentLoad)
+		managerInternals.tryRestoreLocalDraftAfterRemoteLoad = vi.fn().mockResolvedValue(undefined)
+
+		expect(await manager.loadFromRemote()).toBe(false)
+		expect(managerInternals.tryRestoreLocalDraftAfterRemoteLoad).not.toHaveBeenCalled()
+		expect(stateBag.setters.setIsInitialLoading).not.toHaveBeenCalledWith(false)
 	})
 
 	it("clears local draft after a fully persisted save", async () => {
@@ -996,6 +1054,45 @@ describe("DesignProjectManager conflict boundaries", () => {
 				reason: "local-edit",
 			}),
 		)
+	})
+
+	it("defers a successful remote merge that would empty a non-empty remote canvas", () => {
+		const baseData = createDesignData("base", [rect("remote")])
+		const localData = createDesignData("base")
+		const remoteData = createDesignData("remote", [rect("remote")])
+		const { manager, stateBag, getState } = createManager(baseData)
+		manager.syncDesignData(baseData)
+		stateBag.setters.setDesignData(localData)
+		const managerInternals = manager as unknown as {
+			applyRemoteDesignDataSafely: (
+				data: DesignData,
+				updateType: "message",
+				options: { remoteVersion: number },
+			) => boolean
+			pendingRemoteDesignData: { data: DesignData; remoteVersion: number } | null
+			saveManager: {
+				hasRemoteConflict: () => boolean
+				scheduleAutoSave: () => void
+			}
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+		vi.mocked(stateBag.setters.setDesignData).mockClear()
+
+		const applied = managerInternals.applyRemoteDesignDataSafely(remoteData, "message", {
+			remoteVersion: 3,
+		})
+
+		expect(applied).toBe(true)
+		expect(getState().designData).toEqual(localData)
+		expect(stateBag.setters.setDesignData).not.toHaveBeenCalled()
+		expect(getState().conflictState?.reason).toBe("remote-update-with-local-dirty")
+		expect(managerInternals.pendingRemoteDesignData).toEqual({
+			data: remoteData,
+			updateType: "message",
+			remoteVersion: 3,
+		})
+		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(true)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 
 	it("creates a connection-level conflict when both sides change the same connection", () => {
@@ -1986,7 +2083,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.scheduleAutoSave).toHaveBeenCalledTimes(1)
 	})
 
-	it("keeps an empty restored draft local when the trusted remote base is non-empty", async () => {
+	it("does not apply an empty restored draft when the trusted remote base is non-empty", async () => {
 		const remoteData = createDesignData("remote", [rect("remote")])
 		const draftData = createDesignData("empty-draft")
 		const { manager, getState } = createManager(remoteData)
@@ -2015,7 +2112,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 
 		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
 
-		expect(getState().designData).toEqual(draftData)
+		expect(getState().designData).toEqual(remoteData)
 		expect(getState().conflictState).toEqual(
 			expect.objectContaining({
 				reason: "draft-remote-advanced",
@@ -2029,5 +2126,46 @@ describe("DesignProjectManager conflict boundaries", () => {
 			expect.stringContaining("blocked-empty-draft-restore-autosave"),
 		)
 		warnSpy.mockRestore()
+	})
+
+	it("does not apply an empty successful merge when the advanced remote remains non-empty", async () => {
+		const baseData = createDesignData("base", [rect("remote")])
+		const remoteData = createDesignData("remote", [rect("remote")])
+		const draftData = createDesignData("base")
+		const { manager, stateBag, getState } = createManager(remoteData)
+		stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(remoteData))
+		const draft: DesignDraftEntry = {
+			key: "draft-key",
+			schemaVersion: 1,
+			projectId: "project-1",
+			designProjectId: "design-1",
+			magicProjectJsFileId: "file-1",
+			baseRemoteVersion: 1,
+			baseRemoteFingerprint: hashDesignDataComparable(baseData),
+			localFingerprint: hashDesignDataComparable(draftData),
+			localUpdatedAt: 1,
+			reason: "local-edit",
+			designData: draftData,
+			baseRemoteData: baseData,
+		}
+		vi.mocked(readDesignDraft).mockResolvedValue(draft)
+		const managerInternals = manager as unknown as {
+			tryRestoreLocalDraftAfterRemoteLoad: () => Promise<void>
+			saveManager: { scheduleAutoSave: () => void }
+		}
+		managerInternals.saveManager.scheduleAutoSave = vi.fn()
+
+		await managerInternals.tryRestoreLocalDraftAfterRemoteLoad()
+
+		expect(getState().designData).toEqual(remoteData)
+		expect(stateBag.setters.setDesignData).not.toHaveBeenCalled()
+		expect(getState().conflictState).toEqual(
+			expect.objectContaining({
+				reason: "draft-remote-advanced",
+				localData: expect.objectContaining({ canvas: { elements: [] } }),
+				remoteData,
+			}),
+		)
+		expect(managerInternals.saveManager.scheduleAutoSave).not.toHaveBeenCalled()
 	})
 })

@@ -120,6 +120,8 @@ function isTrueLike(value: unknown): boolean {
 	return false
 }
 
+const CAPTURE_QUERY_PARAM = "capture"
+
 function getSharePureMode(shareData: any): boolean {
 	return [
 		shareData?.extra?.pure_mode,
@@ -254,11 +256,16 @@ function Share() {
 	const shareDisplayOptions = useMemo(() => {
 		const urlSearchParams = new URLSearchParams(search)
 		const isPureMode = getSharePureMode(data)
+		const enableFullPageScreenshot = isTrueLike(urlSearchParams.get(CAPTURE_QUERY_PARAM))
 
 		return {
-			forceFullscreenMode: isPureMode || urlSearchParams.get("fullscreen") === "true",
-			// Pure shares have no surrounding chrome, so page scroll can serve long screenshots.
-			documentFlowFullscreen: isPureMode,
+			forceFullscreenMode:
+				isPureMode ||
+				urlSearchParams.get("fullscreen") === "true" ||
+				enableFullPageScreenshot,
+			// Keep normal pure shares on the isolated viewport-scrolling path. Only an explicit
+			// screenshot URL expands the iframe into the page document for whole-page capture.
+			documentFlowFullscreen: enableFullPageScreenshot,
 			hideHeader: isPureMode || urlSearchParams.has("hideHeader"),
 			showFileHeader:
 				isPureMode || urlSearchParams.get("showFileHeader") === "false" ? false : undefined,

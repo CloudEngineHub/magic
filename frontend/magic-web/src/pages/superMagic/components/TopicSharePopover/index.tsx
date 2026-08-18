@@ -700,9 +700,9 @@ function TopicSharePopover({
 					}
 				}}
 				onFocusOutside={(e) => {
-					// Touch-first desktop layouts can move focus outside during a tap without
-					// expressing a user dismissal intent, so keep the PC popover open.
-					if (isMagicApp || isNoHoverCoarsePointer()) {
+					// Embedded SDK iframes can move focus to the host document during a tap,
+					// which is not an intentional dismissal of the desktop popover.
+					if (isMagicApp || isNoHoverCoarsePointer() || window.parent !== window) {
 						e.preventDefault()
 					}
 				}}

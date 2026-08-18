@@ -41,7 +41,7 @@ export function useScheduledTasksModifyModal() {
 	}, [state.visible])
 
 	function openCreateModal(
-		onSubmit: (task: ScheduledTask.UpdateTask) => void,
+		onSubmit: (task: ScheduledTask.UpdateTask, callback?: () => void) => void | Promise<void>,
 		initialValues?: Partial<ScheduledTask.UpdateTask>,
 	) {
 		setState({
@@ -54,7 +54,7 @@ export function useScheduledTasksModifyModal() {
 
 	function openEditModal(
 		task: ScheduledTask.UpdateTask,
-		onSubmit: (task: ScheduledTask.UpdateTask) => void,
+		onSubmit: (task: ScheduledTask.UpdateTask, callback?: () => void) => void | Promise<void>,
 	) {
 		setState({
 			visible: true,
@@ -83,7 +83,7 @@ export function useScheduledTasksModifyModal() {
 	}
 
 	function handleFormSubmit(values: ScheduledTask.UpdateTask) {
-		state.onSubmit?.(values, closeModal)
+		return state.onSubmit?.(values, closeModal)
 	}
 
 	function getInitialValues(): Partial<FormValues> {

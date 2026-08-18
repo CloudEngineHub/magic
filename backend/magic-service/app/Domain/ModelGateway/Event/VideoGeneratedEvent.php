@@ -64,7 +64,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
     protected array $videoReferenceMaterial = [
@@ -72,6 +73,7 @@ class VideoGeneratedEvent extends AbstractEvent
         'reference_image_count' => 0,
         'reference_video_count' => 0,
         'reference_audio_count' => 0,
+        'input_video_duration_seconds' => 0,
     ];
 
     protected array $businessParams = [];
@@ -293,7 +295,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * }
      */
     public function getVideoReferenceMaterial(): array
@@ -306,7 +309,8 @@ class VideoGeneratedEvent extends AbstractEvent
      *     input_mode: ?string,
      *     reference_image_count: int,
      *     reference_video_count: int,
-     *     reference_audio_count: int
+     *     reference_audio_count: int,
+     *     input_video_duration_seconds: int
      * } $videoReferenceMaterial
      */
     public function setVideoReferenceMaterial(array $videoReferenceMaterial): void

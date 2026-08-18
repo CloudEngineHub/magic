@@ -24,6 +24,8 @@ export type MobileSettingsSectionKey = "points" | "account" | "application" | "l
 
 export type MobileSettingsRootItemKey =
 	| "pointsPurchase"
+	| "teamPoints"
+	| "personalQuota"
 	| "pointsDetail"
 	| "orderHistory"
 	| "profile"
@@ -35,6 +37,8 @@ export type MobileSettingsRootItemKey =
 
 export type MobileSettingsPanelKey =
 	| "pointsPurchase"
+	| "teamPoints"
+	| "personalQuota"
 	| "pointsDetail"
 	| "orderHistory"
 	| "profile"
@@ -54,6 +58,21 @@ export interface MobileSettingsConfigSection {
 
 export interface MobileSettingsConfig {
 	sections: MobileSettingsConfigSection[]
+}
+
+export type MobileSettingsPointsRole = "personal" | "teamAdmin" | "teamMember"
+
+export interface MobileSettingsPersonalQuota {
+	used: number
+	total: number
+	percent: number
+}
+
+export interface MobileSettingsPointsOverview {
+	role: MobileSettingsPointsRole
+	primaryPoints: number | null
+	personalQuota: MobileSettingsPersonalQuota | null
+	hasLoadedData: boolean
 }
 
 export interface MobileSettingsMenuItemConfig {

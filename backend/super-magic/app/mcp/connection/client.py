@@ -9,15 +9,19 @@
 
 import asyncio
 import random
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
+import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import JSONRPCError
 
 from agentlang.logger import get_logger
 
 from ..config.env_resolver import redact_config_values
 from ..config.models import MCPServerConfig, MCPServerType
+from .response_normalizer import MCPResponseNormalizer
 
 logger = get_logger(__name__)
 
@@ -67,7 +71,79 @@ def _mcp_http_client_factory_with_error_body(
         kwargs["headers"] = headers
     if auth is not None:
         kwargs["auth"] = auth
-    return _httpx.AsyncClient(**kwargs)
+    return _MCPNormalizingAsyncClient(**kwargs)
+
+
+class _MCPNormalizingAsyncClient(httpx.AsyncClient):
+    """在 MCP SDK 解析前，将 HTTP 非标准响应转换为 JSON-RPC error。"""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self._response_normalizer = MCPResponseNormalizer()
+
+    @asynccontextmanager
+    async def stream(self, method: str, url: str, **kwargs: Any):
+        """只缓存普通 HTTP 响应，保留 SSE 和协议回退控制路径。"""
+        request_payload = kwargs.get("json")
+        async with super().stream(method, url, **kwargs) as response:
+            if self._should_normalize(response):
+                original_status = response.status_code
+                body = await response.aread()
+                request_id = self._extract_request_id(request_payload)
+                normalized = self._response_normalizer.normalize_payload(
+                    body,
+                    request_id=request_id,
+                    http_status=original_status,
+                    content_type=response.headers.get("content-type"),
+                )
+                response._content = normalized
+                response.headers["content-type"] = "application/json"
+                response.headers["content-length"] = str(len(normalized))
+                if original_status >= 400:
+                    response.status_code = 200
+            yield response
+
+    @staticmethod
+    def _should_normalize(response: httpx.Response) -> bool:
+        """判断响应是否属于可安全缓存的普通成功响应。"""
+        if response.status_code in (202, 404, 405):
+            return False
+        return not response.headers.get("content-type", "").lower().startswith("text/event-stream")
+
+    @staticmethod
+    def _extract_request_id(payload: Any) -> str | int | None:
+        """从 SDK 发出的 JSON-RPC 请求中提取关联 ID。"""
+        if isinstance(payload, dict):
+            request_id = payload.get("id")
+            if isinstance(request_id, (str, int)) or request_id is None:
+                return request_id
+        return None
+
+
+class _MCPClientSession(ClientSession):
+    """将 SDK 内部未关联请求的解析异常桥接为 JSON-RPC error。"""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        self._response_normalizer = MCPResponseNormalizer()
+        super().__init__(*args, **kwargs)
+
+    async def _handle_incoming(self, req: Any) -> None:
+        """唤醒当前待处理请求，避免 SDK 解析异常导致无限等待。"""
+        if isinstance(req, Exception):
+            request_id = next(iter(self._response_streams), None)
+            if request_id is not None:
+                stream = self._response_streams.get(request_id)
+                if stream is not None:
+                    error = self._response_normalizer.normalize_exception(req, request_id)
+                    await stream.send(
+                        JSONRPCError(
+                            jsonrpc="2.0",
+                            id=request_id,
+                            error=error,
+                        )
+                    )
+                    return
+        await super()._handle_incoming(req)
 
 
 class MCPClient:
@@ -402,7 +478,7 @@ class MCPClient:
         async with streamablehttp_client 边界将真实的 McpError 重新抛出，
         而不是停留在 CancelledError，从而让调用方获得准确的错误信息。
         """
-        async with ClientSession(read_stream, write_stream) as session:
+        async with _MCPClientSession(read_stream, write_stream) as session:
             await session.initialize()
             self.session = session
             logger.debug(f"MCP 服务器 '{self.config.name}' 连接成功")

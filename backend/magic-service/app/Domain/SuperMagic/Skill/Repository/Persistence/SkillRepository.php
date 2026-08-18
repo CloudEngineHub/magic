@@ -423,6 +423,58 @@ class SkillRepository extends AbstractRepository implements SkillRepositoryInter
         return $result;
     }
 
+    public function findLocalUploadSkillsForI18nCleanup(
+        SkillDataIsolation $dataIsolation,
+        ?string $skillCode,
+        int $page,
+        int $pageSize
+    ): array {
+        $builder = $this->createBuilder($dataIsolation, $this->skillModel::query())
+            ->where('source_type', SkillSourceType::LOCAL_UPLOAD->value);
+
+        if ($skillCode !== null && $skillCode !== '') {
+            $builder->where('code', $skillCode);
+        }
+
+        $total = (clone $builder)->count();
+        $models = $builder
+            ->orderBy('id')
+            ->forPage(max(1, $page), max(1, $pageSize))
+            ->get();
+
+        $entities = [];
+        foreach ($models as $model) {
+            $entities[] = $this->toEntity($model->toArray());
+        }
+
+        return [
+            'total' => $total,
+            'list' => $entities,
+        ];
+    }
+
+    public function updateNameAndDescriptionI18n(
+        SkillDataIsolation $dataIsolation,
+        string $skillCode,
+        array $nameI18n,
+        ?array $descriptionI18n
+    ): bool {
+        $builder = $this->createBuilder($dataIsolation, $this->skillModel::query());
+        /** @var null|SkillModel $model */
+        $model = $builder
+            ->where('code', $skillCode)
+            ->where('source_type', SkillSourceType::LOCAL_UPLOAD->value)
+            ->first();
+
+        if (! $model) {
+            return false;
+        }
+
+        $model->name_i18n = $nameI18n;
+        $model->description_i18n = $descriptionI18n;
+        return $model->save();
+    }
+
     /**
      * 将模型数据转换为实体.
      */

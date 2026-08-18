@@ -77,6 +77,8 @@ function MobileRecordSummaryRouteComponent({
 		<MobileScenePanels editorContext={routeEditorContext} compact />
 	) : null
 
+	// Keep the recording chrome when persisted mode is Recording so the crew header stays.
+	// allowRecordingMode=false is enforced inside RecordSummaryEditorContainer, not here.
 	if (editorMode === RecordingSummaryEditorMode.Editing) {
 		return (
 			<div

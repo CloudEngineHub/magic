@@ -65,7 +65,13 @@ const MagicSidebar = observer(() => {
 				</ShadcnSidebarFooter>
 			</div>
 
-			<Sheet open={workspaceDrawerOpen} onOpenChange={setWorkspaceDrawerOpen}>
+			<Sheet
+				open={workspaceDrawerOpen}
+				onOpenChange={setWorkspaceDrawerOpen}
+				// Body-portalled workspace panels (such as organization switching) must remain
+				// scrollable while this low-resolution drawer is open.
+				modal={false}
+			>
 				<SheetContent
 					side="left"
 					showClose={false}

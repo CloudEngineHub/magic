@@ -130,10 +130,14 @@ readonly class VideoGenerationConfigDomainService
             $leftConfig['generation']['aspect_ratios'],
             $rightConfig['generation']['aspect_ratios'],
         );
-        $durations = self::intersectIntList(
-            $leftConfig['generation']['durations'],
-            $rightConfig['generation']['durations'],
-        );
+
+        $leftDurationType = $leftConfig['generation']['duration_type'] ?? 'options';
+        $rightDurationType = $rightConfig['generation']['duration_type'] ?? 'options';
+        $durationType = $leftDurationType === 'range' || $rightDurationType === 'range' ? 'range' : 'options';
+        $durations = $durationType === 'range'
+            ? self::intersectDurationRanges($leftConfig['generation'], $rightConfig['generation'])
+            : self::intersectIntList($leftConfig['generation']['durations'], $rightConfig['generation']['durations']);
+
         $resolutions = self::intersectStringList(
             $leftConfig['generation']['resolutions'],
             $rightConfig['generation']['resolutions'],
@@ -159,6 +163,7 @@ readonly class VideoGenerationConfigDomainService
         $generation = [
             'aspect_ratios' => $aspectRatios,
             'durations' => $durations,
+            'duration_type' => $durationType,
             'resolutions' => $resolutions,
             'sizes' => $sizes,
             // 布尔能力统一取 AND，只要有一个 provider 不支持，就不能对外宣告支持。
@@ -171,6 +176,24 @@ readonly class VideoGenerationConfigDomainService
             'supports_sample_count' => $supportsSampleCount,
             'supports_enhance_prompt' => $supportsEnhancePrompt,
         ];
+
+        foreach (['generate_audio', 'web_search'] as $switchName) {
+            $leftSwitch = $leftConfig['generation'][$switchName] ?? null;
+            $rightSwitch = $rightConfig['generation'][$switchName] ?? null;
+            if (is_array($leftSwitch) && is_array($rightSwitch)) {
+                $generation[$switchName] = [
+                    ...$leftSwitch,
+                    ...$rightSwitch,
+                    'default' => (bool) ($leftSwitch['default'] ?? false) && (bool) ($rightSwitch['default'] ?? false),
+                ];
+            } elseif (is_array($leftSwitch)) {
+                // 兼容旧 provider：只有左侧声明能力时原样透传。
+                $generation[$switchName] = $leftSwitch;
+            } elseif (is_array($rightSwitch)) {
+                // 兼容旧 provider：只有右侧声明能力时原样透传。
+                $generation[$switchName] = $rightSwitch;
+            }
+        }
 
         $defaultDuration = self::intersectDefaultInt(
             $leftConfig['generation']['default_duration_seconds'],
@@ -370,7 +393,8 @@ readonly class VideoGenerationConfigDomainService
             ],
             'generation' => [
                 'aspect_ratios' => self::normalizeStringList($generation['aspect_ratios'] ?? []),
-                'durations' => self::normalizeIntList($generation['durations'] ?? []),
+                'duration_type' => $generation['duration_type'] ?? 'options',
+                'durations' => $generation['durations'] ?? [],
                 'default_duration_seconds' => isset($generation['default_duration_seconds']) ? (int) $generation['default_duration_seconds'] : null,
                 'resolutions' => self::normalizeStringList($generation['resolutions'] ?? []),
                 'sizes' => self::normalizeSizeOptions($generation['sizes'] ?? []),
@@ -387,6 +411,8 @@ readonly class VideoGenerationConfigDomainService
                 'supports_resize_mode' => (bool) ($generation['supports_resize_mode'] ?? false),
                 'resize_mode_options' => self::normalizeStringList($generation['resize_mode_options'] ?? []),
                 'supports_sample_count' => (bool) ($generation['supports_sample_count'] ?? false),
+                'generate_audio' => is_array($generation['generate_audio'] ?? null) ? $generation['generate_audio'] : null,
+                'web_search' => is_array($generation['web_search'] ?? null) ? $generation['web_search'] : null,
                 'sample_count_range' => self::normalizeIntList($generation['sample_count_range'] ?? []),
             ],
             'constraints' => [
@@ -572,6 +598,17 @@ readonly class VideoGenerationConfigDomainService
     private static function intersectIntList(array $left, array $right): array
     {
         return array_values(array_intersect($left, $right));
+    }
+
+    private static function intersectDurationRanges(array $left, array $right): array
+    {
+        $leftRange = is_array($left['durations'] ?? null) ? $left['durations'] : ['min' => min($left['durations'] ?? [0]), 'max' => max($left['durations'] ?? [0]), 'step' => 1];
+        $rightRange = is_array($right['durations'] ?? null) ? $right['durations'] : ['min' => min($right['durations'] ?? [0]), 'max' => max($right['durations'] ?? [0]), 'step' => 1];
+        return [
+            'min' => max((int) ($leftRange['min'] ?? 0), (int) ($rightRange['min'] ?? 0)),
+            'max' => min((int) ($leftRange['max'] ?? 0), (int) ($rightRange['max'] ?? 0)),
+            'step' => max(1, (int) ($leftRange['step'] ?? 1), (int) ($rightRange['step'] ?? 1)),
+        ];
     }
 
     /**

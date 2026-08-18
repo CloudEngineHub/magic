@@ -26,6 +26,7 @@ interface DesktopInputContainerProps {
 	shouldShowSceneControls: boolean
 	containerRef?: React.RefObject<HTMLDivElement>
 	className?: string
+	fillHeight?: boolean
 	classNames?: {
 		container?: string
 		editorWrapper?: string
@@ -45,6 +46,7 @@ function DesktopInputContainer({
 	shouldShowSceneControls,
 	containerRef,
 	className,
+	fillHeight = false,
 	classNames,
 	editorSize,
 	isFocused,
@@ -65,6 +67,7 @@ function DesktopInputContainer({
 	const containerClassName = cn(
 		"relative flex w-full flex-none flex-col items-start gap-2 self-stretch",
 		"rounded-2xl border border-border bg-sidebar p-2",
+		fillHeight && "h-full min-h-0",
 		getEditorSpanClass(editorSize),
 		className,
 		classNames?.container,
@@ -82,16 +85,26 @@ function DesktopInputContainer({
 						{editorNodes?.taskDataNode}
 						{editorNodes?.messageQueueNode}
 					</div>
-					<div className={cn("w-full", classNames?.editorWrapper)}>
+					<div
+						className={cn(
+							"w-full",
+							fillHeight && "min-h-0 flex-1",
+							classNames?.editorWrapper,
+						)}
+					>
 						<div
 							className={cn(
 								"z-[2] flex flex-col gap-2 overflow-hidden border border-transparent",
+								fillHeight && "h-full min-h-0",
 								classNames?.editor,
 							)}
 							data-testid="message-panel-input-group"
 						>
 							<div
-								className="flex h-full items-center justify-center [&>div]:w-full"
+								className={cn(
+									"flex h-full items-center justify-center [&>div]:w-full",
+									fillHeight && "min-h-0 flex-1 [&>div]:h-full",
+								)}
 								style={{
 									minHeight: INPUT_CONTAINER_MIN_HEIGHT.InvalidModeFallback,
 								}}
@@ -155,23 +168,33 @@ function DesktopInputContainer({
 						) : null}
 					</div>
 				) : null}
-				<div className={cn("w-full", classNames?.editorWrapper)}>
+				<div
+					className={cn(
+						"w-full",
+						fillHeight && "min-h-0 flex-1",
+						classNames?.editorWrapper,
+					)}
+				>
 					<div
 						className={cn(
 							"z-[2] flex flex-col gap-2 overflow-hidden border border-transparent",
+							fillHeight && "h-full min-h-0",
 							classNames?.editor,
 							isFocused && "border-blue-500",
 						)}
 						data-testid="message-panel-input-group"
 					>
 						<div
-							className={cn("flex flex-col", {
+							className={cn("flex flex-col", fillHeight && "min-h-0 flex-1", {
 								"gap-1.5": editorSize !== "default",
 							})}
 						>
 							<div
 								id={SCENE_INPUT_IDS.INPUT_CONTAINER}
-								className="flex h-full items-center justify-center [&>div]:w-full"
+								className={cn(
+									"flex h-full items-center justify-center [&>div]:w-full",
+									fillHeight && "min-h-0 flex-1 [&>div]:h-full",
+								)}
 								style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.TopicPage }}
 							></div>
 						</div>
