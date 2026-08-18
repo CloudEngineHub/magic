@@ -145,7 +145,14 @@ function WorkspaceItem({ workspace, className, searchProjects }: WorkspaceItemPr
 
 	return (
 		<SidebarMenuItem
-			className={cn("flex w-full max-w-full shrink-0 flex-col items-center", className)}
+			className={cn(
+				"flex w-full max-w-full shrink-0 flex-col items-center",
+				// Selecting a workspace scrolls this item to the top. Reserve the sticky
+				// "工作区" header height so the workspace title does not stick downward
+				// over the first project.
+				"scroll-mt-[var(--workspace-list-sticky-top)]",
+				className,
+			)}
 			data-testid={`sidebar-workspace-item-${workspace.id}`}
 			data-workspace-id-segment={workspaceIdSegment}
 			data-workspace-name={workspace.name || t("super:workspace.unnamedWorkspace")}

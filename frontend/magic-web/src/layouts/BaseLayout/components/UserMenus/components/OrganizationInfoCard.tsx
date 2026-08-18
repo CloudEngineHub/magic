@@ -35,15 +35,14 @@ const OrganizationInfoCard = observer(function OrganizationInfoCard({
 				open={organizationListOpen}
 				onOpenChange={setOrganizationListOpen}
 				trigger={["click"]}
-				mobileProps={{ className: "!h-[400px] !max-h-[400px]" }}
 				popupRender={() => (
 					<div
-						className="flex h-[400px] max-h-[400px] w-[300px] max-w-[90vw] flex-col items-start gap-2.5 overflow-hidden rounded-lg bg-popover text-popover-foreground"
+						className="flex w-[300px] max-w-[90vw] flex-col items-start gap-2.5 rounded-lg bg-popover text-popover-foreground"
 						data-testid="user-menus-organization-list"
 						onClick={(e) => e.stopPropagation()}
 						onMouseDown={(e) => e.stopPropagation()}
 					>
-						<OrganizationList compact onClose={handleOrganizationListClose} />
+						<OrganizationList onClose={handleOrganizationListClose} />
 					</div>
 				)}
 				overlayClassName="p-0"

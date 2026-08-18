@@ -33,7 +33,6 @@ import { i18nStore } from "@/models/config/stores/i18n.store"
 
 export interface OrganizationListItemProps {
 	onClose?: () => void
-	compact?: boolean
 }
 
 interface OrganizationOption {
@@ -52,7 +51,7 @@ const getOrganizationOptions = (account: User.UserAccount): OrganizationOption[]
 }
 
 function OrganizationList(props: OrganizationListItemProps) {
-	const { onClose, compact = false } = props
+	const { onClose } = props
 	const { t: tSuper } = useTranslation("super", {
 		i18n: i18nStore.i18n.instance,
 	})
@@ -260,10 +259,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 
 	return (
 		<div
-			className={cn(
-				"flex h-full w-[300px] max-w-[90vw] flex-col gap-1 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-md",
-				compact && "min-h-0",
-			)}
+			className="flex h-full w-[300px] max-w-[90vw] flex-col gap-1 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-md"
 			data-testid="user-menus-organization-list-content"
 		>
 			{accounts.length === 0 ? (
@@ -290,26 +286,13 @@ function OrganizationList(props: OrganizationListItemProps) {
 									</span>
 								</Badge>
 							</div>
-							<div
-								className={cn("relative w-full pl-8", compact && "min-h-0 flex-1")}
-							>
+							<div className="relative w-full pl-8">
 								<div className="absolute bottom-0 left-4 top-0 w-px bg-border" />
-								<div
-									className={cn(
-										"flex w-full flex-col gap-0.5",
-										compact && "h-full min-h-0",
-									)}
-								>
+								<div className="flex w-full flex-col gap-0.5">
 									<ScrollArea
 										type="always"
-										className={cn(
-											"w-full [&_[data-slot='scroll-area-scrollbar']]:bg-transparent",
-											compact && "h-full min-h-0",
-										)}
-										viewportClassName={cn(
-											compact ? "h-full min-h-0" : "max-h-[50vh]",
-											"scroll-smooth pr-3 [&>div]:!block",
-										)}
+										className="w-full [&_[data-slot='scroll-area-scrollbar']]:bg-transparent"
+										viewportClassName="max-h-[50vh] pr-3 scroll-smooth [&>div]:!block"
 									>
 										{getOrganizationOptions(currentAccount).map((option) =>
 											renderOrganizationItem(currentAccount, option, false),
