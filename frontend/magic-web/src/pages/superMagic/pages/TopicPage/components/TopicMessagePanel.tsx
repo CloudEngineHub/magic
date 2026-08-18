@@ -362,7 +362,9 @@ function TopicMessagePanel({
 		isSelfMediaComposerContext({
 			topicMode,
 			agentCode: selectedTopic?.agent_code ?? undefined,
-		}) || topicMode === TopicMode.PPT
+		}) ||
+		topicMode === TopicMode.PPT ||
+		topicMode === TopicMode.RecordSummary
 			? SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
 			: undefined
 
