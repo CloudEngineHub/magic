@@ -14,7 +14,7 @@
 """
 
 from pathlib import Path
-
+from agentlang.llms.utils.debug_logger import LLM_REQUEST_LOG_DIR_NAME
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
 from app.utils.async_file_utils import (
@@ -27,6 +27,11 @@ from app.utils.async_file_utils import (
 )
 
 logger = get_logger(__name__)
+
+
+def _should_skip_chat_history_entry(entry_name: str) -> bool:
+    """判断是否应跳过历史遗留的 LLM 调试日志目录。"""
+    return entry_name == LLM_REQUEST_LOG_DIR_NAME
 
 
 class ChatHistorySnapshotManager:
@@ -83,6 +88,9 @@ class ChatHistorySnapshotManager:
             await async_mkdir(snapshot_dir, parents=True, exist_ok=True)
 
             for entry in await async_scandir(chat_history_dir):
+                if _should_skip_chat_history_entry(entry.name):
+                    logger.debug("跳过历史 LLM 调试日志目录: %s", entry.name)
+                    continue
                 source = Path(entry.path)
                 target = snapshot_dir / entry.name
                 if entry.is_file(follow_symlinks=False):
@@ -108,6 +116,9 @@ class ChatHistorySnapshotManager:
             await async_mkdir(target_dir, parents=True, exist_ok=True)
 
             for entry in await async_scandir(snapshot_dir):
+                if _should_skip_chat_history_entry(entry.name):
+                    logger.debug("跳过历史 LLM 调试日志目录: %s", entry.name)
+                    continue
                 source = Path(entry.path)
                 target = target_dir / entry.name
                 if entry.is_file(follow_symlinks=False):

@@ -10,11 +10,19 @@ const mockState = vi.hoisted(() => ({
 	unsubscribeMock: vi.fn(),
 	superMagicStoreMock: {
 		messages: new Map<string, unknown[]>(),
+		topicMeta: new Map<string, { syncState?: "idle" | "syncing" }>(),
 		initializeMessages: vi.fn(),
 		enqueueMessage: vi.fn(),
 		setActiveTopicId: vi.fn(),
+		beginTopicSync: vi.fn(() => 1),
+		isTopicSyncCurrent: vi.fn(() => true),
+		completeTopicSync: vi.fn(),
+		cancelTopicSync: vi.fn(),
+		getLatestMessageSeqId: vi.fn(() => "1"),
 		getMessageNode: vi.fn(),
 	},
+	getTopicRecoveryStatusMock: vi.fn(() => ({ hasScheduled: false })),
+	resumeTopicRecoveryMock: vi.fn(),
 }))
 
 vi.mock("@/apis", () => ({
@@ -28,7 +36,9 @@ vi.mock("@/pages/superMagic/stores", () => ({
 }))
 
 vi.mock("@/pages/superMagic/services/streamRecoveryCoordinator", () => ({
+	getTopicRecoveryStatus: mockState.getTopicRecoveryStatusMock,
 	registerStreamRecoveryOwner: mockState.registerStreamRecoveryOwnerMock,
+	resumeTopicRecovery: mockState.resumeTopicRecoveryMock,
 }))
 
 vi.mock("@/utils/pubsub", () => ({
@@ -50,6 +60,18 @@ describe("RecordingSummary useTopicMessages", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockState.superMagicStoreMock.messages = new Map()
+		mockState.superMagicStoreMock.topicMeta = new Map()
+		mockState.superMagicStoreMock.beginTopicSync.mockReset()
+		mockState.superMagicStoreMock.beginTopicSync.mockReturnValue(1)
+		mockState.superMagicStoreMock.isTopicSyncCurrent.mockReset()
+		mockState.superMagicStoreMock.isTopicSyncCurrent.mockReturnValue(true)
+		mockState.superMagicStoreMock.completeTopicSync.mockReset()
+		mockState.superMagicStoreMock.cancelTopicSync.mockReset()
+		mockState.superMagicStoreMock.getLatestMessageSeqId.mockReset()
+		mockState.superMagicStoreMock.getLatestMessageSeqId.mockReturnValue("1")
+		mockState.getTopicRecoveryStatusMock.mockReset()
+		mockState.getTopicRecoveryStatusMock.mockReturnValue({ hasScheduled: false })
+		mockState.resumeTopicRecoveryMock.mockReset()
 		mockState.registerStreamRecoveryOwnerMock.mockReturnValue(vi.fn())
 		mockState.getMessagesByConversationIdMock.mockResolvedValue({
 			items: [],
@@ -113,6 +135,49 @@ describe("RecordingSummary useTopicMessages", () => {
 				toolProjectionPolicy: "historical_terminal",
 			},
 		)
+	})
+
+	it("hydrates history when selectedWorkspace is null but chat ids are valid", async () => {
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic(),
+				selectedWorkspace: null,
+				checkNowDebounced: vi.fn(),
+			}),
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				chat_topic_id: "chat-topic-1",
+				conversation_id: "conversation-1",
+			}),
+		)
+	})
+
+	it("skips history pull when chat ids are missing", async () => {
+		renderHook(() =>
+			useTopicMessages({
+				selectedTopic: createTopic({
+					chat_topic_id: "",
+					chat_conversation_id: "",
+				}),
+				selectedWorkspace: { id: "workspace-1" },
+				checkNowDebounced: vi.fn(),
+			}),
+		)
+
+		await act(async () => {
+			await Promise.resolve()
+			await Promise.resolve()
+		})
+
+		expect(mockState.getMessagesByConversationIdMock).not.toHaveBeenCalled()
+		expect(mockState.superMagicStoreMock.setActiveTopicId).toHaveBeenCalledWith(null)
 	})
 
 	it("does not replace when the server cannot prove the recovered Topic snapshot", async () => {

@@ -177,11 +177,7 @@ export function generateMagicProjectJsContent(
 }
 
 export type MagicProjectCanvasStatus =
-	| "valid-empty"
-	| "valid-non-empty"
-	| "missing"
-	| "invalid"
-	| "decompress-failed"
+	"valid-empty" | "valid-non-empty" | "missing" | "invalid" | "decompress-failed"
 
 export interface MagicProjectJsParseDiagnostics {
 	data: DesignData | null
@@ -311,8 +307,7 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
 			const canvasObj = canvasField as
-				| { elements?: LayerElement[]; connections?: unknown }
-				| undefined
+				{ elements?: LayerElement[]; connections?: unknown } | undefined
 			elements = canvasObj?.elements || []
 			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
@@ -497,8 +492,7 @@ function replacePathsInElement(
 		}
 
 		const imageGenerationTaskMeta = element.imageGenerationTaskMeta as
-			| ImageGenerationTaskMeta
-			| undefined
+			ImageGenerationTaskMeta | undefined
 		if (
 			imageGenerationTaskMeta &&
 			typeof imageGenerationTaskMeta === "object" &&
@@ -781,9 +775,7 @@ export function replaceNameInMagicProjectJsContent(
 		const rawCanvas = config.canvas
 		const canvasCompressed = isCompressedCanvas(rawCanvas)
 		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
-			| { elements?: LayerElement[] }
-			| null
-			| undefined
+			{ elements?: LayerElement[] } | null | undefined
 
 		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
 			for (let i = 0; i < canvasObj.elements.length; i++) {
@@ -1802,7 +1794,7 @@ export async function packAndDownloadFileEntries(
 	zipFileName = "design-media.zip",
 	options: PackDownloadFileEntriesOptions = {},
 ): Promise<PackDownloadFilesResult> {
-	const { loadJSZip } = await import("@/lib/jszip")
+	const { loadJSZip } = await import("@/infrastructure/vendors/jszip")
 	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
 	const { downloadFileWithAnchor } = await import("@/pages/superMagic/utils/handleFIle")
 	const JSZip = await loadJSZip()

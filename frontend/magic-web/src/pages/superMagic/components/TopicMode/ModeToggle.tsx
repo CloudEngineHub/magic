@@ -27,7 +27,7 @@ import {
 } from "@/components/shadcn-ui/popover"
 import { Input } from "@/components/shadcn-ui/input"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { MessageEditorSize } from "../MessageEditor/types"
 import { CollapsibleDescription } from "../MessageEditor/components/ModelSwitch/components/CollapsibleDescription"

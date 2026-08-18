@@ -28,7 +28,7 @@ import {
 } from "@/apis/modules/crew"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { crewService } from "@/services/crew/CrewService"
 import { useCrewEditStore } from "../../context"
 import { RoleIcon } from "../common/RoleIcon"

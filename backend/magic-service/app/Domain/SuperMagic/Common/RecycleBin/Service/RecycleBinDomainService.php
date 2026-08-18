@@ -10,6 +10,7 @@ namespace App\Domain\SuperMagic\Common\RecycleBin\Service;
 use App\Domain\SuperMagic\Common\RecycleBin\Entity\RecycleBinEntity;
 use App\Domain\SuperMagic\Common\RecycleBin\Enum\RecycleBinResourceType;
 use App\Domain\SuperMagic\Common\RecycleBin\Handler\FilePermanentDeleteHandler;
+use App\Domain\SuperMagic\Common\RecycleBin\Handler\MicroAppPermanentDeleteHandler;
 use App\Domain\SuperMagic\Common\RecycleBin\Handler\PermanentDeleteHandlerInterface;
 use App\Domain\SuperMagic\Common\RecycleBin\Handler\ProjectPermanentDeleteHandler;
 use App\Domain\SuperMagic\Common\RecycleBin\Handler\TopicPermanentDeleteHandler;
@@ -30,12 +31,14 @@ class RecycleBinDomainService
         protected RecycleBinRepositoryInterface $recycleBinRepository,
         WorkspacePermanentDeleteHandler $workspaceHandler,
         ProjectPermanentDeleteHandler $projectHandler,
+        MicroAppPermanentDeleteHandler $microAppHandler,
         TopicPermanentDeleteHandler $topicHandler,
         FilePermanentDeleteHandler $fileHandler
     ) {
         $this->permanentDeleteHandlers = [
             $workspaceHandler,
             $projectHandler,
+            $microAppHandler,
             $topicHandler,
             $fileHandler,
         ];

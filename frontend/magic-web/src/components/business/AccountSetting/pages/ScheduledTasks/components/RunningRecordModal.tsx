@@ -6,7 +6,7 @@ import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { Flex } from "antd"
 import { IconExternalLink, IconLoader } from "@tabler/icons-react"
 import { colorUsages } from "@/providers/ThemeProvider/colors"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { SHARE_WORKSPACE_ID } from "@/pages/superMagic/constants"
 import { StatusTag } from "@dtyq/magic-admin/components"
 import InfiniteList from "@/components/base/InfiniteList"
@@ -143,9 +143,9 @@ function RunningRecordModal({ taskId, onClose, ...props }: RunningRecordProps) {
 						const workspace = [
 							item.workspace_id && item.workspace_id !== "0"
 								? (item.workspace_id === SHARE_WORKSPACE_ID
-									? tSuper("workspace.teamSharedWorkspace")
-									: item.workspace_name) ||
-								tSuper("workspace.unnamedWorkspace")
+										? tSuper("workspace.teamSharedWorkspace")
+										: item.workspace_name) ||
+									tSuper("workspace.unnamedWorkspace")
 								: tSuper("workspace.unnamedWorkspace"),
 							item.project_name,
 							item.topic_name,

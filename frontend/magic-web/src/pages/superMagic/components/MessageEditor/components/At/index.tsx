@@ -14,7 +14,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import GlobalMentionPanelStore, {
 	MentionPanelStore,
 } from "@/components/business/MentionPanel/runtime/builtin/store"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { GuideTourElementId } from "../../../LazyGuideTour/GuideTourManager"
 
 const MentionPanel = lazy(() => import("@/components/business/MentionPanel"))

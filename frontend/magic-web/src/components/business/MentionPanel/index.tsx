@@ -36,7 +36,7 @@ import {
 	IconArrowNarrowRight,
 	IconSearch,
 } from "@tabler/icons-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/shadcn-ui/popover"
 import { ChevronLeft, Plug, Puzzle } from "lucide-react"

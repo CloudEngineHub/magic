@@ -1,4 +1,4 @@
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { userStore } from "@/models/user"
 
 import type { Admin } from "@/types/admin"
@@ -27,38 +27,32 @@ export function normalizePointsRecords(response: PointsRecordsResponse, fallback
 				? response.data.list
 				: []
 
-	return rawList.map(
-		(item: PointsRecordSourceItem, index: number): PointsRecordItem => ({
-			id: String(item.id ?? index),
-			amount: Number(
-				item.amount ??
-					(item as Record<string, unknown>)["point_amount"] ??
-					(item as Record<string, unknown>)["points"] ??
-					0,
-			),
-			label: String(
-				item.label ??
-					(item as Record<string, unknown>)["title"] ??
-					(item as Record<string, unknown>)["reason"] ??
-					fallbackLabel,
-			),
-			description: String(
-				item.description ?? (item as Record<string, unknown>)["remark"] ?? "",
-			),
-			// 缺失时间时保留空串，让后续分组逻辑统一落入更早分组，避免误归到今天。
-			createdAt: String(
-				item.created_at ?? (item as Record<string, unknown>)["createdAt"] ?? "",
-			),
-			// 详情态优先展示服务端返回的更新时间，没有时回退到创建时间。
-			updatedAt: String(
-				item.updated_at ??
-					(item as Record<string, unknown>)["updatedAt"] ??
-					item.created_at ??
-					(item as Record<string, unknown>)["createdAt"] ??
-					"",
-			),
-		}),
-	)
+	return rawList.map((item: PointsRecordSourceItem, index: number): PointsRecordItem => ({
+		id: String(item.id ?? index),
+		amount: Number(
+			item.amount ??
+				(item as Record<string, unknown>)["point_amount"] ??
+				(item as Record<string, unknown>)["points"] ??
+				0,
+		),
+		label: String(
+			item.label ??
+				(item as Record<string, unknown>)["title"] ??
+				(item as Record<string, unknown>)["reason"] ??
+				fallbackLabel,
+		),
+		description: String(item.description ?? (item as Record<string, unknown>)["remark"] ?? ""),
+		// 缺失时间时保留空串，让后续分组逻辑统一落入更早分组，避免误归到今天。
+		createdAt: String(item.created_at ?? (item as Record<string, unknown>)["createdAt"] ?? ""),
+		// 详情态优先展示服务端返回的更新时间，没有时回退到创建时间。
+		updatedAt: String(
+			item.updated_at ??
+				(item as Record<string, unknown>)["updatedAt"] ??
+				item.created_at ??
+				(item as Record<string, unknown>)["createdAt"] ??
+				"",
+		),
+	}))
 }
 
 /** 从分页接口响应中读取 total；非标准分页结构时返回 null 供 hasMore 走 list 长度兜底。 */

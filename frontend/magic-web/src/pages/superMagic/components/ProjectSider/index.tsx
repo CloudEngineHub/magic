@@ -3,7 +3,7 @@ import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
 import { ProjectSiderProps } from "./types"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 export default memo(function ProjectSider(props: ProjectSiderProps) {
 	const { items, width, className, value, onValueChange } = props

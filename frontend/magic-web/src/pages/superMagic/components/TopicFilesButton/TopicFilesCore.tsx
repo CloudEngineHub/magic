@@ -44,7 +44,10 @@ import {
 	useCrossProjectMoveCompensation,
 } from "./hooks"
 import { useFileShortcuts } from "./hooks/useFileShortcuts"
-import { useCrossProjectFileOperation } from "./hooks/useCrossProjectFileOperation"
+import {
+	useCrossProjectFileOperation,
+	type CrossProjectOperationSuccessResult,
+} from "./hooks/useCrossProjectFileOperation"
 import { useImportFromOtherProject } from "./hooks/useImportFromOtherProject"
 import CrossProjectFileOperationModal from "../SelectPathModal/components/CrossProjectFileOperationModal"
 import ImportFromOtherProjectModal from "../SelectPathModal/components/ImportFromOtherProjectModal"
@@ -132,6 +135,9 @@ interface TopicFilesCoreProps {
 	setUserSelectDetail?: (detail: any) => void
 	onFileClick?: (fileItem: any) => void
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCrossProjectOperationSuccess?: (result: CrossProjectOperationSuccessResult) => void
 	fileFilters?: {
 		documents: boolean
 		multimedia: boolean
@@ -170,6 +176,8 @@ interface TopicFilesCoreProps {
 	filterBatchDownloadLayerMenuItems?: (menuItems: any[]) => any[]
 	// 是否允许下载（用于分享页面权限控制）
 	allowDownload?: boolean
+	// 是否允许只读分享场景中的已登录用户复制文件到自己的项目
+	allowCopyTo?: boolean
 	// Allow a read-only host such as a public share to expose batch selection without login.
 	allowReadonlySelection?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
@@ -207,6 +215,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		setUserSelectDetail,
 		onFileClick,
 		projectId,
+		shareCode,
+		sharePassword,
+		onCrossProjectOperationSuccess,
 		fileFilters = {
 			documents: true,
 			multimedia: true,
@@ -236,6 +247,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		filterMenuItems,
 		filterBatchDownloadLayerMenuItems,
 		allowDownload,
+		allowCopyTo = false,
 		allowReadonlySelection = false,
 		resolveTopicFileRowDecoration,
 		refreshLoading = false,
@@ -255,16 +267,17 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	const { organizationCode } = useOrganization()
 	// 有userId，认为有登录状态
 	const hasLogin = Boolean(userStore.user?.userInfo?.user_id)
-	const selectionEnabled = shouldEnableTopicFileSelection({
+	const selectionEnabledByPermission = shouldEnableTopicFileSelection({
 		isSelectMode,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
 		hasLogin,
 		allowReadonlySelection,
 	})
+	const selectionEnabled = capabilities.multiSelect && selectionEnabledByPermission
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
-	const canUseDesktopCrossProjectMove =
-		capabilities.crossProject && projects.length > 0 && !isChatProject && !isMobile
+	const canUseDesktopCrossProjectMove = capabilities.crossProject && !isChatProject && !isMobile
 	const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 	const downloadProgress = useDownloadProgress()
 
@@ -873,10 +886,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 	// 跨项目文件操作 Hook
 	const crossProjectOperation = useCrossProjectFileOperation({
 		projectId,
+		shareCode,
+		sharePassword,
 		selectedWorkspace: selectedWorkspace || null,
 		selectedProject: selectedProject || null,
 		projects,
-		onSuccess: handleCrossProjectOperationSuccess,
+		onSuccess: (result) => {
+			handleCrossProjectOperationSuccess(result)
+			if (result) onCrossProjectOperationSuccess?.(result)
+		},
 	})
 
 	// 导入操作 Hook
@@ -950,17 +968,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								onKeepBoth: noopFolderConflictHandler,
 							}
 
-	// 创建移动文件处理函数的适配器
+	// Route desktop project moves to the cross-project selector.
 	const handleMoveFileAdapter = useMemoizedFn((item: AttachmentItem) => {
-		// 桌面端普通项目继续复用现有跨项目 Modal；移动端和 chat 项目统一走目录 Sheet。
 		if (canUseDesktopCrossProjectMove) {
 			if (item.file_id) {
-				// 获取文件的父目录路径
 				const parentPath = getParentPathByFileId(item.file_id)
 				crossProjectOperation.openMoveModal([item.file_id], parentPath)
 			}
 		} else {
-			// 否则使用原来的 SelectDirectoryModal
+			// Mobile and chat projects keep the directory selector.
 			moveFileHook.showMoveSelector(item)
 		}
 	})
@@ -1959,7 +1975,8 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 				{/* 更多按钮 */}
 				{!showCheckbox &&
 					renamingItemId !== itemId &&
-					(allowEdit || (filterMenuItems && allowDownload !== false)) && (
+					(allowEdit ||
+						(filterMenuItems && (allowDownload !== false || allowCopyTo))) && (
 						<MagicIcon
 							className={cx(
 								styles.attachmentAction,
@@ -2012,7 +2029,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		getParentPathByFileId,
 		selectedWorkspace,
 		selectedProject,
-		projects,
 		crossProjectOperation,
 		moveFileHook,
 		onUpdateAttachments,
@@ -2020,8 +2036,9 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		isMoving,
 		allowEdit,
 		allowDownload,
+		allowCopyTo,
 		allowMove: capabilities.move,
-		allowCopy: capabilities.crossProject,
+		allowCopy: capabilities.crossProject || allowCopyTo,
 		allowShare: capabilities.share,
 		downloadProgress,
 		// 批量分享回调

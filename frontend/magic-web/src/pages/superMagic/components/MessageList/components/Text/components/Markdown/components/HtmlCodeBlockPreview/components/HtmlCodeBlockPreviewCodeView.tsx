@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import type { HTMLAttributes, Ref } from "react"
 import { ScrollArea, ScrollBar } from "@/components/shadcn-ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const CHUNK_THRESHOLD = 20
 const CHUNK_SIZE = 50

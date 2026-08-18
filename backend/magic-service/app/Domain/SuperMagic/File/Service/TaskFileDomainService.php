@@ -108,6 +108,19 @@ class TaskFileDomainService
     }
 
     /**
+     * 根据文件编号获取文件实体，不限制文件所属空间。
+     */
+    public function getFileEntityById(int $fileId): TaskFileEntity
+    {
+        $fileEntity = $this->taskFileRepository->getById($fileId);
+        if ($fileEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::FILE_NOT_FOUND, trans('file.file_not_found'));
+        }
+
+        return $fileEntity;
+    }
+
+    /**
      * Get file by ID, including soft-deleted records.
      */
     public function getByIdWithTrash(int $id): ?TaskFileEntity
@@ -373,11 +386,12 @@ class TaskFileDomainService
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
-        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth);
+        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth, $includeDirectories);
     }
 
     /**
@@ -3566,10 +3580,7 @@ class TaskFileDomainService
 
         $updatedFile = $this->taskFileRepository->updateById($originalFile);
 
-        $parentId = $originalFile->getParentId();
-        if ($parentId !== null) {
-            $this->incrementVersionChain((string) $parentId);
-        }
+        $this->incrementVersionChain((string) $fileId);
 
         return $updatedFile;
     }

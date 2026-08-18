@@ -137,6 +137,142 @@ describe("useVirtualMessageScroll", () => {
 		expect(onPullMore).toHaveBeenCalledTimes(1)
 	})
 
+	it("honors a custom top threshold and does not reuse an intent created outside it", async () => {
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
+		const virtualizer = createVirtualizer(viewport, {
+			startIndex: 8,
+			starts: Array.from({ length: 12 }, (_, index) => index * 100),
+			totalSize: 1200,
+		})
+		const onPullMore = vi.fn()
+
+		renderHook(() =>
+			useVirtualMessageScroll({
+				containerRef: { current: viewport },
+				virtualizerRef: { current: virtualizer },
+				items: Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` })),
+				topicKey: "topic-1",
+				onPullMore,
+				minTopDistance: 30,
+			}),
+		)
+		act(() => {
+			vi.advanceTimersByTime(301)
+		})
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.scrollTop = 31
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+		expect(onPullMore).not.toHaveBeenCalled()
+
+		// A later layout scroll crossing the threshold must not consume the old gesture.
+		act(() => {
+			viewport.scrollTop = 20
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+		expect(onPullMore).not.toHaveBeenCalled()
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.scrollTop = 10
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+
+		expect(onPullMore).toHaveBeenCalledTimes(1)
+	})
+
+	it("locks history pagination until the request and view restoration have completed", async () => {
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
+		const virtualizer = createVirtualizer(viewport, {
+			startIndex: 1,
+			starts: [0, 500, 700],
+			totalSize: 900,
+		})
+		const virtualizerRef = {
+			current: virtualizer,
+		} as MutableRefObject<Virtualizer<HTMLDivElement, HTMLDivElement> | null>
+		const containerRef = { current: viewport }
+		const initialItems = [{ key: "a" }, { key: "b" }, { key: "c" }]
+		let resolvePullMore: (() => void) | undefined
+		let notifyPullMoreStarted = () => undefined
+		const onPullMore = vi.fn(() => {
+			notifyPullMoreStarted()
+			return new Promise<void>((resolve) => {
+				resolvePullMore = resolve
+			})
+		})
+
+		const { result, rerender } = renderHook(
+			({ items }) =>
+				useVirtualMessageScroll({
+					containerRef,
+					virtualizerRef,
+					items,
+					topicKey: "topic-1",
+					onPullMore,
+					minTopDistance: 30,
+				}),
+			{ initialProps: { items: initialItems } },
+		)
+		notifyPullMoreStarted = result.current.notifyPullMoreStarted
+		act(() => {
+			vi.advanceTimersByTime(301)
+			viewport.scrollTop = 20
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+		expect(onPullMore).toHaveBeenCalledTimes(1)
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+		expect(onPullMore).toHaveBeenCalledTimes(1)
+
+		virtualizer.range = { startIndex: 3, endIndex: 4 }
+		virtualizer.measurementsCache = [0, 100, 200, 900, 1100].map((start, index) => ({
+			index,
+			key: index,
+			start,
+			end: start + 80,
+			size: 80,
+			lane: 0,
+		}))
+		rerender({ items: [{ key: "x" }, { key: "y" }, ...initialItems] })
+		await act(async () => {
+			resolvePullMore?.()
+			await vi.advanceTimersByTimeAsync(64)
+		})
+
+		act(() => {
+			viewport.scrollTop = 20
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+
+		expect(onPullMore).toHaveBeenCalledTimes(2)
+	})
+
 	it("does not turn a prior downward wheel into history intent for later layout scrolls", async () => {
 		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
 		const virtualizer = createVirtualizer(viewport, {
@@ -221,6 +357,49 @@ describe("useVirtualMessageScroll", () => {
 			behavior: "auto",
 		})
 		expect(viewport.scrollTop).toBe(850)
+	})
+
+	it("does not request history when authoritative reconciliation shrinks the list", async () => {
+		const viewport = createViewport({ scrollTop: 900, clientHeight: 300 })
+		const virtualizer = createVirtualizer(viewport, {
+			startIndex: 8,
+			starts: Array.from({ length: 12 }, (_, index) => index * 100),
+			totalSize: 1200,
+		})
+		const onPullMore = vi.fn()
+		const initialItems = Array.from({ length: 12 }, (_, index) => ({ key: `message-${index}` }))
+		const containerRef = { current: viewport }
+		const virtualizerRef = {
+			current: virtualizer,
+		} as MutableRefObject<Virtualizer<HTMLDivElement, HTMLDivElement> | null>
+		const { rerender } = renderHook(
+			({ items }) =>
+				useVirtualMessageScroll({
+					containerRef,
+					virtualizerRef,
+					items,
+					topicKey: "topic-1",
+					onPullMore,
+				}),
+			{ initialProps: { items: initialItems } },
+		)
+
+		act(() => {
+			viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }))
+			viewport.scrollTop = 100
+			viewport.dispatchEvent(new Event("scroll"))
+		})
+		const scrollCallCountBeforeShrink = vi.mocked(virtualizer.scrollToOffset).mock.calls.length
+
+		// A visible-tab HTTP replace can remove local rows. The resulting scrollTop clamp is
+		// a layout side effect, not a request to load older history.
+		rerender({ items: initialItems.slice(0, 4) })
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(500)
+		})
+
+		expect(onPullMore).not.toHaveBeenCalled()
+		expect(virtualizer.scrollToOffset).toHaveBeenCalledTimes(scrollCallCountBeforeShrink)
 	})
 
 	it("cancels a pending history anchor when the user explicitly returns to latest", async () => {

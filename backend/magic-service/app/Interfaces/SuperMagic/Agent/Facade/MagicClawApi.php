@@ -69,6 +69,7 @@ class MagicClawApi extends AbstractApi
                 $projectRequestDTO = new CreateAgentProjectRequestDTO();
                 $projectRequestDTO->setProjectName($clawEntity->getName());
                 $projectRequestDTO->setInitTemplateFiles(false);
+                $projectRequestDTO->setAgentCode($clawEntity->getCode());
 
                 $result = $this->projectAppService->createAgentProject(
                     $requestContext,

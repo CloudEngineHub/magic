@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useState } from "react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ModeAvatar from "../../ModeAvatar"
 import {
 	ChevronDown,

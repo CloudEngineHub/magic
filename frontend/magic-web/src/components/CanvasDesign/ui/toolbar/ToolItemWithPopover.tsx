@@ -5,7 +5,7 @@ import IconButton from "../primitives/custom/IconButton/index"
 import { usePortalContainer } from "../primitives/custom/PortalContainerContext"
 import styles from "./index.module.css"
 import { useMemo, useState } from "react"
-import classNames from "classnames"
+import { cn } from "../../runtime/shared/lib/utils"
 import { type ToolType } from "../../runtime/document/types"
 import type { ToolOptionItem } from "./types"
 
@@ -68,7 +68,7 @@ export default function ToolItemWithPopover({
 							<button
 								key={child.value || child.label}
 								type="button"
-								className={classNames(
+								className={cn(
 									styles.popoverMenuItem,
 									isSelected && styles.popoverMenuItemSelected,
 								)}

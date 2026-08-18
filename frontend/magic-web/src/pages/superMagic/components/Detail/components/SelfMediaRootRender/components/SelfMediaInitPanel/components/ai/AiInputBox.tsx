@@ -11,7 +11,7 @@
 
 import { useState, useRef, useCallback } from "react"
 import { Mic, Sparkles, Square } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useVoiceInput } from "@/components/business/VoiceInput/hooks"
 import { useMicrophonePermission } from "@/hooks/useMicrophonePermission"
 import { Button } from "@/components/shadcn-ui/button"

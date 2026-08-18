@@ -23,6 +23,7 @@ function CrossProjectFileOperationModal(props: CrossProjectFileOperationModalPro
 					sourceAttachments: data.sourceAttachments,
 					includeDocumentDependencies: data.includeDocumentDependencies,
 					documentDependencyFileIds: data.documentDependencyFileIds,
+					preserveParentPath: data.preserveParentPath,
 				})
 			}}
 		/>

@@ -102,7 +102,11 @@ vi.mock("../components/MobileRecordingSummaryPanel", () => ({
 }))
 
 vi.mock("../components/MobileRecordingAudioPlayer", () => ({
-	MobileRecordingAudioPlayer: () => <div data-testid="mock-audio-player">Player</div>,
+	MobileRecordingAudioPlayer: ({ hidden }: { hidden?: boolean }) => (
+		<div data-testid="mock-audio-player" data-hidden={hidden ? "true" : "false"}>
+			Player
+		</div>
+	),
 }))
 
 vi.mock("../components/MobileRecordingShareExportSheet", () => ({
@@ -111,6 +115,7 @@ vi.mock("../components/MobileRecordingShareExportSheet", () => ({
 		showShareSection?: boolean
 		allowDownload?: boolean
 		onOpenChange: (open: boolean) => void
+		onSearch?: () => void
 	}) => {
 		sheetPropsMock(props)
 		if (!props.open) return null
@@ -121,6 +126,11 @@ vi.mock("../components/MobileRecordingShareExportSheet", () => ({
 				<button type="button" onClick={() => props.onOpenChange(false)}>
 					Close
 				</button>
+				{props.onSearch ? (
+					<button type="button" onClick={props.onSearch}>
+						Search content
+					</button>
+				) : null}
 			</div>
 		)
 	},
@@ -147,6 +157,12 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 		expect(screen.getByText("Mock Share Recording")).toBeInTheDocument()
 		expect(screen.getByLabelText("More actions")).toBeInTheDocument()
 		expect(screen.queryByLabelText("detail.exportSection")).not.toBeInTheDocument()
+		expect(screen.getByTestId("mock-summary-panel").parentElement).toHaveClass(
+			"flex",
+			"min-h-0",
+			"flex-1",
+			"overflow-hidden",
+		)
 	})
 
 	it("applies the external share topbar offset to the page root and sticky header", () => {
@@ -238,7 +254,7 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 		)
 	})
 
-	it("hides the more button when download permission is unavailable", () => {
+	it("keeps search available when download permission is unavailable", () => {
 		render(
 			<ShareMobileAudioRecordingDetailPage
 				projectId="project-share-001"
@@ -248,7 +264,11 @@ describe("ShareMobileAudioRecordingDetailPage", () => {
 			/>,
 		)
 
-		expect(screen.queryByLabelText("More actions")).not.toBeInTheDocument()
+		fireEvent.click(screen.getByLabelText("More actions"))
+		expect(screen.getByText("Download blocked")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "Search content" }))
+		expect(screen.getByTestId("mobile-recording-share-content-search-root")).toBeInTheDocument()
+		expect(screen.getByTestId("mock-audio-player")).toHaveAttribute("data-hidden", "true")
 	})
 
 	it("falls back to a zero offset when the outer share header is hidden", () => {

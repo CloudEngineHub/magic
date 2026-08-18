@@ -6,6 +6,8 @@ import { TopicLayoutStore } from "../stores/TopicLayoutStore"
 interface UseTopicDesktopLayoutOptions {
 	isReadOnly: boolean
 	allowProjectSiderResize?: boolean
+	/** Controls whether conversation collapse state survives remounts. */
+	persistConversationPanelState?: boolean
 }
 
 interface UseTopicDesktopLayoutReturn {
@@ -21,18 +23,20 @@ interface UseTopicDesktopLayoutReturn {
 	startDragMessagePanel: (clientX: number) => void
 	toggleConversationPanel: () => void
 	expandConversationPanel: () => void
+	collapseConversationPanel: () => void
 	ensureExpandedWhenDetailVisible: (shouldShowDetailPanel: boolean) => void
 }
 
 export function useTopicDesktopLayout({
 	isReadOnly,
 	allowProjectSiderResize = !isReadOnly,
+	persistConversationPanelState = true,
 }: UseTopicDesktopLayoutOptions): UseTopicDesktopLayoutReturn {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const storeRef = useRef<TopicLayoutStore | null>(null)
 
 	if (!storeRef.current) {
-		storeRef.current = new TopicLayoutStore()
+		storeRef.current = new TopicLayoutStore({ persistConversationPanelState })
 	}
 	const store = storeRef.current
 
@@ -54,19 +58,29 @@ export function useTopicDesktopLayout({
 		store.expandConversationPanel()
 	})
 
+	/** Collapses the conversation panel while preserving its last expanded width. */
+	const collapseConversationPanel = useMemoizedFn(() => {
+		store.collapseConversationPanel()
+	})
+
 	const ensureExpandedWhenDetailVisible = useMemoizedFn((shouldShowDetailPanel: boolean) => {
 		store.ensureExpandedWhenDetailVisible(shouldShowDetailPanel)
 	})
 
 	useEffect(() => {
 		pubsub.subscribe(PubSubEvents.Expand_Topic_Conversation_Panel, expandConversationPanel)
+		pubsub.subscribe(PubSubEvents.Collapse_Topic_Conversation_Panel, collapseConversationPanel)
 		return () => {
 			pubsub.unsubscribe(
 				PubSubEvents.Expand_Topic_Conversation_Panel,
 				expandConversationPanel,
 			)
+			pubsub.unsubscribe(
+				PubSubEvents.Collapse_Topic_Conversation_Panel,
+				collapseConversationPanel,
+			)
 		}
-	}, [expandConversationPanel])
+	}, [collapseConversationPanel, expandConversationPanel])
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -157,6 +171,7 @@ export function useTopicDesktopLayout({
 		startDragMessagePanel,
 		toggleConversationPanel,
 		expandConversationPanel,
+		collapseConversationPanel,
 		ensureExpandedWhenDetailVisible,
 	}
 }

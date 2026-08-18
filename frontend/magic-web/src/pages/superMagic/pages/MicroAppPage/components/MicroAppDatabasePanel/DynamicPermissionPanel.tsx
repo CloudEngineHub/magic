@@ -28,7 +28,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/shadcn-ui/select"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 type PermissionScope = "public" | "private_user" | "private_department" | "private_org" | "disabled"
 

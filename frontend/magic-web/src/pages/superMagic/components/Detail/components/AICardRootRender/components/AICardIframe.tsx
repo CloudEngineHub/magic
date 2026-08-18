@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../contents/HTML/utils"

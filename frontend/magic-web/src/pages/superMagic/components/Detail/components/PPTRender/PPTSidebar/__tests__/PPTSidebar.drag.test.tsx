@@ -65,7 +65,7 @@ vi.mock("ahooks", () => ({
 	useMemoizedFn: <T extends (...args: never[]) => unknown>(fn: T) => fn,
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classNames: Array<string | false | null | undefined>) =>
 		classNames.filter(Boolean).join(" "),
 }))
@@ -282,8 +282,7 @@ function installRafController() {
 		cancel,
 		flushNext() {
 			const entry = callbacks.entries().next().value as
-				| [number, FrameRequestCallback]
-				| undefined
+				[number, FrameRequestCallback] | undefined
 			if (!entry) return false
 			const [id, callback] = entry
 			callbacks.delete(id)

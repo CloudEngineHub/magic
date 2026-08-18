@@ -1,7 +1,7 @@
-import type { Editor, JSONContent } from "@tiptap/react"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { forwardRef, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { useMemoizedFn, useAsyncEffect } from "ahooks"
+import { useAsyncEffect, useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useMessageEditor, useDragUpload, useSlideContentSync } from "./hooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -28,6 +28,7 @@ import {
 	type SendMessageByContentPayload,
 } from "./types"
 import {
+	type DataService,
 	McpMentionData,
 	MentionItemType,
 	type MentionSelectContext,
@@ -64,6 +65,12 @@ import {
 	shouldConvertPastedTextToAttachment,
 } from "./utils/pastedTextAttachment"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { isAllowedMention as defaultIsAllowedMention } from "./utils/mention"
+import {
+	MessageSendModelWaitError,
+	resolveMessageSendModels,
+	type ResolvedMessageSendModels,
+} from "./utils/messageSendModelFallback"
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -104,6 +111,7 @@ export const MessageEditorContainer = observer(
 				modelTopicMode,
 				onFocus,
 				onBlur,
+				onReady,
 				onMentionInsertItems,
 				onFileClick,
 				onEnsureProject,
@@ -171,6 +179,7 @@ export const MessageEditorContainer = observer(
 			})
 
 			const isMountedRef = useRef(true)
+			const modelWaitAbortControllerRef = useRef<AbortController | null>(null)
 			const isProjectContext = Boolean(selectedProject?.id)
 
 			useSyncEditorStoreState({
@@ -208,6 +217,7 @@ export const MessageEditorContainer = observer(
 				handleRemoveFile,
 				handleRemoveUploadedFile,
 				handleMentionRemoveItems: handleUploadMentionRemoveItems,
+				isAllowedUploadMention,
 				shouldRestoreRemovedMention,
 			} = useUploadMentionFlow({
 				fileUploadStore,
@@ -335,11 +345,16 @@ export const MessageEditorContainer = observer(
 				onBlur?.()
 				if (isMobile) resetDocumentScrollPosition()
 			})
-
 			const handleFocus = useMemoizedFn(() => {
 				setIsEditorFocused(true)
 				onFocus?.()
 			})
+
+			const isAllowedEditorMention = useMemoizedFn(
+				(attrs: TiptapMentionAttributes, dataService: DataService) =>
+					isAllowedUploadMention(attrs) &&
+					(isAllowedMention ?? defaultIsAllowedMention)(attrs, dataService),
+			)
 
 			const handleSend = useMessageSendHandler({
 				voiceInputRef,
@@ -364,9 +379,8 @@ export const MessageEditorContainer = observer(
 				onPromptCarouselNavigate: navigatePromptCarousel,
 				onMentionInsertItems: (items) => {
 					syncInsertedMarkersToManager(items)
-					if (!selectedProject?.id) {
-						store.fileUploadStore.addPendingProjectFileReferences(items)
-					}
+					store.fileUploadStore.restorePastedUploadFileReferences(items)
+					store.fileUploadStore.addPendingProjectFileReferences(items)
 					onMentionInsertItems?.(items)
 				},
 				onChange: setValue,
@@ -383,7 +397,7 @@ export const MessageEditorContainer = observer(
 				size,
 				topicMode,
 				mentionPanelStore,
-				isAllowedMention,
+				isAllowedMention: isAllowedEditorMention,
 				shouldSkipRemoveSync: () => shouldSkipMentionRemoveSyncRef.current,
 				shouldRestoreRemovedMention,
 			})
@@ -398,8 +412,16 @@ export const MessageEditorContainer = observer(
 			}, [tiptapEditor, store.editorStore])
 
 			useEffect(() => {
+				isMountedRef.current = true
+				const controller = new AbortController()
+				modelWaitAbortControllerRef.current = controller
+
 				return () => {
 					isMountedRef.current = false
+					controller.abort()
+					if (modelWaitAbortControllerRef.current === controller) {
+						modelWaitAbortControllerRef.current = null
+					}
 				}
 			}, [])
 
@@ -408,9 +430,27 @@ export const MessageEditorContainer = observer(
 			})
 
 			const handleSendMessageByContent = useMemoizedFn(
-				(data: SendMessageByContentPayload) => {
-					const { isLanguageModelReady, selectedLanguageModel } = store.topicModelStore
-					if (!isLanguageModelReady || !selectedLanguageModel) {
+				async (data: SendMessageByContentPayload) => {
+					let models: ResolvedMessageSendModels | null
+					try {
+						models = await resolveMessageSendModels({
+							topicModelStore: store.topicModelStore,
+							selectedModel: data.selectedModel,
+							selectedImageModel: data.selectedImageModel,
+							selectedVideoModel: data.selectedVideoModel,
+							signal: modelWaitAbortControllerRef.current?.signal,
+						})
+					} catch (error) {
+						if (
+							error instanceof MessageSendModelWaitError &&
+							error.reason === "aborted"
+						) {
+							return
+						}
+						magicToast.error(t("messageEditor.modelLoadFailed"))
+						return
+					}
+					if (!models) {
 						magicToast.error(t("messageEditor.pleaseSelectModel"))
 						return
 					}
@@ -418,11 +458,9 @@ export const MessageEditorContainer = observer(
 						value: data.jsonContent,
 						mentionItems:
 							data.mentionItems ?? collectMentionItemsFromContent(data.jsonContent),
-						selectedModel: data.selectedModel ?? selectedLanguageModel,
-						selectedImageModel:
-							data.selectedImageModel ?? store.topicModelStore.selectedImageModel,
-						selectedVideoModel:
-							data.selectedVideoModel ?? store.topicModelStore.selectedVideoModel,
+						selectedModel: models.selectedModel,
+						selectedImageModel: models.selectedImageModel,
+						selectedVideoModel: models.selectedVideoModel,
 						topicMode: data.topicMode ?? topicMode,
 						shouldClearEditorAfterSend: data.shouldClearEditorAfterSend,
 						extra: data.extra,
@@ -492,22 +530,28 @@ export const MessageEditorContainer = observer(
 				store.draftStore.resetSendingGuard()
 				clearAllMarkers()
 
-				if (!draftKey) {
-					return
-				}
+				try {
+					if (!draftKey || skipInitialDraftRestore) {
+						store.draftStore.markDraftReady()
+						return
+					}
 
-				if (skipInitialDraftRestore) {
-					return
+					await store.draftStore.loadLatestDraft({
+						isClearContent: true,
+						replaceDirectly: true,
+					})
+				} catch (error) {
+					store.draftStore.markDraftReady()
+					console.error("Failed to restore latest draft:", error)
+				} finally {
+					// Report readiness after the existing draft phase has settled.
+					onReady?.()
 				}
-
-				await store.draftStore.loadLatestDraft({
-					isClearContent: true,
-					replaceDirectly: true,
-				})
 			}, [
 				draftKey?.topicId,
 				draftKey?.projectId,
 				draftKey?.workspaceId,
+				onReady,
 				skipInitialDraftRestore,
 			])
 

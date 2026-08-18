@@ -20,7 +20,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Button } from "@/components/shadcn-ui/button"
 import { Badge } from "@/components/shadcn-ui/badge"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { usePublishPanelStore } from "../context"
 import { getPublishToCopyKeys, getPublishToUiKey } from "../publishCopy"
 import type { PublishTo } from "../types"

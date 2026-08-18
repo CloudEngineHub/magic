@@ -34,7 +34,6 @@ spl_autoload_register(static function (string $class): void {
         'Dtyq\SuperMagic\Application\Collaboration\Policy\ResourceAccessPolicyService' => 'App\Application\SuperMagic\Common\Collaboration\Policy\ResourceAccessPolicyService',
         'Dtyq\SuperMagic\Application\Collaboration\Service\ResourceCollaborationAppService' => 'App\Application\SuperMagic\Common\Collaboration\Service\ResourceCollaborationAppService',
         'Dtyq\SuperMagic\Application\Contract\AllowAllPromptContentValidator' => 'App\Application\SuperMagic\Common\Contract\AllowAllPromptContentValidator',
-        'Dtyq\SuperMagic\Application\Contract\DefaultDeploymentId' => 'App\Application\SuperMagic\Common\Contract\DefaultDeploymentId',
         'Dtyq\SuperMagic\Application\Contract\DefaultUserAiWatermarkPolicy' => 'App\Application\SuperMagic\Common\Contract\DefaultUserAiWatermarkPolicy',
         'Dtyq\SuperMagic\Application\Contract\DeploymentIdInterface' => 'App\Application\SuperMagic\Common\Contract\DeploymentIdInterface',
         'Dtyq\SuperMagic\Application\Contract\PromptContentValidatorInterface' => 'App\Application\SuperMagic\Common\Contract\PromptContentValidatorInterface',

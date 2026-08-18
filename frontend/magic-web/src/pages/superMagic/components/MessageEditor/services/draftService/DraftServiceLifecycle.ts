@@ -62,11 +62,21 @@ class DraftServiceLifecycle {
 						// Only call .catch if cleanupResult is a Promise
 						if (cleanupResult && typeof cleanupResult.catch === "function") {
 							await cleanupResult.catch((error) => {
-								logger.error("Failed to run cleanup on visibility change", error)
+								logger.error({
+									eventKey: "run_cleanup_visibility_change_failed",
+									errorKind: "lifecycle",
+									error: error,
+									message: "Failed to run cleanup on visibility change",
+								})
 							})
 						}
 					} catch (error) {
-						logger.error("Failed to run cleanup on visibility change", error)
+						logger.error({
+							eventKey: "run_cleanup_visibility_change_failed",
+							errorKind: "lifecycle",
+							error: error,
+							message: "Failed to run cleanup on visibility change",
+						})
 					}
 				}
 			}
@@ -83,11 +93,21 @@ class DraftServiceLifecycle {
 					// Only call .catch if cleanupResult is a Promise
 					if (cleanupResult && typeof cleanupResult.catch === "function") {
 						await cleanupResult.catch((error) => {
-							logger.error("Failed to run cleanup on focus", error)
+							logger.error({
+								eventKey: "run_cleanup_focus_failed",
+								errorKind: "lifecycle",
+								error: error,
+								message: "Failed to run cleanup on focus",
+							})
 						})
 					}
 				} catch (error) {
-					logger.error("Failed to run cleanup on focus", error)
+					logger.error({
+						eventKey: "run_cleanup_focus_failed",
+						errorKind: "lifecycle",
+						error: error,
+						message: "Failed to run cleanup on focus",
+					})
 				}
 			}
 		}
@@ -96,19 +116,34 @@ class DraftServiceLifecycle {
 		try {
 			window.addEventListener("beforeunload", beforeUnloadHandler)
 		} catch (error) {
-			logger.error("Failed to add beforeunload event listener", error)
+			logger.error({
+				eventKey: "add_beforeunload_event_listener_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to add beforeunload event listener",
+			})
 		}
 
 		try {
 			document.addEventListener("visibilitychange", visibilityChangeHandler)
 		} catch (error) {
-			logger.error("Failed to add visibilitychange event listener", error)
+			logger.error({
+				eventKey: "add_visibilitychange_event_listener_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to add visibilitychange event listener",
+			})
 		}
 
 		try {
 			window.addEventListener("focus", focusHandler)
 		} catch (error) {
-			logger.error("Failed to add focus event listener", error)
+			logger.error({
+				eventKey: "add_focus_event_listener_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Failed to add focus event listener",
+			})
 		}
 
 		// Store cleanup functions with error handling
@@ -117,21 +152,36 @@ class DraftServiceLifecycle {
 				try {
 					window?.removeEventListener("beforeunload", beforeUnloadHandler)
 				} catch (error) {
-					logger.error("Failed to remove beforeunload event listener", error)
+					logger.error({
+						eventKey: "remove_beforeunload_event_listener_failed",
+						errorKind: "lifecycle",
+						error: error,
+						message: "Failed to remove beforeunload event listener",
+					})
 				}
 			},
 			() => {
 				try {
 					document?.removeEventListener("visibilitychange", visibilityChangeHandler)
 				} catch (error) {
-					logger.error("Failed to remove visibilitychange event listener", error)
+					logger.error({
+						eventKey: "remove_visibilitychange_event_listener_failed",
+						errorKind: "lifecycle",
+						error: error,
+						message: "Failed to remove visibilitychange event listener",
+					})
 				}
 			},
 			() => {
 				try {
 					window?.removeEventListener("focus", focusHandler)
 				} catch (error) {
-					logger.error("Failed to remove focus event listener", error)
+					logger.error({
+						eventKey: "remove_focus_event_listener_failed",
+						errorKind: "lifecycle",
+						error: error,
+						message: "Failed to remove focus event listener",
+					})
 				}
 			},
 		)
@@ -149,7 +199,12 @@ class DraftServiceLifecycle {
 			// Stop the cleanup scheduler and close the draft service
 			draftService.close()
 		} catch (error) {
-			logger.error("Error during draft service cleanup", error)
+			logger.error({
+				eventKey: "draft_service_cleanup_failed",
+				errorKind: "lifecycle",
+				error: error,
+				message: "Error during draft service cleanup",
+			})
 		}
 	}
 

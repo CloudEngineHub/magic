@@ -133,7 +133,12 @@ baseHistory.listen(({ location, action }) => {
 				}
 			} catch (error) {
 				console.error("路由重定向失败", error)
-				logger.error("redirectFail", error)
+				logger.error({
+					eventKey: "redirect_fail_failed",
+					errorKind: "unknown",
+					error: error,
+					message: "redirectFail",
+				})
 			} finally {
 				// 延迟重置重定向状态
 				delayedResetRedirectState()
@@ -161,7 +166,12 @@ export class history {
 				throw new Error(`push route params: ${JSON.stringify(props)}`)
 			}
 		} catch (error) {
-			logger.error("route path parser fail", error)
+			logger.error({
+				eventKey: "route_path_parser_failed",
+				errorKind: "parse",
+				error: error,
+				message: "route path parser fail",
+			})
 		}
 	}
 
@@ -176,7 +186,12 @@ export class history {
 				throw new Error(`replace route params: ${JSON.stringify(props)}`)
 			}
 		} catch (error) {
-			logger.error("route path parser fail", error)
+			logger.error({
+				eventKey: "route_path_parser_failed",
+				errorKind: "parse",
+				error: error,
+				message: "route path parser fail",
+			})
 		}
 	}
 
@@ -190,7 +205,12 @@ export class history {
 				throw new Error(`createHref route params: ${JSON.stringify(props)}`)
 			}
 		} catch (error) {
-			logger.error("route path parser fail", error)
+			logger.error({
+				eventKey: "route_path_parser_failed",
+				errorKind: "parse",
+				error: error,
+				message: "route path parser fail",
+			})
 		}
 	}
 

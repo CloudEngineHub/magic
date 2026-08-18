@@ -15,7 +15,13 @@ export class LocalStorageAdapter implements IStorageAdapter {
 		try {
 			return window.localStorage.getItem(key)
 		} catch (error) {
-			logger.error("Failed to get item from localStorage", { key, error })
+			logger.error({
+				eventKey: "get_item_local_storage_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to get item from localStorage",
+				context: { key },
+			})
 			return null
 		}
 	}
@@ -27,7 +33,13 @@ export class LocalStorageAdapter implements IStorageAdapter {
 		try {
 			window.localStorage.setItem(key, value)
 		} catch (error) {
-			logger.error("Failed to set item in localStorage", { key, error })
+			logger.error({
+				eventKey: "set_item_local_storage_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to set item in localStorage",
+				context: { key },
+			})
 			throw error
 		}
 	}
@@ -39,7 +51,13 @@ export class LocalStorageAdapter implements IStorageAdapter {
 		try {
 			window.localStorage.removeItem(key)
 		} catch (error) {
-			logger.error("Failed to remove item from localStorage", { key, error })
+			logger.error({
+				eventKey: "remove_item_local_storage_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to remove item from localStorage",
+				context: { key },
+			})
 			throw error
 		}
 	}
@@ -51,7 +69,12 @@ export class LocalStorageAdapter implements IStorageAdapter {
 		try {
 			window.localStorage.clear()
 		} catch (error) {
-			logger.error("Failed to clear localStorage", error)
+			logger.error({
+				eventKey: "clear_local_storage_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to clear localStorage",
+			})
 			throw error
 		}
 	}

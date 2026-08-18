@@ -201,6 +201,7 @@ export function RecordingDetailShareDesktop({
 					<RecordingDetailWorkbench
 						left={
 							<RecordingDetailLeftColumn
+								searchScopeKey={projectId}
 								audioRef={player.audioRef}
 								audioUrl={audioUrl}
 								transcriptMarkdown={texts.transcript?.content}

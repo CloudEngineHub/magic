@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, ReactNode, RefObject } from "react"
 import type { LocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import type { DataService } from "@/components/business/MentionPanel/types"
@@ -109,6 +109,8 @@ export interface SceneEditorContext {
 	onFileClick?: (fileItem: unknown) => void
 	onEditorFocus?: () => void
 	onEditorBlur?: () => void
+	/** Reports that the current editor subscriptions and draft restoration are complete. */
+	onReady?: () => void
 	onMessageSendReady?: (
 		sendMessage?: (params: HandleSendParams) => Promise<boolean>,
 		prevSendMessage?: (params: HandleSendParams) => Promise<boolean>,
@@ -120,6 +122,8 @@ export interface SceneEditorContext {
 	queueContext?: SceneEditorQueueContext
 	showTopicExamplesPortal?: boolean
 	editorModeSwitch?: ({ disabled }: { disabled: boolean }) => ReactNode
+	/** Controls whether recording-summary editors can enter recording mode. */
+	allowRecordingMode?: boolean
 	modelSwitch?: ReactNode
 	topicStore?: TopicStore
 	/** 挂载后自动聚焦编辑器（移动端弹窗打开时使用） */

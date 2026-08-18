@@ -13,7 +13,7 @@ import { observer } from "mobx-react-lite"
 import { IconMenu2, IconX } from "@tabler/icons-react"
 import { Tooltip } from "antd"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {
@@ -132,6 +132,8 @@ const FilesViewer = memo(
 				isKnowledgeBaseTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				getCheckBeforeClose,
 			} = useFilesViewer(props)
 
@@ -297,6 +299,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				enterPreviewFullscreen,
+				exitPreviewFullscreen,
 				// Website tab相关方法
 				openWebsiteTab,
 			}))
@@ -304,7 +308,7 @@ const FilesViewer = memo(
 			// Notify parent about fullscreen state changes via callback
 			useEffect(() => {
 				props.onFullscreenChange?.(Boolean(props.forceFullscreenMode) || !!fullscreenFileId)
-			}, [fullscreenFileId, props])
+			}, [fullscreenFileId, props.forceFullscreenMode, props.onFullscreenChange])
 
 			// 监听activeTab变化，自动滚动到对应位置
 			useEffect(() => {

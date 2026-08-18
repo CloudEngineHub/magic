@@ -12,7 +12,7 @@ import { useMemo, useRef, useState, useEffect } from "react"
 import type { HTMLAttributes } from "react"
 
 /** 类型定义 */
-import type { JSONContent, UseEditorOptions } from "@tiptap/react"
+import type { JSONContent, UseEditorOptions } from "@/infrastructure/editors/tiptap/react"
 import type { ReportFileUploadsResponse } from "@/apis/modules/file"
 import type { EmojiInfo } from "@/components/base/MagicEmojiPanel/types"
 import type { MagicRichEditorRef } from "@/components/base/MagicRichEditor"
@@ -330,8 +330,7 @@ const MessageEditor = observer(function MessageEditor({
 															file_id: files[0].file_id,
 															file_name: files[0].file_name,
 															file_size: files[0].file_size,
-															file_extension:
-																files[0].file_extension,
+															file_extension: files[0].file_extension,
 														},
 													},
 												],
@@ -689,11 +688,7 @@ const MessageEditor = observer(function MessageEditor({
 			})
 			if (residencyContent.length > 0) {
 				runActiveEditor(editorRef.current?.editor, (editor) => {
-					editor
-						.chain()
-						.focus()
-						.insertContent(cloneDeep(residencyContent))
-						.run()
+					editor.chain().focus().insertContent(cloneDeep(residencyContent)).run()
 				})
 			}
 

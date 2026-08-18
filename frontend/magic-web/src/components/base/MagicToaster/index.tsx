@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Toaster } from "@/components/shadcn-ui/sonner"
 import type { ToasterProps } from "sonner"
 

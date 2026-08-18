@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Building2, Eye, EyeOff, UserRound } from "lucide-react"
 import { NodeType } from "@dtyq/user-selector"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
 import { formatRelativeTime } from "@/utils/string"
@@ -15,7 +15,6 @@ import {
 	getShareTypeVisualMeta,
 } from "../utils/shareTypeVisual"
 import SelectedFilesHierarchySection from "./SelectedFilesHierarchySection"
-import { ProjectShareScrollSpacer } from "./ProjectShareFloatingActionBar"
 
 interface ProjectShareLinkDetailViewProps {
 	controller: ProjectShareSheetController
@@ -191,11 +190,6 @@ export default function ProjectShareLinkDetailView({
 					/>
 				</section>
 			) : null}
-
-			<ProjectShareScrollSpacer
-				variant={controller.canNativeShare ? "triple" : "dual"}
-				testId="project-share-sheet-detail-floating-bar"
-			/>
 		</div>
 	)
 }

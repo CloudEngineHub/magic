@@ -15,7 +15,7 @@ import { isOptionGroup, isComplexField, localeTextToDisplayString } from "./util
 import { observer } from "mobx-react-lite"
 import { ChevronDown, CircleX, X } from "lucide-react"
 import { ScenePanelVariant } from "../components/LazyScenePanel/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 function getOptionValue(option: OptionItem): string {
 	return localeTextToDisplayString(option.value)

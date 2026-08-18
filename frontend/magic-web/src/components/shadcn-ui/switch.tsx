@@ -2,7 +2,7 @@ import * as React from "react"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 import { Loader2 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface SwitchProps extends React.ComponentProps<typeof SwitchPrimitive.Root> {
 	loading?: boolean

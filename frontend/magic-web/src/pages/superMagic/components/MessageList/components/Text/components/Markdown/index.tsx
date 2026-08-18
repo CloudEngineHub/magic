@@ -16,7 +16,7 @@ import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
 import { normalizeInlineStyle } from "./normalizeInlineStyle"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MarkdownComponentProps } from "./types"
 import {
 	resolveMarkdownRenderSource,
@@ -262,7 +262,7 @@ export function useMarkdownComponent({
 			},
 			a: MarkdownLink,
 			img(props: XMarkdownComponentProps) {
-				return <Image alt={props.alt} src={props.src} />
+				return <Image alt={props.alt} src={props.src} title={props.title} />
 			},
 			"file-path"(props: XMarkdownComponentProps) {
 				return <FilePath path={props.path} />

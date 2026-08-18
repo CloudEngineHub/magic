@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useCenteredHorizontalScroll } from "../../hooks/useCenteredHorizontalScroll"
 import {
 	useSlidesPreviewNavigation,

@@ -176,7 +176,7 @@ class TaskFileItemDTO extends AbstractDTO
         $dto->fileSize = $data['file_size'] ?? 0;
         $dto->relativeFilePath = $data['relative_file_path'] ?? '';
         $dto->fileUrl = $data['file_url'] ?? $data['external_url'] ?? '';
-        $dto->isHidden = $data['is_hidden'] ?? false;
+        $dto->isHidden = isset($data['is_hidden']) ? (bool) $data['is_hidden'] : false;
         $dto->topicId = (string) ($data['topic_id'] ?? '');
         $dto->updatedAt = (string) ($data['updated_at'] ?? '');
         $dto->isDirectory = isset($data['is_directory']) ? (bool) $data['is_directory'] : false;

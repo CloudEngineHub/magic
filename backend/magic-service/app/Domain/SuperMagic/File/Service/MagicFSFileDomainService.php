@@ -19,6 +19,7 @@ use App\ErrorCode\MagicFSErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
+use App\Infrastructure\SuperMagic\Utils\ContentTypeUtil;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\SuperMagic\Utils\WorkFileUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -312,13 +313,20 @@ class MagicFSFileDomainService
                 // 使用 workDir 作为 prefix（用于 STS 临时凭证的权限范围）
                 $prefix = WorkDirectoryUtil::getPrefix($workDir);
 
+                $options = [];
+                $contentType = ContentTypeUtil::getMappedContentType($name);
+                if ($contentType !== null) {
+                    $options['content_type'] = $contentType;
+                }
+
                 // 在对象存储上创建空文件
                 $this->cloudFileRepository->createFileByCredential(
                     $prefix,
                     $organizationCode,
                     $s3Key,
                     '',  // 空内容
-                    StorageBucketType::SandBox
+                    StorageBucketType::SandBox,
+                    $options
                 );
             } catch (Throwable $e) {
                 // 对象存储创建失败，抛出异常，阻止数据库保存
@@ -386,6 +394,7 @@ class MagicFSFileDomainService
     public function updateFile(string $fileId, array $updates): TaskFileEntity
     {
         $file = $this->getFileById($fileId);
+        $originalExtension = strtolower($file->getFileExtension());
 
         $oldParentId = $file->getParentId();
         $newParentIdInt = null;
@@ -562,6 +571,17 @@ class MagicFSFileDomainService
                     $descendantIds,
                     $file->getIsHidden()
                 );
+            }
+        }
+
+        $extensionChanged = isset($updateData['file_extension'])
+            && $originalExtension !== strtolower($updatedFile->getFileExtension());
+        if ($extensionChanged) {
+            $contentType = ContentTypeUtil::getMappedContentType($updatedFile->getFileName());
+            if ($contentType !== null) {
+                $this->tryUpdateObjectMetadata($updatedFile, [
+                    'content_type' => $contentType,
+                ]);
             }
         }
 
@@ -906,6 +926,25 @@ class MagicFSFileDomainService
             $projectId,
             $storageType
         );
+    }
+
+    private function tryUpdateObjectMetadata(TaskFileEntity $file, array $metadata): void
+    {
+        try {
+            $this->cloudFileRepository->setHeadObjectByCredential(
+                $file->getOrganizationCode(),
+                $file->getFileKey(),
+                $metadata,
+                StorageBucketType::SandBox
+            );
+        } catch (Throwable $throwable) {
+            $this->logger->warning('magicfs_update_object_metadata_failed', [
+                'file_id' => $file->getFileId(),
+                'file_name' => $file->getFileName(),
+                'metadata' => $metadata,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -293,6 +293,7 @@ export function renderPage(path = "/micro-app/app-1") {
 
 export function resetMicroAppSharePageMocks() {
 	vi.clearAllMocks()
+	window.localStorage.clear()
 	mocks.authorization.current = ""
 	mocks.isMobile.current = false
 	mocks.hasHtmlPermissionDeclarations.current = false

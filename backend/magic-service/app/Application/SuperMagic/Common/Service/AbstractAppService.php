@@ -12,6 +12,7 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
+use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
@@ -84,6 +85,44 @@ class AbstractAppService extends AbstractKernelAppService
     public function getAccessibleProjectWithManager(int $projectId, string $userId, string $organizationCode): ProjectEntity
     {
         return $this->getAccessibleProject($projectId, $userId, $organizationCode, MemberRole::MANAGE);
+    }
+
+    /**
+     * 校验任务文件访问权限，并在项目文件场景返回项目实体。
+     *
+     * 用户空间文件没有项目锚点，由文件 owner 权限负责校验；项目文件继续使用项目角色权限。
+     */
+    protected function getAccessibleProjectForTaskFile(
+        TaskFileEntity $fileEntity,
+        MagicUserAuthorization $authorization,
+        MemberRole $requiredRole = MemberRole::VIEWER,
+    ): ?ProjectEntity {
+        if (! $fileEntity->isProjectFile()) {
+            if (! $this->hasTaskFileOwnerPermission($fileEntity, $authorization)) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::FILE_PERMISSION_DENIED, 'file.permission_denied');
+            }
+            return null;
+        }
+
+        return $this->getAccessibleProject(
+            $fileEntity->getProjectId(),
+            $authorization->getId(),
+            $authorization->getOrganizationCode(),
+            $requiredRole,
+        );
+    }
+
+    /**
+     * 判断当前用户是否拥有任务文件的 owner 权限。
+     */
+    protected function hasTaskFileOwnerPermission(
+        TaskFileEntity $fileEntity,
+        MagicUserAuthorization $authorization,
+    ): bool {
+        return $fileEntity->getUserId() !== ''
+            && $fileEntity->getOrganizationCode() !== ''
+            && $fileEntity->getUserId() === $authorization->getId()
+            && $fileEntity->getOrganizationCode() === $authorization->getOrganizationCode();
     }
 
     /**

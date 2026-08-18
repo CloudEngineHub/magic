@@ -1,6 +1,10 @@
-import type { Editor, JSONContent } from "@tiptap/core"
-import type { Node as ProseMirrorNode, Fragment, NodeType } from "@tiptap/pm/model"
-import { loadTipTapModules, type TipTapModules } from "@/lib/tiptap"
+import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
+import type {
+	Node as ProseMirrorNode,
+	Fragment,
+	NodeType,
+} from "@/infrastructure/editors/tiptap/pm-model"
+import { loadTipTapModules, type TipTapModules } from "@/infrastructure/editors/tiptap"
 import { ImageStorageDatabase } from "@/services/tiptap-image-storage"
 import { projectImageStorage } from "@/services/tiptap-image-project"
 import { logger as Logger } from "@/utils/log"
@@ -123,7 +127,12 @@ export class ImageMigrationService {
 
 			return resultMarkdown
 		} catch (error) {
-			logger.error("Failed to migrate storage images", error)
+			logger.error({
+				eventKey: "migrate_storage_images_failed",
+				errorKind: "storage",
+				error: error,
+				message: "Failed to migrate storage images",
+			})
 			// Return original content on error
 			return markdownContent
 		} finally {
@@ -359,7 +368,7 @@ export class ImageMigrationService {
 				// Ensure path starts with "./" when no documentPath is provided
 				finalPath =
 					result.relative_file_path.startsWith("./") ||
-						result.relative_file_path.startsWith("../")
+					result.relative_file_path.startsWith("../")
 						? result.relative_file_path
 						: `./${result.relative_file_path}`
 			} else {
@@ -378,9 +387,12 @@ export class ImageMigrationService {
 				},
 			}
 		} catch (error) {
-			logger.error(`Failed to convert storage image ${imageId}`, {
-				projectId,
-				error: error instanceof Error ? error.message : String(error),
+			logger.error({
+				eventKey: "convert_storage_image_failed",
+				errorKind: "storage",
+				error: error,
+				message: `Failed to convert storage image ${imageId}`,
+				context: { projectId },
 			})
 			return null // Keep original storage image on error
 		}

@@ -40,6 +40,28 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return new TaskFileEntity($model->toArray());
     }
 
+    public function getByIdsWithTrash(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $result = [];
+        $chunks = array_chunk(array_values(array_unique($ids)), 500);
+
+        foreach ($chunks as $chunk) {
+            /* @phpstan-ignore-next-line - TaskFileModel uses SoftDeletes trait which provides withTrashed() */
+            $models = $this->model::withTrashed()->whereIn('file_id', $chunk)->get();
+
+            foreach ($models as $model) {
+                $entity = new TaskFileEntity($model->toArray());
+                $result[$entity->getFileId()] = $entity;
+            }
+        }
+
+        return $result;
+    }
+
     public function getFilesByIds(array $fileIds, int $projectId = 0, ?string $storageType = null): array
     {
         // 如果 ID 列表为空，直接返回空数组
@@ -393,7 +415,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     ): array {
         $query = $this->model::query()
             ->select([
-                'file_id', 'task_id', 'project_id', 'topic_id', 'parent_id',
+                'file_id', 'user_id', 'organization_code', 'space_type',
+                'task_id', 'project_id', 'topic_id', 'parent_id',
                 'file_type', 'file_name', 'file_extension', 'file_key', 'file_size',
                 'is_hidden', 'is_directory', 'sort', 'source',
                 'updated_at', 'display_config', 'metadata',
@@ -1490,9 +1513,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
         if (empty($directoryIds)) {
             return [];
@@ -1527,6 +1551,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     if (! in_array($childId, $processedDirectoryIds)) {
                         $nextLevelParentIds[] = $childId;
                         $processedDirectoryIds[] = $childId;
+                        // 拷贝等场景需要保留目录结构时，把目录ID也计入结果
+                        if ($includeDirectories) {
+                            $allChildFileIds[] = $childId;
+                        }
                     }
                 } else {
                     // 只有文件才计入结果

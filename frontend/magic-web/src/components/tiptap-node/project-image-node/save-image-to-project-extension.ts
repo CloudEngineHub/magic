@@ -29,9 +29,9 @@
  * 4. Update node with final path on success
  * 5. Handle errors according to error type
  */
-import { Extension } from "@tiptap/react"
-import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state"
-import type { EditorView } from "@tiptap/pm/view"
+import { Extension } from "@/infrastructure/editors/tiptap/react"
+import { Plugin, PluginKey, TextSelection } from "@/infrastructure/editors/tiptap/pm-state"
+import type { EditorView } from "@/infrastructure/editors/tiptap/pm-view"
 import type { ProjectImageStorageInterface } from "@/services/tiptap-image-project"
 import { normalizeImageName } from "@/services/tiptap-image-storage"
 import { handleCustomDragData } from "./drag-handlers"
@@ -519,10 +519,18 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 								// Use editor commands to insert content, which will trigger Markdown extension
 								if (editor) {
 									// Use chain API to ensure the operation is added to history
-									const inserted = runActiveEditor(editor, (activeEditor) => {
-										activeEditor.chain().focus().insertContent(textToPaste).run()
-										return true
-									}, false)
+									const inserted = runActiveEditor(
+										editor,
+										(activeEditor) => {
+											activeEditor
+												.chain()
+												.focus()
+												.insertContent(textToPaste)
+												.run()
+											return true
+										},
+										false,
+									)
 									if (!inserted) view.pasteText(textToPaste)
 								} else {
 									// Fallback to pasteText if editor instance is not available
@@ -740,7 +748,7 @@ export const SaveImageToProjectExtension = Extension.create<SaveImageToProjectOp
 	},
 })
 
-declare module "@tiptap/react" {
+declare module "@/infrastructure/editors/tiptap/react" {
 	interface Commands<ReturnType> {
 		saveImageToProject: {
 			/**
@@ -757,7 +765,7 @@ declare module "@tiptap/react" {
 	}
 }
 
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface EditorStorage {
 		saveImageToProject: {
 			projectId: string

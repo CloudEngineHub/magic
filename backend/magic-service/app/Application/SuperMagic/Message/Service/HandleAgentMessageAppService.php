@@ -777,7 +777,7 @@ class HandleAgentMessageAppService extends AbstractAppService
                     $type,
                     $fileKey
                 ));
-                $storageType = StorageType::tryFrom((string) ($attachment['storage_type'] ?? ''))?->value
+                $storageType = StorageType::tryFrom((string) ($attachment['storage_type'] ?? ''))->value
                     ?? StorageType::WORKSPACE->value;
                 $taskFileEntity = $this->convertAttachmentToTaskFileEntity($attachment, $task, $dataIsolation, $type);
                 $savedEntity = $this->taskFileDomainService->upsertProjectFileNode(

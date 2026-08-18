@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { DraftData, DraftKey } from "../../types"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import { draftManager } from "../../services/draftService"
@@ -61,6 +61,11 @@ export class DraftStore {
 
 	setDraftKey(draftKey: DraftKey | null) {
 		this.draftKey = draftKey
+	}
+
+	/** Enables normal draft saving when the initial restore is skipped or fails. */
+	markDraftReady() {
+		this.isDraftReady = true
 	}
 
 	setClearContentHandler(handler: () => void) {
@@ -292,7 +297,6 @@ export class DraftStore {
 		} catch (error) {
 			console.error("Failed to preload mention list:", error)
 		}
-
 		if (replaceDirectly ? draft.value : true) {
 			await syncDraftMarkersToSuperMagicManager(draft)
 

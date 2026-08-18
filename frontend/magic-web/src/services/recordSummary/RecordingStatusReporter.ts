@@ -71,7 +71,12 @@ class RecordingStatusReporter {
 
 			logger.log(`Status reported successfully: ${params.status}`)
 		} catch (error) {
-			logger.error(`Failed to report status: ${params.status}`, error)
+			logger.error({
+				eventKey: "report_status_failed",
+				errorKind: "unknown",
+				error: error,
+				message: `Failed to report status: ${params.status}`,
+			})
 			this.onReportError?.(error as Error)
 		} finally {
 			this.isReporting = false
@@ -144,7 +149,12 @@ class RecordingStatusReporter {
 				status: RecordingSummaryStatus.Recording,
 			})
 		} catch (error) {
-			logger.error("Periodic report failed", error)
+			logger.error({
+				eventKey: "periodic_report_failed",
+				errorKind: "unknown",
+				error: error,
+				message: "Periodic report failed",
+			})
 			this.onReportError?.(error as Error)
 		}
 	}

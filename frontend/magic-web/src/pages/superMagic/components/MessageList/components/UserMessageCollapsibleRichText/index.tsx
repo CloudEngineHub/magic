@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks"
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import RichTextComponent from "../Text/components/RichText"
 import type { RichTextProps } from "../Text/components/RichText/types"
 

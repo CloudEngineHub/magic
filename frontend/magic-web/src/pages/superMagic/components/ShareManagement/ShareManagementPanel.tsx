@@ -11,7 +11,7 @@ import { getSearchPlaceholder } from "./utils/searchPlaceholder"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/shadcn-ui/select"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface ShareManagementPanelProps {
 	projectId?: string

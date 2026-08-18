@@ -18,6 +18,7 @@ enum RecycleBinResourceType: int
     case Project = 2;    // 项目
     case Topic = 3;      // 话题
     case File = 4;       // 文件(预留，第二期启用)
+    case MicroApp = 5;   // 微应用
 
     /**
      * 获取资源类型名称.
@@ -29,6 +30,7 @@ enum RecycleBinResourceType: int
             self::Project => 'project',
             self::Topic => 'topic',
             self::File => 'file',
+            self::MicroApp => 'micro_app',
         };
     }
 
@@ -42,6 +44,7 @@ enum RecycleBinResourceType: int
             self::Project => trans('recycle_bin.resource_type.project'),
             self::Topic => trans('recycle_bin.resource_type.topic'),
             self::File => trans('recycle_bin.resource_type.file'),
+            self::MicroApp => trans('recycle_bin.resource_type.micro_app'),
         };
     }
 
@@ -55,6 +58,7 @@ enum RecycleBinResourceType: int
             2 => self::Project,
             3 => self::Topic,
             4 => self::File,
+            5 => self::MicroApp,
             default => null,
         };
     }

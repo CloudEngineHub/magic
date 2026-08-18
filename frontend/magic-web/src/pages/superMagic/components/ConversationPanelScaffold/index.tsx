@@ -1,5 +1,5 @@
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/tiptap-utils"
+import { cn } from "@/utils/cn"
 import { INPUT_CONTAINER_MIN_HEIGHT } from "@/pages/superMagic/components/MainInputContainer/constants"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
@@ -36,7 +36,12 @@ interface ConversationPanelScaffoldProps {
 	currentTopicStatus?: TaskStatus
 	isMessagesLoading?: boolean
 	emptyHint?: ReactNode
-	handlePullMoreMessage?: (selectedTopic: Topic | null, callback?: () => void) => void
+	handlePullMoreMessage?: (
+		selectedTopic: Topic | null,
+		callback?: () => void,
+	) => void | Promise<unknown>
+	/** Distance from the top at which a fresh upward gesture may load one history page. */
+	historyLoadThresholdPx?: number
 	handleSendMsg?: (content: string, options?: SendMessageOptions) => void
 	rootTestId?: string
 	editorTestId?: string
@@ -107,6 +112,7 @@ function ConversationPanelScaffold({
 	messageListBottomFade = false,
 	messageListBottomFadeClassName,
 	backToLatestButtonClassName,
+	historyLoadThresholdPx,
 	enableRevokedUserMessageReedit,
 	revokedEditorContext,
 	editorNodes,
@@ -291,8 +297,7 @@ function ConversationPanelScaffold({
 		<div
 			className={cn(
 				"relative z-10 flex h-full flex-col items-center overflow-hidden transition-all duration-300",
-				!isConversationPanelCollapsed && "rounded-lg",
-				isConversationPanelCollapsed ? "px-0 pb-0" : !isMobile && "pb-2",
+				!isConversationPanelCollapsed ? "rounded-lg" : "px-0 pb-0",
 				className,
 			)}
 			data-testid={rootTestId || `${scope}-panel`}
@@ -370,6 +375,7 @@ function ConversationPanelScaffold({
 							currentTopicStatus={currentTopicStatus}
 							handleSendMsg={handleSendMsg}
 							isMessagesLoading={isMessagesLoading}
+							historyLoadThresholdPx={historyLoadThresholdPx}
 							fallbackRender={
 								shouldRenderCompactFallback ? (
 									emptyCompact

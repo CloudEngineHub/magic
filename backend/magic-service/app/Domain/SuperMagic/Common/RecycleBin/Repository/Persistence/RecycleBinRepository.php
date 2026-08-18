@@ -126,31 +126,52 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         int $pageSize = 20
     ): array {
         $table = $this->model->getTable();
-        $query = $this->applyVisibleToUserScope($this->model::query(), $userId);
-        $query->whereNull($table . '.removed_at');
+        $ownerQuery = $this->buildOwnerVisibleQuery($userId, $resourceType, $keyword);
+        $total = (clone $ownerQuery)->count($table . '.id');
+        $includeCollaborativeFiles = $resourceType === null
+            || $resourceType === RecycleBinResourceType::File->value;
 
-        // 资源类型筛选
-        if ($resourceType !== null) {
-            $query->where($table . '.resource_type', $resourceType);
+        $collaborativeQuery = null;
+        if ($includeCollaborativeFiles) {
+            $collaborativeQuery = $this->buildCollaborativeFileQuery($userId, $keyword);
+            $total += (clone $collaborativeQuery)->count('rb.id');
         }
 
-        // 关键词搜索(resource_name LIKE)
-        if ($keyword !== null) {
-            $query->where($table . '.resource_name', 'like', '%' . $keyword . '%');
-        }
-
-        // 排序
-        $query->orderBy($table . '.deleted_at', $order);
-
-        // 总数（按主表 id 计数，避免 JOIN 导致重复）
-        $total = $query->count($table . '.id');
-
-        // 分页（只选主表字段）
         $offset = ($page - 1) * $pageSize;
-        $models = $query->offset($offset)->limit($pageSize)->select($table . '.*')->get();
+        if ($collaborativeQuery === null) {
+            $rows = $ownerQuery
+                ->orderBy($table . '.deleted_at', $order)
+                ->offset($offset)
+                ->limit($pageSize)
+                ->select($table . '.*')
+                ->get();
+        } else {
+            $visibleQuery = (clone $ownerQuery)
+                ->select($table . '.*')
+                ->unionAll(
+                    (clone $collaborativeQuery)
+                        ->select('rb.*')
+                );
+
+            $rows = $this->model::query()
+                ->toBase()
+                ->fromSub($visibleQuery, 'visible')
+                ->select('visible.*')
+                ->orderBy('visible.deleted_at', $order)
+                ->offset($offset)
+                ->limit($pageSize)
+                ->get();
+        }
+
+        $models = $this->model::query()->hydrate(
+            $rows->map(static fn ($row) => (array) $row)->all()
+        );
 
         $entities = [];
         foreach ($models as $model) {
+            if (! $model instanceof RecycleBinModel) {
+                continue;
+            }
             $entities[] = $this->modelToEntity($model);
         }
 
@@ -451,6 +472,44 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->setUpdatedAt($model->updated_at?->format('Y-m-d H:i:s'));
 
         return $entity;
+    }
+
+    private function buildOwnerVisibleQuery(string $userId, ?int $resourceType, ?string $keyword): QueryBuilder
+    {
+        $table = $this->model->getTable();
+        $query = $this->model::query()
+            ->toBase()
+            ->whereNull($table . '.removed_at')
+            ->where($table . '.owner_id', $userId);
+
+        if ($resourceType !== null) {
+            $query->where($table . '.resource_type', $resourceType);
+        }
+
+        $this->applyKeywordFilter($query, $table . '.resource_name', $keyword);
+
+        return $query;
+    }
+
+    private function buildCollaborativeFileQuery(string $userId, ?string $keyword): QueryBuilder
+    {
+        $table = $this->model->getTable();
+        $query = $this->model::query()
+            ->toBase()
+            ->from($table . ' as rb')
+            ->join('magic_super_agent_project_members as pm', function ($join) use ($userId): void {
+                $join->on('rb.parent_id', '=', 'pm.project_id')
+                    ->where('pm.target_type', '=', 'User')
+                    ->where('pm.target_id', '=', $userId)
+                    ->whereNull('pm.deleted_at');
+            })
+            ->where('rb.resource_type', RecycleBinResourceType::File->value)
+            ->whereNull('rb.removed_at')
+            ->where('rb.owner_id', '<>', $userId);
+
+        $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
+
+        return $query;
     }
 
     private function countOwnerVisibleByType(RecycleBinResourceType $type, string $userId, ?string $keyword): int

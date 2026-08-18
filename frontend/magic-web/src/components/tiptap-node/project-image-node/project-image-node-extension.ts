@@ -1,18 +1,25 @@
-import { mergeAttributes, ReactNodeViewRenderer } from "@tiptap/react"
-import type { ImageOptions } from "@tiptap/extension-image"
-import { Image as TiptapImage } from "@tiptap/extension-image"
-import type { Transaction, EditorState } from "@tiptap/pm/state"
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
+import { mergeAttributes, ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
+import type { ImageOptions } from "@/infrastructure/editors/tiptap/extension-image"
+import { Image as TiptapImage } from "@/infrastructure/editors/tiptap/extension-image"
+import type { Transaction, EditorState } from "@/infrastructure/editors/tiptap/pm-state"
+import type { Node as ProseMirrorNode } from "@/infrastructure/editors/tiptap/pm-model"
 import { ProjectImageNodeView } from "./project-image-node-view"
 import { parseProjectImageTitle, toMarkdownImageSource } from "./project-image-metadata"
 import { isTempPath } from "./temp-path-utils"
+
+/** Resolves project-relative image paths and optionally reports context readiness changes. */
+export interface ProjectImageUrlResolver {
+	(relativePath: string): string | Promise<string | null> | null
+	isReady?: () => boolean
+	subscribe?: (listener: () => void) => () => void
+}
 
 export interface ProjectImageNodeOptions extends ImageOptions {
 	/**
 	 * URL resolver function to convert relative path to absolute URL
 	 * @required
 	 */
-	urlResolver: (relativePath: string) => string | Promise<string>
+	urlResolver: ProjectImageUrlResolver
 
 	/**
 	 * Error callback
@@ -21,7 +28,7 @@ export interface ProjectImageNodeOptions extends ImageOptions {
 	onError?: (error: Error) => void
 }
 
-declare module "@tiptap/react" {
+declare module "@/infrastructure/editors/tiptap/react" {
 	interface Commands<ReturnType> {
 		projectImage: {
 			/**

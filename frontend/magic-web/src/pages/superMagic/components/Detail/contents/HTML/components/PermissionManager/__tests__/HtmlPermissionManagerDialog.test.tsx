@@ -88,7 +88,7 @@ describe("HtmlPermissionManagerDialog", () => {
 		)
 	})
 
-	it("renders app metadata, declarations, grants, and diagnostics", async () => {
+	it("renders app metadata and only registered declared permissions", async () => {
 		render(
 			<HtmlPermissionManagerDialog
 				open
@@ -108,10 +108,10 @@ describe("HtmlPermissionManagerDialog", () => {
 		).toBeInTheDocument()
 		expect(screen.queryByText("htmlEditor.permissionManager.declared")).not.toBeInTheDocument()
 		expect(screen.queryByText("llm.use")).not.toBeInTheDocument()
-		expect(screen.getByText("future.scope")).toBeInTheDocument()
+		expect(screen.queryByText("future.scope")).not.toBeInTheDocument()
 		expect(
-			screen.getByText("htmlEditor.permissionManager.diagnostics.scopeUnsupported"),
-		).toBeInTheDocument()
+			screen.queryByText("htmlEditor.permissionManager.diagnostics.scopeUnsupported"),
+		).not.toBeInTheDocument()
 		expect(screen.queryByText("project.message.write")).not.toBeInTheDocument()
 		const dialog = screen.getByTestId("html-permission-manager-dialog")
 		expect(dialog.className).toContain("w-[min(880px,calc(100vw-2rem))]")
