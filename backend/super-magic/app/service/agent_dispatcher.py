@@ -315,59 +315,66 @@ class AgentDispatcher(Base):
         # ========== 资源初始化阶段 - 仅首次执行 ==========
         if self.is_workspace_initialized:
             logger.info("工作区已经初始化过，跳过资源创建和工作区初始化")
-            # 只有工作区、ChatHistory 和 Horizon 都恢复完成后，
-            # 才能提交内部 /resume，否则恢复 run 可能缺少会话上下文。
-            from app.service.agent_resumption_service import AgentResumptionService
-            await AgentResumptionService.resume_pending(self)
-            return
-
-        logger.info("首次初始化工作区，开始创建资源...")
-
-        # HTTP订阅流 - 通过环境变量控制是否启用
-        enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
-        configs = init_message.message_subscription_config or []
-        if configs and not self.http_streams:
-            if enable_http_stream:
-                for subscription_config in configs:
-                    stream = HTTPSubscriptionStream(subscription_config)
-                    self.http_streams.append(stream)
-                    self.agent_context.add_stream(stream)
-                logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
-            else:
-                logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
-
-        # 设置聊天历史目录
-        # if init_message.chat_history_dir:
-        #     self.agent_context.set_chat_history_dir(init_message.chat_history_dir)
-        #     logger.info(f"从 init_message 设置聊天历史目录: {init_message.chat_history_dir}")
-
-        fetch_history = getattr(init_message, "fetch_history", True)
-        if fetch_history:
-            await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=True)
         else:
-            logger.info("客户端请求跳过远端聊天历史下载")
-            await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=False)
+            logger.info("首次初始化工作区，开始创建资源...")
 
-        # 改为按需加载agent，不再预先创建
-        self.is_workspace_initialized = True
+            # HTTP订阅流 - 通过环境变量控制是否启用
+            enable_http_stream = os.getenv("ENABLE_HTTP_SUBSCRIPTION_STREAM", "true").lower() == "true"
+            configs = init_message.message_subscription_config or []
+            if configs and not self.http_streams:
+                if enable_http_stream:
+                    for subscription_config in configs:
+                        stream = HTTPSubscriptionStream(subscription_config)
+                        self.http_streams.append(stream)
+                        self.agent_context.add_stream(stream)
+                    logger.info(f"创建和添加了 {len(self.http_streams)} 个 HTTP订阅流")
+                else:
+                    logger.info("HTTP订阅流已通过环境变量 ENABLE_HTTP_SUBSCRIPTION_STREAM 禁用，跳过创建")
 
-        # 首次初始化完成后再触发 runtime-ready resumption，确保恢复 run 读取到完整状态。
+            # 设置聊天历史目录
+            # if init_message.chat_history_dir:
+            #     self.agent_context.set_chat_history_dir(init_message.chat_history_dir)
+            #     logger.info(f"从 init_message 设置聊天历史目录: {init_message.chat_history_dir}")
+
+            fetch_history = getattr(init_message, "fetch_history", True)
+            if fetch_history:
+                await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=True)
+            else:
+                logger.info("客户端请求跳过远端聊天历史下载")
+                await self.agent_service.init_workspace(agent_context=self.agent_context, fetch_history=False)
+
+            # 改为按需加载agent，不再预先创建
+            self.is_workspace_initialized = True
+
+            # 标记 init 事件已发送（非预启动场景）
+            # 只有在 skip_init_messages 不为 True 时才标记已发送
+            # 因为如果 skip_init_messages=True，init 事件实际上没有发送
+            metadata = self.agent_context.get_init_client_message_metadata()
+            if metadata and metadata.skip_init_messages is True:
+                logger.info("工作区初始化完成（预启动场景，init 事件未发送）")
+            else:
+                # 非预启动场景，init_workspace 方法已发送 init 事件
+                if not self.init_event_dispatched:
+                    self.set_init_event_dispatched(True)
+                    logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
+                else:
+                    logger.info("工作区初始化完成")
+
+        await self.on_runtime_ready()
+
+    async def on_runtime_ready(self) -> None:
+        """
+        系统完成工作区、ChatHistory 和 Horizon 恢复后，触发 runtime-ready 事项。
+
+        MOCK DEMO：此时系统已经具备接收消息的条件，但没有伪造真实用户消息；
+        如果 Horizon 存在 pending resumption，只提交一条内部 `/resume`。
+        """
+        if not self.is_workspace_initialized:
+            return
+        # TODO：runtime-ready 处理项增多后，改为可注册的生命周期监听机制，
+        # 避免不同业务继续直接堆叠在本方法中；当前只承载 resumption，不提前引入抽象。
         from app.service.agent_resumption_service import AgentResumptionService
         await AgentResumptionService.resume_pending(self)
-
-        # 标记 init 事件已发送（非预启动场景）
-        # 只有在 skip_init_messages 不为 True 时才标记已发送
-        # 因为如果 skip_init_messages=True，init 事件实际上没有发送
-        metadata = self.agent_context.get_init_client_message_metadata()
-        if metadata and metadata.skip_init_messages is True:
-            logger.info("工作区初始化完成（预启动场景，init 事件未发送）")
-        else:
-            # 非预启动场景，init_workspace 方法已发送 init 事件
-            if not self.init_event_dispatched:
-                self.set_init_event_dispatched(True)
-                logger.info("工作区初始化完成，标记 init 事件已发送（非预启动场景）")
-            else:
-                logger.info("工作区初始化完成")
 
     @staticmethod
     def _agent_mode_value(agent_mode: Union[AgentMode, str]) -> str:
