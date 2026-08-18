@@ -6,7 +6,7 @@ import type {
 	StreamingPackagingWorkerResponse,
 	StreamingPresentationPlan,
 	StreamingWorkerLike,
-} from "../src/packaging/incremental-types"
+} from "../src/packaging/streaming-types"
 
 const config = {
 	htmlWidth: 1280,
@@ -93,11 +93,11 @@ describe("packaging Worker protocol", () => {
 			addSlide: vi.fn(() => ({})),
 			commitSlide: vi.fn(async () => {
 				await writer?.write(new Uint8Array([42]))
-				return { bytesWritten: 1n, manifest: { slideKey: "first" } }
+				return { bytesWritten: 1, manifest: { slideKey: "first" } }
 			}),
 			finalize: vi.fn(async () => {
 				await writer?.close()
-				return { slideCount: 1, mediaPartCount: 0, bytesWritten: 1n }
+				return { slideCount: 1, mediaPartCount: 0, bytesWritten: 1 }
 			}),
 			abort: vi.fn(async () => {
 				await writer?.abort()
@@ -151,6 +151,57 @@ describe("packaging Worker protocol", () => {
 		expect(session.commitSlide).toHaveBeenCalledOnce()
 		expect(responses.filter((message) => message.type === "progress")).toHaveLength(0)
 	})
+
+	it("normalizes PptxGenJS bigint byte counts at the Worker boundary", async () => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const session = {
+			addSlide: vi.fn(() => ({})),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 42n, manifest: {} })),
+			finalize: vi.fn(async () => ({
+				slideCount: 1,
+				mediaPartCount: 0,
+				bytesWritten: 84n,
+			})),
+			abort: vi.fn(async () => undefined),
+		}
+		const presentation = {
+			beginStreaming: vi.fn(async () => session),
+		}
+		const handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: (message) => responses.push(message),
+		})
+
+		handler.handle({
+			type: "start",
+			payload: {
+				config,
+				plan: { finalSlideCount: 1 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+			},
+		})
+		await eventually(() =>
+			expect(responses.some((message) => message.type === "ready")).toBe(true),
+		)
+
+		handler.handle({
+			type: "commit-slide",
+			requestId: 1,
+			payload: { nodes: [] },
+		})
+		await eventually(() => {
+			const response = responses.find((message) => message.type === "slide-committed")
+			expect(response?.type).toBe("slide-committed")
+			if (response?.type === "slide-committed") expect(response.summary.bytesWritten).toBe(42)
+		})
+
+		handler.handle({ type: "finalize", requestId: 2 })
+		await eventually(() => {
+			const response = responses.find((message) => message.type === "completed")
+			expect(response?.type).toBe("completed")
+			if (response?.type === "completed") expect(response.summary.bytesWritten).toBe(84)
+		})
+	})
 })
 
 describe("streaming packager client", () => {
@@ -201,11 +252,11 @@ describe("streaming packager client", () => {
 				await sessionWriter.current?.write(
 					new Uint8Array([session.addSlide.mock.calls.length]),
 				)
-				return { bytesWritten: 1n, manifest: {} }
+				return { bytesWritten: 1, manifest: {} }
 			}),
 			finalize: vi.fn(async () => {
 				await sessionWriter.current?.close()
-				return { slideCount: 2, mediaPartCount: 0, bytesWritten: 2n }
+				return { slideCount: 2, mediaPartCount: 0, bytesWritten: 2 }
 			}),
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}
@@ -273,7 +324,7 @@ describe("streaming packager client", () => {
 					worker.emit({
 						type: "completed",
 						requestId: request.requestId,
-						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 1n },
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 1 },
 					})
 				}
 			},
@@ -335,7 +386,7 @@ describe("streaming packager client", () => {
 					worker.emit({
 						type: "completed",
 						requestId: request.requestId,
-						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0n },
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
 					})
 					return
 				}
@@ -501,7 +552,7 @@ describe("streaming packager client", () => {
 			response: {
 				type: "completed",
 				requestId: 0,
-				summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0n },
+				summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
 			},
 		},
 	])("fails instead of hanging on a malformed Worker response ($label)", async ({ response }) => {
@@ -545,7 +596,7 @@ describe("streaming packager client", () => {
 					worker.emit({
 						type: "completed",
 						requestId: request.requestId,
-						summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0n },
+						summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0 },
 					})
 				}
 				if (request.type === "abort")
@@ -579,7 +630,7 @@ describe("streaming packager client", () => {
 					worker.emit({
 						type: "completed",
 						requestId: request.requestId + 1,
-						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0n },
+						summary: { slideCount: 0, mediaPartCount: 0, bytesWritten: 0 },
 					})
 				}
 				if (request.type === "abort")
@@ -656,11 +707,11 @@ describe("streaming packager client", () => {
 			addSlide: vi.fn(() => ({ addImage: vi.fn(), addMedia: vi.fn() })),
 			commitSlide: vi.fn(async () => {
 				await sessionWriter.current?.write(new Uint8Array([9]))
-				return { bytesWritten: 1n, manifest: {} }
+				return { bytesWritten: 1, manifest: {} }
 			}),
 			finalize: vi.fn(async () => {
 				await sessionWriter.current?.close()
-				return { slideCount: 1, mediaPartCount: 2, bytesWritten: 1n }
+				return { slideCount: 1, mediaPartCount: 2, bytesWritten: 1 }
 			}),
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}

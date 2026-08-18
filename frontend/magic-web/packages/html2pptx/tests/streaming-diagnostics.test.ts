@@ -24,9 +24,9 @@ describe("streaming export diagnostics", () => {
 		const packager = {
 			state: "accepting-slides" as const,
 			ready: Promise.resolve(),
-			commitSlide: vi.fn(async () => ({ bytesWritten: 1n, manifest: {} })),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 1, manifest: {} })),
 			commitSlides: vi.fn(),
-			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 64n })),
+			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 64 })),
 			abort: vi.fn(async () => undefined),
 			dispose: vi.fn(),
 		}

@@ -10,10 +10,10 @@ import type {
 	StreamingSlideCommitSummary,
 	StreamingWorkerDestination,
 	StreamingWorkerLike,
-} from "./incremental-types"
+} from "./streaming-types"
+import type { EmbedFontInput } from "../api/font"
+import type { ResourceLoadError } from "../api/options"
 import { descriptorTransferables } from "../media/source-descriptor"
-// Vite's worker URL query requires the source extension before `?worker&url`.
-// eslint-disable-next-line import/extensions
 import defaultPackagingWorkerUrl from "../workers/packaging-worker.ts?worker&url"
 
 type PendingRequest = {
@@ -121,26 +121,27 @@ export function createStreamingPresentationPackager(
 						kind: "sink-proxy" as const,
 						ackWindow: destination.ackWindow,
 					}
-		const request: StreamingPackagingWorkerRequest = {
-			type: "start",
-			payload: {
-				config: input.config,
-				plan: input.plan,
-				embedFonts: input.embedFonts,
-				compression: input.compression,
-				destination: workerDestination,
-			},
-		}
-		const transfer: Transferable[] = []
-		if (workerDestination.kind === "transferable-stream") {
-			transfer.push(workerDestination.writable)
-		}
-		for (const font of input.embedFonts ?? []) {
-			for (const buffer of [font.regular, font.bold, font.italic, font.boldItalic]) {
-				if (buffer && !transfer.includes(buffer)) transfer.push(buffer)
-			}
-		}
 		try {
+			// Font resolvers commonly cache their ArrayBuffers. Transferring those caller-owned
+			// buffers directly would detach the cache after the first export and make the next
+			// Worker start fail with DataCloneError. Clone once per original reference so face
+			// slots that share a font file still share one transferred copy.
+			const clonedFonts = cloneEmbedFontsForWorker(input.embedFonts)
+			const request: StreamingPackagingWorkerRequest = {
+				type: "start",
+				payload: {
+					config: input.config,
+					plan: input.plan,
+					embedFonts: clonedFonts.fonts,
+					compression: input.compression,
+					destination: workerDestination,
+				},
+			}
+			const transfer: Transferable[] = []
+			if (workerDestination.kind === "transferable-stream") {
+				transfer.push(workerDestination.writable)
+			}
+			transfer.push(...clonedFonts.transferables)
 			worker.postMessage(request, transfer)
 		} catch (error) {
 			fail(toError(error))
@@ -209,6 +210,7 @@ export function createStreamingPresentationPackager(
 		}
 		pending.delete(response.requestId)
 		if (response.type === "slide-committed") {
+			reportResourceErrors(response.summary.resourceErrors)
 			request.resolve(response.summary)
 			return
 		}
@@ -476,6 +478,16 @@ export function createStreamingPresentationPackager(
 		if (state !== expected) throw new Error(`Cannot ${operation} while packager is ${state}`)
 	}
 
+	function reportResourceErrors(errors?: ResourceLoadError[]): void {
+		for (const resourceError of errors ?? []) {
+			try {
+				input.onResourceError?.(resourceError)
+			} catch {
+				// Resource reporting must never turn a successful package into a failed export.
+			}
+		}
+	}
+
 	return {
 		get state() {
 			return state
@@ -535,6 +547,35 @@ function collectSlideTransferables(payload: StreamingCommitSlidePayload): Transf
 		}
 	}
 	return Array.from(buffers)
+}
+
+function cloneEmbedFontsForWorker(embedFonts?: EmbedFontInput[]): {
+	fonts?: EmbedFontInput[]
+	transferables: ArrayBuffer[]
+} {
+	if (!embedFonts?.length) return { fonts: embedFonts, transferables: [] }
+
+	const clonesByOriginal = new Map<ArrayBuffer, ArrayBuffer>()
+	const cloneBuffer = (buffer: ArrayBuffer): ArrayBuffer => {
+		const existing = clonesByOriginal.get(buffer)
+		if (existing) return existing
+		const cloned = buffer.slice(0)
+		clonesByOriginal.set(buffer, cloned)
+		return cloned
+	}
+
+	const fonts = embedFonts.map((font) => ({
+		...font,
+		regular: font.regular ? cloneBuffer(font.regular) : undefined,
+		bold: font.bold ? cloneBuffer(font.bold) : undefined,
+		italic: font.italic ? cloneBuffer(font.italic) : undefined,
+		boldItalic: font.boldItalic ? cloneBuffer(font.boldItalic) : undefined,
+	}))
+
+	return {
+		fonts,
+		transferables: Array.from(clonesByOriginal.values()),
+	}
 }
 
 function attachWorkerListeners(
@@ -619,14 +660,15 @@ function parseWorkerResponse(value: unknown): StreamingPackagingWorkerResponse {
 
 function requireSlideCommitSummary(value: unknown): void {
 	const summary = requireRecord(value, "Packaging Worker slide summary")
-	requireNonNegativeBigInt(summary.bytesWritten, "slide summary bytesWritten")
+	requireNonNegativeFiniteNumber(summary.bytesWritten, "slide summary bytesWritten")
+	requireOptionalResourceErrors(summary.resourceErrors)
 }
 
 function requireExportSummary(value: unknown): void {
 	const summary = requireRecord(value, "Packaging Worker export summary")
 	requireNonNegativeSafeInteger(summary.slideCount, "export summary slideCount")
 	requireNonNegativeSafeInteger(summary.mediaPartCount, "export summary mediaPartCount")
-	requireNonNegativeBigInt(summary.bytesWritten, "export summary bytesWritten")
+	requireNonNegativeFiniteNumber(summary.bytesWritten, "export summary bytesWritten")
 }
 
 function requireSerializedError(value: unknown): void {
@@ -654,7 +696,23 @@ function requireProgress(value: unknown): void {
 	}
 	for (const field of ["bytesRead", "bytesWritten", "estimatedTotalBytes"] as const) {
 		if (progress[field] !== undefined) {
-			requireNonNegativeBigInt(progress[field], `progress ${field}`)
+			requireNonNegativeFiniteNumber(progress[field], `progress ${field}`)
+		}
+	}
+}
+
+function requireOptionalResourceErrors(value: unknown): void {
+	if (value === undefined) return
+	if (!Array.isArray(value)) {
+		throw new Error("Packaging Worker resourceErrors must be an array")
+	}
+	for (const item of value) {
+		const resourceError = requireRecord(item, "Packaging Worker resource error")
+		if (typeof resourceError.url !== "string" || typeof resourceError.kind !== "string") {
+			throw new Error("Packaging Worker resource error must contain string url and kind fields")
+		}
+		if (resourceError.reason !== "timeout" && resourceError.reason !== "load-error") {
+			throw new Error("Packaging Worker resource error reason is invalid")
 		}
 	}
 }
@@ -679,9 +737,9 @@ function requireNonNegativeSafeInteger(value: unknown, label: string): void {
 	}
 }
 
-function requireNonNegativeBigInt(value: unknown, label: string): void {
-	if (typeof value !== "bigint" || value < 0n) {
-		throw new Error(`Packaging Worker ${label} must be a non-negative bigint`)
+function requireNonNegativeFiniteNumber(value: unknown, label: string): void {
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+		throw new Error(`Packaging Worker ${label} must be a non-negative finite number`)
 	}
 }
 

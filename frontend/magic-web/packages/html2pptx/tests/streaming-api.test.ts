@@ -43,7 +43,7 @@ describe("streaming export API", () => {
 				fileName: input.fileName,
 				pageCount: pages.length,
 				mediaPartCount: 1,
-				bytesWritten: 4096n,
+				bytesWritten: 4096,
 				durationMs: 25,
 			}
 		})
@@ -64,7 +64,7 @@ describe("streaming export API", () => {
 			fileName: "large.pptx",
 			pageCount: 2,
 			mediaPartCount: 1,
-			bytesWritten: 4096n,
+			bytesWritten: 4096,
 			durationMs: 25,
 		})
 		expect(exportStreaming).toHaveBeenCalledOnce()
@@ -74,7 +74,7 @@ describe("streaming export API", () => {
 		expect(task?.workerUrl).toBe(workerUrl)
 		expect(progress).toEqual([
 			{ phase: "preflight", pageCount: 2 },
-			{ phase: "completed", pageCount: 2, bytesWritten: 4096n },
+			{ phase: "completed", pageCount: 2, bytesWritten: 4096 },
 		])
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
 	})
@@ -85,9 +85,9 @@ describe("streaming export API", () => {
 		const packager = {
 			state: "accepting-slides" as const,
 			ready: Promise.resolve(),
-			commitSlide: vi.fn(async () => ({ bytesWritten: 1n, manifest: {} })),
+			commitSlide: vi.fn(async () => ({ bytesWritten: 1, manifest: {} })),
 			commitSlides: vi.fn(),
-			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1n })),
+			finalize: vi.fn(async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1 })),
 			abort: vi.fn(async () => undefined),
 			dispose: vi.fn(),
 		}
@@ -109,7 +109,7 @@ describe("streaming export API", () => {
 			workerUrl,
 			destination: createDestination(),
 		})
-		await expect(handle.promise).resolves.toMatchObject({ pageCount: 1, bytesWritten: 1n })
+		await expect(handle.promise).resolves.toMatchObject({ pageCount: 1, bytesWritten: 1 })
 		expect(createPackager).toHaveBeenCalledWith(expect.objectContaining({ workerUrl }))
 		expect(packager.commitSlide).toHaveBeenCalledOnce()
 		expect(sandbox.destroy).toHaveBeenCalledOnce()
@@ -143,7 +143,7 @@ describe("streaming export API", () => {
 			fileName: "should-not-complete.pptx",
 			pageCount: 1,
 			mediaPartCount: 0,
-			bytesWritten: 1n,
+			bytesWritten: 1,
 			durationMs: 1,
 		}))
 		const exporter = createPptxStreamingExporter({ pipeline: { exportStreaming } })
@@ -194,7 +194,7 @@ describe("streaming export API", () => {
 			fileName: "completed.pptx",
 			pageCount: 1,
 			mediaPartCount: 0,
-			bytesWritten: 1024n,
+			bytesWritten: 1024,
 			durationMs: 10,
 		}
 		const exporter = createPptxStreamingExporter({

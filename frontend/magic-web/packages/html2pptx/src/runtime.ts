@@ -14,7 +14,7 @@ import type { TextMergeMode } from "./pipeline/text-merge-mode"
 import type {
 	CreateStreamingPresentationPackagerInput,
 	StreamingPresentationPackager,
-} from "./packaging/incremental-types"
+} from "./packaging/streaming-types"
 
 export interface StreamingStagingStore {
 	createSession(sessionId: string, options?: StreamingStagingOperationOptions): Promise<void>

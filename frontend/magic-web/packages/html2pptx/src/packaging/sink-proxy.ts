@@ -1,4 +1,4 @@
-import type { StreamingOutputSink, StreamingPackagingWorkerResponse } from "./incremental-types"
+import type { StreamingOutputSink, StreamingPackagingWorkerResponse } from "./streaming-types"
 
 const DEFAULT_ACK_WINDOW = 2
 

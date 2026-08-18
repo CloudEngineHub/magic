@@ -148,7 +148,7 @@ export interface ExportFailureDiagnostic {
 	fileName?: string
 	pageIndex?: number
 	pageCount?: number
-	bytesWritten?: bigint
+	bytesWritten?: number
 	outputPolicy?: Exclude<LargeExportOutputPolicy, "auto">
 	mediaPolicyMode?: Exclude<NonNullable<MediaPolicy["mode"]>, "auto">
 	zipMode?: ZipMode
@@ -170,9 +170,9 @@ export interface ExportProgress {
 	pageCount?: number
 	resourceIndex?: number
 	resourceCount?: number
-	bytesRead?: bigint
-	bytesWritten?: bigint
-	estimatedTotalBytes?: bigint
+	bytesRead?: number
+	bytesWritten?: number
+	estimatedTotalBytes?: number
 }
 
 /** Writable destination used when the browser cannot transfer a WritableStream directly. */
@@ -226,7 +226,7 @@ export interface StreamingHtmlPage {
 export type StreamingHtmlPageInput = string | StreamingHtmlPage
 
 /**
- * A large export may migrate incrementally from arrays to a lazy page provider.
+ * Streaming export content may be provided lazily instead of as an in-memory array.
  * AsyncIterable is the intended path for hundreds of pages.
  */
 export type StreamingExportContent =
@@ -267,7 +267,7 @@ export interface ExportSummary {
 	fileName: string
 	pageCount: number
 	mediaPartCount: number
-	bytesWritten: bigint
+	bytesWritten: number
 	durationMs: number
 	/** Execution metadata emitted by the built-in streaming runner. */
 	execution?: ExportExecutionInfo

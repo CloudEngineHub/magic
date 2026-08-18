@@ -75,7 +75,7 @@ export interface PptxExportErrorContext {
 	fileName?: string
 	pageIndex?: number
 	pageCount?: number
-	bytesWritten?: bigint
+	bytesWritten?: number
 	outputPolicy?: ExportFailureDiagnostic["outputPolicy"]
 	mediaPolicyMode?: ExportFailureDiagnostic["mediaPolicyMode"]
 	zipMode?: ExportFailureDiagnostic["zipMode"]

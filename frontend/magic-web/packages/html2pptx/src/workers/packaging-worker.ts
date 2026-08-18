@@ -1,8 +1,8 @@
 import {
 	createStreamingPackagingWorkerHandler,
 	type PackagingWorkerPort,
-} from "../packaging/package-presentation.worker"
-import type { StreamingPackagingWorkerRequest } from "../packaging/incremental-types"
+} from "../packaging/streaming-worker-handler"
+import type { StreamingPackagingWorkerRequest } from "../packaging/streaming-types"
 
 /**
  * Worker entrypoint. The handler keeps sink ACK and abort messages out of the

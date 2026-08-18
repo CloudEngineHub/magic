@@ -69,7 +69,7 @@ interface ExportDiagnosticState {
 	phase: ExportFailurePhase
 	pageIndex?: number
 	pageCount?: number
-	bytesWritten?: bigint
+	bytesWritten?: number
 }
 
 /** Default Phase 4 HTML -> IR -> Packaging Worker streaming runner. */
@@ -221,6 +221,7 @@ async function runDirectStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
+			onResourceError: input.onResourceError,
 		})
 		await packager.ready
 		for await (const page of input.pages) {
@@ -404,6 +405,7 @@ async function runStagedStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
+			onResourceError: input.onResourceError,
 		})
 		await packager.ready
 

@@ -4,7 +4,7 @@ import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { describe, expect, it, vi } from "vitest"
-import type { StreamingPackagingWorkerRequest } from "../src/packaging/incremental-types"
+import type { StreamingPackagingWorkerRequest } from "../src/packaging/streaming-types"
 import { getBaseViteConfig } from "../vite.config"
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url))
@@ -102,7 +102,7 @@ class ProtocolWorker {
 			this.emit({
 				type: "slide-committed",
 				requestId: request.requestId,
-				summary: { bytesWritten: 0n },
+				summary: { bytesWritten: 0 },
 			})
 			return
 		}
@@ -110,7 +110,7 @@ class ProtocolWorker {
 			this.emit({
 				type: "completed",
 				requestId: request.requestId,
-				summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0n },
+				summary: { slideCount: 1, mediaPartCount: 0, bytesWritten: 0 },
 			})
 			return
 		}

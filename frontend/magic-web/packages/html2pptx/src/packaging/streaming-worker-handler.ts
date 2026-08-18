@@ -1,6 +1,7 @@
 import type { EmbedFontInput } from "../api/font"
-import type { SlideConfig } from "../api/options"
+import type { ResourceLoadError, SlideConfig } from "../api/options"
 import type { Pptx, Slide } from "../ir/node"
+import type { SerializablePPTNode } from "../ir/serialize"
 import { drawByRegistry } from "../registry/drawer-registry"
 import { createPresentation } from "./pptx-document"
 import { createSinkProxyWritable } from "./sink-proxy"
@@ -12,13 +13,31 @@ import type {
 	StreamingPackagingWorkerResponse,
 	StreamingPresentationPlan,
 	StreamingSlideCommitSummary,
-} from "./incremental-types"
+} from "./streaming-types"
 
 interface StreamingSessionLike {
 	addSlide(options?: Record<string, unknown>): StreamingSlideLike
-	commitSlide(slide: StreamingSlideLike): Promise<StreamingSlideCommitSummary>
-	finalize(): Promise<StreamingExportSummary>
+	commitSlide(slide: StreamingSlideLike): Promise<RuntimeStreamingSlideCommitSummary>
+	finalize(): Promise<RuntimeStreamingExportSummary>
 	abort(reason?: unknown): Promise<void>
+}
+
+/**
+ * PptxGenJS v5 tracks ZIP byte counts as bigint so ZIP64 output cannot lose
+ * precision. The browser Worker protocol intentionally exposes safe numbers
+ * to html2pptx callers, so normalize at this boundary instead of leaking a
+ * bigint into structured diagnostics and application telemetry.
+ */
+interface RuntimeStreamingSlideCommitSummary {
+	readonly manifest?: unknown
+	readonly bytesWritten: number | bigint
+	readonly resourceErrors?: ResourceLoadError[]
+}
+
+interface RuntimeStreamingExportSummary {
+	readonly slideCount: number
+	readonly mediaPartCount: number
+	readonly bytesWritten: number | bigint
 }
 
 type StreamingSlideLike = Slide
@@ -42,10 +61,21 @@ export interface PackagingWorkerPort {
 }
 
 export interface PackagingWorkerFactoryOptions {
-	/** Injected for tests and hosts that provide a custom PptxGenJS presentation factory. */
+	/** Injected for tests and hosts whose pptxgenjs package is patched at runtime. */
 	createPresentation?: (config: SlideConfig) => Pptx | Promise<Pptx>
 	postMessage?: PackagingWorkerPort["postMessage"]
 	ackWindow?: number
+	/** Prepare one serialized slide before it is handed to PptxGenJS. */
+	prepareSlide?: (
+		payload: StreamingCommitSlidePayload,
+		signal?: AbortSignal,
+	) => Promise<ResourceLoadError[] | void>
+	/** Perform worker-specific relation/materialization work after drawing the slide. */
+	afterSlideDraw?: (
+		slide: Slide,
+		nodes: SerializablePPTNode[],
+		signal?: AbortSignal,
+	) => Promise<void>
 }
 
 export interface StreamingPackagingWorkerHandler {
@@ -64,9 +94,9 @@ type WorkerState =
 	| "aborted"
 
 /**
- * Build the protocol handler separately from the global Worker entrypoint. This
+ * Build the streaming protocol handler separately from the global Worker entrypoint. This
  * keeps ordering, ACK, and cancellation rules testable without constructing a
- * browser Worker or requiring the PptxGenJS v5 streaming runtime in Node.
+ * browser Worker or requiring a patched PptxGenJS package in Node.
  */
 export function createStreamingPackagingWorkerHandler(
 	options: PackagingWorkerFactoryOptions = {},
@@ -160,7 +190,7 @@ export function createStreamingPackagingWorkerHandler(
 			}
 			if (typeof presentation.beginStreaming !== "function") {
 				throw new Error(
-					"PptxGenJS v5 beginStreaming() is unavailable; use the streaming-only runtime or inject a streaming presentation factory",
+					"PptxGenJS beginStreaming() is unavailable; install the Phase 3 patched runtime or inject a streaming presentation factory",
 				)
 			}
 			session = await presentation.beginStreaming({
@@ -186,18 +216,27 @@ export function createStreamingPackagingWorkerHandler(
 			if (state !== "accepting-slides")
 				throw new Error(`Cannot commit a slide while Worker is ${state}`)
 			state = "committing-slide"
-			const summary = await commitSlide(
-				session,
+			const resourceErrors = await options.prepareSlide?.(
 				request.payload,
 				workerAbortController?.signal,
 			)
+			const summary = normalizeSlideCommitSummary(await commitSlide(
+				session,
+				request.payload,
+				workerAbortController?.signal,
+				options.afterSlideDraw,
+			))
 			state = "accepting-slides"
-			postMessage({ type: "slide-committed", requestId: request.requestId, summary })
+			postMessage({
+				type: "slide-committed",
+				requestId: request.requestId,
+				summary: resourceErrors?.length ? { ...summary, resourceErrors } : summary,
+			})
 			return
 		}
 
 		state = "finalizing"
-		const summary = await session.finalize()
+		const summary = normalizeExportSummary(await session.finalize())
 		state = "completed"
 		postMessage({ type: "completed", requestId: request.requestId, summary })
 	}
@@ -258,7 +297,8 @@ async function commitSlide(
 	session: StreamingSessionLike,
 	payload: StreamingCommitSlidePayload,
 	signal?: AbortSignal,
-): Promise<StreamingSlideCommitSummary> {
+	afterSlideDraw?: PackagingWorkerFactoryOptions["afterSlideDraw"],
+): Promise<RuntimeStreamingSlideCommitSummary> {
 	throwIfAborted(signal)
 	const slide = session.addSlide(payload.options as Record<string, unknown> | undefined)
 	if (payload.background) slide.background = { color: payload.background }
@@ -266,8 +306,35 @@ async function commitSlide(
 		throwIfAborted(signal)
 		await drawByRegistry(slide, node, signal)
 	}
+	if (afterSlideDraw) await afterSlideDraw(slide, payload.nodes, signal)
 	throwIfAborted(signal)
 	return session.commitSlide(slide)
+}
+
+function normalizeSlideCommitSummary(
+	summary: RuntimeStreamingSlideCommitSummary,
+): StreamingSlideCommitSummary {
+	return {
+		...summary,
+		bytesWritten: normalizeWireByteCount(summary.bytesWritten, "slide summary bytesWritten"),
+	}
+}
+
+function normalizeExportSummary(summary: RuntimeStreamingExportSummary): StreamingExportSummary {
+	return {
+		...summary,
+		bytesWritten: normalizeWireByteCount(summary.bytesWritten, "export summary bytesWritten"),
+	}
+}
+
+function normalizeWireByteCount(value: number | bigint, label: string): number {
+	const normalized = typeof value === "bigint" ? Number(value) : value
+	if (!Number.isSafeInteger(normalized) || normalized < 0) {
+		throw new RangeError(
+			`Packaging Worker ${label} must be a non-negative safe integer`,
+		)
+	}
+	return normalized
 }
 
 function embedFonts(presentation: StreamingPresentationLike, fonts: EmbedFontInput[]): void {

@@ -1,11 +1,16 @@
 import type { EmbedFontInput } from "../api/font"
-import type { ExportProgress, PptxOutputSink, SlideConfig } from "../api/options"
+import type {
+	ExportProgress,
+	PptxOutputSink,
+	ResourceLoadError,
+	SlideConfig,
+} from "../api/options"
 import type { SerializablePPTNode } from "../ir/serialize"
 
 /**
- * The streaming package is deliberately described locally instead of importing
- * the PptxGenJS v5 declarations. The protocol stays narrow so it can cross a
- * browser Worker boundary without importing Node-only implementation details.
+ * The Worker contract is deliberately described locally instead of importing
+ * PptxGenJS implementation declarations. Both Magic editions require the v5
+ * streaming-only runtime and exchange only structured-clone-safe summaries.
  */
 export interface StreamingPlannedSlide {
 	readonly key: string
@@ -52,13 +57,15 @@ export interface StreamingCommitSlidePayload {
 
 export interface StreamingSlideCommitSummary {
 	readonly manifest?: unknown
-	readonly bytesWritten: bigint
+	readonly bytesWritten: number
+	/** Recoverable resource failures observed while preparing or packaging this slide. */
+	readonly resourceErrors?: ResourceLoadError[]
 }
 
 export interface StreamingExportSummary {
 	readonly slideCount: number
 	readonly mediaPartCount: number
-	readonly bytesWritten: bigint
+	readonly bytesWritten: number
 }
 
 export type StreamingOutputSink = PptxOutputSink
@@ -114,6 +121,7 @@ export interface CreateStreamingPresentationPackagerInput {
 	workerUrl?: string | URL
 	workerFactory?: StreamingWorkerFactory
 	onProgress?: (progress: ExportProgress) => void
+	onResourceError?: (error: ResourceLoadError) => void
 }
 
 export interface StreamingPresentationPackager {

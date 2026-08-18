@@ -1,5 +1,5 @@
 export * from "./pptx-document"
-export * from "./incremental-types"
+export * from "./streaming-types"
 export * from "./sink-proxy"
 export * from "./streaming-package-presentation"
 export {
@@ -7,4 +7,4 @@ export {
 	type PackagingWorkerFactoryOptions,
 	type PackagingWorkerPort,
 	type StreamingPackagingWorkerHandler,
-} from "./package-presentation.worker"
+} from "./streaming-worker-handler"

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { PPTNode } from "../src/ir/node"
 import type { SerializablePPTNode } from "../src/ir/serialize"
 import type { MediaSourceDescriptor } from "../src/media/source-descriptor"
+import type { CreateStreamingPresentationPackagerInput } from "../src/packaging/streaming-types"
 import type { StreamingStagingStore } from "../src/runtime"
 import { runStreamingExport } from "../src/pipeline/streaming-export"
 import type { StreamingExportTaskInput } from "../src"
@@ -91,12 +92,12 @@ function createMediaNodeWithCoverBytes(): PPTNode {
 }
 
 function createPackagerFactory(options: {
-	finalize?: () => Promise<{ slideCount: number; mediaPartCount: number; bytesWritten: bigint }>
+	finalize?: () => Promise<{ slideCount: number; mediaPartCount: number; bytesWritten: number }>
 	commit?: (nodes: SerializablePPTNode[]) => void | Promise<void>
 }) {
 	const commitSlide = vi.fn(async ({ nodes }: { nodes: SerializablePPTNode[] }) => {
 		await options.commit?.(nodes)
-		return { bytesWritten: 1n, manifest: {} }
+		return { bytesWritten: 1, manifest: {} }
 	})
 	const packager = {
 		state: "accepting-slides" as const,
@@ -108,7 +109,7 @@ function createPackagerFactory(options: {
 			(async () => ({
 				slideCount: commitSlide.mock.calls.length,
 				mediaPartCount: 0,
-				bytesWritten: 1n,
+				bytesWritten: 1,
 			})),
 		abort: vi.fn(async () => undefined),
 		dispose: vi.fn(),
@@ -252,7 +253,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3n }),
+			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3 }),
 		})
 		const input = createBaseInput({
 			pageCount: 3,
@@ -300,7 +301,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1n }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1 }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -343,7 +344,7 @@ describe("runStreamingExport", () => {
 					committedKinds.push(image.source?.kind ?? "")
 				}
 			},
-			finalize: async () => ({ slideCount: 2, mediaPartCount: 1, bytesWritten: 2n }),
+			finalize: async () => ({ slideCount: 2, mediaPartCount: 1, bytesWritten: 2 }),
 		})
 		const input = createBaseInput({
 			pageCount: 2,
@@ -450,7 +451,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3n }),
+			finalize: async () => ({ slideCount: 3, mediaPartCount: 1, bytesWritten: 3 }),
 		})
 		const input = createBaseInput({
 			pageCount: 3,
@@ -485,7 +486,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKeys.push(image.source?.key ?? "")
 			},
-			finalize: async () => ({ slideCount: 300, mediaPartCount: 1, bytesWritten: 300n }),
+			finalize: async () => ({ slideCount: 300, mediaPartCount: 1, bytesWritten: 300 }),
 		})
 		const input = createBaseInput({
 			pageCount: 300,
@@ -563,7 +564,7 @@ describe("runStreamingExport", () => {
 				const image = nodes.find((node) => node.type === "image")
 				if (image?.type === "image") committedKinds.push(image.source?.kind ?? "")
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1n }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 1, bytesWritten: 1 }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -597,7 +598,7 @@ describe("runStreamingExport", () => {
 					committedKinds.push(`cover:${media.coverSource?.kind ?? ""}`)
 				}
 			},
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 2, bytesWritten: 1n }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 2, bytesWritten: 1 }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -702,7 +703,7 @@ describe("runStreamingExport", () => {
 	it("keeps staged data after success when cleanup is on-error", async () => {
 		const store = new FakeStagingStore()
 		const { factory } = createPackagerFactory({
-			finalize: async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1n }),
+			finalize: async () => ({ slideCount: 1, mediaPartCount: 0, bytesWritten: 1 }),
 		})
 		const input = createBaseInput({
 			pipeline: {
@@ -840,7 +841,7 @@ describe("runStreamingExport", () => {
 				expect(retainedArrays.every((array) => array.length === 0)).toBe(true)
 				retainedArrays.push(nodes)
 			},
-			finalize: async () => ({ slideCount: 300, mediaPartCount: 0, bytesWritten: 300n }),
+			finalize: async () => ({ slideCount: 300, mediaPartCount: 0, bytesWritten: 300 }),
 		})
 		const input = createBaseInput({
 			pageCount: 300,
