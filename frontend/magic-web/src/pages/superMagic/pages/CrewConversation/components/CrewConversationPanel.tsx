@@ -33,7 +33,7 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { Button } from "@/components/shadcn-ui/button"
 import { DEFAULT_LAYOUT_CONFIG } from "@/pages/superMagic/components/MessageEditor/constants/constant"
@@ -117,6 +117,7 @@ function CrewConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})

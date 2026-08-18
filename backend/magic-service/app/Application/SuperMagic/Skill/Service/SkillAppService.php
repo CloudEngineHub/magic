@@ -1430,22 +1430,16 @@ class SkillAppService extends AbstractSkillAppService
     }
 
     /**
-     * AI 生成多语言内容.
+     * 使用 ZIP 中解析出的技能名称和描述生成默认语言内容.
      *
      * @return array [nameI18n, descriptionI18n]
      */
     private function generateI18nContent(string $packageName, string $packageDescription): array
     {
-        $languageCodes = LanguageEnum::getAllLanguageCodes();
-        $nameI18n = [];
-        $descriptionI18n = [];
-
-        foreach ($languageCodes as $langCode) {
-            $nameI18n[$langCode] = ucfirst(str_replace(['-', '_'], ' ', $packageName));
-            $descriptionI18n[$langCode] = ucfirst(str_replace(['-', '_'], ' ', $packageDescription));
-        }
-
-        return [$nameI18n, $descriptionI18n];
+        return [
+            [LanguageEnum::DEFAULT->value => $packageName],
+            [LanguageEnum::DEFAULT->value => $packageDescription],
+        ];
     }
 
     /**

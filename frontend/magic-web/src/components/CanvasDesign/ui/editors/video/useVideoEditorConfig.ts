@@ -43,6 +43,8 @@ import {
 	buildVideoAspectRatioOptions,
 	buildVideoDurationOptions,
 	buildVideoResolutionOptions,
+	getVideoDurationConfig,
+	resolveVideoDefaultDuration,
 	resolveVideoGenerationSelection,
 	resolveVideoGenerationSelectionPreserving,
 } from "./generation/video-editor-config.generation"
@@ -197,6 +199,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const [selectedDurationSeconds, setSelectedDurationSeconds] = useState<number | undefined>(
 		undefined,
 	)
+	/** Slider interaction state; unlike selectedDurationSeconds, this is not persisted/submitted. */
+	const [durationDraftSeconds, setDurationDraftSeconds] = useState<number | undefined>(undefined)
+	const [selectedGenerateAudio, setSelectedGenerateAudio] = useState<boolean | undefined>(
+		undefined,
+	)
+	const [selectedWebSearch, setSelectedWebSearch] = useState<boolean | undefined>(undefined)
 	const [selectedCompressionQuality, setSelectedCompressionQuality] = useState<
 		string | undefined
 	>(undefined)
@@ -620,6 +628,18 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return buildVideoDurationOptions(selectedModel, effectiveGenerationConstraints)
 	}, [selectedModel, effectiveGenerationConstraints])
 
+	const durationConfig = useMemo(
+		() => getVideoDurationConfig(selectedModel, effectiveGenerationConstraints),
+		[selectedModel, effectiveGenerationConstraints],
+	)
+	const generationSwitchConfig = useMemo(() => {
+		const generation = selectedModel?.video_generation_config?.generation
+		return {
+			audio: generation?.generate_audio,
+			webSearch: generation?.web_search,
+		}
+	}, [selectedModel])
+
 	const supportedCompressionQualityOptions = useMemo(() => {
 		const gen = selectedModel?.video_generation_config?.generation
 		if (!gen?.supports_compression_quality) return []
@@ -648,6 +668,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		},
 		[canvas, syncElementSize, videoElement.id],
 	)
+
+	useEffect(() => {
+		setDurationDraftSeconds(selectedDurationSeconds)
+	}, [selectedDurationSeconds])
 
 	useEffect(() => {
 		if (supportedResolutionOptions.length === 0) {
@@ -696,16 +720,46 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			if (selectedDurationSeconds !== undefined) {
 				setSelectedDurationSeconds(undefined)
 			}
+			if (durationDraftSeconds !== undefined) {
+				setDurationDraftSeconds(undefined)
+			}
 			return
 		}
 		if (selectedDurationSeconds == null) {
-			setSelectedDurationSeconds(supportedDurationOptions[0])
+			const nextDuration = resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints)
+			setSelectedDurationSeconds(nextDuration)
 			return
 		}
 		if (!supportedDurationOptions.includes(selectedDurationSeconds)) {
-			setSelectedDurationSeconds(supportedDurationOptions[0])
+			const nextDuration = resolveVideoDefaultDuration(selectedModel, effectiveGenerationConstraints)
+			setSelectedDurationSeconds(nextDuration)
 		}
-	}, [selectedDurationSeconds, supportedDurationOptions])
+	}, [
+		effectiveGenerationConstraints,
+		selectedDurationSeconds,
+		selectedModel,
+		supportedDurationOptions,
+	])
+
+	useEffect(() => {
+		if (!generationSwitchConfig.audio) {
+			if (selectedGenerateAudio !== undefined) setSelectedGenerateAudio(undefined)
+			return
+		}
+		if (selectedGenerateAudio === undefined) {
+			setSelectedGenerateAudio(generationSwitchConfig.audio.default)
+		}
+	}, [generationSwitchConfig.audio, selectedGenerateAudio])
+
+	useEffect(() => {
+		if (!generationSwitchConfig.webSearch) {
+			if (selectedWebSearch !== undefined) setSelectedWebSearch(undefined)
+			return
+		}
+		if (selectedWebSearch === undefined) {
+			setSelectedWebSearch(generationSwitchConfig.webSearch.default)
+		}
+	}, [generationSwitchConfig.webSearch, selectedWebSearch])
 
 	const resetSelectedResourceSlot = useCallback(() => {
 		selectedResourceSlotRef.current = null
@@ -1047,8 +1101,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setSelectedDurationSeconds(
 				prevDurationSeconds != null && nextDurations.includes(prevDurationSeconds)
 					? prevDurationSeconds
-					: nextDurations[0],
+					: resolveVideoDefaultDuration(nextModel, nextGenerationConstraints),
 			)
+			setSelectedGenerateAudio(
+				nextGen?.generate_audio ? nextGen.generate_audio.default : undefined,
+			)
+			setSelectedWebSearch(nextGen?.web_search ? nextGen.web_search.default : undefined)
 			setSelectedCompressionQuality(
 				prevCompressionQuality && nextQualityOpts.includes(prevCompressionQuality)
 					? prevCompressionQuality
@@ -1096,6 +1154,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			selectedResolution,
 			selectedAspectRatio,
 			selectedDurationSeconds,
+			selectedGenerateAudio,
+			selectedWebSearch,
 			selectedCompressionQuality,
 			activeInputTab,
 			selectedInputMode,
@@ -1145,6 +1205,26 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const handleDurationChange = useCallback((seconds: number) => {
 		if (!Number.isFinite(seconds)) return
 		setSelectedDurationSeconds(seconds)
+	}, [])
+
+	const handleDurationDraftChange = useCallback((seconds: number) => {
+		if (!Number.isFinite(seconds)) return
+		setDurationDraftSeconds(seconds)
+	}, [])
+
+	const handleDurationPopoverOpenChange = useCallback(
+		(_open: boolean) => {
+			setDurationDraftSeconds(selectedDurationSeconds)
+		},
+		[selectedDurationSeconds],
+	)
+
+	const handleGenerateAudioChange = useCallback((value: boolean) => {
+		setSelectedGenerateAudio(value)
+	}, [])
+
+	const handleWebSearchChange = useCallback((value: boolean) => {
+		setSelectedWebSearch(value)
 	}, [])
 
 	const handleCompressionQualityChange = useCallback((value: string) => {
@@ -1431,6 +1511,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			...(selectedDurationSeconds != null && Number.isFinite(selectedDurationSeconds)
 				? { duration_seconds: selectedDurationSeconds }
 				: {}),
+			...(selectedGenerateAudio !== undefined
+				? { generate_audio: selectedGenerateAudio }
+				: {}),
+			...(selectedWebSearch !== undefined ? { web_search: selectedWebSearch } : {}),
 			...(selectedCompressionQuality
 				? { compression_quality: selectedCompressionQuality }
 				: {}),
@@ -1484,6 +1568,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		supportedAspectRatioOptions.length,
 		supportedResolutionOptions.length,
 		selectedDurationSeconds,
+		selectedGenerateAudio,
+		selectedWebSearch,
 		selectedCompressionQuality,
 		supportsReferenceAssets,
 		supportsEndFrame,
@@ -1622,8 +1708,19 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			const resolvedDuration =
 				fromTempDuration != null && fallbackDurations.includes(fromTempDuration)
 					? fromTempDuration
-					: fallbackDurations[0]
+					: resolveVideoDefaultDuration(fallbackModel, fallbackConstraints)
 			setSelectedDurationSeconds(fallbackDurations.length > 0 ? resolvedDuration : undefined)
+			setSelectedGenerateAudio(
+				fallbackGen?.generate_audio
+					? (requestToRestore?.generation?.generate_audio ??
+							fallbackGen.generate_audio.default)
+					: undefined,
+			)
+			setSelectedWebSearch(
+				fallbackGen?.web_search
+					? (requestToRestore?.generation?.web_search ?? fallbackGen.web_search.default)
+					: undefined,
+			)
 
 			const qualityOpts =
 				fallbackGen?.supports_compression_quality &&
@@ -1827,6 +1924,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleResolutionChange,
 			handleRatioChange,
 			handleDurationChange,
+			handleDurationDraftChange,
+			handleDurationPopoverOpenChange,
+			handleGenerateAudioChange,
+			handleWebSearchChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -1855,6 +1956,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleResolutionChange,
 			handleRatioChange,
 			handleDurationChange,
+			handleGenerateAudioChange,
+			handleWebSearchChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -1889,6 +1992,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedResolution,
 		selectedAspectRatio,
 		selectedDurationSeconds,
+		durationDraftSeconds,
+		selectedGenerateAudio,
+		selectedWebSearch,
 		selectedCompressionQuality,
 		currentFrameImages,
 		frameImageInfos,
@@ -1923,6 +2029,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		supportedAspectRatioOptions,
 		supportedResolutionOptions,
 		supportedDurationOptions,
+		durationType: durationConfig.type,
+		durationRange: durationConfig.range,
 		supportedCompressionQualityOptions,
 		currentSelectValue,
 		ratioOption,

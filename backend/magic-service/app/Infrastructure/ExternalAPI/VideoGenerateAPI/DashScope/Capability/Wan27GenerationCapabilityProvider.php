@@ -93,11 +93,7 @@ readonly class Wan27GenerationCapabilityProvider
                 'supports_watermark' => true,
                 'supports_negative_prompt' => true,
                 'supports_generate_audio' => true,
-                'supports_person_generation' => false,
                 'supports_enhance_prompt' => true,
-                'supports_compression_quality' => false,
-                'supports_resize_mode' => false,
-                'supports_sample_count' => false,
             ],
             'input_modes' => [
                 VideoInputMode::Standard->value => VideoInputModeDefinition::standard(

@@ -6,6 +6,8 @@ import type {
 } from "@/apis/modules/superMagic"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import superMagicCustomModelService from "@/services/superMagic/SuperMagicCustomModelService"
+import { MODEL_TYPE_VIDEO, type ServiceProviderModel } from "@/apis/modules/org-ai-model-provider"
 import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
 import type {
 	EstimateVideoPointsResponse,
@@ -16,6 +18,7 @@ import type {
 	GetVideoGenerationResultParams,
 	VideoGenerationResultResponse,
 } from "@/components/CanvasDesign/public/magic-types"
+import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import { toWorkspaceAbsoluteApiPathForOperation } from "../utils/designPath"
@@ -73,7 +76,7 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 		await superMagicModeService.fetchModeList({ force: false })
 		await superMagicModeService.fetchDefaultModeModelList({ force: false })
 		const officialGroups = superMagicModeService.getAllVideoModelGroups()
-		const result = officialGroups.flatMap((groupItem) =>
+		const officialModels = officialGroups.flatMap((groupItem) =>
 			(groupItem.models || []).map((model): VideoModelItem => ({
 				...model,
 				model_source: "official",
@@ -86,8 +89,16 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				},
 			})),
 		)
-		return result
-	}, [])
+		const officialModelIds = new Set(officialModels.map((model) => model.model_id))
+		const customModels = getRepresentativeModelsByModelId(
+			await superMagicCustomModelService.getMyModelsByType(MODEL_TYPE_VIDEO),
+		)
+		const customVideoModels = customModels
+			.filter((model) => !officialModelIds.has(model.model_id))
+			.map((model) => toVideoModelItem(model, t("messageEditor.addModel.myModels")))
+
+		return [...officialModels, ...customVideoModels]
+	}, [t])
 
 	const generateVideo = useCallback(
 		async (params: GenerateVideoRequest): Promise<GenerateVideoResponse> => {
@@ -249,6 +260,37 @@ async function buildDesignVideoRequestParams(
 
 function normalizeVideoModelGroupLabel(label: string): string {
 	return label.replace(/[-_\s]video$/i, "").trim()
+}
+
+const MY_MODELS_GROUP_ID = "my-models"
+
+function toVideoModelItem(model: ServiceProviderModel, groupName: string): VideoModelItem {
+	return {
+		id: model.id,
+		group_id: MY_MODELS_GROUP_ID,
+		model_id: model.model_id,
+		model_name: model.name,
+		provider_model_id: model.model_version || model.model_id,
+		model_description: typeof model.description === "string" ? model.description : "",
+		model_icon: model.icon ?? "",
+		model_status: "normal",
+		sort: 0,
+		model_source: "custom",
+		model_group: {
+			id: MY_MODELS_GROUP_ID,
+			name: groupName,
+			icon: MyModelsIcon,
+			source: "custom",
+		},
+	}
+}
+
+function getRepresentativeModelsByModelId(models: ServiceProviderModel[]): ServiceProviderModel[] {
+	const modelMap = new Map<string, ServiceProviderModel>()
+	models.forEach((model) => {
+		if (!modelMap.has(model.model_id)) modelMap.set(model.model_id, model)
+	})
+	return Array.from(modelMap.values())
 }
 
 function toDesignGenerateVideoRequest(

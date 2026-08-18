@@ -18,6 +18,7 @@ import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/us
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useImageUrlResolver } from "@/pages/superMagic/components/Detail/contents/Md/hooks/useImageUrlResolver"
+import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { useFileChangeCheck } from "./hooks/useFileChangeCheck"
 import type { SimpleEditorRef } from "@/components/tiptap-templates/simple/types"
@@ -31,6 +32,11 @@ import { RoutePath } from "@/constants/routes"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { shouldHideRecordingFloatPanel } from "./utils/float-panel-visibility-policy"
+import {
+	getVisibleRecordingAttachmentTree,
+	selectRecordingImageLookupTree,
+	shouldMarkRecordingAttachmentsReady,
+} from "./utils/recordingImageLookupSnapshot"
 import { isAudioProjectMode } from "@/services/audioRecordings"
 import { MobileActiveRecordingIndicator } from "@/pages/superMagicMobile/pages/AudioRecordingEntry/components/MobileActiveRecordingIndicator"
 import {
@@ -68,8 +74,8 @@ export function RecordingSummaryFloatPanel() {
 		isOnMobileRecordingsListRoute || isOnMobileRecordingDetailRoute
 
 	const editorRef = useRef<SimpleEditorRef>(null)
-	// Create projectFilesStore for managing workspace files
-	// Used by both AiChat and image URL resolution
+	// Local store for overlay file UI and @ mentions. Note image restore uses a
+	// separate hidden-inclusive snapshot so the visible-only store contract stays intact.
 	const { projectFilesStore, recordSummaryFileStore } = useMemo(() => {
 		const projectFilesStore = new ProjectFilesStore()
 		const recordSummaryFileStore = createMentionPanelStore(projectFilesStore)
@@ -79,6 +85,8 @@ export function RecordingSummaryFloatPanel() {
 	// Attachment state management
 	const [attachments, _setAttachments] = useState<any[]>([])
 	const [attachmentList, _setAttachmentList] = useState<any[]>([])
+	/** Hidden-inclusive tree used only for note image path lookup. */
+	const [imageLookupAttachments, setImageLookupAttachments] = useState<AttachmentItem[]>([])
 	const [isEnablingTranscription, setIsEnablingTranscription] = useState(false)
 	/** Project id whose attachments fetch has settled; gates note image URL resolution after refresh. */
 	const [attachmentsReadyProjectId, setAttachmentsReadyProjectId] = useState("")
@@ -134,6 +142,7 @@ export function RecordingSummaryFloatPanel() {
 		) => {
 			if (!selectedProject?.id) {
 				setAttachments([])
+				setImageLookupAttachments([])
 				setAttachmentsReadyProjectId("")
 				projectFilesStore.setWorkspaceFileTree([])
 				return
@@ -144,9 +153,13 @@ export function RecordingSummaryFloatPanel() {
 					projectId: selectedProject?.id,
 					// @ts-ignore 使用window添加临时的token
 					temporaryToken: window.temporary_token || "",
+					includeHidden: true,
 				})
 					.then((res: any) => {
-						setAttachments(res?.tree || [])
+						const lookupTree = (res?.tree || []) as AttachmentItem[]
+						setImageLookupAttachments(lookupTree)
+						// Store/UI keep the visible-only tree; image lookup uses the full snapshot.
+						setAttachments(getVisibleRecordingAttachmentTree(lookupTree))
 						recordSummaryFileStore.finishLoadAttachmentsPromise(selectedProject?.id)
 						markAttachmentsReady(selectedProject?.id)
 						callback?.(res)
@@ -154,6 +167,7 @@ export function RecordingSummaryFloatPanel() {
 					.catch((error: unknown) => {
 						console.error("Failed to fetch attachments:", error)
 						setAttachments([])
+						setImageLookupAttachments([])
 						projectFilesStore.setWorkspaceFileTree([])
 						// Settle readiness even on failure so images do not spin forever.
 						markAttachmentsReady(selectedProject?.id)
@@ -165,6 +179,7 @@ export function RecordingSummaryFloatPanel() {
 			} catch (error) {
 				console.error("Failed to fetch attachments:", error)
 				setAttachments([])
+				setImageLookupAttachments([])
 				projectFilesStore.setWorkspaceFileTree([])
 				markAttachmentsReady(selectedProject?.id)
 				callback?.({ tree: [], list: [] })
@@ -302,10 +317,24 @@ export function RecordingSummaryFloatPanel() {
 		projectId: selectedProjectId,
 		enabled: !isManagedByMobileRecordingPage,
 		store: projectFilesStore,
-		onAttachmentsChange: useMemoizedFn(({ tree, list }) => {
+		onAttachmentsChange: useMemoizedFn(({ tree, list, source }) => {
 			_setAttachments(tree)
 			_setAttachmentList(list)
-			markAttachmentsReady(selectedProjectId)
+			setImageLookupAttachments((current) =>
+				selectRecordingImageLookupTree({
+					current,
+					incoming: tree,
+					source,
+				}),
+			)
+			if (
+				shouldMarkRecordingAttachmentsReady({
+					treeLength: tree.length,
+					source,
+				})
+			) {
+				markAttachmentsReady(selectedProjectId)
+			}
 			void checkNoteFileChange(list)
 		}),
 		onFallbackError: useMemoizedFn((error: unknown) => {
@@ -319,6 +348,7 @@ export function RecordingSummaryFloatPanel() {
 		const selectedProject = recordingSummaryStore.businessData.project
 		// Reset readiness when switching projects after restore/remount.
 		setAttachmentsReadyProjectId("")
+		setImageLookupAttachments([])
 		if (selectedProjectId && selectedProject) {
 			projectFilesStore.setSelectedProject(selectedProject)
 			// Initialize attachment loading promise
@@ -410,7 +440,7 @@ export function RecordingSummaryFloatPanel() {
 	// URL resolver for project images - converts relative paths to download URLs.
 	// Gate on attachments readiness so refresh restore does not resolve against an empty tree.
 	const { urlResolver } = useImageUrlResolver({
-		attachments,
+		attachments: imageLookupAttachments as unknown as AttachmentFile[],
 		relativeFilePath: noteFilePath,
 		isReady:
 			Boolean(selectedProjectId && noteFilePath) &&

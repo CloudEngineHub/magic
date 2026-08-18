@@ -22,10 +22,21 @@ export type {
 	RecordSummaryEditorPanelRef,
 } from "@/components/business/RecordingSummary/internal/editorPanel/types"
 
+/** Render the recording editor state while preserving the parent conversation height contract. */
 export const RecordSummaryEditorPanel = forwardRef<
 	RecordSummaryEditorPanelRef,
 	RecordSummaryEditorPanelProps
->(({ containerClassName, taskDataNode, messageQueueNode, iconSize = 20, ...props }, ref) => {
+>(function RecordSummaryEditorPanel(
+	{
+		containerClassName,
+		taskDataNode,
+		messageQueueNode,
+		iconSize = 20,
+		fillHeight = false,
+		...props
+	},
+	ref,
+) {
 	const {
 		WaveformComponent,
 		ProjectSelectorComponent,
@@ -124,6 +135,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 				onStartRecording={handleStartRecording}
 				onCancelUpload={handleCancelUpload}
 				onUploadFile={handleUploadFile}
+				fillHeight={fillHeight}
 			/>
 		)
 
@@ -133,6 +145,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 				className={cn(
 					"flex flex-col rounded-2xl border border-border bg-white p-2.5",
 					isMobile && "rounded-none border-none",
+					fillHeight && panelMode === "idle" && "min-h-0 flex-1",
 					containerClassName,
 				)}
 			>

@@ -195,6 +195,11 @@ export interface Topic {
 	agent_code?: string
 }
 
+/** Whether a topic is paused while the agent waits for a user response. */
+export function isTopicWaitingForUser(topic?: Pick<Topic, "task_status"> | null): boolean {
+	return topic?.task_status === TaskStatus.WAITING_FOR_USER
+}
+
 // 消息相关类型
 export interface MessageContent {
 	id: string

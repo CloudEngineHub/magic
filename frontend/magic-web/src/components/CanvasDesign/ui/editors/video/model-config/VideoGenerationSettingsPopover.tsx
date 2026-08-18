@@ -1,8 +1,11 @@
 import { useMemo } from "react"
 import { ChevronsUpDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/shadcn/popover"
+import { Slider } from "@/components/shadcn-ui/slider"
+import { Switch } from "@/components/shadcn-ui/switch"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import type { VideoEditorConfig } from "../video-editor-config.types"
+import type { VideoGenerationDurationRange } from "../../../../public/magic-types"
 import styles from "./VideoGenerationSettingsPopover.module.css"
 
 interface VideoGenerationSettingsPopoverProps {
@@ -27,6 +30,39 @@ function buildTriggerSummaryLabel(input: {
 	return segments.join(" · ")
 }
 
+interface DurationRangeControlProps {
+	label: string
+	value: number | undefined
+	range: VideoGenerationDurationRange
+	onChange: (seconds: number) => void
+	onCommit: (seconds: number) => void
+}
+
+function DurationRangeControl(props: DurationRangeControlProps) {
+	const { label, value, range, onChange, onCommit } = props
+	const initialSeconds = value ?? range.min
+
+	return (
+		<>
+			<div className={styles.sectionHeader}>
+				<div className={styles.sectionTitle}>{label}</div>
+				<div className={styles.rangeValue}>{`${initialSeconds}s`}</div>
+			</div>
+			<div className={styles.rangeControl}>
+				<Slider
+					value={[initialSeconds]}
+					min={range.min}
+					max={range.max}
+					step={range.step}
+					onValueChange={([next]) => onChange(next)}
+					onValueCommit={([next]) => onCommit(next)}
+					aria-label={label}
+				/>
+			</div>
+		</>
+	)
+}
+
 export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPopoverProps) {
 	const { config } = props
 	const { t } = useCanvasDesignI18n()
@@ -35,9 +71,14 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		supportedAspectRatioOptions,
 		supportedResolutionOptions,
 		supportedDurationOptions,
+		durationType,
+		durationRange,
 		supportedCompressionQualityOptions,
 		selectedResolution,
 		selectedDurationSeconds,
+		durationDraftSeconds,
+		selectedGenerateAudio,
+		selectedWebSearch,
 		selectedCompressionQuality,
 		currentSelectValue,
 		ratioOption,
@@ -48,6 +89,8 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 	const hasResolution = supportedResolutionOptions.length > 0
 	const hasDuration = supportedDurationOptions.length > 0
 	const hasQuality = supportedCompressionQualityOptions.length > 0
+	const hasAudio = selectedGenerateAudio !== undefined
+	const hasWebSearch = selectedWebSearch !== undefined
 
 	const fallbackTriggerLabel = t("videoEditor.generationSettings", "生成设置")
 
@@ -75,10 +118,11 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		],
 	)
 
-	if (!hasAspect && !hasResolution && !hasDuration && !hasQuality) return null
+	if (!hasAspect && !hasResolution && !hasDuration && !hasQuality && !hasAudio && !hasWebSearch)
+		return null
 
 	return (
-		<Popover>
+		<Popover onOpenChange={handlers.handleDurationPopoverOpenChange}>
 			<PopoverTrigger asChild>
 				<button
 					type="button"
@@ -155,26 +199,40 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 
 				{hasDuration && (
 					<div className={styles.section}>
-						<div className={styles.sectionTitle}>
-							{t("videoEditor.duration", "时长")}
-						</div>
-						<div className={styles.buttonGroup} role="group">
-							{supportedDurationOptions.map((seconds) => {
-								const isActive = selectedDurationSeconds === seconds
-								return (
-									<button
-										key={seconds}
-										type="button"
-										className={`${styles.buttonGroupItem} ${
-											isActive ? styles.buttonGroupItemActive : ""
-										}`}
-										onClick={() => handlers.handleDurationChange(seconds)}
-									>
-										{`${seconds}s`}
-									</button>
-								)
-							})}
-						</div>
+						{durationType === "range" && durationRange ? (
+							<DurationRangeControl
+								label={t("videoEditor.duration", "时长")}
+								value={durationDraftSeconds ?? selectedDurationSeconds}
+								range={durationRange}
+								onChange={handlers.handleDurationDraftChange}
+								onCommit={handlers.handleDurationChange}
+							/>
+						) : (
+							<>
+								<div className={styles.sectionTitle}>
+									{t("videoEditor.duration", "时长")}
+								</div>
+								<div className={styles.buttonGroup} role="group">
+									{supportedDurationOptions.map((seconds) => {
+										const isActive = selectedDurationSeconds === seconds
+										return (
+											<button
+												key={seconds}
+												type="button"
+												className={`${styles.buttonGroupItem} ${
+													isActive ? styles.buttonGroupItemActive : ""
+												}`}
+												onClick={() =>
+													handlers.handleDurationChange(seconds)
+												}
+											>
+												{`${seconds}s`}
+											</button>
+										)
+									})}
+								</div>
+							</>
+						)}
 					</div>
 				)}
 
@@ -202,6 +260,34 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 								)
 							})}
 						</div>
+					</div>
+				)}
+
+				{hasAudio && (
+					<div className={styles.section}>
+						<label className={styles.switchRow}>
+							<span className={styles.sectionTitle}>
+								{t("videoEditor.generateAudio", "音频")}
+							</span>
+							<Switch
+								checked={selectedGenerateAudio}
+								onCheckedChange={handlers.handleGenerateAudioChange}
+							/>
+						</label>
+					</div>
+				)}
+
+				{hasWebSearch && (
+					<div className={styles.section}>
+						<label className={styles.switchRow}>
+							<span className={styles.sectionTitle}>
+								{t("videoEditor.webSearch", "网络搜索")}
+							</span>
+							<Switch
+								checked={selectedWebSearch}
+								onCheckedChange={handlers.handleWebSearchChange}
+							/>
+						</label>
 					</div>
 				)}
 			</PopoverContent>
