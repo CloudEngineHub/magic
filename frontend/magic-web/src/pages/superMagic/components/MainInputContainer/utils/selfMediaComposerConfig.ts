@@ -7,6 +7,8 @@ import {
 import { ScenePanelVariant } from "../components/LazyScenePanel/types"
 
 export const SELF_MEDIA_COMPOSER_TOPIC_PATTERN = "ip-manager"
+/** Reserve enough vertical space for the editor and the self-media configuration trigger. */
+export const SELF_MEDIA_COMPOSER_MIN_INPUT_HEIGHT = 260
 export const SELF_MEDIA_CARD_COUNT_PRESETS = [3, 6, 9, 12] as const
 export const SELF_MEDIA_CUSTOM_CARD_COUNT = "custom"
 export const SELF_MEDIA_CARD_COUNT_MIN = 1

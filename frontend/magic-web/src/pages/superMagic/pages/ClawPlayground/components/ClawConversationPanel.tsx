@@ -329,7 +329,8 @@ export const ClawConversationPanel = observer(function ClawConversationPanel({
 				/>
 			}
 			editor={
-				<div className="flex w-full flex-col gap-2">
+				<div className="flex h-full min-h-0 w-full flex-col gap-2">
+					{/* Preserve the scaffold height so the editor can fill the manually resized panel. */}
 					<ClawPlaygroundInputToolbar
 						variant="desktop"
 						isTaskRunning={showLoading}
