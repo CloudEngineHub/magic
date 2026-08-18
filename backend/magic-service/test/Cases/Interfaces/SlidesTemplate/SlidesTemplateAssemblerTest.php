@@ -184,6 +184,31 @@ class SlidesTemplateAssemblerTest extends TestCase
         $this->assertArrayNotHasKey('template_file_url', $dto->toArray());
     }
 
+    public function testCreatePublicDetailDTOIncludesProjectOnlyForTemplateOwner(): void
+    {
+        $template = $this->makeTemplate()
+            ->setOwnerType(SlidesTemplateOwnerType::User)
+            ->setOwnerId('user-1')
+            ->setProjectId('935281873559658498')
+            ->setProjectDirectoryId('945653402610257921');
+
+        $ownerDetail = SlidesTemplateAssembler::createPublicDetailDTO($template, 'user-1')->toArray();
+        $otherUserDetail = SlidesTemplateAssembler::createPublicDetailDTO($template, 'user-2')->toArray();
+        $anonymousDetail = SlidesTemplateAssembler::createPublicDetailDTO($template)->toArray();
+        $officialDetail = SlidesTemplateAssembler::createPublicDetailDTO(
+            $template->setOwnerType(SlidesTemplateOwnerType::Official),
+            'user-1'
+        )->toArray();
+
+        self::assertSame([
+            'id' => '935281873559658498',
+            'directory_id' => '945653402610257921',
+        ], $ownerDetail['project']);
+        self::assertArrayNotHasKey('project', $otherUserDetail);
+        self::assertArrayNotHasKey('project', $anonymousDetail);
+        self::assertArrayNotHasKey('project', $officialDetail);
+    }
+
     public function testCreateUsedListPageDTOIncludesLatestUsedAtOnlyForUsedTemplates(): void
     {
         $template = $this->makeTemplate();

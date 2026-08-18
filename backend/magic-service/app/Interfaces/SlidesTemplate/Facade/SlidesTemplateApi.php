@@ -10,6 +10,7 @@ namespace App\Interfaces\SlidesTemplate\Facade;
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
 use App\Infrastructure\Core\AbstractApi;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublishSlidesTemplateFromProjectRequest;
@@ -53,9 +54,11 @@ class SlidesTemplateApi extends AbstractApi
 
     public function detail(string $code): array
     {
-        $template = $this->slidesTemplateAppService->detail($this->getAuthorization(), $code);
+        $authorization = $this->getAuthorization();
+        $template = $this->slidesTemplateAppService->detail($authorization, $code);
+        $currentUserId = $authorization instanceof MagicUserAuthorization ? $authorization->getId() : null;
 
-        return SlidesTemplateAssembler::createPublicDetailDTO($template)->toArray();
+        return SlidesTemplateAssembler::createPublicDetailDTO($template, $currentUserId)->toArray();
     }
 
     public function save(SaveUserSlidesTemplateRequest $request): array

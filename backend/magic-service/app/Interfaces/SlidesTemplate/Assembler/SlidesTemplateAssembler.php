@@ -25,6 +25,7 @@ use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\SlidesTemplatePublicListItemDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\UsedSlidesTemplatePublicListItemDTO;
+use App\Interfaces\SlidesTemplate\DTO\Response\UserSlidesTemplatePublicDetailDTO;
 use App\Interfaces\SlidesTemplate\DTO\Response\UserSlidesTemplatePublicListItemDTO;
 
 class SlidesTemplateAssembler
@@ -136,9 +137,14 @@ class SlidesTemplateAssembler
         );
     }
 
-    public static function createPublicDetailDTO(SlidesTemplateEntity $template): SlidesTemplatePublicDetailDTO
-    {
-        $dto = new SlidesTemplatePublicDetailDTO();
+    public static function createPublicDetailDTO(
+        SlidesTemplateEntity $template,
+        ?string $currentUserId = null
+    ): SlidesTemplatePublicDetailDTO {
+        $isOwner = $currentUserId !== null
+            && $template->getOwnerType()->isUser()
+            && $template->getOwnerId() === $currentUserId;
+        $dto = $isOwner ? new UserSlidesTemplatePublicDetailDTO() : new SlidesTemplatePublicDetailDTO();
         $dto->setId($template->getId());
         $dto->setCode($template->getCode());
         $dto->setSourceType($template->getSourceType()->value);
@@ -156,6 +162,9 @@ class SlidesTemplateAssembler
         $dto->setStatus($template->getStatus()->value);
         $dto->setCreatedAt($template->getCreatedAt());
         $dto->setUpdatedAt($template->getUpdatedAt());
+        if ($dto instanceof UserSlidesTemplatePublicDetailDTO && $template->getProjectId() !== null) {
+            $dto->setProject($template->getProjectId(), $template->getProjectDirectoryId());
+        }
         return $dto;
     }
 
