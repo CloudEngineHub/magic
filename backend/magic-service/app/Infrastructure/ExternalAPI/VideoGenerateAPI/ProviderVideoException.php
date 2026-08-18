@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
+use GuzzleHttp\Exception\RequestException;
 use RuntimeException;
 use Throwable;
 
@@ -39,5 +40,13 @@ final class ProviderVideoException extends RuntimeException
     public function getHttpStatus(): ?int
     {
         return $this->httpStatus;
+    }
+
+    public function getOriginalErrorMessage(): string
+    {
+        $previous = $this->getPrevious();
+        $responseBody = $previous instanceof RequestException ? $previous->getResponse()?->getBody() : null;
+
+        return $responseBody !== null ? (string) $responseBody : '';
     }
 }

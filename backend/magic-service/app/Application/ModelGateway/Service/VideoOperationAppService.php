@@ -224,6 +224,7 @@ readonly class VideoOperationAppService
                 $dataIsolation,
                 $operation,
                 $requestDTO->getBusinessParams(),
+                $throwable
             );
             $this->videoQueueDomainService->deleteOperation($operation);
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, $throwable->getMessage(), throwable: $throwable);
@@ -830,7 +831,8 @@ readonly class VideoOperationAppService
     private function dispatchVideoGenerateFailedEvent(
         ModelGatewayDataIsolation $dataIsolation,
         VideoQueueOperationEntity $operation,
-        array $requestBusinessParams = []
+        array $requestBusinessParams = [],
+        ?ProviderVideoException $throwable = null
     ): void {
         $event = new VideoGenerateFailedEvent();
         $businessParams = $this->buildVideoAuditBusinessParams(
@@ -839,6 +841,10 @@ readonly class VideoOperationAppService
             $requestBusinessParams,
             self::AUDIT_STATUS_FAIL,
         );
+
+        if ($throwable && $throwable->getOriginalErrorMessage()) {
+            $businessParams['failure_reason'] = $throwable->getOriginalErrorMessage();
+        }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
         $event->setUserId($operation->getUserId());
