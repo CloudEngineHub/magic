@@ -28,7 +28,7 @@ import { TopicInvalidModeFallback } from "../MessageEditor/components/TopicInval
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { useConversationInputLayout } from "../ConversationInputResize/context"
 
 /**
@@ -129,6 +129,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus,
 		isShowLoadingInit,
 	})
