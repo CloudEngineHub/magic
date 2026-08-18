@@ -344,11 +344,13 @@ export default function Tools() {
 							>
 								<div>
 									<span className={styles.tooltipLabel}>{item.label}</span>
-									&nbsp;&nbsp;
 									{item.shortcut?.length && (
-										<span className={styles.tooltipShortcut}>
-											{item.shortcut?.join("/")}
-										</span>
+										<>
+											&nbsp;&nbsp;
+											<span className={styles.tooltipShortcut}>
+												{item.shortcut.join("/")}
+											</span>
+										</>
 									)}
 								</div>
 								<TooltipPrimitive.Arrow className="fill-black" />
