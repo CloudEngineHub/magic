@@ -579,6 +579,17 @@ export interface GenerateVideoRequest {
 	reference_images?: string[]
 	/** 帧 */
 	frames?: Array<{ role: "start" | "end"; uri: string }>
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
+	/** 当前话题 id */
+	topic_id?: string
+	/** 画布合成扩展参数 */
+	extensions?: {
+		project_path?: string
+		video_edit_element_id?: string
+		output_file_name?: string
+		[key: string]: unknown
+	}
 }
 
 /**
@@ -611,6 +622,8 @@ export interface GenerateVideoResponse {
 	updated_at: string
 	/** 文件 URL */
 	file_url: string | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 	/** ID */
 	id: string
 }
@@ -646,13 +659,13 @@ export interface VideoGenerationResultResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 类型 */
 	type: unknown
 	/** 状态：pending 待处理，processing 处理中，completed 已完成，failed 失败 */
@@ -664,7 +677,7 @@ export interface VideoGenerationResultResponse {
 	/** 更新时间 */
 	updated_at: string
 	/** 文件 URL */
-	file_url: string
+	file_url: string | null
 	/** 文件 ID */
 	file_id: string
 	/** 海报文件 ID */
@@ -689,6 +702,8 @@ export interface VideoGenerationResultResponse {
 		finished_at?: string | null
 		elapsed_seconds?: number | null
 	} | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**

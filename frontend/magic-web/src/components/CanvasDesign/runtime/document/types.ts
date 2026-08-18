@@ -412,24 +412,14 @@ export interface StoryboardElement extends ContentElementProps<StoryboardElement
 	type: typeof ElementTypeEnum.Storyboard
 }
 
-/** 视频编辑输出配置；成片时长由输入视频与编辑结果派生，不重复持久化。 */
-export interface VideoEditOutputConfig {
-	/** 输出画面比例，例如 9:16 */
-	aspectRatio?: string
-	/** 输出分辨率，例如 1K、1080P */
-	resolution?: string
-	/** 输出格式；当前产品默认使用 mp4 */
-	format?: string
-}
-
 export interface VideoEditElementContent extends ElementContentBase {
 	/** 按编辑顺序排列的视频元素 ID；成员资格仍由 CanvasConnection 表达。 */
 	videoSequence?: string[]
-	/** 输出规格；任务、错误和生成结果属于运行态。 */
-	output?: VideoEditOutputConfig
+	/** 按编辑顺序排列的音频元素 ID；成员资格仍由 CanvasConnection 表达。 */
+	audioSequence?: string[]
 }
 
-/** 视频编辑节点；输入成员由 CanvasConnection 表达，顺序由 content.videoSequence 表达。 */
+/** 视频编辑节点；输入成员由 CanvasConnection 表达，顺序由 Content 中的 sequence 表达。 */
 export interface VideoEditElement extends ContentElementProps<VideoEditElementContent> {
 	type: typeof ElementTypeEnum.VideoEdit
 }

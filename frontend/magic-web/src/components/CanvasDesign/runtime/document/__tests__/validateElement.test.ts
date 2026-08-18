@@ -98,18 +98,19 @@ describe("isValidElementData", () => {
 		).toBe(false)
 	})
 
-	it("validates video-edit sequences and output settings", () => {
+	it("validates video-edit sequences without output settings", () => {
 		expect(
 			isValidElementData(
 				contentElement(ElementTypeEnum.VideoEdit, {
-					output: { aspectRatio: "9:16", resolution: "1K", format: "mp4" },
+					videoSequence: ["video-1", "video-2"],
+					audioSequence: ["audio-1"],
 				}),
 			),
 		).toBe(true)
 		expect(
 			isValidElementData(
 				contentElement(ElementTypeEnum.VideoEdit, {
-					output: { resolution: 1024 },
+					output: { aspectRatio: "9:16", resolution: "1K", format: "mp4" },
 				}),
 			),
 		).toBe(false)

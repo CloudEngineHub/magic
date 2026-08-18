@@ -264,7 +264,7 @@ describe("designDataCodec", () => {
 		expect(result.canvas?.elements?.[0]?.contents[0]).toEqual({
 			contentId: "video-edit-1-content-1",
 			videoSequence: ["video-1", "video-2"],
-			output: { format: "mp4", aspectRatio: "1:1", resolution: "1080P" },
+			audioSequence: ["audio-1"],
 		})
 		expect(result.canvas?.connections).toEqual([
 			{

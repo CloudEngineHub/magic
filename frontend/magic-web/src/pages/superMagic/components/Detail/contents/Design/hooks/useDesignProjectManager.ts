@@ -45,7 +45,7 @@ export interface UseDesignProjectManagerReturn {
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
 	) => void
-	manualSave: () => Promise<void>
+	manualSave: () => Promise<boolean>
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 

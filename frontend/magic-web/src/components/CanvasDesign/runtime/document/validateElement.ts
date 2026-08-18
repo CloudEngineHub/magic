@@ -123,10 +123,17 @@ function isValidVideoEditContent(content: Record<string, unknown>): boolean {
 			return false
 		}
 	}
-	if (content.output === undefined) return true
-	if (!isObject(content.output)) return false
-	const output = content.output
-	return ["aspectRatio", "resolution", "format"].every((field) => isOptionalString(output[field]))
+	if (content.audioSequence !== undefined) {
+		if (
+			!Array.isArray(content.audioSequence) ||
+			content.audioSequence.some(
+				(elementId) => typeof elementId !== "string" || elementId.length === 0,
+			)
+		) {
+			return false
+		}
+	}
+	return true
 }
 
 function isValidElementContent(content: Record<string, unknown>, type: string): boolean {

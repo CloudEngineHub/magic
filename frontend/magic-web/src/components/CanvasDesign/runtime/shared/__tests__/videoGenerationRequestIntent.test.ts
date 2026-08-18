@@ -54,6 +54,22 @@ describe("videoGenerationRequestIntent", () => {
 		).toBe(true)
 	})
 
+	it("accepts canvas composition without model or prompt", () => {
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				generation_type: "canvas_composition",
+				extensions: {
+					video_edit_element_id: "video-edit-1",
+				},
+			}),
+		).toBe(true)
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				generation_type: "canvas_composition",
+			}),
+		).toBe(false)
+	})
+
 	it("ignores empty media fields and supports legacy request fields", () => {
 		expect(
 			hasVideoGenerationRequestMediaIntent({

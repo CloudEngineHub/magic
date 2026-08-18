@@ -471,6 +471,7 @@ function DesignViewer(props: DesignViewerProps) {
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
+		manualSave,
 		magicProjectJsFileId,
 		isInitialLoading,
 		pendingDesignUpgrade,
@@ -775,6 +776,8 @@ function DesignViewer(props: DesignViewerProps) {
 		selectedWorkspace,
 		onExitFullscreen: handleExitFullscreen,
 		updateAttachments,
+		saveCanvasDesign: manualSave,
+		compositionProjectPath: props.data?.project_path ?? designProjectBasePath,
 		downloadPolicy,
 	})
 

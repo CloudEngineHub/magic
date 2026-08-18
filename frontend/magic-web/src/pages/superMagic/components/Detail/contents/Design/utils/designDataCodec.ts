@@ -70,7 +70,7 @@ const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> 
 		"innerRadiusRatio",
 	],
 	[ElementTypeEnum.Storyboard]: ["generationConfig", "shots"],
-	[ElementTypeEnum.VideoEdit]: ["videoSequence", "output"],
+	[ElementTypeEnum.VideoEdit]: ["videoSequence", "audioSequence"],
 }
 
 function cloneValue<T>(value: T): T {
@@ -136,6 +136,8 @@ function migrateLegacyVideoEditConnections(
 	context: VideoEditLegacyMigrationContext,
 ): void {
 	contents.forEach((content) => {
+		// VideoEdit output 配置从未正式上线，升级时直接丢弃，不进入新的 DSL。
+		delete content.output
 		const videoSequence = Array.isArray(content.videoSequence)
 			? content.videoSequence.filter(
 					(id): id is string => typeof id === "string" && id.length > 0,
@@ -163,7 +165,6 @@ function migrateLegacyVideoEditConnections(
 			})
 		}
 
-		delete content.audioSequence
 	})
 }
 
@@ -179,6 +180,10 @@ function migrateElementToV3(
 	const elementId = typeof element.id === "string" ? element.id : ""
 	if (!elementId || typeof element.type !== "string") {
 		throw new Error("Canvas element id/type is required")
+	}
+	if (element.type === ElementTypeEnum.VideoEdit) {
+		// 未上线的旧输出配置不迁移到新 DSL。
+		delete element.output
 	}
 
 	const hadContents = Array.isArray(element.contents)

@@ -771,6 +771,7 @@ export class ConnectionManager {
 			if (!content) return
 			const connected = collectConnectedVideoEditInputs(this.canvas, targetElementId)
 			const connectedSet = new Set(connected.videoElementIds)
+			const connectedAudioId = connected.audioElementId
 			const nextVideoSequence: string[] = []
 			;(content.videoSequence ?? []).forEach((elementId) => {
 				if (connectedSet.has(elementId) && !nextVideoSequence.includes(elementId)) {
@@ -782,15 +783,22 @@ export class ConnectionManager {
 			})
 
 			const currentSequence = content.videoSequence ?? []
+			const currentAudioSequence = content.audioSequence ?? []
+			const nextAudioSequence = connectedAudioId ? [connectedAudioId] : []
 			if (
 				currentSequence.length === nextVideoSequence.length &&
-				currentSequence.every((elementId, index) => elementId === nextVideoSequence[index])
+				currentSequence.every((elementId, index) => elementId === nextVideoSequence[index]) &&
+				currentAudioSequence.length === nextAudioSequence.length &&
+				currentAudioSequence.every(
+					(elementId, index) => elementId === nextAudioSequence[index],
+				)
 			) {
 				return
 			}
 
-			const next = updateContent(target, target.activeContentId, {
+			const next = updateContent(target, target.activeContentId ?? undefined, {
 				videoSequence: nextVideoSequence,
+				audioSequence: nextAudioSequence,
 			})
 			if (next !== target) elementManager.update(targetElementId, { contents: next.contents })
 		})

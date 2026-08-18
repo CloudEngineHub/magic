@@ -19,9 +19,6 @@ import type {
 import type { AudioPlaybackSnapshot } from "../../resources/audio/AudioPlaybackManager"
 import { VideoEditPlaybackManager } from "../../interaction/video-edit/VideoEditPlaybackManager"
 import {
-	VIDEO_EDIT_ASPECT_RATIOS,
-	VIDEO_EDIT_FORMATS,
-	VIDEO_EDIT_RESOLUTIONS,
 	type VideoCompositionSnapshot,
 } from "../../resources/video-composition/VideoCompositionManager"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
@@ -36,7 +33,6 @@ import { collectConnectedVideoEditInputs } from "../../interaction/connection/co
 import {
 	resolveVideoEditElementLayout,
 	type VideoEditElementLayout,
-	type VideoEditFooterParameterLayout,
 } from "./VideoEditElement.layout"
 
 /** 打开 / 更新时始终使用当前默认尺寸，忽略旧 DSL 持久化宽高。 */
@@ -50,15 +46,8 @@ function normalizeVideoEditDisplayDimensions(data: VideoEditElementData): VideoE
 
 interface VideoEditControlMetadata {
 	action: VideoEditControlAction
-	kind: "parameter" | "play" | "merge"
+	kind: "play" | "merge"
 	visualNode: Konva.Group
-	overlayAnchorNode?: Konva.Node
-	selectPresentation?: {
-		fontSize: number
-		horizontalPadding: number
-		suffixGap: number
-		suffixIconSize: number
-	}
 	baseBounds: { x: number; y: number; width: number; height: number }
 	idleFill?: string
 	idleStroke?: string
@@ -85,10 +74,6 @@ const NODE_NAMES = {
 	audioProgressThumbHit: "video-edit-audio-progress-thumb-hit",
 	audioName: "video-edit-audio-name",
 	audioDuration: "video-edit-audio-duration",
-	footerOutput: "video-edit-footer-output",
-	footerAspectRatio: "video-edit-footer-aspect-ratio",
-	footerResolution: "video-edit-footer-resolution",
-	footerFormat: "video-edit-footer-format",
 	mergeButton: "video-edit-merge-button",
 } as const
 
@@ -123,7 +108,6 @@ interface AudioInputView {
 const EMPTY_COMPOSITION_SNAPSHOT: VideoCompositionSnapshot = {
 	status: "idle",
 	progress: 0,
-	outputCapability: "idle",
 	issues: [],
 }
 
@@ -135,7 +119,6 @@ function areCompositionSnapshotsEqual(
 		a.status !== b.status ||
 		a.progress !== b.progress ||
 		a.phase !== b.phase ||
-		a.outputCapability !== b.outputCapability ||
 		a.errorMessage !== b.errorMessage ||
 		a.resultElementId !== b.resultElementId ||
 		a.issues.length !== b.issues.length
@@ -274,8 +257,8 @@ function moveItem<T>(items: readonly T[], fromIndex: number, toIndex: number): T
 }
 
 /**
- * 视频编辑节点：展示连接图中的视频输入、单条音频输入与输出规格。
- * 视频成员由连接图表达，处理顺序持久化在 active Content 的 videoSequence。
+ * 视频编辑节点：展示连接图中的视频和单条音频输入，并作为后端合并任务入口。
+ * 输入成员由连接图表达，处理顺序持久化在 active Content 中。
  */
 export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private videoScrollOffset = 0
@@ -303,6 +286,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private connectionChangedUnsubscribe?: () => void
 	private elementDeletedUnsubscribe?: () => void
 	private batchElementsDeletedUnsubscribe?: () => void
+	private documentLoadedUnsubscribe?: () => void
 	private documentRestoredUnsubscribe?: () => void
 	private compositionUnsubscribe: () => void = () => undefined
 	private compositionSnapshot: VideoCompositionSnapshot = EMPTY_COMPOSITION_SNAPSHOT
@@ -336,7 +320,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		width?: number
 		height?: number
 		videoSequence?: string[]
-		output?: VideoEditElementContent["output"]
+		audioSequence?: string[]
 	}): VideoEditElementData {
 		return {
 			id: options.id,
@@ -353,7 +337,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				{
 					contentId: `${options.id}-content-1`,
 					...(options.videoSequence ? { videoSequence: [...options.videoSequence] } : {}),
-					output: options.output ? { ...options.output } : undefined,
+					...(options.audioSequence ? { audioSequence: [...options.audioSequence] } : {}),
 				},
 			],
 			interactionConfig: { aspectRatioLocked: false },
@@ -374,7 +358,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	}
 
 	public render(): Konva.Group {
-		const content = this.getActiveContent<VideoEditElementContent>()
 		const { videoSequence, audioElementId } = this.collectInputs()
 		const width = Math.max(this.data.width ?? VIDEO_EDIT_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? VIDEO_EDIT_CONFIG.DEFAULT_HEIGHT, 1)
@@ -401,7 +384,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 
 		this.renderVideoSection(group, layout, videoSequence)
 		this.renderAudioSection(group, layout, audioElementId)
-		this.renderFooter(group, layout, content)
+		this.renderFooter(group, layout)
 
 		this.finalizeNode(group)
 		return group
@@ -425,20 +408,10 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const needsRerender =
 			previousData.width !== normalizedData.width ||
 			previousData.height !== normalizedData.height ||
-			previousContent?.output !== nextContent?.output ||
 			sequenceChanged
 		if (previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",")) {
 			this.loadVideoPreviews()
 		}
-		if (
-			previousContent?.output !== nextContent?.output ||
-			previousInputs.videoSequence.join(",") !== nextInputs.videoSequence.join(",")
-		) {
-			if (this.canvas.videoCompositionManager?.checkOutputCapability) {
-				this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
-			}
-		}
-
 		if (!needsRerender && this.node) {
 			this.updateBaseProps(this.node, normalizedData)
 		}
@@ -455,9 +428,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.syncInteractionHitTargets()
 		this.bindAudioRuntime()
 		this.bindCompositionRuntime()
-		if (this.canvas.videoCompositionManager?.checkOutputCapability) {
-			this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
-		}
 		this.loadVideoPreviews()
 		if (!this.sourceElementUpdatedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.sourceElementUpdatedUnsubscribe = this.canvas.eventEmitter.on(
@@ -475,9 +445,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 						this.loadVideoPreview(data.elementId, true)
 					}
 					if (inputs.audioElementId === data.elementId) this.bindAudioRuntime(true)
-					if (this.canvas.videoCompositionManager?.checkOutputCapability) {
-						this.canvas.videoCompositionManager.checkOutputCapability(this.data.id)
-					}
 					this.rerenderWhenTransformIdle()
 				},
 			)
@@ -496,6 +463,12 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!this.batchElementsDeletedUnsubscribe && this.canvas.eventEmitter?.on) {
 			this.batchElementsDeletedUnsubscribe = this.canvas.eventEmitter.on(
 				"element:batchdeleted",
+				() => this.refreshConnectedInputs(),
+			)
+		}
+		if (!this.documentLoadedUnsubscribe && this.canvas.eventEmitter?.on) {
+			this.documentLoadedUnsubscribe = this.canvas.eventEmitter.on(
+				"document:loaded",
 				() => this.refreshConnectedInputs(),
 			)
 		}
@@ -519,7 +492,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			if (!connectedVideoIds.has(elementId)) this.previewCanvases.delete(elementId)
 		})
 		this.bindAudioRuntime(true)
-		this.canvas.videoCompositionManager?.checkOutputCapability?.(this.data.id)
 		this.loadVideoPreviews(true)
 		this.rerenderWhenTransformIdle()
 	}
@@ -549,6 +521,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		this.elementDeletedUnsubscribe = undefined
 		this.batchElementsDeletedUnsubscribe?.()
 		this.batchElementsDeletedUnsubscribe = undefined
+		this.documentLoadedUnsubscribe?.()
+		this.documentLoadedUnsubscribe = undefined
 		this.documentRestoredUnsubscribe?.()
 		this.documentRestoredUnsubscribe = undefined
 		this.interactionEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
@@ -579,8 +553,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					manager.bindControl({
 						elementId: this.data.id,
 						node: candidate,
-						overlayAnchorNode: metadata.overlayAnchorNode,
-						selectPresentation: metadata.selectPresentation,
 						action: metadata.action,
 						applyState: (state) => this.applyControlState(metadata, state),
 					}),
@@ -1069,7 +1041,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		const beginCardDrag = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
 			if (
 				this.canvas.readonly ||
-				["checking", "preparing", "encoding", "finalizing", "uploading"].includes(
+				["checking", "preparing", "processing"].includes(
 					this.compositionSnapshot.status,
 				)
 			)
@@ -1635,20 +1607,9 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 	private renderFooter(
 		group: Konva.Group,
 		layout: VideoEditElementLayout,
-		content?: VideoEditElementContent,
 	): void {
 		const { videoSequence } = this.collectInputs()
 		const videoCount = videoSequence.length
-		const outputAspect = VIDEO_EDIT_ASPECT_RATIOS.includes(
-			content?.output?.aspectRatio as (typeof VIDEO_EDIT_ASPECT_RATIOS)[number],
-		)
-			? (content?.output?.aspectRatio ?? "16:9")
-			: this.resolveDefaultAspectRatio(videoSequence[0])
-		const outputResolution = VIDEO_EDIT_RESOLUTIONS.includes(
-			content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number],
-		)
-			? (content?.output?.resolution as (typeof VIDEO_EDIT_RESOLUTIONS)[number])
-			: "1080P"
 		group.add(
 			new Konva.Line({
 				points: [
@@ -1662,150 +1623,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				listening: false,
 			}),
 		)
-		// 合并按钮先渲染，参数行 hit 后渲染，避免按钮层挡住下拉点击。
 		if (!this.canvas.readonly) this.renderMergeButton(group, layout, videoCount)
-		this.renderOutputControls(group, layout, content, outputAspect, outputResolution)
-	}
-
-	private renderOutputControls(
-		group: Konva.Group,
-		layout: VideoEditElementLayout,
-		content: VideoEditElementContent | undefined,
-		aspectRatio: string,
-		resolution: string,
-	): void {
-		const outputFormat =
-			content?.output?.format &&
-			VIDEO_EDIT_FORMATS.includes(
-				content.output.format as (typeof VIDEO_EDIT_FORMATS)[number],
-			)
-				? content.output.format
-				: VIDEO_EDIT_FORMATS[0]
-		this.renderOutputParameterRow(group, layout.footerParameterRows.aspectRatio, {
-			label: this.getText("storyboard.aspectRatio", "画面比例"),
-			value: aspectRatio,
-			action: { type: "select-aspect-ratio" },
-			name: NODE_NAMES.footerAspectRatio,
-		})
-		this.renderOutputParameterRow(group, layout.footerParameterRows.resolution, {
-			label: this.getText("storyboard.resolution", "分辨率"),
-			value: resolution,
-			action: { type: "select-resolution" },
-			name: NODE_NAMES.footerResolution,
-		})
-		this.renderOutputParameterRow(group, layout.footerParameterRows.format, {
-			label: this.getText("videoEditNode.format", "格式"),
-			value: outputFormat.toUpperCase(),
-			action: { type: "select-format" },
-			name: NODE_NAMES.footerFormat,
-		})
-		void content
-	}
-
-	private renderOutputParameterRow(
-		group: Konva.Group,
-		row: VideoEditFooterParameterLayout,
-		options: {
-			label: string
-			value: string
-			action: VideoEditControlAction
-			name: string
-		},
-	): void {
-		const { label, value, action, name } = options
-		const visual = new Konva.Group({ listening: false, name })
-		const background = new Konva.Rect({
-			...row.backgroundRect,
-			fill: "rgba(255, 255, 255, 0)",
-			cornerRadius: row.cornerRadius,
-			listening: false,
-			perfectDrawEnabled: false,
-			name: "video-edit-control-background",
-		})
-		visual.add(background)
-		if (row.showLabel) {
-			visual.add(
-				new Konva.Text({
-					...row.labelRect,
-					text: `${label}：`,
-					verticalAlign: "middle",
-					fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
-					fontSize: row.labelFontSize,
-					fill: VIDEO_EDIT_CONFIG.SECONDARY_TEXT,
-					wrap: "none",
-					ellipsis: true,
-					listening: false,
-					perfectDrawEnabled: false,
-					name: "video-edit-control-label",
-				}),
-			)
-		}
-		visual.add(
-			new Konva.Text({
-				...row.valueTextRect,
-				text: value,
-				align: "left",
-				fontFamily: VIDEO_EDIT_CONFIG.FONT_FAMILY,
-				fontSize: row.fontSize,
-				fill: VIDEO_EDIT_CONFIG.PRIMARY_TEXT,
-				listening: false,
-				perfectDrawEnabled: false,
-				ellipsis: true,
-				wrap: "none",
-				name: "video-edit-control-text",
-			}),
-			...(this.canvas.readonly ? [] : [this.createSelectSuffix(row)]),
-		)
-		const overlayAnchor = this.canvas.readonly
-			? undefined
-			: new Konva.Rect({
-					...row.triggerRect,
-					listening: false,
-				})
-		if (overlayAnchor) visual.add(overlayAnchor)
-		group.add(visual)
-		if (!this.canvas.readonly) {
-			this.addControlHit(group, {
-				action,
-				kind: "parameter",
-				visualNode: visual,
-				overlayAnchorNode: overlayAnchor,
-				selectPresentation: {
-					fontSize: row.fontSize,
-					horizontalPadding: row.horizontalPadding,
-					suffixGap: row.suffixGap,
-					suffixIconSize: row.suffixIconSize,
-				},
-				baseBounds: row.rect,
-			})
-		}
-	}
-
-	private createSelectSuffix(row: VideoEditFooterParameterLayout): Konva.Line {
-		const strokeWidth = Math.max(1.5, row.suffixIconSize * 0.14)
-		const inset = row.suffixIconSize * 0.22
-		const centerX = row.suffixRect.x + row.suffixRect.width / 2
-		const centerY = row.suffixRect.y + row.suffixRect.height / 2
-		const halfWidth = Math.max(1, row.suffixRect.width / 2 - inset)
-		const halfHeight = Math.max(1, row.suffixRect.height * 0.18)
-
-		return new Konva.Line({
-			points: [
-				centerX - halfWidth,
-				centerY - halfHeight,
-				centerX,
-				centerY + halfHeight,
-				centerX + halfWidth,
-				centerY - halfHeight,
-			],
-			stroke: VIDEO_EDIT_CONFIG.PRIMARY_TEXT,
-			strokeWidth,
-			lineCap: "round",
-			lineJoin: "round",
-			listening: false,
-			perfectDrawEnabled: false,
-			name: "video-edit-control-suffix",
-		})
 	}
 
 	private addControlHit(group: Konva.Group, metadata: VideoEditControlMetadata): void {
@@ -1866,7 +1684,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			})
 			candidate.moveToTop()
 		})
-		this.canvas.videoEditInteractionManager?.refreshOutputControlStates(this.data.id)
+		this.canvas.videoEditInteractionManager?.refreshControlStates?.(this.data.id)
 	}
 
 	private applyControlState(
@@ -1877,8 +1695,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			Konva.Shape | undefined
 		const text = metadata.visualNode.findOne(".video-edit-control-text") as
 			Konva.Text | undefined
-		const suffix = metadata.visualNode.findOne(".video-edit-control-suffix") as
-			Konva.Shape | undefined
 		if (!background) return
 
 		if (metadata.kind === "play") {
@@ -1915,28 +1731,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			return
 		}
 
-		if (state === "disabled") {
-			background.fill(VIDEO_EDIT_CONFIG.DISABLED_BACKGROUND)
-			text?.fill(VIDEO_EDIT_CONFIG.DISABLED_TEXT)
-			if (suffix instanceof Konva.Line) suffix.stroke(VIDEO_EDIT_CONFIG.DISABLED_TEXT)
-			else suffix?.fill(VIDEO_EDIT_CONFIG.DISABLED_TEXT)
-			return
-		}
-
-		background.fill(
-			state === "pressed"
-				? VIDEO_EDIT_CONFIG.SURFACE_PRESSED
-				: state === "hover" || state === "editing"
-					? VIDEO_EDIT_CONFIG.SURFACE_STRONG
-					: "rgba(255, 255, 255, 0)",
-		)
-		const foreground =
-			state === "hover" || state === "pressed" || state === "editing"
-				? VIDEO_EDIT_CONFIG.ACCENT
-				: VIDEO_EDIT_CONFIG.PRIMARY_TEXT
-		text?.fill(foreground)
-		if (suffix instanceof Konva.Line) suffix.stroke(foreground)
-		else suffix?.fill(foreground)
 	}
 
 	private renderMergeButton(
@@ -1945,11 +1739,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		videoCount: number,
 	): void {
 		const status = this.compositionSnapshot.status
-		const outputCapability = this.compositionSnapshot.outputCapability
-		const composing = ["checking", "preparing", "encoding", "finalizing", "uploading"].includes(
-			status,
-		)
-		const enabled = videoCount > 0 && outputCapability === "supported" && !composing
+		const composing = ["checking", "preparing", "processing"].includes(status)
+		const enabled = videoCount > 0 && !composing
 		const label = this.getText("videoEditNode.mergeVideos", "合并视频")
 		const idleFill = enabled ? VIDEO_EDIT_CONFIG.ACCENT : VIDEO_EDIT_CONFIG.DISABLED_BACKGROUND
 		const textFill = enabled ? "#FFFFFF" : VIDEO_EDIT_CONFIG.DISABLED_TEXT
@@ -2004,11 +1795,8 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 		if (!manager?.subscribe) return
 		this.compositionUnsubscribe = manager.subscribe(this.data.id, (snapshot) => {
 			const changed = !areCompositionSnapshotsEqual(this.compositionSnapshot, snapshot)
-			this.compositionSnapshot = {
-				...snapshot,
-				outputCapability: snapshot.outputCapability ?? "supported",
-			}
-			this.canvas.videoEditInteractionManager?.refreshOutputControlStates(this.data.id)
+			this.compositionSnapshot = snapshot
+			this.canvas.videoEditInteractionManager?.refreshControlStates?.(this.data.id)
 			if (changed && this.node) this.rerenderWhenTransformIdle()
 		})
 	}
@@ -2055,35 +1843,6 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 					this.previewControllers.delete(elementId)
 				}
 			})
-	}
-
-	private resolveDefaultAspectRatio(
-		elementId?: string,
-	): (typeof VIDEO_EDIT_ASPECT_RATIOS)[number] {
-		const source = elementId ? this.getSourceElement(elementId) : undefined
-		const content =
-			source?.type === ElementTypeEnum.Video
-				? getDownstreamContent<VideoElementContent>(source)
-				: undefined
-		const metadata = content?.src
-			? this.canvas.videoResourceManager?.getCachedMetadata?.(content.src)
-			: undefined
-		const ratio =
-			metadata && metadata.videoHeight > 0
-				? metadata.videoWidth / metadata.videoHeight
-				: source && source.height && source.height > 0
-					? (source.width ?? 16) / source.height
-					: 16 / 9
-		return VIDEO_EDIT_ASPECT_RATIOS.reduce(
-			(nearest, candidate) => {
-				const [width, height] = candidate.split(":").map(Number)
-				const nearestValue = Number(nearest.split(":")[0]) / Number(nearest.split(":")[1])
-				return Math.abs(width / height - ratio) < Math.abs(nearestValue - ratio)
-					? candidate
-					: nearest
-			},
-			"16:9" as (typeof VIDEO_EDIT_ASPECT_RATIOS)[number],
-		)
 	}
 
 	private resolveVideoInput(elementId: string): VideoInputView {

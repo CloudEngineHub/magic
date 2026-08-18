@@ -52,6 +52,7 @@ import type {
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
 import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
+import type { GenerationFailurePolicy } from "../../generation/GenerationRuntimeManager"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -198,12 +199,18 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	/** 调用宿主 generateVideo，写入 generateVideoRequest 并启动轮询 */
-	public async generateVideo(request: GenerateVideoRequest): Promise<boolean> {
+	public async generateVideo(
+		request: GenerateVideoRequest,
+		options?: {
+			failurePolicy?: GenerationFailurePolicy
+			keepTemporaryUntilComplete?: boolean
+		},
+	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
 			!generateVideo ||
 			this.hasPendingVideoGeneration() ||
-			!request.model_id ||
+			(request.generation_type !== "canvas_composition" && !request.model_id) ||
 			!hasVideoGenerationRequestSubmitIntent(request)
 		) {
 			this.canvas.eventEmitter.emit({
@@ -240,7 +247,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					generateVideoRequest: requestWithId,
 				},
 			],
-			failurePolicy: isGenerationPlaceholder ? "promote-empty" : "restore-existing",
+			failurePolicy:
+				options?.failurePolicy ??
+				(isGenerationPlaceholder ? "promote-empty" : "restore-existing"),
 		})
 		this.rerender()
 		this.canvas.eventEmitter.emit({
@@ -257,29 +266,45 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				return false
 			}
 			this.isGenerating = false
+			const persistedRequest: GenerateVideoRequest =
+				requestWithId.generation_type === "canvas_composition"
+					? {
+							video_id: requestWithId.video_id,
+							generation_type: requestWithId.generation_type,
+						}
+					: requestWithId
 
-			const confirmed = this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
-				{
-					elementId: this.data.id,
-					...(contentId ? { contentId } : {}),
-					persistedPatch: {
-						contents: this.data.contents.map((content) =>
-							content.contentId === contentId
-								? {
-										...content,
-										generateVideoRequest: requestWithId,
-										videoGenerationResultMeta: undefined,
-										status: undefined,
-										errorMessage: undefined,
-										src: undefined,
-									}
-								: content,
-						),
-						activeContentId: this.data.activeContentId,
-						mainContentId: this.data.mainContentId,
-					},
-				},
-			])
+			const persistedPatch = {
+				contents: this.data.contents.map((content) =>
+					content.contentId === contentId
+						? {
+								...content,
+								generateVideoRequest: persistedRequest,
+								videoGenerationResultMeta: undefined,
+								status: undefined,
+								errorMessage: undefined,
+								src: undefined,
+							}
+						: content,
+				),
+				activeContentId: this.data.activeContentId,
+				mainContentId: this.data.mainContentId,
+			}
+			const confirmed = options?.keepTemporaryUntilComplete
+				? (() => {
+						this.canvas.elementManager.update(this.data.id, persistedPatch, {
+							silent: true,
+						})
+						this.canvas.generationRuntimeManager.completeAttempt(attemptId)
+						return true
+					})()
+				: this.canvas.generationAttemptCoordinator.confirmAttempt(attemptId, [
+						{
+							elementId: this.data.id,
+							...(contentId ? { contentId } : {}),
+							persistedPatch,
+						},
+					])
 			if (!confirmed) return false
 
 			this.isErrorState = false

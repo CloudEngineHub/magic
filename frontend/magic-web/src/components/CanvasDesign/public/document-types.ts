@@ -20,7 +20,6 @@ export type {
 	TextElementContent,
 	VideoEditElement,
 	VideoEditElementContent,
-	VideoEditOutputConfig,
 	VideoElement,
 	VideoElementContent,
 } from "../runtime/document/types"

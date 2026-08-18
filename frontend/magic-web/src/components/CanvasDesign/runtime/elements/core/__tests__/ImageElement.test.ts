@@ -1630,6 +1630,85 @@ describe("ImageElement mounted image node sync", () => {
 		])
 	})
 
+	it("submits canvas composition through the common video task lifecycle", async () => {
+		const deferred = createDeferred()
+		const generateVideo = vi.fn(() => deferred.promise)
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const data: VideoElementData = {
+			id: "composition-result",
+			type: ElementTypeEnum.Video,
+			width: 320,
+			height: 180,
+			activeContentId: "composition-content",
+			mainContentId: "composition-content",
+			contents: [{ contentId: "composition-content" }],
+		}
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: VideoElementData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: Canvas
+			pollingManager: {
+				setContentId: ReturnType<typeof vi.fn>
+				start: ReturnType<typeof vi.fn>
+			}
+			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
+			rerender: ReturnType<typeof vi.fn>
+		}
+		const update = vi.fn((_id: string, patch: Partial<VideoElementData>) => {
+			Object.assign(data, patch)
+		})
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
+			elementManager: {
+				getElementData: () => data,
+				getTemporaryElementMetadata: () => ({ kind: "generation-result" }),
+				update,
+			},
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.data = data
+		element.canvas = canvas
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
+		element.clearTempGenerateVideoRequest = vi.fn()
+		element.rerender = vi.fn()
+
+		const resultPromise = element.generateVideo(
+			{
+				generation_type: "canvas_composition",
+				extensions: { video_edit_element_id: "editor-1" },
+			},
+			{ failurePolicy: "remove-placeholder", keepTemporaryUntilComplete: true },
+		)
+		await Promise.resolve()
+
+		expect(generateVideo).toHaveBeenCalledWith(
+			expect.objectContaining({
+				generation_type: "canvas_composition",
+				extensions: { video_edit_element_id: "editor-1" },
+				video_id: expect.any(String),
+			}),
+		)
+		expect(data.contents[0]?.generateVideoRequest).toBeUndefined()
+
+		deferred.resolve()
+		expect(await resultPromise).toBe(true)
+		expect(data.contents[0]?.generateVideoRequest).toEqual(
+			expect.objectContaining({
+				generation_type: "canvas_composition",
+				video_id: expect.any(String),
+			}),
+		)
+		expect(data.contents[0]?.generateVideoRequest).not.toHaveProperty("extensions")
+		expect(element.pollingManager.start).toHaveBeenCalledOnce()
+	})
+
 	it("appends a new video Content for result-state regeneration", async () => {
 		const deferred = createDeferred()
 		const generateVideo = vi.fn(() => deferred.promise)

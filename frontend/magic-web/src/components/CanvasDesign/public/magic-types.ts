@@ -822,8 +822,19 @@ export interface GenerateVideoRequest {
 	/** 执行配置 */
 	execution?: Record<string, unknown>
 	/** 扩展配置 */
-	extensions?: Record<string, unknown>
+	extensions?: {
+		project_path?: string
+		video_edit_element_id?: string
+		output_file_name?: string
+		[key: string]: unknown
+	}
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
+	/** 当前话题 id（画布合成任务使用） */
+	topic_id?: string
 }
+
+export type CanvasCompositionPreparationResult = { ok: true } | { ok: false; errorMessage: string }
 
 /**
  * 发起视频生成响应数据
@@ -834,17 +845,17 @@ export interface GenerateVideoResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 输入模式 */
 	input_mode?: VideoInputMode
 	/** 任务类型 */
 	task?: GenerateVideoTask
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 输入素材 */
 	inputs?: GenerateVideoInputs
 	/** 生成参数 */
@@ -859,6 +870,8 @@ export interface GenerateVideoResponse {
 	updated_at: string
 	/** 文件 URL */
 	file_url: string | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 	/** ID */
 	id: string
 }
@@ -1021,15 +1034,15 @@ export interface VideoGenerationResultResponse {
 	/** 视频 id */
 	video_id: string
 	/** 模型 id */
-	model_id: string
+	model_id: string | null
 	/** 提示词 */
-	prompt: string
+	prompt: string | null
 	/** 任务类型 */
 	task?: GenerateVideoTask
 	/** 文件目录 */
-	file_dir: string
+	file_dir: string | null
 	/** 文件名 */
-	file_name: string
+	file_name: string | null
 	/** 输入素材 */
 	inputs?: GenerateVideoInputs
 	/** 生成参数 */
@@ -1045,7 +1058,7 @@ export interface VideoGenerationResultResponse {
 	/** 更新时间 */
 	updated_at: string
 	/** 文件 URL */
-	file_url: string
+	file_url: string | null
 	/** ID */
 	file_id: string
 	/** 海报文件 ID */
@@ -1058,6 +1071,8 @@ export interface VideoGenerationResultResponse {
 	generation_info?: VideoGenerationInfo | null
 	/** 运行时间信息 */
 	runtime?: VideoGenerationRuntimeInfo | null
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**
@@ -1380,6 +1395,8 @@ export interface CanvasDesignConfirmModalOptions {
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
+	/** 保存画布，使后端可读取本次合成所需的 DSL 与连接关系。 */
+	prepareCanvasComposition?: () => Promise<CanvasCompositionPreparationResult>
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式

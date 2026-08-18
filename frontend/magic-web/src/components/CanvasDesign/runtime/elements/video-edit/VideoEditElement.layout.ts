@@ -23,14 +23,6 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 	audioInfoWidth: 240,
 	/** 未提供 sectionTitles 时的标题列回退宽度。 */
 	sectionTitleWidth: 200,
-	// 与分镜参数行一致：固定控件尺寸，不随 footer 剩余空间拉伸。
-	footerParameterWidth: 300,
-	footerParameterHeight: 92,
-	/** 「画面比例：」等完整 label，避免大字阶换行。 */
-	footerParameterLabelWidth: 160,
-	footerParameterResolutionLabelWidth: 130,
-	footerParameterHorizontalPadding: 20,
-	footerParameterSuffixIconSize: 16,
 	mergeButtonWidth: 200,
 	mergeButtonHeight: 84,
 } as const
@@ -38,22 +30,6 @@ export const VIDEO_EDIT_LAYOUT_DESIGN = {
 export interface VideoEditLayoutOptions {
 	/** 视频/音频区块标题文案；按最长项测宽，保证两行标题列对齐。 */
 	sectionTitles?: string[]
-}
-
-export interface VideoEditFooterParameterLayout {
-	rect: LayoutRect
-	backgroundRect: LayoutRect
-	labelRect: LayoutRect
-	triggerRect: LayoutRect
-	valueTextRect: LayoutRect
-	suffixRect: LayoutRect
-	showLabel: boolean
-	horizontalPadding: number
-	suffixGap: number
-	suffixIconSize: number
-	fontSize: number
-	labelFontSize: number
-	cornerRadius: number
 }
 
 export interface VideoEditElementLayout {
@@ -87,12 +63,6 @@ export interface VideoEditElementLayout {
 	audioProgressThumbRadius: number
 	audioInfo: LayoutRect
 	footer: LayoutRect
-	footerOutput: LayoutRect
-	footerParameterRows: {
-		aspectRatio: VideoEditFooterParameterLayout
-		resolution: VideoEditFooterParameterLayout
-		format: VideoEditFooterParameterLayout
-	}
 	mergeButton: LayoutRect
 	mergeButtonCornerRadius: number
 	mergeButtonFontSize: number
@@ -165,80 +135,6 @@ function measureSectionTitleWidth(text: string, fontSize: number): number {
 	return Math.ceil(normalized.length * fontSize)
 }
 
-function resolveFooterParameterLayout(options: {
-	row: LayoutRect
-	labelWidth: number
-	showLabel: boolean
-	valueFontSize: number
-	labelFontSize: number
-	scale: number
-	responsive: ReturnType<typeof resolveResponsiveElementLayout>
-}): VideoEditFooterParameterLayout {
-	const { row, labelWidth, showLabel, valueFontSize, labelFontSize, scale, responsive } = options
-	const horizontalPadding = Math.min(
-		scale * VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHorizontalPadding,
-		row.width * 0.12,
-	)
-	const suffixGap = responsive.design.gap.control
-	const suffixIconSize = scale * VIDEO_EDIT_LAYOUT_DESIGN.footerParameterSuffixIconSize
-	const backgroundRect = responsive.insetRect(row, {
-		top: responsive.design.space.xs,
-		bottom: responsive.design.space.xs,
-	})
-	const contentRect = responsive.insetRect(row, {
-		left: horizontalPadding,
-		right: horizontalPadding,
-	})
-	// 大字阶下 label 需要更大占比，否则「画面比例：」会在槽内换行。
-	const resolvedLabelWidth = showLabel ? Math.min(labelWidth, contentRect.width * 0.55) : 0
-	const labelRect = {
-		x: contentRect.x,
-		y: contentRect.y,
-		width: resolvedLabelWidth,
-		height: contentRect.height,
-	}
-	const triggerRect = {
-		x: contentRect.x + resolvedLabelWidth,
-		y: contentRect.y,
-		width: Math.max(1, contentRect.width - resolvedLabelWidth),
-		height: contentRect.height,
-	}
-	const triggerContent = responsive.insetRect(triggerRect, {
-		left: showLabel ? 0 : horizontalPadding * 0.5,
-		right: horizontalPadding * 0.5,
-	})
-	const suffixRect = responsive.alignRect(
-		{ width: suffixIconSize, height: suffixIconSize },
-		triggerContent,
-		{ inline: "end", block: "center" },
-	)
-	const valueTextRect = responsive.constrainRect(
-		{
-			x: triggerContent.x,
-			y: triggerContent.y + Math.max(0, (triggerContent.height - valueFontSize) / 2),
-			width: Math.max(1, suffixRect.x - suffixGap - triggerContent.x),
-			height: Math.min(triggerContent.height, Math.max(1, valueFontSize * 1.35)),
-		},
-		triggerContent,
-	)
-
-	return {
-		rect: row,
-		backgroundRect,
-		labelRect,
-		triggerRect,
-		valueTextRect,
-		suffixRect,
-		showLabel,
-		horizontalPadding,
-		suffixGap,
-		suffixIconSize,
-		fontSize: valueFontSize,
-		labelFontSize,
-		cornerRadius: responsive.design.radius.control,
-	}
-}
-
 /** 视频编辑节点只根据元素逻辑宽高排版，viewport zoom 不参与计算。 */
 export function resolveVideoEditElementLayout(
 	width: number,
@@ -270,7 +166,6 @@ export function resolveVideoEditElementLayout(
 
 	// 1) 页脚按内容定高
 	const footerControlHeight = Math.max(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHeight),
 		px(VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonHeight),
 	)
 	const preferredFooterHeight = footerVerticalPadding * 2 + footerControlHeight
@@ -444,7 +339,6 @@ export function resolveVideoEditElementLayout(
 		top: footerVerticalPadding,
 		bottom: footerVerticalPadding,
 	})
-	const footerColumnGap = Math.min(design.pad.sectionInline, footerContent.width * 0.04)
 	const mergeButtonFit = responsive.fitUniform(
 		{
 			width: VIDEO_EDIT_LAYOUT_DESIGN.mergeButtonWidth,
@@ -460,89 +354,6 @@ export function resolveVideoEditElementLayout(
 		design.type.caption * (mergeButtonFit.scale / Math.max(scale, 0.0001)),
 		"caption",
 	)
-	const footerOutput: LayoutRect = {
-		x: footerContent.x,
-		y: footerContent.y,
-		width: Math.max(0, mergeButton.x - footerColumnGap - footerContent.x),
-		height: footerContent.height,
-	}
-
-	const footerParameterGap = Math.min(design.space.md, footerOutput.width * 0.035)
-	const footerParameterColumnCount = 3
-	const footerParameterColumnWidth = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterWidth),
-		Math.max(
-			0,
-			(footerOutput.width - footerParameterGap * (footerParameterColumnCount - 1)) /
-				footerParameterColumnCount,
-		),
-	)
-	const footerParameterColumnHeight = Math.min(
-		px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterHeight),
-		footerOutput.height,
-	)
-	const footerParameterCluster = responsive.alignRect(
-		{
-			width:
-				footerParameterColumnWidth * footerParameterColumnCount +
-				footerParameterGap * (footerParameterColumnCount - 1),
-			height: footerParameterColumnHeight,
-		},
-		footerOutput,
-		{ inline: "start", block: "center" },
-	)
-	const aspectColumn: LayoutRect = {
-		x: footerParameterCluster.x,
-		y: footerParameterCluster.y,
-		width: footerParameterColumnWidth,
-		height: footerParameterColumnHeight,
-	}
-	const resolutionColumn: LayoutRect = {
-		x: aspectColumn.x + aspectColumn.width + footerParameterGap,
-		y: footerParameterCluster.y,
-		width: footerParameterColumnWidth,
-		height: footerParameterColumnHeight,
-	}
-	const formatColumn: LayoutRect = {
-		x: resolutionColumn.x + resolutionColumn.width + footerParameterGap,
-		y: footerParameterCluster.y,
-		width: footerParameterColumnWidth,
-		height: footerParameterColumnHeight,
-	}
-	const showFooterParameterLabels = responsive.mode !== "condensed"
-	// label / value 同字号，避免底部控件视觉不齐。
-	const footerParameterLabelFontSize = design.type.caption
-	const footerParameterValueFontSize = footerParameterLabelFontSize
-	const footerParameterRows = {
-		aspectRatio: resolveFooterParameterLayout({
-			row: aspectColumn,
-			labelWidth: px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterLabelWidth),
-			showLabel: showFooterParameterLabels,
-			valueFontSize: footerParameterValueFontSize,
-			labelFontSize: footerParameterLabelFontSize,
-			scale,
-			responsive,
-		}),
-		resolution: resolveFooterParameterLayout({
-			row: resolutionColumn,
-			labelWidth: px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterResolutionLabelWidth),
-			showLabel: showFooterParameterLabels,
-			valueFontSize: footerParameterValueFontSize,
-			labelFontSize: footerParameterLabelFontSize,
-			scale,
-			responsive,
-		}),
-		format: resolveFooterParameterLayout({
-			row: formatColumn,
-			labelWidth: px(VIDEO_EDIT_LAYOUT_DESIGN.footerParameterResolutionLabelWidth),
-			showLabel: showFooterParameterLabels,
-			valueFontSize: footerParameterValueFontSize,
-			labelFontSize: footerParameterLabelFontSize,
-			scale,
-			responsive,
-		}),
-	}
-
 	return {
 		mode: responsive.mode,
 		scale,
@@ -575,8 +386,6 @@ export function resolveVideoEditElementLayout(
 		audioProgressThumbRadius,
 		audioInfo,
 		footer,
-		footerOutput,
-		footerParameterRows,
 		mergeButton,
 		mergeButtonCornerRadius,
 		mergeButtonFontSize,

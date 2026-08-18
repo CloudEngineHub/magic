@@ -111,7 +111,7 @@ export interface DesignProjectManagerAPI {
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
 	) => void
-	manualSave: () => Promise<void>
+	manualSave: () => Promise<boolean>
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 
@@ -1928,19 +1928,19 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.clearConflictState()
 	}
 
-	async manualSave(): Promise<void> {
+	async manualSave(): Promise<boolean> {
 		if (this.isVersionDataSourceLocked()) {
-			return
+			return false
 		}
 		if (this.hasUnresolvedConnectionConflicts()) {
 			this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
-			return
+			return false
 		}
 		if (this.hasUnresolvedElementConflicts()) {
 			const remoteSaveData = this.getRemoteSaveDataForCurrentElementConflicts()
 			if (!remoteSaveData) {
 				this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
-				return
+				return false
 			}
 			this.persistLocalDraft(this.stateBag.getDesignData(), { immediate: true })
 			this.saveManager.cancelAutoSave()
@@ -1954,14 +1954,14 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			if (saveResult.ok) {
 				this.handleSuccessfulSaveResult(saveResult)
 				this.pendingRemoteDesignData = null
-				return
+				return true
 			}
 			await this.handleSaveResultConflict(saveResult)
 			this.tryApplyPendingRemoteDesignData()
-			return
+			return false
 		}
 		if (this.hasBlockingConflict()) {
-			return
+			return false
 		}
 		const saveResult = await this.saveManager.manualSave()
 		if (saveResult.ok) {
@@ -1973,10 +1973,11 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				this.clearLocalDraftAfterFullyPersistedSave()
 			}
 			this.pendingRemoteDesignData = null
-			return
+			return true
 		}
 		await this.handleSaveResultConflict(saveResult)
 		this.tryApplyPendingRemoteDesignData()
+		return false
 	}
 
 	syncDesignData(newDesignData: DesignData): void {

@@ -34,6 +34,9 @@ import {
 
 interface UseVideoGenerationOptions {
 	projectId?: string
+	topicId?: string
+	/** 宿主侧画布项目路径，仅用于补齐后端合成请求。 */
+	canvasCompositionProjectPath?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -67,6 +70,8 @@ interface UseVideoGenerationReturn {
 export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideoGenerationReturn {
 	const {
 		projectId,
+		topicId,
+		canvasCompositionProjectPath,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -111,11 +116,13 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 			const requestParams = await buildDesignVideoRequestParams({
 				params,
 				projectId,
+				topicId,
+				canvasCompositionProjectPath,
 				currentFile,
 				flatAttachments,
 				designProjectBasePath,
 				updateAttachments,
-				ensureVideosDir: true,
+				ensureVideosDir: params.generation_type !== "canvas_composition",
 				pathUnresolvedMessage: t("design.errors.designResourcePathUnresolved"),
 			})
 			const result = await SuperMagicApi.generateVideo(requestParams)
@@ -124,7 +131,16 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				status: normalizeVideoGenerationStatus(result.status),
 			} as GenerateVideoResponse
 		},
-		[projectId, currentFile, flatAttachments, designProjectBasePath, t, updateAttachments],
+		[
+			projectId,
+			topicId,
+			canvasCompositionProjectPath,
+			currentFile,
+			flatAttachments,
+			designProjectBasePath,
+			t,
+			updateAttachments,
+		],
 	)
 
 	const estimateVideoPoints = useCallback(
@@ -172,10 +188,10 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				result.file_url &&
 				result.file_name
 			) {
+				const fileUrl = result.file_url
+				const fileName = result.file_name
 				const normalizedDir = normalizePath(normalizedResult.file_dir || "")
-				const workspacePath = normalizedDir
-					? `${normalizedDir}/${normalizedResult.file_name}`
-					: normalizedResult.file_name
+				const workspacePath = normalizedDir ? `${normalizedDir}/${fileName}` : fileName
 				const filePath = resolveDesignWorkspaceStoragePath(workspacePath, {
 					designProjectBasePath,
 				})
@@ -183,8 +199,8 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 					await syncFileInfoAfterGenerationComplete({
 						projectId,
 						filePath,
-						fileUrl: normalizedResult.file_url,
-						fileName: normalizedResult.file_name,
+						fileUrl,
+						fileName,
 						setFileInfoCache,
 					})
 				}
@@ -200,6 +216,8 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 interface BuildDesignVideoRequestParamsOptions {
 	params: GenerateVideoRequest
 	projectId: string
+	topicId?: string
+	canvasCompositionProjectPath?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -217,6 +235,8 @@ async function buildDesignVideoRequestParams(
 	const {
 		params,
 		projectId,
+		topicId,
+		canvasCompositionProjectPath,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -249,14 +269,31 @@ async function buildDesignVideoRequestParams(
 		}
 	}
 	const fileDirWithSlash = fileDir ? `/${fileDir}/` : undefined
+	const request = toDesignGenerateVideoRequest(
+		params,
+		designProjectBasePath,
+		flatAttachments,
+		pathUnresolvedMessage,
+	)
+	if (params.generation_type === "canvas_composition") {
+		const projectPath = canvasCompositionProjectPath ?? designProjectBasePath
+		if (!topicId || !projectPath || !request.extensions?.video_edit_element_id?.trim()) {
+			throw new Error("画布合并任务上下文不完整")
+		}
+		return {
+			...request,
+			project_id: projectId,
+			topic_id: topicId,
+			extensions: {
+				...request.extensions,
+				project_path: projectPath,
+			},
+		}
+	}
 	return {
-		...toDesignGenerateVideoRequest(
-			params,
-			designProjectBasePath,
-			flatAttachments,
-			pathUnresolvedMessage,
-		),
+		...request,
 		project_id: projectId,
+		...(topicId ? { topic_id: topicId } : {}),
 		file_dir: fileDirWithSlash,
 	}
 }
@@ -316,6 +353,8 @@ function toDesignGenerateVideoRequest(
 		task: params.task || "generate",
 		file_dir: params.file_dir,
 		file_name: params.file_name,
+		generation_type: params.generation_type,
+		topic_id: params.topic_id,
 		...(Object.keys(normalizedInputs).length > 0
 			? {
 					inputs: normalizeGenerateVideoInputs(
