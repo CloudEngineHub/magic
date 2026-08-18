@@ -14,8 +14,8 @@ type FunctionPermissionState = {
 	isLoading: boolean
 }
 
-type PlatformSuperAdminState = {
-	isSuperAdmin: boolean
+type PlatformPermissionState = {
+	permissionKeys?: string[]
 	error?: unknown
 	isLoading: boolean
 }
@@ -117,9 +117,9 @@ const stopPermissionContextReaction = () => {
 
 const platformPermissionListeners = new Set<() => void>()
 
-let platformPermissionCache: boolean | undefined
+let platformPermissionCache: string[] | undefined
 let platformPermissionError: unknown
-let platformPermissionRequest: Promise<boolean> | null = null
+let platformPermissionRequest: Promise<string[]> | null = null
 let hasRequestedPlatformPermission = false
 let platformPermissionContextKey = ""
 let platformPermissionRequestVersion = 0
@@ -129,12 +129,12 @@ const notifyPlatformPermissionListeners = () => {
 	platformPermissionListeners.forEach((listener) => listener())
 }
 
-const getPlatformSuperAdminState = (): PlatformSuperAdminState => {
+const getPlatformPermissionState = (): PlatformPermissionState => {
 	const contextKey = getPermissionContextKey()
 
 	return {
-		isSuperAdmin:
-			platformPermissionContextKey === contextKey && platformPermissionCache === true,
+		permissionKeys:
+			platformPermissionContextKey === contextKey ? platformPermissionCache : undefined,
 		error: platformPermissionContextKey === contextKey ? platformPermissionError : undefined,
 		isLoading:
 			platformPermissionContextKey !== contextKey ||
@@ -153,7 +153,7 @@ const resetPlatformPermission = (contextKey = getPermissionContextKey()) => {
 	notifyPlatformPermissionListeners()
 }
 
-const fetchPlatformSuperAdmin = (force = false) => {
+const fetchPlatformPermissions = (force = false) => {
 	const contextKey = getPermissionContextKey()
 	if (platformPermissionContextKey !== contextKey) {
 		resetPlatformPermission(contextKey)
@@ -170,12 +170,11 @@ const fetchPlatformSuperAdmin = (force = false) => {
 	platformPermissionRequestVersion = currentRequestVersion
 	const request = FunctionPermissionApi.getPermissionGroups()
 		.then(({ permission_key }) => {
-			const isSuperAdmin =
-				permission_key?.includes(PLATFORM_SUPER_ADMIN_PERMISSION_KEY) === true
+			const permissionKeys = Array.isArray(permission_key) ? permission_key : []
 			if (currentRequestVersion === platformPermissionRequestVersion) {
-				platformPermissionCache = isSuperAdmin
+				platformPermissionCache = permissionKeys
 			}
-			return isSuperAdmin
+			return permissionKeys
 		})
 		.catch((error: unknown) => {
 			if (currentRequestVersion === platformPermissionRequestVersion) {
@@ -203,7 +202,7 @@ const startPlatformPermissionReaction = () => {
 		(contextKey, previous) => {
 			if (contextKey === previous) return
 			resetPlatformPermission(contextKey)
-			void fetchPlatformSuperAdmin().catch(() => undefined)
+			void fetchPlatformPermissions().catch(() => undefined)
 		},
 	)
 }
@@ -215,17 +214,17 @@ const stopPlatformPermissionReaction = () => {
 	disposePlatformPermissionReaction = undefined
 }
 
-const usePlatformSuperAdmin = (enabled: boolean) => {
-	const [state, setState] = useState<PlatformSuperAdminState>(getPlatformSuperAdminState)
+const usePlatformPermissionKeys = (enabled: boolean) => {
+	const [state, setState] = useState<PlatformPermissionState>(getPlatformPermissionState)
 
 	useEffect(() => {
 		if (!enabled) return
 
-		const handleStateChange = () => setState(getPlatformSuperAdminState())
+		const handleStateChange = () => setState(getPlatformPermissionState())
 		platformPermissionListeners.add(handleStateChange)
 		startPlatformPermissionReaction()
 		handleStateChange()
-		void fetchPlatformSuperAdmin().catch(() => undefined)
+		void fetchPlatformPermissions().catch(() => undefined)
 
 		return () => {
 			platformPermissionListeners.delete(handleStateChange)
@@ -233,7 +232,52 @@ const usePlatformSuperAdmin = (enabled: boolean) => {
 		}
 	}, [enabled])
 
-	return enabled ? state : { isSuperAdmin: false, isLoading: false, error: undefined }
+	const mutate = useCallback(() => fetchPlatformPermissions(true), [])
+
+	return enabled
+		? { ...state, mutate }
+		: {
+				permissionKeys: undefined,
+				error: undefined,
+				isLoading: false,
+				mutate,
+			}
+}
+
+const usePlatformSuperAdmin = (enabled: boolean) => {
+	const { permissionKeys, error, isLoading } = usePlatformPermissionKeys(enabled)
+
+	return {
+		isSuperAdmin:
+			enabled && permissionKeys?.includes(PLATFORM_SUPER_ADMIN_PERMISSION_KEY) === true,
+		error,
+		isLoading,
+	}
+}
+
+export interface UsePermissionKeyOptions {
+	/** Allow platform super administrators to bypass a missing permission key. */
+	allowSuperAdmin?: boolean
+}
+
+/**
+ * Check a permission key returned by `/api/v1/permissions/me`.
+ * This hook intentionally does not request `/api/v1/function-permissions/me`.
+ */
+export const usePermissionKey = (permissionKey: string, options: UsePermissionKeyOptions = {}) => {
+	const { permissionKeys, error, isLoading, mutate } = usePlatformPermissionKeys(true)
+	const directPermissionGranted = permissionKeys?.includes(permissionKey) === true
+	const superAdminGranted =
+		options.allowSuperAdmin === true &&
+		permissionKeys?.includes(PLATFORM_SUPER_ADMIN_PERMISSION_KEY) === true
+
+	return {
+		error,
+		isAllowed: directPermissionGranted || superAdminGranted,
+		isLoading,
+		mutate,
+		permissionKeys,
+	}
 }
 
 export const useFunctionPermissions = () => {
@@ -277,7 +321,7 @@ export const useFunctionPermission = (
 	const refresh = useCallback(async () => {
 		const permissions = await mutate()
 		if (options.allowSuperAdmin === true && permissions?.[code] !== true) {
-			await fetchPlatformSuperAdmin(true)
+			await fetchPlatformPermissions(true)
 		}
 		return permissions
 	}, [code, mutate, options.allowSuperAdmin])

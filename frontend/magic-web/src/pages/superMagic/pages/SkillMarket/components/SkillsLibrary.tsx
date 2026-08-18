@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skills } from "@/enhance/lucide-react"
-import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { useFunctionPermission, usePermissionKey } from "@/hooks/useFunctionPermission"
 import { cn } from "@/lib/utils"
 import { configStore } from "@/models/config"
 import OfficialSkillImportDialog from "@/pages/superMagic/components/OfficialSkillImportDialog"
@@ -52,7 +52,7 @@ function SkillsLibrary({
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
-	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
+	const { isAllowed: canImportOfficialSkill } = usePermissionKey(
 		FUNCTION_PERMISSION_CODE.SkillMarketManage,
 		{ allowSuperAdmin: true },
 	)

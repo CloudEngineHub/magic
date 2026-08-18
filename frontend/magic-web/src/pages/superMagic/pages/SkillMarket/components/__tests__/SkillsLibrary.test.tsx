@@ -6,6 +6,7 @@ import type { StoreSkillView } from "@/services/skills/SkillsService"
 const getStoreSkillsMock = vi.fn()
 const getSkillMarketCategoriesMock = vi.fn()
 const useFunctionPermissionMock = vi.hoisted(() => vi.fn())
+const usePermissionKeyMock = vi.hoisted(() => vi.fn())
 const skillCardRenderMock = vi.fn()
 const skillDetailDialogRenderMock = vi.fn()
 
@@ -87,6 +88,8 @@ vi.mock("@/enhance/lucide-react", () => ({
 vi.mock("@/hooks/useFunctionPermission", () => ({
 	useFunctionPermission: (code: string, options?: { allowSuperAdmin?: boolean }) =>
 		useFunctionPermissionMock(code, options),
+	usePermissionKey: (code: string, options?: { allowSuperAdmin?: boolean }) =>
+		usePermissionKeyMock(code, options),
 }))
 
 vi.mock("@/models/config", () => ({
@@ -192,6 +195,7 @@ describe("SkillsLibrary", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		useFunctionPermissionMock.mockImplementation(() => ({ isAllowed: false }))
+		usePermissionKeyMock.mockImplementation(() => ({ isAllowed: false }))
 		getStoreSkillsMock.mockReset()
 		getSkillMarketCategoriesMock.mockReset()
 		getSkillMarketCategoriesMock.mockResolvedValue([])
@@ -215,7 +219,7 @@ describe("SkillsLibrary", () => {
 	})
 
 	it("shows the official Skill entry for users with market management permission", async () => {
-		useFunctionPermissionMock.mockImplementation((code: string) => ({
+		usePermissionKeyMock.mockImplementation((code: string) => ({
 			isAllowed: code === "SkillMarketManage",
 		}))
 		getStoreSkillsMock.mockResolvedValue(createPage([], 1, 20))
@@ -223,7 +227,10 @@ describe("SkillsLibrary", () => {
 		render(<SkillsLibrary />)
 
 		const uploadButton = await screen.findByTestId("skills-library-upload-official-button")
-		expect(useFunctionPermissionMock).toHaveBeenCalledWith("SkillMarketManage", {
+		expect(usePermissionKeyMock).toHaveBeenCalledWith("SkillMarketManage", {
+			allowSuperAdmin: true,
+		})
+		expect(useFunctionPermissionMock).not.toHaveBeenCalledWith("SkillMarketManage", {
 			allowSuperAdmin: true,
 		})
 		expect(uploadButton).toBeInTheDocument()

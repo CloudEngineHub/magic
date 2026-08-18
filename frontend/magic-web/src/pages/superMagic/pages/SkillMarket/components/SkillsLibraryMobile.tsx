@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
-import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { usePermissionKey } from "@/hooks/useFunctionPermission"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
@@ -29,7 +29,7 @@ function SkillsLibraryMobile() {
 	const skillsStoreRef = useRef(new StoreSkillsStore())
 	const skillsStore = skillsStoreRef.current
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
-	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
+	const { isAllowed: canImportOfficialSkill } = usePermissionKey(
 		FUNCTION_PERMISSION_CODE.SkillMarketManage,
 		{ allowSuperAdmin: true },
 	)

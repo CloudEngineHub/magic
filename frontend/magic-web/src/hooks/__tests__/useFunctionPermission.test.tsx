@@ -22,8 +22,9 @@ vi.mock("@/apis", () => ({
 
 vi.mock("@/models/user", () => ({ userStore: mocks.userStore }))
 
-import { useFunctionPermission } from "../useFunctionPermission"
+import { useFunctionPermission, usePermissionKey } from "../useFunctionPermission"
 
+const SKILL_CREATE = "skill.create" as const
 const SKILL_MARKET_EDIT = "platform.skill.market.edit" as const
 
 let testContext = 0
@@ -40,11 +41,9 @@ describe("useFunctionPermission", () => {
 	})
 
 	it("uses the function permission when it is granted", async () => {
-		mocks.getFunctionPermissions.mockResolvedValue({ [SKILL_MARKET_EDIT]: true })
+		mocks.getFunctionPermissions.mockResolvedValue({ [SKILL_CREATE]: true })
 
-		const { result } = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
-		)
+		const { result } = renderHook(() => useFunctionPermission(SKILL_CREATE))
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 
@@ -58,7 +57,7 @@ describe("useFunctionPermission", () => {
 		})
 
 		const { result } = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+			useFunctionPermission(SKILL_CREATE, { allowSuperAdmin: true }),
 		)
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -73,10 +72,10 @@ describe("useFunctionPermission", () => {
 		})
 
 		const first = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+			useFunctionPermission(SKILL_CREATE, { allowSuperAdmin: true }),
 		)
 		const second = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+			useFunctionPermission(SKILL_CREATE, { allowSuperAdmin: true }),
 		)
 
 		await waitFor(() => {
@@ -95,7 +94,7 @@ describe("useFunctionPermission", () => {
 		})
 
 		const { result, rerender } = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+			useFunctionPermission(SKILL_CREATE, { allowSuperAdmin: true }),
 		)
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -106,7 +105,7 @@ describe("useFunctionPermission", () => {
 	})
 
 	it("does not request the fallback when it is not enabled", async () => {
-		const { result } = renderHook(() => useFunctionPermission(SKILL_MARKET_EDIT))
+		const { result } = renderHook(() => useFunctionPermission(SKILL_CREATE))
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 
@@ -118,12 +117,43 @@ describe("useFunctionPermission", () => {
 		mocks.getPermissionGroups.mockRejectedValue(new Error("permission request failed"))
 
 		const { result } = renderHook(() =>
-			useFunctionPermission(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+			useFunctionPermission(SKILL_CREATE, { allowSuperAdmin: true }),
 		)
 
 		await waitFor(() => expect(result.current.isLoading).toBe(false))
 
 		expect(result.current.isAllowed).toBe(false)
 		expect(result.current.error).toBeInstanceOf(Error)
+	})
+
+	it("reads the skill market permission from permission keys without requesting function permissions", async () => {
+		mocks.getPermissionGroups.mockResolvedValue({
+			permission_key: [SKILL_MARKET_EDIT],
+		})
+
+		const { result } = renderHook(() =>
+			usePermissionKey(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+		)
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		expect(result.current.isAllowed).toBe(true)
+		expect(mocks.getPermissionGroups).toHaveBeenCalledTimes(1)
+		expect(mocks.getFunctionPermissions).not.toHaveBeenCalled()
+	})
+
+	it("allows the skill market permission for platform super administrators", async () => {
+		mocks.getPermissionGroups.mockResolvedValue({
+			permission_key: ["MAGIC_PLATFORM_PERMISSIONS"],
+		})
+
+		const { result } = renderHook(() =>
+			usePermissionKey(SKILL_MARKET_EDIT, { allowSuperAdmin: true }),
+		)
+
+		await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+		expect(result.current.isAllowed).toBe(true)
+		expect(mocks.getFunctionPermissions).not.toHaveBeenCalled()
 	})
 })

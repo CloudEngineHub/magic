@@ -47,6 +47,7 @@ import { Progress } from "@/components/shadcn-ui/progress"
 import { Separator } from "@/components/shadcn-ui/separator"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useUpload } from "@/hooks/useUploadFiles"
+import { cn } from "@/lib/utils"
 import { SupportLocales } from "@/constants/locale"
 import { skillsService } from "@/services/skills/SkillsService"
 import type { SkillMarketCategoryView } from "@/services/skills/SkillsService"
@@ -160,7 +161,7 @@ function UploadDropzone({
 				data-testid="official-skill-file-input"
 			/>
 			<div
-				className="group flex min-h-[208px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-input bg-muted/20 px-6 py-8 transition-colors hover:border-foreground/40 hover:bg-muted/40"
+				className="group flex min-h-[210px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/70 bg-background px-6 py-8 transition-colors hover:border-foreground/40 hover:bg-muted/30"
 				onClick={() => inputRef.current?.click()}
 				onDrop={handleDrop}
 				onDragOver={(event) => event.preventDefault()}
@@ -648,11 +649,17 @@ function OfficialSkillImportDialog({
 	const isManualReady = uploadedFile?.status === "done" && parseResult != null
 	const isDirectReady = fileKeys.length > 0
 	const canSubmit = mode === "manual" ? isManualReady && manualStep === "details" : isDirectReady
+	const isCompactUpload = mode === "manual" && manualStep === "upload"
 
 	return (
 		<Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && handleClose()}>
 			<DialogContent
-				className="w-[min(860px,calc(100vw-24px))] max-w-none gap-0 overflow-hidden p-0"
+				className={cn(
+					"grid w-[calc(100vw-24px)] !max-w-[586px] gap-0 overflow-hidden p-0",
+					isCompactUpload
+						? "max-h-[calc(100vh-32px)]"
+						: "h-[min(760px,calc(100vh-32px))] grid-rows-[auto_minmax(0,1fr)_auto]",
+				)}
 				showCloseButton={false}
 				data-testid="official-skill-import-dialog"
 				onInteractOutside={(event) => event.preventDefault()}
@@ -689,20 +696,23 @@ function OfficialSkillImportDialog({
 				<Tabs
 					value={mode}
 					onValueChange={(value) => setMode(value as ImportMode)}
-					className="min-h-0 gap-0"
+					className={cn(
+						"flex min-h-0 flex-col gap-0 overflow-hidden",
+						!isCompactUpload && "flex-1",
+					)}
 				>
 					<div className="border-b border-border px-5 pt-3">
-						<TabsList className="h-9 w-full justify-start gap-5 rounded-none bg-transparent p-0">
+						<TabsList className="h-9 w-full justify-stretch gap-0 rounded-none bg-transparent p-0">
 							<TabsTrigger
 								value="manual"
-								className="h-9 rounded-none border-b-2 border-transparent px-0 text-sm data-[state=active]:border-foreground data-[state=active]:bg-transparent"
+								className="h-9 flex-1 rounded-none border-0 border-b-2 border-transparent px-3 text-sm data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 								data-testid="official-skill-manual-tab"
 							>
 								{t("officialSkillImport.modes.manual")}
 							</TabsTrigger>
 							<TabsTrigger
 								value="direct"
-								className="h-9 rounded-none border-b-2 border-transparent px-0 text-sm data-[state=active]:border-foreground data-[state=active]:bg-transparent"
+								className="h-9 flex-1 rounded-none border-0 border-b-2 border-transparent px-3 text-sm data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 								data-testid="official-skill-direct-tab"
 							>
 								{t("officialSkillImport.modes.direct")}
@@ -710,7 +720,13 @@ function OfficialSkillImportDialog({
 						</TabsList>
 					</div>
 
-					<ScrollArea className="h-[min(640px,calc(100vh-250px))]">
+					<ScrollArea
+						className={cn(
+							"min-h-0",
+							!isCompactUpload && "min-h-0 flex-1",
+							isCompactUpload && "max-h-[calc(100vh-220px)]",
+						)}
+					>
 						<TabsContent value="manual" className="m-0 px-5 py-5">
 							{manualStep === "upload" ? (
 								<div className="flex flex-col gap-4">
@@ -876,7 +892,7 @@ function OfficialSkillImportDialog({
 					</ScrollArea>
 				</Tabs>
 
-				<DialogFooter className="border-t border-border px-5 py-3">
+				<DialogFooter className="shrink-0 border-t border-border bg-background px-5 py-3">
 					<div className="flex w-full items-center justify-between gap-3">
 						<div className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
 							<Info className="size-3.5" />

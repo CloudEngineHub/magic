@@ -63,7 +63,7 @@ vi.mock("@/apis", () => ({
 }))
 
 vi.mock("@/hooks/useFunctionPermission", () => ({
-	useFunctionPermission: () => ({ isAllowed: false }),
+	usePermissionKey: () => ({ isAllowed: false }),
 }))
 
 vi.mock("@/enhance/lucide-react", () => ({
