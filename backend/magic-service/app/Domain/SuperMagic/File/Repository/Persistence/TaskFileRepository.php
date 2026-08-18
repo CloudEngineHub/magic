@@ -9,7 +9,6 @@ namespace App\Domain\SuperMagic\File\Repository\Persistence;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
-use App\Domain\SuperMagic\File\Constant\TopicFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Repository\Facade\TaskFileRepositoryInterface;
@@ -1733,7 +1732,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->where('topic_id', $topicId)
             ->where('space_type', FileSpaceType::TOPIC->value)
             ->where('storage_type', StorageType::TOPIC->value)
-            ->where('file_name', TopicFileConstant::ROOT_FILE_NAME)
+            // 不过滤 file_name：根目录名已从固定 `.topic` 改为 `topic_{topic_id}`，
+            // 去掉该条件可同时兼容存量 `.topic` 行，避免重复创建根目录。
             ->whereNull('parent_id')
             ->where('is_directory', true)
             ->whereNull('deleted_at')

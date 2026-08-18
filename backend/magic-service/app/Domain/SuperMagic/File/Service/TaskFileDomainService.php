@@ -2142,7 +2142,8 @@ class TaskFileDomainService
             }
 
             // Topic root 使用既有固定物理目录，以便沙箱按该前缀申请最小范围权限。
-            // `.topic` 仅是 TaskFile 元数据名称，不拼入对象存储 file_key。
+            // `topic_{topic_id}` 仅是 TaskFile 元数据名称，不拼入对象存储 file_key；
+            // 不能命名为 `.topic`，否则沙箱 mount 时与容器内挂载点冲突。
             $relativeDir = WorkDirectoryUtil::getTopicRootDir($userId, $projectId, $topicId);
             $fullPrefix = $this->getFullPrefix($projectOrganizationCode);
             $fileKey = rtrim($fullPrefix . ltrim($relativeDir, '/'), '/') . '/';
@@ -2160,7 +2161,7 @@ class TaskFileDomainService
             $entity->setOrganizationCode($organizationCode);
             $entity->setProjectId($projectId);
             $entity->setTopicId($topicId);
-            $entity->setFileName(TopicFileConstant::ROOT_FILE_NAME);
+            $entity->setFileName(TopicFileConstant::rootFileName($topicId));
             $entity->setFileKey($fileKey);
             $entity->setFileSize(0);
             $entity->setFileType(FileType::DIRECTORY->value);
