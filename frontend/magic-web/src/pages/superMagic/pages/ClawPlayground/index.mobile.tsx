@@ -28,7 +28,7 @@ import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPag
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
@@ -153,7 +153,7 @@ const ClawMobileConversationPanel = observer(
 				topicId: selectedTopic?.id,
 				agentCode: clawCode,
 				isTaskRunning: showLoading,
-				isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
+				isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 				isEmptyStatus: false,
 				isShowLoadingInit: isMessagesInitialLoading,
 			})

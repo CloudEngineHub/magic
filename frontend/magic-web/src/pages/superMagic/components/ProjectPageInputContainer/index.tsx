@@ -28,7 +28,7 @@ import { TopicInvalidModeFallback } from "../MessageEditor/components/TopicInval
 import { userStore } from "@/models/user"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
-import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 
 /**
  * 这个组件作为项目页的编辑器组件
@@ -120,7 +120,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
-		isWaitingForUser: selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus,
 		isShowLoadingInit,
 	})
