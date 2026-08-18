@@ -15,6 +15,7 @@ import {
 	mySlidesTemplateAdapter,
 	type MySlidesTemplateAdapter,
 } from "@/pages/superMagic/services/mySlidesTemplateAdapter"
+import SuperMagicService from "@/pages/superMagic/services"
 import SlidesTemplateCanvas, { type SlidesTemplateCanvasHandle } from "./SlidesTemplateCanvas"
 import SlidesTemplatesBottomTools from "./SlidesTemplatesBottomTools"
 import { getTemplateCoverUrl, getTemplateKey } from "./canvasInteraction"
@@ -354,6 +355,19 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 		setSimilarColorSource({ ...template, colors })
 	}, [])
 
+	const handleOpenProject = useCallback((template: OptionItem) => {
+		const project = template.project
+		if (!project?.id || !project.directory_id) return
+
+		void SuperMagicService.switchProjectById(project.id, undefined, undefined, {
+			slidesTemplateProjectId: project.id,
+			slidesTemplateDirectoryId: project.directory_id,
+		}).catch((error) => {
+			console.error("Failed to open slides template source project", error)
+			magicToast.error(i18next.t("mySlidesTemplates.openProjectFailed", { ns: "super" }))
+		})
+	}, [])
+
 	const handleFavoriteToggle = useCallback(
 		(template: OptionItem) => {
 			const section = mySlidesTemplates.activeSection
@@ -452,6 +466,7 @@ export function SlidesTemplatesPage({ myTemplatesAdapter }: SlidesTemplatesPageP
 						mySlidesTemplates.isSelected ? undefined : handleFindSimilarColors
 					}
 					onFavoriteToggle={handleFavoriteToggle}
+					onOpenProject={handleOpenProject}
 					onPreviewOpenChange={setIsInlinePreviewOpen}
 					onRetryRefresh={
 						mySlidesTemplates.isSelected

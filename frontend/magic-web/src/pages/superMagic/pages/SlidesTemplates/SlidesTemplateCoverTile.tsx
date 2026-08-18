@@ -1,4 +1,4 @@
-import { Award, Check, Eye, Image as ImageIcon } from "lucide-react"
+import { Award, Check, Eye, FolderOpen, Image as ImageIcon } from "lucide-react"
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -26,6 +26,7 @@ interface SlidesTemplateCoverTileProps {
 	isSelected: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewClick: () => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onSelect: (template: OptionItem) => void
@@ -41,6 +42,7 @@ export default function SlidesTemplateCoverTile({
 	isSelected,
 	onFindSimilarColors,
 	onFavoriteToggle,
+	onOpenProject,
 	onPreviewClick,
 	onPreviewIntent,
 	onSelect,
@@ -116,6 +118,12 @@ export default function SlidesTemplateCoverTile({
 		event.preventDefault()
 		event.stopPropagation()
 		onFavoriteToggle?.(template)
+	}
+
+	function handleOpenProjectClick(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
+		onOpenProject?.(template)
 	}
 
 	return (
@@ -205,6 +213,25 @@ export default function SlidesTemplateCoverTile({
 					className="flex shrink-0 origin-bottom-right items-center gap-1.5 [transform:scale(var(--slides-template-canvas-action-scale,1))]"
 					data-testid="slides-template-cover-actions"
 				>
+					{onOpenProject && template.project ? (
+						<MagicTooltip
+							title={tSuper("mySlidesTemplates.openProject")}
+							placement="top"
+						>
+							<Button
+								type="button"
+								size="icon"
+								variant="secondary"
+								className="size-7 rounded-full bg-white/[0.92] text-zinc-950 shadow-md backdrop-blur hover:bg-white"
+								aria-label={tSuper("mySlidesTemplates.openProject")}
+								tabIndex={isKeyboardAccessible ? 0 : -1}
+								onClick={handleOpenProjectClick}
+								data-testid="slides-template-cover-open-project-button"
+							>
+								<FolderOpen className="size-3.5" />
+							</Button>
+						</MagicTooltip>
+					) : null}
 					{onFavoriteToggle ? (
 						<MagicTooltip title={favoriteLabel} placement="top">
 							<Button

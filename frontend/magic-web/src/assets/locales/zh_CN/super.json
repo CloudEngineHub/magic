@@ -4082,6 +4082,8 @@
 		},
 		"loadFailedDescription": "我的模板加载失败，请重试。",
 		"loading": "正在加载我的模板",
+		"openProject": "打开源项目",
+		"openProjectFailed": "打开源项目失败，请稍后重试",
 		"retry": "重试",
 		"saveDialog": {
 			"create": "保存为新的模板",

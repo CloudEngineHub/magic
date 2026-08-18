@@ -262,6 +262,28 @@ describe("SlidesPresetGrid", () => {
 		).toHaveAttribute("data-favorite-state", "favorite")
 	})
 
+	it("opens the source project without selecting the template", () => {
+		const template = {
+			...mockTemplates[0],
+			project: { id: "project-1", directory_id: "directory-1" },
+		}
+		const handleTemplateClick = vi.fn()
+		const handleOpenProject = vi.fn()
+
+		render(
+			<SlidesPresetGrid
+				templates={[template]}
+				onTemplateClick={handleTemplateClick}
+				onOpenProject={handleOpenProject}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("slides-preset-card-open-project-button"))
+
+		expect(handleOpenProject).toHaveBeenCalledWith(template)
+		expect(handleTemplateClick).not.toHaveBeenCalled()
+	})
+
 	it("restores the selection button and shows selected state", () => {
 		const handleTemplateClick = vi.fn()
 		render(
@@ -557,10 +579,15 @@ describe("SlidesPresetGrid", () => {
 	})
 
 	it("keeps the current favorite state when hover detail is stale", async () => {
-		const favoriteTemplate = { ...mockTemplates[0], is_favorite: true }
+		const favoriteTemplate = {
+			...mockTemplates[0],
+			is_favorite: true,
+			project: { id: "project-1", directory_id: "directory-1" },
+		}
 		const staleDetailTemplate = { ...mockTemplates[0], is_favorite: false }
 		const onPreviewDetailLoad = vi.fn().mockResolvedValue(staleDetailTemplate)
 		const onFavoriteToggle = vi.fn()
+		const onOpenProject = vi.fn()
 		vi.useFakeTimers()
 
 		try {
@@ -569,6 +596,7 @@ describe("SlidesPresetGrid", () => {
 					templates={[favoriteTemplate, mockTemplates[1]]}
 					onPreviewDetailLoad={onPreviewDetailLoad}
 					onFavoriteToggle={onFavoriteToggle}
+					onOpenProject={onOpenProject}
 				/>,
 			)
 
@@ -583,6 +611,9 @@ describe("SlidesPresetGrid", () => {
 			const favoriteButton = screen.getAllByTestId("slides-preset-card-favorite-button")[0]
 			expect(favoriteButton).toHaveAttribute("aria-pressed", "true")
 			expect(favoriteButton).toHaveAttribute("aria-label", "mySlidesTemplates.unfavorite")
+			expect(
+				screen.getAllByTestId("slides-preset-card-open-project-button")[0],
+			).toBeInTheDocument()
 		} finally {
 			vi.useRealTimers()
 		}

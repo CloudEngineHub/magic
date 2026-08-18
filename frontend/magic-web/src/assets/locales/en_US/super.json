@@ -4082,6 +4082,8 @@
 		},
 		"loadFailedDescription": "Unable to load My templates. Try again.",
 		"loading": "Loading My templates",
+		"openProject": "Open source project",
+		"openProjectFailed": "Unable to open source project. Try again later.",
 		"retry": "Retry",
 		"saveDialog": {
 			"create": "Save as a new template",

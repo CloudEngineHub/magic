@@ -26,6 +26,7 @@ interface SlidesPresetGridProps {
 	onRetryLoadMore?: () => void
 	onPreviewOpenChange?: (open: boolean) => void
 	onPreviewDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
+	onOpenProject?: (template: OptionItem) => void
 	showHoverDetails?: boolean
 	hoverDetailsContainer?: HTMLElement | null
 	disableEntryAnimation?: boolean
@@ -84,6 +85,7 @@ const SlidesPresetGrid = observer(
 		onRetryLoadMore,
 		onPreviewOpenChange,
 		onPreviewDetailLoad,
+		onOpenProject,
 		showHoverDetails = true,
 		hoverDetailsContainer,
 		disableEntryAnimation = false,
@@ -285,7 +287,11 @@ const SlidesPresetGrid = observer(
 						// 详情接口只负责补充悬浮预览字段，收藏状态以当前列表数据为准。
 						// 收藏操作可能先于详情请求返回，直接使用旧详情会把乐观状态覆盖掉。
 						const cardTemplate = hoverDetailTemplate
-							? { ...hoverDetailTemplate, is_favorite: template.is_favorite }
+							? {
+									...hoverDetailTemplate,
+									is_favorite: template.is_favorite,
+									project: template.project ?? hoverDetailTemplate.project,
+								}
 							: template
 
 						return (
@@ -315,6 +321,7 @@ const SlidesPresetGrid = observer(
 									isSelected={selectedTemplateValue === value}
 									onClick={onTemplateClick}
 									onFavoriteToggle={onFavoriteToggle}
+									onOpenProject={onOpenProject}
 									favoritePending={favoritePendingCodes?.has(value)}
 									onPreviewClick={handlePreviewClick}
 									onPreviewPreload={handlePreviewPreload}

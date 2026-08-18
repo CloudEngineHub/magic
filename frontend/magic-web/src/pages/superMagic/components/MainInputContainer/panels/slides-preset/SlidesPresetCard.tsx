@@ -6,7 +6,7 @@ import {
 	useRef,
 	useState,
 } from "react"
-import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide-react"
+import { Award, Check, Eye, FolderOpen, Image as ImageIcon, MousePointerClick } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
@@ -30,6 +30,7 @@ interface SlidesPresetCardProps {
 	onPreviewClick?: (template: OptionItem) => void
 	onPreviewPreload?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	favoritePending?: boolean
 	canUseHoverPreview?: boolean
 	showHoverDetails?: boolean
@@ -72,6 +73,7 @@ function SlidesPresetCard({
 	onPreviewClick,
 	onPreviewPreload,
 	onFavoriteToggle,
+	onOpenProject,
 	favoritePending = false,
 	canUseHoverPreview = false,
 	showHoverDetails = true,
@@ -144,6 +146,12 @@ function SlidesPresetCard({
 		onFavoriteToggle?.(template)
 	}
 
+	function handleOpenProjectClick(event: MouseEvent<HTMLButtonElement>) {
+		event.preventDefault()
+		event.stopPropagation()
+		onOpenProject?.(template)
+	}
+
 	function handlePreviewIntentStart() {
 		if (!canUseHoverPreview || !canPreview || preloadTimerRef.current) return
 
@@ -196,32 +204,57 @@ function SlidesPresetCard({
 					canUseHoverPreview && "group-hover:border-primary/30 group-hover:shadow-md",
 				)}
 			>
-				{onFavoriteToggle ? (
-					<MagicTooltip title={favoriteLabel} placement="top">
-						<Button
-							type="button"
-							size="icon"
-							variant="secondary"
-							className={cn(
-								"absolute right-2 top-2 z-30 size-9 bg-background/95 text-muted-foreground shadow-md backdrop-blur transition-[color,opacity,transform] active:scale-[0.96] sm:size-8",
-								canUseHoverPreview &&
-									!template.is_favorite &&
-									"opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
-								template.is_favorite && "text-rose-500",
-							)}
-							aria-label={favoriteLabel}
-							aria-pressed={template.is_favorite}
-							disabled={favoritePending}
-							data-testid="slides-preset-card-favorite-button"
-							onClick={handleFavoriteClick}
+				<div className="absolute right-2 top-2 z-30 flex items-center gap-1.5">
+					{onOpenProject && template.project ? (
+						<MagicTooltip
+							title={tSuper("mySlidesTemplates.openProject")}
+							placement="top"
 						>
-							<SlidesTemplateFavoriteIcon
-								isFavorite={Boolean(template.is_favorite)}
-								className="size-4"
-							/>
-						</Button>
-					</MagicTooltip>
-				) : null}
+							<Button
+								type="button"
+								size="icon"
+								variant="secondary"
+								className={cn(
+									"size-9 bg-background/95 text-foreground shadow-md backdrop-blur transition-[opacity,transform] active:scale-[0.96] sm:size-8",
+									canUseHoverPreview &&
+										!template.is_favorite &&
+										"opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+								)}
+								aria-label={tSuper("mySlidesTemplates.openProject")}
+								onClick={handleOpenProjectClick}
+								data-testid="slides-preset-card-open-project-button"
+							>
+								<FolderOpen className="size-4" />
+							</Button>
+						</MagicTooltip>
+					) : null}
+					{onFavoriteToggle ? (
+						<MagicTooltip title={favoriteLabel} placement="top">
+							<Button
+								type="button"
+								size="icon"
+								variant="secondary"
+								className={cn(
+									"size-9 bg-background/95 text-muted-foreground shadow-md backdrop-blur transition-[color,opacity,transform] active:scale-[0.96] sm:size-8",
+									canUseHoverPreview &&
+										!template.is_favorite &&
+										"opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+									template.is_favorite && "text-rose-500",
+								)}
+								aria-label={favoriteLabel}
+								aria-pressed={template.is_favorite}
+								disabled={favoritePending}
+								data-testid="slides-preset-card-favorite-button"
+								onClick={handleFavoriteClick}
+							>
+								<SlidesTemplateFavoriteIcon
+									isFavorite={Boolean(template.is_favorite)}
+									className="size-4"
+								/>
+							</Button>
+						</MagicTooltip>
+					) : null}
+				</div>
 				{template.thumbnail_url ? (
 					<>
 						{!isThumbnailLoaded && (

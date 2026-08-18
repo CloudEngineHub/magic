@@ -43,6 +43,7 @@ interface SlidesTemplateCanvasSurfaceProps {
 	onControlMove: ComponentProps<typeof SlidesTemplateCanvasControls>["onMove"]
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPointerCancel: PointerEventHandler<HTMLDivElement>
 	onPointerDown: PointerEventHandler<HTMLDivElement>
 	onPointerLeave: PointerEventHandler<HTMLDivElement>
@@ -88,6 +89,7 @@ export default function SlidesTemplateCanvasSurface({
 	onControlMove,
 	onFindSimilarColors,
 	onFavoriteToggle,
+	onOpenProject,
 	onPointerCancel,
 	onPointerDown,
 	onPointerLeave,
@@ -191,6 +193,7 @@ export default function SlidesTemplateCanvasSurface({
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}
 				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={onPreviewToggle}
