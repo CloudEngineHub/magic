@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Design\Service;
 
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
+use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
 use App\Application\Design\Service\DesignVideoAppService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
@@ -28,18 +29,81 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\VideoCatalog\Entity\ValueObject\VideoCatalogModelDefinition;
 use App\Domain\VideoCatalog\Service\VideoCatalogQueryDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use DateTime;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Amqp\Producer;
 use PHPUnit\Framework\TestCase;
 use Qbhy\HyperfAuth\Authenticatable;
+use RuntimeException;
 
 /**
  * @internal
  */
 class DesignVideoAppServiceTest extends TestCase
 {
+    public function testCanvasCompositionValidatesProjectAndDispatchesAsyncSubmission(): void
+    {
+        $repository = new InMemoryDesignVideoTaskRepository();
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('findEntityByRelativePath')
+            ->with(123, 'canvas-project/magic.project.js')
+            ->willReturn($this->createFile(7101, '/org/project_123/workspace/canvas-project/magic.project.js'));
+
+        $producer = $this->createMock(Producer::class);
+        $producer->expects($this->once())
+            ->method('produce')
+            ->with($this->isInstanceOf(DesignVideoSubmitPublisher::class));
+
+        $service = new TestableDesignVideoAppService(
+            $taskFileDomainService,
+            new CreateVideoFileDomainService('/org'),
+            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            new DesignGenerationTaskDomainService($repository),
+            new UnexpectedDesignVideoSubmissionDomainService(),
+            $producer,
+        );
+        $entity = $this->createCanvasCompositionEntity('canvas-project//');
+
+        $result = $service->create($this->createMock(Authenticatable::class), $entity);
+
+        $this->assertSame(DesignGenerationStatus::PENDING, $result->getStatus());
+        $this->assertSame('', $result->getOperationId());
+        $this->assertSame('canvas-project', $result->getRequestPayload()['extensions']['project_path'] ?? null);
+    }
+
+    public function testCanvasCompositionRejectsMissingProjectConfigBeforeCreatingTask(): void
+    {
+        $repository = new InMemoryDesignVideoTaskRepository();
+        $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
+        $taskFileDomainService->expects($this->once())
+            ->method('findEntityByRelativePath')
+            ->with(123, 'missing-project/magic.project.js')
+            ->willReturn(null);
+
+        $service = new TestableDesignVideoAppService(
+            $taskFileDomainService,
+            new CreateVideoFileDomainService('/org'),
+            new StubVideoCatalogQueryDomainService($this->createModelDefinition()),
+            new DesignGenerationTaskDomainService($repository),
+            new UnexpectedDesignVideoSubmissionDomainService(),
+            $this->createMock(Producer::class),
+        );
+
+        $this->expectException(BusinessException::class);
+
+        try {
+            $service->create(
+                $this->createMock(Authenticatable::class),
+                $this->createCanvasCompositionEntity('missing-project'),
+            );
+        } finally {
+            $this->assertNull($repository->createdEntity);
+        }
+    }
+
     public function testCreateStoresOutputDirectoryFileIdSnapshot(): void
     {
         $repository = new InMemoryDesignVideoTaskRepository();
@@ -132,6 +196,21 @@ class DesignVideoAppServiceTest extends TestCase
             status: 1,
             providerCode: 'Cloudsway',
         );
+    }
+
+    private function createCanvasCompositionEntity(string $projectPath): DesignGenerationTaskEntity
+    {
+        return DesignGenerationTaskFactory::createVideoTask(new DesignVideoCreateDTO([
+            'project_id' => 123,
+            'video_id' => 'composition-1',
+            'generation_type' => DesignGenerationType::CANVAS_COMPOSITION->value,
+            'topic_id' => '456',
+            'extensions' => [
+                'project_path' => $projectPath,
+                'video_edit_element_id' => 'video-edit-1',
+                'output_file_name' => 'final.mp4',
+            ],
+        ]));
     }
 
     private function createDirectory(int $fileId, string $fileKey): TaskFileEntity
@@ -261,6 +340,18 @@ readonly class StubDesignVideoSubmissionDomainService extends DesignVideoSubmiss
             'poll_attempts' => 0,
             'deadline_at' => date(DATE_ATOM, time() + 3600),
         ];
+    }
+}
+
+readonly class UnexpectedDesignVideoSubmissionDomainService extends DesignVideoSubmissionDomainService
+{
+    public function __construct()
+    {
+    }
+
+    public function submit(DesignGenerationTaskEntity $entity): array
+    {
+        throw new RuntimeException('画布合成不应在 HTTP 请求中同步提交');
     }
 }
 

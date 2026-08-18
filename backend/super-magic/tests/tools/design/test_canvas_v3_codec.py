@@ -119,6 +119,24 @@ def test_v3_codec_round_trip_keeps_content_and_connections():
     assert "src" not in canvas_data["elements"][1]
 
 
+def test_v3_codec_accepts_video_edit_without_audio_sequence():
+    """Video Edit 未配置外部音频时允许省略 audioSequence。"""
+    config = _build_v3_config()
+    video_edit = config.canvas.get_element("video-edit-1")
+    assert video_edit is not None
+    content = video_edit.get_main_content()
+    assert content is not None
+    content.fields.pop("audioSequence")
+
+    decoded = V3CanvasCodec.decode(V3CanvasCodec.encode(config))
+
+    decoded_video_edit = decoded.canvas.get_element("video-edit-1")
+    assert decoded_video_edit is not None
+    decoded_content = decoded_video_edit.get_main_content()
+    assert decoded_content is not None
+    assert "audioSequence" not in decoded_content.fields
+
+
 def test_v3_codec_rejects_business_fields_on_element_shell():
     """V3 codec 拒绝把图片业务字段残留在 Element 外壳。"""
     config = _build_v3_config()

@@ -419,10 +419,11 @@ class V3CanvasCodec:
 
     @staticmethod
     def _validate_video_edit_content(content: ElementContent) -> None:
-        """校验 Video Edit Content。"""
+        """校验 Video Edit Content，音频序列缺省时表示使用源视频音频。"""
         fields = content.fields
         for field_name in ("videoSequence", "audioSequence"):
-            sequence = fields.get(field_name)
+            # videoSequence 是合成顺序的必填字段；audioSequence 是可选字段，缺省等价于空数组。
+            sequence = [] if field_name == "audioSequence" and field_name not in fields else fields.get(field_name)
             if not isinstance(sequence, list):
                 raise ValueError(f"Content {content.content_id}.{field_name} must be an array")
             if any(not isinstance(item, str) or not item for item in sequence):

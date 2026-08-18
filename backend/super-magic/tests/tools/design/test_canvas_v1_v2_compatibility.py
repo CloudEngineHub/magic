@@ -3,6 +3,7 @@
 import pytest
 
 from agentlang.path_manager import PathManager
+from app.tools.design.manager import canvas_manager
 from app.tools.design.manager.canvas_manager import CanvasManager
 from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.manager.canvas_manager_v2 import CanvasManagerV2
@@ -44,6 +45,25 @@ def _build_mock_config(version: str, name: str) -> MagicProjectConfig:
         ),
         _extra_project_data={"frontendMeta": {"source": "mock"}},
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_manager_stops_immediately_when_project_file_is_missing(monkeypatch):
+    """旧版画布路径错误时立即失败，不重复等待确定不存在的文件。"""
+    attempts = 0
+
+    async def missing_file(_project_path):
+        """模拟确定不存在的旧版项目文件。"""
+        nonlocal attempts
+        attempts += 1
+        raise FileNotFoundError("mock legacy magic.project.js missing")
+
+    monkeypatch.setattr(canvas_manager, "read_magic_project_js", missing_file)
+
+    with pytest.raises(FileNotFoundError, match="mock legacy magic.project.js missing"):
+        await CanvasManager("missing-project").read_current_canvas()
+
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
@@ -104,4 +124,3 @@ async def test_v2_manager_keeps_compressed_format_and_version(monkeypatch, tmp_p
     assert parsed._extra_project_data == {"frontendMeta": {"source": "mock"}}
     assert parsed.canvas is not None
     assert parsed.canvas._extra_canvas_data == {"background": "#ffffff"}
-

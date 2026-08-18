@@ -135,12 +135,15 @@ class CanvasManager(CanvasManagerProtocol):
         for attempt in range(max_retries):
             try:
                 return await read_magic_project_js(self.project_path)
+            except FileNotFoundError:
+                # 路径错误不是文件写入延迟，立即返回给调用方修正。
+                raise
             except (OSError, ValueError) as error:
                 last_error = error
                 error_text = str(error).lower()
                 retryable = isinstance(error, OSError) or any(
                     marker in error_text
-                    for marker in ("is empty", "still being written", "not found")
+                    for marker in ("is empty", "still being written")
                 )
                 if not retryable:
                     raise

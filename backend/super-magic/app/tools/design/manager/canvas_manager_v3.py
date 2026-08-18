@@ -70,6 +70,9 @@ class CanvasManagerV3(CanvasManagerProtocol):
                 config = V3CanvasCodec.decode(content)
                 await self._sidecar_store.hydrate(config)
                 return config
+            except FileNotFoundError:
+                # 路径错误不是 MagicFS 短暂可见性问题，立即返回给调用方修正。
+                raise
             except OSError as error:
                 last_error = error
                 if attempt >= CANVAS_READ_MAX_RETRIES - 1:

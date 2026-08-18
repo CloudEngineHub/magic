@@ -5,6 +5,7 @@ import json
 import pytest
 
 from agentlang.path_manager import PathManager
+from app.tools.design.manager import canvas_manager_v3
 from app.tools.design.codec.envelope_codec import (
     CanvasEnvelopeCodec,
     UnsupportedCanvasVersionError,
@@ -58,6 +59,25 @@ def _build_config_with_heavy_fields() -> MagicProjectConfigV3:
             ]
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_v3_manager_stops_immediately_when_project_file_is_missing(monkeypatch):
+    """V3 画布路径错误时立即失败，不把永久缺失误判为 MagicFS 延迟。"""
+    attempts = 0
+
+    async def missing_file(_path):
+        """模拟确定不存在的项目文件。"""
+        nonlocal attempts
+        attempts += 1
+        raise FileNotFoundError("mock magic.project.js missing")
+
+    monkeypatch.setattr(canvas_manager_v3, "async_read_text", missing_file)
+
+    with pytest.raises(FileNotFoundError, match="mock magic.project.js missing"):
+        await CanvasManagerV3("missing-project").read_current_canvas()
+
+    assert attempts == 1
 
 
 @pytest.mark.asyncio

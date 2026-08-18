@@ -8,7 +8,9 @@ declare(strict_types=1);
 namespace App\Application\Design\Service;
 
 use App\Application\Design\Event\Message\DesignVideoPollMessage;
+use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
+use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
@@ -17,6 +19,7 @@ use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\SuperMagic\File\Constant\ProjectFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
@@ -53,7 +56,7 @@ class DesignVideoAppService extends DesignAppService
     }
 
     /**
-     * 创建 Design 视频生成任务：校验项目与素材、保存本地任务、提交模型网关并投递首次轮询。
+     * 创建 Design 视频生成任务：校验项目与素材、保存本地任务并投递异步执行消息。
      */
     public function create(Authenticatable $authenticatable, DesignGenerationTaskEntity $entity): DesignGenerationTaskEntity
     {
@@ -61,7 +64,9 @@ class DesignVideoAppService extends DesignAppService
         $project = $this->assertProjectAccess($designDataIsolation, $entity->getProjectId(), MemberRole::EDITOR);
         $modelDefinition = null;
         $supportsProviderAssetUri = false;
-        if (! $entity->isCanvasComposition()) {
+        if ($entity->isCanvasComposition()) {
+            $this->normalizeAndAssertCanvasCompositionProject($project->getId(), $entity);
+        } else {
             $modelDefinition = $this->findModelOrFail($entity->getModelId());
             $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelDefinition);
             $outputDirectory = $this->assertWorkspacePathsExist(
@@ -106,19 +111,21 @@ class DesignVideoAppService extends DesignAppService
             throw $throwable;
         }
 
-        // 调用外部网关提交任务，失败则删除任务记录
-        try {
-            $providerPayload = $this->submissionDomainService->submit($entity);
-        } catch (Throwable $throwable) {
-            $this->designGenerationTaskDomainService->deleteTask($designDataIsolation, $entity);
-            throw $throwable;
+        // 普通生视频沿用同步提交；画布合成需要初始化沙箱，交给独立消费者异步提交。
+        if (! $entity->isCanvasComposition()) {
+            try {
+                $providerPayload = $this->submissionDomainService->submit($entity);
+            } catch (Throwable $throwable) {
+                $this->designGenerationTaskDomainService->deleteTask($designDataIsolation, $entity);
+                throw $throwable;
+            }
+
+            $this->designGenerationTaskDomainService->markAsSubmitted($designDataIsolation, $entity, $providerPayload);
         }
 
-        $this->designGenerationTaskDomainService->markAsSubmitted($designDataIsolation, $entity, $providerPayload);
-
-        // 投递首次 poll 消息，失败则记录重试信息，由 crontab 兜底恢复
+        // 投递首次执行消息，失败则记录重试信息，由 crontab 兜底恢复。
         try {
-            $this->producer->produce($this->buildInitialPollPublisher($entity));
+            $this->producer->produce($this->buildInitialPublisher($entity));
             $this->designGenerationTaskDomainService->markFirstPollSent($designDataIsolation, $entity);
         } catch (Throwable $throwable) {
             $this->designGenerationTaskDomainService->markFirstPollDispatchFailed(
@@ -425,6 +432,67 @@ class DesignVideoAppService extends DesignAppService
             $entity->getProjectId(),
             $entity->getGenerationId(),
         ));
+    }
+
+    /**
+     * 构造首次异步消息；画布合成先进入提交队列，其他视频任务直接进入轮询队列。
+     */
+    private function buildInitialPublisher(DesignGenerationTaskEntity $entity): DesignVideoPollDelayPublisher|DesignVideoSubmitPublisher
+    {
+        if ($entity->isCanvasComposition()) {
+            return new DesignVideoSubmitPublisher(new DesignVideoSubmitMessage(
+                $entity->getOrganizationCode(),
+                $entity->getProjectId(),
+                $entity->getGenerationId(),
+            ));
+        }
+
+        return $this->buildInitialPollPublisher($entity);
+    }
+
+    /**
+     * 规范化画布项目路径并通过 Magic Service 文件索引确认项目配置存在。
+     */
+    private function normalizeAndAssertCanvasCompositionProject(
+        int $projectId,
+        DesignGenerationTaskEntity $entity,
+    ): void {
+        $requestPayload = $entity->getRequestPayload();
+        $extensions = is_array($requestPayload['extensions'] ?? null) ? $requestPayload['extensions'] : [];
+        $projectPath = str_replace('\\', '/', trim((string) ($extensions['project_path'] ?? '')));
+        $isAbsolutePath = str_starts_with($projectPath, '/')
+            || preg_match('#^[A-Za-z]:/#', $projectPath) === 1;
+        $projectPath = preg_replace('#/+#', '/', $projectPath) ?? $projectPath;
+        $projectPath = trim($projectPath, '/');
+        $segments = array_values(array_filter(explode('/', $projectPath), static fn (string $segment): bool => $segment !== ''));
+
+        if (
+            $isAbsolutePath
+            || $projectPath === ''
+            || str_contains($projectPath, "\0")
+            || in_array('.', $segments, true)
+            || in_array('..', $segments, true)
+        ) {
+            ExceptionBuilder::throw(
+                DesignErrorCode::InvalidArgument,
+                'common.invalid',
+                ['label' => 'extensions.project_path']
+            );
+        }
+
+        $configRelativePath = $projectPath . '/' . ProjectFileConstant::PROJECT_CONFIG_FILENAME;
+        $configFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $configRelativePath);
+        if ($configFile === null || $configFile->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                DesignErrorCode::InvalidArgument,
+                'common.not_found',
+                ['label' => $configRelativePath]
+            );
+        }
+
+        $extensions['project_path'] = $projectPath;
+        $requestPayload['extensions'] = $extensions;
+        $entity->setRequestPayload($requestPayload);
     }
 
     /**
