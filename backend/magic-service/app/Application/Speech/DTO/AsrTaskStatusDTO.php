@@ -40,7 +40,7 @@ class AsrTaskStatusDTO
     // 文件ID（数据库中的实际ID）
     public ?string $audioFileId = null; // 音频文件ID（写入magic_super_agent_task_files表后返回的ID）
 
-    public ?string $audioFormat = null; // 任务音频格式（录音任务仅支持 wav/ogg）
+    public ?string $audioFormat = null; // 任务音频格式（录音任务仅支持 wav/opus）
 
     // note 文件信息
     public ?string $noteFileName = null; // note文件名（与音频文件在同一目录，为空表示无笔记文件）

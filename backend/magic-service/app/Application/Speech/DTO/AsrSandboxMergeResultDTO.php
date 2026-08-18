@@ -95,6 +95,6 @@ readonly class AsrSandboxMergeResultDTO
             return null;
         }
         $format = strtolower(ltrim(trim($format), '.'));
-        return in_array($format, ['wav', 'ogg'], true) ? $format : null;
+        return in_array($format, ['wav', 'opus'], true) ? $format : null;
     }
 }

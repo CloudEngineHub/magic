@@ -18,7 +18,7 @@ from app.service.asr.asr_utils import SUPPORTED_AUDIO_FORMATS, validate_audio_fo
 
 
 class AsrFileDetector(AsrServiceBase):
-    """ASR 文件检测器 - 支持 WAV / OGG 分片（任务内格式同质）"""
+    """ASR 文件检测器 - 支持 WAV / Opus 分片（任务内格式同质）"""
 
     # 支持的音频格式（与 asr_utils.SUPPORTED_AUDIO_FORMATS 保持一致）
     SUPPORTED_AUDIO_FORMATS: list[str] = list(SUPPORTED_AUDIO_FORMATS)
@@ -27,7 +27,7 @@ class AsrFileDetector(AsrServiceBase):
         """
         从文件名提取序号
 
-        支持格式: {index}.{ext}，例如 "0.ogg", "1.wav", "123.ogg"
+        支持格式: {index}.{ext}，例如 "0.opus", "1.wav", "123.opus"
 
         Args:
             filename: 文件名
@@ -91,7 +91,7 @@ class AsrFileDetector(AsrServiceBase):
 
         The legacy ``scan_audio_files`` API remains deduplicated for callers
         that only need merge inputs.  Conflict-aware callers must use this
-        method so a ``0.wav``/``0.ogg`` pair cannot disappear before validation.
+        method so a ``0.wav``/``0.opus`` pair cannot disappear before validation.
         """
         files_by_index: dict[int, list[Path]] = {}
 
@@ -166,7 +166,7 @@ class AsrFileDetector(AsrServiceBase):
 
         format_names = {item.strip().lower() for item in str(metadata.get("format_name", "")).split(",")}
         codec = str(metadata.get("codec_name", "")).lower()
-        if expected == "ogg":
+        if expected == "opus":
             if "ogg" not in format_names:
                 return False, "Expected Ogg container"
             if codec != "opus":
@@ -198,7 +198,7 @@ class AsrFileDetector(AsrServiceBase):
             files: scan_audio_files 的扫描结果 [(index, path), ...]
 
         Returns:
-            str | None: 格式（wav / ogg），无分片时返回 None
+            str | None: 格式（wav / opus），无分片时返回 None
         """
         if not files:
             return None
@@ -213,7 +213,7 @@ class AsrFileDetector(AsrServiceBase):
 
         Args:
             files: scan_audio_files 的扫描结果
-            audio_format: 任务已定格式（wav / ogg）
+            audio_format: 任务已定格式（wav / opus）
 
         Returns:
             仅保留该格式分片的列表

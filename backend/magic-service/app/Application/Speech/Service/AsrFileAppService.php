@@ -1884,16 +1884,16 @@ class AsrFileAppService extends AbstractAppService
     /**
      * 构建期望音频文件名的候选列表.
      *
-     * 产物扩展名跟随任务分片格式（ogg 任务产出 .ogg，wav 任务产出 .wav），
-     * 而任务状态中的 expectedAudioFileName 固定以 .wav 写入，恢复查找时需兼容两种后缀。
+     * 产物扩展名跟随任务分片格式（opus 任务产出 .opus，wav 任务产出 .wav），
+     * 状态未确定格式时可能没有扩展名，恢复查找时兼容 wav 和 opus 两种后缀。
      *
      * @return array<int, string>
      */
     private function buildExpectedAudioFileNameCandidates(string $expectedAudioFileName): array
     {
-        $baseName = (string) preg_replace('/\.(wav|ogg)$/i', '', $expectedAudioFileName);
+        $baseName = (string) preg_replace('/\.(wav|opus)$/i', '', $expectedAudioFileName);
 
-        return array_values(array_unique([$expectedAudioFileName, $baseName . '.wav', $baseName . '.ogg']));
+        return array_values(array_unique([$expectedAudioFileName, $baseName . '.wav', $baseName . '.opus']));
     }
 
     private function completeRecoverFromExistingAudioFileIfPossible(AsrTaskStatusDTO $taskStatus): bool
@@ -1927,7 +1927,7 @@ class AsrFileAppService extends AbstractAppService
         $lookupStrategy = null;
         if (! empty($taskStatus->displayDirectoryId) && ! empty($taskStatus->expectedAudioFileName)) {
             $lookupStrategy = 'parent_id_and_name';
-            // 音频产物扩展名跟随任务分片格式（wav/ogg），按候选名查找并拒绝双文件歧义
+            // 音频产物扩展名跟随任务分片格式（wav/opus），按候选名查找并拒绝双文件歧义
             $matches = [];
             foreach ($this->buildExpectedAudioFileNameCandidates($taskStatus->expectedAudioFileName) as $candidateName) {
                 $candidate = $this->taskFileDomainService->getByProjectParentAndName(

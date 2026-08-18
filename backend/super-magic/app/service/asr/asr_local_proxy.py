@@ -71,7 +71,7 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
     def __init__(self, task_key: str, remote_dir: Path, local_base_dir: str = None, audio_format: str = None):
         self.task_key = task_key
         self.remote_dir = remote_dir
-        # 任务音频格式决定 merged 文件名（merged.wav / merged.ogg），None 回退 wav 兼容历史任务
+        # 任务音频格式决定 merged 文件名（merged.wav / merged.opus），None 回退 wav 兼容历史任务
         self.merged_filename = self.get_merged_filename(audio_format)
 
         # 如果未指定 local_base_dir，使用默认值

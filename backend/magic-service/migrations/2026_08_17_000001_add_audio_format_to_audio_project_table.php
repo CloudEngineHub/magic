@@ -21,7 +21,7 @@ return new class extends Migration {
                 $table->string('audio_format', 16)
                     ->nullable()
                     ->after('audio_source')
-                    ->comment('Audio format; recorded tasks use wav/ogg, imported files keep their extension');
+                    ->comment('Audio format; recorded tasks use wav/opus, imported files keep their extension');
             });
         }
 
@@ -60,11 +60,6 @@ return new class extends Migration {
 
     public function down(): void
     {
-        if (Schema::hasTable('magic_super_agent_audio_project')
-            && Schema::hasColumn('magic_super_agent_audio_project', 'audio_format')) {
-            Schema::table('magic_super_agent_audio_project', static function (Blueprint $table): void {
-                $table->dropColumn('audio_format');
-            });
-        }
+
     }
 };

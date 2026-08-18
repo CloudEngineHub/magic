@@ -143,7 +143,7 @@ readonly class AsrTaskDomainService
     public function setAudioFormat(AsrTaskStatusDTO $taskStatus, string $audioFormat): void
     {
         $format = strtolower(ltrim(trim($audioFormat), '.'));
-        if (! in_array($format, ['wav', 'ogg'], true)) {
+        if (! in_array($format, ['wav', 'opus'], true)) {
             throw new \InvalidArgumentException(sprintf('Unsupported ASR audio format: %s', $audioFormat));
         }
 

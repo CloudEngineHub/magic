@@ -60,7 +60,7 @@ class AsrMergeService(AsrServiceBase):
         self.merge_operations = AsrMergeOperations(self.file_detector)
         self.task_finalizer = AsrTaskFinalizer(self.merge_operations)
 
-        logger.info(f"{self.LOG_PREFIX} 🎙️ ASR音频合并服务初始化完成 (支持 WAV/OGG)")
+        logger.info(f"{self.LOG_PREFIX} 🎙️ ASR音频合并服务初始化完成 (支持 WAV/OPUS)")
 
     @staticmethod
     def should_block_merge(audio_format: str | None, all_files: list, audio_format_error: str | None) -> bool:
@@ -103,7 +103,7 @@ class AsrMergeService(AsrServiceBase):
                 # TEMP(disabled): scan-wav workaround is currently turned off.
                 # await self._trigger_scan_wav(_scan_wav_project_id, _scan_wav_relative_path, task.task_key)
 
-                # 1. 扫描所有音频分片（wav/ogg）
+                # 1. 扫描所有音频分片（wav/opus）
                 merge_blocked = False
                 audio_format = None
                 all_files, format_conflicts = await asyncio.to_thread(
@@ -121,7 +121,7 @@ class AsrMergeService(AsrServiceBase):
                 else:
                     all_files = AsrFileDetector.deduplicate_files(all_files)
 
-                    # 1.5 确定任务音频格式并过滤异格式分片（任务级格式钉住：历史任务 wav，新任务可能 ogg）
+                    # 1.5 确定任务音频格式并过滤异格式分片（任务级格式钉住：历史任务 wav，新任务可能 opus）
                     audio_format = await self._ensure_task_audio_format(task.task_key, all_files)
                     task_state = await task_manager.get_task(task.task_key)
                     audio_format_error = task_state.audio_format_error if task_state else None
@@ -301,7 +301,7 @@ class AsrMergeService(AsrServiceBase):
             all_files: 本轮扫描到的分片列表 [(index, path), ...]
 
         Returns:
-            str | None: 任务音频格式（wav/ogg）；尚未有任何分片时返回 None
+            str | None: 任务音频格式（wav/opus）；尚未有任何分片时返回 None
         """
         task_manager = AsrMergeTaskManager.instance()
 

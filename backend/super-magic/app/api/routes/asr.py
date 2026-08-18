@@ -54,7 +54,7 @@ async def _resolve_finish_file_shard_count(audio_config, workspace_dir: str, tas
     策略：
     1. 客户端传了合法 file_shard_count（>=0）则优先使用
     2. 未传或非法时，复用现有 scan 逻辑（AsrFileDetector.scan_audio_files）
-       按 include_merged=False 统计分片数量（wav/ogg，按探测格式过滤）
+       按 include_merged=False 统计分片数量（wav/opus，按探测格式过滤）
 
     Args:
         audio_config: finish 请求中的 audio 配置

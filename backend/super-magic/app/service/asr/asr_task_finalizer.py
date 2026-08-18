@@ -117,7 +117,7 @@ class AsrTaskFinalizer(AsrServiceBase):
                 )
                 return
 
-            # 解析路径（优先识别已有 merged.ogg，兼容历史状态缺少 audio_format）
+            # 解析路径（优先识别已有 merged.opus，兼容状态缺少 audio_format）
             try:
                 resolved_format = resolve_audio_format_from_directory(source_dir, task_state.audio_format)
             except ValueError as exc:
@@ -478,7 +478,7 @@ class AsrTaskFinalizer(AsrServiceBase):
                 if item.name in keep_filenames:
                     continue
 
-                # 删除音频分片（{index}.wav / {index}.ogg 等）
+                # 删除音频分片（{index}.wav / {index}.opus 等）
                 if item.suffix.lower().lstrip(".") in SUPPORTED_AUDIO_FORMATS:
                     try:
                         await asyncio.to_thread(item.unlink)

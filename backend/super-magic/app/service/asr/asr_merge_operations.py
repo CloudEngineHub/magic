@@ -25,7 +25,7 @@ from app.service.asr.asr_utils import normalize_audio_format, resolve_audio_form
 
 
 class AsrMergeOperations(AsrServiceBase):
-    """ASR 合并操作类 - 支持 WAV / OGG 格式"""
+    """ASR 合并操作类 - 支持 WAV / Ogg Opus 格式"""
 
     def __init__(self, file_detector: AsrFileDetector):
         """
@@ -114,7 +114,7 @@ class AsrMergeOperations(AsrServiceBase):
     async def concat_group_files(
         self, task_key: str, group_files: List[Path], output_path: Path, operation_name: str = "合并"
     ) -> bool:
-        """使用 FFmpeg concat 合并多个 WAV/OGG 音频文件。"""
+        """使用 FFmpeg concat 合并多个 WAV/Ogg Opus 音频文件。"""
         async with self.get_concat_lock(task_key):
             return await self._run_concat_task(task_key, group_files, output_path, operation_name)
 
@@ -222,7 +222,7 @@ class AsrMergeOperations(AsrServiceBase):
                     wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
                     timeout=asr_time_config.FILE_READY_TIMEOUT,
                 )
-                if is_ready and expected_format in {"wav", "ogg"}:
+                if is_ready and expected_format in {"wav", "opus"}:
                     is_valid_format, format_reason = await self.file_detector.validate_audio_file(f, expected_format)
                     if not is_valid_format:
                         return f, False, format_reason
@@ -316,7 +316,7 @@ class AsrMergeOperations(AsrServiceBase):
             "-i",
             str(list_file),
         ]
-        if temp_output.suffix.lower() == ".ogg" and not asr_time_config.OGG_COPY_CONCAT_ENABLED:
+        if temp_output.suffix.lower() == ".opus" and not asr_time_config.OGG_COPY_CONCAT_ENABLED:
             cmd.extend(
                 [
                     "-c:a",
@@ -382,7 +382,7 @@ class AsrMergeOperations(AsrServiceBase):
     @staticmethod
     def _size_expectation_for_output(output_path: Path, expected_size: int) -> int | None:
         """Avoid applying WAV input-size thresholds to a re-encoded Ogg output."""
-        if output_path.suffix.lower() == ".ogg" and not asr_time_config.OGG_COPY_CONCAT_ENABLED:
+        if output_path.suffix.lower() == ".opus" and not asr_time_config.OGG_COPY_CONCAT_ENABLED:
             return None
         return expected_size or None
 
@@ -529,7 +529,7 @@ class AsrMergeOperations(AsrServiceBase):
             source_dir: 源目录路径
             all_files: 所有文件列表 [(index, path), ...]
             is_first_run: 是否首次运行
-            audio_format: 任务音频格式（wav/ogg），None 回退 wav 兼容历史任务
+            audio_format: 任务音频格式（wav/opus），None 回退 wav 兼容历史任务
 
         Returns:
             tuple: (本地文件路径列表, 临时合并输入文件, 是否增量合并)
@@ -660,7 +660,7 @@ class AsrMergeOperations(AsrServiceBase):
             use_incremental: 是否使用增量合并
             current_indices: 当前索引集合
             total_files_count: 总文件数
-            audio_format: 任务音频格式（wav/ogg），None 回退 wav 兼容历史任务
+            audio_format: 任务音频格式（wav/opus），None 回退 wav 兼容历史任务
 
         Returns:
             bool: 是否完成任务（触发了任务完成流程）

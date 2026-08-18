@@ -42,10 +42,10 @@ class AsrServiceBase:
         按任务音频格式获取 merged 文件名
 
         Args:
-            audio_format: 任务音频格式（wav/ogg），None 时回退 merged.wav 兼容历史任务
+            audio_format: 任务音频格式（wav/opus），None 时回退 merged.wav 兼容历史任务
 
         Returns:
-            str: merged 文件名（merged.wav / merged.ogg）
+            str: merged 文件名（merged.wav / merged.opus）
         """
         return build_merged_filename(audio_format)
 

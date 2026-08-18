@@ -50,7 +50,7 @@ class AsrTaskResult(BaseModel):
     task_key: str
     status: AsrTaskStatus
     source_dir: str
-    audio_format: Optional[str] = None  # 任务音频分片格式（wav/ogg），首次扫描确定后不再变更；None 按 wav 兼容历史任务
+    audio_format: Optional[str] = None  # 任务音频分片格式（wav/opus），首次扫描确定后不再变更；None 按 wav 兼容历史任务
     audio_format_error: Optional[str] = None  # 格式冲突/实际编码校验错误，阻止任务正常完成
     target_dir: Optional[str] = None  # 创建时可选，完成时必填
     intelligent_title: Optional[str] = None  # 智能标题，完成时必填
@@ -708,7 +708,7 @@ class AsrMergeTaskManager(AsrServiceBase):
 
         Args:
             task_key: 任务标识符
-            audio_format: 音频格式（仅支持 wav/ogg，非法值抛出 ValueError）
+            audio_format: 音频格式（仅支持 wav/opus，非法值抛出 ValueError）
 
         Returns:
             bool: 是否更新成功

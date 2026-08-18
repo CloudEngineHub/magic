@@ -15,7 +15,7 @@ from app.path_manager import PathManager
 DEFAULT_AUDIO_FORMAT = "wav"
 
 # 支持的音频分片格式（任务内格式同质：一个任务从首片到末片只用一种格式）
-SUPPORTED_AUDIO_FORMATS = ("wav", "ogg")
+SUPPORTED_AUDIO_FORMATS = ("wav", "opus")
 
 
 def normalize_audio_format(audio_format: str | None) -> str:
@@ -26,7 +26,7 @@ def normalize_audio_format(audio_format: str | None) -> str:
         audio_format: 原始格式字符串（可带点、大小写不敏感、可为 None）
 
     Returns:
-        str: 归一化后的格式（wav / ogg）
+        str: 归一化后的格式（wav / opus）
     """
     fmt = (audio_format or "").strip().lower().lstrip(".")
     return fmt if fmt in SUPPORTED_AUDIO_FORMATS else DEFAULT_AUDIO_FORMAT
@@ -49,7 +49,7 @@ def validate_audio_format_for_write(audio_format: str | None) -> str:
 
 def build_merged_filename(audio_format: str | None) -> str:
     """
-    按任务音频格式构建 merged 文件名（merged.wav / merged.ogg）
+    按任务音频格式构建 merged 文件名（merged.wav / merged.opus）
 
     Args:
         audio_format: 任务音频格式，None 时回退 wav（兼容历史检查点）
@@ -61,25 +61,25 @@ def build_merged_filename(audio_format: str | None) -> str:
 
 
 def resolve_audio_format_from_directory(source_dir: Path, state_format: str | None) -> str | None:
-    """Resolve a task format without hiding legacy ``merged.ogg`` artifacts."""
+    """Resolve a task format without hiding conflicting merged artifacts."""
     merged_wav = source_dir / "merged.wav"
-    merged_ogg = source_dir / "merged.ogg"
+    merged_opus = source_dir / "merged.opus"
     wav_exists = merged_wav.exists()
-    ogg_exists = merged_ogg.exists()
-    if wav_exists and ogg_exists:
-        raise ValueError("Conflicting merged audio files: merged.wav and merged.ogg")
+    opus_exists = merged_opus.exists()
+    if wav_exists and opus_exists:
+        raise ValueError("Conflicting merged audio files: merged.wav and merged.opus")
 
     if state_format is not None:
         resolved_state = validate_audio_format_for_write(state_format)
-        if (resolved_state == "wav" and ogg_exists) or (resolved_state == "ogg" and wav_exists):
+        if (resolved_state == "wav" and opus_exists) or (resolved_state == "opus" and wav_exists):
             raise ValueError(
                 f"Task format {resolved_state} conflicts with existing merged file "
-                f"{('merged.ogg' if ogg_exists else 'merged.wav')}"
+                f"{('merged.opus' if opus_exists else 'merged.wav')}"
             )
         return resolved_state
 
-    if ogg_exists:
-        return "ogg"
+    if opus_exists:
+        return "opus"
     if wav_exists:
         return "wav"
     return None
