@@ -12,7 +12,7 @@ export default defineConfig({
 			formats: ["es", "cjs"],
 		},
 		rolldownOptions: {
-			external: ["@apmplus/web", "@arms/rum-browser"],
+			external: ["@apmplus/web", "@arms/rum-browser", "@cloudcare/browser-rum"],
 		},
 	},
 	plugins: [
