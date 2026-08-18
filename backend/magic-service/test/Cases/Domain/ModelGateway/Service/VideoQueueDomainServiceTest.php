@@ -1144,6 +1144,40 @@ class VideoQueueDomainServiceTest extends TestCase
         $this->assertArrayNotHasKey('unsupported_input', $operation->getRawRequest()['inputs']);
     }
 
+    public function testCreateOperationRejectsUnsupportedResolutionInsteadOfFallingBack(): void
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'MiniMax-H3',
+            'task' => 'generate',
+            'prompt' => 'make a video',
+            'generation' => [
+                'resolution' => '3k',
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionMessage('generation.resolution must be one of: 768p, 2k');
+
+        $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'MiniMax-H3',
+            'provider-model-minimax-h3',
+            ProviderCode::VolcengineArk,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'supported_inputs' => ['text_prompt'],
+                'reference_images' => [],
+                'generation' => [
+                    'resolutions' => ['768p', '2k'],
+                    'default_resolution' => '768p',
+                ],
+                'constraints' => [],
+            ]),
+        );
+    }
+
     public function testFinishExecutionFailureKeepsProviderSpecificMessage(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\VideoGenerateAPI;
 
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Hyperf\Codec\Json;
@@ -75,13 +76,14 @@ readonly class VolcengineArkVideoClient
         $normalizedBaseUrl = rtrim($baseUrl, '/');
         $normalizedPath = '/' . ltrim($path, '/');
         $startedAt = microtime(true);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
 
         $this->logger->info('volcengine ark video request', [
             'method' => $method,
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
-            'context' => $logContext,
-            'payload' => $options['json'] ?? null,
+            'context' => $sanitizedLogContext,
+            'payload' => is_array($options['json'] ?? null) ? PayloadLogSanitizer::sanitizeValue($options['json']) : null,
         ]);
 
         try {
@@ -94,18 +96,19 @@ readonly class VolcengineArkVideoClient
             $response = match ($method) {
                 'post' => $this->createClient()->post($normalizedBaseUrl . $normalizedPath, $requestOptions),
                 'get' => $this->createClient()->get($normalizedBaseUrl . $normalizedPath, $requestOptions),
-                default => throw new ProviderVideoException(sprintf('unsupported volcengine ark video method %s', $method)),
+                default => throw ProviderVideoException::nonRetriable(sprintf('unsupported volcengine ark video method %s', $method)),
             };
             $data = Json::decode((string) $response->getBody());
         } catch (RequestException $exception) {
             $response = $exception->getResponse();
             $errorMessage = trim((string) $response?->getBody());
+            $httpStatus = $response?->getStatusCode();
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
-                'context' => $logContext,
-                'http_status' => $response?->getStatusCode(),
+                'context' => $sanitizedLogContext,
+                'http_status' => $httpStatus,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
@@ -113,40 +116,49 @@ readonly class VolcengineArkVideoClient
             // 如果id没有找到，则需要返回异常
             try {
                 $errorMessageArr = Json::decode($errorMessage);
-                if (in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound'])) {
+                if (in_array($httpStatus, [404, 400]) || in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound', 'InvalidParameter'])) {
                     $errorMessageArr['status'] = 'error';
                     return $errorMessageArr;
                 }
             } catch (Throwable $throwable) {
             }
 
-            throw new ProviderVideoException($this->formatRequestExceptionMessage($errorMessage), $exception);
+            throw ProviderVideoException::retriable(
+                $this->formatRequestExceptionMessage($errorMessage),
+                $exception,
+            );
+        } catch (ProviderVideoException $exception) {
+            throw $exception;
         } catch (Throwable $throwable) {
             $this->logger->error('volcengine ark video error', [
                 'method' => $method,
                 'base_url' => $normalizedBaseUrl,
                 'path' => $normalizedPath,
-                'context' => $logContext,
+                'context' => $sanitizedLogContext,
                 'http_status' => null,
                 'provider_request_id' => null,
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
             ]);
-            throw new ProviderVideoException(sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()), $throwable);
+            throw ProviderVideoException::retriable(
+                sprintf('volcengine ark video %s failed: %s', $method, $throwable->getMessage()),
+                $throwable,
+            );
         }
 
         if (! is_array($data)) {
-            throw new ProviderVideoException(sprintf('volcengine ark video %s returned invalid json', $method));
+            throw ProviderVideoException::retriable(sprintf('volcengine ark video %s returned invalid json', $method));
         }
 
         $this->logger->info('volcengine ark video response', [
             'method' => $method,
             'base_url' => $normalizedBaseUrl,
             'path' => $normalizedPath,
-            'context' => $logContext,
+            'context' => $sanitizedLogContext,
             'http_status' => $response->getStatusCode(),
+            'provider_request_id' => $response->getHeaderLine('x-tt-logid'),
             'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
-            'response' => $data,
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
         ]);
 
         return $data;

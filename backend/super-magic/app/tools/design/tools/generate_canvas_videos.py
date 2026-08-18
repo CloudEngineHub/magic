@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from math import isfinite
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -380,6 +381,11 @@ Relative path to the design project (folder containing magic.project.js)"""
 Video generation task list. Each task produces one video. Maximum 4 tasks per call. Each task must include prompt and name. aspect_ratio, duration_seconds, and resolution are optional; when the user asks for them, or they can be reasonably inferred from the current video model rules, choose declared values from <media_model_info>; omit when uncertain. Optional fields must use the exact schema names: duration_seconds (not duration), reference_image_paths (not images/image), reference_video_paths (not videos/video), frame_start_path (not start_frame), frame_end_path (not end_frame). When using reference assets, the prompt must bind them by list order with [image1] / [video1] / [audio1]. Example: tasks=[{"prompt":"White long-haired kitten [image1] peeks out of the black box, black short-haired kitten [image2] jumps out of the white box, orange tabby kitten [image3] climbs out of the yellow box.","name":"three_color_box_cats","aspect_ratio":"16:9","duration_seconds":4,"resolution":"720p","reference_image_paths":["images/cat1.png","images/cat2.png","images/cat3.png"]}]"""
     )
     model_id: str = Field("", description="<!--zh: 可选视频模型 ID，所有任务共用-->Optional video model ID, shared across all tasks")
+    action: Literal["estimate_points", "generate"] = Field(
+        "generate",
+        description="""<!--zh: 执行动作。estimate_points 只预估任务积分，不创建占位元素或提交生成；用户确认后使用相同 tasks 再以 generate 调用。-->
+Action to perform. estimate_points only calculates task points without creating placeholders or submitting generation. After user confirmation, call again with the same tasks and action set to generate.""",
+    )
 
     @classmethod
     def get_custom_error_message(cls, field_name: str, error_type: str) -> str | None:
@@ -438,6 +444,8 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             workspace_root = Path(self.base_dir)
             project_prefix = params.project_path.strip("/")
             await self._normalize_reference_paths(params.tasks, workspace_root, project_prefix)
+            if params.action == "estimate_points":
+                return await self._estimate_video_points(tool_context, params)
             return await self._run_generate_flow(tool_context, params.project_path, params.tasks)
         except Exception as e:
             logger.exception(f"generate_canvas_videos 失败: {e!s}")
@@ -445,6 +453,51 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"生成视频到画布失败: {e!s}",
                 extra_info={"error_type": "design.error_unexpected"},
             )
+
+    async def _estimate_video_points(
+        self,
+        tool_context: ToolContext,
+        params: GenerateCanvasVideosParams,
+    ) -> ToolResult:
+        try:
+            project_id = self._resolve_project_id()
+            model_id = self._resolve_video_model(params.model_id, tool_context)
+            relative_project_path = params.project_path.strip("/")
+            items = []
+
+            for task in params.tasks:
+                payload = self._build_estimate_design_video_request(
+                    task=task,
+                    project_id=project_id,
+                    model_id=model_id,
+                    relative_project_path=relative_project_path,
+                )
+                response = await self._get_magic_service_client().estimate_design_video_points(payload)
+                items.append({"name": task.name, "points": self._read_estimated_points(response)})
+
+            total_points = sum(item["points"] for item in items)
+            item_details = "；".join(
+                f"{item['name']}：{item['points']} 积分" for item in items
+            )
+            return ToolResult(
+                ok=True,
+                content=f"视频积分预估完成：{item_details}；总计：{total_points} 积分。",
+                data={"items": items, "total_points": total_points},
+            )
+        except Exception as error:
+            return ToolResult(ok=False, content=f"视频积分预估失败：{error!s}")
+
+    @staticmethod
+    def _read_estimated_points(response: Dict[str, Any]) -> int | float:
+        points = response.get("points")
+        if (
+            isinstance(points, bool)
+            or not isinstance(points, (int, float))
+            or not isfinite(points)
+            or points < 0
+        ):
+            raise ValueError("积分预估结果缺少有效 points")
+        return points
 
     # ------------------------------------------------------------------
     # 实现抽象接口
@@ -594,15 +647,43 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         project_path: Path,
     ) -> Dict[str, Any]:
         workspace_path = Path(self.base_dir)
-        relative_project_path = project_path.relative_to(workspace_path)
+        relative_project_path, directory_parts = self._safe_project_directory_parts(
+            project_path,
+            workspace_path,
+        )
         design_file_dir = self._format_design_file_dir(str(relative_project_path / "videos"))
         project_id = self._resolve_project_id()
         await async_mkdir(project_path / "videos", parents=True, exist_ok=True)
+        await self._get_magic_service_client().ensure_project_directories(
+            project_id,
+            [*directory_parts, "videos"],
+        )
         return {
             "design_file_dir": design_file_dir,
             "project_id": project_id,
             "_relative_project_path": str(relative_project_path),
         }
+
+    @staticmethod
+    def _safe_project_directory_parts(
+        project_path: Path,
+        workspace_path: Path,
+    ) -> tuple[Path, List[str]]:
+        try:
+            relative_project_path = project_path.relative_to(workspace_path)
+        except ValueError as exc:
+            raise ValueError(f"项目路径不安全，必须位于 workspace 内: {project_path}") from exc
+
+        directory_parts = list(relative_project_path.parts)
+        if not directory_parts or any(part in {"", ".", ".."} for part in directory_parts):
+            raise ValueError(f"项目路径包含不安全的路径段: {project_path}")
+
+        try:
+            project_path.resolve().relative_to(workspace_path.resolve())
+        except ValueError as exc:
+            raise ValueError(f"项目路径不安全，必须位于 workspace 内: {project_path}") from exc
+
+        return relative_project_path, directory_parts
 
     async def _normalize_reference_paths(
         self,
@@ -781,20 +862,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         task: VideoTaskSpec,
         video_id: str,
     ) -> Dict[str, Any]:
-        input_mode = self._resolve_design_input_mode(task)
         payload: Dict[str, Any] = {
             "video_id": video_id,
             "model_id": self._model_id or None,
-            "prompt": task.prompt,
-            "input_mode": input_mode,
-            "task": task.task or "generate",
+            **self._build_design_video_task_fields(task),
         }
-        generation = self._build_design_generation(task)
-        if generation:
-            payload["generation"] = generation
-        payload["inputs"] = self._build_design_video_inputs(task)
-        if task.extensions:
-            payload["extensions"] = dict(task.extensions)
         return self._drop_empty_values(payload)
 
     def _build_design_video_request(
@@ -806,27 +878,71 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         file_dir: str,
         relative_project_path: str = "",
     ) -> Dict[str, Any]:
-        input_mode = self._resolve_design_input_mode(task)
+        payload = self._build_common_design_video_request(
+            task=task,
+            project_id=project_id,
+            model_id=model_id,
+            relative_project_path=relative_project_path,
+        )
+        payload["video_id"] = video_id
+        payload["file_dir"] = self._format_design_file_dir(file_dir)
+        return payload
+
+    def _build_estimate_design_video_request(
+        self,
+        task: VideoTaskSpec,
+        project_id: str,
+        model_id: str,
+        relative_project_path: str = "",
+    ) -> Dict[str, Any]:
+        return self._build_common_design_video_request(
+            task=task,
+            project_id=project_id,
+            model_id=model_id,
+            relative_project_path=relative_project_path,
+        )
+
+    def _build_common_design_video_request(
+        self,
+        task: VideoTaskSpec,
+        project_id: str,
+        model_id: str,
+        relative_project_path: str = "",
+    ) -> Dict[str, Any]:
+        task_fields = self._build_design_video_task_fields(task, relative_project_path)
         payload: Dict[str, Any] = {
             "project_id": project_id,
-            "video_id": video_id,
             "model_id": model_id,
-            "prompt": task.prompt,
-            "input_mode": input_mode,
-            "task": task.task or "generate",
-            "file_dir": self._format_design_file_dir(file_dir),
+            "prompt": task_fields["prompt"],
+            "input_mode": task_fields["input_mode"],
+            "task": task_fields["task"],
+            "inputs": task_fields["inputs"],
         }
+        generation = task_fields.get("generation")
+        if generation:
+            payload["generation"] = generation
+        extensions = task_fields.get("extensions")
+        if extensions:
+            payload["extensions"] = extensions
+        return payload
 
-        payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)
-
+    def _build_design_video_task_fields(
+        self,
+        task: VideoTaskSpec,
+        relative_project_path: str = "",
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "prompt": task.prompt,
+            "input_mode": self._resolve_design_input_mode(task),
+            "task": task.task or "generate",
+        }
         generation = self._build_design_generation(task)
         if generation:
             payload["generation"] = generation
-
+        payload["inputs"] = self._build_design_video_inputs(task, relative_project_path)
         if task.extensions:
             payload["extensions"] = dict(task.extensions)
-
-        return self._drop_empty_values(payload)
+        return payload
 
     def _build_design_video_inputs(
         self,
@@ -950,6 +1066,11 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 default_action_code="generate_canvas_videos",
                 default_success_message_code="generate_canvas_videos.exception",
             )
+        if arguments and arguments.get("action") == "estimate_points":
+            return {
+                "action": "预估视频积分",
+                "remark": result.content,
+            }
         return {
             "action": i18n.translate("generate_canvas_videos", category="tool.actions"),
             "remark": self._get_remark_content(result, arguments),
@@ -959,6 +1080,8 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
         self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
     ) -> Optional[ToolDetail]:
         if not result.ok:
+            return None
+        if arguments and arguments.get("action") == "estimate_points":
             return None
         try:
             from app.core.entity.message.server_message import DesignElementContent

@@ -38,6 +38,25 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         );
     }
 
+    public function testVolcengineArkVideoTemplateIncludes4kTokenObjects(): void
+    {
+        $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
+        $template = null;
+        foreach ($config['templates'] as $item) {
+            if ($item['code'] === BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value) {
+                $template = $item;
+                break;
+            }
+        }
+
+        self::assertIsArray($template);
+        $billingObjects = array_column($template['items'], 'billing_object');
+        self::assertContains(BillingObject::videoToken('4k')->value, $billingObjects);
+        self::assertContains(BillingObject::videoTokenCost('4k')->value, $billingObjects);
+        self::assertContains(BillingObject::videoReferenceVideoToken('4k')->value, $billingObjects);
+        self::assertContains(BillingObject::videoReferenceVideoTokenCost('4k')->value, $billingObjects);
+    }
+
     public function testQueriesFallsBackToCategoryDefaultsWhenProviderTemplateMissing(): void
     {
         $service = new ProviderModelPricingTemplateAppService($this->templatesConfig());

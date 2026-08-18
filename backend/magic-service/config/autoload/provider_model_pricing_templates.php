@@ -221,7 +221,7 @@ return [
         ],
         [
             'code' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
-            'label' => '可灵视频按规格与输入条件时长计费',
+            'label' => '可灵视频按分辨率与输入条件视频时长计费',
             'category' => Category::VGM->value,
             'billing_type' => BillingType::KelingVideoResolutionMediaConditionDurationPricing->value,
             'items' => [
@@ -293,7 +293,7 @@ return [
         ],
         [
             'code' => BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value,
-            'label' => '火山视频按分辨率与参考视频 Token 矩阵计费',
+            'label' => '火山方舟 Seedance 视频按分辨率与参考视频 Token 计费',
             'category' => Category::VGM->value,
             'billing_type' => BillingType::VolcengineArkVideoResolutionReferenceVideoTokenMatrix->value,
             'items' => [
@@ -345,6 +345,40 @@ return [
                     'billing_object' => BillingObject::videoReferenceVideoTokenCost('1080p')->value,
                     'label' => '1080P 参考视频 Token 成本',
                 ],
+                [
+                    'billing_object' => BillingObject::videoToken('4k')->value,
+                    'label' => '4K 无参考视频 Token',
+                ],
+                [
+                    'billing_object' => BillingObject::videoTokenCost('4k')->value,
+                    'label' => '4K 无参考视频 Token 成本',
+                ],
+                [
+                    'billing_object' => BillingObject::videoReferenceVideoToken('4k')->value,
+                    'label' => '4K 参考视频 Token',
+                ],
+                [
+                    'billing_object' => BillingObject::videoReferenceVideoTokenCost('4k')->value,
+                    'label' => '4K 参考视频 Token 成本',
+                ],
+            ],
+        ],
+        [
+            'code' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
+            'label' => 'MiniMax H3 视频按分辨率与媒体时长计费',
+            'category' => Category::VGM->value,
+            'billing_type' => BillingType::MiniMaxH3VideoMediaUsagePricing->value,
+            'items' => [
+                ['billing_object' => BillingObject::videoDuration('768p')->value, 'label' => '768P 视频输出时长'],
+                ['billing_object' => BillingObject::videoDurationCost('768p')->value, 'label' => '768P 视频输出时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('768p')->value, 'label' => '768P 参考视频输入时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('768p')->value, 'label' => '768P 参考视频输入时长成本'],
+                ['billing_object' => BillingObject::videoDuration('2k')->value, 'label' => '2K 视频输出时长'],
+                ['billing_object' => BillingObject::videoDurationCost('2k')->value, 'label' => '2K 视频输出时长成本'],
+                ['billing_object' => BillingObject::videoReferenceVideoDuration('2k')->value, 'label' => '2K 参考视频输入时长'],
+                ['billing_object' => BillingObject::videoReferenceVideoDurationCost('2k')->value, 'label' => '2K 参考视频输入时长成本'],
+                ['billing_object' => BillingObject::videoReferenceImageAfterCount(5)->value, 'label' => '第 6 张起参考图片售价'],
+                ['billing_object' => BillingObject::videoReferenceImageAfterCountCost(5)->value, 'label' => '第 6 张起参考图片成本'],
             ],
         ],
     ],
@@ -405,6 +439,13 @@ return [
             'template_codes' => [
                 BillingType::ImageCount->value,
                 BillingType::Seedream5ProImage->value,
+            ],
+        ],
+        [
+            'provider_code' => ProviderCode::MiniMax->value,
+            'category' => Category::VGM->value,
+            'template_codes' => [
+                BillingType::MiniMaxH3VideoMediaUsagePricing->value,
             ],
         ],
 
