@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Optional
 
 
@@ -27,6 +28,43 @@ class PendingNotification:
     pushed_at: str   # ISO 8601 datetime
     source: str      # 推送方标识，如 "asr_service"、"im_channel"
     content: str     # 通知正文
+
+
+class ResumptionTrigger(StrEnum):
+    """触发 Agent 主动继续运行的时机。"""
+
+    RUNTIME_READY = "runtime_ready"
+
+
+class ResumptionStatus(StrEnum):
+    """
+    resumption 的生命周期状态。
+
+    MOCK DEMO：
+    - pending：事项已登记，还没有 Agent run 接手。
+    - assigned：事项已分配给一个 Agent run，但还没有完成。
+    - 删除：事项已经成功注入 Agent 上下文，不再保留。
+
+    `assigned` 不是“已完成”，而是为了防止多个 run 重复处理同一事项。
+    """
+
+    PENDING = "pending"
+    ASSIGNED = "assigned"
+
+
+@dataclass
+class PendingResumption:
+    """等待 Agent 在运行时恢复后主动处理的事项。"""
+
+    id: str
+    source: str
+    content: str
+    created_at: str
+    trigger: ResumptionTrigger
+    status: ResumptionStatus = ResumptionStatus.PENDING
+    assigned_at: str = ""
+    assigned_to_run_id: str = ""
+    last_error: str = ""
 
 
 @dataclass(frozen=True)
@@ -189,6 +227,7 @@ class HorizonState:
     agent_id: str
     file_records: dict[str, FileContextRecord] = field(default_factory=dict)     # abs_path -> record
     pending_notifications: list[PendingNotification] = field(default_factory=list)
+    pending_resumptions: list[PendingResumption] = field(default_factory=list)
     browser_pages: dict[str, BrowserPageObservation] = field(default_factory=dict)
     loaded_skills: list[str] = field(default_factory=list)
     image_model: ImageModelState = field(default_factory=ImageModelState)

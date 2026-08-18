@@ -29,6 +29,9 @@ from app.core.horizon.models import (
     ImageModelState,
     ManualContextWindowState,
     PendingNotification,
+    PendingResumption,
+    ResumptionStatus,
+    ResumptionTrigger,
     SuperMagicProductContextState,
     VideoModelState,
 )
@@ -82,6 +85,44 @@ def _notif_from_dict(d: dict) -> PendingNotification:
         pushed_at=d["pushed_at"],
         source=d["source"],
         content=d["content"],
+    )
+
+
+def _resumption_to_dict(resumption: PendingResumption) -> dict[str, str]:
+    # 持久化字段必须与 PendingResumption 保持一一对应；状态命名变更不能只改内存模型。
+    return {
+        "id": resumption.id,
+        "source": resumption.source,
+        "content": resumption.content,
+        "created_at": resumption.created_at,
+        "trigger": resumption.trigger.value,
+        "status": resumption.status.value,
+        "assigned_at": resumption.assigned_at,
+        "assigned_to_run_id": resumption.assigned_to_run_id,
+        "last_error": resumption.last_error,
+    }
+
+
+def _resumption_from_dict(data: dict) -> PendingResumption:
+    # 从 JSON 恢复时保留 assigned 的时间和 run 归属，供重启后的过期分配清理使用。
+    try:
+        trigger = ResumptionTrigger(str(data.get("trigger") or ResumptionTrigger.RUNTIME_READY))
+    except ValueError:
+        trigger = ResumptionTrigger.RUNTIME_READY
+    try:
+        status = ResumptionStatus(str(data.get("status") or ResumptionStatus.PENDING))
+    except ValueError:
+        status = ResumptionStatus.PENDING
+    return PendingResumption(
+        id=str(data.get("id") or ""),
+        source=str(data.get("source") or ""),
+        content=str(data.get("content") or ""),
+        created_at=str(data.get("created_at") or ""),
+        trigger=trigger,
+        status=status,
+        assigned_at=str(data.get("assigned_at") or ""),
+        assigned_to_run_id=str(data.get("assigned_to_run_id") or ""),
+        last_error=str(data.get("last_error") or ""),
     )
 
 
@@ -168,6 +209,7 @@ def _encode_state(state: HorizonState) -> dict:
         "agent_id": state.agent_id,
         "loaded_skills": state.loaded_skills,
         "pending_notifications": [_notif_to_dict(n) for n in state.pending_notifications],
+        "pending_resumptions": [_resumption_to_dict(r) for r in state.pending_resumptions],
         "browser_pages": {
             page_id: _browser_page_to_dict(page)
             for page_id, page in state.browser_pages.items()
@@ -210,6 +252,7 @@ def _decode_state(data: dict) -> HorizonState:
         "agent_id",
         "file_records",
         "pending_notifications",
+        "pending_resumptions",
         "browser_pages",
         "loaded_skills",
         "image_model",
@@ -237,6 +280,11 @@ def _decode_state(data: dict) -> HorizonState:
     state.pending_notifications = [
         _notif_from_dict(notification)
         for notification in data.get("pending_notifications", [])
+    ]
+    state.pending_resumptions = [
+        _resumption_from_dict(resumption)
+        for resumption in data.get("pending_resumptions", [])
+        if isinstance(resumption, dict)
     ]
     state.browser_pages = {
         page_id: _browser_page_from_dict(page)

@@ -315,6 +315,10 @@ class AgentDispatcher(Base):
         # ========== 资源初始化阶段 - 仅首次执行 ==========
         if self.is_workspace_initialized:
             logger.info("工作区已经初始化过，跳过资源创建和工作区初始化")
+            # 只有工作区、ChatHistory 和 Horizon 都恢复完成后，
+            # 才能提交内部 /resume，否则恢复 run 可能缺少会话上下文。
+            from app.service.agent_resumption_service import AgentResumptionService
+            await AgentResumptionService.resume_pending(self)
             return
 
         logger.info("首次初始化工作区，开始创建资源...")
@@ -346,6 +350,10 @@ class AgentDispatcher(Base):
 
         # 改为按需加载agent，不再预先创建
         self.is_workspace_initialized = True
+
+        # 首次初始化完成后再触发 runtime-ready resumption，确保恢复 run 读取到完整状态。
+        from app.service.agent_resumption_service import AgentResumptionService
+        await AgentResumptionService.resume_pending(self)
 
         # 标记 init 事件已发送（非预启动场景）
         # 只有在 skip_init_messages 不为 True 时才标记已发送
@@ -553,7 +561,13 @@ class AgentDispatcher(Base):
 
         return cleaned
 
-    async def submit_message(self, message: ChatClientMessage) -> None:
+    async def submit_message(
+        self,
+        message: ChatClientMessage,
+        *,
+        resumption_id: Optional[str] = None,
+        resumption_run_id: Optional[str] = None,
+    ) -> None:
         """
         Standard entry point for channel adapters to submit an inbound message.
 
@@ -569,6 +583,7 @@ class AgentDispatcher(Base):
         """
         await self.agent_context.stop_run(reason="new message")
         self.agent_context.reset_run_state()
+        self.agent_context.set_resumption_context(resumption_id, resumption_run_id)
 
         task = asyncio.create_task(self._run_dispatch_task(message))
 

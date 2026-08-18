@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -327,8 +328,12 @@ class AgentContextSnapshotService:
             history_path=temp_files.history,
             session_path=temp_files.session,
         )
+        horizon_state = copy.deepcopy(snapshot.horizon_state)
+        # MOCK DEMO：ChatHistory 可以复制给子 Agent，但 resumption 代表外部动作，
+        # 不能复制，否则父子会话可能各自执行同一个沙盒恢复事项。
+        horizon_state.pending_resumptions.clear()
         await HorizonStore.write_fork_state(
-            snapshot.horizon_state,
+            horizon_state,
             target_agent_id=target.agent_id,
             horizon_path=temp_files.horizon,
         )

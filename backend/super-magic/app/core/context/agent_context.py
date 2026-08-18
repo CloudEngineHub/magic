@@ -174,6 +174,8 @@ class AgentContext(BaseAgentContext):
         self._run_cleanup_registry: RunCleanupRegistry = RunCleanupRegistry()
         self._run_cancellation_handle: RunCancellationHandle = RunCancellationHandle()
         self._stop_run_task: Optional[asyncio.Task] = None
+        self._resumption_id: Optional[str] = None
+        self._resumption_run_id: Optional[str] = None
 
         # AgentHorizon 懒初始化，per-agent 上下文工程基础设施
         self._horizon: Optional["AgentHorizon"] = None
@@ -452,6 +454,23 @@ class AgentContext(BaseAgentContext):
         if isinstance(source, SuperMagicExecutionSource):
             return source
         return SuperMagicExecutionSource.from_raw(source)
+
+    def set_resumption_context(
+        self,
+        resumption_id: Optional[str],
+        run_id: Optional[str],
+    ) -> None:
+        """绑定当前主 Agent run 正在处理的 resumption。"""
+        self._resumption_id = resumption_id
+        self._resumption_run_id = run_id
+
+    def get_resumption_id(self) -> Optional[str]:
+        """返回当前主 Agent run 的 resumption ID。"""
+        return self._resumption_id
+
+    def get_resumption_run_id(self) -> Optional[str]:
+        """返回当前主 Agent run 的内部 run ID。"""
+        return self._resumption_run_id
 
     def is_magiclaw(self) -> bool:
         """当前会话是否为 magiclaw 模式（龙虾 claw agent）。"""
@@ -1349,6 +1368,7 @@ class AgentContext(BaseAgentContext):
         self.shared_context.update_field("interruption_requested", False)
         self.shared_context.update_field("interruption_reason", None)
         self._interruption_event.clear()
+        self.set_resumption_context(None, None)
 
     # ====== 思考状态管理方法 ======
 
