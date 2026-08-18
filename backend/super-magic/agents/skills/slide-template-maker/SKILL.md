@@ -46,6 +46,12 @@ Do not add a `slide-templates/` prefix. Do not create a ZIP, `magic.project.js`,
 
 During authoring, `create_slide_template_project` also creates `<template-id>/.template-work/`. Store every reference render, extracted media candidate, downloaded source copy, contact sheet, and QA scratch file there. This directory is temporary and is not part of the final package.
 
+## Tool ownership
+
+`create_slide_template_project` owns the template directory, `template.json`, and the initial slide scaffolds. Do not recreate or overwrite those files with `shell_exec`, `run_python_snippet`, `write_file`, or other generic file tools. After creation, generic file tools may edit only `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. If project creation fails, stop and report the failure instead of emulating the tool.
+
+The template is not complete when authoring finishes. Call `finalize_slide_template` with the returned `template_directory`, inspect `result.ok` and `result.content`, and report completion only after finalization succeeds. A failed finalization is a failed template task, even when the source files exist.
+
 ## Workflow
 
 1. Inspect the source without modifying it.

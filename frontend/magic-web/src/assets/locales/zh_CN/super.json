@@ -2417,6 +2417,7 @@
 		"slideIsBeingDeleted": "该页面正在删除中",
 		"slidesTemplateLoadFailed": "无法打开 PPT 模板",
 		"slidesTemplateLoadFailedDescription": "请检查 template.json 和 slides 目录中的页面文件是否完整。",
+		"slidesTemplateLoadFailedReason": "具体原因：{reason}",
 		"sortSlides": "调整顺序",
 		"sortSlidesCancel": "取消",
 		"sortSlidesFailed": "更新失败",

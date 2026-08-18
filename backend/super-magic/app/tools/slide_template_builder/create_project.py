@@ -163,7 +163,10 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                     f"Put all reference renders, extracted candidates, and QA scratch files under `{template_dir / WORK_DIR_NAME}`. "
                     "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
                     "`data-height` matching `template.json.source.canvas`; preserve this contract when authoring. "
-                    "Replace every scaffold file, then call finalize_slide_template; it removes the working directory after success."
+                    "Only author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. "
+                    "Do not replace `template.json` or create the template directory with generic file or shell tools. "
+                    "Replace every scaffold file, then call finalize_slide_template and check `result.ok`; "
+                    "the template is not complete until finalization succeeds."
                 ),
                 data=data,
                 extra_info=data,

@@ -111,6 +111,8 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     }
     assert "main.slide-container" in result.content
     assert "template.json.source.canvas" in result.content
+    assert "Do not replace `template.json`" in result.content
+    assert "the template is not complete until finalization succeeds" in result.content
     assert "slide-template-scaffold" in (template_dir / "theme.css").read_text()
     scaffold = (template_dir / "slides/cover.html").read_text()
     assert '<main class="slide-container"' in scaffold
