@@ -2,6 +2,7 @@ import { OrgAiModelProviderApi } from "@/apis"
 import {
 	MODEL_TYPE_IMAGE,
 	MODEL_TYPE_LLM,
+	MODEL_TYPE_VIDEO,
 	ServiceProviderModel,
 } from "@/apis/modules/org-ai-model-provider"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
@@ -16,7 +17,7 @@ interface LoadMyModelsOptions {
 
 interface FindMyModelOptions extends LoadMyModelsOptions {
 	modelId: string
-	modelType: typeof MODEL_TYPE_LLM | typeof MODEL_TYPE_IMAGE
+	modelType: typeof MODEL_TYPE_LLM | typeof MODEL_TYPE_IMAGE | typeof MODEL_TYPE_VIDEO
 }
 
 export function serviceProviderModelToModelItem(model: ServiceProviderModel): ModelItem {
@@ -67,7 +68,7 @@ class SuperMagicCustomModelService {
 	}
 
 	async getMyModelsByType(
-		modelType: typeof MODEL_TYPE_LLM | typeof MODEL_TYPE_IMAGE,
+		modelType: typeof MODEL_TYPE_LLM | typeof MODEL_TYPE_IMAGE | typeof MODEL_TYPE_VIDEO,
 		options?: LoadMyModelsOptions,
 	): Promise<ServiceProviderModel[]> {
 		const models = await this.getMyModels(options)

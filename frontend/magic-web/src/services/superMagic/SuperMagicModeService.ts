@@ -1,5 +1,9 @@
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
-import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
+import {
+	MODEL_TYPE_IMAGE,
+	MODEL_TYPE_LLM,
+	MODEL_TYPE_VIDEO,
+} from "@/apis/modules/org-ai-model-provider"
 import { userStore } from "@/models/user"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import {
@@ -821,14 +825,17 @@ class SuperMagicModeService {
 	}): Promise<ModelItem | null> {
 		if (!modelId) return null
 
-		if (modelType !== "video") {
-			const customModel = await superMagicCustomModelService.findMyModelById({
-				modelId,
-				modelType: modelType === "image" ? MODEL_TYPE_IMAGE : MODEL_TYPE_LLM,
-			})
-			if (customModel) {
-				return superMagicCustomModelService.toModelItem(customModel)
-			}
+		const customModel = await superMagicCustomModelService.findMyModelById({
+			modelId,
+			modelType:
+				modelType === "image"
+					? MODEL_TYPE_IMAGE
+					: modelType === "video"
+						? MODEL_TYPE_VIDEO
+						: MODEL_TYPE_LLM,
+		})
+		if (customModel) {
+			return superMagicCustomModelService.toModelItem(customModel)
 		}
 
 		const officialModel = this.getOfficialModelListByType(mode, modelType, agentCode).find(

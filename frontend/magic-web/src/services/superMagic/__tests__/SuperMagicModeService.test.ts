@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import { ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import { IconType } from "@/pages/superMagic/components/AgentSelector/types"
-import { MODEL_TYPE_IMAGE, MODEL_TYPE_LLM } from "@/apis/modules/org-ai-model-provider"
+import {
+	MODEL_TYPE_IMAGE,
+	MODEL_TYPE_LLM,
+	MODEL_TYPE_VIDEO,
+} from "@/apis/modules/org-ai-model-provider"
 import type { ModeItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
@@ -396,6 +400,36 @@ describe("SuperMagicModeService", () => {
 
 		expect(resolved?.id).toBe("custom-image-1")
 		expect(resolved?.model_name).toBe("Custom Shared Image Model")
+	})
+
+	it("prefers custom video model over official video model", async () => {
+		vi.mocked(superMagicCustomModelService.findMyModelById).mockResolvedValue({
+			id: "custom-video-1",
+			name: "Custom Shared Video Model",
+			model_id: "shared-video-model",
+			model_type: MODEL_TYPE_VIDEO,
+			category: "video",
+			service_provider_config_id: "provider-3",
+			service_provider_config: {
+				id: "provider-3",
+				name: "Custom Video Provider",
+			},
+			description: "Custom video description",
+			icon: "custom-video-icon",
+		})
+
+		const resolved = await superMagicModeService.resolveModelByMode({
+			mode: "general",
+			modelId: "shared-video-model",
+			modelType: "video",
+		})
+
+		expect(superMagicCustomModelService.findMyModelById).toHaveBeenCalledWith({
+			modelId: "shared-video-model",
+			modelType: MODEL_TYPE_VIDEO,
+		})
+		expect(resolved?.id).toBe("custom-video-1")
+		expect(resolved?.model_name).toBe("Custom Shared Video Model")
 	})
 
 	it("uses default model groups to organize all supported image and video models", () => {
