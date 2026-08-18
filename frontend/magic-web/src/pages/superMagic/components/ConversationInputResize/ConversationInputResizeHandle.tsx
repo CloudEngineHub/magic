@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface ConversationInputResizeHandleProps {
 	disabled?: boolean

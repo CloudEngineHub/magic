@@ -19,7 +19,7 @@ import SlidesTemplateHomeSelectionPreview from "../Slides/SlidesTemplateHomeSele
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant } from "../../stores"
 import { useConversationInputLayout } from "../../../ConversationInputResize/context"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface DefaultInputContainerProps extends ScenePanelComponentBaseProps {}
 

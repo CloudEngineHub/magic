@@ -1,6 +1,6 @@
 import { useMemo, useRef, type ReactNode } from "react"
 import MagicSplitter from "@/components/base/MagicSplitter"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { CONVERSATION_INPUT_HEIGHT_CONFIG } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import ConversationInputResizeHandle from "@/pages/superMagic/components/ConversationInputResize/ConversationInputResizeHandle"
 import { ConversationInputLayoutProvider } from "@/pages/superMagic/components/ConversationInputResize/context"
