@@ -10,8 +10,11 @@ import type {
 	GetSkillLastVersionsParams,
 	GetSkillsParams,
 	GetStoreSkillsParams,
+	ImportOfficialSkillParams,
+	ImportOfficialSkillResponse,
 	ImportSkillParams,
 	ImportSkillResponse,
+	ParseOfficialSkillResponse,
 	ParseSkillResponse,
 	PublishSkillParams,
 	PublishSkillPrefillResponse,
@@ -191,8 +194,16 @@ export class SkillsService {
 		return SkillsApi.parseSkillFile({ file_key })
 	}
 
+	parseOfficialSkillFile(file_key: string): Promise<ParseOfficialSkillResponse> {
+		return SkillsApi.parseOfficialSkillFile({ file_key })
+	}
+
 	importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
 		return SkillsApi.importSkill(params)
+	}
+
+	importOfficialSkill(params: ImportOfficialSkillParams): Promise<ImportOfficialSkillResponse> {
+		return SkillsApi.importOfficialSkill(params)
 	}
 
 	getSkillDetail(code: string): Promise<SkillDetailResponse> {

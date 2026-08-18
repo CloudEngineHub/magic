@@ -5,6 +5,7 @@ import type { StoreSkillView } from "@/services/skills/SkillsService"
 
 const getStoreSkillsMock = vi.fn()
 const getSkillMarketCategoriesMock = vi.fn()
+const useFunctionPermissionMock = vi.hoisted(() => vi.fn())
 const skillCardRenderMock = vi.fn()
 const skillDetailDialogRenderMock = vi.fn()
 
@@ -24,6 +25,7 @@ vi.mock("react-i18next", () => ({
 				"skillsLibrary.retryFeatured": "Retry",
 				"skillsLibrary.refreshFeatured": "Refresh",
 				"skillsLibrary.featuredLoadFailed": "Failed to load featured skills",
+				"skillsLibrary.uploadOfficialSkill": "Upload official Skill",
 			})[key] ?? key,
 	}),
 }))
@@ -35,6 +37,7 @@ vi.mock("lucide-react", () => {
 
 	return {
 		Check: Icon,
+		BadgeCheck: Icon,
 		ChevronDown: Icon,
 		Loader2: Icon,
 		Plus: Icon,
@@ -48,7 +51,10 @@ vi.mock("sonner", () => ({
 }))
 
 vi.mock("@/apis", () => ({
-	FUNCTION_PERMISSION_CODE: { SkillCreate: "SkillCreate" },
+	FUNCTION_PERMISSION_CODE: {
+		SkillCreate: "SkillCreate",
+		SkillMarketManage: "SkillMarketManage",
+	},
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
@@ -78,7 +84,7 @@ vi.mock("@/enhance/lucide-react", () => ({
 }))
 
 vi.mock("@/hooks/useFunctionPermission", () => ({
-	useFunctionPermission: () => ({ isAllowed: false }),
+	useFunctionPermission: (code: string) => useFunctionPermissionMock(code),
 }))
 
 vi.mock("@/models/config", () => ({
@@ -98,6 +104,11 @@ vi.mock("@/pages/superMagic/components/SkillDetailDialog", () => ({
 		skillDetailDialogRenderMock(props)
 		return null
 	},
+}))
+
+vi.mock("@/pages/superMagic/components/OfficialSkillImportDialog", () => ({
+	default: ({ open }: { open: boolean }) =>
+		open ? <div data-testid="official-skill-import-dialog" /> : null,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useAutoLoadMoreSentinel", () => ({
@@ -178,6 +189,7 @@ function createPage(list: StoreSkillView[], page: number, pageSize: number) {
 describe("SkillsLibrary", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		useFunctionPermissionMock.mockImplementation(() => ({ isAllowed: false }))
 		getStoreSkillsMock.mockReset()
 		getSkillMarketCategoriesMock.mockReset()
 		getSkillMarketCategoriesMock.mockResolvedValue([])
@@ -190,6 +202,23 @@ describe("SkillsLibrary", () => {
 
 		expect(await screen.findByRole("tab", { name: "All Skills" })).toBeInTheDocument()
 		expect(screen.queryByRole("tab", { name: "All", exact: true })).not.toBeInTheDocument()
+		expect(
+			screen.queryByTestId("skills-library-upload-official-button"),
+		).not.toBeInTheDocument()
+	})
+
+	it("shows the official Skill entry for users with market management permission", async () => {
+		useFunctionPermissionMock.mockImplementation((code: string) => ({
+			isAllowed: code === "SkillMarketManage",
+		}))
+		getStoreSkillsMock.mockResolvedValue(createPage([], 1, 20))
+
+		render(<SkillsLibrary />)
+
+		const uploadButton = await screen.findByTestId("skills-library-upload-official-button")
+		expect(uploadButton).toBeInTheDocument()
+		fireEvent.click(uploadButton)
+		expect(screen.getByTestId("official-skill-import-dialog")).toBeInTheDocument()
 	})
 
 	it("includes empty categories and filters the skill list by string id", async () => {

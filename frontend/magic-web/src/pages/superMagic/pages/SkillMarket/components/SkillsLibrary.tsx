@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { RefObject } from "react"
 import { useDebounce, useThrottle } from "ahooks"
-import { Check, ChevronDown, Loader2, Plus, RefreshCw, Search } from "lucide-react"
+import { BadgeCheck, Check, ChevronDown, Loader2, Plus, RefreshCw, Search } from "lucide-react"
 import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -13,6 +13,7 @@ import { Skills } from "@/enhance/lucide-react"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { cn } from "@/lib/utils"
 import { configStore } from "@/models/config"
+import OfficialSkillImportDialog from "@/pages/superMagic/components/OfficialSkillImportDialog"
 import SkillActionDropdown from "@/pages/superMagic/components/SkillActionDropdown"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
@@ -50,10 +51,14 @@ function SkillsLibrary({
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
+	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
+		FUNCTION_PERMISSION_CODE.SkillMarketManage,
+	)
 
 	const [searchQuery, setSearchQuery] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
+	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: SKILLS_SEARCH_DEBOUNCE_MS })
 	const throttledSearchQuery = useThrottle(debouncedSearchQuery, {
 		wait: SKILLS_SEARCH_THROTTLE_MS,
@@ -182,6 +187,12 @@ function SkillsLibrary({
 				skillSummary={selectedSkill}
 				primaryAction={detailPrimaryAction}
 			/>
+			{canImportOfficialSkill ? (
+				<OfficialSkillImportDialog
+					open={officialImportOpen}
+					onOpenChange={setOfficialImportOpen}
+				/>
+			) : null}
 
 			<header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
 				{hideMarketingHeadline ? null : (
@@ -195,7 +206,7 @@ function SkillsLibrary({
 					</div>
 				)}
 
-				<div className="flex min-w-0 flex-1 flex-col gap-2.5 sm:flex-row sm:items-center xl:max-w-[570px] xl:justify-end">
+				<div className="flex min-w-0 flex-1 flex-col gap-2.5 sm:flex-row sm:items-center xl:max-w-[760px] xl:justify-end">
 					<form
 						className="relative min-w-0 flex-1 xl:max-w-[320px]"
 						onSubmit={(event) => {
@@ -226,6 +237,18 @@ function SkillsLibrary({
 							<Skills className="size-4" />
 							{t("skillsLibrary.mySkills")}
 						</Button>
+
+						{canImportOfficialSkill ? (
+							<Button
+								variant="outline"
+								className="h-9 flex-1 gap-2 bg-background shadow-none sm:flex-none"
+								onClick={() => setOfficialImportOpen(true)}
+								data-testid="skills-library-upload-official-button"
+							>
+								<BadgeCheck className="size-4" />
+								{t("skillsLibrary.uploadOfficialSkill")}
+							</Button>
+						) : null}
 
 						{canCreateSkill ? (
 							<SkillActionDropdown

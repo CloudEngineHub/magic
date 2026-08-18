@@ -4,6 +4,8 @@ import { genRequestUrl } from "@/utils/http"
 export const FUNCTION_PERMISSION_CODE = {
 	SkillCreate: "skill.create",
 	SkillPublish: "skill.publish_team",
+	/** Platform Skill market management (official Skill import). */
+	SkillMarketManage: "platform.skill.market.edit",
 	AgentCreate: "agent.create",
 	AgentPublish: "agent.publish_team",
 	MagicClawAccess: "magic_claw.access",

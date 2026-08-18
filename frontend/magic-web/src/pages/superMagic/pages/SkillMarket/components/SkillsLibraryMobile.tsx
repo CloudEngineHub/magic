@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { Check, ChevronLeft, Loader2, Search } from "lucide-react"
+import { BadgeCheck, Check, ChevronLeft, Loader2, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -9,12 +9,15 @@ import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
+import { FUNCTION_PERMISSION_CODE } from "@/apis"
+import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { StoreSkillCardMobile } from "./StoreSkillCardMobile"
+import OfficialSkillImportDialog from "@/pages/superMagic/components/OfficialSkillImportDialog"
 import { StoreSkillsStore } from "../stores/store-skills"
 import SkillCategoryFilter from "./SkillCategoryFilter"
 import { ViewTransitionPresets } from "@/types/viewTransition"
@@ -26,10 +29,14 @@ function SkillsLibraryMobile() {
 	const skillsStoreRef = useRef(new StoreSkillsStore())
 	const skillsStore = skillsStoreRef.current
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
+	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
+		FUNCTION_PERMISSION_CODE.SkillMarketManage,
+	)
 
 	const [searchOpen, setSearchOpen] = useState(false)
 	const [queryDraft, setQueryDraft] = useState("")
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
+	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const hasActiveFilters =
 		Boolean(skillsStore.keyword) ||
 		skillsStore.categoryIds.length > 0 ||
@@ -137,6 +144,12 @@ function SkillsLibraryMobile() {
 						: undefined
 				}
 			/>
+			{canImportOfficialSkill ? (
+				<OfficialSkillImportDialog
+					open={officialImportOpen}
+					onOpenChange={setOfficialImportOpen}
+				/>
+			) : null}
 			<header
 				className="flex shrink-0 items-center gap-2 rounded-b-xl bg-background px-2.5 py-2 shadow-xs"
 				data-testid="skills-library-mobile-top-bar"
@@ -165,6 +178,18 @@ function SkillsLibraryMobile() {
 					>
 						<Search className="size-4" aria-hidden />
 					</Button>
+					{canImportOfficialSkill ? (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-8 rounded-md"
+							onClick={() => setOfficialImportOpen(true)}
+							aria-label={t("skillsLibrary.uploadOfficialSkill")}
+							data-testid="skills-library-mobile-upload-official"
+						>
+							<BadgeCheck className="size-4" aria-hidden />
+						</Button>
+					) : null}
 					<Button
 						variant="ghost"
 						className="h-8 shrink-0 gap-1 rounded-md px-2 text-xs font-medium text-foreground"

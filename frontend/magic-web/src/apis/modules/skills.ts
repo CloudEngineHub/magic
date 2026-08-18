@@ -272,6 +272,57 @@ export interface ParseSkillResponse {
 	logo: string
 }
 
+/** Response data for parsing an official Skill package (admin phase 1). */
+export interface ParseOfficialSkillResponse {
+	import_token: string
+	package_name: string
+	code: string
+	package_description: string
+	is_update: boolean
+	name_i18n: Record<string, string>
+	description_i18n: Record<string, string>
+	source_i18n?: Record<string, string>
+	logo: string
+	market_id: number | null
+}
+
+/** Common fields for an official Skill import request. */
+export interface OfficialSkillImportFields {
+	version: string
+	name_i18n: SkillI18nText
+	description_i18n: SkillI18nText
+	source_i18n?: SkillI18nText
+	logo?: string
+	category_ids?: string[]
+	publish_status?: "OFFLINE" | "PUBLISHED"
+	is_hidden?: boolean
+	is_featured?: boolean
+	sort_order?: number
+}
+
+/** Page import: the parse token is required. */
+export interface ImportOfficialSkillByTokenParams extends OfficialSkillImportFields {
+	import_token: string
+	file_key?: never
+}
+
+/** Direct import: intended for a previously uploaded object-storage file. */
+export interface ImportOfficialSkillByFileKeyParams extends OfficialSkillImportFields {
+	file_key: string
+	import_token?: never
+}
+
+export type ImportOfficialSkillParams =
+	ImportOfficialSkillByTokenParams | ImportOfficialSkillByFileKeyParams
+
+export interface ImportOfficialSkillResponse {
+	code: string
+	version: string
+	action: "created" | "updated"
+	market_id: number | null
+	version_id: number | null
+}
+
 /** Request body for parsing a GitHub repo (phase 1, reserved) */
 export interface ParseSkillGithubParams {
 	repo_url: string
@@ -574,6 +625,17 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	},
 
 	/**
+	 * Admin-only official Skill import phase 1.
+	 * Parses an uploaded package and returns a short-lived import token.
+	 */
+	parseOfficialSkillFile(params: ParseSkillFileParams) {
+		return fetch.post<ParseOfficialSkillResponse>(
+			genRequestUrl("/api/v1/admin/official-skills/import/parse/file"),
+			params,
+		)
+	},
+
+	/**
 	 * Import phase 1 (reserved): Parse a GitHub repository as a skill.
 	 * Not yet implemented; reserved for future use.
 	 * @param params.repo_url GitHub repository URL
@@ -594,6 +656,17 @@ export const generateSkillsApi = (fetch: HttpClient) => ({
 	 */
 	importSkill(params: ImportSkillParams) {
 		return fetch.post<ImportSkillResponse>(genRequestUrl("/api/v1/skills/import"), params)
+	},
+
+	/**
+	 * Admin-only official Skill import phase 2.
+	 * `import_token` is used by the page flow; `file_key` is used by direct imports.
+	 */
+	importOfficialSkill(params: ImportOfficialSkillParams) {
+		return fetch.post<ImportOfficialSkillResponse>(
+			genRequestUrl("/api/v1/admin/official-skills/import"),
+			params,
+		)
 	},
 
 	/**

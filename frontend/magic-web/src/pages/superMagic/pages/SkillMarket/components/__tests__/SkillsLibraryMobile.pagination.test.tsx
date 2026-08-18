@@ -56,6 +56,16 @@ vi.mock("@/pages/superMagic/components/SkillDetailDialog", () => ({
 	SkillDetailDialog: () => null,
 }))
 
+vi.mock("@/apis", () => ({
+	FUNCTION_PERMISSION_CODE: {
+		SkillMarketManage: "SkillMarketManage",
+	},
+}))
+
+vi.mock("@/hooks/useFunctionPermission", () => ({
+	useFunctionPermission: () => ({ isAllowed: false }),
+}))
+
 vi.mock("@/enhance/lucide-react", () => ({
 	Skills: () => <span data-testid="skills-icon" />,
 }))
