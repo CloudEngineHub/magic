@@ -46,6 +46,13 @@
 			"projects": "Projects"
 		}
 	},
+	"featureSwitch": {
+		"description": "When off, automatic reading and organization of general long-term memory stops. Existing memory remains available for manual editing.",
+		"disableSuccess": "Long-term memory turned off",
+		"enableSuccess": "Long-term memory turned on",
+		"saveFailed": "Failed to save the long-term memory setting. Please try again.",
+		"title": "Use long-term memory automatically"
+	},
 	"globalEditor": {
 		"conflict": {
 			"description": "This file was updated by another task or page while you were editing. Choose how to continue without losing the latest content.",

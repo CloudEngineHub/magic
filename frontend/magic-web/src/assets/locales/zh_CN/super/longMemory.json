@@ -46,6 +46,13 @@
 			"projects": "项目"
 		}
 	},
+	"featureSwitch": {
+		"description": "关闭后将停止自动读取和整理通用长期记忆，已有记忆内容仍会保留并可手动编辑。",
+		"disableSuccess": "已关闭长期记忆",
+		"enableSuccess": "已开启长期记忆",
+		"saveFailed": "长期记忆设置保存失败，请稍后重试",
+		"title": "自动使用长期记忆"
+	},
 	"globalEditor": {
 		"conflict": {
 			"description": "该文件在你编辑期间已被其他任务或页面更新。为避免丢失最新内容，请选择后续处理方式。",
