@@ -27,6 +27,10 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
+from app.tools.design.video_production.service.media_generation_service import (
+    MediaGenerationService,
+    MediaSourceType,
+)
 from app.tools.generate_images import (
     GenerateImages,
     GenerateImagesParams,
@@ -35,6 +39,7 @@ from app.tools.generate_images import (
     ImageGenerationTask as CanvasImageGenTask,
 )
 from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
+from app.tools.video_generation_utils import is_provider_asset_uri
 from app.utils.async_file_utils import async_exists, async_mkdir
 
 logger = get_logger(__name__)
@@ -299,7 +304,19 @@ Expand brief user descriptions into full prompts covering subject, style, compos
     ) -> ToolResult:
         try:
             workspace_root = self._get_runtime_workspace_dir(tool_context)
-            project_prefix = params.project_path.strip("/")
+            project_path, project_error = await self._ensure_project_ready(
+                params.project_path,
+                require_magic_project_js=True,
+                tool_context=tool_context,
+            )
+            if project_error:
+                return project_error
+            project_prefix = project_path.relative_to(workspace_root).as_posix()
+            await self._materialize_reference_images(
+                params.tasks,
+                project_path,
+                workspace_root,
+            )
             normalize_error = await self._normalize_tasks(params.tasks, workspace_root, project_prefix)
             if normalize_error:
                 return normalize_error
@@ -310,6 +327,34 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 f"生成图片到画布失败: {e!s}",
                 extra_info={"error_type": "design.error_unexpected"}
             )
+
+    async def _materialize_reference_images(
+        self,
+        tasks: List[ImageTaskSpec],
+        project_path: Path,
+        workspace_root: Path,
+    ) -> None:
+        """将本地项目外参考图复制到当前项目的 images 目录。"""
+        for task in tasks:
+            materialized_paths: list[str] = []
+            for reference_path in task.reference_images:
+                normalized = str(reference_path or "").strip()
+                if (
+                    not normalized
+                    or normalized.startswith(("http://", "https://"))
+                    or is_provider_asset_uri(normalized)
+                ):
+                    materialized_paths.append(reference_path)
+                    continue
+                materialized_paths.append(
+                    await MediaGenerationService.materialize_reference_path(
+                        normalized,
+                        MediaSourceType.IMAGE,
+                        project_path,
+                        workspace_root,
+                    )
+                )
+            task.reference_images = materialized_paths
 
     # ------------------------------------------------------------------
     # 实现抽象接口

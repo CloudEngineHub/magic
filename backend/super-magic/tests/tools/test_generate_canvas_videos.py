@@ -12,6 +12,10 @@ from app.infrastructure.magic_service.client import MagicServiceClient
 from app.infrastructure.magic_service.config import MagicServiceConfig
 from app.infrastructure.magic_service.exceptions import ApiError
 from app.tools.design.tools.base_generate_canvas_elements import ElementDetail, TaskExecutionResult
+from app.tools.design.tools.generate_canvas_images import (
+    GenerateCanvasImages,
+    ImageTaskSpec,
+)
 from app.tools.design.tools.generate_canvas_videos import (
     GenerateCanvasVideos,
     GenerateCanvasVideosParams,
@@ -349,6 +353,64 @@ async def test_generate_canvas_videos_normalizes_project_relative_reference_path
     assert task.reference_audio_paths == ["demo-project/audios/ref.mp3"]
     assert task.frame_start_path == "demo-project/frames/start.jpg"
     assert task.frame_end_path == "demo-project/frames/end.jpg"
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_videos_materializes_external_reference_media(tmp_path):
+    """项目外的本地视频生成参考媒体应复制到当前项目的类型目录。"""
+    project_dir = tmp_path / "demo-project"
+    external_dir = tmp_path / ".tmp"
+    project_dir.mkdir()
+    external_dir.mkdir()
+    (external_dir / "reference.png").write_bytes(b"image")
+    (external_dir / "reference.mp4").write_bytes(b"video")
+    (external_dir / "reference.mp3").write_bytes(b"audio")
+
+    tool = GenerateCanvasVideos(base_dir=str(tmp_path))
+    task = VideoTaskSpec(
+        prompt="使用 [image1]、[image2]、[video1] 和 [audio1]",
+        name="外部参考媒体",
+        aspect_ratio="16:9",
+        duration_seconds=4,
+        resolution="720p",
+        reference_image_paths=[".tmp/reference.png", "asset://provider-image"],
+        reference_video_paths=[".tmp/reference.mp4"],
+        reference_audio_paths=[".tmp/reference.mp3"],
+    )
+
+    await tool._materialize_reference_media([task], project_dir, tmp_path)
+
+    assert task.reference_image_paths[0].startswith("demo-project/images/reference-")
+    assert task.reference_image_paths[1] == "asset://provider-image"
+    assert task.reference_video_paths[0].startswith("demo-project/videos/reference-")
+    assert task.reference_audio_paths[0].startswith("demo-project/audio/reference-")
+    assert list((project_dir / "images").glob("reference-*"))
+    assert list((project_dir / "videos").glob("reference-*"))
+    assert list((project_dir / "audio").glob("reference-*"))
+
+
+@pytest.mark.asyncio
+async def test_generate_canvas_images_materializes_external_reference_images(tmp_path):
+    """项目外的本地生图参考图应复制到当前项目的 images 目录。"""
+    project_dir = tmp_path / "demo-project"
+    external_dir = tmp_path / ".tmp"
+    project_dir.mkdir()
+    external_dir.mkdir()
+    (external_dir / "reference.png").write_bytes(b"image")
+
+    tool = GenerateCanvasImages(base_dir=str(tmp_path))
+    task = ImageTaskSpec(
+        prompt="基于参考图创作",
+        name="外部参考图",
+        size="640x360",
+        reference_images=[".tmp/reference.png", "https://example.test/reference.png"],
+    )
+
+    await tool._materialize_reference_images([task], project_dir, tmp_path)
+
+    assert task.reference_images[0].startswith("demo-project/images/reference-")
+    assert task.reference_images[1] == "https://example.test/reference.png"
+    assert list((project_dir / "images").glob("reference-*"))
 
 
 def test_video_task_spec_requires_video_and_audio_tokens():

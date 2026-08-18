@@ -36,6 +36,10 @@ from app.tools.design.tools.base_generate_canvas_elements import (
     TaskExecutionResult,
     TaskPlaceholderInfo,
 )
+from app.tools.design.video_production.service.media_generation_service import (
+    MediaGenerationService,
+    MediaSourceType,
+)
 from app.tools.media_generator.factory import get_video_generator
 from app.tools.media_generator.video_base import VideoGenerationRequest
 from app.tools.media_generator.video_dispatcher import HANDLER_MAGIC_SERVICE
@@ -464,6 +468,20 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             self._task_video_ids = {}
             workspace_root = self._get_runtime_workspace_dir(tool_context)
             project_prefix = params.project_path.strip("/")
+            if params.action == "generate":
+                project_path, project_error = await self._ensure_project_ready(
+                    params.project_path,
+                    require_magic_project_js=True,
+                    tool_context=tool_context,
+                )
+                if project_error:
+                    return project_error
+                project_prefix = project_path.relative_to(workspace_root).as_posix()
+                await self._materialize_reference_media(
+                    params.tasks,
+                    project_path,
+                    workspace_root,
+                )
             await self._normalize_reference_paths(params.tasks, workspace_root, project_prefix)
             if params.action == "estimate_points":
                 return await self._estimate_video_points(tool_context, params)
@@ -474,6 +492,83 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
                 f"生成视频到画布失败: {e!s}",
                 extra_info={"error_type": "design.error_unexpected"},
             )
+
+    async def _materialize_reference_media(
+        self,
+        tasks: List[VideoTaskSpec],
+        project_path: Path,
+        workspace_root: Path,
+    ) -> None:
+        """将本地项目外参考媒体复制到当前项目的类型目录。"""
+        for task in tasks:
+            task.reference_image_paths = await self._materialize_path_list(
+                task.reference_image_paths,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+            task.reference_video_paths = await self._materialize_path_list(
+                task.reference_video_paths,
+                MediaSourceType.VIDEO,
+                project_path,
+                workspace_root,
+            )
+            task.reference_audio_paths = await self._materialize_path_list(
+                task.reference_audio_paths,
+                MediaSourceType.AUDIO,
+                project_path,
+                workspace_root,
+            )
+            task.frame_start_path = await self._materialize_optional_path(
+                task.frame_start_path,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+            task.frame_end_path = await self._materialize_optional_path(
+                task.frame_end_path,
+                MediaSourceType.IMAGE,
+                project_path,
+                workspace_root,
+            )
+
+    async def _materialize_path_list(
+        self,
+        paths: List[str],
+        media_type: MediaSourceType,
+        project_path: Path,
+        workspace_root: Path,
+    ) -> List[str]:
+        """物化列表中的本地路径，并保留 URL 与供应商素材 URI。"""
+        return [
+            await self._materialize_optional_path(
+                path,
+                media_type,
+                project_path,
+                workspace_root,
+            )
+            for path in paths
+        ]
+
+    @staticmethod
+    async def _materialize_optional_path(
+        path: str,
+        media_type: MediaSourceType,
+        project_path: Path,
+        workspace_root: Path,
+    ) -> str:
+        """物化单个本地参考路径，非文件引用保持原值。"""
+        normalized = str(path or "").strip()
+        if not normalized or normalized.startswith(("http://", "https://")):
+            return path
+        if is_provider_asset_uri(normalized):
+            return normalized
+        return await MediaGenerationService.materialize_reference_path(
+            normalized,
+            media_type,
+            project_path,
+            workspace_root,
+        )
 
     async def _estimate_video_points(
         self,

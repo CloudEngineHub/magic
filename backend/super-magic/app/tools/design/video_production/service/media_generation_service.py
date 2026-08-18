@@ -109,6 +109,26 @@ class CanvasAssetRegistration:
 class MediaGenerationService:
     """准备参考媒体路径，并支持显式素材导入工具登记节点。"""
 
+    @classmethod
+    async def materialize_reference_path(
+        cls,
+        path: str,
+        media_type: MediaSourceType,
+        project_path: Path,
+        workspace_root: Path,
+    ) -> str:
+        """将本地参考素材物化到当前项目，并返回工作区相对路径。
+
+        项目内文件直接复用，项目外文件复制到对应的 images、videos 或 audio 目录。
+        """
+        materialized = await cls._materialize_media_path(
+            path,
+            media_type,
+            project_path,
+            workspace_root,
+        )
+        return materialized.generation_path
+
     @staticmethod
     def infer_media_type(path: str) -> MediaSourceType:
         """根据素材扩展名推断稳定媒体类型。"""
