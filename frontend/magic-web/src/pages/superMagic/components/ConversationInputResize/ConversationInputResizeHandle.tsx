@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type PointerEvent as ReactPointerEvent,
+} from "react"
 import { cn } from "@/utils/cn"
 
 interface ConversationInputResizeHandleProps {
@@ -13,7 +19,7 @@ interface ConversationInputResizeHandleProps {
 	onResizeStateChange?: (isResizing: boolean) => void
 }
 
-/** Render the desktop-only grab target and translate pointer movement into height deltas. */
+/** Render the grab target and translate pointer movement into height deltas. */
 export default function ConversationInputResizeHandle({
 	disabled = false,
 	value,
@@ -26,8 +32,11 @@ export default function ConversationInputResizeHandle({
 	onResizeStateChange,
 }: ConversationInputResizeHandleProps) {
 	const startYRef = useRef<number | null>(null)
+	const pointerIdRef = useRef<number | null>(null)
+	const pointerTargetRef = useRef<HTMLDivElement | null>(null)
 	const pendingDeltaRef = useRef<number | null>(null)
 	const resizeFrameRef = useRef<number | null>(null)
+	const cleanupDragRef = useRef<(() => void) | null>(null)
 	const [isDragging, setIsDragging] = useState(false)
 
 	const applyPendingResize = useCallback(() => {
@@ -37,9 +46,10 @@ export default function ConversationInputResizeHandle({
 		onResize(pendingDelta)
 	}, [onResize])
 
-	const handleMouseMove = useCallback(
-		(event: MouseEvent) => {
+	const handlePointerMove = useCallback(
+		(event: PointerEvent) => {
 			if (startYRef.current === null) return
+			if (pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) return
 
 			pendingDeltaRef.current = event.clientY - startYRef.current
 			if (resizeFrameRef.current !== null) return
@@ -52,50 +62,85 @@ export default function ConversationInputResizeHandle({
 		[applyPendingResize],
 	)
 
-	const stopMouseResize = useCallback(() => {
-		if (startYRef.current === null) return
+	/** Finish a pointer gesture and optionally persist the final height. */
+	const finishPointerResize = useCallback(
+		(commit: boolean) => {
+			if (startYRef.current === null) return
 
-		if (resizeFrameRef.current !== null) {
-			window.cancelAnimationFrame(resizeFrameRef.current)
-			resizeFrameRef.current = null
-		}
-		applyPendingResize()
-		startYRef.current = null
-		pendingDeltaRef.current = null
-		setIsDragging(false)
-		onResizeStateChange?.(false)
-		window.removeEventListener("mousemove", handleMouseMove)
-		window.removeEventListener("mouseup", stopMouseResize)
-		onResizeEnd()
-	}, [applyPendingResize, handleMouseMove, onResizeEnd, onResizeStateChange])
+			if (resizeFrameRef.current !== null) {
+				window.cancelAnimationFrame(resizeFrameRef.current)
+				resizeFrameRef.current = null
+			}
+			if (commit) applyPendingResize()
+			else pendingDeltaRef.current = null
 
-	const handleMouseDown = useCallback(
-		(event: ReactMouseEvent<HTMLDivElement>) => {
-			if (disabled || event.button !== 0) return
+			const pointerId = pointerIdRef.current ?? -1
+			if (pointerTargetRef.current?.hasPointerCapture?.(pointerId)) {
+				pointerTargetRef.current.releasePointerCapture?.(pointerId)
+			}
+			startYRef.current = null
+			pointerIdRef.current = null
+			pointerTargetRef.current = null
+			pendingDeltaRef.current = null
+			setIsDragging(false)
+			onResizeStateChange?.(false)
+			if (commit) onResizeEnd()
+		},
+		[applyPendingResize, onResizeEnd, onResizeStateChange],
+	)
 
+	const handlePointerDown = useCallback(
+		(event: ReactPointerEvent<HTMLDivElement>) => {
+			if (
+				disabled ||
+				event.isPrimary === false ||
+				(event.pointerType === "mouse" && event.button !== 0)
+			) {
+				return
+			}
+
+			cleanupDragRef.current?.()
 			event.preventDefault()
+			pointerIdRef.current = event.pointerId
+			pointerTargetRef.current = event.currentTarget
 			startYRef.current = event.clientY
 			pendingDeltaRef.current = null
+			event.currentTarget.setPointerCapture?.(event.pointerId)
 			setIsDragging(true)
 			onResizeStateChange?.(true)
 			onResizeStart()
-			window.addEventListener("mousemove", handleMouseMove)
-			window.addEventListener("mouseup", stopMouseResize)
+
+			const handlePointerUp = () => {
+				finishPointerResize(true)
+				cleanupDragRef.current?.()
+			}
+			const handlePointerCancel = () => {
+				finishPointerResize(false)
+				cleanupDragRef.current?.()
+			}
+			cleanupDragRef.current = () => {
+				window.removeEventListener("pointermove", handlePointerMove)
+				window.removeEventListener("pointerup", handlePointerUp)
+				window.removeEventListener("pointercancel", handlePointerCancel)
+				cleanupDragRef.current = null
+			}
+			window.addEventListener("pointermove", handlePointerMove)
+			window.addEventListener("pointerup", handlePointerUp)
+			window.addEventListener("pointercancel", handlePointerCancel)
 		},
-		[disabled, handleMouseMove, onResizeStart, onResizeStateChange, stopMouseResize],
+		[disabled, finishPointerResize, handlePointerMove, onResizeStart, onResizeStateChange],
 	)
 
 	useEffect(() => {
 		return () => {
+			cleanupDragRef.current?.()
 			if (resizeFrameRef.current !== null) {
 				window.cancelAnimationFrame(resizeFrameRef.current)
 				resizeFrameRef.current = null
 			}
 			pendingDeltaRef.current = null
-			window.removeEventListener("mousemove", handleMouseMove)
-			window.removeEventListener("mouseup", stopMouseResize)
 		}
-	}, [handleMouseMove, stopMouseResize])
+	}, [])
 
 	const handleDoubleClick = useCallback(() => {
 		if (disabled) return
@@ -121,7 +166,7 @@ export default function ConversationInputResizeHandle({
 				"hover:before:opacity-100 data-[resizing=true]:before:opacity-100",
 				disabled && "pointer-events-none",
 			)}
-			onMouseDown={handleMouseDown}
+			onPointerDown={handlePointerDown}
 			onDoubleClick={handleDoubleClick}
 		>
 			{/* Keep the two-line indicator inside the clipped input panel so both lines stay visible. */}
