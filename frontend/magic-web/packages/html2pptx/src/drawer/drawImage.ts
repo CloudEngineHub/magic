@@ -1,10 +1,9 @@
 import type { PPTImageNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
-import { bytesMediaSourceDescriptor } from "../media/source-descriptor"
 
 export function drawImage(slide: Slide, node: PPTImageNode): void {
 	const { x, y, w, h, sizing, intrinsicSize, transparency, rotate } = node
-	const source = resolveImageSource(node)
+	const source = node.source
 	const src = node.src
 
 	if (!source && !src) return
@@ -79,15 +78,4 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 		})
 		throw error
 	}
-}
-
-/**
- * Resolve the image source: prefer transferred binary bytes, converted to a base64 data URL inside the packaging worker,
- * so the main thread does not keep large base64 strings; otherwise fall back to `src` (remote URL / data URL / fallback).
- */
-function resolveImageSource(node: PPTImageNode) {
-	if (node.source) return node.source
-	const bytes = node.srcBytes
-	if (!bytes?.data.byteLength) return undefined
-	return bytesMediaSourceDescriptor({ data: bytes.data, contentType: bytes.mime })
 }

@@ -24,6 +24,8 @@ const forbiddenIdentifiers = new Set([
 	"IncrementalPackagingWorkerResponse",
 	"IncrementalSlideBatch",
 	"encodeSlideMediaRels",
+	"srcBytes",
+	"coverBytes",
 ])
 
 const removedFiles = [
@@ -48,7 +50,7 @@ const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"])
 const expectedPptxGenJs = {
 	name: "pptxgenjs",
 	version: "5.0.0",
-	sourceCommit: "02e9928961c16980a286978753ca269602e3d999",
+	sourceCommit: "2d99c61e117e503fd94094945dfa0482dc35577d",
 }
 const violations = []
 let scannedFiles = 0

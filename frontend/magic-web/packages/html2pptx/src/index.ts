@@ -297,6 +297,23 @@ export type {
 	ImageTransformDescriptorResult,
 } from "./media/image-preflight"
 export { imagePolicyRequiresReplay, preflightPptImage } from "./media/image-preflight"
+export {
+	MAX_INLINE_MEDIA_BYTES,
+	bytesMediaSourceDescriptor,
+	mediaSourceDescriptorFromBytes,
+	normalizeMediaSourceDescriptor,
+	withMediaSourceKey,
+} from "./media/source-descriptor"
+export type {
+	BlobMediaSourceDescriptor,
+	BytesMediaSourceDescriptor,
+	MediaMetadataOrigin,
+	MediaSourceDescriptor,
+	MediaSourceDescriptorBase,
+	OpfsMediaSourceDescriptor,
+	PathMediaSourceDescriptor,
+	UrlMediaSourceDescriptor,
+} from "./media/source-descriptor"
 export { preflightPptxExport, type PreflightOptions } from "./api/preflight"
 export {
 	resolveStreamingMediaPolicyMode,

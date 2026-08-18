@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
 	MAX_INLINE_MEDIA_BYTES,
 	bytesMediaSourceDescriptor,
+	mediaSourceDescriptorFromBytes,
 	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,
 } from "../src/media/source-descriptor"
@@ -56,6 +57,23 @@ describe("streaming media source descriptors", () => {
 				contentType: "image/webp",
 			}),
 		).toMatchObject({ extn: "webp", metadataOrigin: "explicit" })
+	})
+
+	it("stages oversized caller bytes as a Blob descriptor", () => {
+		const data = new ArrayBuffer(MAX_INLINE_MEDIA_BYTES + 1)
+		const source = mediaSourceDescriptorFromBytes({
+			data,
+			contentType: "image/png",
+			key: "large-image",
+		})
+
+		expect(source).toMatchObject({
+			kind: "blob",
+			size: data.byteLength,
+			key: "large-image",
+			contentType: "image/png",
+			extn: "png",
+		})
 	})
 
 	it("rejects an oversized percent-encoded data URL before decoding it", async () => {

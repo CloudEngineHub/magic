@@ -15,7 +15,6 @@ import type { StreamingExportTaskInput } from "../index"
 import type { PPTNode } from "../ir/node"
 import { serializePptNodes, type SerializablePPTNode } from "../ir/serialize"
 import {
-	bytesMediaSourceDescriptor,
 	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,
 	type MediaSourceDescriptor,
@@ -553,7 +552,6 @@ async function applyImagePreflight(
 		}
 		node.source = withMediaSourceKey(result.source, node.assetKey)
 		node.src = ""
-		node.srcBytes = undefined
 		if (result.intrinsicSize) node.intrinsicSize = result.intrinsicSize
 		kept.push(node)
 	}
@@ -641,14 +639,6 @@ function imageDecisionDetails(
 async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<void> {
 	for (const node of nodes) {
 		if (node.type === "image") {
-			if (!node.source && node.srcBytes?.data?.byteLength) {
-				node.source = bytesMediaSourceDescriptor({
-					data: node.srcBytes.data,
-					contentType: node.srcBytes.mime,
-					key: node.assetKey,
-				})
-				node.srcBytes = undefined
-			}
 			if (!node.source && node.src) {
 				node.source = await normalizeMediaSourceDescriptor(node.src, {
 					key: node.assetKey,
@@ -657,7 +647,6 @@ async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<
 			if (node.source) node.source = withMediaSourceKey(node.source, node.assetKey)
 			if (node.source) {
 				node.src = ""
-				node.srcBytes = undefined
 			}
 			continue
 		}
@@ -674,14 +663,6 @@ async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<
 			}
 		}
 		if (node.source) node.source = withMediaSourceKey(node.source, node.assetKey)
-		if (!node.coverSource && node.coverBytes?.data?.byteLength) {
-			node.coverSource = bytesMediaSourceDescriptor({
-				data: node.coverBytes.data,
-				contentType: node.coverBytes.mime,
-				key: node.coverAssetKey,
-			})
-			node.coverBytes = undefined
-		}
 		if (!node.coverSource && node.cover) {
 			node.coverSource = await normalizeMediaSourceDescriptor(node.cover, {
 				contentType: "image/png",
@@ -697,7 +678,6 @@ async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<
 		}
 		if (node.coverSource) {
 			node.cover = undefined
-			node.coverBytes = undefined
 		}
 	}
 }

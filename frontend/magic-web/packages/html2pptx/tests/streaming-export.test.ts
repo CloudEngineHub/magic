@@ -68,7 +68,7 @@ function createImageNode(
 	} as PPTNode
 }
 
-function createMediaNodeWithCoverBytes(): PPTNode {
+function createMediaNodeWithCoverSource(): PPTNode {
 	return {
 		type: "media",
 		x: 0,
@@ -84,9 +84,12 @@ function createMediaNodeWithCoverBytes(): PPTNode {
 			contentType: "video/mp4",
 			extn: "mp4",
 		},
-		coverBytes: {
+		coverSource: {
+			kind: "bytes",
 			data: new Uint8Array([7, 8, 9]).buffer,
-			mime: "image/png",
+			key: "video-cover",
+			contentType: "image/png",
+			extn: "png",
 		},
 	} as PPTNode
 }
@@ -585,7 +588,7 @@ describe("runStreamingExport", () => {
 		expect(committedKinds).toEqual(["opfs"])
 	})
 
-	it("converts compatibility image and media bytes before JSON SlideIR replay", async () => {
+	it("stages descriptor image and media bytes before JSON SlideIR replay", async () => {
 		const store = new FakeStagingStore()
 		const committedKinds: string[] = []
 		const { factory } = createPackagerFactory({
@@ -613,12 +616,15 @@ describe("runStreamingExport", () => {
 							zOrder: 0,
 							src: "",
 							sizing: "stretch",
-							srcBytes: {
+							source: {
+								kind: "bytes",
 								data: new Uint8Array([1, 2, 3]).buffer,
-								mime: "image/png",
+								key: "image-source",
+								contentType: "image/png",
+								extn: "png",
 							},
 						} as PPTNode,
-						createMediaNodeWithCoverBytes(),
+						createMediaNodeWithCoverSource(),
 					],
 					totalWidth: 1280,
 					totalHeight: 720,

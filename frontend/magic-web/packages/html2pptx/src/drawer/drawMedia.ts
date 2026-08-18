@@ -1,7 +1,6 @@
 import type { PPTMediaNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
 import { throwIfAborted } from "../sandbox/abort"
-import { bytesMediaSourceDescriptor } from "../media/source-descriptor"
 
 interface MediaOptions {
 	x: number
@@ -29,7 +28,7 @@ export async function drawMedia(
 ): Promise<void> {
 	throwIfAborted(signal)
 	const { x, y, w, h, mediaType, path, data, source, link, extn } = node
-	const coverSource = resolveCoverSource(node)
+	const coverSource = node.coverSource
 
 	const options: MediaOptions = {
 		x,
@@ -78,14 +77,4 @@ export async function drawMedia(
 		default:
 			log(LogLevel.L3, "Unknown media type", { mediaType })
 	}
-}
-
-/**
- * Normalize the compatibility byte field without generating a base64 string.
- */
-function resolveCoverSource(node: PPTMediaNode): PPTMediaNode["coverSource"] {
-	if (node.coverSource) return node.coverSource
-	const bytes = node.coverBytes
-	if (!bytes?.data.byteLength) return undefined
-	return bytesMediaSourceDescriptor({ data: bytes.data, contentType: bytes.mime })
 }

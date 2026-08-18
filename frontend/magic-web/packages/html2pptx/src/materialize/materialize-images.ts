@@ -2,7 +2,6 @@ import type { ResourceLoadError } from "../api/options"
 import type { PPTImageNode, PPTNode } from "../ir/node"
 import { log, LogLevel } from "../logger"
 import {
-	bytesMediaSourceDescriptor,
 	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,
 } from "../media/source-descriptor"
@@ -29,17 +28,6 @@ async function materializePptImageNode(
 	const src = node.src
 	if (node.source) {
 		node.source = withMediaSourceKey(node.source, node.assetKey)
-		node.captureElement = undefined
-		return
-	}
-	if (node.srcBytes?.data.byteLength) {
-		node.source = bytesMediaSourceDescriptor({
-			data: node.srcBytes.data,
-			contentType: node.srcBytes.mime,
-			key: node.assetKey,
-		})
-		node.srcBytes = undefined
-		node.src = ""
 		node.captureElement = undefined
 		return
 	}

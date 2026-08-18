@@ -534,7 +534,6 @@ function collectSlideTransferables(payload: StreamingCommitSlidePayload): Transf
 			for (const transferable of descriptorTransferables(node.source)) {
 				if (transferable instanceof ArrayBuffer) buffers.add(transferable)
 			}
-			if (node.srcBytes?.data) buffers.add(node.srcBytes.data)
 		}
 		if (node.type === "media") {
 			for (const transferable of descriptorTransferables(node.source)) {
@@ -543,7 +542,6 @@ function collectSlideTransferables(payload: StreamingCommitSlidePayload): Transf
 			for (const transferable of descriptorTransferables(node.coverSource)) {
 				if (transferable instanceof ArrayBuffer) buffers.add(transferable)
 			}
-			if (node.coverBytes?.data) buffers.add(node.coverBytes.data)
 		}
 	}
 	return Array.from(buffers)

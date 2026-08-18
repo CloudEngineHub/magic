@@ -106,13 +106,8 @@ export interface PPTImageNode extends PPTNodeBase {
 	src: string
 	/** Stable business identity (for example data-original-path) used for media deduplication. */
 	assetKey?: string
-	/** Binary/streaming source used by new exports; preferred over `src`. */
+	/** Binary/streaming source used by exports; preferred over `src`. */
 	source?: MediaSourceDescriptor
-	/**
-	 * Deprecated compatibility input. It is normalized to a bounded `bytes` descriptor
-	 * and is never converted back to base64 by the new packaging path.
-	 */
-	srcBytes?: { data: ArrayBuffer; mime: string }
 	/** Capture source */
 	capture?: "snapdom"
 	/** Capture target element */
@@ -256,10 +251,6 @@ export interface PPTMediaNode extends PPTNodeBase {
 	cover?: string
 	/** Binary/streaming video poster source. */
 	coverSource?: MediaSourceDescriptor
-	/**
-	 * Deprecated compatibility input normalized to `coverSource` without base64 conversion.
-	 */
-	coverBytes?: { data: ArrayBuffer; mime: string }
 	/** Whether to autoplay */
 	autoplay?: boolean
 	/** File extension */

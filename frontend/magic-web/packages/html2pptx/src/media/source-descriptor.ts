@@ -140,16 +140,57 @@ export function bytesMediaSourceDescriptor(input: {
 			`Inline media is ${input.data.byteLength} bytes; stage it as Blob/OPFS instead of transferring an ArrayBuffer.`,
 		)
 	}
+	return createBytesDescriptor(input)
+}
+
+/**
+ * Convert caller-owned bytes into the descriptor protocol without exposing a
+ * legacy node-level byte field. Small payloads remain transferable ArrayBuffers;
+ * larger payloads become Blob descriptors so the Worker boundary does not copy
+ * or transfer an oversized inline buffer.
+ */
+export function mediaSourceDescriptorFromBytes(input: {
+	data: ArrayBuffer
+	contentType: string
+	extn?: string
+	key?: string
+}): BytesMediaSourceDescriptor | BlobMediaSourceDescriptor {
+	if (input.data.byteLength <= MAX_INLINE_MEDIA_BYTES) return createBytesDescriptor(input)
+	const contentType = input.contentType || "application/octet-stream"
+	const extn = normalizeExtension(input.extn || extensionFromContentType(contentType))
+	const key = input.key || defaultBytesSourceKey(input.data, contentType)
+	return {
+		kind: "blob",
+		blob: new Blob([input.data], { type: contentType }),
+		size: input.data.byteLength,
+		key,
+		contentType,
+		extn,
+		metadataOrigin: "explicit",
+	}
+}
+
+function createBytesDescriptor(input: {
+	data: ArrayBuffer
+	contentType: string
+	extn?: string
+	key?: string
+}): BytesMediaSourceDescriptor {
+	const contentType = input.contentType || "application/octet-stream"
 	return {
 		kind: "bytes",
 		data: input.data,
 		key:
 			input.key ||
-			`bytes:${input.contentType}:${input.data.byteLength}:${hashBytes(new Uint8Array(input.data, 0, Math.min(input.data.byteLength, 4096)))}`,
-		contentType: input.contentType || "application/octet-stream",
-		extn: normalizeExtension(input.extn || extensionFromContentType(input.contentType)),
+				defaultBytesSourceKey(input.data, contentType),
+		contentType,
+		extn: normalizeExtension(input.extn || extensionFromContentType(contentType)),
 		metadataOrigin: "explicit",
 	}
+}
+
+function defaultBytesSourceKey(data: ArrayBuffer, contentType: string): string {
+	return `bytes:${contentType}:${data.byteLength}:${hashBytes(new Uint8Array(data, 0, Math.min(data.byteLength, 4096)))}`
 }
 
 function normalizeDescriptorMetadata(

@@ -733,7 +733,7 @@ describe("streaming packager client", () => {
 		})
 		const imageBytes = new ArrayBuffer(4)
 		const mediaBytes = new ArrayBuffer(5)
-		const coverBytes = new ArrayBuffer(6)
+		const coverBuffer = new ArrayBuffer(6)
 		const packager = createStreamingPresentationPackager({
 			config,
 			plan: { finalSlideCount: 1 },
@@ -778,7 +778,7 @@ describe("streaming packager client", () => {
 					},
 					coverSource: {
 						kind: "bytes",
-						data: coverBytes,
+						data: coverBuffer,
 						key: "cover",
 						contentType: "image/jpeg",
 						extn: "jpg",
@@ -790,7 +790,7 @@ describe("streaming packager client", () => {
 		expect(output).toEqual([9])
 		expect(worker.transfers[0]).toContain(writable)
 		expect(worker.transfers[1]).toEqual(
-			expect.arrayContaining([imageBytes, mediaBytes, coverBytes]),
+			expect.arrayContaining([imageBytes, mediaBytes, coverBuffer]),
 		)
 		packager.dispose()
 	})
