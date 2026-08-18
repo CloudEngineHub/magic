@@ -19,7 +19,6 @@ class PathManager(BasePathManager):
         .cache/              ← 缓存（父类管理）
         .topic/              ← 话题持久状态（父类管理）
             chat_history/    ← 聊天记录
-            checkpoints/     ← checkpoint 自身
         .credentials/        ← 凭证（应用层，预创建）
         .project_schemas/    ← 项目架构（应用层，预创建）
         .client_message/     ← 客户端消息（应用层，预创建）
@@ -33,6 +32,7 @@ class PathManager(BasePathManager):
             background_compact/ ← 后台压缩临时上下文
             llm_request/    ← LLM 调试日志
         app/i18n/            ← 语言翻译（源码只读目录）
+        .checkpoints/        ← 检查点（getter 内按需创建）
         .workspace/          ← MagicFS 云端持久工作区（父类管理）
             .asr_states/     ← ASR 状态（按需创建）
             .magic/          ← Magic 配置（按需创建）
@@ -48,13 +48,13 @@ class PathManager(BasePathManager):
     - 框架层预创建目录由父类负责
     - 应用层预创建目录仅以 `_ensure_app_directories_exist()` 中显式创建的目录为准
     - 未在该方法中创建的目录一律视为按需创建，首次写入时由调用方自行创建
-    - `get_*` 方法只返回路径，不隐式创建目录；运行时目录由对应业务流程在挂载完成后按需创建
+    - `get_*` 方法只返回路径，不隐式创建目录（`get_checkpoints_dir` / `get_checkpoint_dir` 除外，历史遗留）
 
     持久化边界：
     - `.topic/chat_history/` 是话题持久状态，进入归档和 checkpoint；`compacted/` 与 `subagents/` 也属于这里。
     - `.runtime/` 只保存可重新生成的运行数据，不进入归档和 checkpoint。
     - `.workspace/` 保存用户文件，由现有文件 checkpoint 机制单独管理。
-    - `.topic/checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
+    - `.checkpoints/` 保存 checkpoint 自身，不能作为聊天记录快照源。
     """
 
     # ── project_root 下 ───────────────────────────────────────────────────────
@@ -124,9 +124,6 @@ class PathManager(BasePathManager):
     # 临时目录：.workspace/.tmp（按需创建）
     _tmp_dir_name: ClassVar[str] = ".tmp"
     _tmp_dir: ClassVar[Optional[Path]] = None
-    _checkpoints_dir_name: ClassVar[str] = "checkpoints"
-
-
     @classmethod
     def _ensure_app_initialization(cls) -> None:
         """确保应用层PathManager已初始化"""
@@ -404,26 +401,26 @@ class PathManager(BasePathManager):
     @classmethod
     def get_checkpoints_dir(cls) -> Path:
         """
-        获取检查点存储目录（project_root/.topic/checkpoints）。
+        获取检查点存储目录（project_root/.checkpoints）。
 
-        仅返回路径，不创建目录；`.topic` 必须先由 sandbox 挂载流程准备完成。
+        注意：此方法会在返回前创建目录，历史遗留行为，勿仿照。
         """
         cls._ensure_app_initialization()
-        return cls.get_topic_dir() / cls._checkpoints_dir_name
-
-    @classmethod
-    def get_checkpoints_dir_name(cls) -> str:
-        return cls._checkpoints_dir_name
+        checkpoint_dir = cls.get_project_root() / ".checkpoints"
+        checkpoint_dir.mkdir(exist_ok=True)
+        return checkpoint_dir
 
     @classmethod
     def get_checkpoint_dir(cls, checkpoint_id: str) -> Path:
         """
-        获取检查点实例目录（project_root/.topic/checkpoints/{checkpoint_id}）。
+        获取检查点实例目录（project_root/.checkpoints/{checkpoint_id}）。
 
-        仅返回路径，实际创建由 checkpoint 存储流程负责。
+        注意：此方法会在返回前创建目录，历史遗留行为，勿仿照。
         """
         cls._ensure_app_initialization()
-        return cls.get_checkpoints_dir() / checkpoint_id
+        checkpoint_dir = cls.get_checkpoints_dir() / checkpoint_id
+        checkpoint_dir.mkdir(exist_ok=True)
+        return checkpoint_dir
 
     # ── workspace（project_root/.workspace）下的 getter ──────────────────────
 

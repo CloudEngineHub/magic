@@ -8,7 +8,7 @@
 .topic/chat_history/  = 话题的持久状态，需要 checkpoint 和归档
 .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
 .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
-.topic/checkpoints/   = checkpoint 自身，不能复制进自己
+.checkpoints/   = checkpoint 自身，不能复制进自己
 ```
 
 这四个目录不是同一层级的不同叫法，而是四种不同的数据责任：
@@ -16,7 +16,7 @@
 - `.topic/chat_history/` 保存 Agent 继续理解和恢复一个话题所需的持久数据。
 - `.runtime/` 保存进程运行期间的临时文件、调试日志和可重新计算结果。
 - `.workspace/` 保存用户需要长期保留、下载或继续编辑的文件。
-- `.topic/checkpoints/` 保存文件 checkpoint 和聊天记录快照本身。
+- `.checkpoints/` 保存文件 checkpoint 和聊天记录快照本身。
 
 ## 目标目录结构
 
@@ -31,16 +31,6 @@ project_root/
 │   │   ├── magic<main>.tools.json          主 Agent 能力盘点输入
 │   │   ├── compacted/                      压缩前历史
 │   │   └── subagents/                      子 Agent 持久状态
-│   └── checkpoints/                        checkpoint 自身
-│       ├── checkpoint_manifest.json
-│       └── <checkpoint-id>/
-│           ├── file_snapshots/             用户文件快照
-│           ├── initial_chat_history_snapshots/
-│           │   └── .topic/chat_history/ 的完整内容
-│           ├── latest_chat_history_snapshots/
-│           │   └── .topic/chat_history/ 的完整内容
-│           └── checkpoint_info.json
-│
 ├── .runtime/                              可重新生成的运行数据
 │   ├── background_compact/                后台压缩临时上下文
 │   ├── llm_request/                       LLM 调试日志
@@ -54,7 +44,7 @@ project_root/
 
 ## checkpoint 边界
 
-`.topic/` 由基础设施在容器启动阶段通过 agfs-fuse 挂载为当前 topic 的持久卷。应用层不重复判断操作系统挂载点，只检查 `.topic/chat_history/` 和 `.topic/checkpoints/` 是否可用，并通过各自的持久化状态判断是否跳过 zip；状态未确认或恢复失败时继续使用 zip 下载/上传兜底。
+`.topic/` 由基础设施在容器启动阶段通过 agfs-fuse 挂载为当前 topic 的持久卷。应用层不重复判断操作系统挂载点，只检查 `.topic/chat_history/` 是否可用；聊天历史状态未确认或恢复失败时继续使用 zip 下载/上传兜底。checkpoint 仍使用原有 `.checkpoints/` 和 zip 链路。
 
 checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话题的持久状态，不只代表主 Agent 的三个文件。
 
@@ -68,7 +58,7 @@ checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话�
 
 - `.runtime/` 下的临时上下文、LLM 调试日志、后台 shell 日志和 MCP 大结果。
 - `.workspace/` 下的用户文件；这些文件由 `file_snapshots/` 的现有机制负责。
-- `.topic/checkpoints/` 本身；checkpoint 不能把自己再次复制进聊天记录快照。
+- `.checkpoints/` 本身；checkpoint 不能把自己再次复制进聊天记录快照。
 
 回滚 `.topic/chat_history/` 时，目标目录必须与目标 checkpoint 的目录状态一致：目标 checkpoint 之后创建的压缩前历史和子 Agent 文件会被删除，目标 checkpoint 中存在的内容会被恢复。
 
@@ -79,7 +69,7 @@ checkpoint 由主 Agent 创建和管理，但聊天记录快照代表整个话�
 | Agent 之后还需要从中恢复话题或查找历史吗？ | `.topic/chat_history/` |
 | 进程结束后能否重新生成，或只是调试、临时、中间结果？ | `.runtime/` |
 | 用户需要长期保留、下载或继续编辑吗？ | `.workspace/` |
-| 它是 checkpoint 的索引、快照或文件操作记录吗？ | `.topic/checkpoints/` |
+| 它是 checkpoint 的索引、快照或文件操作记录吗？ | `.checkpoints/` |
 
 如果一个文件同时满足多类描述，优先按它的持久责任放置，而不是按生成它的 Agent 放置。例如：
 

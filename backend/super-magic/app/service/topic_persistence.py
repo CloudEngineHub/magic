@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 
 TOPIC_DIR_NAME = ".topic"
 CHAT_HISTORY_DIR_NAME = "chat_history"
-CHECKPOINTS_DIR_NAME = "checkpoints"
 MIGRATION_STATE_FILE_NAME = ".migration_state.json"
 PERSISTENCE_STATE_FILE_NAME = ".persistence_state.json"
 STATE_SCHEMA_VERSION = 1
@@ -82,13 +81,11 @@ class TopicPersistenceManager:
         self.project_root = Path(project_root)
         self.topic_dir = self.project_root / TOPIC_DIR_NAME
         self.chat_history_dir = self.topic_dir / CHAT_HISTORY_DIR_NAME
-        self.checkpoints_dir = self.topic_dir / CHECKPOINTS_DIR_NAME
         self.migration_state_path = self.topic_dir / MIGRATION_STATE_FILE_NAME
         self.persistence_state_path = self.topic_dir / PERSISTENCE_STATE_FILE_NAME
 
     def ensure_directories(self) -> None:
         self.chat_history_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
     def is_healthy(self, topic_id: Optional[str]) -> bool:
         """Return true when the sandbox-provided topic directories are available."""
@@ -96,7 +93,7 @@ class TopicPersistenceManager:
             return False
         self.ensure_directories()
         try:
-            return self.topic_dir.is_dir() and self.chat_history_dir.is_dir() and self.checkpoints_dir.is_dir()
+            return self.topic_dir.is_dir() and self.chat_history_dir.is_dir()
         except OSError as error:
             logger.warning("topic 持久卷健康检查失败: %s", error)
             return False
@@ -150,7 +147,6 @@ class TopicPersistenceManager:
         self.ensure_directories()
         migrations = {
             "chat_history": (self.project_root / ".chat_history", self.chat_history_dir),
-            "checkpoints": (self.project_root / ".checkpoints", self.checkpoints_dir),
         }
         migration_state_exists = self.migration_state_path.exists()
         migration_state = self._load_state(self.migration_state_path)
@@ -216,11 +212,11 @@ class TopicPersistenceManager:
         return result
 
     def component_has_data(self, component: str) -> bool:
-        directory = self.chat_history_dir if component == "chat_history" else self.checkpoints_dir
+        if component != "chat_history":
+            return False
+        directory = self.chat_history_dir
         try:
             entries = directory.iterdir()
-            if component == "chat_history":
-                return any(entry.name != "llm_request" for entry in entries)
-            return any(entries)
+            return any(entry.name != "llm_request" for entry in entries)
         except OSError:
             return False

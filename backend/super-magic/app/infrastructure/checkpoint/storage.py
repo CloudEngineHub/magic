@@ -31,12 +31,6 @@ class CheckpointStorage:
         try:
             checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
 
-            # 先创建 checkpoint 自身目录（父目录）。
-            # 自 PathManager.get_checkpoint_dir 改为只返回路径、不再隐式建目录后，
-            # 这里的父目录必须显式创建，否则下面的非递归 mkdir 会因父目录不存在而
-            # 报 Errno 2（No such file or directory）。
-            await async_mkdir(checkpoint_dir, parents=True, exist_ok=True)
-
             # 创建文件快照子目录
             file_snapshots_dir = self.get_file_snapshots_dir(checkpoint_id)
             await async_mkdir(file_snapshots_dir, exist_ok=True)

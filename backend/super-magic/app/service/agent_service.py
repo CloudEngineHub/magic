@@ -154,12 +154,9 @@ class AgentService(Base):
         healthy = await asyncio.to_thread(persistence.is_healthy, topic_id)
         agent_context.set_topic_persistence_healthy(healthy)
 
-        # 沙箱负责挂载 .topic；应用只依据每个组件的恢复状态和目录内容决定是否兜底下载。
+        # 沙箱负责挂载 .topic；聊天历史依据恢复状态决定是否兜底下载。
         chat_ready = healthy and await asyncio.to_thread(
             persistence.is_component_ready, "chat_history"
-        )
-        checkpoints_ready = healthy and await asyncio.to_thread(
-            persistence.is_component_ready, "checkpoints"
         )
 
         if not self.is_support_fetch_workspace():
@@ -169,14 +166,7 @@ class AgentService(Base):
         if chat_ready:
             agent_context.mark_chat_history_persisted()
             logger.info("检测到已恢复的持久化聊天历史，跳过 zip 下载")
-        if checkpoints_ready:
-            agent_context.mark_checkpoints_persisted()
-            logger.info("检测到已恢复的持久化 checkpoints，跳过 zip 下载")
-
-        if chat_ready and checkpoints_ready:
-            return
-
-        # Only construct a storage client when at least one component needs it.
+        # checkpoint 继续使用原有的 zip 恢复链路，不纳入 .topic 持久卷。
         sts_token_refresh = agent_context.get_init_client_message_sts_token_refresh()
         platform_type = agent_context.get_init_client_message_platform_type()
         storage_service = await StorageFactory.get_storage(
@@ -189,11 +179,7 @@ class AgentService(Base):
                 await asyncio.to_thread(persistence.mark_component_ready, "chat_history", True)
                 agent_context.mark_chat_history_persisted()
 
-        if topic_id and not checkpoints_ready:
-            checkpoints_ready = await self._download_and_extract_checkpoints_archive(storage_service, agent_context)
-            if healthy and checkpoints_ready:
-                await asyncio.to_thread(persistence.mark_component_ready, "checkpoints", True)
-                agent_context.mark_checkpoints_persisted()
+        await self._download_and_extract_checkpoints_archive(storage_service, agent_context)
 
         logger.info("聊天历史和checkpoints处理完成")
 
@@ -409,7 +395,7 @@ class AgentService(Base):
             if "temp_file_path" in locals() and os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
 
-    async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> bool:
+    async def _download_and_extract_checkpoints_archive(self, storage_service, agent_context: AgentContext) -> None:
         """
         Download and extract checkpoints archive
 
@@ -422,7 +408,7 @@ class AgentService(Base):
             topic_id = agent_context.get_metadata().get("topic_id")
             if not topic_id:
                 logger.info("No topic_id in agent_context, skipping checkpoints download")
-                return False
+                return
 
             # Construct the object key using the topic_id
             checkpoints_object_name = f"checkpoints_{topic_id}.zip"
@@ -434,7 +420,7 @@ class AgentService(Base):
             # Check if object exists
             if not await storage_service.exists(checkpoints_object_key):
                 logger.info(f"Checkpoints archive not found: {checkpoints_object_key}")
-                return True
+                return
 
             logger.info(f"Downloading checkpoints archive: {checkpoints_object_key}")
 
@@ -457,20 +443,15 @@ class AgentService(Base):
                 total_uncompressed = sum(info.file_size for info in infos)
                 total_compressed = sum(info.compress_size for info in infos)
 
-                extracted_count = await asyncio.to_thread(
-                    safe_extract_archive,
-                    temp_file_path,
-                    checkpoints_dir,
-                )
+                os.makedirs(checkpoints_dir, exist_ok=True)
+                zip_ref.extractall(checkpoints_dir)
                 logger.info(
                     f"Checkpoints restored to {checkpoints_dir}: "
-                    f"{extracted_count} entries, {file_size / (1024 * 1024):.2f} MiB compressed "
+                    f"{len(infos)} files, {file_size / (1024 * 1024):.2f} MiB compressed "
                     f"-> {total_uncompressed / (1024 * 1024):.2f} MiB uncompressed"
                 )
-            return True
         except Exception as e:
             logger.error(f"Failed to download and extract checkpoints: {e}")
-            return False
         finally:
             # Clean up temporary file
             if "temp_file_path" in locals() and os.path.exists(temp_file_path):

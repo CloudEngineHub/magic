@@ -164,9 +164,8 @@ class AgentContext(BaseAgentContext):
             self.set_chat_history_dir(chat_history_dir)
 
         # 迁移兼容状态：由启动阶段的 topic 持久化状态机设置，默认保守地关闭。
-        # 待旧归档迁移和持久卷灰度验证完成后，可移除这两个组件级状态及其上传门控兼容逻辑。
+        # 待旧归档迁移和持久卷灰度验证完成后，可移除该状态及其上传门控兼容逻辑。
         self._chat_history_persisted = False
-        self._checkpoints_persisted = False
         self._topic_persistence_healthy = False
 
         # 设置默认代理名称
@@ -226,12 +225,6 @@ class AgentContext(BaseAgentContext):
 
     def is_chat_history_persisted(self) -> bool:
         return self._chat_history_persisted
-
-    def mark_checkpoints_persisted(self) -> None:
-        self._checkpoints_persisted = True
-
-    def is_checkpoints_persisted(self) -> bool:
-        return self._checkpoints_persisted
 
     def set_topic_persistence_healthy(self, healthy: bool) -> None:
         self._topic_persistence_healthy = bool(healthy)

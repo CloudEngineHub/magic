@@ -507,13 +507,6 @@ class FileStorageListenerService:
                 persistence_healthy=persistence_healthy,
                 component_persisted=agent_context.is_chat_history_persisted(),
             )
-            upload_checkpoints = should_upload_component(
-                persistence_healthy=persistence_healthy,
-                component_persisted=agent_context.is_checkpoints_persisted(),
-            )
-            if not upload_chat_history and not upload_checkpoints:
-                logger.info("topic 数据已由健康持久卷分别持久化，跳过 zip 上传")
-                return
 
             # Load local manifest to check current state
             # local_manifest = FileStorageListenerService._load_local_manifest()
@@ -549,13 +542,10 @@ class FileStorageListenerService:
                 logger.info("聊天历史已由持久卷持久化，跳过归档上传")
 
             # Process and upload checkpoints archive
-            if upload_checkpoints:
-                checkpoints_dir = PathManager.get_checkpoints_dir()
-                await FileStorageListenerService._process_checkpoints_archive(
-                    str(checkpoints_dir), topic_id, storage_service
-                )
-            else:
-                logger.info("checkpoints 已由持久卷持久化，跳过归档上传")
+            checkpoints_dir = PathManager.get_checkpoints_dir()
+            await FileStorageListenerService._process_checkpoints_archive(
+                str(checkpoints_dir), topic_id, storage_service
+            )
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)

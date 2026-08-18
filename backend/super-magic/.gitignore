@@ -81,6 +81,7 @@ config/mcp.json
 .compare/
 config/config.local.yaml
 config/dynamic_config.yaml
+.checkpoints/
 .client_message/
 config/tool_definitions.json
 .cursor/
@@ -118,4 +119,3 @@ Makefile
 
 /skills
 /scripts/test*
-.checkpoints/

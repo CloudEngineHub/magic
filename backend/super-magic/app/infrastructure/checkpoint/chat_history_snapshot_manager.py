@@ -6,7 +6,7 @@
     .topic/chat_history/  = 话题的持久状态，需要 checkpoint 和归档
     .runtime/       = 可重新生成的运行数据，不需要 checkpoint，不进入归档
     .workspace/     = 用户文件，由现有文件 checkpoint 机制单独处理
-    .topic/checkpoints/   = checkpoint 自身，不能复制进自己
+    .checkpoints/   = checkpoint 自身，不能复制进自己
 
 因此 checkpoint 复制整个 ``.topic/chat_history/``，包括 ``compacted/``、
 ``subagents/`` 和根目录辅助 JSON；``.runtime/`` 不在快照源目录内，
