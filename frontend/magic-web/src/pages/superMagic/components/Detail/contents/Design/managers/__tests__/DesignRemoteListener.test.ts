@@ -53,6 +53,14 @@ function createListener(
 	return listener
 }
 
+function createDeferred<T>() {
+	let resolve!: (value: T) => void
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise
+	})
+	return { promise, resolve }
+}
+
 describe("DesignRemoteListener file-change freshness", () => {
 	it("detects nested processing media whose sidecar generation request is not hydrated", () => {
 		const data: DesignData = {
@@ -236,5 +244,28 @@ describe("DesignRemoteListener file-change freshness", () => {
 			remoteVersion: 4,
 		})
 		expect(updateLocalVersion).toHaveBeenCalledWith(4)
+	})
+
+	it("discards an in-flight file-change load after the project changes", async () => {
+		vi.useFakeTimers()
+		const deferredData = createDeferred<DesignData>()
+		const applyRemoteDesignData = vi.fn().mockReturnValue(true)
+		const listener = createListener({ applyRemoteDesignData })
+		const listenerInternals = listener as unknown as {
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			debouncedLoadAndApply: (ms: null, version: number) => void
+		}
+		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
+			.fn()
+			.mockReturnValue(deferredData.promise)
+
+		listenerInternals.debouncedLoadAndApply(null, 4)
+		await vi.advanceTimersByTimeAsync(0)
+		listener.updateOptions({ projectId: "project-2", designProjectId: "design-2" })
+		deferredData.resolve(DESIGN_DATA)
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(applyRemoteDesignData).not.toHaveBeenCalled()
 	})
 })

@@ -293,11 +293,10 @@ export interface VideoGenerationSizeOption {
 export interface VideoGenerationDurationRange {
 	min: number
 	max: number
-	step?: number
+	step: number
 }
 
 export type VideoGenerationDurations = number[] | VideoGenerationDurationRange
-
 export interface VideoGenerationSwitchConfig {
 	type: "switch"
 	default: boolean
@@ -322,6 +321,10 @@ export interface VideoGenerationConfig {
 		duration_type?: "options" | "range"
 		/** 默认时长（秒） */
 		default_duration_seconds?: number
+		/** 是否生成音频 */
+		generate_audio?: VideoGenerationSwitchConfig
+		/** 是否启用网络搜索 */
+		web_search?: VideoGenerationSwitchConfig
 		/** 可选分辨率列表，如 1080p */
 		resolutions?: string[]
 		/** 可选输出尺寸（与 aspect_ratios、resolutions 组合一一对应时可优先使用） */
@@ -431,6 +434,8 @@ export interface GenerateVideoGeneration {
 	negative_prompt?: string
 	/** 是否生成音频 */
 	generate_audio?: boolean
+	/** 是否启用网络搜索 */
+	web_search?: boolean
 	/** 人物生成策略 */
 	person_generation?: string
 	/** 是否增强提示词 */

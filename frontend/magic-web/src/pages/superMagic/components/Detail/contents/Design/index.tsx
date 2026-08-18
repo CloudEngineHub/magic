@@ -265,6 +265,8 @@ interface DesignViewerProps {
 	}
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
+	/** 独立预览场景传入的项目 ID */
+	projectId?: string
 	/** 是否为话题回放模式 */
 	isPlaybackMode?: boolean
 	allowEdit: boolean
@@ -284,7 +286,6 @@ function DesignViewer(props: DesignViewerProps) {
 	const {
 		attachments,
 		attachmentList,
-		projectId: projectIdProp,
 		currentFile: currentFileProps,
 		selectedTopic,
 		selectedProject,
@@ -296,7 +297,6 @@ function DesignViewer(props: DesignViewerProps) {
 		isFullscreen,
 		onFullscreen,
 	} = props
-
 	// Native standalone preview has no selected topic, so use the project id
 	// forwarded by Render as its only fallback.
 	const projectId = selectedTopic?.project_id ?? projectIdProp ?? selectedProject?.id
@@ -413,9 +413,13 @@ function DesignViewer(props: DesignViewerProps) {
 		}
 	}, [])
 
-	// 用于跟踪是否已经执行过初始加载，确保只加载一次
-	// 这样可以避免 attachments 数组引用变化导致的重复加载
-	const hasLoadedRef = useRef(false)
+	// 初始加载按项目/画布身份去重；同一实例切换画布时，旧请求不能阻止新画布加载。
+	const initialLoadIdentity = currentFile?.id
+		? JSON.stringify([projectId ?? null, currentFile.id])
+		: null
+	const currentInitialLoadIdentityRef = useRef(initialLoadIdentity)
+	const loadedInitialLoadIdentityRef = useRef<string | null>(null)
+	currentInitialLoadIdentityRef.current = initialLoadIdentity
 	const wasOfflineRef = useRef(isOffline)
 
 	// magic.project.js 与 designData 集中管理器（含 autoSave、远端更新监听、版本管理）
@@ -423,6 +427,7 @@ function DesignViewer(props: DesignViewerProps) {
 		currentFile,
 		attachments,
 		flatAttachments,
+		attachmentsReady,
 		attachmentIndex,
 		projectId,
 		allowEdit,
@@ -498,12 +503,16 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
 	const latestDesignDataRef = useRef(designData)
+	const isInitialLoadingRef = useRef(isInitialLoading)
 	const [isVersionActionLoading, setIsVersionActionLoading] = useState(false)
 
 	useEffect(() => {
 		latestDesignDataRef.current = designData
 	}, [designData])
 
+	useEffect(() => {
+		isInitialLoadingRef.current = isInitialLoading
+	}, [isInitialLoading])
 	const [isUpgrading, setIsUpgrading] = useState(false)
 	const [autoUpgradeFailed, setAutoUpgradeFailed] = useState(false)
 	const [upgradeProgress, setUpgradeProgress] = useState(0)
@@ -929,11 +938,20 @@ function DesignViewer(props: DesignViewerProps) {
 
 	const persistCurrentCanvasDraftImmediately = useCallback(
 		(reason: DesignDraftReason = "pagehide") => {
-			if (fileVersion !== undefined || isVersionActionLoading) {
+			if (
+				fileVersion !== undefined ||
+				isVersionActionLoading ||
+				isInitialLoadingRef.current
+			) {
 				return
 			}
 			const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
-			if (currentCanvasData) {
+			const latestCanvasData = latestDesignDataRef.current.canvas
+			const currentElementCount = currentCanvasData?.elements?.length ?? 0
+			const latestElementCount = latestCanvasData?.elements?.length ?? 0
+			// Canvas 在初始化/恢复期间可能暂时导出空文档。此时保留最近一次可信数据，
+			// 避免 pagehide 把远端非空画布覆盖成本地空草稿。
+			if (currentCanvasData && (currentElementCount > 0 || latestElementCount === 0)) {
 				persistCanvasDataLocally(currentCanvasData, {
 					immediate: true,
 					reason,
@@ -1165,17 +1183,15 @@ function DesignViewer(props: DesignViewerProps) {
 	)
 
 	// 组件挂载时加载初始数据
-	// 监听 attachments 变化，确保在 attachments 有数据后再加载
+	// 监听附件快照变化，确保附件数据准备完成后再加载
 	// 这样可以避免在 attachments 未加载完成时就尝试查找文件，导致找不到文件但 isInitialLoading 被设置为 false
-	// 只加载一次，文件切换时不重新加载（保持与 useMount 的行为一致）
+	// 同一项目/画布只加载一次；文件切换时以新身份重新加载。
 	useEffect(() => {
-		// 如果已经加载过，不再重复加载
-		if (hasLoadedRef.current) {
+		if (!initialLoadIdentity || loadedInitialLoadIdentityRef.current === initialLoadIdentity) {
 			return
 		}
 
-		// 如果 attachments 为空，不执行加载，等待 attachments 更新
-		if (!attachments || attachments.length === 0) {
+		if (!attachmentsReady) {
 			return
 		}
 
@@ -1183,35 +1199,45 @@ function DesignViewer(props: DesignViewerProps) {
 			return
 		}
 
-		// attachments 有数据后，执行加载
-		hasLoadedRef.current = true
-
-		loadFromRemote().then(() => {
-			if (isMobile) {
-				setTimeout(() => {
-					canvasDesignRef.current?.fitToScreen()
-				}, 1)
-			}
-			if (isPlaybackMode) {
-				setTimeout(() => {
-					if (propsElements) {
-						canvasDesignRef.current?.focusElement(
-							propsElements.map((element) => element.id),
-							{
-								animated: false,
-								selectElement: false,
-							},
-						)
-					} else {
+		const requestIdentity = initialLoadIdentity
+		void (async () => {
+			try {
+				const didLoad = await loadFromRemote()
+				if (!didLoad || currentInitialLoadIdentityRef.current !== requestIdentity) {
+					return
+				}
+				loadedInitialLoadIdentityRef.current = requestIdentity
+				if (isMobile) {
+					setTimeout(() => {
 						canvasDesignRef.current?.fitToScreen()
-					}
-				}, 100)
+					}, 1)
+				}
+				if (isPlaybackMode) {
+					setTimeout(() => {
+						if (propsElements) {
+							canvasDesignRef.current?.focusElement(
+								propsElements.map((element) => element.id),
+								{
+									animated: false,
+									selectElement: false,
+								},
+							)
+						} else {
+							canvasDesignRef.current?.fitToScreen()
+						}
+					}, 100)
+				}
+			} catch {
+				// 加载失败时保持 loading 状态，等待后续附件快照变化触发重试。
 			}
-		})
+		})()
 	}, [
 		attachments,
+		attachmentsReady,
 		currentFile?.id,
 		currentFile?.name,
+		flatAttachments,
+		initialLoadIdentity,
 		isMobile,
 		isPlaybackMode,
 		loadFromRemote,

@@ -281,6 +281,17 @@ export function parseMagicProjectJsContentWithDiagnostics(
 }
 
 /**
+ * 解析远端 magic.project.js；缺失或异常 canvas 时返回 null，禁止以空画布兜底。
+ */
+export function parseMagicProjectJsContentSafely(content: string): DesignData | null {
+	const parsed = parseMagicProjectJsContentWithDiagnostics(content)
+	if (parsed.canvasStatus !== "valid-empty" && parsed.canvasStatus !== "valid-non-empty") {
+		return null
+	}
+	return parsed.data
+}
+
+/**
  * 从 magic.project.js 文件内容中解析出 designData
  * @param content magic.project.js 文件的内容
  * @returns 解析后的 DesignData，如果解析失败则返回 null

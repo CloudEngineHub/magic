@@ -20,18 +20,30 @@ import {
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 
 export interface DesignLoadResult {
+	didLoad: boolean
 	pendingUpgrade: PendingDesignUpgrade | null
 	issue?: DesignLoadIssue
 	sidecarStatus: DesignSidecarStatus
 }
 
+interface DesignLoadRequest {
+	identityKey: string
+	options: DesignProjectManagerOptions
+	currentFile: { id: string; name: string }
+}
+
+interface PendingDesignLoad {
+	identityKey: string
+	promise: Promise<DesignLoadResult>
+}
+
 export class DesignLoadManager {
 	private stateBag: DesignProjectStateBag
 	private options: DesignProjectManagerOptions
-
-	private isLoading = false
-	private lastLoadedFileId: string | null = null
+	private pendingLoad: PendingDesignLoad | null = null
+	private lastLoadedIdentityKey: string | null = null
 	private currentProjectId: string | null = null
+	private lastLoadResult: DesignLoadResult | undefined
 
 	constructor(stateBag: DesignProjectStateBag, options: DesignProjectManagerOptions) {
 		this.stateBag = stateBag
@@ -39,148 +51,216 @@ export class DesignLoadManager {
 	}
 
 	updateOptions(options: DesignProjectManagerOptions) {
+		const previousIdentityKey = this.getCurrentLoadIdentity()
 		this.options = options
+		if (previousIdentityKey !== this.getCurrentLoadIdentity()) {
+			this.lastLoadedIdentityKey = null
+		}
 	}
 
-	async loadFromRemote(): Promise<DesignLoadResult | undefined> {
+	getCurrentLoadIdentity(): string | null {
+		return this.createLoadRequest()?.identityKey ?? null
+	}
+
+	isCurrentLoadIdentity(identityKey: string | null): boolean {
+		return !!identityKey && this.getCurrentLoadIdentity() === identityKey
+	}
+
+	async loadFromRemote(): Promise<boolean> {
+		const request = this.createLoadRequest()
+		if (!request) {
+			this.lastLoadResult = { didLoad: false, pendingUpgrade: null, sidecarStatus: "missing" }
+			return false
+		}
+
+		if (this.pendingLoad?.identityKey === request.identityKey) {
+			const result = await this.pendingLoad.promise
+			this.lastLoadResult = result
+			return result.didLoad
+		}
+
+		const pendingLoad: PendingDesignLoad = {
+			identityKey: request.identityKey,
+			promise: this.loadFromRemoteInternal(request),
+		}
+		this.pendingLoad = pendingLoad
+		try {
+			const result = await pendingLoad.promise
+			this.lastLoadResult = result
+			return result.didLoad
+		} finally {
+			if (this.pendingLoad === pendingLoad) {
+				this.pendingLoad = null
+			}
+		}
+	}
+
+	getLastLoadResult(): DesignLoadResult | undefined {
+		return this.lastLoadResult
+	}
+
+	async resetAndReload(): Promise<boolean> {
+		this.lastLoadedIdentityKey = null
+		return this.loadFromRemote()
+	}
+
+	private createLoadRequest(): DesignLoadRequest | null {
 		const {
 			currentFile,
 			attachments,
 			flatAttachments,
 			projectPath,
 			projectId,
-			allowEdit,
-			isPlaybackMode,
-			isShareRoute,
-			isMobile,
+			attachmentsReady,
 		} = this.options
-
 		const actualCurrentFile = resolveActualDesignCurrentFile({
 			currentFile,
 			flatAttachments,
 			attachments,
 			projectPath,
 		})
-		const actualCurrentFileId = actualCurrentFile?.id
-		const actualCurrentFileName = actualCurrentFile?.name
+		if (
+			!actualCurrentFile?.id ||
+			!actualCurrentFile.name ||
+			!attachments ||
+			attachmentsReady === false
+		) {
+			return null
+		}
 
-		if (!actualCurrentFileId || !actualCurrentFileName || !attachments) {
-			this.stateBag.setters.setIsInitialLoading(false)
-			return { pendingUpgrade: null, sidecarStatus: "missing" }
+		return {
+			identityKey: JSON.stringify([projectId ?? null, actualCurrentFile.id]),
+			options: this.options,
+			currentFile: actualCurrentFile,
+		}
+	}
+
+	private isCurrentLoadRequest(request: DesignLoadRequest): boolean {
+		return this.getCurrentLoadIdentity() === request.identityKey
+	}
+
+	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<DesignLoadResult> {
+		const {
+			options: {
+				attachments,
+				flatAttachments,
+				projectPath,
+				projectId,
+				allowEdit,
+				isPlaybackMode,
+				isShareRoute,
+				isMobile,
+				attachmentIndex,
+			},
+			currentFile: { id: currentFileId, name: currentFileName },
+		} = request
+		if (!attachments) {
+			return { didLoad: false, pendingUpgrade: null, sidecarStatus: "missing" }
 		}
 
 		const currentProjectId = projectId ?? null
 		const hasProjectChanged =
 			this.currentProjectId !== null && this.currentProjectId !== currentProjectId
-
 		if (hasProjectChanged) {
-			this.lastLoadedFileId = null
 			this.stateBag.setters.setIsReadOnly(
 				!allowEdit || isPlaybackMode || isShareRoute || isMobile,
 			)
 		}
-
 		this.currentProjectId = currentProjectId
 
-		if (this.isLoading) return undefined
-		if (this.lastLoadedFileId === actualCurrentFileId && !hasProjectChanged) return undefined
+		if (this.lastLoadedIdentityKey === request.identityKey) {
+			return { didLoad: true, pendingUpgrade: null, sidecarStatus: "missing" }
+		}
 
 		let pendingUpgrade: PendingDesignUpgrade | null = null
 		let sidecarStatus: DesignSidecarStatus = "missing"
 		let loadIssue: DesignLoadIssue | undefined
-
 		try {
-			this.isLoading = true
 			this.stateBag.setters.setIsInitialLoading(true)
-
 			const result = await findMagicProjectJsFile({
 				attachments,
-				currentFileId: actualCurrentFileId,
-				currentFileName: actualCurrentFileName,
+				currentFileId,
+				currentFileName,
 			})
+			if (!this.isCurrentLoadRequest(request)) {
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
+			}
+			if (!result?.fileId || result.content === undefined || result.content === null) {
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
+			}
 
-			if (result?.fileId) {
-				this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
+			const directoryName = resolveDesignDirectoryNameFromAttachments({
+				currentFile: { id: currentFileId, name: currentFileName },
+				flatAttachments,
+				attachments,
+				projectPath,
+			})
+			const dslBase = resolveDesignProjectBasePathFromAttachments({
+				currentFile: { id: currentFileId, name: currentFileName },
+				flatAttachments,
+				attachments,
+			})
+			const loaded = await loadDesignDataToRuntime({
+				content: result.content,
+				nameOverride: directoryName,
+				elementDetailsContext: {
+					attachments,
+					flatAttachments,
+					mainFileId: result.fileId,
+					projectId: projectId ?? undefined,
+				},
+				pathContext: {
+					projectBasePath: dslBase,
+					flatAttachments,
+					attachmentIndex,
+				},
+				fileId: result.fileId,
+			})
+			if (!this.isCurrentLoadRequest(request)) {
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
+			}
 
-				let didApplyDesignData = false
-				if (result.content !== undefined && result.content !== null) {
-					const directoryName = resolveDesignDirectoryNameFromAttachments({
-						currentFile: { id: actualCurrentFileId, name: actualCurrentFileName },
-						flatAttachments,
-						attachments,
-						projectPath,
-					})
-					const dslBase = resolveDesignProjectBasePathFromAttachments({
-						currentFile: {
-							id: actualCurrentFileId,
-							name: actualCurrentFileName,
-						},
-						flatAttachments,
-						attachments,
-					})
-					const loaded = await loadDesignDataToRuntime({
-						content: result.content,
-						nameOverride: directoryName,
-						elementDetailsContext: {
-							attachments,
-							flatAttachments,
-							mainFileId: result.fileId,
-							projectId: projectId ?? undefined,
-						},
-						pathContext: {
-							projectBasePath: dslBase,
-							flatAttachments,
-							attachmentIndex: this.options.attachmentIndex,
-						},
-						fileId: result.fileId,
-					})
-					{
-						const parsedData = loaded.data
-						sidecarStatus = loaded.sidecarStatus
-						loadIssue = loaded.issue
-						this.stateBag.setters.setSidecarStatus?.(sidecarStatus)
-						this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
-						if (loaded.needsPersist && sidecarStatus !== "unsupported") {
-							pendingUpgrade = {
-								reason: "legacy-dsl",
-								createdAt: Date.now(),
-								fileId: result.fileId,
-								sourceVersion: loaded.sourceVersion,
-								targetVersion: MAGIC_PROJECT_VERSION_V3,
-							}
-						}
-						this.stateBag.setters.setElementDetailsProvenance?.(
-							loaded.elementDetailsProvenance ?? {},
-						)
-						this.stateBag.setters.setDesignData(parsedData)
-						this.stateBag.setPrevDesignDataFingerprint(
-							hashDesignDataComparable(parsedData),
-						)
-						didApplyDesignData = true
-						this.lastLoadedFileId = actualCurrentFileId
-						this.stateBag.setters.setIsReadOnly(
-							sidecarStatus === "unsupported" ||
-								!allowEdit ||
-								isPlaybackMode ||
-								isShareRoute ||
-								isMobile,
-						)
-					}
-				}
-
-				if (!isShareRoute && didApplyDesignData) {
-					try {
-						const fileInfo = await SuperMagicApi.getFileInfo({
-							file_id: result.fileId,
-						})
-						if (fileInfo?.version !== undefined) {
-							this.stateBag.setMagicProjectJsVersion(fileInfo.version)
-						}
-					} catch {
-						// ignore
-					}
+			const parsedData = loaded.data
+			sidecarStatus = loaded.sidecarStatus
+			loadIssue = loaded.issue
+			if (loaded.needsPersist && sidecarStatus !== "unsupported") {
+				pendingUpgrade = {
+					reason: "legacy-dsl",
+					createdAt: Date.now(),
+					fileId: result.fileId,
+					sourceVersion: loaded.sourceVersion,
+					targetVersion: MAGIC_PROJECT_VERSION_V3,
 				}
 			}
+			this.stateBag.setters.setMagicProjectJsFileId(result.fileId)
+			this.stateBag.setters.setSidecarStatus?.(sidecarStatus)
+			this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+			this.stateBag.setters.setElementDetailsProvenance?.(
+				loaded.elementDetailsProvenance ?? {},
+			)
+			this.stateBag.setters.setDesignData(parsedData)
+			this.stateBag.setPrevDesignDataFingerprint(hashDesignDataComparable(parsedData))
+			this.lastLoadedIdentityKey = request.identityKey
+			this.stateBag.setters.setIsReadOnly(
+				sidecarStatus === "unsupported" ||
+					!allowEdit ||
+					isPlaybackMode ||
+					isShareRoute ||
+					isMobile,
+			)
+
+			if (!isShareRoute) {
+				try {
+					const fileInfo = await SuperMagicApi.getFileInfo({ file_id: result.fileId })
+					if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {
+						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
+					}
+				} catch {
+					// ignore
+				}
+			}
+
+			return { didLoad: true, pendingUpgrade, issue: loadIssue, sidecarStatus }
 		} catch (error) {
 			loadIssue =
 				error instanceof DesignLoadError
@@ -190,18 +270,14 @@ export class DesignLoadManager {
 							stage: "parse-envelope",
 							message: error instanceof Error ? error.message : String(error),
 						}
-			this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
-			return { pendingUpgrade: null, issue: loadIssue, sidecarStatus }
+			if (this.isCurrentLoadRequest(request)) {
+				this.stateBag.setters.setDesignLoadIssue?.(loadIssue)
+			}
+			return { didLoad: false, pendingUpgrade: null, issue: loadIssue, sidecarStatus }
 		} finally {
-			this.isLoading = false
-			this.stateBag.setters.setIsInitialLoading(false)
+			if (this.isCurrentLoadRequest(request)) {
+				this.stateBag.setters.setIsInitialLoading(false)
+			}
 		}
-
-		return { pendingUpgrade, sidecarStatus, issue: loadIssue }
-	}
-
-	async resetAndReload(): Promise<DesignLoadResult | undefined> {
-		this.lastLoadedFileId = null
-		return this.loadFromRemote()
 	}
 }

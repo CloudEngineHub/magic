@@ -371,7 +371,7 @@ function rewriteImageResourceReferences(
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	let hasChanged = false
-	for (const content of element.contents) {
+	for (const content of Array.isArray(element.contents) ? element.contents : []) {
 		const contentRecord = content as unknown as MutableRecord
 		hasChanged =
 			rewritePathField(
@@ -448,7 +448,7 @@ function rewriteVideoResourceReferences(
 	resolveResourceReference?: ResolveCanvasResourceReference,
 ): boolean {
 	let hasChanged = false
-	for (const content of element.contents) {
+	for (const content of Array.isArray(element.contents) ? element.contents : []) {
 		hasChanged =
 			rewritePathField(
 				content as unknown as MutableRecord,
@@ -537,6 +537,29 @@ function rewriteVideoResourceReferences(
 			delete generateVideoRequest.file_dir
 			delete generateVideoRequest.file_name
 		}
+	}
+
+	const rootGenerateVideoRequest = asRecord(
+		(element as unknown as { generateVideoRequest?: unknown }).generateVideoRequest,
+	)
+	const rootInputs = asRecord(rootGenerateVideoRequest?.inputs)
+	if (rootInputs) {
+		if (
+			rewritePathFieldArray(
+				rootInputs.reference_videos,
+				"uri",
+				pathMap,
+				replacementByIdentity,
+				resolveResourceReference,
+			)
+		) {
+			hasChanged = true
+		}
+	}
+	if (rootGenerateVideoRequest) {
+		delete rootGenerateVideoRequest.project_id
+		delete rootGenerateVideoRequest.file_dir
+		delete rootGenerateVideoRequest.file_name
 	}
 
 	return hasChanged

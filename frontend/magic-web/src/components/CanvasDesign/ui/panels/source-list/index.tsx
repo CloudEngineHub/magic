@@ -315,7 +315,7 @@ export default function SourceList(props: SourceListProps) {
 
 					const contentNode =
 						hasResource && !hasMediaTooltip ? (
-							<Tooltip delayDuration={400}>
+							<Tooltip delayDuration={200}>
 								<TooltipTrigger asChild>
 									<div className={styles.sourceItemTooltipTrigger}>
 										{slotItemNode}

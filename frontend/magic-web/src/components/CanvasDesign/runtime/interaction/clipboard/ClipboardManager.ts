@@ -1470,6 +1470,9 @@ export class ClipboardManager {
 
 	private cloneElementForPaste(element: LayerElement): LayerElement {
 		let clonedElement = { ...element, id: generateElementId() } as LayerElement
+		if (!Array.isArray(clonedElement.contents)) {
+			return clonedElement
+		}
 		const contentIdMap = new Map<string, string>()
 		clonedElement.contents.forEach((content) => {
 			contentIdMap.set(content.contentId, createContentId())
@@ -1657,9 +1660,47 @@ export class ClipboardManager {
 			sourceElement.type === ElementTypeEnum.Image
 				? getActiveImageContent(sourceElement).src
 				: getActiveContent(sourceElement)?.src
+		const targetContentId = getActiveContent(finalElement)?.contentId
+		if (!sourcePath || !targetContentId) {
+			return {
+				element: finalElement,
+				sourceReferenceFailureCount: 0,
+			}
+		}
+
+		if (metadata?.role === "generation-resource") {
+			const completedTransfer =
+				await this.canvas.canvasFileUploadManager.getReusableCompletedRemoteResourceTransfer(
+					{
+						sourceCanvasId,
+						metadata,
+					},
+				)
+			if (completedTransfer) {
+				const cachedElement = this.getFileElementDataWithUploadResult(
+					finalElement,
+					completedTransfer,
+					targetContentId,
+				)
+				const nextPathMap = new Map<string, string>()
+				addClipboardResourceAliasMappings(
+					nextPathMap,
+					sourcePath,
+					[metadata?.sourceRef?.src, ...(metadata?.resourceAliases ?? [])].filter(
+						(alias): alias is string => Boolean(alias),
+					),
+					completedTransfer.path,
+				)
+				rewriteElementResourceReferences(cachedElement, nextPathMap)
+				this.primeFileElementResourceCache(cachedElement, completedTransfer)
+				return {
+					element: cachedElement,
+					sourceReferenceFailureCount: 0,
+				}
+			}
+		}
 
 		const file = fileByElementId.get(sourceElement.id)
-		const targetContentId = getActiveContent(finalElement)?.contentId
 		if (!targetContentId) {
 			return {
 				element: null,
@@ -2189,6 +2230,7 @@ export class ClipboardManager {
 						const elementId =
 							await this.canvas.canvasFileUploadManager.uploadFileElement({
 								file,
+								dimensions: mediaDimensions[i],
 								position,
 								manageHistory: false,
 								onUploadComplete: () => {

@@ -82,6 +82,8 @@ export interface DesignProjectManagerOptions {
 	currentFile?: { id: string; name: string }
 	attachments?: FileItem[]
 	flatAttachments?: FileItem[]
+	/** 已拿到附件快照，可开始解析 magic.project.js */
+	attachmentsReady?: boolean
 	projectPath?: string
 	projectId?: string
 	allowEdit: boolean

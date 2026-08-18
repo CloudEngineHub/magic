@@ -17,7 +17,7 @@ import type {
 	FetchRemoteDesignDataFn,
 	LoadAndApplyRemoteFn,
 } from "./DesignRemoteListener"
-import { DesignLoadManager } from "./DesignLoadManager"
+import { DesignLoadManager, type DesignLoadResult } from "./DesignLoadManager"
 import {
 	DesignSaveManager,
 	type DesignSaveContext,
@@ -115,9 +115,9 @@ export interface DesignProjectManagerAPI {
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 
-	loadFromRemote: () => Promise<void>
-	reloadPreservingLocalDraft: () => Promise<void>
-	reloadDiscardingLocalDraft: () => Promise<void>
+	loadFromRemote: () => Promise<boolean>
+	reloadPreservingLocalDraft: () => Promise<boolean>
+	reloadDiscardingLocalDraft: () => Promise<boolean>
 
 	saveToRemote: () => Promise<void>
 	generateContent: (data?: DesignData) => string
@@ -327,9 +327,12 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		const loadAndApplyRemote: LoadAndApplyRemoteFn = async (
 			updateType: "message" | "revoke" | "restore" = "message",
 		) => {
+			const loadIdentity = this.loadManager.getCurrentLoadIdentity()
+			const isCurrentLoad = () =>
+				!loadIdentity || this.loadManager.isCurrentLoadIdentity(loadIdentity)
 			if (isVersionDataSourceLocked()) return false
 			const remote = await fetchRemoteDesignDataWithVersion()
-			if (isVersionDataSourceLocked()) return false
+			if (isVersionDataSourceLocked() || !isCurrentLoad()) return false
 			if (!remote) return false
 			return applyRemoteDesignData(remote.data, updateType, {
 				remoteVersion: remote.version,
@@ -1226,6 +1229,13 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		try {
 			const mergedData = mergeResult.mergedData
+			if (!this.shouldAutoSaveRestoredDraft(mergedData, newData)) {
+				this.deferRemoteDesignData(newData, updateType, {
+					remoteVersion: options?.remoteVersion,
+				})
+				return true
+			}
+
 			this.pendingRemoteDesignData = null
 			this.saveManager.cancelAutoSave()
 			this.saveManager.clearRemoteConflict()
@@ -1348,6 +1358,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		updateType: "message" | "revoke" | "restore",
 		options?: { remoteVersion?: number | null },
 	): boolean {
+		if (!Array.isArray(newData?.canvas?.elements)) {
+			return false
+		}
 		if (this.isVersionDataSourceLocked()) {
 			return false
 		}
@@ -1602,9 +1615,6 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		if (mergeResult.ok) {
 			const mergedData = mergeResult.mergedData
-			this.stateBag.setters.setDesignData(mergedData)
-			this.setSyncedRemoteBaseDesignData(remoteData)
-			this.options.onRemoteDesignDataUpdate?.(oldData, mergedData, "draft")
 			if (!this.shouldAutoSaveRestoredDraft(mergedData, remoteData)) {
 				this.enterDraftRestoreConflictForUnsafeEmptyLocal({
 					localData: mergedData,
@@ -1618,6 +1628,10 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 				})
 				return true
 			}
+
+			this.stateBag.setters.setDesignData(mergedData)
+			this.setSyncedRemoteBaseDesignData(remoteData)
+			this.options.onRemoteDesignDataUpdate?.(oldData, mergedData, "draft")
 			this.clearConflictState()
 			this.persistLocalDraft(mergedData, { immediate: true })
 			this.saveManager.scheduleAutoSave(undefined, { source: "draft-restore" })
@@ -1671,13 +1685,21 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		return true
 	}
 
-	private async tryRestoreLocalDraftAfterRemoteLoad(): Promise<void> {
+	private async tryRestoreLocalDraftAfterRemoteLoad(
+		loadIdentity: string | null = null,
+	): Promise<void> {
+		if (loadIdentity && !this.loadManager.isCurrentLoadIdentity(loadIdentity)) {
+			return
+		}
 		if (!this.canUseLocalDraft()) {
 			return
 		}
 
 		const identity = this.getDraftIdentity()
 		const draft = await readDesignDraft(identity)
+		if (loadIdentity && !this.loadManager.isCurrentLoadIdentity(loadIdentity)) {
+			return
+		}
 		if (!draft) {
 			return
 		}
@@ -1702,26 +1724,33 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 
 		if (hasRemoteVersionAdvanced || hasRemoteFingerprintChanged) {
 			const dslBase = this.getDesignProjectBasePath()
-			const loadedDraft = await loadDesignDataToRuntime({
-				designData: draft.designData,
-				pathContext: {
-					projectBasePath: dslBase,
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				},
-			})
-			const draftData = loadedDraft.data
-			const loadedDraftBase = draft.baseRemoteData
-				? await loadDesignDataToRuntime({
-						designData: draft.baseRemoteData,
-						pathContext: {
-							projectBasePath: dslBase,
-							flatAttachments: this.options.flatAttachments,
-							attachmentIndex: this.options.attachmentIndex,
-						},
-					})
+			const draftData =
+				draft.designData.version === MAGIC_PROJECT_VERSION_V3
+					? (cloneDeep(draft.designData) as DesignData)
+					: (
+							await loadDesignDataToRuntime({
+								designData: draft.designData,
+								pathContext: {
+									projectBasePath: dslBase,
+									flatAttachments: this.options.flatAttachments,
+									attachmentIndex: this.options.attachmentIndex,
+								},
+							})
+						).data
+			const draftBaseData = draft.baseRemoteData
+				? draft.baseRemoteData.version === MAGIC_PROJECT_VERSION_V3
+					? (cloneDeep(draft.baseRemoteData) as DesignData)
+					: (
+							await loadDesignDataToRuntime({
+								designData: draft.baseRemoteData,
+								pathContext: {
+									projectBasePath: dslBase,
+									flatAttachments: this.options.flatAttachments,
+									attachmentIndex: this.options.attachmentIndex,
+								},
+							})
+						).data
 				: null
-			const draftBaseData = loadedDraftBase?.data ?? null
 			if (draftBaseData) {
 				if (
 					this.tryMergeRemoteAdvancedDraft({
@@ -1753,20 +1782,21 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 
 		const dslBase = this.getDesignProjectBasePath()
-		const loadedDraft = await loadDesignDataToRuntime({
-			designData: draft.designData,
-			pathContext: {
-				projectBasePath: dslBase,
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
-			},
-		})
-		const restoredData = loadedDraft.data
+		const restoredData =
+			draft.designData.version === MAGIC_PROJECT_VERSION_V3
+				? (cloneDeep(draft.designData) as DesignData)
+				: (
+						await loadDesignDataToRuntime({
+							designData: draft.designData,
+							pathContext: {
+								projectBasePath: dslBase,
+								flatAttachments: this.options.flatAttachments,
+								attachmentIndex: this.options.attachmentIndex,
+							},
+						})
+					).data
 
 		const oldData = this.stateBag.getDesignData()
-		this.stateBag.setters.setDesignData(restoredData)
-		this.stateBag.setPrevDesignDataFingerprint(remoteFingerprint)
-		this.options.onRemoteDesignDataUpdate?.(oldData, restoredData, "draft")
 		if (!this.shouldAutoSaveRestoredDraft(restoredData, oldData)) {
 			this.enterDraftRestoreConflictForUnsafeEmptyLocal({
 				localData: restoredData,
@@ -1780,6 +1810,9 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			})
 			return
 		}
+		this.stateBag.setters.setDesignData(restoredData)
+		this.stateBag.setPrevDesignDataFingerprint(remoteFingerprint)
+		this.options.onRemoteDesignDataUpdate?.(oldData, restoredData, "draft")
 		this.saveManager.scheduleAutoSave(undefined, { source: "draft-restore" })
 	}
 
@@ -1955,15 +1988,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.tryApplyPendingRemoteDesignData()
 	}
 
-	private applyPendingUpgradeFromLoad(
-		loadResult:
-			| {
-					pendingUpgrade: PendingDesignUpgrade | null
-					issue?: import("../utils/designDataLoader").DesignLoadIssue
-					sidecarStatus: import("../utils/designDataLoader").DesignSidecarStatus
-			  }
-			| undefined,
-	): void {
+	private applyPendingUpgradeFromLoad(loadResult: DesignLoadResult | undefined): void {
 		if (!loadResult) return
 		this.stateBag.setters.setDesignLoadIssue?.(loadResult.issue)
 		this.stateBag.setters.setSidecarStatus?.(loadResult.sidecarStatus)
@@ -1973,47 +1998,69 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		}
 	}
 
-	async loadFromRemote(): Promise<void> {
-		this.clearPendingRemoteDesignData()
-		const loadResult = await this.loadManager.loadFromRemote()
+	private async completeRemoteLoad(
+		load: () => Promise<boolean | DesignLoadResult>,
+		restoreLocalDraft: boolean,
+	): Promise<boolean> {
+		const loadIdentity = this.loadManager.getCurrentLoadIdentity()
+		const rawLoadResult = await load()
+		const loadResult: DesignLoadResult =
+			typeof rawLoadResult === "boolean"
+				? (this.loadManager.getLastLoadResult() ?? {
+						didLoad: rawLoadResult,
+						pendingUpgrade: null,
+						sidecarStatus: "missing",
+					})
+				: {
+						didLoad: rawLoadResult.didLoad ?? true,
+						pendingUpgrade: rawLoadResult.pendingUpgrade ?? null,
+						issue: rawLoadResult.issue,
+						sidecarStatus: rawLoadResult.sidecarStatus ?? "missing",
+					}
+		const isCurrentLoad = !loadIdentity || this.loadManager.isCurrentLoadIdentity(loadIdentity)
+		if (!loadResult.didLoad || !isCurrentLoad) {
+			if (!loadResult.didLoad && isCurrentLoad) {
+				this.stateBag.setters.setIsInitialLoading(true)
+			}
+			return false
+		}
+
 		this.syncBaseDesignDataFromCurrent()
 		let draftLoadIssue: DesignLoadError["issue"] | undefined
-		try {
-			await this.tryRestoreLocalDraftAfterRemoteLoad()
-		} catch (error) {
-			if (error instanceof DesignLoadError) {
-				draftLoadIssue = error.issue
+		if (restoreLocalDraft) {
+			try {
+				await this.tryRestoreLocalDraftAfterRemoteLoad(loadIdentity)
+			} catch (error) {
+				if (error instanceof DesignLoadError) {
+					draftLoadIssue = error.issue
+				}
 			}
 		}
+		if (loadIdentity && !this.loadManager.isCurrentLoadIdentity(loadIdentity)) {
+			return false
+		}
+
 		this.applyPendingUpgradeFromLoad(loadResult)
 		if (draftLoadIssue) this.stateBag.setters.setDesignLoadIssue?.(draftLoadIssue)
 		await this.restoreStoredPendingUpgrade()
+		this.stateBag.setters.setIsInitialLoading(false)
+		return true
 	}
 
-	async reloadPreservingLocalDraft(): Promise<void> {
+	async loadFromRemote(): Promise<boolean> {
 		this.clearPendingRemoteDesignData()
-		const loadResult = await this.loadManager.resetAndReload()
-		this.syncBaseDesignDataFromCurrent()
-		let draftLoadIssue: DesignLoadError["issue"] | undefined
-		try {
-			await this.tryRestoreLocalDraftAfterRemoteLoad()
-		} catch (error) {
-			if (error instanceof DesignLoadError) {
-				draftLoadIssue = error.issue
-			}
-		}
-		this.applyPendingUpgradeFromLoad(loadResult)
-		if (draftLoadIssue) this.stateBag.setters.setDesignLoadIssue?.(draftLoadIssue)
-		await this.restoreStoredPendingUpgrade()
+		return this.completeRemoteLoad(() => this.loadManager.loadFromRemote(), true)
 	}
 
-	async reloadDiscardingLocalDraft(): Promise<void> {
+	async reloadPreservingLocalDraft(): Promise<boolean> {
+		this.clearPendingRemoteDesignData()
+		return this.completeRemoteLoad(() => this.loadManager.resetAndReload(), true)
+	}
+
+	async reloadDiscardingLocalDraft(): Promise<boolean> {
 		this.clearPendingRemoteDesignData()
 		this.clearLocalDraftBecauseVersionSwitched()
-		const loadResult = await this.loadManager.resetAndReload()
-		this.syncBaseDesignDataFromCurrent()
-		this.applyPendingUpgradeFromLoad(loadResult)
-		await this.restoreStoredPendingUpgrade()
+		return this.completeRemoteLoad(() => this.loadManager.resetAndReload(), false)
 	}
 
 	async persistPendingDesignUpgrade(): Promise<boolean> {

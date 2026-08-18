@@ -1,6 +1,7 @@
 import type {
 	GenerateVideoRequest,
 	VideoGenerationConstraints,
+	VideoGenerationDurationRange,
 	VideoGenerationSizeOption,
 	VideoModelItem,
 } from "../../../../public/magic-types"
@@ -93,12 +94,55 @@ export function buildVideoDurationOptions(
 	constraints?: VideoGenerationConstraints,
 ): number[] {
 	const configuredDurations = model?.video_generation_config?.generation?.durations
-	const topLevelDurations = (
-		Array.isArray(configuredDurations) ? configuredDurations : []
-	).filter((value) => typeof value === "number" && Number.isFinite(value))
+	const topLevelDurations = Array.isArray(configuredDurations)
+		? configuredDurations.filter((value) => typeof value === "number" && Number.isFinite(value))
+		: buildRangeDurationOptions(configuredDurations)
 	if (constraints?.durations === undefined) return Array.from(new Set(topLevelDurations))
 	if (!Array.isArray(constraints.durations) || constraints.durations.length === 0) return []
 	return constraints.durations.filter((duration) => topLevelDurations.includes(duration))
+}
+
+function buildRangeDurationOptions(
+	durations: VideoGenerationDurationRange | number[] | undefined,
+): number[] {
+	if (!durations || Array.isArray(durations)) return []
+	const { min, max, step } = durations
+	if (![min, max, step].every((value) => typeof value === "number" && Number.isFinite(value)))
+		return []
+	if (step <= 0 || max < min) return []
+	const values: number[] = []
+	for (let value = min; value <= max + step / 1000; value += step) {
+		values.push(Number(value.toFixed(6)))
+	}
+	return values
+}
+
+export function getVideoDurationConfig(
+	model: VideoModelItem | undefined,
+	constraints?: VideoGenerationConstraints,
+): { type: "options" | "range"; range?: VideoGenerationDurationRange } {
+	const generation = model?.video_generation_config?.generation
+	// Mode/variant discrete constraints must win over a model-level range so the
+	// slider cannot emit values that the active mode does not accept.
+	if (constraints?.durations !== undefined) return { type: "options" }
+	if (
+		generation?.duration_type === "range" &&
+		generation.durations &&
+		!Array.isArray(generation.durations)
+	) {
+		return { type: "range", range: generation.durations }
+	}
+	return { type: "options" }
+}
+
+export function resolveVideoDefaultDuration(
+	model: VideoModelItem | undefined,
+	constraints?: VideoGenerationConstraints,
+): number | undefined {
+	const options = buildVideoDurationOptions(model, constraints)
+	const configuredDefault = model?.video_generation_config?.generation?.default_duration_seconds
+	if (configuredDefault != null && options.includes(configuredDefault)) return configuredDefault
+	return options[options.length - 1]
 }
 
 /** 为宽高比下拉生成预览块与图标的像素尺寸 */

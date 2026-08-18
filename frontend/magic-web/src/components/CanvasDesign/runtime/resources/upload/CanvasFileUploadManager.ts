@@ -80,6 +80,8 @@ export interface UploadImageElementOptions {
 export interface UploadFileElementOptions {
 	/** 要上传的文件 */
 	file: File
+	/** 已预先读取的媒体尺寸，批量粘贴时用于避免重复解码文件元数据 */
+	dimensions?: { width: number; height: number }
 	/** 文件位置（文件中心对齐到该位置） */
 	position: { x: number; y: number }
 	/** 可选的元素初始数据（用于复制粘贴时保留元素属性） */
@@ -857,7 +859,7 @@ export class CanvasFileUploadManager {
 		const historyManager = manageHistory ? this.canvas.historyManager : null
 
 		try {
-			const dimensions = await getMediaDimensions(file)
+			const dimensions = options.dimensions ?? (await getMediaDimensions(file))
 			const targetX = position.x - dimensions.width / 2
 			const targetY = position.y - dimensions.height / 2
 			const baseName = file.name.replace(/\.[^/.]+$/, "")

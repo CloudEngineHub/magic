@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
 	CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE,
 	CanvasElementClipboard,
@@ -137,5 +137,17 @@ describe("CanvasElementClipboard", () => {
 				resourceAliases: ["./images/image.png", "/画布A/images/image.png"],
 			}),
 		)
+	})
+	it("reads the browser clipboard only once when no CanvasDesign bundle exists", async () => {
+		const read = vi.fn().mockResolvedValue([])
+
+		await expect(
+			CanvasElementClipboard.parseClipboardContent(undefined, {
+				read,
+				readText: vi.fn().mockResolvedValue(""),
+			}),
+		).resolves.toEqual({ type: "empty" })
+
+		expect(read).toHaveBeenCalledTimes(1)
 	})
 })

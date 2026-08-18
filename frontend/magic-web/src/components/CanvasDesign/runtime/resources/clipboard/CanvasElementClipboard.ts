@@ -467,12 +467,12 @@ export class CanvasElementClipboard {
 	public static async read(options?: {
 		read?: () => Promise<ClipboardItem[]>
 	}): Promise<CanvasElementClipboardReadResult | null> {
-		const bundleResult = await CanvasDesignClipboard.readBundle(options)
+		const items = await CanvasDesignClipboard.read(options)
+		const bundleResult = await CanvasDesignClipboard.readBundleFromItems(items)
 		if (bundleResult) {
 			return bundleResult
 		}
 
-		const items = await CanvasDesignClipboard.read(options)
 		if (!items) {
 			return null
 		}
@@ -499,7 +499,8 @@ export class CanvasElementClipboard {
 		try {
 			const eventFilesSnapshot = CanvasDesignClipboard.readEventFilesSnapshot(clipboardEvent)
 
-			const bundleResult = await CanvasDesignClipboard.readBundle(options)
+			const clipboardItems = await CanvasDesignClipboard.read(options)
+			const bundleResult = await CanvasDesignClipboard.readBundleFromItems(clipboardItems)
 			if (bundleResult) {
 				const canvasElementResult = this.parseCanvasElementClipboardReadResult(bundleResult)
 				if (canvasElementResult) {
@@ -507,7 +508,6 @@ export class CanvasElementClipboard {
 				}
 			}
 
-			const clipboardItems = await CanvasDesignClipboard.read(options)
 			const canvasElementResult = await this.parseCanvasElementClipboardItems(clipboardItems)
 			if (canvasElementResult) {
 				if (canvasElementResult.type === "files") {
