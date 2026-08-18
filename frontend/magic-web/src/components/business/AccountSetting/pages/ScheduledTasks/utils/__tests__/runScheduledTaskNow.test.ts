@@ -86,6 +86,7 @@ describe("runScheduledTaskNow", () => {
 		expect(payload?.topicName).toBe("Daily report")
 		expect(payload?.topicMode).toBe(TopicMode.General)
 		expect(payload?.afterCreate?.content).toMatchObject({ type: "doc" })
+		expect(payload?.afterCreate?.send).toBe(true)
 		expect(payload?.afterCreate?.selectedModel).toMatchObject({ model_id: "gpt-4" })
 	})
 

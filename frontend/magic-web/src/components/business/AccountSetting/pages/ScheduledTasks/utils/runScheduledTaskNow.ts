@@ -39,6 +39,7 @@ export function buildScheduledTaskRunNowPayload(
 		topicMode,
 		afterCreate: {
 			content,
+			send: true,
 			mentionItems: superAgent?.mentions,
 			topicMode,
 			selectedModel: superAgent?.model ?? undefined,
