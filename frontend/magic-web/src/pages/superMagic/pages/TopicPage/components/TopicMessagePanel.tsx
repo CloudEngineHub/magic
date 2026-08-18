@@ -29,10 +29,8 @@ import projectFilesStore from "@/stores/projectFiles"
 import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
-import {
-	isSelfMediaComposerContext,
-	SELF_MEDIA_COMPOSER_MIN_INPUT_HEIGHT,
-} from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
+import { SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT } from "@/pages/superMagic/components/ConversationInputResize/constants"
+import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -359,13 +357,14 @@ function TopicMessagePanel({
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)
-	// The self-media configuration trigger sits below the editor, so its compact layout needs a larger floor.
-	const inputMinHeight = isSelfMediaComposerContext({
-		topicMode,
-		agentCode: selectedTopic?.agent_code ?? undefined,
-	})
-		? SELF_MEDIA_COMPOSER_MIN_INPUT_HEIGHT
-		: undefined
+	// Specialized composer controls sit below the editor, so their compact layouts need a larger floor.
+	const inputMinHeight =
+		isSelfMediaComposerContext({
+			topicMode,
+			agentCode: selectedTopic?.agent_code ?? undefined,
+		}) || topicMode === TopicMode.PPT
+			? SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT
+			: undefined
 
 	return (
 		<div
