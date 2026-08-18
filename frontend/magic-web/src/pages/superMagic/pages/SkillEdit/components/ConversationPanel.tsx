@@ -15,7 +15,10 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
-import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicWaitingForUser,
+	type ProjectListItem,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../Workspace/TopicMode"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { userStore } from "@/models/user"
@@ -107,6 +110,7 @@ function ConversationPanel({
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
 		isTaskRunning: showLoading,
+		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
 	})
