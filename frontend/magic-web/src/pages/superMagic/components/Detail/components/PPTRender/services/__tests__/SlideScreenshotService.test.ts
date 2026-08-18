@@ -11,6 +11,7 @@ vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 const snapdomMocks = vi.hoisted(() => {
 	let counter = 0
 	let capturedImageSources: string[] = []
+	let fallbackCaptureCount = 0
 
 	return {
 		toWebp: vi.fn(async () => {
@@ -20,6 +21,15 @@ const snapdomMocks = vi.hoisted(() => {
 		resetCounter: () => {
 			counter = 0
 			capturedImageSources = []
+			fallbackCaptureCount = 0
+		},
+		triggerFallbackOnNextCapture: () => {
+			fallbackCaptureCount = 1
+		},
+		shouldTriggerFallback: () => {
+			if (fallbackCaptureCount === 0) return false
+			fallbackCaptureCount -= 1
+			return true
 		},
 		captureImageSources: (target: Element) => {
 			capturedImageSources = Array.from(target.querySelectorAll<HTMLImageElement>("img")).map(
@@ -32,8 +42,9 @@ const snapdomMocks = vi.hoisted(() => {
 
 // Mock snapdom
 vi.mock("@zumer/snapdom", () => ({
-	snapdom: vi.fn(async (target: Element) => {
+	snapdom: vi.fn(async (target: Element, options: { fallbackURL?: () => string }) => {
 		snapdomMocks.captureImageSources(target)
+		if (snapdomMocks.shouldTriggerFallback()) options.fallbackURL?.()
 		return {
 			toWebp: snapdomMocks.toWebp,
 		}
@@ -106,6 +117,7 @@ describe("SlideScreenshotService", () => {
 				blob: vi.fn().mockResolvedValue(imageBlob),
 			} as unknown as Response)
 			const imageUrl = "https://cdn.example.com/image.webp"
+			snapdomMocks.triggerFallbackOnNextCapture()
 
 			await service.generateScreenshot(
 				"https://example.com/slide-with-image.html",
@@ -121,6 +133,20 @@ describe("SlideScreenshotService", () => {
 			expect(snapdomMocks.getCapturedImageSources()).toEqual([
 				expect.stringMatching(/^data:image\/webp;base64,/),
 			])
+			expect(snapdom).toHaveBeenCalledTimes(2)
+		})
+
+		it("does not refresh cross-origin images when the first capture succeeds", async () => {
+			global.fetch = vi.fn()
+			const imageUrl = "https://cdn.example.com/image.webp"
+
+			await service.generateScreenshot(
+				"https://example.com/slide-with-image.html",
+				`<div class="slide-container"><img src="${imageUrl}" /></div>`,
+			)
+
+			expect(global.fetch).not.toHaveBeenCalled()
+			expect(snapdom).toHaveBeenCalledTimes(1)
 		})
 
 		it("uses the slide container dimensions for portrait thumbnails", async () => {

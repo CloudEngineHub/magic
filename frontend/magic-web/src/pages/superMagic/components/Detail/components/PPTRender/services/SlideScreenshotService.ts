@@ -638,22 +638,38 @@ export class SlideScreenshotService {
 
 			await this.waitForRenderingReady(iframeDoc, signal)
 
-			const restoreImageSources = await this.inlineCrossOriginImagesForSnapdom(
-				screenshotTarget,
-				signal,
-			)
 			const restoreTextStyles = stabilizeSingleLineTextForSnapdom(screenshotTarget)
+			let restoreImageSources: () => void = () => undefined
 			try {
-				const snapdomGeneration = snapdom(screenshotTarget, {
-					width,
-					height,
-					backgroundColor: "#ffffff",
-					embedFonts: true,
-					fallbackURL: fallbackImageBase64,
-					plugins: [this.createSnapdomAbortPlugin(signal)],
+				let usedFallbackImage = false
+				const captureWithSnapdom = async (onFallback: () => void) => {
+					const snapdomGeneration = snapdom(screenshotTarget, {
+						width,
+						height,
+						backgroundColor: "#ffffff",
+						embedFonts: true,
+						fallbackURL: () => {
+							onFallback()
+							return fallbackImageBase64
+						},
+						plugins: [this.createSnapdomAbortPlugin(signal)],
+					})
+					holdSlotUntil(snapdomGeneration)
+					return this.waitForAbortableOperation(snapdomGeneration, signal)
+				}
+
+				let result = await captureWithSnapdom(() => {
+					usedFallbackImage = true
 				})
-				holdSlotUntil(snapdomGeneration)
-				const result = await this.waitForAbortableOperation(snapdomGeneration, signal)
+
+				if (usedFallbackImage && this.hasCrossOriginImagesForSnapdom(screenshotTarget)) {
+					restoreImageSources = await this.inlineCrossOriginImagesForSnapdom(
+						screenshotTarget,
+						signal,
+					)
+					result = await captureWithSnapdom(() => undefined)
+				}
+
 				this.throwIfAborted(signal)
 
 				const webpGeneration = result.toWebp({
@@ -1130,6 +1146,10 @@ export class SlideScreenshotService {
 			imagesByUrl.set(sourceUrl, images)
 		}
 		return imagesByUrl
+	}
+
+	private hasCrossOriginImagesForSnapdom(target: HTMLElement): boolean {
+		return this.collectCrossOriginImagesByUrl(target).size > 0
 	}
 
 	private async refreshAndInlineImageGroup(
