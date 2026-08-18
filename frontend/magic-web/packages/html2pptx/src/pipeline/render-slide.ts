@@ -7,8 +7,6 @@ import { collectElements, filterRenderable, sortByZOrder } from "../collector"
 import { transformElements } from "../transform"
 import {
 	materializePptImageNodes,
-	materializeVideoCoverNodes,
-	resolveCaptures,
 	materializePseudoIcons,
 	restoreIcons,
 } from "../materialize"
@@ -64,9 +62,6 @@ export async function prepareSlideNodes({
 	const activeMaterializePseudoIcons = runtime?.materializePseudoIcons ?? materializePseudoIcons
 	const activeRestoreIcons = runtime?.restoreIcons ?? restoreIcons
 	const activeTransformElements = runtime?.transformElements ?? transformElements
-	const activeResolveCaptures = runtime?.resolveCaptures ?? resolveCaptures
-	const activeMaterializeVideoCoverNodes =
-		runtime?.materializeVideoCoverNodes ?? materializeVideoCoverNodes
 	const activeMaterializePptImageNodes =
 		runtime?.materializePptImageNodes ?? materializePptImageNodes
 	const iconBackups = activeMaterializePseudoIcons(iDocument, iWindow)
@@ -90,8 +85,12 @@ export async function prepareSlideNodes({
 		})
 
 		ensureNotAborted(signal)
-		await activeResolveCaptures(pptNodes, signal, onResourceError)
-		await activeMaterializeVideoCoverNodes(pptNodes, signal, onResourceError)
+		if (runtime?.resolveCaptures) {
+			await runtime.resolveCaptures(pptNodes, signal, onResourceError)
+		}
+		if (runtime?.materializeVideoCoverNodes) {
+			await runtime.materializeVideoCoverNodes(pptNodes, signal, onResourceError)
+		}
 		await activeMaterializePptImageNodes(pptNodes, signal, onResourceError)
 		return { pptNodes, totalWidth, totalHeight, bodyBackground }
 	} catch (error) {

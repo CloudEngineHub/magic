@@ -35,6 +35,15 @@ const removedFiles = [
 	"src/packaging/package-presentation.worker.ts",
 	"enterprise/src/packaging/package-presentation.worker.ts",
 	"src/pipeline/export-slides.ts",
+	"src/materialize/image-to-base64.ts",
+	"src/materialize/image-capture.ts",
+	"src/materialize/video-first-frame.ts",
+	"src/materialize/resolve-captures.ts",
+	"src/materialize/materialize-video-covers.ts",
+	"src/shared/fetch.ts",
+	"src/drawer/data-url.ts",
+	"src/workers/image-pool.ts",
+	"src/workers/image-worker.ts",
 ]
 
 const scanRoots = [

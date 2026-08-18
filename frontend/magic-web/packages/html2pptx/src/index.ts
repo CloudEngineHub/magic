@@ -334,7 +334,3 @@ export {
 export type { ExportFidelityFailureKind, PptxExportErrorContext } from "./errors"
 export { LogLevel } from "./logger"
 export type { ExternalLogger } from "./logger"
-export {
-	captureVideoFirstFrameDataUrl,
-	type CaptureVideoFirstFrameOptions,
-} from "./materialize/video-first-frame"
