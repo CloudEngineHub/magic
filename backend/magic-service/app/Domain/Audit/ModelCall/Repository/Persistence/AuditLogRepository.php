@@ -95,8 +95,6 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
 
         if (! empty($filters['type'])) {
             $builder->where('type', (string) $filters['type']);
-        } else {
-            $builder->where('type', '!=', AuditType::EMBEDDING->value);
         }
         if (! empty($filters['status'])) {
             $builder->where('status', (string) $filters['status']);
