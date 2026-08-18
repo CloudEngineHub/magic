@@ -1,4 +1,7 @@
 /** Shared desktop conversation input bounds used by every resize entry point. */
+/** Keep specialized composer controls inside the smallest supported conversation panel. */
+export const SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT = 260
+
 export const CONVERSATION_INPUT_HEIGHT_CONFIG = {
 	/** Keep content-driven growth conservative by default. */
 	maxRatio: 0.5,
