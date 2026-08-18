@@ -3,7 +3,15 @@ import XMarkdown, {
 	type XMarkdownProps,
 } from "@ant-design/x-markdown"
 import { QRCode } from "antd"
-import { memo, useMemo, useRef, type MutableRefObject, type ReactElement } from "react"
+import {
+	memo,
+	useCallback,
+	useMemo,
+	useRef,
+	useSyncExternalStore,
+	type MutableRefObject,
+	type ReactElement,
+} from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
@@ -24,6 +32,8 @@ import {
 } from "./streamingMarkdown"
 import styles from "./index.module.css"
 import { CitationBadge } from "../../../Citations"
+import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
+import { platformKey } from "@/utils/storage"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -48,6 +58,78 @@ const RAW_HTML_DECLARATION_PATTERN = /<![^>]*>/gi
 // 允许保留的项目自定义标签，避免它们在预处理阶段被误转义。
 const RAW_HTML_ALLOWED_CUSTOM_TAGS = new Set(["file-path", "citation", "references", "ref"])
 const QRCODE_FENCE_LANGUAGE = "qrcode"
+const MARKDOWN_CODE_WRAP_STORAGE_KEY = platformKey("super_magic/markdown/code_block_wrap")
+const DEFAULT_MARKDOWN_CODE_WRAP = false
+
+type MarkdownCodeWrapListener = () => void
+
+let markdownCodeWrapValue: boolean | undefined
+const markdownCodeWrapListeners = new Set<MarkdownCodeWrapListener>()
+let hasMarkdownCodeWrapStorageListener = false
+
+function readMarkdownCodeWrapPreference(): boolean {
+	if (typeof window === "undefined") return DEFAULT_MARKDOWN_CODE_WRAP
+
+	try {
+		const storedValue = window.localStorage.getItem(MARKDOWN_CODE_WRAP_STORAGE_KEY)
+		if (storedValue === "true") return true
+		if (storedValue === "false") return false
+	} catch {
+		// 受限 WebView 或隐私模式可能禁止访问存储，回退到默认展示状态。
+	}
+
+	return DEFAULT_MARKDOWN_CODE_WRAP
+}
+
+function getMarkdownCodeWrapSnapshot(): boolean {
+	if (markdownCodeWrapValue === undefined) {
+		markdownCodeWrapValue = readMarkdownCodeWrapPreference()
+	}
+
+	return markdownCodeWrapValue
+}
+
+function subscribeMarkdownCodeWrap(listener: MarkdownCodeWrapListener): () => void {
+	if (typeof window !== "undefined" && !hasMarkdownCodeWrapStorageListener) {
+		window.addEventListener("storage", (event) => {
+			if (event.key !== MARKDOWN_CODE_WRAP_STORAGE_KEY) return
+
+			markdownCodeWrapValue = readMarkdownCodeWrapPreference()
+			markdownCodeWrapListeners.forEach((currentListener) => currentListener())
+		})
+		hasMarkdownCodeWrapStorageListener = true
+	}
+
+	markdownCodeWrapListeners.add(listener)
+	return () => markdownCodeWrapListeners.delete(listener)
+}
+
+function setMarkdownCodeWrapPreference(nextValue: boolean): void {
+	markdownCodeWrapValue = nextValue
+	if (typeof window !== "undefined") {
+		try {
+			window.localStorage.setItem(MARKDOWN_CODE_WRAP_STORAGE_KEY, String(nextValue))
+		} catch {
+			// 存储失败不应阻塞本次 UI 操作，内存状态仍然立即生效。
+		}
+	}
+	markdownCodeWrapListeners.forEach((listener) => listener())
+}
+
+function useMarkdownCodeWrapPreference(): {
+	isWrapped: boolean
+	toggle: () => void
+} {
+	const isWrapped = useSyncExternalStore(
+		subscribeMarkdownCodeWrap,
+		getMarkdownCodeWrapSnapshot,
+		() => DEFAULT_MARKDOWN_CODE_WRAP,
+	)
+
+	const toggle = useCallback(() => setMarkdownCodeWrapPreference(!isWrapped), [isWrapped])
+
+	return { isWrapped, toggle }
+}
 
 function isCodeLanguage(className: string | undefined, language: string): boolean {
 	if (!className) return false
@@ -61,6 +143,16 @@ function isCodeLanguage(className: string | undefined, language: string): boolea
 		(token) =>
 			token === language || token === `lang-${language}` || token === `language-${language}`,
 	)
+}
+
+function resolveCodeLanguage(className: string | undefined): string | undefined {
+	if (!className) return undefined
+
+	const languageToken = className
+		.split(/\s+/)
+		.find((token) => token.startsWith("language-") || token.startsWith("lang-"))
+
+	return languageToken?.replace(/^(?:language-|lang-)/, "") || undefined
 }
 
 function resolveQRCodeValue(props: {
@@ -183,6 +275,8 @@ export function useMarkdownComponent({
 	citations,
 	highlightedCitation,
 	onCitationClick,
+	isCodeWrapped,
+	onToggleCodeWrap,
 }: {
 	streamingScrollStateRef: MutableRefObject<HtmlCodeBlockPreviewStreamingScrollState>
 	isStreaming: boolean
@@ -190,6 +284,8 @@ export function useMarkdownComponent({
 	citations?: CitationSource[]
 	highlightedCitation?: number | null
 	onCitationClick?: (index: number | null) => void
+	isCodeWrapped: boolean
+	onToggleCodeWrap: () => void
 }): UseMarkdownComponentResult {
 	// 用 ref 持有随每个 chunk 变化的 citation 相关值，避免 components 对象随
 	// 每个 chunk 重建——否则 components.pre 引用变化会导致 XMarkdown 重新挂载
@@ -231,7 +327,7 @@ export function useMarkdownComponent({
 					)
 				}
 
-				if (!codeBlockInfo || !previewCode) {
+				if (!codeBlockInfo) {
 					return (
 						<pre
 							className={typeof preClassName === "string" ? preClassName : undefined}
@@ -240,6 +336,34 @@ export function useMarkdownComponent({
 						>
 							{children}
 						</pre>
+					)
+				}
+
+				if (!previewCode) {
+					const codeBlockClassName = cn(
+						styles.codeBlockPre,
+						isCodeWrapped ? styles.codeBlockPreWrapped : styles.codeBlockPreUnwrapped,
+					)
+
+					return (
+						<div className={styles.codeBlock}>
+							<MarkdownCodeBlockToolbar
+								language={resolveCodeLanguage(codeBlockInfo.className)}
+								isWrapped={isCodeWrapped}
+								onToggleWrap={onToggleCodeWrap}
+								code={codeBlockInfo.code}
+							/>
+							<pre
+								className={cn(
+									typeof preClassName === "string" ? preClassName : undefined,
+									codeBlockClassName,
+								)}
+								style={normalizedStyle}
+								title={typeof title === "string" ? title : undefined}
+							>
+								{children}
+							</pre>
+						</div>
 					)
 				}
 
@@ -257,6 +381,8 @@ export function useMarkdownComponent({
 						previewCode={previewCode}
 						fullCode={isCodeBlockStreaming ? undefined : previewCode}
 						streamingScrollStateRef={streamingScrollStateRef}
+						isCodeWrapped={isCodeWrapped}
+						onToggleCodeWrap={onToggleCodeWrap}
 					/>
 				)
 			},
@@ -292,8 +418,13 @@ export function useMarkdownComponent({
 		}),
 		// citation 相关值通过 ref 读取，不加入 deps，保证 streaming 期间 components
 		// 对象引用稳定，防止 HtmlCodeBlockPreview 因 pre 函数引用变化而重新挂载。
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[enableHtmlCodeBlockPreview, isStreaming, streamingScrollStateRef],
+		[
+			enableHtmlCodeBlockPreview,
+			isCodeWrapped,
+			isStreaming,
+			onToggleCodeWrap,
+			streamingScrollStateRef,
+		],
 	)
 }
 
@@ -340,6 +471,7 @@ function MarkdownComponent({
 	const streamingScrollStateRef = useRef<HtmlCodeBlockPreviewStreamingScrollState>({
 		hasUserInteracted: false,
 	})
+	const { isWrapped: isCodeWrapped, toggle: onToggleCodeWrap } = useMarkdownCodeWrapPreference()
 
 	const components = useMarkdownComponent({
 		enableHtmlCodeBlockPreview,
@@ -348,6 +480,8 @@ function MarkdownComponent({
 		citations,
 		highlightedCitation,
 		onCitationClick,
+		isCodeWrapped,
+		onToggleCodeWrap,
 	})
 
 	return (

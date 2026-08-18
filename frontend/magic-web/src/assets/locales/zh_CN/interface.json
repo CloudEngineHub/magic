@@ -1116,7 +1116,9 @@
 			"htmlSnippet": "HTML 片段",
 			"raw": "原始",
 			"totalLength": "总长度",
-			"viewFullText": "查看全文"
+			"unwrapCode": "取消换行",
+			"viewFullText": "查看全文",
+			"wrapCode": "换行"
 		},
 		"markmap": {
 			"downloadPicture": "下载图片",

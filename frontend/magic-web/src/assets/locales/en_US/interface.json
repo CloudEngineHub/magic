@@ -1114,7 +1114,9 @@
 			"htmlSnippet": "HTML snippet",
 			"raw": "original",
 			"totalLength": "Total length",
-			"viewFullText": "View Full Text"
+			"unwrapCode": "Unwrap lines",
+			"viewFullText": "View Full Text",
+			"wrapCode": "Wrap lines"
 		},
 		"markmap": {
 			"downloadPicture": "Download pictures",

@@ -105,6 +105,68 @@
 	overflow-x: auto;
 }
 
+.codeBlock {
+	margin: 0.5em 0;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: 8px;
+}
+
+.codeBlockToolbar {
+	display: flex;
+	min-height: 30px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 2px 6px 2px 10px;
+	color: inherit;
+	font-size: 12px;
+	opacity: 0.72;
+}
+
+.codeBlockLanguage {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.codeBlockActions {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+}
+
+.plainMarkdown:global(.x-markdown) .codeBlockPre {
+	margin: 0;
+	max-width: 100%;
+	border-radius: 0;
+	background: transparent;
+}
+
+.plainMarkdown:global(.x-markdown) .codeBlockPreUnwrapped {
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.plainMarkdown:global(.x-markdown) .codeBlockPreUnwrapped code {
+	white-space: inherit;
+}
+
+.plainMarkdown:global(.x-markdown) .codeBlockPreWrapped {
+	overflow-x: hidden;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.plainMarkdown:global(.x-markdown) .codeBlockPreWrapped code {
+	white-space: inherit;
+	overflow-wrap: inherit;
+	word-break: inherit;
+}
+
 .qrCodeBlock {
 	display: inline-flex;
 	align-items: center;
