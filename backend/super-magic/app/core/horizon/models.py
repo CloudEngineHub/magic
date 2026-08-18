@@ -1,6 +1,7 @@
 """AgentHorizon 数据模型。"""
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Optional
@@ -251,3 +252,32 @@ class HorizonState:
     initial_context_injected: bool = False
     # 上次注入时间的日期部分（YYYY-MM-DD），同一天增量注入时省略周几/周数/时区
     last_injected_date: str = ""
+
+    def copy_for_fork(self, target_agent_id: str) -> "HorizonState":
+        """
+        复制可由子 Agent 继承的 Horizon 状态，并清理不能重复执行的外部动作。
+
+        MOCK DEMO：
+
+        父 Agent：
+        {
+          "agent_id": "parent-001",
+          "pending_notifications": [{"source": "system", "content": "..."}],
+          "pending_resumptions": [{"id": "r-001", "status": "pending"}]
+        }
+
+        fork 子 Agent：
+        {
+          "agent_id": "child-001",
+          "pending_notifications": [{"source": "system", "content": "..."}],
+          "pending_resumptions": []
+        }
+
+        ChatHistory 和模型已见的 Horizon baseline 可以复制；resumption 代表父会话尚未
+        完成的外部动作，不能复制，否则父子会话可能重复处理同一事项。以后新增具有
+        副作用的 Horizon 字段时，应继续在本方法中直接写清楚复制后的清理逻辑。
+        """
+        fork_state = copy.deepcopy(self)
+        fork_state.agent_id = target_agent_id
+        fork_state.pending_resumptions.clear()
+        return fork_state

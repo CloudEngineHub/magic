@@ -15,7 +15,6 @@ Skill、通知、模型配置、workspace 快照和 context usage baseline。这
 from __future__ import annotations
 
 import asyncio
-import copy
 from dataclasses import fields
 from pathlib import Path
 from typing import Optional
@@ -393,15 +392,13 @@ class HorizonStore:
         target_agent_id: str,
         horizon_path: Path,
     ) -> None:
-        """把 Horizon baseline 改为目标身份后写入指定临时路径。
+        """按 Horizon 自己的 fork 语义生成目标状态并写入指定临时路径。
 
-        fork 后状态内容仍然来自来源，但文件里的 `agent_id` 必须改成目标 ID：否则子
-        Agent 启动时会看到“文件名是 research-2，状态内部却属于 research-1”的身份冲突。
-        深拷贝保证这个改名不会反向修改来源 Agent 的内存状态。
+        哪些状态可以继承、哪些外部动作必须清理由 `HorizonState.copy_for_fork()` 统一
+        决定；Store 只负责把已经准备好的目标状态写入文件。
         """
         normalized_horizon_path = Path(horizon_path).expanduser().resolve(strict=False)
-        target_state = copy.deepcopy(state)
-        target_state.agent_id = target_agent_id
+        target_state = state.copy_for_fork(target_agent_id)
         await cls._write_path(normalized_horizon_path, target_state)
 
     @staticmethod
