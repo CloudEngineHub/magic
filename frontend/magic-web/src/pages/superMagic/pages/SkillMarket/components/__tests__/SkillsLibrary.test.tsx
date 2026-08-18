@@ -43,6 +43,7 @@ vi.mock("lucide-react", () => {
 		Plus: Icon,
 		RefreshCw: Icon,
 		Search: Icon,
+		WandSparkles: Icon,
 	}
 })
 
@@ -84,7 +85,8 @@ vi.mock("@/enhance/lucide-react", () => ({
 }))
 
 vi.mock("@/hooks/useFunctionPermission", () => ({
-	useFunctionPermission: (code: string) => useFunctionPermissionMock(code),
+	useFunctionPermission: (code: string, options?: { allowSuperAdmin?: boolean }) =>
+		useFunctionPermissionMock(code, options),
 }))
 
 vi.mock("@/models/config", () => ({
@@ -201,6 +203,11 @@ describe("SkillsLibrary", () => {
 		render(<SkillsLibrary />)
 
 		expect(await screen.findByRole("tab", { name: "All Skills" })).toBeInTheDocument()
+		expect(screen.getByTestId("skills-library-search-bar")).toHaveClass(
+			"rounded-xl",
+			"border-border",
+			"shadow-xs",
+		)
 		expect(screen.queryByRole("tab", { name: "All", exact: true })).not.toBeInTheDocument()
 		expect(
 			screen.queryByTestId("skills-library-upload-official-button"),
@@ -216,6 +223,9 @@ describe("SkillsLibrary", () => {
 		render(<SkillsLibrary />)
 
 		const uploadButton = await screen.findByTestId("skills-library-upload-official-button")
+		expect(useFunctionPermissionMock).toHaveBeenCalledWith("SkillMarketManage", {
+			allowSuperAdmin: true,
+		})
 		expect(uploadButton).toBeInTheDocument()
 		fireEvent.click(uploadButton)
 		expect(screen.getByTestId("official-skill-import-dialog")).toBeInTheDocument()

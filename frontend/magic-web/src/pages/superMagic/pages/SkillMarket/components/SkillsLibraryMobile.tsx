@@ -31,6 +31,7 @@ function SkillsLibraryMobile() {
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
 	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillMarketManage,
+		{ allowSuperAdmin: true },
 	)
 
 	const [searchOpen, setSearchOpen] = useState(false)

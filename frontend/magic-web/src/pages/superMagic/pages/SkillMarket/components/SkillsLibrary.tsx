@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
 import { useDebounce, useThrottle } from "ahooks"
-import { BadgeCheck, Check, ChevronDown, Loader2, Plus, RefreshCw, Search } from "lucide-react"
+import { BadgeCheck, Check, ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react"
 import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
-import { Input } from "@/components/shadcn-ui/input"
 import { Skills } from "@/enhance/lucide-react"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { cn } from "@/lib/utils"
@@ -19,6 +18,8 @@ import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDial
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { useSkillCreateMenuItems } from "@/pages/superMagic/hooks/useSkillCreateMenuItems"
+import MarketStickyHeader from "@/pages/superMagic/pages/CrewMarket/components/MarketStickyHeader"
+import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
 import {
 	MY_SKILLS_INITIAL_TAB_QUERY_KEY,
 	MY_SKILLS_PUBLISH_SKILL_CODE_QUERY_KEY,
@@ -53,10 +54,12 @@ function SkillsLibrary({
 	)
 	const { isAllowed: canImportOfficialSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillMarketManage,
+		{ allowSuperAdmin: true },
 	)
 
 	const [searchQuery, setSearchQuery] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
+	const lastSubmittedSearchRef = useRef<string | null>(null)
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
 	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: SKILLS_SEARCH_DEBOUNCE_MS })
@@ -91,6 +94,10 @@ function SkillsLibrary({
 	useEffect(() => {
 		if (isSearchComposing) return
 		const keyword = throttledSearchQuery.trim()
+		if (lastSubmittedSearchRef.current === keyword) {
+			lastSubmittedSearchRef.current = null
+			return
+		}
 		void skillsStore.fetchSkills({ keyword: keyword || undefined, page: 1 })
 	}, [skillsStore, throttledSearchQuery, isSearchComposing])
 
@@ -126,6 +133,18 @@ function SkillsLibrary({
 	function handleMySkills() {
 		navigate({ name: RouteName.MySkills })
 	}
+
+	const handleSearch = useCallback(
+		(query?: string) => {
+			if (isSearchComposing) return
+			const keyword = (query ?? searchQuery).trim()
+			lastSubmittedSearchRef.current = keyword
+			void skillsStore.fetchSkills({ keyword: keyword || undefined, page: 1 })
+		},
+		[isSearchComposing, searchQuery, skillsStore],
+	)
+	const onSearchCompositionStart = useCallback(() => setIsSearchComposing(true), [])
+	const onSearchCompositionEnd = useCallback(() => setIsSearchComposing(false), [])
 
 	const createSkillMenuItems = useSkillCreateMenuItems({
 		createViaChatTestId: "skills-create-via-chat",
@@ -194,95 +213,89 @@ function SkillsLibrary({
 				/>
 			) : null}
 
-			<header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+			<header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				{hideMarketingHeadline ? null : (
-					<div className="flex min-w-0 items-center gap-4">
-						<h1 className="shrink-0 text-2xl font-semibold tracking-[-0.035em] text-foreground">
+					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
+						<h1 className="break-words text-2xl font-semibold leading-tight tracking-[-0.035em] text-foreground sm:text-3xl">
 							{t("skillsLibrary.title")}
 						</h1>
-						<p className="border-l border-border pl-4 text-xs text-muted-foreground">
+						<p className="max-w-2xl break-words text-sm text-muted-foreground">
 							{t("skillsLibrary.subtitle")}
 						</p>
 					</div>
 				)}
 
-				<div className="flex min-w-0 flex-1 flex-col gap-2.5 sm:flex-row sm:items-center xl:max-w-[760px] xl:justify-end">
-					<form
-						className="relative min-w-0 flex-1 xl:max-w-[320px]"
-						onSubmit={(event) => {
-							event.preventDefault()
-						}}
-						data-testid="skills-library-search-bar"
+				<div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
+					<Button
+						variant="outline"
+						className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
+						onClick={handleMySkills}
+						data-testid="skills-library-my-skills-button"
 					>
-						<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" />
-						<Input
-							value={searchQuery}
-							onChange={(event) => setSearchQuery(event.target.value)}
-							onCompositionStart={() => setIsSearchComposing(true)}
-							onCompositionEnd={() => setIsSearchComposing(false)}
-							placeholder={t("skillsLibrary.aiSearchPlaceholder")}
-							aria-label={t("skillsLibrary.searchAria")}
-							className="h-9 rounded-lg border-border bg-muted/40 pl-9 text-sm shadow-none focus-visible:bg-background"
-							data-testid="search-bar-input"
-						/>
-					</form>
+						<Skills className="size-4" />
+						{t("skillsLibrary.mySkills")}
+					</Button>
 
-					<div className="flex items-center gap-2.5">
+					{canImportOfficialSkill ? (
 						<Button
 							variant="outline"
-							className="h-9 flex-1 gap-2 bg-background shadow-none sm:flex-none"
-							onClick={handleMySkills}
-							data-testid="skills-library-my-skills-button"
+							className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
+							onClick={() => setOfficialImportOpen(true)}
+							data-testid="skills-library-upload-official-button"
 						>
-							<Skills className="size-4" />
-							{t("skillsLibrary.mySkills")}
+							<BadgeCheck className="size-4" />
+							{t("skillsLibrary.uploadOfficialSkill")}
 						</Button>
+					) : null}
 
-						{canImportOfficialSkill ? (
-							<Button
-								variant="outline"
-								className="h-9 flex-1 gap-2 bg-background shadow-none sm:flex-none"
-								onClick={() => setOfficialImportOpen(true)}
-								data-testid="skills-library-upload-official-button"
-							>
-								<BadgeCheck className="size-4" />
-								{t("skillsLibrary.uploadOfficialSkill")}
-							</Button>
-						) : null}
-
-						{canCreateSkill ? (
-							<SkillActionDropdown
-								createMenuItems={createSkillMenuItems}
-								onImportSuccess={(result) =>
-									navigate({
-										name: RouteName.MySkills,
-										query: {
-											[MY_SKILLS_INITIAL_TAB_QUERY_KEY]:
-												MY_SKILLS_TAB_VALUES.createdByMe,
-											[MY_SKILLS_PUBLISH_SKILL_CODE_QUERY_KEY]:
-												result.skill_code,
-										},
-									})
-								}
-								promptPublishAfterImport
-								placement="bottomRight"
-								overlayClassName="w-80"
-							>
-								<span>
-									<Button
-										className="h-9 flex-1 gap-2 shadow-none sm:flex-none"
-										data-testid="skills-library-create-button"
-									>
-										<Plus className="size-4" />
-										{t("skillsLibrary.createSkill")}
-										<ChevronDown className="size-4 opacity-70" />
-									</Button>
-								</span>
-							</SkillActionDropdown>
-						) : null}
-					</div>
+					{canCreateSkill ? (
+						<SkillActionDropdown
+							createMenuItems={createSkillMenuItems}
+							onImportSuccess={(result) =>
+								navigate({
+									name: RouteName.MySkills,
+									query: {
+										[MY_SKILLS_INITIAL_TAB_QUERY_KEY]:
+											MY_SKILLS_TAB_VALUES.createdByMe,
+										[MY_SKILLS_PUBLISH_SKILL_CODE_QUERY_KEY]: result.skill_code,
+									},
+								})
+							}
+							promptPublishAfterImport
+							placement="bottomRight"
+							overlayClassName="w-80"
+						>
+							<span>
+								<Button
+									className="h-9 flex-1 gap-2 shadow-xs sm:flex-none"
+									data-testid="skills-library-create-button"
+								>
+									<Plus className="size-4" />
+									{t("skillsLibrary.createSkill")}
+									<ChevronDown className="size-4 opacity-70" />
+								</Button>
+							</span>
+						</SkillActionDropdown>
+					) : null}
 				</div>
 			</header>
+
+			<MarketStickyHeader
+				className="gap-6 pb-6 pt-6 sm:gap-8 sm:pb-8 sm:pt-8"
+				scrollViewportRef={scrollViewportRef}
+				data-testid="skills-library-sticky-header"
+			>
+				<SearchBar
+					value={searchQuery}
+					onChange={setSearchQuery}
+					onSearch={handleSearch}
+					onCompositionStart={onSearchCompositionStart}
+					onCompositionEnd={onSearchCompositionEnd}
+					placeholder={t("skillsLibrary.aiSearchPlaceholder")}
+					enableSearchSubmit
+					data-testid="skills-library-search-bar"
+				/>
+			</MarketStickyHeader>
 
 			{showFeaturedSection &&
 			(skillsStore.featuredLoading ||

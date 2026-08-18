@@ -69,7 +69,10 @@ export const MagicFSApi = generateMagicFSApi(magicClient)
 export const MagicBaseApi = generateMagicBaseApi(magicClient)
 
 export { MAGIC_CLAW_STATUS } from "./modules/magicClaw"
-export { FUNCTION_PERMISSION_CODE } from "./modules/function-permission"
+export {
+	FUNCTION_PERMISSION_CODE,
+	PLATFORM_SUPER_ADMIN_PERMISSION_KEY,
+} from "./modules/function-permission"
 
 export type {
 	MagicClawItem,
@@ -83,7 +86,11 @@ export type {
 	UpdateMagicClawBody,
 } from "./modules/magicClaw"
 
-export type { FunctionPermissionCode, FunctionPermissionMap } from "./modules/function-permission"
+export type {
+	FunctionPermissionCode,
+	FunctionPermissionMap,
+	PermissionGroupsResponse,
+} from "./modules/function-permission"
 export type {
 	CreateMagicFSFileParams,
 	ListMagicFSFilesParams,
