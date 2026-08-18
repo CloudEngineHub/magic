@@ -300,6 +300,7 @@ export { imagePolicyRequiresReplay, preflightPptImage } from "./media/image-pref
 export {
 	MAX_INLINE_MEDIA_BYTES,
 	bytesMediaSourceDescriptor,
+	createMediaSourceDescriptor,
 	mediaSourceDescriptorFromBytes,
 	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,

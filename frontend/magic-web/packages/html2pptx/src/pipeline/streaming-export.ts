@@ -15,7 +15,6 @@ import type { StreamingExportTaskInput } from "../index"
 import type { PPTNode } from "../ir/node"
 import { serializePptNodes, type SerializablePPTNode } from "../ir/serialize"
 import {
-	normalizeMediaSourceDescriptor,
 	withMediaSourceKey,
 	type MediaSourceDescriptor,
 } from "../media/source-descriptor"
@@ -490,10 +489,11 @@ async function applyImagePreflight(
 	const transformImageDescriptor = input.pipeline?.transformImageDescriptor
 	const kept: SerializablePPTNode[] = []
 	for (const node of nodes) {
-		if (node.type !== "image" || !node.source) {
+		if (node.type !== "image") {
 			kept.push(node)
 			continue
 		}
+		if (!node.source) throw new TypeError("Image node must provide a source descriptor")
 
 		const decision = preflightPptImage(node, policy)
 		if (decision.action === "passthrough") {
@@ -551,7 +551,6 @@ async function applyImagePreflight(
 			)
 		}
 		node.source = withMediaSourceKey(result.source, node.assetKey)
-		node.src = ""
 		if (result.intrinsicSize) node.intrinsicSize = result.intrinsicSize
 		kept.push(node)
 	}
@@ -639,46 +638,15 @@ function imageDecisionDetails(
 async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<void> {
 	for (const node of nodes) {
 		if (node.type === "image") {
-			if (!node.source && node.src) {
-				node.source = await normalizeMediaSourceDescriptor(node.src, {
-					key: node.assetKey,
-				})
-			}
-			if (node.source) node.source = withMediaSourceKey(node.source, node.assetKey)
-			if (node.source) {
-				node.src = ""
-			}
+			if (!node.source) throw new TypeError("Image node must provide a source descriptor")
+			node.source = withMediaSourceKey(node.source, node.assetKey)
 			continue
 		}
 		if (node.type !== "media" || node.mediaType === "online") continue
-		if (!node.source) {
-			const value = node.data || node.path
-			if (value) {
-				node.source = await normalizeMediaSourceDescriptor(value, {
-					contentType: mediaContentType(node.mediaType, node.extn),
-					extn: node.extn,
-					key: node.assetKey,
-					metadataOrigin: "inferred",
-				})
-			}
-		}
-		if (node.source) node.source = withMediaSourceKey(node.source, node.assetKey)
-		if (!node.coverSource && node.cover) {
-			node.coverSource = await normalizeMediaSourceDescriptor(node.cover, {
-				contentType: "image/png",
-				key: node.coverAssetKey,
-				metadataOrigin: "inferred",
-			})
-		}
+		if (!node.source) throw new TypeError(`${node.mediaType} node must provide a source descriptor`)
+		node.source = withMediaSourceKey(node.source, node.assetKey)
 		if (node.coverSource)
 			node.coverSource = withMediaSourceKey(node.coverSource, node.coverAssetKey)
-		if (node.source) {
-			node.data = undefined
-			node.path = undefined
-		}
-		if (node.coverSource) {
-			node.cover = undefined
-		}
 	}
 }
 
@@ -1072,21 +1040,6 @@ function buildFinalAutoSizeConfig(config: SlideConfig, measuredMaxWidth: number)
 		htmlWidth,
 		slideWidth: htmlWidth / DEFAULT_DPI,
 	}
-}
-
-function mediaContentType(type: "video" | "audio", extn?: string): string | undefined {
-	const extension = extn?.replace(/^\./, "").toLowerCase()
-	if (type === "video") {
-		if (extension === "mov") return "video/quicktime"
-		if (extension === "webm") return "video/webm"
-		if (extension === "mp4" || extension === "m4v") return "video/mp4"
-		return undefined
-	}
-	if (extension === "wav") return "audio/wav"
-	if (extension === "m4a") return "audio/mp4"
-	if (extension === "ogg" || extension === "oga") return "audio/ogg"
-	if (extension === "mp3") return "audio/mpeg"
-	return undefined
 }
 
 function createSlideKey(sourceKey: string | undefined, index: number, pageOffset: number): string {

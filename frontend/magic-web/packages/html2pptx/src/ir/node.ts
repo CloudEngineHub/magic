@@ -102,12 +102,10 @@ export interface PPTShapeNode extends PPTNodeBase {
 /** Image node */
 export interface PPTImageNode extends PPTNodeBase {
 	type: "image"
-	/** Image source (URL or base64) */
-	src: string
 	/** Stable business identity (for example data-original-path) used for media deduplication. */
 	assetKey?: string
-	/** Binary/streaming source used by exports; preferred over `src`. */
-	source?: MediaSourceDescriptor
+	/** Repeatable binary/streaming source used by every export path. */
+	source: MediaSourceDescriptor
 	/** Capture source */
 	capture?: "snapdom"
 	/** Capture target element */
@@ -239,22 +237,14 @@ export interface PPTMediaNode extends PPTNodeBase {
 	assetKey?: string
 	/** Optional stable identity for a video poster/cover resource. */
 	coverAssetKey?: string
-	/** Media path (URL) */
-	path?: string
-	/** Binary/streaming media source; preferred over path/data for new exports. */
+	/** Repeatable binary/streaming source; required for audio/video and omitted for online media. */
 	source?: MediaSourceDescriptor
-	/** Media data (base64) */
-	data?: string
 	/** Online video link, such as YouTube */
 	link?: string
-	/** Cover: poster or materialized JPEG data URL */
-	cover?: string
 	/** Binary/streaming video poster source. */
 	coverSource?: MediaSourceDescriptor
 	/** Whether to autoplay */
 	autoplay?: boolean
-	/** File extension */
-	extn?: string
 	/** Only used for main-thread materialization and stripped before serialization; points to `<video>` for first-frame capture when there is no poster */
 	coverCaptureElement?: HTMLVideoElement
 }

@@ -60,7 +60,6 @@ function createImageNode(
 		w: 1,
 		h: 1,
 		zOrder: 0,
-		src: "",
 		sizing: "stretch",
 		source,
 		assetKey,
@@ -614,7 +613,6 @@ describe("runStreamingExport", () => {
 							w: 1,
 							h: 1,
 							zOrder: 0,
-							src: "",
 							sizing: "stretch",
 							source: {
 								kind: "bytes",

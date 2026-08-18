@@ -4,6 +4,7 @@ import type { SlideConfig } from "../api/options"
 import { computeEffectiveOpacity } from "../shared/color"
 import { pxToInch, resolveEffectiveRadius, getGlobalTransform } from "../shared/unit"
 import { createMediaAssetKey, getOriginalMediaPath } from "../media/asset-identity"
+import { createMediaSourceDescriptor } from "../media/source-descriptor"
 
 /**
  * Parse an image from an IMG tag or background-image.
@@ -68,12 +69,13 @@ export function parseImage(
 			imgElement.naturalWidth > 0 && imgElement.naturalHeight > 0
 				? { width: imgElement.naturalWidth, height: imgElement.naturalHeight }
 				: undefined
+		const assetKey = createMediaAssetKey("image", getOriginalMediaPath(imgElement))
 
 		return {
 			...finalRect,
 			type: "image",
-			src,
-			assetKey: createMediaAssetKey("image", getOriginalMediaPath(imgElement)),
+			assetKey,
+			source: createMediaSourceDescriptor(src, { key: assetKey }),
 			sizing,
 			intrinsicSize,
 			transparency,
@@ -95,6 +97,7 @@ export function parseImage(
 
 	const src = urlMatch[1]
 	const originalPath = getOriginalMediaPath(element)
+	const assetKey = createMediaAssetKey("image", originalPath)
 
 	// Parse background-size to determine the sizing mode.
 	const bgSize = style.backgroundSize
@@ -105,8 +108,8 @@ export function parseImage(
 	return {
 		...finalRect,
 		type: "image",
-		src,
-		assetKey: createMediaAssetKey("image", originalPath),
+		assetKey,
+		source: createMediaSourceDescriptor(src, { key: assetKey }),
 		sizing,
 		transparency,
 		radius, // Apply corner radius.

@@ -4,19 +4,7 @@ import { log, LogLevel } from "../logger"
 export function drawImage(slide: Slide, node: PPTImageNode): void {
 	const { x, y, w, h, sizing, intrinsicSize, transparency, rotate } = node
 	const source = node.source
-	const src = node.src
-
-	if (!source && !src) return
-
-	const isDataUrl = src?.startsWith("data:")
-	const isRemoteUrl = src?.startsWith("http://") || src?.startsWith("https://")
-
-	if (!source && !isDataUrl && !isRemoteUrl) {
-		log(LogLevel.L3, "skip image: unsupported src format", {
-			preview: src.slice(0, 80),
-		})
-		return
-	}
+	if (!source) throw new TypeError("Image node must provide a source descriptor")
 
 	const options: Record<string, unknown> = {
 		x,
@@ -41,13 +29,7 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 		options.h = intrinsicSize.height / maxDimension
 	}
 
-	if (source) {
-		options.source = source
-	} else if (isDataUrl) {
-		options.data = src
-	} else {
-		options.path = src
-	}
+	options.source = source
 
 	if (rotate !== undefined) options.rotate = rotate
 
@@ -73,7 +55,7 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 		slide.addImage(options)
 	} catch (error) {
 		log(LogLevel.L3, "Failed to add image", {
-			src: String(src).slice(0, 80),
+			sourceKey: source.key,
 			error: String(error),
 		})
 		throw error

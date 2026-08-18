@@ -13,6 +13,7 @@ import {
 	getOriginalMediaCoverPath,
 	getOriginalMediaPath,
 } from "../media/asset-identity"
+import { createMediaSourceDescriptor } from "../media/source-descriptor"
 
 /**
  * Parse a media element.
@@ -54,8 +55,6 @@ function parseVideoElement(
 	}
 
 	const poster = video.poster?.trim()
-	const cover = poster || undefined
-	const extn = getFileExtension(src)
 	const mediaBase = resolveVideoMediaBase(node, base, config, video)
 	const assetKey = createMediaAssetKey(
 		"video",
@@ -63,17 +62,20 @@ function parseVideoElement(
 			(sourceElement ? getOriginalMediaPath(sourceElement) : undefined),
 	)
 	const coverAssetKey = createMediaAssetKey("cover", getOriginalMediaCoverPath(video))
+	const source = createMediaSourceDescriptor(src, { key: assetKey })
+	const coverSource = poster
+		? createMediaSourceDescriptor(poster, { key: coverAssetKey })
+		: undefined
 
 	return {
 		...mediaBase,
 		type: "media",
 		mediaType: "video",
-		path: src,
 		assetKey,
 		coverAssetKey,
-		cover,
-		coverCaptureElement: poster && poster.startsWith("data:") ? undefined : video,
-		extn,
+		source,
+		coverSource,
+		coverCaptureElement: poster ? undefined : video,
 	}
 }
 
@@ -127,38 +129,17 @@ function parseAudioElement(audio: HTMLAudioElement, base: PPTNodeBase): PPTMedia
 		log(LogLevel.L3, "Audio element has no src")
 		return null
 	}
-
-	const extn = getFileExtension(src)
+	const assetKey = createMediaAssetKey(
+		"audio",
+		getOriginalMediaPath(audio) ??
+			(sourceElement ? getOriginalMediaPath(sourceElement) : undefined),
+	)
 
 	return {
 		...base,
 		type: "media",
 		mediaType: "audio",
-		path: src,
-		assetKey: createMediaAssetKey(
-			"audio",
-			getOriginalMediaPath(audio) ??
-				(sourceElement ? getOriginalMediaPath(sourceElement) : undefined),
-		),
-		extn,
+		assetKey,
+		source: createMediaSourceDescriptor(src, { key: assetKey }),
 	}
-}
-
-/**
- * Get the file extension from a media URL.
- */
-function getFileExtension(url: string): string | undefined {
-	try {
-		const pathname = new URL(url, "http://dummy").pathname
-		const ext = pathname.split(".").pop()?.toLowerCase()
-		if (ext && ext.length <= 5) {
-			return ext
-		}
-	} catch {
-		const match = url.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/)
-		if (match?.[1]) {
-			return match[1].toLowerCase()
-		}
-	}
-	return undefined
 }

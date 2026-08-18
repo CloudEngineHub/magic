@@ -1,10 +1,7 @@
 import type { ResourceLoadError } from "../api/options"
 import type { PPTImageNode, PPTNode } from "../ir/node"
 import { log, LogLevel } from "../logger"
-import {
-	normalizeMediaSourceDescriptor,
-	withMediaSourceKey,
-} from "../media/source-descriptor"
+import { withMediaSourceKey } from "../media/source-descriptor"
 
 type ResourceErrorReporter = (error: ResourceLoadError) => void
 
@@ -22,39 +19,17 @@ export async function materializePptImageNodes(
 
 async function materializePptImageNode(
 	node: PPTImageNode,
-	signal?: AbortSignal,
+	_signal?: AbortSignal,
 	onResourceError?: ResourceErrorReporter,
 ): Promise<void> {
-	const src = node.src
-	if (node.source) {
-		node.source = withMediaSourceKey(node.source, node.assetKey)
-		node.captureElement = undefined
-		return
-	}
-	if (!src?.trim()) {
-		node.captureElement = undefined
-		return
-	}
-
-	try {
-		if (signal?.aborted) throw signal.reason
-		node.source = await normalizeMediaSourceDescriptor(src, { key: node.assetKey })
-		// The descriptor is now authoritative. Clearing `src` prevents retaining a
-		// second (potentially base64) copy through render and package stages.
-		node.src = ""
-	} catch (error) {
-		if (signal?.aborted) throw error
-		log(LogLevel.L3, "image unreachable, dropping", {
-			src: src.slice(0, 80),
-			error: String(error),
-		})
+	if (!node.source) {
 		onResourceError?.({
-			url: src.slice(0, 200),
+			url: node.assetKey?.slice(0, 200) || "image",
 			kind: "image",
 			reason: "load-error",
 		})
-		node.src = ""
+		throw new TypeError("Image node must provide a source descriptor")
 	}
-
+	node.source = withMediaSourceKey(node.source, node.assetKey)
 	node.captureElement = undefined
 }

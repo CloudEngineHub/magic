@@ -751,7 +751,6 @@ describe("streaming packager client", () => {
 					w: 1,
 					h: 1,
 					zOrder: 0,
-					src: "",
 					sizing: "stretch",
 					source: {
 						kind: "bytes",

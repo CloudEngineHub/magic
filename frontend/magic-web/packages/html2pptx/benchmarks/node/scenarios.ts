@@ -1,4 +1,5 @@
 import type { SerializablePPTNode } from "../../src/ir/serialize"
+import { createMediaSourceDescriptor } from "../../src/media/source-descriptor"
 import { createNoisePngDataUrl } from "../shared/png"
 import type { BenchmarkProfile, ScenarioName, ScenarioShape } from "../shared/types"
 
@@ -141,7 +142,9 @@ function createImageNodes(
 		w: 5.7,
 		h: 3.05,
 		zOrder: 300 + imageIndex,
-		src: resolveSource(imageIndex),
+		source: createMediaSourceDescriptor(resolveSource(imageIndex), {
+			key: `benchmark:image:${slideIndex}:${imageIndex}`,
+		}),
 		sizing: "cover" as const,
 		intrinsicSize: {
 			width: shape.imageWidthPx,

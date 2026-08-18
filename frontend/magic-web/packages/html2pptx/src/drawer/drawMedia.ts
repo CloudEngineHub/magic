@@ -8,13 +8,9 @@ interface MediaOptions {
 	w: number
 	h: number
 	type: "video" | "audio" | "online"
-	path?: string
-	data?: string
 	source?: PPTMediaNode["source"]
 	link?: string
-	cover?: string
 	coverSource?: PPTMediaNode["coverSource"]
-	extn?: string
 }
 
 /**
@@ -27,7 +23,7 @@ export async function drawMedia(
 	signal?: AbortSignal,
 ): Promise<void> {
 	throwIfAborted(signal)
-	const { x, y, w, h, mediaType, path, data, source, link, extn } = node
+	const { x, y, w, h, mediaType, source, link } = node
 	const coverSource = node.coverSource
 
 	const options: MediaOptions = {
@@ -50,28 +46,14 @@ export async function drawMedia(
 
 		case "video":
 		case "audio":
+			if (!source) {
+				throw new TypeError(`${mediaType} node must provide a source descriptor`)
+			}
 			if (mediaType === "video") {
 				if (coverSource) options.coverSource = coverSource
-				else if (node.cover?.startsWith("data:")) options.cover = node.cover
 			}
-			if (extn) options.extn = extn
-
-			if (source) {
-				options.source = source
-				slide.addMedia(options)
-			} else if (data) {
-				options.data = data
-				slide.addMedia(options)
-			} else if (path) {
-				if (path.startsWith("data:")) {
-					options.data = path
-				} else {
-					options.path = path
-				}
-				slide.addMedia(options)
-			} else {
-				log(LogLevel.L3, "Media requires path or data")
-			}
+			options.source = source
+			slide.addMedia(options)
 			break
 
 		default:

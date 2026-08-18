@@ -7,6 +7,7 @@ import type { SlideConfig } from "../src/api/options"
 import { drawImage } from "../src/drawer/drawImage"
 import type { ElementNode } from "../src/ir/dom"
 import type { PPTImageNode, PPTNodeBase } from "../src/ir/node"
+import { createMediaSourceDescriptor } from "../src/media/source-descriptor"
 import { parseImage } from "../src/parsers/parseImage"
 import {
 	asStreamingPptxPresentation,
@@ -58,7 +59,7 @@ describe("image sizing", () => {
 			w: 16,
 			h: 9,
 			zOrder: 1,
-			src: transparentPng,
+			source: createMediaSourceDescriptor(transparentPng, { key: "sizing-image" }),
 			sizing: "cover",
 			intrinsicSize: { width: 4, height: 3 },
 		}

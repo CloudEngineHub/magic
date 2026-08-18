@@ -76,31 +76,30 @@ interface NormalizeMediaDescriptorOptions {
 
 /**
  * Normalize existing URL/data-URL inputs without fetching their full payload.
- * Caller-provided data URLs are decoded once into a Blob and are intentionally
- * capped: multi-GB exports must use Blob/URL/OPFS descriptors instead of base64.
+ * Caller-provided data URLs are decoded once into a bounded ArrayBuffer descriptor and are
+ * intentionally capped: multi-GB exports must use Blob/URL/OPFS descriptors instead of base64.
  */
-export async function normalizeMediaSourceDescriptor(
+export function createMediaSourceDescriptor(
 	src: string,
 	options: NormalizeMediaDescriptorOptions = {},
-): Promise<MediaSourceDescriptor> {
+): MediaSourceDescriptor {
 	const value = src.trim()
 	if (!value) throw new TypeError("Media source must not be empty")
 
 	if (value.startsWith("data:")) {
-		const blob = await dataUrlToBlob(value)
-		if (blob.size > MAX_INLINE_MEDIA_BYTES) {
+		const decoded = dataUrlToArrayBuffer(value)
+		if (decoded.data.byteLength > MAX_INLINE_MEDIA_BYTES) {
 			throw new RangeError(
-				`Inline media is ${blob.size} bytes; use a Blob, URL, or OPFS descriptor above ${MAX_INLINE_MEDIA_BYTES} bytes.`,
+				`Inline media is ${decoded.data.byteLength} bytes; use a Blob, URL, or OPFS descriptor above ${MAX_INLINE_MEDIA_BYTES} bytes.`,
 			)
 		}
-		const contentType = options.contentType || blob.type || "application/octet-stream"
+		const contentType = options.contentType || decoded.contentType || "application/octet-stream"
 		return {
-			kind: "blob",
-			blob,
-			size: blob.size,
+			kind: "bytes",
+			data: decoded.data,
 			key:
 				options.key ||
-				`data:${contentType}:${blob.size}:${hashString(value.slice(0, 4096))}`,
+				`data:${contentType}:${decoded.data.byteLength}:${hashString(value.slice(0, 4096))}`,
 			contentType,
 			extn: normalizeExtension(options.extn || extensionFromContentType(contentType)),
 			metadataOrigin: "explicit",
@@ -127,6 +126,20 @@ export async function normalizeMediaSourceDescriptor(
 		extn: metadata.extn,
 		metadataOrigin: metadata.origin,
 	}
+}
+
+/**
+ * Normalize a string source through the public asynchronous API.
+ *
+ * The parser uses the synchronous constructor above so the HTML → IR stage can emit
+ * descriptor-only nodes without a second legacy string field. Callers that already
+ * depend on the Promise-shaped API can continue to await this wrapper.
+ */
+export async function normalizeMediaSourceDescriptor(
+	src: string,
+	options: NormalizeMediaDescriptorOptions = {},
+): Promise<MediaSourceDescriptor> {
+	return createMediaSourceDescriptor(src, options)
 }
 
 export function bytesMediaSourceDescriptor(input: {
@@ -229,7 +242,7 @@ export function descriptorTransferables(source?: MediaSourceDescriptor): Transfe
 	return source?.kind === "bytes" ? [source.data] : []
 }
 
-async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+function dataUrlToArrayBuffer(dataUrl: string): { data: ArrayBuffer; contentType: string } {
 	const commaIndex = dataUrl.indexOf(",")
 	if (commaIndex < 0) throw new TypeError("Invalid data URL")
 	const metadata = dataUrl.slice(5, commaIndex)
@@ -250,7 +263,8 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 				`Inline media payload is ${payload.length} encoded characters; use a Blob, URL, or OPFS descriptor above ${MAX_INLINE_MEDIA_BYTES} bytes.`,
 			)
 		}
-		return new Blob([decodeURIComponent(payload)], { type: contentType })
+		const bytes = new TextEncoder().encode(decodeURIComponent(payload))
+		return { data: bytes.buffer, contentType }
 	}
 	const estimatedBytes = Math.floor((payload.replace(/\s+/g, "").length * 3) / 4)
 	if (estimatedBytes > MAX_INLINE_MEDIA_BYTES) {
@@ -261,7 +275,7 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 	const binary = atob(payload.replace(/\s+/g, ""))
 	const bytes = new Uint8Array(binary.length)
 	for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-	return new Blob([bytes], { type: contentType })
+	return { data: bytes.buffer, contentType }
 }
 
 function isFetchableUrl(value: string): boolean {

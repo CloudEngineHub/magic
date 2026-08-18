@@ -40,7 +40,8 @@ describe("stable media identity", () => {
 		expect(getOriginalMediaPath(image)).toBe("assets/hero.png")
 		const parsed = parseImage(createElementNode(image), createBaseNode(), config, window)
 
-		expect(parsed?.src).toContain("token=rotated")
+		expect(parsed?.source.kind).toBe("url")
+		expect(parsed?.source.kind === "url" ? parsed.source.url : "").toContain("token=rotated")
 		expect(parsed?.assetKey).toBe("asset:image:assets/hero.png")
 	})
 

@@ -25,7 +25,6 @@ describe("media descriptor serialization", () => {
 				w: 1,
 				h: 1,
 				zOrder: 0,
-				src: "",
 				source: imageSource,
 				sizing: "stretch",
 				captureElement: document.createElement("div"),
