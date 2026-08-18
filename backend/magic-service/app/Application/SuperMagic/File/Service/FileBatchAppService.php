@@ -454,14 +454,13 @@ class FileBatchAppService extends AbstractAppService
     }
 
     /**
-     * @param TaskFileEntity[] $selectedEntities Original user selections.
+     * @param TaskFileEntity[] $selectedEntities original user selections
      */
     private function buildBatchDownloadTargetName(
         string $projectName,
         array $selectedEntities,
         bool $isWholeProject,
-    ): string
-    {
+    ): string {
         $timestamp = date('YmdHi');
         $baseName = $projectName;
 
