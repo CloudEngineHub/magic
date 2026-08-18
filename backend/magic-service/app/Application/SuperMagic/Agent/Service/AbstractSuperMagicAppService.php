@@ -44,7 +44,7 @@ use App\Domain\SuperMagic\Agent\Service\UserAgentDomainService;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\BuiltinSkill;
+use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\DataIsolation\BaseDataIsolation;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -77,6 +77,9 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
     #[Inject]
     protected SuperMagicAgentCategoryRelationDomainService $marketCategoryRelationDomainService;
+
+    #[Inject]
+    protected SkillMarketDomainService $skillMarketDomainService;
 
     public function __construct(
         protected OperationPermissionDomainService $operationPermissionDomainService,
@@ -598,7 +601,10 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
 
         return array_values(array_unique(array_merge(
             $accessibleSkillCodes,
-            array_values(array_intersect(BuiltinSkill::values(), $skillCodes ?? []))
+            array_values(array_intersect(
+                $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(),
+                $skillCodes ?? []
+            ))
         )));
     }
 
