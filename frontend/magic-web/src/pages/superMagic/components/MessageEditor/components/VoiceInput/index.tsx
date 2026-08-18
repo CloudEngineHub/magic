@@ -3,7 +3,7 @@ import { VoiceResultUtterance } from "@/components/business/VoiceInput/services/
 import { VoiceResult } from "@/components/business/VoiceInput/types"
 import AiCompletionService from "@/services/chat/editor/AiCompletionService"
 import { isMobile } from "@/utils/devices"
-import { Editor, JSONContent } from "@tiptap/core"
+import { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { logger as Logger } from "@/utils/log"
 import { useMemoizedFn } from "ahooks"
 import { forwardRef, Ref, useRef, useImperativeHandle, useEffect, type ReactNode } from "react"

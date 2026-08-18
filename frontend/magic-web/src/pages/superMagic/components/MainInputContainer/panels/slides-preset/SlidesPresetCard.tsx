@@ -10,7 +10,7 @@ import { Award, Check, Eye, Image as ImageIcon, MousePointerClick } from "lucide
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { formatNumber } from "@/utils/format"
 import type { OptionItem } from "../types"
 import { useLocaleText } from "../hooks/useLocaleText"

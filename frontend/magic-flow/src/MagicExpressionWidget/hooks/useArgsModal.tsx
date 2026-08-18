@@ -1,5 +1,5 @@
 import { useMemoizedFn, useResetState } from "ahooks"
-import _ from "lodash"
+import { cloneDeep } from "lodash-es"
 import React, { useState } from "react"
 import CustomInputExpression from "../InputExpression"
 import { useGlobalContext } from "../context/GlobalContext/useGlobalContext"
@@ -41,7 +41,7 @@ export default function useArgsModal({ value, handleChange }: UseArgsModalProps)
 
 	const notifyChange = useMemoizedFn((resultArgsValue: EXPRESSION_VALUE) => {
 		const resultValue = { ...resultArgsValue }
-		let cloneVal = _.cloneDeep(value)
+		let cloneVal = cloneDeep(value)
 		const index = cloneVal.findIndex((item) => item.uniqueId === config.uniqueId)
 		if (index > -1) {
 			cloneVal.splice(index, 1, resultValue)
@@ -81,7 +81,7 @@ export default function useArgsModal({ value, handleChange }: UseArgsModalProps)
 			index: number,
 		) => {
 			e.stopPropagation()
-			const tempArg = _.cloneDeep(arg)
+			const tempArg = cloneDeep(arg)
 			setArgValue(tempArg)
 			setArgsIndex(index)
 			setConfig({ ...item })

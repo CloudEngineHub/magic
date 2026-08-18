@@ -24,7 +24,7 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import MagicAvatar from "@/components/base/MagicAvatar"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import userInfoStore from "@/stores/userInfo"
 
 export type PermissionEditorMode = "table" | "row" | "column"

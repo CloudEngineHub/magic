@@ -1,4 +1,4 @@
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { userStore } from "@/models/user"
 
 import type { Admin } from "@/types/admin"

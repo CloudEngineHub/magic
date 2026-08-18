@@ -1,5 +1,5 @@
 import type { RefObject } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { FlatColorSegment } from "@/pages/superMagic/pages/AudioRecordings/utils/chapter-color-segments"
 import { RecordingDetailAudioBar } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/player"
 

@@ -12,10 +12,9 @@ import { getHomeURL } from "@/utils/redirect"
 import { history } from "@/routes/history"
 import { matchPath } from "react-router"
 import { LoginValueKey } from "@/pages/login/constants"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import { RouteName } from "@/routes/constants"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
-import { AppInitErrorCode, AppInitializationError } from "./errors"
+import { AppInitErrorCode, AppInitializationError, isAuthenticationFailure } from "./errors"
 import type { User } from "@/types/user"
 import type { SettingsAll } from "@/apis/types"
 import type { ConfigService } from "@/services/config/ConfigService"
@@ -38,6 +37,8 @@ import { BroadcastChannelSender } from "@/broadcastChannel"
 import { defaultClusterCode } from "@/routes/helpers"
 import { DEFAULT_MAINTENANCE_CONFIG, shouldForceSiteClose } from "@/constants/maintenance"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 interface PlatformServiceFactory {
 	(context: AppServiceContext): Promise<PlatformServiceInterface>
@@ -67,48 +68,50 @@ const appInitSkipWaitRequestOptions = {
 const AuthenticationKey = "authorization"
 
 /**
- * APP 初始化结果枚举
+ * Application initialization result enum.
  */
 export enum AppInitResult {
-	/** 初始化成功 */
+	/** Initialization succeeded */
 	SUCCESS = "SUCCESS",
-	/** 没有授权码但当前是公开路由，允许轻量继续 */
+	/** No access token, but the current route is public, so lightweight initialization may continue */
 	NO_TOKEN_PUBLIC_ROUTE = "NO_TOKEN_PUBLIC_ROUTE",
-	/** 没有授权码但是白名单路由，允许继续 */
+	/** No access token, but the route is allowlisted, so initialization may continue */
 	NO_TOKEN_WHITELIST = "NO_TOKEN_WHITELIST",
-	/** 没有授权码且已重定向到登录页 */
+	/** No access token; redirected to the login page */
 	NO_TOKEN_REDIRECTED = "NO_TOKEN_REDIRECTED",
-	/** 初始化失败且已重定向到登录页 */
+	/** Initialization failed; redirected to the login page */
 	INIT_FAILED_REDIRECTED = "INIT_FAILED_REDIRECTED",
-	/** 初始化失败但是白名单路由 */
+	/** Initialization failed for a non-authentication reason; kept the current route */
+	INIT_FAILED_NO_REDIRECT = "INIT_FAILED_NO_REDIRECT",
+	/** Initialization failed on an allowlisted route */
 	INIT_FAILED_WHITELIST = "INIT_FAILED_WHITELIST",
-	/** 系统需要初始化且已重定向到初始化页 */
+	/** System initialization is required; redirected to the initialization page */
 	NEED_SYSTEM_INITIALIZATION = "NEED_SYSTEM_INITIALIZATION",
-	/** 系统维护中且已重定向到维护页 */
+	/** The system is under maintenance; redirected to the maintenance page */
 	SITE_MAINTENANCE = "SITE_MAINTENANCE",
 }
 
 /**
- * APP 初始化结果结构体
+ * Application initialization result data.
  */
 export interface AppInitResultData {
-	/** 初始化结果枚举值 */
+	/** Initialization result enum value */
 	result: AppInitResult
-	/** 当前路径 */
+	/** Current path */
 	pathname: string
-	/** 是否为白名单路由 */
+	/** Whether the route is allowlisted */
 	isWhiteListRoute: boolean
-	/** 是否有授权码 */
+	/** Whether an access token is present */
 	hasAccessToken: boolean
-	/** 错误信息（如果有） */
+	/** Error details, if any */
 	error?: AppInitializationError
-	/** 时间戳 */
+	/** Timestamp */
 	timestamp: number
 }
 
 /**
- * APP 初始化服务
- * @description 用于初始化 APP 的各项服务
+ * Application initialization service.
+ * @description Initializes the application's services.
  * @constructor
  */
 class AppService extends AbstractAppService<AppInitResultData> {
@@ -174,8 +177,8 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * 加载平台配置
-	 * 包括默认语言，默认图标，平台设置等配置
+	 * Loads platform settings, including the default language, default icon,
+	 * platform configuration, and related settings.
 	 * @returns Promise<SettingsAll>
 	 * @throws AppInitializationError
 	 */
@@ -225,7 +228,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * 创建并上报初始化结果
+	 * Creates and reports the initialization result.
 	 */
 	private createAndReportInitResult(
 		result: AppInitResult,
@@ -474,7 +477,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					this.logger.warn("公开配置初始化失败，但不中断登录流程", error)
 				})
 
-				// 系统初始化检查必须先于登录/白名单分流，避免未初始化实例误入登录页
+				// Check system initialization before login and allowlist routing to keep uninitialized instances off the login page.
 				const needsInitialization = await this.checkSystemInitialization()
 				if (needsInitialization) {
 					this.logger.log("系统需要初始化，已重定向到初始化页面")
@@ -523,7 +526,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					)
 				}
 
-				// 集群初始化优先
+				// Initialize the cluster first.
 				await service.get<ConfigService>("configService").initialCluster()
 
 				this.initializeAuthenticatedConfiguration().catch((error) => {
@@ -547,30 +550,30 @@ class AppService extends AbstractAppService<AppInitResultData> {
 				this.logger.log("账户初始化完成")
 
 				// // Wait for config initialization to complete before finishing app init
-				// this.logger.log("等待公开配置初始化完成")
+				// this.logger.log("Wait for public configuration initialization to complete")
 				// if (this.configInitPromise) {
 				// 	await withTimeout(
 				// 		this.configInitPromise,
 				// 		15000,
-				// 		"等待公开配置初始化超时 (15秒)",
+				// 		"Timed out waiting for public configuration initialization (15 seconds)",
 				// 	).catch((error) => {
-				// 		this.logger.warn("公开配置初始化等待失败，但不中断应用初始化", error)
+				// 		this.logger.warn("Waiting for public configuration initialization failed without interrupting application initialization", error)
 				// 	})
 				// }
 
 				// if (this.configInitStatus === "success") {
-				// 	this.logger.log("公开配置初始化已完成")
+				// 	this.logger.log("Public configuration initialization completed")
 				// } else {
-				// 	this.logger.warn("公开配置初始化未完成，当前状态:", this.configInitStatus)
+				// 	this.logger.warn("Public configuration initialization is incomplete; current status:", this.configInitStatus)
 				// }
 
 				// if (this.authenticatedConfigPromise) {
 				// 	await withTimeout(
 				// 		this.authenticatedConfigPromise,
 				// 		5000,
-				// 		"等待登录后配置初始化超时 (5秒)",
+				// 		"Timed out waiting for post-login configuration initialization (5 seconds)",
 				// 	).catch((error) => {
-				// 		this.logger.warn("登录后配置初始化等待失败，但不中断应用初始化", error)
+				// 		this.logger.warn("Waiting for post-login configuration initialization failed without interrupting application initialization", error)
 				// 	})
 				// }
 
@@ -596,7 +599,9 @@ class AppService extends AbstractAppService<AppInitResultData> {
 					error: initError,
 					message: "应用初始化失败",
 				})
-				if (!isWhiteListRoute) {
+				const shouldRedirectToLogin =
+					!isWhiteListRoute && isAuthenticationFailure(initError)
+				if (shouldRedirectToLogin) {
 					this.logger.log("非白名单路由，重定向到登录页")
 					this.redirectToLogin()
 				}
@@ -604,7 +609,9 @@ class AppService extends AbstractAppService<AppInitResultData> {
 				return this.createAndReportInitResult(
 					isWhiteListRoute
 						? AppInitResult.INIT_FAILED_WHITELIST
-						: AppInitResult.INIT_FAILED_REDIRECTED,
+						: shouldRedirectToLogin
+							? AppInitResult.INIT_FAILED_REDIRECTED
+							: AppInitResult.INIT_FAILED_NO_REDIRECT,
 					pathname,
 					isWhiteListRoute,
 					hasAccessToken,
@@ -637,7 +644,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		this.isWhiteListRoute(pathname) || this.isLoginRoute(pathname)
 
 	/**
-	 * @description 判断是否为白名单路由
+	 * @description Determines whether the route is allowlisted.
 	 * @returns boolean
 	 */
 	private isWhiteListRoute = (pathname: string) => {
@@ -649,39 +656,27 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * @description 重定向到登录页
+	 * @description Redirects to the login page.
 	 */
 	redirectToLogin = () => {
-		if (![RoutePath.Login].includes(window.location.pathname as RoutePath)) {
-			const redirectUrl = new URL(window.location.href).searchParams.get(
-				LoginValueKey.REDIRECT_URL,
-			)
-			this.logger.log("重定向到登录页", {
-				currentPath: window.location.pathname,
-				redirectUrl: redirectUrl ?? window.location.href,
-			})
-			history.replace({
-				name: RouteName.Login,
-				query: convertSearchParams(
-					buildLoginRedirectSearchParams({
-						currentHref: window.location.href,
-						redirectTarget: redirectUrl ?? window.location.href,
-					}),
-				),
-			})
-		} else {
-			this.logger.log("当前已在登录页，无需重定向")
-		}
+		if (window.location.pathname === RoutePath.Login) return
+		this.logger.log("发布登录请求", { currentPath: window.location.pathname })
+		authEventBus.emit(AuthEventName.RequestLogin, {
+			reason: "missing-session",
+			source: "app-init",
+			returnTo: window.location.href,
+			preserveQuery: true,
+		})
 	}
 
 	/**
-	 * @description 重定向到初始化页面
+	 * @description Redirects to the initialization page.
 	 */
 	private redirectToInitialization = () => {
 		const pathname = window.location.pathname
 
 		if (pathname !== RoutePath.Initialization) {
-			// 保留原始的 redirect_url，以便初始化完成后跳转回原页面
+			// Preserve the original redirect_url so initialization can return to the original page.
 			const redirectUrl = new URL(window.location.href).searchParams.get(
 				LoginValueKey.REDIRECT_URL,
 			)
@@ -742,25 +737,25 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * @description 检查系统是否需要初始化
-	 * @returns Promise<boolean> 如果需要初始化返回 true
+	 * @description Checks whether the system requires initialization.
+	 * @returns Promise<boolean> Resolves to true when initialization is required
 	 */
 	private checkSystemInitialization = async (): Promise<boolean> => {
 		try {
 			const pathname = window.location.pathname
 
-			// 如果当前已经在初始化页面，直接返回 false，避免循环
+			// Return false on the initialization page to avoid a redirect loop.
 			if (pathname === RoutePath.Initialization) {
 				this.logger.log("当前已在初始化页面，跳过初始化检查")
 				return false
 			}
 
-			// 复用公开配置请求结果，避免初始化阶段重复请求
+			// Reuse the public configuration request to avoid duplicate initialization requests.
 			this.logger.log("检查系统是否需要初始化")
 			const globalConfig = await this.loadSettingsAll()
 				.then((response) => response.global_config)
 				.catch((error) => {
-					// 如果接口调用失败，假设不需要初始化，继续正常流程
+					// If the request fails, assume initialization is not required and continue normally.
 					this.logger.warn("获取公开配置失败，假设系统已初始化", error)
 					return {
 						...DEFAULT_MAINTENANCE_CONFIG,
@@ -792,7 +787,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		this.logger.log("开始初始化账户")
 		const accessToken = this.getQueryAuthorization() ?? userStore.user.authorization
 		if (!accessToken) {
-			// 没有授权码,大概率需要走重定向
+			// Without an access token, a redirect is most likely required.
 			this.logger.log("无授权码，跳过账户初始化")
 			this.redirectToLogin()
 			return
@@ -864,9 +859,9 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * @description 初始化用户切换后的流程
-	 * @param user 用户信息
-	 * @param showSwitchLoading 是否显示切换加载状态
+	 * @description Initializes the flow after switching users.
+	 * @param user User information
+	 * @param showSwitchLoading Whether to show the switching loading state
 	 * @returns Promise<void>
 	 */
 	initUserData = async (user: User.UserInfo) => {
@@ -907,11 +902,11 @@ class AppService extends AbstractAppService<AppInitResultData> {
 	}
 
 	/**
-	 * @description 切换组织
-	 * @param accountInfo 账号信息
-	 * @param organizationInfo 组织信息
-	 * @param userInfo 当前用户信息
-	 * @param onSwitchAfter 切换后回调
+	 * @description Switches organizations.
+	 * @param accountInfo Account information
+	 * @param organizationInfo Organization information
+	 * @param userInfo Current user information
+	 * @param onSwitchAfter Callback invoked after switching
 	 */
 	switchOrganization = async (
 		accountInfo: User.UserAccount,
@@ -928,7 +923,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 		try {
 			interfaceStore.setIsSwitchingOrganization(true)
 			let shouldRefreshAccountContext = false
-			// 账号不一致下要切换账号(切换账号下优先判断集群是否一致，不一致情况下优先切换路由上集群再调用切换账号逻辑，这里必须先切换帐号后重定向路由!!!)
+			// When accounts differ, compare clusters first. If clusters also differ, switch the account before redirecting the route to the target cluster.
 			if (accountInfo?.magic_id !== userInfo?.magic_id) {
 				this.logger.log("检测到账号不一致，开始切换账号")
 				// Set cluster code before switching account
@@ -995,7 +990,7 @@ class AppService extends AbstractAppService<AppInitResultData> {
 						error: err,
 						message: "组织切换失败，恢复当前组织",
 					})
-					// 切换失败，恢复当前组织
+					// Restore the current organization after a failed switch.
 					service
 						.get<UserService>("userService")
 						.setMagicOrganizationCode(userInfo?.organization_code)

@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { SelfMediaPlatform } from "@/pages/superMagic/components/Detail/types"
 import {
 	getDefaultCardCount,
@@ -13,8 +13,7 @@ export const SELF_MEDIA_CARD_COUNT_MIN = 1
 export const SELF_MEDIA_CARD_COUNT_MAX = 20
 
 export type SelfMediaCardCountMode =
-	| `${(typeof SELF_MEDIA_CARD_COUNT_PRESETS)[number]}`
-	| typeof SELF_MEDIA_CUSTOM_CARD_COUNT
+	`${(typeof SELF_MEDIA_CARD_COUNT_PRESETS)[number]}` | typeof SELF_MEDIA_CUSTOM_CARD_COUNT
 
 export interface SelfMediaComposerConfigValue {
 	platform?: SelfMediaPlatform

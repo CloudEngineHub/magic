@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { ModelItem } from "../../MessageEditor/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"

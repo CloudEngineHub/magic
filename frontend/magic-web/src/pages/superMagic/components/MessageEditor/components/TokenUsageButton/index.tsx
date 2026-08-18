@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Button } from "@/components/shadcn-ui/button"
 import { Separator } from "@/components/shadcn-ui/separator"

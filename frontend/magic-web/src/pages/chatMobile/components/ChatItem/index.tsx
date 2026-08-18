@@ -9,7 +9,7 @@ import { useStyles } from "./styles"
 import { ChatItemData } from "./type"
 import { observer } from "mobx-react-lite"
 import ConversationStore from "@/stores/chatNew/conversation"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface ChatItemProps {
 	data: ChatItemData

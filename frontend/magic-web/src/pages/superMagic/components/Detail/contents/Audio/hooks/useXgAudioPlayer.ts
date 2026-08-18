@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import type Player from "xgplayer"
-import { loadXGPlayerModules } from "@/lib/xgplayer"
+import type Player from "@/infrastructure/vendors/xgplayer"
+import { loadXGPlayerModules } from "@/infrastructure/vendors/xgplayer"
 
 interface UseXgAudioPlayerProps {
 	fileUrl?: string

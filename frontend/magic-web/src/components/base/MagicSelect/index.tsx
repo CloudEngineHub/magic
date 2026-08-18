@@ -8,7 +8,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/shadcn-ui/select"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import type { OverlayZIndexScope } from "@/utils/overlayZIndex/overlayStackManager"

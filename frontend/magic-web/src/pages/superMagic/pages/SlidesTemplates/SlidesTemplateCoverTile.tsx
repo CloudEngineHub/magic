@@ -2,7 +2,7 @@ import { Award, Check, Eye, Image as ImageIcon } from "lucide-react"
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import { useLocaleText } from "@/pages/superMagic/components/MainInputContainer/panels/hooks/useLocaleText"
 import {

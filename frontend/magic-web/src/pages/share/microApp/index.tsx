@@ -27,13 +27,12 @@ import { OrganizationSwitchPanel } from "@/layouts/BaseLayoutMobile/components/O
 import useLogout from "@/hooks/account/useLogout"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useAuthorization, useOrganization, useUserInfo } from "@/models/user/hooks"
-import { RouteName } from "@/routes/constants"
-import { history } from "@/routes/history"
 import GlobalSidebarStore from "@/stores/display/GlobalSidebarStore"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import useMicroAppSafetyNoticeConfirmation from "./hooks/useMicroAppSafetyNoticeConfirmation"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
 
@@ -90,23 +89,12 @@ function buildPreviewFile(entryFile: AttachmentItem) {
 	}
 }
 
-function convertToQuery(params: URLSearchParams): Record<string, string> {
-	const query: Record<string, string> = {}
-	params.forEach((value, key) => {
-		query[key] = value
-	})
-	return query
-}
-
 function goLogin() {
-	history.replace({
-		name: RouteName.Login,
-		query: convertToQuery(
-			buildLoginRedirectSearchParams({
-				currentHref: window.location.href,
-				redirectTarget: window.location.href,
-			}),
-		),
+	authEventBus.emit(AuthEventName.RequestLogin, {
+		reason: "manual",
+		source: "share",
+		returnTo: window.location.href,
+		preserveQuery: true,
 	})
 }
 

@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import {
@@ -26,7 +26,7 @@ import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { collectMentionItemsFromContent } from "@/pages/superMagic/components/MessageEditor/services/uploadMentionService"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 type StoredModelItem = Partial<ModelItem> & Pick<ModelItem, "model_id">
 

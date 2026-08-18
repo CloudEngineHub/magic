@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MentionItemRendererContext } from "../../../../renderers/types"
 import {
 	MentionItemType,

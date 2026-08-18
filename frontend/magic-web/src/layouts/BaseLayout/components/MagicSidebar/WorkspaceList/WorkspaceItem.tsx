@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { ChevronRight, Loader2Icon, Plus, EllipsisIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import { sidebarStore } from "@/stores/layout/SidebarStore"
 import ProjectList from "./ProjectList"

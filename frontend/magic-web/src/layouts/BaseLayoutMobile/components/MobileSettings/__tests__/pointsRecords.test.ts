@@ -1,4 +1,4 @@
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 import {

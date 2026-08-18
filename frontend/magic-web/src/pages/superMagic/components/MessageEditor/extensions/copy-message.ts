@@ -1,4 +1,4 @@
-import { Extension, type JSONContent } from "@tiptap/core"
+import { Extension, type JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { Plugin, PluginKey } from "prosemirror-state"
 import { isAllowedMention, markProjectFileMentionForCopy } from "../utils/mention"
 import type {

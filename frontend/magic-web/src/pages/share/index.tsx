@@ -4,7 +4,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router"
@@ -18,9 +18,9 @@ import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import Logo from "@/layouts/BaseLayout/components/Header/components/Logo"
 import { history } from "@/routes/history"
-import { convertSearchParams } from "@/routes/history/helpers"
 import { RouteName } from "@/routes/constants"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 import { useTokenRefreshPolling } from "./hooks/useTokenRefreshPolling"
 import WorkspaceButton from "./components/WorkspaceButton"
 import { formatCopyProjectCount } from "@/utils/format"
@@ -590,6 +590,8 @@ function Share() {
 			}),
 		[attachments, data?.data?.project_mode, projectId],
 	)
+	// Keep the mobile audio share route on the flex height chain so its inner content viewport can scroll.
+	const isMobileAudioShareLayout = isMobile && shouldRenderAudioShareShell
 
 	// 是否显示复制项目按钮：旧文件分享 或 allowCopyProjectFiles 为 true 时显示，且用户已登录
 	const showCopyProjectButton = useMemo(() => {
@@ -651,14 +653,11 @@ function Share() {
 		if (!isLogined) {
 			const currentHref = window.location.href
 			clearWindowData()
-			history.replace({
-				name: RouteName.Login,
-				query: convertSearchParams(
-					buildLoginRedirectSearchParams({
-						currentHref,
-						redirectTarget: currentHref,
-					}),
-				),
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "share-access-required",
+				source: "share",
+				returnTo: currentHref,
+				preserveQuery: true,
 			})
 			return
 		}
@@ -711,11 +710,11 @@ function Share() {
 			urlSearchParams.toString() +
 			window.location.hash
 		if (!isLogined) {
-			navigate({
-				name: RouteName.Login,
-				query: {
-					redirect: encodeURIComponent(newFullPath),
-				},
+			authEventBus.emit(AuthEventName.RequestLogin, {
+				reason: "share-access-required",
+				source: "share",
+				returnTo: newFullPath,
+				preserveQuery: true,
 			})
 			return
 		}
@@ -825,7 +824,10 @@ function Share() {
 				shareDisplayOptions.documentFlowFullscreen
 					? "box-border flex min-h-dvh w-full flex-col overflow-visible bg-muted dark:bg-muted"
 					: "box-border flex h-full w-screen flex-col overflow-hidden bg-muted dark:bg-muted",
-				"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
+				!isMobileAudioShareLayout &&
+					"max-md:block max-md:bg-white max-md:pb-[calc(50px+var(--safe-area-inset-bottom,0px))] dark:max-md:bg-card",
+				isMobileAudioShareLayout &&
+					"max-md:flex max-md:min-h-0 max-md:bg-white dark:max-md:bg-card",
 				isFileShare && "max-md:pb-0",
 				!isFileShare && "pb-[50px]",
 				isImmersiveFullscreen && "max-md:bg-transparent dark:max-md:bg-transparent",
@@ -974,7 +976,12 @@ function Share() {
 								className="h-8 rounded-lg px-5 py-1.5"
 								onClick={() => {
 									clearWindowData()
-									history.replace({ name: RouteName.Login })
+									authEventBus.emit(AuthEventName.RequestLogin, {
+										reason: "manual",
+										source: "share",
+										returnTo: window.location.href,
+										preserveQuery: true,
+									})
 								}}
 								data-testid="share-login-button"
 							>
@@ -989,7 +996,9 @@ function Share() {
 					"relative max-md:w-full",
 					shareDisplayOptions.documentFlowFullscreen
 						? "min-h-dvh overflow-visible"
-						: "h-full overflow-hidden",
+						: isMobileAudioShareLayout
+							? "min-h-0 flex-1 overflow-hidden"
+							: "h-full overflow-hidden",
 				)}
 				data-testid="share-content-container"
 			>

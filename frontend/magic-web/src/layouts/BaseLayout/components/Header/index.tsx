@@ -6,7 +6,7 @@ import HeaderActionSlot from "@/layouts/BaseLayout/components/Header/components/
 import GlobalServiceStatus from "./components/GlobalServiceStatus"
 import GlobalVersionStatus from "./components/GlobalVersionStatus"
 import { MacMenu, WindowMenu, useDesktopVersionCheck } from "./components/DesktopMenu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 /**
  * Global search header component

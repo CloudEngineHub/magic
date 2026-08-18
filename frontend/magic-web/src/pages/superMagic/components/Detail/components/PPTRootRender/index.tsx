@@ -9,7 +9,7 @@ import { type FileItem } from "../../contents/HTML/utils/fetchInterceptor"
 import { createParentMessageHandler } from "../../contents/HTML/utils/fetchInterceptor"
 import type { PPTRootRenderProps } from "./types"
 import { flattenAttachments } from "../../contents/HTML/utils"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"

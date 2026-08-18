@@ -11,12 +11,12 @@ import {
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { MagicDatePicker } from "@/components/base"
 import { MagicSwitch } from "@/components/base/MagicSwitch"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { parseContent } from "@/pages/superMagic/components/MessageList/components/Text/components/RichText/utils"
 import {
 	type ProjectListItem,

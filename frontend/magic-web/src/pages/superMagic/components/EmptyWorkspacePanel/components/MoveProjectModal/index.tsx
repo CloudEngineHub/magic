@@ -1,7 +1,7 @@
 import MagicModal from "@/components/base/MagicModal"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { IconCheck, IconSearch, IconX, IconFolderPlus, IconFileSearch } from "@tabler/icons-react"
 import { Checkbox } from "antd"
 import { useEffect, useMemo, useRef, useState } from "react"

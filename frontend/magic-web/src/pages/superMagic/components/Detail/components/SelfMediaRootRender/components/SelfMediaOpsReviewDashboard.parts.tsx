@@ -15,7 +15,7 @@ import { Line, LineChart, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/shadcn-ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/shadcn-ui/chart"
 import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
 import type { SelfMediaPlatformPostItem } from "../stores/SelfMediaStore"
 import type {

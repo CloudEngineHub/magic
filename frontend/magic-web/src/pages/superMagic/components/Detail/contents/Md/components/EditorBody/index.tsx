@@ -16,7 +16,7 @@ import {
 	type AttachmentFile,
 } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
 import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 
 interface EditorBodyProps {

@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import i18n from "i18next"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 

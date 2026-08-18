@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import {
@@ -282,8 +282,7 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -300,8 +299,7 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})

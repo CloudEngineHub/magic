@@ -41,7 +41,7 @@ import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents
 import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProcess"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"

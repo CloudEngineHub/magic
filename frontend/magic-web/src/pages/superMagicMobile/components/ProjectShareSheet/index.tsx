@@ -1,5 +1,5 @@
 import CommonPopup from "@/pages/superMagicMobile/components/CommonPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import DefaultOpenFilePicker from "./components/DefaultOpenFilePicker"
 import ProjectShareCreateView from "./components/ProjectShareCreateView"
 import ProjectShareDeleteConfirmView from "./components/ProjectShareDeleteConfirmView"

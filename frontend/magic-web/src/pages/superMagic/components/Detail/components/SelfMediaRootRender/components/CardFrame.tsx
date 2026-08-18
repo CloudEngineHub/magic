@@ -11,7 +11,7 @@ import {
 import { snapdom } from "@zumer/snapdom"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import type { ImageProcessOptions } from "@/utils/image-processing"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useTranslation } from "react-i18next"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"
 import { flattenAttachments } from "../../../contents/HTML/utils"

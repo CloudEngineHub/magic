@@ -2,7 +2,7 @@ import { observer } from "mobx-react-lite"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
 import ScenePanelContainer from "@/pages/superMagic/components/MainInputContainer/components/ScenePanelContainer"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface MobileScenePanelsProps {
 	editorContext: SceneEditorContext

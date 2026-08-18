@@ -6,7 +6,7 @@ import { SceneStateProvider, SceneStateStore } from "../MainInputContainer/store
 import { ModeToggle } from "../TopicMode"
 import LazyScenePanel from "../MainInputContainer/components/LazyScenePanel"
 import SelfMediaComposerConfigPanel from "../MainInputContainer/components/SelfMediaComposerConfigPanel"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	SceneEditorContext,
 	SceneEditorNodes,

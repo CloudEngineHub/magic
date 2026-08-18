@@ -13,7 +13,7 @@ import {
 	DropdownMenuContent,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { ModelPreferenceTooltip } from "./components/ModelPreferenceTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"

@@ -3,11 +3,16 @@
 // Copyright (c) 2023 - 2024 Jeet Mandaliya (Github: sereneinserenade)
 // Modified to support runtime regex toggling via storage
 
-import type { Dispatch, Range } from "@tiptap/core"
-import { Extension } from "@tiptap/core"
-import type { Node as PMNode } from "@tiptap/pm/model"
-import { type EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state"
-import { Decoration, DecorationSet } from "@tiptap/pm/view"
+import type { Dispatch, Range } from "@/infrastructure/editors/tiptap/core"
+import { Extension } from "@/infrastructure/editors/tiptap/core"
+import type { Node as PMNode } from "@/infrastructure/editors/tiptap/pm-model"
+import {
+	type EditorState,
+	Plugin,
+	PluginKey,
+	type Transaction,
+} from "@/infrastructure/editors/tiptap/pm-state"
+import { Decoration, DecorationSet } from "@/infrastructure/editors/tiptap/pm-view"
 
 export interface SearchAndReplaceOptions {
 	searchResultClass: string
@@ -26,7 +31,7 @@ export interface SearchAndReplaceStorage {
 	lastResultIndex: number
 }
 
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Commands<ReturnType> {
 		searchAndReplace: {
 			setSearchTerm: (searchTerm: string) => ReturnType

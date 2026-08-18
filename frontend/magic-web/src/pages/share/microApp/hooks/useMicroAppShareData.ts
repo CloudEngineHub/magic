@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "react-router"
 import { SuperMagicApi } from "@/apis"
-import { RouteName } from "@/routes/constants"
-import { history } from "@/routes/history"
 import { userStore } from "@/models/user"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { useSharePermission } from "@/pages/share/hooks/useSharePermission"
 import { useTokenRefreshPolling } from "@/pages/share/hooks/useTokenRefreshPolling"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 interface UseMicroAppShareDataParams {
 	appId: string
@@ -100,23 +99,12 @@ function hasLoginAuthorization(): boolean {
 	return Boolean(userStore.user.authorization?.trim() || userStore.user.userInfo?.user_id)
 }
 
-function convertToQuery(params: URLSearchParams): Record<string, string> {
-	const query: Record<string, string> = {}
-	params.forEach((value, key) => {
-		query[key] = value
-	})
-	return query
-}
-
 function redirectToLogin(): void {
-	history.replace({
-		name: RouteName.Login,
-		query: convertToQuery(
-			buildLoginRedirectSearchParams({
-				currentHref: window.location.href,
-				redirectTarget: window.location.href,
-			}),
-		),
+	authEventBus.emit(AuthEventName.RequestLogin, {
+		reason: "share-access-required",
+		source: "share",
+		returnTo: window.location.href,
+		preserveQuery: true,
 	})
 }
 

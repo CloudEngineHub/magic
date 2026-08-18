@@ -8,7 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ScheduledTask } from "@/types/scheduledTask"
 import mcpTempStorage from "../store/MCPTempStorage"
 import { useScheduledTasksModifyModal } from "./useScheduledTasksModifyModal"
-import { JSONContent } from "@tiptap/react"
+import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { ScheduledTasksModifyModalController } from "../types/ScheduledTasksModify"
 
 interface UseScheduleTaskProps {

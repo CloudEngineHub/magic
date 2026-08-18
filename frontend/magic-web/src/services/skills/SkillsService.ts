@@ -1,4 +1,4 @@
-import dayjs from "dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import i18n from "i18next"
 import { SkillsApi } from "@/apis"
 import type { CollaboratorPermission } from "@/pages/superMagic/types/collaboration"

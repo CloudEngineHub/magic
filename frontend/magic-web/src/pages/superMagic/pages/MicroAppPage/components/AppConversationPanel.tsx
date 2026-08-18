@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
-import { JSONContent } from "@tiptap/react"
+import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useTranslation } from "react-i18next"
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import ConversationEmptyState from "@/pages/superMagic/components/ConversationPanelScaffold/ConversationEmptyState"

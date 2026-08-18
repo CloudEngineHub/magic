@@ -38,6 +38,8 @@ import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import { messagesTransformer } from "../MessageList/utils"
 import { observer } from "mobx-react-lite"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 import FooterLogo from "./components/FooterLogo"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import ResizableDivider from "@/pages/superMagic/components/ResizableDivider"
@@ -48,7 +50,7 @@ import {
 	DEFAULT_MAX_WIDTH,
 	DEFAULT_WIDTH,
 } from "@/pages/superMagic/constants/resizablePanel"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
@@ -1440,7 +1442,14 @@ function Topic({
 					{!isLogined ? (
 						<div
 							className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
-							onClick={() => history.replace({ name: RouteName.Login })}
+							onClick={() =>
+								authEventBus.emit(AuthEventName.RequestLogin, {
+									reason: "manual",
+									source: "share",
+									returnTo: window.location.href,
+									preserveQuery: true,
+								})
+							}
 							data-testid="share-navigation-login-item"
 						>
 							<IconLogin className="size-5" />

@@ -31,7 +31,7 @@ export interface InspectorDetailAttrs {
 
 export interface InspectorDetailOptions {}
 
-declare module "@tiptap/core" {
+declare module "@/infrastructure/editors/tiptap/core" {
 	interface Commands<ReturnType> {
 		inspectorDetail: {
 			insertInspectorDetail: (attrs: InspectorDetailAttrs) => ReturnType

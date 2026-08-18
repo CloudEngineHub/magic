@@ -7,7 +7,7 @@ import {
 	useSupportLanguageOptions,
 	useTheme,
 } from "@/models/config/hooks"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 function LanguageSelect() {
 	const options = useSupportLanguageOptions()

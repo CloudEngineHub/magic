@@ -1,5 +1,5 @@
 import { isObject, merge } from "lodash-es"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { ChatApi, SuperMagicApi } from "@/apis"
 import { EventType } from "@/types/chat"
 import {

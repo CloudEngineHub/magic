@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks"
 import { memo, useMemo, useState, type ReactNode } from "react"
-import type { JSONContent } from "@tiptap/core"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { observer } from "mobx-react-lite"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
@@ -18,7 +18,11 @@ import { isAllowedMention as defaultIsAllowedMention } from "@/pages/superMagic/
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import {
+	projectStore,
+	topicStore,
+	workspaceStore,
+} from "@/pages/superMagic/stores/core"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import projectFilesStore from "@/stores/projectFiles"
 import { UserMessageCollapsibleRichText } from "@/pages/superMagic/components/MessageList/components/UserMessageCollapsibleRichText"

@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
 import { AttachmentSection } from "./sections/AttachmentSection"

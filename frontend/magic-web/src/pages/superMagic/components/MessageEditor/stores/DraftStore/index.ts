@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx"
-import type { JSONContent } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import type { DraftData, DraftKey } from "../../types"
 import type { DataService } from "@/components/business/MentionPanel/types"
 import { draftManager } from "../../services/draftService"

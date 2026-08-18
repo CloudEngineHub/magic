@@ -1,4 +1,4 @@
-import type { Node as TiptapNode } from "@tiptap/core"
+import type { Node as TiptapNode } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"

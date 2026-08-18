@@ -14,7 +14,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import { useLocaleText } from "./hooks/useLocaleText"
 import type { FieldItem, OptionItem } from "./types"

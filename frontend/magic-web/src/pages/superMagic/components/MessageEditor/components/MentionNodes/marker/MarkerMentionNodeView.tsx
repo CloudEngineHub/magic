@@ -1,4 +1,4 @@
-import { NodeViewWrapper } from "@tiptap/react"
+import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import { memo, useCallback, type MouseEvent } from "react"
 import {
 	getMentionDisplayName,

@@ -4,7 +4,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { OverlayZIndexScope } from "@/utils/overlayZIndex/overlayStackManager"
 
 interface SheetRootContextValue {

@@ -16,7 +16,7 @@ import { FilePath } from "./parser/FilePath"
 import { Image } from "./parser/Image"
 import { MarkdownLink, type MarkdownLinkProps } from "./parser/MarkdownLink"
 import { normalizeInlineStyle } from "./normalizeInlineStyle"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MarkdownComponentProps } from "./types"
 import {
 	resolveMarkdownRenderSource,

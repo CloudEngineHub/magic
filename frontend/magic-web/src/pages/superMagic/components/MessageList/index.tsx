@@ -19,7 +19,7 @@ import Empty from "./components/Empty"
 import BackToLatestButton from "./components/BackToLatestButton"
 import MessageListFallback from "./components/MessageListFallback"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { TaskStatus, Topic } from "../../pages/Workspace/types"
 import { useTranslation } from "react-i18next"
 import { IconArrowBackUp, IconChevronsDown, IconChevronsUp } from "@tabler/icons-react"
@@ -81,7 +81,10 @@ interface MessageListProps {
 	className?: string
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
-	handlePullMoreMessage?: (selectedTopic: Topic | null, callback?: () => void) => void
+	handlePullMoreMessage?: (
+		selectedTopic: Topic | null,
+		callback?: () => void,
+	) => void | Promise<unknown>
 	showLoading?: boolean
 	currentTopicStatus?: TaskStatus
 	handleSendMsg?: (content: string, options?: any) => void
@@ -105,6 +108,8 @@ interface MessageListProps {
 	exportTitle?: string
 	/** Optional ref to the ScrollArea viewport (mobile TopicPage scroll coordination). */
 	viewportRef?: Ref<HTMLDivElement | null>
+	/** Distance from the top at which a fresh upward gesture may load one history page. */
+	historyLoadThresholdPx?: number
 	/**
 	 * Top/bottom scroll edge fade on mobile (prototype ChatScreen).
 	 * Pass `false` to disable; default enables on mobile when not share.
@@ -168,6 +173,7 @@ const MessageList = observer(
 		viewportRef,
 		scrollEdgeFade,
 		isMessagesLoading,
+		historyLoadThresholdPx,
 	}: MessageListProps) => {
 		const { t } = useTranslation("super")
 		const isMobile = useIsMobile()
@@ -328,7 +334,8 @@ const MessageList = observer(
 		const isLastMessageError = useMemo(() => {
 			const lastNode = mainDisplayData?.[mainDisplayData?.length - 1]
 			const n = superMagicStore.getMessageNode(lastNode?.super_message_id) as
-				{ status?: TaskStatus } | undefined
+				| { status?: TaskStatus }
+				| undefined
 			return n?.status === TaskStatus.ERROR
 		}, [mainDisplayData])
 
@@ -476,8 +483,9 @@ const MessageList = observer(
 				items: virtualMessageItems,
 				topicKey: currentTopicKey,
 				onPullMore: () => {
-					handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
+					return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
 				},
+				minTopDistance: historyLoadThresholdPx,
 			})
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))

@@ -1,9 +1,9 @@
-import { useEditor, JSONContent } from "@tiptap/react"
-import { Document } from "@tiptap/extension-document"
-import { Paragraph } from "@tiptap/extension-paragraph"
-import { Text } from "@tiptap/extension-text"
+import { useEditor, JSONContent } from "@/infrastructure/editors/tiptap/react"
+import { Document } from "@/infrastructure/editors/tiptap/extension-document"
+import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
+import { Text } from "@/infrastructure/editors/tiptap/extension-text"
 import { useRef, useEffect } from "react"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection } from "@/infrastructure/editors/tiptap/pm-state"
 import {
 	HardBlock,
 	CodeAwarePasteExtension,
@@ -25,7 +25,7 @@ import { Topic } from "../../../pages/Workspace/types"
 import { type TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { ChatApi } from "@/apis"
 import { isEmptyJSONContent } from "../utils"
-import { UndoRedo } from "@tiptap/extensions"
+import { UndoRedo } from "@/infrastructure/editors/tiptap/extensions"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { isAllowedMention as defaultIsAllowedMention } from "../utils/mention"
 import GlobalMentionPanelStore, {

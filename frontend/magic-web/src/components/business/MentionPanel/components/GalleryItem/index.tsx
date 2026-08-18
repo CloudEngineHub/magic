@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from "react"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Check, ChevronRight, FileText, Maximize2 } from "lucide-react"
 import type { I18nTexts } from "../../i18n/types"
 import {

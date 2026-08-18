@@ -1,7 +1,7 @@
 import type { MouseEventHandler } from "react"
 import type { LucideIcon } from "lucide-react"
 import MagicTooltip from "@/components/base/MagicTooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface SelfMediaPostActionButtonProps {
 	label: string
