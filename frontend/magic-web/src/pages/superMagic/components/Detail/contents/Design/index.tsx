@@ -264,8 +264,6 @@ interface DesignViewerProps {
 	}
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
-	/** 独立预览场景传入的项目 ID */
-	projectId?: string
 	/** 是否为话题回放模式 */
 	isPlaybackMode?: boolean
 	allowEdit: boolean
@@ -288,6 +286,7 @@ function DesignViewer(props: DesignViewerProps) {
 		currentFile: currentFileProps,
 		selectedTopic,
 		selectedProject,
+		projectId: projectIdProp,
 		isPlaybackMode = false,
 		allowEdit,
 		showFileHeader,
@@ -620,7 +619,16 @@ function DesignViewer(props: DesignViewerProps) {
 		}
 
 		if (prevDesignProjectBasePathRef.current !== designProjectBasePath) {
-			prevDesignProjectBasePathRef.current = designProjectBasePath
+			const prevPath = prevDesignProjectBasePathRef.current
+			const nextPath = designProjectBasePath
+			// Tab switch can briefly drop attachments/currentFile, which makes the path empty.
+			// That is not a directory rename; keep the last real path and skip reload.
+			if (!prevPath || !nextPath) {
+				if (nextPath) prevDesignProjectBasePathRef.current = nextPath
+				return
+			}
+
+			prevDesignProjectBasePathRef.current = nextPath
 			const taskId = basePathSwitchTaskIdRef.current + 1
 			basePathSwitchTaskIdRef.current = taskId
 			setIsBasePathSwitching(true)
