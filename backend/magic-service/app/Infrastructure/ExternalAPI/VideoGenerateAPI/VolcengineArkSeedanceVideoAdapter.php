@@ -800,12 +800,12 @@ readonly class VolcengineArkSeedanceVideoAdapter implements VideoGenerationConne
                 'name' => __('video.generation.generate_audio.name'),
                 'description' => __('video.generation.generate_audio.description'),
             ],
-            'web_search' => [
+            /*'web_search' => [
                 'type' => 'switch',
                 'default' => false,
                 'name' => __('video.generation.web_search.name'),
                 'description' => __('video.generation.web_search.description'),
-            ],
+            ],*/
         ];
     }
 
