@@ -101,6 +101,13 @@ describe("ChatProjectMessageLayout", () => {
 
 		expect(screen.getByTestId("message-list")).toBeInTheDocument()
 		expect(screen.getByTestId("message-input")).toBeInTheDocument()
+		expect(screen.getByTestId("message-list").parentElement).toHaveClass(
+			"flex",
+			"h-full",
+			"min-h-0",
+			"w-full",
+			"flex-col",
+		)
 		const panels = screen.getAllByTestId("splitter-panel")
 		expect(panels).toHaveLength(2)
 		expect(panels[1]).toHaveAttribute("data-size", "240")

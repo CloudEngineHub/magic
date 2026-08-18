@@ -60,7 +60,8 @@ export default function ChatProjectMessageLayout({
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
 					resizable={!isConversationPanelCollapsed}
 				>
-					{messageList}
+					{/* Keep the message fallback stretched so its flex centering uses the full panel height. */}
+					<div className="flex h-full min-h-0 w-full flex-col">{messageList}</div>
 				</MagicSplitter.Panel>
 				<MagicSplitter.Panel
 					min={inputMinHeight}
