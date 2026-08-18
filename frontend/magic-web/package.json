@@ -275,7 +275,7 @@
 		"pdf-lib": "^1.17.1",
 		"polished": "^4.3.1",
 		"pptx-preview": "^1.0.7",
-		"pptxgenjs": "file:../../../../PptxGenJS",
+		"pptxgenjs": "file:./vendor/pptxgenjs-5.0.0.tgz",
 		"prismjs": "^1.30.0",
 		"prosemirror-model": "^1.25.0",
 		"prosemirror-state": "^1.4.3",

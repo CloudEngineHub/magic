@@ -1,4 +1,5 @@
-import { access, readFile, readdir } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { access, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
@@ -44,6 +45,11 @@ const scanRoots = [
 ]
 
 const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"])
+const expectedPptxGenJs = {
+	name: "pptxgenjs",
+	version: "5.0.0",
+	sourceCommit: "02e9928961c16980a286978753ca269602e3d999",
+}
 const violations = []
 let scannedFiles = 0
 
@@ -155,15 +161,77 @@ async function verifyPackageMetadata() {
 }
 
 async function verifyLocalPptxGenJs(manifestPath, specifier) {
-	const dependencyRoot = path.resolve(path.dirname(manifestPath), specifier.slice("file:".length))
-	const dependencyManifest = path.join(dependencyRoot, "package.json")
-	if (!(await exists(dependencyManifest))) {
-		report(manifestPath, `local PptxGenJS dependency is unavailable: ${dependencyRoot}`)
+	const dependencyPath = path.resolve(path.dirname(manifestPath), specifier.slice("file:".length))
+	if (!isInsideOrEqual(dependencyPath, magicWebRoot)) {
+		report(manifestPath, `local PptxGenJS dependency must stay inside Magic Web: ${dependencyPath}`)
 		return
 	}
-	const dependency = JSON.parse(await readFile(dependencyManifest, "utf8"))
-	if (dependency.name !== "pptxgenjs" || !/^5\./.test(dependency.version ?? "")) {
-		report(dependencyManifest, `local dependency must be pptxgenjs v5; found ${dependency.name}@${dependency.version}`)
+	if (path.extname(dependencyPath) !== ".tgz") {
+		report(manifestPath, `local PptxGenJS dependency must be a vendored .tgz: ${dependencyPath}`)
+		return
+	}
+	if (!(await exists(dependencyPath))) {
+		report(manifestPath, `vendored PptxGenJS tarball is unavailable: ${dependencyPath}`)
+		return
+	}
+	if (!(await stat(dependencyPath)).isFile()) {
+		report(manifestPath, `vendored PptxGenJS dependency is not a file: ${dependencyPath}`)
+		return
+	}
+
+	const resolvedMagicWebRoot = await realpath(magicWebRoot)
+	const resolvedDependencyPath = await realpath(dependencyPath)
+	if (!isInsideOrEqual(resolvedDependencyPath, resolvedMagicWebRoot)) {
+		report(manifestPath, `vendored PptxGenJS tarball resolves outside Magic Web: ${resolvedDependencyPath}`)
+		return
+	}
+
+	const provenancePath = dependencyPath.replace(/\.tgz$/, ".manifest.json")
+	if (!(await exists(provenancePath))) {
+		report(manifestPath, `vendored PptxGenJS manifest is unavailable: ${provenancePath}`)
+		return
+	}
+	if (!(await stat(provenancePath)).isFile()) {
+		report(manifestPath, `vendored PptxGenJS manifest is not a file: ${provenancePath}`)
+		return
+	}
+	const resolvedProvenancePath = await realpath(provenancePath)
+	if (!isInsideOrEqual(resolvedProvenancePath, resolvedMagicWebRoot)) {
+		report(manifestPath, `vendored PptxGenJS manifest resolves outside Magic Web: ${resolvedProvenancePath}`)
+		return
+	}
+
+	let provenance
+	try {
+		provenance = JSON.parse(await readFile(provenancePath, "utf8"))
+	} catch (error) {
+		report(provenancePath, `vendored PptxGenJS manifest is invalid JSON: ${error.message}`)
+		return
+	}
+
+	if (provenance.name !== expectedPptxGenJs.name) {
+		report(provenancePath, `name must be ${expectedPptxGenJs.name}; found ${String(provenance.name)}`)
+	}
+	if (provenance.version !== expectedPptxGenJs.version) {
+		report(provenancePath, `version must be ${expectedPptxGenJs.version}; found ${String(provenance.version)}`)
+	}
+	if (provenance.sourceCommit !== expectedPptxGenJs.sourceCommit) {
+		report(provenancePath, `sourceCommit must be ${expectedPptxGenJs.sourceCommit}; found ${String(provenance.sourceCommit)}`)
+	}
+	if (provenance.artifact !== path.basename(dependencyPath)) {
+		report(
+			provenancePath,
+			`artifact must match ${path.basename(dependencyPath)}; found ${String(provenance.artifact)}`,
+		)
+	}
+	if (!/^[0-9a-f]{64}$/i.test(provenance.sha256 ?? "")) {
+		report(provenancePath, `sha256 must be a 64-character digest; found ${String(provenance.sha256)}`)
+		return
+	}
+
+	const actualSha256 = createHash("sha256").update(await readFile(dependencyPath)).digest("hex")
+	if (actualSha256 !== provenance.sha256.toLowerCase()) {
+		report(provenancePath, `sha256 mismatch: expected ${provenance.sha256}; calculated ${actualSha256}`)
 	}
 }
 
@@ -224,6 +292,11 @@ function report(file, message) {
 function isInside(file, directory) {
 	const relative = path.relative(directory, file)
 	return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+}
+
+function isInsideOrEqual(file, directory) {
+	const relative = path.relative(directory, file)
+	return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }
 
 async function exists(file) {

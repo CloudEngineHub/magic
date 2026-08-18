@@ -15,6 +15,7 @@ COPY package.json ./
 COPY patches ./patches
 COPY plugins ./plugins
 COPY packages ./packages
+COPY vendor ./vendor
 
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 RUN --mount=type=cache,id=node-npm-${NODE_VERSION}-alpine-${TARGETARCH},target=/root/.npm \
