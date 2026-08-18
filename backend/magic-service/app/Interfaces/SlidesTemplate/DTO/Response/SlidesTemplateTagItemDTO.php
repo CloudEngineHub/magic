@@ -137,6 +137,4 @@ class SlidesTemplateTagItemDTO extends AbstractDTO
     {
         $this->name = $name;
     }
-
-    
 }
