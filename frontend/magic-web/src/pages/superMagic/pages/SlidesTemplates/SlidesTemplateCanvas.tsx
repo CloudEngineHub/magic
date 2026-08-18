@@ -52,6 +52,7 @@ interface SlidesTemplateCanvasProps {
 	onLoadMore: () => void
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewOpenChange?: (isOpen: boolean) => void
 	onRetryRefresh?: () => void
 	onTemplateDetailLoad?: (template: OptionItem) => Promise<OptionItem | null>
@@ -82,6 +83,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 			onLoadMore,
 			onFindSimilarColors,
 			onFavoriteToggle,
+			onOpenProject,
 			onPreviewOpenChange,
 			onRetryRefresh,
 			onTemplateDetailLoad,
@@ -506,6 +508,7 @@ const SlidesTemplateCanvas = forwardRef<SlidesTemplateCanvasHandle, SlidesTempla
 				onCanvasClickCapture={handleCanvasClickCapture}
 				onFindSimilarColors={onFindSimilarColors}
 				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewIntent={handlePreviewIntent}
 				onPreviewToggle={handlePreviewToggle}

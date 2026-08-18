@@ -176,6 +176,12 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 					<div className="text-sm text-muted-foreground">
 						{t("fileViewer.slidesTemplateLoadFailedDescription")}
 					</div>
+					<div
+						className="max-w-full break-words rounded-md bg-muted px-3 py-2 text-left text-xs text-muted-foreground"
+						data-testid="slides-template-load-error-detail"
+					>
+						{t("fileViewer.slidesTemplateLoadFailedReason", { reason: error.message })}
+					</div>
 					<Button variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
 						{t("fileViewer.retry")}
 					</Button>

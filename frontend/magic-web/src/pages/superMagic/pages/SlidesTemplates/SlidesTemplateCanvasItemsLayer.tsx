@@ -27,6 +27,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	prioritizeCoverLoading: boolean
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -52,6 +53,7 @@ function SlidesTemplateCanvasItemsLayer({
 	prioritizeCoverLoading,
 	onFindSimilarColors,
 	onFavoriteToggle,
+	onOpenProject,
 	onPreviewClick,
 	onPreviewIntent,
 	onTemplateSelect,
@@ -130,6 +132,7 @@ function SlidesTemplateCanvasItemsLayer({
 					selectedTemplateValue={selectedTemplateValue}
 					onFindSimilarColors={onFindSimilarColors}
 					onFavoriteToggle={onFavoriteToggle}
+					onOpenProject={onOpenProject}
 					onTemplateSelect={onTemplateSelect}
 					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={onPreviewClick}
@@ -161,6 +164,7 @@ function SlidesTemplateCanvasItemsLayer({
 						selectedTemplateValue={selectedTemplateValue}
 						onFindSimilarColors={onFindSimilarColors}
 						onFavoriteToggle={onFavoriteToggle}
+						onOpenProject={onOpenProject}
 						onTemplateSelect={onTemplateSelect}
 						onPreviewIntent={onPreviewIntent}
 						onPreviewClick={onPreviewClick}

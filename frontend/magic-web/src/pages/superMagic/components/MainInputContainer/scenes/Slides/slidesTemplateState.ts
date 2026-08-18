@@ -49,6 +49,12 @@ export interface SlidesTemplateItem {
 	tags?: SlidesTemplateItemTag[]
 	created_at?: string | null
 	updated_at?: string | null
+	project?: SlidesTemplateProjectReference | null
+}
+
+export interface SlidesTemplateProjectReference {
+	id: string
+	directory_id: string
 }
 
 export interface SlidesTemplateItemTag extends OptionItemTag {
@@ -491,6 +497,7 @@ export function toTemplateOption(template: SlidesTemplateItem, options?: { isFea
 		sort: template.sort,
 		colors: template.colors ?? [],
 		tags: template.tags ?? [],
+		project: template.project ?? null,
 		preview_title: {
 			zh_CN: `${resolveSlidesTemplateText(template.label, "zh_CN")}预览`,
 			en_US: `${resolveSlidesTemplateText(template.label, "en_US")} Preview`,

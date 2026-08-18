@@ -92,6 +92,10 @@ export interface OptionItem {
 	sort?: number
 	colors?: string[]
 	tags?: OptionItemTag[]
+	project?: {
+		id: string
+		directory_id: string
+	} | null
 }
 
 export interface OptionItemTag {

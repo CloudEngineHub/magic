@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import SlidesTemplateRootRender from "../index"
 
 const mocks = vi.hoisted(() => ({
@@ -24,10 +24,17 @@ vi.mock("@/components/base/MagicSpin", () => ({
 
 vi.mock("react-i18next", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react-i18next")>()),
-	useTranslation: () => ({ t: (key: string) => key }),
+	useTranslation: () => ({
+		t: (key: string, options?: { reason?: string }) =>
+			options?.reason ? `${key}: ${options.reason}` : key,
+	}),
 }))
 
 describe("SlidesTemplateRootRender", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
 	it("loads template.json and passes a slide model to PPTRootRender", async () => {
 		mocks.getFileContentById.mockResolvedValue(
 			JSON.stringify({
@@ -82,5 +89,37 @@ describe("SlidesTemplateRootRender", () => {
 				}),
 			)
 		})
+	})
+
+	it("shows the manifest error that prevented the template from loading", async () => {
+		mocks.getFileContentById.mockResolvedValue(
+			JSON.stringify({
+				version: "1.0.0",
+				files: { entry_html: "slides/cover.html" },
+				slides: [],
+			}),
+		)
+
+		render(
+			<SlidesTemplateRootRender
+				data={
+					{
+						file_id: "root",
+						file_name: "PPT-template",
+						is_directory: true,
+						children: [
+							{ file_id: "manifest", file_name: "template.json" },
+							{ file_id: "spec", file_name: "visual-spec.md" },
+							{ file_id: "theme", file_name: "theme.css" },
+							{ file_id: "slides-dir", file_name: "slides", is_directory: true },
+						],
+					} as never
+				}
+			/>,
+		)
+
+		expect(await screen.findByTestId("slides-template-load-error-detail")).toHaveTextContent(
+			"Unsupported template schema",
+		)
 	})
 })

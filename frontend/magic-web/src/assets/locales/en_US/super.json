@@ -2416,6 +2416,7 @@
 		"slideIsBeingDeleted": "This slide is being deleted",
 		"slidesTemplateLoadFailed": "Unable to open PPT template",
 		"slidesTemplateLoadFailedDescription": "Check template.json and the slide files in the slides directory.",
+		"slidesTemplateLoadFailedReason": "Reason: {reason}",
 		"sortSlides": "Sort Pages",
 		"sortSlidesCancel": "Cancel",
 		"sortSlidesFailed": "Update failed",
@@ -4081,6 +4082,8 @@
 		},
 		"loadFailedDescription": "Unable to load My templates. Try again.",
 		"loading": "Loading My templates",
+		"openProject": "Open source project",
+		"openProjectFailed": "Unable to open source project. Try again later.",
 		"retry": "Retry",
 		"saveDialog": {
 			"create": "Save as a new template",

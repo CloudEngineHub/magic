@@ -28,6 +28,7 @@ interface SlidesTemplateCanvasLoopColumnProps {
 	items: SlidesTemplateCanvasColumnItem[]
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -48,6 +49,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 	items,
 	onFindSimilarColors,
 	onFavoriteToggle,
+	onOpenProject,
 	onPreviewClick,
 	onPreviewIntent,
 	onTemplateSelect,
@@ -191,6 +193,7 @@ export default function SlidesTemplateCanvasLoopColumn({
 				selectedTemplateValue={selectedTemplateValue}
 				onFindSimilarColors={onFindSimilarColors}
 				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onTemplateSelect={onTemplateSelect}
 				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={onPreviewClick}

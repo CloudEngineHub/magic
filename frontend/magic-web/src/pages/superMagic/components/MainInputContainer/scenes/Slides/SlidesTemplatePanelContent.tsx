@@ -22,6 +22,7 @@ import MySlidesTemplatesEmptyState from "@/pages/superMagic/pages/SlidesTemplate
 import MySlidesTemplatesTabIcon from "./MySlidesTemplatesTabIcon"
 import MySlidesTemplatesGroupTabs from "@/pages/superMagic/pages/SlidesTemplates/MySlidesTemplatesGroupTabs"
 import magicToast from "@/components/base/MagicToaster/utils"
+import SuperMagicService from "@/pages/superMagic/services"
 
 interface SlidesTemplatePanelContentProps {
 	slidesState: SlidesTemplatePanelState
@@ -59,6 +60,8 @@ function SlidesTemplatePanelContent({
 	const isComposingRef = useRef(false)
 	const selectedGroupKey = slidesState.selectedGroupKey
 	const isMyTemplatesSelected = selectedGroupKey === MY_SLIDES_TEMPLATES_GROUP_KEY
+	const shouldShowSourceProjectEntry =
+		isMyTemplatesSelected && slidesState.myTemplatesActiveSection === "created"
 	const selectorGroups = showMyTemplates
 		? slidesState.groups
 		: slidesState.groups.filter((group) => group.group_key !== MY_SLIDES_TEMPLATES_GROUP_KEY)
@@ -102,6 +105,21 @@ function SlidesTemplatePanelContent({
 				})
 		},
 		[slidesState, tSuper],
+	)
+	const handleOpenProject = useCallback(
+		(template: OptionItem) => {
+			const project = template.project
+			if (!project?.id || !project.directory_id) return
+
+			void SuperMagicService.switchProjectById(project.id, undefined, undefined, {
+				slidesTemplateProjectId: project.id,
+				slidesTemplateDirectoryId: project.directory_id,
+			}).catch((error) => {
+				console.error("Failed to open slides template source project", error)
+				magicToast.error(tSuper("mySlidesTemplates.openProjectFailed"))
+			})
+		},
+		[tSuper],
 	)
 	const handlePrimaryGroupChange = useCallback(
 		(groupKey: string) => {
@@ -312,6 +330,7 @@ function SlidesTemplatePanelContent({
 					selectedTemplate={selectedTemplate ?? undefined}
 					onTemplateClick={onTemplateClick}
 					onFavoriteToggle={handleFavoriteToggle}
+					onOpenProject={shouldShowSourceProjectEntry ? handleOpenProject : undefined}
 					favoritePendingCodes={slidesState.favoritePendingCodes}
 					isLoading={slidesState.isLoading}
 					isRefreshing={slidesState.isRefreshing}

@@ -44,6 +44,7 @@ interface SlidesTemplateCanvasTileItemProps {
 	loopState?: SlidesTemplateCanvasTileLoopState
 	onFindSimilarColors?: (template: OptionItem) => void
 	onFavoriteToggle?: (template: OptionItem) => void
+	onOpenProject?: (template: OptionItem) => void
 	onPreviewClick: (anchorTileId: string, tile: SlidesTemplateCanvasTile) => void
 	onPreviewIntent?: (template: OptionItem) => void
 	onTemplateSelect: (template: OptionItem) => void
@@ -67,6 +68,7 @@ function SlidesTemplateCanvasTileItem({
 	loopState,
 	onFindSimilarColors,
 	onFavoriteToggle,
+	onOpenProject,
 	onPreviewClick,
 	onPreviewIntent,
 	onTemplateSelect,
@@ -102,6 +104,7 @@ function SlidesTemplateCanvasTileItem({
 				favoritePending={favoritePending}
 				onFindSimilarColors={onFindSimilarColors}
 				onFavoriteToggle={onFavoriteToggle}
+				onOpenProject={onOpenProject}
 				onSelect={onTemplateSelect}
 				onPreviewIntent={onPreviewIntent}
 				onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
@@ -123,6 +126,7 @@ function SlidesTemplateCanvasTileItem({
 					favoritePending={favoritePending}
 					onFindSimilarColors={onFindSimilarColors}
 					onFavoriteToggle={onFavoriteToggle}
+					onOpenProject={onOpenProject}
 					onSelect={onTemplateSelect}
 					onPreviewIntent={onPreviewIntent}
 					onPreviewClick={() => onPreviewClick(anchorTileId, tile)}
