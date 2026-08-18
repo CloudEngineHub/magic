@@ -39,6 +39,10 @@ class VideoCompositionCapability:
             str(task.payload.get("output_file_name") or f"composition-{task.task_id}.mp4")
         )
         relative_output_path = f"./videos/{output_file_name}"
+        workspace_relative_output_path = self._build_workspace_relative_output_path(
+            project_path,
+            relative_output_path,
+        )
         await update_status(SandboxTaskStatus.RUNNING)
         video_paths = [self._resolve_media_path(project_path, source) for source in input_spec.video_sources]
         audio_path = self._resolve_media_path(project_path, input_spec.audio_source) if input_spec.audio_source else None
@@ -60,7 +64,7 @@ class VideoCompositionCapability:
             # 本地开发时文件可能尚未有 MagicFS xattr，路径仍然可用于本地调试。
             file_url = None
         return {
-            "file_path": relative_output_path,
+            "file_path": workspace_relative_output_path,
             "file_url": file_url,
             "width": result.width,
             "height": result.height,
@@ -85,6 +89,17 @@ class VideoCompositionCapability:
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("Media source must be project-relative")
         return project_path / relative
+
+    @staticmethod
+    def _build_workspace_relative_output_path(project_path: Path, output_path: str) -> str:
+        """构造包含项目目录的 workspace-relative 输出路径。"""
+        workspace_dir = PathManager.get_workspace_dir().resolve()
+        project_relative_path = project_path.resolve().relative_to(workspace_dir).as_posix()
+        project_relative_path = project_relative_path.strip('/')
+        output_relative_path = output_path.removeprefix('./').lstrip('/')
+        if project_relative_path:
+            return f"./{project_relative_path}/{output_relative_path}"
+        return f"./{output_relative_path}"
 
     @staticmethod
     def _normalize_output_file_name(file_name: str) -> str:
