@@ -64,6 +64,7 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
+import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../core/BaseElement"
@@ -102,6 +103,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
+	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
 
 	// 生成相关
 	private isGenerating: boolean = false
@@ -407,6 +409,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
+		this.mainVersionTagDecorator?.destroy()
+		this.mainVersionTagDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -427,6 +431,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.pollingManager.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
+		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
@@ -552,6 +557,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
+		this.mainVersionTagDecorator?.refreshLayout()
 		const src = this.getActiveContentData().src
 		if (src) {
 			this.canvas.visibilityManager.registerImageElement(this.data.id, src)
@@ -2310,6 +2316,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
+			this.createMainVersionTag(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2368,6 +2375,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
+			this.createMainVersionTag(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2480,6 +2488,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
+			this.createMainVersionTag(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2515,6 +2524,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用预加载好的图片对象
 		if (!this.loadedImage) {
+			this.createMainVersionTag(group, width, height)
 			this.finalizeNode(group)
 			return group
 		}
@@ -2540,6 +2550,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.createBorder(group, width, height, false)
 
 		this.createCornerActions(group, width, height, { fullscreen: true })
+		this.createMainVersionTag(group, width, height)
 
 		this.finalizeNode(group)
 		return group
@@ -2612,6 +2623,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
+			this.createMainVersionTag(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2685,6 +2697,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return !!this.getActiveGenerateImageRequest()
 	}
 
+	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
+		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+		})
+		this.mainVersionTagDecorator.create()
+	}
+
 	private shouldShowFullscreenButton(): boolean {
 		return !!this.getActiveContentData().src
 	}
@@ -2728,6 +2750,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.updateContentScale(width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.mainVersionTagDecorator?.updateConfig({ width, height, data: this.data })
 		this.updateClipRegion(width, height)
 		this.node.getLayer()?.batchDraw()
 	}

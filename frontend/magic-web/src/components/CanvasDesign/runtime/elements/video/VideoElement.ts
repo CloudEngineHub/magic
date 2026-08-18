@@ -28,6 +28,7 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
+import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { TransformContext } from "../core/BaseElement"
 import {
@@ -73,6 +74,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
+	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
 	public isGenerating = false
 	private isLoadingState = false
 	private isInlinePlaybackPending = false
@@ -177,6 +179,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.destroy()
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
+		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.removeRetryEditingListeners()
 		this.removeVideoResourceRefreshedListener()
@@ -195,6 +198,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator = undefined
 		this.cornerActionsDecorator?.destroy()
 		this.cornerActionsDecorator = undefined
+		this.mainVersionTagDecorator?.destroy()
+		this.mainVersionTagDecorator = undefined
 		return super.rerender()
 	}
 
@@ -904,6 +909,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		this.syncRenderLayout(this.data.width, this.data.height)
+		this.mainVersionTagDecorator?.refreshLayout()
 		const src = this.getVideoSrc()
 		if (src) {
 			this.canvas.visibilityManager.registerVideoElement(this.data.id, src)
@@ -995,6 +1001,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
+		this.createMainVersionTag(group, width, height)
 		this.setupContentUpdateListener(group)
 	}
 
@@ -1056,6 +1063,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
+				this.createMainVersionTag(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -1074,6 +1082,16 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+	}
+
+	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
+		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+			canvas: this.canvas,
+			width,
+			height,
+			data: this.data,
+		})
+		this.mainVersionTagDecorator.create()
 	}
 
 	private setupRetryEditingListeners(): void {
@@ -1377,6 +1395,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.renderer.updatePlayerLayout(this.node, width, height)
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
+		this.mainVersionTagDecorator?.updateConfig({ width, height, data: this.data })
 		this.node.getLayer()?.batchDraw()
 	}
 
