@@ -496,6 +496,10 @@ export class ConnectionManager {
 			this.hitTester.invalidateElements([event.data.elementId])
 			this.rerenderNow()
 		}
+		const clearHoverAndRerender = () => {
+			this.renderer.clearHover()
+			this.rerenderNow()
+		}
 		const scheduleTransformRerender = (event: { data: { elementIds?: string[] } }) => {
 			this.scheduleRerender({
 				invalidateElementIds: event.data.elementIds,
@@ -531,6 +535,8 @@ export class ConnectionManager {
 			this.canvas.eventEmitter.on("connection:change", rerenderAfterConnectionChange),
 			this.canvas.eventEmitter.on("document:loaded", rerender),
 			this.canvas.eventEmitter.on("document:restored", rerender),
+			this.canvas.eventEmitter.on("canvas:readonly", clearHoverAndRerender),
+			this.canvas.eventEmitter.on("tool:change", clearHoverAndRerender),
 			this.canvas.eventEmitter.on("canvas:clear", clearSelection),
 			this.canvas.eventEmitter.on(
 				"element:select",
