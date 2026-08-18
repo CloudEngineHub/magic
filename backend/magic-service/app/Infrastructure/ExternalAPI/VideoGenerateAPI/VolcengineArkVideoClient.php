@@ -36,36 +36,41 @@ readonly class VolcengineArkVideoClient
 
     public function post(string $baseUrl, string $apiKey, string $path, array $payload, array $logContext = []): array
     {
-        return $this->requestJson(
+        return $this->handleRequestException(
+            fn () => $this->requestJson(
+                'post',
+                $baseUrl,
+                $apiKey,
+                $path,
+                ['json' => $payload],
+                $logContext,
+            ),
             'post',
             $baseUrl,
-            $apiKey,
             $path,
-            ['json' => $payload],
             $logContext,
         );
     }
 
     public function get(string $baseUrl, string $apiKey, string $path, array $logContext = []): array
     {
-        return $this->requestJson(
+        return $this->handleRequestException(
+            fn () => $this->requestJson(
+                'get',
+                $baseUrl,
+                $apiKey,
+                $path,
+                [],
+                $logContext,
+            ),
             'get',
             $baseUrl,
-            $apiKey,
             $path,
-            [],
             $logContext,
         );
     }
 
-    private function createClient(): Client
-    {
-        return $this->clientFactory->create([
-            'timeout' => self::REQUEST_TIMEOUT_SECONDS,
-        ]);
-    }
-
-    private function requestJson(
+    public function requestJson(
         string $method,
         string $baseUrl,
         string $apiKey,
@@ -86,19 +91,54 @@ readonly class VolcengineArkVideoClient
             'payload' => is_array($options['json'] ?? null) ? PayloadLogSanitizer::sanitizeValue($options['json']) : null,
         ]);
 
+        $requestOptions = array_merge([
+            'headers' => [
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type' => 'application/json',
+            ],
+        ], $options);
+        $response = match ($method) {
+            'post' => $this->createClient()->post($normalizedBaseUrl . $normalizedPath, $requestOptions),
+            'get' => $this->createClient()->get($normalizedBaseUrl . $normalizedPath, $requestOptions),
+            default => throw ProviderVideoException::nonRetriable(sprintf('unsupported volcengine ark video method %s', $method)),
+        };
+        $data = Json::decode((string) $response->getBody());
+
+        $this->logger->info('volcengine ark video response', [
+            'method' => $method,
+            'base_url' => $normalizedBaseUrl,
+            'path' => $normalizedPath,
+            'context' => $sanitizedLogContext,
+            'http_status' => $response->getStatusCode(),
+            'provider_request_id' => $response->getHeaderLine('x-tt-logid'),
+            'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
+            'response' => PayloadLogSanitizer::sanitizeValue($data),
+        ]);
+
+        return $data;
+    }
+
+    private function createClient(): Client
+    {
+        return $this->clientFactory->create([
+            'timeout' => self::REQUEST_TIMEOUT_SECONDS,
+        ]);
+    }
+
+    private function handleRequestException(
+        callable $request,
+        string $method,
+        string $baseUrl,
+        string $path,
+        array $logContext,
+    ): array {
+        $normalizedBaseUrl = rtrim($baseUrl, '/');
+        $normalizedPath = '/' . ltrim($path, '/');
+        $startedAt = microtime(true);
+        $sanitizedLogContext = PayloadLogSanitizer::sanitizeValue($logContext);
+
         try {
-            $requestOptions = array_merge([
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $apiKey,
-                    'Content-Type' => 'application/json',
-                ],
-            ], $options);
-            $response = match ($method) {
-                'post' => $this->createClient()->post($normalizedBaseUrl . $normalizedPath, $requestOptions),
-                'get' => $this->createClient()->get($normalizedBaseUrl . $normalizedPath, $requestOptions),
-                default => throw ProviderVideoException::nonRetriable(sprintf('unsupported volcengine ark video method %s', $method)),
-            };
-            $data = Json::decode((string) $response->getBody());
+            return $request();
         } catch (RequestException $exception) {
             $response = $exception->getResponse();
             $errorMessage = trim((string) $response?->getBody());
@@ -112,20 +152,10 @@ readonly class VolcengineArkVideoClient
                 'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
                 'error' => $errorMessage,
             ]);
-
-            // 如果id没有找到，则需要返回异常
-            try {
-                $errorMessageArr = Json::decode($errorMessage);
-                if (in_array($httpStatus, [404, 400]) || in_array($errorMessageArr['error']['code'] ?? '', ['ResourceNotFound', 'InvalidParameter'])) {
-                    $errorMessageArr['status'] = 'error';
-                    return $errorMessageArr;
-                }
-            } catch (Throwable $throwable) {
-            }
-
             throw ProviderVideoException::retriable(
                 $this->formatRequestExceptionMessage($errorMessage),
                 $exception,
+                $httpStatus
             );
         } catch (ProviderVideoException $exception) {
             throw $exception;
@@ -145,23 +175,6 @@ readonly class VolcengineArkVideoClient
                 $throwable,
             );
         }
-
-        if (! is_array($data)) {
-            throw ProviderVideoException::retriable(sprintf('volcengine ark video %s returned invalid json', $method));
-        }
-
-        $this->logger->info('volcengine ark video response', [
-            'method' => $method,
-            'base_url' => $normalizedBaseUrl,
-            'path' => $normalizedPath,
-            'context' => $sanitizedLogContext,
-            'http_status' => $response->getStatusCode(),
-            'provider_request_id' => $response->getHeaderLine('x-tt-logid'),
-            'elapsed_ms' => $this->calculateElapsedMilliseconds($startedAt),
-            'response' => PayloadLogSanitizer::sanitizeValue($data),
-        ]);
-
-        return $data;
     }
 
     private function calculateElapsedMilliseconds(float $startedAt): int
