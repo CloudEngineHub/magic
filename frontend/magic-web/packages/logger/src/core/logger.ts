@@ -1,4 +1,4 @@
-import type { ILogger, ILoggerConfig, IProvider, ProviderType } from "./types"
+import type { ILogger, ILoggerConfig, IProvider, IUserInfo, ProviderType } from "./types"
 
 /**
  * Logger 主类
@@ -50,6 +50,10 @@ class Logger implements ILogger {
 		return this.provider?.setConfig(config)
 	}
 
+	setUser(user: IUserInfo): void {
+		this.provider?.setUser?.(user)
+	}
+
 	// setConfig(config: Partial<ILoggerConfig>): void {
 	// 	this.config = { ...this.config, ...config } as ILoggerConfig
 	//
@@ -81,6 +85,8 @@ class Logger implements ILogger {
 				return (await import("../providers/volcengine")).VolcengineProvider
 			case "Aliyun":
 				return (await import("../providers/aliyun")).AliyunProvider
+			case "DataFlux":
+				return (await import("../providers/dataflux")).DataFluxProvider
 			default:
 				return (await import("../providers/magic")).MagicProvider
 		}

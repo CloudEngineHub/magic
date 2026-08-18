@@ -25,9 +25,11 @@ export type {
 	LogLevel,
 } from "./core/types"
 
-export type { IVolcengineConfig, IAliyunConfig, ProviderConfig } from "./config/types"
+export type {
+	IVolcengineConfig,
+	IAliyunConfig,
+	IDataFluxConfig,
+	ProviderConfig,
+} from "./config/types"
 
-// Provider 导出
-// 会导致动态导入失效
-// export { VolcengineProvider } from "./providers/volcengine"
-// export { AliyunProvider } from "./providers/aliyun"
+// Provider 通过 Logger 动态加载，避免把可选的 SDK 依赖提升为主入口依赖。
