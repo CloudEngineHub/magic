@@ -11,7 +11,12 @@ interface ChatProjectMessageLayoutProps {
 	input: ReactNode
 	isConversationPanelCollapsed: boolean
 	scope?: string
+	/** Allow callers with extra input controls to raise the shared minimum height. */
+	inputMinHeight?: number
 }
+
+/** Preserve the existing minimum for conversation layouts without extra controls. */
+const DEFAULT_INPUT_MIN_HEIGHT = 200
 
 /** Arrange project conversation content while sharing the desktop input height state machine. */
 export default function ChatProjectMessageLayout({
@@ -19,6 +24,7 @@ export default function ChatProjectMessageLayout({
 	input,
 	isConversationPanelCollapsed,
 	scope = "topic-page",
+	inputMinHeight = DEFAULT_INPUT_MIN_HEIGHT,
 }: ChatProjectMessageLayoutProps) {
 	const layoutRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLDivElement>(null)
@@ -27,6 +33,7 @@ export default function ChatProjectMessageLayout({
 		enabled: !isConversationPanelCollapsed,
 		containerRef: inputRef,
 		availableRef: layoutRef,
+		minHeight: inputMinHeight,
 		...CONVERSATION_INPUT_HEIGHT_CONFIG,
 	})
 	const inputLayoutContext = useMemo(
@@ -56,7 +63,7 @@ export default function ChatProjectMessageLayout({
 					{messageList}
 				</MagicSplitter.Panel>
 				<MagicSplitter.Panel
-					min={200}
+					min={inputMinHeight}
 					size={inputHeight.effectiveHeight}
 					max={inputHeight.maxHeight}
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
@@ -74,7 +81,7 @@ export default function ChatProjectMessageLayout({
 							<div className="absolute inset-x-2 top-0 mx-auto h-2 max-w-3xl">
 								<ConversationInputResizeHandle
 									value={inputHeight.effectiveHeight}
-									min={200}
+									min={inputMinHeight}
 									max={inputHeight.maxHeight}
 									onResizeStart={inputHeight.startPointerResize}
 									onResize={inputHeight.resizeByPointerDelta}

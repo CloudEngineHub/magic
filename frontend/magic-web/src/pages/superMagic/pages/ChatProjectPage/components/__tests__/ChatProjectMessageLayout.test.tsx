@@ -114,10 +114,15 @@ describe("ChatProjectMessageLayout", () => {
 		)
 		expect(inputHeightMocks.useConversationInputHeight).toHaveBeenCalledWith(
 			expect.objectContaining({
+				minHeight: 200,
 				maxRatio: 0.5,
 				manualMaxRatio: 0.7,
 				manualMinAvailableHeight: 240,
 			}),
+		)
+		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveAttribute(
+			"aria-valuemin",
+			"200",
 		)
 
 		fireEvent.click(screen.getByRole("button", { name: "resize-start" }))
@@ -126,6 +131,28 @@ describe("ChatProjectMessageLayout", () => {
 		expect(inputHeightMocks.onSplitterResizeStart).toHaveBeenCalledWith([480, 320])
 		expect(inputHeightMocks.onSplitterResize).toHaveBeenCalledWith([460, 340])
 		expect(inputHeightMocks.onSplitterResizeEnd).toHaveBeenCalledWith([440, 360])
+	})
+
+	// Verify one caller-provided value reaches the controller, panel boundary, and grab handle.
+	it("uses the caller-provided minimum for the full input height chain", () => {
+		render(
+			<ChatProjectMessageLayout
+				messageList={<div>messages</div>}
+				input={<div data-testid="message-input">editor</div>}
+				isConversationPanelCollapsed={false}
+				inputMinHeight={260}
+			/>,
+		)
+
+		const panels = screen.getAllByTestId("splitter-panel")
+		expect(panels[1]).toHaveAttribute("data-min", "260")
+		expect(screen.getByTestId("conversation-input-resize-handle")).toHaveAttribute(
+			"aria-valuemin",
+			"260",
+		)
+		expect(inputHeightMocks.useConversationInputHeight).toHaveBeenCalledWith(
+			expect.objectContaining({ minHeight: 260 }),
+		)
 	})
 
 	it("restores automatic sizing only when the Splitter bar is double-clicked", () => {
