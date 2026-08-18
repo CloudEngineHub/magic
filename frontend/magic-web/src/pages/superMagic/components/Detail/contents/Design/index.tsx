@@ -288,7 +288,6 @@ function DesignViewer(props: DesignViewerProps) {
 		currentFile: currentFileProps,
 		selectedTopic,
 		selectedProject,
-		projectId: projectIdProp,
 		isPlaybackMode = false,
 		allowEdit,
 		showFileHeader,
