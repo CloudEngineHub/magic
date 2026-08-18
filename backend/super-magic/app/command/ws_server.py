@@ -185,6 +185,15 @@ async def lifespan(app: FastAPI):
     # 执行启动时残留文件清理检查
     await cleanup_stale_files_on_startup()
 
+    # 恢复通用沙箱任务，避免服务重启后丢失页面提交的合成任务。
+    try:
+        from app.service.sandbox_task.task_manager import SandboxTaskManager
+        from app.api.routes.sandbox_tasks import _run_capability
+        recovered = await SandboxTaskManager.instance().recover(_run_capability)
+        logger.info("通用沙箱任务恢复完成: {}", recovered)
+    except Exception as e:
+        logger.error("通用沙箱任务恢复失败: {}", e)
+
     logger.info(f"HTTP API服务将监听端口：{get_api_port()}")
     try:
         yield

@@ -55,10 +55,13 @@ class DesignVideoAppService extends DesignAppService
     {
         $designDataIsolation = $this->createDesignDataIsolation($authenticatable);
         $project = $this->assertProjectAccess($designDataIsolation, $entity->getProjectId(), MemberRole::EDITOR);
-        $modelDefinition = $this->findModelOrFail($entity->getModelId());
-        $outputDirectory = $this->assertWorkspacePathsExist($project->getId(), $entity);
-        // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
-        $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+        $modelDefinition = null;
+        if (! $entity->isCanvasComposition()) {
+            $modelDefinition = $this->findModelOrFail($entity->getModelId());
+            $outputDirectory = $this->assertWorkspacePathsExist($project->getId(), $entity);
+            // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
+            $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+        }
 
         $existingEntity = $this->designGenerationTaskDomainService->findVideoTask($designDataIsolation, $project->getId(), $entity->getGenerationId());
         if ($existingEntity !== null) {
@@ -72,7 +75,9 @@ class DesignVideoAppService extends DesignAppService
             $entity->getGenerationId()
         );
         // 先在请求体里写入能力开关，后续 builder 就能无状态地选择图片输入格式。
-        $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelDefinition);
+        if ($modelDefinition !== null) {
+            $requestPayload[self::REQUEST_KEY_SUPPORTS_IMAGE_INPUT_URL] = $this->supportsImageInputUrl($modelDefinition);
+        }
         $entity->setOrganizationCode($designDataIsolation->getCurrentOrganizationCode());
         $entity->setUserId($designDataIsolation->getCurrentUserId());
         $entity->setRequestPayload($requestPayload);
@@ -350,6 +355,14 @@ class DesignVideoAppService extends DesignAppService
                     )[0]['url'] ?? null
                 );
             } else {
+                if ($entity->isCanvasComposition()) {
+                    // 合成文件已由共享沙箱写入，MagicFS 文件索引可能稍后才可见；不要把暂时未索引误判为失败。
+                    $providerUrl = trim((string) ($entity->getOutputPayload()['provider_video_url'] ?? ''));
+                    if ($providerUrl !== '') {
+                        $entity->setFileUrl($providerUrl);
+                    }
+                    return;
+                }
                 $entity->setStatus(DesignGenerationStatus::FAILED);
                 $entity->setErrorMessage('Generated video file not found');
             }

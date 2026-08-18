@@ -109,15 +109,20 @@ class DesignGenerationTaskEntity extends AbstractEntity
 
     public function prepareForCreate(): void
     {
-        foreach ([
+        $requiredFields = [
             self::FIELD_ORGANIZATION_CODE => $this->organizationCode,
             self::FIELD_USER_ID => $this->userId,
             self::FIELD_PROJECT_ID => $this->projectId,
             self::FIELD_GENERATION_ID => $this->generationId,
-            self::FIELD_MODEL_ID => $this->modelId,
-            self::FIELD_PROMPT => $this->prompt,
-            self::FIELD_FILE_DIR => $this->fileDir,
-        ] as $label => $value) {
+        ];
+        if ($this->generationType !== DesignGenerationType::CANVAS_COMPOSITION) {
+            $requiredFields += [
+                self::FIELD_MODEL_ID => $this->modelId,
+                self::FIELD_PROMPT => $this->prompt,
+                self::FIELD_FILE_DIR => $this->fileDir,
+            ];
+        }
+        foreach ($requiredFields as $label => $value) {
             if ($value === '' || $value === 0) {
                 ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.empty', ['label' => $label]);
             }
@@ -148,6 +153,12 @@ class DesignGenerationTaskEntity extends AbstractEntity
     public function hasOperationId(): bool
     {
         return $this->getOperationId() !== '';
+    }
+
+    /** 判断是否为画布合成业务任务。 */
+    public function isCanvasComposition(): bool
+    {
+        return $this->generationType === DesignGenerationType::CANVAS_COMPOSITION;
     }
 
     public function getOperationId(): string

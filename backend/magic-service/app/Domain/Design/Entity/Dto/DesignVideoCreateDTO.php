@@ -9,6 +9,7 @@ namespace App\Domain\Design\Entity\Dto;
 
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
+use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -35,6 +36,8 @@ class DesignVideoCreateDTO extends AbstractDTO
     protected ?int $projectId = null;
 
     protected string $videoId = '';
+
+    protected string $generationType = '';
 
     protected string $modelId = '';
 
@@ -102,6 +105,19 @@ class DesignVideoCreateDTO extends AbstractDTO
     public function getVideoId(): string
     {
         return $this->videoId;
+    }
+
+    /** 获取视频业务生成类型。 */
+    public function getGenerationType(): string
+    {
+        return $this->generationType;
+    }
+
+    /** 设置视频业务生成类型。 */
+    public function setGenerationType(mixed $generationType): void
+    {
+        $value = is_string($generationType) ? trim($generationType) : '';
+        $this->generationType = DesignGenerationType::tryFrom($value)?->value ?? '';
     }
 
     public function setVideoId(mixed $videoId): void
@@ -342,17 +358,21 @@ class DesignVideoCreateDTO extends AbstractDTO
         if ($this->videoId === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'video_id is required');
         }
-        if ($this->modelId === '') {
+        $isCanvasComposition = $this->generationType === DesignGenerationType::CANVAS_COMPOSITION->value;
+        if (! $isCanvasComposition && $this->modelId === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::MODEL_NOT_SUPPORT);
         }
         if (! VideoTaskType::isValid($this->task)) {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'task is invalid');
         }
-        if ($this->prompt === '') {
+        if (! $isCanvasComposition && $this->prompt === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'prompt is required');
         }
-        if ($this->fileDir === '') {
+        if (! $isCanvasComposition && $this->fileDir === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'file_dir is required');
+        }
+        if ($this->generationType !== '' && DesignGenerationType::tryFrom($this->generationType) === null) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'generation_type is invalid');
         }
 
         foreach (self::TOP_LEVEL_ARRAY_FIELDS as $field) {
@@ -385,6 +405,25 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertGenerationFields();
         $this->assertCallbackAndExecutionFields();
         $this->assertExtensionFields();
+    }
+
+    /** 校验画布合成任务的业务字段，避免把页面请求误交给 Provider。 */
+    public function validForCanvasComposition(): void
+    {
+        if (($this->projectId ?? 0) <= 0 || $this->videoId === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'project_id and video_id are required');
+        }
+        if ($this->generationType !== DesignGenerationType::CANVAS_COMPOSITION->value) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'generation_type is invalid');
+        }
+        if ($this->topicId === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'topic_id is required');
+        }
+        $projectPath = trim((string) ($this->extensions['project_path'] ?? ''));
+        $videoEditElementId = trim((string) ($this->extensions['video_edit_element_id'] ?? ''));
+        if ($projectPath === '' || $videoEditElementId === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition project_path and video_edit_element_id are required');
+        }
     }
 
     /**
@@ -533,6 +572,7 @@ class DesignVideoCreateDTO extends AbstractDTO
     {
         $this->setProjectId($data['project_id'] ?? null);
         $this->setVideoId($data['video_id'] ?? null);
+        $this->setGenerationType($data['generation_type'] ?? null);
         $this->setModelId($data['model_id'] ?? null);
         $this->setTopicId($data['topic_id'] ?? null);
         $this->setTaskId($data['task_id'] ?? null);

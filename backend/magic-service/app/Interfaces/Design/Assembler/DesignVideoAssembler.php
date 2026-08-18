@@ -21,7 +21,11 @@ final class DesignVideoAssembler
 {
     public static function toDO(DesignVideoCreateDTO $dto): DesignGenerationTaskEntity
     {
-        DesignVideoInputPayloadPreparer::sanitizeDtoForCreate($dto);
+        if ($dto->getGenerationType() === DesignGenerationType::CANVAS_COMPOSITION->value) {
+            $dto->validForCanvasComposition();
+        } else {
+            DesignVideoInputPayloadPreparer::sanitizeDtoForCreate($dto);
+        }
         return DesignGenerationTaskFactory::createVideoTask($dto);
     }
 
@@ -37,6 +41,7 @@ final class DesignVideoAssembler
         $dto->setType(match ($entity->getGenerationType()) {
             DesignGenerationType::TEXT_TO_VIDEO => VideoGenerationType::TEXT_TO_VIDEO->value,
             DesignGenerationType::IMAGE_TO_VIDEO => VideoGenerationType::IMAGE_TO_VIDEO->value,
+            DesignGenerationType::CANVAS_COMPOSITION => null,
         });
         $dto->setStatus($entity->getStatus()->value);
         $dto->setErrorMessage($entity->getStatus()->value === 'failed' ? $entity->getErrorMessage() : null);
@@ -65,6 +70,7 @@ final class DesignVideoAssembler
         $outputPayload = $entity->getOutputPayload();
 
         return [
+            'generation_type' => $entity->getGenerationType()->value,
             'task' => self::stringValue($requestPayload['task'] ?? null),
             'input_mode' => self::stringValue($requestPayload['input_mode'] ?? null),
             'aspect_ratio' => self::stringValue($generation['aspect_ratio'] ?? null),

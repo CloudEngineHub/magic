@@ -126,6 +126,7 @@ class VideoCompositionService:
         result_name: str,
         result_element_id: Optional[str],
         relative_output_path: str,
+        result_content_id: Optional[str] = None,
     ) -> CompositionPreparation:
         """重新校验输入并创建独立 processing Video Content。"""
         input_spec = self.inspect_inputs(canvas, video_edit_element_id)
@@ -159,16 +160,20 @@ class VideoCompositionService:
                 raise ValueError(f"Result Element is not a Video Element: {element.id}")
             element.properties["name"] = result_name
             self._set_output_dimensions(element, input_spec)
-            content_id = CanvasIdGenerator.generate_content_id(
-                element.id,
-                [content.content_id for content in element.contents],
-            )
-            ContentService.append_content(
-                element,
-                ElementContent(content_id=content_id, fields={"status": "processing"}),
-                activate=True,
-                set_main_when_empty=True,
-            )
+            existing_content = element.get_content(result_content_id) if result_content_id else None
+            if existing_content is not None and existing_content.fields.get("status") == "processing":
+                content_id = existing_content.content_id
+            else:
+                content_id = CanvasIdGenerator.generate_content_id(
+                    element.id,
+                    [content.content_id for content in element.contents],
+                )
+                ContentService.append_content(
+                    element,
+                    ElementContent(content_id=content_id, fields={"status": "processing"}),
+                    activate=True,
+                    set_main_when_empty=True,
+                )
         VideoProductionRelationService.synchronize_incoming(
             canvas,
             element.id,

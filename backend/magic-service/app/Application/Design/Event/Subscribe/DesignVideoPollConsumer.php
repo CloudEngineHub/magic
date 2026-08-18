@@ -15,6 +15,7 @@ use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Factory\PathFactory;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
+use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
@@ -56,6 +57,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
         private readonly ProjectDomainService $projectDomainService,
         private readonly DesignGeneratedVideoFileNameTool $generatedVideoFileNameTool,
         private readonly LoggerInterface $logger,
+        private readonly ?DesignVideoSubmissionDomainService $submissionDomainService = null,
     ) {
     }
 
@@ -109,10 +111,12 @@ class DesignVideoPollConsumer extends ConsumerMessage
         }
 
         try {
-            $result = $this->videoGatewayClient->queryVideo($operationId, [
-                'organization_code' => $entity->getOrganizationCode(),
-                'user_id' => $entity->getUserId(),
-            ]);
+            $result = $entity->isCanvasComposition()
+                ? ($this->submissionDomainService ?? di(DesignVideoSubmissionDomainService::class))->query($dataIsolation, $entity)
+                : $this->videoGatewayClient->queryVideo($operationId, [
+                    'organization_code' => $entity->getOrganizationCode(),
+                    'user_id' => $entity->getUserId(),
+                ]);
         } catch (BusinessException $exception) {
             $this->handleQueryFailure($dataIsolation, $entity, $msg, $exception);
             return Result::ACK;
@@ -166,6 +170,9 @@ class DesignVideoPollConsumer extends ConsumerMessage
         }
 
         try {
+            if ($entity->isCanvasComposition() && $this->completeCanvasComposition($dataIsolation, $entity, $result)) {
+                return Result::ACK;
+            }
             $this->archiveFiles($dataIsolation, $entity, $result);
         } catch (Throwable $throwable) {
             $this->logger->error('design video poll archive failed', [
@@ -187,6 +194,36 @@ class DesignVideoPollConsumer extends ConsumerMessage
         }
 
         return Result::ACK;
+    }
+
+    /**
+     * 画布合成结果已经写入共享工作区，不重复上传；仅记录路径供文件同步和查询使用。
+     */
+    private function completeCanvasComposition(
+        DesignDataIsolation $dataIsolation,
+        DesignGenerationTaskEntity $entity,
+        array $result,
+    ): bool {
+        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
+        $relativePath = trim((string) ($output['video_path'] ?? ''), '/');
+        if ($relativePath === '') {
+            return false;
+        }
+
+        // Super Magic 返回的是项目相对路径（通常带 ./ 前缀），Design 任务统一保存为 /videos/... 形式。
+        $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
+        $relativePath = '/' . ltrim($relativePath, '/');
+        $fileName = basename($relativePath);
+        $entity->setFileDir('/' . trim((string) dirname($relativePath), '/'));
+        $this->domainService->markAsCompleted($dataIsolation, $entity, [
+            'relative_file_path' => $relativePath,
+            'provider_video_url' => (string) ($output['video_url'] ?? ''),
+            'duration_seconds' => $output['duration_seconds'] ?? null,
+            'resolution' => (string) ($output['resolution'] ?? ''),
+            'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
+            'archive_skipped_reason' => 'sandbox_workspace_output',
+        ], $fileName);
+        return true;
     }
 
     /**

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\Design\RequestForm;
 
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
+use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
 use Hyperf\Validation\Request\FormRequest;
 
 class GenerateVideoFormRequest extends FormRequest
@@ -58,13 +59,17 @@ class GenerateVideoFormRequest extends FormRequest
         return [
             'project_id' => 'required|integer|min:' . self::MAX_PROJECT_ID,
             'video_id' => 'required|string|max:' . self::MAX_VIDEO_ID_LENGTH,
-            'model_id' => 'required|string|max:' . self::MAX_MODEL_ID_LENGTH,
+            'generation_type' => 'nullable|string|in:' . implode(',', array_map(
+                static fn (DesignGenerationType $type): string => $type->value,
+                DesignGenerationType::cases()
+            )),
+            'model_id' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_MODEL_ID_LENGTH,
             'topic_id' => 'nullable|string|max:' . self::MAX_CONTEXT_ID_LENGTH,
             'task_id' => 'nullable|string|max:' . self::MAX_CONTEXT_ID_LENGTH,
             'task' => 'nullable|string|in:' . $taskValues . '|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'input_mode' => 'nullable|string|in:' . $inputModes . '|max:' . self::MAX_OPTION_TEXT_LENGTH,
-            'prompt' => 'required|string|max:' . self::MAX_PROMPT_LENGTH,
-            'file_dir' => 'required|string|max:' . self::MAX_FILE_DIR_LENGTH,
+            'prompt' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_PROMPT_LENGTH,
+            'file_dir' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_FILE_DIR_LENGTH,
             'file_name' => 'nullable|string|max:' . self::MAX_FILE_NAME_LENGTH,
             'inputs' => 'nullable|array',
             'inputs.frames' => 'nullable|array|max:' . self::MAX_FRAME_COUNT,
@@ -114,6 +119,10 @@ class GenerateVideoFormRequest extends FormRequest
             'execution.service_tier' => 'nullable|string|in:' . $serviceTiers . '|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'execution.expires_after_seconds' => 'nullable|integer|min:1',
             'extensions' => 'nullable|array',
+            'extensions.capability' => 'nullable|string|max:' . self::MAX_SHORT_TEXT_LENGTH,
+            'extensions.project_path' => 'nullable|string|max:1000',
+            'extensions.video_edit_element_id' => 'nullable|string|max:128',
+            'extensions.output_file_name' => 'nullable|string|max:255',
         ];
     }
 }

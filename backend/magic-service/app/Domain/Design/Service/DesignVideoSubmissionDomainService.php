@@ -9,6 +9,8 @@ namespace App\Domain\Design\Service;
 
 use App\Domain\Design\Contract\VideoGatewayPayloadBuilderInterface;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
+use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
+use App\Domain\Design\Entity\DesignDataIsolation;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -20,6 +22,7 @@ readonly class DesignVideoSubmissionDomainService
     public function __construct(
         private VideoGatewayPayloadBuilderInterface $payloadBuilder,
         private VideoGatewayClientInterface $videoGatewayClient,
+        private ?DesignCanvasCompositionSubmissionService $canvasCompositionService = null,
     ) {
     }
 
@@ -30,6 +33,13 @@ readonly class DesignVideoSubmissionDomainService
      */
     public function submit(DesignGenerationTaskEntity $entity): array
     {
+        if ($entity->getGenerationType() === DesignGenerationType::CANVAS_COMPOSITION) {
+            $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
+            return $service->submit(
+                DesignDataIsolation::create($entity->getOrganizationCode(), $entity->getUserId()),
+                $entity,
+            );
+        }
         try {
             $result = $this->videoGatewayClient->submitVideo(
                 $this->payloadBuilder->build($entity),
@@ -64,6 +74,20 @@ readonly class DesignVideoSubmissionDomainService
             'poll_attempts' => 0,
             'deadline_at' => date(DATE_ATOM, time() + (int) config('design_generation.video_poll.timeout_seconds', 3600)),
         ];
+    }
+
+    /** 查询 Design 视频任务对应的业务执行器。 */
+    public function query(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): array
+    {
+        if ($entity->getGenerationType() === DesignGenerationType::CANVAS_COMPOSITION) {
+            $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
+            return $service->query($dataIsolation, $entity);
+        }
+
+        return $this->videoGatewayClient->queryVideo($entity->getOperationId(), [
+            'organization_code' => $entity->getOrganizationCode(),
+            'user_id' => $entity->getUserId(),
+        ]);
     }
 
     public function estimate(array $payload, array $businessParams): array
