@@ -190,7 +190,7 @@ export function createStreamingPackagingWorkerHandler(
 			}
 			if (typeof presentation.beginStreaming !== "function") {
 				throw new Error(
-					"PptxGenJS beginStreaming() is unavailable; install the Phase 3 patched runtime or inject a streaming presentation factory",
+					"PptxGenJS v5 beginStreaming() is unavailable; use the streaming-only runtime or inject a streaming presentation factory",
 				)
 			}
 			session = await presentation.beginStreaming({
