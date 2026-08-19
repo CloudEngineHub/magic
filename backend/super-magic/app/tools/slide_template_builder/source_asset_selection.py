@@ -48,7 +48,7 @@ AssetType = Literal[
 
 
 class SourceAssetDecisionParams(BaseModel):
-    asset: str = Field(..., description="Asset identifier from source-analysis.json asset_catalog[].asset.")
+    asset: str = Field(..., description="Public catalog id such as asset-01, or a legacy asset_catalog[].asset path.")
     decision: AssetDecision
     asset_type: AssetType
     quality: AssetQuality
@@ -94,8 +94,9 @@ Template directory previously prepared by prepare_slide_template_source.""",
     )
     decisions: list[SourceAssetDecisionParams] = Field(
         ...,
-        description="""<!--zh: 对 asset_catalog 中每个素材的完整审核决策。必须覆盖全部素材。-->
-Complete review decisions covering every asset in asset_catalog exactly once.""",
+        min_length=1,
+        description="""<!--zh: 本次要写入的素材审核决策。可分批调用，asset 必须使用 asset_catalog[].id（如 asset-01）。-->
+One batch of review decisions. Repeat the call until every catalog asset is decided. Use exact asset_catalog[].id values such as asset-01, not document-converter filenames.""",
     )
 
     @field_validator("template_dir")
@@ -105,6 +106,64 @@ Complete review decisions covering every asset in asset_catalog exactly once."""
         if not value:
             raise ValueError("template_dir is required")
         return value
+
+
+def _catalog_lookups(
+    catalog: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, str], dict[str, list[str]], dict[str, str]]:
+    by_asset: dict[str, dict[str, Any]] = {}
+    by_source_file: dict[str, str] = {}
+    by_basename: dict[str, list[str]] = {}
+    by_id: dict[str, str] = {}
+    for item in catalog:
+        if not isinstance(item, dict):
+            continue
+        asset = item.get("asset")
+        if not isinstance(asset, str) or not asset:
+            continue
+        by_asset[asset] = item
+        source_file = item.get("source_file")
+        if isinstance(source_file, str) and source_file:
+            by_source_file[source_file] = asset
+        by_basename.setdefault(Path(asset).name, []).append(asset)
+        public_id = item.get("id")
+        if isinstance(public_id, str) and public_id:
+            by_id[public_id] = asset
+    return by_asset, by_source_file, by_basename, by_id
+
+
+def _resolve_decision_asset(
+    raw: str,
+    by_asset: dict[str, dict[str, Any]],
+    by_source_file: dict[str, str],
+    by_basename: dict[str, list[str]],
+    by_id: dict[str, str],
+) -> str | None:
+    if raw in by_id:
+        return by_id[raw]
+    candidates = [raw]
+    prefix = f"{ANALYSIS_DIR_NAME}/"
+    if raw.startswith(prefix):
+        candidates.append(raw[len(prefix):])
+    for key in candidates:
+        if key in by_asset:
+            return key
+        if key in by_source_file:
+            return by_source_file[key]
+    matches = by_basename.get(Path(raw).name, [])
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _catalog_ref(item: dict[str, Any]) -> str:
+    return str(item.get("id") or item.get("asset") or "")
+
+
+def _format_asset_ids(asset_ids: list[str], limit: int = 20) -> str:
+    preview = asset_ids[:limit]
+    suffix = "" if len(asset_ids) <= limit else f", ... ({len(asset_ids) - limit} more)"
+    return ", ".join(preview) + suffix
 
 
 def _resolve_source_asset(work_dir: Path, relative_path: str) -> Path:
@@ -142,55 +201,67 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
             if not isinstance(catalog, list):
                 raise SlideTemplateBuilderError("source-analysis.json asset_catalog must be an array.")
 
-            catalog_by_asset = {
-                item.get("asset"): item
-                for item in catalog
-                if isinstance(item, dict) and isinstance(item.get("asset"), str)
-            }
+            catalog_by_asset, catalog_by_source_file, catalog_by_basename, catalog_by_id = _catalog_lookups(catalog)
             if len(catalog_by_asset) != len(catalog):
                 raise SlideTemplateBuilderError(
                     "source-analysis.json asset_catalog contains invalid or duplicate asset identifiers."
                 )
-            decision_by_asset = {item.asset: item for item in params.decisions}
-            if len(decision_by_asset) != len(params.decisions):
-                raise SlideTemplateBuilderError("Each source asset must have exactly one decision.")
-            missing = sorted(set(catalog_by_asset) - set(decision_by_asset))
-            unknown = sorted(set(decision_by_asset) - set(catalog_by_asset))
-            if missing or unknown:
-                details = []
-                if missing:
-                    details.append("missing decisions: " + ", ".join(missing))
-                if unknown:
-                    details.append("unknown assets: " + ", ".join(unknown))
-                raise SlideTemplateBuilderError("Asset decisions must exactly cover asset_catalog; " + "; ".join(details))
+            resolved_decisions: dict[str, SourceAssetDecisionParams] = {}
+            unknown: list[str] = []
+            for item in params.decisions:
+                resolved = _resolve_decision_asset(
+                    item.asset,
+                    catalog_by_asset,
+                    catalog_by_source_file,
+                    catalog_by_basename,
+                    catalog_by_id,
+                )
+                if resolved is None:
+                    unknown.append(item.asset)
+                    continue
+                if resolved in resolved_decisions:
+                    raise SlideTemplateBuilderError("Each source asset must have exactly one decision.")
+                resolved_decisions[resolved] = item
+            if unknown:
+                expected_ids = [_catalog_ref(item) for item in catalog if isinstance(item, dict)]
+                raise SlideTemplateBuilderError(
+                    "Asset decisions must use exact asset_catalog[].id identifiers; unknown assets: "
+                    + ", ".join(unknown)
+                    + "; expected catalog asset ids: "
+                    + _format_asset_ids(expected_ids)
+                )
 
-            selected_names = [item.target_name for item in params.decisions if item.decision == "reuse"]
-            if len(selected_names) != len(set(selected_names)):
-                raise SlideTemplateBuilderError("Reused source assets must use unique target_name values.")
-
-            source_paths = {}
-            for asset_name, catalog_item in catalog_by_asset.items():
-                decision = decision_by_asset[asset_name]
+            for asset_name, decision in resolved_decisions.items():
+                catalog_item = catalog_by_asset[asset_name]
                 source_file = str(catalog_item.get("source_file") or "")
                 source_path = _resolve_source_asset(work_dir, source_file)
                 if not await async_is_file(source_path):
                     raise SlideTemplateBuilderError(f"Extracted source asset is missing: {source_file}")
-                source_extension = Path(asset_name).suffix.lower()
+                source_extension = Path(str(catalog_item.get("asset") or asset_name)).suffix.lower()
                 target_extension = Path(decision.target_name or "").suffix.lower()
                 if decision.decision == "reuse" and source_extension != target_extension:
                     raise SlideTemplateBuilderError(
-                        f"target_name must keep the original extension for {asset_name}: {source_extension}"
+                        f"target_name must keep the original extension for {_catalog_ref(catalog_item)}: {source_extension}"
                     )
-                source_paths[asset_name] = source_path
 
-            if await async_exists(final_assets_dir):
-                await async_rmtree(final_assets_dir)
-            await async_mkdir(final_assets_dir, parents=True, exist_ok=False)
+            selected_names = [
+                item.target_name
+                for item in resolved_decisions.values()
+                if item.decision == "reuse"
+            ]
+            existing_selected_names = [
+                str(item.get("target_name") or "")
+                for asset_name, item in catalog_by_asset.items()
+                if asset_name not in resolved_decisions
+                and item.get("decision") == "reuse"
+                and item.get("target_name")
+            ]
+            all_selected_names = selected_names + existing_selected_names
+            if len(all_selected_names) != len(set(all_selected_names)):
+                raise SlideTemplateBuilderError("Reused source assets must use unique target_name values.")
 
-            selected_files = []
-            discarded_assets = []
-            for asset_name, catalog_item in catalog_by_asset.items():
-                decision = decision_by_asset[asset_name]
+            for asset_name, decision in resolved_decisions.items():
+                catalog_item = catalog_by_asset[asset_name]
                 catalog_item.update({
                     "decision": decision.decision,
                     "asset_type": decision.asset_type,
@@ -200,13 +271,28 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
                     "target_name": decision.target_name,
                     "final_file": None,
                 })
-                if decision.decision == "reuse":
-                    final_file = f"images/source-assets/{decision.target_name}"
-                    await async_copy2(source_paths[asset_name], template_dir / final_file)
+
+            if await async_exists(final_assets_dir):
+                await async_rmtree(final_assets_dir)
+            await async_mkdir(final_assets_dir, parents=True, exist_ok=False)
+
+            selected_files = []
+            discarded_assets = []
+            pending_assets = []
+            for asset_name, catalog_item in catalog_by_asset.items():
+                decision_name = str(catalog_item.get("decision") or "pending")
+                if decision_name == "reuse":
+                    target_name = str(catalog_item.get("target_name") or "")
+                    source_file = str(catalog_item.get("source_file") or "")
+                    final_file = f"images/source-assets/{target_name}"
+                    await async_copy2(_resolve_source_asset(work_dir, source_file), template_dir / final_file)
                     catalog_item["final_file"] = final_file
                     selected_files.append(final_file)
+                elif decision_name == "discard":
+                    catalog_item["final_file"] = None
+                    discarded_assets.append(_catalog_ref(catalog_item))
                 else:
-                    discarded_assets.append(asset_name)
+                    pending_assets.append(_catalog_ref(catalog_item))
 
             await async_write_json(analysis_file, analysis, ensure_ascii=False, indent=2)
             data = {
@@ -214,14 +300,24 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
                 "template_directory": str(template_dir),
                 "selected_files": selected_files,
                 "discarded_assets": discarded_assets,
+                "pending_assets": pending_assets,
                 "selected_count": len(selected_files),
                 "discarded_count": len(discarded_assets),
+                "pending_count": len(pending_assets),
                 "source_analysis": str(analysis_file),
             }
+            pending_note = ""
+            if pending_assets:
+                pending_note = (
+                    f" Pending {len(pending_assets)} asset(s) still need a decision: "
+                    + _format_asset_ids(pending_assets)
+                    + ". Call select_slide_template_source_assets again with those exact catalog ids."
+                )
             return ToolResult(
                 content=(
-                    f"Source asset review completed: selected {len(selected_files)} asset(s) and discarded "
-                    f"{len(discarded_assets)} asset(s). Reference every selected file from final HTML or CSS."
+                    f"Source asset review updated: selected {len(selected_files)} asset(s) and discarded "
+                    f"{len(discarded_assets)} asset(s).{pending_note} "
+                    "Reference every selected file from final HTML or CSS."
                 ),
                 data=data,
                 extra_info=data,
@@ -275,6 +371,7 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
                 "",
                 f"- Selected: {data.get('selected_count', 0)}",
                 f"- Discarded: {data.get('discarded_count', 0)}",
+                f"- Pending: {data.get('pending_count', 0)}",
                 f"- Final files: {', '.join(data.get('selected_files', [])) or '-'}",
             ])
         else:

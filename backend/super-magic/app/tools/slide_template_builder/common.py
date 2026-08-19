@@ -34,10 +34,39 @@ SCAFFOLD_MARKER = "slide-template-scaffold"
 WORK_DIR_NAME = ".template-work"
 RUNTIME_CAPABILITY_NAME = "slide-template-maker"
 ANALYSIS_DIR_NAME = "source-analysis"
+CONVERTER_DIR_NAME = "converter"
 SOURCE_ANALYSIS_FILE = "source-analysis.json"
 RECONSTRUCTION_MODES = {"high-fidelity", "template-abstraction", "hybrid"}
 TEMPLATE_WORK_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
 TEMPLATE_WORK_MAX_ENTRIES = 16
+
+
+def public_asset_id(index: int) -> str:
+    return f"asset-{index:02d}"
+
+
+def recommended_review_indexes(slide_count: int) -> list[int]:
+    if slide_count <= 0:
+        return []
+    if slide_count <= 4:
+        return list(range(1, slide_count + 1))
+    indexes = {1, slide_count // 3, (2 * slide_count) // 3, slide_count}
+    indexes.discard(0)
+    return sorted(indexes)
+
+
+def unreviewed_source_indexes(slides: list[Any]) -> list[int]:
+    indexes: list[int] = []
+    for position, slide in enumerate(slides, 1):
+        if not isinstance(slide, dict):
+            indexes.append(position)
+            continue
+        source_index = slide.get("source_index")
+        index = source_index if isinstance(source_index, int) and source_index > 0 else position
+        visual = slide.get("visual_analysis")
+        if not isinstance(visual, dict) or visual.get("status") != "complete":
+            indexes.append(index)
+    return indexes
 
 
 @dataclass(frozen=True)
@@ -71,6 +100,11 @@ def resolve_template_working_directory(template_dir: Path, template_id: str) -> 
     if not normalized_id:
         raise SlideTemplateBuilderError("template_id is required to resolve the working directory.")
     return resolve_runtime_root(template_dir.parent) / RUNTIME_CAPABILITY_NAME / normalized_id
+
+
+def resolve_template_converter_output_dir(work_dir: Path) -> Path:
+    """Place PPTX conversion artifacts beside template authoring state, outside the workspace."""
+    return work_dir / CONVERTER_DIR_NAME
 
 
 async def evict_stale_template_working_directories(
@@ -385,6 +419,7 @@ async def _validate_source_analysis(
 
     must_preserve_count = 0
     visual_element_count = 0
+    unreviewed = []
     for index, slide in enumerate(analysis_slides, 1):
         if not isinstance(slide, dict):
             raise SlideTemplateBuilderError(f"Source analysis slide {index} must be an object.")
@@ -399,8 +434,10 @@ async def _validate_source_analysis(
             if not crop_file or not await async_exists(_resolve_analysis_artifact(work_dir, crop_file)):
                 raise SlideTemplateBuilderError(f"Source analysis crop is missing for slide {index}.")
         visual = slide.get("visual_analysis")
+        source_index = slide.get("source_index") if isinstance(slide.get("source_index"), int) else index
         if not isinstance(visual, dict) or visual.get("status") != "complete":
-            raise SlideTemplateBuilderError(f"Source visual analysis is incomplete for slide {index}.")
+            unreviewed.append(source_index)
+            continue
         must_preserve = visual.get("must_preserve")
         visual_elements = visual.get("visual_elements")
         style_tokens = visual.get("style_tokens")
@@ -414,10 +451,19 @@ async def _validate_source_analysis(
         visual_element_count += len(visual_elements)
 
     capture = analysis.get("capture") if isinstance(analysis.get("capture"), dict) else {}
+    warnings = [str(item) for item in analysis.get("warnings")] if isinstance(analysis.get("warnings"), list) else []
+    if unreviewed:
+        warnings.append(
+            "Unreviewed source pages: "
+            + ", ".join(str(item) for item in unreviewed)
+            + ". Call review_slide_template_source with those source_indexes."
+        )
     return {
         "completed": True,
         "reconstruction_mode": mode,
         "source_slide_count": len(analysis_slides),
+        "reviewed_slide_count": len(analysis_slides) - len(unreviewed),
+        "unreviewed_source_indexes": unreviewed,
         "must_preserve_count": must_preserve_count,
         "visual_element_count": visual_element_count,
         "pptx_structure_extracted": bool(capture.get("pptx_structure")),
@@ -425,7 +471,7 @@ async def _validate_source_analysis(
         "selected_source_asset_count": selected_asset_count,
         "discarded_source_asset_count": discarded_asset_count,
         "selected_source_files": selected_source_files,
-        "warnings": analysis.get("warnings") if isinstance(analysis.get("warnings"), list) else [],
+        "warnings": warnings,
     }
 
 

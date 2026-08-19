@@ -83,6 +83,10 @@
         "zh_CN": "筛选模板原始素材",
         "en_US": "Select slide template source assets"
     },
+    "review_slide_template_source": {
+        "zh_CN": "回顾模板源页视觉",
+        "en_US": "Review slide template source pages"
+    },
     "install_slides_template": {
         "zh_CN": "安装幻灯片模板",
         "en_US": "Install slide template"

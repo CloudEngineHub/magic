@@ -15,7 +15,7 @@ Passing schema validation is necessary but not sufficient. A finished template m
 
 ## Scene Page Inventory
 
-Use these as starting points, then adapt to the source:
+Use these as starting points for reusable/`hybrid` templates, then adapt to the source. High-fidelity templates follow the source page inventory minus junk pages.
 
 | Scene | Recommended layouts |
 | --- | --- |

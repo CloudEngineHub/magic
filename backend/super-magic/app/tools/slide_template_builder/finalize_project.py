@@ -139,6 +139,13 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
             manifest_path = template_dir / "template-assets.json"
             await async_write_json(manifest_path, manifest, ensure_ascii=False, indent=2)
 
+            summary = validated.source_analysis_summary if isinstance(validated.source_analysis_summary, dict) else {}
+            warnings = summary.get("warnings") if isinstance(summary.get("warnings"), list) else []
+            unreviewed = (
+                summary.get("unreviewed_source_indexes")
+                if isinstance(summary.get("unreviewed_source_indexes"), list)
+                else []
+            )
             data = {
                 "template_id": validated.metadata["template_id"],
                 "category_code": validated.metadata["category_code"],
@@ -152,12 +159,22 @@ class FinalizeSlideTemplate(WorkspaceTool[FinalizeSlideTemplateParams]):
                 "slide_count": len(preview_images.slide_paths),
                 "removed_temporary_paths": removed_temporary_paths,
                 "zip_created": False,
+                "warnings": warnings,
+                "unreviewed_source_indexes": unreviewed,
             }
+            warning_note = f" Warnings: {' '.join(str(item) for item in warnings)}" if warnings else ""
+            unreviewed_note = (
+                f" Unreviewed source indexes: {', '.join(str(item) for item in unreviewed)}."
+                if unreviewed
+                else ""
+            )
             return ToolResult(
                 content=(
                     f"Slide template finalized: {len(preview_images.slide_paths)} slides rendered. "
                     f"Preview assets and source files are together under `{template_dir}`. "
                     f"Removed {len(removed_temporary_paths)} temporary work path(s). No ZIP was created."
+                    f"{warning_note}{unreviewed_note} "
+                    "Compare `previews/slides/` with the source pages before reporting completion."
                 ),
                 data=data,
                 extra_info=data,

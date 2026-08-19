@@ -25,7 +25,7 @@ Do not turn the entire project into a cleaned copy of the original deck.
 
 ## 3. Create A Standalone Template
 
-Plan the extracted page inventory, then call `create_slide_template_project` to create a new `<semantic-template-name>/` directory at the workspace root; never create it inside the source project or under a `slide-templates/` prefix. Put temporary copied pages, asset candidates, and inspection output under the returned `working_directory`.
+Plan the extracted page inventory, then call `create_slide_template_project` to create a new `<semantic-template-name>/` directory at the workspace root; never create it inside the source project or under a `slide-templates/` prefix. Later tools only need `template_dir`.
 
 - Rewrite source-specific text into realistic neutral sample content.
 - Move reusable visual rules into `theme.css` and document them in `visual-spec.md`.
@@ -47,7 +47,7 @@ Ask before keeping any logo, real person, customer image, internal screenshot, p
 
 - Confirm the source project is unchanged.
 - Confirm the template contains the required source files plus the generated `previews/` and `template-assets.json` sidecars after finalization.
-- Confirm the temporary working directory and leftover `.template-work/` are absent after successful finalization.
+- Confirm the template directory contains no leftover `.template-work/`.
 - Confirm repeated pages were reduced to meaningful layouts.
 - Confirm all local asset references resolve.
 - Run the structural and sampled visual checks from `quality-guidelines.md`.

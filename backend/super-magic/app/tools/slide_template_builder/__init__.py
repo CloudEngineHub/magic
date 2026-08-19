@@ -4,10 +4,12 @@ from app.tools.slide_template_builder.create_project import CreateSlideTemplateP
 from app.tools.slide_template_builder.finalize_project import FinalizeSlideTemplate
 from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplateSource
 from app.tools.slide_template_builder.source_asset_selection import SelectSlideTemplateSourceAssets
+from app.tools.slide_template_builder.source_review import ReviewSlideTemplateSource
 
 __all__ = [
     "CreateSlideTemplateProject",
     "FinalizeSlideTemplate",
     "PrepareSlideTemplateSource",
+    "ReviewSlideTemplateSource",
     "SelectSlideTemplateSourceAssets",
 ]

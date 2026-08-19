@@ -21,6 +21,8 @@ from app.tools.slide_template_builder.common import (
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
     ensure_template_working_directory,
+    public_asset_id,
+    recommended_review_indexes,
     resolve_template_working_directory,
     resolve_workspace_template_dir,
     validate_template_directory,
@@ -172,6 +174,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
 
             structure = None
             presentation_canvas = None
+            structure_warning = None
             if params.source_presentation:
                 presentation_path = self.resolve_path(params.source_presentation).resolve(strict=False)
                 if not await async_is_file(presentation_path):
@@ -180,8 +183,14 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     raise SlideTemplateBuilderError(
                         "source_presentation must be an OOXML presentation. Convert legacy PPT to PPTX first."
                     )
-                structure = await asyncio.to_thread(extract_pptx_structure, presentation_path)
-                presentation_canvas = TemplateCanvas.model_validate(structure.metadata["normalized_canvas"])
+                try:
+                    structure = await asyncio.to_thread(extract_pptx_structure, presentation_path)
+                    presentation_canvas = TemplateCanvas.model_validate(structure.metadata["normalized_canvas"])
+                except Exception as exc:
+                    structure_warning = (
+                        "PPTX structure extraction failed; continue from rendered page images. "
+                        f"Details: {exc}"
+                    )
 
             if await async_exists(analysis_root):
                 await async_rmtree(analysis_root)
@@ -299,6 +308,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     if not source_slides:
                         asset_metadata["quality_flags"].append("not-linked-from-slide-shapes")
                     asset_catalog.append({
+                        "id": public_asset_id(len(asset_catalog) + 1),
                         "source_file": f"{ANALYSIS_DIR_NAME}/{asset.relative_path}",
                         "asset": asset.relative_path,
                         "sha256": asset.sha256,
@@ -318,6 +328,8 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 extracted_asset_count = len(structure.assets)
 
             warnings = list(canvas_warnings)
+            if structure_warning:
+                warnings.append(structure_warning)
             if structure_slide_count is not None and structure_slide_count != len(slide_records):
                 warnings.append(
                     f"Rendered page count ({len(slide_records)}) differs from PPTX slide count ({structure_slide_count})."
@@ -340,6 +352,8 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             }
             await async_write_json(analysis_file, manifest, ensure_ascii=False, indent=2)
 
+            review_indexes = recommended_review_indexes(len(slide_records))
+            public_ids = [str(item.get("id") or "") for item in asset_catalog if item.get("id")]
             data = {
                 "template_directory": str(template_dir),
                 "working_directory": str(work_dir),
@@ -352,6 +366,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "detail_crop_count": len(slide_records) * params.crop_columns * params.crop_rows,
                 "extracted_asset_count": extracted_asset_count,
                 "asset_catalog": asset_catalog,
+                "recommended_review_indexes": review_indexes,
                 "asset_analysis_batches": [
                     asset_analysis_paths[index:index + 8]
                     for index in range(0, len(asset_analysis_paths), 8)
@@ -359,14 +374,27 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "analysis_batches": analysis_batches,
                 "warnings": warnings,
             }
+            catalog_note = f" Catalog ids: {', '.join(public_ids)}. " if public_ids else ""
+            review_note = (
+                f"Recommended review pages: {', '.join(str(index) for index in review_indexes)}. "
+                "Call review_slide_template_source with 1-3 of those source_indexes per call. "
+            )
+            select_note = (
+                "Then call select_slide_template_source_assets with those catalog ids, not converter filenames. "
+                if extracted_asset_count
+                else "No extracted assets to select. "
+            )
             return ToolResult(
                 content=(
                     f"Slide template source prepared for {len(slide_records)} page(s) in {params.reconstruction_mode} mode. "
                     f"Canvas: {detected_canvas.width}x{detected_canvas.height}. "
-                    f"Extracted {extracted_asset_count} source asset candidate(s) for review. "
+                    f"Extracted {extracted_asset_count} source asset candidate(s)."
+                    + catalog_note
+                    + review_note
+                    + select_note
                     + (f"Warnings: {' '.join(warnings)} " if warnings else "")
-                    + "Analyze every page, crop, and asset, "
-                    "then call select_slide_template_source_assets before authoring when candidates exist."
+                    + "Later tools only need template_dir. Do not write source-analysis.json "
+                    "or create .template-work inside the template directory."
                 ),
                 data=data,
                 extra_info=data,

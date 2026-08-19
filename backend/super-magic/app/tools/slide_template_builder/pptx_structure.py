@@ -184,6 +184,73 @@ def _table_value(shape: Any) -> dict[str, Any] | None:
     }
 
 
+def _related_picture_blob(shape: Any) -> tuple[bytes | None, str, str | None]:
+    """Read picture bytes when python-pptx cannot expose an ImagePart."""
+    try:
+        pic = getattr(shape, "_pic", None)
+        r_id = pic.blip_rId if pic is not None else None
+        if not r_id:
+            return None, "bin", None
+        part = shape.part.related_part(r_id)
+        blob = getattr(part, "blob", None)
+        if blob is None:
+            return None, "bin", None
+        partname = str(getattr(part, "partname", "") or "")
+        extension = Path(partname).suffix.lower().lstrip(".") or "bin"
+        content_type = getattr(part, "content_type", None)
+        return blob, extension, str(content_type) if content_type else None
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None, "bin", None
+
+
+def _picture_crop(shape: Any) -> dict[str, float] | None:
+    try:
+        return {
+            "left": float(shape.crop_left),
+            "right": float(shape.crop_right),
+            "top": float(shape.crop_top),
+            "bottom": float(shape.crop_bottom),
+        }
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _picture_value(
+    shape: Any,
+    asset_paths: dict[str, str],
+    asset_blobs: dict[str, bytes],
+) -> dict[str, Any] | None:
+    blob = None
+    extension = "bin"
+    content_type = None
+    source_size = None
+    try:
+        image = shape.image
+        blob = image.blob
+        extension = str(image.ext or "bin").lower()
+        content_type = image.content_type
+        source_size = {"width": image.size[0], "height": image.size[1]}
+    except (AttributeError, KeyError, TypeError, ValueError):
+        blob, extension, content_type = _related_picture_blob(shape)
+    if not blob:
+        return None
+    digest = hashlib.sha256(blob).hexdigest()
+    relative_path = asset_paths.setdefault(digest, f"source-assets/{digest[:16]}.{extension}")
+    asset_blobs.setdefault(digest, blob)
+    result: dict[str, Any] = {
+        "asset": relative_path,
+        "sha256": digest,
+    }
+    if content_type:
+        result["content_type"] = content_type
+    if source_size:
+        result["source_size"] = source_size
+    crop = _picture_crop(shape)
+    if crop:
+        result["crop"] = crop
+    return result
+
+
 def _shape_value(
     shape: Any,
     slide_width: int,
@@ -219,23 +286,9 @@ def _shape_value(
     if getattr(shape, "has_chart", False):
         result["chart"] = {"type": _enum_name(shape.chart.chart_type)}
     if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-        blob = shape.image.blob
-        digest = hashlib.sha256(blob).hexdigest()
-        extension = str(shape.image.ext or "bin").lower()
-        relative_path = asset_paths.setdefault(digest, f"source-assets/{digest[:16]}.{extension}")
-        asset_blobs.setdefault(digest, blob)
-        result["image"] = {
-            "asset": relative_path,
-            "sha256": digest,
-            "content_type": shape.image.content_type,
-            "source_size": {"width": shape.image.size[0], "height": shape.image.size[1]},
-            "crop": {
-                "left": float(shape.crop_left),
-                "right": float(shape.crop_right),
-                "top": float(shape.crop_top),
-                "bottom": float(shape.crop_bottom),
-            },
-        }
+        image = _picture_value(shape, asset_paths, asset_blobs)
+        if image:
+            result["image"] = image
     if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
         result["children"] = [
             _shape_value(

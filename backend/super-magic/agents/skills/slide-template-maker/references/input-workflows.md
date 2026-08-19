@@ -1,6 +1,6 @@
 # Image, HTML, Text, And Existing Template Workflows
 
-After calling `create_slide_template_project`, store source copies, screenshots, rendered references, downloaded files, and QA scratch output only under the returned `working_directory`. Copy only approved final assets into `images/`; `finalize_slide_template` removes the working directory after success.
+After calling `create_slide_template_project`, later tools only need `template_dir`. Copy only approved final assets into `images/`. Do not write `source-analysis.json` or create `.template-work/` inside the template directory. Run the Intake Checkpoint in the main skill before create when shape or asset strategy is missing.
 
 ## Image Or Screenshot Source
 
@@ -16,7 +16,11 @@ After calling `create_slide_template_project`, store source copies, screenshots,
 `create_slide_template_project` writes a fixed canvas root into every slide scaffold. Preserve this exact protocol while authoring:
 
 ```html
-<main class="slide-container" data-width="<canvas width>" data-height="<canvas height>">
+<main
+  class="slide-container"
+  data-width="<canvas width>"
+  data-height="<canvas height>"
+></main>
 ```
 
 The two data attributes must match `template.json.source.canvas`. Replace scaffold content inside this root; do not remove or rename the class or dimension attributes.

@@ -16,6 +16,7 @@ from app.tools.slide_template_builder.common import (
     ensure_template_working_directory,
     generate_semantic_directory_name,
     generate_unique_template_id,
+    resolve_template_converter_output_dir,
     resolve_template_working_directory,
     resolve_workspace_template_dir,
     safe_slide_path,
@@ -107,6 +108,8 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             work_dir = await ensure_template_working_directory(
                 resolve_template_working_directory(template_dir, template_id)
             )
+            converter_output_dir = resolve_template_converter_output_dir(work_dir)
+            await async_mkdir(converter_output_dir, parents=True, exist_ok=True)
 
             metadata = {
                 "schema_version": "1.0",
@@ -156,6 +159,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 "images_directory": str(template_dir / "images"),
                 "slides_directory": str(template_dir / "slides"),
                 "working_directory": str(work_dir),
+                "converter_output_dir": str(converter_output_dir),
                 "slide_count": len(params.slides),
                 "canvas": params.source.canvas.model_dump(),
                 "canvas_contract": {
@@ -169,12 +173,14 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             return ToolResult(
                 content=(
                     f"Slide template project created at `{template_dir}` with {len(params.slides)} planned slides. "
-                    f"Put all reference renders, extracted candidates, and QA scratch files under `{work_dir}`. "
-                    "That working directory is outside the workspace and is not synced to the project file tree. "
+                    "Later source tools only need this template_dir. "
+                    f"For presentation conversion, pass `{converter_output_dir}` to document-converter as output_dir. "
+                    "Do not write PDF, page images, or converter dumps into the workspace. "
                     "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
                     "`data-height` matching `template.json.source.canvas`; preserve this contract when authoring. "
                     "Only author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. "
-                    "Do not replace `template.json` or create the template directory with generic file or shell tools. "
+                    "Do not replace `template.json`, invent `source-analysis.json`, or create `.template-work/` "
+                    "inside the template directory. "
                     "Replace every scaffold file, then call finalize_slide_template and check `result.ok`; "
                     "the template is not complete until finalization succeeds."
                 ),
@@ -246,7 +252,6 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 f"- Category: `{data.get('category_code', '')}`",
                 f"- Tags: {', '.join(data.get('tag_codes', []))}",
                 f"- Directory: `{data.get('template_directory', '')}`",
-                f"- Temporary working directory: `{data.get('working_directory', '')}`",
                 f"- Planned slides: {data.get('slide_count', 0)}",
             ])
         else:

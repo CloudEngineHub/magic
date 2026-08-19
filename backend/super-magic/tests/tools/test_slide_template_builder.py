@@ -118,6 +118,14 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     with pytest.raises(ValueError):
         work_dir.resolve().relative_to(template_dir.parent.resolve())
     work_dir.resolve().relative_to((tmp_path / ".runtime").resolve())
+    converter_output_dir = Path(result.data["converter_output_dir"])
+    assert converter_output_dir.is_dir()
+    assert converter_output_dir.parent == work_dir
+    converter_output_dir.resolve().relative_to((tmp_path / ".runtime").resolve())
+    with pytest.raises(ValueError):
+        converter_output_dir.resolve().relative_to(template_dir.parent.resolve())
+    assert str(converter_output_dir) in result.content
+    assert "Do not write PDF, page images, or converter dumps into the workspace" in result.content
     assert result.data["canvas_contract"] == {
         "selector": ".slide-container",
         "width_attribute": "data-width",
@@ -249,6 +257,9 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     assert manifest["slides"][0]["full_image"] == "source-analysis/full/slide-001.png"
     assert manifest["slides"][0]["visual_analysis"]["status"] == "pending"
     assert len(manifest["asset_catalog"]) == 2
+    assert [item["id"] for item in manifest["asset_catalog"]] == ["asset-01", "asset-02"]
+    assert "asset-01" in result.content
+    assert result.data["recommended_review_indexes"] == [1]
     assert all(item["decision"] == "pending" for item in manifest["asset_catalog"])
     assert all(item["final_file"] is None for item in manifest["asset_catalog"])
     assert result.data["detail_crop_count"] == 9
@@ -277,6 +288,40 @@ async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path
 
     with pytest.raises(Exception, match="completed source analysis"):
         await validate_template_project(template_dir)
+
+
+@pytest.mark.asyncio
+async def test_incomplete_visual_analysis_names_status_and_manifest_path(tmp_path):
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
+    create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
+    assert create_result.ok
+    template_dir = Path(create_result.data["template_directory"])
+    page_image = tmp_path / "source-page.png"
+    Image.new("RGB", (1920, 1080), "#102a43").save(page_image)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
+    prepared = await prepare_tool.execute(
+        ToolContext(tool_name=prepare_tool.name, arguments={}),
+        PrepareSlideTemplateSourceParams(
+            template_dir=create_result.data["template_id"],
+            page_images=[str(page_image)],
+        ),
+    )
+    assert prepared.ok, prepared.content
+    await async_write_text(template_dir / "visual-spec.md", "# Visual Specification\n\nNavy report system.\n")
+    await async_write_text(
+        template_dir / "theme.css",
+        "html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }\n.slide { width: 1920px; height: 1080px; }\n",
+    )
+    await async_write_text(
+        template_dir / "slides/cover.html",
+        "<!doctype html><html><head><link rel=\"stylesheet\" href=\"../theme.css\"></head><body><main class=\"slide\"><h1 data-slot=\"title\">Business Review</h1><p data-slot=\"subtitle\">Q4</p><span data-slot=\"meta\">Strategy Team</span></main></body></html>",
+    )
+    from app.tools.slide_template_builder.common import validate_template_project
+
+    validated = await validate_template_project(template_dir)
+    assert validated.source_analysis_summary is not None
+    assert validated.source_analysis_summary["unreviewed_source_indexes"] == [1]
+    assert any("review_slide_template_source" in warning for warning in validated.source_analysis_summary["warnings"])
 
 
 @pytest.mark.asyncio
@@ -350,6 +395,8 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
         "completed": True,
         "reconstruction_mode": "hybrid",
         "source_slide_count": 1,
+        "reviewed_slide_count": 1,
+        "unreviewed_source_indexes": [],
         "must_preserve_count": 2,
         "visual_element_count": 1,
         "pptx_structure_extracted": False,

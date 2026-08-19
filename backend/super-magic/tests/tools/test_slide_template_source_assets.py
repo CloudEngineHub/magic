@@ -147,8 +147,9 @@ async def test_select_source_assets_copies_only_reviewed_reusable_candidates(tmp
 
 
 @pytest.mark.asyncio
-async def test_select_source_assets_requires_a_decision_for_every_candidate(tmp_path):
-    template_dir, _work_dir, manifest = await _prepare_with_assets(tmp_path)
+async def test_select_source_assets_accepts_public_asset_ids(tmp_path):
+    template_dir, work_dir, manifest = await _prepare_with_assets(tmp_path)
+    assert manifest["asset_catalog"][0]["id"] == "asset-01"
     select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
     result = await select_tool.execute(
         ToolContext(tool_name=select_tool.name, arguments={}),
@@ -156,18 +157,111 @@ async def test_select_source_assets_requires_a_decision_for_every_candidate(tmp_
             template_dir=template_dir.name,
             decisions=[
                 SourceAssetDecisionParams(
-                    asset=manifest["asset_catalog"][0]["asset"],
-                    decision="discard",
+                    asset="asset-01",
+                    decision="reuse",
                     asset_type="illustration",
-                    quality="acceptable",
-                    rationale="Not needed for this template layout.",
+                    quality="high",
+                    rationale="Keep the public-id artwork as the cover visual anchor.",
+                    target_name="cover-illustration.png",
+                    intended_role="Cover visual anchor.",
+                ),
+                SourceAssetDecisionParams(
+                    asset="asset-02",
+                    decision="discard",
+                    asset_type="other",
+                    quality="poor",
+                    rationale="The unused package image should not enter the template.",
+                ),
+            ],
+        ),
+    )
+
+    assert result.ok, result.content
+    updated = await async_read_json(work_dir / "source-analysis.json")
+    selected = next(item for item in updated["asset_catalog"] if item["id"] == "asset-01")
+    assert selected["final_file"] == "images/source-assets/cover-illustration.png"
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_accepts_partial_decisions_then_completes(tmp_path):
+    template_dir, work_dir, manifest = await _prepare_with_assets(tmp_path)
+    first_asset, second_asset = [item["asset"] for item in manifest["asset_catalog"]]
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    first = await select_tool.execute(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        SelectSlideTemplateSourceAssetsParams(
+            template_dir=template_dir.name,
+            decisions=[
+                SourceAssetDecisionParams(
+                    asset=first_asset,
+                    decision="reuse",
+                    asset_type="illustration",
+                    quality="high",
+                    rationale="Keep the source artwork as the cover visual anchor.",
+                    target_name="cover-illustration.png",
+                    intended_role="Cover visual anchor.",
+                )
+            ],
+        ),
+    )
+
+    assert first.ok, first.content
+    assert first.data["pending_count"] == 1
+    assert "asset-02" in first.content
+    updated = await async_read_json(work_dir / "source-analysis.json")
+    assert next(item["decision"] for item in updated["asset_catalog"] if item["asset"] == first_asset) == "reuse"
+    assert next(item["decision"] for item in updated["asset_catalog"] if item["asset"] == second_asset) == "pending"
+
+    second = await select_tool.execute(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        SelectSlideTemplateSourceAssetsParams(
+            template_dir=template_dir.name,
+            decisions=[
+                SourceAssetDecisionParams(
+                    asset=second_asset,
+                    decision="discard",
+                    asset_type="other",
+                    quality="poor",
+                    rationale="The package-only image is unused and should not enter the template.",
+                )
+            ],
+        ),
+    )
+
+    assert second.ok, second.content
+    assert second.data["pending_count"] == 0
+    assert second.data["selected_count"] == 1
+    assert second.data["discarded_count"] == 1
+    assert [path.name for path in (template_dir / "images/source-assets").glob("*")] == ["cover-illustration.png"]
+
+
+@pytest.mark.asyncio
+async def test_select_source_assets_lists_catalog_ids_for_unknown_assets(tmp_path):
+    template_dir, _work_dir, manifest = await _prepare_with_assets(tmp_path)
+    catalog_ids = [item["id"] for item in manifest["asset_catalog"]]
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
+    result = await select_tool.execute(
+        ToolContext(tool_name=select_tool.name, arguments={}),
+        SelectSlideTemplateSourceAssetsParams(
+            template_dir=template_dir.name,
+            decisions=[
+                SourceAssetDecisionParams(
+                    asset="source-assets/麦吉AI助理培训_image_0001.webp",
+                    decision="reuse",
+                    asset_type="illustration",
+                    quality="high",
+                    rationale="Keep the mascot as a reusable visual element.",
+                    target_name="mascot-standing.webp",
+                    intended_role="Brand mascot.",
                 )
             ],
         ),
     )
 
     assert not result.ok
-    assert "exactly cover asset_catalog" in result.content
+    assert "unknown assets" in result.content
+    assert "expected catalog asset ids" in result.content
+    assert catalog_ids[0] in result.content
     assert not (template_dir / "images/source-assets").exists()
 
 
