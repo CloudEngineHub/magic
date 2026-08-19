@@ -61,6 +61,14 @@ describe("useVideoGeneration model grouping", () => {
 				projectId: "project-1",
 				topicId: "topic-1",
 				designProjectBasePath: "新建画布",
+				currentFile: { id: "design-1", name: "新建画布.magic" },
+				flatAttachments: [
+					{
+						file_id: "design-1",
+						file_name: "新建画布.magic",
+						relative_file_path: "新建画布/新建画布.magic",
+					},
+				],
 				updateAttachments: vi.fn(),
 			}),
 		)
@@ -68,6 +76,11 @@ describe("useVideoGeneration model grouping", () => {
 		await result.current.generateVideo({
 			generation_type: "canvas_composition",
 			topic_id: "topic-1",
+			generation: {
+				aspect_ratio: "9:16",
+				resolution: "480p",
+				duration_seconds: 4,
+			},
 			composition: {
 				videos: [{ path: "./videos/a.mp4" }, { path: "./videos/b.mp4" }],
 				audios: [{ path: "./audios/b.mp3" }],
@@ -77,6 +90,12 @@ describe("useVideoGeneration model grouping", () => {
 		expect(generateVideo).toHaveBeenCalledWith({
 			project_id: "project-1",
 			generation_type: "canvas_composition",
+			file_dir: "/新建画布/videos/",
+			generation: {
+				aspect_ratio: "9:16",
+				resolution: "480p",
+				duration_seconds: 4,
+			},
 			composition: {
 				videos: [{ path: "/新建画布/videos/a.mp4" }, { path: "/新建画布/videos/b.mp4" }],
 				audios: [{ path: "/新建画布/audios/b.mp3" }],

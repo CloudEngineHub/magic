@@ -1725,7 +1725,13 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 				background.opacity(1)
 				return
 			}
-			background.fill(idleFill)
+			background.fill(
+				state === "pressed"
+					? VIDEO_EDIT_CONFIG.ACCENT_ACTIVE
+					: state === "hover"
+						? VIDEO_EDIT_CONFIG.ACCENT_HOVER
+						: idleFill,
+			)
 			background.opacity(1)
 			text?.fill("#FFFFFF")
 			return

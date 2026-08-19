@@ -272,9 +272,13 @@ async function buildDesignVideoRequestParams(
 		if (!request.composition?.videos.length) {
 			throw new Error("画布合并任务缺少视频输入")
 		}
+		if (!fileDirWithSlash) {
+			throw new Error(pathUnresolvedMessage)
+		}
 		return {
 			...request,
 			project_id: projectId,
+			file_dir: fileDirWithSlash,
 		}
 	}
 	return {
@@ -348,6 +352,9 @@ function toDesignGenerateVideoRequest(
 			project_id: params.project_id,
 			video_id: params.video_id,
 			generation_type: params.generation_type,
+			...(Object.keys(normalizedGeneration).length > 0
+				? { generation: normalizedGeneration }
+				: {}),
 			...(composition ? { composition } : {}),
 			...(compositionExtensions ? { extensions: compositionExtensions } : {}),
 		}

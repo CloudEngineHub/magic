@@ -549,9 +549,19 @@ export interface ImageGenerationResultsResponse {
 	images: GeneratedImageResultItem[]
 }
 
-/**
- * 发起视频生成请求参数
- */
+/** 视频生成参数；画布合成暂不使用，保留为后续输出配置扩展。 */
+export interface GenerateVideoGeneration {
+	/** 宽高比，如 16:9 */
+	aspect_ratio?: string
+	/** 分辨率，如 1080p */
+	resolution?: string
+	/** 时长（秒） */
+	duration_seconds?: number
+	/** 预留扩展字段 */
+	[key: string]: unknown
+}
+
+/** 发起视频生成请求参数 */
 export interface GenerateVideoRequest {
 	/** 项目 id */
 	project_id?: string
@@ -579,6 +589,8 @@ export interface GenerateVideoRequest {
 	reference_images?: string[]
 	/** 帧 */
 	frames?: Array<{ role: "start" | "end"; uri: string }>
+	/** 生成参数；画布合成当前可省略，保留为后续输出配置扩展 */
+	generation?: GenerateVideoGeneration
 	/** 画布合成输入快照；数组顺序即合并顺序 */
 	composition?: {
 		videos: Array<{ path: string }>
