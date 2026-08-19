@@ -47,7 +47,7 @@ Ask before keeping any logo, real person, customer image, internal screenshot, p
 
 - Confirm the source project is unchanged.
 - Confirm the template contains the required source files plus the generated `previews/` and `template-assets.json` sidecars after finalization.
-- Confirm `.template-work/` and temporary copied source material are absent after successful finalization.
+- Confirm the temporary working directory and leftover `.template-work/` are absent after successful finalization.
 - Confirm repeated pages were reduced to meaningful layouts.
 - Confirm all local asset references resolve.
 - Run the structural and sampled visual checks from `quality-guidelines.md`.

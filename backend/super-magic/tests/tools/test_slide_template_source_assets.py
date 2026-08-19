@@ -22,8 +22,13 @@ from app.tools.slide_template_builder.source_asset_selection import (
     SelectSlideTemplateSourceAssetsParams,
     SourceAssetDecisionParams,
 )
-from app.tools.slide_template_builder.common import WORK_DIR_NAME
 from app.utils.async_file_utils import async_read_json
+
+
+def _workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / ".workspace"
+    workspace.mkdir(exist_ok=True)
+    return workspace
 
 
 def _params() -> CreateSlideTemplateProjectParams:
@@ -74,8 +79,8 @@ def _write_source_pptx(path: Path, image_path: Path) -> None:
         archive.writestr("ppt/media/package-only.png", package_only.getvalue())
 
 
-async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, dict]:
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, Path, dict]:
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     created = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert created.ok, created.content
     template_dir = Path(created.data["template_directory"])
@@ -86,7 +91,7 @@ async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, dict]:
     Image.new("RGB", (120, 80), "#e6b566").save(embedded_image)
     _write_source_pptx(source_pptx, embedded_image)
 
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     prepared = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
@@ -96,13 +101,14 @@ async def _prepare_with_assets(tmp_path: Path) -> tuple[Path, dict]:
         ),
     )
     assert prepared.ok, prepared.content
-    manifest_path = template_dir / WORK_DIR_NAME / "source-analysis.json"
-    return template_dir, await async_read_json(manifest_path)
+    work_dir = Path(created.data["working_directory"])
+    manifest_path = work_dir / "source-analysis.json"
+    return template_dir, work_dir, await async_read_json(manifest_path)
 
 
 @pytest.mark.asyncio
 async def test_select_source_assets_copies_only_reviewed_reusable_candidates(tmp_path):
-    template_dir, manifest = await _prepare_with_assets(tmp_path)
+    template_dir, work_dir, manifest = await _prepare_with_assets(tmp_path)
     catalog = manifest["asset_catalog"]
     decisions = [
         SourceAssetDecisionParams(
@@ -122,7 +128,7 @@ async def test_select_source_assets_copies_only_reviewed_reusable_candidates(tmp
             rationale="The package-only image is not used by any source slide and adds no reusable value.",
         ),
     ]
-    select_tool = SelectSlideTemplateSourceAssets(base_dir=tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
     result = await select_tool.execute(
         ToolContext(tool_name=select_tool.name, arguments={}),
         SelectSlideTemplateSourceAssetsParams(template_dir=template_dir.name, decisions=decisions),
@@ -131,7 +137,7 @@ async def test_select_source_assets_copies_only_reviewed_reusable_candidates(tmp
     assert result.ok, result.content
     final_assets = list((template_dir / "images/source-assets").glob("*"))
     assert [path.name for path in final_assets] == ["cover-illustration.png"]
-    updated = await async_read_json(template_dir / WORK_DIR_NAME / "source-analysis.json")
+    updated = await async_read_json(work_dir / "source-analysis.json")
     selected = next(item for item in updated["asset_catalog"] if item["decision"] == "reuse")
     discarded = next(item for item in updated["asset_catalog"] if item["decision"] == "discard")
     assert selected["final_file"] == "images/source-assets/cover-illustration.png"
@@ -142,8 +148,8 @@ async def test_select_source_assets_copies_only_reviewed_reusable_candidates(tmp
 
 @pytest.mark.asyncio
 async def test_select_source_assets_requires_a_decision_for_every_candidate(tmp_path):
-    template_dir, manifest = await _prepare_with_assets(tmp_path)
-    select_tool = SelectSlideTemplateSourceAssets(base_dir=tmp_path)
+    template_dir, _work_dir, manifest = await _prepare_with_assets(tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
     result = await select_tool.execute(
         ToolContext(tool_name=select_tool.name, arguments={}),
         SelectSlideTemplateSourceAssetsParams(

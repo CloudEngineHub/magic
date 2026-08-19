@@ -12,10 +12,11 @@ from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.slide_template_builder.common import (
     SCAFFOLD_MARKER,
-    WORK_DIR_NAME,
     SlideTemplateBuilderError,
+    ensure_template_working_directory,
     generate_semantic_directory_name,
     generate_unique_template_id,
+    resolve_template_working_directory,
     resolve_workspace_template_dir,
     safe_slide_path,
     validate_taxonomy_selection,
@@ -103,7 +104,9 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
 
             await async_mkdir(template_dir / "images", parents=True, exist_ok=False)
             await async_mkdir(template_dir / "slides", parents=True, exist_ok=False)
-            await async_mkdir(template_dir / WORK_DIR_NAME, parents=True, exist_ok=False)
+            work_dir = await ensure_template_working_directory(
+                resolve_template_working_directory(template_dir, template_id)
+            )
 
             metadata = {
                 "schema_version": "1.0",
@@ -152,7 +155,7 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
                 "theme_css": str(template_dir / "theme.css"),
                 "images_directory": str(template_dir / "images"),
                 "slides_directory": str(template_dir / "slides"),
-                "working_directory": str(template_dir / WORK_DIR_NAME),
+                "working_directory": str(work_dir),
                 "slide_count": len(params.slides),
                 "canvas": params.source.canvas.model_dump(),
                 "canvas_contract": {
@@ -166,7 +169,8 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             return ToolResult(
                 content=(
                     f"Slide template project created at `{template_dir}` with {len(params.slides)} planned slides. "
-                    f"Put all reference renders, extracted candidates, and QA scratch files under `{template_dir / WORK_DIR_NAME}`. "
+                    f"Put all reference renders, extracted candidates, and QA scratch files under `{work_dir}`. "
+                    "That working directory is outside the workspace and is not synced to the project file tree. "
                     "Each slide scaffold contains a required `main.slide-container` canvas root with `data-width` and "
                     "`data-height` matching `template.json.source.canvas`; preserve this contract when authoring. "
                     "Only author `visual-spec.md`, `theme.css`, `images/`, and the declared `slides/*.html` files. "

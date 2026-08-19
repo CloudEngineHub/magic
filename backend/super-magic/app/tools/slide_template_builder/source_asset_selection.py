@@ -17,7 +17,7 @@ from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
     SOURCE_ANALYSIS_FILE,
     SlideTemplateBuilderError,
-    WORK_DIR_NAME,
+    resolve_template_working_directory,
     resolve_workspace_template_dir,
     validate_template_directory,
 )
@@ -107,9 +107,9 @@ Complete review decisions covering every asset in asset_catalog exactly once."""
         return value
 
 
-def _resolve_source_asset(template_dir: Path, relative_path: str) -> Path:
-    resolved = (template_dir / relative_path).resolve(strict=False)
-    analysis_root = (template_dir / WORK_DIR_NAME / ANALYSIS_DIR_NAME / "source-assets").resolve(strict=False)
+def _resolve_source_asset(work_dir: Path, relative_path: str) -> Path:
+    resolved = (work_dir / relative_path).resolve(strict=False)
+    analysis_root = (work_dir / ANALYSIS_DIR_NAME / "source-assets").resolve(strict=False)
     try:
         resolved.relative_to(analysis_root)
     except ValueError as exc:
@@ -129,11 +129,12 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
 
     async def execute(self, tool_context: ToolContext, params: SelectSlideTemplateSourceAssetsParams) -> ToolResult:
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)
-        analysis_file = template_dir / WORK_DIR_NAME / SOURCE_ANALYSIS_FILE
         final_assets_dir = template_dir / "images" / "source-assets"
         try:
             metadata = await async_read_json(template_dir / "template.json")
             validate_template_directory(template_dir, metadata)
+            work_dir = resolve_template_working_directory(template_dir, str(metadata.get("template_id") or ""))
+            analysis_file = work_dir / SOURCE_ANALYSIS_FILE
             if not await async_is_file(analysis_file):
                 raise SlideTemplateBuilderError("Call prepare_slide_template_source before selecting source assets.")
             analysis = await async_read_json(analysis_file)
@@ -171,7 +172,7 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
             for asset_name, catalog_item in catalog_by_asset.items():
                 decision = decision_by_asset[asset_name]
                 source_file = str(catalog_item.get("source_file") or "")
-                source_path = _resolve_source_asset(template_dir, source_file)
+                source_path = _resolve_source_asset(work_dir, source_file)
                 if not await async_is_file(source_path):
                     raise SlideTemplateBuilderError(f"Extracted source asset is missing: {source_file}")
                 source_extension = Path(asset_name).suffix.lower()

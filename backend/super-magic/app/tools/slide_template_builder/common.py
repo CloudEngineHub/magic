@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -20,17 +21,23 @@ from app.tools.slide_template_builder.models import (
 from app.tools.slide_template_builder.taxonomy import active_category_codes, tag_records_by_code
 from app.utils.async_file_utils import (
     async_exists,
+    async_mkdir,
     async_read_json,
     async_read_text,
     async_rmtree,
     async_scandir,
+    async_stat,
 )
+from app.utils.runtime_storage import trigger_opportunistic_cleanup
 
 SCAFFOLD_MARKER = "slide-template-scaffold"
 WORK_DIR_NAME = ".template-work"
+RUNTIME_CAPABILITY_NAME = "slide-template-maker"
 ANALYSIS_DIR_NAME = "source-analysis"
 SOURCE_ANALYSIS_FILE = "source-analysis.json"
 RECONSTRUCTION_MODES = {"high-fidelity", "template-abstraction", "hybrid"}
+TEMPLATE_WORK_MAX_AGE_SECONDS = 3 * 24 * 60 * 60
+TEMPLATE_WORK_MAX_ENTRIES = 16
 
 
 @dataclass(frozen=True)
@@ -40,6 +47,97 @@ class ValidatedTemplate:
     slides: list[dict[str, Any]]
     canvas: TemplateCanvas
     source_analysis_summary: dict[str, Any] | None
+
+
+def resolve_runtime_root(workspace: Path) -> Path:
+    """Place runtime data beside the workspace, never inside it."""
+    resolved = workspace.resolve(strict=False)
+    try:
+        from app.path_manager import PathManager
+
+        official_workspace = PathManager.get_workspace_dir().resolve(strict=False)
+        if resolved == official_workspace:
+            return PathManager.get_runtime_dir()
+    except (RuntimeError, AttributeError, TypeError):
+        pass
+    if resolved.name == ".workspace":
+        return resolved.parent / ".runtime"
+    return resolved.parent / f"{resolved.name}.runtime"
+
+
+def resolve_template_working_directory(template_dir: Path, template_id: str) -> Path:
+    """Resolve the authoring work directory outside the workspace."""
+    normalized_id = str(template_id or "").strip()
+    if not normalized_id:
+        raise SlideTemplateBuilderError("template_id is required to resolve the working directory.")
+    return resolve_runtime_root(template_dir.parent) / RUNTIME_CAPABILITY_NAME / normalized_id
+
+
+async def evict_stale_template_working_directories(
+    capability_root: Path,
+    *,
+    protected_paths: frozenset[Path] = frozenset(),
+    max_age_seconds: int = TEMPLATE_WORK_MAX_AGE_SECONDS,
+    max_entries: int = TEMPLATE_WORK_MAX_ENTRIES,
+) -> None:
+    """Drop abandoned authoring dirs by age, then by oldest-first count."""
+    if not await async_exists(capability_root):
+        return
+    protected = {path.resolve(strict=False) for path in protected_paths}
+    candidates: list[tuple[float, Path]] = []
+    for entry in await async_scandir(capability_root):
+        path = Path(entry.path)
+        if path.resolve(strict=False) in protected or entry.is_symlink() or not entry.is_dir():
+            continue
+        try:
+            stat = await async_stat(path)
+        except FileNotFoundError:
+            continue
+        candidates.append((stat.st_mtime, path))
+    candidates.sort()
+    now = time.time()
+    remaining: list[Path] = []
+    for modified_at, path in candidates:
+        if now - modified_at > max_age_seconds:
+            await async_rmtree(path)
+        else:
+            remaining.append(path)
+    overflow = len(remaining) - max_entries
+    if overflow <= 0:
+        return
+    for path in remaining[:overflow]:
+        await async_rmtree(path)
+
+
+async def ensure_template_working_directory(work_dir: Path) -> Path:
+    """Create the authoring work directory, using official runtime rules when possible."""
+    try:
+        from app.path_manager import PathManager
+        from app.utils.runtime_storage import ensure_runtime_directory
+
+        official = PathManager.get_runtime_dir().resolve(strict=False)
+        target = work_dir.resolve(strict=False)
+        if target == official or official in target.parents:
+            created = await ensure_runtime_directory(work_dir)
+            trigger_opportunistic_cleanup(
+                "slide-template-maker",
+                lambda: evict_stale_template_working_directories(
+                    official / RUNTIME_CAPABILITY_NAME,
+                    protected_paths=frozenset({created}),
+                ),
+            )
+            return created
+    except RuntimeError:
+        pass
+    await async_mkdir(work_dir, parents=True, exist_ok=True)
+    trigger_opportunistic_cleanup(
+        f"slide-template-maker:{work_dir.parent}",
+        lambda: evict_stale_template_working_directories(
+            work_dir.parent,
+            protected_paths=frozenset({work_dir}),
+        ),
+    )
+    return work_dir
 
 
 def resolve_workspace_template_dir(base_dir: Path, value: str) -> Path:
@@ -198,9 +296,9 @@ def validate_canvas(value: Any, field_name: str = "source.canvas") -> TemplateCa
         raise SlideTemplateBuilderError(str(exc)) from exc
 
 
-def _resolve_analysis_artifact(template_dir: Path, relative_path: str) -> Path:
-    resolved = (template_dir / relative_path).resolve(strict=False)
-    analysis_root = (template_dir / WORK_DIR_NAME / ANALYSIS_DIR_NAME).resolve(strict=False)
+def _resolve_analysis_artifact(work_dir: Path, relative_path: str) -> Path:
+    resolved = (work_dir / relative_path).resolve(strict=False)
+    analysis_root = (work_dir / ANALYSIS_DIR_NAME).resolve(strict=False)
     try:
         resolved.relative_to(analysis_root)
     except ValueError as exc:
@@ -226,7 +324,8 @@ async def _validate_source_analysis(
     if source.get("method") != "visual-reconstruction":
         return None
 
-    analysis_path = template_dir / WORK_DIR_NAME / SOURCE_ANALYSIS_FILE
+    work_dir = resolve_template_working_directory(template_dir, str(metadata.get("template_id") or ""))
+    analysis_path = work_dir / SOURCE_ANALYSIS_FILE
     if not await async_exists(analysis_path):
         existing_manifest_path = template_dir / "template-assets.json"
         if await async_exists(existing_manifest_path):
@@ -290,14 +389,14 @@ async def _validate_source_analysis(
         if not isinstance(slide, dict):
             raise SlideTemplateBuilderError(f"Source analysis slide {index} must be an object.")
         full_image = str(slide.get("full_image") or "")
-        if not full_image or not await async_exists(_resolve_analysis_artifact(template_dir, full_image)):
+        if not full_image or not await async_exists(_resolve_analysis_artifact(work_dir, full_image)):
             raise SlideTemplateBuilderError(f"Source analysis full image is missing for slide {index}.")
         crops = slide.get("detail_crops")
         if not isinstance(crops, list) or len(crops) < 4:
             raise SlideTemplateBuilderError(f"Source analysis needs at least four detail crops for slide {index}.")
         for crop in crops:
             crop_file = str(crop.get("file") or "") if isinstance(crop, dict) else ""
-            if not crop_file or not await async_exists(_resolve_analysis_artifact(template_dir, crop_file)):
+            if not crop_file or not await async_exists(_resolve_analysis_artifact(work_dir, crop_file)):
                 raise SlideTemplateBuilderError(f"Source analysis crop is missing for slide {index}.")
         visual = slide.get("visual_analysis")
         if not isinstance(visual, dict) or visual.get("status") != "complete":
@@ -483,10 +582,24 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
 
 
 async def cleanup_template_intermediates(template_dir: Path) -> list[str]:
-    """Remove the canonical authoring work directory after successful finalization."""
+    """Remove the runtime work directory and any leftover in-project scratch dir."""
 
-    work_dir = template_dir / WORK_DIR_NAME
-    if not await async_exists(work_dir):
-        return []
-    await async_rmtree(work_dir)
-    return [WORK_DIR_NAME]
+    removed: list[str] = []
+    legacy_dir = template_dir / WORK_DIR_NAME
+    if await async_exists(legacy_dir):
+        await async_rmtree(legacy_dir)
+        removed.append(WORK_DIR_NAME)
+
+    metadata_path = template_dir / "template.json"
+    if await async_exists(metadata_path):
+        try:
+            metadata = await async_read_json(metadata_path)
+        except (OSError, ValueError):
+            metadata = {}
+        template_id = str(metadata.get("template_id") or "").strip() if isinstance(metadata, dict) else ""
+        if template_id:
+            work_dir = resolve_template_working_directory(template_dir, template_id)
+            if await async_exists(work_dir):
+                await async_rmtree(work_dir)
+                removed.append(str(work_dir))
+    return removed

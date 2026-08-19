@@ -19,6 +19,12 @@ from app.tools.slide_template_builder.preview import SlideCapture
 from app.utils.async_file_utils import async_exists, async_write_text
 
 
+def _workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / ".workspace"
+    workspace.mkdir(exist_ok=True)
+    return workspace
+
+
 def _params() -> CreateSlideTemplateProjectParams:
     return CreateSlideTemplateProjectParams(
         template_id="SLIDE-navy-quarterly-review",
@@ -40,7 +46,7 @@ def _params() -> CreateSlideTemplateProjectParams:
 
 @pytest.mark.asyncio
 async def test_finalize_project_uses_browser_sdk_instead_of_direct_playwright(tmp_path: Path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -63,7 +69,7 @@ async def test_finalize_project_uses_browser_sdk_instead_of_direct_playwright(tm
     Image.new("RGB", (1920, 1080), "#102a43").save(screenshot, format="PNG")
 
     async def fake_render_slide_previews(*, workspace_dir, template_dir, slides, canvas):
-        assert workspace_dir == tmp_path
+        assert workspace_dir == _workspace(tmp_path)
         assert template_dir == Path(create_result.data["template_directory"])
         assert [slide["file"] for slide in slides] == ["slides/cover.html"]
         assert canvas.as_tuple() == (1920, 1080)
@@ -82,7 +88,7 @@ async def test_finalize_project_uses_browser_sdk_instead_of_direct_playwright(tm
             )
         ]
 
-    finalize_tool = FinalizeSlideTemplate(base_dir=tmp_path)
+    finalize_tool = FinalizeSlideTemplate(base_dir=_workspace(tmp_path))
     with (
         patch(
             "app.tools.slide_template_builder.finalize_project.render_slide_previews",

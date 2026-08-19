@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import zipfile
 from io import BytesIO
@@ -20,7 +21,9 @@ from app.tools.slide_template_builder import (
 from app.tools.slide_template_builder.common import (
     WORK_DIR_NAME,
     cleanup_template_intermediates,
+    evict_stale_template_working_directories,
     generate_semantic_directory_name,
+    resolve_template_working_directory,
     validate_template_id,
 )
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
@@ -38,6 +41,12 @@ from app.tools.slide_template_builder.source_asset_selection import (
     SourceAssetDecisionParams,
 )
 from app.utils.async_file_utils import async_read_json, async_scandir, async_write_json, async_write_text
+
+
+def _workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / ".workspace"
+    workspace.mkdir(exist_ok=True)
+    return workspace
 
 
 def _params():
@@ -88,7 +97,7 @@ def _write_source_pptx(path: Path, image_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
-    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
 
     assert result.ok
@@ -102,8 +111,13 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     assert (template_dir / "theme.css").exists()
     assert (template_dir / "images").is_dir()
     assert (template_dir / "slides/cover.html").exists()
-    assert (template_dir / WORK_DIR_NAME).is_dir()
-    assert result.data["working_directory"] == str(template_dir / WORK_DIR_NAME)
+    assert not (template_dir / WORK_DIR_NAME).exists()
+    work_dir = Path(result.data["working_directory"])
+    assert work_dir.is_dir()
+    assert work_dir == resolve_template_working_directory(template_dir, result.data["template_id"])
+    with pytest.raises(ValueError):
+        work_dir.resolve().relative_to(template_dir.parent.resolve())
+    work_dir.resolve().relative_to((tmp_path / ".runtime").resolve())
     assert result.data["canvas_contract"] == {
         "selector": ".slide-container",
         "width_attribute": "data-width",
@@ -153,7 +167,7 @@ def test_generate_semantic_directory_name_uses_chinese_label():
 
 @pytest.mark.asyncio
 async def test_create_project_rejects_an_existing_semantic_directory(tmp_path):
-    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     first = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
     second = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
 
@@ -166,13 +180,13 @@ async def test_create_project_rejects_an_existing_semantic_directory(tmp_path):
 async def test_create_project_does_not_leave_a_directory_when_slide_plan_is_invalid(tmp_path):
     params = _params()
     params.slides = [params.slides[0], params.slides[0]]
-    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
 
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
 
     assert not result.ok
     assert "Slide file paths must be unique" in result.content
-    created_entries = await async_scandir(tmp_path)
+    created_entries = await async_scandir(_workspace(tmp_path))
     assert not [entry for entry in created_entries if entry.name == "SLIDE-navy-business-review"]
 
 
@@ -180,7 +194,7 @@ async def test_create_project_does_not_leave_a_directory_when_slide_plan_is_inva
 async def test_create_project_rejects_unknown_taxonomy_codes(tmp_path):
     params = _params()
     params.category_code = "PPT-CATE-not-a-real-category"
-    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
     assert not result.ok
     assert "active bundled PPT category" in result.content
@@ -194,7 +208,7 @@ async def test_create_project_rejects_unknown_taxonomy_codes(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -206,7 +220,7 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     Image.new("RGB", (120, 80), "#e6b566").save(embedded_image)
     _write_source_pptx(source_pptx, embedded_image)
 
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
@@ -217,7 +231,10 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     )
 
     assert result.ok, result.content
-    analysis_root = template_dir / WORK_DIR_NAME / "source-analysis"
+    work_dir = Path(create_result.data["working_directory"])
+    analysis_root = work_dir / "source-analysis"
+    assert not (template_dir / WORK_DIR_NAME).exists()
+    assert result.data["working_directory"] == str(work_dir)
     assert (analysis_root / "full/slide-001.png").exists()
     assert len(list((analysis_root / "crops/slide-001").glob("*.png"))) == 9
     assert (analysis_root / "contact-sheet.png").exists()
@@ -228,7 +245,8 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
     assert structure["source_asset_count"] == 2
     assert any(shape.get("image") for shape in structure["slides"][0]["shapes"])
     assert list((analysis_root / "source-assets").glob("*"))
-    manifest = json.loads((template_dir / WORK_DIR_NAME / "source-analysis.json").read_text())
+    manifest = json.loads((work_dir / "source-analysis.json").read_text())
+    assert manifest["slides"][0]["full_image"] == "source-analysis/full/slide-001.png"
     assert manifest["slides"][0]["visual_analysis"]["status"] == "pending"
     assert len(manifest["asset_catalog"]) == 2
     assert all(item["decision"] == "pending" for item in manifest["asset_catalog"])
@@ -239,7 +257,7 @@ async def test_prepare_source_creates_multiscale_evidence_and_pptx_facts(tmp_pat
 
 @pytest.mark.asyncio
 async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -263,7 +281,7 @@ async def test_visual_reconstruction_requires_completed_source_analysis(tmp_path
 
 @pytest.mark.asyncio
 async def test_validate_project_rejects_mismatched_slide_container_dimensions(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -285,14 +303,14 @@ async def test_validate_project_rejects_mismatched_slide_container_dimensions(tm
 
 @pytest.mark.asyncio
 async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
     page_image = tmp_path / "source-page.png"
     Image.new("RGB", (1920, 1080), "#102a43").save(page_image)
 
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     prepare_result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
@@ -312,7 +330,8 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
         "<!doctype html><html><head><link rel=\"stylesheet\" href=\"../theme.css\"></head><body><main class=\"slide\"><h1 data-slot=\"title\">Business Review</h1><p data-slot=\"subtitle\">Q4</p><span data-slot=\"meta\">Strategy Team</span></main></body></html>",
     )
 
-    manifest_path = template_dir / WORK_DIR_NAME / "source-analysis.json"
+    work_dir = Path(create_result.data["working_directory"])
+    manifest_path = work_dir / "source-analysis.json"
     manifest = await async_read_json(manifest_path)
     visual = manifest["slides"][0]["visual_analysis"]
     visual.update({
@@ -345,7 +364,7 @@ async def test_completed_source_analysis_is_accepted_and_summarized(tmp_path):
 
 @pytest.mark.asyncio
 async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -356,7 +375,7 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     Image.new("RGB", (120, 80), "#e6b566").save(embedded_image)
     _write_source_pptx(source_pptx, embedded_image)
 
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     prepare_result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
@@ -366,7 +385,8 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
         ),
     )
     assert prepare_result.ok, prepare_result.content
-    manifest_path = template_dir / WORK_DIR_NAME / "source-analysis.json"
+    work_dir = Path(create_result.data["working_directory"])
+    manifest_path = work_dir / "source-analysis.json"
     manifest = await async_read_json(manifest_path)
     manifest["slides"][0]["visual_analysis"].update({
         "status": "complete",
@@ -377,7 +397,7 @@ async def test_hybrid_reconstruction_must_reference_selected_source_asset(tmp_pa
     })
     await async_write_json(manifest_path, manifest, ensure_ascii=False, indent=2)
     catalog = manifest["asset_catalog"]
-    select_tool = SelectSlideTemplateSourceAssets(base_dir=tmp_path)
+    select_tool = SelectSlideTemplateSourceAssets(base_dir=_workspace(tmp_path))
     select_result = await select_tool.execute(
         ToolContext(tool_name=select_tool.name, arguments={}),
         SelectSlideTemplateSourceAssetsParams(
@@ -447,7 +467,7 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
             await browser.close()
         except Exception as exc:
             pytest.skip(f"Playwright Chromium cannot launch in this environment: {exc}")
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
     template_dir = Path(create_result.data["template_directory"])
@@ -464,13 +484,15 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
         "<!doctype html><html><head><link rel=\"stylesheet\" href=\"../theme.css\"></head><body><main class=\"slide\"><h1 data-slot=\"title\" data-content-hint=\"Report title\">Business Review</h1><p data-slot=\"subtitle\" data-content-hint=\"Period\">Q4</p><span data-slot=\"meta\" data-content-hint=\"Presenter\">Strategy Team</span></main></body></html>",
     )
 
-    finalize_tool = FinalizeSlideTemplate(base_dir=tmp_path)
+    finalize_tool = FinalizeSlideTemplate(base_dir=_workspace(tmp_path))
     result = await finalize_tool.execute(
         ToolContext(tool_name=finalize_tool.name, arguments={}),
         FinalizeSlideTemplateParams(template_dir=create_result.data["template_id"]),
     )
 
     assert result.ok, result.content
+    work_dir = Path(create_result.data["working_directory"])
+    assert not work_dir.exists()
     assert not (template_dir / WORK_DIR_NAME).exists()
     assert (template_dir / "previews/thumbnail.png").exists()
     assert (template_dir / "previews/collage.png").exists()
@@ -489,24 +511,53 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
     assert manifest["backend_fields"]["status"] == 1
     assert manifest["backend_fields"]["category_code"] == "PPT-CATE-business-report"
     assert manifest["backend_fields"]["tag_codes"] == _params().tag_codes
-    assert manifest["cleanup"]["removed_temporary_paths"] == [WORK_DIR_NAME]
+    assert str(work_dir) in manifest["cleanup"]["removed_temporary_paths"]
     assert manifest["not_generated"]["template_file_key"]
 
 
+def test_resolve_template_working_directory_uses_sibling_runtime_for_workspace(tmp_path):
+    workspace = tmp_path / ".workspace"
+    template_dir = workspace / "SLIDE-demo"
+    template_id = "SLIDE-demo-ABCDEF"
+    work_dir = resolve_template_working_directory(template_dir, template_id)
+
+    assert work_dir.resolve() == (tmp_path / ".runtime" / "slide-template-maker" / template_id).resolve()
+
+
+def test_resolve_template_working_directory_stays_outside_isolated_workspace(tmp_path):
+    template_dir = tmp_path / "SLIDE-demo"
+    template_id = "SLIDE-demo-ABCDEF"
+    work_dir = resolve_template_working_directory(template_dir, template_id)
+
+    assert work_dir.resolve() == (
+        tmp_path.parent / f"{tmp_path.name}.runtime" / "slide-template-maker" / template_id
+    ).resolve()
+    with pytest.raises(ValueError):
+        work_dir.resolve().relative_to(tmp_path.resolve())
+
+
 @pytest.mark.asyncio
-async def test_cleanup_template_intermediates_removes_only_canonical_work_dir(tmp_path):
-    template_dir = tmp_path / "SLIDE-navy-quarterly-review"
-    work_dir = template_dir / WORK_DIR_NAME
+async def test_cleanup_template_intermediates_removes_runtime_and_legacy_work_dirs(tmp_path):
+    template_dir = _workspace(tmp_path) / "SLIDE-navy-quarterly-review"
+    template_id = "SLIDE-navy-quarterly-review-ABC123"
+    template_dir.mkdir()
+    (template_dir / "template.json").write_text(json.dumps({"template_id": template_id}), encoding="utf-8")
+    work_dir = resolve_template_working_directory(template_dir, template_id)
+    legacy_dir = template_dir / WORK_DIR_NAME
     final_images_dir = template_dir / "images"
     work_dir.mkdir(parents=True)
+    legacy_dir.mkdir()
     final_images_dir.mkdir()
     (work_dir / "reference-render.png").write_bytes(b"temporary")
+    (legacy_dir / "old-scratch.png").write_bytes(b"legacy")
     (final_images_dir / "hero.webp").write_bytes(b"final")
 
     removed = await cleanup_template_intermediates(template_dir)
 
-    assert removed == [WORK_DIR_NAME]
+    assert WORK_DIR_NAME in removed
+    assert str(work_dir) in removed
     assert not work_dir.exists()
+    assert not legacy_dir.exists()
     assert (final_images_dir / "hero.webp").exists()
 
 
@@ -517,6 +568,23 @@ def test_template_id_uses_backend_compatible_format():
         validate_template_id("SLIDE-中文模板")
     with pytest.raises(Exception):
         validate_template_id("PPT-navy-quarterly-review")
+
+
+@pytest.mark.asyncio
+async def test_evict_stale_template_working_directories_removes_old_dirs(tmp_path):
+    root = tmp_path / ".runtime" / "slide-template-maker"
+    old_dir = root / "old-id"
+    fresh_dir = root / "fresh-id"
+    old_dir.mkdir(parents=True)
+    fresh_dir.mkdir()
+    (old_dir / "scratch.png").write_bytes(b"old")
+    (fresh_dir / "scratch.png").write_bytes(b"new")
+    os.utime(old_dir, (0, 0))
+
+    await evict_stale_template_working_directories(root, max_age_seconds=60, max_entries=8)
+
+    assert not old_dir.exists()
+    assert fresh_dir.exists()
 
 
 def test_preview_helpers_keep_expected_dimensions():

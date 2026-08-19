@@ -19,7 +19,7 @@ Use `document-converter` through `run_sdk_snippet`:
    - a 2–4 by 2–4 overlapping crop grid for local detail inspection;
    - a contact sheet for deck-level rhythm;
    - `pptx-structure.json` with text, fonts, shapes, fills, lines, image crops, and layer order when an OOXML source is supplied;
-   - deduplicated embedded image candidates under `.template-work/source-analysis/source-assets/`;
+   - deduplicated embedded image candidates under `working_directory/source-analysis/source-assets/`;
    - an `asset_catalog` recording source paths, hashes, dimensions, usage clues, and pending review fields;
    - `asset_analysis_batches`, which groups candidate images for visual inspection.
 8. Analyze every page twice: full-page first, then its crops. Review every candidate image in `asset_analysis_batches`, classify its type and quality, and call `select_slide_template_source_assets` with a complete `reuse` or `discard` decision for every candidate. Do not submit a page with `visual_analysis.status: pending` or an asset with a pending decision.

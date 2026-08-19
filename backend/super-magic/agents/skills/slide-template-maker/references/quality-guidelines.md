@@ -43,13 +43,13 @@ Use these as starting points, then adapt to the source:
 Confirm:
 
 - Every slide has one `main.slide-container` root with `data-width` and `data-height` attributes matching `template.json.source.canvas`. The root class and dimension attributes are part of the preview canvas protocol and must not be renamed or removed.
-- Before finalization, all temporary material is confined to `.template-work/`. After finalization, the directory contains only the source files, `images/`, `slides/`, generated `previews/`, and `template-assets.json`.
+- Before finalization, all temporary material is confined to the returned working directory outside the workspace. After finalization, the template directory contains only the source files, `images/`, `slides/`, generated `previews/`, and `template-assets.json`.
 - `template.json` validates against `template-json.schema.json`.
 - `category_code` is an active exact taxonomy code, `tag_codes` is non-empty and unique, and `template-assets.json.backend_fields` carries the same values.
 - Every slide index points to an existing file and every slide loads `../theme.css`.
 - Each slide has at least three useful slot hints and no remote or absolute asset reference.
 - No forbidden metadata or legacy conversion residue remains.
-- `.template-work/`, reference renders, extracted candidates, contact sheets, downloaded source copies, and QA scratch files are absent from the completed template.
+- The temporary working directory, leftover `.template-work/`, reference renders, extracted candidates, contact sheets, downloaded source copies, and QA scratch files are absent from the completed template.
 
 ## Browser And Visual Checks
 

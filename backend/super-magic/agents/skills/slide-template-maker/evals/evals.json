@@ -49,7 +49,7 @@
     {
       "id": 10,
       "prompt": "模板做好后帮我直接打成 ZIP。",
-      "expected_output": "Load slide-template-maker and follow its no-ZIP project contract. Keep source files, previews/, and template-assets.json under the same <semantic-template-name>/ directory; remove .template-work/ after finalization; explain that the skill does not create a ZIP."
+      "expected_output": "Load slide-template-maker and follow its no-ZIP project contract. Keep source files, previews/, and template-assets.json under the same <semantic-template-name>/ directory; remove the temporary working directory after finalization; explain that the skill does not create a ZIP."
     },
     {
       "id": 11,

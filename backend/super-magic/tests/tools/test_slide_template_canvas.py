@@ -29,6 +29,12 @@ from app.tools.slide_template_builder.source_analysis import PrepareSlideTemplat
 from magic_use.config import BrowserRuntimeConfig
 
 
+def _workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / ".workspace"
+    workspace.mkdir(exist_ok=True)
+    return workspace
+
+
 def _params() -> CreateSlideTemplateProjectParams:
     return CreateSlideTemplateProjectParams(
         template_id="SLIDE-square-source",
@@ -146,7 +152,7 @@ async def test_create_project_preserves_square_source_canvas(tmp_path):
     params.source.canvas.width = 1080
     params.source.canvas.height = 1080
 
-    tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     result = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), params)
 
     assert result.ok, result.content
@@ -163,7 +169,7 @@ async def test_create_project_preserves_square_source_canvas(tmp_path):
 
 @pytest.mark.asyncio
 async def test_prepare_source_updates_canvas_when_rendered_pages_are_square(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
 
@@ -171,7 +177,7 @@ async def test_prepare_source_updates_canvas_when_rendered_pages_are_square(tmp_
     Image.new("RGB", (1080, 1080), "#102a43").save(page_image)
     source_pptx = tmp_path / "square-source.pptx"
     _write_square_pptx(source_pptx)
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(
@@ -191,7 +197,7 @@ async def test_prepare_source_updates_canvas_when_rendered_pages_are_square(tmp_
 
 @pytest.mark.asyncio
 async def test_prepare_source_rejects_rendered_ratio_that_differs_from_pptx(tmp_path):
-    create_tool = CreateSlideTemplateProject(base_dir=tmp_path)
+    create_tool = CreateSlideTemplateProject(base_dir=_workspace(tmp_path))
     create_result = await create_tool.execute(ToolContext(tool_name=create_tool.name, arguments={}), _params())
     assert create_result.ok
 
@@ -200,7 +206,7 @@ async def test_prepare_source_rejects_rendered_ratio_that_differs_from_pptx(tmp_
     source_pptx = tmp_path / "square-source.pptx"
     _write_square_pptx(source_pptx)
 
-    prepare_tool = PrepareSlideTemplateSource(base_dir=tmp_path)
+    prepare_tool = PrepareSlideTemplateSource(base_dir=_workspace(tmp_path))
     result = await prepare_tool.execute(
         ToolContext(tool_name=prepare_tool.name, arguments={}),
         PrepareSlideTemplateSourceParams(

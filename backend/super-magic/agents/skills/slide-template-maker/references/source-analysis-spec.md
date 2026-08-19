@@ -1,6 +1,6 @@
 # Source Analysis Specification
 
-`prepare_slide_template_source` creates `.template-work/source-analysis/source-analysis.json`. This is an authoring manifest, not a final package file. It is removed after successful `finalize_slide_template`, while its summary is retained in `template-assets.json`.
+`prepare_slide_template_source` creates `source-analysis.json` under the returned working directory. This is an authoring manifest, not a final package file. Paths in the manifest are relative to that working directory. It is removed after successful `finalize_slide_template`, while its summary is retained in `template-assets.json`.
 
 ## Required manifest fields
 
@@ -9,14 +9,14 @@
   "schema_version": "1.0",
   "reconstruction_mode": "hybrid",
   "capture": {
-    "contact_sheet": ".template-work/source-analysis/contact-sheet.png",
-    "crop_grid": {"columns": 3, "rows": 3, "overlap_ratio": 0.1},
-    "pptx_structure": ".template-work/source-analysis/pptx-structure.json",
-    "source_assets_dir": ".template-work/source-analysis/source-assets"
+    "contact_sheet": "source-analysis/contact-sheet.png",
+    "crop_grid": { "columns": 3, "rows": 3, "overlap_ratio": 0.1 },
+    "pptx_structure": "source-analysis/pptx-structure.json",
+    "source_assets_dir": "source-analysis/source-assets"
   },
   "asset_catalog": [
     {
-      "source_file": ".template-work/source-analysis/source-assets/<hash>.png",
+      "source_file": "source-analysis/source-assets/<hash>.png",
       "asset": "source-assets/<hash>.png",
       "sha256": "...",
       "size_bytes": 12345,
@@ -43,8 +43,10 @@
   "slides": [
     {
       "source_index": 1,
-      "full_image": ".template-work/source-analysis/full/slide-001.png",
-      "detail_crops": [{"file": ".template-work/source-analysis/crops/slide-001/region-r01-c01.png"}],
+      "full_image": "source-analysis/full/slide-001.png",
+      "detail_crops": [
+        { "file": "source-analysis/crops/slide-001/region-r01-c01.png" }
+      ],
       "visual_analysis": {
         "status": "complete",
         "summary": "Short description of the page's visual grammar.",
@@ -97,4 +99,4 @@ Review each catalog item against the candidate image and its source-slide usage 
 
 The source PPT is evidence, not an asset inventory to copy blindly. If a source image is low quality, unrelated, sensitive, duplicated, or makes the reconstructed layout worse, discard it even when it appears on a source slide. If no candidate materially improves the template, discard all candidates and author the layout with safe local CSS or neutral assets.
 
-When a source presentation is supplied, extracted embedded images remain temporary candidates under `.template-work/source-analysis/source-assets/` until visual review is complete. For every candidate, record `asset_type`, `quality`, `rationale`, and a `reuse` or `discard` decision through `select_slide_template_source_assets`. Reused assets also require `target_name` and `intended_role`; poor-quality assets cannot be reused. Finalization verifies that every selected asset exists, is referenced by final HTML/CSS, and is the only file present in `images/source-assets/`. Unused or discarded candidates are never part of the final package.
+When a source presentation is supplied, extracted embedded images remain temporary candidates under `working_directory/source-analysis/source-assets/` until visual review is complete. For every candidate, record `asset_type`, `quality`, `rationale`, and a `reuse` or `discard` decision through `select_slide_template_source_assets`. Reused assets also require `target_name` and `intended_role`; poor-quality assets cannot be reused. Finalization verifies that every selected asset exists, is referenced by final HTML/CSS, and is the only file present in `images/source-assets/`. Unused or discarded candidates are never part of the final package.

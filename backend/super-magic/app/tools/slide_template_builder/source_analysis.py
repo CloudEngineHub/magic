@@ -19,8 +19,9 @@ from app.tools.slide_template_builder.canvas import PixelSize, detect_source_can
 from app.tools.slide_template_builder.common import (
     ANALYSIS_DIR_NAME,
     SOURCE_ANALYSIS_FILE,
-    WORK_DIR_NAME,
     SlideTemplateBuilderError,
+    ensure_template_working_directory,
+    resolve_template_working_directory,
     resolve_workspace_template_dir,
     validate_template_directory,
     validate_canvas,
@@ -153,16 +154,17 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
 
     async def execute(self, tool_context: ToolContext, params: PrepareSlideTemplateSourceParams) -> ToolResult:
         template_dir = resolve_workspace_template_dir(Path(self.base_dir), params.template_dir)
-        analysis_root = template_dir / WORK_DIR_NAME / ANALYSIS_DIR_NAME
-        analysis_file = template_dir / WORK_DIR_NAME / SOURCE_ANALYSIS_FILE
         try:
             metadata_path = template_dir / "template.json"
             if not await async_is_file(metadata_path):
                 raise SlideTemplateBuilderError("Template project must be created before source preparation.")
             metadata = await async_read_json(metadata_path)
             validate_template_directory(template_dir, metadata)
-            if not await async_exists(template_dir / WORK_DIR_NAME):
-                await async_mkdir(template_dir / WORK_DIR_NAME, parents=True, exist_ok=False)
+            work_dir = await ensure_template_working_directory(
+                resolve_template_working_directory(template_dir, str(metadata.get("template_id") or ""))
+            )
+            analysis_root = work_dir / ANALYSIS_DIR_NAME
+            analysis_file = work_dir / SOURCE_ANALYSIS_FILE
             page_paths = [self.resolve_path(value).resolve(strict=False) for value in params.page_images]
             for page_path in page_paths:
                 if not await async_is_file(page_path):
@@ -198,8 +200,8 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     params.crop_columns,
                     params.crop_rows,
                 )
-                full_relative = f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/full/slide-{index:03d}.png"
-                full_path = template_dir / full_relative
+                full_relative = f"{ANALYSIS_DIR_NAME}/full/slide-{index:03d}.png"
+                full_path = work_dir / full_relative
                 await async_write_bytes(full_path, artifacts.full_png)
                 full_page_buffers.append(artifacts.full_png)
                 source_page_sizes.append(PixelSize(width=artifacts.width, height=artifacts.height))
@@ -212,7 +214,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     crop_name = f"region-r{crop.row:02d}-c{crop.column:02d}.png"
                     crop_path = crop_dir / crop_name
                     await async_write_bytes(crop_path, crop.png)
-                    crop_relative = f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/crops/slide-{index:03d}/{crop_name}"
+                    crop_relative = f"{ANALYSIS_DIR_NAME}/crops/slide-{index:03d}/{crop_name}"
                     crop_records.append({
                         "file": crop_relative,
                         "row": crop.row,
@@ -297,7 +299,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                     if not source_slides:
                         asset_metadata["quality_flags"].append("not-linked-from-slide-shapes")
                     asset_catalog.append({
-                        "source_file": f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/{asset.relative_path}",
+                        "source_file": f"{ANALYSIS_DIR_NAME}/{asset.relative_path}",
                         "asset": asset.relative_path,
                         "sha256": asset.sha256,
                         "size_bytes": len(asset.data),
@@ -325,12 +327,12 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
                 "reconstruction_mode": params.reconstruction_mode,
                 "source_presentation": Path(params.source_presentation).name if params.source_presentation else "",
                 "capture": {
-                    "contact_sheet": f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/contact-sheet.png",
+                    "contact_sheet": f"{ANALYSIS_DIR_NAME}/contact-sheet.png",
                     "crop_grid": {"columns": params.crop_columns, "rows": params.crop_rows, "overlap_ratio": 0.1},
                     "pptx_structure": (
-                        f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/pptx-structure.json" if structure_path else None
+                        f"{ANALYSIS_DIR_NAME}/pptx-structure.json" if structure_path else None
                     ),
-                    "source_assets_dir": f"{WORK_DIR_NAME}/{ANALYSIS_DIR_NAME}/source-assets",
+                    "source_assets_dir": f"{ANALYSIS_DIR_NAME}/source-assets",
                 },
                 "slides": slide_records,
                 "asset_catalog": asset_catalog,
@@ -340,7 +342,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
 
             data = {
                 "template_directory": str(template_dir),
-                "working_directory": str(template_dir / WORK_DIR_NAME),
+                "working_directory": str(work_dir),
                 "source_analysis": str(analysis_file),
                 "contact_sheet": str(contact_sheet_path),
                 "pptx_structure": str(structure_path) if structure_path else None,
