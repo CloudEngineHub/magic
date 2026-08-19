@@ -170,6 +170,20 @@ from app.tools.design.tools import (
     UpsertStoryboard,
 )
 
+# 独立 Canvas Agent 工具集；不复用旧 Design Canvas 工具实现
+from app.tools.canvas import (
+    AddCanvasConnections,
+    AddCanvasContents,
+    AddCanvasElements,
+    InitializeCanvas,
+    LayoutCanvasElements,
+    QueryCanvasElementDetails,
+    QueryCanvasOverview,
+    RetryCanvasContentGeneration,
+    SelectCanvasMainContent,
+    WaitCanvasGeneration,
+)
+
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
 from app.tools.magicbase_tools import (
@@ -415,6 +429,18 @@ __all__ = [
     "SearchCanvasImages",
     "SearchImagePrompts",
     "UpsertStoryboard",
+
+    # 独立 Canvas Agent 工具
+    "AddCanvasConnections",
+    "AddCanvasContents",
+    "AddCanvasElements",
+    "InitializeCanvas",
+    "LayoutCanvasElements",
+    "QueryCanvasElementDetails",
+    "QueryCanvasOverview",
+    "RetryCanvasContentGeneration",
+    "SelectCanvasMainContent",
+    "WaitCanvasGeneration",
 
     # MCP 工具集
     "McpAddServer",

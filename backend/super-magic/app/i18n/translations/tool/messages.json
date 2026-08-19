@@ -5434,5 +5434,41 @@
     "update_html_app_memory.detail_error": {
         "zh_CN": "更新微应用信息失败，请稍后重试或检查参数。",
         "en_US": "Failed to update micro-app information. Try again or check the parameters."
+    },
+    "canvas.operation_failed": {
+        "zh_CN": "画布操作失败",
+        "en_US": "Canvas operation failed"
+    },
+    "canvas.items_pending": {
+        "zh_CN": "准备处理 {{total}} 项",
+        "en_US": "Preparing {{total}} items"
+    },
+    "canvas.items_result": {
+        "zh_CN": "已完成 {{succeeded}}/{{total}} 项",
+        "en_US": "Completed {{succeeded}}/{{total}} items"
+    },
+    "canvas.page": {
+        "zh_CN": "第 {{page}} 页",
+        "en_US": "Page {{page}}"
+    },
+    "canvas.wait_limit": {
+        "zh_CN": "本次最多等待 {{seconds}} 秒",
+        "en_US": "Waiting up to {{seconds}} seconds"
+    },
+    "canvas.wait_completed": {
+        "zh_CN": "生成任务已全部完成（{{completed}}/{{total}}）",
+        "en_US": "All generation tasks completed ({{completed}}/{{total}})"
+    },
+    "canvas.wait_failed": {
+        "zh_CN": "生成任务均未成功（失败 {{failed}}/{{total}}）",
+        "en_US": "No generation task succeeded ({{failed}}/{{total}} failed)"
+    },
+    "canvas.wait_timeout": {
+        "zh_CN": "等待超时，已完成 {{completed}}/{{total}}，可继续等待原任务",
+        "en_US": "Wait timed out; {{completed}}/{{total}} completed. Continue with the same tasks"
+    },
+    "canvas.wait_partial": {
+        "zh_CN": "生成任务部分完成（完成 {{completed}}，失败 {{failed}}，共 {{total}}）",
+        "en_US": "Generation partially completed ({{completed}} completed, {{failed}} failed, {{total}} total)"
     }
 }

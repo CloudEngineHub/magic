@@ -746,5 +746,57 @@
     "delete_share": {
         "zh_CN": "删除分享",
         "en_US": "Delete share"
+    },
+    "canvas.initialize": {
+        "zh_CN": "初始化画布",
+        "en_US": "Initialize canvas"
+    },
+    "canvas.query_overview": {
+        "zh_CN": "查看画布概览",
+        "en_US": "Inspect canvas overview"
+    },
+    "canvas.query_elements": {
+        "zh_CN": "查看画布节点",
+        "en_US": "Inspect canvas elements"
+    },
+    "canvas.add_elements": {
+        "zh_CN": "新增画布节点",
+        "en_US": "Add canvas elements"
+    },
+    "canvas.add_generated_content": {
+        "zh_CN": "生成画布内容",
+        "en_US": "Generate canvas content"
+    },
+    "canvas.import_content": {
+        "zh_CN": "导入画布素材",
+        "en_US": "Import canvas assets"
+    },
+    "canvas.retry_generation": {
+        "zh_CN": "重试失败内容",
+        "en_US": "Retry failed content"
+    },
+    "canvas.select_main": {
+        "zh_CN": "选择主内容",
+        "en_US": "Select main content"
+    },
+    "canvas.layout": {
+        "zh_CN": "调整画布布局",
+        "en_US": "Adjust canvas layout"
+    },
+    "canvas.remove_connections": {
+        "zh_CN": "移除画布连线",
+        "en_US": "Remove canvas connections"
+    },
+    "canvas.replace_connections": {
+        "zh_CN": "替换画布连线",
+        "en_US": "Replace canvas connections"
+    },
+    "add_canvas_connections": {
+        "zh_CN": "新增画布连线",
+        "en_US": "Add canvas connections"
+    },
+    "canvas.wait_generation": {
+        "zh_CN": "等待内容生成",
+        "en_US": "Wait for content generation"
     }
 }

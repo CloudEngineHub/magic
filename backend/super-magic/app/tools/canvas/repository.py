@@ -1,0 +1,186 @@
+"""Canvas 项目文件和并发事务边界。"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import tempfile
+from collections import defaultdict
+from pathlib import Path
+from typing import Awaitable, Callable, TypeVar
+
+from app.tools.canvas.codec import CanvasCodec
+from app.tools.canvas.domain.models import CanvasProject
+
+T = TypeVar("T")
+
+
+class CanvasPathResolver:
+    """把工作区相对 project_path 安全解析为本地目录。"""
+
+    @staticmethod
+    def resolve(workspace: Path, project_path: str) -> Path:
+        """解析并拒绝绝对路径和工作区外路径。"""
+        if not project_path or not project_path.strip() or project_path.strip() in {".", "./"}:
+            raise ValueError("PROJECT_PATH_INVALID")
+        raw = Path(project_path)
+        if raw.is_absolute() or ".." in raw.parts:
+            raise ValueError("PROJECT_PATH_INVALID")
+        resolved = (workspace / raw).resolve()
+        workspace_root = workspace.resolve()
+        if resolved != workspace_root and workspace_root not in resolved.parents:
+            raise ValueError("PROJECT_PATH_INVALID")
+        return resolved
+
+
+class CanvasRepository:
+    """负责 Canvas 主文件和 sidecar 的读取、写入与项目级锁。"""
+
+    _locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    def __init__(self, workspace: Path):
+        """初始化工作区级仓储。"""
+        self.workspace = workspace
+
+    async def initialize(self, project_path: str) -> tuple[Path, bool]:
+        """创建空项目；已存在合法项目时返回未修改状态。"""
+        path = CanvasPathResolver.resolve(self.workspace, project_path)
+        path.mkdir(parents=True, exist_ok=True)
+        project_file = path / "magic.project.js"
+        if project_file.exists():
+            await self.read(project_path)
+            return path, False
+        await asyncio.to_thread(
+            self._atomic_write_text,
+            project_file,
+            CanvasCodec.encode(CanvasCodec.empty_project(path.name)),
+        )
+        return path, True
+
+    async def read(self, project_path: str) -> CanvasProject:
+        """读取并校验当前项目。"""
+        path = CanvasPathResolver.resolve(self.workspace, project_path)
+        project_file = path / "magic.project.js"
+        if not project_file.exists():
+            raise FileNotFoundError("PROJECT_NOT_FOUND")
+        return CanvasCodec.decode(await asyncio.to_thread(project_file.read_text, encoding="utf-8"))
+
+    async def transaction(
+        self,
+        project_path: str,
+        mutator: Callable[[CanvasProject], T | Awaitable[T]],
+    ) -> T:
+        """在项目锁内读取、修改、校验并写回主文件。"""
+        path = CanvasPathResolver.resolve(self.workspace, project_path)
+        lock = self._locks[str(path)]
+        async with lock:
+            project = await self.read(project_path)
+            result = mutator(project)
+            if asyncio.iscoroutine(result):
+                result = await result
+            project.canvas.validate()
+            await self._write(path, project)
+            return result
+
+    async def transaction_with_sidecar(
+        self,
+        project_path: str,
+        mutator: Callable[[CanvasProject, dict], T | Awaitable[tuple[T, dict]]],
+        filename: str = "element-details.json",
+    ) -> T:
+        """在同一项目锁内协调主文件和 sidecar 写入。
+
+        两个文件无法由普通文件系统提供真正的跨文件事务，因此这里使用临时文件、
+        顺序替换和失败回滚，避免把半完成的结构暴露给后续 Canvas 调用。
+        """
+        path = CanvasPathResolver.resolve(self.workspace, project_path)
+        lock = self._locks[str(path)]
+        async with lock:
+            project = await self.read(project_path)
+            sidecar = await self._read_sidecar_strict(path / filename)
+            result = mutator(project, sidecar)
+            if asyncio.iscoroutine(result):
+                result = await result
+            if not isinstance(result, tuple) or len(result) != 2:
+                raise TypeError("transaction_with_sidecar mutator must return (result, sidecar)")
+            value, updated_sidecar = result
+            project.canvas.validate()
+            await self._write_bundle(path, project, updated_sidecar, filename)
+            return value
+
+    async def _write(self, path: Path, project: CanvasProject) -> None:
+        """原子写入主文件并保留 sidecar 的已有内容。"""
+        encoded = CanvasCodec.encode(project)
+        await asyncio.to_thread(self._atomic_write_text, path / "magic.project.js", encoded)
+
+    async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:
+        """读取可选 sidecar；不存在或非法时返回空对象。"""
+        path = CanvasPathResolver.resolve(self.workspace, project_path) / filename
+        return await self._read_sidecar_strict(path, missing_ok=True)
+
+    async def write_sidecar(self, project_path: str, data: dict, filename: str = "element-details.json") -> None:
+        """原子写入 Canvas 侧车元数据，不把内部字段写入主协议。"""
+        path = CanvasPathResolver.resolve(self.workspace, project_path) / filename
+        await asyncio.to_thread(self._atomic_write_text, path, json.dumps(data, ensure_ascii=False, indent=2))
+
+    async def _read_sidecar_strict(self, path: Path, missing_ok: bool = True) -> dict:
+        """严格读取 sidecar，损坏或非对象结构不静默覆盖。"""
+        if not path.exists():
+            if missing_ok:
+                return {}
+            raise ValueError("INVALID_ELEMENT_DETAILS")
+        try:
+            data = await asyncio.to_thread(path.read_text, encoding="utf-8")
+            value = json.loads(data)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("INVALID_ELEMENT_DETAILS") from exc
+        if not isinstance(value, dict):
+            raise ValueError("INVALID_ELEMENT_DETAILS")
+        return value
+
+    async def _write_bundle(
+        self, path: Path, project: CanvasProject, sidecar: dict, filename: str
+    ) -> None:
+        """以临时文件和备份实现主文件、sidecar 的可恢复写入。"""
+        project_file = path / "magic.project.js"
+        sidecar_file = path / filename
+        encoded = CanvasCodec.encode(project)
+        sidecar_text = json.dumps(sidecar, ensure_ascii=False, indent=2)
+        temp_files: list[Path] = []
+        backups: dict[Path, bytes | None] = {}
+        try:
+            for target, content in ((project_file, encoded), (sidecar_file, sidecar_text)):
+                fd, raw_path = tempfile.mkstemp(prefix=f".{target.name}.", dir=path)
+                os.close(fd)
+                temp_path = Path(raw_path)
+                temp_path.write_text(content, encoding="utf-8")
+                temp_files.append(temp_path)
+                backups[target] = target.read_bytes() if target.exists() else None
+            os.replace(temp_files[0], project_file)
+            os.replace(temp_files[1], sidecar_file)
+        except Exception:
+            for target, original in backups.items():
+                try:
+                    if original is None:
+                        target.unlink(missing_ok=True)
+                    else:
+                        target.write_bytes(original)
+                except OSError:
+                    pass
+            raise
+        finally:
+            for temp_path in temp_files:
+                temp_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _atomic_write_text(target: Path, content: str) -> None:
+        """通过同目录临时文件和原子替换写入单个文件。"""
+        fd, raw_path = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        os.close(fd)
+        temp_path = Path(raw_path)
+        try:
+            temp_path.write_text(content, encoding="utf-8")
+            os.replace(temp_path, target)
+        finally:
+            temp_path.unlink(missing_ok=True)
