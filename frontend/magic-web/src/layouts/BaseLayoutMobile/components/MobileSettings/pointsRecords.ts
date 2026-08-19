@@ -2,7 +2,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import { userStore } from "@/models/user"
 
 import type { Admin } from "@/types/admin"
-import type { PointsRecordGroup, PointsRecordItem } from "./types"
+import type { MobileSettingsPointsRole, PointsRecordGroup, PointsRecordItem } from "./types"
 
 const POINTS_GROUP_ORDER = ["today", "yesterday", "thisWeek", "earlier"] as const
 type PointsRecordSourceItem = Admin.OrganizationPointsChangeListItem | Record<string, unknown>
@@ -84,10 +84,19 @@ export function getMobileSettingsPointsPurchaseState() {
 	const subscriptionInfo = userStore.user.organizationSubscriptionInfo
 
 	return {
-		points: userStore.user.organizationPoints || 0,
+		points: userStore.user.organizationPointsInfo ? userStore.user.organizationPoints : null,
 		isPaidPlan: Boolean(subscriptionInfo?.is_paid_plan),
 		canRecharge: Boolean(subscriptionInfo?.is_recharge_points),
 	}
+}
+
+/** Choose a non-commercial title in private deployments while preserving the existing purchase title elsewhere. */
+export function getMobileSettingsPointsSheetTitleKey(params: {
+	privateDeploy: boolean
+	role: MobileSettingsPointsRole
+}) {
+	if (!params.privateDeploy) return "bonusPointsModal.purchasePoints"
+	return params.role === "teamAdmin" ? "setting.teamPoints" : "bonusPointsModal.bonusPoints"
 }
 
 /** 统一把积分记录解析成用户时区下的时间对象，非法时间返回 null 供调用方兜底。 */

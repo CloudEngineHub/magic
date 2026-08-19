@@ -6082,6 +6082,7 @@
 			"keepBoth": "Keep Both",
 			"merge": "Merge",
 			"message": "A folder named “{{folderName}}” already exists here. Do you want to merge the contents or keep both folders?",
+			"replace": "Overwrite",
 			"title": "Folder Already Exists"
 		},
 		"editorGenerationLockDescription": "Please wait a moment. Editing will resume automatically when the update finishes",

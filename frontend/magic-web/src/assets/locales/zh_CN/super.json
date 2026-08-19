@@ -6096,6 +6096,7 @@
 			"keepBoth": "保留两者",
 			"merge": "合并",
 			"message": "此位置已经存在名为 “{{folderName}}” 的文件夹。您想合并内容，还是保留两个文件夹？",
+			"replace": "覆盖",
 			"title": "已存在同名文件夹"
 		},
 		"editorGenerationLockDescription": "请稍候片刻，更新完成后会自动恢复编辑",

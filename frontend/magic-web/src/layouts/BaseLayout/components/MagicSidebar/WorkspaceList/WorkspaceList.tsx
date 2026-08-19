@@ -344,6 +344,8 @@ function WorkspaceList({ beforeItems }: WorkspaceListProps) {
 			const workspaceElement = workspaceListRef.current?.querySelector<HTMLElement>(
 				`[data-workspace-id-segment="${workspaceIdSegment}"]`,
 			)
+			// Workspace items use scroll-margin-top for the sticky list header.
+			// Without it, block:start tucks the first project under the workspace title.
 			workspaceElement?.scrollIntoView({
 				behavior: "smooth",
 				block: "start",

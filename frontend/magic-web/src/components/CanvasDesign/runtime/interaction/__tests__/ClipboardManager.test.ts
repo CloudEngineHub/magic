@@ -1911,4 +1911,152 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
 		expect(releaseLoadDeferral).toHaveBeenCalledTimes(1)
 	})
+
+	it("preserves a cross-canvas empty image element without requiring a source", async () => {
+		const emptyImage: ImageElement = {
+			id: "empty-image",
+			type: "image",
+			x: 12,
+			y: 16,
+			width: 80,
+			height: 60,
+		}
+		const manager = createClipboardManager()
+
+		const result = await manager.prepareClipboardTreeElement({
+			sourceElement: emptyImage,
+			currentNames: new Set(),
+			isRoot: true,
+			offsetX: 20,
+			offsetY: 30,
+			rootZIndex: 7,
+			canReuseElementSrc: false,
+			fileByElementId: new Map(),
+			metadataByElementId: new Map(),
+			resourcePathMap: new Map(),
+			sourceCanvasId: "source-canvas",
+		})
+
+		expect(result.sourceReferenceFailureCount).toBe(0)
+		expect(result.pendingUploads).toEqual([])
+		expect(result.element).toEqual(
+			expect.objectContaining({
+				type: "image",
+				x: 32,
+				y: 46,
+				zIndex: 7,
+			}),
+		)
+		expect((result.element as ImageElement).src).toBeUndefined()
+	})
+
+	it("rewrites source-canvas aliases during background resource transfers", async () => {
+		const uploadResult: UploadFileResponse = {
+			path: "./videos/reference-copy.mp4",
+			src: "https://target.test/reference-copy.mp4",
+			fileName: "reference-copy.mp4",
+			expires_at: "2030-01-01 00:00:00",
+		}
+		const currentElement: VideoElement = {
+			id: "pasted-video",
+			type: "video",
+			name: "Pasted video",
+			x: 12,
+			y: 16,
+			width: 160,
+			height: 90,
+			generateVideoRequest: {
+				model_id: "video-model",
+				prompt: "merge clips",
+				inputs: {
+					reference_videos: [{ uri: "./videos/reference.mp4" }],
+				},
+			},
+		}
+		const transferRemoteResource = vi.fn(async () => uploadResult)
+		const update = vi.fn()
+		const recordHistoryImmediate = vi.fn()
+		const releaseLoadDeferral = vi.fn()
+		const manager = createClipboardManager()
+		manager.canvas = {
+			id: "target-canvas",
+			canvasFileUploadManager: {
+				getCompletedRemoteResourceTransfer: vi.fn(),
+				getReusableCompletedRemoteResourceTransfer: vi.fn(),
+				transferRemoteResource,
+			},
+			elementManager: {
+				getElementData: vi.fn(() => currentElement),
+				update,
+			},
+			historyManager: {
+				recordHistoryImmediate,
+			},
+			imageResourceManager: {
+				primeCache: vi.fn(),
+			},
+			videoResourceManager: {
+				primeCache: vi.fn(),
+			},
+		} as unknown as ClipboardManagerTestHarness["canvas"]
+		;(
+			manager as unknown as {
+				runClipboardGenerationResourceTransfers: (options: {
+					fileMetadata: Array<{
+						elementId: string
+						filename: string
+						mimeType: string
+						fileSize: number
+						role: string
+						resourcePath?: string
+						sourceRef?: { src?: string; ossUrl?: string }
+					}>
+					sourceCanvasId?: string
+					targetElementIds: string[]
+					releaseLoadDeferrals?: Array<() => void>
+				}) => void
+			}
+		).runClipboardGenerationResourceTransfers({
+			fileMetadata: [
+				{
+					elementId: "generation-resource:0",
+					filename: "reference.mp4",
+					mimeType: "video/mp4",
+					fileSize: 0,
+					role: "generation-resource",
+					resourcePath: "./videos/reference.mp4",
+					sourceRef: {
+						src: "./videos/reference.mp4",
+						ossUrl: "https://source.test/reference.mp4",
+					},
+				},
+			],
+			sourceCanvasId: "source-canvas",
+			targetElementIds: ["pasted-video"],
+			releaseLoadDeferrals: [releaseLoadDeferral],
+		})
+
+		await vi.waitFor(() => {
+			expect(transferRemoteResource).toHaveBeenCalledTimes(1)
+			expect(update).toHaveBeenCalledTimes(1)
+		})
+
+		expect(update).toHaveBeenCalledWith(
+			"pasted-video",
+			expect.objectContaining({
+				generateVideoRequest: expect.objectContaining({
+					inputs: expect.objectContaining({
+						reference_videos: [{ uri: "./videos/reference-copy.mp4" }],
+					}),
+				}),
+			}),
+			{ silent: false },
+		)
+		expect(manager.canvas.videoResourceManager.primeCache).toHaveBeenCalledWith(
+			"./videos/reference-copy.mp4",
+			uploadResult,
+		)
+		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+		expect(releaseLoadDeferral).toHaveBeenCalledTimes(1)
+	})
 })

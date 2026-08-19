@@ -19,6 +19,8 @@ import SlidesTemplateHomeSelectionPreview from "../Slides/SlidesTemplateHomeSele
 import { ScenePanelVariant } from "../../components/LazyScenePanel/types"
 import { useOptionalScenePanelVariant } from "../../stores"
 import VideoProductionConfigPanel from "../../components/VideoProductionConfigPanel"
+import { useConversationInputLayout } from "../../../ConversationInputResize/context"
+import { cn } from "@/utils/cn"
 
 interface DefaultInputContainerProps extends ScenePanelComponentBaseProps {}
 
@@ -38,6 +40,9 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	const isSlidesMode = editorContext?.topicMode === TopicMode.PPT
 	const variant = useOptionalScenePanelVariant()
 	const isProjectScene = variant === ScenePanelVariant.TopicPage
+	const inputLayout = useConversationInputLayout()
+	// A fixed conversation height must propagate through scene wrappers before the editor can scroll.
+	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 
 	useEffect(() => {
 		if (!isSlidesMode) {
@@ -125,13 +130,17 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 			<AnimatePresence mode="wait">
 				<motion.div
 					key="slides-editor"
+					className={cn(shouldFillHeight && "h-full min-h-0")}
 					initial={SCENE_ANIMATION_CONFIG.initial}
 					animate={SCENE_ANIMATION_CONFIG.animate}
 					exit={SCENE_ANIMATION_CONFIG.exit}
 					transition={SCENE_ANIMATION_CONFIG.transition}
 				>
-					<div className="flex flex-col gap-2">
+					<div
+						className={cn("flex flex-col gap-2", shouldFillHeight && "h-full min-h-0")}
+					>
 						<div
+							className={cn(shouldFillHeight && "min-h-0 flex-1 [&>div]:h-full")}
 							onDragEnterCapture={handleEditorRandomDragOver}
 							onDragOverCapture={handleEditorRandomDragOver}
 							onDropCapture={handleEditorRandomDrop}
@@ -166,7 +175,10 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 										? handleSlidesTemplatePickerContainerChange
 										: undefined
 								}
-								className={isProjectScene ? "gap-2 p-2" : undefined}
+								className={cn(
+									isProjectScene && "gap-2 p-2",
+									shouldFillHeight && "shrink-0",
+								)}
 								templatePickerOpen={isSlidesTemplatePickerOpen}
 								onTemplatePickerOpenChange={setIsSlidesTemplatePickerOpen}
 								showTemplateActions={isProjectScene}

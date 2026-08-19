@@ -135,6 +135,7 @@ export interface UseMessageQueueProps {
 	topicId?: string
 	agentCode?: string
 	isTaskRunning?: boolean
+	isWaitingForUser?: boolean
 	isEmptyStatus?: boolean
 	isShowLoadingInit?: boolean
 }
@@ -144,6 +145,7 @@ function useMessageQueue({
 	topicId,
 	agentCode,
 	isTaskRunning,
+	isWaitingForUser,
 	isEmptyStatus,
 	isShowLoadingInit,
 }: UseMessageQueueProps) {
@@ -1066,6 +1068,7 @@ function useMessageQueue({
 			// Scenario: while consuming task 1, user sends 2/3/4 offline; server completes task 1 during disconnect;
 			// after reconnect, 2/3/4 are re-submitted to server queue, but frontend missed the task-end event — need to proactively consume the first pending item.
 			if (!projectId || !topicId || !currentTopicContext) return
+			if (isWaitingForUser) return
 			if (syncLocalQueueLockRef.current && !options?.ignoreSyncLock) return
 			if (getNetworkMonitor().isNetworkOffline()) return
 			if (isTaskRunningRef.current) return
@@ -1450,7 +1453,7 @@ function useMessageQueue({
 
 	// 任务完成时（isTaskRunning 从 true → false），检查队列并兜底消费。
 	useUpdateEffect(() => {
-		if (!isTaskRunning && projectId && topicId) {
+		if (!isWaitingForUser && !isTaskRunning && projectId && topicId) {
 			const timer = setTimeout(async () => {
 				const latestQueue = await fetchQueueList()
 				if (Array.isArray(latestQueue) && latestQueue.length > 0) {
@@ -1459,7 +1462,7 @@ function useMessageQueue({
 			}, 500)
 			return () => clearTimeout(timer)
 		}
-	}, [isTaskRunning])
+	}, [isTaskRunning, isWaitingForUser])
 
 	// // 当任务完成时，自动处理下一个消息
 	// useUpdateEffect(() => {

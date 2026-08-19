@@ -94,6 +94,58 @@ class FileServiceTest extends CloudFileBaseTest
         $this->assertEmpty($list);
     }
 
+    /**
+     * 使用真实 FileService 配置验证批量预签名 URL 请求。
+     */
+    public function testGetPreSignedUrlsByCredentialWithRealFileServiceRequest(): void
+    {
+        $filesystem = $this->getFilesystem();
+        $credentialPolicy = new CredentialPolicy([
+            'sts' => true,
+            'roleSessionName' => 'batch-presigned-url-test',
+        ]);
+
+        $urls = $filesystem->getPreSignedUrlsByCredential(
+            $credentialPolicy,
+            [
+                [
+                    'object_key' => 'easy-file/file-service.txt',
+                    'options' => [
+                        'filename' => 'batch-file-service.txt',
+                    ],
+                ],
+                [
+                    'object_key' => 'easy-file/test.txt',
+                    'options' => [
+                        'filename' => 'batch-test.txt',
+                        'download' => false,
+                    ],
+                ],
+            ],
+            $this->getOptions([
+                'expires' => 600,
+            ])
+        );
+
+        $this->assertCount(2, $urls);
+        $this->assertArrayHasKey('easy-file/file-service.txt', $urls);
+        $this->assertArrayHasKey('easy-file/test.txt', $urls);
+
+        foreach ($urls as $url) {
+            $parsedUrl = parse_url($url);
+            $this->assertIsArray($parsedUrl);
+            $this->assertSame('https', $parsedUrl['scheme'] ?? null);
+            $this->assertNotEmpty($parsedUrl['host'] ?? null);
+
+            $query = [];
+            parse_str((string) ($parsedUrl['query'] ?? ''), $query);
+            $this->assertArrayHasKey('x-oss-signature', $query);
+        }
+
+        $this->assertContentDisposition($urls['easy-file/file-service.txt'], 'attachment; filename="batch-file-service.txt"');
+        $this->assertContentDisposition($urls['easy-file/test.txt'], 'inline; filename="batch-test.txt"');
+    }
+
     public function testSimpleUpload()
     {
         $filesystem = $this->getFilesystem();

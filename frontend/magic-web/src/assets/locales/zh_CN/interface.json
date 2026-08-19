@@ -2241,6 +2241,13 @@
 		"openSystemNotificationSettings": "系统通知设置",
 		"orderRecords": "订单记录",
 		"personalInfo": "个人信息",
+		"personalQuota": "个人额度",
+		"personalQuotaSheet": {
+			"cta": "我知道了",
+			"hint": "该额度为您在当前组织中的个人可用上限，达到上限后需等待额度恢复或联系管理员调整。",
+			"usageFraction": "已使用 {{used}} / {{total}}"
+		},
+		"personalQuotaZeroDescription": "当前个人额度为 0，如需使用团队积分，请联系团队管理员调整额度。",
 		"phoneAreaCode": {
 			"china": "中国大陆(+86)",
 			"malaysia": "马来西亚(+60)"
@@ -2286,6 +2293,13 @@
 		"standard": "标准",
 		"system": "系统",
 		"systemSetting": "系统设置",
+		"teamPoints": "团队积分",
+		"teamPointsSheet": {
+			"balanceLabel": "积分余额",
+			"cta": "我知道了",
+			"hint": "整个团队所有用户共同使用团队积分余额，若团队总积分耗尽，个人剩余额度将无法使用。",
+			"title": "团队积分"
+		},
 		"thirdPartyPlatform": "第三方平台",
 		"timezone": "时区",
 		"timezoneDescription": "系统基于该时区设置显示相关时间",

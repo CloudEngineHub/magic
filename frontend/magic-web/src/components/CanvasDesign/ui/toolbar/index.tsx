@@ -351,7 +351,7 @@ export default function Tools() {
 
 				return (
 					<Tooltip delayDuration={0} key={item.value}>
-						<TooltipTrigger className={styles.toolTrigger}>
+						<TooltipTrigger>
 							<IconButton
 								className={styles.toolItem}
 								selected={item.value === activeTool}

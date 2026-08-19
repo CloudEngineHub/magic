@@ -12,9 +12,12 @@ use App\Application\Kernel\SmartFileLinks;
 use App\Application\ModelGateway\Service\LLMAppService;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ModelGateway\Contract\VideoGenerationConnectivityTestableInterface;
+use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterface;
 use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
 use App\Domain\ModelGateway\Entity\Dto\EmbeddingsDTO;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\ModelGateway\Entity\ValueObject\QueueExecutorConfig;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
 use App\Domain\Provider\DTO\ProviderConfigDTO;
 use App\Domain\Provider\DTO\ProviderConfigModelsDTO;
@@ -55,6 +58,7 @@ use Hyperf\DbConnection\Db;
 use Hyperf\Odin\Api\Response\ChatCompletionResponse;
 use JsonException;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Throwable;
 
 use function Hyperf\Translation\__;
 
@@ -351,10 +355,11 @@ readonly class AdminProviderAppService
             $modelPrimaryId
         );
         // 根据服务商类型和模型类型进行连通性测试
-        return match ($this->getConnectivityTestType($providerModelEntity->getCategory()->value, $providerModelEntity->getModelType()->value)) {
+        return match (NaturalLanguageProcessing::fromCategory($providerModelEntity->getCategory(), $providerModelEntity->getModelType()->value)) {
             NaturalLanguageProcessing::EMBEDDING => $this->embeddingConnectivityTest($modelPrimaryId, $authorization),
             NaturalLanguageProcessing::LLM => $this->llmConnectivityTest($modelPrimaryId, $authorization),
             NaturalLanguageProcessing::VLM => $this->adminProviderDomainService->vlmConnectivityTest($modelPrimaryId, $authorization),
+            NaturalLanguageProcessing::VIDEO => $this->videoConnectivityTest($providerModelEntity, $authorization),
             default => throw new BusinessException(__('service_provider.connectivity_not_supported')),
         };
     }
@@ -825,17 +830,49 @@ readonly class AdminProviderAppService
     }
 
     /**
-     * 获取联通测试类型.
+     * 视频模型连通性测试：根据服务商配置创建 adapter 并执行探测。
+     *
+     * 失败原因统一写入 ConnectResponse，与现有 LLM/VLM 连通性测试保持一致。
      */
-    private function getConnectivityTestType(string $category, int $modelType): NaturalLanguageProcessing
-    {
-        if (Category::from($category) === Category::LLM) {
-            return $modelType === ModelType::EMBEDDING->value ? NaturalLanguageProcessing::EMBEDDING : NaturalLanguageProcessing::LLM;
+    private function videoConnectivityTest(
+        ProviderModelEntity $providerModelEntity,
+        MagicUserAuthorization $authorization,
+    ): ConnectResponse {
+        $connectResponse = new ConnectResponse();
+
+        try {
+            $providerConfig = $this->providerConfigDomainService->getProviderConfig(
+                ProviderDataIsolation::create($authorization->getOrganizationCode()),
+                (string) $providerModelEntity->getServiceProviderConfigId(),
+            );
+            if ($providerConfig === null || $providerConfig->getProviderCode() === null) {
+                throw new BusinessException(__('service_provider.connectivity_not_supported'));
+            }
+
+            // 视频服务商按 provider code 获取 adapter，未实现连通性测试能力的不支持。
+            $adapter = di(VideoGenerationProviderAdapterFactoryInterface::class)->createByProviderCode(
+                $providerConfig->getProviderCode(),
+                $providerModelEntity->getModelVersion(),
+            );
+            if (! $adapter instanceof VideoGenerationConnectivityTestableInterface) {
+                throw new BusinessException(__('service_provider.connectivity_not_supported'));
+            }
+
+            // 各 provider 自实现连通性探测，失败异常在下方统一转成 ConnectResponse 返回给前端。
+            $connectResponse->setStatus($adapter->testConnection(
+                QueueExecutorConfig::fromProviderConfig($providerConfig->getConfig()?->toArray() ?? []),
+                $providerModelEntity->getModelVersion(),
+            ));
+            if (! $connectResponse->isStatus()) {
+                $connectResponse->setMessage('video connectivity test failed');
+            }
+        } catch (Throwable $exception) {
+            // 与 LLM/VLM 连通性测试一致，把 provider 错误信息作为失败原因返回。
+            $connectResponse->setStatus(false);
+            $connectResponse->setMessage($exception->getMessage());
         }
-        if (Category::from($category)->isVlm()) {
-            return NaturalLanguageProcessing::VLM;
-        }
-        return NaturalLanguageProcessing::DEFAULT;
+
+        return $connectResponse;
     }
 
     private function embeddingConnectivityTest(string $modelPrimaryId, MagicUserAuthorization $authorization): ConnectResponse

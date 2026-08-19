@@ -96,6 +96,9 @@ importers:
       '@arms/rum-browser':
         specifier: ^0.0.37
         version: 0.0.37(@babel/runtime@7.29.7)
+      '@cloudcare/browser-rum':
+        specifier: 3.3.6
+        version: 3.3.6
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1705,6 +1708,15 @@ packages:
   '@chevrotain/utils@11.0.3':
     resolution: {integrity: sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ==}
 
+  '@cloudcare/browser-core@3.3.6':
+    resolution: {integrity: sha512-LY7st6P8gjEabLsDT2aDuuBi8mopM8FMLQK3Z3hTWUDpDdTUxxwXd0a0eFqrhWZj1gESlYhUMBZo8uIzps32jA==}
+
+  '@cloudcare/browser-rum@3.3.6':
+    resolution: {integrity: sha512-CsHJaRc46jssHrrkxHs43O9RtXbyPiWNFRvOSe1WxTZU0bLMC51ptJc0BWGWiZhBh3C/DNwqAAicZcReOnEhKw==}
+
+  '@cloudcare/browser-worker@3.3.6':
+    resolution: {integrity: sha512-h7RB7YRS9nqHrSniCvJj0kZzcy6gy7CPfCJvzSrbeSUVBzXLxG4kbBnZS3qoJptgVPHr4dp+0UfU9B66zoPomg==}
+
   '@code-inspector/core@1.6.6':
     resolution: {integrity: sha512-r7EzrS5391Nhd3zvuJF9EprmBTxL6jZzBztY5WRJs7V17I6vmt2YmJVq4zWIEBWaGF/BAm5bh3Xz0HyxdV6xIA==}
 
@@ -2315,9 +2327,11 @@ packages:
 
   '@dtyq/es6-template-strings@0.0.6':
     resolution: {integrity: sha512-QzusO9G+v7KFuyQaiVOH+7nN8DU6mnB3WpBfAYGFP/fvU1nxs6oh6WXyj+MBhJeU7gOGj2ZHf9NjchcG79crCQ==, tarball: https://registry.npmjs.org/@dtyq/es6-template-strings/-/es6-template-strings-0.0.6.tgz}
+    engines: {node: '>=18.0.0'}
 
   '@dtyq/eslint-config@0.0.11':
     resolution: {integrity: sha512-QFsMh5KAmLpfhL16i1ul9HyGPPW/eNEfzPRiPJK8WiLzX9uuScO6EadmRFH9wP8V3zOjuhWHJm7wq2JBS+b0PQ==, tarball: https://git.dtyq.com/api/packages/magic/npm/%40dtyq%2Feslint-config/-/0.0.11/eslint-config-0.0.11.tgz}
+    engines: {node: '>=14.0.0'}
     hasBin: true
     peerDependencies:
       eslint: '>=8.0.0'
@@ -2334,16 +2348,19 @@ packages:
 
   '@dtyq/timezone@0.0.2':
     resolution: {integrity: sha512-iiEr7xoq0iMiFLK4m0OS9xJ0xAcB0W0ECZxhpb/DYO/oDy/fqxZH7SBnCBcCXPRanGPvy5hZQjGobHHy7IAleA==, tarball: https://git.dtyq.com/api/packages/magic/npm/%40dtyq%2Ftimezone/-/0.0.2/timezone-0.0.2.tgz}
+    engines: {node: '>=16', pnpm: '>=10.0.0'}
     peerDependencies:
       dayjs: ^1.11.12
 
   '@dtyq/upload-sdk@0.0.11':
     resolution: {integrity: sha512-IvRnZj9ofVCmBu+Dq+SDnnyEgGfHgh0gdhqbJd8ZcIYeDNjVo2V03aJYCNW85pvr2Zkmorw5agrMzQKydnrpBw==, tarball: https://registry.npmjs.org/@dtyq/upload-sdk/-/upload-sdk-0.0.11.tgz}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/user-selector@0.1.15':
     resolution: {integrity: sha512-dDYmrFeQTHHJVfDNGgR749XRByokha3aqffeg3wyTw+fua1jffExgct0NxmBf6BFffxH1znvO+15whGuzvG0fw==, tarball: https://registry.npmjs.org/@dtyq/user-selector/-/user-selector-0.1.15.tgz}
+    engines: {node: '>=18.18.0', pnpm: '>=9'}
     peerDependencies:
       '@radix-ui/react-avatar': '>=1 <2'
       '@radix-ui/react-checkbox': '>=1 <2'
@@ -16966,10 +16983,21 @@ snapshots:
 
   '@chevrotain/utils@11.0.3': {}
 
+  '@cloudcare/browser-core@3.3.6': {}
+
+  '@cloudcare/browser-rum@3.3.6':
+    dependencies:
+      '@cloudcare/browser-core': 3.3.6
+      '@cloudcare/browser-worker': 3.3.6
+
+  '@cloudcare/browser-worker@3.3.6':
+    dependencies:
+      '@cloudcare/browser-core': 3.3.6
+
   '@code-inspector/core@1.6.6':
     dependencies:
       '@vue/compiler-dom': 3.5.41
-      chalk: 4.1.1
+      chalk: 4.1.2
       dotenv: 16.6.1
       launch-ide: 1.4.5
       portfinder: 1.0.38
@@ -28394,7 +28422,7 @@ snapshots:
 
   launch-ide@1.4.5:
     dependencies:
-      chalk: 4.1.1
+      chalk: 4.1.2
       dotenv: 16.6.1
 
   layout-base@1.0.2: {}

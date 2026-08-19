@@ -18,6 +18,7 @@ import {
 	findActiveStickyIndex,
 	type VirtualMessageItem,
 } from "../virtual-message-items"
+import { shouldAdjustVirtualMessageScrollPosition } from "../virtual-scroll-position"
 import { MessageViewStateScopeProvider } from "../view-state/MessageViewStateContext"
 
 const terminalToolStatuses = new Set(["completed", "failed", "error", "finished", "suspended"])
@@ -134,6 +135,8 @@ function VirtualMessageListInner({
 		useAnimationFrameWithResizeObserver: true,
 		onChange: onVirtualizerChange,
 	})
+	virtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+		shouldAdjustVirtualMessageScrollPosition
 
 	if (virtualizerRef) virtualizerRef.current = virtualizer
 

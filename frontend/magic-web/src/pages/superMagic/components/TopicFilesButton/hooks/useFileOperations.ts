@@ -454,7 +454,12 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// 文件夹上传处理函数（所有文件作为一个任务）
 	const processFolderUpload = useCallback(
-		async (files: File[], suffixDir?: string, parentIdOverride?: string) => {
+		async (
+			files: File[],
+			suffixDir?: string,
+			parentIdOverride?: string,
+			displayName?: string,
+		) => {
 			const refreshCoordinator = createUploadRefreshCoordinator({
 				uploadType: "folder",
 				projectFiles: attachments || [],
@@ -493,6 +498,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					taskId: "",
 					storageType: "workspace",
 					source: UploadSource.ProjectFile,
+					displayName,
 					// 文件夹任务完成时的回调
 					onComplete: (taskId: string) => {
 						console.log(`📁 Folder upload task ${taskId} completed`)

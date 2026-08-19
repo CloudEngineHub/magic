@@ -6,11 +6,12 @@ Handles Magic Service API interactions including file registration.
 
 import json
 import os
+import re
 import traceback
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 from agentlang.logger import get_logger
@@ -233,6 +234,41 @@ class MagicServiceClient:
             payload,
             operation_name="设计视频生成",
         )
+
+    async def estimate_design_video_points(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Estimate points for a design video generation task."""
+        return await self._request_json(
+            "POST",
+            "/api/v1/design/estimate-video-points",
+            payload,
+            operation_name="设计视频积分预估",
+        )
+
+    async def ensure_project_directories(
+        self,
+        project_id: str,
+        directory_parts: List[str],
+    ) -> str:
+        """Ensure a project directory hierarchy exists in the Magic Service file tree."""
+        parent_id = ""
+        for directory_name in directory_parts:
+            result = await self._request_json(
+                "POST",
+                "/api/v1/super-agent/file",
+                {
+                    "project_id": project_id,
+                    "parent_id": parent_id,
+                    "file_name": directory_name,
+                    "is_directory": True,
+                    "ignore_duplicate": True,
+                    "pre_file_id": -1,
+                },
+                operation_name="创建项目目录",
+            )
+            parent_id = str(result.get("file_id") or "")
+            if not parent_id:
+                raise ApiError(f"创建项目目录失败: {directory_name}")
+        return parent_id
 
     async def get_slides_template_file_url(
         self,
@@ -1231,3 +1267,162 @@ class MagicServiceClient:
         finally:
             if should_close_session:
                 await session_to_use.close()
+
+    async def create_video(
+        self,
+        payload: Dict[str, Any],
+        request_id: str = "",
+    ) -> Dict[str, Any]:
+        """Create a regular video generation task."""
+        return await self._request_video_json(
+            "POST",
+            "/videos",
+            payload,
+            request_id=request_id,
+        )
+
+    async def estimate_video_points(
+        self,
+        payload: Dict[str, Any],
+        request_id: str = "",
+    ) -> Dict[str, Any]:
+        """Estimate points for a regular video request without creating it."""
+        return await self._request_video_json(
+            "POST",
+            "/videos/estimate-points",
+            payload,
+            request_id=request_id,
+        )
+
+    async def get_video_operation(
+        self,
+        operation_id: str,
+        request_id: str = "",
+    ) -> Dict[str, Any]:
+        """Get a regular video generation operation."""
+        normalized_id = (
+            operation_id.strip() if isinstance(operation_id, str) else ""
+        )
+        if not normalized_id:
+            raise ValueError("operation_id is required")
+        escaped_id = quote(normalized_id, safe="")
+        return await self._request_video_json(
+            "GET",
+            f"/videos/{escaped_id}",
+            request_id=request_id,
+        )
+
+    async def _request_video_json(
+        self,
+        method: str,
+        path: str,
+        payload: Optional[Dict[str, Any]] = None,
+        request_id: str = "",
+    ) -> Dict[str, Any]:
+        """Request a regular video endpoint and preserve the raw operation JSON."""
+        url = f"{self._video_api_base_url()}{path}"
+        headers = self._build_json_headers()
+        if request_id:
+            headers["request-id"] = request_id
+        session_to_use = self.session or aiohttp.ClientSession()
+        should_close_session = self.session is None
+
+        try:
+            async with session_to_use.request(
+                method,
+                url,
+                json=payload,
+                headers=headers,
+                timeout=600,
+            ) as response:
+                response_text = await response.text()
+                content_type = response.headers.get("Content-Type", "")
+                context = self._video_response_context(
+                    method,
+                    path,
+                    response.status,
+                    content_type,
+                    response_text,
+                )
+                if response.status < 200 or response.status >= 300:
+                    body = self._parse_json_object(response_text)
+                    message = self._video_error_message(body)
+                    suffix = f"; service error: {message}" if message else ""
+                    raise ApiError(
+                        f"Video API request failed: HTTP {response.status}; "
+                        f"{context}{suffix}",
+                        status_code=response.status,
+                        response_data=body or {"response": response_text},
+                    )
+                if not response_text.strip():
+                    raise ApiError(
+                        f"Video API returned an empty response; {context}",
+                        status_code=response.status,
+                        response_data={"response": response_text},
+                    )
+                try:
+                    body = json.loads(response_text)
+                except json.JSONDecodeError as exc:
+                    raise ApiError(
+                        f"Video API returned invalid JSON; {context}",
+                        status_code=response.status,
+                        response_data={"response": response_text},
+                        cause=exc,
+                    ) from exc
+                if not isinstance(body, dict):
+                    raise ApiError(
+                        f"Video API response must be a JSON object; {context}",
+                        status_code=response.status,
+                        response_data={"response": body},
+                    )
+                return body
+        except aiohttp.ClientError as exc:
+            raise ConnectionError(
+                f"Failed to connect to Magic Service: {exc}",
+                cause=exc,
+            ) from exc
+        finally:
+            if should_close_session:
+                await session_to_use.close()
+
+    def _video_api_base_url(self) -> str:
+        """Build the versioned base URL for regular video endpoints."""
+        parsed = urlparse(self.config.api_base_url.strip().rstrip("/"))
+        path = re.sub(r"/v\d+$", "", parsed.path.rstrip("/"))
+        return parsed._replace(path=f"{path}/v1").geturl().rstrip("/")
+
+    @staticmethod
+    def _parse_json_object(response_text: str) -> Optional[Dict[str, Any]]:
+        """Parse a JSON object response when possible."""
+        if not response_text.strip():
+            return None
+        try:
+            body = json.loads(response_text)
+        except json.JSONDecodeError:
+            return None
+        return body if isinstance(body, dict) else None
+
+    @staticmethod
+    def _video_error_message(body: Optional[Dict[str, Any]]) -> str:
+        """Extract a readable error message from a video response."""
+        if not body:
+            return ""
+        error = body.get("error")
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("detail") or "")
+        return str(error or body.get("message") or "")
+
+    @staticmethod
+    def _video_response_context(
+        method: str,
+        path: str,
+        status: int,
+        content_type: str,
+        body: str,
+    ) -> str:
+        """Summarize a video response for error diagnostics."""
+        summary = " ".join(body.split())[:300] or "<empty>"
+        return (
+            f"method={method} path={path} status={status} "
+            f"content_type={content_type or '<missing>'} body={summary!r}"
+        )

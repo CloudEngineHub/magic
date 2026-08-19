@@ -162,6 +162,37 @@ describe("TopicSharePopover touch desktop behavior", () => {
 		expect(preventDefault).toHaveBeenCalledTimes(1)
 	})
 
+	it("prevents focus-only dismissal when rendered inside an SDK iframe", () => {
+		const parentWindow = window.parent
+		Object.defineProperty(window, "parent", {
+			configurable: true,
+			value: {},
+		})
+
+		try {
+			render(
+				<TopicSharePopover
+					open
+					onOpenChange={vi.fn()}
+					topicId="mock-topic-id"
+					topicTitle="Mock topic"
+				>
+					<button type="button">share</button>
+				</TopicSharePopover>,
+			)
+
+			const preventDefault = vi.fn()
+			popoverContentProps.onFocusOutside?.({ preventDefault })
+
+			expect(preventDefault).toHaveBeenCalledTimes(1)
+		} finally {
+			Object.defineProperty(window, "parent", {
+				configurable: true,
+				value: parentWindow,
+			})
+		}
+	})
+
 	it("allows focus-only dismissal for a regular desktop pointer", () => {
 		render(
 			<TopicSharePopover
