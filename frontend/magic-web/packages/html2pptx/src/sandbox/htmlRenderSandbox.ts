@@ -9,12 +9,10 @@ import {
 	isDocumentReadyForRender,
 	measureContentSize,
 	normalizeSandboxHtml,
+	requiresNativeLoadWait,
 } from "./htmlRenderSandbox.helpers"
 import { installEChartsExportInterceptor } from "./echarts-export-interceptor"
-import {
-	SandboxReadyController,
-	type SandboxReadyControllerInput,
-} from "./waitSandboxReady"
+import { SandboxReadyController, type SandboxReadyControllerInput } from "./waitSandboxReady"
 import type { ResourceLoadError } from "../api/options"
 import { detectRenderReadinessCapabilities } from "./render-readiness"
 
@@ -114,9 +112,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 		options?: { signal?: AbortSignal; onResourceError?: (error: ResourceLoadError) => void },
 	): Promise<SandboxRenderResult> {
 		if (this.rendering) {
-			return Promise.reject(
-				new Error("[Sandbox] concurrent render is not supported"),
-			)
+			return Promise.reject(new Error("[Sandbox] concurrent render is not supported"))
 		}
 		this.rendering = true
 		let iframeWindow: Window
@@ -157,10 +153,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			let checkLoaded: () => void = () => {}
 			const renderStartedAt = Date.now()
 
-			const finish = (
-				type: "resolve" | "reject",
-				payload: SandboxRenderResult | unknown,
-			) => {
+			const finish = (type: "resolve" | "reject", payload: SandboxRenderResult | unknown) => {
 				if (lifecycleState.settled) return
 				lifecycleState.settled = true
 				try {
@@ -209,7 +202,8 @@ export class HtmlRenderSandbox implements SandboxInstance {
 			const onWindowError = (event: ErrorEvent) => {
 				Promise.resolve().then(() => {
 					if (event.defaultPrevented || lifecycleState.settled) return
-					const error = event.error ?? new Error(event.message || "Unknown page script error")
+					const error =
+						event.error ?? new Error(event.message || "Unknown page script error")
 					reportUnhandledScriptError(event.filename || "inline-script://window-error")
 					recordPageError(error)
 				})
@@ -242,10 +236,8 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				if (signal) signal.removeEventListener("abort", onAbort)
 				lifecycleState.readyController?.restore()
 				lifecycleState.readyController = null
-				if (lifecycleState.timeoutId)
-					clearTimeout(lifecycleState.timeoutId)
-				if (lifecycleState.pollTimerId)
-					clearTimeout(lifecycleState.pollTimerId)
+				if (lifecycleState.timeoutId) clearTimeout(lifecycleState.timeoutId)
+				if (lifecycleState.pollTimerId) clearTimeout(lifecycleState.pollTimerId)
 				lifecycleState.timeoutId = null
 				lifecycleState.pollTimerId = null
 			}
@@ -256,6 +248,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 					return
 				}
 				signal?.addEventListener("abort", onAbort, { once: true })
+				const needsNativeLoadWait = requiresNativeLoadWait(html)
 				const normalizedHtml = normalizeSandboxHtml(html)
 				const readinessCapabilities = detectRenderReadinessCapabilities(normalizedHtml)
 
@@ -270,7 +263,7 @@ export class HtmlRenderSandbox implements SandboxInstance {
 				lifecycleState.readyController = new this.ReadyController({
 					iframeWindow,
 					iframeDocument,
-					nativeLoadWaitMs: NATIVE_LOAD_WAIT_MS,
+					nativeLoadWaitMs: needsNativeLoadWait ? NATIVE_LOAD_WAIT_MS : 0,
 					onResourceError: options?.onResourceError,
 					onPageError: recordPageError,
 					...readinessCapabilities,
@@ -294,8 +287,9 @@ export class HtmlRenderSandbox implements SandboxInstance {
 							Promise.resolve()
 								.then(async () => {
 									await Promise.race([
-											lifecycleState.readyController?.waitForReady({ signal: renderSignal }) ??
-											Promise.resolve(),
+										lifecycleState.readyController?.waitForReady({
+											signal: renderSignal,
+										}) ?? Promise.resolve(),
 										pageErrorPromise,
 									])
 									const measured = measureContentSize({

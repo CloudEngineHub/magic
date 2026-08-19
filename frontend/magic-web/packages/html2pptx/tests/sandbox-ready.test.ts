@@ -5,6 +5,7 @@ import {
 	HtmlRenderSandbox,
 	type SandboxReadyControllerConstructor,
 } from "../src/sandbox/htmlRenderSandbox"
+import { NATIVE_LOAD_WAIT_MS } from "../src/shared/constants"
 
 let sandbox: HtmlRenderSandbox | null = null
 
@@ -37,5 +38,31 @@ describe("sandbox readiness", () => {
 		await render
 
 		expect(readyCalls).toBe(1)
+	})
+
+	it.each([
+		["static HTML", "<html><body>ready</body></html>", 0],
+		["scripted HTML", "<html><body><script>void 0</script></body></html>", NATIVE_LOAD_WAIT_MS],
+	])("uses the expected native-load wait for %s", async (_label, html, expectedWaitMs) => {
+		let observedWaitMs: number | undefined
+		const ReadyController = class {
+			constructor(input: { nativeLoadWaitMs: number }) {
+				observedWaitMs = input.nativeLoadWaitMs
+			}
+			async waitForReady(): Promise<void> {}
+			restore(): void {}
+		} as SandboxReadyControllerConstructor
+
+		sandbox = new HtmlRenderSandbox(undefined, { ReadyController })
+		Object.defineProperty(sandbox.document, "readyState", {
+			configurable: true,
+			get: () => "complete",
+		})
+		sandbox.window.requestAnimationFrame = (callback: FrameRequestCallback): number =>
+			window.setTimeout(() => callback(performance.now()), 0)
+
+		await sandbox.render(html)
+
+		expect(observedWaitMs).toBe(expectedWaitMs)
 	})
 })
