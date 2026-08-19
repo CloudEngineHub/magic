@@ -33,10 +33,16 @@ export interface SuperMagicTopicModelStoreLike {
 	currentTopicMode: TopicMode
 	/** Agent code when topic_mode is custom_agent */
 	currentAgentCode: string
+	/** Context key whose model data has completed loading */
+	loadedContextKey: string
+	/** Context key with an active model load or validation */
+	loadingContextKey: string
 	setSelectedLanguageModel: (model: ModelItem | null) => void
 	setSelectedImageModel: (model: ModelItem | null) => void
 	setSelectedVideoModel: (model: ModelItem | null) => void
 	setLoading: (loading: boolean) => void
+	markCurrentContextLoaded: (contextKey: string) => void
+	markContextLoading: (contextKey: string) => void
 }
 
 /**
@@ -100,6 +106,15 @@ class SuperMagicTopicModelService {
 			store.currentTopicMode === context.topicMode &&
 			store.currentAgentCode === (context.agentCode ?? "")
 		)
+	}
+
+	private getContextKey(context: ModelContext) {
+		return JSON.stringify([
+			context.topicId,
+			context.projectId,
+			context.topicMode,
+			context.agentCode ?? "",
+		])
 	}
 
 	private createRequestGuard(
@@ -177,8 +192,8 @@ class SuperMagicTopicModelService {
 					await this.flushAll(prev.topicId)
 				}
 
-				// 话题内，切换模式，重新校验模型
-				// 话题外，还是走默认的逻辑
+				// 话题内切换模式：旧上下文已加载完成时校验，否则按新模式重新获取配置。
+				// 话题外，还是走默认的逻辑。
 				if (
 					prev &&
 					prev.topicId &&
@@ -186,13 +201,42 @@ class SuperMagicTopicModelService {
 					prev.topicMode &&
 					(prev.topicMode !== topicMode || prev.agentCode !== agentCode)
 				) {
-					logger.report("[Context] Topic mode changed, validating models", {
+					const previousContextKey = this.getContextKey({
+						topicId: prev.topicId,
+						projectId: prev.projectId,
+						topicMode: prev.topicMode,
+						agentCode: prev.agentCode,
+					})
+					const currentContextKey = this.getContextKey({
+						topicId,
+						projectId,
+						topicMode,
+						agentCode,
+					})
+					const previousContextReady =
+						store.loadedContextKey === previousContextKey &&
+						store.loadingContextKey !== previousContextKey
+
+					store.markContextLoading(currentContextKey)
+
+					logger.report("[Context] Topic mode changed", {
 						oldMode: prev.topicMode,
 						newMode: topicMode,
 						oldAgentCode: prev.agentCode,
 						newAgentCode: agentCode,
+						previousContextReady,
 					})
-					await this.validateModelsForMode(topicMode, store)
+
+					if (previousContextReady) {
+						await this.validateModelsForMode(topicMode, store)
+					} else {
+						logger.report("[Context] Model load pending, refetching for new mode", {
+							topicId,
+							projectId,
+							topicMode,
+						})
+						await this.fetchTopicModel(topicId, projectId, topicMode, store)
+					}
 					return
 				}
 
@@ -416,6 +460,7 @@ class SuperMagicTopicModelService {
 		if (!this.isCurrentContext(store, context)) return
 		const requestGuard = this.createRequestGuard(store, context)
 		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
+		store.markContextLoading(this.getContextKey(context))
 		store.setLoading(true)
 
 		const previousLanguageModel = store.selectedLanguageModel
@@ -504,6 +549,9 @@ class SuperMagicTopicModelService {
 					imageModelId: imageModel?.model_id,
 					videoModelId: videoModel?.model_id,
 				})
+			}
+			if (isCurrentRequest()) {
+				store.markCurrentContextLoaded(this.getContextKey(context))
 			}
 		} finally {
 			if (isCurrentRequest()) store.setLoading(false)
@@ -850,10 +898,12 @@ class SuperMagicTopicModelService {
 		if (!this.isCurrentContext(store, context)) return
 		const requestGuard = this.createRequestGuard(store, context)
 		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
+		store.markContextLoading(this.getContextKey(context))
 
 		const completeLoading = () => {
 			if (hasCompletedLoading) return
 			if (!isCurrentRequest()) return
+			store.markCurrentContextLoaded(this.getContextKey(context))
 			store.setLoading(false)
 			hasCompletedLoading = true
 		}
@@ -1205,8 +1255,6 @@ class SuperMagicTopicModelService {
 				})
 			}
 
-			completeLoading()
-
 			// 级联回填逻辑：从高级别获取的值回填到低级别
 			// 确定数据来源级别
 			logger.report("[Fallback] Data source level determined", {
@@ -1231,6 +1279,7 @@ class SuperMagicTopicModelService {
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
 			if (needTopicBackfill) {
+				if (!isCurrentRequest()) return
 				logger.report("[Fallback] Backfilling Topic level", {
 					topicId,
 					sourceLevel,
@@ -1245,9 +1294,11 @@ class SuperMagicTopicModelService {
 					videoModelId: finalVideoModel?.model_id,
 					timestamp: Date.now(),
 				})
+				if (!isCurrentRequest()) return
 
 				// 更新 Topic 级别远程数据
 				try {
+					if (!isCurrentRequest()) return
 					await SuperMagicApi.saveSuperMagicTopicModel({
 						cache_id: topicId,
 						model_id: finalLanguageModel?.model_id,
@@ -1265,6 +1316,7 @@ class SuperMagicTopicModelService {
 				}
 			} else if (shouldFetchTopic && topicResult.success && topicResult.hasValidRemoteData) {
 				// Topic 级别本身就成功了且远程数据也有效，只需更新本地缓存
+				if (!isCurrentRequest()) return
 				await superMagicTopicModelCacheService.saveTopicModel(topicId, {
 					languageModelId: finalLanguageModel?.model_id,
 					imageModelId: finalImageModel?.model_id,
@@ -1282,6 +1334,7 @@ class SuperMagicTopicModelService {
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
 			if (needProjectBackfill) {
+				if (!isCurrentRequest()) return
 				const projectKey = this.genProjectKey(projectId)
 				logger.report("[Fallback] Backfilling Project level", {
 					projectId,
@@ -1299,9 +1352,11 @@ class SuperMagicTopicModelService {
 					videoModelId: finalVideoModel?.model_id,
 					timestamp: Date.now(),
 				})
+				if (!isCurrentRequest()) return
 
 				// 更新 Project 级别远程数据
 				try {
+					if (!isCurrentRequest()) return
 					await SuperMagicApi.saveSuperMagicTopicModel({
 						cache_id: projectKey,
 						model_id: finalLanguageModel?.model_id,
@@ -1319,6 +1374,7 @@ class SuperMagicTopicModelService {
 				}
 			} else if (projectId && projectResult.success && projectResult.hasValidRemoteData) {
 				// Project 级别本身就成功了且远程数据也有效，只需更新本地缓存
+				if (!isCurrentRequest()) return
 				await superMagicTopicModelCacheService.saveProjectModel(projectId, {
 					languageModelId: finalLanguageModel?.model_id,
 					imageModelId: finalImageModel?.model_id,
@@ -1335,6 +1391,7 @@ class SuperMagicTopicModelService {
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
 			if (needModeDefaultBackfill) {
+				if (!isCurrentRequest()) return
 				const modeDefaultKey = this.genModeDefaultKey(topicMode, agentCode)
 				logger.report("[Fallback] Backfilling ModeDefault level", {
 					topicMode,
@@ -1352,9 +1409,11 @@ class SuperMagicTopicModelService {
 					videoModelId: finalVideoModel?.model_id,
 					timestamp: Date.now(),
 				})
+				if (!isCurrentRequest()) return
 
 				// 更新 ModeDefault 级别远程数据
 				try {
+					if (!isCurrentRequest()) return
 					await SuperMagicApi.saveSuperMagicTopicModel({
 						cache_id: modeDefaultKey,
 						model_id: finalLanguageModel?.model_id,
@@ -1375,6 +1434,7 @@ class SuperMagicTopicModelService {
 				}
 			} else if (modeDefaultResult.success && modeDefaultResult.hasValidRemoteData) {
 				// ModeDefault 级别本身就成功了且远程数据也有效，只需更新本地缓存
+				if (!isCurrentRequest()) return
 				await superMagicTopicModelCacheService.saveModeDefaultModel(
 					this.genModeDefaultKey(topicMode, agentCode),
 					{

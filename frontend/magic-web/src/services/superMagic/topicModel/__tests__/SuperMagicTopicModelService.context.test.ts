@@ -231,6 +231,51 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		expect(store.isLoading).toBe(false)
 	})
 
+	it("refetches the new mode when the previous context is still loading", async () => {
+		const initialResponse = createDeferred<{ model: { model_id: string } }>()
+		const generalResponse = createDeferred<{ model: { model_id: string } }>()
+		const responses = [initialResponse.promise, generalResponse.promise]
+
+		vi.mocked(superMagicModeService.getModelListByMode).mockImplementation((mode) =>
+			mode === "general" ? [summaryModel] : [dataAnalysisModel],
+		)
+		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockImplementation(({ topic_id }) => {
+			if (topic_id === "topic-1") return responses.shift() as never
+			return Promise.resolve({}) as never
+		})
+
+		const store = createSuperMagicTopicModelStore()
+		superMagicTopicModelService.initForStore(store)
+		store.setCurrentContext("topic-1", "project-1", "ip-manager")
+
+		await vi.waitFor(() => {
+			expect(
+				vi
+					.mocked(SuperMagicApi.getSuperMagicTopicModel)
+					.mock.calls.filter(([params]) => params.topic_id === "topic-1"),
+			).toHaveLength(1)
+		})
+
+		store.setCurrentContext("topic-1", "project-1", "general")
+
+		await vi.waitFor(() => {
+			expect(
+				vi
+					.mocked(SuperMagicApi.getSuperMagicTopicModel)
+					.mock.calls.filter(([params]) => params.topic_id === "topic-1"),
+			).toHaveLength(2)
+		})
+
+		generalResponse.resolve({ model: { model_id: summaryModel.model_id } })
+		await vi.waitFor(() => {
+			expect(store.selectedLanguageModel?.model_id).toBe(summaryModel.model_id)
+			expect(store.isLoading).toBe(false)
+		})
+		expect(SuperMagicApi.saveSuperMagicTopicModel).not.toHaveBeenCalled()
+
+		initialResponse.resolve({ model: { model_id: dataAnalysisModel.model_id } })
+	})
+
 	it("restores readiness after validating a same-topic mode change", async () => {
 		const store = createSuperMagicTopicModelStore()
 		store.setCurrentContext("topic-1", "project-1", "summary")
