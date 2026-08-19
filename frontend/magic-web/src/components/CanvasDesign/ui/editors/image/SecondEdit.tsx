@@ -6,6 +6,7 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
+import { useElementVersionToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementVersionToolbarSection"
 import styles from "./index.module.css"
 import { LoaderCircle, Pencil, RotateCcw, SquarePen } from "lucide-react"
 import { type MessageEditorRef } from "../message/MessageEditor"
@@ -72,6 +73,7 @@ export default function SecondEdit(props: SecondEditProps) {
 	const canRegenerate = Boolean(activeContent.generateImageRequest?.model_id)
 	const directGenerateRequest = activeContent.generateImageRequest
 	const hasProcessingContent = hasProcessingImageContent(props.imageElement)
+	useElementVersionToolbarSection(props.imageElement, !isEditing && !isReplacing)
 
 	const createAndSubmitImageGeneration = useCallback(
 		async (

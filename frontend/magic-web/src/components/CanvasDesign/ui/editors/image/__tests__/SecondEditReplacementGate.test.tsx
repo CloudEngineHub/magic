@@ -65,6 +65,12 @@ vi.mock("../../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarConte
 	},
 }))
 
+vi.mock("../../../canvas-editor/element-bottom-toolbar/ElementVersionToolbarSection", () => ({
+	useElementVersionToolbarSection: (_element: unknown, visible?: boolean) => {
+		if (visible === false) mocks.registration = { visible: false }
+	},
+}))
+
 vi.mock("../ImageEditorSurface", () => ({
 	default: () => null,
 }))

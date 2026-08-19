@@ -28,6 +28,10 @@ vi.mock("../../../../app/providers/I18nProvider", () => ({
 	}),
 }))
 
+vi.mock("../../../../app/hooks/canvas", () => ({
+	useIsMediaReplacing: () => false,
+}))
+
 function createImageElement(overrides: Partial<ImageElement> = {}): ImageElement {
 	return {
 		id: "image-1",

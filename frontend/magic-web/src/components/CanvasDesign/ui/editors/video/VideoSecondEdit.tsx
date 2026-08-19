@@ -8,6 +8,7 @@ import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/ty
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
 import { generateUUID } from "../../../runtime/shared/ids"
 import { useElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbarContext"
+import { useElementVersionToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementVersionToolbarSection"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import { useVideoPointsConfirm } from "./useVideoPointsConfirm"
@@ -77,6 +78,10 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
 	const isReplacing = useIsMediaReplacing(videoElement.id)
 	const isMediaResourcePreviewOpen = props.isMediaResourcePreviewOpen ?? false
+	useElementVersionToolbarSection(
+		videoElement,
+		!editingMode && !isReplacing && !isMediaResourcePreviewOpen,
+	)
 	const videoContent = getActiveContent(videoElement)
 	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
 	const confirmVideoGeneration = useVideoPointsConfirm()
