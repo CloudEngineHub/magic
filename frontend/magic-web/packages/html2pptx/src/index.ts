@@ -326,6 +326,7 @@ export { DEFAULT_CONFIG } from "./shared/unit"
 export {
 	ExportFidelityError,
 	createOpfsUnavailableError,
+	isOpfsUnavailableError,
 	isExportFidelityError,
 	PptxExportError,
 	isPptxExportError,

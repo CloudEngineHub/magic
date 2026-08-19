@@ -674,6 +674,11 @@ function requireSerializedError(value: unknown): void {
 	if (typeof serialized.name !== "string" || typeof serialized.message !== "string") {
 		throw new Error("Packaging Worker error must contain string name and message fields")
 	}
+	for (const field of ["code", "capability", "causeCode"] as const) {
+		if (serialized[field] !== undefined && typeof serialized[field] !== "string") {
+			throw new Error(`Packaging Worker error ${field} must be a string`)
+		}
+	}
 	if (serialized.stack !== undefined && typeof serialized.stack !== "string") {
 		throw new Error("Packaging Worker error stack must be a string")
 	}
@@ -751,6 +756,14 @@ function requireRecord(value: unknown, label: string): Record<string, unknown> {
 function deserializeError(error: SerializedStreamingError): Error {
 	const value = new Error(error.message, { cause: error.cause })
 	value.name = error.name || "Error"
+	if (error.code !== undefined)
+		Object.defineProperty(value, "code", { value: error.code, enumerable: true })
+	if (error.capability !== undefined) {
+		Object.defineProperty(value, "capability", { value: error.capability, enumerable: true })
+	}
+	if (error.causeCode !== undefined) {
+		Object.defineProperty(value, "causeCode", { value: error.causeCode, enumerable: true })
+	}
 	if (error.stack) value.stack = error.stack
 	return value
 }

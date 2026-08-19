@@ -152,6 +152,12 @@ export interface StreamingSlideBatch {
 export interface SerializedStreamingError {
 	readonly name: string
 	readonly message: string
+	/** Stable error classification propagated across the Worker boundary. */
+	readonly code?: string
+	/** Optional capability identifier for structured unavailable diagnostics. */
+	readonly capability?: string
+	/** Code carried by a wrapped cause, such as a ZIP metadata spill failure. */
+	readonly causeCode?: string
 	readonly stack?: string
 	readonly cause?: string
 }

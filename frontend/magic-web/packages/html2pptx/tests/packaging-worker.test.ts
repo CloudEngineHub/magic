@@ -202,9 +202,88 @@ describe("packaging Worker protocol", () => {
 			if (response?.type === "completed") expect(response.summary.bytesWritten).toBe(84)
 		})
 	})
+
+	it("preserves structured capability fields on Worker errors", async () => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const failure = Object.assign(new Error("Central-directory metadata spill failed"), {
+			name: "CentralDirectoryMetadataBudgetError",
+			code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+			capability: "file.createWritable",
+			causeCode: "OPFS_WRITE_UNAVAILABLE",
+		})
+		const presentation = {
+			beginStreaming: vi.fn(async () => {
+				throw failure
+			}),
+		}
+		const handler = createStreamingPackagingWorkerHandler({
+			createPresentation: () => presentation as never,
+			postMessage: (message) => responses.push(message),
+		})
+
+		handler.handle({
+			type: "start",
+			payload: {
+				config,
+				plan: { finalSlideCount: 1 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+			},
+		})
+		await eventually(() => {
+			const response = responses.find((message) => message.type === "error")
+			expect(response?.type).toBe("error")
+			if (response?.type === "error") {
+				expect(response.error).toMatchObject({
+					name: "CentralDirectoryMetadataBudgetError",
+					code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+					capability: "file.createWritable",
+					causeCode: "OPFS_WRITE_UNAVAILABLE",
+				})
+			}
+		})
+	})
 })
 
 describe("streaming packager client", () => {
+	it("deserializes structured OPFS capability fields from Worker errors", async () => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type !== "start") return
+				worker.emit({
+					type: "error",
+					error: {
+						name: "CentralDirectoryMetadataBudgetError",
+						message: "Central-directory metadata spill failed",
+						code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+						capability: "file.createWritable",
+						causeCode: "OPFS_WRITE_UNAVAILABLE",
+					},
+				})
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		const error = await packager.ready.catch((value) => value)
+
+		expect(error).toMatchObject({
+			name: "CentralDirectoryMetadataBudgetError",
+			code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+			capability: "file.createWritable",
+			causeCode: "OPFS_WRITE_UNAVAILABLE",
+		})
+		expect(packager.state).toBe("failed")
+		packager.dispose()
+	})
+
 	it("uses an explicit module URL when constructing the default Packaging Worker", async () => {
 		const worker = new LoopbackWorker()
 		worker.handler = {
@@ -542,6 +621,13 @@ describe("streaming packager client", () => {
 		{
 			label: "missing error payload",
 			response: { type: "error" },
+		},
+		{
+			label: "invalid error cause code",
+			response: {
+				type: "error",
+				error: { name: "Error", message: "failed", causeCode: 42 },
+			},
 		},
 		{
 			label: "missing sink chunk data",

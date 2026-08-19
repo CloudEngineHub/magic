@@ -279,9 +279,17 @@ export function createStreamingPackagingWorkerHandler(
 	return { handle, abort }
 
 	function postError(error: Error, requestId?: number): void {
+		const candidate = error as Error & {
+			code?: unknown
+			capability?: unknown
+			causeCode?: unknown
+		}
 		const serialized: SerializedStreamingError = {
 			name: error.name || "Error",
 			message: error.message,
+			code: typeof candidate.code === "string" ? candidate.code : undefined,
+			capability: typeof candidate.capability === "string" ? candidate.capability : undefined,
+			causeCode: typeof candidate.causeCode === "string" ? candidate.causeCode : undefined,
 			stack: error.stack,
 			cause: error.cause === undefined ? undefined : String(error.cause),
 		}

@@ -30,6 +30,7 @@ import {
 	ExportFidelityError,
 	createOpfsUnavailableError,
 	isExportFidelityError,
+	isOpfsUnavailableError,
 	isPptxExportError,
 	PptxExportError,
 	normalizePptxExportError,
@@ -158,7 +159,11 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 			pageIndex: diagnostic.pageIndex,
 			pageCount: diagnostic.pageCount,
 			bytesWritten: diagnostic.bytesWritten,
-			code: isExportFidelityError(error) ? "fidelity-failed" : undefined,
+			code: isExportFidelityError(error)
+				? "fidelity-failed"
+				: isOpfsUnavailableError(error)
+					? "opfs-unavailable"
+					: undefined,
 		})
 	}
 }
@@ -773,6 +778,7 @@ function runStagingOperation<T>(
 }
 
 function isLikelyOpfsUnavailableError(error: unknown): boolean {
+	if (isOpfsUnavailableError(error)) return true
 	const name =
 		error && typeof error === "object" && "name" in error
 			? String((error as { name?: unknown }).name ?? "")

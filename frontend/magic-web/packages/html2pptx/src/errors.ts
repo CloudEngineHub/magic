@@ -95,6 +95,32 @@ export function createOpfsUnavailableError(
 	)
 }
 
+/** Recognize OPFS capability failures after they cross a Worker boundary. */
+export function isOpfsUnavailableError(error: unknown): boolean {
+	if (isPptxExportError(error)) return error.code === "opfs-unavailable"
+	if (!error || typeof error !== "object") return false
+	const candidate = error as {
+		code?: unknown
+		causeCode?: unknown
+		name?: unknown
+		message?: unknown
+	}
+	if (
+		candidate.code === "OPFS_WRITE_UNAVAILABLE" ||
+		candidate.causeCode === "OPFS_WRITE_UNAVAILABLE"
+	) {
+		return true
+	}
+	if (
+		candidate.name === "OpfsCapabilityError" ||
+		candidate.name === "SlideManifestStagingUnavailableError"
+	) {
+		return true
+	}
+	const message = typeof candidate.message === "string" ? candidate.message : ""
+	return /origin private file system|\bopfs\b|slide manifest staging requires/i.test(message)
+}
+
 export function getPptxExportDiagnostic(error: unknown): ExportFailureDiagnostic | undefined {
 	if (isPptxExportError(error)) return error.diagnostic
 	if (!error || typeof error !== "object") return undefined

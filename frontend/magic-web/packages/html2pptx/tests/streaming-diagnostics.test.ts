@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { createPptxStreamingExporter, getPptxExportDiagnostic, type PptxDestination } from "../src"
+import {
+	createPptxStreamingExporter,
+	getPptxExportDiagnostic,
+	isOpfsUnavailableError,
+	type PptxDestination,
+} from "../src"
 import type { SandboxInstance } from "../src/sandbox"
 
 function createSandboxStub(): SandboxInstance {
@@ -113,6 +118,53 @@ describe("streaming export diagnostics", () => {
 				},
 			},
 		})
+	})
+
+	it("recognizes an OPFS capability code carried by a wrapped Worker error", () => {
+		const error = Object.assign(new Error("Central-directory metadata spill failed"), {
+			name: "CentralDirectoryMetadataBudgetError",
+			code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+			causeCode: "OPFS_WRITE_UNAVAILABLE",
+		})
+
+		expect(isOpfsUnavailableError(error)).toBe(true)
+	})
+
+	it("classifies a Worker metadata spill cause as unavailable OPFS", async () => {
+		const workerError = Object.assign(
+			new Error("Central-directory metadata spill target could not be used"),
+			{
+				name: "CentralDirectoryMetadataBudgetError",
+				code: "CENTRAL_DIRECTORY_METADATA_BUDGET_EXCEEDED",
+				causeCode: "OPFS_WRITE_UNAVAILABLE",
+			},
+		)
+		const packager = {
+			state: "starting" as const,
+			ready: Promise.reject(workerError),
+			commitSlide: vi.fn(),
+			commitSlides: vi.fn(),
+			finalize: vi.fn(),
+			abort: vi.fn(async () => undefined),
+			dispose: vi.fn(),
+		}
+		const exporter = createPptxStreamingExporter({
+			createSandbox: createSandboxStub,
+			pipeline: {
+				createStreamingPresentationPackager: vi.fn(() => packager),
+			},
+		})
+
+		const error = await exporter(["page"], {
+			destination: createDestination(),
+		}).promise.catch((value) => value)
+
+		expect(getPptxExportDiagnostic(error)).toMatchObject({
+			phase: "worker",
+			code: "opfs-unavailable",
+			message: workerError.message,
+		})
+		expect(packager.abort).toHaveBeenCalledWith(workerError)
 	})
 
 	it("classifies a lazy page provider failure as source-failed", async () => {
