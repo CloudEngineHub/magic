@@ -40,6 +40,17 @@ import i18n from "i18next"
 export interface TiptapMentionAttributes {
 	type: MentionItem["type"]
 	data: MentionItem["data"]
+	/**
+	 * Marks a Canvas-derived mention as a temporary preview that has not yet
+	 * entered the formal mention lifecycle. Pending mentions are excluded from
+	 * drafts and send payloads, and rendered with reduced opacity until promoted.
+	 */
+	pending?: boolean
+	/**
+	 * Runtime-only owner identifier for a pending mention node. The Canvas bridge
+	 * uses it to replace or promote only the temporary nodes it created.
+	 */
+	pendingId?: string
 }
 
 export interface MentionListItem {

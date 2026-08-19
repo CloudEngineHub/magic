@@ -8,9 +8,17 @@ import {
 import { FolderIcon } from "@/components/CanvasDesign/ui/primitives/icons"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { I18nTexts } from "../../../../../i18n/types"
-import { MentionItemType, type MentionItem } from "../../../../../types"
+import {
+	MentionItemType,
+	type MentionItem,
+	type ProjectFileMentionData,
+} from "../../../../../types"
 import { workspaceFilesRendererEntries } from "../../workspace-files/renderer"
-import { getCanvasElementMentionItemId, MentionPanelCanvasElementsStore } from "../store"
+import {
+	collectCanvasElementMentionItems,
+	getCanvasElementMentionItemId,
+	MentionPanelCanvasElementsStore,
+} from "../store"
 
 const files: FileItem[] = [
 	{
@@ -416,5 +424,97 @@ describe("MentionPanelCanvasElementsStore", () => {
 
 		expect(groupResults).toEqual([])
 		expect(frameResults.map((item) => item.name)).toEqual(["Hero Layer"])
+	})
+
+	it("collects selected nested image, video and audio media with main-image and resource dedupe", () => {
+		const selectedDocument: CanvasDocument = {
+			elements: [
+				{
+					id: "frame",
+					type: ElementTypeEnum.Frame,
+					zIndex: 1,
+					children: [
+						{
+							id: "image-main-version",
+							type: ElementTypeEnum.Image,
+							zIndex: 3,
+							contents: [
+								{ contentId: "active", src: "./images/older-version.png" },
+								{ contentId: "main", src: "./images/hero.png" },
+							],
+							activeContentId: "active",
+							mainContentId: "main",
+						},
+						contentElement(
+							{
+								id: "duplicate-image",
+								type: ElementTypeEnum.Image,
+								zIndex: 2,
+							},
+							"duplicate-image-content",
+							{ src: "./images/hero.png" },
+						),
+						{
+							id: "nested-group",
+							type: ElementTypeEnum.Group,
+							zIndex: 1,
+							children: [
+								contentElement(
+									{
+										id: "video",
+										type: ElementTypeEnum.Video,
+										zIndex: 2,
+									},
+									"video-content",
+									{ src: "./videos/clip.mp4" },
+								),
+								contentElement(
+									{
+										id: "audio",
+										type: ElementTypeEnum.Audio,
+										zIndex: 1,
+									},
+									"audio-content",
+									{ src: "./audio/voice.mp3" },
+								),
+							],
+						},
+					],
+				},
+			],
+		}
+
+		const items = collectCanvasElementMentionItems({
+			document: selectedDocument,
+			selectedElementIds: ["frame", "image-main-version"],
+			designProjectId: "design-id",
+			resolveFileBySrc: (src) => {
+				if (src === "./images/hero.png") return files[0]
+				if (src === "./videos/clip.mp4") return files[1]
+				if (src === "./audio/voice.mp3") {
+					return {
+						file_id: "file-audio",
+						file_name: "voice.mp3",
+						file_extension: "mp3",
+						relative_file_path: "/design/audio/voice.mp3",
+					}
+				}
+				return null
+			},
+		})
+
+		expect(items).toHaveLength(3)
+		expect(
+			items.map((item) =>
+				item.type === MentionItemType.PROJECT_FILE
+					? (item.data as ProjectFileMentionData).file_id
+					: undefined,
+			),
+		).toEqual(["file-hero", "file-clip", "file-audio"])
+		expect(items[0]?.sourcePreview).toMatchObject({
+			mediaType: "image",
+			src: "./images/hero.png",
+		})
+		expect(items[2]?.sourcePreview).toMatchObject({ mediaType: "audio" })
 	})
 })

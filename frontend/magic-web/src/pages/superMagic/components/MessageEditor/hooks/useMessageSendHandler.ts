@@ -22,6 +22,7 @@ interface UseMessageSendHandlerParams {
 	onSend?: MessageEditorProps["onSend"]
 	topicMode?: MessageEditorProps["topicMode"]
 	collectMentionItemsFromEditor: () => MentionListItem[]
+	promoteCanvasPendingMentions?: () => void
 	isMountedRef: MutableRefObject<boolean>
 }
 
@@ -36,10 +37,13 @@ export default function useMessageSendHandler({
 	onSend,
 	topicMode,
 	collectMentionItemsFromEditor,
+	promoteCanvasPendingMentions,
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
+		// Sending is also an explicit confirmation path when the editor never received focus.
+		promoteCanvasPendingMentions?.()
 
 		if (isEditingQueueItem && isEmptyJSONContent(store.editorStore.value)) {
 			return

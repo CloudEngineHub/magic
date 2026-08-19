@@ -110,4 +110,22 @@ describe("FileMentionNodeView", () => {
 		expect(screen.getByText("@project.png")).toBeInTheDocument()
 		expect(screen.getByTestId("file-mention-visual")).toBeInTheDocument()
 	})
+
+	it("renders pending canvas file mentions with reduced opacity", () => {
+		const props = createProps(MentionItemType.PROJECT_FILE, {
+			file_id: "project-file-1",
+			file_name: "project.png",
+			file_extension: "png",
+			file_path: "project.png",
+		})
+
+		render(
+			<FileMentionNodeView
+				{...props}
+				attrs={{ ...props.attrs, pending: true, pendingId: "canvas-selection:1" }}
+			/>,
+		)
+
+		expect(screen.getByText("@project.png").closest(".magic-mention")).toHaveClass("opacity-50")
+	})
 })

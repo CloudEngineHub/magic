@@ -35,6 +35,7 @@ interface UseCanvasEventListenersOptions {
 		patch: CanvasDesignDataPatch,
 		meta?: CanvasDesignDataChangeMeta,
 	) => void
+	onSelectionChange?: (elementIds: string[]) => void
 }
 
 /**
@@ -51,6 +52,7 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 	} = options
 
 	const { canvas } = useCanvas()
@@ -62,9 +64,25 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 	const onMarkerUpdatedRef = useLatest(onMarkerUpdated)
 	const onCanvasDesignDataChangeRef = useLatest(onCanvasDesignDataChange)
 	const onCanvasDesignDataPatchChangeRef = useLatest(onCanvasDesignDataPatchChange)
+	const onSelectionChangeRef = useLatest(onSelectionChange)
 	const readonlyRef = useLatest(readonly)
 	const pendingCanvasDataChangeMetaRef = useRef<CanvasDesignDataChangeMeta | null>(null)
 	const pendingDeletedElementIdsRef = useRef<Set<string>>(new Set())
+	const isElementWithinSelection = useCallback(
+		(elementId: string, selectedIds: string[]) => {
+			if (!canvas) return false
+			const selectedIdSet = new Set(selectedIds)
+			const visited = new Set<string>()
+			let currentId: string | undefined = elementId
+			while (currentId && !visited.has(currentId)) {
+				if (selectedIdSet.has(currentId)) return true
+				visited.add(currentId)
+				currentId = canvas.elementManager.findParentIdForElement(currentId)
+			}
+			return false
+		},
+		[canvas],
+	)
 	const canvasDataChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	// 防抖保存 viewport 到 storage
@@ -335,6 +353,27 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 
 	// 监听所有可能导致画布数据变化的事件
 	useCanvasEvents(
+		["element:select", "element:deselect"] as const,
+		() => {
+			const selectedIds = canvas?.selectionManager?.getSelectedIds()
+			if (!selectedIds) return
+			onSelectionChangeRef.current?.(selectedIds)
+		},
+		[canvas],
+	)
+
+	// Recompute the selected media when a selected element's active/main content changes.
+	useCanvasEvents(
+		["element:updated"] as const,
+		(event) => {
+			const selectedIds = canvas?.selectionManager?.getSelectedIds() ?? []
+			if (!isElementWithinSelection(event.data.elementId, selectedIds)) return
+			onSelectionChangeRef.current?.(selectedIds)
+		},
+		[canvas, isElementWithinSelection],
+	)
+
+	useCanvasEvents(
 		[
 			"element:change",
 			"canvas:clear",
@@ -348,6 +387,14 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 				const changedElementIds = filterRuntimeOnlyGenerationElementIds(
 					changeEvent.data?.elementIds,
 				)
+				const selectedIds = canvas?.selectionManager?.getSelectedIds() ?? []
+				if (
+					selectedIds.length > 0 &&
+					(!changedElementIds ||
+						changedElementIds.some((id) => isElementWithinSelection(id, selectedIds)))
+				) {
+					onSelectionChangeRef.current?.(selectedIds)
+				}
 				const elementNameChanges = changeEvent.data?.nameChanges?.filter(
 					(change) => changedElementIds?.includes(change.elementId) ?? true,
 				)
@@ -382,10 +429,15 @@ export function useCanvasEventListeners(options: UseCanvasEventListenersOptions)
 				return
 			}
 			if (restoredEvent) {
+				onSelectionChangeRef.current?.(canvas?.selectionManager?.getSelectedIds() ?? [])
 				scheduleCanvasDesignDataChange("document:restored")
 			}
 		},
-		[filterRuntimeOnlyGenerationElementIds, scheduleCanvasDesignDataChange],
+		[
+			filterRuntimeOnlyGenerationElementIds,
+			isElementWithinSelection,
+			scheduleCanvasDesignDataChange,
+		],
 	)
 
 	// 监听 viewport 变化，保存到 storage

@@ -263,7 +263,7 @@ export interface CanvasElementMentionSourcePreview {
 	kind: "canvas-element"
 	designProjectId?: string
 	elementId: string
-	mediaType: "image" | "video"
+	mediaType: "image" | "video" | "audio"
 	src: string
 	crop?: MentionImageSourceCrop
 }

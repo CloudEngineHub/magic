@@ -50,6 +50,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onElementDetailsProvenanceChange,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 		elementActionHints,
 		onElementActionHintAction,
 		connectionActionHints,
@@ -93,6 +94,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		onMarkerUpdated,
 		onCanvasDesignDataChange,
 		onCanvasDesignDataPatchChange,
+		onSelectionChange,
 	})
 
 	// 更新视口偏移量

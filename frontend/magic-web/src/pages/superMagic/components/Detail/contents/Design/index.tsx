@@ -66,6 +66,7 @@ import type { DesignSaveMetadata } from "./managers"
 import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
 import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
+import { useCanvasSelectionMentionPublisher } from "./hooks/useCanvasSelectionMentionPublisher"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -684,6 +685,32 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 设计项目 ID
 	const designProjectId = directoryInfo.id || currentFile?.id || ""
+	const isCanvasSelectionMentionsEnabled =
+		allowEdit && !isPlaybackMode && !isShareRoute && !isReadOnlyState && isTabActive !== false
+	const resolveCanvasResourceFile = useCallback(
+		(src: string) =>
+			resolveDesignCanvasResourceFileItem(src, {
+				flatAttachments,
+				designProjectBasePath,
+				attachmentIndex,
+			}) ?? null,
+		[attachmentIndex, designProjectBasePath, flatAttachments],
+	)
+	const getLatestCanvasDocument = useCallback(() => latestDesignDataRef.current.canvas, [])
+	const publishCanvasSelectionMentions = useCanvasSelectionMentionPublisher({
+		canvasDesignRef,
+		designProjectId,
+		enabled: isCanvasSelectionMentionsEnabled,
+		scope: {
+			workspaceId: selectedWorkspace?.id,
+			projectId,
+			topicId: selectedTopic?.id,
+			designProjectId,
+		},
+		getFallbackDocument: getLatestCanvasDocument,
+		resolveFileBySrc: resolveCanvasResourceFile,
+	})
+
 	const videoPointsEstimateCacheScope = useMemo(
 		() =>
 			[
@@ -717,15 +744,7 @@ function DesignViewer(props: DesignViewerProps) {
 				canvasDesignRef.current?.exportCurrentDocument?.() ??
 				latestDesignDataRef.current.canvas ??
 				null,
-			resolveFileBySrc: (src) => {
-				return (
-					resolveDesignCanvasResourceFileItem(src, {
-						flatAttachments,
-						designProjectBasePath,
-						attachmentIndex,
-					}) ?? null
-				)
-			},
+			resolveFileBySrc: resolveCanvasResourceFile,
 		})
 		setCanvasElementResourceGetter(
 			designProjectId,
@@ -736,14 +755,7 @@ function DesignViewer(props: DesignViewerProps) {
 			mentionPanelStore.clearActiveCanvasElementsContext(designProjectId)
 			setCanvasElementResourceGetter(designProjectId, null)
 		}
-	}, [
-		attachmentIndex,
-		designProjectBasePath,
-		designProjectId,
-		displayName,
-		flatAttachments,
-		isTabActive,
-	])
+	}, [designProjectId, displayName, isTabActive, resolveCanvasResourceFile])
 
 	const downloadPolicy = useDesignDownloadPolicy()
 
@@ -1766,6 +1778,9 @@ function DesignViewer(props: DesignViewerProps) {
 										defaultProjectAttachmentFolderName,
 										mentionDataServiceCtor: CanvasDesignMentionDataService,
 										mentionExtension: MentionExtension,
+										onSelectionChange: isCanvasSelectionMentionsEnabled
+											? publishCanvasSelectionMentions
+											: undefined,
 										referenceResourcePanelRenderer:
 											CanvasDesignReferenceResourcePanel,
 									}}

@@ -436,6 +436,8 @@ export interface CanvasDesignProps {
 			patch: CanvasDesignDataPatch,
 			meta?: CanvasDesignDataChangeMeta,
 		) => void
+		/** 当前画布选中元素变化；宿主可将选中元素映射为业务引用。 */
+		onSelectionChange?: (elementIds: string[]) => void
 		/** 项目附件树根节点列表，用于 @ / 参考资源面板（保留目录层级） */
 		projectAttachmentMentionTree?: ProjectAttachmentMentionNode[]
 		/** `@文件` 默认进入的项目目录 id，通常为当前设计项目目录 */

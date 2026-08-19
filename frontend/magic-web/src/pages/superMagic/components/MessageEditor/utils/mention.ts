@@ -560,6 +560,30 @@ export const isAllowedMention = (
 }
 
 /**
+ * Canvas selection mentions are an in-editor interaction preview. They must
+ * never survive draft persistence, because a restored draft no longer has the
+ * focus gesture that confirms the selection.
+ */
+export function filterPendingCanvasMentionsFromContent(
+	content: JSONContent | undefined,
+): JSONContent | undefined {
+	if (!content) return content
+	if (content.type === "mention" && (content.attrs as TiptapMentionAttributes)?.pending) {
+		return undefined
+	}
+
+	const filteredContent = { ...content }
+	if (Array.isArray(content.content)) {
+		filteredContent.content = content.content.flatMap((child) => {
+			const filteredChild = filterPendingCanvasMentionsFromContent(child)
+			return filteredChild ? [filteredChild] : []
+		})
+	}
+
+	return filteredContent
+}
+
+/**
  * Recursively filter out upload file mentions from JSONContent
  * @param content - The JSONContent to filter
  * @returns Filtered JSONContent with upload file mentions removed
