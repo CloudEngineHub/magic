@@ -643,7 +643,7 @@ readonly class VideoOperationAppService
             organizationCode: $operation->getOrganizationCode(),
             userId: $operation->getUserId(),
             sourceId: $operation->getSourceId() ?: $dataIsolation->getSourceId(),
-            usage: $this->buildVideoOperationUsage($operation, $estimateRequest),
+            usage: $this->buildVideoOperationUsage($dataIsolation, $operation, $estimateRequest),
             businessParams: $this->buildManagedPollBusinessParams($dataIsolation, $requestBusinessParams),
         );
 
@@ -680,9 +680,9 @@ readonly class VideoOperationAppService
     /**
      * @return array<string, mixed>
      */
-    private function buildVideoOperationUsage(VideoQueueOperationEntity $operation, VideoPointEstimateRequest $estimateRequest): array
+    private function buildVideoOperationUsage(ModelGatewayDataIsolation $dataIsolation, VideoQueueOperationEntity $operation, VideoPointEstimateRequest $estimateRequest): array
     {
-        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($operation);
+        $referenceMaterial = $this->resolveVideoReferenceMaterialContext($dataIsolation, $operation);
 
         return [
             'model' => $estimateRequest->getModelId(),
