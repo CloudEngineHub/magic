@@ -52,6 +52,10 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 			message:
 				"This export requires Origin Private File System staging, which is unavailable here.",
 			severity: "error",
+			details: {
+				capability: "opfs-staging",
+				detection: "navigator.storage.getDirectory",
+			},
 		})
 	}
 	if (requiresSlidePlan && pageCount === undefined) {
@@ -130,11 +134,16 @@ function normalizePageCount(value?: number): number | undefined {
 }
 
 function hasOpfs(): boolean {
-	const storage = typeof navigator === "undefined" ? undefined : navigator.storage
-	return (
-		typeof (storage as (StorageManager & { getDirectory?: unknown }) | undefined)
-			?.getDirectory === "function"
-	)
+	try {
+		const storage = typeof navigator === "undefined" ? undefined : navigator.storage
+		return (
+			typeof (storage as (StorageManager & { getDirectory?: unknown }) | undefined)
+				?.getDirectory === "function"
+		)
+	} catch {
+		// Some restricted/private browser contexts expose navigator but reject access to storage.
+		return false
+	}
 }
 
 function isDestinationShapeSupported(destination?: PptxDestination): boolean {

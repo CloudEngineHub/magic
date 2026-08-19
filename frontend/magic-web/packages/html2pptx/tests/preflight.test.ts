@@ -117,7 +117,41 @@ describe("preflightPptxExport", () => {
 
 		expect(result.accepted).toBe(false)
 		expect(result.requiresOpfs).toBe(true)
-		expect(result.errors.map((issue) => issue.code)).toContain("opfs-unavailable")
+		expect(result.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "opfs-unavailable",
+					details: {
+						capability: "opfs-staging",
+						detection: "navigator.storage.getDirectory",
+					},
+				}),
+			]),
+		)
+	})
+
+	it("classifies storage access failures as unavailable OPFS", () => {
+		vi.stubGlobal("navigator", {
+			get storage(): never {
+				throw new DOMException("Storage access denied", "SecurityError")
+			},
+		})
+
+		const result = preflightPptxExport({
+			destination: createSinkProxyDestination(),
+			requiresOpfs: true,
+			hasInjectedPackager: true,
+		})
+
+		expect(result.accepted).toBe(false)
+		expect(result.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "opfs-unavailable",
+					details: expect.objectContaining({ capability: "opfs-staging" }),
+				}),
+			]),
+		)
 	})
 
 	it("allows an unknown cumulative size and selects ZIP64 conservatively", () => {

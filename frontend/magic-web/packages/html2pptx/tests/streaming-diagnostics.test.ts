@@ -80,6 +80,41 @@ describe("streaming export diagnostics", () => {
 		)
 	})
 
+	it("classifies an unavailable OPFS staging capability structurally", async () => {
+		vi.stubGlobal("navigator", {})
+		const exporter = createPptxStreamingExporter({
+			createSandbox: createSandboxStub,
+			pipeline: {
+				createStreamingPresentationPackager: vi.fn(),
+			},
+		})
+
+		const error = await exporter(["page"], {
+			destination: createDestination(),
+			stagingPolicy: { mode: "opfs" },
+		}).promise.catch((value) => value)
+
+		expect(error).toMatchObject({
+			name: "PptxExportError",
+			code: "opfs-unavailable",
+			diagnostic: {
+				phase: "preflight",
+				code: "opfs-unavailable",
+				details: {
+					issues: expect.arrayContaining([
+						expect.objectContaining({
+							code: "opfs-unavailable",
+							details: {
+								capability: "opfs-staging",
+								detection: "navigator.storage.getDirectory",
+							},
+						}),
+					]),
+				},
+			},
+		})
+	})
+
 	it("classifies a lazy page provider failure as source-failed", async () => {
 		const sourceError = new Error("page provider failed")
 		const packager = {

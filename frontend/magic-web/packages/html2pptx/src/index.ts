@@ -325,6 +325,7 @@ export type { EmbedFontInput, FontMissPolicy, FontResolver, UsedFont } from "./a
 export { DEFAULT_CONFIG } from "./shared/unit"
 export {
 	ExportFidelityError,
+	createOpfsUnavailableError,
 	isExportFidelityError,
 	PptxExportError,
 	isPptxExportError,

@@ -61,6 +61,40 @@ export function isPptxExportError(error: unknown): error is PptxExportError {
 	return error instanceof PptxExportError
 }
 
+/**
+ * Build a stable diagnostic when the two-pass pipeline cannot create its OPFS staging store.
+ * Browser support can expose `navigator.storage.getDirectory()` while rejecting the actual
+ * writable-file operation (for example in Safari/Firefox or a restricted/private context), so
+ * this is intentionally separate from the generic worker failure classification.
+ */
+export function createOpfsUnavailableError(
+	sourceError: unknown,
+	details: Record<string, unknown> = {},
+): PptxExportError {
+	const causeName =
+		sourceError && typeof sourceError === "object" && "name" in sourceError
+			? String((sourceError as { name?: unknown }).name ?? "Error")
+			: sourceError instanceof Error
+				? sourceError.name
+				: "Error"
+	return new PptxExportError(
+		{
+			phase: "preflight",
+			code: "opfs-unavailable",
+			message:
+				"Origin Private File System staging is unavailable in this browser or execution context.",
+			recoverable: false,
+			cancelled: false,
+			details: {
+				capability: "opfs-staging",
+				causeName,
+				...details,
+			},
+		},
+		sourceError,
+	)
+}
+
 export function getPptxExportDiagnostic(error: unknown): ExportFailureDiagnostic | undefined {
 	if (isPptxExportError(error)) return error.diagnostic
 	if (!error || typeof error !== "object") return undefined

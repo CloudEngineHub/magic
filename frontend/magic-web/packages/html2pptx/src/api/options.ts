@@ -125,6 +125,7 @@ export type ExportFailurePhase =
 export type ExportFailureCode =
 	| "cancelled"
 	| "preflight-rejected"
+	| "opfs-unavailable"
 	| "source-failed"
 	| "prepare-page-failed"
 	| "render-page-failed"

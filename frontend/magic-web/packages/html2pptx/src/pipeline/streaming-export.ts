@@ -28,6 +28,7 @@ import {
 import { createPresentation, ensureFileName } from "../packaging/pptx-document"
 import {
 	ExportFidelityError,
+	createOpfsUnavailableError,
 	isExportFidelityError,
 	isPptxExportError,
 	PptxExportError,
@@ -118,13 +119,17 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 			const cause = new Error(
 				`[exportPPTXStreaming] Preflight failed: ${preflight.errors.map((issue) => issue.message).join("; ")}`,
 			)
+			const hasOpfsUnavailable = preflight.errors.some(
+				(issue) => issue.code === "opfs-unavailable",
+			)
 			const error = normalizePptxExportError(cause, {
 				...errorContext,
-				code: "preflight-rejected",
+				code: hasOpfsUnavailable ? "opfs-unavailable" : "preflight-rejected",
 				details: {
 					issues: preflight.errors.map((issue) => ({
 						code: issue.code,
 						severity: issue.severity,
+						details: issue.details,
 					})),
 				},
 			})
@@ -298,6 +303,7 @@ async function runStagedStreamingExport(
 	const usedFonts = new Map<string, Set<string>>()
 	const stagedKeys: string[] = []
 	const stagedMedia = new Map<string, MediaSourceDescriptor>()
+	const usesDefaultOpfsStore = !input.pipeline?.createStreamingStagingStore
 	let measuredMaxWidth = input.config.htmlWidth
 	let successfulSourcePages = 0
 	let exportSucceeded = false
@@ -308,8 +314,10 @@ async function runStagedStreamingExport(
 			createStagingStore(input, sessionId),
 		)
 		store = activeStore
-		await runStagingOperation(input.signal, () =>
-			activeStore.createSession(sessionId, { signal: input.signal }),
+		await runStagingOperation(
+			input.signal,
+			() => activeStore.createSession(sessionId, { signal: input.signal }),
+			usesDefaultOpfsStore ? { operation: "createSession", classifyAll: true } : undefined,
 		)
 		for await (const page of input.pages) {
 			throwIfAborted(input.signal)
@@ -350,20 +358,24 @@ async function runStagedStreamingExport(
 						input.signal,
 						stagedMedia,
 						input.mediaPolicy?.mode,
+						usesDefaultOpfsStore ? "stage" : undefined,
 					)
 					mergeUsedFonts(usedFonts, detectFontsFromNodes([outputNodes]))
 					const key = createSlideKey(page.key, page.index, pageOffset)
 					const stageIndex = stagedKeys.length + 1
-					await runStagingOperation(input.signal, () =>
-						activeStore.putSlideIr(
-							stageIndex,
-							{
-								key,
-								nodes: outputNodes,
-								background: result.bodyBackground,
-							} satisfies StagedSlideRecord,
-							{ signal: input.signal },
-						),
+					await runStagingOperation(
+						input.signal,
+						() =>
+							activeStore.putSlideIr(
+								stageIndex,
+								{
+									key,
+									nodes: outputNodes,
+									background: result.bodyBackground,
+								} satisfies StagedSlideRecord,
+								{ signal: input.signal },
+							),
+						usesDefaultOpfsStore ? { operation: "putSlideIr" } : undefined,
 					)
 					outputNodes.length = 0
 					stagedKeys.push(key)
@@ -409,8 +421,10 @@ async function runStagedStreamingExport(
 
 		for (let index = 1; index <= stagedKeys.length; index += 1) {
 			throwIfAborted(input.signal)
-			const record = await runStagingOperation(input.signal, () =>
-				activeStore.getSlideIr<StagedSlideRecord>(index, { signal: input.signal }),
+			const record = await runStagingOperation(
+				input.signal,
+				() => activeStore.getSlideIr<StagedSlideRecord>(index, { signal: input.signal }),
+				usesDefaultOpfsStore ? { operation: "getSlideIr" } : undefined,
 			)
 			await packager.commitSlide({
 				nodes: record.nodes,
@@ -420,8 +434,10 @@ async function runStagedStreamingExport(
 			record.nodes.length = 0
 			const deleteSlideIr = activeStore.deleteSlideIr
 			if (deleteSlideIr) {
-				await runStagingOperation(input.signal, () =>
-					deleteSlideIr.call(activeStore, index, { signal: input.signal }),
+				await runStagingOperation(
+					input.signal,
+					() => deleteSlideIr.call(activeStore, index, { signal: input.signal }),
+					usesDefaultOpfsStore ? { operation: "deleteSlideIr" } : undefined,
 				)
 			}
 			input.onProgress?.({
@@ -656,10 +672,18 @@ async function stageNodeMediaSources(
 	signal: AbortSignal,
 	stagedMedia: Map<string, MediaSourceDescriptor>,
 	mediaMode: MediaPolicy["mode"],
+	opfsOperation?: string,
 ): Promise<void> {
 	for (const node of nodes) {
 		if (node.type === "image" && node.source) {
-			node.source = await stageDescriptor(node.source, store, signal, stagedMedia, mediaMode)
+			node.source = await stageDescriptor(
+				node.source,
+				store,
+				signal,
+				stagedMedia,
+				mediaMode,
+				opfsOperation,
+			)
 		}
 		if (node.type === "media") {
 			if (node.source) {
@@ -669,6 +693,7 @@ async function stageNodeMediaSources(
 					signal,
 					stagedMedia,
 					mediaMode,
+					opfsOperation,
 				)
 			}
 			if (node.coverSource) {
@@ -678,6 +703,7 @@ async function stageNodeMediaSources(
 					signal,
 					stagedMedia,
 					mediaMode,
+					opfsOperation,
 				)
 			}
 		}
@@ -690,6 +716,7 @@ async function stageDescriptor(
 	signal: AbortSignal,
 	stagedMedia: Map<string, MediaSourceDescriptor>,
 	mediaMode: MediaPolicy["mode"],
+	opfsOperation?: string,
 ): Promise<MediaSourceDescriptor> {
 	const existing = stagedMedia.get(source.key)
 	if (existing) return existing
@@ -701,8 +728,10 @@ async function stageDescriptor(
 		stagedMedia.set(source.key, source)
 		return source
 	}
-	const staged = await runStagingOperation(signal, () =>
-		store.stage(source, { signal, directory: "media" }),
+	const staged = await runStagingOperation(
+		signal,
+		() => store.stage(source, { signal, directory: "media" }),
+		opfsOperation ? { operation: opfsOperation } : undefined,
 	)
 	stagedMedia.set(source.key, staged)
 	return staged
@@ -717,13 +746,48 @@ async function stageDescriptor(
  * to settle. The original promise remains handled by `withAbort`, preventing a
  * late rejection from becoming an unhandled rejection.
  */
-function runStagingOperation<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+function runStagingOperation<T>(
+	signal: AbortSignal,
+	operation: () => Promise<T>,
+	opfsDetails?: { operation: string; classifyAll?: boolean },
+): Promise<T> {
 	throwIfSandboxAborted(signal)
 	const task = Promise.resolve().then(() => {
 		throwIfSandboxAborted(signal)
 		return operation()
 	})
-	return withAbort({ task, signal })
+	return withAbort({ task, signal }).catch((error) => {
+		if (
+			opfsDetails &&
+			!signal.aborted &&
+			!isPptxExportError(error) &&
+			(opfsDetails.classifyAll || isLikelyOpfsUnavailableError(error))
+		) {
+			throw createOpfsUnavailableError(error, {
+				reason: "runtime-operation-rejected",
+				operation: opfsDetails.operation,
+			})
+		}
+		throw error
+	})
+}
+
+function isLikelyOpfsUnavailableError(error: unknown): boolean {
+	const name =
+		error && typeof error === "object" && "name" in error
+			? String((error as { name?: unknown }).name ?? "")
+			: ""
+	if (
+		["NotSupportedError", "SecurityError", "InvalidStateError", "QuotaExceededError"].includes(
+			name,
+		)
+	) {
+		return true
+	}
+	const message = error instanceof Error ? error.message : String(error ?? "")
+	return /origin private file system|\bopfs\b|storage\.getDirectory|createWritable|opfs.*(?:unavailable|not writable|permission|quota)/i.test(
+		message,
+	)
 }
 
 const STAGING_CLEANUP_ATTEMPTS = 2
@@ -787,11 +851,18 @@ async function createStagingStore(
 	}
 	const presentation = createPresentation(input.config) as unknown as StreamingPptxWithStaging
 	if (typeof presentation.createOpfsStagingStore !== "function") {
-		throw new Error(
-			"PptxGenJS v5 createOpfsStagingStore() is unavailable; use the streaming-only runtime.",
+		throw createOpfsUnavailableError(
+			new Error("PptxGenJS v5 createOpfsStagingStore() is unavailable"),
+			{ reason: "runtime-hook-missing" },
 		)
 	}
-	return presentation.createOpfsStagingStore({ sessionId })
+	try {
+		return await presentation.createOpfsStagingStore({ sessionId })
+	} catch (error) {
+		throw createOpfsUnavailableError(error, {
+			reason: "runtime-operation-rejected",
+		})
+	}
 }
 
 async function resolveFonts(
