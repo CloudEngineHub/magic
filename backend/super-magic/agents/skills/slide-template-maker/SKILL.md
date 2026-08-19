@@ -26,10 +26,10 @@ For presentation sources, render pages only to obtain visual evidence. Analyze t
 
 ## Output Contract
 
-Write one standalone project directory at the workspace root. The source files and generated preview assets share this directory:
+Write one standalone project directory at the workspace root. Its semantic name is generated in Chinese or English according to the selected language tag. The name is a filesystem detail and is not added to `template.json`. The source files and generated preview assets share this directory:
 
 ```text
-<template-id>/
+<semantic-template-name>/
 ├── template.json
 ├── visual-spec.md
 ├── theme.css
@@ -44,7 +44,7 @@ Write one standalone project directory at the workspace root. The source files a
 
 Do not add a `slide-templates/` prefix. Do not create a ZIP, `magic.project.js`, `index.html`, `slide-bridge.js`, `preview.html`, or `packages/`. `previews/` and `template-assets.json` are required finalization outputs and must stay inside the same project directory.
 
-During authoring, `create_slide_template_project` also creates `<template-id>/.template-work/`. Store every reference render, extracted media candidate, downloaded source copy, contact sheet, and QA scratch file there. This directory is temporary and is not part of the final package.
+During authoring, `create_slide_template_project` also creates `<semantic-template-name>/.template-work/`. Store every reference render, extracted media candidate, downloaded source copy, contact sheet, and QA scratch file there. This directory is temporary and is not part of the final package.
 
 ## Tool ownership
 
@@ -62,7 +62,7 @@ The template is not complete when authoring finishes. Call `finalize_slide_templ
 3. Read `references/scene-routing.md`, `references/template-taxonomy.md`, `references/template-json-spec.md`, `references/source-analysis-spec.md`, and `references/quality-guidelines.md` before writing files.
 4. Determine the audience, use case, visual thesis, scene, semantic name, page inventory, asset strategy, and sensitive-content risks.
 5. Query the bundled taxonomy through `scripts/template_taxonomy.py`. Select one exact active `category_code` and 4–10 exact `tag_codes`, then run the script's `validate` command. Never invent taxonomy codes or add `featured` automatically.
-6. Determine a backend-compatible semantic base ID before writing: use `SLIDE-` plus lowercase kebab-case words, for example `SLIDE-navy-quarterly-review`. `create_slide_template_project` automatically appends a short six-character uppercase hexadecimal suffix, for example `-A1B2C3`; use the returned `created.data["template_id"]` and `created.data["template_directory"]` for every subsequent call.
+6. Determine a backend-compatible semantic base ID before writing: use `SLIDE-` plus lowercase kebab-case words, for example `SLIDE-navy-quarterly-review`. `create_slide_template_project` appends a short six-character uppercase hexadecimal suffix to the backend `template_id`, but the local directory name contains no random suffix. The directory is derived from the matching localized label: `language-chinese` uses `label.zh_CN`, while `language-english` and other languages use `label.en_US`. Examples: `SLIDE-深蓝经营复盘` and `SLIDE-navy-business-review`. Use the returned `created.data["template_directory"]` for every subsequent call; never reconstruct the directory path from the ID. If the semantic directory already exists, use a more specific label or treat the request as an explicit update instead of overwriting it.
 7. For a presentation source, render every page at high resolution with `document-converter`, determine one shared source canvas from the rendered page ratio, then call `create_slide_template_project` with that canvas, the validated category, tags, and semantic base ID. Do not create the template directory manually. Use `created.data["working_directory"]` for all intermediate files.
 8. Call `prepare_slide_template_source` with the rendered page images and the original OOXML presentation whenever the input is a presentation. This extracts image candidates into `.template-work/source-analysis/source-assets/`; it does not copy every candidate into the final `images/` directory.
 9. Analyze every source page in two passes: first the full page for hierarchy and composition, then its bounded detail crops for typography, texture, image-internal details, charts, and small decorations. Fill every page's `visual_analysis` with `status: complete`, `must_preserve`, `visual_elements`, and `style_tokens` before authoring. Do not analyze only representative pages.
@@ -175,7 +175,7 @@ from sdk.tool import tool
 canvas_width = 1920  # Read source.canvas.width from template.json.
 canvas_height = 1080  # Read source.canvas.height from template.json.
 visual_result = tool.call("visual_understanding_webpage", {
-    "target": "<template-id>/slides/cover.html",
+    "target": "<semantic-template-name>/slides/cover.html",
     "query": "Review visual hierarchy, readability, composition, canvas usage, and image quality.",
     "viewport_width": canvas_width,
     "viewport_height": canvas_height,
@@ -186,7 +186,7 @@ if not visual_result.ok:
 print(visual_result.content)
 
 layout_result = tool.call("analysis_slide_webpage", {
-    "target": "<template-id>/slides/cover.html",
+    "target": "<semantic-template-name>/slides/cover.html",
     "max_width": canvas_width,
     "max_height": canvas_height
 })
@@ -203,7 +203,7 @@ run_sdk_snippet(python_code="""
 from sdk.tool import tool
 
 result = tool.call("visual_understanding", {
-    "images": ["<template-id>/previews/slides/slide-001.png"],
+    "images": ["<semantic-template-name>/previews/slides/slide-001.png"],
     "query": "Review hierarchy, readability, composition, canvas usage, image quality, and background interference."
 })
 if not result.ok:

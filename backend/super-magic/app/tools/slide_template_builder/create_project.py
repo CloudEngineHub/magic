@@ -14,6 +14,7 @@ from app.tools.slide_template_builder.common import (
     SCAFFOLD_MARKER,
     WORK_DIR_NAME,
     SlideTemplateBuilderError,
+    generate_semantic_directory_name,
     generate_unique_template_id,
     resolve_workspace_template_dir,
     safe_slide_path,
@@ -78,21 +79,26 @@ class CreateSlideTemplateProject(WorkspaceTool[CreateSlideTemplateProjectParams]
             if len(slide_files) != len(set(slide_files)):
                 return ToolResult.error("Slide file paths must be unique.")
 
-            template_dir = None
             template_id = None
             for _ in range(5):
                 candidate_id = generate_unique_template_id(requested_template_id)
                 candidate_dir = resolve_workspace_template_dir(Path(self.base_dir), candidate_id)
-                try:
-                    await async_mkdir(candidate_dir, parents=True, exist_ok=False)
-                except FileExistsError:
-                    continue
-                template_id = candidate_id
-                template_dir = candidate_dir
-                break
-            if template_id is None or template_dir is None:
+                if not candidate_dir.exists():
+                    template_id = candidate_id
+                    break
+            if template_id is None:
                 return ToolResult.error(
                     f"Could not allocate a unique template ID from base: {requested_template_id}"
+                )
+
+            directory_name = generate_semantic_directory_name(params.label.model_dump(), tag_codes)
+            template_dir = resolve_workspace_template_dir(Path(self.base_dir), directory_name)
+            try:
+                await async_mkdir(template_dir, parents=True, exist_ok=False)
+            except FileExistsError:
+                return ToolResult.error(
+                    f"Semantic template directory already exists: {directory_name}. "
+                    "Use a more specific label or update the existing template."
                 )
 
             await async_mkdir(template_dir / "images", parents=True, exist_ok=False)

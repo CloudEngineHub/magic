@@ -22,8 +22,8 @@ from app.tools.slide_template_builder.common import (
     WORK_DIR_NAME,
     SlideTemplateBuilderError,
     resolve_workspace_template_dir,
+    validate_template_directory,
     validate_canvas,
-    validate_template_id,
 )
 from app.tools.slide_template_builder.models import ReconstructionMode, TemplateCanvas
 from app.tools.slide_template_builder.pptx_structure import extract_pptx_structure
@@ -160,9 +160,7 @@ class PrepareSlideTemplateSource(WorkspaceTool[PrepareSlideTemplateSourceParams]
             if not await async_is_file(metadata_path):
                 raise SlideTemplateBuilderError("Template project must be created before source preparation.")
             metadata = await async_read_json(metadata_path)
-            template_id = validate_template_id(str(metadata.get("template_id") or ""))
-            if template_dir.name != template_id:
-                raise SlideTemplateBuilderError("Template directory name must exactly match template_id.")
+            validate_template_directory(template_dir, metadata)
             if not await async_exists(template_dir / WORK_DIR_NAME):
                 await async_mkdir(template_dir / WORK_DIR_NAME, parents=True, exist_ok=False)
             page_paths = [self.resolve_path(value).resolve(strict=False) for value in params.page_images]

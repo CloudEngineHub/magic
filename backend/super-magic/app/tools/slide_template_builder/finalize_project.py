@@ -31,8 +31,8 @@ from app.utils.async_file_utils import (
 class FinalizeSlideTemplateParams(BaseToolParams):
     template_dir: str = Field(
         ...,
-        description="""<!--zh: 工作区内模板目录，例如 SLIDE-navy-quarterly-review。目录必须包含 template.json、visual-spec.md、theme.css、images/ 和 slides/。-->
-Template directory inside the workspace, for example SLIDE-navy-quarterly-review. It must contain template.json, visual-spec.md, theme.css, images/, and slides/.""",
+        description="""<!--zh: 工作区内语义化模板目录，例如 SLIDE-navy-business-review。目录必须包含 template.json、visual-spec.md、theme.css、images/ 和 slides/。-->
+Semantic template directory inside the workspace, for example SLIDE-navy-business-review. It must contain template.json, visual-spec.md, theme.css, images/, and slides/.""",
     )
 
     @field_validator("template_dir")

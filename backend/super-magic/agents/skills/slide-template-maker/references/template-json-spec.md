@@ -52,7 +52,8 @@
 ## Rules
 
 - `schema_version` is always `"1.0"`.
-- `template_id` must match the backend rule `^SLIDE-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`. The create tool accepts a lowercase semantic base such as `SLIDE-navy-quarterly-review` and appends a six-character uppercase hexadecimal suffix such as `A1B2C3`; the final ID stored in `template.json` and used as the directory name is the returned ID.
+- `template_id` must match the backend rule `^SLIDE-[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`. The create tool accepts a lowercase semantic base such as `SLIDE-navy-quarterly-review` and appends a six-character uppercase hexadecimal suffix such as `A1B2C3`.
+- The local folder name is generated from the localized label selected by the language tag and does not include the random ID suffix. `language-chinese` produces a name such as `SLIDE-深蓝季度经营复盘`; `language-english` produces `SLIDE-navy-quarterly-review`. The folder name is not stored in `template.json`; use the returned `created.data["template_directory"]` instead of reconstructing the path. Existing templates whose folder is named by `template_id` remain valid.
 - `category_code` is required and must be an active exact code in the bundled taxonomy. Do not invent a code that only matches the backend pattern.
 - `tag_codes` is a required non-empty array of unique exact codes in the bundled taxonomy. Use `scripts/template_taxonomy.py` as described in `template-taxonomy.md`; never invent tags or add `featured` automatically.
 - Bilingual labels and descriptions are required and describe the reusable template, not the production process.

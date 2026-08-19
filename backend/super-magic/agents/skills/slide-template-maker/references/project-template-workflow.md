@@ -25,7 +25,7 @@ Do not turn the entire project into a cleaned copy of the original deck.
 
 ## 3. Create A Standalone Template
 
-Plan the extracted page inventory, then call `create_slide_template_project` to create a new `<template-id>/` directory at the workspace root; never create it inside the source project or under a `slide-templates/` prefix. Put temporary copied pages, asset candidates, and inspection output under the returned `working_directory`.
+Plan the extracted page inventory, then call `create_slide_template_project` to create a new `<semantic-template-name>/` directory at the workspace root; never create it inside the source project or under a `slide-templates/` prefix. Put temporary copied pages, asset candidates, and inspection output under the returned `working_directory`.
 
 - Rewrite source-specific text into realistic neutral sample content.
 - Move reusable visual rules into `theme.css` and document them in `visual-spec.md`.

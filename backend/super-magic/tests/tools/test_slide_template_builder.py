@@ -20,6 +20,7 @@ from app.tools.slide_template_builder import (
 from app.tools.slide_template_builder.common import (
     WORK_DIR_NAME,
     cleanup_template_intermediates,
+    generate_semantic_directory_name,
     validate_template_id,
 )
 from app.tools.slide_template_builder.create_project import CreateSlideTemplateProjectParams
@@ -95,6 +96,7 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     assert result.data["template_directory"] == str(template_dir)
     assert result.data["requested_template_id"] == "SLIDE-navy-quarterly-review"
     assert re.fullmatch(r"SLIDE-navy-quarterly-review-[0-9A-F]{6}", result.data["template_id"])
+    assert template_dir.name == "SLIDE-navy-business-review"
     assert (template_dir / "template.json").exists()
     assert (template_dir / "visual-spec.md").exists()
     assert (template_dir / "theme.css").exists()
@@ -119,6 +121,7 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     assert 'data-width="1920" data-height="1080"' in scaffold
     metadata = json.loads((template_dir / "template.json").read_text())
     assert metadata["template_id"] == result.data["template_id"]
+    assert "directory_name" not in metadata
     assert metadata["category_code"] == "PPT-CATE-business-report"
     assert metadata["tag_codes"] == [
         "purpose-quarterly-review",
@@ -130,16 +133,33 @@ async def test_create_project_puts_standard_files_at_workspace_root(tmp_path):
     ]
 
 
+def test_generate_semantic_directory_name_uses_english_label_and_sanitizes_punctuation():
+    name = generate_semantic_directory_name(
+        {"zh_CN": "增长 / 路线图：2026", "en_US": "Growth Roadmap: 2026"},
+        ["language-english"],
+    )
+
+    assert name == "SLIDE-growth-roadmap-2026"
+
+
+def test_generate_semantic_directory_name_uses_chinese_label():
+    name = generate_semantic_directory_name(
+        {"zh_CN": "增长路线图", "en_US": "Growth Roadmap"},
+        ["language-chinese"],
+    )
+
+    assert name == "SLIDE-增长路线图"
+
+
 @pytest.mark.asyncio
-async def test_create_project_generates_distinct_ids_for_repeated_base_names(tmp_path):
+async def test_create_project_rejects_an_existing_semantic_directory(tmp_path):
     tool = CreateSlideTemplateProject(base_dir=tmp_path)
     first = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
     second = await tool.execute(ToolContext(tool_name=tool.name, arguments={}), _params())
 
     assert first.ok, first.content
-    assert second.ok, second.content
-    assert first.data["template_id"] != second.data["template_id"]
-    assert first.data["template_directory"] != second.data["template_directory"]
+    assert not second.ok
+    assert "Semantic template directory already exists" in second.content
 
 
 @pytest.mark.asyncio
@@ -153,7 +173,7 @@ async def test_create_project_does_not_leave_a_directory_when_slide_plan_is_inva
     assert not result.ok
     assert "Slide file paths must be unique" in result.content
     created_entries = await async_scandir(tmp_path)
-    assert not [entry for entry in created_entries if entry.name.startswith("SLIDE-navy-quarterly-review-")]
+    assert not [entry for entry in created_entries if entry.name == "SLIDE-navy-business-review"]
 
 
 @pytest.mark.asyncio

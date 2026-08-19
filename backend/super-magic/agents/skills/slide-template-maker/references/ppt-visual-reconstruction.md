@@ -56,7 +56,7 @@ Do not copy every page. Do not keep only the first ten pages. Do not add generic
 
 ## 4. Author A Clean Template
 
-Plan the page inventory, then call `create_slide_template_project` to create a fresh `<template-id>/` directory at the workspace root. Move the references still needed into its returned `working_directory`; keep a list of any external temporary paths until they are deleted. Do not use a converter draft as final source or add a `slide-templates/` prefix. After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed. Delete and verify any remaining tracked external temporary paths before reporting completion.
+Plan the page inventory, then call `create_slide_template_project` to create a fresh `<semantic-template-name>/` directory at the workspace root. Move the references still needed into its returned `working_directory`; keep a list of any external temporary paths until they are deleted. Do not use a converter draft as final source or add a `slide-templates/` prefix. After authoring, call `finalize_slide_template` so `previews/` and `template-assets.json` are generated beside the source files and the temporary working directory is removed. Delete and verify any remaining tracked external temporary paths before reporting completion.
 
 Author the files in this order:
 

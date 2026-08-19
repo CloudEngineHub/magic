@@ -19,7 +19,7 @@ from app.tools.slide_template_builder.common import (
     SlideTemplateBuilderError,
     WORK_DIR_NAME,
     resolve_workspace_template_dir,
-    validate_template_id,
+    validate_template_directory,
 )
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
@@ -133,9 +133,7 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
         final_assets_dir = template_dir / "images" / "source-assets"
         try:
             metadata = await async_read_json(template_dir / "template.json")
-            template_id = validate_template_id(str(metadata.get("template_id") or ""))
-            if template_dir.name != template_id:
-                raise SlideTemplateBuilderError("Template directory name must exactly match template_id.")
+            validate_template_directory(template_dir, metadata)
             if not await async_is_file(analysis_file):
                 raise SlideTemplateBuilderError("Call prepare_slide_template_source before selecting source assets.")
             analysis = await async_read_json(analysis_file)
@@ -211,7 +209,7 @@ class SelectSlideTemplateSourceAssets(WorkspaceTool[SelectSlideTemplateSourceAss
 
             await async_write_json(analysis_file, analysis, ensure_ascii=False, indent=2)
             data = {
-                "template_id": template_id,
+                "template_id": metadata["template_id"],
                 "template_directory": str(template_dir),
                 "selected_files": selected_files,
                 "discarded_assets": discarded_assets,

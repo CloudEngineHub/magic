@@ -1,6 +1,8 @@
 """Shared validation helpers for slide template tools."""
 
+import json
 import re
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +51,18 @@ def resolve_workspace_template_dir(base_dir: Path, value: str) -> Path:
         resolved.relative_to(workspace)
     except ValueError as exc:
         raise SlideTemplateBuilderError("Template directory must stay inside the workspace.") from exc
+    if not resolved.exists() and not raw_path.is_absolute() and raw_path.parent == Path("."):
+        for entry in workspace.iterdir():
+            if not entry.is_dir():
+                continue
+            metadata_path = entry / "template.json"
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if str(metadata.get("template_id") or "").strip() == value.strip():
+                resolved = entry.resolve(strict=False)
+                break
     return resolved
 
 
@@ -65,6 +79,38 @@ def generate_unique_template_id(base_id: str) -> str:
     """Append a short uppercase UUID-derived suffix to a validated semantic ID."""
     semantic_id = validate_template_id(base_id)
     return f"{semantic_id}-{uuid.uuid4().hex[:6].upper()}"
+
+
+def _semantic_directory_part(value: str, *, max_length: int) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).strip()
+    normalized = re.sub(
+        r"[^A-Za-z0-9\u3400-\u4DBF\u4E00-\u9FFF]+",
+        "-",
+        normalized,
+    )
+    normalized = re.sub(r"-+", "-", normalized).strip("-").lower()
+    return normalized[:max_length].rstrip("-")
+
+
+def generate_semantic_directory_name(label: Any, tag_codes: Any) -> str:
+    """Build a readable local directory name in the template's selected language."""
+    label_data = label if isinstance(label, dict) else {}
+    tags = set(tag_codes) if isinstance(tag_codes, list) else set()
+    if "language-chinese" in tags:
+        semantic_part = _semantic_directory_part(label_data.get("zh_CN", ""), max_length=48) or "模板"
+    else:
+        semantic_part = _semantic_directory_part(label_data.get("en_US", ""), max_length=64) or "template"
+    return f"SLIDE-{semantic_part}"
+
+
+def validate_template_directory(template_dir: Path, metadata: dict[str, Any]) -> None:
+    template_id = validate_template_id(str(metadata.get("template_id") or ""))
+    if template_dir.name == template_id:
+        return
+    label = metadata.get("label")
+    expected_name = generate_semantic_directory_name(label, metadata.get("tag_codes"))
+    if template_dir.name != expected_name:
+        raise SlideTemplateBuilderError("Template directory name does not match its localized semantic name.")
 
 
 def validate_taxonomy_selection(category_code: Any, tag_codes: Any) -> tuple[str, list[str]]:
@@ -297,9 +343,7 @@ async def validate_template_project(template_dir: Path) -> ValidatedTemplate:
         raise SlideTemplateBuilderError(f"Template structure is incomplete: {', '.join(missing)}")
 
     metadata = await async_read_json(template_dir / "template.json")
-    template_id = validate_template_id(str(metadata.get("template_id") or ""))
-    if template_dir.name != template_id:
-        raise SlideTemplateBuilderError("Template directory name must exactly match template_id.")
+    validate_template_directory(template_dir, metadata)
     if metadata.get("schema_version") != "1.0":
         raise SlideTemplateBuilderError("schema_version must be 1.0.")
     category_code, _ = validate_taxonomy_selection(
