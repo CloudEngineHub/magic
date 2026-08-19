@@ -214,7 +214,6 @@ class DesignVideoPollConsumer extends ConsumerMessage
         $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
         $relativePath = '/' . ltrim($relativePath, '/');
         $fileName = basename($relativePath);
-        $entity->setFileDir('/' . trim((string) dirname($relativePath), '/'));
         $this->domainService->markAsCompleted($dataIsolation, $entity, [
             'relative_file_path' => $relativePath,
             'provider_video_url' => (string) ($output['video_url'] ?? ''),
