@@ -2,16 +2,9 @@ import type { PPTMediaNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
 import { throwIfAborted } from "../sandbox/abort"
 
-interface MediaOptions {
-	x: number
-	y: number
-	w: number
-	h: number
-	type: "video" | "audio" | "online"
-	source?: PPTMediaNode["source"]
-	link?: string
-	coverSource?: PPTMediaNode["coverSource"]
-}
+type MediaProps = Parameters<Slide["addMedia"]>[0]
+type EmbeddedMediaProps = Exclude<MediaProps, { type: "online" }>
+type OnlineMediaProps = Extract<MediaProps, { type: "online" }>
 
 /**
  * Draw media onto the slide.
@@ -23,38 +16,33 @@ export async function drawMedia(
 	signal?: AbortSignal,
 ): Promise<void> {
 	throwIfAborted(signal)
-	const { x, y, w, h, mediaType, source, link } = node
+	const { x, y, w, h, mediaType, source, link, autoplay } = node
 	const coverSource = node.coverSource
 
-	const options: MediaOptions = {
-		x,
-		y,
-		w,
-		h,
-		type: mediaType,
-	}
-
 	switch (mediaType) {
-		case "online":
+		case "online": {
 			if (!link) {
 				log(LogLevel.L3, "Online video requires link")
 				return
 			}
-			options.link = link
+			const options: OnlineMediaProps = { x, y, w, h, type: "online", link }
 			slide.addMedia(options)
 			break
+		}
 
 		case "video":
-		case "audio":
+		case "audio": {
 			if (!source) {
 				throw new TypeError(`${mediaType} node must provide a source descriptor`)
 			}
+			const options: EmbeddedMediaProps = { x, y, w, h, type: mediaType, source }
 			if (mediaType === "video") {
 				if (coverSource) options.coverSource = coverSource
 			}
-			options.source = source
+			if (autoplay !== undefined) options.autoplay = autoplay
 			slide.addMedia(options)
 			break
+		}
 
 		default:
 			log(LogLevel.L3, "Unknown media type", { mediaType })

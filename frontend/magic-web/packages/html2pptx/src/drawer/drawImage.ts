@@ -1,16 +1,19 @@
 import type { PPTImageNode, Slide } from "../ir/node"
 import { log, LogLevel } from "../logger"
 
+type ImageProps = Parameters<Slide["addImage"]>[0]
+
 export function drawImage(slide: Slide, node: PPTImageNode): void {
 	const { x, y, w, h, sizing, intrinsicSize, transparency, rotate } = node
 	const source = node.source
 	if (!source) throw new TypeError("Image node must provide a source descriptor")
 
-	const options: Record<string, unknown> = {
+	const options: ImageProps = {
 		x,
 		y,
 		w,
 		h,
+		source,
 	}
 
 	if (
@@ -28,8 +31,6 @@ export function drawImage(slide: Slide, node: PPTImageNode): void {
 		options.w = intrinsicSize.width / maxDimension
 		options.h = intrinsicSize.height / maxDimension
 	}
-
-	options.source = source
 
 	if (rotate !== undefined) options.rotate = rotate
 
