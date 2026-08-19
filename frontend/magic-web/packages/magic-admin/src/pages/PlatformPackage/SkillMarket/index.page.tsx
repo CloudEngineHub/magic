@@ -8,16 +8,19 @@ import {
 	TableWithFilters,
 	MobileList,
 } from "@admin-components"
-import type { SearchItem, TimeRangeValue } from "@admin-components"
+import type { SearchItem, TableButton, TimeRangeValue } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Flex, InputNumber, Switch, Tooltip, message, type TableProps } from "antd"
+import { IconCategory, IconUpload } from "@tabler/icons-react"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useApis } from "@admin/apis"
 import type { PlatformPackage } from "@admin/types/platformPackage"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
 import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
+import { SkillMarketCategoryModal } from "./components/SkillMarketCategoryModal"
+import OfficialSkillImportDialog from "./components/OfficialSkillImportDialog"
 
 const SkillMarketCard = lazy(() => import("./SkillMarketCard"))
 
@@ -48,6 +51,8 @@ function SkillMarketPage() {
 	const [sortSavingIds, setSortSavingIds] = useState<Set<string>>(new Set())
 	const [featuredSavingIds, setFeaturedSavingIds] = useState<Set<string>>(new Set())
 	const [hiddenSavingIds, setHiddenSavingIds] = useState<Set<string>>(new Set())
+	const [categoryOpen, setCategoryOpen] = useState(false)
+	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const [lastTimeFilterValue, setLastTimeFilterValue] = useState<TimeRangeValue | null>(null)
 	const [params, setParams] = useState<ParamsType>({
 		page: 1,
@@ -460,6 +465,7 @@ function SkillMarketPage() {
 				field: "publish_status",
 				prefix: t("publishStatus"),
 				placeholder: tCommon("all"),
+				value: params.publish_status ?? "all",
 				options: [
 					{ label: tCommon("all"), value: "all" },
 					{ label: t("unpublished"), value: "UNPUBLISHED" },
@@ -467,7 +473,6 @@ function SkillMarketPage() {
 					{ label: t("published"), value: "PUBLISHED" },
 					{ label: t("offline"), value: "OFFLINE" },
 				],
-				defaultValue: "PUBLISHED",
 				onChange: (value) => {
 					updateParams({ publish_status: value === "all" ? undefined : value })
 				},
@@ -516,7 +521,47 @@ function SkillMarketPage() {
 				},
 			},
 		],
-		[t, tCommon, timeFilterValue, updateParams, debouncedSearch],
+		[t, tCommon, timeFilterValue, updateParams, debouncedSearch, params.publish_status],
+	)
+
+	const buttons: TableButton[] = useMemo(() => {
+		const nextButtons: TableButton[] = [
+			{
+				text: t("category.manageButton"),
+				icon: <IconCategory size={16} />,
+				onClick: () => setCategoryOpen(true),
+			},
+		]
+
+		if (hasEditRight) {
+			nextButtons.push({
+				text: t("officialSkillImport.openButton"),
+				icon: <IconUpload size={16} />,
+				type: "primary",
+				onClick: () => setOfficialImportOpen(true),
+			})
+		}
+
+		return nextButtons
+	}, [hasEditRight, t])
+
+	const refreshAfterCategoryChange = useMemoizedFn(() => {
+		run(params)
+	})
+
+	const handleOfficialImportSuccess = useMemoizedFn(
+		(
+			_result: PlatformPackage.ImportOfficialSkillResponse,
+			context: { publishStatus: "OFFLINE" | "PUBLISHED" },
+		) => {
+			const nextParams: ParamsType = {
+				...params,
+				page: 1,
+				publish_status: context.publishStatus,
+			}
+			setParams(nextParams)
+			run(nextParams)
+		},
 	)
 
 	const isMobile = useIsMobile()
@@ -531,45 +576,81 @@ function SkillMarketPage() {
 
 	if (isMobile) {
 		return (
-			<MobileList<ParamsType, DataType>
-				data={data}
-				loading={loading}
-				total={total}
-				currentFilters={params}
-				search={searchItems}
-				CardComponent={
-					<SkillMarketCard
-						publishStatusMap={publishStatusMap}
-						publisherTypeMap={publisherTypeMap}
-						featuredSavingIds={featuredSavingIds}
-						hiddenSavingIds={hiddenSavingIds}
-						sortSavingIds={sortSavingIds}
-						getSortOrderInputValue={getSortOrderInputValue}
-						updateSortOrderDraft={updateSortOrderDraft}
-						debouncedAutoSaveSortOrder={debouncedAutoSaveSortOrder}
-						handleChangeFeatured={handleChangeFeatured}
-						handleChangeHidden={handleChangeHidden}
-						getLocalizedText={getLocalizedText}
+			<>
+				<MobileList<ParamsType, DataType>
+					data={data}
+					loading={loading}
+					total={total}
+					currentFilters={params}
+					search={searchItems}
+					buttons={buttons}
+					CardComponent={
+						<SkillMarketCard
+							publishStatusMap={publishStatusMap}
+							publisherTypeMap={publisherTypeMap}
+							featuredSavingIds={featuredSavingIds}
+							hiddenSavingIds={hiddenSavingIds}
+							sortSavingIds={sortSavingIds}
+							getSortOrderInputValue={getSortOrderInputValue}
+							updateSortOrderDraft={updateSortOrderDraft}
+							debouncedAutoSaveSortOrder={debouncedAutoSaveSortOrder}
+							handleChangeFeatured={handleChangeFeatured}
+							handleChangeHidden={handleChangeHidden}
+							getLocalizedText={getLocalizedText}
+						/>
+					}
+					paginationConfig={paginationConfig}
+					showDetail={false}
+				/>
+				{categoryOpen && (
+					<SkillMarketCategoryModal
+						open={categoryOpen}
+						hasEditRight={hasEditRight}
+						onCancel={() => setCategoryOpen(false)}
+						onSuccess={refreshAfterCategoryChange}
 					/>
-				}
-				paginationConfig={paginationConfig}
-				showDetail={false}
-			/>
+				)}
+				{officialImportOpen && (
+					<OfficialSkillImportDialog
+						open={officialImportOpen}
+						onCancel={() => setOfficialImportOpen(false)}
+						onSuccess={handleOfficialImportSuccess}
+					/>
+				)}
+			</>
 		)
 	}
 
 	return (
-		<div className={styles.container}>
-			<TableWithFilters<DataType>
-				search={searchItems}
-				columns={columns}
-				dataSource={data}
-				rowKey="id"
-				extraHeight={116}
-				loading={loading}
-				pagination={paginationConfig}
-			/>
-		</div>
+		<>
+			<div className={styles.container}>
+				<TableWithFilters<DataType>
+					search={searchItems}
+					buttons={buttons}
+					columns={columns}
+					dataSource={data}
+					rowKey="id"
+					extraHeight={116}
+					loading={loading}
+					pagination={paginationConfig}
+				/>
+			</div>
+			{categoryOpen && (
+				<SkillMarketCategoryModal
+					open={categoryOpen}
+					hasEditRight={hasEditRight}
+					onCancel={() => setCategoryOpen(false)}
+					onSuccess={refreshAfterCategoryChange}
+				/>
+			)}
+			{officialImportOpen && (
+				<OfficialSkillImportDialog
+					open={officialImportOpen}
+					onCancel={() => setOfficialImportOpen(false)}
+					onSuccess={handleOfficialImportSuccess}
+				/>
+			)}
+		</>
 	)
 }
 

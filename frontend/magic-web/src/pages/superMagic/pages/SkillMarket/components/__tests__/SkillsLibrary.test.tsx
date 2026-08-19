@@ -6,7 +6,6 @@ import type { StoreSkillView } from "@/services/skills/SkillsService"
 const getStoreSkillsMock = vi.fn()
 const getSkillMarketCategoriesMock = vi.fn()
 const useFunctionPermissionMock = vi.hoisted(() => vi.fn())
-const usePermissionKeyMock = vi.hoisted(() => vi.fn())
 const skillCardRenderMock = vi.fn()
 const skillDetailDialogRenderMock = vi.fn()
 
@@ -26,7 +25,6 @@ vi.mock("react-i18next", () => ({
 				"skillsLibrary.retryFeatured": "Retry",
 				"skillsLibrary.refreshFeatured": "Refresh",
 				"skillsLibrary.featuredLoadFailed": "Failed to load featured skills",
-				"skillsLibrary.uploadOfficialSkill": "Upload official Skill",
 			})[key] ?? key,
 	}),
 }))
@@ -38,7 +36,6 @@ vi.mock("lucide-react", () => {
 
 	return {
 		Check: Icon,
-		BadgeCheck: Icon,
 		ChevronDown: Icon,
 		Loader2: Icon,
 		Plus: Icon,
@@ -55,7 +52,6 @@ vi.mock("sonner", () => ({
 vi.mock("@/apis", () => ({
 	FUNCTION_PERMISSION_CODE: {
 		SkillCreate: "SkillCreate",
-		SkillMarketManage: "SkillMarketManage",
 	},
 }))
 
@@ -88,8 +84,6 @@ vi.mock("@/enhance/lucide-react", () => ({
 vi.mock("@/hooks/useFunctionPermission", () => ({
 	useFunctionPermission: (code: string, options?: { allowSuperAdmin?: boolean }) =>
 		useFunctionPermissionMock(code, options),
-	usePermissionKey: (code: string, options?: { allowSuperAdmin?: boolean }) =>
-		usePermissionKeyMock(code, options),
 }))
 
 vi.mock("@/models/config", () => ({
@@ -109,11 +103,6 @@ vi.mock("@/pages/superMagic/components/SkillDetailDialog", () => ({
 		skillDetailDialogRenderMock(props)
 		return null
 	},
-}))
-
-vi.mock("@/pages/superMagic/components/OfficialSkillImportDialog", () => ({
-	default: ({ open }: { open: boolean }) =>
-		open ? <div data-testid="official-skill-import-dialog" /> : null,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useAutoLoadMoreSentinel", () => ({
@@ -195,7 +184,6 @@ describe("SkillsLibrary", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		useFunctionPermissionMock.mockImplementation(() => ({ isAllowed: false }))
-		usePermissionKeyMock.mockImplementation(() => ({ isAllowed: false }))
 		getStoreSkillsMock.mockReset()
 		getSkillMarketCategoriesMock.mockReset()
 		getSkillMarketCategoriesMock.mockResolvedValue([])
@@ -216,26 +204,6 @@ describe("SkillsLibrary", () => {
 		expect(
 			screen.queryByTestId("skills-library-upload-official-button"),
 		).not.toBeInTheDocument()
-	})
-
-	it("shows the official Skill entry for users with market management permission", async () => {
-		usePermissionKeyMock.mockImplementation((code: string) => ({
-			isAllowed: code === "SkillMarketManage",
-		}))
-		getStoreSkillsMock.mockResolvedValue(createPage([], 1, 20))
-
-		render(<SkillsLibrary />)
-
-		const uploadButton = await screen.findByTestId("skills-library-upload-official-button")
-		expect(usePermissionKeyMock).toHaveBeenCalledWith("SkillMarketManage", {
-			allowSuperAdmin: true,
-		})
-		expect(useFunctionPermissionMock).not.toHaveBeenCalledWith("SkillMarketManage", {
-			allowSuperAdmin: true,
-		})
-		expect(uploadButton).toBeInTheDocument()
-		fireEvent.click(uploadButton)
-		expect(screen.getByTestId("official-skill-import-dialog")).toBeInTheDocument()
 	})
 
 	it("includes empty categories and filters the skill list by string id", async () => {
@@ -266,6 +234,41 @@ describe("SkillsLibrary", () => {
 				}),
 			)
 		})
+	})
+
+	it("keeps the global featured section visible when switching categories", async () => {
+		const featuredSkill = createSkill({
+			id: "global-featured",
+			skillCode: "global.featured",
+			name: "Global featured",
+			isFeatured: true,
+		})
+		getSkillMarketCategoriesMock.mockResolvedValueOnce([
+			{
+				id: "10001",
+				name: "Productivity",
+				sortOrder: 100,
+				skillCount: 1,
+			},
+		])
+		getStoreSkillsMock.mockImplementation(({ is_featured }: { is_featured?: number }) =>
+			Promise.resolve(
+				createPage(is_featured === 1 ? [featuredSkill] : [], 1, is_featured === 1 ? 3 : 20),
+			),
+		)
+
+		render(<SkillsLibrary />)
+
+		const featuredSection = await screen.findByTestId("featured-skills-section")
+		fireEvent.click(await screen.findByRole("tab", { name: "Productivity" }))
+
+		await waitFor(() => {
+			expect(getStoreSkillsMock).toHaveBeenCalledWith(
+				expect.objectContaining({ category_ids: ["10001"] }),
+			)
+		})
+		expect(featuredSection).toBeInTheDocument()
+		expect(screen.getByTestId("featured-skills-section")).toBeInTheDocument()
 	})
 
 	it("opens the clicked featured object when the main list contains another object with the same id", async () => {

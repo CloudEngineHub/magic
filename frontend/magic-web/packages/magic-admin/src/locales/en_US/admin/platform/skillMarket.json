@@ -1,5 +1,36 @@
 {
 	"asc": "Ascending",
+	"category": {
+		"actions": {
+			"search": "Search"
+		},
+		"addButton": "Add Category",
+		"addChildButton": "Add Subcategory",
+		"addTitle": "Add Skill Category",
+		"columns": {
+			"name": "Category Name",
+			"skillCount": "Skill Count",
+			"status": "Status"
+		},
+		"editTitle": "Edit Skill Category",
+		"fields": {
+			"logo": "Icon URL",
+			"name": "Category Name",
+			"parent": "Parent Category",
+			"status": "Status"
+		},
+		"filters": {
+			"keyword": "Keyword",
+			"status": "Status"
+		},
+		"manageButton": "Categories",
+		"manageTitle": "Skill Category Management",
+		"root": "Top-level Category",
+		"status": {
+			"hidden": "Hidden",
+			"visible": "Visible"
+		}
+	},
 	"createdAt": "Created At",
 	"desc": "Descending",
 	"description": "Description",
@@ -7,6 +38,57 @@
 	"isFeatured": "Featured",
 	"isHidden": "Hidden",
 	"no": "No",
+	"officialSkillImport": {
+		"buttons": {
+			"confirm": "Import"
+		},
+		"createNew": "Create skill",
+		"defaultSource": "Official source",
+		"description": "Upload a .skill file, .zip archive, or Skill folder, complete the market information, and publish it. This entry is for manual admin imports only.",
+		"errors": {
+			"archiveFailed": "The folder could not be archived. Try again later.",
+			"categoriesFailed": "Categories could not be loaded. Try again later.",
+			"emptyFolder": "The folder is empty and cannot be imported.",
+			"fileTooLarge": "The file cannot exceed 100 MB",
+			"importFailed": "Import failed. Try again later.",
+			"invalidFile": "Select a .skill or .zip file",
+			"parseFailed": "The file could not be uploaded or parsed. Check it and try again."
+		},
+		"fields": {
+			"category": "Categories",
+			"categoryPlaceholder": "Select categories (optional)",
+			"description": "Description",
+			"descriptionPlaceholder": "Enter a skill description",
+			"featured": "Featured",
+			"hidden": "Hidden",
+			"logo": "Icon URL",
+			"logoPlaceholder": "Enter an icon URL (optional)",
+			"name": "Skill name",
+			"namePlaceholder": "Enter a skill name",
+			"notFeatured": "Not featured",
+			"offline": "Offline",
+			"published": "Published",
+			"sortOrder": "Sort order",
+			"source": "Source",
+			"sourcePlaceholder": "Enter a source (optional)",
+			"status": "Publish status",
+			"version": "Version",
+			"visible": "Visible"
+		},
+		"openButton": "Upload Official Skill",
+		"success": {
+			"created": "Official Skill imported",
+			"updated": "Official Skill updated"
+		},
+		"title": "Upload Official Skill",
+		"updateExisting": "Update existing skill",
+		"upload": {
+			"chooseFile": "Choose file",
+			"chooseFolder": "Choose folder",
+			"hint": "Supports .skill files, .zip archives, or folders up to 100 MB before and after compression",
+			"title": "Choose a Skill file or folder"
+		}
+	},
 	"offline": "Offline",
 	"orderBy": "Created Time Order",
 	"organization": "Organization",

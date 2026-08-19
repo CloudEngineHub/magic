@@ -1,5 +1,36 @@
 {
 	"asc": "正序",
+	"category": {
+		"actions": {
+			"search": "搜索"
+		},
+		"addButton": "新增分类",
+		"addChildButton": "新增子分类",
+		"addTitle": "新增技能分类",
+		"columns": {
+			"name": "分类名称",
+			"skillCount": "技能数量",
+			"status": "状态"
+		},
+		"editTitle": "编辑技能分类",
+		"fields": {
+			"logo": "图标地址",
+			"name": "分类名称",
+			"parent": "上级分类",
+			"status": "显示状态"
+		},
+		"filters": {
+			"keyword": "关键词",
+			"status": "状态"
+		},
+		"manageButton": "分类管理",
+		"manageTitle": "技能分类管理",
+		"root": "一级分类",
+		"status": {
+			"hidden": "隐藏",
+			"visible": "显示"
+		}
+	},
 	"createdAt": "创建时间",
 	"desc": "倒序",
 	"description": "技能描述",
@@ -7,6 +38,57 @@
 	"isFeatured": "是否精选",
 	"isHidden": "是否隐藏",
 	"no": "否",
+	"officialSkillImport": {
+		"buttons": {
+			"confirm": "确认导入"
+		},
+		"createNew": "新建技能",
+		"defaultSource": "官方来源",
+		"description": "上传 .skill、.zip 或 Skill 文件夹，解析后填写市场信息并发布，此入口仅用于后台手动导入",
+		"errors": {
+			"archiveFailed": "文件夹打包失败，请稍后重试",
+			"categoriesFailed": "分类加载失败，请稍后重试",
+			"emptyFolder": "文件夹为空，无法导入",
+			"fileTooLarge": "文件大小不能超过 100 MB",
+			"importFailed": "导入失败，请稍后重试",
+			"invalidFile": "请选择 .skill 或 .zip 文件",
+			"parseFailed": "文件上传或解析失败，请检查文件后重试"
+		},
+		"fields": {
+			"category": "分类",
+			"categoryPlaceholder": "请选择分类（可多选）",
+			"description": "技能描述",
+			"descriptionPlaceholder": "请输入技能描述",
+			"featured": "精选",
+			"hidden": "隐藏",
+			"logo": "图标地址",
+			"logoPlaceholder": "请输入图标地址（可选）",
+			"name": "技能名称",
+			"namePlaceholder": "请输入技能名称",
+			"notFeatured": "非精选",
+			"offline": "下线",
+			"published": "发布",
+			"sortOrder": "排序",
+			"source": "来源",
+			"sourcePlaceholder": "请输入来源（可选）",
+			"status": "发布状态",
+			"version": "版本号",
+			"visible": "显示"
+		},
+		"openButton": "上传官方 Skill",
+		"success": {
+			"created": "官方 Skill 导入成功",
+			"updated": "官方 Skill 更新成功"
+		},
+		"title": "上传官方 Skill",
+		"updateExisting": "更新已有技能",
+		"upload": {
+			"chooseFile": "选择文件",
+			"chooseFolder": "选择文件夹",
+			"hint": "支持 .skill、.zip 或文件夹，压缩前后均不超过 100 MB",
+			"title": "选择 Skill 文件或文件夹"
+		}
+	},
 	"offline": "已下线",
 	"orderBy": "创建时间排序",
 	"organization": "组织",

@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, ReactNode, Ref } from "react"
+import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const navigateMock = vi.fn()
@@ -54,16 +55,6 @@ vi.mock("@/components/shadcn-ui/sheet", () => ({
 
 vi.mock("@/pages/superMagic/components/SkillDetailDialog", () => ({
 	SkillDetailDialog: () => null,
-}))
-
-vi.mock("@/apis", () => ({
-	FUNCTION_PERMISSION_CODE: {
-		SkillMarketManage: "SkillMarketManage",
-	},
-}))
-
-vi.mock("@/hooks/useFunctionPermission", () => ({
-	usePermissionKey: () => ({ isAllowed: false }),
 }))
 
 vi.mock("@/enhance/lucide-react", () => ({
@@ -124,6 +115,24 @@ describe("SkillsLibraryMobile pagination", () => {
 			.mockResolvedValueOnce({
 				list: [
 					{
+						id: "featured-skill-1",
+						storeSkillId: "featured-store-skill-1",
+						skillCode: "featured.skill.code.1",
+						name: "Featured Skill 1",
+						description: "Featured skill",
+						isFeatured: true,
+						status: "not-added",
+						publisherType: "OFFICIAL",
+						needUpgrade: false,
+						updatedAt: "2026-03-23 10:00:00",
+					},
+				],
+				page: 1,
+				pageSize: 3,
+			})
+			.mockResolvedValueOnce({
+				list: [
+					{
 						id: "skill-2",
 						storeSkillId: "store-skill-2",
 						skillCode: "skill.code.2",
@@ -146,7 +155,7 @@ describe("SkillsLibraryMobile pagination", () => {
 		vi.unstubAllGlobals()
 	})
 
-	it("binds the observer to the scroll viewport and loads more", async () => {
+	it("deduplicates initial requests in StrictMode and loads more", async () => {
 		const { default: SkillsLibraryMobile } = await import("../SkillsLibraryMobile")
 		const observe = vi.fn()
 		const disconnect = vi.fn()
@@ -165,12 +174,25 @@ describe("SkillsLibraryMobile pagination", () => {
 
 		vi.stubGlobal("IntersectionObserver", intersectionObserver)
 
-		render(<SkillsLibraryMobile />)
+		render(
+			<StrictMode>
+				<SkillsLibraryMobile />
+			</StrictMode>,
+		)
 
 		await waitFor(() => {
-			expect(getStoreSkillsMock).toHaveBeenCalledTimes(1)
-			expect(intersectionObserver).toHaveBeenCalledTimes(1)
+			expect(getStoreSkillsMock).toHaveBeenCalledTimes(2)
+			expect(intersectionObserver).toHaveBeenCalledTimes(2)
 		})
+		expect(getStoreSkillsMock.mock.calls[1]?.[0]).toEqual({
+			page: 1,
+			page_size: 3,
+			is_featured: 1,
+		})
+		expect(getStoreSkillsMock.mock.calls[1]?.[0]).not.toHaveProperty("category_ids")
+
+		expect(screen.getByTestId("featured-skills-mobile-section")).toBeInTheDocument()
+		expect(screen.getByTestId("featured-skills-mobile-list")).toBeInTheDocument()
 
 		expect(screen.getByTestId("skills-library-mobile-scroll-sentinel")).toBeInTheDocument()
 
@@ -189,10 +211,10 @@ describe("SkillsLibraryMobile pagination", () => {
 		})
 
 		await waitFor(() => {
-			expect(getStoreSkillsMock).toHaveBeenCalledTimes(2)
+			expect(getStoreSkillsMock).toHaveBeenCalledTimes(3)
 		})
 
-		expect(getStoreSkillsMock.mock.calls[1]?.[0]).toMatchObject({
+		expect(getStoreSkillsMock.mock.calls[2]?.[0]).toMatchObject({
 			page: 2,
 			page_size: 20,
 			keyword: undefined,

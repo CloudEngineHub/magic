@@ -320,7 +320,7 @@
 		"updatedAt": "更新于 {{date}}"
 	},
 	"noMoreData": "没有更多数据。",
-	"noResults": "暂无结果。",
+	"noResults": "暂无结果",
 	"officialSkillImport": {
 		"adminOnly": "管理员",
 		"buttons": {

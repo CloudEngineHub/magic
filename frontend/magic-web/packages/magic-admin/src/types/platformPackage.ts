@@ -42,6 +42,16 @@ export namespace PlatformPackage {
 	export type GetSkillMarketListParams = MarketTypes.GetSkillMarketListParams
 	export type SkillMarketItem = MarketTypes.SkillMarketItem
 	export type UpdateSkillMarketInfoParams = MarketTypes.UpdateSkillMarketInfoParams
+	export type ParseOfficialSkillResponse = MarketTypes.ParseOfficialSkillResponse
+	export type OfficialSkillImportFields = MarketTypes.OfficialSkillImportFields
+	export type ImportOfficialSkillParams = MarketTypes.ImportOfficialSkillParams
+	export type ImportOfficialSkillResponse = MarketTypes.ImportOfficialSkillResponse
+	export type SkillMarketCategoryStatus = MarketTypes.SkillMarketCategoryStatus
+	export import SkillMarketCategoryStatusMap = MarketTypes.SkillMarketCategoryStatusMap
+	export type GetSkillMarketCategoryListParams = MarketTypes.GetSkillMarketCategoryListParams
+	export type SkillMarketCategoryListResponse = MarketTypes.SkillMarketCategoryListResponse
+	export type SkillMarketCategoryItem = MarketTypes.SkillMarketCategoryItem
+	export type SaveSkillMarketCategoryParams = MarketTypes.SaveSkillMarketCategoryParams
 	export type GetAgentMarketListParams = MarketTypes.GetAgentMarketListParams
 	export type RoleI18N = MarketTypes.RoleI18N
 	export type AgentMarketItem = MarketTypes.AgentMarketItem

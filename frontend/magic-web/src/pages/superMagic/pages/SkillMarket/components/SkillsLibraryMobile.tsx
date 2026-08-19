@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { reaction } from "mobx"
 import { configStore } from "@/models/config"
-import { BadgeCheck, Check, ChevronLeft, Loader2, Search } from "lucide-react"
+import { Check, ChevronLeft, Loader2, RefreshCw, Search } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -9,15 +9,13 @@ import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { Skills } from "@/enhance/lucide-react"
-import { FUNCTION_PERMISSION_CODE } from "@/apis"
-import { usePermissionKey } from "@/hooks/useFunctionPermission"
+import { cn } from "@/lib/utils"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
 import { useDelayedVisibility } from "@/pages/superMagic/hooks/useDelayedVisibility"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { StoreSkillCardMobile } from "./StoreSkillCardMobile"
-import OfficialSkillImportDialog from "@/pages/superMagic/components/OfficialSkillImportDialog"
 import { StoreSkillsStore } from "../stores/store-skills"
 import SkillCategoryFilter from "./SkillCategoryFilter"
 import { ViewTransitionPresets } from "@/types/viewTransition"
@@ -29,15 +27,11 @@ function SkillsLibraryMobile() {
 	const skillsStoreRef = useRef(new StoreSkillsStore())
 	const skillsStore = skillsStoreRef.current
 	const scrollViewportRef = useRef<HTMLDivElement | null>(null)
-	const { isAllowed: canImportOfficialSkill } = usePermissionKey(
-		FUNCTION_PERMISSION_CODE.SkillMarketManage,
-		{ allowSuperAdmin: true },
-	)
+	const initialLoadLifecycleRef = useRef({ initialized: false, generation: 0 })
 
 	const [searchOpen, setSearchOpen] = useState(false)
 	const [queryDraft, setQueryDraft] = useState("")
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
-	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const hasActiveFilters =
 		Boolean(skillsStore.keyword) ||
 		skillsStore.categoryIds.length > 0 ||
@@ -45,9 +39,23 @@ function SkillsLibraryMobile() {
 		skillsStore.isFeatured != null
 
 	useEffect(() => {
-		void skillsStore.fetchSkills()
-		void skillsStore.fetchCategories()
-		return () => skillsStore.reset()
+		const lifecycle = initialLoadLifecycleRef.current
+		const effectGeneration = ++lifecycle.generation
+
+		// React StrictMode replays effects in development. Keep the first request
+		// alive and avoid starting the same initial queries a second time.
+		if (!lifecycle.initialized) {
+			lifecycle.initialized = true
+			void skillsStore.fetchSkills()
+			void skillsStore.fetchFeaturedSkills()
+			void skillsStore.fetchCategories()
+		}
+
+		return () => {
+			queueMicrotask(() => {
+				if (lifecycle.generation === effectGeneration) skillsStore.reset()
+			})
+		}
 	}, [skillsStore])
 
 	useEffect(() => {
@@ -106,6 +114,10 @@ function SkillsLibraryMobile() {
 		setSelectedSkill(skill)
 	}, [])
 
+	const handleRefreshFeatured = useCallback(() => {
+		void skillsStore.fetchNextFeaturedSkills()
+	}, [skillsStore])
+
 	return (
 		<div
 			className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border border-t-0 border-border bg-background shadow-xs"
@@ -145,12 +157,6 @@ function SkillsLibraryMobile() {
 						: undefined
 				}
 			/>
-			{canImportOfficialSkill ? (
-				<OfficialSkillImportDialog
-					open={officialImportOpen}
-					onOpenChange={setOfficialImportOpen}
-				/>
-			) : null}
 			<header
 				className="flex shrink-0 items-center gap-2 rounded-b-xl bg-background px-2.5 py-2 shadow-xs"
 				data-testid="skills-library-mobile-top-bar"
@@ -179,18 +185,6 @@ function SkillsLibraryMobile() {
 					>
 						<Search className="size-4" aria-hidden />
 					</Button>
-					{canImportOfficialSkill ? (
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-8 rounded-md"
-							onClick={() => setOfficialImportOpen(true)}
-							aria-label={t("skillsLibrary.uploadOfficialSkill")}
-							data-testid="skills-library-mobile-upload-official"
-						>
-							<BadgeCheck className="size-4" aria-hidden />
-						</Button>
-					) : null}
 					<Button
 						variant="ghost"
 						className="h-8 shrink-0 gap-1 rounded-md px-2 text-xs font-medium text-foreground"
@@ -236,6 +230,74 @@ function SkillsLibraryMobile() {
 				viewportRef={scrollViewportRef}
 			>
 				<div className="flex min-w-0 flex-col gap-2.5 px-2 pb-6 pt-2">
+					<section
+						className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 shadow-xs"
+						data-testid="featured-skills-mobile-section"
+					>
+						<div className="flex min-h-8 items-center justify-between gap-2 border-b border-border pb-2">
+							<h2 className="text-sm font-semibold text-foreground">
+								{t("skillsLibrary.featuredSkills")}
+							</h2>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs text-muted-foreground"
+								disabled={
+									skillsStore.featuredLoading || !skillsStore.canRefreshFeatured
+								}
+								onClick={handleRefreshFeatured}
+								data-testid="featured-skills-mobile-refresh"
+							>
+								<RefreshCw
+									className={cn(
+										"size-3.5",
+										skillsStore.featuredLoading && "animate-spin",
+									)}
+									aria-hidden
+								/>
+								{skillsStore.featuredError
+									? t("skillsLibrary.retryFeatured")
+									: t("skillsLibrary.refreshFeatured")}
+							</Button>
+						</div>
+
+						{skillsStore.featuredError ? (
+							<div
+								className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
+								role="status"
+								data-testid="featured-skills-mobile-error"
+							>
+								{t("skillsLibrary.featuredLoadFailed")}
+							</div>
+						) : null}
+
+						{skillsStore.featuredLoading && skillsStore.featuredList.length === 0 ? (
+							<div
+								className="flex items-center justify-center py-8"
+								data-testid="featured-skills-mobile-loading"
+							>
+								<Loader2 className="size-5 animate-spin text-muted-foreground" />
+							</div>
+						) : skillsStore.featuredList.length > 0 ? (
+							<div
+								className="flex min-w-0 flex-col gap-2.5"
+								data-testid="featured-skills-mobile-list"
+							>
+								{skillsStore.featuredList.map((skill) => (
+									<StoreSkillCardMobile
+										key={`featured-${skill.id}`}
+										skill={skill}
+										language={i18n.language}
+										showFeaturedTag
+										onAdd={handleAdd}
+										onUpgrade={handleUpgrade}
+										onOpenDetail={handleOpenDetail}
+									/>
+								))}
+							</div>
+						) : null}
+					</section>
+
 					<SkillCategoryFilter
 						categories={skillsStore.categories}
 						selectedCategoryIds={skillsStore.categoryIds}

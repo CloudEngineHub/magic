@@ -16,6 +16,7 @@ import { isOfficialStoreSkillPublisher, resolveStoreSkillPublisherLabel } from "
 interface StoreSkillCardMobileProps {
 	skill: StoreSkillView
 	language: string
+	showFeaturedTag?: boolean
 	onAdd?: (id: string) => void
 	onUpgrade?: (id: string) => void
 	onOpenDetail?: (skill: StoreSkillView) => void
@@ -45,6 +46,7 @@ function normalizeDisplayText(value?: string | null) {
 export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 	skill,
 	language,
+	showFeaturedTag = false,
 	onAdd,
 	onUpgrade,
 	onOpenDetail,
@@ -115,6 +117,15 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 						<p className="min-w-0 flex-1 truncate pt-0.5 text-sm font-medium leading-6 text-foreground">
 							{skill.name}
 						</p>
+						{showFeaturedTag ? (
+							<Badge
+								variant="outline"
+								className="mt-0.5 shrink-0 rounded-md border-transparent bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 dark:text-orange-300"
+								data-testid="skills-library-mobile-card-featured"
+							>
+								{t("skillsLibrary.featured")}
+							</Badge>
+						) : null}
 					</div>
 					<div className="flex min-w-0 items-center justify-between gap-2">
 						{packageNameLabel && (

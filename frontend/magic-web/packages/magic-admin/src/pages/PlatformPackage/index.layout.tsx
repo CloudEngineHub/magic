@@ -166,8 +166,10 @@ function PlatformPackageLayout() {
 						validate: (permissions: string[], isSuperAdmin?: boolean) => {
 							return (
 								isSuperAdmin ||
-								permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_QUERY) ||
-								permissions.includes(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
+								permissions.includes(
+									PERMISSION_KEY_MAP.PLATFORM_SKILL_MARKET_QUERY,
+								) ||
+								permissions.includes(PERMISSION_KEY_MAP.PLATFORM_SKILL_MARKET_EDIT)
 							)
 						},
 					},

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
 import { useDebounce, useThrottle } from "ahooks"
-import { BadgeCheck, Check, ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react"
+import { Check, ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react"
 import { reaction } from "mobx"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -9,10 +9,9 @@ import { toast } from "sonner"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skills } from "@/enhance/lucide-react"
-import { useFunctionPermission, usePermissionKey } from "@/hooks/useFunctionPermission"
+import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { cn } from "@/lib/utils"
 import { configStore } from "@/models/config"
-import OfficialSkillImportDialog from "@/pages/superMagic/components/OfficialSkillImportDialog"
 import SkillActionDropdown from "@/pages/superMagic/components/SkillActionDropdown"
 import { SkillDetailDialog } from "@/pages/superMagic/components/SkillDetailDialog"
 import { useAutoLoadMoreSentinel } from "@/pages/superMagic/hooks/useAutoLoadMoreSentinel"
@@ -52,16 +51,11 @@ function SkillsLibrary({
 	const { isAllowed: canCreateSkill } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.SkillCreate,
 	)
-	const { isAllowed: canImportOfficialSkill } = usePermissionKey(
-		FUNCTION_PERMISSION_CODE.SkillMarketManage,
-		{ allowSuperAdmin: true },
-	)
 
 	const [searchQuery, setSearchQuery] = useState("")
 	const [isSearchComposing, setIsSearchComposing] = useState(false)
 	const lastSubmittedSearchRef = useRef<string | null>(null)
 	const [selectedSkill, setSelectedSkill] = useState<StoreSkillView | null>(null)
-	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const debouncedSearchQuery = useDebounce(searchQuery, { wait: SKILLS_SEARCH_DEBOUNCE_MS })
 	const throttledSearchQuery = useThrottle(debouncedSearchQuery, {
 		wait: SKILLS_SEARCH_THROTTLE_MS,
@@ -73,7 +67,6 @@ function SkillsLibrary({
 		skillsStore.categoryIds.length > 0 ||
 		skillsStore.publisherType != null ||
 		skillsStore.isFeatured != null
-	const showFeaturedSection = !hasActiveFilters
 	useEffect(() => () => skillsStore.reset(), [skillsStore])
 
 	useEffect(() => {
@@ -194,7 +187,7 @@ function SkillsLibrary({
 	)
 
 	return (
-		<div className="flex min-w-0 flex-col gap-8" data-testid="skills-library">
+		<div className="flex min-w-0 flex-col gap-5 sm:gap-6" data-testid="skills-library">
 			<SkillDetailDialog
 				open={selectedSkill != null}
 				onOpenChange={(nextOpen) => {
@@ -206,13 +199,6 @@ function SkillsLibrary({
 				skillSummary={selectedSkill}
 				primaryAction={detailPrimaryAction}
 			/>
-			{canImportOfficialSkill ? (
-				<OfficialSkillImportDialog
-					open={officialImportOpen}
-					onOpenChange={setOfficialImportOpen}
-				/>
-			) : null}
-
 			<header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				{hideMarketingHeadline ? null : (
 					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
@@ -235,18 +221,6 @@ function SkillsLibrary({
 						<Skills className="size-4" />
 						{t("skillsLibrary.mySkills")}
 					</Button>
-
-					{canImportOfficialSkill ? (
-						<Button
-							variant="outline"
-							className="h-9 flex-1 gap-2 bg-background shadow-xs sm:flex-none"
-							onClick={() => setOfficialImportOpen(true)}
-							data-testid="skills-library-upload-official-button"
-						>
-							<BadgeCheck className="size-4" />
-							{t("skillsLibrary.uploadOfficialSkill")}
-						</Button>
-					) : null}
 
 					{canCreateSkill ? (
 						<SkillActionDropdown
@@ -281,7 +255,7 @@ function SkillsLibrary({
 			</header>
 
 			<MarketStickyHeader
-				className="gap-6 pb-6 pt-6 sm:gap-8 sm:pb-8 sm:pt-8"
+				className="py-1.5 sm:py-2"
 				scrollViewportRef={scrollViewportRef}
 				data-testid="skills-library-sticky-header"
 			>
@@ -297,10 +271,9 @@ function SkillsLibrary({
 				/>
 			</MarketStickyHeader>
 
-			{showFeaturedSection &&
-			(skillsStore.featuredLoading ||
-				skillsStore.featuredError ||
-				skillsStore.featuredList.length > 0) ? (
+			{skillsStore.featuredLoading ||
+			skillsStore.featuredError ||
+			skillsStore.featuredList.length > 0 ? (
 				<section className="flex min-w-0 flex-col" data-testid="featured-skills-section">
 					<div className="flex items-end justify-between border-b border-border">
 						<h2 className="border-b-2 border-foreground pb-3 text-xl font-semibold tracking-[-0.025em] text-foreground">

@@ -153,4 +153,14 @@ describe("StoreSkillCardMobile", () => {
 
 		expect(screen.queryByTestId("skills-library-mobile-card-featured")).not.toBeInTheDocument()
 	})
+
+	it("shows a featured badge when the card is rendered in the featured section", () => {
+		const skill = createSkill({ isFeatured: true })
+
+		render(<StoreSkillCardMobile skill={skill} language="en_US" showFeaturedTag />)
+
+		expect(screen.getByTestId("skills-library-mobile-card-featured")).toHaveTextContent(
+			"Featured",
+		)
+	})
 })
