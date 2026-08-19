@@ -699,7 +699,11 @@ def _items_content(summary: str, result: dict[str, Any]) -> str:
             rendered = json.dumps(value, ensure_ascii=False, separators=(",", ":")) if isinstance(value, (list, dict)) else str(value).lower() if isinstance(value, bool) else str(value)
             values.append(f"{key}={rendered}")
         lines.append("- " + " | ".join(values))
-    if any(item.get("generation_task_id") for item in result.get("items", [])):
+    if any(
+        item.get("generation_task_id")
+        and item.get("status") in {"pending", "processing"}
+        for item in result.get("items", [])
+    ):
         lines.append("Next: call wait_canvas_generation with the returned generation_task_id values.")
     if any(item.get("timed_out") for item in result.get("items", [])):
         lines.append("Continue waiting with the same generation_task_id; do not create a duplicate generation task.")

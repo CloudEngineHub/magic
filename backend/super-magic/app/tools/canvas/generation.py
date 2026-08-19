@@ -7,6 +7,7 @@ Application 不依赖某个 provider，也不把同步或异步判断写死在�
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -315,9 +316,86 @@ class GenericVideoGenerationPort:
         return GenerationQueryResult("processing")
 
 
+_FAKE_VIDEO_QUERIES: dict[str, int] = {}
+_FAKE_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0dIDAT"
+    b"\x08\xd7c\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+class FakeImageGenerationPort:
+    """本地调试用同步生图端口，不访问真实模型或外部服务。"""
+
+    execution_mode = "sync"
+
+    def __init__(self, workspace: Path):
+        """保存工作区根目录。"""
+        self.workspace = workspace
+
+    async def submit(
+        self, request: GenerationRequest, tool_context: ToolContext | None
+    ) -> GenerationSubmission:
+        """写入最小合法 PNG 并同步返回。"""
+        output = self.workspace / request.project_path / "images" / f"{request.content_id}.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(_FAKE_PNG)
+        return GenerationSubmission(
+            "sync",
+            "completed",
+            output_uri=output.relative_to(self.workspace).as_posix(),
+        )
+
+
+class FakeVideoGenerationPort:
+    """本地调试用异步生视频端口，第一次查询处理中，第二次查询完成。"""
+
+    execution_mode = "async"
+
+    def __init__(self, workspace: Path):
+        """保存工作区根目录。"""
+        self.workspace = workspace
+
+    async def submit(
+        self, request: GenerationRequest, tool_context: ToolContext | None
+    ) -> GenerationSubmission:
+        """创建进程内 fake provider 任务，不生成真实视频。"""
+        provider_task_id = f"fake-provider-{uuid.uuid4().hex}"
+        _FAKE_VIDEO_QUERIES[provider_task_id] = 0
+        return GenerationSubmission(
+            "async",
+            "processing",
+            generation_task_id=f"canvas-generation-{uuid.uuid4().hex}",
+            provider_task_id=provider_task_id,
+        )
+
+    async def query(
+        self, request: GenerationQueryRequest, tool_context: ToolContext | None
+    ) -> GenerationQueryResult:
+        """按固定两阶段返回 fake 状态，并写入最小视频占位文件。"""
+        count = _FAKE_VIDEO_QUERIES.get(request.provider_task_id, 0) + 1
+        _FAKE_VIDEO_QUERIES[request.provider_task_id] = count
+        if count == 1:
+            return GenerationQueryResult("processing")
+        output = self.workspace / request.project_path / "videos" / f"{request.content_id}.mp4"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"fake-canvas-video")
+        return GenerationQueryResult(
+            "completed",
+            output_uri=output.relative_to(self.workspace).as_posix(),
+        )
+
+
 def default_generation_capabilities(workspace: Path | None = None) -> list[GenerationCapability]:
     """创建默认图片同步和视频异步能力。"""
     workspace = workspace or Path.cwd()
+    if os.getenv("CANVAS_FAKE_GENERATION") == "1":
+        image = FakeImageGenerationPort(workspace)
+        video = FakeVideoGenerationPort(workspace)
+        return [
+            GenerationCapability("fake-image-generation", "image", "sync", image, None),
+            GenerationCapability("fake-video-generation", "video", "async", video, video),
+        ]
     image = GenericImageGenerationPort(workspace)
     video = GenericVideoGenerationPort(workspace)
     return [
