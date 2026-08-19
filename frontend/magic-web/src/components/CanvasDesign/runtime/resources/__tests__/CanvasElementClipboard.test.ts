@@ -3,6 +3,7 @@ import {
 	CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE,
 	CanvasElementClipboard,
 } from "../clipboard/CanvasElementClipboard"
+import { CanvasDesignClipboard } from "../clipboard/CanvasDesignClipboard"
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 
 describe("CanvasElementClipboard", () => {
@@ -95,6 +96,65 @@ describe("CanvasElementClipboard", () => {
 				resourceAliases: ["./images/ref.png", "/画布A/images/ref.png"],
 			}),
 		)
+	})
+
+	it("preserves internal connections and keeps legacy payloads readable", async () => {
+		const elements = [
+			{
+				id: "image-1",
+				type: "image" as const,
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 100,
+				contents: [{ contentId: "image-1-content", src: "./images/image.png" }],
+				activeContentId: "image-1-content",
+				mainContentId: "image-1-content",
+			},
+			{
+				id: "image-2",
+				type: "image" as const,
+				x: 120,
+				y: 0,
+				width: 100,
+				height: 100,
+				contents: [{ contentId: "image-2-content", src: "./images/image-2.png" }],
+				activeContentId: "image-2-content",
+				mainContentId: "image-2-content",
+			},
+		]
+		const connections = [
+			{ id: "connection-1", sourceElementId: "image-1", targetElementId: "image-2" },
+		]
+		const payload = CanvasElementClipboard.createPayload({
+			elements,
+			files: [],
+			operation: "copy-elements",
+			connections,
+		})
+		const bundle = CanvasDesignClipboard.createBundleBlob({ payload, files: [] })
+		const restoredBundle = await CanvasDesignClipboard.parseBundleBlob(bundle)
+
+		expect(restoredBundle.payload.connections).toEqual(connections)
+
+		const item = {
+			types: [CANVAS_ELEMENT_CLIPBOARD_MIME_TYPE],
+			getType: async () =>
+				({
+					text: async () => JSON.stringify({ ...payload, connections: undefined }),
+				}) as unknown as Blob,
+		} as ClipboardItem
+		const legacyPayload = await CanvasElementClipboard.readPayload([item])
+
+		expect(legacyPayload?.connections).toBeUndefined()
+		expect(
+			CanvasElementClipboard.createPayload({
+				elements: [],
+				files: [],
+				operation: "copy-as-png",
+				connections,
+			}).connections,
+		).toBeUndefined()
 	})
 
 	it("preserves element media aliases in the clipboard payload", async () => {

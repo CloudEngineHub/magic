@@ -6,6 +6,7 @@ import type {
 	ImageElement,
 	VideoElement,
 	CanvasFileElement,
+	CanvasConnection,
 	ElementUpdatePatch,
 } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
@@ -1121,6 +1122,31 @@ export class ClipboardManager {
 		return mediaElements
 	}
 
+	private getClipboardElementIds(elements: LayerElement[]): Set<string> {
+		const elementIds = new Set<string>()
+
+		const collect = (element: LayerElement): void => {
+			elementIds.add(element.id)
+			if (isCanvasContainerElement(element) && Array.isArray(element.children)) {
+				element.children.forEach(collect)
+			}
+		}
+
+		elements.forEach(collect)
+		return elementIds
+	}
+
+	private getClipboardConnections(elements: LayerElement[]): CanvasConnection[] {
+		const copiedElementIds = this.getClipboardElementIds(elements)
+		return this.canvas.connectionManager
+			.exportConnections()
+			.filter(
+				(connection) =>
+					copiedElementIds.has(connection.sourceElementId) &&
+					copiedElementIds.has(connection.targetElementId),
+			)
+	}
+
 	/**
 	 * 复制元素到剪贴板
 	 * @param elementId - 元素ID（可选，如果不传则复制所有选中的元素）
@@ -1136,7 +1162,10 @@ export class ClipboardManager {
 				elements = [element]
 			} else {
 				// 复制所有选中的元素
-				const selectedIds = this.canvas.selectionManager.getSelectedIds()
+				const selectedIds = filterRedundantElements(
+					this.canvas.selectionManager.getSelectedIds(),
+					this.canvas.elementManager,
+				)
 				if (selectedIds.length === 0) {
 					return
 				}
@@ -1156,6 +1185,7 @@ export class ClipboardManager {
 				return
 			}
 			elements = elements.map((element) => this.sanitizeElementTreeForClipboard(element))
+			const connections = this.getClipboardConnections(elements)
 
 			// 复制元素时会异步获取媒体 sourceRef，先展示 loading 避免用户误以为未响应。
 			const copyToast = this.showCopyLoadingToast()
@@ -1167,6 +1197,7 @@ export class ClipboardManager {
 					canvasId: this.canvas.id,
 					files: metadata,
 					operation: "copy-elements",
+					connections,
 				})
 				await this.writeCanvasElementClipboardWithLog({
 					operation: "copy-elements",
@@ -1248,6 +1279,7 @@ export class ClipboardManager {
 					parseResult.elements,
 					parseResult.files,
 					parseResult.fileMetadata,
+					parseResult.connections,
 					parseResult.canvasId,
 					position,
 				)
@@ -1468,8 +1500,12 @@ export class ClipboardManager {
 		}
 	}
 
-	private cloneElementForPaste(element: LayerElement): LayerElement {
+	private cloneElementForPaste(
+		element: LayerElement,
+		sourceToTargetElementIdMap?: Map<string, string>,
+	): LayerElement {
 		let clonedElement = { ...element, id: generateElementId() } as LayerElement
+		sourceToTargetElementIdMap?.set(element.id, clonedElement.id)
 		if (!Array.isArray(clonedElement.contents)) {
 			return clonedElement
 		}
@@ -1772,6 +1808,7 @@ export class ClipboardManager {
 		fileByElementId: Map<string, File>
 		metadataByElementId: Map<string, CanvasElementClipboardFileMetadata>
 		sourceCanvasId?: string
+		sourceToTargetElementIdMap?: Map<string, string>
 	}): Promise<PreparedClipboardTreeElement> {
 		const {
 			sourceElement,
@@ -1783,10 +1820,11 @@ export class ClipboardManager {
 			fileByElementId,
 			metadataByElementId,
 			sourceCanvasId,
+			sourceToTargetElementIdMap,
 		} = options
 		let sourceReferenceFailureCount = 0
 		const pendingUploads: ClipboardTreeFileUpload[] = []
-		let finalElement = this.cloneElementForPaste(sourceElement)
+		let finalElement = this.cloneElementForPaste(sourceElement, sourceToTargetElementIdMap)
 
 		if (isRoot) {
 			finalElement = {
@@ -1810,6 +1848,7 @@ export class ClipboardManager {
 					fileByElementId,
 					metadataByElementId,
 					sourceCanvasId,
+					sourceToTargetElementIdMap,
 				})
 				sourceReferenceFailureCount += preparedChild.sourceReferenceFailureCount
 				pendingUploads.push(...preparedChild.pendingUploads)
@@ -2010,25 +2049,136 @@ export class ClipboardManager {
 		)
 	}
 
-	private runClipboardTreeFileUploads(uploads: ClipboardTreeFileUpload[]): void {
+	private remapClipboardConnections(
+		connections: CanvasConnection[],
+		sourceToTargetElementIdMap: ReadonlyMap<string, string>,
+	): Array<Pick<CanvasConnection, "sourceElementId" | "targetElementId">> {
+		const remappedConnections: Array<
+			Pick<CanvasConnection, "sourceElementId" | "targetElementId">
+		> = []
+		const seenPairs = new Set<string>()
+
+		for (const connection of connections) {
+			const sourceElementId = sourceToTargetElementIdMap.get(connection.sourceElementId)
+			const targetElementId = sourceToTargetElementIdMap.get(connection.targetElementId)
+			if (!sourceElementId || !targetElementId || sourceElementId === targetElementId) {
+				continue
+			}
+
+			const pair = `${sourceElementId}\u0000${targetElementId}`
+			const reversePair = `${targetElementId}\u0000${sourceElementId}`
+			if (seenPairs.has(pair) || seenPairs.has(reversePair)) continue
+
+			seenPairs.add(pair)
+			remappedConnections.push({ sourceElementId, targetElementId })
+		}
+
+		return remappedConnections
+	}
+
+	private createClipboardConnections(
+		connections: Array<Pick<CanvasConnection, "sourceElementId" | "targetElementId">>,
+		deferredTargetElementIds?: ReadonlySet<string>,
+	): boolean {
+		const readyConnections: Array<
+			Pick<CanvasConnection, "sourceElementId" | "targetElementId">
+		> = []
+		const plannedPairs = new Set<string>()
+
+		for (const connection of connections) {
+			const { sourceElementId, targetElementId } = connection
+			if (
+				deferredTargetElementIds?.has(targetElementId) ||
+				!this.canvas.elementManager.hasElement(sourceElementId) ||
+				!this.canvas.elementManager.hasElement(targetElementId) ||
+				this.canvas.elementManager.isTemporary(sourceElementId) ||
+				this.canvas.elementManager.isTemporary(targetElementId) ||
+				this.canvas.connectionManager.hasConnection(sourceElementId, targetElementId) ||
+				this.canvas.connectionManager.hasReverseConnection(sourceElementId, targetElementId)
+			) {
+				continue
+			}
+
+			const pair = `${sourceElementId}\u0000${targetElementId}`
+			const reversePair = `${targetElementId}\u0000${sourceElementId}`
+			if (plannedPairs.has(pair) || plannedPairs.has(reversePair)) continue
+
+			plannedPairs.add(pair)
+			readyConnections.push(connection)
+		}
+
+		if (readyConnections.length === 0) return false
+
+		return (
+			this.canvas.connectionManager.connectElementsBatch({ edges: readyConnections }).status ===
+			"created"
+		)
+	}
+
+	/**
+	 * VideoEdit 的 videoSequence 以连接加入顺序补齐。若同一 VideoEdit 有任一
+	 * 输入还在上传，需连同其它输入一起等到上传结算后按 payload 原顺序创建，
+	 * 避免已完成输入先被写入而导致序列顺序反转。
+	 */
+	private getClipboardDeferredVideoEditConnectionTargets(
+		connections: Array<Pick<CanvasConnection, "sourceElementId" | "targetElementId">>,
+	): Set<string> {
+		const deferredTargetElementIds = new Set<string>()
+
+		for (const { sourceElementId, targetElementId } of connections) {
+			if (
+				!this.canvas.elementManager.isTemporary(sourceElementId) &&
+				!this.canvas.elementManager.isTemporary(targetElementId)
+			) {
+				continue
+			}
+
+			const targetElement = this.canvas.elementManager.getElementData(targetElementId)
+			if (targetElement?.type === ElementTypeEnum.VideoEdit) {
+				deferredTargetElementIds.add(targetElementId)
+			}
+		}
+
+		return deferredTargetElementIds
+	}
+
+	private runClipboardTreeFileUploads(
+		uploads: ClipboardTreeFileUpload[],
+		onSettled?: () => boolean,
+	): void {
 		if (uploads.length === 0) {
 			return
 		}
 
 		void Promise.all(
 			uploads.map(async (upload) => {
-				const uploadResult = await this.resolveClipboardTreeUploadResult(upload)
-				if (!uploadResult) {
+				try {
+					const uploadResult = await this.resolveClipboardTreeUploadResult(upload)
+					if (!uploadResult) {
+						this.applyClipboardTreeUploadFailure(upload)
+						return false
+					}
+					return this.applyClipboardTreeUploadResult(upload, uploadResult)
+				} catch {
 					this.applyClipboardTreeUploadFailure(upload)
 					return false
 				}
-				return this.applyClipboardTreeUploadResult(upload, uploadResult)
 			}),
 		).then((results) => {
 			const successCount = results.filter(Boolean).length
 			const failureCount = uploads.length - successCount
+			let connectionsCreated = false
 
-			if (successCount > 0) {
+			if (onSettled) {
+				this.canvas.historyManager.disable()
+				try {
+					connectionsCreated = onSettled()
+				} finally {
+					this.canvas.historyManager.enable()
+				}
+			}
+
+			if (successCount > 0 || connectionsCreated) {
 				this.canvas.historyManager.recordHistoryImmediate()
 			}
 
@@ -2042,6 +2192,7 @@ export class ClipboardManager {
 		elements: LayerElement[],
 		files: CanvasElementClipboardFile[],
 		fileMetadata: CanvasElementClipboardFileMetadata[],
+		connections: CanvasConnection[],
 		canvasId: string | undefined,
 		position?: { x: number; y: number },
 	): Promise<void> {
@@ -2065,6 +2216,7 @@ export class ClipboardManager {
 			: []
 		const createdElementIds: string[] = []
 		const pendingTreeFileUploads: ClipboardTreeFileUpload[] = []
+		const sourceToTargetElementIdMap = new Map<string, string>()
 		let sourceReferenceFailureCount = 0
 		let hasShownSourceUnavailableHint = false
 		let generationResourceTransferScheduled = false
@@ -2089,6 +2241,7 @@ export class ClipboardManager {
 							fileByElementId,
 							metadataByElementId,
 							sourceCanvasId: canvasId,
+							sourceToTargetElementIdMap,
 						})
 						sourceReferenceFailureCount += preparedTree.sourceReferenceFailureCount
 
@@ -2117,6 +2270,17 @@ export class ClipboardManager {
 				},
 			)
 
+			const remappedConnections = this.remapClipboardConnections(
+				connections,
+				sourceToTargetElementIdMap,
+			)
+			const deferredVideoEditConnectionTargets =
+				this.getClipboardDeferredVideoEditConnectionTargets(remappedConnections)
+			this.createClipboardConnections(
+				remappedConnections,
+				deferredVideoEditConnectionTargets,
+			)
+
 			this.canvas.historyManager.enable()
 			if (createdElementIds.length > 0) {
 				this.canvas.selectionManager.selectMultiple(createdElementIds)
@@ -2133,7 +2297,9 @@ export class ClipboardManager {
 			) {
 				this.canvas.canvasFileUploadManager.commitPendingUploadBatch(pendingBatchId)
 			}
-			this.runClipboardTreeFileUploads(pendingTreeFileUploads)
+			this.runClipboardTreeFileUploads(pendingTreeFileUploads, () =>
+				this.createClipboardConnections(remappedConnections),
+			)
 			if (shouldTransferGenerationResourcesAfterCreate) {
 				generationResourceTransferScheduled = true
 				this.runClipboardGenerationResourceTransfers({

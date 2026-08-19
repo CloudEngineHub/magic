@@ -2060,3 +2060,148 @@ describe("ClipboardManager frame clipboard trees", () => {
 		expect(releaseLoadDeferral).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("ClipboardManager connection clipboard", () => {
+	it("keeps only connections whose endpoints are inside the copied element tree", () => {
+		const firstChild = v3<ImageElement>({
+			id: "frame-image-1",
+			type: "image",
+			x: 0,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const secondChild = v3<ImageElement>({
+			id: "frame-image-2",
+			type: "image",
+			x: 100,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const frame = v3<FrameElement>({
+			id: "frame-1",
+			type: "frame",
+			x: 0,
+			y: 0,
+			width: 300,
+			height: 200,
+			children: [firstChild, secondChild],
+		})
+		const manager = Object.create(ClipboardManager.prototype) as {
+			canvas: { connectionManager: { exportConnections: () => unknown[] } }
+			getClipboardConnections: (elements: LayerElement[]) => unknown[]
+		}
+		manager.canvas = {
+			connectionManager: {
+				exportConnections: () => [
+					{
+						id: "internal",
+						sourceElementId: firstChild.id,
+						targetElementId: secondChild.id,
+					},
+					{
+						id: "external",
+						sourceElementId: secondChild.id,
+						targetElementId: "outside-element",
+					},
+				],
+			},
+		}
+
+		expect(manager.getClipboardConnections([frame])).toEqual([
+			expect.objectContaining({ id: "internal" }),
+		])
+	})
+
+	it("remaps connection endpoints and waits for temporary elements", () => {
+		const manager = Object.create(ClipboardManager.prototype) as {
+			canvas: {
+				elementManager: {
+					hasElement: (elementId: string) => boolean
+					isTemporary: (elementId: string) => boolean
+					getElementData: (elementId: string) => { type: string } | null
+				}
+				connectionManager: {
+					hasConnection: (sourceElementId: string, targetElementId: string) => boolean
+					hasReverseConnection: (sourceElementId: string, targetElementId: string) => boolean
+					connectElementsBatch: (options: { edges: unknown[] }) => { status: "created" }
+				}
+			}
+			remapClipboardConnections: (
+				connections: Array<{
+					id: string
+					sourceElementId: string
+					targetElementId: string
+				}>,
+				mapping: ReadonlyMap<string, string>,
+			) => unknown[]
+			getClipboardDeferredVideoEditConnectionTargets: (
+				connections: Array<{ sourceElementId: string; targetElementId: string }>,
+			) => Set<string>
+			createClipboardConnections: (
+				connections: unknown[],
+				deferredTargetElementIds?: ReadonlySet<string>,
+			) => boolean
+		}
+		const connectElementsBatch = vi.fn(() => ({ status: "created" as const }))
+		manager.canvas = {
+			elementManager: {
+				hasElement: (elementId) => elementId !== "missing",
+				isTemporary: (elementId) => elementId === "target-pending",
+				getElementData: (elementId) =>
+					elementId === "target-video-edit" ? { type: "videoEdit" } : null,
+			},
+			connectionManager: {
+				hasConnection: () => false,
+				hasReverseConnection: () => false,
+				connectElementsBatch,
+			},
+		}
+
+		const remapped = manager.remapClipboardConnections(
+			[
+				{ id: "edge-1", sourceElementId: "source-a", targetElementId: "source-b" },
+				{ id: "edge-2", sourceElementId: "source-b", targetElementId: "source-c" },
+			],
+			new Map([
+				["source-a", "target-a"],
+				["source-b", "target-pending"],
+				["source-c", "target-c"],
+			]),
+		)
+
+		expect(remapped).toEqual([
+			{ sourceElementId: "target-a", targetElementId: "target-pending" },
+			{ sourceElementId: "target-pending", targetElementId: "target-c" },
+		])
+		expect(manager.createClipboardConnections(remapped)).toBe(false)
+		expect(connectElementsBatch).not.toHaveBeenCalled()
+
+		manager.canvas.elementManager.isTemporary = () => false
+		expect(manager.createClipboardConnections(remapped)).toBe(true)
+		expect(connectElementsBatch).toHaveBeenCalledWith({ edges: remapped })
+
+		connectElementsBatch.mockClear()
+		manager.canvas.elementManager.isTemporary = (elementId) => elementId === "source-pending"
+		const videoEditConnections = [
+			{ sourceElementId: "source-pending", targetElementId: "target-video-edit" },
+			{ sourceElementId: "source-ready", targetElementId: "target-video-edit" },
+			{ sourceElementId: "source-ready", targetElementId: "target-regular" },
+		]
+		const deferredTargets = manager.getClipboardDeferredVideoEditConnectionTargets(
+			videoEditConnections,
+		)
+
+		expect(deferredTargets).toEqual(new Set(["target-video-edit"]))
+		expect(manager.createClipboardConnections(videoEditConnections, deferredTargets)).toBe(true)
+		expect(connectElementsBatch).toHaveBeenCalledWith({
+			edges: [{ sourceElementId: "source-ready", targetElementId: "target-regular" }],
+		})
+
+		connectElementsBatch.mockClear()
+		manager.canvas.elementManager.isTemporary = () => false
+		expect(manager.createClipboardConnections(videoEditConnections)).toBe(true)
+		expect(connectElementsBatch).toHaveBeenCalledWith({ edges: videoEditConnections })
+	})
+})

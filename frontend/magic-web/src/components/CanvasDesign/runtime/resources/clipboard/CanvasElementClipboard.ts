@@ -1,4 +1,4 @@
-import type { CanvasFileElement, LayerElement } from "../../document/types"
+import type { CanvasConnection, CanvasFileElement, LayerElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import {
 	CanvasDesignClipboard,
@@ -77,6 +77,8 @@ export interface CanvasElementClipboardPayload {
 	sourceCanvasId?: string
 	elements: LayerElement[]
 	files: CanvasElementClipboardFileMetadata[]
+	/** 复制内容内部的持久化连接；旧 payload 缺少该字段时按空数组处理。 */
+	connections?: CanvasConnection[]
 }
 
 export interface CanvasElementClipboardFile {
@@ -98,6 +100,7 @@ export type CanvasElementClipboardParseResult =
 	| {
 			type: "canvas-elements"
 			elements: CanvasElementClipboardPayload["elements"]
+			connections: CanvasConnection[]
 			canvasId?: string
 			files: CanvasElementClipboardFile[]
 			fileMetadata: CanvasElementClipboardPayload["files"]
@@ -191,6 +194,8 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 	const files = data.files
 		.map(normalizeFileMetadata)
 		.filter((file): file is CanvasElementClipboardFileMetadata => Boolean(file))
+	const connections =
+		operation === "copy-elements" ? normalizeConnections(data.connections) : []
 
 	if (elements.length === 0 && !files.some((file) => file.role === "canvas-export")) {
 		return null
@@ -203,7 +208,50 @@ function normalizePayload(data: unknown): CanvasElementClipboardPayload | null {
 		sourceCanvasId: getPayloadSourceCanvasId(data),
 		elements,
 		files,
+		connections: connections.length > 0 ? connections : undefined,
 	}
+}
+
+function normalizeConnections(value: unknown): CanvasConnection[] {
+	if (!Array.isArray(value)) return []
+
+	const seenIds = new Set<string>()
+	const seenPairs = new Set<string>()
+	const connections: CanvasConnection[] = []
+
+	for (const item of value) {
+		if (!isRecord(item)) continue
+		if (
+			typeof item.id !== "string" ||
+			typeof item.sourceElementId !== "string" ||
+			typeof item.targetElementId !== "string"
+		) {
+			continue
+		}
+		if (
+			item.id.length === 0 ||
+			item.sourceElementId.length === 0 ||
+			item.targetElementId.length === 0 ||
+			item.sourceElementId === item.targetElementId ||
+			seenIds.has(item.id)
+		) {
+			continue
+		}
+
+		const pair = `${item.sourceElementId}\u0000${item.targetElementId}`
+		const reversePair = `${item.targetElementId}\u0000${item.sourceElementId}`
+		if (seenPairs.has(pair) || seenPairs.has(reversePair)) continue
+
+		seenIds.add(item.id)
+		seenPairs.add(pair)
+		connections.push({
+			id: item.id,
+			sourceElementId: item.sourceElementId,
+			targetElementId: item.targetElementId,
+		})
+	}
+
+	return connections
 }
 
 function getPayloadSourceCanvasId(payload: unknown): string | undefined {
@@ -308,7 +356,12 @@ export class CanvasElementClipboard {
 		canvasId?: string
 		files: CanvasElementClipboardFileMetadata[]
 		operation: CanvasElementClipboardOperation
+		connections?: CanvasConnection[]
 	}): CanvasElementClipboardPayload {
+		const connections =
+			options.operation === "copy-elements" && options.connections?.length
+				? options.connections
+				: undefined
 		const payload: CanvasElementClipboardPayload = {
 			source: CANVAS_ELEMENT_CLIPBOARD_SOURCE,
 			version: CANVAS_ELEMENT_CLIPBOARD_VERSION,
@@ -316,6 +369,7 @@ export class CanvasElementClipboard {
 			sourceCanvasId: options.canvasId,
 			elements: options.elements,
 			files: options.files,
+			connections,
 		}
 
 		return payload
@@ -564,6 +618,7 @@ export class CanvasElementClipboard {
 			return {
 				type: "canvas-elements",
 				elements: payload.elements,
+				connections: payload.connections ?? [],
 				canvasId: payload.sourceCanvasId,
 				files,
 				fileMetadata: payload.files,
