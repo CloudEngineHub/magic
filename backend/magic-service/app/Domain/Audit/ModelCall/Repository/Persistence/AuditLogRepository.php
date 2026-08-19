@@ -108,6 +108,9 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
         if (! empty($filters['provider_name'])) {
             $builder->where('provider_name', (string) $filters['provider_name']);
         }
+        if (! empty($filters['service_provider_config_id'])) {
+            $builder->where('service_provider_config_id', (int) $filters['service_provider_config_id']);
+        }
         if (! empty($filters['user_id'])) {
             $builder->where('user_id', (string) $filters['user_id']);
         }
@@ -265,6 +268,7 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
             $item['access_token_name'] = (string) ($item['access_token_name'] ?? '');
             $item['model_version'] = (string) ($item['model_version'] ?? '');
             $item['provider_name'] = (string) ($item['provider_name'] ?? '');
+            $item['service_provider_config_id'] = (string) ($item['service_provider_config_id'] ?? '');
         }
 
         return $list;
