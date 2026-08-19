@@ -24,7 +24,6 @@ function MobileScenePanelsComponent({
 	})
 	const shouldShowVideoProductionConfig =
 		includeVideoProductionConfig &&
-		(editorContext.messagesLength ?? 0) === 0 &&
 		isVideoProductionContext({
 			topicMode: editorContext.topicMode,
 			agentCode: editorContext.agentCode,

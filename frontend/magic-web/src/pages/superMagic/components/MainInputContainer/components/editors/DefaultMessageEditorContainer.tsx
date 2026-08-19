@@ -30,7 +30,7 @@ import { cn } from "@/utils/cn"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
-import { buildQueueMessageInput, mergeSceneClientContext } from "./messageParams"
+import { buildQueueMessageInput } from "./messageParams"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 import { useConversationInputLayout } from "../../../ConversationInputResize/context"
 
@@ -251,10 +251,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const mergedParams = customParamsPatch
 			? { ...defaultParams, ...customParamsPatch }
 			: defaultParams
-		const finalParams: HandleSendParams = {
-			...mergedParams,
-			extra: mergeSceneClientContext(mergedParams.extra, sceneStateStore?.clientContext),
-		}
+		const finalParams: HandleSendParams = mergedParams
 
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 

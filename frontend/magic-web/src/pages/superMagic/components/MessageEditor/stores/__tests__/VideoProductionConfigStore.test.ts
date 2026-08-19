@@ -137,6 +137,33 @@ describe("VideoProductionConfigStore", () => {
 		expect(nextStore.config).toMatchObject({ generationMode: "normal", durationSeconds: 5 })
 
 		store.clearCurrentConfig()
-		expect(store.config.durationSeconds).toBe(5)
+		expect(store.config).toEqual({})
+	})
+
+	it("only initializes model defaults for the first message in a topic", () => {
+		const model = createModel("model-a", {
+			aspect_ratios: ["16:9"],
+			durations: [5, 10],
+			resolutions: ["720p"],
+		})
+		const store = new VideoProductionConfigStore()
+
+		store.setContext({ model, inputScopeKey: "topic-a", initializeWithDefaults: true })
+		expect(store.config).toMatchObject({
+			generationMode: "normal",
+			aspectRatio: "16:9",
+			durationSeconds: 5,
+			resolution: "720p",
+		})
+
+		store.clearCurrentConfig()
+		store.setContext({ model, inputScopeKey: "topic-a", initializeWithDefaults: true })
+		expect(store.config).toEqual({})
+
+		store.setConfig({ durationSeconds: 10 })
+		expect(store.config).toEqual({ durationSeconds: 10 })
+
+		store.setContext({ model, inputScopeKey: "topic-b", initializeWithDefaults: false })
+		expect(store.config).toEqual({})
 	})
 })

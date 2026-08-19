@@ -13,7 +13,7 @@ import type { ModelItem } from "../components/ModelSwitch/types"
 export type VideoProductionGenerationMode = "normal" | "detailed"
 
 export interface VideoProductionConfig {
-	generationMode: VideoProductionGenerationMode
+	generationMode?: VideoProductionGenerationMode
 	skillId?: string
 	aspectRatio?: string
 	durationSeconds?: number
@@ -46,7 +46,7 @@ export interface ResolveVideoProductionCapabilitiesParams {
 	selectedResolution?: string
 }
 
-const EMPTY_CONFIG: VideoProductionConfig = { generationMode: "normal" }
+const EMPTY_CONFIG: VideoProductionConfig = {}
 
 function asCanvasVideoModel(model?: ModelItem | null): VideoModelItem | undefined {
 	return model ? (model as VideoModelItem) : undefined
@@ -108,7 +108,7 @@ export function resolveVideoProductionCapabilities({
 	const resolutionOptions = hasGenerationConfig
 		? buildVideoResolutionOptions(canvasModel, effectiveConstraints)
 		: []
-	const defaults: VideoProductionConfig = { ...EMPTY_CONFIG }
+	const defaults: VideoProductionConfig = { generationMode: "normal" }
 	const defaultResolution = model?.video_generation_config?.generation?.default_resolution
 	const resolution = resolutionOptions.some((option) => option.value === defaultResolution)
 		? defaultResolution
@@ -158,26 +158,37 @@ export function resolveVideoProductionCapabilities({
 function mergeValidConfig(
 	current: Partial<VideoProductionConfig> | undefined,
 	capabilities: VideoProductionCapabilities,
+	fillMissingWithDefaults: boolean,
 ): VideoProductionConfig {
-	const next: VideoProductionConfig = {
-		generationMode: current?.generationMode === "detailed" ? "detailed" : "normal",
+	const next: VideoProductionConfig = {}
+	if (current?.generationMode === "normal" || current?.generationMode === "detailed") {
+		next.generationMode = current.generationMode
+	} else if (fillMissingWithDefaults) {
+		next.generationMode = capabilities.defaults.generationMode
 	}
 	if (typeof current?.skillId === "string" && current.skillId) next.skillId = current.skillId
 	if (capabilities.showAspectRatio) {
-		next.aspectRatio = capabilities.aspectRatioOptions.some(
-			(item) => item.value === current?.aspectRatio,
-		)
-			? current?.aspectRatio
-			: capabilities.defaults.aspectRatio
+		if (current?.aspectRatio !== undefined || fillMissingWithDefaults) {
+			next.aspectRatio = capabilities.aspectRatioOptions.some(
+				(item) => item.value === current?.aspectRatio,
+			)
+				? current?.aspectRatio
+				: capabilities.defaults.aspectRatio
+		}
 	}
 	if (capabilities.showResolution) {
-		next.resolution = capabilities.resolutionOptions.some(
-			(item) => item.value === current?.resolution,
-		)
-			? current?.resolution
-			: capabilities.defaults.resolution
+		if (current?.resolution !== undefined || fillMissingWithDefaults) {
+			next.resolution = capabilities.resolutionOptions.some(
+				(item) => item.value === current?.resolution,
+			)
+				? current?.resolution
+				: capabilities.defaults.resolution
+		}
 	}
-	if (capabilities.showDuration) {
+	if (
+		capabilities.showDuration &&
+		(current?.durationSeconds !== undefined || fillMissingWithDefaults)
+	) {
 		const duration = current?.durationSeconds
 		if (capabilities.duration.type === "options") {
 			next.durationSeconds = capabilities.duration.options.includes(duration ?? NaN)
@@ -208,23 +219,56 @@ export class VideoProductionConfigStore {
 	currentModelId = ""
 	private model?: ModelItem | null
 	private modelSignature = ""
+	private inputScopeKey: string | undefined
+	private defaultsActive = false
 	private active = false
 
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
 	}
 
-	setContext({ model }: { model?: ModelItem | null }) {
+	setContext({
+		model,
+		inputScopeKey = "",
+		initializeWithDefaults = true,
+	}: {
+		model?: ModelItem | null
+		inputScopeKey?: string
+		initializeWithDefaults?: boolean
+	}) {
 		const nextModelId = model?.model_id || ""
 		const nextModelSignature = JSON.stringify(model?.video_generation_config ?? null)
 		const modelChanged = this.modelSignature !== nextModelSignature
-		if (nextModelId === this.currentModelId && !modelChanged && this.active) return
+		const scopeChanged = this.inputScopeKey !== inputScopeKey
+		const shouldDisableDefaults = this.defaultsActive && !initializeWithDefaults
+		if (
+			nextModelId === this.currentModelId &&
+			!modelChanged &&
+			!scopeChanged &&
+			!shouldDisableDefaults &&
+			this.active
+		) {
+			return
+		}
 		this.active = true
 		this.model = model
 		this.modelSignature = nextModelSignature
 		this.currentModelId = nextModelId
+		this.inputScopeKey = inputScopeKey
 		this.capabilities = resolveVideoProductionCapabilities({ model, inputMode: "standard" })
-		this.config = mergeValidConfig(undefined, this.capabilities)
+		if (scopeChanged) {
+			this.defaultsActive = initializeWithDefaults
+			this.config = mergeValidConfig(undefined, this.capabilities, this.defaultsActive)
+		} else if (shouldDisableDefaults) {
+			this.defaultsActive = false
+			this.config = { ...EMPTY_CONFIG }
+		} else if (modelChanged) {
+			this.config = mergeValidConfig(
+				this.defaultsActive ? undefined : this.config,
+				this.capabilities,
+				this.defaultsActive,
+			)
+		}
 	}
 
 	deactivate() {
@@ -239,10 +283,11 @@ export class VideoProductionConfigStore {
 			selectedResolution: candidate.resolution,
 		})
 		this.capabilities = nextCapabilities
-		this.config = mergeValidConfig(candidate, nextCapabilities)
+		this.config = mergeValidConfig(candidate, nextCapabilities, false)
 	}
 
 	clearCurrentConfig() {
-		this.config = { ...this.capabilities.defaults }
+		this.defaultsActive = false
+		this.config = { ...EMPTY_CONFIG }
 	}
 }

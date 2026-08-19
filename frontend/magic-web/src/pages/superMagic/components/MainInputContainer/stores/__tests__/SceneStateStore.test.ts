@@ -56,35 +56,3 @@ describe("SceneStateStore preset suffix sources", () => {
 		expect(getPlainTextFromNode(store.presetSuffixContent)).toBe("platform: rednote.")
 	})
 })
-
-describe("SceneStateStore client context sources", () => {
-	it("merges client context source content into one versioned payload", () => {
-		const store = createSceneStateStore()
-
-		store.setClientContextForSource("video", {
-			version: "1.0.0",
-			data: { content: "generation: detailed." },
-		})
-		store.setClientContextForSource("page", {
-			version: "1.0.0",
-			data: { content: "page: home." },
-		})
-
-		expect(store.clientContext).toEqual({
-			version: "1.0.0",
-			data: { content: "generation: detailed.\n\npage: home." },
-		})
-	})
-
-	it("clears client context when its source is removed", () => {
-		const store = createSceneStateStore()
-
-		store.setClientContextForSource("video", {
-			version: "1.0.0",
-			data: { content: "generation: detailed." },
-		})
-		store.setClientContextForSource("video", undefined)
-
-		expect(store.clientContext).toBeUndefined()
-	})
-})

@@ -3072,6 +3072,7 @@
 			"normal": "普通",
 			"normalDescription": "少问、快做，适合短视频和简单需求",
 			"resolution": "清晰度",
+			"selectPlaceholder": "请选择",
 			"skill": "视频技能"
 		},
 		"waitForFileUpload": "请等待文件上传完成",

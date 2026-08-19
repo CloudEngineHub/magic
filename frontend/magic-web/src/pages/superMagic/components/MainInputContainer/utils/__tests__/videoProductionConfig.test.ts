@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { buildVideoProductionClientContext } from "../videoProductionConfig"
+import { buildVideoProductionPresetContent } from "../videoProductionConfig"
 
 describe("videoProductionConfig", () => {
-	it("builds a natural-language client_context payload from stable config values", () => {
-		const payload = buildVideoProductionClientContext({
+	it("builds a natural-language message suffix from stable config values", () => {
+		const payload = buildVideoProductionPresetContent({
 			generationMode: "normal",
 			aspectRatio: "16:9",
 			durationSeconds: 5,
@@ -20,10 +20,18 @@ describe("videoProductionConfig", () => {
 		})
 
 		expect(payload).toEqual({
-			version: "1.0.0",
-			data: {
-				content: "生成方式: normal; 画幅: 16:9; 时长: 5s; 清晰度: 768p.",
-			},
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{
+							type: "text",
+							text: "生成方式: normal; 画幅: 16:9; 时长: 5s; 清晰度: 768p.",
+						},
+					],
+				},
+			],
 		})
 	})
 })

@@ -1,6 +1,6 @@
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, CircleX, X } from "lucide-react"
 import { observer } from "mobx-react-lite"
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
@@ -16,8 +16,8 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import {
-	VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE,
-	buildVideoProductionClientContext,
+	VIDEO_PRODUCTION_SUFFIX_SOURCE,
+	buildVideoProductionPresetContent,
 	isVideoProductionContext,
 } from "../utils/videoProductionConfig"
 import AIAutoSelectVisual from "../scenes/Slides/AIAutoSelectVisual"
@@ -27,7 +27,7 @@ import { useOptionalScenePanelVariant, useOptionalSceneStateStore } from "../sto
 interface VideoProductionConfigPanelProps {
 	topicMode?: string
 	agentCode?: string | null
-	selectedTopic?: { agent_code?: string | null } | null
+	selectedTopic?: { id?: string; agent_code?: string | null } | null
 	messagesLength?: number
 }
 
@@ -53,9 +53,71 @@ function VideoProductionConfigScroll({ enabled, children }: VideoProductionConfi
 
 type MobileVideoPopupKey = "aspectRatio" | "duration" | "resolution" | "generation"
 
+const VIDEO_CONFIG_CONTROL_WIDTH_CLASS: Record<MobileVideoPopupKey, string> = {
+	aspectRatio: "min-w-[104px]",
+	duration: "min-w-[104px]",
+	resolution: "min-w-[112px]",
+	generation: "min-w-[104px]",
+}
+
+const VIDEO_CONFIG_DESKTOP_MIN_WIDTH_CLASS: Record<MobileVideoPopupKey, string> = {
+	aspectRatio: "min-w-[90px]",
+	duration: "min-w-[90px]",
+	resolution: "min-w-[90px]",
+	generation: "min-w-[90px]",
+}
+
 interface MobileVideoOption {
 	value: string
 	label: ReactNode
+}
+
+function VideoConfigClearButton({
+	field,
+	clearText,
+	onClear,
+	compact = false,
+	hidden = false,
+}: {
+	field: MobileVideoPopupKey
+	clearText: string
+	onClear: () => void
+	compact?: boolean
+	hidden?: boolean
+}) {
+	const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+		if (event.key !== "Enter" && event.key !== " ") return
+		event.preventDefault()
+		event.stopPropagation()
+		onClear()
+	}
+
+	return (
+		<span
+			role="button"
+			tabIndex={0}
+			aria-label={clearText}
+			className={cn(
+				"inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground/70",
+				compact && "-m-2 size-8 active:bg-muted",
+				hidden &&
+					"pointer-events-none opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100",
+			)}
+			onPointerDown={(event) => {
+				event.preventDefault()
+				event.stopPropagation()
+			}}
+			onClick={(event) => {
+				event.preventDefault()
+				event.stopPropagation()
+				onClear()
+			}}
+			onKeyDown={handleKeyDown}
+			data-testid={`video-production-${field}-clear-button`}
+		>
+			<CircleX className="size-4 text-muted-foreground opacity-50" />
+		</span>
+	)
 }
 
 interface MobileVideoOptionPopupProps {
@@ -134,25 +196,35 @@ function MobileVideoOptionPopup({
 }
 
 function MobileVideoProductionConfigPanel({
-	configStore,
 	capabilities,
 	config,
+	onConfigChange,
+	clearText,
+	selectPlaceholder,
 	t,
 }: {
-	configStore: VideoProductionConfigStore
 	capabilities: VideoProductionConfigStore["capabilities"]
 	config: VideoProductionConfigStore["config"]
+	onConfigChange: (patch: Partial<VideoProductionConfigStore["config"]>) => void
+	clearText: string
+	selectPlaceholder: string
 	t: (key: string) => string
 }) {
 	const [openKey, setOpenKey] = useState<MobileVideoPopupKey | null>(null)
 	const closePopup = () => setOpenKey(null)
 	const openPopup = (key: MobileVideoPopupKey) => setOpenKey(key)
+	const clearValue = (key: MobileVideoPopupKey) => {
+		if (key === "aspectRatio") onConfigChange({ aspectRatio: undefined })
+		if (key === "resolution") onConfigChange({ resolution: undefined })
+		if (key === "duration") onConfigChange({ durationSeconds: undefined })
+		if (key === "generation") onConfigChange({ generationMode: undefined })
+	}
 	const selectValue = (key: MobileVideoPopupKey, value: string) => {
-		if (key === "aspectRatio") configStore.setConfig({ aspectRatio: value })
-		if (key === "resolution") configStore.setConfig({ resolution: value })
-		if (key === "duration") configStore.setConfig({ durationSeconds: Number(value) })
+		if (key === "aspectRatio") onConfigChange({ aspectRatio: value })
+		if (key === "resolution") onConfigChange({ resolution: value })
+		if (key === "duration") onConfigChange({ durationSeconds: Number(value) })
 		if (key === "generation") {
-			configStore.setConfig({ generationMode: value as "normal" | "detailed" })
+			onConfigChange({ generationMode: value as "normal" | "detailed" })
 		}
 		closePopup()
 	}
@@ -160,15 +232,34 @@ function MobileVideoProductionConfigPanel({
 		<button
 			type="button"
 			onClick={() => openPopup(key)}
-			className="flex !h-8 min-h-8 w-fit shrink-0 items-center gap-1 rounded-full border border-border bg-card px-2.5 text-foreground shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] dark:bg-card"
+			className={cn(
+				"group relative flex !h-8 min-h-8 w-fit shrink-0 items-center gap-1 rounded-full border border-border bg-card py-0 pl-2.5 pr-8 text-foreground shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] dark:bg-card",
+				VIDEO_CONFIG_CONTROL_WIDTH_CLASS[key],
+			)}
 			aria-label={label}
 			data-testid={`mobile-video-production-${key}-trigger`}
 		>
 			<span className="whitespace-nowrap text-[11px] text-muted-foreground">{label}</span>
-			<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
+			<span
+				className={cn(
+					"whitespace-nowrap text-left text-[13px] font-medium",
+					value === selectPlaceholder ? "text-muted-foreground" : "text-foreground",
+				)}
+			>
 				{value}
 			</span>
-			<ChevronDown className="size-4 shrink-0 text-muted-foreground opacity-50" />
+			<span className="absolute right-2.5 top-1/2 inline-flex size-4 -translate-y-1/2 items-center justify-center">
+				{value === selectPlaceholder ? (
+					<ChevronDown className="size-4 text-muted-foreground opacity-50" />
+				) : (
+					<VideoConfigClearButton
+						field={key}
+						clearText={clearText}
+						compact
+						onClear={() => clearValue(key)}
+					/>
+				)}
+			</span>
 		</button>
 	)
 
@@ -185,7 +276,7 @@ function MobileVideoProductionConfigPanel({
 						{trigger(
 							"aspectRatio",
 							aspectLabel,
-							config.aspectRatio ?? capabilities.aspectRatioOptions[0]?.label ?? "",
+							config.aspectRatio ?? selectPlaceholder,
 						)}
 						<MobileVideoOptionPopup
 							open={openKey === "aspectRatio"}
@@ -214,7 +305,9 @@ function MobileVideoProductionConfigPanel({
 						{trigger(
 							"duration",
 							durationLabel,
-							`${config.durationSeconds ?? capabilities.duration.options[0]}s`,
+							config.durationSeconds == null
+								? selectPlaceholder
+								: `${config.durationSeconds}s`,
 						)}
 						<MobileVideoOptionPopup
 							open={openKey === "duration"}
@@ -235,7 +328,9 @@ function MobileVideoProductionConfigPanel({
 						{trigger(
 							"duration",
 							durationLabel,
-							`${config.durationSeconds ?? capabilities.duration.min}s`,
+							config.durationSeconds == null
+								? selectPlaceholder
+								: `${config.durationSeconds}s`,
 						)}
 						<MagicPopup
 							visible={openKey === "duration"}
@@ -248,8 +343,16 @@ function MobileVideoProductionConfigPanel({
 							<div className="p-4">
 								<div className="mb-4 flex items-center justify-between text-base font-medium">
 									<span>{durationLabel}</span>
-									<span>
-										{config.durationSeconds ?? capabilities.duration.min}s
+									<span
+										className={cn(
+											config.durationSeconds == null
+												? "text-muted-foreground"
+												: "text-foreground",
+										)}
+									>
+										{config.durationSeconds == null
+											? selectPlaceholder
+											: `${config.durationSeconds}s`}
 									</span>
 								</div>
 								<input
@@ -259,7 +362,7 @@ function MobileVideoProductionConfigPanel({
 									step={capabilities.duration.step}
 									value={config.durationSeconds ?? capabilities.duration.min}
 									onChange={(event) =>
-										configStore.setConfig({
+										onConfigChange({
 											durationSeconds: Number(event.target.value),
 										})
 									}
@@ -272,7 +375,11 @@ function MobileVideoProductionConfigPanel({
 
 				{capabilities.showResolution && (
 					<>
-						{trigger("resolution", resolutionLabel, config.resolution ?? "")}
+						{trigger(
+							"resolution",
+							resolutionLabel,
+							config.resolution ?? selectPlaceholder,
+						)}
 						<MobileVideoOptionPopup
 							open={openKey === "resolution"}
 							label={resolutionLabel}
@@ -291,12 +398,14 @@ function MobileVideoProductionConfigPanel({
 					{trigger(
 						"generation",
 						generationLabel,
-						t(`messageEditor.videoProductionConfig.${config.generationMode}`),
+						config.generationMode
+							? t(`messageEditor.videoProductionConfig.${config.generationMode}`)
+							: selectPlaceholder,
 					)}
 					<MobileVideoOptionPopup
 						open={openKey === "generation"}
 						label={generationLabel}
-						value={config.generationMode}
+						value={config.generationMode ?? ""}
 						options={(["normal", "detailed"] as const).map((mode) => ({
 							value: mode,
 							label: (
@@ -331,15 +440,24 @@ function VideoProductionConfigPanel({
 	const store = useOptionalMessageEditorStore()
 	const scenePanelVariant = useOptionalScenePanelVariant()
 	const sceneStateStore = useOptionalSceneStateStore()
-	const isVisible =
-		(messagesLength ?? 0) === 0 &&
-		isVideoProductionContext({ topicMode, agentCode, selectedTopic })
+	const isVisible = isVideoProductionContext({ topicMode, agentCode, selectedTopic })
 	const selectedVideoModel = store?.topicModelStore.selectedVideoModel
 	const configStore = useMemo(() => new VideoProductionConfigStore(), [])
 	const capabilities = configStore.capabilities
 	const config = configStore.config
+	const selectPlaceholder = t("messageEditor.videoProductionConfig.selectPlaceholder")
+	const clearText = t("shadcn-ui:select.clear")
 	const [isGenerationPopoverOpen, setIsGenerationPopoverOpen] = useState(false)
 	const [isDurationPopoverOpen, setIsDurationPopoverOpen] = useState(false)
+	const clearConfigValue = (field: MobileVideoPopupKey) => {
+		if (field === "aspectRatio") configStore.setConfig({ aspectRatio: undefined })
+		if (field === "resolution") configStore.setConfig({ resolution: undefined })
+		if (field === "duration") configStore.setConfig({ durationSeconds: undefined })
+		if (field === "generation") configStore.setConfig({ generationMode: undefined })
+	}
+	const inputScopeKey =
+		sceneStateStore?.inputScopeKey ||
+		`${topicMode ?? ""}\u001e${selectedTopic?.id ?? ""}\u001e${agentCode ?? selectedTopic?.agent_code ?? ""}`
 
 	useEffect(() => {
 		if (!store) return
@@ -349,30 +467,34 @@ function VideoProductionConfigPanel({
 		}
 		configStore.setContext({
 			model: selectedVideoModel,
+			inputScopeKey,
+			initializeWithDefaults: (messagesLength ?? 0) === 0,
 		})
 		return () => configStore.deactivate()
-	}, [configStore, isVisible, selectedVideoModel, store])
+	}, [configStore, inputScopeKey, isVisible, messagesLength, selectedVideoModel, store])
 
 	useEffect(() => {
 		if (!sceneStateStore) return
 		if (!isVisible || !store) {
-			sceneStateStore.setClientContextForSource(
-				VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE,
+			sceneStateStore.setPresetSuffixContentForSource(
+				VIDEO_PRODUCTION_SUFFIX_SOURCE,
 				undefined,
 			)
 			return
 		}
 
-		sceneStateStore.setClientContextForSource(
-			VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE,
-			buildVideoProductionClientContext({
-				generationMode: t(`messageEditor.videoProductionConfig.${config.generationMode}`),
+		sceneStateStore.setPresetSuffixContentForSource(
+			VIDEO_PRODUCTION_SUFFIX_SOURCE,
+			buildVideoProductionPresetContent({
+				generationMode: config.generationMode
+					? t(`messageEditor.videoProductionConfig.${config.generationMode}`)
+					: undefined,
 				aspectRatio: config.aspectRatio,
 				durationSeconds: config.durationSeconds,
 				resolution: config.resolution,
-				showAspectRatio: capabilities.showAspectRatio,
-				showDuration: capabilities.showDuration,
-				showResolution: capabilities.showResolution,
+				showAspectRatio: capabilities.showAspectRatio && config.aspectRatio !== undefined,
+				showDuration: capabilities.showDuration && config.durationSeconds !== undefined,
+				showResolution: capabilities.showResolution && config.resolution !== undefined,
 				labels: {
 					generation: t("messageEditor.videoProductionConfig.generation"),
 					aspectRatio: t("messageEditor.videoProductionConfig.aspectRatio"),
@@ -383,31 +505,58 @@ function VideoProductionConfigPanel({
 		)
 
 		return () => {
-			sceneStateStore.setClientContextForSource(
-				VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE,
+			sceneStateStore.setPresetSuffixContentForSource(
+				VIDEO_PRODUCTION_SUFFIX_SOURCE,
 				undefined,
 			)
 		}
 	}, [capabilities, config, isVisible, sceneStateStore, store, t])
 
 	const sendCount = sceneStateStore?.sendCount
+	const lastHandledSendCountRef = useRef(sendCount)
 	useEffect(() => {
-		if (!sendCount) return
+		if (
+			sendCount === undefined ||
+			sendCount <= (lastHandledSendCountRef.current ?? sendCount)
+		) {
+			lastHandledSendCountRef.current = sendCount
+			return
+		}
+
+		lastHandledSendCountRef.current = sendCount
 		configStore.clearCurrentConfig()
-	}, [configStore, sendCount])
+		sceneStateStore?.setPresetSuffixContentForSource(VIDEO_PRODUCTION_SUFFIX_SOURCE, undefined)
+	}, [configStore, sceneStateStore, sendCount])
 
 	if (!isVisible || !store) return null
 
 	const triggerClass =
-		"flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-full border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs outline-none transition-[color,box-shadow] hover:bg-muted focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0 dark:bg-input/30 dark:hover:bg-input/50"
-	const selectTriggerClass = `!h-8 min-w-[84px] ${triggerClass}`
-	const popoverTriggerClass = `h-8 min-w-[84px] ${triggerClass}`
+		"flex w-fit shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-full border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-xs outline-none transition-[color,box-shadow] hover:bg-muted focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0 dark:bg-input/30 dark:hover:bg-input/50"
 	const fieldClass = "relative flex items-center gap-2 whitespace-nowrap"
 	const isCompactMobile = scenePanelVariant === ScenePanelVariant.Mobile
 	const compactTriggerClass =
 		"!h-8 min-h-8 min-w-0 shrink-0 gap-1 border-border bg-card pl-2.5 pr-2 text-foreground shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] dark:bg-card"
-	const compactSelectTriggerClass = cn(selectTriggerClass, compactTriggerClass)
-	const compactPopoverTriggerClass = cn(popoverTriggerClass, compactTriggerClass)
+	const selectTriggerClass = (key: MobileVideoPopupKey) =>
+		cn(
+			"!h-8",
+			triggerClass,
+			VIDEO_CONFIG_DESKTOP_MIN_WIDTH_CLASS[key],
+			isCompactMobile && compactTriggerClass,
+		)
+	const popoverTriggerClass = (key: MobileVideoPopupKey) =>
+		cn(
+			"h-8",
+			triggerClass,
+			VIDEO_CONFIG_DESKTOP_MIN_WIDTH_CLASS[key],
+			isCompactMobile && compactTriggerClass,
+		)
+	const compactValueClass = (hasValue: boolean) =>
+		cn(
+			"whitespace-nowrap text-[13px] font-medium",
+			hasValue ? "text-foreground" : "text-muted-foreground",
+		)
+	const popoverValueClass = (hasValue: boolean) =>
+		cn("whitespace-nowrap text-left", hasValue ? "text-foreground" : "text-muted-foreground")
 	const shouldShowBackground = scenePanelVariant === ScenePanelVariant.HomePage
 	const shouldUseHorizontalScroll =
 		scenePanelVariant === ScenePanelVariant.TopicPage ||
@@ -420,9 +569,11 @@ function VideoProductionConfigPanel({
 				data-testid="video-production-config-panel"
 			>
 				<MobileVideoProductionConfigPanel
-					configStore={configStore}
 					capabilities={capabilities}
 					config={config}
+					onConfigChange={configStore.setConfig}
+					clearText={clearText}
+					selectPlaceholder={selectPlaceholder}
 					t={t}
 				/>
 			</div>
@@ -486,11 +637,12 @@ function VideoProductionConfigPanel({
 										aria-label={t(
 											"messageEditor.videoProductionConfig.aspectRatio",
 										)}
-										className={
-											isCompactMobile
-												? compactSelectTriggerClass
-												: selectTriggerClass
-										}
+										className={cn(
+											"group",
+											selectTriggerClass("aspectRatio"),
+											config.aspectRatio !== undefined &&
+												"[&>svg:last-child]:hidden",
+										)}
 									>
 										{isCompactMobile ? (
 											<>
@@ -499,12 +651,29 @@ function VideoProductionConfigPanel({
 														"messageEditor.videoProductionConfig.aspectRatio",
 													)}
 												</span>
-												<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-													{config.aspectRatio ?? ""}
+												<span
+													className={compactValueClass(
+														config.aspectRatio !== undefined,
+													)}
+												>
+													{config.aspectRatio ?? selectPlaceholder}
 												</span>
 											</>
 										) : (
-											<SelectValue>{config.aspectRatio ?? ""}</SelectValue>
+											<SelectValue
+												placeholder={selectPlaceholder}
+												className="whitespace-nowrap"
+											>
+												{config.aspectRatio}
+											</SelectValue>
+										)}
+										{config.aspectRatio !== undefined && (
+											<VideoConfigClearButton
+												field="aspectRatio"
+												clearText={clearText}
+												hidden
+												onClear={() => clearConfigValue("aspectRatio")}
+											/>
 										)}
 									</SelectTrigger>
 									<SelectContent
@@ -551,11 +720,10 @@ function VideoProductionConfigPanel({
 										<PopoverTrigger asChild>
 											<button
 												type="button"
-												className={
-													isCompactMobile
-														? compactPopoverTriggerClass
-														: popoverTriggerClass
-												}
+												className={cn(
+													"group",
+													popoverTriggerClass("duration"),
+												)}
 												aria-label={t(
 													"messageEditor.videoProductionConfig.duration",
 												)}
@@ -568,20 +736,42 @@ function VideoProductionConfigPanel({
 																"messageEditor.videoProductionConfig.duration",
 															)}
 														</span>
-														<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-															{config.durationSeconds ??
-																capabilities.duration.min}
-															s
+														<span
+															className={compactValueClass(
+																config.durationSeconds !==
+																	undefined,
+															)}
+														>
+															{config.durationSeconds == null
+																? selectPlaceholder
+																: `${config.durationSeconds}s`}
 														</span>
 													</>
 												) : (
-													<span>
-														{config.durationSeconds ??
-															capabilities.duration.min}
-														s
+													<span
+														className={popoverValueClass(
+															config.durationSeconds !== undefined,
+														)}
+													>
+														{config.durationSeconds == null
+															? selectPlaceholder
+															: `${config.durationSeconds}s`}
 													</span>
 												)}
-												<ChevronDown className="size-4 text-muted-foreground opacity-50" />
+												<span className="relative flex size-4 shrink-0 items-center justify-center">
+													{config.durationSeconds !== undefined ? (
+														<VideoConfigClearButton
+															field="duration"
+															clearText={clearText}
+															hidden
+															onClear={() =>
+																clearConfigValue("duration")
+															}
+														/>
+													) : (
+														<ChevronDown className="size-4 text-muted-foreground opacity-50" />
+													)}
+												</span>
 											</button>
 										</PopoverTrigger>
 										<PopoverContent
@@ -596,10 +786,17 @@ function VideoProductionConfigPanel({
 															"messageEditor.videoProductionConfig.duration",
 														)}
 													</span>
-													<span className="font-medium text-foreground">
-														{config.durationSeconds ??
-															capabilities.duration.min}
-														s
+													<span
+														className={cn(
+															"font-medium",
+															config.durationSeconds == null
+																? "text-muted-foreground"
+																: "text-foreground",
+														)}
+													>
+														{config.durationSeconds == null
+															? selectPlaceholder
+															: `${config.durationSeconds}s`}
 													</span>
 												</div>
 												<input
@@ -647,11 +844,11 @@ function VideoProductionConfigPanel({
 											aria-label={t(
 												"messageEditor.videoProductionConfig.duration",
 											)}
-											className={
-												isCompactMobile
-													? compactSelectTriggerClass
-													: selectTriggerClass
-											}
+											className={cn(
+												selectTriggerClass("duration"),
+												config.durationSeconds !== undefined &&
+													"[&>svg:last-child]:hidden",
+											)}
 										>
 											{isCompactMobile ? (
 												<>
@@ -660,18 +857,33 @@ function VideoProductionConfigPanel({
 															"messageEditor.videoProductionConfig.duration",
 														)}
 													</span>
-													<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
+													<span
+														className={compactValueClass(
+															config.durationSeconds !== undefined,
+														)}
+													>
 														{config.durationSeconds == null
-															? ""
+															? selectPlaceholder
 															: `${config.durationSeconds}s`}
 													</span>
 												</>
 											) : (
-												<SelectValue>
+												<SelectValue
+													placeholder={selectPlaceholder}
+													className="whitespace-nowrap"
+												>
 													{config.durationSeconds == null
-														? ""
+														? undefined
 														: `${config.durationSeconds}s`}
 												</SelectValue>
+											)}
+											{config.durationSeconds !== undefined && (
+												<VideoConfigClearButton
+													field="duration"
+													clearText={clearText}
+													hidden
+													onClear={() => clearConfigValue("duration")}
+												/>
 											)}
 										</SelectTrigger>
 										<SelectContent align="start" showScrollButtons={false}>
@@ -703,11 +915,12 @@ function VideoProductionConfigPanel({
 										aria-label={t(
 											"messageEditor.videoProductionConfig.resolution",
 										)}
-										className={
-											isCompactMobile
-												? compactSelectTriggerClass
-												: selectTriggerClass
-										}
+										className={cn(
+											"group",
+											selectTriggerClass("resolution"),
+											config.resolution !== undefined &&
+												"[&>svg:last-child]:hidden",
+										)}
 									>
 										{isCompactMobile ? (
 											<>
@@ -716,12 +929,27 @@ function VideoProductionConfigPanel({
 														"messageEditor.videoProductionConfig.resolution",
 													)}
 												</span>
-												<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-													{config.resolution ?? ""}
+												<span
+													className={compactValueClass(
+														config.resolution !== undefined,
+													)}
+												>
+													{config.resolution ?? selectPlaceholder}
 												</span>
 											</>
 										) : (
-											<SelectValue />
+											<SelectValue
+												placeholder={selectPlaceholder}
+												className="whitespace-nowrap"
+											/>
+										)}
+										{config.resolution !== undefined && (
+											<VideoConfigClearButton
+												field="resolution"
+												clearText={clearText}
+												hidden
+												onClear={() => clearConfigValue("resolution")}
+											/>
 										)}
 									</SelectTrigger>
 									<SelectContent align="start" showScrollButtons={false}>
@@ -748,11 +976,7 @@ function VideoProductionConfigPanel({
 								<PopoverTrigger asChild>
 									<button
 										type="button"
-										className={
-											isCompactMobile
-												? compactPopoverTriggerClass
-												: popoverTriggerClass
-										}
+										className={cn("group", popoverTriggerClass("generation"))}
 										aria-label={t(
 											"messageEditor.videoProductionConfig.generation",
 										)}
@@ -765,20 +989,43 @@ function VideoProductionConfigPanel({
 														"messageEditor.videoProductionConfig.generation",
 													)}
 												</span>
-												<span className="whitespace-nowrap text-[13px] font-medium text-foreground">
-													{t(
-														`messageEditor.videoProductionConfig.${config.generationMode}`,
+												<span
+													className={compactValueClass(
+														config.generationMode !== undefined,
 													)}
+												>
+													{config.generationMode
+														? t(
+																`messageEditor.videoProductionConfig.${config.generationMode}`,
+															)
+														: selectPlaceholder}
 												</span>
 											</>
 										) : (
-											<span>
-												{t(
-													`messageEditor.videoProductionConfig.${config.generationMode}`,
+											<span
+												className={popoverValueClass(
+													config.generationMode !== undefined,
 												)}
+											>
+												{config.generationMode
+													? t(
+															`messageEditor.videoProductionConfig.${config.generationMode}`,
+														)
+													: selectPlaceholder}
 											</span>
 										)}
-										<ChevronDown className="size-4 text-muted-foreground opacity-50" />
+										<span className="relative flex size-4 shrink-0 items-center justify-center">
+											{config.generationMode !== undefined ? (
+												<VideoConfigClearButton
+													field="generation"
+													clearText={clearText}
+													hidden
+													onClear={() => clearConfigValue("generation")}
+												/>
+											) : (
+												<ChevronDown className="size-4 text-muted-foreground opacity-50" />
+											)}
+										</span>
 									</button>
 								</PopoverTrigger>
 								<PopoverContent
@@ -801,7 +1048,9 @@ function VideoProductionConfigPanel({
 												}`}
 												aria-pressed={config.generationMode === mode}
 												onClick={() => {
-													configStore.setConfig({ generationMode: mode })
+													configStore.setConfig({
+														generationMode: mode,
+													})
 													setIsGenerationPopoverOpen(false)
 												}}
 											>

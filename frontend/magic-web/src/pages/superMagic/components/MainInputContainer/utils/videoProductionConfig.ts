@@ -1,7 +1,7 @@
-import type { SceneClientContextPayload } from "../stores/SceneStateStore"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 
 export const VIDEO_PRODUCTION_AGENT_CODE = "video-production"
-export const VIDEO_PRODUCTION_CLIENT_CONTEXT_SOURCE = "video-production-config"
+export const VIDEO_PRODUCTION_SUFFIX_SOURCE = "video-production-config"
 
 export interface VideoProductionContextLike {
 	topicMode?: string
@@ -16,7 +16,7 @@ export function isVideoProductionContext(context?: VideoProductionContextLike): 
 	)
 }
 
-export interface VideoProductionClientContextInput {
+export interface VideoProductionPresetInput {
 	generationMode?: string
 	aspectRatio?: string
 	durationSeconds?: number
@@ -32,10 +32,10 @@ export interface VideoProductionClientContextInput {
 	}
 }
 
-/** Build the selected video configuration as natural-language client context. */
-export function buildVideoProductionClientContext(
-	input: VideoProductionClientContextInput,
-): SceneClientContextPayload | undefined {
+/** Build the selected video configuration as a natural-language message suffix. */
+export function buildVideoProductionPresetContent(
+	input: VideoProductionPresetInput,
+): JSONContent | undefined {
 	const labels = {
 		generation: "generation",
 		aspectRatio: "aspect ratio",
@@ -59,9 +59,12 @@ export function buildVideoProductionClientContext(
 	if (segments.length === 0) return undefined
 
 	return {
-		version: "1.0.0",
-		data: {
-			content: `${segments.join("; ")}.`,
-		},
+		type: "doc",
+		content: [
+			{
+				type: "paragraph",
+				content: [{ type: "text", text: `${segments.join("; ")}.` }],
+			},
+		],
 	}
 }

@@ -54,10 +54,7 @@ import {
 import { getMCPAccess } from "@/components/Agent/MCP/store/mcp-access"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
-import {
-	buildQueueMessageInput,
-	mergeSceneClientContext,
-} from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
+import { buildQueueMessageInput } from "@/pages/superMagic/components/MainInputContainer/components/editors/messageParams"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { resetDocumentScrollPosition } from "@/utils/scroll"
@@ -427,15 +424,12 @@ export default function useMobileComposerLogic({
 			const finalParams = customParamsPatch
 				? { ...defaultParams, ...customParamsPatch }
 				: defaultParams
-			const finalParamsWithClientContext: HandleSendParams = {
-				...finalParams,
-				extra: mergeSceneClientContext(finalParams.extra, sceneStateStore?.clientContext),
-			}
-
 			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
-				queueContext.addToQueue(
-					buildQueueMessageInput(finalParamsWithClientContext, params.value),
+				const queueId = await queueContext.addToQueue(
+					buildQueueMessageInput(finalParams, params.value),
 				)
+				if (!queueId) return
+				sceneStateStore?.incrementSendCount()
 				clearContentAfterSend()
 				setIsComposerFocused(false)
 				return
@@ -450,7 +444,7 @@ export default function useMobileComposerLogic({
 			}
 
 			const preparedSend = await preparePanelSend({
-				params: finalParamsWithClientContext,
+				params: finalParams,
 				context: {
 					selectedProject,
 					selectedTopic,
@@ -485,6 +479,7 @@ export default function useMobileComposerLogic({
 				messagesLength: editorContext.messagesLength ?? 0,
 			})
 
+			if (sendResult) sceneStateStore?.incrementSendCount()
 			editorContext.onSendSuccess?.({
 				currentProject: sendResult?.currentProject ?? null,
 				currentTopic: sendResult?.currentTopic ?? null,

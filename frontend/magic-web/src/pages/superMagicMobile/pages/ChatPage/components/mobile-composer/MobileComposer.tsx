@@ -488,13 +488,11 @@ function MobileComposerComponent({
 			</Button>
 		</div>
 	)
-	const shouldShowVideoProductionConfigInHeader =
-		(editorContext.messagesLength ?? 0) === 0 &&
-		isVideoProductionContext({
-			topicMode: editorContext.topicMode,
-			agentCode: editorContext.agentCode,
-			selectedTopic: editorContext.selectedTopic,
-		})
+	const shouldShowVideoProductionConfigInHeader = isVideoProductionContext({
+		topicMode: editorContext.topicMode,
+		agentCode: editorContext.agentCode,
+		selectedTopic: editorContext.selectedTopic,
+	})
 	const headerScenePanelsNode =
 		shouldRenderPanelsInHeader || shouldShowVideoProductionConfigInHeader ? (
 			<MobileScenePanels

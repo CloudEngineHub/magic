@@ -3071,6 +3071,7 @@
 			"normal": "Normal",
 			"normalDescription": "Fewer questions and faster output for simple requests",
 			"resolution": "Resolution",
+			"selectPlaceholder": "Please select",
 			"skill": "Video skill"
 		},
 		"waitForFileUpload": "Please wait for file upload to complete",
