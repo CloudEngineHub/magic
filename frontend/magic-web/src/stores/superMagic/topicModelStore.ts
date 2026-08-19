@@ -37,9 +37,6 @@ class SuperMagicTopicModelStore {
 	/** Context key whose model data has completed loading */
 	loadedContextKey = ""
 
-	/** Context key with an active model load or validation */
-	loadingContextKey = ""
-
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
 	}
@@ -81,15 +78,9 @@ class SuperMagicTopicModelStore {
 		this.isLoading = loading
 	}
 
-	/** Mark the current topic/project/mode context as fully loaded */
+	/** 标记当前上下文的模型已加载完成 */
 	markCurrentContextLoaded(contextKey: string) {
 		this.loadedContextKey = contextKey
-		if (this.loadingContextKey === contextKey) this.loadingContextKey = ""
-	}
-
-	/** Mark a topic/project/mode context as loading */
-	markContextLoading(contextKey: string) {
-		this.loadingContextKey = contextKey
 	}
 
 	/**
@@ -145,7 +136,6 @@ class SuperMagicTopicModelStore {
 		this.currentTopicMode = getFallbackTopicModeIdentifier()
 		this.currentAgentCode = ""
 		this.loadedContextKey = ""
-		this.loadingContextKey = ""
 	}
 }
 

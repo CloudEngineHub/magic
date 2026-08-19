@@ -35,14 +35,11 @@ export interface SuperMagicTopicModelStoreLike {
 	currentAgentCode: string
 	/** Context key whose model data has completed loading */
 	loadedContextKey: string
-	/** Context key with an active model load or validation */
-	loadingContextKey: string
 	setSelectedLanguageModel: (model: ModelItem | null) => void
 	setSelectedImageModel: (model: ModelItem | null) => void
 	setSelectedVideoModel: (model: ModelItem | null) => void
 	setLoading: (loading: boolean) => void
 	markCurrentContextLoaded: (contextKey: string) => void
-	markContextLoading: (contextKey: string) => void
 }
 
 /**
@@ -192,8 +189,9 @@ class SuperMagicTopicModelService {
 					await this.flushAll(prev.topicId)
 				}
 
-				// 话题内切换模式：旧上下文已加载完成时校验，否则按新模式重新获取配置。
-				// 话题外，还是走默认的逻辑。
+				// 同话题切 mode/Agent 仍走 fetch：目录和 ModeDefault 按 mode/Agent
+				// 隔离。内存校验会跳过新模式已存配置，未加载完时还可能把空模型
+				// 当成无效并写入 Auto。
 				if (
 					prev &&
 					prev.topicId &&
@@ -201,43 +199,12 @@ class SuperMagicTopicModelService {
 					prev.topicMode &&
 					(prev.topicMode !== topicMode || prev.agentCode !== agentCode)
 				) {
-					const previousContextKey = this.getContextKey({
-						topicId: prev.topicId,
-						projectId: prev.projectId,
-						topicMode: prev.topicMode,
-						agentCode: prev.agentCode,
-					})
-					const currentContextKey = this.getContextKey({
-						topicId,
-						projectId,
-						topicMode,
-						agentCode,
-					})
-					const previousContextReady =
-						store.loadedContextKey === previousContextKey &&
-						store.loadingContextKey !== previousContextKey
-
-					store.markContextLoading(currentContextKey)
-
-					logger.report("[Context] Topic mode changed", {
+					logger.report("[Context] Topic mode changed, refetching", {
 						oldMode: prev.topicMode,
 						newMode: topicMode,
 						oldAgentCode: prev.agentCode,
 						newAgentCode: agentCode,
-						previousContextReady,
 					})
-
-					if (previousContextReady) {
-						await this.validateModelsForMode(topicMode, store)
-					} else {
-						logger.report("[Context] Model load pending, refetching for new mode", {
-							topicId,
-							projectId,
-							topicMode,
-						})
-						await this.fetchTopicModel(topicId, projectId, topicMode, store)
-					}
-					return
 				}
 
 				// Skip if both are empty (unstable phase), but NOT if topicId="default"
@@ -458,9 +425,17 @@ class SuperMagicTopicModelService {
 			agentCode,
 		}
 		if (!this.isCurrentContext(store, context)) return
+		const contextKey = this.getContextKey(context)
+		// 当前上下文尚未加载完成时不校验，避免把空/旧模型当成无效并写入 Auto
+		if (store.loadedContextKey !== contextKey) {
+			logger.report("[Validate] Skip validation before models are loaded", {
+				topicMode,
+				loadedContextKey: store.loadedContextKey,
+			})
+			return
+		}
 		const requestGuard = this.createRequestGuard(store, context)
 		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
-		store.markContextLoading(this.getContextKey(context))
 		store.setLoading(true)
 
 		const previousLanguageModel = store.selectedLanguageModel
@@ -551,7 +526,7 @@ class SuperMagicTopicModelService {
 				})
 			}
 			if (isCurrentRequest()) {
-				store.markCurrentContextLoaded(this.getContextKey(context))
+				store.markCurrentContextLoaded(contextKey)
 			}
 		} finally {
 			if (isCurrentRequest()) store.setLoading(false)
@@ -898,7 +873,6 @@ class SuperMagicTopicModelService {
 		if (!this.isCurrentContext(store, context)) return
 		const requestGuard = this.createRequestGuard(store, context)
 		const isCurrentRequest = () => this.isCurrentRequest(store, requestGuard)
-		store.markContextLoading(this.getContextKey(context))
 
 		const completeLoading = () => {
 			if (hasCompletedLoading) return
@@ -913,16 +887,8 @@ class SuperMagicTopicModelService {
 		let modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
 		let imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
 		let videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
-
-		if (topicMode === TopicMode.Default && modelList.length === 0) {
-			await superMagicModeService.fetchDefaultModeModelList()
-			modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
-			imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
-			videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
-		}
-
-		const supportsImageModel = imageModelList.length > 0
-		const supportsVideoModel = videoModelList.length > 0
+		let supportsImageModel = imageModelList.length > 0
+		let supportsVideoModel = videoModelList.length > 0
 
 		logger.report("[Fallback] Four-level cascade started", {
 			topicId,
@@ -937,6 +903,14 @@ class SuperMagicTopicModelService {
 		})
 
 		try {
+			if (topicMode === TopicMode.Default && modelList.length === 0) {
+				await superMagicModeService.fetchDefaultModeModelList()
+				modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
+				imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
+				videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
+				supportsImageModel = imageModelList.length > 0
+				supportsVideoModel = videoModelList.length > 0
+			}
 			// 四层级联策略: Topic -> Project -> ModeDefault(default_{topicMode}) -> Global(default)
 			// 每层都执行: 取本地缓存 -> 取远程 -> 校验 -> 纠正
 
@@ -1780,17 +1754,20 @@ class SuperMagicTopicModelService {
 		return `default_${resolveModeMapKey(topicMode, agentCode)}`
 	}
 
-	/**
-	 * Cleanup timers and buffers for specific topic
-	 * @param topicId - Topic ID
-	 */
+	/** 清理指定话题的 debounce，并清掉它带出的 project 待保存 */
 	cleanup(topicId: string) {
-		const timer = this.debounceTimers.get(topicId)
+		const pending = this.pendingSaves.get(topicId)
+		this.clearPendingSave(topicId)
+		if (pending?.projectId) this.clearPendingSave(this.genProjectKey(pending.projectId))
+	}
+
+	private clearPendingSave(cacheKey: string) {
+		const timer = this.debounceTimers.get(cacheKey)
 		if (timer) {
 			clearTimeout(timer)
-			this.debounceTimers.delete(topicId)
+			this.debounceTimers.delete(cacheKey)
 		}
-		this.pendingSaves.delete(topicId)
+		this.pendingSaves.delete(cacheKey)
 	}
 
 	/**
