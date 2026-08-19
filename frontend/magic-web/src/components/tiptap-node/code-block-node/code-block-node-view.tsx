@@ -8,9 +8,16 @@ import {
 	DiffSyntaxHighlighter,
 	loadDiffSyntaxHighlighter,
 } from "@/infrastructure/vendors/react-syntax-highlighter/diff"
+import type { CodeBlockNodeOptions } from "./code-block-node-extension"
 
 const MagicCode = lazy(() => import("@/components/base/MagicCode"))
 const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
+
+interface CodeBlockNodeViewProps extends NodeViewProps {
+	extension: NodeViewProps["extension"] & {
+		options: CodeBlockNodeOptions
+	}
+}
 
 /**
  * React component for rendering CodeBlock nodes
@@ -18,9 +25,10 @@ const MagicMermaid = lazy(() => import("@/components/base/MagicMermaid"))
  * - Editable: uses NodeViewContent for direct editing
  * - Read-only: uses MagicCode for enhanced display with syntax highlighting
  */
-export function CodeBlockNodeView(props: NodeViewProps) {
-	const { node, editor } = props
+export function CodeBlockNodeView(props: CodeBlockNodeViewProps) {
+	const { node, editor, extension } = props
 	const language = node.attrs.language || "text"
+	const { enableWrapToggle } = extension.options
 	const [diffStyle, setDiffStyle] = useState<Record<string, CSSProperties> | null>(null)
 	useEffect(() => {
 		if (language !== "diff" || diffStyle) return
@@ -106,6 +114,7 @@ export function CodeBlockNodeView(props: NodeViewProps) {
 					language={language || "text"}
 					data={codeContent}
 					className="code-block-node-view"
+					enableWrapToggle={enableWrapToggle}
 				/>
 			</Suspense>
 		</NodeViewWrapper>

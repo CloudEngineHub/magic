@@ -3,15 +3,7 @@ import XMarkdown, {
 	type XMarkdownProps,
 } from "@ant-design/x-markdown"
 import { QRCode } from "antd"
-import {
-	memo,
-	useCallback,
-	useMemo,
-	useRef,
-	useSyncExternalStore,
-	type MutableRefObject,
-	type ReactElement,
-} from "react"
+import { memo, useMemo, useRef, type MutableRefObject, type ReactElement } from "react"
 import { preprocessMarkdown } from "@/pages/superMagic/utils/handleMarkDown"
 import type { CitationSource } from "@/pages/superMagic/utils/citations"
 import HtmlCodeBlockPreview from "./components/HtmlCodeBlockPreview"
@@ -33,7 +25,7 @@ import {
 import styles from "./index.module.css"
 import { CitationBadge } from "../../../Citations"
 import MarkdownCodeBlockToolbar from "./components/MarkdownCodeBlockToolbar"
-import { platformKey } from "@/utils/storage"
+import { useCodeBlockWrapPreference } from "@/services/markdown/codeBlockWrapPreference"
 
 const MARKDOWN_ALLOWED_URI_REGEXP =
 	/^(?:(?:https?|ftps?|mailto|tel|callto|sms|cid|xmpp|matrix|oa|oa-view|open-action|openaction):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i
@@ -58,78 +50,6 @@ const RAW_HTML_DECLARATION_PATTERN = /<![^>]*>/gi
 // 允许保留的项目自定义标签，避免它们在预处理阶段被误转义。
 const RAW_HTML_ALLOWED_CUSTOM_TAGS = new Set(["file-path", "citation", "references", "ref"])
 const QRCODE_FENCE_LANGUAGE = "qrcode"
-const MARKDOWN_CODE_WRAP_STORAGE_KEY = platformKey("super_magic/markdown/code_block_wrap")
-const DEFAULT_MARKDOWN_CODE_WRAP = false
-
-type MarkdownCodeWrapListener = () => void
-
-let markdownCodeWrapValue: boolean | undefined
-const markdownCodeWrapListeners = new Set<MarkdownCodeWrapListener>()
-let hasMarkdownCodeWrapStorageListener = false
-
-function readMarkdownCodeWrapPreference(): boolean {
-	if (typeof window === "undefined") return DEFAULT_MARKDOWN_CODE_WRAP
-
-	try {
-		const storedValue = window.localStorage.getItem(MARKDOWN_CODE_WRAP_STORAGE_KEY)
-		if (storedValue === "true") return true
-		if (storedValue === "false") return false
-	} catch {
-		// 受限 WebView 或隐私模式可能禁止访问存储，回退到默认展示状态。
-	}
-
-	return DEFAULT_MARKDOWN_CODE_WRAP
-}
-
-function getMarkdownCodeWrapSnapshot(): boolean {
-	if (markdownCodeWrapValue === undefined) {
-		markdownCodeWrapValue = readMarkdownCodeWrapPreference()
-	}
-
-	return markdownCodeWrapValue
-}
-
-function subscribeMarkdownCodeWrap(listener: MarkdownCodeWrapListener): () => void {
-	if (typeof window !== "undefined" && !hasMarkdownCodeWrapStorageListener) {
-		window.addEventListener("storage", (event) => {
-			if (event.key !== MARKDOWN_CODE_WRAP_STORAGE_KEY) return
-
-			markdownCodeWrapValue = readMarkdownCodeWrapPreference()
-			markdownCodeWrapListeners.forEach((currentListener) => currentListener())
-		})
-		hasMarkdownCodeWrapStorageListener = true
-	}
-
-	markdownCodeWrapListeners.add(listener)
-	return () => markdownCodeWrapListeners.delete(listener)
-}
-
-function setMarkdownCodeWrapPreference(nextValue: boolean): void {
-	markdownCodeWrapValue = nextValue
-	if (typeof window !== "undefined") {
-		try {
-			window.localStorage.setItem(MARKDOWN_CODE_WRAP_STORAGE_KEY, String(nextValue))
-		} catch {
-			// 存储失败不应阻塞本次 UI 操作，内存状态仍然立即生效。
-		}
-	}
-	markdownCodeWrapListeners.forEach((listener) => listener())
-}
-
-function useMarkdownCodeWrapPreference(): {
-	isWrapped: boolean
-	toggle: () => void
-} {
-	const isWrapped = useSyncExternalStore(
-		subscribeMarkdownCodeWrap,
-		getMarkdownCodeWrapSnapshot,
-		() => DEFAULT_MARKDOWN_CODE_WRAP,
-	)
-
-	const toggle = useCallback(() => setMarkdownCodeWrapPreference(!isWrapped), [isWrapped])
-
-	return { isWrapped, toggle }
-}
 
 function isCodeLanguage(className: string | undefined, language: string): boolean {
 	if (!className) return false
@@ -471,7 +391,7 @@ function MarkdownComponent({
 	const streamingScrollStateRef = useRef<HtmlCodeBlockPreviewStreamingScrollState>({
 		hasUserInteracted: false,
 	})
-	const { isWrapped: isCodeWrapped, toggle: onToggleCodeWrap } = useMarkdownCodeWrapPreference()
+	const { isWrapped: isCodeWrapped, toggle: onToggleCodeWrap } = useCodeBlockWrapPreference()
 
 	const components = useMarkdownComponent({
 		enableHtmlCodeBlockPreview,

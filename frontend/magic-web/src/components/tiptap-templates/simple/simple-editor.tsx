@@ -85,6 +85,7 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 		additionalExtensions,
 		enableDragHandle = true,
 		enableSearchReplace = true,
+		enableCodeBlockWrap = false,
 		isEditable = true,
 		isMobile = false,
 		documentFlow = false,
@@ -177,7 +178,9 @@ export const SimpleEditor = React.forwardRef<SimpleEditorRef, SimpleEditorProps>
 			}),
 			MarkdownFrontmatterNode,
 			HorizontalRule,
-			CodeBlockNode,
+			CodeBlockNode.configure({
+				enableWrapToggle: enableCodeBlockWrap,
+			}),
 			TextAlign.configure({ types: ["heading", "paragraph"] }),
 			TaskList,
 			TaskItem.configure({ nested: true }),

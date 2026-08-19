@@ -110,18 +110,20 @@
 	min-width: 0;
 	overflow: hidden;
 	border-radius: 8px;
+	border: 1px solid rgb(var(--border-rgb) / var(--border-alpha));
+	background: rgb(var(--muted-rgb));
 }
 
 .codeBlockToolbar {
 	display: flex;
-	min-height: 30px;
+	min-height: 34px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	padding: 2px 6px 2px 10px;
-	color: inherit;
+	padding: 3px 6px 3px 12px;
+	border-bottom: 1px solid rgb(var(--border-rgb) / var(--border-alpha));
+	color: rgb(var(--muted-foreground-rgb));
 	font-size: 12px;
-	opacity: 0.72;
 }
 
 .codeBlockLanguage {
@@ -141,6 +143,9 @@
 .plainMarkdown:global(.x-markdown) .codeBlockPre {
 	margin: 0;
 	max-width: 100%;
+	box-sizing: border-box;
+	padding: 12px 16px 16px;
+	border: 0;
 	border-radius: 0;
 	background: transparent;
 }
@@ -152,6 +157,8 @@
 
 .plainMarkdown:global(.x-markdown) .codeBlockPreUnwrapped code {
 	white-space: inherit;
+	overflow-wrap: normal;
+	word-break: normal;
 }
 
 .plainMarkdown:global(.x-markdown) .codeBlockPreWrapped {
