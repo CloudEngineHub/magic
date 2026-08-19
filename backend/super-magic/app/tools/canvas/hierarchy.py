@@ -27,8 +27,60 @@ class FrameSelectionPlan:
     item_ref: str
     frame: CanvasElement
     children: tuple[CanvasElement, ...]
+    selected_ids: tuple[str, ...]
     root_insert_index: int
     padding: float
+
+
+class CoordinateSpaceResolver:
+    """负责 Canvas 直接父级坐标空间之间的边界计算和坐标转换。"""
+
+    @staticmethod
+    def bounds(elements: list[CanvasElement]) -> tuple[float, float, float, float]:
+        """计算同一坐标空间内多个 Element 的包围盒。"""
+        if not elements:
+            raise CanvasDomainError("FRAME_SELECTION_INVALID", "Frame selection cannot be empty.")
+        bounds = [CoordinateSpaceResolver.element_bounds(element) for element in elements]
+        return (
+            min(item[0] for item in bounds),
+            min(item[1] for item in bounds),
+            max(item[2] for item in bounds),
+            max(item[3] for item in bounds),
+        )
+
+    @staticmethod
+    def element_bounds(element: CanvasElement) -> tuple[float, float, float, float]:
+        """读取单个 Element 在其直接父级坐标空间内的包围盒。"""
+        x = _number(element.properties.get("x"))
+        y = _number(element.properties.get("y"))
+        if x is None or y is None:
+            raise CanvasDomainError("FRAME_SELECTION_INVALID", "Selected Elements must have numeric positions.")
+        width = _size(element.properties.get("width"), 1024.0)
+        height = _size(element.properties.get("height"), 1024.0)
+        return x, y, x + width, y + height
+
+    @staticmethod
+    def to_local(element: CanvasElement, origin_x: float, origin_y: float) -> CanvasElement:
+        """复制 Element 并将其位置转换为指定父级的局部坐标。"""
+        child = element.clone()
+        child.properties["x"] = float(element.properties.get("x", 0)) - origin_x
+        child.properties["y"] = float(element.properties.get("y", 0)) - origin_y
+        return child
+
+
+@dataclass(frozen=True)
+class HierarchyMutationPlan:
+    """封装一次把同层级节点收纳到 Frame 的树结构变更。"""
+
+    frame: CanvasElement
+    selected_ids: tuple[str, ...]
+    root_insert_index: int
+
+    def apply(self, canvas: CanvasDocument) -> None:
+        """在已完成校验的 Canvas 快照上原子应用层级变更。"""
+        selected = set(self.selected_ids)
+        canvas.elements[:] = [element for element in canvas.elements if element.element_id not in selected]
+        canvas.insert_element(self.frame, index=min(self.root_insert_index, len(canvas.elements)))
 
 
 class ElementTreeIndex:
@@ -90,11 +142,7 @@ class FrameSelectionStrategy:
             raise CanvasDomainError("FRAME_SELECTION_MIXED_PARENTS", "Selected Elements must share the same direct parent.")
 
         ordered = sorted(selected, key=lambda element: canvas.elements.index(element))
-        bounds = [self._bounds(element) for element in ordered]
-        left = min(item[0] for item in bounds)
-        top = min(item[1] for item in bounds)
-        right = max(item[2] for item in bounds)
-        bottom = max(item[3] for item in bounds)
+        left, top, right, bottom = CoordinateSpaceResolver.bounds(ordered)
         longest = max(right - left, bottom - top)
         padding = self.default_padding_divisor and longest / self.default_padding_divisor if request.padding is None else request.padding
         if (
@@ -130,32 +178,20 @@ class FrameSelectionStrategy:
         frame.active_content_id = content.content_id
         frame.main_content_id = content.content_id
 
-        child_copies: list[CanvasElement] = []
-        for element in ordered:
-            child = element.clone()
-            child.properties["x"] = float(element.properties.get("x", 0)) - frame_x
-            child.properties["y"] = float(element.properties.get("y", 0)) - frame_y
-            child_copies.append(child)
+        child_copies = [
+            CoordinateSpaceResolver.to_local(element, frame_x, frame_y)
+            for element in ordered
+        ]
 
         root_indexes = [canvas.elements.index(element) for element in ordered]
         return FrameSelectionPlan(
             item_ref=request.item_ref,
             frame=frame,
             children=tuple(child_copies),
+            selected_ids=tuple(element.element_id for element in ordered),
             root_insert_index=min(root_indexes),
             padding=float(padding),
         )
-
-    @staticmethod
-    def _bounds(element: CanvasElement) -> tuple[float, float, float, float]:
-        """读取 Element 的世界坐标包围盒。"""
-        x = _number(element.properties.get("x"))
-        y = _number(element.properties.get("y"))
-        if x is None or y is None:
-            raise CanvasDomainError("FRAME_SELECTION_INVALID", "Selected Elements must have numeric positions.")
-        width = _size(element.properties.get("width"), 1024.0)
-        height = _size(element.properties.get("height"), 1024.0)
-        return x, y, x + width, y + height
 
 
 def _new_id(prefix: str) -> str:

@@ -15,7 +15,10 @@ from app.tools.canvas.generation import (
     GenerationQueryResult,
     GenerationRequest,
     GenerationSubmission,
+    GenerationTask,
+    InMemoryGenerationTaskRepository,
 )
+from app.tools.canvas.hierarchy import HierarchyMutationPlan
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import AddCanvasConnections, ConnectionInput
 
@@ -216,6 +219,30 @@ class MockIncompleteAsynchronousGenerationPort:
         return GenerationSubmission("async", "processing", provider_task_id="provider-only")
 
 
+class MockRetryableAsynchronousGenerationPort:
+    """用于验证异步重试任务携带正确 retry_count 的 mock 端口。"""
+
+    execution_mode = "async"
+
+    def __init__(self):
+        """初始化提交次数。"""
+        self.submit_count = 0
+
+    async def submit(self, request, tool_context):
+        """为每次尝试返回唯一的 Canvas 和 provider 任务标识。"""
+        self.submit_count += 1
+        return GenerationSubmission(
+            "async",
+            "processing",
+            generation_task_id=f"retry-canvas-task-{self.submit_count}",
+            provider_task_id=f"retry-provider-task-{self.submit_count}",
+        )
+
+    async def query(self, request, tool_context):
+        """让每次等待都以失败终止，从而进入下一次受控重试。"""
+        return GenerationQueryResult("failed", error_message="mock retry failure")
+
+
 @pytest.mark.asyncio
 async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp_path) -> None:
     """同步结果直接回写，异步结果通过同一任务 ID 等待后回写。"""
@@ -270,6 +297,70 @@ async def test_async_generation_requires_canvas_and_provider_task_ids() -> None:
         )
 
     assert error.value.code == "GENERATION_TASK_ID_MISSING"
+
+
+@pytest.mark.asyncio
+async def test_async_retry_count_is_carried_to_each_generation_task(tmp_path) -> None:
+    """异步重试的任务记录必须携带当前 Content 的 retry_count。"""
+    port = MockRetryableAsynchronousGenerationPort()
+    tasks = InMemoryGenerationTaskRepository()
+    registry = GenerationCapabilityRegistry([
+        GenerationCapability("mock-retry-video", "video", "async", port, port),
+    ])
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplication(
+        repository,
+        generation_capabilities=registry,
+        generation_tasks=tasks,
+    )
+    await application.initialize("mock-project")
+
+    created = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "video",
+            "element_type": "video",
+            "content": {"source": "generated", "content_type": "video", "prompt": "mock"},
+        }],
+    )
+    element_id = created["items"][0]["element_id"]
+    content_id = created["items"][0]["content_id"]
+    await application.wait("mock-project", ["retry-canvas-task-1"], max_wait_seconds=1)
+
+    retried = await application.retry_content(
+        "mock-project",
+        [{"item_ref": "retry-one", "element_id": element_id, "content_id": content_id}],
+    )
+    assert retried["items"][0]["generation_task_id"] == "retry-canvas-task-2"
+    first_retry_task = await tasks.get("retry-canvas-task-2")
+    assert isinstance(first_retry_task, GenerationTask)
+    assert first_retry_task.retry_count == 1
+    await application.wait("mock-project", ["retry-canvas-task-2"], max_wait_seconds=1)
+
+    retried_again = await application.retry_content(
+        "mock-project",
+        [{"item_ref": "retry-two", "element_id": element_id, "content_id": content_id}],
+    )
+    assert retried_again["items"][0]["generation_task_id"] == "retry-canvas-task-3"
+    second_retry_task = await tasks.get("retry-canvas-task-3")
+    assert isinstance(second_retry_task, GenerationTask)
+    assert second_retry_task.retry_count == 2
+
+
+def test_hierarchy_mutation_plan_replaces_selected_root_elements_in_order() -> None:
+    """层级变更计划应用后应保留未选节点顺序并在首个选中位置插入 Frame。"""
+    canvas = CanvasDocument(
+        elements=[
+            CanvasElement("a", "text"),
+            CanvasElement("b", "image"),
+            CanvasElement("c", "video"),
+        ]
+    )
+    frame = CanvasElement("frame-1", "frame", children=[])
+
+    HierarchyMutationPlan(frame=frame, selected_ids=("b", "c"), root_insert_index=1).apply(canvas)
+
+    assert [element.element_id for element in canvas.elements] == ["a", "frame-1"]
 
 
 @pytest.mark.asyncio

@@ -34,7 +34,12 @@ from app.tools.canvas.repository import CanvasRepository, CanvasUnitOfWork
 from app.tools.canvas.query import CanvasQueryService
 from app.tools.canvas.sidecar import ElementDetailsAdapter
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrategyRegistry, LayoutStrategyRegistry
-from app.tools.canvas.hierarchy import ElementTreeIndex, FrameSelectionRequest, FrameSelectionStrategy
+from app.tools.canvas.hierarchy import (
+    ElementTreeIndex,
+    FrameSelectionRequest,
+    FrameSelectionStrategy,
+    HierarchyMutationPlan,
+)
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 _default_generation_tasks = InMemoryGenerationTaskRepository()
@@ -206,12 +211,12 @@ class CanvasApplication:
                 plan = self.frame_selection.plan(project.canvas, request)
                 children = [child.clone() for child in plan.children]
                 plan.frame.children = children
-                project.canvas.elements[:] = [
-                    element for element in project.canvas.elements if element.element_id not in request.element_ids
-                ]
-                insert_index = min(plan.root_insert_index, len(project.canvas.elements))
-                project.canvas.insert_element(plan.frame, index=insert_index)
-                selected_ids.update(request.element_ids)
+                HierarchyMutationPlan(
+                    frame=plan.frame,
+                    selected_ids=plan.selected_ids,
+                    root_insert_index=plan.root_insert_index,
+                ).apply(project.canvas)
+                selected_ids.update(plan.selected_ids)
                 results.append({
                     "item_ref": item["item_ref"],
                     "frame_element_id": plan.frame.element_id,
@@ -498,6 +503,7 @@ class CanvasApplication:
                 "element_id": item["element_id"],
                 "content_id": item["content_id"],
                 "element_type": element.element_type if element else "image",
+                "retry_count": int(detail.get("retryCount", 0)),
                 "parameters": detail.get("generationParameters", {}),
             })
         return await self._submit_generated(project_path, result, generated, tool_context)
@@ -669,6 +675,7 @@ class CanvasApplication:
                     content_id=content.content_id,
                     element_type=element.element_type,
                     capability_name="recovered",
+                    retry_count=int(detail.get("retryCount", 0)),
                     status=str(detail.get("generationStatus") or content.fields.get("status") or "processing"),
                     error=detail.get("errorMessage") or content.fields.get("errorMessage"),
                     output_uri=detail.get("outputUri") or content.fields.get("src"),
@@ -718,6 +725,7 @@ class CanvasApplication:
                     content_id=item["content_id"],
                     element_type=item["element_type"],
                     capability_name=capability.name,
+                    retry_count=int(item.get("retry_count", 0)),
                     status=submission.status,
                     error=submission.error_message,
                     output_uri=submission.output_uri,

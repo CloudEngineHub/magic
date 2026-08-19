@@ -141,6 +141,7 @@ class GenerationTask:
     content_id: str
     element_type: str
     capability_name: str
+    retry_count: int = 0
     status: str = "processing"
     error: str | None = None
     output_uri: str | None = None
