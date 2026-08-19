@@ -77,12 +77,14 @@ class DesignVideoPollConsumer extends ConsumerMessage
         $dataIsolation = DesignDataIsolation::create($msg->organizationCode, $entity->getUserId());
 
         $operationId = $entity->getOperationId();
+        $sandboxId = (string) ($entity->getProviderPayload()['sandbox_id'] ?? '');
         if ($operationId === '') {
             $this->logger->error('design video poll mark failed', [
                 'reason' => 'operation_id_missing',
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => trans('design.video_generation.operation_id_missing'),
             ]);
@@ -101,6 +103,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'submitted_at' => $entity->getProviderPayload()['submitted_at'] ?? null,
                 'deadline_at' => $deadlineAt,
@@ -140,6 +143,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'status' => $status,
                 'provider_result' => is_array($result['provider_result'] ?? null) ? $result['provider_result'] : [],
@@ -160,6 +164,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'status' => $status,
                 'provider_result' => is_array($result['provider_result'] ?? null) ? $result['provider_result'] : [],
@@ -179,6 +184,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
@@ -187,6 +193,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
@@ -222,6 +229,15 @@ class DesignVideoPollConsumer extends ConsumerMessage
             'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
             'archive_skipped_reason' => 'sandbox_workspace_output',
         ], $fileName);
+        $this->logger->info('design video canvas composition completed', [
+            'video_id' => $entity->getGenerationId(),
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
+            'operation_id' => $entity->getOperationId(),
+            'file_dir' => $entity->getFileDir(),
+            'relative_file_path' => $relativePath,
+        ]);
         return true;
     }
 
@@ -456,6 +472,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
             'video_id' => $entity->getGenerationId(),
             'project_id' => $entity->getProjectId(),
             'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
             'operation_id' => $entity->getOperationId(),
             'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
             'error' => $throwable->getMessage(),
@@ -470,6 +487,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
                 'operation_id' => $entity->getOperationId(),
                 'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
                 'error' => $republishThrowable->getMessage(),
@@ -479,6 +497,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
                 'operation_id' => $entity->getOperationId(),
                 'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
                 'error' => $publicErrorMessage,

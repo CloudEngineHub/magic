@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * 负责把画布合成任务提交到现有项目沙箱中的 Super Magic 运行时。
@@ -29,6 +30,7 @@ readonly class DesignCanvasCompositionSubmissionService
         private SandboxGatewayInterface $sandboxGateway,
         private ProjectDomainService $projectDomainService,
         private TopicDomainService $topicDomainService,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -43,6 +45,13 @@ readonly class DesignCanvasCompositionSubmissionService
             $dataIsolation->getCurrentUserId(),
         );
         $sandboxId = $this->resolveSandboxId($contactIsolation, $entity);
+        $this->logger->info('design video canvas composition sandbox resolved', [
+            'video_id' => $entity->getGenerationId(),
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => $sandboxId,
+            'operation_id' => $entity->getGenerationId(),
+        ]);
 
         $result = $this->sandboxGateway->proxySandboxRequest(
             $contactIsolation,

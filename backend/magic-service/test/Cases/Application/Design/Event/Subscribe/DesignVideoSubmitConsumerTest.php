@@ -36,12 +36,21 @@ class DesignVideoSubmitConsumerTest extends TestCase
         $producer->expects($this->once())
             ->method('produce')
             ->with($this->isInstanceOf(DesignVideoPollDelayPublisher::class));
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('info')
+            ->with(
+                'design video async submit succeeded',
+                $this->callback(static fn (array $context): bool => ($context['video_id'] ?? '') === 'composition-1'
+                    && ($context['sandbox_id'] ?? '') === 'sandbox-1'
+                    && ($context['operation_id'] ?? '') === 'composition-operation-1')
+            );
 
         $consumer = new DesignVideoSubmitConsumer(
             new DesignGenerationTaskDomainService($repository),
             new SubmitConsumerSubmissionDomainService(),
             $producer,
-            $this->createMock(LoggerInterface::class),
+            $logger,
         );
 
         $consumer->consumeMessage([
@@ -88,6 +97,7 @@ readonly class SubmitConsumerSubmissionDomainService extends DesignVideoSubmissi
             'provider' => 'super_magic',
             'submit_endpoint' => 'api/sandbox/tasks',
             'operation_id' => 'composition-operation-1',
+            'sandbox_id' => 'sandbox-1',
             'submitted_at' => date(DATE_ATOM),
             'poll_attempts' => 0,
             'deadline_at' => date(DATE_ATOM, time() + 3600),

@@ -310,10 +310,38 @@ class DesignVideoAppService extends DesignAppService
 
         $requestPayload = $entity->getRequestPayload();
         $composition = is_array($requestPayload['composition'] ?? null) ? $requestPayload['composition'] : [];
+        /** @var array<string, array{names: array<string, bool>, paths: array<string, string>}> $filesByParentPath */
+        $filesByParentPath = [];
         foreach (['videos', 'audios'] as $mediaType) {
             foreach ((array) ($composition[$mediaType] ?? []) as $media) {
                 $path = trim((string) ($media['path'] ?? ''));
-                $taskFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $path);
+                [$parentPath, $fileName] = $this->splitWorkspacePath($path);
+                $filesByParentPath[$parentPath]['names'][$fileName] = true;
+                $filesByParentPath[$parentPath]['paths'][$fileName] = $path;
+            }
+        }
+
+        foreach ($filesByParentPath as $parentPath => $fileData) {
+            $parentDirectory = $this->normalizeWorkspacePath($entity->getFileDir()) === $parentPath
+                ? $taskFileDir
+                : $this->taskFileDomainService->findEntityByRelativePath($projectId, $parentPath);
+            if (! $parentDirectory || ! $parentDirectory->getIsDirectory()) {
+                $missingPath = array_values($fileData['paths'])[0] ?? $parentPath;
+                ExceptionBuilder::throw(
+                    DesignErrorCode::InvalidArgument,
+                    'design.video_generation.reference_file_not_exists',
+                    ['file_key' => $missingPath]
+                );
+            }
+
+            $fileNames = array_keys($fileData['names']);
+            $files = $this->taskFileDomainService->getByProjectParentAndNames(
+                $projectId,
+                $parentDirectory->getFileId(),
+                $fileNames,
+            );
+            foreach ($fileData['paths'] as $fileName => $path) {
+                $taskFile = $files[$fileName] ?? null;
                 if (! $taskFile || $taskFile->getIsDirectory()) {
                     ExceptionBuilder::throw(
                         DesignErrorCode::InvalidArgument,
@@ -325,6 +353,30 @@ class DesignVideoAppService extends DesignAppService
         }
 
         return $taskFileDir;
+    }
+
+    /**
+     * 拆分工作区相对路径，返回父目录路径和文件名。
+     *
+     * @return array{string, string}
+     */
+    private function splitWorkspacePath(string $path): array
+    {
+        $segments = array_values(array_filter(
+            explode('/', trim($path, '/')),
+            static fn (string $segment): bool => $segment !== ''
+        ));
+        $fileName = (string) array_pop($segments);
+        $parentPath = $segments === [] ? '/' : '/' . implode('/', $segments);
+
+        return [$parentPath, $fileName];
+    }
+
+    /** 统一工作区路径格式，用于判断是否可以复用已解析的输出目录。 */
+    private function normalizeWorkspacePath(string $path): string
+    {
+        $path = '/' . trim($path, '/');
+        return $path === '/' ? $path : rtrim($path, '/');
     }
 
     /**
