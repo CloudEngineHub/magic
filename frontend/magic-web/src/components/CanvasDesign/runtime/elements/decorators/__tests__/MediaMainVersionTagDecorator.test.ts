@@ -135,7 +135,15 @@ describe("MediaMainVersionTagDecorator", () => {
 		const tag = group.findOne<Konva.Group>(".decorator-media-main-version-tag")
 		expect(tag?.visible()).toBe(true)
 
-		stage.scale({ x: 1.5, y: 1.5 })
+		stage.scale({ x: 0.5, y: 0.5 })
+		handlers.get("viewport:scale")?.[0]?.()
+		expect(tag?.visible()).toBe(true)
+
+		stage.scale({ x: 0.3, y: 0.3 })
+		handlers.get("viewport:scale")?.[0]?.()
+		expect(tag?.visible()).toBe(false)
+
+		stage.scale({ x: 0.2, y: 0.2 })
 		handlers.get("viewport:scale")?.[0]?.()
 		expect(tag?.visible()).toBe(false)
 

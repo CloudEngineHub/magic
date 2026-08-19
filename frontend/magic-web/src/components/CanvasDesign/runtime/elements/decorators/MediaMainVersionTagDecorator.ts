@@ -132,11 +132,16 @@ export class MediaMainVersionTagDecorator {
 		const offsetY = resolveImageControlCanvasOffset(totalScaleY)
 		const elementScreenWidth = Math.abs(this.config.width * totalScaleX)
 		const elementScreenHeight = Math.abs(this.config.height * totalScaleY)
+		const offsetScreenX = offsetX * totalScaleX
+		const offsetScreenY = offsetY * totalScaleY
+		const tagScreenWidth = this.tag.width()
+		const tagScreenHeight = this.tag.height()
 
 		this.tag.scale({ x: 1 / totalScaleX, y: 1 / totalScaleY })
 		this.tag.position({ x: offsetX, y: offsetY })
 		this.tag.visible(
-			Math.min(elementScreenWidth, elementScreenHeight) >= LAYOUT.MIN_CONTENT_SCREEN_SIZE,
+			elementScreenWidth >= tagScreenWidth + offsetScreenX * 2 &&
+				elementScreenHeight >= tagScreenHeight + offsetScreenY * 2,
 		)
 		this.tag.opacity(this.config.canvas.readonly ? 0.55 : 1)
 		this.tag.moveToTop()
