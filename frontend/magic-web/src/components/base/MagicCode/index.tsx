@@ -58,6 +58,8 @@ const MagicCode = memo((props: MagicCodeProps) => {
 	const { isWrapped, toggle: toggleWrap } = useCodeBlockWrapPreference(enableWrapToggle)
 	const wrapLabel = t("chat.markdown.wrapCode")
 	const unwrapLabel = t("chat.markdown.unwrapCode")
+	const wrapActionLabel = isWrapped ? unwrapLabel : wrapLabel
+	const copyLabel = copyText ?? t("chat.markdown.copy")
 
 	const { appearance } = useThemeMode()
 
@@ -109,12 +111,12 @@ const MagicCode = memo((props: MagicCodeProps) => {
 							className={cx(styles.action, "magic-code-wrap")}
 							onClick={toggleWrap}
 							size="small"
-							aria-label={isWrapped ? unwrapLabel : wrapLabel}
+							aria-label={wrapActionLabel}
 							aria-pressed={isWrapped}
-							tip={isWrapped ? unwrapLabel : wrapLabel}
+							tip={wrapActionLabel}
 							icon={<WrapText size={iconSize} />}
 						>
-							{isWrapped ? unwrapLabel : wrapLabel}
+							{enableWrapToggle ? null : wrapActionLabel}
 						</MagicButton>
 					) : null}
 					<MagicButton
@@ -122,6 +124,8 @@ const MagicCode = memo((props: MagicCodeProps) => {
 						className={cx(styles.action, "magic-code-copy")}
 						onClick={setCopied}
 						size="small"
+						aria-label={copyLabel}
+						tip={copyLabel}
 						icon={
 							<MagicIcon
 								color="currentColor"
@@ -130,7 +134,7 @@ const MagicCode = memo((props: MagicCodeProps) => {
 							/>
 						}
 					>
-						{copyText ?? t("chat.markdown.copy")}
+						{enableWrapToggle ? null : copyLabel}
 					</MagicButton>
 				</div>
 			) : null}
