@@ -36,7 +36,7 @@ class RowIncrementalLayoutStrategy(LayoutStrategyInterface):
         """复用默认设计布局语义，为新节点寻找下一处稳定位置。"""
         positioned = [
             item
-            for item in canvas.iter_elements()
+            for item in canvas.siblings(element.element_id)
             if item.element_id != element.element_id
             and item.properties.get("visible") is not False
             and _number(item.properties.get("x")) is not None
@@ -75,9 +75,10 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
 
     def apply(self, canvas: CanvasDocument, element: CanvasElement, request: dict[str, Any], index: int) -> None:
         """根据直接上游把目标放在右侧，并只向下避让碰撞。"""
+        parent_id = canvas.parent_map().get(element.element_id)
         occupied = [
             item
-            for item in canvas.iter_elements()
+            for item in canvas.siblings(element.element_id)
             if item.element_id != element.element_id
             and _number(item.properties.get("x")) is not None
             and _number(item.properties.get("y")) is not None
@@ -89,6 +90,12 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
         ]
         sources = [canvas.get_element(source_id) for source_id in dict.fromkeys(source_ids)]
         sources = [source for source in sources if source is not None]
+        parent_map = canvas.parent_map()
+        if any(parent_map.get(source.element_id) != parent_id for source in sources):
+            raise CanvasDomainError(
+                "LAYOUT_CROSS_CONTAINER_UNSUPPORTED",
+                "Dependency layout requires all connected Elements to share the same direct parent.",
+            )
         if sources:
             if any(_number(source.properties.get("x")) is None or _number(source.properties.get("y")) is None for source in sources):
                 raise CanvasDomainError("LAYOUT_SOURCE_UNPOSITIONED", "Dependency layout requires positioned upstream Elements.")
@@ -164,7 +171,7 @@ def _assign_next_z_index(canvas: CanvasDocument, element: CanvasElement) -> None
     maximum = max(
         (
             value
-            for item in canvas.iter_elements()
+            for item in canvas.siblings(element.element_id)
             if item.element_id != element.element_id
             and (value := _number(item.properties.get("zIndex"))) is not None
         ),

@@ -6,17 +6,19 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 from typing import Protocol
 
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.repository import CanvasPathResolver
+from app.utils.async_file_utils import async_exists, async_stat
 
 
 class AssetGateway(Protocol):
     """定义 imported Content 所需的素材访问能力。"""
 
-    def normalize_existing_file(self, asset_path: str) -> str:
+    async def normalize_existing_file(self, asset_path: str) -> str:
         """校验素材并返回规范化的工作区相对路径。"""
 
 
@@ -27,7 +29,7 @@ class WorkspaceAssetGateway:
         """保存工作区根目录。"""
         self.workspace = workspace
 
-    def normalize_existing_file(self, asset_path: str) -> str:
+    async def normalize_existing_file(self, asset_path: str) -> str:
         """拒绝工作区外路径、目录和不存在的素材。"""
         try:
             resolved = CanvasPathResolver.resolve(self.workspace, asset_path)
@@ -36,6 +38,6 @@ class WorkspaceAssetGateway:
                 "ASSET_PATH_INVALID",
                 "Imported asset path must be a workspace-relative path.",
             ) from exc
-        if not resolved.exists() or not resolved.is_file():
+        if not await async_exists(resolved) or not stat.S_ISREG((await async_stat(resolved)).st_mode):
             raise CanvasDomainError("ASSET_NOT_FOUND", f"Imported asset does not exist: {asset_path}.")
         return resolved.relative_to(self.workspace.resolve()).as_posix()

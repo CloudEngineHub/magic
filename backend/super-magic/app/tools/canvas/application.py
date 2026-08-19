@@ -12,23 +12,30 @@ from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.assets import AssetGateway, WorkspaceAssetGateway
+from app.tools.canvas.batch import AtomicBatchGuard
 from app.tools.canvas.codec import SUPPORTED_ELEMENT_TYPES
+from app.tools.canvas.connection_ledger import ConnectionOperationLedger
+from app.tools.canvas.content_metadata import ContentMetadataService
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasElement, CanvasProject
 from app.tools.canvas.generation import (
-    AsynchronousGenerationStrategy,
+    CanvasGenerationResultApplier,
     GenerationCapabilityRegistry,
+    GenerationExecutionStrategyRegistry,
     GenerationQueryRequest,
     GenerationRequest,
+    GenerationTaskPoller,
     GenerationSubmission,
     GenerationTask,
     GenerationTaskRepository,
     InMemoryGenerationTaskRepository,
-    SynchronousGenerationStrategy,
 )
-from app.tools.canvas.repository import CanvasRepository
+from app.tools.canvas.repository import CanvasRepository, CanvasUnitOfWork
+from app.tools.canvas.query import CanvasQueryService
 from app.tools.canvas.sidecar import ElementDetailsAdapter
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrategyRegistry, LayoutStrategyRegistry
+from app.tools.canvas.hierarchy import ElementTreeIndex, FrameSelectionRequest, FrameSelectionStrategy
+from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 _default_generation_tasks = InMemoryGenerationTaskRepository()
 
@@ -54,15 +61,19 @@ class CanvasApplication:
     ):
         """初始化用例门面和仓储。"""
         self.repository = repository
+        self.unit_of_work = CanvasUnitOfWork(repository)
         self.layout_strategies = layout_strategies or LayoutStrategyRegistry()
         self.content_strategies = content_strategies or ContentStrategyRegistry()
         self.connection_strategies = connection_strategies or ConnectionStrategyRegistry()
         self.sidecar_adapter = ElementDetailsAdapter()
+        self.query_service = CanvasQueryService(repository, self.sidecar_adapter)
         self.generation_capabilities = generation_capabilities or GenerationCapabilityRegistry(workspace=repository.workspace)
         self.generation_tasks = generation_tasks or _default_generation_tasks
         self.asset_gateway = asset_gateway or WorkspaceAssetGateway(repository.workspace)
-        self._sync_generation = SynchronousGenerationStrategy()
-        self._async_generation = AsynchronousGenerationStrategy()
+        self.frame_selection = FrameSelectionStrategy()
+        self.generation_execution = GenerationExecutionStrategyRegistry()
+        self.generation_poller = GenerationTaskPoller()
+        self.generation_result_applier = CanvasGenerationResultApplier()
 
     async def initialize(self, project_path: str) -> dict[str, Any]:
         """创建或复用一个 Canvas 项目。"""
@@ -71,84 +82,11 @@ class CanvasApplication:
 
     async def overview(self, project_path: str, page: int, limit: int) -> dict[str, Any]:
         """返回分页的轻量 Element 概览。"""
-        project = await self.repository.read(project_path)
-        elements = project.canvas.iter_elements()
-        total = len(elements)
-        start = (page - 1) * limit
-        page_items = elements[start : start + limit]
-        connection_map: dict[str, dict[str, list[str]]] = {
-            element.element_id: {"incoming": [], "outgoing": []} for element in elements
-        }
-        for connection in project.canvas.connections:
-            if connection.source_element_id in connection_map:
-                connection_map[connection.source_element_id]["outgoing"].append(connection.target_element_id)
-            if connection.target_element_id in connection_map:
-                connection_map[connection.target_element_id]["incoming"].append(connection.source_element_id)
-        return {
-            "project_path": project_path,
-            "project_name": project.name,
-            "total_elements": total,
-            "total_connections": len(project.canvas.connections),
-            "page": page,
-            "limit": limit,
-            "has_more": start + limit < total,
-            "elements": [
-                {
-                    "element_id": element.element_id,
-                    "element_type": element.element_type,
-                    "name": element.properties.get("name"),
-                    "x": element.properties.get("x"),
-                    "y": element.properties.get("y"),
-                    "width": element.properties.get("width"),
-                    "height": element.properties.get("height"),
-                    "content_count": len(element.contents),
-                    "active_content_id": element.active_content_id,
-                    "main_content_id": element.main_content_id,
-                    "status": (element.get_content(element.active_content_id) or CanvasContent("", {})).fields.get("status"),
-                    **connection_map[element.element_id],
-                }
-                for element in page_items
-            ],
-        }
+        return await self.query_service.overview(project_path, page, limit)
 
     async def elements(self, project_path: str, element_ids: list[str]) -> dict[str, Any]:
         """返回精确 Element 的模型友好业务 DTO 和关联连线。"""
-        project = await self.repository.read(project_path)
-        sidecar_warnings: list[str] = []
-        try:
-            baseline = await self.repository.read_sidecar(project_path, "element-details.json")
-        except ValueError:
-            baseline = {}
-            sidecar_warnings.append("Some generated Content details are temporarily unavailable.")
-        try:
-            user = await self.repository.read_sidecar(project_path, "element-details-user.json")
-        except ValueError:
-            user = {}
-            sidecar_warnings.append("Some user-provided Content details are temporarily unavailable.")
-        merged_details = self.sidecar_adapter.merge(project, baseline, user)
-        requested = []
-        for element_id in element_ids:
-            element = project.canvas.get_element(element_id)
-            if element is None:
-                raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {element_id} does not exist.")
-            requested.append(element)
-        selected = set(element_ids)
-        connections = [
-            {
-                "connection_id": connection.connection_id,
-                "source_element_id": connection.source_element_id,
-                "target_element_id": connection.target_element_id,
-            }
-            for connection in project.canvas.connections
-            if connection.source_element_id in selected or connection.target_element_id in selected
-        ]
-        return {
-            "project_path": project_path,
-            "details_complete": not sidecar_warnings,
-            "elements": [self._element_details_dto(element, merged_details.get(element.element_id, {}), connections) for element in requested],
-            "connections": connections,
-            "warnings": sidecar_warnings,
-        }
+        return await self.query_service.elements(project_path, element_ids)
 
     async def add_elements(
         self,
@@ -159,13 +97,16 @@ class CanvasApplication:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[dict[str, Any]] = []
         self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
 
-        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+            nonlocal current_item_ref
             created: dict[str, str] = {}
             results: list[dict[str, Any]] = []
             layout_requests: list[tuple[CanvasElement, dict[str, Any] | None]] = []
             for item in items:
                 item_ref = item["item_ref"]
+                current_item_ref = item_ref
                 if item.get("element_type") not in SUPPORTED_ELEMENT_TYPES:
                     raise CanvasDomainError(
                         "INVALID_ELEMENT",
@@ -180,10 +121,18 @@ class CanvasApplication:
                     properties={"name": item.get("name")} if item.get("name") else {},
                 )
                 content = item.get("content")
+                if element.element_type in {"frame", "group"}:
+                    if content is not None:
+                        raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
+                    content_id = _new_id("content")
+                    element.contents.append(CanvasContent(content_id, {}))
+                    element.active_content_id = content_id
+                    element.main_content_id = content_id
+                    element.children = []
                 generated_content_id = None
                 if content:
                     content = dict(content)
-                    self._prepare_imported_content(project, content)
+                    await self._prepare_imported_content(project, content)
                     content.setdefault("content_id", _new_id("content"))
                     element.contents.append(self._build_content(content, element.element_type))
                     element.active_content_id = element.contents[0].content_id
@@ -208,6 +157,7 @@ class CanvasApplication:
                 created[item_ref] = element_id
                 results.append({"item_ref": item_ref, "element_id": element_id, "content_id": generated_content_id or (element.contents[0].content_id if element.contents else None), "status": "pending" if generated_content_id else "completed"})
             for item in items:
+                current_item_ref = item["item_ref"]
                 current_element_id = created.get(item["item_ref"])
                 for relation in item.get("connections", []):
                     source_id = relation.get("source_element_id") or created.get(relation.get("source_item_ref"))
@@ -220,11 +170,64 @@ class CanvasApplication:
                         raise CanvasDomainError("INVALID_CONNECTION", "Connection reference could not be resolved.")
                     self._add_connection(project, source_id, target_id)
             for index, (element, layout) in enumerate(layout_requests):
+                current_item_ref = items[index]["item_ref"]
                 self._apply_layout(project, element, layout, index)
             return {"items": results, "created_element_ids": list(created.values())}, metadata
 
-        result = await self.repository.transaction_with_sidecar(project_path, mutate)
+        try:
+            result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
         return await self._submit_generated(project_path, result, generated, tool_context)
+
+    async def frame_elements(
+        self,
+        project_path: str,
+        items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """将根级普通兄弟节点框选为新 Frame，并完成局部坐标转换。"""
+        self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
+
+        def mutate(project: CanvasProject) -> dict[str, Any]:
+            nonlocal current_item_ref
+            results: list[dict[str, Any]] = []
+            selected_ids: set[str] = set()
+            for item in items:
+                current_item_ref = item["item_ref"]
+                request = FrameSelectionRequest(
+                    item_ref=item["item_ref"],
+                    element_ids=tuple(item.get("element_ids") or []),
+                    name=item.get("name"),
+                    padding=item.get("padding"),
+                )
+                if selected_ids.intersection(request.element_ids):
+                    raise CanvasDomainError("FRAME_SELECTION_OVERLAP", "Frame selections in one batch cannot overlap.")
+                plan = self.frame_selection.plan(project.canvas, request)
+                children = [child.clone() for child in plan.children]
+                plan.frame.children = children
+                project.canvas.elements[:] = [
+                    element for element in project.canvas.elements if element.element_id not in request.element_ids
+                ]
+                insert_index = min(plan.root_insert_index, len(project.canvas.elements))
+                project.canvas.insert_element(plan.frame, index=insert_index)
+                selected_ids.update(request.element_ids)
+                results.append({
+                    "item_ref": item["item_ref"],
+                    "frame_element_id": plan.frame.element_id,
+                    "child_element_ids": [child.element_id for child in children],
+                    "content_id": plan.frame.active_content_id,
+                    "parent_element_id": None,
+                    "depth": 0,
+                    "padding": plan.padding,
+                    "status": "completed",
+                })
+            return {"items": results}
+
+        try:
+            return await self.unit_of_work.transaction(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
 
     async def add_contents(
         self,
@@ -235,15 +238,20 @@ class CanvasApplication:
         """向已有 Element 追加 Content 版本。"""
         generated: list[dict[str, Any]] = []
         self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
 
-        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+            nonlocal current_item_ref
             results = []
             for item in items:
+                current_item_ref = item["item_ref"]
                 element = project.canvas.get_element(item["element_id"])
                 if element is None:
                     raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item['element_id']} does not exist.")
+                if element.element_type in {"frame", "group"}:
+                    raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
                 content_data = dict(item["content"])
-                self._prepare_imported_content(project, content_data)
+                await self._prepare_imported_content(project, content_data)
                 content_data.setdefault("content_id", _new_id("content"))
                 content = self._build_content(content_data, element.element_type)
                 if element.get_content(content.content_id) is not None:
@@ -272,18 +280,26 @@ class CanvasApplication:
                 )
             return {"items": results}, metadata
 
-        result = await self.repository.transaction_with_sidecar(project_path, mutate)
+        try:
+            result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
         return await self._submit_generated(project_path, result, generated, tool_context)
 
     async def select_main(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
         """只修改用户明确选择的 main Content 指针。"""
         self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
         def mutate(project: CanvasProject) -> dict[str, Any]:
+            nonlocal current_item_ref
             results = []
             for item in items:
+                current_item_ref = item["item_ref"]
                 element = project.canvas.get_element(item["element_id"])
                 if element is None:
                     raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item['element_id']} does not exist.")
+                if element.element_type in {"frame", "group"}:
+                    raise CanvasDomainError("FRAME_CONTENT_MANAGED_INTERNAL", "Frame and Group Content is managed internally.")
                 content = element.get_content(item["content_id"])
                 if content is None:
                     raise CanvasDomainError("CONTENT_NOT_FOUND", f"Content {item['content_id']} does not exist.")
@@ -300,14 +316,20 @@ class CanvasApplication:
                 })
             return {"items": results}
 
-        return await self.repository.transaction(project_path, mutate)
+        try:
+            return await self.unit_of_work.transaction(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
 
     async def layout(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
         """按可插拔布局策略调整 Element 布局。"""
         self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
         def mutate(project: CanvasProject) -> dict[str, Any]:
+            nonlocal current_item_ref
             results = []
             for index, item in enumerate(items):
+                current_item_ref = item["item_ref"]
                 element = project.canvas.get_element(item["element_id"])
                 if element is None:
                     raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item['element_id']} does not exist.")
@@ -315,14 +337,21 @@ class CanvasApplication:
                 results.append({"item_ref": item["item_ref"], "element_id": element.element_id, "strategy": item["layout"]["strategy"]})
             return {"items": results}
 
-        return await self.repository.transaction(project_path, mutate)
+        try:
+            return await self.unit_of_work.transaction(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
 
     async def connections(self, project_path: str, items: list[dict[str, Any]]) -> dict[str, Any]:
         """新增、按 ID 删除或原子替换 Connection。"""
         self._validate_unique_item_refs(items)
-        def mutate(project: CanvasProject) -> dict[str, Any]:
+        current_item_ref: str | None = None
+        def mutate(project: CanvasProject, metadata: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+            nonlocal current_item_ref
+            ledger = ConnectionOperationLedger(metadata)
             results = []
             for item in items:
+                current_item_ref = item["item_ref"]
                 remove_ids = item.get("remove_connection_ids") or []
                 replace = item.get("replace_existing_connections", False)
                 source = item.get("source_element_id")
@@ -345,8 +374,19 @@ class CanvasApplication:
                         None,
                     )
                 if missing_ids:
-                    repeated_remove = not source and not target and not existing_old_connections
-                    repeated_replace = replace and existing_new is not None and not existing_old_connections
+                    repeated_remove = (
+                        not source
+                        and not target
+                        and all(ledger.was_removed(connection_id) for connection_id in missing_ids)
+                    )
+                    repeated_replace = (
+                        replace
+                        and existing_new is not None
+                        and all(
+                            ledger.replacement_matches(connection_id, source, target)
+                            for connection_id in missing_ids
+                        )
+                    )
                     if repeated_remove:
                         results.append({"item_ref": item["item_ref"], "status": "already_removed", "removed_connection_ids": remove_ids})
                         continue
@@ -368,6 +408,9 @@ class CanvasApplication:
                         for old in existing_old_connections:
                             project.canvas.connections.remove(old)
                     connection = self._add_connection(project, source, target)
+                    if replace:
+                        for old_id in remove_ids:
+                            ledger.mark_replaced(old_id, connection.connection_id, source, target)
                     results.append({
                         "item_ref": item["item_ref"],
                         "status": "replaced" if replace else "added",
@@ -379,10 +422,20 @@ class CanvasApplication:
                 else:
                     for old in existing_old_connections:
                         project.canvas.connections.remove(old)
+                    for old_id in remove_ids:
+                        ledger.mark_removed(old_id)
                     results.append({"item_ref": item["item_ref"], "status": "removed", "removed_connection_ids": remove_ids})
-            return {"items": results}
+            ledger.compact()
+            return {"items": results}, metadata
 
-        return await self.repository.transaction(project_path, mutate)
+        try:
+            return await self.unit_of_work.transaction_with_sidecar(
+                project_path,
+                mutate,
+                filename=".canvas-connection-ledger.json",
+            )
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
 
     async def retry_content(
         self,
@@ -392,14 +445,19 @@ class CanvasApplication:
     ) -> dict[str, Any]:
         """校验失败 Content 的受控重试边界；生成提交由后续 Port 接入。"""
         self._validate_unique_item_refs(items)
+        current_item_ref: str | None = None
 
         def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+            nonlocal current_item_ref
             results = []
             for item in items:
+                current_item_ref = item["item_ref"]
                 element = project.canvas.get_element(item["element_id"])
                 content = element.get_content(item["content_id"]) if element else None
                 if element is None or content is None:
                     raise CanvasDomainError("CONTENT_NOT_FOUND", "The requested Content does not exist.")
+                if element.element_type in {"frame", "group"}:
+                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Frame and Group Elements do not have generated Content.")
                 if content.fields.get("status") != "failed":
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only failed generated Content can be retried.")
                 detail = self._get_content_detail(metadata, element.element_id, item["content_id"])
@@ -425,7 +483,10 @@ class CanvasApplication:
                 results.append({"item_ref": item["item_ref"], "element_id": element.element_id, "content_id": content.content_id, "status": "pending"})
             return {"items": results}, metadata
 
-        result = await self.repository.transaction_with_sidecar(project_path, mutate)
+        try:
+            result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
+        except CanvasDomainError as error:
+            raise self._batch_error(items, current_item_ref, error) from error
         project = await self.repository.read(project_path)
         metadata = await self.repository.read_sidecar(project_path)
         generated = []
@@ -451,11 +512,15 @@ class CanvasApplication:
         """轮询异步任务并在终态回写 Content。"""
         if len(task_ids) != len(set(task_ids)):
             raise CanvasDomainError("GENERATION_TASK_ID_INVALID", "generation_task_id values must be unique within a wait call.")
-        deadline = time.monotonic() + max_wait_seconds
-        results = await asyncio.gather(
-            *(self._wait_one_safely(project_path, task_id, deadline, tool_context) for task_id in task_ids)
-        )
-        return {"items": results}
+        keep_alive_task = start_tool_keep_alive(tool_context) if tool_context is not None else None
+        try:
+            deadline = time.monotonic() + max_wait_seconds
+            results = await asyncio.gather(
+                *(self._wait_one_safely(project_path, task_id, deadline, tool_context) for task_id in task_ids)
+            )
+            return {"items": results}
+        finally:
+            stop_tool_keep_alive(keep_alive_task)
 
     async def _wait_one_safely(
         self,
@@ -514,37 +579,43 @@ class CanvasApplication:
                 "error": record.error,
                 "already_finalized": True,
             }
+        if record.element_type in {"frame", "group"}:
+            return {
+                "generation_task_id": task_id,
+                "element_id": record.element_id,
+                "content_id": record.content_id,
+                "status": "not_applicable",
+                "error": "Frame and Group Elements do not have generation tasks.",
+            }
         capability = self.generation_capabilities.get(record.element_type)
         if capability.query_port is None:
             return {"generation_task_id": task_id, "status": "processing", "timed_out": True}
-        while True:
-            query_result = await capability.query_port.query(
-                GenerationQueryRequest(
-                    provider_task_id=record.provider_task_id,
-                    project_path=record.project_path,
-                    element_id=record.element_id,
-                    content_id=record.content_id,
-                ),
-                tool_context,
-            )
-            if query_result.status in {"completed", "failed"}:
-                break
-            if time.monotonic() >= deadline:
-                return {
-                    "generation_task_id": task_id,
-                    "element_id": record.element_id,
-                    "content_id": record.content_id,
-                    "status": query_result.status,
-                    "timed_out": True,
-                    "next_action": "Call wait_canvas_generation again with the same generation_task_id.",
-                }
-            await asyncio.sleep(min(1.0, max(0.05, deadline - time.monotonic())))
+        query_result = await self.generation_poller.poll(
+            capability.query_port,
+            GenerationQueryRequest(
+                provider_task_id=record.provider_task_id,
+                project_path=record.project_path,
+                element_id=record.element_id,
+                content_id=record.content_id,
+            ),
+            deadline,
+            tool_context,
+        )
+        if query_result.status not in {"completed", "failed"}:
+            return {
+                "generation_task_id": task_id,
+                "element_id": record.element_id,
+                "content_id": record.content_id,
+                "status": query_result.status,
+                "timed_out": True,
+                "next_action": "Call wait_canvas_generation again with the same generation_task_id.",
+            }
 
         final_status = query_result.status
 
         def finalize(project: CanvasProject, metadata: dict) -> tuple[None, dict]:
             """在同一项目事务中完成异步结果和任务元数据回写。"""
-            self._apply_generation_result(
+            self.generation_result_applier.apply(
                 project,
                 record.element_id,
                 record.content_id,
@@ -561,7 +632,7 @@ class CanvasApplication:
             })
             return None, metadata
 
-        await self.repository.transaction_with_sidecar(project_path, finalize)
+        await self.unit_of_work.transaction_with_sidecar(project_path, finalize)
         record.status = final_status
         record.error = query_result.error_message
         record.output_uri = query_result.output_uri
@@ -624,7 +695,7 @@ class CanvasApplication:
                 element_type=item["element_type"],
                 parameters=item.get("parameters") or {},
             )
-            strategy = self._sync_generation if capability.execution_mode == "sync" else self._async_generation
+            strategy = self.generation_execution.get(capability.execution_mode)
             try:
                 submission = await strategy.execute(capability, request, tool_context)
             except Exception as error:
@@ -677,7 +748,7 @@ class CanvasApplication:
                 return None, metadata
 
             try:
-                await self.repository.transaction_with_sidecar(project_path, persist)
+                await self.unit_of_work.transaction_with_sidecar(project_path, persist)
             except Exception as error:
                 if not submission.generation_task_id:
                     raise
@@ -699,30 +770,12 @@ class CanvasApplication:
     @staticmethod
     def _get_content_detail(metadata: dict, element_id: str, content_id: str) -> dict[str, Any]:
         """读取 Content 级 sidecar；兼容早期顶层 contentDetails 形态。"""
-        elements = metadata.get("elements") if isinstance(metadata, dict) else None
-        if isinstance(elements, dict):
-            element = elements.get(element_id)
-            if isinstance(element, dict):
-                details = element.get("contentDetails")
-                if isinstance(details, dict) and isinstance(details.get(content_id), dict):
-                    return dict(details[content_id])
-        legacy = metadata.get("contentDetails") if isinstance(metadata, dict) else None
-        if isinstance(legacy, dict) and isinstance(legacy.get(content_id), dict):
-            return dict(legacy[content_id])
-        return {}
+        return ContentMetadataService.get(metadata, element_id, content_id)
 
     @staticmethod
     def _set_content_detail(metadata: dict, element_id: str, content_id: str, detail: dict[str, Any]) -> None:
         """按 Element -> Content 的标准 sidecar 结构写入内部详情。"""
-        metadata.setdefault("version", "2.0.0")
-        elements = metadata.setdefault("elements", {})
-        element = elements.setdefault(element_id, {})
-        element.setdefault("contentDetails", {})[content_id] = detail
-        legacy = metadata.get("contentDetails")
-        if isinstance(legacy, dict):
-            legacy.pop(content_id, None)
-            if not legacy:
-                metadata.pop("contentDetails", None)
+        ContentMetadataService.set(metadata, element_id, content_id, detail)
 
     @staticmethod
     def _apply_generation_result(
@@ -733,29 +786,19 @@ class CanvasApplication:
         output_uri: str | None,
         error_message: str | None,
     ) -> None:
-        """只回写程序托管的生成状态和结果字段。"""
-        element = project.canvas.get_element(element_id)
-        content = element.get_content(content_id) if element else None
-        if content is None:
-            raise CanvasDomainError("CONTENT_NOT_FOUND", "Generated Content no longer exists.")
-        content.fields["status"] = status
-        if output_uri:
-            content.fields["src"] = output_uri
-        if error_message:
-            content.fields["errorMessage"] = error_message
-        else:
-            content.fields.pop("errorMessage", None)
+        """兼容旧调用方，委托给独立结果回写器。"""
+        CanvasGenerationResultApplier.apply(project, element_id, content_id, status, output_uri, error_message)
 
     def _build_content(self, data: dict[str, Any], element_type: str) -> CanvasContent:
         """把模型输入转换为主协议允许的 Content 字段。"""
         return self.content_strategies.build(data, element_type)
 
-    def _prepare_imported_content(self, project: CanvasProject, data: dict[str, Any]) -> None:
+    async def _prepare_imported_content(self, project: CanvasProject, data: dict[str, Any]) -> None:
         """规范化 imported 素材路径并阻止同一素材重复登记。"""
         if data.get("source") != "imported":
             return
         asset_path = str(data.pop("asset_path", "") or "")
-        normalized = self.asset_gateway.normalize_existing_file(asset_path)
+        normalized = await self.asset_gateway.normalize_existing_file(asset_path)
         existing_paths = {
             str(content.fields.get("src"))
             for element in project.canvas.iter_elements()
@@ -769,26 +812,21 @@ class CanvasApplication:
     @staticmethod
     def _new_content_detail(element_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """创建不进入主协议的 Content 来源与生成尝试详情。"""
-        detail: dict[str, Any] = {
-            "elementId": element_id,
-            "source": data.get("source", "user"),
-        }
-        if data.get("source") == "generated":
-            detail.update({
-                "retryCount": 0,
-                "generationStatus": "pending",
-                "generationParameters": dict(data),
-            })
-        elif data.get("source") == "imported":
-            detail["assetPath"] = data.get("src")
-        return detail
+        return ContentMetadataService.new_detail(element_id, data)
 
     @staticmethod
     def _validate_unique_item_refs(items: list[dict[str, Any]]) -> None:
         """保证批次关联标签唯一，避免同批引用产生歧义。"""
-        refs = [str(item.get("item_ref") or "") for item in items]
-        if any(not item_ref for item_ref in refs) or len(refs) != len(set(refs)):
-            raise CanvasDomainError("ITEM_REF_INVALID", "item_ref values must be non-empty and unique within a batch.")
+        AtomicBatchGuard.validate_item_refs(items)
+
+    @staticmethod
+    def _batch_error(
+        items: list[dict[str, Any]],
+        failed_item_ref: str | None,
+        error: CanvasDomainError,
+    ) -> CanvasDomainError:
+        """把多项原子批量异常转换为逐项结果，单项保留原错误码。"""
+        return AtomicBatchGuard.map_error(items, failed_item_ref, error)
 
     @staticmethod
     def _merge_generation_override(
@@ -797,24 +835,7 @@ class CanvasApplication:
         override: dict[str, Any] | None,
     ) -> dict[str, Any]:
         """只允许覆盖指定生成能力公开的输入字段。"""
-        allowed = {
-            "image": {"prompt", "size", "model_id", "name", "reference_images"},
-            "video": {
-                "prompt", "model_id", "name", "reference_image_paths", "reference_video_paths",
-                "reference_audio_paths", "frame_start_path", "frame_end_path", "size",
-                "duration_seconds", "aspect_ratio", "resolution", "fps", "seed", "watermark", "extensions",
-            },
-        }.get(element_type)
-        if allowed is None:
-            raise CanvasDomainError("GENERATION_NOT_CONFIGURED", f"No retry capability is configured for {element_type}.")
-        values = dict(override or {})
-        unexpected = set(values) - allowed
-        if unexpected:
-            raise CanvasDomainError(
-                "CONTENT_FIELD_MANAGED_INTERNAL",
-                f"Generation override contains unsupported fields: {', '.join(sorted(unexpected))}.",
-            )
-        return {**dict(original or {}), **values}
+        return ContentMetadataService.merge_generation_override(element_type, original, override)
 
     @staticmethod
     def _start_retry_detail(
@@ -824,88 +845,17 @@ class CanvasApplication:
         parameters: dict[str, Any],
     ) -> dict[str, Any]:
         """归档上一次终态并创建不复用旧任务绑定的新重试详情。"""
-        updated = dict(detail)
-        history = list(updated.get("attemptHistory") or [])
-        if updated.get("generationStatus") in {"completed", "failed"}:
-            history.append({
-                "generationTaskId": updated.get("generationTaskId"),
-                "generationStatus": updated.get("generationStatus"),
-                "outputUri": updated.get("outputUri"),
-                "errorMessage": updated.get("errorMessage"),
-            })
-        for key in ("providerTaskId", "generationTaskId", "outputUri", "errorMessage"):
-            updated.pop(key, None)
-        updated.update({
-            "elementId": element_id,
-            "source": "generated",
-            "retryCount": retry_count,
-            "generationStatus": "pending",
-            "generationParameters": parameters,
-            "attemptHistory": history,
-        })
-        return updated
+        return ContentMetadataService.start_retry(element_id, detail, retry_count, parameters)
 
     @staticmethod
     def _element_details_dto(
         element: CanvasElement,
         details: dict[str, dict[str, Any]],
         connections: list[dict[str, Any]],
+        tree: ElementTreeIndex,
     ) -> dict[str, Any]:
-        """把持久化字段和内部详情转换为稳定的 Tool DTO。"""
-        layout_keys = {
-            "x": "x", "y": "y", "width": "width", "height": "height",
-            "scaleX": "scale_x", "scaleY": "scale_y", "zIndex": "z_index",
-        }
-        layout = {
-            public_key: element.properties[stored_key]
-            for stored_key, public_key in layout_keys.items()
-            if stored_key in element.properties
-        }
-        contents = []
-        for content in element.contents:
-            detail = details.get(content.content_id, {})
-            payload = {
-                key: value
-                for key, value in content.fields.items()
-                if key not in {
-                    "src", "status", "errorMessage", "generateImageRequest", "generateVideoRequest",
-                    "imageGenerationTaskMeta", "videoGenerationResultMeta",
-                }
-            }
-            item = {
-                "content_id": content.content_id,
-                "status": content.fields.get("status"),
-                "asset_path": content.fields.get("src"),
-                "error_message": (
-                    "Generation failed; ask the user whether to retry."
-                    if content.fields.get("errorMessage")
-                    else None
-                ),
-                "source": detail.get("source"),
-                "retry_count": int(detail.get("retryCount", 0)),
-                "generation_task_id": detail.get("generationTaskId"),
-                "generation_parameters": detail.get("generationParameters"),
-                "payload": payload or None,
-            }
-            contents.append({key: value for key, value in item.items() if value is not None})
-        return {
-            "element_id": element.element_id,
-            "element_type": element.element_type,
-            "name": element.properties.get("name"),
-            "visible": element.properties.get("visible"),
-            "locked": element.properties.get("locked"),
-            "opacity": element.properties.get("opacity"),
-            "layout": layout,
-            "active_content_id": element.active_content_id,
-            "main_content_id": element.main_content_id,
-            "contents": contents,
-            "connections": [
-                connection
-                for connection in connections
-                if connection["source_element_id"] == element.element_id
-                or connection["target_element_id"] == element.element_id
-            ],
-        }
+        """兼容旧调用方，委托给独立查询服务。"""
+        return CanvasQueryService.element_details_dto(element, details, connections, tree)
 
     def _apply_layout(self, project: CanvasProject, element: CanvasElement, layout: dict[str, Any] | None, index: int) -> None:
         """执行最小布局策略集合。"""

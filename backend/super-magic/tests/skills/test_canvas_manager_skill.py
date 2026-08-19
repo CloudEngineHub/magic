@@ -17,6 +17,18 @@ def test_skill_constrains_retry_and_connection_boundaries() -> None:
     assert "Element and Content deletion are not available" in content
 
 
+def test_skill_describes_frame_boundaries_and_follow_up_ids() -> None:
+    """Skill 必须说明 Frame 的选区边界、局部坐标和后续真实 ID。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "frame_canvas_elements" in content
+    assert "frame_element_id" in content
+    assert "child_element_ids" in content
+    assert "local" in content
+    assert "does not frame existing Frames/Groups" in content
+    assert "unframing" in content
+
+
 def test_skill_does_not_expose_protocol_version_or_storage_driver() -> None:
     """Skill 不应把协议版本和底层驱动暴露给模型。"""
     content = SKILL_PATH.read_text(encoding="utf-8")

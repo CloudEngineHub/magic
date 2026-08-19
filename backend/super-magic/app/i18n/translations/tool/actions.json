@@ -759,10 +759,14 @@
         "zh_CN": "查看画布节点",
         "en_US": "Inspect canvas elements"
     },
-    "canvas.add_elements": {
-        "zh_CN": "新增画布节点",
-        "en_US": "Add canvas elements"
-    },
+  "canvas.add_elements": {
+    "zh_CN": "新增画布节点",
+    "en_US": "Add canvas elements"
+  },
+  "canvas.frame_elements": {
+    "zh_CN": "框选画布节点",
+    "en_US": "Frame canvas elements"
+  },
     "canvas.add_generated_content": {
         "zh_CN": "生成画布内容",
         "en_US": "Generate canvas content"

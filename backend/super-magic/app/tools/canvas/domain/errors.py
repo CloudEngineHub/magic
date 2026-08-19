@@ -15,6 +15,15 @@ class CanvasProtocolError(CanvasDomainError):
     """表示主文件协议无法解析或校验失败的内部错误。"""
 
 
+class CanvasBatchError(CanvasDomainError):
+    """表示原子批量请求未写入，并携带逐项失败结果。"""
+
+    def __init__(self, items: list[dict], message: str = "Canvas batch validation failed."):
+        """保存每个 item 的状态，避免一个异常覆盖整个批次。"""
+        super().__init__("BATCH_VALIDATION_FAILED", message)
+        self.items = items
+
+
 def canvas_error(code: str, message: str) -> CanvasDomainError:
     """创建统一的 Canvas 业务错误。"""
     return CanvasDomainError(code, message)

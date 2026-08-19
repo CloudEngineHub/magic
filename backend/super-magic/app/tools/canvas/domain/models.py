@@ -123,6 +123,87 @@ class CanvasDocument:
         """按 Element ID 查找节点。"""
         return next((element for element in self.iter_elements() if element.element_id == element_id), None)
 
+    def parent_map(self) -> dict[str, str | None]:
+        """构建 Element 到直接父级的索引。"""
+        result: dict[str, str | None] = {}
+
+        def visit(element: CanvasElement, parent_id: str | None) -> None:
+            result[element.element_id] = parent_id
+            for child in element.children or []:
+                visit(child, element.element_id)
+
+        for element in self.elements:
+            visit(element, None)
+        return result
+
+    def depth_map(self) -> dict[str, int]:
+        """构建 Element 到树深度的索引。"""
+        result: dict[str, int] = {}
+
+        def visit(element: CanvasElement, depth: int) -> None:
+            result[element.element_id] = depth
+            for child in element.children or []:
+                visit(child, depth + 1)
+
+        for element in self.elements:
+            visit(element, 0)
+        return result
+
+    def direct_children(self, element_id: str) -> list[CanvasElement]:
+        """返回指定 Frame/Group 的直接子节点。"""
+        element = self.get_element(element_id)
+        return list(element.children or []) if element is not None else []
+
+    def parent_element(self, element_id: str) -> CanvasElement | None:
+        """返回 Element 的直接父容器。"""
+        parent_id = self.parent_map().get(element_id)
+        return self.get_element(parent_id) if parent_id else None
+
+    def siblings(self, element_id: str) -> list[CanvasElement]:
+        """返回 Element 所在直接父级坐标空间中的兄弟节点。"""
+        parent = self.parent_element(element_id)
+        return list(parent.children or []) if parent is not None else list(self.elements)
+
+    def remove_element(self, element_id: str) -> CanvasElement | None:
+        """从根级列表或直接父容器中移除 Element。"""
+        for index, element in enumerate(self.elements):
+            if element.element_id == element_id:
+                return self.elements.pop(index)
+        return self._remove_child(self.elements, element_id)
+
+    def insert_element(
+        self,
+        element: CanvasElement,
+        parent_element_id: str | None = None,
+        index: int | None = None,
+    ) -> None:
+        """将 Element 插入根级或指定 Frame/Group 的 children。"""
+        target = self.get_element(parent_element_id) if parent_element_id else None
+        if parent_element_id and target is None:
+            raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Parent Element {parent_element_id} does not exist.")
+        container = target.children if target is not None else self.elements
+        if target is not None and target.element_type not in {"frame", "group"}:
+            raise CanvasDomainError("INVALID_ELEMENT_PARENT", "Only Frame or Group Elements may contain children.")
+        if container is None:
+            target.children = []
+            container = target.children
+        if index is None or index < 0 or index > len(container):
+            container.append(element)
+        else:
+            container.insert(index, element)
+
+    def _remove_child(self, elements: list[CanvasElement], element_id: str) -> CanvasElement | None:
+        """递归移除直接子节点，供公开层级操作复用。"""
+        for element in elements:
+            children = element.children or []
+            for index, child in enumerate(children):
+                if child.element_id == element_id:
+                    return children.pop(index)
+            removed = self._remove_child(children, element_id)
+            if removed is not None:
+                return removed
+        return None
+
     def to_dict(self) -> dict[str, Any]:
         """转换为主协议 Canvas 字典。"""
         return {
@@ -133,13 +214,30 @@ class CanvasDocument:
 
     def validate(self) -> None:
         """校验 Element、Content、Connection 的领域不变量。"""
-        elements = self.iter_elements()
-        element_ids = [element.element_id for element in elements]
-        if len(element_ids) != len(set(element_ids)):
-            raise CanvasDomainError("INVALID_CANVAS_DOCUMENT", "Element IDs must be unique.")
+        elements: list[CanvasElement] = []
+        element_ids: set[str] = set()
+
+        def visit(element: CanvasElement, ancestors: set[int]) -> None:
+            """递归校验层级树并检测对象引用环。"""
+            object_id = id(element)
+            if object_id in ancestors:
+                raise CanvasDomainError("INVALID_CANVAS_DOCUMENT", "Element hierarchy cannot contain cycles.")
+            if element.element_id in element_ids:
+                raise CanvasDomainError("INVALID_CANVAS_DOCUMENT", "Element IDs must be unique.")
+            element_ids.add(element.element_id)
+            elements.append(element)
+            next_ancestors = {*ancestors, object_id}
+            if element.children and element.element_type not in {"frame", "group"}:
+                raise CanvasDomainError("INVALID_ELEMENT", "Only Frame or Group Elements may contain children.")
+            for child in element.children or []:
+                visit(child, next_ancestors)
+
+        for element in self.elements:
+            visit(element, set())
+
         connection_ids: set[str] = set()
         connection_pairs: set[tuple[str, str]] = set()
-        known_ids = set(element_ids)
+        known_ids = element_ids
         for connection in self.connections:
             if not connection.connection_id or connection.connection_id in connection_ids:
                 raise CanvasDomainError("INVALID_CONNECTION", "Connection IDs must be unique and non-empty.")

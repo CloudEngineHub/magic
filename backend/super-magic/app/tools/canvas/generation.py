@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, Protocol
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.utils.async_file_utils import async_mkdir, async_write_bytes
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,25 @@ class GenerationQueryRequest:
     project_path: str
     element_id: str
     content_id: str
+
+
+@dataclass(frozen=True)
+class ProjectIdentity:
+    """外部生成适配所需的稳定项目身份。"""
+
+    project_path: str
+    project_name: str
+
+
+class ProjectIdentityResolver:
+    """从工作区相对路径解析外部适配使用的项目身份。"""
+
+    def resolve(self, project_path: str) -> ProjectIdentity:
+        """保留完整 project_path，并只从末级目录取得展示名称。"""
+        normalized = Path(project_path).as_posix().strip("/")
+        if not normalized:
+            raise CanvasDomainError("PROJECT_PATH_INVALID", "project_path must not be empty.")
+        return ProjectIdentity(project_path=normalized, project_name=Path(normalized).name)
 
 
 class GenerationSubmissionPort(Protocol):
@@ -199,9 +220,99 @@ class AsynchronousGenerationStrategy:
             raise CanvasDomainError("GENERATION_RESULT_INVALID", "Asynchronous generation returned an invalid mode.")
         if submission.status not in {"processing", "pending", "completed", "failed"}:
             raise CanvasDomainError("GENERATION_RESULT_INVALID", "Generation returned an unsupported status.")
-        if submission.status in {"processing", "pending"} and not submission.provider_task_id:
-            raise CanvasDomainError("GENERATION_TASK_ID_MISSING", "Asynchronous generation did not return a task ID.")
+        if submission.status in {"processing", "pending"} and (
+            not submission.generation_task_id or not submission.provider_task_id
+        ):
+            raise CanvasDomainError(
+                "GENERATION_TASK_ID_MISSING",
+                "Asynchronous generation did not return complete Canvas and provider task IDs.",
+            )
         return submission
+
+
+class GenerationExecutionStrategyRegistry:
+    """按执行模式选择同步或异步生成策略。"""
+
+    def __init__(
+        self,
+        synchronous: SynchronousGenerationStrategy | None = None,
+        asynchronous: AsynchronousGenerationStrategy | None = None,
+    ):
+        """初始化可替换的执行策略。"""
+        self._strategies = {
+            "sync": synchronous or SynchronousGenerationStrategy(),
+            "async": asynchronous or AsynchronousGenerationStrategy(),
+        }
+
+    def get(self, execution_mode: str):
+        """返回指定执行模式的策略，不让 Application 自行判断分支。"""
+        strategy = self._strategies.get(execution_mode)
+        if strategy is None:
+            raise CanvasDomainError(
+                "GENERATION_EXECUTION_MODE_INVALID",
+                f"Unsupported generation execution mode: {execution_mode}.",
+            )
+        return strategy
+
+
+class GenerationTaskPoller:
+    """在等待窗口内轮询外部生成任务，不负责 Canvas 写回。"""
+
+    async def poll(
+        self,
+        query_port: GenerationQueryPort,
+        request: GenerationQueryRequest,
+        deadline: float,
+        tool_context: ToolContext | None,
+    ) -> GenerationQueryResult:
+        """查询任务直到终态或达到等待截止时间。"""
+        while True:
+            result = await query_port.query(request, tool_context)
+            if result.status in {"completed", "failed"}:
+                return result
+            if time.monotonic() >= deadline:
+                return result
+            await asyncio.sleep(min(1.0, max(0.05, deadline - time.monotonic())))
+
+
+class GenerationResultMapper:
+    """把生成查询结果映射为主文件允许的托管字段。"""
+
+    @staticmethod
+    def to_content_fields(
+        status: str,
+        output_uri: str | None,
+        error_message: str | None,
+    ) -> dict[str, Any]:
+        """生成只包含状态、结果地址和错误信息的回写字段。"""
+        fields: dict[str, Any] = {"status": status}
+        if output_uri:
+            fields["src"] = output_uri
+        if error_message:
+            fields["errorMessage"] = error_message
+        return fields
+
+
+class CanvasGenerationResultApplier:
+    """校验任务目标并把生成结果写回 Canvas Content。"""
+
+    @staticmethod
+    def apply(
+        project: Any,
+        element_id: str,
+        content_id: str,
+        status: str,
+        output_uri: str | None,
+        error_message: str | None,
+    ) -> None:
+        """只修改程序托管的生成状态和结果字段。"""
+        element = project.canvas.get_element(element_id)
+        content = element.get_content(content_id) if element else None
+        if content is None:
+            raise CanvasDomainError("CONTENT_NOT_FOUND", "Generated Content no longer exists.")
+        content.fields.update(GenerationResultMapper.to_content_fields(status, output_uri, error_message))
+        if not error_message:
+            content.fields.pop("errorMessage", None)
 
 
 class GenericImageGenerationPort:
@@ -212,6 +323,7 @@ class GenericImageGenerationPort:
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
         self.workspace = workspace
+        self.project_identity_resolver = ProjectIdentityResolver()
 
     async def submit(
         self, request: GenerationRequest, tool_context: ToolContext | None
@@ -220,8 +332,9 @@ class GenericImageGenerationPort:
         from app.tools.generate_images import GenerateImages, GenerateImagesParams, ImageGenerationTask
 
         parameters = request.parameters
+        project = self.project_identity_resolver.resolve(request.project_path)
         name = str(parameters.get("name") or request.content_id)
-        output_path = str(parameters.get("output_path") or f"{request.project_path}/images")
+        output_path = str(parameters.get("output_path") or f"{project.project_path}/images")
         task = ImageGenerationTask(
             prompt=str(parameters.get("prompt") or ""),
             size=parameters.get("size"),
@@ -255,6 +368,7 @@ class GenericVideoGenerationPort:
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
         self.workspace = workspace
+        self.project_identity_resolver = ProjectIdentityResolver()
 
     async def submit(
         self, request: GenerationRequest, tool_context: ToolContext | None
@@ -263,12 +377,15 @@ class GenericVideoGenerationPort:
         from app.tools.generate_video import GenerateVideo, GenerateVideoParams
 
         parameters = request.parameters
+        project = self.project_identity_resolver.resolve(request.project_path)
+        extensions = dict(parameters.get("extensions") or {})
+        extensions.setdefault("project_path", project.project_path)
         params = GenerateVideoParams(
             action="generate",
             prompt=str(parameters.get("prompt") or ""),
             model_id=str(parameters.get("model_id") or ""),
             video_name=str(parameters.get("name") or request.content_id),
-            output_path=str(parameters.get("output_path") or f"{request.project_path}/videos"),
+            output_path=str(parameters.get("output_path") or f"{project.project_path}/videos"),
             reference_image_paths=list(parameters.get("reference_image_paths") or []),
             reference_video_paths=list(parameters.get("reference_video_paths") or []),
             reference_audio_paths=list(parameters.get("reference_audio_paths") or []),
@@ -281,7 +398,7 @@ class GenericVideoGenerationPort:
             fps=parameters.get("fps"),
             seed=parameters.get("seed"),
             watermark=parameters.get("watermark"),
-            extensions=dict(parameters.get("extensions") or {}),
+            extensions=extensions,
         )
         result = await GenerateVideo(base_dir=self.workspace).execute_purely(tool_context, params)
         operation_id = str((result.data or {}).get("operation_id") or "").strip()
@@ -296,13 +413,14 @@ class GenericVideoGenerationPort:
         """查询视频任务一次并在成功时下载到项目目录。"""
         from app.tools.get_video import GetVideo, GetVideoParams
 
+        project = self.project_identity_resolver.resolve(request.project_path)
         result = await GetVideo(base_dir=self.workspace).execute_purely(
             tool_context,
             GetVideoParams(
                 operation_id=request.provider_task_id,
                 wait_mode="once",
                 video_name=request.content_id,
-                output_path=f"{request.project_path}/videos",
+                output_path=f"{project.project_path}/videos",
             ),
         )
         data = result.data or {}
@@ -338,8 +456,8 @@ class FakeImageGenerationPort:
     ) -> GenerationSubmission:
         """写入最小合法 PNG 并同步返回。"""
         output = self.workspace / request.project_path / "images" / f"{request.content_id}.png"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(_FAKE_PNG)
+        await async_mkdir(output.parent, parents=True, exist_ok=True)
+        await async_write_bytes(output, _FAKE_PNG)
         return GenerationSubmission(
             "sync",
             "completed",
@@ -378,8 +496,8 @@ class FakeVideoGenerationPort:
         if count == 1:
             return GenerationQueryResult("processing")
         output = self.workspace / request.project_path / "videos" / f"{request.content_id}.mp4"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(b"fake-canvas-video")
+        await async_mkdir(output.parent, parents=True, exist_ok=True)
+        await async_write_bytes(output, b"fake-canvas-video")
         return GenerationQueryResult(
             "completed",
             output_uri=output.relative_to(self.workspace).as_posix(),

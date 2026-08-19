@@ -175,6 +175,7 @@ from app.tools.canvas import (
     AddCanvasConnections,
     AddCanvasContents,
     AddCanvasElements,
+    FrameCanvasElements,
     InitializeCanvas,
     LayoutCanvasElements,
     QueryCanvasElementDetails,

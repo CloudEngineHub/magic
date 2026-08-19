@@ -29,6 +29,17 @@ The available layout strategy names are:
 - `dependency_flow`: place new Elements from their direct upstream Connections for a production flow.
 - `explicit_position`: use only when the user gives exact `x` and `y` values.
 
+Frame layout uses the direct parent's coordinate space. Do not mix root-level coordinates with a Frame child's local coordinates. A Frame itself may be laid out; its children are laid out only with their direct siblings as the collision set.
+
+## Frame rules
+
+- A Frame is a first-class container Element with a system-managed structural Content and a `children` list.
+- Before framing, query the exact Element IDs. `frame_canvas_elements` accepts only root-level ordinary sibling Elements in the first phase; it does not frame existing Frames/Groups and rejects locked Elements, nested Elements, duplicate IDs, and mixed selections.
+- Do not send raw `children`, `x`, `y`, `width`, or `height` to the framing tool. The tool computes the bounding box and converts children to Frame-local coordinates.
+- Use the returned real `frame_element_id` and `child_element_ids` for later details, layout, and Connection calls. `item_ref` is only a batch correlation label.
+- A Frame may be queried, laid out, or used as a Connection source/target. Do not append ordinary Content, retry generation, switch its main Content, or wait on a Frame generation task; explain that its structural Content is system-managed.
+- There is no Agent operation for unframing or deleting a Frame or its children. Tell the user to make those changes directly on the Canvas.
+
 ## Connection rules
 
 - Use `add_canvas_connections` for new, removed, or replaced Connections.
@@ -49,20 +60,38 @@ The available layout strategy names are:
 
 ## Tool sequence
 
-1. If Element IDs are unknown, call `query_canvas_overview`.
-2. Call `query_canvas_element_details` when complete Content or Connection details are needed.
-3. Use the smallest tool matching the requested change: add Element, add Content, retry failed Content, select main Content, layout Elements, or manage Connections.
-4. Query again after a write when the next decision depends on persisted state.
+1. Keep the exact `project_path` supplied by the user or runtime. Never invent, shorten, replace, or guess a project path.
+2. If the user asks to create or initialize a project, or the target project may not exist, call `initialize_canvas` with that exact path before querying it. Initialization is idempotent and does not overwrite an existing valid project.
+3. For an existing project, call `query_canvas_overview` when Element IDs are unknown.
+4. If a query returns `PROJECT_NOT_FOUND`, call `initialize_canvas` with the same exact `project_path`; do not inspect directories or switch to another path.
+5. Call `query_canvas_element_details` when complete Content or Connection details are needed.
+6. Use the smallest tool matching the requested change: add Element, add Content, retry failed Content, select main Content, layout Elements, or manage Connections.
+7. Query again after a write when the next decision depends on persisted state.
 
 ## Tool contracts and chaining
 
 `add_canvas_elements` creates new Elements. Each item must have an `item_ref` and `element_type`; `layout`, `content`, and initial `connections` are optional. Initial Connections use the current item as the anchor: provide exactly one of `source_element_id`, `source_item_ref`, `target_element_id`, or `target_item_ref`.
+
+Content uses one stable shape:
+
+```python
+{"source": "user", "content_type": "text", "content": "Fake Canvas debugging"}
+{"source": "generated", "content_type": "image", "prompt": "blue product hero"}
+{"source": "generated", "content_type": "video", "prompt": "product motion"}
+{"source": "imported", "content_type": "image", "asset_path": "Canvas/Demo/images/hero.png"}
+```
+
+Do not use `source="text"`, `text=...`, or `value=...`. Text is `source="user"`, `content_type="text"`, and the text value goes in `content`.
 
 For `content.source="imported"`, provide an existing workspace-relative `asset_path`; do not provide managed status, task, or result fields. The tool validates the file and rejects a path that is missing, outside the workspace, or already registered.
 
 `add_canvas_contents` appends one new Content version to an existing Element. Use it when the Element already exists, including a new generated candidate. It never overwrites an existing Content.
 
 `retry_canvas_content_generation` targets one existing generated Content that is `failed`. It preserves the same Element and Content IDs. If it returns a `generation_task_id`, call `wait_canvas_generation` with that ID.
+
+`wait_canvas_generation` receives `tasks`, where each item is `{"generation_task_id": "<task-id>"}`, plus an optional `max_wait_seconds`. Do not pass `task_ids` or a bare task ID.
+
+`frame_canvas_elements` creates a new Frame around existing sibling Elements. It returns a new `frame_element_id`, the unchanged child IDs, and the generated structural Content ID. Query the returned Frame when later decisions depend on the persisted hierarchy.
 
 `add_canvas_connections` has three explicit branches:
 
@@ -87,6 +116,12 @@ Next: call wait_canvas_generation with the returned generation_task_id values.
 Canvas generation status returned.
 - item_ref=- | status=processing | element_id=<element-id> | content_id=<content-id> | timed_out=true
 Continue waiting with the same generation_task_id; do not create a duplicate generation task.
+```
+
+```text
+Canvas Frames created successfully.
+- item_ref=group-1 | status=completed | frame_element_id=<frame-id> | child_element_ids=[<child-a>,<child-b>] | padding=<padding>
+Next: call query_canvas_element_details with the returned frame_element_id when hierarchy details are needed.
 ```
 
 Use only the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by a previous tool. `item_ref` is only a short label for correlating items in the current batch; it is not a Canvas identifier and is not reused in a later call.
