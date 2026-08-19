@@ -14,7 +14,7 @@ use function Hyperf\Translation\__;
 
 class UpdateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
 {
-    public ?int $parentId = null;
+    public ?string $parentId = null;
 
     public ?array $nameI18n = null;
 
@@ -28,9 +28,9 @@ class UpdateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
 
     private bool $logoProvided = false;
 
-    public function setParentId(null|int|string $parentId): void
+    public function setParentId(?string $parentId): void
     {
-        $this->parentId = $parentId === null ? 0 : (int) $parentId;
+        $this->parentId = $parentId === null ? '0' : $parentId;
         $this->parentIdProvided = true;
     }
 
@@ -40,12 +40,12 @@ class UpdateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
         $this->logoProvided = true;
     }
 
-    /** @return array{parent_id?: int, name_i18n?: array, logo?: ?string, sort_order?: int, status?: int} */
+    /** @return array{parent_id?: string, name_i18n?: array, logo?: ?string, sort_order?: int, status?: int} */
     public function getUpdatePayload(): array
     {
         $payload = [];
         if ($this->parentIdProvided) {
-            $payload['parent_id'] = (int) $this->parentId;
+            $payload['parent_id'] = (string) $this->parentId;
         }
         if ($this->nameI18n !== null) {
             $payload['name_i18n'] = $this->nameI18n;
@@ -65,7 +65,7 @@ class UpdateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'parent_id' => 'sometimes|integer|min:0',
+            'parent_id' => 'sometimes|string|regex:/^\d+$/',
             'name_i18n' => [
                 'sometimes',
                 'array',

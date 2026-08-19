@@ -16,7 +16,10 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Service\SkillCategoryDomainService;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\CreateSkillCategoryRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillCategoriesRequestAdminDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillCategoryRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillMarketRequestAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\OrganizationInfoAdminDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\PublisherInfoAdminDTO;
@@ -428,6 +431,40 @@ final class SkillMarketCategoryContractTest extends TestCase
         $this->assertArrayNotHasKey('name_i18n', $tree[0]);
         $this->assertSame('Child', $tree[0]['children'][0]['name']);
         $this->assertArrayNotHasKey('name_i18n', $tree[0]['children'][0]);
+    }
+
+    public function testSkillCategoryParentIdUsesStringForRequestsAndResponses(): void
+    {
+        $createRules = $this->getValidationRules(CreateSkillCategoryRequestAdminDTO::class);
+        $updateRules = $this->getValidationRules(UpdateSkillCategoryRequestAdminDTO::class);
+
+        $this->assertSame('sometimes|string|regex:/^\d+$/', $createRules['parent_id']);
+        $this->assertSame('sometimes|string|regex:/^\d+$/', $updateRules['parent_id']);
+
+        $update = new UpdateSkillCategoryRequestAdminDTO();
+        $update->setParentId('10');
+        $this->assertSame(['parent_id' => '10'], $update->getUpdatePayload());
+
+        $parent = (new SkillCategoryEntity())
+            ->setId(10)
+            ->setParentId('0')
+            ->setNameI18n(['default' => 'Parent']);
+        $child = (new SkillCategoryEntity())
+            ->setId(20)
+            ->setParentId('10')
+            ->setNameI18n(['default' => 'Child']);
+
+        $categoryDomainService = $this->createMock(SkillCategoryDomainService::class);
+        $categoryDomainService->method('findByQuery')->willReturn([$parent, $child]);
+        $categoryDomainService->method('getMarketIdsMap')->willReturn([10 => [], 20 => []]);
+
+        $tree = (new AdminSkillCategoryAppService(
+            $categoryDomainService,
+            $this->createMock(MagicUserDomainService::class),
+        ))->query(new QuerySkillCategoriesRequestAdminDTO());
+
+        $this->assertSame('0', $tree[0]['parent_id']);
+        $this->assertSame('10', $tree[0]['children'][0]['parent_id']);
     }
 
     public function testMarketListResponseExposesLocalizedSourceAndLegacyI18nFields(): void

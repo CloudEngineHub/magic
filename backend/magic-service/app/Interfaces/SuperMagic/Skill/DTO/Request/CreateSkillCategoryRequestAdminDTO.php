@@ -14,7 +14,7 @@ use function Hyperf\Translation\__;
 
 class CreateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
 {
-    public int $parentId = 0;
+    public string $parentId = '0';
 
     public array $nameI18n;
 
@@ -27,7 +27,7 @@ class CreateSkillCategoryRequestAdminDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'parent_id' => 'sometimes|integer|min:0',
+            'parent_id' => 'sometimes|string|regex:/^\d+$/',
             'name_i18n' => [
                 'required',
                 'array',

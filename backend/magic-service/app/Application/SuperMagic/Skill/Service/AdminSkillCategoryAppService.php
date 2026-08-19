@@ -78,7 +78,7 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
         $authorization = $this->resolveMagicUserAuthorization($authorization);
         $dataIsolation = $this->createSkillDataIsolation($authorization);
         $category = (new SkillCategoryEntity())
-            ->setParentId($requestDTO->parentId)
+            ->setParentId((int) $requestDTO->parentId)
             ->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
             ->setNameI18n($requestDTO->nameI18n)
             ->setLogo($requestDTO->logo)
@@ -97,7 +97,7 @@ class AdminSkillCategoryAppService extends AbstractSkillAppService
         $category = $this->get($id);
         $payload = $requestDTO->getUpdatePayload();
         if (array_key_exists('parent_id', $payload)) {
-            $category->setParentId($payload['parent_id']);
+            $category->setParentId((int) $payload['parent_id']);
         }
         if (array_key_exists('name_i18n', $payload)) {
             $category->setNameI18n($payload['name_i18n']);
