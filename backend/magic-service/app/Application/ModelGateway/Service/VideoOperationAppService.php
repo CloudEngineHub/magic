@@ -842,8 +842,9 @@ readonly class VideoOperationAppService
             self::AUDIT_STATUS_FAIL,
         );
 
-        if ($throwable && $throwable->getOriginalErrorMessage()) {
-            $businessParams['failure_reason'] = $throwable->getOriginalErrorMessage();
+        $originalErrorMessage = $throwable?->getOriginalErrorMessage() ?? '';
+        if ($originalErrorMessage !== '') {
+            $businessParams['failure_reason'] = $originalErrorMessage;
         }
 
         $event->setOrganizationCode($operation->getOrganizationCode());
