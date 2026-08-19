@@ -1,0 +1,99 @@
+name: html2pptx P6 streaming gate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'frontend/magic-web/packages/html2pptx/**'
+      - 'frontend/magic-web/package.json'
+      - 'frontend/magic-web/pnpm-lock.yaml'
+      - 'frontend/magic-web/vendor/pptxgenjs-5.0.0.*'
+      - '.github/workflows/html2pptx-p6.yml'
+  pull_request:
+    paths:
+      - 'frontend/magic-web/packages/html2pptx/**'
+      - 'frontend/magic-web/package.json'
+      - 'frontend/magic-web/pnpm-lock.yaml'
+      - 'frontend/magic-web/vendor/pptxgenjs-5.0.0.*'
+      - '.github/workflows/html2pptx-p6.yml'
+
+concurrency:
+  group: html2pptx-p6-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package-streaming:
+    name: Package, browser, Worker and OPFS gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend/magic-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/magic-web/pnpm-lock.yaml
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned Chromium for Puppeteer
+        run: pnpm --filter @magic/html2pptx exec puppeteer browsers install chrome
+
+      - name: Run P6 package and real Chromium gates
+        run: pnpm --filter @magic/html2pptx run ci:p6
+
+      - name: Upload P6 reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: html2pptx-p6-package-reports
+          if-no-files-found: error
+          path: frontend/magic-web/packages/html2pptx/benchmarks/results/p6-ci-*.json
+
+  app-build:
+    name: Full open-source magic-web build
+    needs: package-streaming
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend/magic-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/magic-web/pnpm-lock.yaml
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Package typecheck is enforced in package-streaming. The repository-wide
+      # tsconfig.eslint check currently contains pre-existing baseline errors
+      # outside this migration and is intentionally not a P6 release gate.
+      - name: Build complete open-source app
+        run: pnpm build
