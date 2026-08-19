@@ -1,7 +1,9 @@
 """File mention handler"""
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.path_manager import PathManager
 from app.service.mention.base import BaseMentionHandler, logger
@@ -60,6 +62,48 @@ def _is_temporary_workspace_path(file_path: str) -> bool:
         return False
 
 
+def _workspace_relative_path(file_path: str) -> Optional[str]:
+    """将安全的工作区路径转换为 canonical 相对路径。"""
+    raw_path = file_path.strip()
+    if not raw_path:
+        return None
+
+    normalized_input = raw_path.replace("\\", "/")
+    if re.match(r"^[A-Za-z][A-Za-z\d+.-]*:", normalized_input):
+        return None
+    if ".." in Path(normalized_input).parts:
+        return None
+
+    normalized_path = Path(os.path.normpath(normalized_input))
+    if normalized_path.is_absolute():
+        workspace_path = Path(os.path.normpath(str(PathManager.get_workspace_dir())))
+        try:
+            normalized_path = normalized_path.relative_to(workspace_path)
+        except ValueError:
+            return None
+
+    relative_path = normalized_path.as_posix()
+    if relative_path.startswith("./"):
+        relative_path = relative_path[2:]
+    if not relative_path or relative_path == "." or relative_path.startswith("../"):
+        return None
+    return relative_path
+
+
+def _markdown_label(value: str) -> str:
+    return " ".join(value.split()).replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
+def _canonical_file_link(file_path: str, file_name: str) -> Optional[str]:
+    relative_path = _workspace_relative_path(file_path)
+    if not relative_path:
+        return None
+
+    encoded_path = "/".join(quote(segment, safe="-._~") for segment in relative_path.split("/"))
+    label = _markdown_label(file_name or Path(relative_path).name)
+    return f"[{label}](./{encoded_path})"
+
+
 class FileHandler(BaseMentionHandler):
     """处理文件类型的mention（file、project_file、upload_file）"""
 
@@ -105,12 +149,20 @@ class FileHandler(BaseMentionHandler):
 
     async def handle(self, mention: Dict[str, Any], index: int, agent_context: Optional["AgentContext"] = None) -> List[str]:
         file_path = mention.get("file_path", "") or ""
+        file_name = str(mention.get("file_name") or "").strip()
         file_url = mention.get("file_url", "")
 
         if _is_temporary_workspace_path(file_path) and file_path not in self._temporary_file_paths:
             self._temporary_file_paths.append(file_path)
 
-        context_lines = [f"{index}. [@file_path:{file_path}]"]
+        canonical_link = _canonical_file_link(file_path, file_name)
+        if canonical_link:
+            context_lines = [f"{index}. {canonical_link}"]
+        else:
+            readable_reference = file_path or file_url or "missing file path"
+            context_lines = [
+                f"{index}. File reference (not a valid workspace-relative link): {readable_reference}"
+            ]
 
         project_path, project_type = await find_parent_canvas_project(file_path)
         if project_path and project_type:

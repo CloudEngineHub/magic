@@ -2,6 +2,10 @@ import { observer } from "mobx-react-lite"
 import type { ReactNode } from "react"
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	isWorkspaceHrefCandidate,
+	parseCanonicalWorkspaceHref,
+} from "@/pages/superMagic/utils/filePathMention"
 import { findAttachmentByPath } from "./helper"
 import { normalizeInlineStyle } from "../normalizeInlineStyle"
 
@@ -37,7 +41,8 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	)
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const attachments = projectFilesStore.workspaceFilesList
-	const fileInfo = findAttachmentByPath(attachments, normalizedHref)
+	const workspacePath = parseCanonicalWorkspaceHref(normalizedHref)
+	const fileInfo = workspacePath ? findAttachmentByPath(attachments, workspacePath) : undefined
 
 	const onClick = () => {
 		if (!fileInfo) return
@@ -54,6 +59,20 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 				className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] hover:bg-[#e0ecff]"
 				onClick={onClick}
 				title={typeof children === "string" ? children : normalizedHref}
+			>
+				{children}
+			</span>
+		)
+	}
+
+	if (isWorkspaceHrefCandidate(normalizedHref)) {
+		return (
+			<span
+				aria-disabled="true"
+				className="cursor-default overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#f0f6ff] px-1.5 py-0.5 text-xs font-normal leading-5 text-[#315cec] opacity-60"
+				title={normalizedTitle ?? normalizedHref}
+				{...safeAttributes}
+				style={normalizedStyle}
 			>
 				{children}
 			</span>

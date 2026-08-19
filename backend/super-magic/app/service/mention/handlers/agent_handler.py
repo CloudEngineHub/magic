@@ -9,6 +9,7 @@ handler 职责：
      run_sdk_snippet 调用 call_simple_agent 工具来真正派发给目标 agent。
 """
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.service.mention.base import BaseMentionHandler, logger
 
@@ -99,7 +100,12 @@ class AgentHandler(BaseMentionHandler):
             f"(agent_id={agent_id}, flow_code={flow_code})"
         )
 
-        lines = [f"{index}. [@agent:{agent_name}]"]
+        if agent_id:
+            target = quote(agent_id, safe="-._~")
+            label = agent_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+            lines = [f"{index}. [{label}](agent://{target})"]
+        else:
+            lines = [f"{index}. Agent reference: {agent_name} (agent_id is missing)"]
         if agent_id:
             lines.append(f"   - agent_id: {agent_id}")
         if description:

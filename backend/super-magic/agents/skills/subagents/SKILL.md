@@ -266,9 +266,9 @@ Never let multiple sub-agents write to the same file concurrently.
 
 ## Reporting Results to the User
 
-Sub-agents may include output file paths in their results. When reporting to the user, convert those paths to `[@file_path:path]` format — the frontend renders them as clickable links.
+Sub-agents may include output file paths in their results. When reporting to the user, convert workspace paths to Markdown links using `./workspace-relative-path` destinations.
 
-Example: Research report is ready: `[@file_path:reports/market-research.md]`
+Example: Research report is ready: `[market-research.md](./reports/market-research.md)`
 
 ## Sync Example
 

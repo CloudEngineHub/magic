@@ -40,6 +40,7 @@ import {
 	tryAcceptPromptCarouselShortcut,
 	tryNavigatePromptCarouselShortcut,
 } from "../utils/promptCarousel"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 
 interface UseMessageEditorProps {
 	value?: JSONContent
@@ -77,6 +78,7 @@ interface UseMessageEditorProps {
 		stillExists: boolean,
 		context?: { deletionInput: MentionDeletionInput },
 	) => boolean
+	getWorkspaceFilesList?: () => AttachmentItem[]
 }
 
 type MentionEditorCommands = {
@@ -148,6 +150,7 @@ export const useMessageEditor = ({
 	shouldSkipInsertSync,
 	shouldSkipRemoveSync,
 	shouldRestoreRemovedMention,
+	getWorkspaceFilesList,
 }: UseMessageEditorProps) => {
 	const domRef = useRef<HTMLDivElement>(null)
 	const { i18n } = useTranslation()
@@ -302,6 +305,12 @@ export const useMessageEditor = ({
 			Paragraph,
 			Text,
 			HardBlock,
+			CopyMessageExtension.configure({
+				onMentionsInsert: onMentionInsertItems,
+				onContentChange: onChange,
+				dataService: mentionPanelStore,
+				getWorkspaceFilesList,
+			}),
 			CodeAwarePasteExtension,
 			SuperPlaceholderExtension.configure({
 				size: size || "default",
@@ -313,11 +322,6 @@ export const useMessageEditor = ({
 			UndoRedo.configure({
 				depth: 100,
 				newGroupDelay: 250,
-			}),
-			CopyMessageExtension.configure({
-				onMentionsInsert: onMentionInsertItems,
-				onContentChange: onChange,
-				dataService: mentionPanelStore,
 			}),
 			...(shouldEnableMention
 				? [
