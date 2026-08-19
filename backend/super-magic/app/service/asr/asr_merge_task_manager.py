@@ -14,7 +14,6 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional, TypeVar, Union
-from uuid import uuid4
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
@@ -101,8 +100,6 @@ class AsrMergeTaskManager(AsrServiceBase):
 
     # 常量定义
     STATE_FILE_SUFFIX = ".json"
-    TEMP_FILE_PREFIX = "."
-    TEMP_FILE_SUFFIX = ".tmp"
     MAX_TASK_RETRIES = 10  # 最大允许重试整个任务次数（由 finish 触发）
 
     def __init__(self):
@@ -165,7 +162,12 @@ class AsrMergeTaskManager(AsrServiceBase):
     @staticmethod
     def _atomic_write(target_file: Path, data: dict) -> None:
         """
-        原子性写入 JSON 文件（使用临时文件+原子替换）
+        直接写入 JSON 文件。
+
+        状态文件位于 AGFS 挂载的 workspace 中。不能使用临时文件加
+        ``os.replace``，因为 AGFS 会把 replace 记录成新的文件对象，导致
+        同一个状态文件不断产生新的 file_id。调用方已经用 ``_io_lock``
+        保护 read-modify-write；这里直接 truncate/write 同一个目标文件。
 
         Args:
             target_file: 目标文件路径
@@ -175,29 +177,15 @@ class AsrMergeTaskManager(AsrServiceBase):
             IOError: 文件写入失败时抛出
             OSError: 文件操作失败时抛出
         """
-        temp_file = target_file.parent / (
-            f"{AsrMergeTaskManager.TEMP_FILE_PREFIX}"
-            f"{target_file.name}_{uuid4().hex}{AsrMergeTaskManager.TEMP_FILE_SUFFIX}"
-        )
-
         try:
-            # 写入临时文件
-            with open(temp_file, "w", encoding="utf-8") as f:
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(target_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
 
-            # 原子替换
-            os.replace(str(temp_file), str(target_file))
-
         except (IOError, OSError) as e:
-            # 清理临时文件
-            if temp_file.exists():
-                try:
-                    temp_file.unlink()
-                except OSError:
-                    pass
-            raise IOError(f"原子写入失败: {e}") from e
+            raise IOError(f"状态文件写入失败: {e}") from e
 
     @staticmethod
     def get_state_file_path(task_key: str) -> Path:

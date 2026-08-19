@@ -100,8 +100,9 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
                 local_meta_path.write_text, json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
-            # 同步到远程
-            return await self.sync_local_to_remote_atomic(self.METADATA_FILE)
+            # metadata 频繁更新，直接覆盖已有远端文件，避免 AGFS 将
+            # "临时文件 + rename" 记录成新的 file_id。
+            return await self.sync_local_to_remote_direct(self.METADATA_FILE)
         except Exception as e:
             logger.error(f"{self.LOG_PREFIX} ❌ 保存元数据失败: {e}")
             return False
@@ -288,6 +289,67 @@ class AsrLocalWorkspaceProxy(AsrServiceBase):
             # 尝试清理临时文件
             await asyncio.to_thread(temp_remote_path.unlink, missing_ok=True)
             return False
+
+    async def sync_local_to_remote_direct(self, filename: str, retries: int | None = None) -> bool:
+        """直接覆盖远端文件，保持 AGFS 中已有文件记录。
+
+        该方法只用于小型、完整生成后再写出的文件（目前是
+        ``merged_metadata.json``）。与原子替换不同，它不会在远端创建临时
+        文件再 rename 到目标路径，因此 AGFS 可以对已有目标执行原位更新。
+        写入后仍会等待文件稳定并校验大小；如果目标原本不存在且写入失败，
+        才清理残留文件，避免覆盖更新失败时先删除旧版本。
+        """
+        if retries is None:
+            retries = asr_time_config.SINGLE_FILE_SYNC_RETRIES
+
+        local_path = self.local_dir / filename
+        remote_path = self.remote_dir / filename
+
+        if not await asyncio.to_thread(local_path.exists):
+            logger.warning(f"{self.LOG_PREFIX} ⚠️ 本地文件不存在，无法同步: {local_path}")
+            return False
+
+        try:
+            local_size = await asyncio.to_thread(lambda: local_path.stat().st_size)
+            remote_existed = await asyncio.to_thread(remote_path.exists)
+        except OSError as e:
+            logger.error(f"{self.LOG_PREFIX} ❌ 获取文件信息失败: {e}")
+            return False
+
+        for attempt in range(retries + 1):
+            try:
+                await asyncio.to_thread(shutil.copy2, str(local_path), str(remote_path))
+                is_ready, reason = await self.wait_for_file_ready(
+                    remote_path,
+                    min_size=asr_size_config.OPTIONAL_FILE_MIN_SIZE,
+                    expected_size=local_size,
+                    retries=asr_time_config.FILE_READY_RETRIES,
+                    wait_interval=asr_time_config.FILE_READY_WAIT_INTERVAL,
+                    stable_count=asr_time_config.FILE_STABLE_COUNT,
+                )
+                if not is_ready:
+                    raise IOError(f"远端文件未就绪: {reason}")
+
+                remote_size = await asyncio.to_thread(lambda: remote_path.stat().st_size)
+                if remote_size != local_size:
+                    raise IOError(f"远端大小不一致 local={local_size}B remote={remote_size}B")
+
+                logger.info(
+                    f"{self.LOG_PREFIX} ✅ 直接覆盖同步完成 {filename} "
+                    f"size={remote_size}B attempt={attempt + 1}/{retries + 1}"
+                )
+                return True
+            except Exception as e:
+                logger.error(
+                    f"{self.LOG_PREFIX} ❌ 直接覆盖同步失败 {filename} "
+                    f"尝试 {attempt + 1}/{retries + 1}: {e}"
+                )
+                if not remote_existed:
+                    await asyncio.to_thread(remote_path.unlink, missing_ok=True)
+                if attempt < retries:
+                    await asyncio.sleep(asr_time_config.OPERATION_RETRY_WAIT)
+
+        return False
 
     async def sync_local_to_remote_single_pass(self, filename: str, retries: int | None = None) -> bool:
         """
