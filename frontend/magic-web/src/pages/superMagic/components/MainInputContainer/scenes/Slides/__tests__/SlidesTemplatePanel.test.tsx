@@ -294,7 +294,8 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -311,7 +312,8 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				JSONContent | undefined
+				| JSONContent
+				| undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})
