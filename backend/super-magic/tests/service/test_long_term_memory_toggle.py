@@ -31,9 +31,9 @@ Metadata = message_module.Metadata
 PersonalPreferences = import_module(
     "app.core.entity.message.personal_preferences"
 ).PersonalPreferences
-apply_long_term_memory_prompt_policy = import_module(
-    "app.core.prompt.long_term_memory_prompt"
-).apply_long_term_memory_prompt_policy
+apply_personal_preferences = import_module(
+    "app.core.prompt.personal_preferences_prompt"
+).apply_personal_preferences
 auto_read_module = import_module("app.service.auto_read_file_service")
 AutoReadFileService = auto_read_module.AutoReadFileService
 AutoReadLoadPolicy = auto_read_module.AutoReadLoadPolicy
@@ -128,7 +128,11 @@ def test_system_prompt_uses_first_chat_value(
 ):
     prompt = "before\n<memory_filesystem>memory instructions</memory_filesystem>\nafter"
 
-    result = apply_long_term_memory_prompt_policy(prompt, enabled, is_magiclaw)
+    result = apply_personal_preferences(
+        prompt,
+        PersonalPreferences(long_term_memory_enabled=enabled),
+        is_magiclaw,
+    )
 
     assert ("<memory_filesystem>" in result) is expected_memory_prompt
 

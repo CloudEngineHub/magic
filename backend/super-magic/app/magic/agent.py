@@ -93,7 +93,7 @@ from app.utils.file_utils import (
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.skill_sources import get_system_skills_dir, get_workspace_skills_dir
-from app.core.prompt.long_term_memory_prompt import apply_long_term_memory_prompt_policy
+from app.core.prompt.personal_preferences_prompt import apply_personal_preferences
 from agentlang.agent.define import AgentDefine, SkillsConfig, SystemSkillEntry
 from app.core.models.agent_model_context import TextModelState
 from app.core.models.agent_runtime import AgentProviderType
@@ -527,11 +527,9 @@ class Agent(BaseAgent):
         self.system_prompt += "\n\n---\n\n" + build_security_guardrails_prompt(
             is_mainland=Environment.is_mainland(),
         )
-        self.system_prompt = apply_long_term_memory_prompt_policy(
+        self.system_prompt = apply_personal_preferences(
             self.system_prompt,
-            long_term_memory_enabled=(
-                self.agent_context.get_personal_preferences().long_term_memory_enabled
-            ),
+            personal_preferences=self.agent_context.get_personal_preferences(),
             is_magiclaw=self.agent_context.is_magiclaw(),
         )
 
