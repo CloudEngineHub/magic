@@ -2,7 +2,7 @@ import { memo } from "react"
 import { observer } from "mobx-react-lite"
 import type { NodeProps } from "@/pages/superMagic/components/MessageList/components/Nodes/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useToolTooltip } from "../../hooks/useToolTooltip"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
 

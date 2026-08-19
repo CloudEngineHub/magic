@@ -51,16 +51,25 @@ function getImageFitScale(image: HTMLImageElement) {
 	})
 }
 
-function getSvgFitScale(svg: SVGSVGElement) {
+function getSvgFitScale(svg: SVGSVGElement, container: HTMLElement) {
 	const viewBox = svg.viewBox.baseVal
-	const intrinsicWidth = viewBox.width || svg.width.baseVal.value
-	const intrinsicHeight = viewBox.height || svg.height.baseVal.value
+	const intrinsicWidth =
+		viewBox.width ||
+		svg.width?.baseVal.value ||
+		Number.parseFloat(svg.getAttribute("width") || "")
+	const intrinsicHeight =
+		viewBox.height ||
+		svg.height?.baseVal.value ||
+		Number.parseFloat(svg.getAttribute("height") || "")
 
 	return calculateFitScale({
 		intrinsicWidth,
 		intrinsicHeight,
-		layoutWidth: svg.clientWidth,
-		layoutHeight: svg.clientHeight,
+		// Measure against the viewport instead of the SVG's current layout size.
+		// Vector previews change their real width/height while zooming; using those
+		// dimensions here would feed the zoomed size back into fitScale.
+		layoutWidth: container.clientWidth,
+		layoutHeight: container.clientHeight,
 		objectFit: "contain",
 	})
 }
@@ -90,8 +99,12 @@ function measureContentFitScale(container: HTMLElement) {
 	const svgs = Array.from(container.querySelectorAll("svg")).filter((svg) => {
 		const viewBox = svg.viewBox.baseVal
 		return (
-			(viewBox.width || svg.width.baseVal.value) &&
-			(viewBox.height || svg.height.baseVal.value)
+			(viewBox.width ||
+				svg.width?.baseVal.value ||
+				Number.parseFloat(svg.getAttribute("width") || "")) &&
+			(viewBox.height ||
+				svg.height?.baseVal.value ||
+				Number.parseFloat(svg.getAttribute("height") || ""))
 		)
 	})
 	if (svgs.length === 0) return undefined
@@ -101,7 +114,7 @@ function measureContentFitScale(container: HTMLElement) {
 		const largestSize = largest.viewBox.baseVal
 		return size.width * size.height > largestSize.width * largestSize.height ? svg : largest
 	})
-	return getSvgFitScale(sourceSvg)
+	return getSvgFitScale(sourceSvg, container)
 }
 
 /** Measures how much the browser's fitted layout scales the original image or SVG. */

@@ -386,11 +386,12 @@ class TaskFileDomainService
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
-        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth);
+        return $this->taskFileRepository->getAllChildrenFileIdsByDirectoryIds($directoryIds, $projectId, $maxDepth, $includeDirectories);
     }
 
     /**
@@ -1952,8 +1953,8 @@ class TaskFileDomainService
      */
     public function findOrCreateProjectRootDirectory(int $projectId, string $workDir, string $userId, string $organizationCode, string $projectOrganizationCode, TaskFileSource $source = TaskFileSource::PROJECT_DIRECTORY): int
     {
-        // Look for existing root directory (parent_id IS NULL and is_directory = true)
-        $rootDir = $this->findDirectoryByParentIdAndName(null, '/', $projectId);
+        // 按完整根目录条件精确查询，不能扫描 parent_id=NULL 的全部同级记录。
+        $rootDir = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
 
         if ($rootDir !== null) {
             return $rootDir->getFileId();
@@ -3025,11 +3026,7 @@ class TaskFileDomainService
         $dirEntity->setIsDirectory(true);
         $dirEntity->setParentId($parentId);
         $dirEntity->setSource($source);
-        if (WorkFileUtil::isSnapshotFile($fileKey)) {
-            $dirEntity->setStorageType(StorageType::SNAPSHOT);
-        } else {
-            $dirEntity->setStorageType(StorageType::WORKSPACE);
-        }
+        $dirEntity->setStorageType(StorageType::WORKSPACE);
         $dirEntity->setIsHidden($this->determineIsHidden($dirName, $parentId, $projectId));
         $dirEntity->setSort(0);
 
@@ -3421,12 +3418,7 @@ class TaskFileDomainService
             $fileEntity->setFileSize(! empty($taskFileEntity->getFileSize()) ? $taskFileEntity->getFileSize() : 0);
 
             if ($dto->getStorageTypeOverride() === '') {
-                $incomingStorageType = $taskFileEntity->getStorageType();
-                if ($incomingStorageType->value === StorageType::WORKSPACE->value && WorkFileUtil::isSnapshotFile($fileKey)) {
-                    $fileEntity->setStorageType(StorageType::SNAPSHOT);
-                } else {
-                    $fileEntity->setStorageType($incomingStorageType);
-                }
+                $fileEntity->setStorageType($taskFileEntity->getStorageType());
             } else {
                 $fileEntity->setStorageType($dto->getStorageTypeOverride());
             }
@@ -3588,10 +3580,7 @@ class TaskFileDomainService
 
         $updatedFile = $this->taskFileRepository->updateById($originalFile);
 
-        $parentId = $originalFile->getParentId();
-        if ($parentId !== null) {
-            $this->incrementVersionChain((string) $parentId);
-        }
+        $this->incrementVersionChain((string) $fileId);
 
         return $updatedFile;
     }

@@ -12,14 +12,13 @@ import json
 import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
 from app.core.entity.checkpoint import FileSnapshot, FileOperation, CheckpointInfo, FileType
 from app.infrastructure.checkpoint.metadata_manager import CheckpointMetadataManager
 from app.infrastructure.checkpoint.storage import CheckpointStorage
 from app.infrastructure.checkpoint.chat_history_snapshot_manager import ChatHistorySnapshotManager
 from app.utils.async_file_utils import (
-    async_copy2, async_rmtree, async_mkdir, async_unlink, async_rmdir, async_write_json,
-    async_rename, get_file_id_from_xattr
+    async_copy2, async_rmtree, async_mkdir, async_unlink, async_rmdir,
+    async_rename, async_exists, get_file_id_from_xattr
 )
 from app.core.exceptions import RollbackException, ErrorCode
 from app.path_manager import PathManager
@@ -451,7 +450,7 @@ class RollbackExecutor:
 
             snapshot_dir = self.storage.get_initial_chat_history_snapshots_dir(first_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {first_checkpoint_id} 没有 initial 聊天历史快照，跳过历史回滚")
                 return True
 
@@ -490,7 +489,7 @@ class RollbackExecutor:
 
             snapshot_dir = self.storage.get_latest_chat_history_snapshots_dir(last_checkpoint_id)
 
-            if not snapshot_dir.exists():
+            if not await async_exists(snapshot_dir):
                 logger.warning(f"checkpoint {last_checkpoint_id} 没有 latest 聊天历史快照，跳过历史回滚")
                 return True
 
@@ -503,76 +502,6 @@ class RollbackExecutor:
 
         except Exception as e:
             logger.error(f"正向聊天历史回滚失败: {e}")
-            return False
-
-    async def commit_rollback(self) -> bool:
-        """
-        提交回滚操作，清理当前checkpoint之后的所有checkpoint
-
-        Returns:
-            bool: 提交是否成功
-        """
-        try:
-            # 获取当前checkpoint
-            current_checkpoint_id = await self.metadata_manager.get_current_checkpoint()
-            if current_checkpoint_id is None:
-                logger.warning("无法获取当前checkpoint，跳过清理操作")
-                return True
-
-            logger.info(f"开始清理checkpoint {current_checkpoint_id} 之后的所有checkpoint")
-
-            # 获取需要清理的checkpoint列表
-            manifest = await self.metadata_manager.load_checkpoint_manifest()
-            if not manifest:
-                logger.warning("无法加载checkpoint清单，跳过清理操作")
-                return True
-
-            # 找到当前checkpoint在清单中的位置
-            checkpoint_ids = list(manifest.checkpoints.keys()) if hasattr(manifest.checkpoints, 'keys') else manifest.checkpoints
-            try:
-                current_index = checkpoint_ids.index(current_checkpoint_id)
-            except ValueError:
-                logger.error(f"当前checkpoint {current_checkpoint_id} 不在清单中")
-                return False
-
-            # 获取需要删除的checkpoint（当前checkpoint之后的所有checkpoint）
-            checkpoints_to_delete = checkpoint_ids[current_index + 1:]
-
-            if not checkpoints_to_delete:
-                logger.info("没有需要清理的checkpoint")
-                return True
-
-            logger.info(f"将删除以下checkpoint: {checkpoints_to_delete}")
-
-            # 删除checkpoint数据和元数据
-            for checkpoint_id in checkpoints_to_delete:
-                # 删除checkpoint存储数据
-                checkpoint_dir = PathManager.get_checkpoint_dir(checkpoint_id)
-                if checkpoint_dir.exists():
-                    await async_rmtree(checkpoint_dir)
-                    logger.info(f"已删除checkpoint存储目录: {checkpoint_id}")
-
-                # 从清单中移除
-                if hasattr(manifest.checkpoints, 'keys'):
-                    if checkpoint_id in manifest.checkpoints:
-                        del manifest.checkpoints[checkpoint_id]
-                        logger.info(f"已从清单中移除checkpoint: {checkpoint_id}")
-                else:
-                    if checkpoint_id in manifest.checkpoints:
-                        manifest.checkpoints.remove(checkpoint_id)
-                        logger.info(f"已从清单中移除checkpoint: {checkpoint_id}")
-
-            # 保存更新后的清单
-            manifest.updated_time = datetime.now()
-            manifest_file = self.storage.get_checkpoint_manifest_file_path()
-            await async_write_json(manifest_file, manifest.model_dump(), ensure_ascii=False, indent=2, default=str)
-
-            logger.info(f"成功清理了 {len(checkpoints_to_delete)} 个checkpoint")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"提交回滚操作失败: {e}")
             return False
 
     async def undo_rollback(self, latest_checkpoint_id: str) -> Tuple[bool, List[Dict[str, str]]]:

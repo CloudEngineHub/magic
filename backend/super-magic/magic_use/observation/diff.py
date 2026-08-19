@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from magic_use.models.snapshot import PageSnapshot, SnapshotDiff, SnapshotNode
+from magic_use.models.elements import PageElements, ElementDiff, ElementNode
 
 
-class SnapshotDiffer:
-    def compare(self, previous: PageSnapshot | None, current_nodes: tuple[SnapshotNode, ...]) -> SnapshotDiff:
+class ElementDiffer:
+    def compare(self, previous: PageElements | None, current_nodes: tuple[ElementNode, ...]) -> ElementDiff:
         if previous is None:
             current = self._summaries(current_nodes)
-            return SnapshotDiff(added=tuple(current[key] for key in sorted(current)))
+            return ElementDiff(added=tuple(current[key] for key in sorted(current)))
 
         before = self._summaries(previous.root_nodes)
         after = self._summaries(current_nodes)
@@ -18,12 +18,12 @@ class SnapshotDiffer:
             for key in sorted(after.keys() & before.keys())
             if after[key] != before[key]
         )
-        return SnapshotDiff(added=added, removed=removed, changed=changed)
+        return ElementDiff(added=added, removed=removed, changed=changed)
 
-    def _summaries(self, roots: tuple[SnapshotNode, ...]) -> dict[str, str]:
+    def _summaries(self, roots: tuple[ElementNode, ...]) -> dict[str, str]:
         result: dict[str, str] = {}
 
-        def visit(node: SnapshotNode, path: tuple[int, ...]) -> None:
+        def visit(node: ElementNode, path: tuple[int, ...]) -> None:
             key = node.ref or f"{path}:{node.role}:{node.name}"
             state_text = ",".join(sorted(node.states))
             result[key] = f"[{node.role}] {node.name or node.text} ({state_text})".strip()

@@ -10,7 +10,7 @@ import {
 } from "@/components/shadcn-ui/dropdown-menu"
 import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import { useAIEdit } from "@/pages/superMagic/components/Detail/components/PPTRender/hooks/useAIEdit"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import ConditionalTooltip from "./ConditionalTooltip"
 import { TOOLBAR_Z_INDEX } from "../../constants/z-index"
 

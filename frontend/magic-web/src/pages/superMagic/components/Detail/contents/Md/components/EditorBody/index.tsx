@@ -16,7 +16,8 @@ import {
 	type AttachmentFile,
 } from "../../utils"
 import { parseAnchorLink, scrollToAnchor } from "@/utils/slug"
-import { Editor } from "@tiptap/react"
+import { Editor } from "@/infrastructure/editors/tiptap/react"
+import type { ProjectImageUrlResolver } from "@/components/tiptap-node/project-image-node/project-image-node-extension"
 
 interface EditorBodyProps {
 	isLoading: boolean
@@ -34,9 +35,10 @@ interface EditorBodyProps {
 	setEditContent?: (content: string) => void
 	selectedProject?: ProjectListItem | null
 	currentDocumentPath?: string
-	urlResolver?: (relativePath: string) => string | Promise<string>
+	urlResolver?: ProjectImageUrlResolver
 	folderPath?: string
 	onImageUploadSuccess?: (relativePath: string) => void
+	onImageUploadError?: (error: Error) => void
 	editorRef?: React.RefObject<SimpleEditorRef>
 	placeholder?: string
 	attachments?: AttachmentFile[]
@@ -67,6 +69,7 @@ function EditorBody({
 	folderPath,
 	urlResolver,
 	onImageUploadSuccess,
+	onImageUploadError,
 	editorRef,
 	placeholder,
 	attachments,
@@ -82,6 +85,7 @@ function EditorBody({
 		folderPath,
 		urlResolver,
 		onSuccess: onImageUploadSuccess,
+		onError: onImageUploadError,
 		resolveImagesFolderParentId,
 	})
 

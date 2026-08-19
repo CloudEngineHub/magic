@@ -8,7 +8,7 @@ import { Tooltip } from "antd"
 import { Icon } from "@iconify/react"
 import { useMemoizedFn } from "ahooks"
 import i18next from "i18next"
-import _ from "lodash"
+import { get } from "lodash-es"
 import React, { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SystemNodeSuffix } from "../../../constant"
@@ -82,7 +82,7 @@ export function LabelNode({ config, selected, deleteFn, wrapperWidth }: LabelNod
 
 	const label = useMemo(() => {
 		const nodeId = (currentValue?.nodeId as string)?.split?.(SystemNodeSuffix)[0]
-		const node = _.get(nodeConfig, [nodeId || "empty"], null)
+		const node = get(nodeConfig, [nodeId || "empty"], null)
 
 		const isVariableNode = judgeIsVariableNode(currentNodeSchema?.id as string)
 

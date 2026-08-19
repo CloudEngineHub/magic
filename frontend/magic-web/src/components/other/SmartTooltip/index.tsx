@@ -1,6 +1,6 @@
 import { memo, ReactNode, useEffect, useRef, useState } from "react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/shadcn-ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 type ActionType = "click" | "hover" | "focus" | "contextMenu"
 

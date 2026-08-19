@@ -85,7 +85,7 @@ vi.mock("@/models/user/hooks/useOrganization", () => ({
 	}),
 }))
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/utils/cn", () => ({
 	cn: (...classNames: Array<string | false | null | undefined>) =>
 		classNames.filter(Boolean).join(" "),
 }))

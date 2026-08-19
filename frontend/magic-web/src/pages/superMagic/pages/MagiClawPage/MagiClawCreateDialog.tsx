@@ -13,7 +13,7 @@ import {
 } from "@/components/shadcn-ui/dialog"
 import { Input } from "@/components/shadcn-ui/input"
 import { useUpload } from "@/hooks/useUploadFiles"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { MagiClawTemplateAvatar } from "./MagiClawTemplateAvatar"
 import { MAGI_CLAW_TEMPLATE_OPTIONS } from "./constants/template_options"

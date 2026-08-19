@@ -1,4 +1,4 @@
-import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react"
+import { NodeViewWrapper, type ReactNodeViewProps } from "@/infrastructure/editors/tiptap/react"
 import {
 	Component,
 	memo,

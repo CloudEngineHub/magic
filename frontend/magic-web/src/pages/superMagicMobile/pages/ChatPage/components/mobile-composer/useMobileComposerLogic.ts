@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
-import type { JSONContent } from "@tiptap/core"
-import type { Editor } from "@tiptap/react"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import type { Editor } from "@/infrastructure/editors/tiptap/react"
 import { useAsyncEffect, useCreation, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import type {
@@ -42,7 +42,11 @@ import { createMessageSendService } from "@/pages/superMagic/services/messageSen
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import { preparePanelSend } from "@/pages/superMagic/services/messageSendPreparation"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import {
+	projectStore,
+	topicStore,
+	workspaceStore,
+} from "@/pages/superMagic/stores/core"
 import { roleStore } from "@/pages/superMagic/stores"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { superMagicTopicModelService } from "@/services/superMagic/topicModel"
@@ -155,6 +159,9 @@ export default function useMobileComposerLogic({
 
 	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
 	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
+	const draftKey = editorContext.draftKey
+	const onReady = editorContext.onReady
+	const skipInitialDraftRestore = editorContext.skipInitialDraftRestore
 	const effectiveTopicMode = editorContext.topicMode ?? roleStore.currentRole
 	const currentAgentCode = editorContext.agentCode ?? selectedTopic?.agent_code
 	const effectiveSetSelectedWorkspace =
@@ -707,18 +714,29 @@ export default function useMobileComposerLogic({
 		store.draftStore.resetSendingGuard()
 		pubsub.publish(PubSubEvents.Super_Magic_Clear_Canvas_Markers, {})
 
-		if (!editorContext.draftKey) return
-		if (editorContext.skipInitialDraftRestore) return
+		try {
+			if (!draftKey || skipInitialDraftRestore) {
+				store.draftStore.markDraftReady()
+				return
+			}
 
-		await store.draftStore.loadLatestDraft({
-			isClearContent: true,
-			replaceDirectly: true,
-		})
+			await store.draftStore.loadLatestDraft({
+				isClearContent: true,
+				replaceDirectly: true,
+			})
+		} catch (error) {
+			store.draftStore.markDraftReady()
+			console.error("Failed to restore latest draft:", error)
+		} finally {
+			// Report readiness after the existing mobile draft phase has settled.
+			onReady?.()
+		}
 	}, [
-		editorContext.draftKey?.topicId,
-		editorContext.draftKey?.projectId,
-		editorContext.draftKey?.workspaceId,
-		editorContext.skipInitialDraftRestore,
+		draftKey?.topicId,
+		draftKey?.projectId,
+		draftKey?.workspaceId,
+		onReady,
+		skipInitialDraftRestore,
 		store.draftStore,
 	])
 

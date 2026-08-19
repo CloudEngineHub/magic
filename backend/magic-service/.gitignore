@@ -31,7 +31,7 @@ scripts/
 storage/files/test001
 /CLAUDE.md
 /AGENTS.md
-/agents/skills/
+.agents
 .cursor/
 .github
 /docs/

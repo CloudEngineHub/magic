@@ -4,7 +4,7 @@ import MagicAvatar from "@/components/base/MagicAvatar"
 import FoldIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
 import { getAttachmentType } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/utils"
 import { CustomFolderMagicIcon } from "@/pages/superMagic/components/TopicFilesButton/components/CustomFolderMagicIcon"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ICON_MAPPINGS } from "../../../../constants"
 import type { DirectoryMentionData, MentionItem, ProjectFileMentionData } from "../../../../types"
 import type {

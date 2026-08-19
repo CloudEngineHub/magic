@@ -19,7 +19,7 @@ import { Input } from "../../primitives/shadcn/input"
 import LayersEmpty from "../empty/index"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../../primitives/shadcn/tooltip"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
-import classNames from "classnames"
+import { cn } from "../../../runtime/shared/lib/utils"
 import Tree, { type TreeNode, type RenderNodeContext } from "../../primitives/custom/Tree/index"
 import {
 	ElementTypeEnum,
@@ -283,7 +283,7 @@ export default function LayersDrawer() {
 					<div className={styles.layerNodeLabel}>
 						{isEditing ? (
 							<Input
-								className={classNames(
+								className={cn(
 									styles.layerNodeInput,
 									context.noHoverClassName,
 									context.noActiveClassName,
@@ -318,14 +318,14 @@ export default function LayersDrawer() {
 					{!isEditing && (
 						<div className={styles.layerNodeActions}>
 							<div
-								className={classNames(
+								className={cn(
 									// 锁定按钮：当被锁定时一直显示，否则只在 hover 时显示
 									!isLocked && context.showOnHoverClassName,
 									readonly && !isLocked && styles.hidden,
 								)}
 							>
 								<IconButton
-									className={classNames(
+									className={cn(
 										styles.layerNodeActionButton,
 										readonly && styles.noHover,
 										context.noHoverClassName,
@@ -341,13 +341,13 @@ export default function LayersDrawer() {
 								</IconButton>
 							</div>
 							<div
-								className={classNames(
+								className={cn(
 									// 可见性按钮：当不可见时一直显示，否则只在 hover 时显示
 									isVisible && context.showOnHoverClassName,
 								)}
 							>
 								<IconButton
-									className={classNames(
+									className={cn(
 										styles.layerNodeActionButton,
 										context.noHoverClassName,
 										context.noActiveClassName,
@@ -458,7 +458,7 @@ export default function LayersDrawer() {
 
 	return (
 		<div
-			className={classNames(
+			className={cn(
 				styles.layersDrawer,
 				collapsed && styles.collapsed,
 				readonly && styles.readonly,
@@ -473,7 +473,7 @@ export default function LayersDrawer() {
 				<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
 				{!collapsed && !!elements?.length && (
 					<div
-						className={classNames(
+						className={cn(
 							styles.layersDrawerSearch,
 							layerSearchValue && styles.layersDrawerSearchActive,
 						)}

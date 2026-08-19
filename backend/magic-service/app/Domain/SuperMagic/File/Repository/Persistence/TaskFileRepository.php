@@ -1513,9 +1513,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * @param array $directoryIds 目录ID数组
      * @param int $projectId 项目ID
      * @param int $maxDepth 最大递归深度，防止无限递归
+     * @param bool $includeDirectories 是否在结果中包含子目录ID（默认不包含，仅返回文件ID）
      * @return array 所有子文件的ID数组
      */
-    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10): array
+    public function getAllChildrenFileIdsByDirectoryIds(array $directoryIds, int $projectId, int $maxDepth = 10, bool $includeDirectories = false): array
     {
         if (empty($directoryIds)) {
             return [];
@@ -1550,6 +1551,10 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     if (! in_array($childId, $processedDirectoryIds)) {
                         $nextLevelParentIds[] = $childId;
                         $processedDirectoryIds[] = $childId;
+                        // 拷贝等场景需要保留目录结构时，把目录ID也计入结果
+                        if ($includeDirectories) {
+                            $allChildFileIds[] = $childId;
+                        }
                     }
                 } else {
                     // 只有文件才计入结果
@@ -1642,8 +1647,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * Find root directory by project ID.
-     * Root directory is identified by: parent_id IS NULL AND file_name = '/' AND is_directory = true.
+     * Find workspace root directory by project ID.
+     * Root identity includes parent_id, file_name, is_directory and storage_type.
      */
     public function findRootDirectoryByProjectId(int $projectId): ?TaskFileEntity
     {
@@ -1652,6 +1657,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             ->whereNull('parent_id')
             ->where('file_name', '/')
             ->where('is_directory', true)
+            ->where('storage_type', StorageType::WORKSPACE->value)
             ->orderBy('file_id', 'asc')
             ->first();
 

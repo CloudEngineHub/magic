@@ -24,7 +24,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { getPreviewDetailDisplayName } from "./headerMeta"
 import {
 	MOBILE_PREVIEW_BODY_CLASSNAME,

@@ -1,6 +1,6 @@
 import { Activity, Bookmark, Eye, Heart, MessageCircle, Send, TrendingUp } from "lucide-react"
 import type { ReactNode } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { SelfMediaOpsOverview } from "../services/selfMediaOpsOverview"
 import {
 	formatSelfMediaCompactNumber,

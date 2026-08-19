@@ -8,7 +8,7 @@ import {
 	DrawerTitle,
 } from "@/components/shadcn-ui/drawer"
 import { Input as ShadcnInput } from "@/components/shadcn-ui/input"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { XIcon } from "lucide-react"
 import { memo, useEffect, useRef } from "react"
 import { Drawer as DrawerPrimitive } from "vaul"

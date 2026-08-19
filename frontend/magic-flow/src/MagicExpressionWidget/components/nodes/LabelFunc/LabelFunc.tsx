@@ -4,7 +4,7 @@ import { Splitor } from "@/common/BaseUI/DropdownRenderer/Reference/constants"
 import { ExpandAltOutlined } from "@ant-design/icons"
 import { IconClose } from "@douyinfe/semi-icons"
 import { Tooltip } from "antd"
-import _ from "lodash"
+import { uniqueId } from "lodash-es"
 import React from "react"
 import { LabelFuncStyle } from "../../../style"
 import {
@@ -85,12 +85,12 @@ export function LabelFunc({ config, disabled, selected, deleteFn }: LabelFuncPro
 								},
 								index: number,
 							) => (
-								<React.Fragment key={_.uniqueId("label-func-")}>
+								<React.Fragment key={uniqueId("label-func-")}>
 									{index !== 0 && ", "}
 									{flatStringifyFunArg(arg)}
 									{!disabled && (
 										<ExpandAltOutlined
-											key={_.uniqueId("label-func-icon-")}
+											key={uniqueId("label-func-icon-")}
 											onClick={(e) =>
 												onPopoverModalClick(e, config, arg, index)
 											}

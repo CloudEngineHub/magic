@@ -4,56 +4,56 @@ import { fetch as originFetch } from "../../helpers/fetch"
 import { UrlUtils } from "@/apis/utils"
 
 /**
- * Fetch 监控插件配置接口
+ * Configuration for the Fetch monitoring plugin.
  */
 export interface FetchMonitorPluginOptions {
-	/** 是否启用插件 */
+	/** Whether the plugin is enabled */
 	enabled?: boolean
-	/** 慢 API 阈值，超过此时间的请求会被标记为慢请求（毫秒，默认 3000） */
+	/** Slow API threshold in milliseconds; requests exceeding it are marked as slow (default: 3000) */
 	slowApiThreshold?: number
-	/** 需要排除的 URL 模式列表，支持字符串和正则表达式 */
+	/** URL patterns to exclude; supports strings and regular expressions */
 	excludeUrls?: (string | RegExp)[]
 }
 
 /**
- * API 请求信息接口
+ * API request information.
  */
 interface ApiRequestInfo {
-	/** 请求 URL */
+	/** Request URL */
 	url: string
-	/** 请求体 */
+	/** Request body */
 	body?: string
-	/** 请求头 */
+	/** Request headers */
 	headers: Record<string, string>
-	/** HTTP 请求方法 */
+	/** HTTP request method */
 	method: string
-	/** 请求开始时间戳 */
+	/** Request start timestamp */
 	startTime: number
-	/** 请求耗时（毫秒） */
+	/** Request duration in milliseconds */
 	duration?: number
-	/** HTTP 响应状态码 */
+	/** HTTP response status code */
 	status?: number
-	/** HTTP 响应状态文本 */
+	/** HTTP response status text */
 	statusText?: string
-	/** 请求过程中的错误信息 */
+	/** Error encountered during the request */
 	error?: Error | string
-	/** 业务请求状态码 */
+	/** Business response code */
 	responseCode?: string
 }
 
 /**
- * Fetch API 监控插件
+ * Fetch API monitoring plugin.
  *
- * 核心功能：
- * - 拦截所有 fetch 请求
- * - 检测慢请求和异常请求
- * - 通过 logger.report 上报监控数据
- * - 数据处理和脱敏交给其他插件处理
+ * Core capabilities:
+ * - Intercepts all fetch requests
+ * - Detects slow and failed requests
+ * - Reports monitoring data through logger.report
+ * - Delegates data processing and redaction to other plugins
  */
 export class FetchMonitorPlugin implements LoggerPlugin {
 	readonly name = "fetch-monitor"
 	readonly version = "1.0.0"
-	readonly priority = 5 // 高优先级，确保早期拦截
+	readonly priority = 5 // High priority ensures early interception.
 
 	public enabled = true
 	private options: Required<FetchMonitorPluginOptions>
@@ -61,12 +61,12 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	private isInitialized = false
 
 	constructor(options: FetchMonitorPluginOptions = {}) {
-		// 设置默认配置
+		// Set the default configuration.
 		this.options = {
 			enabled: true,
-			slowApiThreshold: 800, // 3秒
+			slowApiThreshold: 800, // 3 seconds
 			excludeUrls: [
-				/.*\.(js|json|css|png|jpg|jpeg|gif|svg|webp|webm|ico|woff|woff2|ttf|eot|wasm|br|gz)(\?.*)?$/, // 排除静态资源（包含 wasm）
+				/.*\.(js|json|css|png|jpg|jpeg|gif|svg|webp|webm|ico|woff|woff2|ttf|eot|wasm|br|gz)(\?.*)?$/, // Exclude static assets, including WebAssembly.
 			],
 			...options,
 		}
@@ -75,7 +75,7 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 插件初始化 - 拦截 fetch API
+	 * Initializes the plugin and intercepts the Fetch API.
 	 */
 	init(logger: Logger): void {
 		if (this.isInitialized || typeof window === "undefined") {
@@ -88,21 +88,21 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 检查是否应该处理此日志（本插件不处理日志，只负责拦截）
+	 * Checks whether this plugin should process the log. It only intercepts requests.
 	 */
 	shouldHandle(): boolean {
 		return false
 	}
 
 	/**
-	 * 处理日志上下文（本插件不处理日志）
+	 * Processes the log context. This plugin does not modify logs.
 	 */
 	process(context: LogContext): LogContext {
 		return context
 	}
 
 	/**
-	 * 拦截 fetch API
+	 * Intercepts the Fetch API.
 	 */
 	private interceptFetch(): void {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -117,18 +117,18 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 
 			const fetch = originFetch.getInstance()
 
-			// 检查是否需要监控此请求
+			// Check whether this request should be monitored.
 			if (!url || !self.shouldMonitorRequest(url)) {
 				return fetch.call(this, input, init)
 			}
 
-			// 请求头获取
+			// Collect request headers.
 			const headers: Record<string, any> = {}
-				; (init?.headers as Headers)?.forEach?.((v, k) => {
-					headers[k] = v
-				})
+			;(init?.headers as Headers)?.forEach?.((v, k) => {
+				headers[k] = v
+			})
 
-			// 创建请求记录
+			// Create the request record.
 			const requestInfo: ApiRequestInfo = {
 				url,
 				headers,
@@ -138,42 +138,37 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 			}
 
 			try {
-				// 执行原始请求
+				// Execute the original request.
 				const response = await fetch.call(this, input, init)
-				// 记录成功响应
+				// Record the successful response.
 				requestInfo.duration = performance.now() - requestInfo.startTime
 				requestInfo.status = response.status
 				requestInfo.statusText = response.statusText
 
-				// 检查是否为慢 api 并上报异常
-				self.checkSlowApi(requestInfo)
-
-				// 采集业务状态码非异常时
+				// Monitoring is deliberately fire-and-forget. The monitor must never
+				// delay, replace, or reject the business response returned to HttpClient.
 				try {
-					if (self.isStreamingResponse(requestInfo, response)) {
-						return response
-					}
-
-					// 检查HTTP错误状态码
-					const jsonData = (await UrlUtils.responseParse(response.clone())).data
-					const isBusinessError = jsonData?.code && jsonData?.code !== 1000
-					const isHttpError = requestInfo.status && requestInfo.status !== 200
-					if (isBusinessError || isHttpError) {
-						requestInfo.responseCode = jsonData?.code
-						self.reportError(requestInfo, new Error("stack trace"))
-					}
+					self.checkSlowApi(requestInfo)
 				} catch (error) {
-					console.error(error)
+					console.error("[FetchMonitorPlugin] slow API monitoring failed", error)
 				}
+				void self.inspectResponse(response, requestInfo)
 
 				return response
 			} catch (error: any) {
-				// 记录错误响应
+				// Record the failed response.
 				requestInfo.duration = performance.now() - requestInfo.startTime
-				// requestInfo.error = error instanceof Error ? error : String(error)
 
-				// 上报网络错误
-				self.reportError(requestInfo, error)
+				// Preserve the original fetch rejection so HttpClient remains the
+				// single owner of request error handling and business recovery.
+				try {
+					self.reportError(requestInfo, error)
+				} catch (reportError) {
+					console.error(
+						"[FetchMonitorPlugin] network error reporting failed",
+						reportError,
+					)
+				}
 
 				throw error
 			}
@@ -181,7 +176,28 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 安全提取 URL
+	 * Inspect a cloned response without changing the response consumed by the
+	 * business client. All monitoring failures are isolated to this task.
+	 */
+	private async inspectResponse(response: Response, requestInfo: ApiRequestInfo): Promise<void> {
+		try {
+			if (this.isStreamingResponse(requestInfo, response)) return
+
+			const jsonData = (await UrlUtils.responseParse(response.clone())).data
+			const isBusinessError = jsonData?.code && jsonData.code !== 1000
+			const isHttpError = requestInfo.status !== undefined && requestInfo.status !== 200
+
+			if (isBusinessError || isHttpError) {
+				requestInfo.responseCode = jsonData?.code
+				this.reportError(requestInfo, new Error("stack trace"))
+			}
+		} catch (error) {
+			console.error("[FetchMonitorPlugin] response inspection failed", error)
+		}
+	}
+
+	/**
+	 * Safely extracts the URL.
 	 */
 	private extractUrl(input: RequestInfo | URL): string | null {
 		try {
@@ -198,7 +214,7 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 检查是否需要监控此请求
+	 * Checks whether this request should be monitored.
 	 */
 	private shouldMonitorRequest(url: string): boolean {
 		return !this.options.excludeUrls.some((pattern) => {
@@ -220,22 +236,22 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 检查请求结果并上报
+	 * Checks the request result and reports it.
 	 */
 	private checkSlowApi(requestInfo: ApiRequestInfo): void {
-		// 检查慢请求
+		// Check for a slow request.
 		if (requestInfo.duration && requestInfo.duration >= this.options.slowApiThreshold) {
 			this.reportSlowApi(requestInfo)
 		}
 
-		// // 检查HTTP错误状态码
+		// // Check for an HTTP error status code.
 		// if (requestInfo.status && requestInfo.status !== 200) {
 		// 	this.reportError(requestInfo)
 		// }
 	}
 
 	/**
-	 * 上报慢请求
+	 * Reports a slow request.
 	 */
 	private reportSlowApi(requestInfo: ApiRequestInfo): void {
 		if (!this.logger) return
@@ -255,7 +271,7 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 上报异常请求
+	 * Reports a failed request.
 	 */
 	private reportError(requestInfo: ApiRequestInfo, arg: any): void {
 		if (!this.logger) return
@@ -278,10 +294,10 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 	}
 
 	/**
-	 * 插件销毁
+	 * Destroys the plugin.
 	 */
 	destroy(): void {
-		// 恢复原始 fetch 方法
+		// Restore the original fetch implementation.
 		if (this.isInitialized && typeof window !== "undefined") {
 			window.fetch = originFetch.getInstance()
 		}
@@ -292,13 +308,13 @@ export class FetchMonitorPlugin implements LoggerPlugin {
 }
 
 /**
- * Fetch 监控插件工厂函数
+ * Factory function for the Fetch monitoring plugin.
  *
- * 使用示例：
+ * Usage example:
  * ```typescript
  * const fetchMonitor = createFetchMonitorPlugin({
- *   slowApiThreshold: 5000, // 5秒视为慢请求
- *   excludeUrls: [/analytics/, /tracking/], // 排除统计接口
+ *   slowApiThreshold: 5000, // Treat requests slower than 5 seconds as slow.
+ *   excludeUrls: [/analytics/, /tracking/], // Exclude analytics endpoints.
  * })
  *
  * logger.plugin(fetchMonitor)

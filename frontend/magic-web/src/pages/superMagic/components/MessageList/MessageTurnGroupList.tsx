@@ -1,5 +1,5 @@
 import { memo, type PropsWithChildren, type ReactNode } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import type { SuperMagicMessageItem } from "./type"
 import { getMessageNodeKey } from "./helpers"

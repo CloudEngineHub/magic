@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import type { NodeProps } from "../types"
 import { defaultOpen } from "../ToolCall/config"

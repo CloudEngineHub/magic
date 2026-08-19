@@ -233,6 +233,12 @@
 		"workspaceSwitcherPrefix": "工作空间",
 		"workspaceSwitcherRefresh": "刷新工作区列表"
 	},
+	"browserDetail": {
+		"addressUnavailable": "地址不可用",
+		"detail": "详情",
+		"screenshot": "截图",
+		"untitledWebpage": "未命名网页"
+	},
 	"chat": {
 		"backToChatList": "回到对话列表",
 		"chatNameFieldLabel": "对话名称",
@@ -3467,6 +3473,9 @@
 			"coverUpload": "上传封面",
 			"coverUploadFailed": "封面上传失败，请重试",
 			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
+			"displaySettings": "高级选项",
+			"fullScreen": "全屏显示",
+			"fullScreenDescription": "隐藏访问页顶部栏，让微应用内容占满整个屏幕。",
 			"loadFailed": "发布信息加载失败",
 			"password": "访问密码",
 			"passwordHint": "密码长度 4-32 位。",
@@ -3525,6 +3534,7 @@
 		"safetyCoverAlt": "微应用「{{appName}}」的封面",
 		"safetyDescription": "此微应用由用户发布，平台无法保证其中的内容、链接或操作安全。确认来源可信后再继续访问。",
 		"safetyDisclaimer": "点击继续不代表平台已验证此微应用安全。",
+		"safetyDoNotRemind": "不再提醒",
 		"safetyEyebrow": "访问前安全提醒",
 		"safetyLeave": "暂不访问",
 		"safetyPermissions": "谨慎授权摄像头、麦克风、位置，以及下载或安装文件。",
@@ -3755,9 +3765,11 @@
 		},
 		"recordingEntry": {
 			"active": {
+				"askAi": "问 AI",
 				"audioSourceUnavailable": "无法获取可用的音频输入，请检查麦克风设备后重试",
 				"backAria": "返回录音列表",
 				"browserNotSupported": "当前浏览器暂不支持录音，请更换支持麦克风录制的浏览器",
+				"camera": "相机",
 				"cancel": "取消录音",
 				"defaultTitle": "当前录音",
 				"enableTranscription": "开启转写",
@@ -5039,6 +5051,9 @@
 		"noWorkspace": "暂无工作区",
 		"onlySelectableAdministratorDocument": "仅可选择有管理员权限的文档",
 		"pleaseSelectFile": "请选择文件",
+		"preserveParentPath": "保留文件夹层级关系",
+		"preserveParentPathConfirmTitle": "确认跨项目操作",
+		"preserveParentPathDescription": "是否需要在目标项目中按原上级文件夹路径创建层级？不勾选将直接放入所选目录。",
 		"projects": "项目",
 		"returnSearch": "退出搜索",
 		"rootDirectory": "根目录",
@@ -5084,6 +5099,7 @@
 		"conversationLink": "对话链接",
 		"copy": "复制",
 		"copyCount": "次复制项目",
+		"copyFilesCompleted": "文件复制完成",
 		"copyLink": "复制链接",
 		"copyLinkAction": "复制链接",
 		"copyLinkSuccess": "链接已复制",
@@ -5855,8 +5871,7 @@
 	},
 	"topicFiles": {
 		"AIOptimization": "AI 编辑",
-		"addFile": "添加文件",
-		"addFolder": "添加文件夹",
+		"addFileOrFolder": "添加文件/文件夹",
 		"aiPick": "AI 选取",
 		"aiPickTooltip": "点击后选取页面元素，让 AI 对其进行修改",
 		"batchExportingPdf": "批量导出 PDF 中",
@@ -5901,6 +5916,7 @@
 			"batchCopy": "批量复制",
 			"batchMove": "批量移动",
 			"cancel": "取消",
+			"collapseAll": "全部收起",
 			"confirmBatchDelete": "确认删除{{count}}个文件？",
 			"confirmBatchDeleteWithFolders": "选中项包含文件夹，子级未选中文件也将被删除",
 			"confirmBatchDeleteWithMagicSystemFolder": "你选择删除的文件中包含 .magic 系统文件夹。删除后，部分功能及能力可能无法正常使用，且此操作不可撤销，请谨慎操作。",
@@ -5966,6 +5982,7 @@
 			"downloadPdfRaster": "下载 PDF 格式（截图版）",
 			"downloadPpt": "下载 PPT 格式",
 			"downloadPptx": "下载 PPTX 格式（可编辑）",
+			"expandAll": "全部展开",
 			"fileExport": {
 				"checkStatusFailed": "检查导出状态失败",
 				"emptyFileId": "文件ID不能为空",

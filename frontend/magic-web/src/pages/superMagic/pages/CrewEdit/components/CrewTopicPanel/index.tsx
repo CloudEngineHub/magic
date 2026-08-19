@@ -2,7 +2,7 @@ import ConversationPanelScaffold from "@/pages/superMagic/components/Conversatio
 import { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import { type ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "../../../Workspace/TopicMode"
-import { JSONContent } from "@tiptap/react"
+import { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { observer } from "mobx-react-lite"
 import EmptyState from "./components/EmptyState"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"

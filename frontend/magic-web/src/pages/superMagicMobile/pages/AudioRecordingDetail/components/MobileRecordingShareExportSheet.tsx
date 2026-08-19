@@ -7,13 +7,14 @@ import {
 	Link2,
 	NotebookPen,
 	Sparkles,
+	Search as SearchIcon,
 	X,
 	Check,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { downloadRecordingAttachmentFile } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-attachment"
 import { downloadRecordingFilesBatch } from "@/pages/superMagic/pages/AudioRecordings/utils/download-recording-batch"
 import { getAttachmentFileName } from "../utils/recording-detail-files"
@@ -30,6 +31,7 @@ interface MobileRecordingShareExportSheetProps {
 	onOpenChange: (open: boolean) => void
 	onShareLink: () => void
 	onDownloadRecording: () => void
+	onSearch?: () => void
 }
 
 interface ActionRowProps {
@@ -133,6 +135,7 @@ export function MobileRecordingShareExportSheet({
 	onOpenChange,
 	onShareLink,
 	onDownloadRecording,
+	onSearch,
 }: MobileRecordingShareExportSheetProps) {
 	const { t } = useTranslation("audioRecordings")
 	const [view, setView] = useState<"main" | "exportSummary">("main")
@@ -263,6 +266,20 @@ export function MobileRecordingShareExportSheet({
 		>
 			{view === "main" ? (
 				<>
+					{onSearch ? (
+						<div className="flex flex-col gap-2">
+							<div className="overflow-hidden rounded-[22px] bg-card">
+								<ActionRow
+									label={t("detail.searchContent")}
+									icon={<SearchIcon />}
+									onClick={() => {
+										onSearch()
+										onOpenChange(false)
+									}}
+								/>
+							</div>
+						</div>
+					) : null}
 					{showShareSection ? (
 						<div className="flex flex-col gap-2">
 							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">

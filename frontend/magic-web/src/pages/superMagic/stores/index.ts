@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
-import dayjs from "@/lib/dayjs"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
 import {
 	createWebSocketRecordMetadata,
@@ -53,6 +53,7 @@ export type {
 	MessageItem,
 	RawSuperMagicMessageNode,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	StreamRecoveryRequestPayload,
 	StreamRecoveryState,
 	StreamRecoveryFailurePayload,
@@ -111,6 +112,7 @@ import type {
 	RawSuperMagicIMMessage,
 	RawSuperMagicMessageSequence,
 	RawSuperMagicMessageEnvelope,
+	SuperMagicStoreMessageNode,
 	PendingUserMessageEnvelope,
 	ServerMessagesConfirmedPayload,
 	SuperMagicStoreCallbackRegistrar,
@@ -410,7 +412,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** Parent projections subscribe only to Topic membership, never to streamed row payloads. */
 	private topicMessageMembershipRevisions = new Map<string, number>()
 	/** Topic-scoped canonical node sidecar prevents same SuperMessage IDs colliding across Topics. */
-	private topicMessageNodes = new Map<string, Map<string, unknown>>()
+	private topicMessageNodes = new Map<string, Map<string, SuperMagicStoreMessageNode>>()
 	// 消息
 	messages: Map<SuperMagicStoreTopicId, MessageItem[]> = new Map()
 	// 消息缓冲区
@@ -419,7 +421,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		{ isProcessing: boolean; messages: RawSuperMagicMessageEnvelope[] }
 	> = new Map()
 	// 消息内容（卡片形式）
-	messageMap: Map<string, unknown> = new Map()
+	messageMap: Map<string, SuperMagicStoreMessageNode> = new Map()
 	// 工具调用响应最新态（key: <topic_id, tool.id>）
 	toolResponseMap: Map<string, Map<string, ToolResponseState>> = new Map()
 	/** 话题消息元数据 */
@@ -547,14 +549,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return `${topicId}\u0000${superMessageId}`
 	}
 
-	private setTopicMessageNode(topicId: string, superMessageId: string, node: unknown) {
+	private setTopicMessageNode(
+		topicId: string,
+		superMessageId: string,
+		node: SuperMagicStoreMessageNode,
+	) {
 		if (!topicId || !superMessageId) return
-		const nodes = this.topicMessageNodes.get(topicId) || new Map<string, unknown>()
+		const nodes =
+			this.topicMessageNodes.get(topicId) || new Map<string, SuperMagicStoreMessageNode>()
 		nodes.set(superMessageId, node)
 		this.topicMessageNodes.set(topicId, nodes)
 	}
 
-	getTopicMessageNode(topicId: string, superMessageId?: string) {
+	getTopicMessageNode(
+		topicId: string,
+		superMessageId?: string,
+	): SuperMagicStoreMessageNode | undefined {
 		if (!topicId || !superMessageId) return undefined
 		return this.topicMessageNodes.get(topicId)?.get(superMessageId)
 	}
@@ -1309,7 +1319,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private drainPendingHttpToolResponses(
 		topicId: string,
 		toolResponseMap: Map<string, ToolResponseState>,
-		settlements: Array<{ toolId: string; response: ToolResponseState }>,
+		settlements: Array<{
+			toolId: string
+			response: ToolResponseState
+			messageNode?: RawSuperMagicMessageNode
+		}>,
 	) {
 		const topicPending = this.pendingHttpToolResponses.get(topicId)
 		if (!topicPending) return
@@ -1333,8 +1347,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					toolResponseMap,
 					"http",
 				)
-				if (result.kind === "recorded")
-					settlements.push({ toolId, response: result.response })
+				if (result.kind === "recorded") {
+					settlements.push({
+						toolId,
+						response: result.response,
+						messageNode: candidate.node,
+					})
+				}
 				if (result.kind !== "missing_owner") correlationPending.delete(correlationId)
 			})
 			if (correlationPending.size === 0) topicPending.delete(toolId)
@@ -1604,6 +1623,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const revision = this.eventTransitions.nextRevision(messageKey)
 		const identity = {
 			topicId,
+			...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 			correlationId: messageRef.correlationId,
 			appMessageId: messageRef.appMessageId,
 			messageSeqId: messageRef.seqId,
@@ -1727,6 +1747,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		authority: Exclude<TopicExecutionAuthority, "history" | "stream">,
 		identity: {
 			executionId?: string
+			superMagicTopicId?: string
 			correlationId?: string
 			taskId?: string
 			messageSeqId?: string
@@ -1767,6 +1788,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			type: "topic.execution.ended",
 			meta: this.createEventMeta(source, executionKey, {
 				topicId,
+				...(identity.superMagicTopicId
+					? { superMagicTopicId: identity.superMagicTopicId }
+					: {}),
 				...(transition.state.correlationId
 					? { correlationId: transition.state.correlationId }
 					: {}),
@@ -1812,6 +1836,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				"assistant_final",
 				{
 					executionId: identity.executionId,
+					...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId: identity.correlationId,
 					taskId: identity.taskId,
 					messageSeqId: message.seqId,
@@ -1866,6 +1891,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			meta: {
 				...this.createEventMeta(source, toolKey, {
 					topicId,
+					...(messageNode?.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId,
 					toolCallId: toolId,
 				}),
@@ -1971,6 +1997,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			meta: {
 				...this.createEventMeta(context.source, taskKey, {
 					topicId,
+					...(messageNode.topic_id ? { superMagicTopicId: messageNode.topic_id } : {}),
 					correlationId,
 					appMessageId,
 				}),
@@ -3887,6 +3914,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		const httpToolSettlements: Array<{
 			toolId: string
 			response: ToolResponseState
+			messageNode?: RawSuperMagicMessageNode
 		}> = []
 		const tailAnchorIndex =
 			mode === "replace_tail" && anchorSuperMessageId
@@ -4163,6 +4191,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 						httpToolSettlements.push({
 							toolId: String(rawNode?.tool?.id || ""),
 							response: toolResponseResult.response,
+							messageNode: rawNode,
 						})
 					} else if (toolResponseResult.kind === "missing_owner" && rawNode) {
 						this.queuePendingHttpToolResponse(topicId, rawNode, envelope?.seq?.seq_id)
@@ -4365,9 +4394,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (eventPolicy === "live_arrival") {
 			// Cold history and recovery snapshots may restore canonical Tool terminal state,
 			// but only a real-time authoritative tail represents a newly arrived business event.
-			httpToolSettlements.forEach(({ toolId, response }) => {
+			httpToolSettlements.forEach(({ toolId, response, messageNode }) => {
 				if (toolId)
-					this.publishToolCallSettled(topicId, toolId, response, undefined, "http")
+					this.publishToolCallSettled(topicId, toolId, response, messageNode, "http")
 			})
 		}
 		if (toolProjectionPolicy === "historical_terminal") {
@@ -4447,7 +4476,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				this.publishMessageCommitted(
 					topicId,
 					currentMessage,
-					canonicalNode,
+					// Use only the current raw message's business Topic for event metadata.
+					canonicalNode && { ...canonicalNode, topic_id: rawNode?.topic_id },
 					canonicalCommitContext,
 				)
 			} else {
@@ -8113,7 +8143,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * @param superMessageId Store/UI 统一消息身份
 	 * @returns 消息节点
 	 */
-	getMessageNode(superMessageId?: string) {
+	getMessageNode(superMessageId?: string): SuperMagicStoreMessageNode | undefined {
 		return this.messageMap.get(superMessageId || "")
 	}
 

@@ -17,6 +17,7 @@ import MicroAppSafetyNotice from "./components/MicroAppSafetyNotice"
 import MicroAppShareHeader from "./components/MicroAppShareHeader"
 import useMicroAppInstallFlow from "./hooks/useMicroAppInstallFlow"
 import useMicroAppManifestLinks from "./hooks/useMicroAppManifestLinks"
+import useMicroAppSafetyNoticeConfirmation from "./hooks/useMicroAppSafetyNoticeConfirmation"
 import useMicroAppShareData from "./hooks/useMicroAppShareData"
 
 type MicroAppPreviewMode = NonNullable<ComponentProps<typeof HtmlPreviewContent>["viewMode"]>
@@ -77,13 +78,16 @@ export default function MicroAppSharePage() {
 	useMicroAppManifestLinks(appId)
 	const [previewMode, setPreviewMode] = useState<MicroAppPreviewMode>("desktop")
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
-	const [confirmedSafetyAppId, setConfirmedSafetyAppId] = useState<string | null>(null)
 	// 分享页隐藏了 HTML 文件头，通过管理句柄复用预览内部的同一个授权面板。
 	const [permissionManager, setPermissionManager] = useState<{ open: () => void } | null>(null)
+	const { hasConfirmedSafetyNotice, confirmSafetyNotice } =
+		useMicroAppSafetyNoticeConfirmation(appId)
 	const {
 		shareData,
 		resourceId,
 		coverUrl,
+		fullScreen,
+		displayModeResolved,
 		shareMeta,
 		attachmentsTree,
 		attachmentList,
@@ -106,10 +110,7 @@ export default function MicroAppSharePage() {
 		[attachmentList],
 	)
 	const displayAppName = shareMeta.projectName
-	// 将确认绑定到 appId，切换分享路由时不会短暂复用上一应用的确认状态。
-	const hasConfirmedSafetyNotice = confirmedSafetyAppId === appId
 	useEffect(() => {
-		setConfirmedSafetyAppId(null)
 		setPermissionManager(null)
 	}, [appId])
 	const previewFile = useMemo(
@@ -176,13 +177,15 @@ export default function MicroAppSharePage() {
 			className="flex h-screen w-screen flex-col overflow-hidden bg-background"
 			data-testid="micro-app-share-page"
 		>
-			<MicroAppShareHeader
-				appName={displayAppName}
-				showInstall={installFlow.showInstall}
-				showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
-				onInstall={installFlow.handleInstall}
-				onOpenPermissionManager={handleOpenPermissionManager}
-			/>
+			{displayModeResolved && !fullScreen ? (
+				<MicroAppShareHeader
+					appName={displayAppName}
+					showInstall={installFlow.showInstall}
+					showPermissionManager={hasConfirmedSafetyNotice && Boolean(permissionManager)}
+					onInstall={installFlow.handleInstall}
+					onOpenPermissionManager={handleOpenPermissionManager}
+				/>
+			) : null}
 			<MicroAppInstallDialog {...installFlow.dialog} />
 			<main className="min-h-0 flex-1 overflow-hidden">
 				{loading ? (
@@ -231,7 +234,7 @@ export default function MicroAppSharePage() {
 					<MicroAppSafetyNotice
 						appName={displayAppName}
 						coverUrl={coverUrl}
-						onConfirm={() => setConfirmedSafetyAppId(appId)}
+						onConfirm={confirmSafetyNotice}
 						onLeave={handleLeave}
 					/>
 				) : null}

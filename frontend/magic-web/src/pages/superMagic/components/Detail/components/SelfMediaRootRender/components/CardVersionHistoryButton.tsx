@@ -10,7 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuLabel,
 } from "@/components/shadcn-ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { usePPTVersionManager } from "../../PPTRender/hooks/usePPTVersionManager"
 import { processHtmlContent } from "../../../contents/HTML/htmlProcessor"

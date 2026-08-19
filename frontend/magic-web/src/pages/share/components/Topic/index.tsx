@@ -38,6 +38,8 @@ import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import { messagesTransformer } from "../MessageList/utils"
 import { observer } from "mobx-react-lite"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 import FooterLogo from "./components/FooterLogo"
 import useResizablePanel from "@/pages/superMagic/hooks/useResizablePanel"
 import ResizableDivider from "@/pages/superMagic/components/ResizableDivider"
@@ -48,12 +50,13 @@ import {
 	DEFAULT_MAX_WIDTH,
 	DEFAULT_WIDTH,
 } from "@/pages/superMagic/constants/resizablePanel"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { ProjectFilesStore } from "@/stores/projectFiles"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { calculateDefaultOpenFileId } from "@/pages/superMagic/components/Share/FileSelector/utils"
 import { useShareMenuFilters } from "../../hooks"
+import type { CrossProjectOperationSuccessResult } from "@/pages/superMagic/components/TopicFilesButton/hooks/useCrossProjectFileOperation"
 
 const SHARE_MESSAGE_TOP_MASK_CLASS_NAME =
 	"pointer-events-none absolute inset-x-0 top-0 z-10 h-2.5 bg-white dark:bg-card"
@@ -71,10 +74,14 @@ function Topic({
 	isImmersiveFullscreen,
 	topicId,
 	projectId,
+	shareCode,
+	sharePassword,
+	onCopySharedFilesComplete,
 	showAllProjectFiles,
 	viewFileList,
 	showCreatedByBadge,
 	allowDownloadProjectFile,
+	allowCopyProjectFiles = false,
 	forceFullscreenMode,
 	documentFlowFullscreen,
 	hidePreviewHeader,
@@ -94,11 +101,19 @@ function Topic({
 	isImmersiveFullscreen?: boolean
 	topicId?: string
 	projectId?: string
+	shareCode?: string
+	sharePassword?: string
+	onCopySharedFilesComplete?: (info: {
+		projectId: string
+		workspaceId: string
+		projectName?: string
+	}) => void
 	showAllProjectFiles?: boolean
 	isProjectShare?: boolean
 	viewFileList?: boolean
 	showCreatedByBadge?: boolean
 	allowDownloadProjectFile?: boolean
+	allowCopyProjectFiles?: boolean
 	forceFullscreenMode?: boolean
 	documentFlowFullscreen?: boolean
 	hidePreviewHeader?: boolean
@@ -153,9 +168,28 @@ function Topic({
 	const shouldRenderFullscreenFileOnly = isFullscreenMode && Boolean(isFileShare) && !isMobile
 
 	// 使用分享页面菜单过滤 Hook
+	const allowCopySharedFiles = isLogined && allowCopyProjectFiles
 	const { filterShareMenuItems, filterBatchDownloadLayerMenuItems } = useShareMenuFilters({
 		allowDownloadProjectFile,
+		allowCopyProjectFile: allowCopySharedFiles,
 	})
+	const handleCrossProjectOperationSuccess = useMemoizedFn(
+		(result: CrossProjectOperationSuccessResult) => {
+			if (
+				result.operationType !== "copy" ||
+				!result.targetProjectId ||
+				!result.targetWorkspaceId
+			) {
+				return
+			}
+
+			onCopySharedFilesComplete?.({
+				projectId: result.targetProjectId,
+				workspaceId: result.targetWorkspaceId,
+				projectName: result.targetProjectName,
+			})
+		},
+	)
 
 	// 判断是否需要调整 BackToLatestButton 的位置
 	// BackToLatestButton 只在话题分享场景显示，当 Badge 也显示时，需要上移按钮避免遮挡
@@ -1014,6 +1048,11 @@ function Topic({
 														setUserDetail(detail)
 													}}
 													projectId={projectId}
+													shareCode={shareCode}
+													sharePassword={sharePassword}
+													onCrossProjectOperationSuccess={
+														handleCrossProjectOperationSuccess
+													}
 													className="left-0"
 													onFileClick={(fileItem: any) => {
 														setUserDetail(null)
@@ -1024,6 +1063,7 @@ function Topic({
 													}}
 													activeFileId={activeFileId}
 													allowEdit={false}
+													allowCopyTo={allowCopySharedFiles}
 													filterMenuItems={filterShareMenuItems}
 													filterBatchDownloadLayerMenuItems={
 														filterBatchDownloadLayerMenuItems
@@ -1402,7 +1442,14 @@ function Topic({
 					{!isLogined ? (
 						<div
 							className="flex h-10 cursor-pointer items-center gap-1 rounded-lg p-2.5 text-sm text-foreground"
-							onClick={() => history.replace({ name: RouteName.Login })}
+							onClick={() =>
+								authEventBus.emit(AuthEventName.RequestLogin, {
+									reason: "manual",
+									source: "share",
+									returnTo: window.location.href,
+									preserveQuery: true,
+								})
+							}
 							data-testid="share-navigation-login-item"
 						>
 							<IconLogin className="size-5" />
@@ -1480,10 +1527,14 @@ function Topic({
 							}
 						}}
 						projectId={projectId}
+						shareCode={shareCode}
+						sharePassword={sharePassword}
+						onCrossProjectOperationSuccess={handleCrossProjectOperationSuccess}
 						handleDownloadAll={handleDownloadAll}
 						allLoading={allLoading}
 						activeFileId={activeFileId}
 						allowEdit={false}
+						allowCopyTo={allowCopySharedFiles}
 						filterMenuItems={filterShareMenuItems}
 						filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 						allowDownload={allowDownloadProjectFile}

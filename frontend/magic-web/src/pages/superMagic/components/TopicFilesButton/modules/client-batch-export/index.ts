@@ -1,5 +1,5 @@
 import { generatePPTX } from "@magic/html2pptx"
-import { loadJSZip } from "@/lib/jszip"
+import { loadJSZip } from "@/infrastructure/vendors/jszip"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import {

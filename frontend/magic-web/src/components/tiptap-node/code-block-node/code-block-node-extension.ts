@@ -1,5 +1,5 @@
-import { CodeBlock as TiptapCodeBlock } from "@tiptap/extension-code-block"
-import { ReactNodeViewRenderer } from "@tiptap/react"
+import { CodeBlock as TiptapCodeBlock } from "@/infrastructure/editors/tiptap/extension-code-block"
+import { ReactNodeViewRenderer } from "@/infrastructure/editors/tiptap/react"
 import CodeBlockNodeView from "./code-block-node-view"
 
 /**

@@ -1,7 +1,7 @@
 import { useState, type ComponentType } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowUp, ChevronDown, Hourglass, Loader2, Pencil, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { MessageQueueProps } from "./index"
 import { normalizeQueuePreviewText } from "./utils"
 

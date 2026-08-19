@@ -4,16 +4,15 @@ import { Building2, ChevronDown, LogIn, LogOut, MonitorDown, ShieldCheck } from 
 import MagicDropdown from "@/components/base/MagicDropdown"
 import UserAvatarRender from "@/components/business/UserAvatarRender"
 import { Button } from "@/components/shadcn-ui/button"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import OrganizationList from "@/layouts/BaseLayout/components/Sider/components/OrganizationSwitch/OrganizationList"
 import { OrganizationSwitchPanel } from "@/layouts/BaseLayoutMobile/components/OrganizationSwitch"
 import useLogout from "@/hooks/account/useLogout"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useAuthorization, useOrganization, useUserInfo } from "@/models/user/hooks"
-import { RouteName } from "@/routes/constants"
-import { history } from "@/routes/history"
 import GlobalSidebarStore from "@/stores/display/GlobalSidebarStore"
-import { buildLoginRedirectSearchParams } from "@/pages/login/utils/loginRedirect"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 const transparentDropdownOverlayClassName =
 	"!min-h-0 !min-w-0 !overflow-visible !rounded-none !border-0 !bg-transparent !p-0 !shadow-none !outline-none data-[state=open]:!animate-none data-[state=closed]:!animate-none"
@@ -34,23 +33,12 @@ const menuItemClassName =
 const userMenuPanelClassName =
 	"w-[220px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border/60 bg-popover p-1 text-popover-foreground shadow-md"
 
-function convertToQuery(params: URLSearchParams): Record<string, string> {
-	const query: Record<string, string> = {}
-	params.forEach((value, key) => {
-		query[key] = value
-	})
-	return query
-}
-
 function goLogin() {
-	history.replace({
-		name: RouteName.Login,
-		query: convertToQuery(
-			buildLoginRedirectSearchParams({
-				currentHref: window.location.href,
-				redirectTarget: window.location.href,
-			}),
-		),
+	authEventBus.emit(AuthEventName.RequestLogin, {
+		reason: "manual",
+		source: "share",
+		returnTo: window.location.href,
+		preserveQuery: true,
 	})
 }
 

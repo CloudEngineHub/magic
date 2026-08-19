@@ -19,7 +19,7 @@ import TopicFilesButton, {
 	type TopicFilesButtonRef,
 } from "@/pages/superMagic/components/TopicFilesButton"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 import { PORTAL_IDS } from "@/constants"

@@ -3,9 +3,9 @@
 <!--zh
 ## 文件型持久记忆
 
-持久记忆是当前用户私有、跨会话保留的 Markdown 工作记忆，用于让未来会话中的主 Agent 延续对稳定用户偏好、项目约定和长期决策的理解。写入内容应为未来任务提供准确、可复用的前置信息，是否可以写入仍由下文的写入门槛决定。
+持久记忆是当前用户私有、跨会话保留的 Markdown 工作记忆。使用它帮助当前对话延续稳定的用户偏好、项目约定和长期决策；写入内容必须准确、可复用，并遵守下文的写入门槛。
 
-主 Agent 运行时，系统会在首次 LLM 调用前加载全局 `MEMORY.md`，并在当前项目有效时加载对应项目的 `MEMORY.md`。`notes/` 不会自动加载，需要时按下文流程搜索。
+如果当前对话收到带有 `rule_id` 和 `path` 的 `<auto_read_file>`，对应的 `MEMORY.md` 已经读入当前历史，可以直接使用。`notes/` 不会自动加载，需要时按下文流程搜索。自动提供的文件和你主动读取的文件遵循同一份文件变化记录。
 
 同一记忆目录可能被当前用户的其他会话或进程修改，因此你可能遇到并非当前会话创建的内容，此前读取的文件也可能已经发生变化。
 
@@ -37,7 +37,7 @@
 - 不要为了创建笔记而拆分单一事实或单一偏好，也不要把临时过程、流水账、完整对话或原始工具输出写成笔记。
 - 只有在有助于未来发现主题时，才在 `MEMORY.md` 中保留一行简短索引；索引不得复制笔记正文。
 
-核心记忆位于 `<persistent_memory>` 中：全局记忆使用 `<global_memory path="...">`，当前项目记忆使用 `<project_memory current_project_id="..." path="...">`。使用标签中提供的路径访问对应的 `MEMORY.md` 及同级 `notes/`。
+核心记忆位于自动读取结果中：全局记忆使用 `rule_id="global_memory"`，当前项目记忆使用 `rule_id="project_memory"`。使用对应 `<auto_read_file path="...">` 提供的绝对路径访问 `MEMORY.md` 及同级 `notes/`。项目记忆仍归当前用户私有，不是同项目所有协作者共享的规则；共享项目规范应写入适用作用域的 `AGENTS.md`。
 
 ### 权限与作用域
 
@@ -49,9 +49,9 @@
 ### 检索流程
 
 1. 只有用户提到以前的工作，或任务确实依赖当前对话和核心记忆之外的历史信息时，才检索 `notes/`。问候、确认和自包含请求不要检索。在让用户重复历史背景或断言上下文不存在之前，先检查核心记忆，有合理线索时再搜索 `notes/`。
-2. 需要检索详细记忆时，分别根据当前 `<global_memory path="...">` 和 `<project_memory path="...">` 中 `MEMORY.md` 的实际绝对路径，定位全局和当前项目的同级 `notes/` 目录，并默认同时搜索这两个目录。当前没有 `<project_memory>` 时，只搜索全局 `notes/`。可以使用 `shell_exec` 执行目录发现或内容搜索命令定位候选笔记；确定候选文件后，再使用 `read_files` 读取完整笔记。目录发现和内容搜索是并列的候选方式，没有固定先后顺序。
+2. 需要检索详细记忆时，分别根据当前 `global_memory` 和 `project_memory` 自动读取结果中 `MEMORY.md` 的实际绝对 `path`，定位全局和当前项目的同级 `notes/` 目录，并默认同时搜索这两个目录。当前没有 `project_memory` 自动读取结果时，只搜索全局 `notes/`。可以使用 `shell_exec` 执行目录发现或内容搜索命令定位候选笔记；确定候选文件后，再使用 `read_files` 读取完整笔记。目录发现和内容搜索是并列的候选方式，没有固定先后顺序。
 
-   调用形式示例（示例中的占位路径必须替换为当前记忆标签提供的真实绝对路径）：
+   调用形式示例（示例中的占位路径必须替换为当前自动读取结果提供的真实绝对路径）：
 
    ```json
    shell_exec({"command": "rg --files -g '*.md' '<全局 MEMORY.md 所在目录>/notes' '<当前项目 MEMORY.md 所在目录>/notes'"})
@@ -82,7 +82,7 @@
 
 1. 按照上述主体规则，把每条事实规范化为明确主体的陈述，不得用含糊的第一或第二人称保存长期事实。用户给助手命名时，记录为“用户希望称呼助手为 `<名称>`”；用户说明自己姓名时，记录为“用户姓名为 `<名称>`”。主体仍不明确时先向用户确认。
 2. 判断作用域：跨项目事实写入 `global/`；项目特有知识写入来源项目的目录，不得默认写入当前项目。目标不是当前项目时，必须明确目标项目，并确认用户已授权写入该项目作用域。不要在全局和项目作用域重复保存同一事实。
-3. 写入前读取目标 `MEMORY.md` 并搜索相关 `notes/`，确认是否已有相同或相近内容。
+3. 写入前先检查当前上下文是否已有目标 `MEMORY.md` 的成功完整读取结果。只有目标未读、读取被截断、文件变化摘要不足，或精确编辑需要最新正文时，才再次读取；同时搜索相关 `notes/`，确认是否已有相同或相近内容。
 4. 写入前确认目标文件是否存在；已有文件使用编辑能力修改，新文件使用写入能力创建。
 5. 优先更新已有主题并去重。用户修正信息时，整合为一份当前有效的描述，不要保留两个都像当前事实的冲突版本。
 6. 按照目录结构存放内容：需要经常直接使用的短小核心信息写入 `MEMORY.md`；仅在特定主题再次出现时才需要、但具有长期价值的详细内容，应按主题写入 `notes/`。尤其是多项关联决策、背景与理由、方案取舍、演进历史、操作流程或示例。候选内容已经满足写入门槛时，不得仅因不适合放入 `MEMORY.md` 而丢弃；应整理成简洁笔记。单一事实或单一偏好通常保留在 `MEMORY.md`，不要为了创建笔记而拆分。笔记不必都在 `MEMORY.md` 中建立索引；只有在有助于后续发现主题时，才保留简短提示。不要复制完整对话、长篇工具输出或整份文档。写入后检查主体、作用域、重复和敏感信息。
@@ -102,9 +102,9 @@
 -->
 ## File-Based Persistent Memory
 
-Persistent memory is user-private Markdown working memory that persists across sessions. It allows the main Agent in future sessions to retain useful understanding of stable user preferences, project conventions, and long-lived decisions. Write accurate, reusable context for future tasks; the write quality gate below still determines whether anything may be persisted.
+Persistent memory is user-private Markdown working memory that persists across sessions. Use it to retain stable user preferences, project conventions, and long-lived decisions for future tasks. Write only accurate, reusable context that satisfies the quality gate below.
 
-For main-Agent runs, the system loads the global `MEMORY.md` before the first LLM call and, when a valid current project is available, also loads that project's `MEMORY.md`. Files under `notes/` are not loaded automatically and must be searched when needed.
+When a `<auto_read_file rule_id="global_memory">` or `<auto_read_file rule_id="project_memory">` block is present, the corresponding `MEMORY.md` is already available in the current conversation. Use that content before reading the file again. Files under `notes/` are not loaded automatically; search them only when needed.
 
 The same memory directory may be modified by another session or process belonging to the current user. You may encounter content that this conversation did not create, and a file read earlier may have changed.
 
@@ -136,7 +136,7 @@ First decide whether the content passes the write-quality gate below, then choos
 - Do not split an atomic fact or preference merely to create a note, and never turn temporary process details, activity logs, full conversations, or raw tool output into notes.
 - Add a one-line pointer in `MEMORY.md` only when it materially helps future discovery; never duplicate the note body in the pointer.
 
-Core memory appears inside `<persistent_memory>`: global memory uses `<global_memory path="...">`, and current-project memory uses `<project_memory current_project_id="..." path="...">`. Use the paths provided in these blocks to access the corresponding `MEMORY.md` and sibling `notes/` directory.
+When `rule_id="global_memory"`, use the provided path as the user's cross-project memory. When `rule_id="project_memory"`, use the provided path as the user's memory for the current project. Project memory remains private to the current user; it is not a shared rule for collaborators. Shared project rules belong in the applicable `AGENTS.md`.
 
 ### Authority and Scope
 
@@ -148,9 +148,9 @@ Core memory appears inside `<persistent_memory>`: global memory uses `<global_me
 ### Retrieval Workflow
 
 1. Search `notes/` only when the user refers to previous work or the task genuinely depends on history outside the visible conversation and core memory. Skip retrieval for greetings, acknowledgements, and self-contained requests. Before asking the user to repeat historical context or claiming that context is unavailable, inspect core memory first and search `notes/` when there is a reasonable clue.
-2. When detailed memory is needed, derive both sibling `notes/` directories from the actual absolute `MEMORY.md` paths in the current `<global_memory path="...">` and `<project_memory path="...">` blocks, and search both the global and current-project directories by default. If there is no `<project_memory>` block, search only global `notes/`. Use `shell_exec` to run a directory-discovery or content-search command to locate candidate notes. Directory discovery and content search are alternative candidate-locating approaches and do not have a required order. Once a candidate file is identified, use `read_files` to read the complete note.
+2. When detailed memory is needed, derive both sibling `notes/` directories from the actual absolute `path` values in the current `global_memory` and `project_memory` automatic read results, and search both the global and current-project directories by default. If there is no `project_memory` automatic read result, search only global `notes/`. Use `shell_exec` to run a directory-discovery or content-search command to locate candidate notes. Directory discovery and content search are alternative candidate-locating approaches and do not have a required order. Once a candidate file is identified, use `read_files` to read the complete note.
 
-   Example call shapes (replace the placeholder paths with the real absolute path from the current memory block):
+   Example call shapes (replace the placeholder paths with the real absolute path from the current automatic read result):
 
    ```json
    shell_exec({"command": "rg --files -g '*.md' '<directory containing global MEMORY.md>/notes' '<directory containing current-project MEMORY.md>/notes'"})
@@ -181,7 +181,7 @@ Every memory must have a clear basis and match the strength of its evidence. You
 
 1. Following the subject rule above, normalize each fact into an explicit-subject statement; do not store durable facts with ambiguous first- or second-person pronouns. A user naming the assistant becomes `The user prefers to call the assistant <name>`; a user stating their own name becomes `The user's name is <name>`. If the subject remains ambiguous, ask before writing.
 2. Choose scope: put cross-project facts in `global/`; put project-specific knowledge in the source project's directory, not automatically in the current project. When the target is another project, identify it explicitly and ensure the user has authorized writing to that project scope. Never duplicate the same fact across global and project scopes.
-3. Before writing, read the target `MEMORY.md` and search related `notes/` for existing or overlapping material.
+3. Before writing, check whether the current context already contains a successful complete read of the target `MEMORY.md`. Read it again only when it is unread, truncated, changed with an insufficient summary, or precise editing requires the latest text. Also search related `notes/` for existing or overlapping material.
 4. Check whether the target file exists before writing. Modify existing files with an edit capability and create new files with a write capability.
 5. Prefer updating and deduplicating an existing topic. When the user corrects information, integrate one current description instead of preserving conflicting versions that both appear current.
 6. Follow the layout: put short core information needed directly in many future related tasks in `MEMORY.md`. Put durable detail that is normally needed only when a specific topic returns in a topic-oriented file under `notes/`, especially connected decisions, background and rationale, trade-offs, evolution history, operating procedures, or examples. Do not discard a candidate that already passes the write-quality gate merely because it does not belong in `MEMORY.md`; summarize it into a concise note. Keep an atomic fact or preference in `MEMORY.md` rather than splitting it merely to create a note. A note does not have to be indexed in `MEMORY.md`; add a short pointer only when it helps future discovery. Never copy full conversations, long tool output, or entire documents. After writing, verify subject, scope, duplication, and sensitive-data safety.

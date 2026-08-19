@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/shadcn-ui/sidebar"
 import { useSlidesTemplateStatistics } from "@/pages/superMagic/hooks/useSlidesTemplateTotal"
 import { formatNumber } from "@/utils/format"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import {
 	isValidTemplateCountTodayGrowth,
 	SlidesTemplateCountBadge,

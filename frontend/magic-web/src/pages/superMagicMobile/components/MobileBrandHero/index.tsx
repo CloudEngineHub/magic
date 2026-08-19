@@ -1,5 +1,5 @@
 import { SupportLocales } from "@/constants/locale"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { globalConfigStore } from "@/stores/globalConfig"
 import { usePoppinsFont } from "@/styles/font"
 import { getAvatarUrl } from "@/utils/avatar"

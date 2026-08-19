@@ -20,6 +20,7 @@ import {
 	WorkspaceStateCache,
 } from "@/pages/superMagic/utils/superMagicCache"
 import SearchBar from "@/pages/superMagic/pages/CrewMarket/components/SearchBar"
+import MarketStickyHeader from "@/pages/superMagic/pages/CrewMarket/components/MarketStickyHeader"
 import {
 	resolveActiveMarketFilterId,
 	resolveMarketFilterParams,
@@ -247,7 +248,7 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 				}
 			/>
 			{dialog}
-			<div className="mt-5 flex min-w-0 flex-col gap-5 sm:mt-6 sm:gap-6">
+			<div className="flex min-w-0 flex-col pt-5 sm:pt-6">
 				<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 					<div className="flex min-w-0 flex-1 flex-col gap-2">
 						<h1 className="break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-2xl font-bold leading-tight text-transparent sm:text-3xl lg:text-4xl">
@@ -285,97 +286,105 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 					</div>
 				</div>
 
-				<SearchBar
-					value={searchQuery}
-					onChange={setSearchQuery}
-					onSearch={handleSearch}
-					onCompositionStart={onSearchCompositionStart}
-					onCompositionEnd={onSearchCompositionEnd}
-					placeholder={t("aiSearchPlaceholder")}
-					enableSearchSubmit
-					data-testid="crew-market-desktop-search-bar"
-				/>
-
-				<CategoryFilter
-					categories={store.categories}
-					activeCategoryId={activeFilterId}
-					onCategoryChange={handleCategoryChange}
-					showOrganizationShared={!isPersonalOrganization}
-				/>
-
-				{store.loading ? (
-					<div
-						className="flex items-center justify-center py-16"
-						data-testid="crew-market-loading"
-					>
-						<Loader2 className="size-6 animate-spin text-muted-foreground" />
-					</div>
-				) : null}
-
-				{store.isEmpty ? (
-					<div
-						className="flex flex-col items-center justify-center py-16 text-center"
-						data-testid="crew-market-empty"
-					>
-						<p className="text-sm text-muted-foreground">
-							{store.keyword ? t("noResults") : t("noMoreData")}
-						</p>
-					</div>
-				) : null}
-
-				{!store.loading && store.list.length > 0 ? (
-					<div
-						className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
-						data-testid="employee-card-grid"
-					>
-						{store.list.map((employee) => (
-							<EmployeeCard
-								key={employee.id}
-								employee={employee}
-								actionPending={store.isAgentActionPending(employee.id)}
-								onHire={handleHire}
-								onDismiss={handleDismiss}
-								onDetails={handleDetails}
-								onOpenMarketDetail={handleOpenMarketDetail}
-							/>
-						))}
-					</div>
-				) : null}
-
-				{!store.loading && store.list.length > 0 ? (
-					<div
-						ref={loadMoreSentinelRef}
-						className="h-1 w-full"
-						data-testid="crew-market-scroll-sentinel"
+				<MarketStickyHeader
+					className="gap-5 pb-5 pt-5 sm:gap-6 sm:pb-6 sm:pt-6"
+					scrollViewportRef={scrollViewportRef}
+					data-testid="crew-market-sticky-header"
+				>
+					<SearchBar
+						value={searchQuery}
+						onChange={setSearchQuery}
+						onSearch={handleSearch}
+						onCompositionStart={onSearchCompositionStart}
+						onCompositionEnd={onSearchCompositionEnd}
+						placeholder={t("aiSearchPlaceholder")}
+						enableSearchSubmit
+						data-testid="crew-market-desktop-search-bar"
 					/>
-				) : null}
 
-				{!store.loading && store.list.length > 0 ? (
-					<div className="flex items-center justify-center py-2">
-						{store.hasMore ? (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => store.loadMore()}
-								disabled={store.loadingMore}
-								data-testid="crew-market-load-more"
-							>
-								{store.loadingMore ? (
-									<Loader2 className="mr-2 size-4 animate-spin" />
-								) : null}
-								{store.loadingMore ? t("loadingMore") : t("loadMore")}
-							</Button>
-						) : (
-							<div
-								className="flex items-center justify-center gap-1 opacity-30"
-								data-testid="crew-market-no-more"
-							>
-								<Check className="size-4" />
-								<span className="text-xs">{t("noMoreData")}</span>
-							</div>
-						)}
-					</div>
-				) : null}
+					<CategoryFilter
+						categories={store.categories}
+						activeCategoryId={activeFilterId}
+						onCategoryChange={handleCategoryChange}
+						showOrganizationShared={!isPersonalOrganization}
+					/>
+				</MarketStickyHeader>
+
+				<div className="flex min-w-0 flex-col gap-5 sm:gap-6">
+					{store.loading ? (
+						<div
+							className="flex items-center justify-center py-16"
+							data-testid="crew-market-loading"
+						>
+							<Loader2 className="size-6 animate-spin text-muted-foreground" />
+						</div>
+					) : null}
+
+					{store.isEmpty ? (
+						<div
+							className="flex flex-col items-center justify-center py-16 text-center"
+							data-testid="crew-market-empty"
+						>
+							<p className="text-sm text-muted-foreground">
+								{store.keyword ? t("noResults") : t("noMoreData")}
+							</p>
+						</div>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div
+							className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
+							data-testid="employee-card-grid"
+						>
+							{store.list.map((employee) => (
+								<EmployeeCard
+									key={employee.id}
+									employee={employee}
+									actionPending={store.isAgentActionPending(employee.id)}
+									onHire={handleHire}
+									onDismiss={handleDismiss}
+									onDetails={handleDetails}
+									onOpenMarketDetail={handleOpenMarketDetail}
+								/>
+							))}
+						</div>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div
+							ref={loadMoreSentinelRef}
+							className="h-1 w-full"
+							data-testid="crew-market-scroll-sentinel"
+						/>
+					) : null}
+
+					{!store.loading && store.list.length > 0 ? (
+						<div className="flex items-center justify-center py-2">
+							{store.hasMore ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => store.loadMore()}
+									disabled={store.loadingMore}
+									data-testid="crew-market-load-more"
+								>
+									{store.loadingMore ? (
+										<Loader2 className="mr-2 size-4 animate-spin" />
+									) : null}
+									{store.loadingMore ? t("loadingMore") : t("loadMore")}
+								</Button>
+							) : (
+								<div
+									className="flex items-center justify-center gap-1 opacity-30"
+									data-testid="crew-market-no-more"
+								>
+									<Check className="size-4" />
+									<span className="text-xs">{t("noMoreData")}</span>
+								</div>
+							)}
+						</div>
+					) : null}
+				</div>
 			</div>
 		</>
 	)

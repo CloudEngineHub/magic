@@ -13,7 +13,7 @@ import { useVoiceInput, getHotkeyDisplayText } from "./hooks"
 import type { VoiceInputProps, VoiceInputRef } from "./types"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { Mic } from "lucide-react"
 import type { AudioChunkParams } from "@/services/voiceToText"
 

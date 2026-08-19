@@ -15,7 +15,7 @@ import PreviewDetailPopup, {
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 import MicroAppConversationFloatingButton from "./components/MicroAppMobileConversation/MicroAppConversationFloatingButton"
 import MicroAppFallbackState from "./components/MicroAppFallbackState"

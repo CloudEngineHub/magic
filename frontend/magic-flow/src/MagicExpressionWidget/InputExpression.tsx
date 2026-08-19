@@ -2,7 +2,7 @@
 import { useControllableValue, useMemoizedFn, useUpdateEffect } from "ahooks"
 import { Cascader, ConfigProvider, Modal } from "antd"
 // import { FIELDS_NAME, VALUE_TYPE } from "cai-json-edit/dist/JsonSchemaEditor/constants"
-import _, { cloneDeep, isEqual } from "lodash"
+import { castArray, cloneDeep, isEqual } from "lodash-es"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import ContentEditable from "./components/ContentEditable"
 import { ExpressionMode, defaultExpressionValue } from "./constant"
@@ -83,7 +83,7 @@ const CustomInputExpression = (props: InputExpressionProps) => {
 	// 过滤初始空值
 	const filterValue = useMemo(() => {
 		if (!propVal) return null
-		const cloneValue = _.cloneDeep(propVal) as InputExpressionValue
+		const cloneValue = cloneDeep(propVal) as InputExpressionValue
 		cloneValue.const_value = filterEmptyValues(cloneValue.const_value)
 		cloneValue.expression_value = filterEmptyValues(cloneValue.expression_value)
 
@@ -222,7 +222,7 @@ const CustomInputExpression = (props: InputExpressionProps) => {
 
 				// 处理选择引用值的情况
 				if (val.type === LabelTypeMap.LabelFunc || val.type === LabelTypeMap.LabelNode) {
-					newValue = _.castArray(val)
+					newValue = castArray(val)
 				}
 
 				return [

@@ -11,7 +11,7 @@ import type { Virtualizer } from "@tanstack/react-virtual"
 import { debounce, throttle } from "lodash-es"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
-const MIN_TOP_DISTANCE = 400
+const DEFAULT_MIN_TOP_DISTANCE = 400
 const MIN_BOTTOM_DISTANCE = 50
 const BACK_TO_LATEST_OFFSET = 100
 const MAX_ANCHOR_CORRECTION_FRAMES = 8
@@ -26,7 +26,9 @@ interface UseVirtualMessageScrollOptions {
 	virtualizerRef: MutableRefObject<Virtualizer<HTMLDivElement, HTMLDivElement> | null>
 	items: ReadonlyArray<VirtualScrollItem>
 	topicKey: string
-	onPullMore?: () => void
+	onPullMore?: () => void | Promise<unknown>
+	/** Distance from the top at which a fresh upward gesture may load one history page. */
+	minTopDistance?: number
 }
 
 interface HistoryAnchorSnapshot {
@@ -63,6 +65,7 @@ export function useVirtualMessageScroll({
 	items,
 	topicKey,
 	onPullMore,
+	minTopDistance = DEFAULT_MIN_TOP_DISTANCE,
 }: UseVirtualMessageScrollOptions): UseVirtualMessageScrollReturn {
 	const [showBackToLatest, setShowBackToLatest] = useState(false)
 	const itemsRef = useRef(items)
@@ -82,6 +85,10 @@ export function useVirtualMessageScroll({
 	const lastTotalSizeRef = useRef(0)
 	const historyGenerationRef = useRef(0)
 	const historyAnchorRef = useRef<HistoryAnchorSnapshot | null>(null)
+	const historyLoadStateRef = useRef<"idle" | "requesting" | "restoring">("idle")
+	const historyRequestSettledRef = useRef(false)
+	const historyRequestIdRef = useRef(0)
+	const historyUnlockFrameRef = useRef<number | null>(null)
 	const prevTopicKeyRef = useRef(topicKey)
 	const previousItemCountRef = useRef(items.length)
 
@@ -111,6 +118,60 @@ export function useVirtualMessageScroll({
 			layoutCorrectionTimerRef.current = null
 		}, 100)
 	}, [])
+
+	const clearHistoryUnlockFrame = useCallback(() => {
+		if (historyUnlockFrameRef.current === null) return
+		window.cancelAnimationFrame(historyUnlockFrameRef.current)
+		historyUnlockFrameRef.current = null
+	}, [])
+
+	const finishHistoryLoad = useCallback(() => {
+		clearHistoryUnlockFrame()
+		historyLoadStateRef.current = "idle"
+		historyRequestSettledRef.current = false
+		// A page request consumes exactly one gesture. Scroll events emitted while the
+		// request/anchor restoration was in flight must not authorize the next page.
+		userHistoryIntentRef.current = false
+	}, [clearHistoryUnlockFrame])
+
+	const scheduleHistoryUnlock = useCallback(() => {
+		if (!historyRequestSettledRef.current || historyAnchorRef.current) return
+		if (historyUnlockFrameRef.current !== null) return
+		historyUnlockFrameRef.current = window.requestAnimationFrame(() => {
+			historyUnlockFrameRef.current = null
+			if (historyRequestSettledRef.current && !historyAnchorRef.current) {
+				finishHistoryLoad()
+			}
+		})
+	}, [finishHistoryLoad])
+
+	const settleHistoryRequest = useCallback(
+		(requestId: number) => {
+			if (historyRequestIdRef.current !== requestId) return
+			historyRequestSettledRef.current = true
+			if (historyAnchorRef.current) {
+				historyLoadStateRef.current = "restoring"
+				clearHistoryUnlockFrame()
+				historyUnlockFrameRef.current = window.requestAnimationFrame(() => {
+					historyUnlockFrameRef.current = null
+					const snapshot = historyAnchorRef.current
+					if (
+						historyRequestSettledRef.current &&
+						snapshot &&
+						itemsRef.current.length <= snapshot.previousCount
+					) {
+						// Empty/duplicate pages do not cause a list commit. Release the lock after
+						// one paint, while still requiring a fresh gesture for the next request.
+						historyAnchorRef.current = null
+						finishHistoryLoad()
+					}
+				})
+				return
+			}
+			scheduleHistoryUnlock()
+		},
+		[clearHistoryUnlockFrame, finishHistoryLoad, scheduleHistoryUnlock],
+	)
 
 	const scrollToBottom = useCallback(
 		(behavior: ScrollBehavior = "smooth") => {
@@ -157,14 +218,18 @@ export function useVirtualMessageScroll({
 		lastTotalSizeRef.current = 0
 		historyAnchorRef.current = null
 		historyGenerationRef.current += 1
+		historyLoadStateRef.current = "idle"
+		historyRequestSettledRef.current = false
+		historyRequestIdRef.current += 1
 		previousItemCountRef.current = items.length
 	}
 
 	useEffect(() => {
 		setShowBackToLatest(false)
 		clearGuard()
+		finishHistoryLoad()
 		scrollToBottom("auto")
-	}, [clearGuard, scrollToBottom, topicKey])
+	}, [clearGuard, finishHistoryLoad, scrollToBottom, topicKey])
 
 	useLayoutEffect(() => {
 		const previousItemCount = previousItemCountRef.current
@@ -177,6 +242,9 @@ export function useVirtualMessageScroll({
 			historyAnchorRef.current = null
 			historyGenerationRef.current += 1
 			suppressUntilRef.current = Date.now() + 300
+			if (historyLoadStateRef.current === "idle" || historyRequestSettledRef.current) {
+				finishHistoryLoad()
+			}
 		}
 
 		const snapshot = historyAnchorRef.current
@@ -187,6 +255,7 @@ export function useVirtualMessageScroll({
 		const anchorIndex = items.findIndex((item) => item.key === snapshot.key)
 		if (anchorIndex < 0) {
 			historyAnchorRef.current = null
+			scheduleHistoryUnlock()
 			return
 		}
 
@@ -203,6 +272,9 @@ export function useVirtualMessageScroll({
 			if (!currentVirtualizer || !currentViewport || !measurement) {
 				if (++frame < MAX_ANCHOR_CORRECTION_FRAMES) {
 					animationFrame = window.requestAnimationFrame(correctAnchor)
+				} else {
+					historyAnchorRef.current = null
+					scheduleHistoryUnlock()
 				}
 				return
 			}
@@ -223,6 +295,7 @@ export function useVirtualMessageScroll({
 			frame += 1
 			if (stableFrames >= 2 || frame >= MAX_ANCHOR_CORRECTION_FRAMES) {
 				historyAnchorRef.current = null
+				scheduleHistoryUnlock()
 				return
 			}
 			animationFrame = window.requestAnimationFrame(correctAnchor)
@@ -230,7 +303,14 @@ export function useVirtualMessageScroll({
 
 		correctAnchor()
 		return () => window.cancelAnimationFrame(animationFrame)
-	}, [containerRef, items, markLayoutCorrection, virtualizerRef])
+	}, [
+		containerRef,
+		finishHistoryLoad,
+		items,
+		markLayoutCorrection,
+		scheduleHistoryUnlock,
+		virtualizerRef,
+	])
 
 	useEffect(() => {
 		const viewport = containerRef.current
@@ -240,12 +320,39 @@ export function useVirtualMessageScroll({
 		const pullMessages = debounce(() => {
 			if (
 				userHistoryIntentRef.current &&
+				historyLoadStateRef.current === "idle" &&
 				guardTimerRef.current === null &&
 				!isLayoutCorrectionRef.current &&
-				viewport.scrollTop < MIN_TOP_DISTANCE
+				viewport.scrollTop < minTopDistance
 			) {
 				userHistoryIntentRef.current = false
-				onPullMoreRef.current?.()
+				historyLoadStateRef.current = "requesting"
+				historyRequestSettledRef.current = false
+				const requestId = ++historyRequestIdRef.current
+				let result: void | Promise<unknown>
+				try {
+					result = onPullMoreRef.current?.()
+				} catch {
+					settleHistoryRequest(requestId)
+					return
+				}
+				void Promise.resolve(result).then(
+					() => settleHistoryRequest(requestId),
+					() => settleHistoryRequest(requestId),
+				)
+				return
+			}
+
+			if (
+				userHistoryIntentRef.current &&
+				historyLoadStateRef.current === "idle" &&
+				guardTimerRef.current === null &&
+				!isLayoutCorrectionRef.current &&
+				viewport.scrollTop >= minTopDistance
+			) {
+				// Do not carry an upward intent past the threshold. Otherwise a later
+				// streaming/layout scroll could be mistaken for a new user gesture.
+				userHistoryIntentRef.current = false
 			}
 		}, 300)
 
@@ -258,7 +365,9 @@ export function useVirtualMessageScroll({
 
 				if (!isProgrammatic && isUserScrollInteractionRef.current) {
 					if (viewport.scrollTop < previousScrollTopRef.current) {
-						userHistoryIntentRef.current = true
+						if (historyLoadStateRef.current === "idle") {
+							userHistoryIntentRef.current = true
+						}
 					} else if (viewport.scrollTop > previousScrollTopRef.current) {
 						userHistoryIntentRef.current = false
 					}
@@ -269,13 +378,22 @@ export function useVirtualMessageScroll({
 					viewport.scrollTop + viewport.clientHeight + BACK_TO_LATEST_OFFSET < totalSize,
 				)
 				if (!isProgrammatic) autoFollowRef.current = distanceToBottom < MIN_BOTTOM_DISTANCE
-				if (!isProgrammatic && userHistoryIntentRef.current) pullMessages()
+				if (
+					!isProgrammatic &&
+					historyLoadStateRef.current === "idle" &&
+					userHistoryIntentRef.current
+				)
+					pullMessages()
 			},
 			16,
 			{ leading: false, trailing: true },
 		)
 
 		const handleWheel = (event: WheelEvent) => {
+			if (historyLoadStateRef.current !== "idle") {
+				if (event.deltaY >= 0) userHistoryIntentRef.current = false
+				return
+			}
 			if (event.deltaY >= 0) {
 				userHistoryIntentRef.current = false
 				historyAnchorRef.current = null
@@ -310,7 +428,7 @@ export function useVirtualMessageScroll({
 			pullMessages.cancel()
 			handleScroll.cancel()
 		}
-	}, [clearGuard, containerRef, virtualizerRef])
+	}, [clearGuard, containerRef, minTopDistance, settleHistoryRequest, virtualizerRef])
 
 	useEffect(() => {
 		const viewport = containerRef.current
@@ -401,12 +519,13 @@ export function useVirtualMessageScroll({
 	useEffect(
 		() => () => {
 			clearGuard()
+			clearHistoryUnlockFrame()
 			if (layoutCorrectionTimerRef.current !== null) {
 				window.clearTimeout(layoutCorrectionTimerRef.current)
 			}
 			resizeObserverRef.current?.disconnect()
 		},
-		[clearGuard],
+		[clearGuard, clearHistoryUnlockFrame],
 	)
 
 	return { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange }

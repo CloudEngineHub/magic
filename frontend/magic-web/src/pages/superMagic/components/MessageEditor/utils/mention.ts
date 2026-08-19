@@ -20,7 +20,7 @@ import { validateMentionWithDataService } from "@/components/business/MentionPan
 import projectFilesStore from "@/stores/projectFiles"
 import { DraftData, FileData } from "../types"
 import { keyBy } from "lodash-es"
-import { JSONContent } from "@tiptap/core"
+import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { SaveUploadFileToProjectResponse } from "../../../utils/api"
 
 /**

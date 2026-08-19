@@ -17,7 +17,7 @@ import { Icon } from "@iconify/react"
 import { IconChevronRight } from "@tabler/icons-react"
 import { useMemoizedFn } from "ahooks"
 import i18next from "i18next"
-import _ from "lodash"
+import { cloneDeep } from "lodash-es"
 import React, { useMemo, useRef } from "react"
 import SearchInput from "../SearchInput"
 import FunctionTips from "./components/FunctionTips"
@@ -325,7 +325,7 @@ const CascaderDropdown = ({
 						// 如果不可选中，默认点击为展开和折叠
 						if (!node.selectable) {
 							e.preventDefault()
-							const cloneKeys = _.cloneDeep(expandedKeys)
+							const cloneKeys = cloneDeep(expandedKeys)
 							const index = cloneKeys.findIndex((key) => node.key === key)
 							if (node.expanded) {
 								if (index === -1) return

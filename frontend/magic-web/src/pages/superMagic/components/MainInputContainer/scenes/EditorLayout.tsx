@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import PluginTips from "../components/PluginTips"
 import { AgentCommonModal } from "@/components/Agent/AgentCommonModal"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 const AgentSettingsLazy = lazy(() => import("@/components/Agent/MCP/AgentSettings"))
 import CurrentSceneBadge from "../components/SelectedSkillBadge"

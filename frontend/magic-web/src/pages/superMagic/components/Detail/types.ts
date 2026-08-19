@@ -102,6 +102,12 @@ export interface DetailBrowserData {
 	file_key?: string | null
 	screenshot?: string
 	preview?: string
+	action?: string
+	summary?: string
+	detail?: string
+	page_title?: string
+	target?: string
+	status?: "succeeded" | "failed"
 }
 
 /** MD文件 TextEditor */

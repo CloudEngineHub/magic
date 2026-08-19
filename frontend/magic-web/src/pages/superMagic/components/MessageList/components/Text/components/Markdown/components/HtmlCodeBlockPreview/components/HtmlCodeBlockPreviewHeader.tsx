@@ -2,7 +2,7 @@ import { IconChevronUp } from "@tabler/icons-react"
 import { Check, CodeXml, Copy, Fullscreen, Monitor, Smartphone } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import type { HtmlCodeBlockPreviewMode } from "../types"
 import { HtmlCodeBlockPreviewHtmlIcon } from "./HtmlCodeBlockPreviewHtmlIcon"
 

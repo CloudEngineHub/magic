@@ -17,11 +17,12 @@ import { isEmpty, last } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { useMatch } from "react-router"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 import { RoutePath } from "@/constants/routes"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import BaseModal from "../BaseModal"
+import MagicModal from "@/components/base/MagicModal"
 import MobileFilesMoveSheet from "../SelectDirectoryModal/MobileFilesMoveSheet"
 import MagicSpin from "@/components/base/MagicSpin"
 import { SuperMagicApi } from "@/apis"
@@ -162,6 +163,45 @@ function ProjectResourceSelectorModal({
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	// This option only applies to multi-file transfers into another project; same-project
+	// operations retain their existing flat target-directory semantics.
+	const showPreserveParentPathOption =
+		!isMentionMode &&
+		fileIds.length > 1 &&
+		currentProject !== null &&
+		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
+	const confirmPreserveParentPath = useMemoizedFn(
+		() =>
+			new Promise<boolean | null>((resolve) => {
+				let shouldPreserveParentPath = false
+				MagicModal.confirm({
+					title: t("selectPathModal.preserveParentPathConfirmTitle"),
+					content: (
+						<div className="flex flex-col gap-3">
+							<div className="text-sm leading-5 text-muted-foreground">
+								{t("selectPathModal.preserveParentPathDescription")}
+							</div>
+							<label
+								className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+								data-testid="cross-project-file-preserve-parent-path-option"
+							>
+								<Checkbox
+									onChange={(event) => {
+										shouldPreserveParentPath = event.target.checked
+									}}
+								/>
+								<span>{t("selectPathModal.preserveParentPath")}</span>
+							</label>
+						</div>
+					),
+					okText: t("selectPathModal.confirm"),
+					cancelText: t("common.cancel"),
+					maskClosable: false,
+					onOk: () => resolve(shouldPreserveParentPath),
+					onCancel: () => resolve(null),
+				})
+			}),
+	)
 	const [isSearch, setIsSearch] = useState(false)
 	const [fileName, setFileName] = useState("")
 	const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -564,8 +604,9 @@ function ProjectResourceSelectorModal({
 			try {
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// This selector is loading the signed-in user's target project. Do not
+					// inherit the source share token, which rewrites the project ID to 0.
+					temporaryToken: null,
 				})
 				setCurrentProject(project)
 				setViewMode("directory")
@@ -619,8 +660,8 @@ function ProjectResourceSelectorModal({
 				// 5. 获取项目文件树
 				const res = await loadProjectAttachments({
 					projectId: project.id,
-					temporaryToken:
-						(window as Window & { temporary_token?: string }).temporary_token || "",
+					// Claw projects selected as a destination use the current user's auth.
+					temporaryToken: null,
 				})
 
 				setAttachments(res?.tree || [])
@@ -922,7 +963,7 @@ function ProjectResourceSelectorModal({
 		},
 	)
 
-	const submit = useMemoizedFn(() => {
+	const submit = useMemoizedFn(async () => {
 		if (isMentionMode) {
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
@@ -937,6 +978,7 @@ function ProjectResourceSelectorModal({
 				selections: selectedResources,
 				includeDocumentDependencies,
 				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath: false,
 			})
 			if (closeOnSubmit) onClose?.()
 			return
@@ -947,6 +989,13 @@ function ProjectResourceSelectorModal({
 
 		// Some flows, such as recording copy, let users save at workspace level so
 		// the submit handler can create a normal target project before copying.
+		let preserveParentPath = false
+		if (showPreserveParentPathOption) {
+			const preserveParentPathChoice = await confirmPreserveParentPath()
+			if (preserveParentPathChoice === null) return
+			preserveParentPath = preserveParentPathChoice
+		}
+
 		const targetPath = currentProject ? path : []
 		const targetAttachments = currentProject ? attachments : []
 		onSubmit &&
@@ -959,6 +1008,7 @@ function ProjectResourceSelectorModal({
 				sourceAttachments: sourceAttachments,
 				includeDocumentDependencies,
 				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+				preserveParentPath,
 			})
 		if (closeOnSubmit) onClose && onClose()
 	})
@@ -1047,8 +1097,8 @@ function ProjectResourceSelectorModal({
 				try {
 					const res = await loadProjectAttachments({
 						projectId: selectedProject.id,
-						temporaryToken:
-							(window as Window & { temporary_token?: string }).temporary_token || "",
+						// The preselected destination project must not inherit a share token.
+						temporaryToken: null,
 					})
 					setAttachments(res?.tree || [])
 					const dirs = getDirectoriesFromPath(res?.tree || [], initialPath)

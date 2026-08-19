@@ -54,18 +54,7 @@ def parse_questions_xml(raw_xml: str) -> List[dict]:
             questions.append(parsed)
 
     if not questions:
-        # 连正则都没匹配到 <question>，尝试把整个输入当成一个问题
-        logger.warning(f"No <question> tags found, treating entire input as a single question: {raw_xml[:120]}")
-        questions.append({
-            "sub_id": str(uuid.uuid4()),
-            "question": raw_xml.strip(),
-            "interaction_type": "input",
-            "options": None,
-            "placeholder": None,
-            "min_select": None,
-            "max_select": None,
-            "default_value": None,
-        })
+        logger.warning("No valid <question> tags found in ask_user arguments")
 
     return questions
 

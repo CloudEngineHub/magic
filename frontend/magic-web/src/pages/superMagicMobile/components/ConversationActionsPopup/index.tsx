@@ -3,7 +3,7 @@ import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import type { ActionGroup } from "@/pages/superMagicMobile/components/ActionSheet"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 interface ConversationActionsPopupProps {
 	visible: boolean

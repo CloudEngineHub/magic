@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { EditorStore } from "../index"
-import { JSONContent, Editor } from "@tiptap/react"
+import { JSONContent, Editor } from "@/infrastructure/editors/tiptap/react"
 
 describe("EditorStore", () => {
 	let store: EditorStore

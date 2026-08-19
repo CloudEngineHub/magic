@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from playwright.async_api import Browser, BrowserContext
+from magic_use.playwright.fingerprint import UserAgentOverride
 
 if TYPE_CHECKING:
     from magic_use.playwright.host import PlaywrightHost
@@ -29,6 +30,10 @@ class PlaywrightContextLease:
     @property
     def browser(self) -> Browser:
         return self._host.browser
+
+    @property
+    def user_agent_override(self) -> UserAgentOverride | None:
+        return self._host.user_agent_override
 
     def set_disconnect_handler(self, handler: Callable[[], None]) -> None:
         self._host.set_disconnect_handler(self.lease_id, handler)

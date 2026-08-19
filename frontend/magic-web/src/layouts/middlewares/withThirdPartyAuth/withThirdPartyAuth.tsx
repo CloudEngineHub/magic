@@ -5,7 +5,6 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { LoginValueKey } from "@/pages/login/constants"
 import { RoutePath } from "@/constants/routes"
 import { baseHistory, history } from "@/routes/history"
-import { RouteName } from "@/routes/constants"
 import { logger as Logger } from "@/utils/log"
 import { useAuthorization } from "@/models/user/hooks"
 import { useClusterCode } from "@/providers/ClusterProvider"
@@ -22,6 +21,8 @@ import { userStore } from "@/models/user"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
 import { defaultClusterCode } from "@/routes/helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { authEventBus } from "@/services/auth/AuthEventBus"
+import { AuthEventName } from "@/services/auth/AuthEvents"
 
 const logger = Logger.createLogger("withThirdPartyAuth")
 
@@ -92,7 +93,12 @@ export function withThirdPartyAuth<T extends object>(
 						context: { tempToken },
 					})
 					// Need to redirect to login route
-					history.push({ name: RouteName.Login })
+						authEventBus.emit(AuthEventName.RequestLogin, {
+						reason: "third-party-auth-failed",
+						source: "third-party",
+						returnTo: window.location.href,
+						preserveQuery: true,
+					})
 				}
 			},
 			{ wait: 3000, leading: true, trailing: false },
@@ -201,7 +207,12 @@ export function withThirdPartyAuth<T extends object>(
 					magicToast.error(error?.message)
 
 					// Need to redirect to login route
-					history.push({ name: RouteName.Login })
+					authEventBus.emit(AuthEventName.RequestLogin, {
+						reason: "third-party-auth-failed",
+						source: "third-party",
+						returnTo: window.location.href,
+						preserveQuery: true,
+					})
 				}
 			},
 			{ wait: 3000, leading: true, trailing: false },

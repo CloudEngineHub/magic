@@ -18,6 +18,7 @@ use App\Application\ModelGateway\Service\Video\VideoInputMediaMetadataResolver;
 use App\Application\ModelGateway\Service\VideoOperationAppService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\File\Service\FileDomainService;
+use App\Domain\ImageGenerate\ValueObject\ImageGenerateSourceEnum;
 use App\Domain\ModelGateway\Contract\QueueOperationExecutorInterface;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
 use App\Domain\ModelGateway\Entity\AccessTokenEntity;
@@ -2086,6 +2087,43 @@ class VideoOperationAppServiceTest extends TestCase
         } finally {
             $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$operation->getId()]->getStatus());
         }
+    }
+
+    public function testManagedPollUsesBusinessTokenTypeForApiPlatformSource(): void
+    {
+        $operation = $this->createOperation('op-managed-api-platform-source');
+        $operation->setStatus(VideoOperationStatus::PROVIDER_RUNNING);
+        $operation->setProviderTaskId('provider-task-api-platform-source');
+        $operation->setStartedAt(date(DATE_ATOM));
+
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $operationRepository->operations[$operation->getId()] = $operation;
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            new RecordingQueueOperationExecutor(
+                submitResult: 'unused',
+                queryResult: [
+                    'status' => 'succeeded',
+                    'output' => [
+                        'video_url' => 'https://example.com/api-platform-source.mp4',
+                    ],
+                ],
+            ),
+        );
+
+        $isDone = $service->pollOperationById($operation->getId(), [
+            'organization_id' => 'org-test',
+            'access_token_type' => AccessTokenType::User->value,
+        ]);
+
+        $this->assertTrue($isDone);
+        $videoGeneratedEvents = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof VideoGeneratedEvent
+        ));
+        $this->assertCount(1, $videoGeneratedEvents);
+        $event = $videoGeneratedEvents[0];
+        $this->assertSame(ImageGenerateSourceEnum::API_PLATFORM, $event->getSourceType());
     }
 
     public function testGetOperationRejectsFullProviderTaskIdFallbackWhenStoredOperationIsMissing(): void

@@ -12,8 +12,10 @@ import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
 import vitePluginMagicAdminSource from "./packages/magic-admin/vite/plugins/vite-plugin-magic-admin-source"
 import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base-imports"
+import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
 import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
+import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import { resolveMicroAppInstallDevProxy } from "./vite/micro-app-install-proxy"
@@ -163,6 +165,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 				"antd-style",
 				"@emotion/react",
 				"@emotion/cache",
+				"lucide-react",
+				"@tabler/icons-react",
 			],
 			alias: [
 				{
@@ -226,6 +230,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 			],
 		},
 		plugins: [
+			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
 			vitePluginMagicAdminSource({
@@ -240,6 +245,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					{
 						base: "lucide-react",
 						subDirectory: "dist/esm/icons",
+						query: "lucide-static",
 						componentNameFormatter: formatLucideComponentImportName,
 					},
 				],
@@ -319,6 +325,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 					"react-dom": "ReactDOM",
 					"lodash-es": "_",
 				}),
+			!isDev && externalGlobalsPlugin(),
 			vitePluginImp({
 				libList: [
 					{
@@ -336,7 +343,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 						// http2Proxy({ quiet: true }),
 					]
 				: []),
-			// optional -- suppress error logging],
 		],
 		css: {
 			preprocessorOptions: {

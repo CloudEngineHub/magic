@@ -16,7 +16,7 @@ import {
 	SelectValue,
 } from "@/components/shadcn-ui/select"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
-import { cn } from "@/lib/utils"
+import { cn } from "@/utils/cn"
 
 /** Placement for the shared history version dropdown */
 type HistoryVersionSelectorPlacement = "compare" | "fullscreen"

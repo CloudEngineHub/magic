@@ -86,6 +86,8 @@ class FileContent(BaseModel):
 
     file_name: str  # 文件名
     content: str  # 文件内容
+    relative_file_path: Optional[str] = None  # 工作区内文件的相对路径
+    storage_type: Optional[AttachmentStorageType] = None  # 文件生命周期所属的存储类型
 
 
 class FileTreeNode(BaseModel):
@@ -145,10 +147,11 @@ class BrowserContent(BaseModel):
     file_key: Optional[str] = None  # 浏览器截图
     file_size: int = Field(default=0, ge=0)  # 截图文件大小
     file_url: Optional[str] = None  # 仅本地调试即时预览使用
-    storage_type: AttachmentStorageType = AttachmentStorageType.SNAPSHOT  # 截图生命周期归属
+    storage_type: AttachmentStorageType = AttachmentStorageType.TOPIC  # 截图生命周期归属
     file_tag: AttachmentTag = AttachmentTag.BROWSER  # 文件业务类型
     action: Optional[str] = None  # 用户可理解的操作名称
     summary: Optional[str] = None  # 本次操作结果摘要
+    detail: Optional[str] = None  # 脱敏后供用户查看的结构化 Markdown 详情
     page_title: Optional[str] = None  # 当前页面标题
     target: Optional[str] = None  # 本次操作对象
     status: Optional[BrowserDetailStatus] = None  # 本次操作状态

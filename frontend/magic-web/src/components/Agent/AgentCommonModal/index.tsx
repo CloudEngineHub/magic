@@ -4,6 +4,8 @@ import { type AgentCommonModalProps, AgentCommonModalRef } from "./types"
 import { userStore } from "@/models/user"
 import { reaction } from "mobx"
 import { createRef, lazy, Suspense } from "react"
+import { MagicWidgetContextProvider } from "@/providers/MagicWidgetProvider/context"
+import type { MagicWidgetContextValue } from "@/providers/MagicWidgetProvider/types"
 
 const AgentCommonModal = lazy(() =>
 	import("./AgentCommonModal").then((module) => ({
@@ -21,7 +23,12 @@ interface ModalInstance {
 
 const activeModals = new Set<ModalInstance>()
 
-export function openAgentCommonModal(props: AgentCommonModalProps) {
+type OpenAgentCommonModalProps = AgentCommonModalProps & {
+	widgetContext?: MagicWidgetContextValue
+}
+
+export function openAgentCommonModal(props: OpenAgentCommonModalProps) {
+	const { widgetContext, ...modalProps } = props
 	const div = document.createElement("div")
 	document.body.appendChild(div)
 
@@ -71,21 +78,29 @@ export function openAgentCommonModal(props: AgentCommonModalProps) {
 		}, 0)
 	}
 
-	root.render(
+	const modal = (
 		<AppearanceProvider>
 			<Suspense fallback={null}>
 				<AgentCommonModal
-					{...props}
+					{...modalProps}
 					ref={modalRef}
 					getContainer={() => div}
 					onClose={() => {
-						props?.onClose?.()
+						modalProps.onClose?.()
 						handleClose()
 					}}
 					maskClosable={false}
 				/>
 			</Suspense>
-		</AppearanceProvider>,
+		</AppearanceProvider>
+	)
+
+	root.render(
+		widgetContext ? (
+			<MagicWidgetContextProvider value={widgetContext}>{modal}</MagicWidgetContextProvider>
+		) : (
+			modal
+		),
 	)
 
 	return { onClose: () => modalRef.current?.close() }

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react"
-import JSZip from "jszip"
+import { loadJSZip } from "@/infrastructure/vendors/jszip"
 import { saveAs } from "file-saver"
 import { logger as rootLogger } from "@/utils/log"
 import type { CardFrameRef } from "../components/CardFrame"
@@ -90,7 +90,7 @@ export function useExportZip(): UseExportZipResult {
 			const total = posts.reduce((sum, p) => sum + p.cards.length, 0)
 			setProgress({ current: 0, total, status: "running" })
 
-			const zip = new JSZip()
+			const zip = new (await loadJSZip())()
 			let processed = 0
 			let captured = 0
 			const failedPageNumbers: number[] = []

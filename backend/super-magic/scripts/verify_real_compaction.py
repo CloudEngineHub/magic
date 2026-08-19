@@ -42,7 +42,7 @@ magic-service。只有在排查静态 config.yaml provider 时才使用 `--allow
   `summary_ok=true`、`apply_ok=true`、`first_check_result=false`、`second_check_result=true`。
 
 需要人工检查压缩质量时，加 `--keep-artifacts`。脚本会保留主 Agent 的压缩后
-chat history、`.compacted/*_backup.json`，以及 `.chat_history/subagents/` 下对应
+chat history、`compacted/{agent_name}<{agent_id}>_{YYYYMMDDHHMMSS}.json`，以及 `.runtime/background_compact/` 下对应
 subagent 的历史和 token usage。检查完临时产物后用 `trash` 清理，不要用 `rm`。
 """
 
@@ -61,6 +61,13 @@ from typing import Literal, Optional
 
 
 Mode = Literal["background", "precompact", "foreground"]
+
+_VERIFICATION_MAX_DIR_COUNT = 10
+_VERIFICATION_TARGET_DIR_COUNT = 8
+_VERIFICATION_MAX_TOTAL_BYTES = 512 * 1024 * 1024
+_VERIFICATION_TARGET_TOTAL_BYTES = 384 * 1024 * 1024
+_VERIFICATION_RETENTION_SECONDS = 7 * 24 * 60 * 60
+_VERIFICATION_ACTIVE_GRACE_SECONDS = 60 * 60
 
 
 @dataclass
@@ -166,6 +173,98 @@ def _make_run_id(mode: Mode) -> str:
     return f"verify-{mode}-{uuid.uuid4().hex[:12]}"
 
 
+def _verification_root() -> Path:
+    from app.path_manager import PathManager
+
+    return PathManager.get_runtime_dir() / "verification" / "real_compaction"
+
+
+def _verification_artifact_dir(agent_id: str) -> Path:
+    if not agent_id or Path(agent_id).name != agent_id or agent_id in {".", ".."}:
+        raise ValueError("agent_id must be a non-empty single path segment")
+    return _verification_root() / agent_id
+
+
+@dataclass(frozen=True, slots=True)
+class _VerificationArtifact:
+    path: Path
+    size: int
+    modified_at: float
+
+
+async def _prepare_verification_artifacts() -> None:
+    from app.utils.async_file_utils import async_rmtree, async_scandir, async_stat
+    from app.utils.runtime_storage import ensure_runtime_directory
+
+    root = await ensure_runtime_directory(_verification_root())
+    artifacts: list[_VerificationArtifact] = []
+    for entry in await async_scandir(root):
+        if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+            continue
+        path = Path(entry.path)
+        stat = await async_stat(path)
+        artifacts.append(
+            _VerificationArtifact(
+                path=path,
+                size=await _directory_size(path),
+                modified_at=stat.st_mtime,
+            )
+        )
+
+    artifacts.sort(key=lambda item: item.modified_at)
+    now = time.time()
+    expired = [
+        item
+        for item in artifacts
+        if item.modified_at < now - _VERIFICATION_RETENTION_SECONDS
+    ]
+    for item in expired:
+        await async_rmtree(item.path)
+
+    expired_paths = {item.path for item in expired}
+    remaining = [item for item in artifacts if item.path not in expired_paths]
+    total_bytes = sum(item.size for item in remaining)
+    if (
+        len(remaining) <= _VERIFICATION_MAX_DIR_COUNT
+        and total_bytes <= _VERIFICATION_MAX_TOTAL_BYTES
+    ):
+        return
+
+    remaining_count = len(remaining)
+    capacity_candidates = [
+        item
+        for item in remaining
+        if item.modified_at < now - _VERIFICATION_ACTIVE_GRACE_SECONDS
+    ]
+    for item in capacity_candidates:
+        if (
+            remaining_count <= _VERIFICATION_TARGET_DIR_COUNT
+            and total_bytes <= _VERIFICATION_TARGET_TOTAL_BYTES
+        ):
+            break
+        await async_rmtree(item.path)
+        remaining_count -= 1
+        total_bytes -= item.size
+
+
+async def _directory_size(directory: Path) -> int:
+    from app.utils.async_file_utils import async_scandir, async_stat
+
+    total = 0
+    for entry in await async_scandir(directory):
+        if entry.is_symlink():
+            continue
+        path = Path(entry.path)
+        if entry.is_dir(follow_symlinks=False):
+            total += await _directory_size(path)
+        elif entry.is_file(follow_symlinks=False):
+            try:
+                total += (await async_stat(path)).st_size
+            except FileNotFoundError:
+                continue
+    return total
+
+
 async def _make_agent(
     *,
     agent_name: str,
@@ -175,12 +274,15 @@ async def _make_agent(
     from app.core.context.agent_context import AgentContext
     from app.core.models.agent_model_selection import AgentModelSelection
     from app.magic.agent import Agent
-    from app.path_manager import PathManager
+    from app.utils.runtime_storage import ensure_runtime_directory
 
+    artifact_dir = await ensure_runtime_directory(
+        _verification_artifact_dir(agent_id)
+    )
     context = AgentContext(isolated=True)
     context.set_agent_name(agent_name)
     context.set_sandbox_id(os.environ.get("SANDBOX_ID", "default"))
-    context.set_chat_history_dir(str(PathManager.get_runtime_dir() / "real_compaction_verify" / agent_id))
+    context.set_chat_history_dir(str(artifact_dir))
 
     agent = Agent(agent_name, agent_id=agent_id, agent_context=context)
     agent.agent_context.model_context.apply_selection(
@@ -260,7 +362,7 @@ async def _snapshot_debug_files() -> set[Path]:
     from app.path_manager import PathManager
     from app.utils.async_file_utils import async_exists, async_iterdir
 
-    debug_dir = PathManager.get_chat_history_dir() / "llm_request"
+    debug_dir = PathManager.get_llm_request_dir()
     if not await async_exists(debug_dir):
         return set()
     return set(await async_iterdir(debug_dir))
@@ -284,15 +386,12 @@ async def _cleanup_run_artifacts(
             cleaned = True
 
     if subagent_id:
-        subagent_dir = PathManager.get_subagents_chat_history_dir()
+        subagent_dir = PathManager.get_subagent_chat_history_dir(agent_name, subagent_id)
         if await async_exists(subagent_dir):
-            prefix = f"{agent_name}<{subagent_id}>"
-            for path in await async_iterdir(subagent_dir):
-                if path.name.startswith(prefix):
-                    await async_unlink(path)
-                    cleaned = True
+            await async_rmtree(subagent_dir)
+            cleaned = True
 
-    debug_dir = PathManager.get_chat_history_dir() / "llm_request"
+    debug_dir = PathManager.get_llm_request_dir()
     if await async_exists(debug_dir):
         for path in await async_iterdir(debug_dir):
             if path not in debug_files_before:
@@ -370,6 +469,7 @@ async def _run_verification(args: argparse.Namespace) -> VerificationResult:
     started_at = time.time()
     project_root = _project_root()
     await _bootstrap(project_root, load_dynamic_models=args.load_dynamic_models)
+    await _prepare_verification_artifacts()
     debug_files_before = await _snapshot_debug_files()
 
     runtime_model = args.runtime_model
