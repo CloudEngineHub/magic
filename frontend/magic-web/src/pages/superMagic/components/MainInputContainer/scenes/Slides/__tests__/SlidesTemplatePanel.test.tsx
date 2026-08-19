@@ -294,8 +294,7 @@ describe("SlidesTemplatePanel", () => {
 		})
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(getPromptRichTextPlainText(lastContent)).toContain("Pages: 6-10")
 		})
 
@@ -312,8 +311,7 @@ describe("SlidesTemplatePanel", () => {
 
 		await waitFor(() => {
 			const lastContent = handlePresetContentChange.mock.calls.at(-1)?.[0] as
-				| JSONContent
-				| undefined
+				JSONContent | undefined
 			expect(lastContent).toBeUndefined()
 		})
 	})
@@ -825,6 +823,34 @@ describe("SlidesTemplatePanel", () => {
 		fireEvent.click(await screen.findByText("Business Template"))
 
 		await waitFor(() => expect(trigger).toHaveTextContent("Business Template"))
+	})
+
+	it("clears controlled template selection when the input scope changes", async () => {
+		function ControlledTopicTemplatePanel() {
+			const [selectedTemplate, setSelectedTemplate] = useState<OptionItem | null>({
+				value: businessTemplate.code,
+				label: businessTemplate.label,
+			})
+			const config = useMemo(() => createSlidesPresetPanelConfig([]), [])
+
+			return (
+				<SlidesTemplatePanel
+					config={config}
+					variant={ScenePanelVariant.TopicPage}
+					selectedTemplate={selectedTemplate}
+					onTemplateSelect={setSelectedTemplate}
+				/>
+			)
+		}
+
+		const { rerender } = render(<ControlledTopicTemplatePanel />)
+		const trigger = await screen.findByTestId("slides-template-floating-selector-trigger")
+		expect(trigger).toHaveTextContent("Business Template")
+
+		sceneStateStoreMock.inputScopeKey = "ppt\u001etopic-b\u001e"
+		rerender(<ControlledTopicTemplatePanel />)
+
+		await waitFor(() => expect(trigger).not.toHaveTextContent("Business Template"))
 	})
 
 	it("keeps mobile compact selector and filters on the same row", async () => {

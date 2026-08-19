@@ -129,6 +129,9 @@ function SlidesTemplatePanel({
 	const inputScopeKey = sceneStateStore?.inputScopeKey ?? ""
 	const sendCount = sceneStateStore?.sendCount
 	const lastHandledSendCountRef = useRef(sendCount)
+	const lastHandledInputScopeKeyRef = useRef(inputScopeKey)
+	const onTemplateSelectRef = useRef(onTemplateSelect)
+	onTemplateSelectRef.current = onTemplateSelect
 	const slidesState = useSlidesTemplatePanelState()
 	const { setKeyword, setSelectedGroupKey } = slidesState
 	const [fieldItems, setFieldItems] = useState(() => createRuntimeFieldItems(config))
@@ -146,6 +149,11 @@ function SlidesTemplatePanel({
 		setInternalSelectedTemplate(null)
 		setKeyword("")
 		setSelectedGroupKey(ALL_SLIDES_TEMPLATE_GROUP_KEY)
+
+		if (lastHandledInputScopeKeyRef.current === inputScopeKey) return
+		lastHandledInputScopeKeyRef.current = inputScopeKey
+		// Controlled parents must drop the previous topic's template.
+		onTemplateSelectRef.current?.(null)
 	}, [config, inputScopeKey, setKeyword, setSelectedGroupKey])
 
 	useEffect(() => {

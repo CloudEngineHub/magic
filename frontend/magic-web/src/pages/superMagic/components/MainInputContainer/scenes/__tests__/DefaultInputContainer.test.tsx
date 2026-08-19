@@ -59,13 +59,19 @@ vi.mock("../../components/ScenePanelContainer", () => ({
 
 vi.mock("../Slides/SlidesTemplateHomeSelectionPreview", () => ({
 	default: ({
+		template,
 		templatePickerOpen,
 		onTemplatePickerOpenChange,
 	}: {
+		template?: { value: string } | null
 		templatePickerOpen?: boolean
 		onTemplatePickerOpenChange?: (open: boolean) => void
 	}) => (
-		<div data-testid="slides-template-preview" data-template-picker-open={templatePickerOpen}>
+		<div
+			data-testid="slides-template-preview"
+			data-selected-template={template ? String(template.value) : ""}
+			data-template-picker-open={templatePickerOpen}
+		>
 			<button type="button" onClick={() => onTemplatePickerOpenChange?.(true)}>
 				更换模板
 			</button>
@@ -109,6 +115,39 @@ describe("DefaultInputContainer", () => {
 			"false",
 		)
 		expect(mockPublish).not.toHaveBeenCalled()
+	})
+
+	it("clears the selected PPT template when switching topics", () => {
+		const { rerender } = render(
+			<DefaultInputContainer
+				editorContext={{
+					topicMode: TopicMode.PPT,
+					editorRef: { current: null },
+					selectedTopic: { id: "topic-a" },
+				}}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "选择模板" }))
+		expect(screen.getByTestId("slides-template-preview")).toHaveAttribute(
+			"data-selected-template",
+			"template-a",
+		)
+
+		rerender(
+			<DefaultInputContainer
+				editorContext={{
+					topicMode: TopicMode.PPT,
+					editorRef: { current: null },
+					selectedTopic: { id: "topic-b" },
+				}}
+			/>,
+		)
+
+		expect(screen.getByTestId("slides-template-preview")).toHaveAttribute(
+			"data-selected-template",
+			"",
+		)
 	})
 
 	it("阻止 PPT 预览图拖入输入框", () => {
