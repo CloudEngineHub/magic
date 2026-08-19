@@ -204,44 +204,6 @@ class DesignVideoPollConsumer extends ConsumerMessage
     }
 
     /**
-     * 画布合成结果已经写入共享工作区，不重复上传；仅记录路径供文件同步和查询使用。
-     */
-    private function completeCanvasComposition(
-        DesignDataIsolation $dataIsolation,
-        DesignGenerationTaskEntity $entity,
-        array $result,
-    ): bool {
-        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
-        $relativePath = trim((string) ($output['video_path'] ?? ''), '/');
-        if ($relativePath === '') {
-            return false;
-        }
-
-        // Super Magic 返回 workspace-relative 路径（通常带 ./ 前缀），Design 任务统一保存为前导斜杠形式。
-        $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
-        $relativePath = '/' . ltrim($relativePath, '/');
-        $fileName = basename($relativePath);
-        $this->domainService->markAsCompleted($dataIsolation, $entity, [
-            'relative_file_path' => $relativePath,
-            'provider_video_url' => (string) ($output['video_url'] ?? ''),
-            'duration_seconds' => $output['duration_seconds'] ?? null,
-            'resolution' => (string) ($output['resolution'] ?? ''),
-            'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
-            'archive_skipped_reason' => 'sandbox_workspace_output',
-        ], $fileName);
-        $this->logger->info('design video canvas composition completed', [
-            'video_id' => $entity->getGenerationId(),
-            'project_id' => $entity->getProjectId(),
-            'organization_code' => $entity->getOrganizationCode(),
-            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
-            'operation_id' => $entity->getOperationId(),
-            'file_dir' => $entity->getFileDir(),
-            'relative_file_path' => $relativePath,
-        ]);
-        return true;
-    }
-
-    /**
      * @param array<string, mixed> $result
      */
     protected function archiveFiles(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, array $result): void
@@ -372,6 +334,44 @@ class DesignVideoPollConsumer extends ConsumerMessage
             Db::rollBack();
             throw $throwable;
         }
+    }
+
+    /**
+     * 画布合成结果已经写入共享工作区，不重复上传；仅记录路径供文件同步和查询使用。
+     */
+    private function completeCanvasComposition(
+        DesignDataIsolation $dataIsolation,
+        DesignGenerationTaskEntity $entity,
+        array $result,
+    ): bool {
+        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
+        $relativePath = trim((string) ($output['video_path'] ?? ''), '/');
+        if ($relativePath === '') {
+            return false;
+        }
+
+        // Super Magic 返回 workspace-relative 路径（通常带 ./ 前缀），Design 任务统一保存为前导斜杠形式。
+        $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
+        $relativePath = '/' . ltrim($relativePath, '/');
+        $fileName = basename($relativePath);
+        $this->domainService->markAsCompleted($dataIsolation, $entity, [
+            'relative_file_path' => $relativePath,
+            'provider_video_url' => (string) ($output['video_url'] ?? ''),
+            'duration_seconds' => $output['duration_seconds'] ?? null,
+            'resolution' => (string) ($output['resolution'] ?? ''),
+            'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
+            'archive_skipped_reason' => 'sandbox_workspace_output',
+        ], $fileName);
+        $this->logger->info('design video canvas composition completed', [
+            'video_id' => $entity->getGenerationId(),
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
+            'operation_id' => $entity->getOperationId(),
+            'file_dir' => $entity->getFileDir(),
+            'relative_file_path' => $relativePath,
+        ]);
+        return true;
     }
 
     /**

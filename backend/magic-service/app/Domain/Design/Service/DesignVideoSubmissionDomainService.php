@@ -8,9 +8,9 @@ declare(strict_types=1);
 namespace App\Domain\Design\Service;
 
 use App\Domain\Design\Contract\VideoGatewayPayloadBuilderInterface;
+use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
-use App\Domain\Design\Entity\DesignDataIsolation;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;

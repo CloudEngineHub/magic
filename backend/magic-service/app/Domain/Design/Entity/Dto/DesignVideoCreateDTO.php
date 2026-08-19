@@ -7,9 +7,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Design\Entity\Dto;
 
+use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use App\Domain\ModelGateway\Entity\ValueObject\VideoTaskType;
-use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -57,7 +57,7 @@ class DesignVideoCreateDTO extends AbstractDTO
 
     protected array $generation = [];
 
-    /** @var array{videos: list<array{path: string}>, audios: list<array{path: string}>} */
+    /** @var array{videos?: list<array{path: string}>, audios?: list<array{path: string}>} */
     protected array $composition = [];
 
     protected array $callbacks = [];
@@ -120,7 +120,8 @@ class DesignVideoCreateDTO extends AbstractDTO
     public function setGenerationType(mixed $generationType): void
     {
         $value = is_string($generationType) ? trim($generationType) : '';
-        $this->generationType = DesignGenerationType::tryFrom($value)?->value ?? '';
+        $type = DesignGenerationType::tryFrom($value);
+        $this->generationType = $type === null ? '' : $type->value;
     }
 
     public function setVideoId(mixed $videoId): void

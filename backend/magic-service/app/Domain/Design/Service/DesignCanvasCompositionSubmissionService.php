@@ -7,16 +7,17 @@ declare(strict_types=1);
 
 namespace App\Domain\Design\Service;
 
+use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
-use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 /**
  * 负责把画布合成任务提交到现有项目沙箱中的 Super Magic 运行时。
@@ -76,7 +77,7 @@ readonly class DesignCanvasCompositionSubmissionService
             ExceptionBuilder::throw(
                 DesignErrorCode::ThirdPartyServiceError,
                 'design.video_generation.submit_failed',
-                throwable: new \RuntimeException($result->getMessage())
+                throwable: new RuntimeException($result->getMessage())
             );
         }
 

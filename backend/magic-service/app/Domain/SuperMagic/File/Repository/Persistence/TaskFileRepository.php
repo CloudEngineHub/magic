@@ -240,7 +240,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     {
         $fileNames = array_values(array_unique(array_filter(
             $fileNames,
-            static fn (mixed $fileName): bool => is_string($fileName) && $fileName !== ''
+            static fn (string $fileName): bool => $fileName !== ''
         )));
         if ($fileNames === []) {
             return [];
