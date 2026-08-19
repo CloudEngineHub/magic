@@ -29,7 +29,7 @@ use RuntimeException;
  */
 class SkillMarketRepository extends AbstractRepository implements SkillMarketRepositoryInterface
 {
-    private const OFFICIAL_BUILTIN_SKILLS_CACHE_KEY = 'super_magic:skill_market:official_builtin:entities';
+    private const OFFICIAL_BUILTIN_SKILLS_CACHE_KEY = 'super_magic:skill_market:official_builtin:entities:v2';
 
     private const OFFICIAL_BUILTIN_SKILLS_CACHE_TTL = 300;
 
@@ -53,10 +53,14 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             return $this->toEntities($cachedRows);
         }
 
+        $marketTable = $this->skillMarketModel->getTable();
+        $versionTable = $this->resolveSkillVersionTable();
         $models = $this->skillMarketModel::query()
-            ->where('publisher_type', PublisherType::OFFICIAL_BUILTIN->value)
-            ->where('publish_status', PublishStatus::PUBLISHED->value)
-            ->orderBy('id')
+            ->leftJoin($versionTable . ' as skill_versions', $marketTable . '.skill_version_id', '=', 'skill_versions.id')
+            ->select($marketTable . '.*', 'skill_versions.package_name')
+            ->where($marketTable . '.publisher_type', PublisherType::OFFICIAL_BUILTIN->value)
+            ->where($marketTable . '.publish_status', PublishStatus::PUBLISHED->value)
+            ->orderBy($marketTable . '.id')
             ->get();
 
         $rows = [];
