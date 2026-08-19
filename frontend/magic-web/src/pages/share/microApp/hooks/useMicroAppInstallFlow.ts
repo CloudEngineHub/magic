@@ -39,7 +39,7 @@ export default function useMicroAppInstallFlow({
 	safetyConfirmed,
 	verifiedPassword,
 }: UseMicroAppInstallFlowOptions) {
-	const { environment, prompt, status } = useMicroAppInstall()
+	const { environment, prompt, status } = useMicroAppInstall(appId)
 	const [dialogOpen, setDialogOpen] = useState(false)
 	const [rememberPassword, setRememberPassword] = useState(false)
 	const [linkCopied, setLinkCopied] = useState(false)

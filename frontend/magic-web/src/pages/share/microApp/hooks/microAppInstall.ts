@@ -1,3 +1,9 @@
+import {
+	getMicroAppInstallRouteKey,
+	subscribeToMicroAppInstallPrompt,
+	takeMicroAppInstallPrompt,
+} from "@/services/microAppInstallPrompt"
+
 export type MicroAppInstallStatus = "unsupported" | "available" | "installed" | "ios-manual"
 export type MicroAppInstallDialogMode = "browser" | "ios" | "webview"
 
@@ -51,17 +57,15 @@ export function detectMicroAppInstallEnvironment(): MicroAppInstallEnvironment {
 
 export function createMicroAppInstallController(
 	onStatusChange?: (status: MicroAppInstallStatus) => void,
+	appId?: string,
 ): MicroAppInstallController & {
 	destroy(): void
 	environment: MicroAppInstallEnvironment
 } {
 	const environment = detectMicroAppInstallEnvironment()
-	let deferredPrompt:
-		| (Event & {
-				prompt: () => Promise<void>
-				userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
-		  })
-		| null = null
+	const routeKey = appId
+		? getMicroAppInstallRouteKey(`/micro-app/${appId}`)
+		: getMicroAppInstallRouteKey()
 	let status = getInitialMicroAppInstallStatus(environment)
 
 	const setStatus = (nextStatus: MicroAppInstallStatus) => {
@@ -69,21 +73,13 @@ export function createMicroAppInstallController(
 		onStatusChange?.(nextStatus)
 	}
 
-	const handleBeforeInstallPrompt = (event: Event) => {
-		event.preventDefault()
-		deferredPrompt = event as typeof deferredPrompt
-		if (!environment.isStandalone) setStatus("available")
-	}
-
-	const handleAppInstalled = () => {
-		deferredPrompt = null
-		setStatus("installed")
-	}
-
-	if (typeof window !== "undefined") {
-		window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
-		window.addEventListener("appinstalled", handleAppInstalled)
-	}
+	const unsubscribe = subscribeToMicroAppInstallPrompt((signal, signalRouteKey) => {
+		if (signal === "installed") {
+			setStatus("installed")
+		} else if (!environment.isStandalone && signalRouteKey === routeKey) {
+			setStatus("available")
+		}
+	}, routeKey)
 
 	return {
 		environment,
@@ -91,9 +87,8 @@ export function createMicroAppInstallController(
 			return status
 		},
 		async prompt() {
-			if (!deferredPrompt) return "unavailable"
-			const promptEvent = deferredPrompt
-			deferredPrompt = null
+			const promptEvent = takeMicroAppInstallPrompt(routeKey)
+			if (!promptEvent) return "unavailable"
 			await promptEvent.prompt()
 			const choice = await promptEvent.userChoice
 			if (choice.outcome === "accepted") {
@@ -104,10 +99,7 @@ export function createMicroAppInstallController(
 			return "dismissed"
 		},
 		destroy() {
-			if (typeof window === "undefined") return
-			window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
-			window.removeEventListener("appinstalled", handleAppInstalled)
-			deferredPrompt = null
+			unsubscribe()
 		},
 	}
 }
