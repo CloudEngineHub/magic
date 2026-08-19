@@ -579,17 +579,20 @@ export interface GenerateVideoRequest {
 	reference_images?: string[]
 	/** 帧 */
 	frames?: Array<{ role: "start" | "end"; uri: string }>
-	/** 画布合成任务类型 */
-	generation_type?: "canvas_composition" | string
-	/** 当前话题 id */
+	/** 画布合成输入快照；数组顺序即合并顺序 */
+	composition?: {
+		videos: Array<{ path: string }>
+		audios?: Array<{ path: string }>
+	}
+	/** 当前话题 id（普通视频生成使用） */
 	topic_id?: string
-	/** 画布合成扩展参数 */
+	/** 扩展配置 */
 	extensions?: {
-		project_path?: string
-		video_edit_element_id?: string
 		output_file_name?: string
 		[key: string]: unknown
 	}
+	/** 画布合成任务类型 */
+	generation_type?: "canvas_composition" | string
 }
 
 /**

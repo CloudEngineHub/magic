@@ -35,8 +35,6 @@ import {
 interface UseVideoGenerationOptions {
 	projectId?: string
 	topicId?: string
-	/** 宿主侧画布项目路径，仅用于补齐后端合成请求。 */
-	canvasCompositionProjectPath?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -71,7 +69,6 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 	const {
 		projectId,
 		topicId,
-		canvasCompositionProjectPath,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -117,7 +114,6 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 				params,
 				projectId,
 				topicId,
-				canvasCompositionProjectPath,
 				currentFile,
 				flatAttachments,
 				designProjectBasePath,
@@ -134,7 +130,6 @@ export function useVideoGeneration(options: UseVideoGenerationOptions): UseVideo
 		[
 			projectId,
 			topicId,
-			canvasCompositionProjectPath,
 			currentFile,
 			flatAttachments,
 			designProjectBasePath,
@@ -217,7 +212,6 @@ interface BuildDesignVideoRequestParamsOptions {
 	params: GenerateVideoRequest
 	projectId: string
 	topicId?: string
-	canvasCompositionProjectPath?: string
 	currentFile?: {
 		id: string
 		name: string
@@ -236,7 +230,6 @@ async function buildDesignVideoRequestParams(
 		params,
 		projectId,
 		topicId,
-		canvasCompositionProjectPath,
 		currentFile,
 		flatAttachments,
 		designProjectBasePath,
@@ -276,18 +269,12 @@ async function buildDesignVideoRequestParams(
 		pathUnresolvedMessage,
 	)
 	if (params.generation_type === "canvas_composition") {
-		const projectPath = canvasCompositionProjectPath ?? designProjectBasePath
-		if (!topicId || !projectPath || !request.extensions?.video_edit_element_id?.trim()) {
-			throw new Error("画布合并任务上下文不完整")
+		if (!request.composition?.videos.length) {
+			throw new Error("画布合并任务缺少视频输入")
 		}
 		return {
 			...request,
 			project_id: projectId,
-			topic_id: topicId,
-			extensions: {
-				...request.extensions,
-				project_path: projectPath,
-			},
 		}
 	}
 	return {
@@ -343,6 +330,28 @@ function toDesignGenerateVideoRequest(
 		...(params.generation || {}),
 	}
 	const normalizedInputs = params.inputs || {}
+	const isCanvasComposition = params.generation_type === "canvas_composition"
+	const compositionExtensions = params.extensions?.output_file_name
+		? { output_file_name: params.extensions.output_file_name }
+		: undefined
+	const composition = params.composition
+		? normalizeGenerateVideoComposition(
+				params.composition,
+				designProjectBasePath,
+				flatAttachments,
+				pathUnresolvedMessage,
+			)
+		: undefined
+
+	if (isCanvasComposition) {
+		return {
+			project_id: params.project_id,
+			video_id: params.video_id,
+			generation_type: params.generation_type,
+			...(composition ? { composition } : {}),
+			...(compositionExtensions ? { extensions: compositionExtensions } : {}),
+		}
+	}
 
 	return {
 		project_id: params.project_id,
@@ -373,6 +382,35 @@ function toDesignGenerateVideoRequest(
 		...(params.callbacks ? { callbacks: params.callbacks } : {}),
 		...(params.execution ? { execution: params.execution } : {}),
 		...(params.extensions ? { extensions: params.extensions } : {}),
+	}
+}
+
+function normalizeGenerateVideoComposition(
+	composition: NonNullable<GenerateVideoRequest["composition"]>,
+	designProjectBasePath?: string,
+	flatAttachments?: FileItem[],
+	pathUnresolvedMessage?: string,
+): NonNullable<GenerateVideoRequest["composition"]> {
+	const resolve = (input: { path: string }) => {
+		const path = ensureDesignResourceUri(
+			input.path,
+			designProjectBasePath,
+			flatAttachments,
+			pathUnresolvedMessage,
+		)
+		if (!path.startsWith("/")) {
+			throw new Error(pathUnresolvedMessage || "Design composition path unresolved")
+		}
+		return { ...input, path }
+	}
+
+	return {
+		videos: composition.videos.map(resolve),
+		...(composition.audios?.length
+			? { audios: composition.audios.map(resolve) }
+			: composition.audios
+				? { audios: [] }
+				: {}),
 	}
 }
 

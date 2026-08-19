@@ -15,7 +15,7 @@ import {
 } from "../../document/types"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { VideoElement } from "../../elements/video/VideoElement"
-import { collectConnectedVideoEditInputs } from "../../interaction/connection/connectedInputSources"
+import { collectOrderedVideoEditInputs } from "../../interaction/connection/connectedInputSources"
 import { generateElementId } from "../../shared/ids"
 import {
 	collectConnectionCreateObstacleRects,
@@ -31,7 +31,7 @@ export type VideoCompositionStatus =
 export type VideoCompositionPhase = "checking" | "preparing" | "processing"
 
 export interface VideoCompositionIssue {
-	code: "missing-editor" | "missing-video" | "save-failed" | "composition-failed" | "stale-input"
+	code: "missing-editor" | "missing-video" | "composition-failed" | "stale-input"
 	elementId?: string
 	message: string
 }
@@ -69,7 +69,7 @@ function getContentSignature(canvas: Canvas, elementId: string): string | null {
 	if (!element || element.type !== ElementTypeEnum.VideoEdit) return null
 	const content = getActiveContent<VideoEditElementContent>(element)
 	if (!content) return null
-	const inputs = collectConnectedVideoEditInputs(canvas, elementId)
+	const inputs = collectOrderedVideoEditInputs(canvas, elementId)
 	const videoSources = inputs.videoElementIds.map((sourceId) => {
 		const source = canvas.elementManager.getElementData(sourceId)
 		const sourceContent =
@@ -82,22 +82,18 @@ function getContentSignature(canvas: Canvas, elementId: string): string | null {
 			src: sourceContent?.src ?? null,
 		}
 	})
-	const audioSources = inputs.audioElementId
-		? (() => {
-				const source = canvas.elementManager.getElementData(inputs.audioElementId!)
-				const sourceContent =
-					source?.type === ElementTypeEnum.Audio
-						? getDownstreamContent<AudioElementContent>(source)
-						: undefined
-				return [
-					{
-						id: inputs.audioElementId,
-						contentId: sourceContent?.contentId ?? null,
-						src: sourceContent?.src ?? null,
-					},
-				]
-			})()
-		: []
+	const audioSources = inputs.audioElementIds.map((sourceId) => {
+		const source = canvas.elementManager.getElementData(sourceId)
+		const sourceContent =
+			source?.type === ElementTypeEnum.Audio
+				? getDownstreamContent<AudioElementContent>(source)
+				: undefined
+		return {
+			id: sourceId,
+			contentId: sourceContent?.contentId ?? null,
+			src: sourceContent?.src ?? null,
+		}
+	})
 	return JSON.stringify({
 		contentId: content.contentId,
 		videoSequence: content.videoSequence ?? [],
@@ -185,7 +181,7 @@ export class VideoCompositionManager {
 			editor?.type === ElementTypeEnum.VideoEdit
 				? getActiveContent<VideoEditElementContent>(editor)
 				: undefined
-		const inputs = collectConnectedVideoEditInputs(this.canvas, elementId)
+		const inputs = collectOrderedVideoEditInputs(this.canvas, elementId)
 		if (!editor || editor.type !== ElementTypeEnum.VideoEdit) {
 			return this.fail(elementId, "missing-editor", "找不到视频编辑节点")
 		}
@@ -200,12 +196,6 @@ export class VideoCompositionManager {
 			issues: [],
 			errorMessage: undefined,
 		})
-
-		const prepareCanvasComposition =
-			this.canvas.magicConfigManager.config?.methods?.prepareCanvasComposition
-		if (!prepareCanvasComposition) {
-			return this.fail(elementId, "save-failed", "画布合并任务入口不可用，未创建合并任务")
-		}
 
 		const resultElementId = generateElementId()
 		const result = this.createPlaceholderResult(editor, resultElementId)
@@ -230,26 +220,13 @@ export class VideoCompositionManager {
 		}
 		this.jobs.set(elementId, job)
 		this.updateSnapshot(elementId, {
-			status: "preparing",
+			status: "processing",
 			progress: 0.1,
-			phase: "preparing",
+			phase: "processing",
 			resultElementId,
 			resultConnectionId: connection.connectionId,
 		})
 
-		let prepared: Awaited<ReturnType<typeof prepareCanvasComposition>>
-		try {
-			prepared = await prepareCanvasComposition()
-		} catch {
-			if (!this.isCurrentJob(job)) return false
-			this.cleanupJob(job)
-			return this.fail(elementId, "save-failed", "画布合并任务准备失败，未创建合并任务")
-		}
-		if (!this.isCurrentJob(job)) return false
-		if (!prepared.ok) {
-			this.cleanupJob(job)
-			return this.fail(elementId, "save-failed", prepared.errorMessage)
-		}
 		if (getContentSignature(this.canvas, elementId) !== job.signature) {
 			this.cleanupJob(job)
 			return this.fail(elementId, "stale-input", "输入内容已变化，请重新合并")
@@ -261,9 +238,14 @@ export class VideoCompositionManager {
 			return this.fail(elementId, "composition-failed", "合成视频元素实例不可用")
 		}
 		try {
+			const composition = this.buildCompositionRequest(elementId)
+			if (!composition || composition.videos.length === 0) {
+				this.cleanupJob(job)
+				return this.fail(elementId, "missing-video", "请先关联至少一个有效视频")
+			}
 			const request: GenerateVideoRequest = {
 				generation_type: "canvas_composition",
-				extensions: { video_edit_element_id: elementId },
+				composition,
 			}
 			const submitted = await resultInstance.generateVideo(request, {
 				failurePolicy: "remove-placeholder",
@@ -282,6 +264,35 @@ export class VideoCompositionManager {
 		} catch {
 			this.cleanupJob(job)
 			return this.fail(elementId, "composition-failed", "提交合并任务失败")
+		}
+	}
+
+	private buildCompositionRequest(
+		elementId: string,
+	): NonNullable<GenerateVideoRequest["composition"]> | null {
+		const inputs = collectOrderedVideoEditInputs(this.canvas, elementId)
+		const videos = inputs.videoElementIds.map((sourceId) => {
+			const source = this.canvas.elementManager.getElementData(sourceId)
+			const content =
+				source?.type === ElementTypeEnum.Video
+					? getDownstreamContent<VideoElementContent>(source)
+					: undefined
+			return content?.src ? { path: content.src } : null
+		})
+		const audios = inputs.audioElementIds.map((sourceId) => {
+			const source = this.canvas.elementManager.getElementData(sourceId)
+			const content =
+				source?.type === ElementTypeEnum.Audio
+					? getDownstreamContent<AudioElementContent>(source)
+					: undefined
+			return content?.src ? { path: content.src } : null
+		})
+		if (videos.some((video) => video === null)) return null
+		return {
+			videos: videos as Array<{ path: string }>,
+			...(audios.length > 0
+				? { audios: audios.filter((audio): audio is { path: string } => audio !== null) }
+				: {}),
 		}
 	}
 

@@ -6,6 +6,7 @@ import {
 	deleteActiveContent,
 	getActiveContent,
 	getContentById,
+	getElementContentFields,
 	getMainContent,
 	getPendingVideoGenerationContent,
 	hasPendingVideoGenerationContent,
@@ -25,6 +26,13 @@ function image(contents: ImageElementContent[]): ImageElement {
 }
 
 describe("elementContent", () => {
+	it("limits visual understanding to image and video Contents", () => {
+		expect(getElementContentFields("image")).toContain("visualUnderstanding")
+		expect(getElementContentFields("video")).toContain("visualUnderstanding")
+		expect(getElementContentFields("text")).not.toContain("visualUnderstanding")
+		expect(getElementContentFields("frame")).not.toContain("visualUnderstanding")
+	})
+
 	it("queries active, main and explicit Contents", () => {
 		const element = {
 			...image([

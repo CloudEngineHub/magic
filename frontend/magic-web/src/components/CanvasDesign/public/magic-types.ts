@@ -821,10 +821,10 @@ export interface GenerateVideoRequest {
 	callbacks?: Record<string, unknown>
 	/** 执行配置 */
 	execution?: Record<string, unknown>
+	/** 画布合成输入快照；数组顺序即合并顺序 */
+	composition?: GenerateVideoComposition
 	/** 扩展配置 */
 	extensions?: {
-		project_path?: string
-		video_edit_element_id?: string
 		output_file_name?: string
 		[key: string]: unknown
 	}
@@ -834,7 +834,17 @@ export interface GenerateVideoRequest {
 	topic_id?: string
 }
 
-export type CanvasCompositionPreparationResult = { ok: true } | { ok: false; errorMessage: string }
+export interface GenerateVideoCompositionInput {
+	/** 项目文件根目录下的规范化绝对路径 */
+	path: string
+}
+
+export interface GenerateVideoComposition {
+	/** 按合并顺序排列的视频 */
+	videos: GenerateVideoCompositionInput[]
+	/** 按处理顺序排列的音频 */
+	audios?: GenerateVideoCompositionInput[]
+}
 
 /**
  * 发起视频生成响应数据
@@ -1395,8 +1405,6 @@ export interface CanvasDesignConfirmModalOptions {
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
-	/** 保存画布，使后端可读取本次合成所需的 DSL 与连接关系。 */
-	prepareCanvasComposition?: () => Promise<CanvasCompositionPreparationResult>
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式

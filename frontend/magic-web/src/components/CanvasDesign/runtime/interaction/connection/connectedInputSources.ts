@@ -4,7 +4,9 @@ import {
 	type FrameElement,
 	type GroupElement,
 	type LayerElement,
+	type VideoEditElementContent,
 } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import { sortCanvasElementsByZIndexStable } from "../../document/elementIndex"
 
 export type ConnectedSourceOrigin = "connected-element" | "frame-descendant"
@@ -321,9 +323,9 @@ export function collectConnectedSourceElements(
 export function collectConnectedVideoEditInputs(
 	canvas: Canvas,
 	targetElementId: string,
-): { videoElementIds: string[]; audioElementId?: string } {
+): { videoElementIds: string[]; audioElementId?: string; audioElementIds: string[] } {
 	if (!canvas.connectionManager?.getUpstreamConnections) {
-		return { videoElementIds: [] }
+		return { videoElementIds: [], audioElementIds: [] }
 	}
 	const sources = collectConnectedSourceElements(canvas, targetElementId, {
 		mode: "direct",
@@ -333,7 +335,39 @@ export function collectConnectedVideoEditInputs(
 		videoElementIds: sources
 			.filter((source) => source.element.type === ElementTypeEnum.Video)
 			.map((source) => source.sourceElementId),
+		audioElementIds: sources
+			.filter((source) => source.element.type === ElementTypeEnum.Audio)
+			.map((source) => source.sourceElementId),
 		audioElementId: sources.find((source) => source.element.type === ElementTypeEnum.Audio)
 			?.sourceElementId,
+	}
+}
+
+/** Collects VideoEdit inputs in the persisted user order, appending new connections. */
+export function collectOrderedVideoEditInputs(
+	canvas: Canvas,
+	targetElementId: string,
+): { videoElementIds: string[]; audioElementIds: string[] } {
+	const connected = collectConnectedVideoEditInputs(canvas, targetElementId)
+	const target = canvas.elementManager.getElementData(targetElementId)
+	const content =
+		target?.type === ElementTypeEnum.VideoEdit
+			? getActiveContent<VideoEditElementContent>(target)
+			: undefined
+	const order = (preferred: string[] | undefined, available: string[]) => {
+		const availableSet = new Set(available)
+		const result: string[] = []
+		;(preferred ?? []).forEach((elementId) => {
+			if (availableSet.has(elementId) && !result.includes(elementId)) result.push(elementId)
+		})
+		available.forEach((elementId) => {
+			if (!result.includes(elementId)) result.push(elementId)
+		})
+		return result
+	}
+
+	return {
+		videoElementIds: order(content?.videoSequence, connected.videoElementIds),
+		audioElementIds: order(content?.audioSequence, connected.audioElementIds),
 	}
 }

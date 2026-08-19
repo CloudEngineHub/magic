@@ -201,8 +201,6 @@ export interface BaseElementProps {
 /** 节点内容的最小公共结构。内容类型由所属 Element 的顶层 type 决定。 */
 export interface ElementContentBase {
 	contentId: string
-	/** 大模型对当前 Content 的理解结果；重字段由 sidecar 拆分保存。 */
-	visualUnderstanding?: unknown
 }
 
 /** 所有 v3 节点统一使用的内容容器结构。 */
@@ -336,6 +334,8 @@ export interface TextElement extends ContentElementProps<TextElementContent> {
 
 /** 图片节点中可独立切换的内容 */
 export interface ImageElementContent extends ElementContentBase {
+	/** 大模型对当前图片 Content 的理解结果；重字段由 sidecar 拆分保存。 */
+	visualUnderstanding?: unknown
 	/** 图片源(用来换取 ossSrc 的临时 path) */
 	src?: string
 	/** 状态 */
@@ -355,6 +355,8 @@ export interface ImageElement extends ContentElementProps<ImageElementContent> {
 }
 
 export interface VideoElementContent extends ElementContentBase {
+	/** 大模型对当前视频 Content 的理解结果；重字段由 sidecar 拆分保存。 */
+	visualUnderstanding?: unknown
 	/** 视频源(用来换取 ossSrc 的临时 path) */
 	src?: string
 	/** 视频状态 */

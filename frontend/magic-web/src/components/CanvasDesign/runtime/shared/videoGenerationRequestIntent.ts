@@ -61,7 +61,7 @@ export function hasVideoGenerationRequestSubmitIntent(
 	request: Partial<GenerateVideoRequest> | null | undefined,
 ): boolean {
 	if (request?.generation_type === "canvas_composition") {
-		return Boolean(request.extensions?.video_edit_element_id?.trim())
+		return Boolean(request.composition?.videos?.some((video) => video.path?.trim()))
 	}
 	return Boolean(request?.prompt?.trim())
 }

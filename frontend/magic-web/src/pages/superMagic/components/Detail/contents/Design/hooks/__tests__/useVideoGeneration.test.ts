@@ -5,6 +5,16 @@ import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import superMagicCustomModelService from "@/services/superMagic/SuperMagicCustomModelService"
 import { useVideoGeneration } from "../useVideoGeneration"
 
+const { generateVideo } = vi.hoisted(() => ({
+	generateVideo: vi.fn(async (request: unknown) => request),
+}))
+
+vi.mock("@/apis", () => ({
+	SuperMagicApi: {
+		generateVideo,
+	},
+}))
+
 vi.mock("react-i18next", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("react-i18next")>()
 	return {
@@ -43,6 +53,35 @@ function createGroup(id: string, name: string, modelId: string) {
 describe("useVideoGeneration model grouping", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+	})
+
+	it("submits a self-contained composition request with project-absolute paths", async () => {
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				topicId: "topic-1",
+				designProjectBasePath: "新建画布",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await result.current.generateVideo({
+			generation_type: "canvas_composition",
+			topic_id: "topic-1",
+			composition: {
+				videos: [{ path: "./videos/a.mp4" }, { path: "./videos/b.mp4" }],
+				audios: [{ path: "./audios/b.mp3" }],
+			},
+		})
+
+		expect(generateVideo).toHaveBeenCalledWith({
+			project_id: "project-1",
+			generation_type: "canvas_composition",
+			composition: {
+				videos: [{ path: "/新建画布/videos/a.mp4" }, { path: "/新建画布/videos/b.mp4" }],
+				audios: [{ path: "/新建画布/audios/b.mp3" }],
+			},
+		})
 	})
 
 	it("loads all supported models independently of the active topic", async () => {

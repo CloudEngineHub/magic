@@ -2,17 +2,8 @@ import { describe, expect, it, vi } from "vitest"
 import type { Canvas } from "../../../core/Canvas"
 import { EventEmitter } from "../../../core/EventEmitter"
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
+import { VideoElement } from "../../../elements/video/VideoElement"
 import { VideoCompositionManager } from "../VideoCompositionManager"
-
-function createDeferred<T>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason?: unknown) => void
-	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-		resolve = resolvePromise
-		reject = rejectPromise
-	})
-	return { promise, resolve, reject }
-}
 
 function createVideo(id: string): LayerElement {
 	return {
@@ -38,21 +29,25 @@ function createEditor(id = "editor"): LayerElement {
 	} as LayerElement
 }
 
-function createCanvas(
-	elements: LayerElement[],
-	prepareCanvasComposition?: () => Promise<{ ok: true } | { ok: false; errorMessage: string }>,
-) {
+function createAudio(id: string): LayerElement {
+	return {
+		id,
+		type: ElementTypeEnum.Audio,
+		contents: [{ contentId: `${id}-content`, src: `./audios/${id}.mp3` }],
+		activeContentId: `${id}-content`,
+		mainContentId: `${id}-content`,
+	} as LayerElement
+}
+
+function createCanvas(elements: LayerElement[], resultInstance?: VideoElement) {
 	const eventEmitter = new EventEmitter()
 	const elementMap = new Map(elements.map((element) => [element.id, element]))
+	const inputElements = elements.filter(
+		(element) =>
+			element.type === ElementTypeEnum.Video || element.type === ElementTypeEnum.Audio,
+	)
 	const canvas = {
 		eventEmitter,
-		magicConfigManager: {
-			config: {
-				methods: {
-					prepareCanvasComposition,
-				},
-			},
-		},
 		t: (_key: string, fallback: string) => fallback,
 		elementManager: {
 			getElementData: vi.fn((id: string) => elementMap.get(id)),
@@ -60,7 +55,7 @@ function createCanvas(
 			getNextZIndexInLevel: vi.fn(() => 1),
 			hasElement: vi.fn((id: string) => elementMap.has(id)),
 			isElementVisibleInDataTree: vi.fn((id: string) => elementMap.has(id)),
-			getElementInstance: vi.fn(),
+			getElementInstance: vi.fn(() => resultInstance),
 			createTemporaryElement: vi.fn((element: LayerElement) =>
 				elementMap.set(element.id, element),
 			),
@@ -69,7 +64,11 @@ function createCanvas(
 		connectionManager: {
 			getUpstreamConnections: vi.fn((id: string) =>
 				id === "editor"
-					? [{ id: "input", sourceElementId: "video-1", targetElementId: id }]
+					? inputElements.map((element) => ({
+							id: `${element.id}-connection`,
+							sourceElementId: element.id,
+							targetElementId: id,
+						}))
 					: [],
 			),
 			connectRuntimeElements: vi.fn(() => ({
@@ -100,46 +99,50 @@ describe("VideoCompositionManager", () => {
 		manager.destroy()
 	})
 
-	it("does not create a backend task when saving fails", async () => {
-		const prepareCanvasComposition = vi.fn(async () => ({
-			ok: false as const,
-			errorMessage: "画布保存失败，未创建合并任务",
-		}))
+	it("submits a self-contained composition request in persisted sequence order", async () => {
+		const editor = createEditor()
+		editor.contents[0] = {
+			...editor.contents[0],
+			videoSequence: ["video-2", "video-1"],
+			audioSequence: ["audio-1"],
+		}
+		const resultInstance = Object.create(VideoElement.prototype) as VideoElement
+		resultInstance.generateVideo = vi.fn(async () => true)
 		const canvas = createCanvas(
-			[createEditor(), createVideo("video-1")],
-			prepareCanvasComposition,
+			[editor, createVideo("video-1"), createVideo("video-2"), createAudio("audio-1")],
+			resultInstance,
 		)
 		const manager = new VideoCompositionManager({ canvas })
 
-		expect(await manager.start("editor")).toBe(false)
-		expect(prepareCanvasComposition).toHaveBeenCalledWith()
-		expect(canvas.elementManager.createTemporaryElement).toHaveBeenCalledOnce()
-		expect(canvas.elementManager.delete).toHaveBeenCalledOnce()
-		expect(manager.getSnapshot("editor").issues[0]?.code).toBe("save-failed")
+		expect(await manager.start("editor")).toBe(true)
+		expect(resultInstance.generateVideo).toHaveBeenCalledWith(
+			expect.objectContaining({
+				generation_type: "canvas_composition",
+				composition: {
+					videos: [{ path: "./videos/video-2.mp4" }, { path: "./videos/video-1.mp4" }],
+					audios: [{ path: "./audios/audio-1.mp3" }],
+				},
+			}),
+			expect.objectContaining({
+				failurePolicy: "remove-placeholder",
+				keepTemporaryUntilComplete: true,
+			}),
+		)
 		manager.destroy()
 	})
 
-	it("shows the temporary result while the canvas is being saved", async () => {
-		const save = createDeferred<{ ok: true }>()
-		const prepareCanvasComposition = vi.fn(() => save.promise)
-		const canvas = createCanvas(
-			[createEditor(), createVideo("video-1")],
-			prepareCanvasComposition,
-		)
+	it("submits without waiting for a canvas save hook", async () => {
+		const resultInstance = Object.create(VideoElement.prototype) as VideoElement
+		resultInstance.generateVideo = vi.fn(async () => true)
+		const canvas = createCanvas([createEditor(), createVideo("video-1")], resultInstance)
 		const manager = new VideoCompositionManager({ canvas })
 
-		const startPromise = manager.start("editor")
-		await Promise.resolve()
-
-		expect(prepareCanvasComposition).toHaveBeenCalledOnce()
+		expect(await manager.start("editor")).toBe(true)
 		expect(canvas.elementManager.createTemporaryElement).toHaveBeenCalledOnce()
 		expect(manager.getSnapshot("editor")).toMatchObject({
-			status: "preparing",
+			status: "processing",
 			resultElementId: expect.any(String),
 		})
-
-		save.resolve({ ok: true })
-		expect(await startPromise).toBe(false)
 		manager.destroy()
 	})
 })

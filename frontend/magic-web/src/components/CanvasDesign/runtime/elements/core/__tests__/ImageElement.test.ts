@@ -1682,7 +1682,7 @@ describe("ImageElement mounted image node sync", () => {
 		const resultPromise = element.generateVideo(
 			{
 				generation_type: "canvas_composition",
-				extensions: { video_edit_element_id: "editor-1" },
+				composition: { videos: [{ path: "/新建画布/videos/a.mp4" }] },
 			},
 			{ failurePolicy: "remove-placeholder", keepTemporaryUntilComplete: true },
 		)
@@ -1691,7 +1691,7 @@ describe("ImageElement mounted image node sync", () => {
 		expect(generateVideo).toHaveBeenCalledWith(
 			expect.objectContaining({
 				generation_type: "canvas_composition",
-				extensions: { video_edit_element_id: "editor-1" },
+				composition: { videos: [{ path: "/新建画布/videos/a.mp4" }] },
 				video_id: expect.any(String),
 			}),
 		)

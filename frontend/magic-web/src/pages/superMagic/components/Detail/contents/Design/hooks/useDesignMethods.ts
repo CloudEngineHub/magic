@@ -74,9 +74,6 @@ interface UseDesignMethodsOptions {
 	onExitFullscreen?: () => void | Promise<void>
 	/** 文件列表更新 */
 	updateAttachments: () => void
-	saveCanvasDesign?: () => Promise<boolean>
-	/** 宿主侧画布项目路径，仅用于提交后端合成任务。 */
-	compositionProjectPath?: string
 	/** 下载策略（企业版可覆盖） */
 	downloadPolicy: UseDesignDownloadPolicyResult
 }
@@ -108,8 +105,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		afterAddFileToNewTopic,
 		onExitFullscreen,
 		updateAttachments,
-		saveCanvasDesign,
-		compositionProjectPath,
 		downloadPolicy,
 	} = options
 
@@ -167,31 +162,12 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		useVideoGeneration({
 			projectId,
 			topicId: selectedTopic?.id,
-			canvasCompositionProjectPath: compositionProjectPath ?? designProjectBasePath,
 			currentFile,
 			flatAttachments,
 			designProjectBasePath,
 			setFileInfoCache,
 			updateAttachments,
 		})
-
-	const prepareCanvasComposition = useCallback<
-		NonNullable<CanvasDesignMethods["prepareCanvasComposition"]>
-	>(async () => {
-		if (!saveCanvasDesign) {
-			return { ok: false, errorMessage: "画布保存入口不可用，未创建合并任务" }
-		}
-
-		try {
-			if (!(await saveCanvasDesign())) {
-				return { ok: false, errorMessage: "画布保存失败，未创建合并任务" }
-			}
-		} catch {
-			return { ok: false, errorMessage: "画布保存失败，未创建合并任务" }
-		}
-
-		return { ok: true }
-	}, [saveCanvasDesign])
 
 	const { uploadFiles, uploadPrivateFiles } = useFileUpload({
 		projectId,
@@ -634,7 +610,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 	// 组合所有方法到 CanvasDesignMethods 接口
 	const methods = useMemo<CanvasDesignMethods>(() => {
 		return {
-			prepareCanvasComposition,
 			getImageModelList,
 			completeImagePrompt,
 			completeTextContent,
@@ -713,7 +688,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		identifyImageMark,
 		uploadPrivateFiles,
 		confirmModal,
-		prepareCanvasComposition,
 	])
 
 	return methods

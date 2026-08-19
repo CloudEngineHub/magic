@@ -39,12 +39,11 @@ function getTypedContentById<TElement extends ContentElement>(
 
 export type ImageContentFields = Omit<ImageElementContent, "contentId">
 
-const COMMON_CONTENT_FIELDS = ["visualUnderstanding"] as const
-
 const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Frame]: [],
 	[ElementTypeEnum.Group]: [],
 	[ElementTypeEnum.Image]: [
+		"visualUnderstanding",
 		"src",
 		"status",
 		"errorMessage",
@@ -53,6 +52,7 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 		"crop",
 	],
 	[ElementTypeEnum.Video]: [
+		"visualUnderstanding",
 		"src",
 		"status",
 		"errorMessage",
@@ -77,7 +77,12 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 }
 
 export function getElementContentFields(type: string): readonly string[] {
-	return [...COMMON_CONTENT_FIELDS, ...(CONTENT_FIELDS_BY_TYPE[type] ?? [])]
+	return CONTENT_FIELDS_BY_TYPE[type] ?? []
+}
+
+/** 视觉理解结果仅属于后端支持的图片、视频 Content。 */
+export function supportsVisualUnderstanding(type: string): boolean {
+	return type === ElementTypeEnum.Image || type === ElementTypeEnum.Video
 }
 
 export function createContentId(prefix = "content"): string {

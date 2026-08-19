@@ -65,6 +65,30 @@ describe("isValidElementData", () => {
 		expect(isValidElementData(contentElement(ElementTypeEnum.Audio, { src: 123 }))).toBe(false)
 	})
 
+	it("accepts visual understanding only on image and video Contents", () => {
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Image, {
+					visualUnderstanding: { summary: "image" },
+				}),
+			),
+		).toBe(true)
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Video, {
+					visualUnderstanding: { summary: "video" },
+				}),
+			),
+		).toBe(true)
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Text, {
+					visualUnderstanding: { summary: "invalid" },
+				}),
+			),
+		).toBe(false)
+	})
+
 	it("validates storyboard shots without redundant output or duration fields", () => {
 		const content = {
 			generationConfig: { model_id: "gpt-image-2", size: "1080x1920" },

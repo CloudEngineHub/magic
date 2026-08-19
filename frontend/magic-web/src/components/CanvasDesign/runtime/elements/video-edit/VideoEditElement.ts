@@ -1134,7 +1134,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			width: size,
 			height: size,
 			visible: false,
-			listening: false,
+			listening: true,
 			name: "video-edit-video-card-grip",
 		})
 		grip.add(
@@ -1169,7 +1169,7 @@ export class VideoEditElement extends BaseElement<VideoEditElementData> {
 			height: size,
 			fill: "rgba(0, 0, 0, 0.001)",
 			cornerRadius,
-			listening: false,
+			listening: true,
 			perfectDrawEnabled: false,
 			name: "video-edit-video-card-drag-handle",
 		})

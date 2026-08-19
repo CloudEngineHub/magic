@@ -92,6 +92,42 @@ describe("designDataCodec", () => {
 		validateV3CanvasDocument(result.canvas)
 	})
 
+	it("drops visual understanding from non-media legacy and Content data", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "non-media-visual-understanding",
+			canvas: {
+				elements: [
+					{
+						id: "text-legacy",
+						type: ElementTypeEnum.Text,
+						content: [{ children: [{ type: "text", text: "legacy" }] }],
+						visualUnderstanding: { summary: "should drop" },
+					},
+					{
+						id: "text-v3",
+						type: ElementTypeEnum.Text,
+						contents: [
+							{
+								contentId: "text-v3-content-1",
+								content: [{ children: [{ type: "text", text: "v3" }] }],
+								visualUnderstanding: { summary: "should drop" },
+							},
+						],
+						activeContentId: "text-v3-content-1",
+						mainContentId: "text-v3-content-1",
+					},
+				],
+			},
+		})
+
+		for (const element of result.canvas?.elements ?? []) {
+			expect(element).not.toHaveProperty("visualUnderstanding")
+			expect(element.contents[0]).not.toHaveProperty("visualUnderstanding")
+		}
+		validateV3CanvasDocument(result.canvas)
+	})
+
 	it("migrates nested Frame/Group children and keeps node identity stable", () => {
 		const result = upgradeDesignDataToV3({
 			type: "design",

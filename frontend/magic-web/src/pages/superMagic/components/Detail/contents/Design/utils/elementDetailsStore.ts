@@ -1,6 +1,9 @@
 import { isEqual } from "lodash-es"
 import type { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
-import { getContents } from "@/components/CanvasDesign/runtime/document/elementContent"
+import {
+	getContents,
+	supportsVisualUnderstanding,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import type {
 	ElementDetailSource,
 	ElementDetailsProvenance,
@@ -16,6 +19,8 @@ export const HEAVY_FIELDS = [
 	"generateVideoRequest",
 	"visualUnderstanding",
 ] as const
+
+const NON_VISUAL_HEAVY_FIELDS = ["generateImageRequest", "generateVideoRequest"] as const
 
 export type ElementHeavyFields = Record<string, unknown>
 export type ContentDetailEntry = ElementHeavyFields
@@ -86,13 +91,18 @@ export function collectElementIds(elements: LayerElement[] | undefined): Set<str
 	return ids
 }
 
+function getHeavyFieldsForElement(type: string): readonly string[] {
+	return supportsVisualUnderstanding(type) ? HEAVY_FIELDS : NON_VISUAL_HEAVY_FIELDS
+}
+
 function pickContentDetails(element: AnyElement): Record<string, ContentDetailEntry> | null {
 	const details: Record<string, ContentDetailEntry> = {}
+	const heavyFields = getHeavyFieldsForElement(element.type)
 	for (const content of getContents(element) as unknown as Array<
 		Record<string, unknown> & { contentId: string }
 	>) {
 		const detail: ContentDetailEntry = {}
-		for (const field of HEAVY_FIELDS) {
+		for (const field of heavyFields) {
 			const value = content[field]
 			if (value !== undefined && value !== null) detail[field] = value
 		}
@@ -111,13 +121,23 @@ export function stripHeavyFields(elements: LayerElement[] | undefined): void {
 	})
 }
 
-function stripEntryMeta(entry: ElementDetailEntry | undefined): ElementHeavyFields {
+function stripEntryMeta(entry: ElementDetailEntry | undefined, type: string): ElementHeavyFields {
 	if (!entry) return {}
 	const result: ElementHeavyFields = {}
-	if (entry.contentDetails && Object.keys(entry.contentDetails).length > 0) {
-		result.contentDetails = entry.contentDetails
+	const heavyFields = getHeavyFieldsForElement(type)
+	if (entry.contentDetails) {
+		const contentDetails: Record<string, ContentDetailEntry> = {}
+		for (const [contentId, contentDetail] of Object.entries(entry.contentDetails)) {
+			const nextDetail: ContentDetailEntry = {}
+			for (const field of heavyFields) {
+				const value = contentDetail[field]
+				if (value !== undefined && value !== null) nextDetail[field] = value
+			}
+			if (Object.keys(nextDetail).length > 0) contentDetails[contentId] = nextDetail
+		}
+		if (Object.keys(contentDetails).length > 0) result.contentDetails = contentDetails
 	}
-	for (const field of HEAVY_FIELDS) {
+	for (const field of heavyFields) {
 		if (entry[field] !== undefined && entry[field] !== null) result[field] = entry[field]
 	}
 	return result
@@ -148,6 +168,7 @@ export function rehydrateHeavyFields(
 	const provenance: ElementDetailsProvenance = {}
 	walkElements(elements, (rawElement) => {
 		const element = rawElement as AnyElement
+		const heavyFields = getHeavyFieldsForElement(element.type)
 		const userEntry = userDoc.elements[element.id]
 		const agentEntry = agentDoc.elements[element.id]
 		const contentProvenance: NonNullable<ElementDetailsProvenance[string]["contentDetails"]> =
@@ -160,7 +181,7 @@ export function rehydrateHeavyFields(
 			Record<string, unknown> | undefined
 		let legacyFieldsAppliedToFirstContent = false
 		if (legacyWinner && firstContent) {
-			for (const field of HEAVY_FIELDS) {
+			for (const field of heavyFields) {
 				if (firstContent[field] === undefined && legacyWinner[field] !== undefined) {
 					firstContent[field] = legacyWinner[field]
 					legacyFieldsAppliedToFirstContent = true
@@ -178,7 +199,7 @@ export function rehydrateHeavyFields(
 				agentContent ? { ...agentContent, source: agentEntry?.source } : undefined,
 			)
 			if (winner) {
-				for (const field of HEAVY_FIELDS) {
+				for (const field of heavyFields) {
 					if (winner[field] !== undefined && winner[field] !== null)
 						content[field] = winner[field]
 				}
@@ -216,7 +237,7 @@ export function buildUserElementDetailsDoc(
 		const contentDetails = pickContentDetails(element)
 		if (!contentDetails) return
 		const detail = { contentDetails }
-		const baselineDetail = stripEntryMeta(agentBaseline.elements[element.id])
+		const baselineDetail = stripEntryMeta(agentBaseline.elements[element.id], element.type)
 		if (isEqual(detail, baselineDetail)) return
 		result[element.id] = { ...detail, source: ELEMENT_DETAIL_SOURCE_USER }
 	})

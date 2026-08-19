@@ -58,8 +58,8 @@ describe("videoGenerationRequestIntent", () => {
 		expect(
 			hasVideoGenerationRequestSubmitIntent({
 				generation_type: "canvas_composition",
-				extensions: {
-					video_edit_element_id: "video-edit-1",
+				composition: {
+					videos: [{ path: "/新建画布/videos/a.mp4" }],
 				},
 			}),
 		).toBe(true)

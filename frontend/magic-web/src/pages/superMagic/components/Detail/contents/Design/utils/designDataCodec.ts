@@ -6,7 +6,10 @@ import type {
 } from "@/components/CanvasDesign/runtime/document/types"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import { cloneCanvasConnections } from "@/components/CanvasDesign/runtime/document/connectionIndex"
-import { normalizeLegacyHighImageTaskMeta } from "@/components/CanvasDesign/runtime/document/elementContent"
+import {
+	normalizeLegacyHighImageTaskMeta,
+	supportsVisualUnderstanding,
+} from "@/components/CanvasDesign/runtime/document/elementContent"
 import { normalizeStoryboardShot } from "@/components/CanvasDesign/runtime/document/storyboardMigration"
 import { validateElementData } from "@/components/CanvasDesign/runtime/document/validateElement"
 import { cloneDeep } from "lodash-es"
@@ -20,8 +23,6 @@ interface VideoEditLegacyMigrationContext {
 	connectionIds: Set<string>
 	connectionPairs: Set<string>
 }
-
-const LEGACY_COMMON_CONTENT_FIELDS = ["visualUnderstanding"] as const
 
 export interface DesignDataCodecInput {
 	type: string
@@ -41,6 +42,7 @@ export interface DesignDataCodecInput {
  */
 const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Image]: [
+		"visualUnderstanding",
 		"src",
 		"status",
 		"errorMessage",
@@ -50,6 +52,7 @@ const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> 
 		"crop",
 	],
 	[ElementTypeEnum.Video]: [
+		"visualUnderstanding",
 		"src",
 		"status",
 		"errorMessage",
@@ -78,7 +81,7 @@ function cloneValue<T>(value: T): T {
 }
 
 function getLegacyFields(type: unknown): readonly string[] {
-	return [...LEGACY_COMMON_CONTENT_FIELDS, ...(LEGACY_CONTENT_FIELDS_BY_TYPE[String(type)] ?? [])]
+	return LEGACY_CONTENT_FIELDS_BY_TYPE[String(type)] ?? []
 }
 
 function createFirstContentId(elementId: string): string {
@@ -105,6 +108,8 @@ function migrateContentList(element: UnknownRecord, elementId: string): UnknownR
 		) {
 			delete content.errorMessage
 		}
+		// 旧版本曾把该字段放在公共 Content；非媒体节点不应继续携带这份无效数据。
+		if (!supportsVisualUnderstanding(String(element.type))) delete content.visualUnderstanding
 		delete content.id
 		delete content.type
 		content.contentId = contentId
@@ -188,6 +193,7 @@ function migrateElementToV3(
 
 	const hadContents = Array.isArray(element.contents)
 	const contents = migrateContentList(element, elementId)
+	if (!supportsVisualUnderstanding(element.type)) delete element.visualUnderstanding
 	const legacyFields = getLegacyFields(element.type)
 	const firstContent = contents[0] ?? { contentId: createFirstContentId(elementId) }
 	for (const field of legacyFields) {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import type { ImageElement, LayerElement } from "@/components/CanvasDesign/runtime/document/types"
+import type {
+	ImageElement,
+	LayerElement,
+	TextElement,
+} from "@/components/CanvasDesign/runtime/document/types"
 import {
 	ELEMENT_DETAIL_SOURCE_USER,
 	ELEMENT_DETAILS_VERSION,
@@ -15,6 +19,16 @@ function imageElement(contents: ImageElement["contents"]): ImageElement {
 		activeContentId: contents[0]?.contentId ?? null,
 		mainContentId: contents[0]?.contentId ?? null,
 		contents,
+	}
+}
+
+function textElement(): TextElement {
+	return {
+		id: "text-1",
+		type: "text",
+		activeContentId: "c1",
+		mainContentId: "c1",
+		contents: [{ contentId: "c1", content: [] }],
 	}
 }
 
@@ -75,6 +89,25 @@ describe("Content sidecar", () => {
 				},
 			},
 		})
+	})
+
+	it("does not rehydrate or write visual understanding for non-media Contents", () => {
+		const elements: LayerElement[] = [textElement()]
+		const baseline = {
+			version: ELEMENT_DETAILS_VERSION,
+			elements: {
+				"text-1": {
+					contentDetails: {
+						c1: { visualUnderstanding: { summary: "invalid text detail" } },
+					},
+				},
+			},
+		}
+
+		rehydrateHeavyFields(elements, emptyElementDetailsDoc(), baseline)
+
+		expect(elements[0].contents[0]).not.toHaveProperty("visualUnderstanding")
+		expect(buildUserElementDetailsDoc(elements, baseline)).toEqual(emptyElementDetailsDoc())
 	})
 
 	it("migrates an old element-level sidecar entry into the first Content", () => {
