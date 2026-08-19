@@ -302,8 +302,6 @@ class GoogleGeminiModel extends AbstractImageGenerate
             ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR);
         }
 
-        $this->warnIfMultipleImagesRequested($imageGenerateRequest);
-
         $originalReferImages = $imageGenerateRequest->getReferImages();
         try {
             $result = $this->requestImageGenerationWithFallback($imageGenerateRequest, $originalReferImages);

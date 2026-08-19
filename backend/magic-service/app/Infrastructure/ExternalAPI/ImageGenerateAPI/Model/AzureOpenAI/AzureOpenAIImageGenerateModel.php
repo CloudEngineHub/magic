@@ -28,13 +28,10 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
 
     private AzureOpenAIAPI $api;
 
-    private array $configItem;
-
     private string $model;
 
     public function __construct(array $serviceProviderConfig)
     {
-        $this->configItem = $serviceProviderConfig;
         $this->model = $serviceProviderConfig['model_version'] ?? '';
         $apiConfig = AzureOpenAIClientConfig::fromServiceProviderConfig($serviceProviderConfig);
         $this->api = new AzureOpenAIAPI($apiConfig);
