@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from app.tools.canvas.domain.errors import CanvasDomainError
@@ -103,6 +105,7 @@ class ContentMetadataService:
         detail: dict[str, Any],
         retry_count: int,
         parameters: dict[str, Any],
+        idempotency_key: str,
     ) -> dict[str, Any]:
         """归档上一终态并创建不复用旧任务绑定的新尝试。"""
         updated = dict(detail)
@@ -123,5 +126,27 @@ class ContentMetadataService:
             "generationStatus": "pending",
             "generationParameters": parameters,
             "attemptHistory": history,
+            "retryIdempotencyKey": idempotency_key,
         })
         return updated
+
+    @staticmethod
+    def retry_idempotency_key(
+        item_ref: str,
+        element_id: str,
+        content_id: str,
+        parameters: dict[str, Any],
+    ) -> str:
+        """根据一次明确的重试请求生成稳定幂等键。
+
+        item_ref 参与幂等键只用于识别同一次请求的重放；它不会影响 retryCount，
+        因此更换 item_ref 仍然必须经过统一的重试上限校验。
+        """
+        payload = {
+            "item_ref": item_ref,
+            "element_id": element_id,
+            "content_id": content_id,
+            "parameters": parameters,
+        }
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

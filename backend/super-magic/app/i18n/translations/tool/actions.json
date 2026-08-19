@@ -802,5 +802,21 @@
     "canvas.wait_generation": {
         "zh_CN": "等待内容生成",
         "en_US": "Wait for content generation"
+    },
+    "canvas.wait_generation_completed": {
+        "zh_CN": "内容生成完成",
+        "en_US": "Generation completed"
+    },
+    "canvas.wait_generation_timeout": {
+        "zh_CN": "等待内容生成超时",
+        "en_US": "Generation wait timed out"
+    },
+    "canvas.wait_generation_partial": {
+        "zh_CN": "查看内容生成进度",
+        "en_US": "Inspect generation progress"
+    },
+    "canvas.wait_generation_failed": {
+        "zh_CN": "处理内容生成失败",
+        "en_US": "Handle generation failure"
     }
 }

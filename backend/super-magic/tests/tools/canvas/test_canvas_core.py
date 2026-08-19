@@ -20,6 +20,15 @@ from app.tools.canvas.generation import (
 )
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
 from app.tools.canvas.repository import CanvasRepository
+from app.tools.canvas.strategies import (
+    ConnectionMutationPlan,
+    ConnectionStrategyRegistry,
+    ContentMutationPlan,
+    ContentStrategyRegistry,
+    LayoutMutationPlan,
+    LayoutStrategyRequest,
+    LayoutStrategyRegistry,
+)
 from app.tools.canvas.tools import AddCanvasConnections, ConnectionInput
 
 
@@ -206,6 +215,21 @@ class MockFailedGenerationPort:
 
     async def submit(self, request, tool_context):
         """始终返回失败结果。"""
+        return GenerationSubmission("sync", "failed", error_message="mock generation failure")
+
+
+class CountingFailedGenerationPort:
+    """用于验证相同重试请求不会重复提交生成任务的 mock 端口。"""
+
+    execution_mode = "sync"
+
+    def __init__(self):
+        """初始化提交计数。"""
+        self.submit_count = 0
+
+    async def submit(self, request, tool_context):
+        """每次调用都返回失败，但保留提交次数。"""
+        self.submit_count += 1
         return GenerationSubmission("sync", "failed", error_message="mock generation failure")
 
 
@@ -475,6 +499,43 @@ async def test_generated_content_retry_is_limited_and_reuses_content_id(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_identical_retry_request_is_idempotent(tmp_path) -> None:
+    """相同 item_ref 和生成输入的重试重放不能再次提交 provider 任务。"""
+    port = CountingFailedGenerationPort()
+    registry = GenerationCapabilityRegistry([
+        GenerationCapability("mock-image", "image", "sync", port),
+    ])
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplication(repository, generation_capabilities=registry)
+    await application.initialize("mock-project")
+    created = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "image",
+            "element_type": "image",
+            "content": {"source": "generated", "content_type": "image", "prompt": "mock"},
+        }],
+    )
+    element_id = created["items"][0]["element_id"]
+    content_id = created["items"][0]["content_id"]
+    request = [{
+        "item_ref": "same-retry",
+        "element_id": element_id,
+        "content_id": content_id,
+        "generation_override": {"prompt": "same retry"},
+    }]
+
+    first = await application.retry_content("mock-project", request)
+    replay = await application.retry_content("mock-project", request)
+
+    assert first["items"][0]["status"] == "failed"
+    assert replay["items"][0]["idempotent_replay"] is True
+    assert port.submit_count == 2
+    details = await application.elements("mock-project", [element_id])
+    assert details["elements"][0]["contents"][0]["retry_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_element_details_use_public_names_when_sidecar_is_damaged(tmp_path) -> None:
     """详情查询在扩展详情损坏时仍返回公开 DTO，不泄露内部文件名。"""
     repository = CanvasRepository(tmp_path)
@@ -713,3 +774,66 @@ async def test_frame_tools_reject_content_main_and_retry_but_allow_connections(t
         [{"item_ref": "frame-link", "source_element_id": frame_id, "target_element_id": ids["third"]}],
     )
     assert connection["items"][0]["status"] == "added"
+
+
+@pytest.mark.asyncio
+async def test_wait_returns_stable_not_applicable_error_for_frame_task(tmp_path) -> None:
+    """即使出现错误绑定，等待工具也必须明确拒绝 Frame 任务。"""
+    repository = CanvasRepository(tmp_path)
+    tasks = InMemoryGenerationTaskRepository()
+    application = CanvasApplication(repository, generation_tasks=tasks)
+    await application.initialize("mock-project")
+    created = await application.add_elements(
+        "mock-project",
+        [{"item_ref": "frame", "element_type": "frame"}],
+    )
+    await tasks.put(GenerationTask(
+        generation_task_id="frame-task",
+        provider_task_id="provider-task",
+        project_path="mock-project",
+        element_id=created["items"][0]["element_id"],
+        content_id=created["items"][0]["content_id"],
+        element_type="frame",
+        capability_name="invalid",
+        status="processing",
+    ))
+
+    result = await application.wait("mock-project", ["frame-task"], max_wait_seconds=1)
+
+    assert result["items"][0]["status"] == "not_applicable"
+    assert result["items"][0]["error_code"] == "FRAME_GENERATION_NOT_APPLICABLE"
+
+
+def test_strategy_registries_return_typed_plans() -> None:
+    """布局、Content 和 Connection Registry 都应返回独立的强类型计划。"""
+    canvas = CanvasDocument(elements=[CanvasElement("source", "text"), CanvasElement("target", "text")])
+    layout_plan = LayoutStrategyRegistry().get("row_incremental").plan(
+        canvas,
+        canvas.get_element("source"),
+        LayoutStrategyRequest("source", {"strategy": "row_incremental"}),
+    )
+    content_plan = ContentStrategyRegistry().plan({
+        "source": "user",
+        "content_type": "text",
+        "content_id": "content-1",
+        "content": "mock",
+    }, "text")
+    connection_plan = ConnectionStrategyRegistry().plan(canvas, "source", "target")
+
+    assert isinstance(layout_plan, LayoutMutationPlan)
+    assert isinstance(content_plan, ContentMutationPlan)
+    assert isinstance(connection_plan, ConnectionMutationPlan)
+
+
+def test_generation_capability_registry_selects_model_specific_capability() -> None:
+    """同一 Element 类型可根据模型选择不同的执行方式。"""
+    class Port:
+        execution_mode = "sync"
+
+    default = GenerationCapability("default-image", "image", "sync", Port())
+    model_specific = GenerationCapability("async-image-model", "image", "async", Port(), Port(), "model-x")
+    registry = GenerationCapabilityRegistry([default, model_specific])
+
+    assert registry.get("image", "model-x").name == "async-image-model"
+    assert registry.get("image", "other-model").name == "default-image"
+    assert registry.get_by_name("async-image-model", "image").execution_mode == "async"

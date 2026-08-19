@@ -36,9 +36,11 @@ from app.tools.canvas.sidecar import ElementDetailsAdapter
 from app.tools.canvas.strategies import ConnectionStrategyRegistry, ContentStrategyRegistry, LayoutStrategyRegistry
 from app.tools.canvas.hierarchy import (
     ElementTreeIndex,
+    ElementReferenceResolver,
     FrameSelectionRequest,
     FrameSelectionStrategy,
     HierarchyMutationPlan,
+    HierarchyStrategyRegistry,
 )
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
@@ -75,7 +77,9 @@ class CanvasApplication:
         self.generation_capabilities = generation_capabilities or GenerationCapabilityRegistry(workspace=repository.workspace)
         self.generation_tasks = generation_tasks or _default_generation_tasks
         self.asset_gateway = asset_gateway or WorkspaceAssetGateway(repository.workspace)
-        self.frame_selection = FrameSelectionStrategy()
+        self.hierarchy_strategies = HierarchyStrategyRegistry()
+        self.frame_selection = self.hierarchy_strategies.get("frame_selection")
+        self.element_references = ElementReferenceResolver()
         self.generation_execution = GenerationExecutionStrategyRegistry()
         self.generation_poller = GenerationTaskPoller()
         self.generation_result_applier = CanvasGenerationResultApplier()
@@ -143,7 +147,10 @@ class CanvasApplication:
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
                     if content.get("source") == "generated":
-                        self.generation_capabilities.get(element.element_type)
+                        self.generation_capabilities.get(
+                            element.element_type,
+                            content.get("model_id"),
+                        )
                         generated_content_id = element.contents[0].content_id
                         generated.append({
                             "element_id": element.element_id,
@@ -165,8 +172,14 @@ class CanvasApplication:
                 current_item_ref = item["item_ref"]
                 current_element_id = created.get(item["item_ref"])
                 for relation in item.get("connections", []):
-                    source_id = relation.get("source_element_id") or created.get(relation.get("source_item_ref"))
-                    target_id = relation.get("target_element_id") or created.get(relation.get("target_item_ref"))
+                    source_id = relation.get("source_element_id") or self.element_references.resolve(
+                        relation.get("source_item_ref"),
+                        created,
+                    )
+                    target_id = relation.get("target_element_id") or self.element_references.resolve(
+                        relation.get("target_item_ref"),
+                        created,
+                    )
                     if relation.get("source_element_id") or relation.get("source_item_ref"):
                         target_id = current_element_id
                     elif relation.get("target_element_id") or relation.get("target_item_ref"):
@@ -194,7 +207,7 @@ class CanvasApplication:
         self._validate_unique_item_refs(items)
         current_item_ref: str | None = None
 
-        def mutate(project: CanvasProject) -> dict[str, Any]:
+        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
             results: list[dict[str, Any]] = []
             selected_ids: set[str] = set()
@@ -227,10 +240,10 @@ class CanvasApplication:
                     "padding": plan.padding,
                     "status": "completed",
                 })
-            return {"items": results}
+            return {"items": results}, metadata
 
         try:
-            return await self.unit_of_work.transaction(project_path, mutate)
+            return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
             raise self._batch_error(items, current_item_ref, error) from error
 
@@ -267,7 +280,10 @@ class CanvasApplication:
                     element.main_content_id = content.content_id
                 status = "pending" if content_data.get("source") == "generated" else "completed"
                 if content_data.get("source") == "generated":
-                    self.generation_capabilities.get(element.element_type)
+                    self.generation_capabilities.get(
+                        element.element_type,
+                        content_data.get("model_id"),
+                    )
                 results.append({"item_ref": item["item_ref"], "element_id": element.element_id, "content_id": content.content_id, "status": status})
                 if content_data.get("source") == "generated":
                     generated.append({
@@ -295,7 +311,7 @@ class CanvasApplication:
         """只修改用户明确选择的 main Content 指针。"""
         self._validate_unique_item_refs(items)
         current_item_ref: str | None = None
-        def mutate(project: CanvasProject) -> dict[str, Any]:
+        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
             results = []
             for item in items:
@@ -314,15 +330,16 @@ class CanvasApplication:
                 element.main_content_id = content.content_id
                 results.append({
                     "item_ref": item["item_ref"],
+                    "status": "completed",
                     "element_id": element.element_id,
                     "previous_main_content_id": previous,
                     "main_content_id": content.content_id,
                     "active_content_id": element.active_content_id,
                 })
-            return {"items": results}
+            return {"items": results}, metadata
 
         try:
-            return await self.unit_of_work.transaction(project_path, mutate)
+            return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
             raise self._batch_error(items, current_item_ref, error) from error
 
@@ -330,7 +347,7 @@ class CanvasApplication:
         """按可插拔布局策略调整 Element 布局。"""
         self._validate_unique_item_refs(items)
         current_item_ref: str | None = None
-        def mutate(project: CanvasProject) -> dict[str, Any]:
+        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
             results = []
             for index, item in enumerate(items):
@@ -339,11 +356,16 @@ class CanvasApplication:
                 if element is None:
                     raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {item['element_id']} does not exist.")
                 self._apply_layout(project, element, item["layout"], index)
-                results.append({"item_ref": item["item_ref"], "element_id": element.element_id, "strategy": item["layout"]["strategy"]})
-            return {"items": results}
+                results.append({
+                    "item_ref": item["item_ref"],
+                    "status": "completed",
+                    "element_id": element.element_id,
+                    "strategy": item["layout"]["strategy"],
+                })
+            return {"items": results}, metadata
 
         try:
-            return await self.unit_of_work.transaction(project_path, mutate)
+            return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
         except CanvasDomainError as error:
             raise self._batch_error(items, current_item_ref, error) from error
 
@@ -451,6 +473,7 @@ class CanvasApplication:
         """校验失败 Content 的受控重试边界；生成提交由后续 Port 接入。"""
         self._validate_unique_item_refs(items)
         current_item_ref: str | None = None
+        retry_requests: list[dict[str, Any]] = []
 
         def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
             nonlocal current_item_ref
@@ -463,29 +486,78 @@ class CanvasApplication:
                     raise CanvasDomainError("CONTENT_NOT_FOUND", "The requested Content does not exist.")
                 if element.element_type in {"frame", "group"}:
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Frame and Group Elements do not have generated Content.")
-                if content.fields.get("status") != "failed":
-                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only failed generated Content can be retried.")
                 detail = self._get_content_detail(metadata, element.element_id, item["content_id"])
-                if detail.get("source") != "generated":
-                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated Content can be retried.")
-                retry_count = int(detail.get("retryCount", 0))
-                if retry_count >= 2:
-                    raise CanvasDomainError("CONTENT_RETRY_LIMIT_REACHED", "This Content has reached the retry limit.")
-                self.generation_capabilities.get(element.element_type)
                 parameters = self._merge_generation_override(
                     element.element_type,
                     detail.get("generationParameters", {}),
                     item.get("generation_override"),
                 )
+                idempotency_key = ContentMetadataService.retry_idempotency_key(
+                    item["item_ref"],
+                    element.element_id,
+                    content.content_id,
+                    parameters,
+                )
+                if detail.get("retryIdempotencyKey") == idempotency_key:
+                    previous_result = detail.get("retryResult")
+                    if isinstance(previous_result, dict):
+                        results.append({**previous_result, "idempotent_replay": True})
+                        continue
+                    if detail.get("generationStatus") in {"pending", "processing"}:
+                        results.append({
+                            "item_ref": item["item_ref"],
+                            "element_id": element.element_id,
+                            "content_id": content.content_id,
+                            "status": detail.get("generationStatus"),
+                            "generation_task_id": detail.get("generationTaskId"),
+                            "next_action": "Call wait_canvas_generation with the same generation_task_id.",
+                            "idempotent_replay": True,
+                        })
+                        continue
+                if content.fields.get("status") != "failed":
+                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only failed generated Content can be retried.")
+                if detail.get("source") != "generated":
+                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated Content can be retried.")
+                retry_count = int(detail.get("retryCount", 0))
+                if retry_count >= 2:
+                    raise CanvasDomainError("CONTENT_RETRY_LIMIT_REACHED", "This Content has reached the retry limit.")
+                self.generation_capabilities.get(
+                    element.element_type,
+                    parameters.get("model_id"),
+                )
+                previous_status = content.fields.get("status")
                 content.fields["status"] = "pending"
                 content.fields.pop("errorMessage", None)
                 self._set_content_detail(
                     metadata,
                     element.element_id,
                     item["content_id"],
-                    self._start_retry_detail(element.element_id, detail, retry_count + 1, parameters),
+                    self._start_retry_detail(
+                        element.element_id,
+                        detail,
+                        retry_count + 1,
+                        parameters,
+                        idempotency_key,
+                    ),
                 )
-                results.append({"item_ref": item["item_ref"], "element_id": element.element_id, "content_id": content.content_id, "status": "pending"})
+                results.append({
+                    "item_ref": item["item_ref"],
+                    "element_id": element.element_id,
+                    "content_id": content.content_id,
+                    "status": "pending",
+                    "previous_status": previous_status,
+                    "retry_count": retry_count + 1,
+                    "main_content_id": element.main_content_id,
+                })
+                retry_requests.append({
+                    "item_ref": item["item_ref"],
+                    "element_id": element.element_id,
+                    "content_id": content.content_id,
+                    "element_type": element.element_type,
+                    "retry_count": retry_count + 1,
+                    "parameters": parameters,
+                    "retry_idempotency_key": idempotency_key,
+                })
             return {"items": results}, metadata
 
         try:
@@ -495,16 +567,17 @@ class CanvasApplication:
         project = await self.repository.read(project_path)
         metadata = await self.repository.read_sidecar(project_path)
         generated = []
-        for item in items:
+        for item in retry_requests:
             element = project.canvas.get_element(item["element_id"])
             detail = self._get_content_detail(metadata, item["element_id"], item["content_id"])
             generated.append({
-                "item_ref": item.get("item_ref"),
+                "item_ref": item["item_ref"],
                 "element_id": item["element_id"],
                 "content_id": item["content_id"],
                 "element_type": element.element_type if element else "image",
-                "retry_count": int(detail.get("retryCount", 0)),
-                "parameters": detail.get("generationParameters", {}),
+                "retry_count": item["retry_count"],
+                "parameters": item["parameters"],
+                "retry_idempotency_key": item["retry_idempotency_key"],
             })
         return await self._submit_generated(project_path, result, generated, tool_context)
 
@@ -591,9 +664,14 @@ class CanvasApplication:
                 "element_id": record.element_id,
                 "content_id": record.content_id,
                 "status": "not_applicable",
+                "error_code": "FRAME_GENERATION_NOT_APPLICABLE",
                 "error": "Frame and Group Elements do not have generation tasks.",
+                "next_action": "Do not wait for this Element; use Canvas layout or query tools instead.",
             }
-        capability = self.generation_capabilities.get(record.element_type)
+        capability = self.generation_capabilities.get_by_name(
+            record.capability_name,
+            record.element_type,
+        )
         if capability.query_port is None:
             return {"generation_task_id": task_id, "status": "processing", "timed_out": True}
         query_result = await self.generation_poller.poll(
@@ -667,6 +745,14 @@ class CanvasApplication:
                 provider_task_id = detail.get("providerTaskId")
                 if not isinstance(provider_task_id, str) or not provider_task_id:
                     return None
+                parameters = detail.get("generationParameters") or {}
+                try:
+                    capability_name = self.generation_capabilities.get(
+                        element.element_type,
+                        parameters.get("model_id"),
+                    ).name
+                except CanvasDomainError:
+                    capability_name = "recovered"
                 record = GenerationTask(
                     generation_task_id=generation_task_id,
                     provider_task_id=provider_task_id,
@@ -674,7 +760,7 @@ class CanvasApplication:
                     element_id=element.element_id,
                     content_id=content.content_id,
                     element_type=element.element_type,
-                    capability_name="recovered",
+                    capability_name=capability_name,
                     retry_count=int(detail.get("retryCount", 0)),
                     status=str(detail.get("generationStatus") or content.fields.get("status") or "processing"),
                     error=detail.get("errorMessage") or content.fields.get("errorMessage"),
@@ -694,7 +780,10 @@ class CanvasApplication:
         """提交生成能力并把逐项状态合并回结构结果。"""
         by_content = {item["content_id"]: item for item in result.get("items", []) if item.get("content_id")}
         for item in generated:
-            capability = self.generation_capabilities.get(item["element_type"])
+            capability = self.generation_capabilities.get(
+                item["element_type"],
+                (item.get("parameters") or {}).get("model_id"),
+            )
             request = GenerationRequest(
                 project_path=project_path,
                 element_id=item["element_id"],
@@ -714,22 +803,26 @@ class CanvasApplication:
                     target["generation_task_id"] = submission.generation_task_id
                 if submission.output_uri:
                     target["output_uri"] = submission.output_uri
-                if submission.error_message:
-                    target["error"] = submission.error_message
+            if submission.error_message:
+                target["error"] = submission.error_message
+            task_repository_error: str | None = None
             if submission.execution_mode == "async" and submission.generation_task_id and submission.provider_task_id:
-                await self.generation_tasks.put(GenerationTask(
-                    generation_task_id=submission.generation_task_id,
-                    provider_task_id=submission.provider_task_id,
-                    project_path=project_path,
-                    element_id=item["element_id"],
-                    content_id=item["content_id"],
-                    element_type=item["element_type"],
-                    capability_name=capability.name,
-                    retry_count=int(item.get("retry_count", 0)),
-                    status=submission.status,
-                    error=submission.error_message,
-                    output_uri=submission.output_uri,
-                ))
+                try:
+                    await self.generation_tasks.put(GenerationTask(
+                        generation_task_id=submission.generation_task_id,
+                        provider_task_id=submission.provider_task_id,
+                        project_path=project_path,
+                        element_id=item["element_id"],
+                        content_id=item["content_id"],
+                        element_type=item["element_type"],
+                        capability_name=capability.name,
+                        retry_count=int(item.get("retry_count", 0)),
+                        status=submission.status,
+                        error=submission.error_message,
+                        output_uri=submission.output_uri,
+                    ))
+                except Exception:
+                    task_repository_error = "Generation task binding was saved in Canvas metadata and can be recovered on the next wait call."
             def persist(project: CanvasProject, metadata: dict) -> tuple[None, dict]:
                 """在同一项目事务中持久化生成结果和内部任务绑定。"""
                 self._apply_generation_result(
@@ -741,7 +834,7 @@ class CanvasApplication:
                     submission.error_message,
                 )
                 detail = self._get_content_detail(metadata, item["element_id"], item["content_id"])
-                self._set_content_detail(metadata, item["element_id"], item["content_id"], {
+                detail_update = {
                     **detail,
                     "elementId": item["element_id"],
                     "source": "generated",
@@ -752,7 +845,26 @@ class CanvasApplication:
                     "generationStatus": submission.status,
                     "outputUri": submission.output_uri,
                     "errorMessage": submission.error_message,
-                })
+                }
+                retry_key = item.get("retry_idempotency_key")
+                if retry_key:
+                    detail_update["retryIdempotencyKey"] = retry_key
+                    detail_update["retryResult"] = {
+                        "item_ref": item.get("item_ref"),
+                        "element_id": item["element_id"],
+                        "content_id": item["content_id"],
+                        "status": submission.status,
+                        "retry_count": int(item.get("retry_count", 0)),
+                        "generation_task_id": submission.generation_task_id,
+                        "output_uri": submission.output_uri,
+                        "error": submission.error_message,
+                        "next_action": (
+                            "Call wait_canvas_generation with the returned generation_task_id."
+                            if submission.generation_task_id
+                            else "Call query_canvas_element_details to verify the retried Content."
+                        ),
+                    }
+                self._set_content_detail(metadata, item["element_id"], item["content_id"], detail_update)
                 return None, metadata
 
             try:
@@ -767,6 +879,8 @@ class CanvasApplication:
                         "Keep the returned generation_task_id and call wait_canvas_generation."
                     )
                     target["persistence_error"] = "Canvas metadata persistence is temporarily unavailable."
+            if task_repository_error and target is not None:
+                target["persistence_warning"] = task_repository_error
         return result
 
     @staticmethod
@@ -851,9 +965,16 @@ class CanvasApplication:
         detail: dict[str, Any],
         retry_count: int,
         parameters: dict[str, Any],
+        idempotency_key: str,
     ) -> dict[str, Any]:
         """归档上一次终态并创建不复用旧任务绑定的新重试详情。"""
-        return ContentMetadataService.start_retry(element_id, detail, retry_count, parameters)
+        return ContentMetadataService.start_retry(
+            element_id,
+            detail,
+            retry_count,
+            parameters,
+            idempotency_key,
+        )
 
     @staticmethod
     def _element_details_dto(
@@ -884,4 +1005,4 @@ class CanvasApplication:
         existing = next((item for item in project.canvas.connections if item.source_element_id == source and item.target_element_id == target), None)
         if existing is not None:
             return existing
-        return self.connection_strategies.add(project.canvas, source, target)
+        return self.connection_strategies.plan(project.canvas, source, target).apply(project.canvas)

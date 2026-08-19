@@ -109,6 +109,7 @@ class GenerationCapability:
     execution_mode: str
     submission_port: GenerationSubmissionPort
     query_port: GenerationQueryPort | None = None
+    model_id: str | None = None
 
 
 class GenerationCapabilityRegistry:
@@ -117,17 +118,30 @@ class GenerationCapabilityRegistry:
     def __init__(self, capabilities: list[GenerationCapability] | None = None, workspace: Path | None = None):
         """初始化能力注册表；未传入时加载默认图片和视频适配。"""
         values = capabilities if capabilities is not None else default_generation_capabilities(workspace)
-        self._capabilities = {capability.element_type: capability for capability in values}
+        self._capabilities = {
+            (capability.element_type, capability.model_id): capability
+            for capability in values
+        }
+        self._by_name = {capability.name: capability for capability in values}
 
-    def get(self, element_type: str) -> GenerationCapability:
-        """获取指定 Element 类型的生成能力。"""
-        capability = self._capabilities.get(element_type)
+    def get(self, element_type: str, model_id: str | None = None) -> GenerationCapability:
+        """根据 Element 类型和可选模型选择生成能力。"""
+        capability = self._capabilities.get((element_type, model_id))
+        if capability is None and model_id is not None:
+            capability = self._capabilities.get((element_type, None))
         if capability is None:
             raise CanvasDomainError(
                 "GENERATION_NOT_CONFIGURED",
                 f"No generation capability is configured for {element_type}.",
             )
         return capability
+
+    def get_by_name(self, capability_name: str, element_type: str) -> GenerationCapability:
+        """按任务记录中的能力名称恢复查询端口，缺少名称时按类型回退。"""
+        capability = self._by_name.get(capability_name)
+        if capability is not None:
+            return capability
+        return self.get(element_type)
 
 
 @dataclass
@@ -357,7 +371,11 @@ class GenericImageGenerationPort:
         try:
             output_uri = output.relative_to(self.workspace).as_posix()
         except ValueError:
-            output_uri = str(saved[0])
+            return GenerationSubmission(
+                "sync",
+                "failed",
+                error_message="Image generation returned an output outside the Canvas workspace.",
+            )
         return GenerationSubmission("sync", "completed", output_uri=output_uri)
 
 

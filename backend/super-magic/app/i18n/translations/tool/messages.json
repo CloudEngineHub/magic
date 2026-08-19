@@ -5448,8 +5448,8 @@
         "en_US": "Completed {{succeeded}}/{{total}} items"
     },
     "canvas.page": {
-        "zh_CN": "第 {{page}} 页",
-        "en_US": "Page {{page}}"
+        "zh_CN": "第 {{page}} 页，每页 {{limit}} 项",
+        "en_US": "Page {{page}}, {{limit}} items per page"
     },
     "canvas.wait_limit": {
         "zh_CN": "本次最多等待 {{seconds}} 秒",

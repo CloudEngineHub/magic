@@ -29,7 +29,13 @@ def error_result(error: Exception) -> ToolResult:
         return ToolResult.error("\n".join(lines), data={"items": error.items, "applied": False})
     if isinstance(error, (CanvasDomainError, CanvasProtocolError)):
         code = "CANVAS_PROJECT_NOT_SUPPORTED" if error.code == "UNSUPPORTED_CANVAS_VERSION" else error.code
-        return ToolResult.error(f"Canvas operation failed.\n- Error code: {code}\n- Reason: {error.message}")
+        action = _model_action_for_error(code)
+        return ToolResult.error(
+            f"Canvas operation failed.\n"
+            f"- Error code: {code}\n"
+            f"- Reason: {error.message}\n"
+            f"- Action: {action}"
+        )
     if isinstance(error, FileNotFoundError) and str(error) == "PROJECT_NOT_FOUND":
         return ToolResult.error(
             "Canvas operation failed.\n"
@@ -58,6 +64,21 @@ def error_result(error: Exception) -> ToolResult:
         "- Reason: An unexpected internal error occurred.\n"
         "- Action: Keep the returned IDs and retry the smallest failed operation."
     )
+
+
+def _model_action_for_error(code: str) -> str:
+    """根据稳定错误码生成大模型可执行的下一步建议。"""
+    if code in {"CONTENT_RETRY_LIMIT_REACHED", "CONTENT_RETRY_NOT_ALLOWED"}:
+        return "Do not retry this Content automatically; ask the user whether to create a new Content version."
+    if code == "FRAME_GENERATION_NOT_APPLICABLE":
+        return "Do not wait for a Frame; use query or layout tools for the Frame."
+    if code in {"CONNECTION_NOT_FOUND", "CONNECTION_ID_REQUIRED"}:
+        return "Query the affected Elements to obtain the exact Connection ID, then retry only after explicit user intent."
+    if code == "CANVAS_PROJECT_NOT_SUPPORTED":
+        return "Ask the user to open a supported Canvas project; do not inspect or migrate the project file."
+    if code in {"ELEMENT_NOT_FOUND", "CONTENT_NOT_FOUND"}:
+        return "Use the latest Canvas query result to obtain the exact target ID, then retry only the failed item."
+    return "Correct the failed item using the exact IDs from the latest Canvas query, then retry only that operation."
 
 
 class CanvasToolFeedbackMixin:
@@ -89,7 +110,7 @@ class CanvasToolFeedbackMixin:
     ) -> dict[str, str]:
         """根据结果状态生成调用后的用户反馈。"""
         normalized = arguments or {}
-        action_key = self._feedback_action_key(normalized)
+        action_key = self._feedback_action_key_after(normalized, result)
         remark = self._feedback_remark(normalized, result)
         if not result.ok:
             remark = i18n.translate("canvas.operation_failed", category="tool.messages")
@@ -97,6 +118,21 @@ class CanvasToolFeedbackMixin:
             "action": i18n.translate(action_key, category="tool.actions"),
             "remark": remark,
         }
+
+    def _feedback_action_key_after(self, arguments: dict[str, Any], result: ToolResult) -> str:
+        """根据工具结果细分等待状态等用户界面动作。"""
+        action_key = self._feedback_action_key(arguments)
+        if self.feedback_action_key != "canvas.wait_generation" or not result.data:
+            return action_key
+        items = result.data.get("items", [])
+        if any(item.get("timed_out") for item in items):
+            return "canvas.wait_generation_timeout"
+        statuses = {item.get("status") for item in items}
+        if statuses and statuses <= {"completed"}:
+            return "canvas.wait_generation_completed"
+        if statuses and statuses <= {"failed", "not_found", "not_applicable"}:
+            return "canvas.wait_generation_failed"
+        return "canvas.wait_generation_partial"
 
     async def get_tool_detail(
         self,
@@ -234,11 +270,15 @@ class CanvasToolFeedbackMixin:
                 succeeded=success,
                 total=len(items),
             )
+        element_ids = arguments.get("element_ids")
+        if isinstance(element_ids, list) and element_ids:
+            return prefix + "Elements: " + ", ".join(str(element_id) for element_id in element_ids)
         if "page" in arguments:
             return prefix + i18n.translate(
                 "canvas.page",
                 category="tool.messages",
                 page=arguments.get("page"),
+                limit=arguments.get("limit", "-"),
             )
         if "max_wait_seconds" in arguments:
             return prefix + i18n.translate(

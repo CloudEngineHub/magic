@@ -28,7 +28,11 @@ class AtomicBatchGuard:
     ) -> CanvasDomainError:
         """多项批次返回逐项状态，单项保留原业务错误码。"""
         if len(items) == 1:
-            return error
+            item_ref = str(items[0].get("item_ref") or "-")
+            return CanvasDomainError(
+                error.code,
+                f"item_ref={item_ref} | {error.message}",
+            )
         results: list[dict[str, Any]] = []
         for item in items:
             item_ref = str(item.get("item_ref") or "-")

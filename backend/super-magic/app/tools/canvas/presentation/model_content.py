@@ -102,13 +102,18 @@ def _compact_value(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))[:500]
 
 
-def items_content(summary: str, result: dict[str, Any]) -> str:
+def items_content(
+    summary: str,
+    result: dict[str, Any],
+    follow_up: str | None = None,
+) -> str:
     """生成批量工具的模型可读逐项摘要。"""
     lines = [summary]
     for item in result.get("items", []):
         ordered_keys = (
             "item_ref",
             "status",
+            "previous_status",
             "element_id",
             "content_id",
             "connection_id",
@@ -125,6 +130,8 @@ def items_content(summary: str, result: dict[str, Any]) -> str:
             "active_content_id",
             "removed_connection_ids",
             "generation_task_id",
+            "retry_count",
+            "idempotent_replay",
             "output_uri",
             "error_code",
             "error",
@@ -160,4 +167,15 @@ def items_content(summary: str, result: dict[str, Any]) -> str:
         lines.append("Next: call wait_canvas_generation with the returned generation_task_id values.")
     if any(item.get("timed_out") for item in result.get("items", [])):
         lines.append("Continue waiting with the same generation_task_id; do not create a duplicate generation task.")
+    elif follow_up and result.get("items"):
+        statuses = {item.get("status") for item in result["items"]}
+        if statuses and statuses <= {
+            "completed",
+            "added",
+            "removed",
+            "replaced",
+            "already_removed",
+            "already_replaced",
+        }:
+            lines.append(f"Next: {follow_up}")
     return "\n".join(lines)

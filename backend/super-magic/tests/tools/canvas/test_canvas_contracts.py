@@ -7,6 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application import CanvasApplication
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
@@ -17,9 +18,16 @@ from app.tools.canvas.generation import (
     GenerationSubmission,
     InMemoryGenerationTaskRepository,
 )
-from app.tools.canvas.presentation.model_content import elements_content
+from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.repository import CanvasRepository
-from app.tools.canvas.tools import AddCanvasElements, ContentInput, WaitCanvasGeneration, _error_result
+from app.tools.canvas.tools import (
+    AddCanvasElements,
+    ContentInput,
+    QueryCanvasElementDetails,
+    QueryCanvasOverview,
+    WaitCanvasGeneration,
+    _error_result,
+)
 from agentlang.tools.tool_result import ToolResult
 
 
@@ -101,6 +109,20 @@ def test_batch_error_content_is_model_actionable() -> None:
     assert "correct only the failed items" in result.content
 
 
+def test_model_content_contains_follow_up_and_specific_error_action() -> None:
+    """模型结果必须包含可串联的下一步和稳定错误处理建议。"""
+    success = items_content(
+        "Canvas Elements added successfully.",
+        {"items": [{"item_ref": "text", "status": "completed", "element_id": "element-1"}]},
+        "call query_canvas_element_details with the returned element_id",
+    )
+    assert "Next: call query_canvas_element_details" in success
+
+    failed = _error_result(CanvasDomainError("CONTENT_NOT_FOUND", "Content content-1 does not exist."))
+    assert "content-1" in failed.content
+    assert "Action:" in failed.content
+
+
 @pytest.mark.asyncio
 async def test_invalid_user_sidecar_is_visible_and_blocks_writes(tmp_path) -> None:
     """不支持的 user sidecar 不能被静默忽略或在写操作中覆盖。"""
@@ -127,6 +149,37 @@ async def test_invalid_user_sidecar_is_visible_and_blocks_writes(tmp_path) -> No
                 "element_id": element_id,
                 "content": {"source": "user", "content_type": "text", "content": "new"},
             }],
+        )
+
+    assert user_sidecar.read_text(encoding="utf-8") == json.dumps({"elements": []})
+
+
+@pytest.mark.asyncio
+async def test_invalid_user_sidecar_blocks_layout_and_frame_writes(tmp_path) -> None:
+    """所有 Canvas 结构写操作都必须尊重损坏 user sidecar 的保护边界。"""
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplication(repository)
+    await application.initialize("mock-project")
+    created = await application.add_elements(
+        "mock-project",
+        [
+            {"item_ref": "one", "element_type": "text"},
+            {"item_ref": "two", "element_type": "text"},
+        ],
+    )
+    ids = created["created_element_ids"]
+    user_sidecar = tmp_path / "mock-project" / "element-details-user.json"
+    user_sidecar.write_text(json.dumps({"elements": []}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="UNSUPPORTED_ELEMENT_DETAILS_STRUCTURE"):
+        await application.layout(
+            "mock-project",
+            [{"item_ref": "layout", "element_id": ids[0], "layout": {"strategy": "row_incremental"}}],
+        )
+    with pytest.raises(ValueError, match="UNSUPPORTED_ELEMENT_DETAILS_STRUCTURE"):
+        await application.frame_elements(
+            "mock-project",
+            [{"item_ref": "frame", "element_ids": ids}],
         )
 
     assert user_sidecar.read_text(encoding="utf-8") == json.dumps({"elements": []})
@@ -223,6 +276,22 @@ class RecoverableVideoPort:
         return GenerationQueryResult("completed", output_uri="mock/videos/recovered.mp4")
 
 
+class FailingTaskRepository:
+    """用于验证任务仓储失败时仍可从 Canvas sidecar 恢复的 mock。"""
+
+    async def put(self, task):
+        """模拟任务绑定写入失败。"""
+        raise RuntimeError("mock task repository failure")
+
+    async def get(self, generation_task_id):
+        """该仓储不提供运行期任务记录。"""
+        return None
+
+    async def update(self, task):
+        """模拟更新不可用。"""
+        raise RuntimeError("mock task repository failure")
+
+
 @pytest.mark.asyncio
 async def test_async_generation_recovers_between_application_instances(tmp_path) -> None:
     """新的 Application 实例应能仅凭 sidecar 任务绑定继续等待。"""
@@ -258,6 +327,41 @@ async def test_async_generation_recovers_between_application_instances(tmp_path)
     assert waited["items"][0]["output_uri"] == "mock/videos/recovered.mp4"
 
 
+@pytest.mark.asyncio
+async def test_async_generation_recovers_when_task_repository_write_fails(tmp_path) -> None:
+    """任务仓储写失败时，sidecar 绑定仍应支持后续等待恢复。"""
+    port = RecoverableVideoPort()
+    registry = GenerationCapabilityRegistry([
+        GenerationCapability("recoverable-video", "video", "async", port, port),
+    ])
+    repository = CanvasRepository(tmp_path)
+    first = CanvasApplication(
+        repository,
+        generation_capabilities=registry,
+        generation_tasks=FailingTaskRepository(),
+    )
+    await first.initialize("mock-project")
+    created = await first.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "video",
+            "element_type": "video",
+            "content": {"source": "generated", "content_type": "video", "prompt": "mock"},
+        }],
+    )
+    assert created["items"][0]["generation_task_id"] == "recoverable-canvas-task"
+    assert created["items"][0]["persistence_warning"]
+
+    second = CanvasApplication(
+        repository,
+        generation_capabilities=registry,
+        generation_tasks=InMemoryGenerationTaskRepository(),
+    )
+    waited = await second.wait("mock-project", ["recoverable-canvas-task"], max_wait_seconds=1)
+
+    assert waited["items"][0]["status"] == "completed"
+
+
 def test_feedback_and_content_are_separate_channels() -> None:
     """模型 content 只保留语义摘要，结构化 ID 留在 data 中。"""
     result = ToolResult(
@@ -267,3 +371,48 @@ def test_feedback_and_content_are_separate_channels() -> None:
     assert result.content.startswith("Canvas Elements added successfully.")
     assert "element-1" not in result.content
     assert result.data["items"][0]["element_id"] == "element-1"
+
+
+@pytest.mark.asyncio
+async def test_user_feedback_changes_with_query_targets_and_wait_state() -> None:
+    """用户界面反馈应包含查询目标，并区分等待完成和超时。"""
+    context = ToolContext()
+    overview = QueryCanvasOverview()
+    overview_feedback = await overview.get_before_tool_call_friendly_action_and_remark(
+        overview.name,
+        context,
+        {"project_path": "Canvas/Demo", "page": 2, "limit": 7},
+    )
+    assert "第 2 页" in overview_feedback["remark"]
+    assert "7" in overview_feedback["remark"]
+
+    details = QueryCanvasElementDetails()
+    details_feedback = await details.get_before_tool_call_friendly_action_and_remark(
+        details.name,
+        context,
+        {"project_path": "Canvas/Demo", "element_ids": ["element-1", "element-2"]},
+    )
+    assert "element-1" in details_feedback["remark"]
+    assert "element-2" in details_feedback["remark"]
+
+    wait = WaitCanvasGeneration()
+    wait_args = {
+        "project_path": "Canvas/Demo",
+        "tasks": [{"generation_task_id": "task-1"}],
+        "max_wait_seconds": 5,
+    }
+    completed = await wait.get_after_tool_call_friendly_action_and_remark(
+        wait.name,
+        context,
+        ToolResult(content="ok", data={"items": [{"status": "completed"}]}),
+        0.1,
+        wait_args,
+    )
+    timed_out = await wait.get_after_tool_call_friendly_action_and_remark(
+        wait.name,
+        context,
+        ToolResult(content="ok", data={"items": [{"status": "processing", "timed_out": True}]}),
+        0.1,
+        wait_args,
+    )
+    assert completed["action"] != timed_out["action"]

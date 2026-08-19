@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from math import floor
 from typing import Any
 
@@ -16,14 +17,57 @@ DEFAULT_ELEMENT_WIDTH = 1024.0
 DEFAULT_ELEMENT_HEIGHT = 1024.0
 
 
+@dataclass(frozen=True)
+class LayoutStrategyRequest:
+    """布局策略的强类型输入。"""
+
+    element_id: str
+    options: dict[str, Any]
+    index: int = 0
+
+
+@dataclass(frozen=True)
+class LayoutMutationPlan:
+    """布局策略返回的最小变更计划，不直接持久化 Canvas。"""
+
+    element_id: str
+    properties: dict[str, Any]
+
+    def apply(self, canvas: CanvasDocument) -> None:
+        """将已计算的布局字段应用到内存 Canvas 快照。"""
+        element = canvas.get_element(self.element_id)
+        if element is None:
+            raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {self.element_id} does not exist.")
+        element.properties.update(self.properties)
+
+
 class LayoutStrategyInterface(ABC):
     """布局策略接口。"""
 
     name: str
 
     @abstractmethod
-    def apply(self, canvas: CanvasDocument, element: CanvasElement, request: dict[str, Any], index: int) -> None:
-        """根据布局请求修改目标 Element 的布局。"""
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        element: CanvasElement,
+        request: LayoutStrategyRequest,
+    ) -> LayoutMutationPlan:
+        """根据布局请求计算目标 Element 的布局变更计划。"""
+
+    def apply(
+        self,
+        canvas: CanvasDocument,
+        element: CanvasElement,
+        request: dict[str, Any],
+        index: int,
+    ) -> None:
+        """兼容旧调用方，将策略计划应用到内存快照。"""
+        self.plan(
+            canvas,
+            element,
+            LayoutStrategyRequest(element.element_id, dict(request), index),
+        ).apply(canvas)
 
 
 class RowIncrementalLayoutStrategy(LayoutStrategyInterface):
@@ -32,8 +76,14 @@ class RowIncrementalLayoutStrategy(LayoutStrategyInterface):
     name = "row_incremental"
     max_per_row = {"image": 6, "video": 4}
 
-    def apply(self, canvas: CanvasDocument, element: CanvasElement, request: dict[str, Any], index: int) -> None:
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        element: CanvasElement,
+        request: LayoutStrategyRequest,
+    ) -> LayoutMutationPlan:
         """复用默认设计布局语义，为新节点寻找下一处稳定位置。"""
+        changes: dict[str, Any] = {}
         positioned = [
             item
             for item in canvas.siblings(element.element_id)
@@ -44,9 +94,10 @@ class RowIncrementalLayoutStrategy(LayoutStrategyInterface):
         ]
         if "x" not in element.properties or "y" not in element.properties:
             x, y = self._next_position(positioned, element.element_type)
-            element.properties.setdefault("x", x)
-            element.properties.setdefault("y", y)
-        _assign_next_z_index(canvas, element)
+            changes.update({"x": element.properties.get("x", x), "y": element.properties.get("y", y)})
+        if _number(element.properties.get("zIndex")) is None:
+            changes["zIndex"] = _next_z_index(canvas, element)
+        return LayoutMutationPlan(element.element_id, changes)
 
     def _next_position(self, positioned: list[CanvasElement], element_type: str) -> tuple[float, float]:
         """按当前最后一行容量计算下一个位置。"""
@@ -73,7 +124,12 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
     horizontal_gap = 560.0
     vertical_gap = 240.0
 
-    def apply(self, canvas: CanvasDocument, element: CanvasElement, request: dict[str, Any], index: int) -> None:
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        element: CanvasElement,
+        request: LayoutStrategyRequest,
+    ) -> LayoutMutationPlan:
         """根据直接上游把目标放在右侧，并只向下避让碰撞。"""
         parent_id = canvas.parent_map().get(element.element_id)
         occupied = [
@@ -110,8 +166,10 @@ class DependencyFlowLayoutStrategy(LayoutStrategyInterface):
                 else 0.0
             )
         x, y = self._find_available(element, preferred_x, preferred_y, occupied)
-        element.properties.update({"x": x, "y": y})
-        _assign_next_z_index(canvas, element)
+        changes: dict[str, Any] = {"x": x, "y": y}
+        if _number(element.properties.get("zIndex")) is None:
+            changes["zIndex"] = _next_z_index(canvas, element)
+        return LayoutMutationPlan(element.element_id, changes)
 
     def _find_available(
         self,
@@ -138,13 +196,20 @@ class ExplicitPositionLayoutStrategy(LayoutStrategyInterface):
 
     name = "explicit_position"
 
-    def apply(self, canvas: CanvasDocument, element: CanvasElement, request: dict[str, Any], index: int) -> None:
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        element: CanvasElement,
+        request: LayoutStrategyRequest,
+    ) -> LayoutMutationPlan:
         """写入用户提供的 x/y 坐标。"""
-        position = request.get("position") or {}
+        position = request.options.get("position") or {}
         if "x" not in position or "y" not in position:
             raise CanvasDomainError("EXPLICIT_POSITION_REQUIRED", "Explicit positioning requires x and y.")
-        element.properties.update({"x": position["x"], "y": position["y"]})
-        _assign_next_z_index(canvas, element)
+        changes: dict[str, Any] = {"x": position["x"], "y": position["y"]}
+        if _number(element.properties.get("zIndex")) is None:
+            changes["zIndex"] = _next_z_index(canvas, element)
+        return LayoutMutationPlan(element.element_id, changes)
 
 
 def _number(value: Any) -> float | None:
@@ -164,10 +229,8 @@ def _height(element: CanvasElement) -> float:
     return value if value is not None and value > 0 else DEFAULT_ELEMENT_HEIGHT
 
 
-def _assign_next_z_index(canvas: CanvasDocument, element: CanvasElement) -> None:
-    """缺少图层时按当前最大值递增。"""
-    if _number(element.properties.get("zIndex")) is not None:
-        return
+def _next_z_index(canvas: CanvasDocument, element: CanvasElement) -> int:
+    """计算目标 Element 所在父级的下一个图层值。"""
     maximum = max(
         (
             value
@@ -177,7 +240,7 @@ def _assign_next_z_index(canvas: CanvasDocument, element: CanvasElement) -> None
         ),
         default=0.0,
     )
-    element.properties["zIndex"] = floor(maximum) + 1
+    return floor(maximum) + 1
 
 
 def _overlaps(target: CanvasElement, target_x: float, target_y: float, occupied: CanvasElement) -> bool:
@@ -212,15 +275,26 @@ class ContentStrategyInterface(ABC):
     """Content 创建策略接口。"""
 
     @abstractmethod
+    def plan(self, data: dict[str, Any]) -> "ContentMutationPlan":
+        """把外部 Content 输入转换为主协议 Content 变更计划。"""
+
     def build(self, data: dict[str, Any]) -> CanvasContent:
-        """把外部 Content 输入转换为主协议 Content。"""
+        """兼容旧调用方，返回计划中的 Content。"""
+        return self.plan(data).content
+
+
+@dataclass(frozen=True)
+class ContentMutationPlan:
+    """Content 策略返回的不可变创建计划。"""
+
+    content: CanvasContent
 
 
 class UserContentStrategy(ContentStrategyInterface):
     """处理用户直接提供的 Content。"""
 
-    def build(self, data: dict[str, Any]) -> CanvasContent:
-        """创建不包含内部 source 字段的 Content。"""
+    def plan(self, data: dict[str, Any]) -> ContentMutationPlan:
+        """创建不包含内部 source 字段的 Content 计划。"""
         content_id = data.get("content_id")
         if not content_id:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Content ID must be assigned before strategy execution.")
@@ -233,29 +307,29 @@ class UserContentStrategy(ContentStrategyInterface):
         if unexpected:
             fields_text = ", ".join(sorted(unexpected))
             raise CanvasDomainError("CONTENT_INPUT_INVALID", f"Content type {content_type} does not allow: {fields_text}.")
-        return CanvasContent(content_id, fields)
+        return ContentMutationPlan(CanvasContent(content_id, fields))
 
 
 class ImportedAssetContentStrategy(UserContentStrategy):
     """处理从工作区导入的图片或视频 Content。"""
 
-    def build(self, data: dict[str, Any]) -> CanvasContent:
+    def plan(self, data: dict[str, Any]) -> ContentMutationPlan:
         """校验 imported Content 必须提供素材 URI。"""
-        content = super().build(data)
+        content = super().plan(data).content
         if not content.fields.get("src"):
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Imported Content requires src.")
-        return content
+        return ContentMutationPlan(content)
 
 
 class GeneratedContentStrategy(UserContentStrategy):
     """处理生成意图，并把生成状态写入协议允许的 Content 字段。"""
 
-    def build(self, data: dict[str, Any]) -> CanvasContent:
+    def plan(self, data: dict[str, Any]) -> ContentMutationPlan:
         """创建 pending Content，具体生成由 Application 的能力端口执行。"""
         content_type = data.get("content_type")
         if content_type not in {"image", "video"}:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", "Generated Content requires content_type=image or video.")
-        content = super().build(data)
+        content = super().plan(data).content
         content.fields["status"] = "pending"
         request_key = "generateImageRequest" if content_type == "image" else "generateVideoRequest"
         request_fields = {
@@ -264,7 +338,7 @@ class GeneratedContentStrategy(UserContentStrategy):
             if key not in {"source", "content_id", "content_type"} and value is not None
         }
         content.fields.setdefault(request_key, request_fields)
-        return content
+        return ContentMutationPlan(content)
 
 
 # 兼容包内早期实验代码的名称，不作为公开工具 API。
@@ -284,6 +358,10 @@ class ContentStrategyRegistry:
 
     def build(self, data: dict[str, Any], element_type: str | None = None) -> CanvasContent:
         """执行当前 Content 策略。"""
+        return self.plan(data, element_type).content
+
+    def plan(self, data: dict[str, Any], element_type: str | None = None) -> ContentMutationPlan:
+        """执行当前 Content 策略并返回强类型计划。"""
         source = str(data.get("source") or "user")
         content_type = str(data.get("content_type") or "")
         if element_type is not None and content_type != element_type:
@@ -294,32 +372,72 @@ class ContentStrategyRegistry:
         strategy = self._strategies.get(source)
         if strategy is None:
             raise CanvasDomainError("CONTENT_INPUT_INVALID", f"Unsupported Content source: {source}.")
-        return strategy.build(data)
+        return strategy.plan(data)
+
+
+@dataclass(frozen=True)
+class ConnectionStrategyRequest:
+    """连线策略的强类型输入。"""
+
+    source_element_id: str
+    target_element_id: str
+
+
+@dataclass(frozen=True)
+class ConnectionMutationPlan:
+    """连线策略返回的变更计划。"""
+
+    connection: CanvasConnection
+    already_exists: bool = False
+
+    def apply(self, canvas: CanvasDocument) -> CanvasConnection:
+        """将新连线加入内存 Canvas；重复关系保持幂等。"""
+        if self.already_exists:
+            return self.connection
+        if not any(item.connection_id == self.connection.connection_id for item in canvas.connections):
+            canvas.connections.append(self.connection)
+        return self.connection
 
 
 class ConnectionStrategyInterface(ABC):
     """Connection 创建策略接口。"""
 
     @abstractmethod
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        request: ConnectionStrategyRequest,
+    ) -> ConnectionMutationPlan:
+        """校验并计算一条 Connection 的变更计划。"""
+
     def add(self, canvas: CanvasDocument, source: str, target: str) -> CanvasConnection:
-        """校验并新增一条 Connection。"""
+        """兼容旧调用方，将连线计划应用到内存快照。"""
+        return self.plan(
+            canvas,
+            ConnectionStrategyRequest(source, target),
+        ).apply(canvas)
 
 
 class DirectConnectionStrategy(ConnectionStrategyInterface):
     """处理 Element 直接关系的策略。"""
 
-    def add(self, canvas: CanvasDocument, source: str, target: str) -> CanvasConnection:
-        """新增或幂等返回同向关系。"""
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        request: ConnectionStrategyRequest,
+    ) -> ConnectionMutationPlan:
+        """新增或幂等返回同向关系的变更计划。"""
+        source = request.source_element_id
+        target = request.target_element_id
         if canvas.get_element(source) is None or canvas.get_element(target) is None:
             raise CanvasDomainError("ELEMENT_NOT_FOUND", "Connection endpoints must reference existing Elements.")
         if source == target:
             raise CanvasDomainError("INVALID_CONNECTION", "A Connection cannot point to the same Element.")
         existing = next((item for item in canvas.connections if item.source_element_id == source and item.target_element_id == target), None)
         if existing is not None:
-            return existing
+            return ConnectionMutationPlan(existing, already_exists=True)
         connection = CanvasConnection(f"connection-{uuid.uuid4().hex[:16]}", source, target)
-        canvas.connections.append(connection)
-        return connection
+        return ConnectionMutationPlan(connection)
 
 
 class ConnectionStrategyRegistry:
@@ -332,3 +450,12 @@ class ConnectionStrategyRegistry:
     def add(self, canvas: CanvasDocument, source: str, target: str) -> CanvasConnection:
         """执行当前 Connection 策略。"""
         return self._strategy.add(canvas, source, target)
+
+    def plan(
+        self,
+        canvas: CanvasDocument,
+        source: str,
+        target: str,
+    ) -> ConnectionMutationPlan:
+        """返回当前连线策略的强类型变更计划。"""
+        return self._strategy.plan(canvas, ConnectionStrategyRequest(source, target))

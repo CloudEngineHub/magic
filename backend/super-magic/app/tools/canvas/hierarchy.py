@@ -112,6 +112,20 @@ class ElementTreeIndex:
         return self._canvas.direct_children(parent_id)
 
 
+class ElementReferenceResolver:
+    """统一解析已有 Element ID 和当前批次 item_ref。"""
+
+    @staticmethod
+    def resolve(
+        reference: str | None,
+        created_elements: dict[str, str] | None = None,
+    ) -> str | None:
+        """优先解析同批次 item_ref，否则保留已有 Element ID。"""
+        if reference is None:
+            return None
+        return (created_elements or {}).get(reference, reference)
+
+
 class FrameSelectionStrategy:
     """把根级普通兄弟节点转换为一个 Frame 的层级策略。"""
 
@@ -192,6 +206,21 @@ class FrameSelectionStrategy:
             root_insert_index=min(root_indexes),
             padding=float(padding),
         )
+
+
+class HierarchyStrategyRegistry:
+    """层级变更策略注册表。"""
+
+    def __init__(self, strategies: dict[str, FrameSelectionStrategy] | None = None):
+        """初始化默认框选策略。"""
+        self._strategies = strategies or {"frame_selection": FrameSelectionStrategy()}
+
+    def get(self, name: str = "frame_selection") -> FrameSelectionStrategy:
+        """按策略名称取得层级变更策略。"""
+        try:
+            return self._strategies[name]
+        except KeyError as exc:
+            raise CanvasDomainError("HIERARCHY_STRATEGY_NOT_FOUND", f"Unknown hierarchy strategy: {name}.") from exc
 
 
 def _new_id(prefix: str) -> str:

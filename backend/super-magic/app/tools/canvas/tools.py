@@ -141,7 +141,14 @@ class AddCanvasElements(CanvasToolFeedbackMixin, BaseTool[ProjectPathParams]):
         try:
             payload = [item.model_dump(exclude_none=True, by_alias=True) for item in params.items]
             result = await _application(tool_context).add_elements(params.project_path, payload, tool_context)
-            return ToolResult(content=items_content("Canvas Elements added successfully.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas Elements added successfully.",
+                    result,
+                    "call query_canvas_element_details with the returned element_id values to verify the persisted Elements",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 
@@ -165,7 +172,14 @@ class FrameCanvasElements(CanvasToolFeedbackMixin, BaseTool[ProjectPathParams]):
         try:
             payload = [item.model_dump(exclude_none=True) for item in params.items]
             result = await _application(tool_context).frame_elements(params.project_path, payload)
-            return ToolResult(content=items_content("Canvas Frames created successfully.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas Frames created successfully.",
+                    result,
+                    "call query_canvas_element_details with the returned frame_element_id values to verify the hierarchy",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 
@@ -190,7 +204,11 @@ class AddCanvasContents(CanvasToolFeedbackMixin, BaseTool[ProjectPathParams]):
             payload = [item.model_dump(exclude_none=True, by_alias=True) for item in params.items]
             result = await _application(tool_context).add_contents(params.project_path, payload, tool_context)
             return ToolResult(
-                content=items_content("Canvas Content versions added successfully.", result),
+                content=items_content(
+                    "Canvas Content versions added successfully.",
+                    result,
+                    "call query_canvas_element_details with the returned element_id values to verify the Content versions",
+                ),
                 data=result,
             )
         except Exception as error:
@@ -220,7 +238,14 @@ class RetryCanvasContentGeneration(CanvasToolFeedbackMixin, BaseTool[ProjectPath
                 payload,
                 tool_context,
             )
-            return ToolResult(content=items_content("Canvas failed Content retry started.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas failed Content retry started.",
+                    result,
+                    "call query_canvas_element_details with the returned element_id values to verify the retried Content",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 
@@ -246,7 +271,14 @@ class SelectCanvasMainContent(CanvasToolFeedbackMixin, BaseTool[ProjectPathParam
                 params.project_path,
                 [item.model_dump() for item in params.items],
             )
-            return ToolResult(content=items_content("Canvas main Content selected successfully.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas main Content selected successfully.",
+                    result,
+                    "call query_canvas_element_details with the returned element_id values to verify the main Content selection",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 
@@ -270,7 +302,14 @@ class LayoutCanvasElements(CanvasToolFeedbackMixin, BaseTool[ProjectPathParams])
         try:
             payload = [item.model_dump(exclude_none=True) for item in params.items]
             result = await _application(tool_context).layout(params.project_path, payload)
-            return ToolResult(content=items_content("Canvas layout updated successfully.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas layout updated successfully.",
+                    result,
+                    "call query_canvas_overview with the same project_path to verify the persisted layout",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 
@@ -294,7 +333,14 @@ class AddCanvasConnections(CanvasToolFeedbackMixin, BaseTool[ProjectPathParams])
         try:
             payload = [item.model_dump(exclude_none=True) for item in params.items]
             result = await _application(tool_context).connections(params.project_path, payload)
-            return ToolResult(content=items_content("Canvas Connections updated successfully.", result), data=result)
+            return ToolResult(
+                content=items_content(
+                    "Canvas Connections updated successfully.",
+                    result,
+                    "call query_canvas_element_details with the affected Element IDs to verify the Connections",
+                ),
+                data=result,
+            )
         except Exception as error:
             return error_result(error)
 

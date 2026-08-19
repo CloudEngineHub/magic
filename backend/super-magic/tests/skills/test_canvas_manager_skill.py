@@ -36,3 +36,13 @@ def test_skill_does_not_expose_protocol_version_or_storage_driver() -> None:
     assert "Canvas version" not in content
     assert "magic.project.js" not in content
     assert "magic-service" not in content
+
+
+def test_canvas_agent_and_references_do_not_expose_storage_protocol_details() -> None:
+    """Agent、Skill 和 reference 的模型可见文案不能泄露协议或驱动实现。"""
+    root = SKILL_PATH.parent
+    paths = [root.parent.parent / "canvas.agent", SKILL_PATH, *sorted((root / "references").glob("*.md"))]
+    forbidden = ("Canvas version", "magic.project.js", "magic-service", "3.0.0")
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert all(value not in content for value in forbidden), path
