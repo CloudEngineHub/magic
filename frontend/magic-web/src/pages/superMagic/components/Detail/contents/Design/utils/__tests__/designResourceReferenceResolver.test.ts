@@ -11,6 +11,7 @@ import {
 	resolveDesignCanvasResourceApiUri,
 	resolveDesignCanvasResourceWorkspacePath,
 	resolveDesignResourceReference,
+	resolveDesignWorkspaceDirectoryApiPath,
 	resolveDesignWorkspaceStoragePath,
 	type DesignResourceReferenceResolverContext,
 } from "../designResourceReferenceResolver"
@@ -204,6 +205,18 @@ describe("designResourceReferenceResolver", () => {
 
 		expect(resolution.workspacePath).toBe("/images/x.png")
 		expect(resolution.storagePath).toBe("/images/x.png")
+	})
+
+	it("normalizes output directories through the workspace resolver", () => {
+		expect(
+			resolveDesignWorkspaceDirectoryApiPath(
+				"///画布A//videos///",
+				context(undefined, false),
+			),
+		).toBe("/画布A/videos/")
+		expect(
+			resolveDesignWorkspaceDirectoryApiPath("../videos", context(undefined, false)),
+		).toBeUndefined()
 	})
 
 	it("proves current-canvas aliases through the canonical identity", () => {

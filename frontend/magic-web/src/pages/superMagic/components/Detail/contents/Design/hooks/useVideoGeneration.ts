@@ -23,6 +23,7 @@ import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import {
 	resolveDesignCanvasResourceApiUri,
+	resolveDesignWorkspaceDirectoryApiPath,
 	resolveDesignWorkspaceStoragePath,
 } from "../utils/designResourceReferenceResolver"
 import { syncFileInfoAfterGenerationComplete } from "../utils/syncFileInfoAfterGenerationComplete"
@@ -261,7 +262,12 @@ async function buildDesignVideoRequestParams(
 			fileDir = videosDirPath
 		}
 	}
-	const fileDirWithSlash = fileDir ? `/${fileDir}/` : undefined
+	const fileDirWithSlash = fileDir
+		? resolveDesignWorkspaceDirectoryApiPath(fileDir, {
+				designProjectBasePath,
+				flatAttachments,
+			})
+		: undefined
 	const request = toDesignGenerateVideoRequest(
 		params,
 		designProjectBasePath,
