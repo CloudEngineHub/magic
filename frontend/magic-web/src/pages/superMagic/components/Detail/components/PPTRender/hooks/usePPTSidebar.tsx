@@ -209,10 +209,7 @@ export function usePPTSidebar({
 						url: newFileUrl,
 						index: clampedIndex,
 						loadingState: "loading",
-						title: result.filePath
-							.split("/")
-							.pop()
-							?.replace(/\.html$/i, ""),
+						title: result.filePath.split("/").pop(),
 					}
 					const newSlides = [...store.slides]
 					newSlides.splice(clampedIndex, 0, newSlide)

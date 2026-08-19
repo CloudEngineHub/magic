@@ -6,6 +6,10 @@ import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import { createSlidesTemplateStructureAdapter } from "./templateStructureAdapter"
 import { loadSlidesTemplateProject, stringifySlidesTemplateManifest } from "./templateProject"
+import {
+	getSlidesTemplateSyncKey,
+	SLIDES_TEMPLATE_PROJECT_RELOAD_DEBOUNCE_MS,
+} from "./templateRootSync"
 import SlidesTemplatePreviewHeader from "./SlidesTemplatePreviewHeader"
 import SlidesTemplateSettingsDialog from "./SlidesTemplateSettingsDialog"
 import { useSlidesTemplateSaveFlow } from "./SlidesTemplateSaveFlow"
@@ -42,22 +46,27 @@ function getTemplateTitle(
 }
 
 interface SlidesTemplateReadyProps {
-	initialProject: SlidesTemplateProjectContext
+	project: SlidesTemplateProjectContext
 	props: PPTRootRenderProps
 }
 
-function SlidesTemplateReady({ initialProject, props }: SlidesTemplateReadyProps) {
+function SlidesTemplateReady({ project, props }: SlidesTemplateReadyProps) {
 	const { i18n } = useTranslation("super")
-	const [manifest, setManifest] = useState(initialProject.manifest)
+	const [manifest, setManifest] = useState(project.manifest)
 	const [settingsOpen, setSettingsOpen] = useState(false)
-	const manifestRef = useRef(initialProject.manifest)
+	const manifestRef = useRef(project.manifest)
 	const projectId = props.selectedProject?.id || props.projectId
+
+	useEffect(() => {
+		manifestRef.current = project.manifest
+		setManifest(project.manifest)
+	}, [project.manifest])
 
 	const saveManifest = useCallback(
 		async (nextManifest: SlidesTemplateManifest) => {
 			await SuperMagicApi.saveFileContent([
 				{
-					file_id: initialProject.manifestFileId,
+					file_id: project.manifestFileId,
 					content: stringifySlidesTemplateManifest(nextManifest),
 					enable_shadow: true,
 				},
@@ -65,31 +74,31 @@ function SlidesTemplateReady({ initialProject, props }: SlidesTemplateReadyProps
 			manifestRef.current = nextManifest
 			setManifest(nextManifest)
 		},
-		[initialProject.manifestFileId],
+		[project.manifestFileId],
 	)
 
 	const getManifest = useCallback(() => manifestRef.current, [])
 	const slideStructureAdapter = useMemo(
 		() =>
 			createSlidesTemplateStructureAdapter({
-				project: initialProject,
+				project,
 				projectId,
 				getManifest,
 				saveManifest,
 			}),
-		[initialProject, projectId, getManifest, saveManifest],
+		[project, projectId, getManifest, saveManifest],
 	)
 	const { isSaving, startSave, dialogs } = useSlidesTemplateSaveFlow({
-		project: initialProject,
+		project,
 		projectId,
 	})
 	const fallbackName =
-		initialProject.root.file_name ||
-		initialProject.root.filename ||
-		initialProject.root.name ||
-		initialProject.root.display_filename ||
-		initialProject.rootPath.split("/").filter(Boolean).pop() ||
-		initialProject.rootFileId
+		project.root.file_name ||
+		project.root.filename ||
+		project.root.name ||
+		project.root.display_filename ||
+		project.rootPath.split("/").filter(Boolean).pop() ||
+		project.rootFileId
 	const title = getTemplateTitle(manifest, i18n?.language || "zh_CN", fallbackName)
 	const displayConfig = useMemo(
 		() => ({ type: "slide" as const, slides: manifest.slides.map((slide) => slide.file) }),
@@ -113,7 +122,7 @@ function SlidesTemplateReady({ initialProject, props }: SlidesTemplateReadyProps
 					className="h-full"
 					data={{
 						...props.data,
-						file_id: initialProject.rootFileId,
+						file_id: project.rootFileId,
 						display_config: displayConfig,
 					}}
 					displayConfig={displayConfig}
@@ -147,23 +156,42 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 			(props.data as AttachmentItem)
 		)
 	}, [props.attachmentList, props.attachments, props.data, rootId])
+	const syncKey = useMemo(() => getSlidesTemplateSyncKey(root), [root])
+	const projectRef = useRef<SlidesTemplateProjectContext | undefined>(undefined)
+	const loadedSyncKeyRef = useRef("")
+	const loadedReloadKeyRef = useRef(reloadKey)
+	projectRef.current = project
 
 	useEffect(() => {
+		if (!root) return
+		const isRetry = reloadKey !== loadedReloadKeyRef.current
+		if (!isRetry && loadedSyncKeyRef.current === syncKey && projectRef.current) return
+
 		let cancelled = false
-		setError(undefined)
-		setProject(undefined)
-		loadSlidesTemplateProject(root)
-			.then((result) => {
-				if (!cancelled) setProject(result)
-			})
-			.catch((reason) => {
-				if (!cancelled)
-					setError(reason instanceof Error ? reason : new Error(String(reason)))
-			})
+		const delay =
+			projectRef.current && !isRetry ? SLIDES_TEMPLATE_PROJECT_RELOAD_DEBOUNCE_MS : 0
+		const timer = window.setTimeout(() => {
+			if (cancelled) return
+			loadedSyncKeyRef.current = syncKey
+			loadedReloadKeyRef.current = reloadKey
+			setError(undefined)
+			// Keep the last preview mounted while this template reloads.
+			if (!projectRef.current) setProject(undefined)
+			loadSlidesTemplateProject(root)
+				.then((result) => {
+					if (!cancelled) setProject(result)
+				})
+				.catch((reason) => {
+					if (!cancelled)
+						setError(reason instanceof Error ? reason : new Error(String(reason)))
+				})
+		}, delay)
+
 		return () => {
 			cancelled = true
+			window.clearTimeout(timer)
 		}
-	}, [reloadKey, root])
+	}, [reloadKey, root, syncKey])
 
 	if (error) {
 		return (
@@ -198,7 +226,5 @@ export default function SlidesTemplateRootRender(props: PPTRootRenderProps) {
 		)
 	}
 
-	return (
-		<SlidesTemplateReady key={project.manifestFileId} initialProject={project} props={props} />
-	)
+	return <SlidesTemplateReady key={project.rootFileId} project={project} props={props} />
 }

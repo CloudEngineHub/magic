@@ -78,6 +78,7 @@ vi.mock("../../PPTRender", () => ({
 			data-attachment-list-ids={JSON.stringify(
 				attachmentList?.map((item) => item.file_id) || [],
 			)}
+			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
 			data-is-fullscreen={String(Boolean(isFullscreen))}
 		>
 			<button
@@ -527,7 +528,10 @@ describe("PPTRootRender", () => {
 		)
 
 		const pptRender = await screen.findByTestId("ppt-render")
-		expect(pptRender).toHaveAttribute("data-attachment-ids", JSON.stringify(["template-root"]))
+		expect(pptRender).toHaveAttribute(
+			"data-attachment-root-ids",
+			JSON.stringify(["template-root"]),
+		)
 		expect(pptRender).toHaveAttribute(
 			"data-attachment-list-ids",
 			JSON.stringify(["template-root", "images-folder", "image-file"]),

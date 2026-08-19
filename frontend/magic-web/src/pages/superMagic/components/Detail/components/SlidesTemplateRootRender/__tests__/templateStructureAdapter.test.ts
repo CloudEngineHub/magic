@@ -127,11 +127,16 @@ describe("slides template structure adapter", () => {
 			is_directory: false,
 		})
 		expect(result.filePath).toBe("slides/slide-3.html")
+		expect(result.content).toBe("<html>slide-3.html</html>")
 		expect(getSavedManifest().slides.map((slide: { file: string }) => slide.file)).toEqual([
 			"slides/slide-1.html",
 			"slides/slide-3.html",
 			"slides/slide-2.html",
 		])
+		expect(getSavedManifest().slides[1]).toMatchObject({
+			file: "slides/slide-3.html",
+			title: "slide-3.html",
+		})
 	})
 
 	it("renames the HTML file first and then updates the manifest path", async () => {

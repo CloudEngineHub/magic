@@ -107,7 +107,7 @@ export function createSlidesTemplateStructureAdapter({
 				latestManifest.slides.length,
 			)
 			const content = generateBlankSlideContent({
-				slideTitle: fileName.replace(/\.html$/, ""),
+				slideTitle: fileName,
 			})
 			const newFile = (await SuperMagicApi.createFile({
 				project_id: resolvedProjectId,
@@ -124,7 +124,7 @@ export function createSlidesTemplateStructureAdapter({
 				const slides = [...latestManifest.slides]
 				slides.splice(insertIndex, 0, {
 					file: filePath,
-					title: fileName.replace(/\.html$/, ""),
+					title: fileName,
 					layout: "blank",
 					description: "Blank slide",
 				})
