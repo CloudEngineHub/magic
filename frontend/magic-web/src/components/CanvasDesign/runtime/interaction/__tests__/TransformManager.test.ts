@@ -105,6 +105,7 @@ beforeEach(() => {
 	vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
 		clearRect: vi.fn(),
 		fillRect: vi.fn(),
+		scale: vi.fn(),
 		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 0]) })),
 	} as unknown as CanvasRenderingContext2D)
 })
@@ -608,6 +609,71 @@ describe("TransformManager multi-selection proxy sync", () => {
 			expect.any(Object),
 			expect.objectContaining({ mode: "node-only" }),
 		)
+	})
+
+	it("converts mixed Frame and root elements back to their parent coordinates", () => {
+		const contentLayer = new Konva.Layer()
+		const frame = new Konva.Group({ x: 100, y: 50 })
+		const insideNode = new Konva.Group({
+			id: "inside",
+			x: 30,
+			y: 10,
+			width: 20,
+			height: 20,
+		})
+		const outsideNode = new Konva.Group({
+			id: "outside",
+			x: 180,
+			y: 60,
+			width: 20,
+			height: 20,
+		})
+		frame.add(insideNode)
+		contentLayer.add(frame)
+		contentLayer.add(outsideNode)
+
+		const applyTransform = vi.fn((updates: Partial<LayerElement>) => updates)
+		const update = vi.fn()
+		const elementInstance = {
+			applyTransform,
+			shouldKeepRatio: () => false,
+			shouldSyncTransformDataInRealtime: () => false,
+		}
+		const manager = Object.create(TransformManager.prototype) as TransformManagerPrivate
+		manager.canvas = {
+			contentLayer,
+			isKeepRatioModifierPressed: () => false,
+			elementManager: {
+				getNodeAdapter: () => ({
+					getElementsBounds: vi.fn(() => ({ x: 130, y: 60, width: 70, height: 20 })),
+					getNodesForTransform: () => [insideNode, outsideNode],
+				}),
+				getElementData: () => ({ width: 20, height: 20 }),
+				getElementInstance: () => elementInstance,
+				update,
+			},
+		} as unknown as TransformManagerPrivate["canvas"]
+		manager.multiSelectionProxy = {
+			x: () => 130,
+			y: () => 60,
+			width: () => 140,
+			height: () => 20,
+			scaleX: () => 1,
+			scaleY: () => 1,
+		}
+		manager.proxyInitialNodeStates = new Map()
+		manager.transformSessionElementStates = new Map()
+		manager.initialElementAspectRatios = new Map()
+		manager.initialAspectRatio = null
+		manager.proxyInitialBounds = { x: 130, y: 60, width: 70, height: 20 }
+
+		manager.captureProxyState(["inside", "outside"])
+		manager.syncSelectionProxyToElements({ isRealtime: true, isScaling: true })
+
+		const insideUpdate = update.mock.calls.find(([id]) => id === "inside")?.[1]
+		const outsideUpdate = update.mock.calls.find(([id]) => id === "outside")?.[1]
+		expect(insideUpdate).toEqual(expect.objectContaining({ x: 30, y: 10, scaleX: 2 }))
+		expect(outsideUpdate).toEqual(expect.objectContaining({ x: 230, y: 60, scaleX: 2 }))
 	})
 
 	it("emits one batched dragmove with proxy bounds during realtime proxy movement", () => {

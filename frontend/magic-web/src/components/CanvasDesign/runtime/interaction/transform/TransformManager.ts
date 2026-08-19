@@ -39,6 +39,7 @@ export const TransformBehavior = {
 interface ProxyTransformNodeState {
 	node: Konva.Node
 	element: TransformElementInstance
+	/** 节点原点在 contentLayer 坐标系中的位置。 */
 	x: number
 	y: number
 	scaleX: number
@@ -298,8 +299,9 @@ export class TransformManager {
 		elementIds.forEach((elementId) => {
 			const snapshot = this.proxyInitialNodeStates.get(elementId)
 			if (!snapshot) return
-			snapshot.x = snapshot.node.x()
-			snapshot.y = snapshot.node.y()
+			const contentPosition = this.getNodeContentPosition(snapshot.node)
+			snapshot.x = contentPosition.x
+			snapshot.y = contentPosition.y
 		})
 	}
 
@@ -396,6 +398,43 @@ export class TransformManager {
 		return this.canvas.isKeepRatioModifierPressed() || state.shouldKeepRatio
 	}
 
+	/** 将节点原点转换到 contentLayer 坐标系。 */
+	private getNodeContentPosition(node: Konva.Node): { x: number; y: number } {
+		if (!this.canvas?.contentLayer || typeof node.getAbsoluteTransform !== "function") {
+			return { x: node.x(), y: node.y() }
+		}
+		const stagePosition = node.getAbsoluteTransform().copy().point({ x: 0, y: 0 })
+		return this.canvas.contentLayer.getAbsoluteTransform().copy().invert().point(stagePosition)
+	}
+
+	/** 将 contentLayer 坐标转换为节点父容器的局部坐标。 */
+	private getNodeParentPosition(
+		node: Konva.Node,
+		contentPosition: { x: number; y: number },
+	): {
+		x: number
+		y: number
+	} {
+		if (!this.canvas?.contentLayer || typeof node.getAbsoluteTransform !== "function") {
+			return contentPosition
+		}
+		const stagePosition = this.canvas.contentLayer
+			.getAbsoluteTransform()
+			.copy()
+			.point(contentPosition)
+		const parent = node.getParent() ?? this.canvas.contentLayer
+		return parent.getAbsoluteTransform().copy().invert().point(stagePosition)
+	}
+
+	private applyNodeParentPosition(node: Konva.Node, position: { x: number; y: number }): void {
+		if (typeof node.position === "function") {
+			node.position(position)
+			return
+		}
+		node.x(position.x)
+		node.y(position.y)
+	}
+
 	private clearTransformSessionState(): void {
 		this.transformSessionElementStates.clear()
 	}
@@ -459,8 +498,7 @@ export class TransformManager {
 			this.proxyInitialNodeStates.set(node.id(), {
 				node,
 				element: sessionState.element,
-				x: node.x(),
-				y: node.y(),
+				...this.getNodeContentPosition(node),
 				scaleX: node.scaleX(),
 				scaleY: node.scaleY(),
 				width: node instanceof Konva.Group ? node.width() : undefined,
@@ -498,9 +536,14 @@ export class TransformManager {
 		}
 
 		this.proxyInitialNodeStates.forEach((snapshot, elementId) => {
-			const rawUpdates: Partial<LayerElement> = {
+			const contentPosition = {
 				x: currentBounds.x + (snapshot.x - initialBounds.x) * selectionScaleX,
 				y: currentBounds.y + (snapshot.y - initialBounds.y) * selectionScaleY,
+			}
+			const parentPosition = this.getNodeParentPosition(snapshot.node, contentPosition)
+			const rawUpdates: Partial<LayerElement> = {
+				x: parentPosition.x,
+				y: parentPosition.y,
 				scaleX: snapshot.scaleX * selectionScaleX,
 				scaleY: snapshot.scaleY * selectionScaleY,
 				width: snapshot.width,
@@ -540,8 +583,11 @@ export class TransformManager {
 		const deltaY = currentBounds.y - this.proxyInitialBounds.y
 
 		this.proxyInitialNodeStates.forEach((snapshot) => {
-			snapshot.node.x(snapshot.x + deltaX)
-			snapshot.node.y(snapshot.y + deltaY)
+			const parentPosition = this.getNodeParentPosition(snapshot.node, {
+				x: snapshot.x + deltaX,
+				y: snapshot.y + deltaY,
+			})
+			this.applyNodeParentPosition(snapshot.node, parentPosition)
 		})
 		this.requestContentDraw("selection-proxy-translation")
 	}
