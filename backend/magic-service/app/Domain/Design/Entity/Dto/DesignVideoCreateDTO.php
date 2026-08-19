@@ -436,7 +436,7 @@ class DesignVideoCreateDTO extends AbstractDTO
         }
         $videos = $this->composition['videos'] ?? null;
         if (! is_array($videos) || $videos === []) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition.videos must contain at least one video');
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'design.video_generation.composition_videos_required');
         }
         foreach ($videos as $index => $video) {
             $this->assertCompositionMedia($video, sprintf('composition.videos.%d', $index));
