@@ -157,7 +157,7 @@ readonly class VolcengineArkVideoClient
                 'error' => $errorMessage,
             ]);
             throw ProviderVideoException::retriable(
-                $this->formatRequestExceptionMessage($httpStatus, $errorMessage),
+                $this->formatRequestExceptionMessage($httpStatus ?? 0, $errorMessage),
                 $exception,
                 $httpStatus
             );
