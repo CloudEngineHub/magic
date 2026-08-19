@@ -19,7 +19,6 @@ use App\Domain\Design\Factory\DesignVideoInputPayloadPreparer;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
-use App\Domain\SuperMagic\File\Constant\ProjectFileConstant;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
@@ -65,7 +64,8 @@ class DesignVideoAppService extends DesignAppService
         $modelDefinition = null;
         $supportsProviderAssetUri = false;
         if ($entity->isCanvasComposition()) {
-            $this->normalizeAndAssertCanvasCompositionProject($project->getId(), $entity);
+            $outputDirectory = $this->assertCanvasCompositionPathsExist($project->getId(), $entity);
+            $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
         } else {
             $modelDefinition = $this->findModelOrFail($entity->getModelId());
             $supportsProviderAssetUri = $this->supportsProviderAssetUri($modelDefinition);
@@ -294,6 +294,39 @@ class DesignVideoAppService extends DesignAppService
         return $taskFileDir;
     }
 
+    /** 校验文件列表合成的输出目录和所有输入媒体。 */
+    private function assertCanvasCompositionPathsExist(
+        int $projectId,
+        DesignGenerationTaskEntity $entity,
+    ): TaskFileEntity {
+        $taskFileDir = $this->taskFileDomainService->findEntityByRelativePath($projectId, $entity->getFileDir());
+        if (! $taskFileDir || ! $taskFileDir->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                DesignErrorCode::InvalidArgument,
+                'design.video_generation.file_dir_not_exists',
+                ['file_dir' => $entity->getFileDir()]
+            );
+        }
+
+        $requestPayload = $entity->getRequestPayload();
+        $composition = is_array($requestPayload['composition'] ?? null) ? $requestPayload['composition'] : [];
+        foreach (['videos', 'audios'] as $mediaType) {
+            foreach ((array) ($composition[$mediaType] ?? []) as $media) {
+                $path = trim((string) ($media['path'] ?? ''));
+                $taskFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $path);
+                if (! $taskFile || $taskFile->getIsDirectory()) {
+                    ExceptionBuilder::throw(
+                        DesignErrorCode::InvalidArgument,
+                        'design.video_generation.reference_file_not_exists',
+                        ['file_key' => $path]
+                    );
+                }
+            }
+        }
+
+        return $taskFileDir;
+    }
+
     /**
      * 校验视频输入素材文件确实存在于当前项目工作区。
      *
@@ -448,51 +481,6 @@ class DesignVideoAppService extends DesignAppService
         }
 
         return $this->buildInitialPollPublisher($entity);
-    }
-
-    /**
-     * 规范化画布项目路径并通过 Magic Service 文件索引确认项目配置存在。
-     */
-    private function normalizeAndAssertCanvasCompositionProject(
-        int $projectId,
-        DesignGenerationTaskEntity $entity,
-    ): void {
-        $requestPayload = $entity->getRequestPayload();
-        $extensions = is_array($requestPayload['extensions'] ?? null) ? $requestPayload['extensions'] : [];
-        $projectPath = str_replace('\\', '/', trim((string) ($extensions['project_path'] ?? '')));
-        $isAbsolutePath = str_starts_with($projectPath, '/')
-            || preg_match('#^[A-Za-z]:/#', $projectPath) === 1;
-        $projectPath = preg_replace('#/+#', '/', $projectPath) ?? $projectPath;
-        $projectPath = trim($projectPath, '/');
-        $segments = array_values(array_filter(explode('/', $projectPath), static fn (string $segment): bool => $segment !== ''));
-
-        if (
-            $isAbsolutePath
-            || $projectPath === ''
-            || str_contains($projectPath, "\0")
-            || in_array('.', $segments, true)
-            || in_array('..', $segments, true)
-        ) {
-            ExceptionBuilder::throw(
-                DesignErrorCode::InvalidArgument,
-                'common.invalid',
-                ['label' => 'extensions.project_path']
-            );
-        }
-
-        $configRelativePath = $projectPath . '/' . ProjectFileConstant::PROJECT_CONFIG_FILENAME;
-        $configFile = $this->taskFileDomainService->findEntityByRelativePath($projectId, $configRelativePath);
-        if ($configFile === null || $configFile->getIsDirectory()) {
-            ExceptionBuilder::throw(
-                DesignErrorCode::InvalidArgument,
-                'common.not_found',
-                ['label' => $configRelativePath]
-            );
-        }
-
-        $extensions['project_path'] = $projectPath;
-        $requestPayload['extensions'] = $extensions;
-        $entity->setRequestPayload($requestPayload);
     }
 
     /**

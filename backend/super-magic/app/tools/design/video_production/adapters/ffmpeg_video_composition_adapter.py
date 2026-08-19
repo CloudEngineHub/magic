@@ -12,6 +12,7 @@ from uuid import uuid4
 from app.tools.design.video_production.ports.video_composition_port import (
     VideoCompositionRequest,
     VideoCompositionResult,
+    VideoSourceInfo,
 )
 from app.utils.async_file_utils import (
     async_copy2,
@@ -89,6 +90,33 @@ class FfmpegVideoCompositionAdapter:
             )
         finally:
             await async_unlink(temporary_output)
+
+    async def inspect_video(
+        self,
+        video_path: Path,
+        *,
+        interruption_event: Optional[asyncio.Event] = None,
+    ) -> VideoSourceInfo:
+        """读取单个视频的尺寸、时长和音频流信息。"""
+        await self._ensure_binaries()
+        probe = await self._probe_output(video_path, interruption_event=interruption_event)
+        streams = probe.get("streams") or []
+        video_stream = next(
+            (stream for stream in streams if stream.get("codec_type") == "video"),
+            None,
+        )
+        if not isinstance(video_stream, dict):
+            raise VideoCompositionError(f"Video stream not found: {video_path}")
+        width = int(video_stream.get("width") or 0)
+        height = int(video_stream.get("height") or 0)
+        if width <= 0 or height <= 0:
+            raise VideoCompositionError(f"Video dimensions are invalid: {video_path}")
+        return VideoSourceInfo(
+            width=width,
+            height=height,
+            duration_seconds=self._duration_seconds(probe),
+            has_audio=any(stream.get("codec_type") == "audio" for stream in streams),
+        )
 
     async def _ensure_binaries(self) -> None:
         """确认运行环境同时具备 FFmpeg 和 FFprobe。"""

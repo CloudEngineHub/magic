@@ -210,7 +210,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
             return false;
         }
 
-        // Super Magic 返回的是项目相对路径（通常带 ./ 前缀），Design 任务统一保存为 /videos/... 形式。
+        // Super Magic 返回 workspace-relative 路径（通常带 ./ 前缀），Design 任务统一保存为前导斜杠形式。
         $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
         $relativePath = '/' . ltrim($relativePath, '/');
         $fileName = basename($relativePath);

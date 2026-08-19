@@ -11,6 +11,8 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
@@ -25,14 +27,17 @@ readonly class DesignCanvasCompositionSubmissionService
     public function __construct(
         private AgentAppService $agentAppService,
         private SandboxGatewayInterface $sandboxGateway,
+        private ProjectDomainService $projectDomainService,
+        private TopicDomainService $topicDomainService,
     ) {
     }
 
     /** 提交画布合成任务并返回统一轮询快照。 */
     public function submit(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): array
     {
-        $projectPath = $this->requiredExtension($entity, 'project_path');
-        $videoEditElementId = $this->requiredExtension($entity, 'video_edit_element_id');
+        $requestPayload = $entity->getRequestPayload();
+        $composition = is_array($requestPayload['composition'] ?? null) ? $requestPayload['composition'] : [];
+        $generation = is_array($requestPayload['generation'] ?? null) ? $requestPayload['generation'] : [];
         $contactIsolation = ContactDataIsolation::create(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId(),
@@ -47,9 +52,13 @@ readonly class DesignCanvasCompositionSubmissionService
             [
                 'task_id' => $entity->getGenerationId(),
                 'capability' => 'video_composition',
-                'project_path' => $projectPath,
+                // 直接文件合成以 workspace 为根，不依赖 magic.project.js 所在项目目录。
+                'project_path' => '.',
                 'payload' => [
-                    'video_edit_element_id' => $videoEditElementId,
+                    'file_dir' => $entity->getFileDir(),
+                    'composition' => $composition,
+                    'generation' => $generation,
+                    'file_name' => $entity->getFileName(),
                     'output_file_name' => $this->optionalExtension($entity, 'output_file_name'),
                 ],
             ],
@@ -124,36 +133,27 @@ readonly class DesignCanvasCompositionSubmissionService
         ];
     }
 
-    private function topicId(DesignGenerationTaskEntity $entity): int
-    {
-        $requestPayload = $entity->getRequestPayload();
-        $businessParams = is_array($requestPayload['business_params'] ?? null)
-            ? $requestPayload['business_params']
-            : [];
-        $topicId = (int) ($requestPayload['topic_id'] ?? $businessParams['magic_topic_id'] ?? 0);
-        if ($topicId <= 0) {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.empty', ['label' => 'topic_id']);
-        }
-        return $topicId;
-    }
-
     /** 按当前话题初始化或复用其沙箱，避免调用方直接注入任意沙箱 ID。 */
     private function resolveSandboxId(ContactDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): string
     {
+        $hiddenTopic = $this->topicDomainService->findHiddenTopicByProjectAndUser(
+            $entity->getProjectId(),
+            $dataIsolation->getCurrentUserId(),
+        );
+        $project = $this->projectDomainService->getProjectNotUserId($entity->getProjectId());
+        $topicId = $hiddenTopic?->getId() ?? $project?->getCurrentTopicId();
+        if ($topicId === null || $topicId <= 0) {
+            ExceptionBuilder::throw(
+                DesignErrorCode::InvalidArgument,
+                'common.empty',
+                ['label' => 'project.current_topic_id']
+            );
+        }
         return $this->agentAppService->ensureSandboxInitialized(
             $dataIsolation,
-            $this->topicId($entity),
+            $topicId,
             skipInitMessages: true,
         );
-    }
-
-    private function requiredExtension(DesignGenerationTaskEntity $entity, string $key): string
-    {
-        $value = $this->optionalExtension($entity, $key);
-        if ($value === '') {
-            ExceptionBuilder::throw(DesignErrorCode::InvalidArgument, 'common.empty', ['label' => 'extensions.' . $key]);
-        }
-        return $value;
     }
 
     private function optionalExtension(DesignGenerationTaskEntity $entity, string $key): string

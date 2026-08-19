@@ -57,6 +57,9 @@ class DesignVideoCreateDTO extends AbstractDTO
 
     protected array $generation = [];
 
+    /** @var array{videos: list<array{path: string}>, audios: list<array{path: string}>} */
+    protected array $composition = [];
+
     protected array $callbacks = [];
 
     protected array $execution = [];
@@ -250,6 +253,18 @@ class DesignVideoCreateDTO extends AbstractDTO
         return $this->generation;
     }
 
+    /** 设置文件列表合成参数。 */
+    public function setComposition(mixed $composition): void
+    {
+        $this->composition = $this->normalizeJsonArrayInput($composition);
+    }
+
+    /** 获取文件列表合成参数。 */
+    public function getComposition(): array
+    {
+        return $this->composition;
+    }
+
     public function setCallbacks(mixed $callbacks): void
     {
         $this->callbacks = $this->normalizeJsonArrayInput($callbacks);
@@ -416,14 +431,27 @@ class DesignVideoCreateDTO extends AbstractDTO
         if ($this->generationType !== DesignGenerationType::CANVAS_COMPOSITION->value) {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'generation_type is invalid');
         }
-        if ($this->topicId === '') {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'topic_id is required');
+        if ($this->fileDir === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'file_dir is required');
         }
-        $projectPath = trim((string) ($this->extensions['project_path'] ?? ''));
-        $videoEditElementId = trim((string) ($this->extensions['video_edit_element_id'] ?? ''));
-        if ($projectPath === '' || $videoEditElementId === '') {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition project_path and video_edit_element_id are required');
+        $videos = $this->composition['videos'] ?? null;
+        if (! is_array($videos) || $videos === []) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition.videos must contain at least one video');
         }
+        foreach ($videos as $index => $video) {
+            $this->assertCompositionMedia($video, sprintf('composition.videos.%d', $index));
+        }
+        $audios = $this->composition['audios'] ?? [];
+        if (! is_array($audios)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition.audios must be an array');
+        }
+        if (count($audios) > 1) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'composition supports at most one audio');
+        }
+        foreach ($audios as $index => $audio) {
+            $this->assertCompositionMedia($audio, sprintf('composition.audios.%d', $index));
+        }
+        $this->assertGenerationFields();
     }
 
     /**
@@ -444,6 +472,10 @@ class DesignVideoCreateDTO extends AbstractDTO
             'execution' => $this->getExecution(),
             'extensions' => $this->getExtensions(),
         ];
+
+        if ($this->getComposition() !== []) {
+            $payload['composition'] = $this->getComposition();
+        }
 
         if ($this->getTopicId() !== '') {
             $payload['topic_id'] = $this->getTopicId();
@@ -583,6 +615,7 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->setFileName($data['file_name'] ?? null);
         $this->setInputs($data['inputs'] ?? null);
         $this->setGeneration($data['generation'] ?? null);
+        $this->setComposition($data['composition'] ?? null);
         $this->setCallbacks($data['callbacks'] ?? null);
         $this->setExecution($data['execution'] ?? null);
         $this->setExtensions($data['extensions'] ?? null);
@@ -595,6 +628,22 @@ class DesignVideoCreateDTO extends AbstractDTO
         }
 
         return is_array($value) ? $value : [];
+    }
+
+    /** 校验合成媒体对象只包含非空 workspace-relative 路径。 */
+    private function assertCompositionMedia(mixed $value, string $path): void
+    {
+        if (! is_array($value)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s must be an object', $path));
+        }
+        $mediaPath = trim((string) ($value['path'] ?? ''));
+        if ($mediaPath === '' || str_contains($mediaPath, '://') || str_contains($mediaPath, "\0")) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.path is invalid', $path));
+        }
+        $segments = explode('/', trim($mediaPath, '/'));
+        if (in_array('.', $segments, true) || in_array('..', $segments, true)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, sprintf('%s.path is invalid', $path));
+        }
     }
 
     private function assertMediaObject(mixed $value, string $path): void
