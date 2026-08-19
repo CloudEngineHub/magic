@@ -4,10 +4,12 @@ from app.tools.design.video_production.ports.video_composition_port import (
     VideoCompositionPort,
     VideoCompositionRequest,
     VideoCompositionResult,
+    VideoSourceInfo,
 )
 
 __all__ = [
     "VideoCompositionPort",
     "VideoCompositionRequest",
     "VideoCompositionResult",
+    "VideoSourceInfo",
 ]

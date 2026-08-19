@@ -43,14 +43,29 @@ use RuntimeException;
  */
 class DesignVideoAppServiceTest extends TestCase
 {
-    public function testCanvasCompositionValidatesProjectAndDispatchesAsyncSubmission(): void
+    public function testCanvasCompositionValidatesFilesInBatchesAndDispatchesAsyncSubmission(): void
     {
         $repository = new InMemoryDesignVideoTaskRepository();
         $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
-        $taskFileDomainService->expects($this->once())
+        $videoDirectory = $this->createDirectory(7001, '/org/project_123/workspace/canvas/videos');
+        $audioDirectory = $this->createDirectory(7002, '/org/project_123/workspace/canvas/audios');
+        $taskFileDomainService->expects($this->exactly(2))
             ->method('findEntityByRelativePath')
-            ->with(123, 'canvas-project/magic.project.js')
-            ->willReturn($this->createFile(7101, '/org/project_123/workspace/canvas-project/magic.project.js'));
+            ->willReturnMap([
+                [123, '/canvas/videos', $videoDirectory],
+                [123, '/canvas/audios', $audioDirectory],
+            ]);
+        $taskFileDomainService->expects($this->exactly(2))
+            ->method('getByProjectParentAndNames')
+            ->willReturnMap([
+                [123, 7001, ['a.mp4', 'b.mp4'], [
+                    'a.mp4' => $this->createFile(7101, '/org/project_123/workspace/canvas/videos/a.mp4'),
+                    'b.mp4' => $this->createFile(7102, '/org/project_123/workspace/canvas/videos/b.mp4'),
+                ]],
+                [123, 7002, ['bgm.mp3'], [
+                    'bgm.mp3' => $this->createFile(7201, '/org/project_123/workspace/canvas/audios/bgm.mp3'),
+                ]],
+            ]);
 
         $producer = $this->createMock(Producer::class);
         $producer->expects($this->once())
@@ -65,23 +80,29 @@ class DesignVideoAppServiceTest extends TestCase
             new UnexpectedDesignVideoSubmissionDomainService(),
             $producer,
         );
-        $entity = $this->createCanvasCompositionEntity('canvas-project//');
+        $entity = $this->createCanvasCompositionEntity();
 
         $result = $service->create($this->createMock(Authenticatable::class), $entity);
 
         $this->assertSame(DesignGenerationStatus::PENDING, $result->getStatus());
         $this->assertSame('', $result->getOperationId());
-        $this->assertSame('canvas-project', $result->getRequestPayload()['extensions']['project_path'] ?? null);
+        $this->assertSame(7001, $result->getOutputDirectoryFileId());
     }
 
-    public function testCanvasCompositionRejectsMissingProjectConfigBeforeCreatingTask(): void
+    public function testCanvasCompositionRejectsMissingInputFileBeforeCreatingTask(): void
     {
         $repository = new InMemoryDesignVideoTaskRepository();
         $taskFileDomainService = $this->createMock(TaskFileDomainService::class);
         $taskFileDomainService->expects($this->once())
             ->method('findEntityByRelativePath')
-            ->with(123, 'missing-project/magic.project.js')
-            ->willReturn(null);
+            ->with(123, '/canvas/videos')
+            ->willReturn($this->createDirectory(7001, '/org/project_123/workspace/canvas/videos'));
+        $taskFileDomainService->expects($this->once())
+            ->method('getByProjectParentAndNames')
+            ->with(123, 7001, ['a.mp4', 'b.mp4'])
+            ->willReturn([
+                'a.mp4' => $this->createFile(7101, '/org/project_123/workspace/canvas/videos/a.mp4'),
+            ]);
 
         $service = new TestableDesignVideoAppService(
             $taskFileDomainService,
@@ -97,7 +118,7 @@ class DesignVideoAppServiceTest extends TestCase
         try {
             $service->create(
                 $this->createMock(Authenticatable::class),
-                $this->createCanvasCompositionEntity('missing-project'),
+                $this->createCanvasCompositionEntity(withAudio: false),
             );
         } finally {
             $this->assertNull($repository->createdEntity);
@@ -198,16 +219,26 @@ class DesignVideoAppServiceTest extends TestCase
         );
     }
 
-    private function createCanvasCompositionEntity(string $projectPath): DesignGenerationTaskEntity
+    /** 创建仅包含模拟工作区文件的画布合成任务。 */
+    private function createCanvasCompositionEntity(bool $withAudio = true): DesignGenerationTaskEntity
     {
+        $composition = [
+            'videos' => [
+                ['path' => '/canvas/videos/a.mp4'],
+                ['path' => '/canvas/videos/b.mp4'],
+            ],
+        ];
+        if ($withAudio) {
+            $composition['audios'] = [['path' => '/canvas/audios/bgm.mp3']];
+        }
+
         return DesignGenerationTaskFactory::createVideoTask(new DesignVideoCreateDTO([
             'project_id' => 123,
             'video_id' => 'composition-1',
             'generation_type' => DesignGenerationType::CANVAS_COMPOSITION->value,
-            'topic_id' => '456',
+            'file_dir' => '/canvas/videos',
+            'composition' => $composition,
             'extensions' => [
-                'project_path' => $projectPath,
-                'video_edit_element_id' => 'video-edit-1',
                 'output_file_name' => 'final.mp4',
             ],
         ]));

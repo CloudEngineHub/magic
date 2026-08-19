@@ -1162,7 +1162,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $featuredOrderGroups = $this->resolveFeaturedOrderGroups($orderConfig);
         $frequentCodes = $featuredOrderGroups['frequent'];
         $allCodes = $featuredOrderGroups['all'];
-        $configuredCodes = $featuredOrderGroups['query'];
+        $queryAgentCodes = $configuredCodes = $featuredOrderGroups['query'];
 
         if ($configuredCodes !== []) {
             // featured 同时返回显示中和隐藏员工，显示状态由排序分组决定。
@@ -1174,7 +1174,6 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 static fn (SuperMagicAgentEntity $agent): string => $agent->getCode(),
                 $builtinAgents
             );
-            $queryAgentCodes = array_values(array_diff($configuredCodes, $builtinAgentCodes));
         } else {
             // 保留兜底逻辑，避免后续排序规则变更时首页数据直接为空。
             $queryAgentCodes = array_values(array_unique(array_diff(

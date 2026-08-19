@@ -77,12 +77,14 @@ class DesignVideoPollConsumer extends ConsumerMessage
         $dataIsolation = DesignDataIsolation::create($msg->organizationCode, $entity->getUserId());
 
         $operationId = $entity->getOperationId();
+        $sandboxId = (string) ($entity->getProviderPayload()['sandbox_id'] ?? '');
         if ($operationId === '') {
             $this->logger->error('design video poll mark failed', [
                 'reason' => 'operation_id_missing',
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => trans('design.video_generation.operation_id_missing'),
             ]);
@@ -101,6 +103,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'submitted_at' => $entity->getProviderPayload()['submitted_at'] ?? null,
                 'deadline_at' => $deadlineAt,
@@ -140,6 +143,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'status' => $status,
                 'provider_result' => is_array($result['provider_result'] ?? null) ? $result['provider_result'] : [],
@@ -160,6 +164,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'status' => $status,
                 'provider_result' => is_array($result['provider_result'] ?? null) ? $result['provider_result'] : [],
@@ -179,6 +184,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
@@ -187,6 +193,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => $sandboxId,
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
@@ -194,36 +201,6 @@ class DesignVideoPollConsumer extends ConsumerMessage
         }
 
         return Result::ACK;
-    }
-
-    /**
-     * 画布合成结果已经写入共享工作区，不重复上传；仅记录路径供文件同步和查询使用。
-     */
-    private function completeCanvasComposition(
-        DesignDataIsolation $dataIsolation,
-        DesignGenerationTaskEntity $entity,
-        array $result,
-    ): bool {
-        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
-        $relativePath = trim((string) ($output['video_path'] ?? ''), '/');
-        if ($relativePath === '') {
-            return false;
-        }
-
-        // Super Magic 返回的是项目相对路径（通常带 ./ 前缀），Design 任务统一保存为 /videos/... 形式。
-        $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
-        $relativePath = '/' . ltrim($relativePath, '/');
-        $fileName = basename($relativePath);
-        $entity->setFileDir('/' . trim((string) dirname($relativePath), '/'));
-        $this->domainService->markAsCompleted($dataIsolation, $entity, [
-            'relative_file_path' => $relativePath,
-            'provider_video_url' => (string) ($output['video_url'] ?? ''),
-            'duration_seconds' => $output['duration_seconds'] ?? null,
-            'resolution' => (string) ($output['resolution'] ?? ''),
-            'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
-            'archive_skipped_reason' => 'sandbox_workspace_output',
-        ], $fileName);
-        return true;
     }
 
     /**
@@ -360,6 +337,44 @@ class DesignVideoPollConsumer extends ConsumerMessage
     }
 
     /**
+     * 画布合成结果已经写入共享工作区，不重复上传；仅记录路径供文件同步和查询使用。
+     */
+    private function completeCanvasComposition(
+        DesignDataIsolation $dataIsolation,
+        DesignGenerationTaskEntity $entity,
+        array $result,
+    ): bool {
+        $output = is_array($result['output'] ?? null) ? $result['output'] : [];
+        $relativePath = trim((string) ($output['video_path'] ?? ''), '/');
+        if ($relativePath === '') {
+            return false;
+        }
+
+        // Super Magic 返回 workspace-relative 路径（通常带 ./ 前缀），Design 任务统一保存为前导斜杠形式。
+        $relativePath = preg_replace('#^\./#', '', $relativePath) ?? $relativePath;
+        $relativePath = '/' . ltrim($relativePath, '/');
+        $fileName = basename($relativePath);
+        $this->domainService->markAsCompleted($dataIsolation, $entity, [
+            'relative_file_path' => $relativePath,
+            'provider_video_url' => (string) ($output['video_url'] ?? ''),
+            'duration_seconds' => $output['duration_seconds'] ?? null,
+            'resolution' => (string) ($output['resolution'] ?? ''),
+            'has_audio_output' => (bool) ($output['has_audio_output'] ?? false),
+            'archive_skipped_reason' => 'sandbox_workspace_output',
+        ], $fileName);
+        $this->logger->info('design video canvas composition completed', [
+            'video_id' => $entity->getGenerationId(),
+            'project_id' => $entity->getProjectId(),
+            'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
+            'operation_id' => $entity->getOperationId(),
+            'file_dir' => $entity->getFileDir(),
+            'relative_file_path' => $relativePath,
+        ]);
+        return true;
+    }
+
+    /**
      * 优先按创建任务时记录的目录 ID 定位输出目录，避免目录改名后旧路径失效。
      *
      * @return null|array{task_file_dir: TaskFileEntity, full_file_dir: string, relative_file_dir: string}
@@ -457,6 +472,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
             'video_id' => $entity->getGenerationId(),
             'project_id' => $entity->getProjectId(),
             'organization_code' => $entity->getOrganizationCode(),
+            'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
             'operation_id' => $entity->getOperationId(),
             'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
             'error' => $throwable->getMessage(),
@@ -471,6 +487,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
                 'operation_id' => $entity->getOperationId(),
                 'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
                 'error' => $republishThrowable->getMessage(),
@@ -480,6 +497,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
                 'operation_id' => $entity->getOperationId(),
                 'provider_task_id' => $entity->getProviderPayload()['provider_task_id'] ?? '',
                 'error' => $publicErrorMessage,

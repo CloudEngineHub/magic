@@ -24,6 +24,29 @@ final class DesignVideoInputPayloadPreparer
         self::applyPreparedInputs($dto, self::prepareInputs($dto));
     }
 
+    /** 规范化文件列表合成的输出目录和输入路径。 */
+    public static function sanitizeCanvasCompositionDto(DesignVideoCreateDTO $dto): void
+    {
+        $dto->setFileDir(self::normalizePath($dto->getFileDir(), true, 'file_dir'));
+        $composition = $dto->getComposition();
+        foreach (['videos', 'audios'] as $mediaType) {
+            $items = is_array($composition[$mediaType] ?? null) ? $composition[$mediaType] : [];
+            $composition[$mediaType] = array_map(
+                static function (mixed $item) use ($mediaType): array {
+                    $item = is_array($item) ? $item : [];
+                    $item['path'] = self::normalizePath(
+                        (string) ($item['path'] ?? ''),
+                        false,
+                        'composition.' . $mediaType . '.path'
+                    );
+                    return ['path' => $item['path']];
+                },
+                $items,
+            );
+        }
+        $dto->setComposition($composition);
+    }
+
     /**
      * 将视频输入素材整理为统一 payload，并拒绝空路径、非受控外部 URL 和目录穿越路径。
      *

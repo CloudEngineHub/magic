@@ -70,11 +70,20 @@ class DesignVideoSubmitConsumer extends ConsumerMessage
         try {
             $providerPayload = $this->submissionDomainService->submit($entity);
             $this->domainService->markAsSubmitted($dataIsolation, $entity, $providerPayload);
+            $this->logger->info('design video async submit succeeded', [
+                'video_id' => $entity->getGenerationId(),
+                'project_id' => $entity->getProjectId(),
+                'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($providerPayload['sandbox_id'] ?? ''),
+                'operation_id' => (string) ($providerPayload['operation_id'] ?? ''),
+                'submit_endpoint' => (string) ($providerPayload['submit_endpoint'] ?? ''),
+            ]);
         } catch (Throwable $throwable) {
             $this->logger->error('design video async submit failed', [
                 'video_id' => $entity->getGenerationId(),
                 'project_id' => $entity->getProjectId(),
                 'organization_code' => $entity->getOrganizationCode(),
+                'sandbox_id' => (string) ($entity->getProviderPayload()['sandbox_id'] ?? ''),
                 'error' => $throwable->getMessage(),
             ]);
             $this->domainService->markAsFailed($dataIsolation, $entity, $throwable->getMessage());

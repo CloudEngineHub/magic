@@ -71,6 +71,7 @@ class DesignGenerationTaskFactory
                 'frames' => $frames,
             ], static fn (mixed $value): bool => $value !== []),
             'generation' => $requestDTO->getGeneration(),
+            'composition' => $requestDTO->getComposition(),
             'callbacks' => $requestDTO->getCallbacks(),
             'execution' => $requestDTO->getExecution(),
             'extensions' => $requestDTO->getExtensions(),
