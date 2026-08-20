@@ -244,8 +244,8 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 	}, [clearWorkspaceHighlight, hideDropIndicator])
 
 	const showWorkspaceHighlight = useCallback(
-		(target: HTMLElement | null) => {
-			if (!target || visualRef.current.workspaceTarget === target) return
+		(target: HTMLElement | null, refresh = false) => {
+			if (!target || (!refresh && visualRef.current.workspaceTarget === target)) return
 			clearWorkspaceHighlight()
 			target.style.backgroundColor = "#eef3fd"
 			// Inset shadow avoids the layout shift caused by a real border.
@@ -255,15 +255,19 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 			if (header) {
 				const targetRect = target.getBoundingClientRect()
 				const headerRect = header.getBoundingClientRect()
+				const isCollapsed = !target.querySelector('[data-sidebar-drop-type="project-list"]')
 				const isStickyOffset = headerRect.top > targetRect.top + 1
-				header.style.setProperty("background-color", "#eef3fd", "important")
-				header.style.setProperty(
-					"box-shadow",
-					isStickyOffset
+				const headerShadow = isCollapsed
+					? "inset 0 0 0 2px #81bfff"
+					: isStickyOffset
 						? "inset 2px 0 0 0 #81bfff, inset -2px 0 0 0 #81bfff"
-						: "inset 0 2px 0 0 #81bfff, inset 2px 0 0 0 #81bfff, inset -2px 0 0 0 #81bfff",
-				)
-				if (!isStickyOffset) header.style.setProperty("border-radius", "12px 12px 0 0")
+						: "inset 0 2px 0 0 #81bfff, inset 2px 0 0 0 #81bfff, inset -2px 0 0 0 #81bfff"
+				header.style.setProperty("background-color", "#eef3fd", "important")
+				header.style.setProperty("box-shadow", headerShadow)
+				if (isCollapsed) header.style.setProperty("border-radius", "12px")
+				else if (!isStickyOffset) {
+					header.style.setProperty("border-radius", "12px 12px 0 0")
+				}
 			}
 			const activeButton = header?.querySelector<HTMLElement>(
 				'[data-sidebar="menu-button"][data-active="true"]',
@@ -324,10 +328,16 @@ export function useWorkspaceListDnd({ workspaces, disabled }: UseWorkspaceListDn
 			expandTimerRef.current = window.setTimeout(() => {
 				if (expandWorkspaceRef.current !== workspaceId) return
 				sidebarStore.setWorkspaceExpanded(workspaceId, true)
+				window.requestAnimationFrame(() => {
+					const target = visualRef.current.workspaceTarget
+					if (target?.dataset.sidebarDropWorkspaceId === workspaceId) {
+						showWorkspaceHighlight(target, true)
+					}
+				})
 				clearExpandTimer()
 			}, AUTO_EXPAND_DELAY)
 		},
-		[clearExpandTimer],
+		[clearExpandTimer, showWorkspaceHighlight],
 	)
 
 	/** Converts a pointer target into a preview; output is null when dropping is invalid. */
