@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-
+from app.tools.canvas.application.results import InitializeCanvasResult
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
 
@@ -14,7 +13,7 @@ class InitializationService:
         """显式注入项目仓储。"""
         self.repository = repository
 
-    async def initialize(self, project_path: str) -> dict[str, Any]:
+    async def initialize(self, project_path: str) -> InitializeCanvasResult:
         """创建或复用一个 Canvas 项目。"""
         path, created = await self.repository.initialize(project_path)
-        return {"project_path": project_path, "project_name": path.name, "created": created}
+        return InitializeCanvasResult(project_path, path.name, created)

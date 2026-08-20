@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.tools.canvas.application.results import (
+    CanvasConnectionDetailResult,
+    CanvasElementDetailResult,
+    CanvasElementsResult,
+    CanvasOverviewResult,
+)
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
@@ -22,11 +28,11 @@ class CanvasQueryService:
         self.overview_service = OverviewQueryService(repository)
         self.element_details_service = ElementDetailsQueryService(repository, self.sidecar_adapter)
 
-    async def overview(self, project_path: str, page: int, limit: int) -> dict[str, Any]:
+    async def overview(self, project_path: str, page: int, limit: int) -> CanvasOverviewResult:
         """委托概览查询。"""
         return await self.overview_service.overview(project_path, page, limit)
 
-    async def elements(self, project_path: str, element_ids: list[str]) -> dict[str, Any]:
+    async def elements(self, project_path: str, element_ids: list[str]) -> CanvasElementsResult:
         """委托详情查询。"""
         return await self.element_details_service.elements(project_path, element_ids)
 
@@ -34,8 +40,8 @@ class CanvasQueryService:
     def element_details_dto(
         element: CanvasElement,
         details: dict[str, dict[str, Any]],
-        connections: list[dict[str, Any]],
+        connections: tuple[CanvasConnectionDetailResult, ...],
         tree: ElementTreeIndex,
-    ) -> dict[str, Any]:
+    ) -> CanvasElementDetailResult:
         """保留旧的静态投影入口。"""
         return ElementDetailsQueryService.element_details_dto(element, details, connections, tree)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -15,6 +14,12 @@ from app.tools.canvas.application.commands import (
     SelectMainContentCommand,
 )
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.results import (
+    AddContentResultItem,
+    AddContentsResult,
+    SelectMainContentResultItem,
+    SelectMainContentsResult,
+)
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
@@ -46,16 +51,16 @@ class ContentService:
         project_path: str,
         items: Sequence[AddContentCommand],
         tool_context: ToolContext | None = None,
-    ) -> dict[str, Any]:
+    ) -> AddContentsResult:
         """向已有 Element 追加 Content 版本。"""
         generated: list[GenerationSubmissionCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
 
-        async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        async def mutate(project: CanvasProject, metadata: dict) -> tuple[AddContentsResult, dict]:
             nonlocal current_item_ref
-            results = []
+            results: list[AddContentResultItem] = []
             for item in item_list:
                 current_item_ref = item.item_ref
                 element = project.canvas.get_element(item.element_id)
@@ -94,7 +99,12 @@ class ContentService:
                             production_rule=capability.production_rule,
                             parameters=command.generation_parameters or GenerationParameters(),
                         )
-                results.append({"item_ref": item.item_ref, "element_id": element.element_id, "content_id": content.content_id, "status": status})
+                results.append(AddContentResultItem(
+                    item_ref=item.item_ref,
+                    element_id=element.element_id,
+                    content_id=content.content_id,
+                    status=status,
+                ))
                 if command.is_generated:
                     generated.append(GenerationSubmissionCommand(
                         item_ref=item.item_ref,
@@ -109,7 +119,7 @@ class ContentService:
                     content.content_id,
                     CanvasApplicationOperations.new_content_detail(element.element_id, command.to_metadata()),
                 )
-            return {"items": results}, metadata
+            return AddContentsResult(results), metadata
 
         try:
             result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)
@@ -117,14 +127,14 @@ class ContentService:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
         return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
 
-    async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> dict[str, Any]:
+    async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> SelectMainContentsResult:
         """只修改用户明确选择的 main Content 指针。"""
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
-        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        def mutate(project: CanvasProject, metadata: dict) -> tuple[SelectMainContentsResult, dict]:
             nonlocal current_item_ref
-            results = []
+            results: list[SelectMainContentResultItem] = []
             for item in item_list:
                 current_item_ref = item.item_ref
                 element = project.canvas.get_element(item.element_id)
@@ -139,15 +149,15 @@ class ContentService:
                     raise CanvasDomainError("MAIN_CONTENT_NOT_COMPLETED", "The selected Content is not completed.")
                 previous = element.main_content_id
                 element.main_content_id = content.content_id
-                results.append({
-                    "item_ref": item.item_ref,
-                    "status": "completed",
-                    "element_id": element.element_id,
-                    "previous_main_content_id": previous,
-                    "main_content_id": content.content_id,
-                    "active_content_id": element.active_content_id,
-                })
-            return {"items": results}, metadata
+                results.append(SelectMainContentResultItem(
+                    item_ref=item.item_ref,
+                    status="completed",
+                    element_id=element.element_id,
+                    previous_main_content_id=previous,
+                    main_content_id=content.content_id,
+                    active_content_id=element.active_content_id,
+                ))
+            return SelectMainContentsResult(results), metadata
 
         try:
             return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)

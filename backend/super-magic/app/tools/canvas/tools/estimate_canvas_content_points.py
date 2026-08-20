@@ -74,6 +74,6 @@ class EstimateCanvasContentPoints(BaseTool[ProjectPathParams]):
                 for item in result["items"]:
                     lines.append(f"- item_ref={item['item_ref']} | status={item['status']} | reason={item.get('reason') or '-'}")
                 lines.append("Next: ask the user whether to revise or cancel. Do not submit generation automatically.")
-            return ToolResult(content="\n".join(lines), data=result)
+            return ToolResult(content="\n".join(lines), data=result.to_dict())
         except Exception as error:
             return error_result(error)

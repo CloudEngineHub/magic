@@ -99,6 +99,6 @@ class QueryCanvasOverview(BaseTool[ProjectPathParams]):
         """读取当前分页概览。"""
         try:
             result = await _application(tool_context).overview(params.project_path, params.page, params.limit)
-            return ToolResult(content=overview_content(result), data=result)
+            return ToolResult(content=overview_content(result.to_dict()), data=result.to_dict())
         except Exception as error:
             return error_result(error)

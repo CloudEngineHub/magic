@@ -109,6 +109,6 @@ class WaitCanvasGeneration(BaseTool[ProjectPathParams]):
                 params.max_wait_seconds,
                 tool_context,
             )
-            return ToolResult(content=items_content("Canvas generation status returned.", result), data=result)
+            return ToolResult(content=items_content("Canvas generation status returned.", result.to_dict()), data=result.to_dict())
         except Exception as error:
             return error_result(error)

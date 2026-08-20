@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 from app.tools.canvas.application.commands import FrameElementsCommand
+from app.tools.canvas.application.results import FrameElementResultItem, FrameElementsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
@@ -26,14 +26,14 @@ class FrameElementsService:
         self,
         project_path: str,
         items: Sequence[FrameElementsCommand],
-    ) -> dict[str, Any]:
+    ) -> FrameElementsResult:
         """将根级普通兄弟节点框选为新 Frame，并完成局部坐标转换。"""
         CanvasApplicationOperations.validate_unique_item_refs(items)
         current_item_ref: str | None = None
 
-        def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        def mutate(project: CanvasProject, metadata: dict) -> tuple[FrameElementsResult, dict]:
             nonlocal current_item_ref
-            results: list[dict[str, Any]] = []
+            results: list[FrameElementResultItem] = []
             selected_ids: set[str] = set()
             for item in items:
                 current_item_ref = item.item_ref
@@ -54,17 +54,17 @@ class FrameElementsService:
                     root_insert_index=plan.root_insert_index,
                 ).apply(project.canvas)
                 selected_ids.update(plan.selected_ids)
-                results.append({
-                    "item_ref": item.item_ref,
-                    "frame_element_id": plan.frame.element_id,
-                    "child_element_ids": [child.element_id for child in children],
-                    "content_id": plan.frame.active_content_id,
-                    "parent_element_id": None,
-                    "depth": 0,
-                    "padding": plan.padding,
-                    "status": "completed",
-                })
-            return {"items": results}, metadata
+                results.append(FrameElementResultItem(
+                    item_ref=item.item_ref,
+                    frame_element_id=plan.frame.element_id,
+                    child_element_ids=tuple(child.element_id for child in children),
+                    content_id=plan.frame.active_content_id,
+                    parent_element_id=None,
+                    depth=0,
+                    padding=plan.padding,
+                    status="completed",
+                ))
+            return FrameElementsResult(results), metadata
 
         try:
             return await self.unit_of_work.transaction_with_sidecar(project_path, mutate)

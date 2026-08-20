@@ -76,7 +76,7 @@ class InitializeCanvas(BaseTool[ProjectPathParams]):
             state = "created" if result["created"] else "already existed"
             return ToolResult(
                 content=f"Canvas project {state}.\n- Project path: {params.project_path}",
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

@@ -96,10 +96,10 @@ class LayoutCanvasElements(BaseTool[ProjectPathParams]):
             return ToolResult(
                 content=items_content(
                     "Canvas layout updated successfully.",
-                    result,
+                    result.to_dict(),
                     "call query_canvas_overview with the same project_path to verify the persisted layout",
                 ),
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

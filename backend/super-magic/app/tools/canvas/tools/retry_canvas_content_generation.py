@@ -97,10 +97,10 @@ class RetryCanvasContentGeneration(BaseTool[ProjectPathParams]):
             return ToolResult(
                 content=items_content(
                     "Canvas failed Content retry started.",
-                    result,
+                    result.to_dict(),
                     "call query_canvas_element_details with the returned element_id values to verify the retried Content",
                 ),
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

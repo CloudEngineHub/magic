@@ -116,10 +116,10 @@ class AddCanvasConnections(BaseTool[ProjectPathParams]):
             return ToolResult(
                 content=items_content(
                     "Canvas Connections updated successfully.",
-                    result,
+                    result.to_dict(),
                     "call query_canvas_element_details with the affected Element IDs to verify the Connections",
                 ),
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

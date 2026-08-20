@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 from fractions import Fraction
 from pathlib import Path, PurePosixPath
-from typing import Any
 
 from app.tools.canvas.application.canvas_id import new_canvas_id
+from app.tools.canvas.application.results import CanvasVideoCompositionResult
 from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.video import VideoContentFields
 from app.tools.canvas.domain.content_fields.video_edit import VideoEditContentFields
@@ -46,7 +46,7 @@ class VideoCompositionService:
         result_name: str,
         result_element_id: str | None,
         tool_context=None,
-    ) -> dict[str, Any]:
+    ) -> CanvasVideoCompositionResult:
         """创建 processing Content、同步合成并写回完成或失败状态。"""
         output_path = f"./videos/{self._safe_name(result_name)}-{new_canvas_id('video')[-8:]}.mp4"
         preparation = await self._unit_of_work.transaction_with_sidecar(
@@ -75,16 +75,16 @@ class VideoCompositionService:
             project_path,
             lambda project, metadata: self._complete(project, metadata, preparation, result),
         )
-        return {
-            "result_element_id": preparation.result_element_id,
-            "result_content_id": preparation.result_content_id,
-            "status": "completed",
-            "src": preparation.relative_output_path,
-            "width": result.width,
-            "height": result.height,
-            "duration_seconds": result.duration_seconds,
-            "has_audio": result.has_audio,
-        }
+        return CanvasVideoCompositionResult(
+            result_element_id=preparation.result_element_id,
+            result_content_id=preparation.result_content_id,
+            status="completed",
+            src=preparation.relative_output_path,
+            width=result.width,
+            height=result.height,
+            duration_seconds=result.duration_seconds,
+            has_audio=result.has_audio,
+        )
 
     def _prepare(self, project: CanvasProject, metadata: dict, video_edit_element_id: str, result_name: str, result_element_id: str | None, output_path: str):
         """在事务内解析输入并创建 processing 结果 Content。"""
@@ -125,11 +125,12 @@ class VideoCompositionService:
         """在事务内写入完成状态和主 Content 指针。"""
         element = project.canvas.get_element(preparation.result_element_id)
         content = element.get_content(preparation.result_content_id) if element else None
-        if element is None or not isinstance(content.fields if content else None, VideoContentFields):
+        if element is None or content is None or not isinstance(content.fields, VideoContentFields):
             raise CanvasDomainError("CONTENT_NOT_FOUND", "Composition result Content no longer exists.")
+        video_content = content.fields
         element.properties.width = result.width
         element.properties.height = result.height
-        content.fields.update_generation_result("completed", preparation.relative_output_path, None)
+        video_content.update_generation_result("completed", preparation.relative_output_path, None)
         element.main_content_id = preparation.result_content_id
         detail = ContentMetadataService.get(metadata, element.element_id, preparation.result_content_id)
         ContentMetadataService.set(metadata, element.element_id, preparation.result_content_id, {**detail, "generationStatus": "completed", "outputUri": preparation.relative_output_path})
@@ -149,8 +150,9 @@ class VideoCompositionService:
         """在事务内写入失败状态。"""
         element = project.canvas.get_element(preparation.result_element_id)
         content = element.get_content(preparation.result_content_id) if element else None
-        if element is not None and isinstance(content.fields if content else None, VideoContentFields):
-            content.fields.update_generation_result("failed", None, message)
+        if element is not None and content is not None and isinstance(content.fields, VideoContentFields):
+            video_content = content.fields
+            video_content.update_generation_result("failed", None, message)
             if preparation.previous_active_content_id is not None:
                 element.active_content_id = preparation.previous_active_content_id
             if preparation.previous_main_content_id is not None:
@@ -177,9 +179,12 @@ class VideoCompositionService:
             self._require_connection(project, element_id, video_edit_element_id)
             element = project.canvas.get_element(element_id)
             content = element.get_content(element.main_content_id) if element else None
-            if element is None or element.element_type != "video" or not isinstance(content.fields if content else None, VideoContentFields) or content.fields.status != "completed" or not content.fields.src:
+            if element is None or element.element_type != "video" or content is None or not isinstance(content.fields, VideoContentFields):
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Video Element is not completed: {element_id}.")
-            sources.append(content.fields.src)
+            video_content = content.fields
+            if video_content.status != "completed" or not video_content.src:
+                raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Video Element is not completed: {element_id}.")
+            sources.append(video_content.src)
         audio_source = None
         audio_element_id = None
         if main.fields.audio_sequence:
@@ -189,9 +194,12 @@ class VideoCompositionService:
             self._require_connection(project, audio_element_id, video_edit_element_id)
             audio_element = project.canvas.get_element(audio_element_id)
             audio_content = audio_element.get_content(audio_element.main_content_id) if audio_element else None
-            if audio_element is None or audio_element.element_type != "audio" or not isinstance(audio_content.fields if audio_content else None, AudioContentFields) or not audio_content.fields.src:
+            if audio_element is None or audio_element.element_type != "audio" or audio_content is None or not isinstance(audio_content.fields, AudioContentFields):
                 raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Audio Element is not usable: {audio_element_id}.")
-            audio_source = audio_content.fields.src
+            audio_fields = audio_content.fields
+            if not audio_fields.src:
+                raise CanvasDomainError("VIDEO_COMPOSITION_FAILED", f"Audio Element is not usable: {audio_element_id}.")
+            audio_source = audio_fields.src
         width, height = self._resolve_dimensions(str(output.get("aspectRatio") or "16:9"), str(output.get("resolution") or "1080p"))
         return CompositionInputSpec(video_edit_element_id, tuple(main.fields.video_sequence), tuple(sources), audio_element_id, audio_source, width, height)
 

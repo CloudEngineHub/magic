@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.commands import GenerationSubmissionCommand
+from app.tools.canvas.application.results import CanvasBatchResult, CanvasResultItem, GeneratedResultItem
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
     CanvasGenerationResultApplier,
@@ -19,6 +20,8 @@ from app.tools.canvas.generation import (
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
+
+TGeneratedItem = TypeVar("TGeneratedItem", bound=CanvasResultItem)
 
 
 class GenerationSubmissionService:
@@ -44,32 +47,32 @@ class GenerationSubmissionService:
     async def submit_generated(
         self,
         project_path: str,
-        result: dict[str, Any],
+        result: CanvasBatchResult[TGeneratedItem],
         generated: list[GenerationSubmissionCommand],
         tool_context: ToolContext | None,
-    ) -> dict[str, Any]:
+    ) -> CanvasBatchResult[TGeneratedItem]:
         """提交生成能力并把逐项状态合并回结构结果。"""
-        by_content = {
-            item["content_id"]: item
-            for item in result.get("items", [])
-            if item.get("content_id")
-        }
-        for item in generated:
-            parameters = item.parameters
+        by_content: dict[str, GeneratedResultItem] = {}
+        for result_item in result.items:
+            generated_item = cast(GeneratedResultItem, result_item)
+            if generated_item.content_id is not None:
+                by_content[generated_item.content_id] = generated_item
+        for submission_item in generated:
+            parameters = submission_item.parameters
             parameter_payload = parameters.to_dict()
-            capability = self.generation_capabilities.get(item.element_type, parameters.model_id)
+            capability = self.generation_capabilities.get(submission_item.element_type, parameters.model_id)
             if self.estimate_guard is not None and capability.billable:
                 await self.estimate_guard.validate(
                     project_path=project_path,
-                    item_ref=item.item_ref,
+                    item_ref=submission_item.item_ref or "-",
                     production_rule=capability.production_rule,
                     parameters=parameters,
                 )
             request = GenerationRequest(
                 project_path=project_path,
-                element_id=item.element_id,
-                content_id=item.content_id,
-                element_type=item.element_type,
+                element_id=submission_item.element_id,
+                content_id=submission_item.content_id,
+                element_type=submission_item.element_type,
                 parameters=parameters,
             )
             strategy = self.generation_execution.get(capability.execution_mode)
@@ -78,15 +81,16 @@ class GenerationSubmissionService:
             except Exception as error:
                 submission = self._failed_generation_submission(capability.execution_mode, error)
 
-            target = by_content.get(item.content_id)
+            target = by_content.get(submission_item.content_id)
             if target is not None:
-                target["status"] = submission.status
+                generated_target = target
+                generated_target.status = submission.status
                 if submission.generation_task_id:
-                    target["generation_task_id"] = submission.generation_task_id
+                    generated_target.generation_task_id = submission.generation_task_id
                 if submission.output_uri:
-                    target["output_uri"] = submission.output_uri
+                    generated_target.output_uri = submission.output_uri
                 if submission.error_message:
-                    target["error"] = submission.error_message
+                    generated_target.error = submission.error_message
 
             task_repository_error: str | None = None
             if submission.execution_mode == "async" and submission.generation_task_id and submission.provider_task_id:
@@ -96,11 +100,11 @@ class GenerationSubmissionService:
                             generation_task_id=submission.generation_task_id,
                             provider_task_id=submission.provider_task_id,
                             project_path=project_path,
-                            element_id=item.element_id,
-                            content_id=item.content_id,
-                            element_type=item.element_type,
+                            element_id=submission_item.element_id,
+                            content_id=submission_item.content_id,
+                            element_type=submission_item.element_type,
                             capability_name=capability.name,
-                            retry_count=item.retry_count,
+                            retry_count=submission_item.retry_count,
                             status=submission.status,
                             error=submission.error_message,
                             output_uri=submission.output_uri,
@@ -115,18 +119,18 @@ class GenerationSubmissionService:
                 """在同一项目事务中持久化生成结果和内部任务绑定。"""
                 self.generation_result_applier.apply(
                     project,
-                    item.element_id,
-                    item.content_id,
+                    submission_item.element_id,
+                    submission_item.content_id,
                     submission.status,
                     submission.output_uri,
                     submission.error_message,
                 )
-                detail = ContentMetadataService.get(metadata, item.element_id, item.content_id)
+                detail = ContentMetadataService.get(metadata, submission_item.element_id, submission_item.content_id)
                 detail_update = {
                     **detail,
-                    "elementId": item.element_id,
+                    "elementId": submission_item.element_id,
                     "source": "generated",
-                    "retryCount": item.retry_count,
+                    "retryCount": submission_item.retry_count,
                     "generationParameters": parameter_payload,
                     "providerTaskId": submission.provider_task_id,
                     "generationTaskId": submission.generation_task_id,
@@ -134,14 +138,14 @@ class GenerationSubmissionService:
                     "outputUri": submission.output_uri,
                     "errorMessage": submission.error_message,
                 }
-                if item.retry_idempotency_key:
-                    detail_update["retryIdempotencyKey"] = item.retry_idempotency_key
+                if submission_item.retry_idempotency_key:
+                    detail_update["retryIdempotencyKey"] = submission_item.retry_idempotency_key
                     detail_update["retryResult"] = {
-                        "item_ref": item.item_ref,
-                        "element_id": item.element_id,
-                        "content_id": item.content_id,
+                        "item_ref": submission_item.item_ref,
+                        "element_id": submission_item.element_id,
+                        "content_id": submission_item.content_id,
                         "status": submission.status,
-                        "retry_count": item.retry_count,
+                        "retry_count": submission_item.retry_count,
                         "generation_task_id": submission.generation_task_id,
                         "output_uri": submission.output_uri,
                         "error": submission.error_message,
@@ -151,7 +155,7 @@ class GenerationSubmissionService:
                             else "Call query_canvas_element_details to verify the retried Content."
                         ),
                     }
-                ContentMetadataService.set(metadata, item.element_id, item.content_id, detail_update)
+                ContentMetadataService.set(metadata, submission_item.element_id, submission_item.content_id, detail_update)
                 return None, metadata
 
             try:
@@ -160,14 +164,15 @@ class GenerationSubmissionService:
                 if not submission.generation_task_id:
                     raise
                 if target is not None:
-                    target["status"] = submission.status
-                    target["persistence_warning"] = (
+                    generated_target = cast(GeneratedResultItem, target)
+                    generated_target.status = submission.status
+                    generated_target.persistence_warning = (
                         "The generation task was created, but its Canvas metadata could not be saved. "
                         "Keep the returned generation_task_id and call wait_canvas_generation."
                     )
-                    target["persistence_error"] = "Canvas metadata persistence is temporarily unavailable."
+                    generated_target.persistence_error = "Canvas metadata persistence is temporarily unavailable."
             if task_repository_error and target is not None:
-                target["persistence_warning"] = task_repository_error
+                cast(GeneratedResultItem, target).persistence_warning = task_repository_error
         return result
 
     @staticmethod

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from app.tools.canvas.application.commands import ConnectionCommand
+from app.tools.canvas.application.results import ConnectionResultItem, ConnectionsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
@@ -22,14 +23,14 @@ class ConnectionService:
         self.unit_of_work = unit_of_work
         self.connection_strategies = connection_strategies
 
-    async def connections(self, project_path: str, items: Sequence[ConnectionCommand]) -> dict[str, Any]:
+    async def connections(self, project_path: str, items: Sequence[ConnectionCommand]) -> ConnectionsResult:
         """新增、按 ID 删除或原子替换 Connection。"""
         CanvasApplicationOperations.validate_unique_item_refs(items)
         current_item_ref: str | None = None
-        def mutate(project: CanvasProject, metadata: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        def mutate(project: CanvasProject, metadata: dict[str, Any]) -> tuple[ConnectionsResult, dict[str, Any]]:
             nonlocal current_item_ref
             ledger = ConnectionOperationLedger(metadata)
-            results = []
+            results: list[ConnectionResultItem] = []
             for item in items:
                 current_item_ref = item.item_ref
                 remove_ids = item.remove_connection_ids
@@ -64,17 +65,24 @@ class ConnectionService:
                         for connection_id in missing_ids
                     )
                     if repeated_remove:
-                        results.append({"item_ref": item.item_ref, "status": "already_removed", "removed_connection_ids": remove_ids})
+                        results.append(ConnectionResultItem(
+                            item_ref=item.item_ref,
+                            status="already_removed",
+                            connection_id=None,
+                            removed_connection_ids=tuple(remove_ids),
+                            source_element_id=None,
+                            target_element_id=None,
+                        ))
                         continue
                     if repeated_replace and existing_new is not None:
-                        results.append({
-                            "item_ref": item.item_ref,
-                            "status": "already_replaced",
-                            "connection_id": existing_new.connection_id,
-                            "removed_connection_ids": remove_ids,
-                            "source_element_id": source,
-                            "target_element_id": target,
-                        })
+                        results.append(ConnectionResultItem(
+                            item_ref=item.item_ref,
+                            status="already_replaced",
+                            connection_id=existing_new.connection_id,
+                            removed_connection_ids=tuple(remove_ids),
+                            source_element_id=source,
+                            target_element_id=target,
+                        ))
                         continue
                     raise CanvasDomainError("CONNECTION_NOT_FOUND", "One or more Connection IDs do not exist.")
                 if source or target:
@@ -87,22 +95,29 @@ class ConnectionService:
                     if replace:
                         for old_id in remove_ids:
                             ledger.mark_replaced(old_id, connection.connection_id, source, target)
-                    results.append({
-                        "item_ref": item.item_ref,
-                        "status": "replaced" if replace else "added",
-                        "connection_id": connection.connection_id,
-                        "removed_connection_ids": remove_ids,
-                        "source_element_id": source,
-                        "target_element_id": target,
-                    })
+                    results.append(ConnectionResultItem(
+                        item_ref=item.item_ref,
+                        status="replaced" if replace else "added",
+                        connection_id=connection.connection_id,
+                        removed_connection_ids=tuple(remove_ids),
+                        source_element_id=source,
+                        target_element_id=target,
+                    ))
                 else:
                     for old in existing_old_connections:
                         project.canvas.connections.remove(old)
                     for old_id in remove_ids:
                         ledger.mark_removed(old_id)
-                    results.append({"item_ref": item.item_ref, "status": "removed", "removed_connection_ids": remove_ids})
+                    results.append(ConnectionResultItem(
+                        item_ref=item.item_ref,
+                        status="removed",
+                        connection_id=None,
+                        removed_connection_ids=tuple(remove_ids),
+                        source_element_id=None,
+                        target_element_id=None,
+                    ))
             ledger.compact()
-            return {"items": results}, metadata
+            return ConnectionsResult(results), metadata
 
         try:
             return await self.unit_of_work.transaction_with_sidecar(

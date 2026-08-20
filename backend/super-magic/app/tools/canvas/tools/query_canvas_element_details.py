@@ -82,6 +82,6 @@ class QueryCanvasElementDetails(BaseTool[ElementIdParams]):
         """读取指定 Element 和关联 Connection。"""
         try:
             result = await _application(tool_context).elements(params.project_path, params.element_ids)
-            return ToolResult(content=elements_content(result), data=result)
+            return ToolResult(content=elements_content(result.to_dict()), data=result.to_dict())
         except Exception as error:
             return error_result(error)

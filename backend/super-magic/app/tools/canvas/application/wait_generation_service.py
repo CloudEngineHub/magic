@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.application.results import WaitGenerationResult, WaitGenerationResultItem
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
@@ -41,7 +41,7 @@ class WaitGenerationService:
         task_ids: list[str],
         max_wait_seconds: int = 60,
         tool_context: ToolContext | None = None,
-    ) -> dict[str, Any]:
+    ) -> WaitGenerationResult:
         """轮询异步任务并在终态回写 Content。"""
         if len(task_ids) != len(set(task_ids)):
             raise CanvasDomainError("GENERATION_TASK_ID_INVALID", "generation_task_id values must be unique within a wait call.")
@@ -51,7 +51,7 @@ class WaitGenerationService:
             results = await asyncio.gather(
                 *(self._wait_one_safely(project_path, task_id, deadline, tool_context) for task_id in task_ids)
             )
-            return {"items": results}
+            return WaitGenerationResult(list(results))
         finally:
             stop_tool_keep_alive(keep_alive_task)
 
@@ -61,30 +61,26 @@ class WaitGenerationService:
         task_id: str,
         deadline: float,
         tool_context: ToolContext | None,
-    ) -> dict[str, Any]:
+    ) -> WaitGenerationResultItem:
         """隔离单个等待任务的查询或持久化异常，避免拖垮同批其他任务。"""
         try:
             return await self._wait_one(project_path, task_id, deadline, tool_context)
         except CanvasDomainError as error:
             if error.code in {"CONTENT_NOT_FOUND", "ELEMENT_NOT_FOUND"}:
-                return {
-                    "generation_task_id": task_id,
-                    "status": "not_found",
-                    "error": error.message,
-                }
-            return {
-                "generation_task_id": task_id,
-                "status": "processing",
-                "query_error": "Generation status is temporarily unavailable.",
-                "next_action": "Call wait_canvas_generation again with the same generation_task_id.",
-            }
+                return WaitGenerationResultItem(task_id, "not_found", error=error.message)
+            return WaitGenerationResultItem(
+                task_id,
+                "processing",
+                query_error="Generation status is temporarily unavailable.",
+                next_action="Call wait_canvas_generation again with the same generation_task_id.",
+            )
         except Exception:
-            return {
-                "generation_task_id": task_id,
-                "status": "processing",
-                "query_error": "Generation status is temporarily unavailable.",
-                "next_action": "Call wait_canvas_generation again with the same generation_task_id.",
-            }
+            return WaitGenerationResultItem(
+                task_id,
+                "processing",
+                query_error="Generation status is temporarily unavailable.",
+                next_action="Call wait_canvas_generation again with the same generation_task_id.",
+            )
 
     async def _wait_one(
         self,
@@ -92,42 +88,39 @@ class WaitGenerationService:
         task_id: str,
         deadline: float,
         tool_context: ToolContext | None,
-    ) -> dict[str, Any]:
+    ) -> WaitGenerationResultItem:
         """在共享等待窗口内查询并幂等回写一个异步任务。"""
         record = await self.generation_tasks.get(task_id)
         if record is None:
             record = await self._recover_generation_task(project_path, task_id)
         if record is None or record.project_path != project_path:
-            return {
-                "generation_task_id": task_id,
-                "status": "not_found",
-            }
+            return WaitGenerationResultItem(task_id, "not_found")
         if record.status in {"completed", "failed"}:
-            return {
-                "generation_task_id": task_id,
-                "element_id": record.element_id,
-                "content_id": record.content_id,
-                "status": record.status,
-                "output_uri": record.output_uri,
-                "error": record.error,
-                "already_finalized": True,
-            }
+            return WaitGenerationResultItem(
+                task_id,
+                record.status,
+                element_id=record.element_id,
+                content_id=record.content_id,
+                output_uri=record.output_uri,
+                error=record.error,
+                already_finalized=True,
+            )
         if record.element_type in {"frame", "group"}:
-            return {
-                "generation_task_id": task_id,
-                "element_id": record.element_id,
-                "content_id": record.content_id,
-                "status": "not_applicable",
-                "error_code": "FRAME_GENERATION_NOT_APPLICABLE",
-                "error": "Frame and Group Elements do not have generation tasks.",
-                "next_action": "Do not wait for this Element; use Canvas layout or query tools instead.",
-            }
+            return WaitGenerationResultItem(
+                task_id,
+                "not_applicable",
+                element_id=record.element_id,
+                content_id=record.content_id,
+                error_code="FRAME_GENERATION_NOT_APPLICABLE",
+                error="Frame and Group Elements do not have generation tasks.",
+                next_action="Do not wait for this Element; use Canvas layout or query tools instead.",
+            )
         capability = self.generation_capabilities.get_by_name(
             record.capability_name,
             record.element_type,
         )
         if capability.query_port is None:
-            return {"generation_task_id": task_id, "status": "processing", "timed_out": True}
+            return WaitGenerationResultItem(task_id, "processing", timed_out=True)
         query_result = await self.generation_poller.poll(
             capability.query_port,
             GenerationQueryRequest(
@@ -140,14 +133,14 @@ class WaitGenerationService:
             tool_context,
         )
         if query_result.status not in {"completed", "failed"}:
-            return {
-                "generation_task_id": task_id,
-                "element_id": record.element_id,
-                "content_id": record.content_id,
-                "status": query_result.status,
-                "timed_out": True,
-                "next_action": "Call wait_canvas_generation again with the same generation_task_id.",
-            }
+            return WaitGenerationResultItem(
+                task_id,
+                query_result.status,
+                element_id=record.element_id,
+                content_id=record.content_id,
+                timed_out=True,
+                next_action="Call wait_canvas_generation again with the same generation_task_id.",
+            )
 
         final_status = query_result.status
 
@@ -175,15 +168,15 @@ class WaitGenerationService:
         record.error = query_result.error_message
         record.output_uri = query_result.output_uri
         await self.generation_tasks.update(record)
-        return {
-            "generation_task_id": task_id,
-            "element_id": record.element_id,
-            "content_id": record.content_id,
-            "status": final_status,
-            "output_uri": query_result.output_uri,
-            "error": query_result.error_message,
-            "next_action": "Call query_canvas_element_details to verify the persisted Content.",
-        }
+        return WaitGenerationResultItem(
+            task_id,
+            final_status,
+            element_id=record.element_id,
+            content_id=record.content_id,
+            output_uri=query_result.output_uri,
+            error=query_result.error_message,
+            next_action="Call query_canvas_element_details to verify the persisted Content.",
+        )
 
     async def _recover_generation_task(
         self, project_path: str, generation_task_id: str

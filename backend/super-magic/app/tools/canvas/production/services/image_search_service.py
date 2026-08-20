@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from app.tools.canvas.application.canvas_id import new_canvas_id
 from app.tools.canvas.application.commands import LayoutCommand
+from app.tools.canvas.application.results import CanvasImageSearchResult, ImageSearchItemResult, ImportedImageResult
 from app.tools.canvas.domain.content_fields.image import ImageContentFields
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
@@ -44,12 +45,12 @@ class ImageSearchService:
         self._production_rule = production_rule
         self._workspace = workspace
 
-    async def search_and_import(self, project_path: str, topic_id: str, tasks: Sequence[ImageSearchTask], tool_context=None) -> dict[str, object]:
+    async def search_and_import(self, project_path: str, topic_id: str, tasks: Sequence[ImageSearchTask], tool_context=None) -> CanvasImageSearchResult:
         """逐 task 搜索并只物化下载、探测成功的候选。"""
         await self._unit_of_work.repository.read(project_path)
         metadata = await self._unit_of_work.repository.read_sidecar(project_path)
         existing_urls = self._existing_topic_urls(metadata, topic_id)
-        results: list[dict[str, object]] = []
+        results: list[ImageSearchItemResult] = []
         for task in tasks:
             item_ref = task.item_ref
             name = task.name
@@ -63,7 +64,13 @@ class ImageSearchService:
             try:
                 candidates = await self._search_port.search(ImageSearchRequest(query, count, expected_aspect_ratio, requirement_explanation))
             except Exception as error:
-                results.append({"item_ref": item_ref, "status": "failed", "error": str(error)[:500]})
+                results.append(ImageSearchItemResult(
+                    item_ref=item_ref,
+                    status="failed",
+                    imported_count=0,
+                    failed_count=0,
+                    error=str(error)[:500],
+                ))
                 continue
             for index, candidate in enumerate(candidates):
                 normalized_url = candidate.content_url.strip()
@@ -100,10 +107,31 @@ class ImageSearchService:
             if imported:
                 persisted = await self._persist_imports(project_path, topic_id, item_ref, query, imported)
                 existing_urls.update(str(item["source_url"]) for item in persisted if item.get("source_url"))
-                results.append({"item_ref": item_ref, "status": "completed" if failed == 0 else "partial", "imported_count": len(persisted), "failed_count": failed, "items": persisted})
+                results.append(ImageSearchItemResult(
+                    item_ref=item_ref,
+                    status="completed" if failed == 0 else "partial",
+                    imported_count=len(persisted),
+                    failed_count=failed,
+                    items=tuple(
+                        ImportedImageResult(
+                            element_id=str(item["element_id"]),
+                            content_id=str(item["content_id"]),
+                            src=str(item["src"]),
+                            name=str(item["name"]),
+                            source_url=str(item["source_url"]),
+                        )
+                        for item in persisted
+                    ),
+                ))
             else:
-                results.append({"item_ref": item_ref, "status": "failed", "imported_count": 0, "failed_count": max(failed, 1), "error": "No image candidate could be downloaded and validated."})
-        return {"topic_id": topic_id, "items": results}
+                results.append(ImageSearchItemResult(
+                    item_ref=item_ref,
+                    status="failed",
+                    imported_count=0,
+                    failed_count=max(failed, 1),
+                    error="No image candidate could be downloaded and validated.",
+                ))
+        return CanvasImageSearchResult(topic_id=topic_id, items=tuple(results))
 
     async def _persist_imports(self, project_path: str, topic_id: str, item_ref: str, query: str, items: list[dict[str, object]]) -> list[dict[str, object]]:
         """在一个项目事务内为已成功下载的图片创建 Element 和 Content。"""
@@ -112,10 +140,16 @@ class ImageSearchService:
             for index, item in enumerate(items):
                 element_id = new_canvas_id("element")
                 content_id = new_canvas_id("content")
+                width = item["width"]
+                height = item["height"]
+                if not isinstance(width, (int, float)) or isinstance(width, bool):
+                    raise ValueError("Image width must be numeric.")
+                if not isinstance(height, (int, float)) or isinstance(height, bool):
+                    raise ValueError("Image height must be numeric.")
                 element = CanvasElement(
                     element_id,
                     "image",
-                    ElementProperties(name=str(item["name"]), width=float(item["width"]), height=float(item["height"])),
+                    ElementProperties(name=str(item["name"]), width=float(width), height=float(height)),
                     contents=[CanvasContent(content_id, ImageContentFields(src=str(item["src"])))],
                     active_content_id=content_id,
                     main_content_id=content_id,

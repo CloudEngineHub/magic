@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -15,6 +14,7 @@ from app.tools.canvas.application.commands import (
     LayoutCommand,
 )
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.results import AddElementResultItem, AddElementsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
@@ -45,17 +45,17 @@ class AddElementsService:
         project_path: str,
         items: Sequence[AddElementCommand],
         tool_context: ToolContext | None = None,
-    ) -> dict[str, Any]:
+    ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
         item_list = tuple(items)
         CanvasApplicationOperations.validate_unique_item_refs(item_list)
         current_item_ref: str | None = None
 
-        async def mutate(project: CanvasProject, metadata: dict) -> tuple[dict[str, Any], dict]:
+        async def mutate(project: CanvasProject, metadata: dict) -> tuple[AddElementsResult, dict]:
             nonlocal current_item_ref
             created: dict[str, str] = {}
-            results: list[dict[str, object]] = []
+            results: list[AddElementResultItem] = []
             layout_requests: list[tuple[CanvasElement, LayoutCommand | None]] = []
             for item in item_list:
                 item_ref = item.item_ref
@@ -127,7 +127,12 @@ class AddElementsService:
                 project.canvas.elements.append(element)
                 layout_requests.append((element, item.layout))
                 created[item_ref] = element_id
-                results.append({"item_ref": item_ref, "element_id": element_id, "content_id": generated_content_id or (element.contents[0].content_id if element.contents else None), "status": "pending" if generated_content_id else "completed"})
+                results.append(AddElementResultItem(
+                    item_ref=item_ref,
+                    element_id=element_id,
+                    content_id=generated_content_id or (element.contents[0].content_id if element.contents else None),
+                    status="pending" if generated_content_id else "completed",
+                ))
             for item in item_list:
                 current_item_ref = item.item_ref
                 current_element_id = created.get(item.item_ref)
@@ -151,7 +156,7 @@ class AddElementsService:
                 current_item_ref = item_list[index].item_ref
                 request = layout or LayoutCommand(strategy="row_incremental")
                 self.layout_strategies.get(request.strategy).apply(project.canvas, element, request, index)
-            return {"items": results, "created_element_ids": list(created.values())}, metadata
+            return AddElementsResult(results, list(created.values())), metadata
 
         try:
             result = await self.unit_of_work.transaction_with_sidecar(project_path, mutate)

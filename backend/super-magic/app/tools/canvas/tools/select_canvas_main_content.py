@@ -92,10 +92,10 @@ class SelectCanvasMainContent(BaseTool[ProjectPathParams]):
             return ToolResult(
                 content=items_content(
                     "Canvas main Content selected successfully.",
-                    result,
+                    result.to_dict(),
                     "call query_canvas_element_details with the returned element_id values to verify the main Content selection",
                 ),
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

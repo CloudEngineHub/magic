@@ -110,10 +110,10 @@ class AddCanvasElements(BaseTool[ProjectPathParams]):
             return ToolResult(
                 content=items_content(
                     "Canvas Elements added successfully.",
-                    result,
+                    result.to_dict(),
                     "call query_canvas_element_details with the returned element_id values to verify the persisted Elements",
                 ),
-                data=result,
+                data=result.to_dict(),
             )
         except Exception as error:
             return error_result(error)

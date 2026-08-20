@@ -87,6 +87,6 @@ class SearchCanvasImages(BaseTool[ProjectPathParams]):
             if created_ids:
                 lines.append(f"- Created Element IDs: {', '.join(created_ids)}")
             lines.append("Next: review the imported candidates with query_canvas_element_details. Retry only a failed search item if the user requests it.")
-            return ToolResult(content="\n".join(lines), data=data)
+            return ToolResult(content="\n".join(lines), data=data.to_dict())
         except Exception as error:
             return error_result(error)

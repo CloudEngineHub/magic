@@ -56,6 +56,6 @@ class ComposeCanvasVideo(BaseTool[ProjectPathParams]):
                 ),
                 tool_context,
             )
-            return ToolResult(content=f"Canvas video composition completed.\n- Result Element ID: {data['result_element_id']}\n- Result Content ID: {data['result_content_id']}\n- Status: completed\n- Asset path: {data['src']}\nNext: call query_canvas_element_details with the returned element_id to verify the persisted result.", data=data)
+            return ToolResult(content=f"Canvas video composition completed.\n- Result Element ID: {data['result_element_id']}\n- Result Content ID: {data['result_content_id']}\n- Status: completed\n- Asset path: {data['src']}\nNext: call query_canvas_element_details with the returned element_id to verify the persisted result.", data=data.to_dict())
         except Exception as error:
             return error_result(error)
