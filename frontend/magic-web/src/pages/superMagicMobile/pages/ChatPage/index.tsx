@@ -65,6 +65,8 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	// Track the account context used for the last homepage mode refresh so an organization switch
 	// cannot reuse the previous organization's runtime fallback while the homepage stays empty.
 	const homepageRefreshContextRef = useRef<string | null>(null)
+	// Ignore older refresh results so a slower request cannot overwrite a newer homepage selection.
+	const homepageRefreshRequestIdRef = useRef(0)
 	const activeTab = new URLSearchParams(location.search).get("tab") ?? MobileTabParam.Super
 	const isMobileHomeRoute = routesPathMatch(RouteName.MobileHome, location.pathname)
 	// MobileTabs（/mobile-tabs?tab=super）和 MobileHome（/mobile-home）都应视为首页，
@@ -191,7 +193,16 @@ const ChatPagePanel = observer(function ChatPagePanel() {
 	})
 
 	const refreshHomepageModeList = useMemoizedFn(async () => {
+		const requestId = ++homepageRefreshRequestIdRef.current
+		const requestContextKey = homepageContextKey
 		const nextModeList = await refreshFeaturedModeList().catch(() => null)
+		const currentContextKey = `${userStore.user.organizationCode ?? ""}:${userStore.user.userInfo?.user_id ?? ""}`
+		if (
+			requestId !== homepageRefreshRequestIdRef.current ||
+			currentContextKey !== requestContextKey
+		) {
+			return
+		}
 		if (!nextModeList?.length) return
 
 		// 运行时 roleStore 可能被话题恢复流程临时修改；首页应以用户持久化选择为准。
