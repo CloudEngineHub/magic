@@ -1,8 +1,22 @@
 """Canvas Manager Skill 的静态约束测试。"""
 
+import re
 from pathlib import Path
 
 SKILL_PATH = Path(__file__).parents[2] / "agents" / "skills" / "canvas-manager" / "SKILL.md"
+PUBLIC_TOOLS = (
+    "initialize_canvas",
+    "query_canvas_overview",
+    "query_canvas_element_details",
+    "add_canvas_elements",
+    "frame_canvas_elements",
+    "add_canvas_contents",
+    "retry_canvas_content_generation",
+    "select_canvas_main_content",
+    "layout_canvas_elements",
+    "add_canvas_connections",
+    "wait_canvas_generation",
+)
 
 
 def test_skill_constrains_retry_and_connection_boundaries() -> None:
@@ -46,3 +60,50 @@ def test_canvas_agent_and_references_do_not_expose_storage_protocol_details() ->
     for path in paths:
         content = path.read_text(encoding="utf-8")
         assert all(value not in content for value in forbidden), path
+
+
+def test_every_canvas_tool_has_an_independent_guide_and_code_mode_example() -> None:
+    """全部公开工具都必须有独立标题、参数说明和 Code Mode 示例。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    for tool_name in PUBLIC_TOOLS:
+        assert f"## `{tool_name}`" in content
+        assert f'tool.call("{tool_name}"' in content
+
+        section = content.split(f"## `{tool_name}`", maxsplit=1)[1]
+        section = re.split(r"\n## `|\n# ", section, maxsplit=1)[0]
+        assert "参数" in section
+        assert "print(result.content)" in section
+
+
+def test_skill_covers_unified_design_and_video_production_workflows() -> None:
+    """Skill 必须覆盖设计、图片、视频、分镜、Frame 和版本管理。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    for expected in (
+        "图片设计工作流",
+        "普通视频工作流",
+        "精细视频制作工作流",
+        "Storyboard",
+        "video-edit",
+        "row_incremental",
+        "dependency_flow",
+        "explicit_position",
+        "visual_understanding",
+        "add_canvas_contents",
+        "select_canvas_main_content",
+        "frame_canvas_elements",
+        "wait_canvas_generation",
+    ):
+        assert expected in content
+
+
+def test_skill_states_current_backend_gaps_without_false_capability_claims() -> None:
+    """Skill 必须明确最终合成和专用图片搜索仍是后端缺口。"""
+    content = SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "没有执行最终 MP4 合成" in content
+    assert "不得声称已经生成最终视频文件" in content
+    assert "没有 `search_canvas_images` 等价" in content
+    assert "只有拿到真实的工作区相对素材路径" in content
+    assert "audioSequence" not in content

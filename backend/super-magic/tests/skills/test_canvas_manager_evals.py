@@ -26,7 +26,7 @@ def test_canvas_manager_evals_are_complete_and_refer_to_existing_assets() -> Non
     """所有 eval 场景都必须可加载，并且只能引用新 Canvas 链路。"""
     eval_files = sorted((SKILL_ROOT / "evals").glob("*.json"))
 
-    assert len(eval_files) == 11
+    assert len(eval_files) == 15
     identifiers: set[str] = set()
     for path in eval_files:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -63,11 +63,15 @@ def test_canvas_manager_evals_are_complete_and_refer_to_existing_assets() -> Non
         "async-generation-lifecycle",
         "basic-canvas",
         "connection-direction",
+        "design-candidate-workflow",
+        "detailed-video-production",
         "frame-cross-tool",
         "frame-hierarchy-lifecycle",
         "managed-field-guard",
         "media-reference-routing",
         "multi-content-lifecycle",
+        "ordinary-video-workflow",
+        "storyboard-first-frame-flow",
         "tool-chaining",
         "v3-only",
     }
@@ -88,5 +92,9 @@ def test_canvas_manager_evals_cover_generation_frame_and_safety_boundaries() -> 
         "retry_canvas_content_generation",
         "Never delete Canvas Elements or Content",
         "Do not append Content or create a generation task for the Frame",
+        "video-edit Content",
+        "final MP4",
+        "row_incremental",
+        "dependency layout",
     ):
         assert expected in text

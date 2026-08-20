@@ -71,7 +71,7 @@ class ContentInput(BaseToolParams):
     inner_radius_ratio: float | None = Field(None, alias="innerRadiusRatio")
     generation_config: dict[str, Any] | None = Field(None, alias="generationConfig")
     shots: list[dict[str, Any]] | None = None
-    video_sequence: list[dict[str, Any]] | None = Field(None, alias="videoSequence")
+    video_sequence: list[str] | None = Field(None, alias="videoSequence")
     output: dict[str, Any] | None = None
     model_id: str | None = None
     name: str | None = None

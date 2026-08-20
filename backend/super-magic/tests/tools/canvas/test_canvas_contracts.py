@@ -85,6 +85,22 @@ def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
         ContentInput(source="generated", content_type="image")
 
 
+def test_video_edit_content_uses_element_id_sequence() -> None:
+    """Video Edit 必须按协议接收有序的 Video Element ID 数组。"""
+    content = ContentInput(
+        source="user",
+        content_type="video-edit",
+        videoSequence=["video-element-1", "video-element-2"],
+        output={"format": "mp4"},
+    )
+
+    assert content.video_sequence == ["video-element-1", "video-element-2"]
+    assert content.model_dump(by_alias=True)["videoSequence"] == [
+        "video-element-1",
+        "video-element-2",
+    ]
+
+
 def test_wait_schema_uses_tasks_with_generation_task_id() -> None:
     """等待工具保持技术方案约定的 tasks 结构。"""
     schema = WaitCanvasGeneration.Params.model_json_schema()
