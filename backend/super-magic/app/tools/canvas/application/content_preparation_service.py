@@ -20,11 +20,11 @@ class ContentPreparationService:
         """把强类型命令转换为领域 Content。"""
         return self.content_strategies.build(command, element_type)
 
-    async def prepare_imported(self, project: CanvasProject, command: ContentCommand) -> None:
+    async def prepare_imported(self, project: CanvasProject, command: ContentCommand, project_path: str) -> None:
         """规范化 imported 素材路径并阻止同一素材重复登记。"""
         if not command.is_imported:
             return
-        normalized = await self.asset_gateway.normalize_existing_file(command.asset_path or "")
+        normalized = await self.asset_gateway.normalize_existing_file(project_path, command.asset_path or "")
         existing_paths = {
             content.fields.asset_path
             for element in project.canvas.iter_elements()

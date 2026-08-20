@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
@@ -22,6 +23,7 @@ class GenericVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         """保存工作区根目录。"""
         self.workspace = workspace
         self.project_identity_resolver = ProjectIdentityResolver()
+        self.asset_path_resolver = ProjectAssetPathResolver(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """提交视频任务，不在提交阶段阻塞等待结果。"""
@@ -79,7 +81,14 @@ class GenericVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         if not result.ok:
             return GenerationQueryResult("failed", error_message=result.content)
         if status in {"succeeded", "completed"}:
-            return GenerationQueryResult("completed", output_uri=data.get("saved_video_relative_path"))
+            output_path = data.get("saved_video_relative_path")
+            if not isinstance(output_path, str) or not output_path:
+                return GenerationQueryResult("failed", error_message="Video generation returned no output path.")
+            try:
+                output_uri = self.asset_path_resolver.to_project_uri(request.project_path, output_path)
+            except ValueError as error:
+                return GenerationQueryResult("failed", error_message=str(error))
+            return GenerationQueryResult("completed", output_uri=output_uri)
         if status in {"failed", "canceled", "cancelled"}:
             return GenerationQueryResult("failed", error_message=result.content)
         return GenerationQueryResult("processing")

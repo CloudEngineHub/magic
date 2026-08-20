@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
@@ -18,6 +19,7 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
         """保存工作区根目录。"""
         self.workspace = workspace
         self.project_identity_resolver = ProjectIdentityResolver()
+        self.asset_path_resolver = ProjectAssetPathResolver(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """调用通用生图工具并返回工作区相对结果路径。"""
@@ -46,7 +48,7 @@ class GenericImageGenerationPort(GenerationSubmissionPort):
             return GenerationSubmission("sync", "failed", error_message="Image generation returned no output.")
         output = Path(saved[0])
         try:
-            output_uri = output.relative_to(self.workspace).as_posix()
+            output_uri = self.asset_path_resolver.to_project_uri(request.project_path, output)
         except ValueError:
             return GenerationSubmission(
                 "sync",

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
 from app.tools.canvas.generation.ports.submission_port import GenerationSubmissionPort
@@ -23,10 +24,15 @@ class FakeImageGenerationPort(GenerationSubmissionPort):
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
         self.workspace = workspace
+        self.asset_path_resolver = ProjectAssetPathResolver(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """写入最小合法 PNG 并同步返回。"""
         output = self.workspace / request.project_path / "images" / f"{request.content_id}.png"
         await async_mkdir(output.parent, parents=True, exist_ok=True)
         await async_write_bytes(output, _FAKE_PNG)
-        return GenerationSubmission("sync", "completed", output_uri=output.relative_to(self.workspace).as_posix())
+        return GenerationSubmission(
+            "sync",
+            "completed",
+            output_uri=self.asset_path_resolver.to_project_uri(request.project_path, output),
+        )

@@ -78,7 +78,7 @@ class ContentService:
                         generation_parameters=command.generation_parameters,
                         content_id=new_canvas_id("content"),
                     )
-                await self.content_preparation.prepare_imported(project, command)
+                await self.content_preparation.prepare_imported(project, command, project_path)
                 content = self.content_preparation.build(command, element.element_type)
                 if element.get_content(content.content_id) is not None:
                     raise CanvasDomainError("CONTENT_ALREADY_EXISTS", f"Content {content.content_id} already exists.")

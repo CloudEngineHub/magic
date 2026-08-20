@@ -7,5 +7,5 @@ class AssetGateway(ABC):
     """定义工作区素材规范化边界。"""
 
     @abstractmethod
-    async def normalize_existing_file(self, asset_path: str) -> str:
-        """校验并返回工作区相对素材路径。"""
+    async def normalize_existing_file(self, project_path: str, asset_path: str) -> str:
+        """校验并返回当前项目可消费的素材路径。"""

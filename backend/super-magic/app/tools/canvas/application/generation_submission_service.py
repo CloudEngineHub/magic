@@ -6,6 +6,7 @@ from typing import Any, TypeVar, cast
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.commands import GenerationSubmissionCommand
+from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import CanvasBatchResult, CanvasResultItem, GeneratedResultItem
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
@@ -35,6 +36,7 @@ class GenerationSubmissionService:
         generation_execution: GenerationExecutionStrategyRegistry,
         generation_result_applier: CanvasGenerationResultApplier,
         estimate_guard: GenerationEstimateGuard | None = None,
+        element_sizing: CanvasElementSizingService | None = None,
     ) -> None:
         """显式绑定生成提交所需的事务、能力、执行、任务和结果端口。"""
         self.unit_of_work = unit_of_work
@@ -43,6 +45,7 @@ class GenerationSubmissionService:
         self.generation_execution = generation_execution
         self.generation_result_applier = generation_result_applier
         self.estimate_guard = estimate_guard
+        self.element_sizing = element_sizing
 
     async def submit_generated(
         self,
@@ -80,6 +83,17 @@ class GenerationSubmissionService:
                 submission = await strategy.execute(capability, request, tool_context)
             except Exception as error:
                 submission = self._failed_generation_submission(capability.execution_mode, error)
+
+            output_dimensions = None
+            if (
+                submission.status == "completed"
+                and submission_item.element_type == "image"
+                and self.element_sizing is not None
+            ):
+                output_dimensions = await self.element_sizing.inspect_generated_image(
+                    project_path,
+                    submission.output_uri,
+                )
 
             target = by_content.get(submission_item.content_id)
             if target is not None:
@@ -125,6 +139,9 @@ class GenerationSubmissionService:
                     submission.output_uri,
                     submission.error_message,
                 )
+                element = project.canvas.get_element(submission_item.element_id)
+                if element is not None:
+                    CanvasElementSizingService.apply(element, output_dimensions)
                 detail = ContentMetadataService.get(metadata, submission_item.element_id, submission_item.content_id)
                 detail_update = {
                     **detail,

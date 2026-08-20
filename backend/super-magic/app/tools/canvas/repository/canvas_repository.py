@@ -10,6 +10,7 @@ from typing import Awaitable, Callable, TypeVar, cast
 
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
+from app.tools.canvas.infrastructure.persistence.canvas_main_file_sanitizer import CanvasMainFileSanitizer
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
 from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
@@ -35,6 +36,7 @@ class CanvasRepository(CanvasRepositoryInterface):
     def __init__(self, workspace: Path):
         """初始化工作区级仓储。"""
         self._workspace = workspace
+        self._main_file_sanitizer = CanvasMainFileSanitizer()
 
     @property
     def workspace(self) -> Path:
@@ -106,12 +108,13 @@ class CanvasRepository(CanvasRepositoryInterface):
                 raise TypeError("transaction_with_sidecar mutator must return (result, sidecar)")
             value, updated_sidecar = result
             project.canvas.validate()
+            updated_sidecar = self._main_file_sanitizer.synchronize_sidecar(project, updated_sidecar)
             await self._write_bundle(path, project, updated_sidecar, filename)
             return value
 
     async def _write(self, path: Path, project: CanvasProject) -> None:
         """原子写入主文件并保留 sidecar 的已有内容。"""
-        encoded = CanvasCodec.encode(project)
+        encoded = CanvasCodec.encode(self._main_file_sanitizer.sanitize(project))
         await self._atomic_write_text(path / "magic.project.js", encoded)
 
     async def read_sidecar(self, project_path: str, filename: str = "element-details.json") -> dict:
@@ -145,7 +148,7 @@ class CanvasRepository(CanvasRepositoryInterface):
         """以临时文件和备份实现主文件、sidecar 的可恢复写入。"""
         project_file = path / "magic.project.js"
         sidecar_file = path / filename
-        encoded = CanvasCodec.encode(project)
+        encoded = CanvasCodec.encode(self._main_file_sanitizer.sanitize(project))
         ElementDetailsCodec.validate(sidecar)
         sidecar_text = json.dumps(sidecar, ensure_ascii=False, indent=2)
         temp_files: list[Path] = []

@@ -14,6 +14,7 @@ from app.tools.canvas.application.commands import (
     LayoutCommand,
 )
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.results import AddElementResultItem, AddElementsResult
 from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
@@ -29,7 +30,7 @@ from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrate
 class AddElementsService:
     """Canvas AddElementsService 用例服务。"""
 
-    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard):
+    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard, element_sizing: CanvasElementSizingService):
         """显式绑定新增 Element 所需的端口、策略和生成提交服务。"""
         self.unit_of_work = unit_of_work
         self.layout_strategies = layout_strategies
@@ -39,6 +40,7 @@ class AddElementsService:
         self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
         self.estimate_guard = estimate_guard
+        self.element_sizing = element_sizing
 
     async def add_elements(
         self,
@@ -94,7 +96,7 @@ class AddElementsService:
                             generation_parameters=content.generation_parameters,
                             content_id=new_canvas_id("content"),
                         )
-                    await self.content_preparation.prepare_imported(project, content)
+                    await self.content_preparation.prepare_imported(project, content, project_path)
                     element.contents.append(self.content_preparation.build(content, element.element_type))
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
@@ -124,6 +126,7 @@ class AddElementsService:
                         element.contents[0].content_id,
                         CanvasApplicationOperations.new_content_detail(element.element_id, content.to_metadata()),
                     )
+                await self.element_sizing.initialize(project_path, element)
                 project.canvas.elements.append(element)
                 layout_requests.append((element, item.layout))
                 created[item_ref] = element_id

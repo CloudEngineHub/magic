@@ -9,6 +9,7 @@ from app.tools.canvas.application import CanvasApplication
 from app.tools.canvas.application.add_elements_service import AddElementsService
 from app.tools.canvas.application.connection_service import ConnectionService
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
+from app.tools.canvas.application.element_sizing_service import CanvasElementSizingService
 from app.tools.canvas.application.content_service import ContentService
 from app.tools.canvas.application.dependencies import CanvasApplicationDependencies
 from app.tools.canvas.application.frame_elements_service import FrameElementsService
@@ -165,6 +166,10 @@ class CanvasApplicationFactory:
             content_strategies=dependencies.content_strategies,
             asset_gateway=dependencies.asset_gateway,
         )
+        element_sizing = CanvasElementSizingService(
+            workspace=dependencies.repository.workspace,
+            media_probe=dependencies.media_probe_port,
+        )
         estimate_guard = GenerationEstimateGuard(
             estimate_records=dependencies.cost_estimate_records,
             normalizers=dependencies.cost_request_normalizers,
@@ -176,6 +181,7 @@ class CanvasApplicationFactory:
             generation_execution=dependencies.generation_execution,
             generation_result_applier=dependencies.generation_result_applier,
             estimate_guard=estimate_guard,
+            element_sizing=element_sizing,
         )
         return CanvasApplication(
             repository=dependencies.repository,
@@ -190,6 +196,7 @@ class CanvasApplicationFactory:
                 content_preparation=content_preparation,
                 generation_submission_service=generation_submission,
                 estimate_guard=estimate_guard,
+                element_sizing=element_sizing,
             ),
             frame_elements_service=FrameElementsService(
                 unit_of_work=dependencies.unit_of_work,

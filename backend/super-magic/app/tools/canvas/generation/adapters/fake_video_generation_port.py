@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
+from app.tools.canvas.infrastructure.assets import ProjectAssetPathResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
@@ -23,6 +24,7 @@ class FakeVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
     def __init__(self, workspace: Path):
         """保存工作区根目录。"""
         self.workspace = workspace
+        self.asset_path_resolver = ProjectAssetPathResolver(workspace)
 
     async def submit(self, request: GenerationRequest, tool_context: ToolContext | None) -> GenerationSubmission:
         """创建进程内 fake provider 任务，不生成真实视频。"""
@@ -44,4 +46,7 @@ class FakeVideoGenerationPort(GenerationSubmissionPort, GenerationQueryPort):
         output = self.workspace / request.project_path / "videos" / f"{request.content_id}.mp4"
         await async_mkdir(output.parent, parents=True, exist_ok=True)
         await async_write_bytes(output, b"fake-canvas-video")
-        return GenerationQueryResult("completed", output_uri=output.relative_to(self.workspace).as_posix())
+        return GenerationQueryResult(
+            "completed",
+            output_uri=self.asset_path_resolver.to_project_uri(request.project_path, output),
+        )

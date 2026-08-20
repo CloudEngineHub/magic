@@ -27,6 +27,8 @@ from app.tools.canvas.generation import (
     GenerationTask,
     InMemoryGenerationTaskRepository,
 )
+from app.tools.canvas.generation.adapters import FakeImageGenerationPort
+from app.tools.canvas.production.adapters import FakeMediaProbePort
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
 from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.repository import CanvasRepository
@@ -463,6 +465,78 @@ async def test_imported_asset_is_normalized_and_cannot_be_registered_twice(tmp_p
         )
 
     assert error.value.code == "ASSET_ALREADY_REGISTERED"
+
+
+@pytest.mark.asyncio
+async def test_generated_image_persists_project_uri_dimensions_and_sidecar_request(tmp_path) -> None:
+    """生成图片写入项目 URI 和尺寸，主文件不暴露生成请求。"""
+    repository = CanvasRepository(tmp_path)
+    port = FakeImageGenerationPort(tmp_path)
+    registry = GenerationCapabilityRegistry([
+        GenerationCapability("mock-image", "image", "sync", port),
+    ])
+    application = CanvasApplicationFactory.create(
+        repository,
+        generation_capabilities=registry,
+        media_probe_port=FakeMediaProbePort(),
+    )
+    await application.initialize("mock-project")
+
+    created = await application.add_elements(
+        "mock-project",
+        [{
+            "item_ref": "image",
+            "element_type": "image",
+            "content": {
+                "source": "generated",
+                "content_type": "image",
+                "prompt": "mock perfume bottle",
+                "size": "1728x2304",
+            },
+        }],
+    )
+
+    element_id = created["items"][0]["element_id"]
+    content_id = created["items"][0]["content_id"]
+    project = await repository.read("mock-project")
+    element = project.canvas.get_element(element_id)
+    content = element.get_content(content_id)
+    assert content.fields.src == "./images/" + content_id + ".png"
+    assert (element.properties.width, element.properties.height) == (800, 600)
+    assert "generateImageRequest" not in content.fields.to_dict()
+
+    sidecar = await repository.read_sidecar("mock-project")
+    detail = sidecar["elements"][element_id]["contentDetails"][content_id]
+    assert detail["generationParameters"]["size"] == "1728x2304"
+
+
+@pytest.mark.asyncio
+async def test_sizing_only_applies_to_media_elements(tmp_path) -> None:
+    """文本和形状元素不应被后端强制写入默认宽高，媒体元素使用类型默认值。"""
+    repository = CanvasRepository(tmp_path)
+    application = CanvasApplicationFactory.create(repository)
+    await application.initialize("mock-project")
+    created = await application.add_elements(
+        "mock-project",
+        [
+            {"item_ref": "title", "element_type": "text", "content": {"source": "user", "content_type": "text", "content": [{"text": "mock"}]}},
+            {"item_ref": "box", "element_type": "rectangle", "content": {"source": "user", "content_type": "rectangle", "fill": "#000000"}},
+            {"item_ref": "clip", "element_type": "video"},
+            {"item_ref": "voice", "element_type": "audio"},
+        ],
+    )
+    project = await repository.read("mock-project")
+    title = project.canvas.get_element(created["items"][0]["element_id"])
+    box = project.canvas.get_element(created["items"][1]["element_id"])
+    clip = project.canvas.get_element(created["items"][2]["element_id"])
+    voice = project.canvas.get_element(created["items"][3]["element_id"])
+
+    assert title.properties.width is None
+    assert title.properties.height is None
+    assert box.properties.width is None
+    assert box.properties.height is None
+    assert (clip.properties.width, clip.properties.height) == (1280.0, 720.0)
+    assert (voice.properties.width, voice.properties.height) == (480.0, 120.0)
 
 
 @pytest.mark.asyncio
