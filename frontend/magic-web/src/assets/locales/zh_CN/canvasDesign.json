@@ -533,6 +533,8 @@
 		"noDescription": "暂无描述",
 		"notGenerated": "未生成",
 		"pointsCost": "消耗 {{count}} 点",
+		"referenceImageCount": "{{count}} 张",
+		"referenceImages": "参考图",
 		"referenceLimit": "当前模型最多支持 {{count}} 张参考图，请减少左侧连接图片",
 		"regenerate": "再次生成",
 		"resolution": "分辨率",

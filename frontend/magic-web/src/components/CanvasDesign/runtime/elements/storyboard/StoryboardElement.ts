@@ -25,6 +25,12 @@ import {
 } from "../core/BaseElement"
 import { STORYBOARD_CONFIG } from "./StoryboardElement.config"
 import { getActiveContent } from "../../document/elementContent"
+import type { LoadedResource } from "../../resources/image/ImageResourceManager"
+import { getPersistedSourceCrop } from "../../resources/image/imageCropUtils"
+import {
+	resolveStoryboardReferenceImages,
+	type StoryboardReferenceImage,
+} from "../../interaction/storyboard/storyboardReferenceImages"
 import {
 	resolveStoryboardElementLayout,
 	resolveStoryboardRequiredHeight,
@@ -33,7 +39,8 @@ import {
 	type StoryboardShotLayout,
 } from "./StoryboardElement.layout"
 
-type StoryboardControlKind = "parameter" | "description" | "delete" | "add" | "generate"
+type StoryboardControlKind =
+	"parameter" | "description" | "delete" | "add" | "generate" | "reference-preview"
 
 interface StoryboardControlMetadata {
 	action: StoryboardControlAction
@@ -120,7 +127,13 @@ function normalizeStoryboardDisplayDimensions(data: StoryboardElementData): Stor
 	return {
 		...data,
 		width,
-		height: Math.max(STORYBOARD_CONFIG.DEFAULT_HEIGHT, requiredHeight),
+		// 参考图来自运行时连线，构造函数拿不到参考图数量；保留外部已同步的
+		// height，避免 manager 按参考图区扩高后在下一次 rerender 被归一化逻辑覆盖。
+		height: Math.max(
+			data.height ?? STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			requiredHeight,
+		),
 	}
 }
 
@@ -133,7 +146,19 @@ function normalizeStoryboardDisplayDimensions(data: StoryboardElementData): Stor
 export class StoryboardElement extends BaseElement<StoryboardElementData> {
 	private interactionCleanups: Array<() => void> = []
 	private interactionEventUnsubscribers: Array<() => void> = []
+	private referenceSourceEventUnsubscribers: Array<() => void> = []
 	private readonlyChangedUnsubscribe?: () => void
+	private referenceScrollOffset = 0
+	private referenceScrollMax = 0
+	private referenceListHovered = false
+	private referenceTrackGroup?: Konva.Group
+	private referenceScrollbarTrack?: Konva.Rect
+	private referenceScrollbarThumb?: Konva.Rect
+	private referenceScrollbarTrackWidth = 0
+	private referenceScrollbarThumbWidth = 0
+	private readonly referencePreviewResources = new Map<string, LoadedResource>()
+	private readonly referencePreviewControllers = new Map<string, AbortController>()
+	private readonly referencePreviewTokens = new Map<string, number>()
 
 	constructor(data: StoryboardElementData, canvas: Canvas) {
 		super(normalizeStoryboardDisplayDimensions(data), canvas)
@@ -194,9 +219,15 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 
 	public render(): Konva.Group {
 		const content = this.getActiveContent<StoryboardElementContent>()
+		const references = this.resolveReferenceImages()
 		const width = Math.max(this.data.width ?? STORYBOARD_CONFIG.DEFAULT_WIDTH, 1)
 		const height = Math.max(this.data.height ?? STORYBOARD_CONFIG.DEFAULT_HEIGHT, 1)
-		const layout = resolveStoryboardElementLayout(width, height, content?.shots?.length ?? 0)
+		const layout = resolveStoryboardElementLayout(
+			width,
+			height,
+			content?.shots?.length ?? 0,
+			references.length,
+		)
 		const group = new Konva.Group({
 			width,
 			height,
@@ -223,6 +254,7 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 		)
 
 		this.renderParameters(group, layout)
+		this.renderReferenceSection(group, layout, references)
 		this.renderShotList(group, layout)
 		this.renderFooter(group, layout)
 
@@ -254,12 +286,40 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				this.rerenderWhenTransformIdle()
 			})
 		}
+		if (this.referenceSourceEventUnsubscribers.length === 0 && this.canvas.eventEmitter?.on) {
+			const refreshFromSourceChange = () => {
+				this.invalidateReferencePreviewResources()
+				this.rerenderWhenTransformIdle()
+			}
+			this.referenceSourceEventUnsubscribers.push(
+				this.canvas.eventEmitter.on("element:updated", ({ data }) => {
+					if (data.elementId === this.data.id) return
+					if (data.data.type === ElementTypeEnum.Image) refreshFromSourceChange()
+				}),
+				this.canvas.eventEmitter.on("connection:change", refreshFromSourceChange),
+				this.canvas.eventEmitter.on("element:deleted", refreshFromSourceChange),
+				this.canvas.eventEmitter.on("element:batchdeleted", refreshFromSourceChange),
+				this.canvas.eventEmitter.on("document:loaded", refreshFromSourceChange),
+				this.canvas.eventEmitter.on("document:restored", refreshFromSourceChange),
+			)
+		}
 		this.syncInteractionHitTargets()
+	}
+
+	public override onResourceReferenceResolverChanged(): void {
+		this.invalidateReferencePreviewResources()
+		this.rerenderWhenTransformIdle()
 	}
 
 	public override destroy(): void {
 		this.readonlyChangedUnsubscribe?.()
 		this.readonlyChangedUnsubscribe = undefined
+		this.referencePreviewControllers.forEach((controller) => controller.abort())
+		this.referencePreviewControllers.clear()
+		this.referencePreviewTokens.clear()
+		this.referencePreviewResources.clear()
+		this.referenceSourceEventUnsubscribers.forEach((unsubscribe) => unsubscribe())
+		this.referenceSourceEventUnsubscribers = []
 		super.destroy()
 	}
 
@@ -512,6 +572,355 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 			perfectDrawEnabled: false,
 			name: "storyboard-control-suffix",
 		})
+	}
+
+	private resolveReferenceImages(): StoryboardReferenceImage[] {
+		return resolveStoryboardReferenceImages(this.canvas, this.data.id)
+	}
+
+	private renderReferenceSection(
+		group: Konva.Group,
+		layout: StoryboardElementLayout,
+		references: StoryboardReferenceImage[],
+	): void {
+		const referenceLayout = layout.reference
+		if (!referenceLayout || references.length === 0) {
+			this.referenceScrollOffset = 0
+			this.referenceScrollMax = 0
+			this.referenceListHovered = false
+			this.referenceTrackGroup = undefined
+			this.clearReferenceScrollbarNodes()
+			return
+		}
+
+		const title = new Konva.Text({
+			...referenceLayout.titleRect,
+			text: this.getText("storyboard.referenceImages", "参考图"),
+			fontFamily: layout.fontFamily,
+			fontSize: layout.titleFontSize,
+			fontStyle: "500",
+			fill: STORYBOARD_CONFIG.PRIMARY_TEXT,
+			verticalAlign: "middle",
+			listening: false,
+			perfectDrawEnabled: false,
+			name: "storyboard-reference-title",
+		})
+		const countX = title.x() + title.getTextWidth() + referenceLayout.titleCountGap
+		const count = new Konva.Text({
+			...referenceLayout.countRect,
+			x: countX,
+			width: Math.max(
+				0,
+				referenceLayout.countRect.x + referenceLayout.countRect.width - countX,
+			),
+			text: this.getText("storyboard.referenceImageCount", "{{count}}张").replace(
+				"{{count}}",
+				String(references.length),
+			),
+			fontFamily: layout.fontFamily,
+			fontSize: layout.shotSmallFontSize,
+			fill: STORYBOARD_CONFIG.SECONDARY_TEXT,
+			verticalAlign: "middle",
+			listening: false,
+			perfectDrawEnabled: false,
+			name: "storyboard-reference-count",
+		})
+		group.add(title, count)
+
+		const { viewport: viewportRect, thumbnail } = referenceLayout
+		const cardPitch = thumbnail.width + thumbnail.gap
+		const contentWidth =
+			references.length * thumbnail.width + Math.max(0, references.length - 1) * thumbnail.gap
+		this.referenceScrollMax = Math.max(0, contentWidth - viewportRect.width)
+		this.referenceScrollOffset = Math.max(
+			0,
+			Math.min(this.referenceScrollOffset, this.referenceScrollMax),
+		)
+		const viewport = new Konva.Group({
+			x: viewportRect.x,
+			y: viewportRect.y,
+			width: viewportRect.width,
+			height: viewportRect.height,
+			clip: { x: 0, y: 0, width: viewportRect.width, height: viewportRect.height },
+			name: "storyboard-reference-viewport",
+		})
+		viewport.add(
+			new Konva.Rect({
+				width: viewportRect.width,
+				height: viewportRect.height,
+				fill: "rgba(255, 255, 255, 0.001)",
+				listening: true,
+				perfectDrawEnabled: false,
+			}),
+		)
+		const track = new Konva.Group({
+			x: -this.referenceScrollOffset,
+			width: contentWidth,
+			height: thumbnail.height,
+			name: "storyboard-reference-track",
+		})
+		this.referenceTrackGroup = track
+		references.forEach((reference, index) => {
+			this.renderReferenceThumbnail(track, referenceLayout, reference, index * cardPitch)
+		})
+		viewport.add(track)
+		viewport.on("wheel", (event: Konva.KonvaEventObject<WheelEvent>) => {
+			if (this.referenceScrollMax <= 0) return
+			event.cancelBubble = true
+			event.evt.preventDefault()
+			const delta =
+				Math.abs(event.evt.deltaX) > Math.abs(event.evt.deltaY)
+					? event.evt.deltaX
+					: event.evt.deltaY
+			this.setReferenceScrollOffset(this.referenceScrollOffset + delta)
+		})
+		viewport.on("mouseenter", () => {
+			this.referenceListHovered = true
+			this.syncReferenceScrollbarVisibility()
+		})
+		viewport.on("mouseleave", () => {
+			this.referenceListHovered = false
+			this.syncReferenceScrollbarVisibility()
+		})
+		group.add(viewport)
+
+		if (this.referenceScrollMax <= 0) {
+			this.clearReferenceScrollbarNodes()
+			return
+		}
+
+		const scrollbarRadius = referenceLayout.scrollbar.height / 2
+		const scrollbarTrack = new Konva.Rect({
+			...referenceLayout.scrollbar,
+			fill: "#EEF0F4",
+			cornerRadius: scrollbarRadius,
+			visible: this.referenceListHovered,
+			listening: false,
+			perfectDrawEnabled: false,
+			name: "storyboard-reference-scrollbar-track",
+		})
+		this.referenceScrollbarTrack = scrollbarTrack
+		group.add(scrollbarTrack)
+		const visibleRatio = Math.min(1, viewportRect.width / contentWidth)
+		this.referenceScrollbarTrackWidth = referenceLayout.scrollbar.width
+		this.referenceScrollbarThumbWidth = Math.max(
+			44 * layout.scale,
+			referenceLayout.scrollbar.width * visibleRatio,
+		)
+		const scrollbarThumb = new Konva.Rect({
+			x: this.resolveReferenceScrollbarThumbX(referenceLayout),
+			y: referenceLayout.scrollbar.y,
+			width: this.referenceScrollbarThumbWidth,
+			height: referenceLayout.scrollbar.height,
+			fill: "#BFC5D1",
+			cornerRadius: scrollbarRadius,
+			visible: this.referenceListHovered,
+			listening: false,
+			perfectDrawEnabled: false,
+			name: "storyboard-reference-scrollbar-thumb",
+		})
+		scrollbarThumb.setAttr("trackStartX", referenceLayout.scrollbar.x)
+		this.referenceScrollbarThumb = scrollbarThumb
+		group.add(scrollbarThumb)
+	}
+
+	private renderReferenceThumbnail(
+		track: Konva.Group,
+		layout: NonNullable<StoryboardElementLayout["reference"]>,
+		reference: StoryboardReferenceImage,
+		x: number,
+	): void {
+		const { thumbnail } = layout
+		const card = new Konva.Group({
+			x,
+			width: thumbnail.width,
+			height: thumbnail.height,
+			// clip rect 本身没有圆角，只会让边框看起来圆、图片仍泄露到直角。
+			// 使用同一半径裁剪内容，确保 cover 图像也严格贴合缩略图卡片。
+			clipFunc: (context) => {
+				context.beginPath()
+				context.roundRect(0, 0, thumbnail.width, thumbnail.height, thumbnail.cornerRadius)
+			},
+			name: "storyboard-reference-thumbnail",
+		})
+		card.add(
+			new Konva.Rect({
+				width: thumbnail.width,
+				height: thumbnail.height,
+				fill: STORYBOARD_CONFIG.SURFACE,
+				cornerRadius: thumbnail.cornerRadius,
+				listening: false,
+				perfectDrawEnabled: false,
+				name: "storyboard-reference-thumbnail-surface",
+			}),
+		)
+		const resource = this.getReferencePreviewResource(reference.path)
+		if (resource) {
+			const naturalWidth = resource.imageInfo.naturalWidth || resource.sourceWidth
+			const naturalHeight = resource.imageInfo.naturalHeight || resource.sourceHeight
+			const persistedCrop = getPersistedSourceCrop(reference.crop, {
+				width: naturalWidth,
+				height: naturalHeight,
+			})
+			const sourceScaleX = resource.sourceWidth / Math.max(1, naturalWidth)
+			const sourceScaleY = resource.sourceHeight / Math.max(1, naturalHeight)
+			const sourceCrop = {
+				x: persistedCrop.x * sourceScaleX,
+				y: persistedCrop.y * sourceScaleY,
+				width: persistedCrop.width * sourceScaleX,
+				height: persistedCrop.height * sourceScaleY,
+			}
+			const sourceWidth = Math.max(1, sourceCrop.width)
+			const sourceHeight = Math.max(1, sourceCrop.height)
+			const scale = Math.max(thumbnail.width / sourceWidth, thumbnail.height / sourceHeight)
+			const imageWidth = sourceWidth * scale
+			const imageHeight = sourceHeight * scale
+			card.add(
+				new Konva.Image({
+					image: resource.image,
+					x: (thumbnail.width - imageWidth) / 2,
+					y: (thumbnail.height - imageHeight) / 2,
+					width: imageWidth,
+					height: imageHeight,
+					crop: {
+						x: sourceCrop.x,
+						y: sourceCrop.y,
+						width: sourceWidth,
+						height: sourceHeight,
+					},
+					listening: false,
+					perfectDrawEnabled: false,
+					name: "storyboard-reference-image",
+				}),
+			)
+		} else {
+			this.loadReferencePreview(reference.path)
+		}
+		card.add(
+			// 交互遮罩必须在图片之上；底色位于图片之下时 hover/pressed 不可见。
+			new Konva.Rect({
+				width: thumbnail.width,
+				height: thumbnail.height,
+				fill: "rgba(255, 255, 255, 0)",
+				cornerRadius: thumbnail.cornerRadius,
+				listening: false,
+				perfectDrawEnabled: false,
+				name: "storyboard-control-background",
+			}),
+			createInsetStrokeRect(
+				{ width: thumbnail.width, height: thumbnail.height },
+				Math.max(1, layout.thumbnail.width * 0.008),
+				{
+					stroke: STORYBOARD_CONFIG.BORDER_SUBTLE,
+					cornerRadius: thumbnail.cornerRadius,
+					name: "storyboard-control-border",
+				},
+			),
+		)
+		track.add(card)
+		this.addControlHit(track, {
+			action: { type: "preview-reference-image", path: reference.path, crop: reference.crop },
+			kind: "reference-preview",
+			visualNode: card,
+			baseBounds: { x, y: 0, width: thumbnail.width, height: thumbnail.height },
+		})
+	}
+
+	private loadReferencePreview(path: string): void {
+		if (
+			!path ||
+			this.referencePreviewResources.has(path) ||
+			this.referencePreviewControllers.has(path)
+		)
+			return
+		const manager = this.canvas.imageResourceManager
+		if (!manager) return
+		const controller = new AbortController()
+		this.referencePreviewControllers.set(path, controller)
+		const token = (this.referencePreviewTokens.get(path) ?? 0) + 1
+		this.referencePreviewTokens.set(path, token)
+		void manager
+			.getResource(path, { variant: "low", priority: "visible", signal: controller.signal })
+			.then((resource) => {
+				if (
+					controller.signal.aborted ||
+					this.referencePreviewTokens.get(path) !== token ||
+					!resource
+				)
+					return
+				if (!this.resolveReferenceImages().some((reference) => reference.path === path))
+					return
+				this.referencePreviewResources.set(path, resource)
+				if (this.node) this.rerenderWhenTransformIdle()
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (this.referencePreviewControllers.get(path) === controller) {
+					this.referencePreviewControllers.delete(path)
+				}
+			})
+	}
+
+	private getReferencePreviewResource(path: string): LoadedResource | null {
+		const cached = this.referencePreviewResources.get(path)
+		const current = this.canvas.imageResourceManager?.peekResource(path, { variant: "low" })
+		if (current) {
+			if (!cached || cached.image !== current.image || cached.ossSrc !== current.ossSrc) {
+				this.referencePreviewResources.set(path, current)
+			}
+			return current
+		}
+		if (cached) this.referencePreviewResources.delete(path)
+		return null
+	}
+
+	private invalidateReferencePreviewResources(): void {
+		this.referencePreviewControllers.forEach((controller) => controller.abort())
+		this.referencePreviewControllers.clear()
+		this.referencePreviewResources.clear()
+		this.referencePreviewTokens.clear()
+	}
+
+	private setReferenceScrollOffset(offset: number): void {
+		const next = Math.max(0, Math.min(offset, this.referenceScrollMax))
+		if (Math.abs(next - this.referenceScrollOffset) < 0.01) return
+		this.referenceScrollOffset = next
+		this.referenceTrackGroup?.x(-next)
+		if (this.referenceScrollbarThumb) {
+			const available = Math.max(
+				0,
+				this.referenceScrollbarTrackWidth - this.referenceScrollbarThumbWidth,
+			)
+			const progress = this.referenceScrollMax > 0 ? next / this.referenceScrollMax : 0
+			this.referenceScrollbarThumb.x(
+				((this.referenceScrollbarThumb.getAttr("trackStartX") as number | undefined) ?? 0) +
+					available * progress,
+			)
+		}
+		this.referenceTrackGroup?.getLayer()?.batchDraw()
+	}
+
+	private resolveReferenceScrollbarThumbX(
+		layout: NonNullable<StoryboardElementLayout["reference"]>,
+	): number {
+		const available = Math.max(0, layout.scrollbar.width - this.referenceScrollbarThumbWidth)
+		const progress =
+			this.referenceScrollMax > 0 ? this.referenceScrollOffset / this.referenceScrollMax : 0
+		return layout.scrollbar.x + available * progress
+	}
+
+	private clearReferenceScrollbarNodes(): void {
+		this.referenceScrollbarTrack = undefined
+		this.referenceScrollbarThumb = undefined
+		this.referenceScrollbarTrackWidth = 0
+		this.referenceScrollbarThumbWidth = 0
+	}
+
+	private syncReferenceScrollbarVisibility(): void {
+		const visible = this.referenceListHovered && this.referenceScrollMax > 0
+		this.referenceScrollbarTrack?.visible(visible)
+		this.referenceScrollbarThumb?.visible(visible)
+		this.referenceScrollbarTrack?.getLayer()?.batchDraw()
 	}
 
 	private renderShotList(group: Konva.Group, layout: StoryboardElementLayout): void {
@@ -1092,6 +1501,22 @@ export class StoryboardElement extends BaseElement<StoryboardElementData> {
 				)
 				text?.fill("#FFFFFF")
 				generateAgainIcon?.stroke("#FFFFFF")
+				break
+			case "reference-preview":
+				background.fill(
+					state === "pressed"
+						? "rgba(91, 110, 245, 0.24)"
+						: state === "hover"
+							? "rgba(91, 110, 245, 0.12)"
+							: "rgba(255, 255, 255, 0)",
+				)
+				border?.stroke(
+					state === "pressed"
+						? STORYBOARD_CONFIG.ACCENT_PRESSED
+						: state === "hover"
+							? STORYBOARD_CONFIG.ACCENT
+							: STORYBOARD_CONFIG.BORDER_SUBTLE,
+				)
 				break
 		}
 	}

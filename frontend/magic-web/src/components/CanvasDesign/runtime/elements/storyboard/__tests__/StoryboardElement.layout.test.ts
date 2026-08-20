@@ -180,4 +180,37 @@ describe("resolveStoryboardElementLayout", () => {
 				.visibleShotCount,
 		).toBe(20)
 	})
+
+	it("keeps many reference images in one fixed-height horizontal viewport", () => {
+		const withoutReferences = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+		)
+		const oneReference = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+			1,
+		)
+		const manyReferences = resolveStoryboardElementLayout(
+			STORYBOARD_CONFIG.DEFAULT_WIDTH,
+			STORYBOARD_CONFIG.DEFAULT_HEIGHT,
+			1,
+			24,
+		)
+
+		expect(withoutReferences.reference).toBeUndefined()
+		expect(oneReference.reference).toBeDefined()
+		expect(manyReferences.reference).toBeDefined()
+		expect(manyReferences.reference?.rect.height).toBe(oneReference.reference?.rect.height)
+		expect(manyReferences.reference?.viewport.width).toBe(manyReferences.reference?.rect.width)
+		expect(manyReferences.reference?.titleCountGap).toBe(
+			manyReferences.shotLayouts[0]?.headingGap,
+		)
+		expect(manyReferences.reference?.thumbnail.width).toBeGreaterThan(0)
+		expect(manyReferences.reference?.scrollbar.y).toBeGreaterThan(
+			manyReferences.reference?.viewport.y ?? 0,
+		)
+	})
 })

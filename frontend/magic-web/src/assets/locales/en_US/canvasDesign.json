@@ -532,6 +532,8 @@
 		"noDescription": "No description",
 		"notGenerated": "Not generated",
 		"pointsCost": "Costs {{count}} points",
+		"referenceImageCount": "{{count}} totals",
+		"referenceImages": "Reference images",
 		"referenceLimit": "This model supports up to {{count}} reference images",
 		"regenerate": "Regenerate",
 		"resolution": "Resolution",

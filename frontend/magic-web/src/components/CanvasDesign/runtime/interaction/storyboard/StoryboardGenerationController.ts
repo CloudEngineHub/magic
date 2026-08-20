@@ -3,7 +3,6 @@ import type { GenerateImageRequest, ImageModelItem } from "../../../public/magic
 import type { Canvas } from "../../core/Canvas"
 import {
 	ElementTypeEnum,
-	type CropConfig,
 	type FrameElement,
 	type ImageElement as ImageElementData,
 	type StoryboardElement,
@@ -16,7 +15,10 @@ import { BASE_ELEMENT_DATA_DEFAULTS } from "../../elements/core/BaseElement"
 import { ImageElement } from "../../elements/image/ImageElement"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
 import { buildReferenceImageOptions } from "../../resources/image/imageCropUtils"
-import { resolveConnectedImageReferences } from "../connection/connectedMediaInputs"
+import {
+	resolveStoryboardReferenceImages,
+	type StoryboardReferenceImage,
+} from "./storyboardReferenceImages"
 import { createContentFrameData, resolveFrameContentLayout } from "../frame/frameCreation"
 import {
 	buildDefaultImageGenerationConfig,
@@ -30,12 +32,6 @@ import { resolveConnectionCreateGapForElement } from "../../shared/placement/con
 
 const FRAME_GAP = 50
 const STORYBOARD_OUTPUT_FRAME_NAME = "分镜图片组合"
-
-interface StoryboardReferenceImage {
-	path: string
-	crop?: CropConfig
-	sourceContentId?: string
-}
 
 interface OutputLayout {
 	width: number
@@ -238,22 +234,7 @@ export class StoryboardGenerationController {
 	}
 
 	private collectReferenceImages(targetElementId: string): StoryboardReferenceImage[] {
-		const resolver = this.canvas.magicConfigManager.config?.methods?.resolveResourceReference
-		const { references } = resolveConnectedImageReferences(this.canvas, targetElementId, {
-			resolveResourceReference: resolver,
-			resolveImageContent: (element) => {
-				const instance = this.canvas.elementManager.getElementInstance(element.id)
-				return instance instanceof ImageElement
-					? instance.getAssociatedContentData()
-					: undefined
-			},
-		})
-
-		return references.map((reference) => ({
-			path: reference.path,
-			crop: reference.sourceCrop,
-			sourceContentId: reference.sourceContentId,
-		}))
+		return resolveStoryboardReferenceImages(this.canvas, targetElementId)
 	}
 
 	private buildRequest(

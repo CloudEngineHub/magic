@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, useCallback, type ReactNode } from "react"
-import type { LayerElement } from "../../runtime/document/types"
+import type { CropConfig, LayerElement } from "../../runtime/document/types"
 import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
 import { useUpdateEffect } from "ahooks"
@@ -8,6 +8,11 @@ import type { ElementToolType } from "../../public/props"
 export interface FullscreenMediaElement {
 	elementId: string
 	type: "image" | "video" | "audio"
+}
+
+export interface StoryboardReferenceImagePreview {
+	path: string
+	crop?: CropConfig
 }
 
 interface CanvasUIContextValue {
@@ -38,6 +43,8 @@ interface CanvasUIContextValue {
 	// 当前全屏预览的媒体元素（null 表示不显示）
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
+	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
+	setStoryboardReferenceImagePreview: (preview: StoryboardReferenceImagePreview | null) => void
 
 	// 当前正在裁剪的图片元素 ID（null 表示不在裁剪模式）
 	croppingElementId: string | null
@@ -80,6 +87,8 @@ interface CanvasPanelUIContextValue {
 	setMessageHistoryElementId: (id: string | null) => void
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
+	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
+	setStoryboardReferenceImagePreview: (preview: StoryboardReferenceImagePreview | null) => void
 }
 
 interface CanvasModeUIContextValue {
@@ -113,6 +122,8 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 	const [messageHistoryElementId, setMessageHistoryElementId] = useState<string | null>(null)
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
+	const [storyboardReferenceImagePreview, setStoryboardReferenceImagePreview] =
+		useState<StoryboardReferenceImagePreview | null>(null)
 
 	const [croppingElementId, setCroppingElementId] = useState<string | null>(null)
 	const [extendingElementId, setExtendingElementId] = useState<string | null>(null)
@@ -184,6 +195,15 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 		"element:audio:fullscreenClick",
 		({ data }) => {
 			setFullscreenMediaElement({ elementId: data.elementId, type: "audio" })
+		},
+		[],
+	)
+
+	useCanvasEvent(
+		"storyboard:reference-image:preview",
+		({ data }) => {
+			setFullscreenMediaElement(null)
+			setStoryboardReferenceImagePreview(data)
 		},
 		[],
 	)
@@ -274,8 +294,10 @@ export function CanvasUIProvider({ children, readonly }: CanvasUIProviderProps) 
 			setMessageHistoryElementId,
 			fullscreenMediaElement,
 			setFullscreenMediaElement,
+			storyboardReferenceImagePreview,
+			setStoryboardReferenceImagePreview,
 		}
-	}, [messageHistoryElementId, fullscreenMediaElement])
+	}, [messageHistoryElementId, fullscreenMediaElement, storyboardReferenceImagePreview])
 
 	const modeValue = useMemo<CanvasModeUIContextValue>(() => {
 		return {

@@ -360,6 +360,43 @@ describe("StoryboardInteractionManager", () => {
 		manager.destroy()
 	})
 
+	it.each<[string, { readonly?: boolean; locked?: boolean }]>([
+		["readonly canvas", { readonly: true }],
+		["locked storyboard", { locked: true }],
+	])("allows reference preview from a %s", (_label, options) => {
+		const data = createStoryboardData()
+		if (options.locked) data.locked = true
+		const harness = createCanvasMock(data)
+		if (options.readonly) harness.canvas.readonly = true
+		harness.selected.value = true
+		const emit = vi.spyOn(harness.eventEmitter, "emit")
+		const manager = new StoryboardInteractionManager({ canvas: harness.canvas })
+		const hit = new Konva.Rect({ width: 100, height: 40 })
+		manager.bindControl({
+			elementId: data.id,
+			node: hit,
+			action: {
+				type: "preview-reference-image",
+				path: "asset://reference.png",
+				crop: { x: 10, y: 20, width: 80, height: 60 },
+			},
+			applyState: vi.fn(),
+		})
+
+		hit.fire("mousedown", { evt: new MouseEvent("mousedown", { button: 0 }) })
+		hit.fire("mouseup", { evt: new MouseEvent("mouseup", { button: 0 }) })
+		hit.fire("click", { evt: new MouseEvent("click", { button: 0 }) })
+
+		expect(emit).toHaveBeenCalledWith({
+			type: "storyboard:reference-image:preview",
+			data: {
+				path: "asset://reference.png",
+				crop: { x: 10, y: 20, width: 80, height: 60 },
+			},
+		})
+		manager.destroy()
+	})
+
 	it("uses image send prerequisites for the single-shot generate control", async () => {
 		const data = createStoryboardData()
 		getStoryboardContent(data).shots![0].description = "a city at night"

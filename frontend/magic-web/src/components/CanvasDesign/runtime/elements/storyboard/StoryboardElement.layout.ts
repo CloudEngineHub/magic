@@ -26,6 +26,10 @@ export const STORYBOARD_LAYOUT_DESIGN = {
 	parameterHorizontalPadding: 20,
 	parameterSuffixIconSize: 20,
 	modelIconSize: 32,
+	/** 参考图区固定单行高度；参考图数量通过横向滚动消化，不增加节点高度。 */
+	referenceSectionHeight: 228,
+	referenceThumbnailSize: 144,
+	referenceScrollbarHeight: 8,
 	addShotHeight: 92,
 	footerButtonWidth: 220,
 	footerButtonHeight: 84,
@@ -112,6 +116,21 @@ export interface StoryboardFooterLayout {
 	strokeWidth: number
 }
 
+export interface StoryboardReferenceLayout {
+	rect: LayoutRect
+	titleRect: LayoutRect
+	countRect: LayoutRect
+	titleCountGap: number
+	viewport: LayoutRect
+	scrollbar: LayoutRect
+	thumbnail: {
+		width: number
+		height: number
+		gap: number
+		cornerRadius: number
+	}
+}
+
 export interface StoryboardElementLayout {
 	width: number
 	height: number
@@ -127,6 +146,7 @@ export interface StoryboardElementLayout {
 		resolution: StoryboardParameterLayout
 		stacked: boolean
 	}
+	reference?: StoryboardReferenceLayout
 	titleRect: LayoutRect
 	showShotListTitle: boolean
 	shotListRect: LayoutRect
@@ -380,6 +400,7 @@ export function resolveStoryboardElementLayout(
 	width: number,
 	height: number,
 	shotCount: number,
+	referenceCount = 0,
 ): StoryboardElementLayout {
 	const responsive = resolveResponsiveElementLayout(
 		{ width: resolveDimension(width), height: resolveDimension(height) },
@@ -443,8 +464,78 @@ export function resolveStoryboardElementLayout(
 				height: parameterRowHeight,
 			}
 	const detailBottom = resolutionRow.y + resolutionRow.height
-	// 参数区 → 标题只保留一个 section gap；不再用分割线叠加两段留白。
-	const titleTop = detailBottom + design.gap.section
+	const normalizedReferenceCount = Math.max(0, Math.floor(referenceCount))
+	const showReference = normalizedReferenceCount > 0
+	const referenceTitleHeight = Math.min(contentRect.height, titleFontSize * 1.4)
+	const referenceThumbnailSize = Math.min(
+		px(STORYBOARD_LAYOUT_DESIGN.referenceThumbnailSize),
+		Math.max(1, contentRect.width),
+	)
+	const referenceScrollbarHeight = px(STORYBOARD_LAYOUT_DESIGN.referenceScrollbarHeight)
+	const referenceContentGap = design.gap.content
+	const referenceScrollbarGap = design.gap.control
+	const referenceSectionHeight = showReference
+		? Math.max(
+				px(STORYBOARD_LAYOUT_DESIGN.referenceSectionHeight),
+				referenceTitleHeight +
+					referenceContentGap +
+					referenceThumbnailSize +
+					referenceScrollbarGap +
+					referenceScrollbarHeight,
+			)
+		: 0
+	const referenceRect = showReference
+		? {
+				x: contentRect.x,
+				y: detailBottom + design.gap.section,
+				width: contentRect.width,
+				height: referenceSectionHeight,
+			}
+		: undefined
+	const reference: StoryboardReferenceLayout | undefined = referenceRect
+		? {
+				rect: referenceRect,
+				titleRect: {
+					x: referenceRect.x,
+					y: referenceRect.y,
+					width: Math.max(0, referenceRect.width * 0.55),
+					height: referenceTitleHeight,
+				},
+				countRect: {
+					x: referenceRect.x + referenceRect.width * 0.55,
+					y: referenceRect.y,
+					width: Math.max(0, referenceRect.width * 0.45),
+					height: referenceTitleHeight,
+				},
+				titleCountGap: design.gap.content,
+				viewport: {
+					x: referenceRect.x,
+					y: referenceRect.y + referenceTitleHeight + referenceContentGap,
+					width: referenceRect.width,
+					height: referenceThumbnailSize,
+				},
+				scrollbar: {
+					x: referenceRect.x,
+					y:
+						referenceRect.y +
+						referenceTitleHeight +
+						referenceContentGap +
+						referenceThumbnailSize +
+						referenceScrollbarGap,
+					width: referenceRect.width,
+					height: referenceScrollbarHeight,
+				},
+				thumbnail: {
+					width: referenceThumbnailSize,
+					height: referenceThumbnailSize,
+					gap: design.space.md,
+					cornerRadius: design.radius.card,
+				},
+			}
+		: undefined
+	// 参数区 / 参考图区 → 标题只保留一个 section gap；不再用分割线叠加两段留白。
+	const titleTop =
+		(referenceRect ? referenceRect.y + referenceRect.height : detailBottom) + design.gap.section
 	const titleRect = {
 		x: contentRect.x,
 		y: titleTop,
@@ -607,6 +698,7 @@ export function resolveStoryboardElementLayout(
 			}),
 			stacked: useStackedParameters,
 		},
+		reference,
 		titleRect,
 		showShotListTitle: titleRect.height > 0,
 		shotListRect,
@@ -632,19 +724,23 @@ export function resolveStoryboardElementLayout(
  * 这里通过单调容量搜索找到能够完整容纳全部固定高度卡片的最小整数高度，避免
  * 使用 `currentHeight += step` 造成重复执行、历史恢复或旧数据加载后的累计漂移。
  */
-export function resolveStoryboardRequiredHeight(width: number, shotCount: number): number {
-	const minimumHeight = STORYBOARD_LAYOUT_DESIGN.height
+export function resolveStoryboardRequiredHeight(
+	width: number,
+	shotCount: number,
+	referenceCount = 0,
+): number {
+	const minimumHeight: number = STORYBOARD_LAYOUT_DESIGN.height
 	const normalizedShotCount = Math.max(0, Math.floor(shotCount))
 	if (normalizedShotCount === 0) return minimumHeight
 
 	const fits = (height: number): boolean =>
-		resolveStoryboardElementLayout(width, height, normalizedShotCount).visibleShotCount >=
-		normalizedShotCount
+		resolveStoryboardElementLayout(width, height, normalizedShotCount, referenceCount)
+			.visibleShotCount >= normalizedShotCount
 
 	if (fits(minimumHeight)) return minimumHeight
 
-	let lower = minimumHeight
-	let upper = minimumHeight
+	let lower: number = minimumHeight
+	let upper: number = minimumHeight
 	for (let index = 0; index < 32 && !fits(upper); index += 1) {
 		lower = upper
 		upper = Math.max(upper + 1, upper * 2)

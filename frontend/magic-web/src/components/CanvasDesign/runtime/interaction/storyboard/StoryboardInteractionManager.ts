@@ -3,6 +3,7 @@ import type { ImageModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import {
 	ElementTypeEnum,
+	type CropConfig,
 	type LayerElement,
 	type StoryboardElement,
 	type StoryboardElementContent,
@@ -31,6 +32,7 @@ import {
 import { StoryboardGenerationController } from "./StoryboardGenerationController"
 import { resolveStoryboardRequiredHeight } from "../../elements/storyboard/StoryboardElement.layout"
 import { ImageElement } from "../../elements/image/ImageElement"
+import { resolveStoryboardReferenceImages } from "./storyboardReferenceImages"
 
 export type StoryboardControlState = "idle" | "hover" | "pressed" | "disabled" | "editing"
 
@@ -43,6 +45,7 @@ export type StoryboardControlAction =
 	| { type: "delete-shot"; shotId: string }
 	| { type: "generate-shot"; shotId: string; disabled?: boolean }
 	| { type: "generate-all"; disabled?: boolean }
+	| { type: "preview-reference-image"; path: string; crop?: CropConfig }
 
 export interface StoryboardSelectPresentation {
 	fontSize: number
@@ -342,15 +345,20 @@ export class StoryboardInteractionManager {
 			data: { elementId: string; data: LayerElement }
 		}) => {
 			normalizeUpdatedStoryboard(payload)
-			if (payload.data.data.type === ElementTypeEnum.Image) {
+			// 参考图解析会展开 Frame/Group 并读取隐藏状态；任一上游元素更新
+			// 都可能改变参考图计数或顺序，因此不能只监听 Image 更新。
+			if (payload.data.data.type !== ElementTypeEnum.Storyboard) {
+				this.syncStoryboardHeights()
 				this.rerenderStoryboardElements()
 			}
 		}
 		const handleElementDeleted = ({ data }: { data: { elementId: string } }) => {
 			if (this.editingBinding?.elementId === data.elementId) cancelEditor()
+			this.syncStoryboardHeights()
 			this.rerenderStoryboardElements()
 		}
 		const handleConnectionChanged = () => {
+			this.syncStoryboardHeights()
 			this.rerenderStoryboardElements()
 		}
 
@@ -418,6 +426,15 @@ export class StoryboardInteractionManager {
 					this.rerenderStoryboardElements()
 					void generation.finally(() => this.rerenderStoryboardElements())
 				}
+				break
+			case "preview-reference-image":
+				this.canvas.eventEmitter.emit({
+					type: "storyboard:reference-image:preview",
+					data: {
+						path: binding.action.path,
+						crop: binding.action.crop,
+					},
+				})
 				break
 		}
 	}
@@ -527,7 +544,9 @@ export class StoryboardInteractionManager {
 			anchorNode as Konva.Node & { cornerRadius?: () => number | number[] }
 		).cornerRadius
 		const rawCornerRadius =
-			typeof cornerRadiusGetter === "function" ? cornerRadiusGetter.call(anchorNode) : Number.NaN
+			typeof cornerRadiusGetter === "function"
+				? cornerRadiusGetter.call(anchorNode)
+				: Number.NaN
 		const anchorCornerRadius = Array.isArray(rawCornerRadius)
 			? Number(rawCornerRadius[0])
 			: Number(rawCornerRadius)
@@ -955,6 +974,7 @@ export class StoryboardInteractionManager {
 		return resolveStoryboardRequiredHeight(
 			element.width ?? STORYBOARD_CONFIG.DEFAULT_WIDTH,
 			shotCount ?? getActiveContent<StoryboardElementContent>(element)?.shots?.length ?? 0,
+			resolveStoryboardReferenceImages(this.canvas, element.id).length,
 		)
 	}
 
@@ -980,8 +1000,11 @@ export class StoryboardInteractionManager {
 		if (this.destroyed || this.isDisabled(binding) || !this.isSelectedBinding(binding))
 			return false
 		const element = this.getStoryboardElement(binding.elementId)
-		if (!element || this.canvas.readonly || element.locked) return false
-		if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) return false
+		if (!element) return false
+		if (binding.action.type !== "preview-reference-image") {
+			if (this.canvas.readonly || element.locked) return false
+			if (!this.canvas.permissionManager.canUseSelectionToolAffordance()) return false
+		}
 		return this.hasUsableScreenSize(binding)
 	}
 

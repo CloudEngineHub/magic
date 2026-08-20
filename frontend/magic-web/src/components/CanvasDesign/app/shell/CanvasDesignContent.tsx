@@ -14,6 +14,8 @@ import MessageHistory from "../../ui/panels/history/index"
 import VideoFullscreenOverlay from "../../ui/fullscreen/video/index"
 import ImageElementFullscreenOverlay from "../../ui/fullscreen/image-element/index"
 import AudioElementFullscreenOverlay from "../../ui/fullscreen/audio-element/index"
+import MediaResourceFullscreenPreview from "../../ui/fullscreen/media-resource/index"
+import { getCanvasResourceFileName } from "../../runtime/shared/path/canvasResourcePath"
 import { useMagic } from "../providers/MagicProvider"
 import { toPlainObject } from "../../runtime/shared/ids"
 import type { CanvasDesignRef, CanvasDesignProps } from "../../public/props"
@@ -74,7 +76,12 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 
 	const { methods, permissions } = useMagic()
 
-	const { fullscreenMediaElement, setFullscreenMediaElement } = useCanvasPanelUI()
+	const {
+		fullscreenMediaElement,
+		setFullscreenMediaElement,
+		storyboardReferenceImagePreview,
+		setStoryboardReferenceImagePreview,
+	} = useCanvasPanelUI()
 
 	const canvasContainerRef = useRef<HTMLDivElement>(null)
 
@@ -260,6 +267,19 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 					<AudioElementFullscreenOverlay
 						elementId={fullscreenMediaElement.elementId}
 						onClose={() => setFullscreenMediaElement(null)}
+					/>
+				) : null}
+				{storyboardReferenceImagePreview ? (
+					<MediaResourceFullscreenPreview
+						resource={{
+							kind: "image",
+							path: storyboardReferenceImagePreview.path,
+							fileName:
+								getCanvasResourceFileName(storyboardReferenceImagePreview.path) ||
+								storyboardReferenceImagePreview.path,
+							crop: storyboardReferenceImagePreview.crop,
+						}}
+						onClose={() => setStoryboardReferenceImagePreview(null)}
 					/>
 				) : null}
 				<Layers />

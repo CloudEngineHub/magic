@@ -150,6 +150,8 @@ export interface CanvasEventMap {
 	"element:image:fullscreenClick": { elementId: string }
 	"element:video:fullscreenClick": { elementId: string }
 	"element:audio:fullscreenClick": { elementId: string }
+	/** 分镜上游参考图的运行时预览，不改变 Storyboard DSL 或连接。 */
+	"storyboard:reference-image:preview": { path: string; crop?: CropConfig }
 	"element:image:replaceClick": {
 		elementId: string
 		contentId: string | null
