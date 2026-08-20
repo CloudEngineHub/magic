@@ -4,9 +4,8 @@ import pytest
 
 from app.i18n import i18n
 from app.infrastructure.magic_service.exceptions import ApiError
-from app.tools.get_video import GetVideo, GetVideoParams
 from app.tools.generate_video import GenerateVideo, GenerateVideoParams
-
+from app.tools.get_video import GetVideo, GetVideoParams
 
 VIDEO_CONFIG = {
     "supported_inputs": ["text_prompt", "image", "reference_videos", "reference_audios"],
@@ -140,6 +139,16 @@ def test_video_parameter_descriptions_are_bilingual_and_actionable():
     assert "通常省略" in properties["output_path"]["description"]
     assert "默认 videos" in properties["output_path"]["description"]
     assert "用户所用的语言" not in properties["output_path"]["description"]
+
+
+@pytest.mark.asyncio
+async def test_provider_asset_uri_is_forwarded_without_workspace_lookup(tmp_path):
+    """Provider 素材 URI 必须原样透传，不能被当作本地文件解析。"""
+    tool = GenerateVideo(base_dir=tmp_path)
+
+    result = await tool._resolve_input_uri("asset://virtual-human-asset-id")
+
+    assert result == "asset://virtual-human-asset-id"
 
 
 def test_video_params_support_estimate_points_action():
@@ -633,6 +642,8 @@ async def test_payload_includes_all_supported_inputs_and_generation_fields(monke
         "reference_videos": [{"uri": "video.mp4"}],
         "reference_audios": [{"uri": "audio.mp3"}],
     }
+    assert payload["input_mode"] == "omni_reference"
+    assert payload["task"] == "generate"
     assert payload["generation"] == {
         "size": "1366x768",
         "duration_seconds": 5,
