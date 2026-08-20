@@ -87,6 +87,7 @@ class LLMTestAppService extends AbstractLLMAppService
                     $authorization,
                     $modelType
                 ),
+                NaturalLanguageProcessing::VIDEO => throw new BusinessException(__('service_provider.connectivity_not_supported')),
                 NaturalLanguageProcessing::DEFAULT => throw new BusinessException(__('service_provider.model_not_found')),
             };
         }

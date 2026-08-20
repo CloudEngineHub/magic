@@ -30,6 +30,29 @@ class SkillMarketDomainService
     }
 
     /**
+     * 获取已发布的官方内置 Skill code。
+     *
+     * @return array<string>
+     */
+    public function getOfficialBuiltinSkillCodes(): array
+    {
+        return array_values(array_map(
+            static fn (SkillMarketEntity $entity): string => $entity->getSkillCode(),
+            $this->getOfficialBuiltinSkillEntities()
+        ));
+    }
+
+    /**
+     * 获取已发布的官方内置 Skill 实体。
+     *
+     * @return array<int, SkillMarketEntity>
+     */
+    public function getOfficialBuiltinSkillEntities(): array
+    {
+        return $this->skillMarketRepository->getOfficialBuiltinSkillEntities();
+    }
+
+    /**
      * 批量查询商店技能的最新版本信息（用于判断 need_upgrade）.
      *
      * @param array $skillCodes Skill code 列表（对应 magic_skills.version_code）
