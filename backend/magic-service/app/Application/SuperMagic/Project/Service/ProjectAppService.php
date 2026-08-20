@@ -1702,7 +1702,7 @@ class ProjectAppService extends AbstractAppService
             $dto->isHidden = $entity->getIsHidden();
             $dto->updatedAt = $entity->getUpdatedAt();
             $dto->topicId = (string) $entity->getTopicId();
-            $dto->relativeFilePath = $relativePathMap[$entity->getFileId()] ?? WorkDirectoryUtil::getRelativeFilePath($fileKey, $workDir);
+            $dto->relativeFilePath = $relativePathMap[$entity->getFileId()] ?? '';
             $dto->isDirectory = $entity->getIsDirectory();
             $dto->displayConfig = FileMetadataUtil::decodeJsonObject($entity->getDisplayConfig());
             $dto->metadata = $dto->displayConfig;

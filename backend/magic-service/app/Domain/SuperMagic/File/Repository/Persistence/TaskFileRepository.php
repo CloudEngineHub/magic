@@ -1743,6 +1743,35 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         return $model ? new TaskFileEntity($model->toArray()) : null;
     }
 
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array
+    {
+        $query = $this->model::query()
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            ->where('file_id', '!=', $rootFileId)
+            ->whereNull('deleted_at')
+            ->orderBy('file_id', 'asc')
+            ->limit($limit);
+
+        if ($afterFileId !== null && $afterFileId > 0) {
+            $query->where('file_id', '>', $afterFileId);
+        }
+
+        return $query->get()->map(fn ($model) => new TaskFileEntity($model->toArray()))->all();
+    }
+
+    public function countTopicFilesForCopy(int $topicId, int $rootFileId): int
+    {
+        return $this->model::query()
+            ->where('topic_id', $topicId)
+            ->where('space_type', FileSpaceType::TOPIC->value)
+            ->where('storage_type', StorageType::TOPIC->value)
+            ->where('file_id', '!=', $rootFileId)
+            ->whereNull('deleted_at')
+            ->count();
+    }
+
     /**
      * Batch update is_hidden field for given file IDs.
      */

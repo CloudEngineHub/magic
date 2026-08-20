@@ -560,6 +560,15 @@ interface TaskFileRepositoryInterface
     public function findTopicSpaceRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity;
 
     /**
+     * Get topic files using a file_id cursor, excluding the topic root itself.
+     *
+     * @return TaskFileEntity[]
+     */
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array;
+
+    public function countTopicFilesForCopy(int $topicId, int $rootFileId): int;
+
+    /**
      * Batch update is_hidden field for given file IDs.
      *
      * @param int[] $fileIds File IDs to update
