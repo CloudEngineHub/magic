@@ -30,32 +30,6 @@ return new class extends Migration {
             ->where('audio_source', 'recorded')
             ->whereNull('audio_format')
             ->update(['audio_format' => 'wav']);
-
-        // Imported projects retain the actual extension of their primary file.
-        if (! Schema::hasTable('magic_super_agent_task_files')) {
-            return;
-        }
-
-        $rows = Db::table('magic_super_agent_audio_project as a')
-            ->join('magic_super_agent_task_files as f', 'a.audio_file_id', '=', 'f.file_id')
-            ->where('a.audio_source', 'imported')
-            ->whereNull('a.audio_format')
-            ->whereNotNull('f.file_extension')
-            ->where('f.file_extension', '<>', '')
-            ->select(['a.project_id', 'f.file_extension'])
-            ->get();
-
-        foreach ($rows as $row) {
-            $format = strtolower(ltrim(trim((string) $row->file_extension), '.'));
-            if ($format === '' || ! preg_match('/^[a-z0-9]{1,16}$/', $format)) {
-                continue;
-            }
-
-            Db::table('magic_super_agent_audio_project')
-                ->where('project_id', (int) $row->project_id)
-                ->whereNull('audio_format')
-                ->update(['audio_format' => $format]);
-        }
     }
 
     public function down(): void
