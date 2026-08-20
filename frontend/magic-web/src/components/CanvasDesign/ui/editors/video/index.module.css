@@ -34,6 +34,19 @@
 	width: 100%;
 }
 
+.restoreDefaultButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	height: var(--height-h-6, 24px) !important;
+	min-height: var(--height-h-6, 24px) !important;
+	padding: 0 var(--spacing-2, 8px) !important;
+	color: var(--base-muted-foreground, #737373);
+	font-size: var(--text-xs-font-size, 12px);
+	line-height: 1;
+}
+
 .sourceListMount {
 	display: contents;
 }

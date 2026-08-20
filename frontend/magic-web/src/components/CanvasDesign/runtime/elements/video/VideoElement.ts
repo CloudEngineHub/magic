@@ -15,11 +15,7 @@ import {
 	getPendingVideoGenerationContent,
 	hasPendingVideoGenerationContent,
 } from "../../document/elementContent"
-import type {
-	GenerateVideoRequest,
-	StoredVideoModeDraftsMap,
-	UploadFileResponse,
-} from "../../../public/magic-types"
+import type { GenerateVideoRequest, UploadFileResponse } from "../../../public/magic-types"
 import { BaseElement } from "../core/BaseElement"
 import { RenderUtils } from "../../shared/render/RenderUtils"
 import { generateUUID, type Rect } from "../../shared/ids"
@@ -54,6 +50,10 @@ import type { ResourceLoadFailureReason } from "../../resources/media-common/res
 import { hasVideoGenerationRequestSubmitIntent } from "../../shared/videoGenerationRequestIntent"
 import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
 import type { GenerationFailurePolicy } from "../../generation/GenerationRuntimeManager"
+import {
+	buildMediaEditSourceFingerprint,
+	type MediaEditIntent,
+} from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
 
@@ -81,8 +81,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isInlinePlaybackRefreshing = false
 	private isErrorState = false
 	private contentUpdateHandler?: () => void
-	private tempGenerateVideoRequest?: Partial<GenerateVideoRequest>
-	private modeInputDrafts?: StoredVideoModeDraftsMap
 	private referenceImageInfos: UploadFileResponse[] = []
 	private previewLoadToken = 0
 	private previewLoadInFlightPath?: string
@@ -138,30 +136,40 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			},
 		})
 
-		const tempConfig = VideoElement.getTempConfigFromStorage(this.canvas, this.data.id)
-		this.modeInputDrafts = VideoElement.getModeInputDraftsFromStorage(this.canvas, this.data.id)
-		if (tempConfig) {
-			this.tempGenerateVideoRequest = tempConfig
-		} else {
-			const generateVideoRequest = this.getVideoContent()?.generateVideoRequest
-			if (generateVideoRequest) {
-				// 无本地临时草稿时，从元素已保存的请求恢复可继续编辑的字段子集
-				const { model_id, input_mode, task, generation, inputs, video_id } =
-					generateVideoRequest
-				this.tempGenerateVideoRequest = {
-					...(model_id && { model_id }),
-					...(input_mode && { input_mode }),
-					...(task && { task }),
-					...(generation ? { generation } : {}),
-					...(inputs ? { inputs } : {}),
-					...(video_id ? { video_id } : {}),
-				}
-			}
-		}
-
 		if (!pollingContent?.src && pollingContent?.generateVideoRequest?.video_id) {
 			this.pollingManager.start()
 		}
+	}
+
+	private clearGenerateRecoveryDraft(content = this.getVideoContent()): void {
+		if (!content) return
+		this.canvas.mediaEditRecoveryManager?.clear({
+			elementId: this.data.id,
+			contentId: content.contentId,
+			intent: "generate",
+		})
+	}
+
+	private saveGenerateRecoveryDraft(
+		request: Partial<GenerateVideoRequest>,
+		content = this.getVideoContent(),
+		intent: MediaEditIntent = "generate",
+	): void {
+		if (!content) return
+		const key = {
+			elementId: this.data.id,
+			contentId: content.contentId,
+			intent,
+		}
+		const sourceFingerprint = buildMediaEditSourceFingerprint(content.contentId, content.src)
+		const existing = this.canvas.mediaEditRecoveryManager?.get<{
+			request: Partial<GenerateVideoRequest>
+			modeDrafts?: unknown
+		}>(key, sourceFingerprint)
+		this.canvas.mediaEditRecoveryManager?.saveDraft(key, sourceFingerprint, {
+			...existing?.draft,
+			request,
+		})
 	}
 
 	override destroy(): void {
@@ -228,14 +236,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const requestWithId: GenerateVideoRequest = {
 			...request,
 			// 复用已有 video_id，避免同一次编辑链路上被当成新任务
-			video_id:
-				request.video_id ||
-				this.getVideoRequest()?.video_id ||
-				this.tempGenerateVideoRequest?.video_id ||
-				generateUUID(),
+			video_id: request.video_id || this.getVideoRequest()?.video_id || generateUUID(),
 		}
 		const contentId =
 			this.getVideoContent()?.contentId ?? this.data.activeContentId ?? undefined
+		const recoveryContent = this.getVideoContent()
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
@@ -313,7 +318,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			if (!confirmed) return false
 
 			this.isErrorState = false
-			this.clearTempGenerateVideoRequest()
+			this.clearGenerateRecoveryDraft(recoveryContent)
 			this.pollingManager.start()
 			this.rerender()
 			return true
@@ -330,6 +335,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				data: { elementId: this.data.id },
 			})
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent)
 			return false
 		}
 	}
@@ -338,7 +344,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	 * 在当前视频元素内追加一次生成 Content，供结果态的重新编辑/再次生成使用。
 	 * 生成请求确认前只登记运行时 attempt，避免失败时把空任务写入 DSL。
 	 */
-	public async submitContentGeneration(request: GenerateVideoRequest): Promise<boolean> {
+	public async submitContentGeneration(
+		request: GenerateVideoRequest,
+		options?: { recoveryIntent?: MediaEditIntent },
+	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
 			!generateVideo ||
@@ -354,6 +363,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 
 		const contentId = createContentId("content")
+		const recoveryContent = this.getVideoContent()
 		const requestWithId: GenerateVideoRequest = {
 			...request,
 			prompt: request.prompt?.trim(),
@@ -419,7 +429,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 			this.isGenerating = false
 			this.isErrorState = false
-			this.clearTempGenerateVideoRequest()
+			this.clearGenerateRecoveryDraft(recoveryContent)
 			this.pollingManager.setContentId(contentId)
 			this.pollingManager.start()
 			this.rerender()
@@ -437,6 +447,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				data: { elementId: this.data.id },
 			})
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, options?.recoveryIntent)
 			return false
 		}
 	}
@@ -1411,102 +1422,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		}
 	}
 
-	/** 从宿主 storage 读取未发送的草稿请求 */
-	static getTempConfigFromStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-	): Partial<GenerateVideoRequest> | undefined {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage) return undefined
-		const storage = methods.getStorage()
-		return storage?.tempVideoConfigs?.[elementId]
-	}
-
-	/** 持久化草稿请求（提示词、模型、参考图等） */
-	static saveTempConfigToStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-		config: Partial<GenerateVideoRequest>,
-	): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage() || {}
-		const tempVideoConfigs = storage.tempVideoConfigs || {}
-		tempVideoConfigs[elementId] = config
-
-		methods.saveStorage({
-			...storage,
-			tempVideoConfigs,
-		})
-	}
-
-	/** 删除该元素在 storage 中的草稿 */
-	static clearTempConfigFromStorage(canvas: BaseElement["canvas"], elementId: string): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage()
-		if (!storage?.tempVideoConfigs) return
-
-		const tempVideoConfigs = { ...storage.tempVideoConfigs }
-		delete tempVideoConfigs[elementId]
-
-		methods.saveStorage({
-			...storage,
-			tempVideoConfigs,
-		})
-	}
-
-	static getModeInputDraftsFromStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-	): StoredVideoModeDraftsMap | undefined {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage) return undefined
-		const storage = methods.getStorage()
-		return storage?.tempVideoModeDrafts?.[elementId]
-	}
-
-	static saveModeInputDraftsToStorage(
-		canvas: BaseElement["canvas"],
-		elementId: string,
-		drafts: StoredVideoModeDraftsMap,
-	): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage() || {}
-		const tempVideoModeDrafts = { ...(storage.tempVideoModeDrafts || {}) }
-		const hasAnyDraft = Object.keys(drafts).length > 0
-		if (hasAnyDraft) {
-			tempVideoModeDrafts[elementId] = drafts
-		} else {
-			delete tempVideoModeDrafts[elementId]
-		}
-
-		methods.saveStorage({
-			...storage,
-			tempVideoModeDrafts,
-		})
-	}
-
-	static clearModeInputDraftsFromStorage(canvas: BaseElement["canvas"], elementId: string): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage()
-		if (!storage?.tempVideoModeDrafts) return
-
-		const tempVideoModeDrafts = { ...storage.tempVideoModeDrafts }
-		delete tempVideoModeDrafts[elementId]
-
-		methods.saveStorage({
-			...storage,
-			tempVideoModeDrafts,
-		})
-	}
-
 	public getRenderName(): string {
 		return this.getText("video.defaultName", "视频生成器")
 	}
@@ -1594,45 +1509,6 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	/** 已有成片且解码出预览后可交互播放 */
 	public canTogglePlayback(): boolean {
 		return !!this.getVideoSrc() && this.renderer.hasPreview() && !this.isInlinePlaybackPending
-	}
-
-	/** 更新内存与 storage 中的草稿请求 */
-	public saveTempGenerateVideoRequest(request: Partial<GenerateVideoRequest>): void {
-		this.tempGenerateVideoRequest = request
-		VideoElement.saveTempConfigToStorage(this.canvas, this.data.id, request)
-	}
-
-	/** 当前草稿请求（未发送生成前） */
-	public getTempGenerateVideoRequest(): Partial<GenerateVideoRequest> | undefined {
-		return this.tempGenerateVideoRequest
-	}
-
-	/** 各互斥 input_mode 下的参考/首尾帧暂存（刷新或重挂载后恢复） */
-	public getModeInputDrafts(): StoredVideoModeDraftsMap | undefined {
-		return this.modeInputDrafts
-	}
-
-	public saveModeInputDrafts(drafts: StoredVideoModeDraftsMap): void {
-		this.modeInputDrafts = Object.keys(drafts).length > 0 ? drafts : undefined
-		VideoElement.saveModeInputDraftsToStorage(this.canvas, this.data.id, drafts)
-	}
-
-	/** 清除草稿（内存 + storage） */
-	public clearTempGenerateVideoRequest(): void {
-		this.tempGenerateVideoRequest = undefined
-		this.modeInputDrafts = undefined
-		VideoElement.clearTempConfigFromStorage(this.canvas, this.data.id)
-		VideoElement.clearModeInputDraftsFromStorage(this.canvas, this.data.id)
-	}
-
-	/** 生成成功后去掉草稿中的 prompt，保留模型等字段 */
-	public clearTempGenerateVideoRequestPrompt(): void {
-		if (this.tempGenerateVideoRequest) {
-			const { prompt, ...rest } = this.tempGenerateVideoRequest
-			void prompt
-			this.tempGenerateVideoRequest = rest
-			VideoElement.saveTempConfigToStorage(this.canvas, this.data.id, rest)
-		}
 	}
 
 	/** 追加一张参考图/帧（去重 path），并预热图片缓存 */

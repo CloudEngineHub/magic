@@ -8,7 +8,7 @@ import {
 	type ClipboardEvent,
 } from "react"
 import { ArrowUp, LoaderCircle, ZapIcon } from "lucide-react"
-import { useUpdateEffect } from "ahooks"
+import { useLatest, useUnmount, useUpdateEffect } from "ahooks"
 import { toast } from "sonner"
 import { useHostUiLocale } from "../../../app/providers/HostUiLocaleProvider"
 import { Button } from "../../primitives/shadcn/button"
@@ -17,6 +17,7 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
+import { useCanvasEvent, useIsMediaReplacing } from "../../../app/hooks/canvas"
 import { ElementTypeEnum, type VideoElement } from "../../../runtime/document/types"
 import type {
 	CompleteImagePromptRequest,
@@ -27,6 +28,7 @@ import type {
 } from "../../../public/magic-types"
 import type {
 	UseVideoEditorConfigOptions,
+	VideoEditSessionSnapshot,
 	VideoReferenceAssetInfo,
 } from "./video-editor-config.types"
 import { VideoElement as VideoElementClass } from "../../../runtime/elements/video/VideoElement"
@@ -101,6 +103,10 @@ import {
 } from "./prompt-placeholders/video-prompt-placeholder"
 import { hasVideoGenerationRequestSubmitIntent } from "../../../runtime/shared/videoGenerationRequestIntent"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
+import {
+	areMediaEditSnapshotsEqual,
+	type MediaEditIntent,
+} from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -113,6 +119,9 @@ interface VideoGenerateEditorRenderProps {
 	restoreOnMount?: UseVideoEditorConfigOptions["restoreOnMount"]
 	/** current-content 在当前视频元素中追加一个 Content；new-element 保留独立结果节点能力。 */
 	submitTarget?: "current-element" | "current-content" | "new-element"
+	sessionIntent?: MediaEditIntent
+	sessionSourceFingerprint?: string
+	sessionSnapshot?: VideoEditSessionSnapshot
 	/** 尺寸选择变化时是否同步更新当前元素尺寸 */
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
@@ -128,6 +137,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		onGenerateSubmitSucceeded,
 		restoreOnMount,
 		submitTarget = "current-element",
+		sessionIntent,
+		sessionSourceFingerprint,
+		sessionSnapshot,
 		syncElementSize,
 		onPreviewMediaResource,
 		isMediaResourcePreviewOpen = false,
@@ -142,7 +154,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const { selectedElements } = useCanvasSelectionUI()
 	const { canvas } = useCanvas()
 	const resolveResourceReference =
-		canvas.magicConfigManager.config?.methods?.resolveResourceReference
+		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [hasEditorScrollbar, setHasEditorScrollbar] = useState(false)
 	const [hasSourceListScrollbar, setHasSourceListScrollbar] = useState(false)
@@ -151,8 +163,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
 	const sendingRef = useRef(false)
 	const isMountedRef = useRef(false)
+	const sessionPersistenceEnabledRef = useRef(true)
 	const hasScrollbar = hasEditorScrollbar || hasSourceListScrollbar
 	const confirmVideoGeneration = useVideoPointsConfirm()
+	const isReplacing = useIsMediaReplacing(videoElement.id)
 
 	useEffect(() => {
 		isMountedRef.current = true
@@ -164,10 +178,124 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const config = useVideoEditorConfig({
 		videoElement,
 		messageEditorRef: editorRef,
+		manageRecoverySession: !sessionIntent,
 		...(restoreOnMount ? { restoreOnMount } : {}),
+		...(sessionSnapshot ? { sessionSnapshot } : {}),
 		...(syncElementSize !== undefined ? { syncElementSize } : {}),
 	})
 	const { handlers } = config
+	const sessionStore = canvas?.mediaEditRecoveryManager
+	const sessionKey = useMemo(
+		() =>
+			sessionIntent && videoElement.activeContentId
+				? {
+						elementId: videoElement.id,
+						contentId: videoElement.activeContentId,
+						intent: sessionIntent,
+					}
+				: null,
+		[sessionIntent, videoElement.activeContentId, videoElement.id],
+	)
+	const previousSourceFingerprintRef = useRef(sessionSourceFingerprint)
+	const [hasInterruptedDraft, setHasInterruptedDraft] = useState(false)
+
+	useEffect(() => {
+		if (previousSourceFingerprintRef.current === sessionSourceFingerprint) return
+		sessionPersistenceEnabledRef.current = false
+		sessionStore?.clearElement(videoElement.id)
+		previousSourceFingerprintRef.current = sessionSourceFingerprint
+		setHasInterruptedDraft(false)
+	}, [sessionSourceFingerprint, sessionStore, videoElement.id])
+
+	const captureSessionDraft = useCallback(() => {
+		if (
+			!sessionPersistenceEnabledRef.current ||
+			!sessionStore ||
+			!sessionKey ||
+			!sessionSourceFingerprint ||
+			!config.hasRestoredRef.current ||
+			config.isRestoringRef.current ||
+			config.restoreRevision === 0
+		)
+			return
+		const snapshot = handlers.buildSessionSnapshot()
+		const existing = sessionStore.get<VideoEditSessionSnapshot>(
+			sessionKey,
+			sessionSourceFingerprint,
+		)
+		if (existing) {
+			sessionStore.updateDraft(sessionKey, sessionSourceFingerprint, snapshot)
+			setHasInterruptedDraft(!areMediaEditSnapshotsEqual(existing.baseline, snapshot))
+			return
+		}
+		sessionStore.set(sessionKey, sessionSourceFingerprint, snapshot, snapshot)
+		setHasInterruptedDraft(false)
+	}, [
+		config.hasRestoredRef,
+		config.isRestoringRef,
+		config.restoreRevision,
+		handlers,
+		sessionKey,
+		sessionSourceFingerprint,
+		sessionStore,
+	])
+	const captureSessionDraftRef = useLatest(captureSessionDraft)
+	useUnmount(() => captureSessionDraftRef.current?.())
+
+	useCanvasEvent(
+		"element:deselect",
+		({ data }) => {
+			if (
+				!sessionKey ||
+				(data?.elementIds?.length && !data.elementIds.includes(videoElement.id))
+			) {
+				return
+			}
+			captureSessionDraft()
+		},
+		[captureSessionDraft, sessionKey, videoElement.id],
+	)
+
+	useEffect(() => {
+		if (!sessionStore || !sessionKey || !sessionSourceFingerprint) return
+		const existing = sessionStore.get<VideoEditSessionSnapshot>(
+			sessionKey,
+			sessionSourceFingerprint,
+		)
+		if (!existing) {
+			if (!config.hasRestoredRef.current || config.restoreRevision === 0) return
+			const baseline = handlers.buildSessionSnapshot()
+			sessionStore.set(sessionKey, sessionSourceFingerprint, baseline, baseline)
+			setHasInterruptedDraft(false)
+			return
+		}
+		setHasInterruptedDraft(!areMediaEditSnapshotsEqual(existing.baseline, existing.draft))
+	}, [
+		config.hasRestoredRef,
+		config.restoreRevision,
+		handlers,
+		sessionKey,
+		sessionSourceFingerprint,
+		sessionStore,
+	])
+
+	useEffect(() => {
+		if (isReplacing) sessionPersistenceEnabledRef.current = false
+	}, [isReplacing])
+
+	const handleRestoreBaseline = useCallback(() => {
+		if (!sessionStore || !sessionKey || !sessionSourceFingerprint) return
+		const existing = sessionStore.get<VideoEditSessionSnapshot>(
+			sessionKey,
+			sessionSourceFingerprint,
+		)
+		if (!existing) return
+		handlers.restoreSessionSnapshotToUi(existing.baseline)
+		sessionStore.set(sessionKey, sessionSourceFingerprint, existing.baseline, existing.baseline)
+		setHasInterruptedDraft(false)
+		// 恢复配置按钮会抢走焦点；等待编辑器同步快照后，把光标恢复到之前的编辑位置。
+		window.setTimeout(() => editorRef.current?.focus(), 0)
+	}, [handlers, sessionKey, sessionSourceFingerprint, sessionStore])
 	const { linkedFrameBindings } = config
 	const { buildRequestParams, replaceFrameImageAt, setLinkedFrameBindings } = handlers
 	const linkedMediaPolicy = useMemo<LinkedEditorMediaPolicy>(() => {
@@ -692,6 +820,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			setIsSending(true)
 			try {
 				handlers.cancelPendingDraftPersistence()
+				if (submitTarget === "current-content") captureSessionDraft()
 				const submitted =
 					submitTarget === "new-element"
 						? await createAndSubmitVideoGeneration({
@@ -701,14 +830,23 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								newElementSize: config.ratioOption,
 							})
 						: submitTarget === "current-content"
-							? await elementInstance.submitContentGeneration(requestParams)
+							? await elementInstance.submitContentGeneration(requestParams, {
+									recoveryIntent: sessionIntent,
+								})
 							: await (async () => {
 									handlers.saveDraftRequest(
 										options?.draftRequest ?? requestParams,
 									)
 									return elementInstance.generateVideo(requestParams)
 								})()
-				if (submitted) onGenerateSubmitSucceeded?.()
+				if (submitted) {
+					sessionPersistenceEnabledRef.current = false
+					if (sessionStore && sessionKey) {
+						sessionStore.clear(sessionKey)
+						setHasInterruptedDraft(false)
+					}
+					onGenerateSubmitSucceeded?.()
+				}
 			} finally {
 				sendingRef.current = false
 				if (isMountedRef.current) setIsSending(false)
@@ -718,8 +856,12 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			canvas,
 			config.ratioOption,
 			config.selectedModelId,
+			captureSessionDraft,
 			handlers,
 			onGenerateSubmitSucceeded,
+			sessionKey,
+			sessionStore,
+			sessionIntent,
 			submitTarget,
 			videoElement,
 		],
@@ -920,7 +1062,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				matchableItems={matchableItems}
 				mentionDataService={mentionDataService}
 				mentionExtension={mentionExtension}
-				mentionItemsReady={config.hasRestoredRef.current}
+				mentionItemsReady={Boolean(config.hasRestoredRef.current)}
 				onMentionChange={handleMentionChange}
 				onMentionItemHoverChange={setHoveredMentionPath}
 				mentionEnabled={mentionEnabled}
@@ -950,6 +1092,20 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
 					/>
 				)}
+				renderRestoreDefaultConfigButton={
+					hasInterruptedDraft
+						? () => (
+								<Button
+									variant="ghost"
+									className={styles.restoreDefaultButton}
+									onClick={handleRestoreBaseline}
+									data-testid="video-editor-re-enter"
+								>
+									{t("videoEditor.reEnter", "重新输入")}
+								</Button>
+							)
+						: undefined
+				}
 				renderSendButton={() => (
 					<Button
 						className={styles.sendButton}

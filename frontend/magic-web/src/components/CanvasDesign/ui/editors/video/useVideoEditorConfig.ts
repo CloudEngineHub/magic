@@ -6,7 +6,6 @@ import { useMagic } from "../../../app/providers/MagicProvider"
 import type {
 	DefaultGenerateVideoConfig,
 	GenerateVideoRequest,
-	StoredVideoModeDraftsMap,
 	UploadFileResponse,
 	VideoGenerationConstraints,
 	VideoInputMode,
@@ -77,6 +76,7 @@ import {
 } from "./model-config/video-editor-config.model"
 import type {
 	LinkedFrameBinding,
+	VideoEditSessionSnapshot,
 	VideoEditorConfig,
 	VideoInputSlotInfo,
 	VideoModelOption,
@@ -86,6 +86,7 @@ import type {
 	VideoReferenceAssetInfo,
 	UseVideoEditorConfigOptions,
 } from "./video-editor-config.types"
+import { buildMediaEditSourceFingerprint } from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
 	decodeVideoPromptPlaceholdersToMentions,
 	encodeVideoPromptMentionsToPlaceholders,
@@ -137,6 +138,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		videoElement,
 		messageEditorRef,
 		restoreOnMount = "preferDraft",
+		sessionSnapshot,
+		manageRecoverySession = true,
+		recoveryIntent = "generate",
 		syncElementSize = true,
 	} = options
 	const { t } = useCanvasDesignI18n()
@@ -144,6 +148,22 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const { canvas } = useCanvas()
 	const savedRequest = getActiveContent(videoElement)?.generateVideoRequest
 	const resolveResourceReference = methods?.resolveResourceReference
+	const activeVideoContent = getActiveContent(videoElement)
+	const activeVideoContentId = activeVideoContent?.contentId
+	const recoveryKey = useMemo(
+		() =>
+			manageRecoverySession && activeVideoContentId
+				? {
+						elementId: videoElement.id,
+						contentId: activeVideoContentId,
+						intent: recoveryIntent,
+					}
+				: null,
+		[activeVideoContentId, manageRecoverySession, recoveryIntent, videoElement.id],
+	)
+	const recoverySourceFingerprint = activeVideoContent
+		? buildMediaEditSourceFingerprint(activeVideoContent.contentId, activeVideoContent.src)
+		: ""
 
 	const [selectedModelId, setSelectedModelId] = useState("")
 	const [selectedInputMode, setSelectedInputMode] = useState<VideoInputMode>("standard")
@@ -235,10 +255,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const hasRestoredRef = useRef(false)
 	const isRestoringRef = useRef(false)
+	const [restoreRevision, setRestoreRevision] = useState(0)
 	const popoverCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const draftPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const pendingDraftRequestRef = useRef<Partial<GenerateVideoRequest> | null>(null)
-	const lastPersistedDraftRef = useRef("")
 	const isApplyingRestoreRef = useRef(false)
 	const isRemovingReferenceImageRef = useRef(false)
 	const selectedResourceSlotRef = useRef<VideoInputSlotInfo | null>(null)
@@ -250,6 +270,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	} | null>(null)
 	const modeDraftCacheRef = useRef<Partial<Record<VideoInputMode, VideoModeInputDraft>>>({})
 	const restoreModeRef = useRef<"normal" | "quickEdit">("normal")
+	const sessionRestoreSnapshotRef = useRef<VideoEditSessionSnapshot | null>(
+		sessionSnapshot ?? null,
+	)
 
 	const selectedModel = useMemo(() => {
 		return videoModelList.find((model) => model.model_id === selectedModelId)
@@ -389,7 +412,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		if (selectedInputMode !== resolvedInputMode) {
 			setSelectedInputMode(resolvedInputMode)
 		}
-	}, [resolvedInputMode, selectedInputMode])
+	}, [availableInputModes, resolvedInputMode, selectedInputMode, selectedModelId])
 
 	useEffect(() => {
 		if (!availableInputTabs.includes(activeInputTab)) {
@@ -1695,19 +1718,14 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				pendingDraftRequestRef.current = null
 				return
 			}
-			if (!canvas) return
-			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
-			if (!(elementInstance instanceof VideoElementClass)) return
-			const serializedRequest = JSON.stringify(request)
-			if (lastPersistedDraftRef.current === serializedRequest) {
-				pendingDraftRequestRef.current = null
-				return
-			}
-			elementInstance.saveTempGenerateVideoRequest(request)
-			lastPersistedDraftRef.current = serializedRequest
+			if (!canvas || !manageRecoverySession || !recoveryKey) return
+			canvas.mediaEditRecoveryManager.saveDraft(recoveryKey, recoverySourceFingerprint, {
+				request,
+				modeDrafts: cloneModeDraftCache(modeDraftCacheRef.current),
+			})
 			pendingDraftRequestRef.current = null
 		},
-		[canvas, videoElement.id],
+		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint],
 	)
 
 	const cancelPendingDraftPersistence = useCallback(() => {
@@ -1750,29 +1768,25 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 		isRestoringRef.current = true
 		try {
+			const sessionSnapshot =
+				sessionRestoreSnapshotRef.current ??
+				(manageRecoverySession && recoveryKey
+					? canvas.mediaEditRecoveryManager.get<VideoEditSessionSnapshot>(
+							recoveryKey,
+							recoverySourceFingerprint,
+						)?.draft
+					: undefined)
+			sessionRestoreSnapshotRef.current = null
+			const isSessionRestore = Boolean(sessionSnapshot)
 			const isQuickEdit =
-				restoreOnMount === "quickEdit" || restoreModeRef.current === "quickEdit"
-			const fromElementDrafts =
-				isQuickEdit || restoreOnMount === "originalRequestOnly"
-					? undefined
-					: elementInstance.getModeInputDrafts()
+				!isSessionRestore &&
+				(restoreOnMount === "quickEdit" || restoreModeRef.current === "quickEdit")
+			const fromElementDrafts = sessionSnapshot?.modeDrafts ?? undefined
 			modeDraftCacheRef.current = cloneModeDraftCache(
 				(fromElementDrafts ?? {}) as Partial<Record<VideoInputMode, VideoModeInputDraft>>,
 			)
-			const tempRequest =
-				isQuickEdit || restoreOnMount === "originalRequestOnly"
-					? undefined
-					: elementInstance.getTempGenerateVideoRequest()
 			const currentRequest = savedRequest
-			const requestToRestore = tempRequest
-				? {
-						...currentRequest,
-						...tempRequest,
-						prompt: tempRequest.prompt ?? currentRequest?.prompt,
-						generation: tempRequest.generation || currentRequest?.generation,
-						inputs: tempRequest.inputs || currentRequest?.inputs,
-					}
-				: currentRequest
+			const requestToRestore = sessionSnapshot?.request ?? currentRequest
 			const rootStorage = canvas.magicConfigManager.config?.methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateVideoConfig as
 				DefaultGenerateVideoConfig | undefined
@@ -1795,6 +1809,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				setSelectedModelId(modelId)
 			}
 			const restoredInputMode =
+				sessionSnapshot?.request.input_mode ??
 				quickEditModel?.inputMode ??
 				resolveInputModeFromRequest(requestToRestore, fallbackModel)
 			setSelectedInputMode(restoredInputMode)
@@ -1955,9 +1970,9 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				restoredLinkedFrameBindings,
 			)
 			modeDraftCacheRef.current = mergedDrafts
-			elementInstance.saveModeInputDrafts(mergedDrafts as StoredVideoModeDraftsMap)
 
 			hasRestoredRef.current = true
+			setRestoreRevision((revision) => revision + 1)
 		} finally {
 			setTimeout(() => {
 				isRestoringRef.current = false
@@ -1977,18 +1992,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		resolveModeDraftInputTab,
 		promptPlaceholderTokenConfig,
 		restoreOnMount,
+		manageRecoverySession,
+		recoveryKey,
+		recoverySourceFingerprint,
 	])
 
 	const restoreOriginalGenerateVideoRequestToUi = useCallback(() => {
 		if (!canvas) return
 		if (isApplyingRestoreRef.current) return
-		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
-		if (!(elementInstance instanceof VideoElementClass)) return
 		if (!savedRequest) return
 
 		cancelPendingDraftPersistence()
-		elementInstance.clearTempGenerateVideoRequest()
-		lastPersistedDraftRef.current = ""
 		modeDraftCacheRef.current = {}
 		hasRestoredRef.current = false
 		restoreModeRef.current = "normal"
@@ -1999,12 +2013,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		if (!canvas || !getActiveContent(videoElement)?.src) return
 		const quickEditPreferredModelId = selectedModelId || savedRequest?.model_id
 		if (!resolveVideoReferenceVideoModel(videoModelList, quickEditPreferredModelId)) return
-		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
-		if (!(elementInstance instanceof VideoElementClass)) return
-
 		cancelPendingDraftPersistence()
-		elementInstance.clearTempGenerateVideoRequest()
-		lastPersistedDraftRef.current = ""
 		modeDraftCacheRef.current = {}
 		hasRestoredRef.current = false
 		restoreModeRef.current = "quickEdit"
@@ -2017,6 +2026,57 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		videoElement,
 		videoModelList,
 	])
+
+	const buildSessionSnapshot = useCallback((): VideoEditSessionSnapshot => {
+		const request = buildRequestParams()
+		const snapshot = {
+			request,
+			modeDrafts: cloneModeDraftCache(modeDraftCacheRef.current),
+		}
+		return snapshot
+	}, [buildRequestParams])
+
+	// 首次完成初始化后建立普通生成意图的 baseline；已有失败/中断草稿则保留原 baseline。
+	useEffect(() => {
+		if (
+			!manageRecoverySession ||
+			!canvas ||
+			!recoveryKey ||
+			!hasRestoredRef.current ||
+			restoreRevision === 0
+		)
+			return
+		if (!canvas.mediaEditRecoveryManager.get(recoveryKey, recoverySourceFingerprint)) {
+			const baseline = buildSessionSnapshot()
+			canvas.mediaEditRecoveryManager.set(
+				recoveryKey,
+				recoverySourceFingerprint,
+				baseline,
+				baseline,
+			)
+		}
+	}, [
+		buildSessionSnapshot,
+		canvas,
+		manageRecoverySession,
+		recoveryKey,
+		recoverySourceFingerprint,
+		restoreRevision,
+	])
+
+	const restoreSessionSnapshotToUi = useCallback(
+		(snapshot: VideoEditSessionSnapshot) => {
+			if (!canvas || videoModelList.length === 0) return
+			if (isApplyingRestoreRef.current) return
+
+			cancelPendingDraftPersistence()
+			sessionRestoreSnapshotRef.current = snapshot
+			hasRestoredRef.current = false
+			restoreModeRef.current = "normal"
+			restoreConfig()
+		},
+		[canvas, cancelPendingDraftPersistence, restoreConfig, videoModelList.length],
+	)
 
 	useEffect(() => {
 		if (
@@ -2046,8 +2106,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	useLayoutEffect(() => {
 		if (!canvas || !hasRestoredRef.current || isRestoringRef.current) return
-		const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
-		if (!(elementInstance instanceof VideoElementClass)) return
 		const merged = mergeCurrentUiIntoModeDraftCache(
 			modeDraftCacheRef.current,
 			selectedInputMode,
@@ -2058,7 +2116,6 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			linkedFrameBindings,
 		)
 		modeDraftCacheRef.current = merged
-		elementInstance.saveModeInputDrafts(merged as StoredVideoModeDraftsMap)
 	}, [
 		activeInputTab,
 		canvas,
@@ -2076,21 +2133,17 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	}, [buildRequestParams, scheduleDraftPersistence])
 
 	useUnmount(() => {
-		if (canvas && hasRestoredRef.current && !isRestoringRef.current) {
-			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
-			if (elementInstance instanceof VideoElementClass) {
-				const merged = mergeCurrentUiIntoModeDraftCache(
-					modeDraftCacheRef.current,
-					selectedInputMode,
-					prompt,
-					activeInputTab,
-					frameImageInfos,
-					referenceImageInfos,
-					linkedFrameBindings,
-				)
-				modeDraftCacheRef.current = merged
-				elementInstance.saveModeInputDrafts(merged as StoredVideoModeDraftsMap)
-			}
+		if (canvas && manageRecoverySession && hasRestoredRef.current && !isRestoringRef.current) {
+			modeDraftCacheRef.current = mergeCurrentUiIntoModeDraftCache(
+				modeDraftCacheRef.current,
+				selectedInputMode,
+				prompt,
+				activeInputTab,
+				frameImageInfos,
+				referenceImageInfos,
+				linkedFrameBindings,
+			)
+			saveDraftRequest(buildRequestParams())
 		}
 		cancelPendingDraftPersistence()
 		if (popoverCloseTimeoutRef.current) {
@@ -2131,6 +2184,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			cancelPendingDraftPersistence,
 			restoreOriginalGenerateVideoRequestToUi,
 			restoreQuickEditConfigToUi,
+			buildSessionSnapshot,
+			restoreSessionSnapshotToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
 			handleFileChange,
@@ -2162,6 +2217,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			cancelPendingDraftPersistence,
 			restoreOriginalGenerateVideoRequestToUi,
 			restoreQuickEditConfigToUi,
+			buildSessionSnapshot,
+			restoreSessionSnapshotToUi,
 			triggerFileSelect,
 			uploadReferenceFiles,
 			handleFileChange,
@@ -2226,6 +2283,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedResourceSlot,
 		hasRestoredRef,
 		isRestoringRef,
+		restoreRevision,
 		handlers,
 		fileInputRef,
 	}

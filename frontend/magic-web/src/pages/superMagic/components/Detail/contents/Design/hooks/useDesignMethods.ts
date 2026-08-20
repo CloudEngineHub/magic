@@ -182,10 +182,6 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 
 	const { getStorage, saveStorage, getRootStorage, saveRootStorage } = useCanvasStorage({
 		designProjectId,
-		designProjectBasePath,
-		flatAttachments,
-		attachmentsReady,
-		attachmentIndex,
 	})
 
 	const { addToConversation, downloadFiles } = useConversationAndDownload({

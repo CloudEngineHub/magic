@@ -9,7 +9,6 @@ function createVideoInstance(
 ): VideoElementClass {
 	const instance = Object.create(VideoElementClass.prototype) as VideoElementClass
 	instance.generateVideo = generateVideo as VideoElementClass["generateVideo"]
-	instance.saveTempGenerateVideoRequest = vi.fn()
 	return instance
 }
 
@@ -27,6 +26,7 @@ function createCanvas(getElementInstance: (elementId: string) => VideoElementCla
 	return {
 		canvas: {
 			elementManager,
+			mediaEditRecoveryManager: { saveDraft: vi.fn() },
 			generationRuntimeManager: { getTargetState: vi.fn(() => null) },
 			generationAttemptCoordinator: {
 				resolveDetachedPlaceholderFailure: vi.fn(),

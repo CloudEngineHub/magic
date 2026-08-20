@@ -228,6 +228,7 @@ interface VideoEditorControlsProps {
 		context?: ReferenceResourcePanelSelectContext,
 	) => void
 	renderSendButton?: () => React.ReactNode
+	renderRestoreDefaultConfigButton?: () => React.ReactNode
 	/** 点击顶部栏空白区域（非 SourceList）时聚焦提示词编辑器 */
 	onFocusEditor?: () => void
 	linkedMediaItems?: LinkedEditorMediaItem[]
@@ -252,6 +253,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		onSelectSource,
 		onProjectSelect,
 		renderSendButton,
+		renderRestoreDefaultConfigButton,
 		onFocusEditor,
 		linkedMediaItems = [],
 		onLinkedMediaSelectionChange,
@@ -1167,6 +1169,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						)}
 					</div>
 					<div className={styles.right}>
+						{renderRestoreDefaultConfigButton && renderRestoreDefaultConfigButton()}
 						<VideoGenerationSettingsPopover config={config} />
 						{renderPromptOptimizationButton && renderPromptOptimizationButton()}
 						{renderSendButton && renderSendButton()}

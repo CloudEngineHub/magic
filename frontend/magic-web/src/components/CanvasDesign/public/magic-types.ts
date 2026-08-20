@@ -1297,17 +1297,8 @@ export interface CanvasDesignStorageData {
 	layersCollapsed?: boolean
 	layersWidth?: number
 	markers?: Marker[]
-	/** 图片元素临时配置（未发送前的配置） */
-	tempImageConfigs?: Record<string, Partial<GenerateImageRequest>>
-	/** 视频元素临时配置（未发送前的配置） */
-	tempVideoConfigs?: Record<string, Partial<GenerateVideoRequest>>
 	/** 关联文本的用户选择与顺序（不进入生成 API） */
 	tempLinkedEditorDrafts?: Record<string, StoredLinkedEditorDraftV1 | StoredLinkedEditorDraft>
-	/**
-	 * 视频元素各 input_mode 互斥区暂存（不入生成 API，仅编辑器与本地缓存）
-	 * key 为画布元素 id
-	 */
-	tempVideoModeDrafts?: Record<string, StoredVideoModeDraftsMap>
 }
 
 /** v1 草稿兼容读取类型；媒体 selected ID 仅为历史字段，不再参与业务状态。 */
@@ -1333,22 +1324,6 @@ export interface StoredLinkedFrameBinding {
 	sourceFileName: string
 	frameRole: "start" | "end"
 }
-
-/** 与 VideoGenerateEditor 中单模式草稿结构一致，用于 localStorage 持久化 */
-export interface StoredVideoModeInputDraft {
-	prompt?: string
-	activeInputTab?: "frame" | "reference"
-	frameImageInfos: Array<UploadFileResponse | undefined>
-	referenceImageInfos: Array<UploadFileResponse & { assetType: "image" | "video" | "audio" }>
-	linkedFrameBindings?: Array<StoredLinkedFrameBinding | undefined>
-}
-
-export type StoredVideoModeDraftsMap = Partial<
-	Record<
-		"standard" | "keyframe_guided" | "image_reference" | "omni_reference" | "video_edit",
-		StoredVideoModeInputDraft
-	>
->
 
 export interface CanvasMediaPlacementConfig {
 	/** 新建媒体元素之间的最小间距 */

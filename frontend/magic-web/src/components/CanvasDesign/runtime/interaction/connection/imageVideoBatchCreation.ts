@@ -1,6 +1,7 @@
 import type { VideoModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum, type VideoElement as VideoElementData } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import { ElementFactory } from "../../elements/core/ElementFactory"
 import { VideoElement } from "../../elements/video/VideoElement"
 import { generateElementId } from "../../shared/ids"
@@ -17,6 +18,7 @@ import {
 	type ResolvedImageReferenceVideoModel,
 } from "./imageVideoReferenceModel"
 import { createContentFrameData, resolveFrameContentLayout } from "../frame/frameCreation"
+import { buildMediaEditSourceFingerprint } from "../media-edit-recovery/MediaEditRecoveryManager"
 
 const COLUMN_GAP = 64
 const FRAME_GAP = 50
@@ -33,10 +35,13 @@ interface CreatedImageVideoPair {
 	videoElementId: string
 }
 
-function createEmptyVideoData(
-	canvas: Canvas,
-	options: { x: number; y: number; width: number; height: number; zIndex: number },
-): VideoElementData {
+function createEmptyVideoData(options: {
+	x: number
+	y: number
+	width: number
+	height: number
+	zIndex: number
+}): VideoElementData {
 	const id = generateElementId()
 	return ElementFactory.createElementData(
 		ElementTypeEnum.Video,
@@ -78,11 +83,24 @@ function applyReferenceVideoDraft(
 ): void {
 	const instance = canvas.elementManager.getElementInstance(videoElementId)
 	if (!(instance instanceof VideoElement)) return
-	instance.saveTempGenerateVideoRequest({
-		model_id: model.model.model_id,
-		input_mode: model.inputMode,
-		task: model.task,
-	})
+	const activeContent = getActiveContent(instance.getData())
+	if (!activeContent) return
+	canvas.mediaEditRecoveryManager.saveDraft(
+		{
+			elementId: videoElementId,
+			contentId: activeContent.contentId,
+			intent: "generate",
+		},
+		buildMediaEditSourceFingerprint(activeContent.contentId, activeContent.src),
+		{
+			request: {
+				model_id: model.model.model_id,
+				input_mode: model.inputMode,
+				task: model.task,
+			},
+			modeDrafts: {},
+		},
+	)
 }
 
 interface BatchVideoPlacement {
@@ -339,7 +357,7 @@ export function createStoryboardVideosFromConnection(options: {
 
 			try {
 				const videoChildren = imageElementIds.map((imageElementId, index) => {
-					const videoData = createEmptyVideoData(canvas, {
+					const videoData = createEmptyVideoData({
 						x: frameLayout.padding,
 						y: frameLayout.padding + getChildrenOffset(heights, index),
 						width: size.width,

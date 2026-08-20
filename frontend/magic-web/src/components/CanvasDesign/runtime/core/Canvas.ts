@@ -85,6 +85,7 @@ import { VideoEditInteractionManager } from "../interaction/video-edit/VideoEdit
 import { VideoEditPlaybackManager } from "../interaction/video-edit/VideoEditPlaybackManager"
 import { ImageEditingCoordinator } from "../interaction/image-editing/ImageEditingCoordinator"
 import { VideoContinuationManager } from "../interaction/video-continuation/VideoContinuationManager"
+import { MediaEditRecoveryManager } from "../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
 	editActions,
 	layerActions,
@@ -148,6 +149,7 @@ export class Canvas {
 
 	public permissionManager: PermissionManager
 	public imageEditingCoordinator: ImageEditingCoordinator
+	public mediaEditRecoveryManager: MediaEditRecoveryManager
 	public elementManager: ElementManager
 	public selectionManager: SelectionManager
 	public transformManager: TransformManager
@@ -281,6 +283,29 @@ export class Canvas {
 
 		// 创建事件发射器
 		this.eventEmitter = new EventEmitter()
+		this.mediaEditRecoveryManager = new MediaEditRecoveryManager()
+		this.eventEmitter.on("element:deleted", ({ data }) => {
+			this.mediaEditRecoveryManager.clearElement(data.elementId)
+		})
+		this.eventEmitter.on("element:batchdeleted", ({ data }) => {
+			data.elementIds.forEach((elementId) =>
+				this.mediaEditRecoveryManager.clearElement(elementId),
+			)
+		})
+		this.eventEmitter.on("element:updated", ({ data }) => {
+			if (!data.previousData) return
+			const previousContent = getActiveContent(data.previousData)
+			const nextContent = getActiveContent(data.data)
+			const previousSource =
+				previousContent && "src" in previousContent ? previousContent.src : undefined
+			const nextSource = nextContent && "src" in nextContent ? nextContent.src : undefined
+			if (
+				previousContent?.contentId !== nextContent?.contentId ||
+				previousSource !== nextSource
+			) {
+				this.mediaEditRecoveryManager.clearElement(data.elementId)
+			}
+		})
 		this.generationRuntimeManager = new GenerationRuntimeManager({ canvas: this })
 		this.elementDetailsRuntimeManager = new ElementDetailsRuntimeManager()
 
@@ -1413,6 +1438,7 @@ export class Canvas {
 	 * 销毁画布
 	 */
 	public destroy(): void {
+		this.mediaEditRecoveryManager.clearAll()
 		this.visibilityManager.destroy()
 		this.imagePresentationScheduler.destroy()
 		this.resourceUrlWarmupManager.destroy()

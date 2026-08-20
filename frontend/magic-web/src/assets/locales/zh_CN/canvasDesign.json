@@ -251,6 +251,7 @@
 		"projectFilesRoot": "当前项目文件",
 		"quickEdit": "快捷编辑",
 		"reEditFromSaved": "重新编辑",
+		"reEnter": "重新输入",
 		"referenceImage": "参考图",
 		"resolution": "分辨率",
 		"size": "尺寸"
@@ -639,6 +640,7 @@
 		"quality": "画质",
 		"quickEdit": "快捷编辑",
 		"reEditFromSaved": "重新编辑",
+		"reEnter": "重新输入",
 		"referenceAsset": "全能模式",
 		"referenceAssetTotalMaxReached": "参考素材最多可上传 {{max}} 个",
 		"referenceAssetTotalMinNotMet": "参考素材至少需要 {{min}} 个",

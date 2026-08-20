@@ -10,6 +10,9 @@ describe("Canvas destroy", () => {
 		const canvas = Object.create(Canvas.prototype) as Canvas
 
 		Object.assign(canvas, {
+			mediaEditRecoveryManager: {
+				clearAll: vi.fn(() => destroyOrder.push("mediaEditRecoveryManager")),
+			},
 			visibilityManager: destroyable("visibilityManager"),
 			imagePresentationScheduler: destroyable("imagePresentationScheduler"),
 			resourceUrlWarmupManager: destroyable("resourceUrlWarmupManager"),
@@ -25,6 +28,7 @@ describe("Canvas destroy", () => {
 			imageEditingCoordinator: destroyable("imageEditingCoordinator"),
 			generationRuntimeManager: destroyable("generationRuntimeManager"),
 			mediaPlaybackCoordinator: destroyable("mediaPlaybackCoordinator"),
+			videoEditPlaybackManager: destroyable("videoEditPlaybackManager"),
 			audioPlaybackManager: destroyable("audioPlaybackManager"),
 			audioReplaceController: destroyable("audioReplaceController"),
 			imageReplaceController: destroyable("imageReplaceController"),
@@ -78,6 +82,7 @@ describe("Canvas destroy", () => {
 		canvas.destroy()
 
 		const eventEmitterIndex = destroyOrder.indexOf("eventEmitter")
+		expect(destroyOrder.indexOf("mediaEditRecoveryManager")).toBeLessThan(eventEmitterIndex)
 		const dependencyIndexes = [
 			"cursorManager",
 			"elementManager",

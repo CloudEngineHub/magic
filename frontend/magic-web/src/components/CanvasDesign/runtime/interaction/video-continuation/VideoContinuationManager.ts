@@ -2,10 +2,11 @@ import { toast } from "sonner"
 import type { VideoModelItem } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import { getMainContent } from "../../document/elementContent"
-import { ElementTypeEnum } from "../../document/types"
+import { ElementTypeEnum, type VideoElementContent } from "../../document/types"
 import { VideoElement } from "../../elements/video/VideoElement"
 import { extractVideoTailFrame } from "../../resources/video/VideoFrameExtractor"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
+import { buildMediaEditSourceFingerprint } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
 	collectConnectionCreateObstacleRects,
 	resolveConnectionCreateGapForElement,
@@ -197,27 +198,27 @@ export class VideoContinuationManager {
 	}
 
 	private collectSources(elementIds: readonly string[]): ContinuationSource[] {
-		return uniqueIds(elementIds)
-			.map((elementId) => {
-				const element = this.canvas.elementManager.getElementData(elementId)
-				if (!element || element.type !== ElementTypeEnum.Video) return null
-				const mainContent = getMainContent<VideoElementData>(element)
-				if (
-					!mainContent ||
-					typeof mainContent.src !== "string" ||
-					!mainContent.src ||
-					(mainContent.status !== undefined && mainContent.status !== "completed")
-				) {
-					return null
-				}
-				return {
-					elementId,
-					mainContentId: mainContent.contentId ?? null,
-					mainPath: mainContent.src,
-					fileName: getCanvasResourceFileName(mainContent.src) || elementId,
-				}
+		const sources: ContinuationSource[] = []
+		for (const elementId of uniqueIds(elementIds)) {
+			const element = this.canvas.elementManager.getElementData(elementId)
+			if (!element || element.type !== ElementTypeEnum.Video) continue
+			const mainContent = getMainContent<VideoElementContent>(element)
+			if (
+				!mainContent ||
+				typeof mainContent.src !== "string" ||
+				!mainContent.src ||
+				(mainContent.status !== undefined && mainContent.status !== "completed")
+			) {
+				continue
+			}
+			sources.push({
+				elementId,
+				mainContentId: mainContent.contentId ?? null,
+				mainPath: mainContent.src,
+				fileName: getCanvasResourceFileName(mainContent.src) || elementId,
 			})
-			.filter((source): source is ContinuationSource => source !== null)
+		}
+		return sources
 	}
 
 	private async prepareSource(
@@ -321,14 +322,41 @@ export class VideoContinuationManager {
 							markSkipped(item.source.elementId)
 							continue
 						}
-						instance.saveTempGenerateVideoRequest({
-							model_id: model.model.model_id,
-							input_mode: model.inputMode,
-							task: model.task,
-							inputs: {
-								frames: [{ role: "start", uri: item.uploadedPath }],
+						const createdData =
+							this.canvas.elementManager.getElementData?.(createdElementId)
+						if (createdData?.type !== ElementTypeEnum.Video) {
+							this.canvas.elementManager.delete(createdElementId)
+							markSkipped(item.source.elementId)
+							continue
+						}
+						const activeContent = getMainContent<VideoElementContent>(createdData)
+						if (!activeContent) {
+							this.canvas.elementManager.delete(createdElementId)
+							markSkipped(item.source.elementId)
+							continue
+						}
+						this.canvas.mediaEditRecoveryManager?.saveDraft(
+							{
+								elementId: createdElementId,
+								contentId: activeContent.contentId,
+								intent: "generate",
 							},
-						})
+							buildMediaEditSourceFingerprint(
+								activeContent.contentId,
+								activeContent.src,
+							),
+							{
+								request: {
+									model_id: model.model.model_id,
+									input_mode: model.inputMode,
+									task: model.task,
+									inputs: {
+										frames: [{ role: "start", uri: item.uploadedPath }],
+									},
+								},
+								modeDrafts: {},
+							},
+						)
 						createdNodes.push({
 							sourceId: item.source.elementId,
 							elementId: createdElementId,

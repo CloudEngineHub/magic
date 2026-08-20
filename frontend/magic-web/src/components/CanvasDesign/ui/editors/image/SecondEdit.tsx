@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useEventListener, useLatest } from "ahooks"
+import { useEventListener, useLatest, useUnmount } from "ahooks"
 import { ElementTypeEnum, type ImageElement } from "../../../runtime/document/types"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
@@ -28,7 +28,13 @@ import {
 	hasProcessingImageContent,
 } from "../../../runtime/document/elementContent"
 import { isEditorInteractiveKeyboardTarget } from "../keyboard"
-import { useIsMediaReplacing } from "../../../app/hooks/canvas"
+import { useCanvasEvent, useIsMediaReplacing } from "../../../app/hooks/canvas"
+import {
+	areMediaEditSnapshotsEqual,
+	buildMediaEditSourceFingerprint,
+	type MediaEditIntent,
+} from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import type { ImageEditSessionSnapshot } from "./useImageEditorConfig"
 
 type SecondEditIntent = "quick-edit" | "re-edit" | "generate-again"
 
@@ -41,18 +47,39 @@ interface SecondEditProps {
 export default function SecondEdit(props: SecondEditProps) {
 	const { selectedElements } = useCanvasUI()
 	const { canvas } = useCanvas()
-	const { imageModelList, methods } = useMagic()
+	const { imageModelList, isLoadingImageModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const editorRef = useRef<MessageEditorRef>(null)
 	const [pendingOpenMode, setPendingOpenMode] = useState<"quick-edit" | "regenerate" | null>(null)
 	const [editingIntent, setEditingIntent] =
 		useState<Extract<SecondEditIntent, "quick-edit" | "re-edit">>("quick-edit")
 	const activeContent = getActiveImageContent(props.imageElement)
+	const sessionStore = canvas?.mediaEditRecoveryManager
+	const sessionContentId = activeContent.contentId
+	const sessionSourceFingerprint = buildMediaEditSourceFingerprint(
+		sessionContentId,
+		activeContent.src,
+	)
+	const [sessionIntent, setSessionIntent] = useState<MediaEditIntent | null>(null)
+	const [hasInterruptedDraft, setHasInterruptedDraft] = useState(false)
+	const [pendingBaselineIntent, setPendingBaselineIntent] = useState<MediaEditIntent | null>(null)
+	const previousSourceFingerprintRef = useRef(sessionSourceFingerprint)
+	const sessionPersistenceEnabledRef = useRef(true)
+
+	const getSessionKey = useCallback(
+		(intent: MediaEditIntent) => ({
+			elementId: props.imageElement.id,
+			contentId: sessionContentId,
+			intent,
+		}),
+		[props.imageElement.id, sessionContentId],
+	)
 
 	// 使用共享的配置 hook（ossSrc 会直接从实例中获取，因为二次编辑只有在 ossSrc 准备好后才会显示）
 	const config = useImageEditorConfig({
 		imageElement: props.imageElement,
 		originalImageSrc: activeContent.src,
+		manageRecoverySession: false,
 		editorFocusRef: editorRef,
 		originalImageName:
 			// 从 src 字段提取文件名（例如："/超级画布/images/111.jpg" -> "111.jpg"）
@@ -74,6 +101,63 @@ export default function SecondEdit(props: SecondEditProps) {
 	const directGenerateRequest = activeContent.generateImageRequest
 	const hasProcessingContent = hasProcessingImageContent(props.imageElement)
 	useElementVersionToolbarSection(props.imageElement, !isEditing && !isReplacing)
+
+	const captureSessionDraft = useCallback(() => {
+		if (
+			!sessionPersistenceEnabledRef.current ||
+			!sessionStore ||
+			!sessionIntent ||
+			!config.hasRestoredRef.current ||
+			config.isRestoringRef.current ||
+			config.restoreRevision === 0
+		)
+			return
+		const key = getSessionKey(sessionIntent)
+		const snapshot = config.editSession.buildSnapshot()
+		const existing = sessionStore.get<ImageEditSessionSnapshot>(key, sessionSourceFingerprint)
+		if (existing) {
+			sessionStore.updateDraft(key, sessionSourceFingerprint, snapshot)
+			setHasInterruptedDraft(!areMediaEditSnapshotsEqual(existing.baseline, snapshot))
+			return
+		}
+		sessionStore.set(key, sessionSourceFingerprint, snapshot, snapshot)
+		setHasInterruptedDraft(false)
+	}, [
+		config.editSession,
+		config.hasRestoredRef,
+		config.isRestoringRef,
+		config.restoreRevision,
+		getSessionKey,
+		sessionIntent,
+		sessionSourceFingerprint,
+		sessionStore,
+	])
+
+	const captureSessionDraftRef = useLatest(captureSessionDraft)
+	useUnmount(() => captureSessionDraftRef.current?.())
+
+	useCanvasEvent(
+		"element:deselect",
+		({ data }) => {
+			if (
+				!sessionIntent ||
+				(data?.elementIds?.length && !data.elementIds.includes(props.imageElement.id))
+			) {
+				return
+			}
+			captureSessionDraft()
+		},
+		[captureSessionDraft, props.imageElement.id, sessionIntent],
+	)
+
+	useEffect(() => {
+		if (previousSourceFingerprintRef.current === sessionSourceFingerprint) return
+		sessionPersistenceEnabledRef.current = false
+		sessionStore?.clearElement(props.imageElement.id)
+		previousSourceFingerprintRef.current = sessionSourceFingerprint
+		setSessionIntent(null)
+		setHasInterruptedDraft(false)
+	}, [props.imageElement.id, sessionSourceFingerprint, sessionStore])
 
 	const createAndSubmitImageGeneration = useCallback(
 		async (
@@ -105,14 +189,26 @@ export default function SecondEdit(props: SecondEditProps) {
 			}
 
 			const intent = options?.intent ?? "quick-edit"
+			const sessionIntentToClear: MediaEditIntent | null =
+				intent === "quick-edit" || intent === "re-edit" ? intent : null
 			if (intent !== "quick-edit") {
 				if (hasProcessingImageContent(originalElementInstance.getData())) return false
 				sendingRef.current = true
 				setIsSending(true)
 				try {
-					const submitted = await originalElementInstance.submitContentGeneration(request)
+					const submitted = await originalElementInstance.submitContentGeneration(
+						request,
+						{
+							recoveryIntent: intent === "re-edit" ? "re-edit" : "generate",
+						},
+					)
 					if (!submitted) return false
-					originalElementInstance.clearTempGenerateImageRequestPrompt()
+					sessionPersistenceEnabledRef.current = false
+					if (sessionStore && sessionIntentToClear) {
+						sessionStore.clear(getSessionKey(sessionIntentToClear))
+						if (sessionIntent === sessionIntentToClear) setHasInterruptedDraft(false)
+					}
+					canvas.mediaEditRecoveryManager.clearElement(props.imageElement.id)
 					if (options?.clearEditorPromptOnSuccess) setPrompt("")
 					if (options?.closeEditorOnSuccess) setIsEditing(false)
 					if (options?.deselectOnSuccess) canvas.selectionManager.deselectAll()
@@ -131,7 +227,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				props.imageElement,
 				originalElementInstance,
 				canvas.elementManager,
-				NEW_ELEMENT_SPACING,
+				{ spacing: NEW_ELEMENT_SPACING },
 			)
 			if (!newPosition) {
 				return false
@@ -217,12 +313,6 @@ export default function SecondEdit(props: SecondEditProps) {
 					canvas,
 					newImageElement,
 					request: generateRequest,
-					draftRequest: {
-						...generateRequest,
-						prompt: "",
-						reference_images: [],
-						reference_image_options: undefined,
-					},
 					onSubmitStarted: () => {
 						canvas.eventEmitter.emit({
 							type: "element:image:generate-submit-started",
@@ -239,7 +329,12 @@ export default function SecondEdit(props: SecondEditProps) {
 				if (!submitted) {
 					return false
 				}
-				originalElementInstance.clearTempGenerateImageRequestPrompt()
+				sessionPersistenceEnabledRef.current = false
+				if (sessionStore && sessionIntentToClear) {
+					sessionStore.clear(getSessionKey(sessionIntentToClear))
+					if (sessionIntent === sessionIntentToClear) setHasInterruptedDraft(false)
+				}
+				canvas.mediaEditRecoveryManager.clearElement(props.imageElement.id)
 				if (options?.clearEditorPromptOnSuccess) {
 					setPrompt("")
 				}
@@ -255,7 +350,16 @@ export default function SecondEdit(props: SecondEditProps) {
 				setIsSending(false)
 			}
 		},
-		[activeContent.crop, canvas, imageModelList, props.imageElement, setPrompt],
+		[
+			activeContent.crop,
+			canvas,
+			getSessionKey,
+			imageModelList,
+			props.imageElement,
+			sessionIntent,
+			sessionStore,
+			setPrompt,
+		],
 	)
 
 	// 处理发送按钮点击
@@ -329,13 +433,19 @@ export default function SecondEdit(props: SecondEditProps) {
 
 	useEffect(() => {
 		if (!isReplacing) return
+		sessionPersistenceEnabledRef.current = false
 		setPendingOpenMode(null)
 		setIsEditing(false)
 		setIsVisible(false)
-	}, [isReplacing])
+		sessionStore?.clearElement(props.imageElement.id)
+		setSessionIntent(null)
+		setHasInterruptedDraft(false)
+	}, [isReplacing, props.imageElement.id, sessionStore])
 
 	useEffect(() => {
 		if (!pendingOpenMode) return
+		// 等模型列表完成后再消费入口指令，避免恢复快照时配置 hook 仍处于未初始化状态。
+		if (isLoadingImageModelList) return
 		if (isEditing) {
 			setPendingOpenMode(null)
 			return
@@ -344,22 +454,74 @@ export default function SecondEdit(props: SecondEditProps) {
 		const modeToOpen = pendingOpenMode
 		// 先消费指令，避免 restore/open 过程中 effect 重入再次执行。
 		setPendingOpenMode(null)
+		sessionPersistenceEnabledRef.current = true
 
-		if (modeToOpen === "quick-edit") {
-			setEditingIntent("quick-edit")
+		const intent: MediaEditIntent = modeToOpen === "quick-edit" ? "quick-edit" : "re-edit"
+		const session = sessionStore?.get<ImageEditSessionSnapshot>(
+			getSessionKey(intent),
+			sessionSourceFingerprint,
+		)
+		const hasDraft = Boolean(
+			session && !areMediaEditSnapshotsEqual(session.baseline, session.draft),
+		)
+		setEditingIntent(intent)
+		setSessionIntent(intent)
+		setHasInterruptedDraft(hasDraft)
+		if (session) {
+			config.editSession.restoreSnapshotToUi(session.draft)
+		} else if (intent === "quick-edit") {
+			setPendingBaselineIntent(intent)
 			restoreQuickEditConfigToUi()
 		} else {
-			setEditingIntent("re-edit")
+			setPendingBaselineIntent(intent)
 			restoreOriginalGenerateImageRequestToUi()
 		}
 		openEditor()
 	}, [
+		config.editSession,
+		getSessionKey,
 		isEditing,
+		isLoadingImageModelList,
 		openEditor,
 		pendingOpenMode,
 		restoreOriginalGenerateImageRequestToUi,
 		restoreQuickEditConfigToUi,
+		sessionSourceFingerprint,
+		sessionStore,
 	])
+
+	useEffect(() => {
+		if (!isEditing || !pendingBaselineIntent || !sessionStore || config.restoreRevision === 0)
+			return
+		if (!config.hasRestoredRef.current) return
+		const key = getSessionKey(pendingBaselineIntent)
+		if (!sessionStore.get(key, sessionSourceFingerprint)) {
+			const baseline = config.editSession.buildSnapshot()
+			sessionStore.set(key, sessionSourceFingerprint, baseline, baseline)
+		}
+		setPendingBaselineIntent(null)
+	}, [
+		config.editSession,
+		config.hasRestoredRef,
+		config.restoreRevision,
+		getSessionKey,
+		isEditing,
+		pendingBaselineIntent,
+		sessionSourceFingerprint,
+		sessionStore,
+	])
+
+	const handleRestoreBaseline = useCallback(() => {
+		if (!sessionStore || !sessionIntent) return
+		const key = getSessionKey(sessionIntent)
+		const session = sessionStore.get<ImageEditSessionSnapshot>(key, sessionSourceFingerprint)
+		if (!session) return
+		config.editSession.restoreSnapshotToUi(session.baseline)
+		sessionStore.set(key, sessionSourceFingerprint, session.baseline, session.baseline)
+		setHasInterruptedDraft(false)
+		// 恢复配置按钮会抢走焦点；等待编辑器同步快照后，把光标恢复到之前的编辑位置。
+		window.setTimeout(() => editorRef.current?.focus(), 0)
+	}, [config.editSession, getSessionKey, sessionIntent, sessionSourceFingerprint, sessionStore])
 
 	// 使用 useLatest 获取最新的值，避免闭包问题
 	const isEditingRef = useLatest(isEditing)
@@ -476,6 +638,8 @@ export default function SecondEdit(props: SecondEditProps) {
 				autoFocus
 				autoFocusAtDocumentEnd
 				isDropEnabled={isEditing}
+				showRestoreDefaultConfig={hasInterruptedDraft}
+				onRestoreDefaultConfig={handleRestoreBaseline}
 				className={styles.imageMessageEditor}
 				style={{ visibility: isVisible ? "visible" : "hidden" }}
 				onPreviewMediaResource={props.onPreviewMediaResource}

@@ -19,8 +19,6 @@ interface ImageMessageEditorRenderProps {
 	autoFocus?: boolean
 	/** 与 autoFocus 联用：挂载后将光标置于提示词末尾 */
 	autoFocusAtDocumentEnd?: boolean
-	/** 失败重试时按已受理任务的完整请求回填。 */
-	preferCurrentRequestOnRestore?: boolean
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
 }
@@ -30,7 +28,6 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 		imageElement,
 		autoFocus = false,
 		autoFocusAtDocumentEnd = false,
-		preferCurrentRequestOnRestore = false,
 		onPreviewMediaResource,
 		isMediaResourcePreviewOpen = false,
 	} = props
@@ -46,7 +43,6 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 	const config = useImageEditorConfig({
 		imageElement,
 		editorFocusRef: editorRef,
-		preferCurrentRequestOnRestore,
 	})
 	// 保存默认生图配置
 	const saveDefaultGenerateImageConfig = useCallback(

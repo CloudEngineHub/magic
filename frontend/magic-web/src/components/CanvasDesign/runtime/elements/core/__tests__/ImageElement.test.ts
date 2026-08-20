@@ -16,6 +16,10 @@ import { GenerationRuntimeManager } from "../../../generation/GenerationRuntimeM
 import { GenerationAttemptCoordinator } from "../../../generation/GenerationAttemptCoordinator"
 import type { Canvas } from "../../../core/Canvas"
 import { INVALID_GENERATED_RESOURCE_PATH_ERROR } from "../../../resources/polling/generationPollingUtils"
+import {
+	buildMediaEditSourceFingerprint,
+	MediaEditRecoveryManager,
+} from "../../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 function createDeferred() {
 	let resolve!: () => void
@@ -58,7 +62,6 @@ type GenerationTestImageElement = {
 	isRetryEditing: boolean
 	canvas: Canvas
 	pollingManager: { start: ReturnType<typeof vi.fn> }
-	clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
 	rerender?: ReturnType<typeof vi.fn>
 	rerenderWhenTransformIdle?: ReturnType<typeof vi.fn>
 	updateImageElementNames?: ReturnType<typeof vi.fn>
@@ -1228,7 +1231,6 @@ describe("ImageElement mounted image node sync", () => {
 			pollingManager: { start: ReturnType<typeof vi.fn> }
 			updateImageElementNames: ReturnType<typeof vi.fn>
 			createOssSrcPromise: ReturnType<typeof vi.fn>
-			clearTempGenerateImageRequestPrompt: ReturnType<typeof vi.fn>
 			rerender: ReturnType<typeof vi.fn>
 		}
 		element.data = {
@@ -1255,7 +1257,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.pollingManager = { start: vi.fn() }
 		element.updateImageElementNames = vi.fn()
 		element.createOssSrcPromise = vi.fn()
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerender = vi.fn()
 
 		const resultPromise = element.submitInitialGeneration({
@@ -1327,7 +1328,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.pollingManager = { start: vi.fn() }
 		element.updateImageElementNames = vi.fn()
 		element.createOssSrcPromise = vi.fn()
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerender = vi.fn()
 
 		await expect(
@@ -1352,6 +1352,7 @@ describe("ImageElement mounted image node sync", () => {
 	it("persists a failed Content when a later submission fails", async () => {
 		const generateImage = vi.fn().mockRejectedValue(new Error("submit failed"))
 		const generationRuntimeManager = new GenerationRuntimeManager()
+		const mediaEditRecoveryManager = new MediaEditRecoveryManager()
 		const initialData = contentImage([
 			{
 				contentId: "v1",
@@ -1368,6 +1369,7 @@ describe("ImageElement mounted image node sync", () => {
 		const canvas = {
 			magicConfigManager: { config: { methods: { generateImage } } },
 			generationRuntimeManager,
+			mediaEditRecoveryManager,
 			elementManager: {
 				getElementData: () => element.data,
 				getTemporaryElementMetadata: () => null,
@@ -1385,11 +1387,13 @@ describe("ImageElement mounted image node sync", () => {
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 		element.canvas = canvas
 		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
-			element.submitContentGeneration({ model_id: "image-model", prompt: "new version" }),
+			element.submitContentGeneration(
+				{ model_id: "image-model", prompt: "new version" },
+				{ recoveryIntent: "re-edit" },
+			),
 		).resolves.toBe(false)
 
 		if (!isImageElementContent(element.data)) throw new Error("Expected image Content data")
@@ -1408,6 +1412,32 @@ describe("ImageElement mounted image node sync", () => {
 			type: "element:image:generate-submit-failed",
 			data: { elementId: element.data.id },
 		})
+		expect(
+			mediaEditRecoveryManager.get(
+				{
+					elementId: element.data.id,
+					contentId: "v1",
+					intent: "re-edit",
+				},
+				buildMediaEditSourceFingerprint("v1", "./images/original.png"),
+			)?.draft,
+		).toEqual({
+			request: expect.objectContaining({
+				model_id: "image-model",
+				prompt: "new version",
+				image_id: expect.any(String),
+			}),
+		})
+		expect(
+			mediaEditRecoveryManager.get(
+				{
+					elementId: element.data.id,
+					contentId: "v1",
+					intent: "generate",
+				},
+				buildMediaEditSourceFingerprint("v1", "./images/original.png"),
+			),
+		).toBeNull()
 	})
 
 	it("clears the pending version attempt when the element disappears after submission", async () => {
@@ -1448,7 +1478,6 @@ describe("ImageElement mounted image node sync", () => {
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 		element.canvas = canvas
 		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		const resultPromise = element.submitContentGeneration({
@@ -1511,7 +1540,6 @@ describe("ImageElement mounted image node sync", () => {
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 		element.canvas = canvas
 		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateImageRequestPrompt = vi.fn()
 		element.rerenderWhenTransformIdle = vi.fn()
 
 		await expect(
@@ -1562,7 +1590,6 @@ describe("ImageElement mounted image node sync", () => {
 				eventEmitter: { emit: ReturnType<typeof vi.fn> }
 			}
 			pollingManager: { start: ReturnType<typeof vi.fn> }
-			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
 			rerender: ReturnType<typeof vi.fn>
 		}
 		element.data = {
@@ -1590,7 +1617,6 @@ describe("ImageElement mounted image node sync", () => {
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 		element.canvas = canvas as typeof element.canvas
 		element.pollingManager = { start: vi.fn() }
-		element.clearTempGenerateVideoRequest = vi.fn()
 		element.rerender = vi.fn()
 
 		const resultPromise = element.generateVideo({
@@ -1653,7 +1679,6 @@ describe("ImageElement mounted image node sync", () => {
 				setContentId: ReturnType<typeof vi.fn>
 				start: ReturnType<typeof vi.fn>
 			}
-			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
 			rerender: ReturnType<typeof vi.fn>
 		}
 		const update = vi.fn((_id: string, patch: Partial<VideoElementData>) => {
@@ -1676,7 +1701,6 @@ describe("ImageElement mounted image node sync", () => {
 		element.isErrorState = false
 		element.isRetryEditing = false
 		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
-		element.clearTempGenerateVideoRequest = vi.fn()
 		element.rerender = vi.fn()
 
 		const resultPromise = element.generateVideo(
@@ -1707,6 +1731,73 @@ describe("ImageElement mounted image node sync", () => {
 		)
 		expect(data.contents[0]?.generateVideoRequest).not.toHaveProperty("extensions")
 		expect(element.pollingManager.start).toHaveBeenCalledOnce()
+	})
+
+	it("saves the complete request when initial video submission fails", async () => {
+		const generateVideo = vi.fn().mockRejectedValue(new Error("submit failed"))
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const mediaEditRecoveryManager = new MediaEditRecoveryManager()
+		const data: VideoElementData = {
+			id: "video-failed-initial",
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+			activeContentId: "video-content-1",
+			mainContentId: "video-content-1",
+			contents: [{ contentId: "video-content-1" }],
+		}
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: VideoElementData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: Canvas
+			pollingManager: { start: ReturnType<typeof vi.fn> }
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = data
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
+			mediaEditRecoveryManager,
+			elementManager: {
+				getElementData: () => data,
+				getTemporaryElementMetadata: () => null,
+			},
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas
+		element.pollingManager = { start: vi.fn() }
+		element.rerender = vi.fn()
+
+		await expect(
+			element.generateVideo({
+				model_id: "video-model",
+				prompt: "initial prompt",
+				input_mode: "standard",
+			}),
+		).resolves.toBe(false)
+
+		const recovery = mediaEditRecoveryManager.get(
+			{
+				elementId: data.id,
+				contentId: "video-content-1",
+				intent: "generate",
+			},
+			buildMediaEditSourceFingerprint("video-content-1"),
+		)
+		expect(recovery?.draft).toEqual({
+			request: expect.objectContaining({
+				model_id: "video-model",
+				prompt: "initial prompt",
+				input_mode: "standard",
+				video_id: expect.any(String),
+			}),
+		})
 	})
 
 	it("appends a new video Content for result-state regeneration", async () => {
@@ -1757,7 +1848,6 @@ describe("ImageElement mounted image node sync", () => {
 				setContentId: ReturnType<typeof vi.fn>
 				start: ReturnType<typeof vi.fn>
 			}
-			clearTempGenerateVideoRequest: ReturnType<typeof vi.fn>
 			rerender: ReturnType<typeof vi.fn>
 		}
 		element.data = data
@@ -1776,7 +1866,6 @@ describe("ImageElement mounted image node sync", () => {
 		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
 		element.canvas = canvas as typeof element.canvas
 		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
-		element.clearTempGenerateVideoRequest = vi.fn()
 		element.rerender = vi.fn()
 
 		const resultPromise = element.submitContentGeneration({
@@ -1809,5 +1898,126 @@ describe("ImageElement mounted image node sync", () => {
 			data.contents[1]?.contentId,
 		)
 		expect(element.pollingManager.start).toHaveBeenCalledTimes(1)
+	})
+
+	it("preserves re-edit mode drafts without polluting the generate session on failure", async () => {
+		const generateVideo = vi.fn().mockRejectedValue(new Error("submit failed"))
+		const generationRuntimeManager = new GenerationRuntimeManager()
+		const mediaEditRecoveryManager = new MediaEditRecoveryManager()
+		const data: VideoElementData = {
+			id: "video-failed-1",
+			type: ElementTypeEnum.Video,
+			width: 100,
+			height: 100,
+			activeContentId: "video-v1",
+			mainContentId: "video-v1",
+			contents: [
+				{
+					contentId: "video-v1",
+					src: "./videos/original.mp4",
+					status: GenerationStatus.Completed,
+				},
+			],
+		}
+		const element = Object.create(VideoElement.prototype) as VideoElement & {
+			data: VideoElementData
+			isGenerating: boolean
+			isErrorState: boolean
+			isRetryEditing: boolean
+			canvas: {
+				magicConfigManager: { config: { methods: { generateVideo: typeof generateVideo } } }
+				generationRuntimeManager: GenerationRuntimeManager
+				generationAttemptCoordinator: GenerationAttemptCoordinator
+				mediaEditRecoveryManager: MediaEditRecoveryManager
+				elementManager: { getElementData: () => VideoElementData }
+				eventEmitter: { emit: ReturnType<typeof vi.fn> }
+			}
+			pollingManager: {
+				setContentId: ReturnType<typeof vi.fn>
+				start: ReturnType<typeof vi.fn>
+			}
+			rerender: ReturnType<typeof vi.fn>
+		}
+		element.data = data
+		element.isGenerating = false
+		element.isErrorState = false
+		element.isRetryEditing = false
+		const canvas = {
+			magicConfigManager: { config: { methods: { generateVideo } } },
+			generationRuntimeManager,
+			mediaEditRecoveryManager,
+			elementManager: { getElementData: () => data },
+			eventEmitter: { emit: vi.fn() },
+		} as unknown as Canvas
+		canvas.generationAttemptCoordinator = new GenerationAttemptCoordinator(canvas)
+		element.canvas = canvas as typeof element.canvas
+		element.pollingManager = { setContentId: vi.fn(), start: vi.fn() }
+		element.rerender = vi.fn()
+		const sourceFingerprint = buildMediaEditSourceFingerprint(
+			"video-v1",
+			"./videos/original.mp4",
+		)
+		mediaEditRecoveryManager.set(
+			{
+				elementId: data.id,
+				contentId: "video-v1",
+				intent: "re-edit",
+			},
+			sourceFingerprint,
+			{
+				request: { model_id: "video-model", prompt: "draft prompt" },
+				modeDrafts: {
+					keyframe_guided: {
+						prompt: "saved keyframe prompt",
+						linkedFrameBindings: [{ sourceConnectionId: "connection-1" }],
+					},
+				},
+			},
+		)
+
+		await expect(
+			element.submitContentGeneration(
+				{
+					model_id: "video-model",
+					prompt: "  edited prompt  ",
+					input_mode: "first_last_frame",
+					inputs: { start_frame: { path: "./images/start.png" } },
+				},
+				{ recoveryIntent: "re-edit" },
+			),
+		).resolves.toBe(false)
+
+		const recovery = mediaEditRecoveryManager.get(
+			{
+				elementId: data.id,
+				contentId: "video-v1",
+				intent: "re-edit",
+			},
+			sourceFingerprint,
+		)
+		expect(recovery?.draft).toEqual({
+			request: expect.objectContaining({
+				model_id: "video-model",
+				prompt: "edited prompt",
+				input_mode: "first_last_frame",
+				video_id: expect.any(String),
+			}),
+			modeDrafts: {
+				keyframe_guided: {
+					prompt: "saved keyframe prompt",
+					linkedFrameBindings: [{ sourceConnectionId: "connection-1" }],
+				},
+			},
+		})
+		expect(
+			mediaEditRecoveryManager.get(
+				{
+					elementId: data.id,
+					contentId: "video-v1",
+					intent: "generate",
+				},
+				sourceFingerprint,
+			),
+		).toBeNull()
 	})
 })

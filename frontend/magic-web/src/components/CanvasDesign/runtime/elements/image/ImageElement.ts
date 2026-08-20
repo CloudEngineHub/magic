@@ -81,6 +81,10 @@ import {
 	isBatchImageGenerationTaskMeta,
 } from "../../resources/image/imageGenerationTaskMeta"
 import { resolveGenerationErrorMessage } from "../../resources/polling/generationPollingUtils"
+import {
+	buildMediaEditSourceFingerprint,
+	type MediaEditIntent,
+} from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 const IMAGE_CONTENT_NODE_NAME = "image-content"
 
@@ -143,8 +147,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	/** 最近一次已应用到视图的资源失败签名（用于去重，避免重复 rerender） */
 	private lastAppliedLoadFailureSignature: string | null = null
 
-	// 临时生成图片请求数据（用于弹窗关闭后恢复）
-	private tempGenerateImageRequest?: Partial<GenerateImageRequest>
 	// 参考图信息列表（保存上传的参考图完整信息）
 	private referenceImageInfos: UploadFileResponse[] = []
 	// 上传结果（由全局上传管理器设置）
@@ -198,28 +200,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			},
 		})
 
-		// 从 storage 恢复 tempGenerateImageRequest
-		const tempConfig = ImageElement.getTempConfigFromStorage(this.canvas, this.data.id)
-
-		// 如果有临时配置，恢复临时配置
-		if (tempConfig) {
-			this.tempGenerateImageRequest = tempConfig
-		}
-		// 如果没有临时配置，从 generateImageRequest 恢复临时配置
-		else if (
-			this.getActiveContentData().generateImageRequest &&
-			!this.tempGenerateImageRequest
-		) {
-			const { model_id, resolution, size, image_generation_config } =
-				this.getActiveContentData().generateImageRequest || {}
-			this.tempGenerateImageRequest = {
-				...(model_id && { model_id }),
-				...(resolution && { resolution }),
-				...(size && { size }),
-				...(image_generation_config && { image_generation_config }),
-			}
-		}
-
 		const activeContent = this.getActiveContentData()
 		// active 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度。
 		if (activeContent.src) {
@@ -238,6 +218,34 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 		// 任一 Content 处于 processing 都需要继续轮询，即使 active 仍显示其他 Content。
 		this.pollingManager.syncWithElementData()
+	}
+
+	private saveGenerateRecoveryDraft(
+		request: Partial<GenerateImageRequest>,
+		content?: ImageElementContent,
+		intent: MediaEditIntent = "generate",
+	): void {
+		if (!isImageElementContent(this.data)) return
+		const targetContent = content ?? this.getActiveContentData()
+		this.canvas.mediaEditRecoveryManager?.saveDraft(
+			{
+				elementId: this.data.id,
+				contentId: targetContent.contentId,
+				intent,
+			},
+			buildMediaEditSourceFingerprint(targetContent.contentId, targetContent.src),
+			{ request },
+		)
+	}
+
+	private clearGenerateRecoveryDraft(content?: ImageElementContent): void {
+		if (!isImageElementContent(this.data)) return
+		const targetContent = content ?? this.getActiveContentData()
+		this.canvas.mediaEditRecoveryManager?.clear({
+			elementId: this.data.id,
+			contentId: targetContent.contentId,
+			intent: "generate",
+		})
 	}
 
 	private resolveActiveContentData(): ImageElementContent {
@@ -349,8 +357,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/** 提交当前图片元素的重新编辑/再次生成 Content。 */
-	public submitContentGeneration(request: GenerateImageRequest): Promise<boolean> {
-		return this.generateImageContent(request)
+	public submitContentGeneration(
+		request: GenerateImageRequest,
+		options?: { recoveryIntent?: MediaEditIntent },
+	): Promise<boolean> {
+		return this.generateImageContent(request, options?.recoveryIntent)
 	}
 
 	public switchActiveContent(contentId: string): boolean {
@@ -595,6 +606,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
+		const recoveryContent = this.getActiveContentData()
 		const contentId = getActiveImageContentId(this.data)
 		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
 			elementId: this.data.id,
@@ -643,8 +655,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 启动轮询检查结果
 			this.pollingManager.start()
 
-			// 清除临时生成图片请求数据中的 prompt（保留其他配置，以便二次编辑时复用）
-			this.clearTempGenerateImageRequestPrompt()
+			this.clearGenerateRecoveryDraft(recoveryContent)
 
 			// 触发重新渲染以清除错误状态显示
 			this.rerender()
@@ -662,6 +673,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				data: { elementId: this.data.id },
 			})
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent)
 			return false
 		}
 	}
@@ -670,7 +682,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 在当前元素内追加一次重新编辑/再次生成任务。
 	 * 迁移后的 processing Content 追加只在生成确认后通过一次文档更新完成。
 	 */
-	private async generateImageContent(request: GenerateImageRequest): Promise<boolean> {
+	private async generateImageContent(
+		request: GenerateImageRequest,
+		recoveryIntent: MediaEditIntent = "generate",
+	): Promise<boolean> {
 		const generateImage = this.canvas.magicConfigManager.config?.methods?.generateImage
 		if (!generateImage || this.isGenerating || hasProcessingImageContent(this.data))
 			return false
@@ -685,6 +700,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.isGenerating = true
 		this.isErrorState = false
 		this.isRetryEditing = false
+		const recoveryContent = this.getActiveContentData()
 
 		const attemptId = this.beginOrReuseGenerationAttempt("image-generate", {
 			elementId: this.data.id,
@@ -695,7 +711,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			this.canvas.generationAttemptCoordinator.rejectAttempt(attemptId)
 			this.isGenerating = false
 			this.isErrorState = true
-			this.saveTempGenerateImageRequest(requestWithId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
 		}
@@ -725,7 +741,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			}
 
 			this.isGenerating = false
-			this.clearTempGenerateImageRequestPrompt()
+			this.clearGenerateRecoveryDraft(recoveryContent)
 			this.pollingManager.start()
 			this.rerenderWhenTransformIdle()
 			return true
@@ -748,7 +764,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			if (!committed) return rejectSubmission()
 			this.isGenerating = false
 			this.isErrorState = true
-			this.saveTempGenerateImageRequest(requestWithId)
+			this.saveGenerateRecoveryDraft(requestWithId, recoveryContent, recoveryIntent)
 			this.rerenderWhenTransformIdle()
 			return false
 		}
@@ -1847,65 +1863,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	/**
-	 * 从 storage 中获取临时配置
-	 */
-	static getTempConfigFromStorage(
-		canvas: Canvas,
-		elementId: string,
-	): Partial<GenerateImageRequest> | undefined {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage) return undefined
-
-		const storage = methods.getStorage()
-		return storage?.tempImageConfigs?.[elementId]
-	}
-
-	/**
-	 * 保存临时配置到 storage
-	 */
-	static saveTempConfigToStorage(
-		canvas: Canvas,
-		elementId: string,
-		config: Partial<GenerateImageRequest>,
-	): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) {
-			return
-		}
-
-		const storage = methods.getStorage() || {}
-		const tempImageConfigs = storage.tempImageConfigs || {}
-
-		tempImageConfigs[elementId] = config
-
-		const newStorage = {
-			...storage,
-			tempImageConfigs,
-		}
-
-		methods.saveStorage(newStorage)
-	}
-
-	/**
-	 * 从 storage 中清除临时配置
-	 */
-	static clearTempConfigFromStorage(canvas: Canvas, elementId: string): void {
-		const methods = canvas.magicConfigManager.config?.methods
-		if (!methods?.getStorage || !methods?.saveStorage) return
-
-		const storage = methods.getStorage()
-		if (!storage?.tempImageConfigs) return
-
-		const tempImageConfigs = { ...storage.tempImageConfigs }
-		delete tempImageConfigs[elementId]
-
-		methods.saveStorage({
-			...storage,
-			tempImageConfigs,
-		})
-	}
-
-	/**
 	 * 获取渲染名称（用于显示的默认名称，支持多语言）
 	 */
 	public getRenderName(): string {
@@ -2852,41 +2809,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (this.deselectHandler) {
 			this.canvas.eventEmitter.off("element:deselect", this.deselectHandler)
 			this.deselectHandler = undefined
-		}
-	}
-
-	/**
-	 * 保存临时生成图片请求数据
-	 */
-	saveTempGenerateImageRequest(request: Partial<GenerateImageRequest>): void {
-		this.tempGenerateImageRequest = request
-		ImageElement.saveTempConfigToStorage(this.canvas, this.data.id, request)
-	}
-
-	/**
-	 * 获取临时生成图片请求数据
-	 */
-	getTempGenerateImageRequest(): Partial<GenerateImageRequest> | undefined {
-		return this.tempGenerateImageRequest
-	}
-
-	/**
-	 * 清除临时生成图片请求数据
-	 */
-	clearTempGenerateImageRequest(): void {
-		this.tempGenerateImageRequest = undefined
-		ImageElement.clearTempConfigFromStorage(this.canvas, this.data.id)
-	}
-
-	/**
-	 * 清除临时生成图片请求数据中的 prompt（保留其他配置）
-	 */
-	clearTempGenerateImageRequestPrompt(): void {
-		if (this.tempGenerateImageRequest) {
-			// eslint-disable-next-line @typescript-eslint/no-unused-vars
-			const { prompt, ...rest } = this.tempGenerateImageRequest
-			this.tempGenerateImageRequest = rest
-			ImageElement.saveTempConfigToStorage(this.canvas, this.data.id, rest)
 		}
 	}
 

@@ -10,7 +10,6 @@ function createImageInstance(
 	const instance = Object.create(ImageElementClass.prototype) as ImageElementClass
 	instance.submitInitialGeneration =
 		submitInitialGeneration as ImageElementClass["submitInitialGeneration"]
-	instance.saveTempGenerateImageRequest = vi.fn()
 	return instance
 }
 

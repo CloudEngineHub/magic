@@ -2,12 +2,12 @@ import type { Canvas } from "../../../../runtime/core/Canvas"
 import type { ImageElement } from "../../../../runtime/document/types"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import type { GenerateImageRequest } from "../../../../public/magic-types"
+import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface CreateAndSubmitImageGenerationOptions {
 	canvas: Canvas | null | undefined
 	newImageElement: ImageElement
 	request: GenerateImageRequest
-	draftRequest?: Partial<GenerateImageRequest>
 	onSubmitStarted?: () => void
 	onSubmitFailed?: () => void
 }
@@ -16,8 +16,7 @@ interface CreateAndSubmitImageGenerationOptions {
 export async function createAndSubmitImageGeneration(
 	options: CreateAndSubmitImageGenerationOptions,
 ): Promise<boolean> {
-	const { canvas, newImageElement, request, draftRequest, onSubmitStarted, onSubmitFailed } =
-		options
+	const { canvas, newImageElement, request, onSubmitStarted, onSubmitFailed } = options
 	if (!canvas || !request.model_id || !request.prompt?.trim()) {
 		return false
 	}
@@ -36,7 +35,20 @@ export async function createAndSubmitImageGeneration(
 		...request,
 		prompt: request.prompt.trim(),
 	}
-	elementInstance.saveTempGenerateImageRequest(draftRequest ?? requestToSubmit)
+	const activeContent = newImageElement.contents?.find(
+		(content) => content.contentId === newImageElement.activeContentId,
+	)
+	if (activeContent) {
+		canvas.mediaEditRecoveryManager?.saveDraft(
+			{
+				elementId,
+				contentId: activeContent.contentId,
+				intent: "generate",
+			},
+			buildMediaEditSourceFingerprint(activeContent.contentId, activeContent.src),
+			{ request: requestToSubmit },
+		)
+	}
 	onSubmitStarted?.()
 
 	let submitted: boolean

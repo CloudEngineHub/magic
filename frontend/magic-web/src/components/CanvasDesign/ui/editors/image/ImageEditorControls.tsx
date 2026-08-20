@@ -25,6 +25,7 @@ import type {
 } from "../../../public/props"
 import SizeIconPreview from "../../primitives/custom/SizeIconPreview/index"
 import SourceList, {
+	isSourceListSlotOption,
 	type SourceListOption,
 	type SourceListRenderItemParams,
 } from "../../panels/source-list/index"
@@ -151,6 +152,7 @@ interface ImageEditorControlsProps {
 	onLinkedMediaSelectionChange?: (connectionId: string, selected: boolean) => void
 	renderPromptOptimizationButton?: () => React.ReactNode
 	renderSendButton?: () => React.ReactNode
+	renderRestoreDefaultConfigButton?: () => React.ReactNode
 	/** 将媒体 SourceList 挂载到编辑器顶部；未传入时保留内联渲染。 */
 	sourceListContainer?: HTMLElement | null
 }
@@ -166,6 +168,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		onLinkedMediaSelectionChange,
 		renderPromptOptimizationButton,
 		renderSendButton,
+		renderRestoreDefaultConfigButton,
 		sourceListContainer,
 	} = props
 	const { t } = useCanvasDesignI18n()
@@ -235,6 +238,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 
 	const handleSelectReferenceSlot = useCallback(
 		(option: SourceListOption) => {
+			if (!isSourceListSlotOption(option)) return
 			setSelectedReferenceSlotKey(option.value)
 			handlers.prepareReferenceSlotSelection(option.slotIndex, {
 				slotKey: option.value,
@@ -372,7 +376,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 								resolveResourceReference,
 							) ===
 								getLinkedMediaReferenceIdentity(
-									hoveredMentionPath,
+									hoveredMentionPath ?? undefined,
 									resolveResourceReference,
 								) &&
 							sourceListStyles.sourceItemMentionHovered,
@@ -447,6 +451,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 						/>
 					</div>
 					<div className={styles.right}>
+						{renderRestoreDefaultConfigButton && renderRestoreDefaultConfigButton()}
 						{supportedImageSettingOptions.map((setting) => {
 							const defaultOption = setting.options.find(
 								(option) => option.value === setting.default,

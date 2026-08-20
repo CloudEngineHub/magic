@@ -7,6 +7,8 @@ import { resolveDerivedRightPlacement } from "../../../../runtime/shared/placeme
 import type { GenerateVideoRequest } from "../../../../public/magic-types"
 import { calculateCanvasSizeFromAspectRatio } from "../generation/video-editor-config.generation"
 import { hasVideoGenerationRequestSubmitIntent } from "../../../../runtime/shared/videoGenerationRequestIntent"
+import { getActiveContent } from "../../../../runtime/document/elementContent"
+import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface CreateAndSubmitVideoGenerationOptions {
 	canvas: Canvas | null | undefined
@@ -73,7 +75,18 @@ export async function createAndSubmitVideoGeneration(
 		...request,
 		prompt: request.prompt?.trim() || undefined,
 	}
-	newElementInstance.saveTempGenerateVideoRequest(requestToSubmit)
+	const activeContent = getActiveContent(newVideoElement)
+	if (activeContent) {
+		canvas.mediaEditRecoveryManager?.saveDraft(
+			{
+				elementId: newElementId,
+				contentId: activeContent.contentId,
+				intent: "generate",
+			},
+			buildMediaEditSourceFingerprint(activeContent.contentId, activeContent.src),
+			{ request: requestToSubmit, modeDrafts: {} },
+		)
+	}
 
 	let submitted: boolean
 	try {

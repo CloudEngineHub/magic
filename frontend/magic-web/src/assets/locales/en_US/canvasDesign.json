@@ -251,6 +251,7 @@
 		"projectFilesRoot": "Current Project Files",
 		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
+		"reEnter": "Re-enter",
 		"referenceImage": "Image",
 		"resolution": "Resolution",
 		"size": "Size"
@@ -638,6 +639,7 @@
 		"quality": "Quality",
 		"quickEdit": "Quick edit",
 		"reEditFromSaved": "Re-edit",
+		"reEnter": "Re-enter",
 		"referenceAsset": "Omni Mode",
 		"referenceAssetTotalMaxReached": "Up to {{max}} reference assets are allowed",
 		"referenceAssetTotalMinNotMet": "At least {{min}} reference assets are required",

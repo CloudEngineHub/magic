@@ -10,6 +10,7 @@ import type {
 	VideoModelItem,
 	VideoGenerationDurationRange,
 } from "../../../public/magic-types"
+import type { MediaEditIntent } from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import type {
 	ReferenceAssetPerTypeLimits,
 	ReferenceAssetTypeCounts,
@@ -31,6 +32,10 @@ export interface UseVideoEditorConfigOptions {
 	 * quickEdit 以当前视频作为唯一 reference_videos 初始化快捷编辑。
 	 */
 	restoreOnMount?: "preferDraft" | "originalRequestOnly" | "quickEdit"
+	sessionSnapshot?: VideoEditSessionSnapshot
+	/** 是否由该配置 hook 管理普通 Canvas 内存恢复；二次编辑由外层意图会话管理。 */
+	manageRecoverySession?: boolean
+	recoveryIntent?: MediaEditIntent
 	/** 尺寸选择变化时是否同步更新当前 videoElement；结果态重新编辑生成新元素时应关闭 */
 	syncElementSize?: boolean
 }
@@ -67,6 +72,11 @@ export interface VideoReferenceAssetInfo extends UploadFileResponse {
 
 /** 首尾帧槽位当前由哪个连线媒体提供，运行时用于展示来源与处理替换。 */
 export type LinkedFrameBinding = StoredLinkedFrameBinding
+
+export interface VideoEditSessionSnapshot {
+	request: Partial<GenerateVideoRequest>
+	modeDrafts: Partial<Record<VideoInputMode, VideoModeInputDraft>>
+}
 
 /** 各互斥输入模式下的暂存配置（切换 Tab 时恢复，发送时仅使用当前模式） */
 export interface VideoModeInputDraft {
@@ -196,6 +206,7 @@ export interface VideoEditorConfig {
 	selectedResourceSlot: VideoInputSlotInfo | null
 	hasRestoredRef: React.RefObject<boolean>
 	isRestoringRef: React.RefObject<boolean>
+	restoreRevision: number
 	handlers: {
 		setPrompt: (prompt: string) => void
 		setLinkedFrameBindings: React.Dispatch<
@@ -260,6 +271,8 @@ export interface VideoEditorConfig {
 		restoreOriginalGenerateVideoRequestToUi: () => void
 		/** 快捷编辑：清空草稿并以当前视频作为唯一 reference_videos */
 		restoreQuickEditConfigToUi: () => void
+		buildSessionSnapshot: () => VideoEditSessionSnapshot
+		restoreSessionSnapshotToUi: (snapshot: VideoEditSessionSnapshot) => void
 		triggerFileSelect: () => void
 		uploadReferenceFiles: (files: File[]) => Promise<void>
 		handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void

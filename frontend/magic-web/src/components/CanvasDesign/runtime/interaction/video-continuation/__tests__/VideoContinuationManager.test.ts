@@ -51,9 +51,11 @@ function sourceElement(id: string, path = `./videos/${id}.mp4`): Record<string, 
 	}
 }
 
-function createCanvas(sourceIds: string[]): {
+function createCanvas(
+	sourceIds: string[],
+	options: { createdVideoHasNoContent?: boolean } = {},
+): {
 	canvas: Canvas
-	instances: Map<string, VideoElement>
 	createdIds: string[]
 	createdPoints: Array<{ x: number; y: number }>
 	connectionManager: {
@@ -130,12 +132,17 @@ function createCanvas(sourceIds: string[]): {
 						y: y - 90,
 						width: 320,
 						height: 180,
-						contents: [{ contentId: `${id}-content` }],
-						activeContentId: `${id}-content`,
-						mainContentId: `${id}-content`,
+						contents: options.createdVideoHasNoContent
+							? []
+							: [{ contentId: `${id}-content` }],
+						activeContentId: options.createdVideoHasNoContent
+							? undefined
+							: `${id}-content`,
+						mainContentId: options.createdVideoHasNoContent
+							? undefined
+							: `${id}-content`,
 					})
 					const instance = Object.create(VideoElement.prototype) as VideoElement
-					instance.saveTempGenerateVideoRequest = vi.fn()
 					instances.set(id, instance)
 					createdIds.push(id)
 					createdPoints.push({ x, y })
@@ -153,6 +160,12 @@ function createCanvas(sourceIds: string[]): {
 					: null
 			}),
 		},
+		mediaEditRecoveryManager: {
+			saveDraft: vi.fn(),
+			clear: vi.fn(),
+			clearElement: vi.fn(),
+			clearAll: vi.fn(),
+		},
 		historyManager: { runTransaction },
 		selectionManager: {
 			select: vi.fn(),
@@ -164,7 +177,7 @@ function createCanvas(sourceIds: string[]): {
 		},
 	} as unknown as Canvas
 
-	return { canvas, instances, createdIds, createdPoints, connectionManager, runTransaction }
+	return { canvas, createdIds, createdPoints, connectionManager, runTransaction }
 }
 
 describe("VideoContinuationManager", () => {
@@ -178,7 +191,7 @@ describe("VideoContinuationManager", () => {
 	})
 
 	it("creates one empty video with a start-frame draft in one transaction", async () => {
-		const { canvas, instances, createdIds, createdPoints, connectionManager, runTransaction } =
+		const { canvas, createdIds, createdPoints, connectionManager, runTransaction } =
 			createCanvas(["video-1"])
 		const manager = new VideoContinuationManager(canvas)
 
@@ -193,12 +206,23 @@ describe("VideoContinuationManager", () => {
 			skippedSourceIds: [],
 		})
 		expect(runTransaction).toHaveBeenCalledTimes(1)
-		expect(instances.get("created-1")?.saveTempGenerateVideoRequest).toHaveBeenCalledWith({
-			model_id: "model-1",
-			input_mode: "keyframe_guided",
-			task: "generate",
-			inputs: { frames: [{ role: "start", uri: "./images/tail-frame.jpg" }] },
-		})
+		expect(canvas.mediaEditRecoveryManager.saveDraft).toHaveBeenCalledWith(
+			{
+				elementId: "created-1",
+				contentId: "created-1-content",
+				intent: "generate",
+			},
+			"created-1-content:",
+			{
+				request: {
+					model_id: "model-1",
+					input_mode: "keyframe_guided",
+					task: "generate",
+					inputs: { frames: [{ role: "start", uri: "./images/tail-frame.jpg" }] },
+				},
+				modeDrafts: {},
+			},
+		)
 		expect(createdIds).toEqual(["created-1"])
 		expect(createdPoints).toEqual([{ x: 1504, y: 90 }])
 		expect(connectionManager.connectElementsBatch).toHaveBeenCalledWith({
@@ -283,5 +307,25 @@ describe("VideoContinuationManager", () => {
 		expect(canvas.elementManager.delete).toHaveBeenCalledWith("created-1")
 		expect(canvas.elementManager.delete).toHaveBeenCalledWith("created-2")
 		expect(toast.error).toHaveBeenCalled()
+	})
+
+	it("removes a created video when its content cannot be resolved", async () => {
+		const { canvas, connectionManager } = createCanvas(["video-1"], {
+			createdVideoHasNoContent: true,
+		})
+		const manager = new VideoContinuationManager(canvas)
+
+		const result = await manager.continueVideos({
+			sourceVideoIds: ["video-1"],
+			videoModelList: [model],
+		})
+
+		expect(result).toEqual({
+			createdElementIds: [],
+			failedSourceIds: [],
+			skippedSourceIds: ["video-1"],
+		})
+		expect(canvas.elementManager.delete).toHaveBeenCalledWith("created-1")
+		expect(connectionManager.connectElementsBatch).not.toHaveBeenCalled()
 	})
 })

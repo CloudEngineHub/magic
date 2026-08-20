@@ -22,6 +22,8 @@ import { useIsMediaReplacing } from "../../../app/hooks/canvas"
 import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { isEditorInteractiveKeyboardTarget } from "../keyboard"
 import { resolveVideoReferenceVideoModel } from "./model-config/video-editor-config.model"
+import type { VideoEditSessionSnapshot } from "./video-editor-config.types"
+import { buildMediaEditSourceFingerprint } from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -84,6 +86,12 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	)
 	const videoContent = getActiveContent(videoElement)
 	const savedGenerateVideoRequest = videoContent?.generateVideoRequest
+	const sessionStore = canvas?.mediaEditRecoveryManager
+	const sessionContentId = videoContent?.contentId ?? videoElement.activeContentId ?? ""
+	const sessionSourceFingerprint = buildMediaEditSourceFingerprint(
+		sessionContentId,
+		videoContent?.src,
+	)
 	const confirmVideoGeneration = useVideoPointsConfirm()
 	const quickEditModel = resolveVideoReferenceVideoModel(
 		videoModelList,
@@ -94,10 +102,6 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const handleStartRegenerate = useCallback(() => {
 		if (!canvas || !savedGenerateVideoRequest) return
 		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
-		const inst = canvas.elementManager.getElementInstance(videoElement.id)
-		if (inst instanceof VideoElementClass) {
-			inst.clearTempGenerateVideoRequest()
-		}
 		setEditingMode("re-edit")
 	}, [canvas, savedGenerateVideoRequest, videoElement.id])
 
@@ -117,7 +121,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			if (isEditingRef.current || isReplacing || isMediaResourcePreviewOpen || !canQuickEdit)
 				return
 			if (
-				!selectedElementsRef.current.some(
+				!selectedElementsRef.current?.some(
 					(element) =>
 						element?.type === ElementTypeEnum.Video && element.id === videoElement.id,
 				)
@@ -127,7 +131,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			if (isEditorInteractiveKeyboardTarget(event.target)) return
 			if (event.key !== "Tab" || event.shiftKey) return
 			event.preventDefault()
-			handleStartQuickEditRef.current()
+			handleStartQuickEditRef.current?.()
 		},
 		{ target: window },
 	)
@@ -194,10 +198,11 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 						videoElement.id,
 					)
 					if (!(elementInstance instanceof VideoElementClass)) return
-					await elementInstance.submitContentGeneration({
+					const submitted = await elementInstance.submitContentGeneration({
 						...generateVideoRequest,
 						video_id: generateUUID(),
 					})
+					if (submitted) sessionStore?.clearElement(videoElement.id)
 				} finally {
 					setIsGeneratingAgain(false)
 				}
@@ -212,6 +217,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		isPreparingGenerateAgain,
 		methods?.estimateVideoPoints,
 		savedGenerateVideoRequest,
+		sessionStore,
 		videoElement,
 	])
 
@@ -219,8 +225,10 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
 
 	useEffect(() => {
-		if (isReplacing) setEditingMode(null)
-	}, [isReplacing])
+		if (!isReplacing) return
+		setEditingMode(null)
+		sessionStore?.clearElement(videoElement.id)
+	}, [isReplacing, sessionStore, videoElement.id])
 
 	const resultActionSection = useMemo(
 		() => ({
@@ -298,6 +306,18 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			autoFocusAtDocumentEnd
 			restoreOnMount={editingMode === "quick-edit" ? "quickEdit" : "originalRequestOnly"}
 			submitTarget={editingMode === "quick-edit" ? "new-element" : "current-content"}
+			sessionIntent={editingMode}
+			sessionSourceFingerprint={sessionSourceFingerprint}
+			sessionSnapshot={
+				sessionStore?.get<VideoEditSessionSnapshot>(
+					{
+						elementId: videoElement.id,
+						contentId: sessionContentId,
+						intent: editingMode,
+					},
+					sessionSourceFingerprint,
+				)?.draft
+			}
 			syncElementSize={false}
 			onGenerateSubmitSucceeded={() => setEditingMode(null)}
 			onPreviewMediaResource={props.onPreviewMediaResource}

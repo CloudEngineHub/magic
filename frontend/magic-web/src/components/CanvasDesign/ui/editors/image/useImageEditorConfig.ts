@@ -60,8 +60,11 @@ import {
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
 } from "../../../runtime/shared/path/canvasResourcePath"
-import { resolveImageEditorRequestToRestore } from "./image-editor-request-restore"
 import { createCanvasMentionPathMatcher } from "../connection/linkedMediaMentionMatcher"
+import {
+	buildMediaEditSourceFingerprint,
+	type MediaEditIntent,
+} from "../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface UseImageEditorConfigOptions {
 	imageElement: ImageElement
@@ -69,14 +72,19 @@ interface UseImageEditorConfigOptions {
 	originalImageName?: string
 	/** 编辑器 focus 的 ref，上传完成后用于聚焦 */
 	editorFocusRef?: React.RefObject<MessageEditorRef | null>
-	/** 失败重试时优先按已受理任务的请求回填，避免临时草稿覆盖任务输入。 */
-	preferCurrentRequestOnRestore?: boolean
+	/** 是否由该配置 hook 管理普通 Canvas 内存恢复；二次编辑由外层意图会话管理。 */
+	manageRecoverySession?: boolean
+	recoveryIntent?: MediaEditIntent
 }
 
 export interface ImageReferenceSlotInfo {
 	slotIndex: number
 	slotKey?: string
 	path?: string
+}
+
+export interface ImageEditSessionSnapshot {
+	request: Partial<GenerateImageRequest>
 }
 
 export interface ImageEditorConfig {
@@ -124,6 +132,7 @@ export interface ImageEditorConfig {
 	referenceSourceCrop: CropConfig | undefined
 	hasRestoredRef: React.RefObject<boolean>
 	isRestoringRef: React.RefObject<boolean>
+	restoreRevision: number
 	handlers: {
 		setSelectedModelId: (id: string) => void
 		setPrompt: (prompt: string) => void
@@ -168,6 +177,10 @@ export interface ImageEditorConfig {
 		handlePromptReferencePathsChange: (paths: string[]) => void
 	}
 	fileInputRef: React.MutableRefObject<HTMLInputElement | null>
+	editSession: {
+		buildSnapshot: () => ImageEditSessionSnapshot
+		restoreSnapshotToUi: (snapshot: ImageEditSessionSnapshot) => void
+	}
 }
 
 export function useImageEditorConfig(options: UseImageEditorConfigOptions): ImageEditorConfig {
@@ -176,7 +189,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		originalImageSrc,
 		originalImageName,
 		editorFocusRef,
-		preferCurrentRequestOnRestore = false,
+		manageRecoverySession = true,
+		recoveryIntent = "generate",
 	} = options
 	const activeImageContent = getActiveImageContent(imageElement)
 	const { imageModelList, isLoadingImageModelList, methods } = useMagic()
@@ -185,6 +199,21 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const { t } = useCanvasDesignI18n()
 	const referenceResourceType: ReferenceResourceType = "image"
 	const fileInputAccept = "image/*"
+	const recoveryKey = useMemo(
+		() =>
+			manageRecoverySession
+				? {
+						elementId: imageElement.id,
+						contentId: activeImageContent.contentId,
+						intent: recoveryIntent,
+					}
+				: null,
+		[activeImageContent.contentId, imageElement.id, manageRecoverySession, recoveryIntent],
+	)
+	const recoverySourceFingerprint = buildMediaEditSourceFingerprint(
+		activeImageContent.contentId,
+		activeImageContent.src,
+	)
 
 	// 本地 state 管理配置
 	const [selectedModelId, setSelectedModelId] = useState<string>("")
@@ -205,12 +234,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const hasRestoredRef = useRef<boolean>(false)
 	// 标记是否正在恢复配置（用于避免恢复时触发保存）
 	const isRestoringRef = useRef<boolean>(false)
+	const [restoreRevision, setRestoreRevision] = useState(0)
 	// Popover 关闭延迟的 timeout ID
 	const popoverCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const draftPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const pendingDraftRequestRef = useRef<Partial<GenerateImageRequest> | null>(null)
-	const lastPersistedDraftRef = useRef("")
 	const isApplyingRestoreRef = useRef<boolean>(false)
+	const sessionRestoreRequestRef = useRef<Partial<GenerateImageRequest> | null>(null)
 	// 标记是否正在删除参考图（用于防止删除时弹窗关闭）
 	const isRemovingReferenceImageRef = useRef<boolean>(false)
 	const selectedReferenceSlotRef = useRef<ImageReferenceSlotInfo | null>(null)
@@ -1006,19 +1036,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				pendingDraftRequestRef.current = null
 				return
 			}
-			if (!canvas) return
-			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
-			if (!(elementInstance instanceof ImageElementClass)) return
-			const serializedRequest = JSON.stringify(request)
-			if (lastPersistedDraftRef.current === serializedRequest) {
-				pendingDraftRequestRef.current = null
-				return
-			}
-			elementInstance.saveTempGenerateImageRequest(request)
-			lastPersistedDraftRef.current = serializedRequest
+			if (!canvas || !manageRecoverySession || !recoveryKey) return
+			canvas.mediaEditRecoveryManager.saveDraft(recoveryKey, recoverySourceFingerprint, {
+				request,
+			})
 			pendingDraftRequestRef.current = null
 		},
-		[canvas, imageElement.id],
+		[canvas, manageRecoverySession, recoveryKey, recoverySourceFingerprint],
 	)
 
 	const cancelPendingDraftPersistence = useCallback(() => {
@@ -1145,15 +1169,18 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		// 标记正在恢复配置
 		isRestoringRef.current = true
 
-		// 获取临时请求（统一使用 tempGenerateImageRequest）
-		const tempRequest = elementInstance.getTempGenerateImageRequest()
+		// 优先恢复外层传入的二次编辑快照，再恢复当前普通生成意图的会话草稿。
+		const sessionRequest = sessionRestoreRequestRef.current
+		sessionRestoreRequestRef.current = null
+		const recoveryRequest =
+			manageRecoverySession && recoveryKey
+				? canvas.mediaEditRecoveryManager.get<ImageEditSessionSnapshot>(
+						recoveryKey,
+						recoverySourceFingerprint,
+					)?.draft.request
+				: undefined
 		const currentRequest = activeImageContent.generateImageRequest
-		const requestToRestore = resolveImageEditorRequestToRestore({
-			currentRequest,
-			tempRequest,
-			preferCurrentRequest: preferCurrentRequestOnRestore,
-		})
-
+		const requestToRestore = sessionRequest ?? recoveryRequest ?? currentRequest
 		if (requestToRestore) {
 			// 恢复模型ID
 			const restoredModelId =
@@ -1231,7 +1258,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				setSelectedResolution(undefined)
 			}
 		} else {
-			// 没有 tempRequest，尝试从 rootStorage 恢复
+			// 没有会话草稿时，尝试从 rootStorage 恢复
 			const methods = canvas.magicConfigManager.config?.methods
 			const rootStorage = methods?.getRootStorage?.()
 			const defaultConfig = rootStorage?.defaultGenerateImageConfig
@@ -1316,6 +1343,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		}
 
 		hasRestoredRef.current = true
+		setRestoreRevision((revision) => revision + 1)
 
 		// 同步参考文件状态（确保恢复的 Element 文件 infos 同步到 state）
 		syncFromElement()
@@ -1328,10 +1356,12 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	}, [
 		canvas,
 		imageElement.id,
+		manageRecoverySession,
+		recoveryKey,
+		recoverySourceFingerprint,
 		activeImageContent.generateImageRequest,
 		syncFromElement,
 		imageModelList,
-		preferCurrentRequestOnRestore,
 		resolvePromptReferencesByPaths,
 		promptPlaceholderTokenConfig,
 		applyBindingStateFromPromptAndReferences,
@@ -1350,8 +1380,6 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		if (!(elementInstance instanceof ImageElementClass)) return
 
 		cancelPendingDraftPersistence()
-		elementInstance.clearTempGenerateImageRequest()
-		lastPersistedDraftRef.current = ""
 		hasRestoredRef.current = false
 		restoreConfig()
 	}, [
@@ -1363,13 +1391,60 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		restoreConfig,
 	])
 
+	const restoreSessionSnapshotToUi = useCallback(
+		(snapshot: ImageEditSessionSnapshot) => {
+			if (!canvas) return
+			if (isApplyingRestoreRef.current) return
+
+			cancelPendingDraftPersistence()
+			sessionRestoreRequestRef.current = snapshot.request
+			hasRestoredRef.current = false
+			if (imageModelList.length > 0) restoreConfig()
+		},
+		[canvas, cancelPendingDraftPersistence, imageModelList.length, restoreConfig],
+	)
+
+	const buildSessionSnapshot = useCallback(
+		(): ImageEditSessionSnapshot => ({
+			request: buildRequestParams(),
+		}),
+		[buildRequestParams],
+	)
+
+	// 首次完成初始化后建立普通生成意图的 baseline；已有失败/中断草稿则保留原 baseline。
+	useEffect(() => {
+		if (
+			!manageRecoverySession ||
+			!canvas ||
+			!recoveryKey ||
+			!hasRestoredRef.current ||
+			isRestoringRef.current
+		)
+			return
+		if (!canvas.mediaEditRecoveryManager.get(recoveryKey, recoverySourceFingerprint)) {
+			const baseline = buildSessionSnapshot()
+			canvas.mediaEditRecoveryManager.set(
+				recoveryKey,
+				recoverySourceFingerprint,
+				baseline,
+				baseline,
+			)
+		}
+	}, [
+		buildSessionSnapshot,
+		canvas,
+		manageRecoverySession,
+		recoveryKey,
+		recoverySourceFingerprint,
+	])
+
 	// 初始化：从 Element 同步参考图信息
 	useMount(() => {
 		// 同步参考图状态
 		syncFromElement()
 	})
 
-	// 从 tempRequest 恢复之前填写的内容（等待模型列表加载完成后执行）
+	// 从 Canvas 恢复管理器恢复之前填写的内容（等待模型列表加载完成后执行）
 	useEffect(() => {
 		if (
 			!canvas ||
@@ -1396,7 +1471,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		updateProtectedReferencePaths,
 	])
 
-	// 当用户填写的内容变化时，防抖写入 tempRequest（使用 useUpdateEffect 避免首次挂载时触发）
+	// 当用户填写的内容变化时，防抖写入 Canvas 恢复管理器。
 	useUpdateEffect(() => {
 		if (isRestoringRef.current) return
 		scheduleDraftPersistence(buildRequestParams())
@@ -1404,6 +1479,9 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 	// 组件卸载时清理定时器
 	useUnmount(() => {
+		if (manageRecoverySession && hasRestoredRef.current && !isRestoringRef.current) {
+			saveDraftRequest(buildRequestParams())
+		}
 		cancelPendingDraftPersistence()
 		if (popoverCloseTimeoutRef.current) {
 			clearTimeout(popoverCloseTimeoutRef.current)
@@ -1442,6 +1520,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		fileInputAccept,
 		hasRestoredRef,
 		isRestoringRef,
+		restoreRevision,
 		handlers: {
 			setSelectedModelId,
 			setPrompt,
@@ -1472,5 +1551,9 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			handlePromptReferencePathsChange,
 		},
 		fileInputRef,
+		editSession: {
+			buildSnapshot: buildSessionSnapshot,
+			restoreSnapshotToUi: restoreSessionSnapshotToUi,
+		},
 	}
 }

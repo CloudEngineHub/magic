@@ -83,6 +83,8 @@ interface ImageEditorSurfaceProps {
 	autoFocus?: boolean
 	autoFocusAtDocumentEnd?: boolean
 	isDropEnabled?: boolean
+	showRestoreDefaultConfig?: boolean
+	onRestoreDefaultConfig?: () => void
 	className?: string
 	style?: CSSProperties
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
@@ -103,6 +105,8 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		autoFocus,
 		autoFocusAtDocumentEnd,
 		isDropEnabled = true,
+		showRestoreDefaultConfig = false,
+		onRestoreDefaultConfig,
 		className,
 		style,
 		onPreviewMediaResource,
@@ -110,7 +114,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	} = props
 	const { canvas } = useCanvas()
 	const resolveResourceReference =
-		canvas.magicConfigManager.config?.methods?.resolveResourceReference
+		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
 	const { t } = useCanvasDesignI18n()
 	const hostUiLocale = useHostUiLocale()
 	const [hasScrollbar, setHasScrollbar] = useState(false)
@@ -485,7 +489,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				matchableItems={matchableItems}
 				mentionDataService={mentionDataService}
 				mentionExtension={mentionExtension}
-				mentionItemsReady={config.hasRestoredRef.current}
+				mentionItemsReady={Boolean(config.hasRestoredRef.current)}
 				onMentionChange={handleMentionChange}
 				onMentionItemHoverChange={setHoveredMentionPath}
 				mentionEnabled={mentionEnabled}
@@ -523,6 +527,20 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						)}
 					</Button>
 				)}
+				renderRestoreDefaultConfigButton={
+					showRestoreDefaultConfig && onRestoreDefaultConfig
+						? () => (
+								<Button
+									variant="ghost"
+									className={styles.restoreDefaultButton}
+									onClick={onRestoreDefaultConfig}
+									data-testid="image-editor-re-enter"
+								>
+									{t("imageEditor.reEnter", "重新输入")}
+								</Button>
+							)
+						: undefined
+				}
 				sourceListContainer={sourceListContainer}
 			/>
 		</ReferenceResourceDropSurface>
