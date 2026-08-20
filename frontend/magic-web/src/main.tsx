@@ -7,10 +7,13 @@ import { createRoot } from "react-dom/client"
 import App from "./App"
 import "@/utils/polyfill"
 import { appService } from "./services/app/AppService"
+import { initializeMicroAppInstallPromptCapture } from "./services/microAppInstallPrompt"
 import { DevStrictMode } from "@/utils/devStrictMode"
 import { registerAppServiceWorker } from "@/workers/service-worker/register"
 
 enableMapSet()
+// Capture beforeinstallprompt before the lazy share page loads.
+initializeMicroAppInstallPromptCapture()
 
 async function initMock() {
 	if (!import.meta.env.DEV || import.meta.env.MAGIC_MOCK !== "true") {
