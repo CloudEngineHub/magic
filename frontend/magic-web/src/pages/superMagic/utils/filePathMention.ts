@@ -1,4 +1,5 @@
 export const FILE_PATH_MENTION_PREFIX = "[@file_path:"
+const WORKSPACE_ROOT_PREFIX = ".workspace/"
 
 export interface FilePathMentionMatch {
 	path: string
@@ -55,11 +56,18 @@ export function normalizeWorkspaceRelativePath(path: string): string | null {
 
 	const normalized = decodeHtmlEntities(path.trim())
 	const withoutPrefix = normalized.startsWith("./") ? normalized.slice(2) : normalized
-	if (/^[a-z][a-z\d+.-]*:/i.test(withoutPrefix) || withoutPrefix.startsWith("//")) {
+	const withoutWorkspaceRoot = withoutPrefix.startsWith(WORKSPACE_ROOT_PREFIX)
+		? withoutPrefix.slice(WORKSPACE_ROOT_PREFIX.length)
+		: withoutPrefix
+	if (
+		!withoutWorkspaceRoot ||
+		/^[a-z][a-z\d+.-]*:/i.test(withoutWorkspaceRoot) ||
+		withoutWorkspaceRoot.startsWith("//")
+	) {
 		return null
 	}
 
-	return normalizeWorkspacePathSegments(withoutPrefix)
+	return normalizeWorkspacePathSegments(withoutWorkspaceRoot)
 }
 
 /** 兼容附件树中以 / 表示工作区根的历史路径，只用于内部精确比较。 */
@@ -78,18 +86,29 @@ export function parseCanonicalWorkspaceHref(href: string): string | null {
 	if (!href) return null
 
 	const rawHref = decodeHtmlEntities(href.trim())
-	if (!rawHref.startsWith("./") || rawHref.includes("#") || rawHref.includes("?")) {
+	const isCanonicalHref = rawHref.startsWith("./")
+	const isWorkspaceRootPrefixedHref =
+		rawHref.startsWith(WORKSPACE_ROOT_PREFIX) ||
+		rawHref.startsWith(`./${WORKSPACE_ROOT_PREFIX}`)
+	if (
+		(!isCanonicalHref && !isWorkspaceRootPrefixedHref) ||
+		rawHref.includes("#") ||
+		rawHref.includes("?")
+	) {
 		return null
 	}
 
 	const decoded = decodeURIComponentOnce(rawHref)
-	if (decoded === null || !decoded.startsWith("./")) return null
+	if (decoded === null) return null
+	if (isCanonicalHref && !decoded.startsWith("./")) return null
+	if (!isCanonicalHref && !decoded.startsWith(WORKSPACE_ROOT_PREFIX)) return null
 
-	return normalizeWorkspacePathSegments(decoded.slice(2))
+	return normalizeWorkspaceRelativePath(isCanonicalHref ? decoded.slice(2) : decoded)
 }
 
 export function isWorkspaceHrefCandidate(href: string): boolean {
-	return decodeHtmlEntities(href.trim()).startsWith("./")
+	const normalizedHref = decodeHtmlEntities(href.trim())
+	return normalizedHref.startsWith("./") || normalizedHref.startsWith(WORKSPACE_ROOT_PREFIX)
 }
 
 function encodePathSegment(segment: string): string {

@@ -35,6 +35,7 @@ import { SUPER_PLACEHOLDER_TYPE } from "../extensions/super-placeholder/const"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import MarkerMentionNodeView from "../components/MentionNodes/marker/MarkerMentionNodeView"
 import UploadFileMentionNodeView from "../components/MentionNodes/upload-file/UploadFileMentionNodeView"
+import ProjectFileMentionNodeView from "../components/MentionNodes/project-file/ProjectFileMentionNodeView"
 import { runActiveEditor } from "../utils/editorLifecycle"
 import {
 	tryAcceptPromptCarouselShortcut,
@@ -350,6 +351,7 @@ export const useMessageEditor = ({
 							dataService: mentionPanelStore,
 							nodeViewRenderers: {
 								[MentionItemType.DESIGN_MARKER]: MarkerMentionNodeView,
+								[MentionItemType.PROJECT_FILE]: ProjectFileMentionNodeView,
 								[MentionItemType.UPLOAD_FILE]: UploadFileMentionNodeView,
 							},
 							shouldSkipInsertSync,
