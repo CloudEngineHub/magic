@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
 from collections.abc import Sequence
-from app.tools.canvas.application.commands import FrameElementsCommand
+from typing import Any
 
+from app.tools.canvas.application.commands import FrameElementsCommand
 from app.tools.canvas.application.support import CanvasApplicationOperations
-from app.tools.canvas.repository import CanvasUnitOfWork
-from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.hierarchy import FrameSelectionRequest, HierarchyMutationPlan
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface
 
 
 class FrameElementsService:

@@ -12,9 +12,16 @@ import re
 from copy import deepcopy
 from typing import Any
 
-from app.tools.canvas.domain.errors import CanvasProtocolError
 from app.tools.canvas.domain.content_fields import ContentFieldsFactory
-from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject, ElementProperties
+from app.tools.canvas.domain.errors import CanvasProtocolError
+from app.tools.canvas.domain.models import (
+    CanvasConnection,
+    CanvasContent,
+    CanvasDocument,
+    CanvasElement,
+    CanvasProject,
+    ElementProperties,
+)
 from app.tools.canvas.domain.protocol import BASE_ELEMENT_FIELDS, CONTENT_FIELDS, SUPPORTED_ELEMENT_TYPES
 
 MAGIC_PROJECT_VERSION = "3.0.0"

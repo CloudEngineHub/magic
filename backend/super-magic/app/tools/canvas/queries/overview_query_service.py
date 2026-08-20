@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.tools.canvas.domain.models import CanvasContent
 from app.tools.canvas.domain.content_fields import ContentFieldsFactory
+from app.tools.canvas.domain.models import CanvasContent
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 

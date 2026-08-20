@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.tools.canvas.domain.content_fields import CanvasContentFields
 
+
 @dataclass
 class CanvasContent:
     """表示一个 Element 下的 Content 版本。"""

@@ -6,25 +6,29 @@ from collections.abc import Sequence
 from typing import Any
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.application.canvas_id import new_canvas_id
-from app.tools.canvas.application.commands import AddElementCommand, GenerationParameters, GenerationSubmissionCommand, LayoutCommand
-from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.application.commands import (
+    AddElementCommand,
+    GenerationParameters,
+    GenerationSubmissionCommand,
+    LayoutCommand,
+)
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
-from app.tools.canvas.domain.services.element_reference_resolver import ElementReferenceResolver
-from app.tools.canvas.generation import GenerationCapabilityRegistry
-from app.tools.canvas.repository import CanvasUnitOfWork
-from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
-from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
+from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasElement, CanvasProject, ElementProperties
-from app.tools.canvas.hierarchy import HierarchyMutationPlan
+from app.tools.canvas.domain.services.element_reference_resolver import ElementReferenceResolver
+from app.tools.canvas.generation import GenerationCapabilityRegistry
+from app.tools.canvas.infrastructure.persistence.canvas_codec import SUPPORTED_ELEMENT_TYPES
+from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies import ConnectionStrategyRegistry, LayoutStrategyRegistry
 
 
 class AddElementsService:
     """Canvas AddElementsService 用例服务。"""
 
-    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service):
+    def __init__(self, unit_of_work: CanvasUnitOfWork, layout_strategies: LayoutStrategyRegistry, connection_strategies: ConnectionStrategyRegistry, generation_capabilities: GenerationCapabilityRegistry, element_references: ElementReferenceResolver, content_preparation: ContentPreparationService, generation_submission_service, estimate_guard: GenerationEstimateGuard):
         """显式绑定新增 Element 所需的端口、策略和生成提交服务。"""
         self.unit_of_work = unit_of_work
         self.layout_strategies = layout_strategies
@@ -33,6 +37,7 @@ class AddElementsService:
         self.element_references = element_references
         self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
+        self.estimate_guard = estimate_guard
 
     async def add_elements(
         self,
@@ -93,10 +98,17 @@ class AddElementsService:
                     element.active_content_id = element.contents[0].content_id
                     element.main_content_id = element.contents[0].content_id
                     if content.is_generated:
-                        self.generation_capabilities.get(
+                        capability = self.generation_capabilities.get(
                             element.element_type,
                             content.generation_parameters.model_id if content.generation_parameters else None,
                         )
+                        if capability.billable:
+                            await self.estimate_guard.validate(
+                                project_path=project_path,
+                                item_ref=item.item_ref,
+                                production_rule=capability.production_rule,
+                                parameters=content.generation_parameters or GenerationParameters(),
+                            )
                         generated_content_id = element.contents[0].content_id
                         generated.append(GenerationSubmissionCommand(
                             element_id=element.element_id,

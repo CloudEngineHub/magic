@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.tools.canvas.application.commands.generation_parameters import GenerationParameters
+from app.tools.canvas.application.commands.generation_override import GenerationParametersOverride
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class RetryContentCommand:
     item_ref: str
     element_id: str
     content_id: str
-    generation_override: GenerationParameters | None = None
+    generation_override: GenerationParametersOverride | None = None
 
 
 @dataclass(frozen=True)

@@ -3,8 +3,8 @@
 from pathlib import Path
 from stat import S_ISREG
 
-from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway
 from app.tools.canvas.domain.errors import CanvasDomainError
+from app.tools.canvas.infrastructure.assets.asset_gateway_interface import AssetGateway
 from app.utils.async_file_utils import async_exists, async_stat
 
 

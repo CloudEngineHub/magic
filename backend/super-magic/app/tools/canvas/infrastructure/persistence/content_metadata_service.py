@@ -69,6 +69,7 @@ class ContentMetadataService:
             "video": {
                 "prompt",
                 "model_id",
+                "estimate_id",
                 "name",
                 "reference_image_paths",
                 "reference_video_paths",

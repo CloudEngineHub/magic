@@ -27,7 +27,7 @@ print(result.content)
 - `item_ref` 只是在当前批次中关联请求和结果的标签，不是持久化 Canvas ID。
 - 写操作后，如果下一步依赖持久化状态，必须重新查询。
 
-## 能力范围与真实缺口
+## 能力范围
 
 当前可以完成：
 
@@ -40,13 +40,12 @@ print(result.content)
 - 使用命名布局策略独立修改布局。
 - 新增、删除或替换精确 Connection。
 - 等待任何返回异步任务 ID 的生成策略。
+- 在视频生成前独立预估积分，并用 `estimate_id` 绑定用户确认过的同一组参数。
+- 按 Video Edit 主 Content 的视频和可选音频顺序合成最终 MP4。
+- 搜索、下载、校验并批量导入图片候选。
 - 编排普通设计、普通视频生成和多镜头视频制作。
 
-必须明确说明的后端缺口：
-
-- `video-edit` Element 可以保存确认后的镜头顺序和输出配置，但当前没有执行最终 MP4 合成的 Canvas 工具，不得声称已经生成最终视频文件。
-- 当前没有 `search_canvas_images` 等价的专用图片搜索并落盘工具。可以使用通用搜索了解素材，但只有拿到真实的工作区相对素材路径并成功调用导入工具后，才能说素材已加入 Canvas。
-- 素材恢复是受控的只读比对加明确导入编排，不是独立恢复事务。
+素材恢复仍是受控的只读比对加明确导入编排，不是独立恢复事务。
 
 ## Element、Content、Frame 与可修改字段
 
@@ -106,9 +105,9 @@ Frame 子节点使用直接父 Frame 的局部坐标，不能混用根坐标和�
 {"source": "user", "content_type": "text", "content": "发布会标题"}
 {"source": "imported", "content_type": "image", "asset_path": "Canvas/Product Launch/images/product.png"}
 {"source": "generated", "content_type": "image", "prompt": "高级产品主视觉", "size": "2048x2048"}
-{"source": "generated", "content_type": "video", "prompt": "产品缓慢旋转展示", "duration_seconds": 5}
+{"source": "generated", "content_type": "video", "prompt": "产品缓慢旋转展示", "duration_seconds": 5, "estimate_id": "estimate-confirmed-id"}
 {"source": "user", "content_type": "storyboard", "generationConfig": {"aspect_ratio": "16:9"}, "shots": []}
-{"source": "user", "content_type": "video-edit", "videoSequence": [], "output": {"format": "mp4"}}
+{"source": "user", "content_type": "video-edit", "videoSequence": [], "audioSequence": [], "output": {"format": "mp4"}}
 ```
 
 - 文本使用 `source="user"`、`content_type="text"`，文本值放在 `content`；不要使用 `source="text"`、`text` 或 `value`。
@@ -138,11 +137,12 @@ Frame 子节点使用直接父 Frame 的局部坐标，不能混用根坐标和�
 
 1. 查询精确参考 Element 和媒体路径。
 2. 对时长、比例、参考模式等关键未决参数先确认。
-3. 新视频使用 `add_canvas_elements`，已有视频候选使用 `add_canvas_contents`。
-4. 返回任务 ID 后立即调用 `wait_canvas_generation`。
-5. 超时不是失败，使用同一个任务 ID 继续等待，不提交重复任务。
-6. 失败后先报告，用户明确同意且未超限时才重试。
-7. 用户确认完成候选后才选择主 Content。
+3. 调用 `estimate_canvas_content_points`，向用户展示完整参数和逐项积分并等待明确确认。
+4. 确认后以完全相同的 `item_ref` 和参数提交视频，并携带返回的 `estimate_id`。新视频使用 `add_canvas_elements`，已有视频候选使用 `add_canvas_contents`。
+5. 返回任务 ID 后立即调用 `wait_canvas_generation`。
+6. 超时不是失败，使用同一个任务 ID 继续等待，不提交重复任务。
+7. 失败后先报告；用户明确同意重试时必须重新预估、重新确认，再携带新的 `estimate_id` 重试。
+8. 用户确认完成候选后才选择主 Content。
 
 ## 精细视频制作工作流
 
@@ -157,7 +157,7 @@ Frame 子节点使用直接父 Frame 的局部坐标，不能混用根坐标和�
 7. 从对应首帧生成镜头视频，异步任务使用等待工具。
 8. 保留成功镜头，只修订受影响的 Content 和下游结果。
 9. 使用确认后的镜头 Video Element ID 配置 `video-edit` Content。
-10. 明确告知当前不能执行最终 MP4 合成。
+10. 查询 Video Edit 和输入媒体后调用 `compose_canvas_video`，再查询结果 Video Element 验证最终 Content。
 
 生产流程使用 `dependency_flow` 布局。只有直接业务前驱才建立 Connection；仅作为生成参考的素材不自动建立 Connection。
 
@@ -206,7 +206,8 @@ result = tool.call("add_canvas_elements", {
             "reference_image_paths": ["Canvas/Product Launch/images/s01-first-frame.png"],
             "duration_seconds": 4,
             "aspect_ratio": "16:9",
-            "resolution": "1080p"
+            "resolution": "1080p",
+            "estimate_id": "estimate-confirmed-id"
         },
         "connections": [{"source_element_id": "element-740000000000000006"}]
     }]
@@ -232,6 +233,7 @@ result = tool.call("add_canvas_elements", {
                 "element-740000000000000010",
                 "element-740000000000000011"
             ],
+            "audioSequence": [],
             "output": {"aspectRatio": "16:9", "resolution": "1080p", "format": "mp4"}
         },
         "connections": [
@@ -242,7 +244,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-如果 Video Edit 已存在，使用 `add_canvas_contents` 追加新的配置版本，并使用 `add_canvas_connections` 补齐其他确认镜头的直接 Connection。保存配置不等于执行最终合成。
+如果 Video Edit 已存在，使用 `add_canvas_contents` 追加新的配置版本，并使用 `add_canvas_connections` 补齐其他确认镜头的直接 Connection。保存配置后调用 `compose_canvas_video` 执行最终合成。
 
 ## 失败、重试与修订
 
@@ -479,6 +481,69 @@ print(result.content)
 
 删除或替换前必须先查询并取得精确 Connection ID；不能按名称、位置或端点猜测。
 
+## `estimate_canvas_content_points`
+
+在需要计费的视频生成前执行无副作用积分预估。参数：`project_path`、`production_rule="video_generation"`、`items`；每项必填 `item_ref`、`prompt`，并携带与真实生成一致的模型、时长、比例、分辨率和参考媒体参数。
+
+```python
+from sdk.tool import tool
+result = tool.call("estimate_canvas_content_points", {
+    "project_path": "Canvas/Product Launch",
+    "production_rule": "video_generation",
+    "items": [{
+        "item_ref": "shot-s01",
+        "prompt": "使用确认首帧，产品保持稳定，镜头缓慢推进，无文字水印",
+        "model_id": "confirmed-video-model",
+        "duration_seconds": 4,
+        "aspect_ratio": "16:9",
+        "resolution": "1080p",
+        "reference_image_paths": ["Canvas/Product Launch/images/s01-first-frame.png"]
+    }]
+})
+print(result.content)
+```
+
+向用户展示完整参数和逐项积分后结束当前轮并等待确认。确认后真实生成必须复用同一 `item_ref` 和全部参数，并把返回的 `estimate_id` 放入 generated video Content。参数变化、预估失败或不可用时必须重新预估，不能直接生成。
+
+## `compose_canvas_video`
+
+根据 Video Edit 主 Content 的 `videoSequence`、可选 `audioSequence` 和输出配置同步合成最终视频。参数：`project_path`、`video_edit_element_id`、`result_name`；可选 `result_element_id` 只允许指向明确的 Video Element。
+
+```python
+from sdk.tool import tool
+result = tool.call("compose_canvas_video", {
+    "project_path": "Canvas/Product Launch",
+    "video_edit_element_id": "element-740000000000000020",
+    "result_name": "产品发布最终成片"
+})
+print(result.content)
+```
+
+合成前先查询 Video Edit、全部输入 Element 和 Connection。成功后使用返回的 `result_element_id` 查询验证；失败时保留 failed Content，修复输入或配置后再由用户决定是否重新合成。该同步合成不调用 `wait_canvas_generation`。
+
+## `search_canvas_images`
+
+按主题搜索、下载、校验并导入图片候选。参数：`project_path`、`topic_id`、`tasks`；每项必填 `item_ref`、`name`、`query`，可选用途说明、比例和 `count`。
+
+```python
+from sdk.tool import tool
+result = tool.call("search_canvas_images", {
+    "project_path": "Canvas/Product Launch",
+    "topic_id": "product-hero",
+    "tasks": [{
+        "item_ref": "hero-candidates",
+        "name": "产品主视觉候选",
+        "query": "premium product studio photography dark background",
+        "requirement_explanation": "用于发布会视频封面",
+        "expected_aspect_ratio": "16:9",
+        "count": 3
+    }]
+})
+print(result.content)
+```
+
+只把下载和探测成功的候选创建为 imported Image Content。同一 `topic_id` 会按来源 URL 去重。部分失败时保留成功 Element，只在用户要求时重试失败 item，不重放整个批次。
+
 ## `wait_canvas_generation`
 
 所有新增、追加或重试返回异步任务 ID 时使用。参数：`project_path`、`tasks`（每项必填 `generation_task_id`）、`max_wait_seconds`（1-600，默认 60）。
@@ -501,6 +566,9 @@ print(result.content)
 initialize_canvas -> query_canvas_overview -> query_canvas_element_details
 query_canvas_element_details -> add_canvas_contents -> select_canvas_main_content（用户确认后）
 add_canvas_elements/add_canvas_contents -> wait_canvas_generation -> query_canvas_element_details
+estimate_canvas_content_points -> 用户确认 -> add_canvas_elements/add_canvas_contents -> wait_canvas_generation
+query_canvas_element_details -> compose_canvas_video -> query_canvas_element_details
+search_canvas_images -> query_canvas_overview -> query_canvas_element_details
 query_canvas_overview -> query_canvas_element_details -> frame_canvas_elements -> layout_canvas_elements
 query_canvas_element_details -> add_canvas_connections -> query_canvas_element_details
 ```
@@ -510,6 +578,7 @@ query_canvas_element_details -> add_canvas_connections -> query_canvas_element_d
 - `references/image-generation.md`：仅图片生成、修订、参考图或图片重试。
 - `references/video-generation.md`：所有生成视频请求或视频恢复。
 - `references/video-production.md`：多镜头、端到端视频制作编排。
+- `references/image-search.md`：用户明确要求联网搜索并导入图片候选。
 - `references/video-storyboard.md`：Storyboard、镜头顺序、首帧和依赖关系。
 - `references/asset-reconciliation.md`：只有用户明确提到 Canvas 与 `images` 或 `videos` 目录差异，或明确要求恢复本地素材时加载。
 

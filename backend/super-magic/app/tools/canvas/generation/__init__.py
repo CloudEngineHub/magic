@@ -5,8 +5,8 @@ from app.tools.canvas.generation.adapters.fake_video_generation_port import Fake
 from app.tools.canvas.generation.adapters.generic_image_generation_port import GenericImageGenerationPort
 from app.tools.canvas.generation.adapters.generic_video_generation_port import GenericVideoGenerationPort
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
-from app.tools.canvas.generation.capability.generation_capability_registry import GenerationCapabilityRegistry
 from app.tools.canvas.generation.capability.default_capability_factory import default_generation_capabilities
+from app.tools.canvas.generation.capability.generation_capability_registry import GenerationCapabilityRegistry
 from app.tools.canvas.generation.contracts.generation_capability import GenerationCapability
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult

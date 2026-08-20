@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import math
-from typing import Any, Literal
-
-from pydantic import ConfigDict, Field, model_validator
-
-from app.tools.core import BaseToolParams
+from pydantic import Field
 
 from app.tools.canvas.schemas.inputs.project_path_params import ProjectPathParams
+
 
 class ElementIdParams(ProjectPathParams):
     """精确 Element 查询参数。"""

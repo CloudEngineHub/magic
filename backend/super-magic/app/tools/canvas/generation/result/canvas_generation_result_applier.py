@@ -1,7 +1,7 @@
 """生成结果 Canvas 回写器。"""
 
-from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
+from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 
 

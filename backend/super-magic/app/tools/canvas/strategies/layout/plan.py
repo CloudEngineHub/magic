@@ -1,6 +1,7 @@
 """布局策略变更计划。"""
 
 from dataclasses import dataclass
+
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasDocument
 from app.tools.canvas.domain.models.element_properties import ElementProperties

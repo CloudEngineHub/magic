@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
 from collections.abc import Sequence
-from app.tools.canvas.application.commands import LayoutElementCommand
+from typing import Any
 
+from app.tools.canvas.application.commands import LayoutElementCommand
 from app.tools.canvas.application.support import CanvasApplicationOperations
-from app.tools.canvas.repository import CanvasUnitOfWork
-from app.tools.canvas.strategies import LayoutStrategyRegistry
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies import LayoutStrategyRegistry
 
 
 class LayoutService:

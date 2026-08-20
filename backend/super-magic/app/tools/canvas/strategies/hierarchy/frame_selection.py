@@ -3,9 +3,9 @@
 import math
 import uuid
 
+from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasDocument, CanvasElement, ElementProperties
-from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.services.coordinate_space_resolver import CoordinateSpaceResolver
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
 from app.tools.canvas.strategies.hierarchy.interface import HierarchyStrategyInterface

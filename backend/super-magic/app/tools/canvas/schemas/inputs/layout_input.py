@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, model_validator
 
-from app.tools.core import BaseToolParams
 from app.tools.canvas.application.commands import LayoutCommand
+from app.tools.core import BaseToolParams
 
 
 class LayoutInput(BaseToolParams):

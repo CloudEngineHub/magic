@@ -1,8 +1,8 @@
 """布局策略抽象接口。"""
 
 from abc import ABC, abstractmethod
-from app.tools.canvas.application.commands import LayoutCommand
 
+from app.tools.canvas.application.commands import LayoutCommand
 from app.tools.canvas.domain.models import CanvasDocument, CanvasElement
 from app.tools.canvas.strategies.layout.plan import LayoutMutationPlan
 from app.tools.canvas.strategies.layout.request import LayoutStrategyRequest

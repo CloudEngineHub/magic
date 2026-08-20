@@ -7,14 +7,19 @@ import time
 from typing import Any
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.application.support import CanvasApplicationOperations
-from app.tools.canvas.generation import CanvasGenerationResultApplier, GenerationCapabilityRegistry, GenerationTaskPoller, GenerationTaskRepository
-from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
-from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
-from app.tools.canvas.generation import GenerationQueryRequest, GenerationTask
+from app.tools.canvas.generation import (
+    CanvasGenerationResultApplier,
+    GenerationCapabilityRegistry,
+    GenerationQueryRequest,
+    GenerationTask,
+    GenerationTaskPoller,
+    GenerationTaskRepository,
+)
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.repository import CanvasUnitOfWork
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 
 

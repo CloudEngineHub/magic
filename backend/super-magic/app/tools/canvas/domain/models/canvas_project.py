@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+
 from app.tools.canvas.domain.models.canvas_document import CanvasDocument
 from app.tools.canvas.domain.types import JsonObject
+
 
 @dataclass
 class CanvasProject:

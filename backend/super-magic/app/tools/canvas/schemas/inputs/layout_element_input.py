@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import math
-from typing import Any, Literal
+from pydantic import ConfigDict
 
-from pydantic import ConfigDict, Field, model_validator
-
-from app.tools.core import BaseToolParams
 from app.tools.canvas.application.commands import LayoutElementCommand
-
 from app.tools.canvas.schemas.inputs.layout_input import LayoutInput
+from app.tools.core import BaseToolParams
+
 
 class LayoutElementInput(BaseToolParams):
     """调整布局参数。"""

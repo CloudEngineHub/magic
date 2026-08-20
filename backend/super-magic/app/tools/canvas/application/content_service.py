@@ -6,15 +6,20 @@ from collections.abc import Sequence
 from typing import Any
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.application.canvas_id import new_canvas_id
-from app.tools.canvas.application.commands import AddContentCommand, GenerationParameters, GenerationSubmissionCommand, SelectMainContentCommand
-from app.tools.canvas.application.support import CanvasApplicationOperations
+from app.tools.canvas.application.commands import (
+    AddContentCommand,
+    GenerationParameters,
+    GenerationSubmissionCommand,
+    SelectMainContentCommand,
+)
 from app.tools.canvas.application.content_preparation_service import ContentPreparationService
-from app.tools.canvas.generation import GenerationCapabilityRegistry
-from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.application.support import CanvasApplicationOperations
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.generation import GenerationCapabilityRegistry
+from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
+from app.tools.canvas.repository import CanvasUnitOfWork
 
 
 class ContentService:
@@ -26,12 +31,14 @@ class ContentService:
         generation_capabilities: GenerationCapabilityRegistry,
         content_preparation: ContentPreparationService,
         generation_submission_service,
+        estimate_guard: GenerationEstimateGuard,
     ):
         """显式绑定追加 Content 所需的事务、内容准备和生成提交服务。"""
         self.unit_of_work = unit_of_work
         self.generation_capabilities = generation_capabilities
         self.content_preparation = content_preparation
         self.generation_submission_service = generation_submission_service
+        self.estimate_guard = estimate_guard
 
     async def add_contents(
         self,
@@ -75,10 +82,17 @@ class ContentService:
                     element.main_content_id = content.content_id
                 status = "pending" if command.is_generated else "completed"
                 if command.is_generated:
-                    self.generation_capabilities.get(
+                    capability = self.generation_capabilities.get(
                         element.element_type,
                         command.generation_parameters.model_id if command.generation_parameters else None,
                     )
+                    if capability.billable:
+                        await self.estimate_guard.validate(
+                            project_path=project_path,
+                            item_ref=item.item_ref,
+                            production_rule=capability.production_rule,
+                            parameters=command.generation_parameters or GenerationParameters(),
+                        )
                 results.append({"item_ref": item.item_ref, "element_id": element.element_id, "content_id": content.content_id, "status": status})
                 if command.is_generated:
                     generated.append(GenerationSubmissionCommand(

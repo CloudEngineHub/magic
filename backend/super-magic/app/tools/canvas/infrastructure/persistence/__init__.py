@@ -9,10 +9,10 @@ from app.tools.canvas.infrastructure.persistence.canvas_codec import (
     SUPPORTED_ELEMENT_TYPES,
     CanvasCodec,
 )
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
-from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
 __all__ = [
     "BASE_ELEMENT_FIELDS", "CANVAS_PREFIX", "CONTENT_FIELDS",

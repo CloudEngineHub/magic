@@ -1,6 +1,7 @@
 """布局策略共享的几何计算函数。"""
 
 from math import floor
+
 from app.tools.canvas.domain.models import CanvasDocument, CanvasElement
 
 DEFAULT_ELEMENT_SPACING = 200.0

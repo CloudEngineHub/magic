@@ -8,11 +8,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 
-from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
-from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
 from app.tools.canvas.infrastructure.persistence.element_details_codec import ElementDetailsCodec
+from app.tools.canvas.repository.canvas_path_resolver import CanvasPathResolver
 from app.utils.async_file_utils import (
     async_close_fd,
     async_exists,

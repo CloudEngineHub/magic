@@ -2,17 +2,18 @@
 
 from typing import Any
 
+from pydantic import Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
-
-from app.tools.canvas.schemas import FrameSelectionInput, ProjectPathParams
 from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.schemas import FrameSelectionInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
 from app.tools.core import tool
 from app.tools.core.base_tool import BaseTool
-from pydantic import Field
+
 
 @tool(name="frame_canvas_elements", code_mode_only=True)
 class FrameCanvasElements(BaseTool[ProjectPathParams]):
@@ -86,7 +87,10 @@ class FrameCanvasElements(BaseTool[ProjectPathParams]):
     async def execute(self, tool_context: ToolContext, params: Params) -> ToolResult:
         """创建 Frame 并返回真实 Frame 和子节点 ID。"""
         try:
-            result = await _application(tool_context).frame_elements([item.to_command() for item in params.items])
+            result = await _application(tool_context).frame_elements(
+                params.project_path,
+                [item.to_command() for item in params.items],
+            )
             return ToolResult(
                 content=items_content(
                     "Canvas Frames created successfully.",

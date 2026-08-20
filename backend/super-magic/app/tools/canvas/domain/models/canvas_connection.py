@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+
 @dataclass
 class CanvasConnection:
     """表示两个 Element 之间的关系。"""

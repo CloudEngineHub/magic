@@ -4,7 +4,6 @@ import uuid
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult

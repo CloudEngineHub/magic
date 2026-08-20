@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.generation.adapters.project_identity_resolver import ProjectIdentityResolver
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission

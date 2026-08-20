@@ -16,6 +16,9 @@ PUBLIC_TOOLS = (
     "layout_canvas_elements",
     "add_canvas_connections",
     "wait_canvas_generation",
+    "estimate_canvas_content_points",
+    "compose_canvas_video",
+    "search_canvas_images",
 )
 
 
@@ -98,12 +101,11 @@ def test_skill_covers_unified_design_and_video_production_workflows() -> None:
         assert expected in content
 
 
-def test_skill_states_current_backend_gaps_without_false_capability_claims() -> None:
-    """Skill 必须明确最终合成和专用图片搜索仍是后端缺口。"""
+def test_skill_states_current_production_capabilities() -> None:
+    """Skill 必须描述已实现的合成、图片搜索和音频序列能力。"""
     content = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "没有执行最终 MP4 合成" in content
-    assert "不得声称已经生成最终视频文件" in content
-    assert "没有 `search_canvas_images` 等价" in content
-    assert "只有拿到真实的工作区相对素材路径" in content
-    assert "audioSequence" not in content
+    assert "compose_canvas_video" in content
+    assert "search_canvas_images" in content
+    assert "audioSequence" in content
+    assert "asset_path" in content

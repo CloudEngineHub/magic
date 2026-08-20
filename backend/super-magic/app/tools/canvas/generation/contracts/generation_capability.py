@@ -16,3 +16,5 @@ class GenerationCapability:
     submission_port: GenerationSubmissionPort
     query_port: GenerationQueryPort | None = None
     model_id: str | None = None
+    billable: bool = False
+    production_rule: str | None = None

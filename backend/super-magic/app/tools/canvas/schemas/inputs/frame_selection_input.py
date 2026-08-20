@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import math
-from typing import Any, Literal
+from pydantic import ConfigDict, Field
 
-from pydantic import ConfigDict, Field, model_validator
-
-from app.tools.core import BaseToolParams
 from app.tools.canvas.application.commands import FrameElementsCommand
+from app.tools.core import BaseToolParams
 
 
 class FrameSelectionInput(BaseToolParams):

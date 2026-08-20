@@ -16,6 +16,8 @@
 
 直接首帧是镜头视频的业务前驱；仅作为提示词参考的图片、视频或音频不自动建立 Connection。修改一个首帧后，只重新生成真正依赖它的镜头。
 
-## 当前缺口
+## Final composition
 
-Canvas Manager 当前没有执行 `video-edit` 并产出最终 MP4 的工具。完成 Video Edit 配置后，应向用户说明配置已保存，不能声称已交付合成文件。
+After the Video Edit Content and its direct input Connections are confirmed, call `compose_canvas_video` to synchronously create the final MP4 Content. The tool supports an ordered `videoSequence` and zero or one final `audioSequence` item. Verify the returned result Element with `query_canvas_element_details`.
+
+If composition fails, keep the failed Content for diagnosis and preserve the previous active and main Content pointers. Correct the inputs or output configuration before asking the user whether to compose again.

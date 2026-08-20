@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
 from collections.abc import Sequence
-from app.tools.canvas.application.commands import ConnectionCommand
+from typing import Any
 
+from app.tools.canvas.application.commands import ConnectionCommand
 from app.tools.canvas.application.support import CanvasApplicationOperations
-from app.tools.canvas.repository import CanvasUnitOfWork
-from app.tools.canvas.strategies import ConnectionStrategyRegistry
-from app.tools.canvas.infrastructure.connections import ConnectionOperationLedger
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
+from app.tools.canvas.infrastructure.connections import ConnectionOperationLedger
+from app.tools.canvas.repository import CanvasUnitOfWork
+from app.tools.canvas.strategies import ConnectionStrategyRegistry
 
 
 class ConnectionService:

@@ -8,6 +8,7 @@ from typing import Iterable
 from app.tools.canvas.domain.models.canvas_content import CanvasContent
 from app.tools.canvas.domain.models.element_properties import ElementProperties
 
+
 @dataclass
 class CanvasElement:
     """表示一个可嵌套的 Canvas Element。"""

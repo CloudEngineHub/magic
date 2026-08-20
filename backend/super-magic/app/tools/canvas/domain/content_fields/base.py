@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 
+
 @dataclass
 class CanvasContentFields(ABC):
     """定义所有 Content Fields 的公共行为。"""

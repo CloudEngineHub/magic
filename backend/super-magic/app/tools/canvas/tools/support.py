@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.application import CanvasApplication
-from app.tools.canvas.repository import CanvasRepository
+from app.tools.canvas.bootstrap import CanvasApplicationFactory
 
 
 def _workspace(tool_context: ToolContext | None) -> Path:
@@ -23,4 +22,4 @@ def _workspace(tool_context: ToolContext | None) -> Path:
 
 def _application(tool_context: ToolContext | None) -> CanvasApplication:
     """创建当前调用使用的 Canvas Application。"""
-    return CanvasApplication(CanvasRepository(_workspace(tool_context)))
+    return CanvasApplicationFactory.create_default(_workspace(tool_context))

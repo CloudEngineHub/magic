@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import math
-from typing import Any, Literal
+from pydantic import ConfigDict
 
-from pydantic import ConfigDict, Field, model_validator
-
-from app.tools.core import BaseToolParams
 from app.tools.canvas.application.commands import AddContentCommand
-
 from app.tools.canvas.schemas.inputs.content_input import ContentInput
+from app.tools.core import BaseToolParams
+
 
 class AddContentInput(BaseToolParams):
     """追加 Content 参数。"""

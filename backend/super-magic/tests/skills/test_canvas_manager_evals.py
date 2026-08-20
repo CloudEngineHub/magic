@@ -19,6 +19,9 @@ PUBLIC_TOOLS = {
     "layout_canvas_elements",
     "add_canvas_connections",
     "wait_canvas_generation",
+    "estimate_canvas_content_points",
+    "compose_canvas_video",
+    "search_canvas_images",
 }
 
 
@@ -26,7 +29,7 @@ def test_canvas_manager_evals_are_complete_and_refer_to_existing_assets() -> Non
     """所有 eval 场景都必须可加载，并且只能引用新 Canvas 链路。"""
     eval_files = sorted((SKILL_ROOT / "evals").glob("*.json"))
 
-    assert len(eval_files) == 15
+    assert len(eval_files) == 18
     identifiers: set[str] = set()
     for path in eval_files:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -74,6 +77,9 @@ def test_canvas_manager_evals_are_complete_and_refer_to_existing_assets() -> Non
         "storyboard-first-frame-flow",
         "tool-chaining",
         "v3-only",
+        "point-estimate-lifecycle",
+        "video-composition-lifecycle",
+        "image-search-import",
     }
 
 

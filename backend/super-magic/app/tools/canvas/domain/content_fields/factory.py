@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from app.tools.canvas.domain.content_fields.audio import AudioContentFields
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
 from app.tools.canvas.domain.content_fields.ellipse import EllipseContentFields
@@ -89,6 +91,7 @@ class ContentFieldsFactory:
         if element_type == "video-edit":
             return VideoEditContentFields(
                 video_sequence=cls._string_list(data, "videoSequence"),
+                audio_sequence=cls._string_list(data, "audioSequence"),
                 output=cls._optional_object(data, "output"),
             )
         raise CanvasProtocolError("INVALID_CONTENT", f"Unsupported Content type: {element_type}.")

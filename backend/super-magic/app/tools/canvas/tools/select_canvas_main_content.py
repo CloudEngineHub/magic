@@ -2,17 +2,18 @@
 
 from typing import Any
 
+from pydantic import Field
+
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
-
-from app.tools.canvas.schemas import MainContentInput, ProjectPathParams
 from app.tools.canvas.presentation import error_result, items_content
+from app.tools.canvas.schemas import MainContentInput, ProjectPathParams
 from app.tools.canvas.tools.support import _application
 from app.tools.core import tool
 from app.tools.core.base_tool import BaseTool
-from pydantic import Field
+
 
 @tool(name="select_canvas_main_content", code_mode_only=True)
 class SelectCanvasMainContent(BaseTool[ProjectPathParams]):

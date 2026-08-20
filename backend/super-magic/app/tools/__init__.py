@@ -183,6 +183,9 @@ from app.tools.canvas import (
     RetryCanvasContentGeneration,
     SelectCanvasMainContent,
     WaitCanvasGeneration,
+    EstimateCanvasContentPoints,
+    ComposeCanvasVideo as CanvasComposeCanvasVideo,
+    SearchCanvasImages as CanvasSearchCanvasImages,
 )
 
 # 用户信息工具
@@ -442,6 +445,9 @@ __all__ = [
     "RetryCanvasContentGeneration",
     "SelectCanvasMainContent",
     "WaitCanvasGeneration",
+    "EstimateCanvasContentPoints",
+    "CanvasComposeCanvasVideo",
+    "CanvasSearchCanvasImages",
 
     # MCP 工具集
     "McpAddServer",

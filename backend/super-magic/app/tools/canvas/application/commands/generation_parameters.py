@@ -13,6 +13,7 @@ class GenerationParameters:
 
     prompt: str = ""
     model_id: str | None = None
+    estimate_id: str | None = None
     name: str | None = None
     output_path: str | None = None
     size: str | None = None
@@ -42,6 +43,7 @@ class GenerationParameters:
         }
         optional: dict[str, object | None] = {
             "model_id": self.model_id,
+            "estimate_id": self.estimate_id,
             "name": self.name,
             "output_path": self.output_path,
             "size": self.size,
@@ -71,7 +73,7 @@ class GenerationParameters:
             raw = values.get(field_name, [])
             kwargs[field_name] = tuple(value for value in raw if isinstance(value, str)) if isinstance(raw, list) else ()
         for field_name in (
-            "prompt", "model_id", "name", "output_path", "size", "frame_start_path",
+            "prompt", "model_id", "estimate_id", "name", "output_path", "size", "frame_start_path",
             "frame_end_path", "aspect_ratio", "resolution",
         ):
             raw = values.get(field_name)

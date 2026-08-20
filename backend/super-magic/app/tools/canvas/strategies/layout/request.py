@@ -1,6 +1,7 @@
 """布局策略请求模型。"""
 
 from dataclasses import dataclass
+
 from app.tools.canvas.application.commands import LayoutCommand
 
 

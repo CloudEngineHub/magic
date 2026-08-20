@@ -24,7 +24,7 @@ skills:
     - name: using-mcp
     - name: user-info
     - name: document-converter
-  workspace_skills: []
+  workspace_skills: "*"
 ---
 
 <role>

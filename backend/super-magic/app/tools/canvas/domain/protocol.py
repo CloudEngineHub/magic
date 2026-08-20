@@ -20,5 +20,5 @@ CONTENT_FIELDS = {
     "triangle": {"fill", "stroke", "strokeWidth"},
     "star": {"fill", "stroke", "strokeWidth", "cornerRadius", "sides", "innerRadiusRatio"},
     "storyboard": {"generationConfig", "shots"},
-    "video-edit": {"videoSequence", "output"},
+    "video-edit": {"videoSequence", "audioSequence", "output"},
 }

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.application.commands import GenerationSubmissionCommand
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.generation import (
@@ -18,6 +17,7 @@ from app.tools.canvas.generation import (
     GenerationTaskRepository,
 )
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
+from app.tools.canvas.production.services.generation_estimate_guard import GenerationEstimateGuard
 from app.tools.canvas.repository import CanvasUnitOfWork
 
 
@@ -31,6 +31,7 @@ class GenerationSubmissionService:
         generation_tasks: GenerationTaskRepository,
         generation_execution: GenerationExecutionStrategyRegistry,
         generation_result_applier: CanvasGenerationResultApplier,
+        estimate_guard: GenerationEstimateGuard | None = None,
     ) -> None:
         """显式绑定生成提交所需的事务、能力、执行、任务和结果端口。"""
         self.unit_of_work = unit_of_work
@@ -38,6 +39,7 @@ class GenerationSubmissionService:
         self.generation_tasks = generation_tasks
         self.generation_execution = generation_execution
         self.generation_result_applier = generation_result_applier
+        self.estimate_guard = estimate_guard
 
     async def submit_generated(
         self,
@@ -56,6 +58,13 @@ class GenerationSubmissionService:
             parameters = item.parameters
             parameter_payload = parameters.to_dict()
             capability = self.generation_capabilities.get(item.element_type, parameters.model_id)
+            if self.estimate_guard is not None and capability.billable:
+                await self.estimate_guard.validate(
+                    project_path=project_path,
+                    item_ref=item.item_ref,
+                    production_rule=capability.production_rule,
+                    parameters=parameters,
+                )
             request = GenerationRequest(
                 project_path=project_path,
                 element_id=item.element_id,

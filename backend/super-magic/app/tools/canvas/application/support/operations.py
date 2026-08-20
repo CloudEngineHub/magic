@@ -2,10 +2,11 @@
 
 from typing import Any
 
+from app.tools.canvas.application.support.atomic_batch_guard import AtomicBatchGuard, ItemReferenceCommand
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasConnection, CanvasProject
+from app.tools.canvas.generation.result.canvas_generation_result_applier import CanvasGenerationResultApplier
 from app.tools.canvas.infrastructure.persistence.content_metadata_service import ContentMetadataService
-from app.tools.canvas.application.support.atomic_batch_guard import AtomicBatchGuard, ItemReferenceCommand
 from app.tools.canvas.strategies import ConnectionStrategyRegistry
 
 

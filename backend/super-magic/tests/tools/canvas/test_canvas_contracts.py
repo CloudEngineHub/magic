@@ -7,8 +7,10 @@ import json
 import pytest
 from pydantic import ValidationError
 
+import tests.tools.canvas.helpers  # noqa: F401
 from agentlang.context.tool_context import ToolContext
-from app.tools.canvas.application import CanvasApplication
+from agentlang.tools.tool_result import ToolResult
+from app.tools.canvas.bootstrap import CanvasApplicationFactory
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.generation import (
@@ -18,24 +20,26 @@ from app.tools.canvas.generation import (
     GenerationSubmission,
     InMemoryGenerationTaskRepository,
 )
-from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.presentation import error_result as _error_result
+from app.tools.canvas.presentation.model_content import elements_content, items_content
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.tools import (
     AddCanvasConnections,
     AddCanvasContents,
     AddCanvasElements,
+    ComposeCanvasVideo,
+    ContentInput,
+    EstimateCanvasContentPoints,
     FrameCanvasElements,
     InitializeCanvas,
     LayoutCanvasElements,
-    ContentInput,
     QueryCanvasElementDetails,
     QueryCanvasOverview,
     RetryCanvasContentGeneration,
+    SearchCanvasImages,
     SelectCanvasMainContent,
     WaitCanvasGeneration,
 )
-from agentlang.tools.tool_result import ToolResult
 
 
 def test_content_input_exposes_one_stable_model_schema() -> None:
@@ -66,6 +70,9 @@ def test_each_canvas_tool_owns_feedback_hooks() -> None:
         LayoutCanvasElements,
         AddCanvasConnections,
         WaitCanvasGeneration,
+        EstimateCanvasContentPoints,
+        ComposeCanvasVideo,
+        SearchCanvasImages,
     ]
     hooks = {
         "get_before_tool_call_friendly_action_and_remark",
@@ -113,7 +120,7 @@ def test_wait_schema_uses_tasks_with_generation_task_id() -> None:
 async def test_atomic_batch_error_preserves_each_item_and_rolls_back(tmp_path) -> None:
     """批量预检失败时返回逐项状态，并且不留下半完成节点。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
 
     with pytest.raises(CanvasBatchError) as raised:
@@ -174,7 +181,7 @@ def test_model_content_contains_follow_up_and_specific_error_action() -> None:
 async def test_invalid_user_sidecar_is_visible_and_blocks_writes(tmp_path) -> None:
     """不支持的 user sidecar 不能被静默忽略或在写操作中覆盖。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -205,7 +212,7 @@ async def test_invalid_user_sidecar_is_visible_and_blocks_writes(tmp_path) -> No
 async def test_invalid_user_sidecar_blocks_layout_and_frame_writes(tmp_path) -> None:
     """所有 Canvas 结构写操作都必须尊重损坏 user sidecar 的保护边界。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -236,7 +243,7 @@ async def test_invalid_user_sidecar_blocks_layout_and_frame_writes(tmp_path) -> 
 async def test_single_item_keeps_specific_error_code(tmp_path) -> None:
     """单项工具错误保留稳定业务码，不被批量汇总码覆盖。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
 
     with pytest.raises(CanvasDomainError) as raised:
@@ -347,7 +354,7 @@ async def test_async_generation_recovers_between_application_instances(tmp_path)
         GenerationCapability("recoverable-video", "video", "async", port, port),
     ])
     repository = CanvasRepository(tmp_path)
-    first = CanvasApplication(
+    first = CanvasApplicationFactory.create(
         repository,
         generation_capabilities=registry,
         generation_tasks=InMemoryGenerationTaskRepository(),
@@ -363,7 +370,7 @@ async def test_async_generation_recovers_between_application_instances(tmp_path)
     )
     assert created["items"][0]["generation_task_id"] == "recoverable-canvas-task"
 
-    second = CanvasApplication(
+    second = CanvasApplicationFactory.create(
         repository,
         generation_capabilities=registry,
         generation_tasks=InMemoryGenerationTaskRepository(),
@@ -382,7 +389,7 @@ async def test_async_generation_recovers_when_task_repository_write_fails(tmp_pa
         GenerationCapability("recoverable-video", "video", "async", port, port),
     ])
     repository = CanvasRepository(tmp_path)
-    first = CanvasApplication(
+    first = CanvasApplicationFactory.create(
         repository,
         generation_capabilities=registry,
         generation_tasks=FailingTaskRepository(),
@@ -399,7 +406,7 @@ async def test_async_generation_recovers_when_task_repository_write_fails(tmp_pa
     assert created["items"][0]["generation_task_id"] == "recoverable-canvas-task"
     assert created["items"][0]["persistence_warning"]
 
-    second = CanvasApplication(
+    second = CanvasApplicationFactory.create(
         repository,
         generation_capabilities=registry,
         generation_tasks=InMemoryGenerationTaskRepository(),

@@ -1,6 +1,7 @@
 """生成请求模型。"""
 
 from dataclasses import dataclass, field
+
 from app.tools.canvas.application.commands import GenerationParameters
 
 

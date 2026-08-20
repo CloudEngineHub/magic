@@ -19,12 +19,12 @@ def default_generation_capabilities(workspace: Path | None = None) -> list[Gener
         image = FakeImageGenerationPort(workspace)
         video = FakeVideoGenerationPort(workspace)
         return [
-            GenerationCapability("fake-image-generation", "image", "sync", image, None),
-            GenerationCapability("fake-video-generation", "video", "async", video, video),
+            GenerationCapability("fake-image-generation", "image", "sync", image, None, production_rule="image_generation"),
+            GenerationCapability("fake-video-generation", "video", "async", video, video, billable=True, production_rule="video_generation"),
         ]
     image = GenericImageGenerationPort(workspace)
     video = GenericVideoGenerationPort(workspace)
     return [
-        GenerationCapability("image-generation", "image", "sync", image, None),
-        GenerationCapability("video-generation", "video", "async", video, video),
+        GenerationCapability("image-generation", "image", "sync", image, None, production_rule="image_generation"),
+        GenerationCapability("video-generation", "video", "async", video, video, billable=True, production_rule="video_generation"),
     ]

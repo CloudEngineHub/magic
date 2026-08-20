@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
 

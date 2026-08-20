@@ -1,8 +1,8 @@
 """Content 策略注册器。"""
 
+from app.tools.canvas.application.commands import ContentCommand
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent
-from app.tools.canvas.application.commands import ContentCommand
 from app.tools.canvas.strategies.content.generated_content import GeneratedContentStrategy
 from app.tools.canvas.strategies.content.imported_asset import ImportedAssetContentStrategy
 from app.tools.canvas.strategies.content.interface import ContentStrategyInterface

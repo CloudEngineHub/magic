@@ -10,6 +10,7 @@ from app.tools.canvas.domain.models.canvas_connection import CanvasConnection
 from app.tools.canvas.domain.models.canvas_element import CanvasElement
 from app.tools.canvas.domain.types import JsonObject
 
+
 @dataclass
 class CanvasDocument:
     """表示解压后的 Canvas 文档。"""

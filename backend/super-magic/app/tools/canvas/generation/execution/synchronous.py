@@ -1,7 +1,6 @@
 """同步生成执行策略。"""
 
 from agentlang.context.tool_context import ToolContext
-
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.generation.contracts.generation_capability import GenerationCapability
 from app.tools.canvas.generation.contracts.generation_request import GenerationRequest

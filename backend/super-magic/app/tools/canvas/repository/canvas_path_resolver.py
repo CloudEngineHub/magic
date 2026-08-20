@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+
 class CanvasPathResolver:
     """把工作区相对 project_path 安全解析为本地目录。"""
 

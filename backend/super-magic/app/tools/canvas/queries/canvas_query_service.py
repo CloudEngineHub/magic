@@ -6,10 +6,10 @@ from typing import Any
 
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
+from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 from app.tools.canvas.queries.element_details_query_service import ElementDetailsQueryService
 from app.tools.canvas.queries.overview_query_service import OverviewQueryService
-from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
 
 
 class CanvasQueryService:

@@ -1,9 +1,9 @@
 """Canvas Content 创建前准备服务。"""
 
 from app.tools.canvas.application.commands import ContentCommand
+from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasContent, CanvasProject
-from app.tools.canvas.domain.content_fields.generated_media import GeneratedMediaContentFields
 from app.tools.canvas.infrastructure.assets import AssetGateway
 from app.tools.canvas.strategies import ContentStrategyRegistry
 

@@ -7,8 +7,8 @@ from typing import Any
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasElement
 from app.tools.canvas.domain.services.element_tree_index import ElementTreeIndex
-from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.infrastructure.persistence.element_details_adapter import ElementDetailsAdapter
 
 
 class ElementDetailsQueryService:

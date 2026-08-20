@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from typing import Literal, cast
 
 from pydantic import ConfigDict, Field, model_validator
 
-from app.tools.core import BaseToolParams
 from app.tools.canvas.application.commands import ContentCommand, GenerationParameters
 from app.tools.canvas.domain.content_fields import (
     AudioContentFields,
@@ -22,10 +20,11 @@ from app.tools.canvas.domain.content_fields import (
     VideoContentFields,
     VideoEditContentFields,
 )
-from app.tools.canvas.domain.types import JsonObject, JsonValue
+from app.tools.canvas.domain.types import JsonObject
 from app.tools.canvas.schemas.inputs.rich_text_input import RichTextParagraphInput, TextStyleInput
 from app.tools.canvas.schemas.inputs.storyboard_input import StoryboardGenerationConfigInput, StoryboardShotInput
 from app.tools.canvas.schemas.inputs.video_edit_input import VideoEditOutputInput
+from app.tools.core import BaseToolParams
 
 
 class ContentInput(BaseToolParams):
@@ -90,8 +89,13 @@ class ContentInput(BaseToolParams):
     generation_config: StoryboardGenerationConfigInput | None = Field(None, alias="generationConfig")
     shots: list[StoryboardShotInput] | None = None
     video_sequence: list[str] | None = Field(None, alias="videoSequence")
+    audio_sequence: list[str] | None = Field(None, alias="audioSequence")
     output: VideoEditOutputInput | None = None
     model_id: str | None = None
+    estimate_id: str | None = Field(
+        None,
+        description="Point estimate confirmation ID required for generated video Content.",
+    )
     name: str | None = None
     reference_images: list[str] = Field(default_factory=list)
     reference_image_paths: list[str] = Field(default_factory=list)
@@ -106,7 +110,7 @@ class ContentInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
-    extensions: JsonObject = Field(default_factory=dict)
+    extensions: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_source_fields(self) -> "ContentInput":
@@ -195,6 +199,7 @@ class ContentInput(BaseToolParams):
         if self.content_type == "video-edit":
             return VideoEditContentFields(
                 video_sequence=list(self.video_sequence or []),
+                audio_sequence=list(self.audio_sequence or []),
                 output=self._model_object(self.output),
             )
         return ContentFieldsFactory.empty(self.content_type)
@@ -204,6 +209,7 @@ class ContentInput(BaseToolParams):
         return GenerationParameters(
             prompt=self.prompt or "",
             model_id=self.model_id,
+            estimate_id=self.estimate_id,
             name=self.name,
             size=self.size,
             reference_images=tuple(self.reference_images),

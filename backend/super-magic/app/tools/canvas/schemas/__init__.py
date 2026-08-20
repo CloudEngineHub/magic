@@ -2,6 +2,7 @@
 
 from app.tools.canvas.schemas.inputs import (
     AddContentInput,
+    ComposeVideoInput,
     ConnectionInput,
     ContentInput,
     CreationConnectionInput,
@@ -14,11 +15,15 @@ from app.tools.canvas.schemas.inputs import (
     MainContentInput,
     ProjectPathParams,
     RetryContentInput,
+    SearchImagesInput,
+    SearchImageTaskInput,
+    VideoPointEstimateItemInput,
     WaitTask,
 )
 
 __all__ = [
     "AddContentInput",
+    "ComposeVideoInput",
     "ConnectionInput",
     "ContentInput",
     "CreationConnectionInput",
@@ -31,5 +36,8 @@ __all__ = [
     "MainContentInput",
     "ProjectPathParams",
     "RetryContentInput",
+    "SearchImageTaskInput",
+    "SearchImagesInput",
+    "VideoPointEstimateItemInput",
     "WaitTask",
 ]

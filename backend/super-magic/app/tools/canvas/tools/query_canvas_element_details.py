@@ -6,12 +6,12 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
-
-from app.tools.canvas.schemas import ElementIdParams
 from app.tools.canvas.presentation import elements_content, error_result
+from app.tools.canvas.schemas import ElementIdParams
 from app.tools.canvas.tools.support import _application
 from app.tools.core import tool
 from app.tools.core.base_tool import BaseTool
+
 
 @tool(name="query_canvas_element_details", code_mode_only=True)
 class QueryCanvasElementDetails(BaseTool[ElementIdParams]):

@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import pytest
 
-from app.tools.canvas.application import CanvasApplication
-from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
+import tests.tools.canvas.helpers  # noqa: F401
+from app.tools.canvas.application.commands import ContentCommand
+from app.tools.canvas.bootstrap import CanvasApplicationFactory
+from app.tools.canvas.domain.content_fields import ImageContentFields, TextContentFields
 from app.tools.canvas.domain.errors import CanvasBatchError, CanvasDomainError, CanvasProtocolError
-from app.tools.canvas.domain.models import CanvasConnection, CanvasContent, CanvasDocument, CanvasElement, CanvasProject
+from app.tools.canvas.domain.models import (
+    CanvasConnection,
+    CanvasContent,
+    CanvasDocument,
+    CanvasElement,
+    CanvasProject,
+    ElementProperties,
+)
 from app.tools.canvas.generation import (
     AsynchronousGenerationStrategy,
     GenerationCapability,
@@ -19,6 +28,7 @@ from app.tools.canvas.generation import (
     InMemoryGenerationTaskRepository,
 )
 from app.tools.canvas.hierarchy import HierarchyMutationPlan
+from app.tools.canvas.infrastructure.persistence.canvas_codec import CanvasCodec
 from app.tools.canvas.repository import CanvasRepository
 from app.tools.canvas.strategies import (
     ConnectionMutationPlan,
@@ -26,8 +36,8 @@ from app.tools.canvas.strategies import (
     ContentMutationPlan,
     ContentStrategyRegistry,
     LayoutMutationPlan,
-    LayoutStrategyRequest,
     LayoutStrategyRegistry,
+    LayoutStrategyRequest,
 )
 from app.tools.canvas.tools import AddCanvasConnections, ConnectionInput
 
@@ -43,14 +53,14 @@ def test_codec_round_trip_preserves_nested_content_and_connection() -> None:
                 CanvasElement(
                     element_id="text-1",
                     element_type="text",
-                    contents=[CanvasContent("text-content-1", {"content": [{"text": "mock"}]})],
+                    contents=[CanvasContent("text-content-1", TextContentFields(content=[{"children": [{"type": "text", "text": "mock"}]}]))],
                     active_content_id="text-content-1",
                     main_content_id="text-content-1",
                 ),
                 CanvasElement(
                     element_id="image-1",
                     element_type="image",
-                    contents=[CanvasContent("image-content-1", {"src": "images/mock.png", "status": "completed"})],
+                    contents=[CanvasContent("image-content-1", ImageContentFields(src="images/mock.png", status="completed"))],
                     active_content_id="image-content-1",
                     main_content_id="image-content-1",
                 ),
@@ -61,7 +71,7 @@ def test_codec_round_trip_preserves_nested_content_and_connection() -> None:
 
     decoded = CanvasCodec.decode(CanvasCodec.encode(project))
 
-    assert decoded.canvas.get_element("text-1").contents[0].fields["content"][0]["text"] == "mock"
+    assert decoded.canvas.get_element("text-1").contents[0].fields.content[0]["children"][0]["text"] == "mock"
     assert decoded.canvas.connections[0].target_element_id == "image-1"
 
 
@@ -80,7 +90,7 @@ def test_codec_rejects_unsupported_version() -> None:
 async def test_connection_replacement_is_atomic_and_idempotent(tmp_path) -> None:
     """替换连线时旧线和新线在同一事务内完成，重复新增不产生重复边。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     await application.add_elements(
         "mock-project",
@@ -119,7 +129,7 @@ async def test_connection_replacement_is_atomic_and_idempotent(tmp_path) -> None
 async def test_connection_removal_rejects_unknown_ids_and_replays_known_deletions(tmp_path) -> None:
     """连线删除必须拒绝未知 ID，并允许已成功删除的精确 ID 幂等重放。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     await application.add_elements(
         "mock-project",
@@ -157,7 +167,7 @@ async def test_connection_removal_rejects_unknown_ids_and_replays_known_deletion
 async def test_initial_connections_use_each_current_item_as_anchor(tmp_path) -> None:
     """同批初始连线必须锚定各自 item，而不是批次最后一个 Element。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -277,7 +287,7 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
         GenerationCapability("mock-video", "video", "async", video_port, video_port),
     ])
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository, generation_capabilities=registry)
+    application = CanvasApplicationFactory.create(repository, generation_capabilities=registry)
     await application.initialize("mock-project")
 
     image_result = await application.add_elements(
@@ -294,12 +304,12 @@ async def test_generation_strategies_write_sync_result_and_wait_async_result(tmp
 
     image = project.canvas.get_element(image_result["items"][0]["element_id"])
     video = project.canvas.get_element(video_result["items"][0]["element_id"])
-    assert image.get_content(image.active_content_id).fields["src"] == "mock/images/result.png"
+    assert image.get_content(image.active_content_id).fields.src == "mock/images/result.png"
     assert video_result["items"][0]["generation_task_id"] == "canvas-task-1"
     assert waited["items"][0]["status"] == "completed"
     assert waited_again["items"][0]["already_finalized"] is True
     assert video_port.query_count == 1
-    assert video.get_content(video.active_content_id).fields["src"] == "mock/videos/result.mp4"
+    assert video.get_content(video.active_content_id).fields.src == "mock/videos/result.mp4"
 
 
 @pytest.mark.asyncio
@@ -332,7 +342,7 @@ async def test_async_retry_count_is_carried_to_each_generation_task(tmp_path) ->
         GenerationCapability("mock-retry-video", "video", "async", port, port),
     ])
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(
+    application = CanvasApplicationFactory.create(
         repository,
         generation_capabilities=registry,
         generation_tasks=tasks,
@@ -391,7 +401,7 @@ def test_hierarchy_mutation_plan_replaces_selected_root_elements_in_order() -> N
 async def test_add_first_content_to_empty_element_initializes_content_pointers(tmp_path) -> None:
     """空 Element 首次追加 Content 时应初始化 active 和 main 指针。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -422,7 +432,7 @@ async def test_imported_asset_is_normalized_and_cannot_be_registered_twice(tmp_p
     asset.parent.mkdir(parents=True)
     asset.write_bytes(b"mock")
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
 
     await application.add_elements(
@@ -463,7 +473,7 @@ async def test_generated_content_retry_is_limited_and_reuses_content_id(tmp_path
         GenerationCapability("mock-image", "image", "sync", failed_port),
     ])
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository, generation_capabilities=registry)
+    application = CanvasApplicationFactory.create(repository, generation_capabilities=registry)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -506,7 +516,7 @@ async def test_identical_retry_request_is_idempotent(tmp_path) -> None:
         GenerationCapability("mock-image", "image", "sync", port),
     ])
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository, generation_capabilities=registry)
+    application = CanvasApplicationFactory.create(repository, generation_capabilities=registry)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -539,7 +549,7 @@ async def test_identical_retry_request_is_idempotent(tmp_path) -> None:
 async def test_element_details_use_public_names_when_sidecar_is_damaged(tmp_path) -> None:
     """详情查询在扩展详情损坏时仍返回公开 DTO，不泄露内部文件名。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -562,7 +572,7 @@ async def test_element_details_use_public_names_when_sidecar_is_damaged(tmp_path
 async def _create_positioned_elements(tmp_path):
     """创建带有 mock 几何信息的根级 Element。"""
     repository = CanvasRepository(tmp_path)
-    application = CanvasApplication(repository)
+    application = CanvasApplicationFactory.create(repository)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -582,8 +592,10 @@ async def _create_positioned_elements(tmp_path):
             ids["third"]: {"x": 600, "y": 100, "width": 80, "height": 80, "zIndex": 3},
         }
         for element in project.canvas.elements:
-            element.properties.update(values[element.element_id])
-        content = CanvasContent("first-content", {"src": "./images/mock.png", "status": "completed"})
+            properties = values[element.element_id]
+            for key, value in properties.items():
+                setattr(element.properties, {"zIndex": "z_index"}.get(key, key), value)
+        content = CanvasContent("first-content", ImageContentFields(src="./images/mock.png", status="completed"))
         project.canvas.get_element(ids["first"]).contents.append(content)
         project.canvas.get_element(ids["first"]).active_content_id = content.content_id
         project.canvas.get_element(ids["first"]).main_content_id = content.content_id
@@ -618,8 +630,8 @@ async def test_frame_selection_preserves_ids_connections_and_converts_to_local_c
     assert frame.active_content_id == framed["items"][0]["content_id"]
     assert first.element_id == ids["first"]
     assert second.element_id == ids["second"]
-    assert first.properties["x"] == pytest.approx(100 / 1 - frame.properties["x"])
-    assert second.properties["y"] == pytest.approx(260 - frame.properties["y"])
+    assert first.properties.x == pytest.approx(100 / 1 - frame.properties.x)
+    assert second.properties.y == pytest.approx(260 - frame.properties.y)
     assert first.contents[0].content_id == first_content_id
     assert any(
         item.connection_id == connection_id
@@ -714,7 +726,7 @@ async def test_layout_uses_direct_parent_local_coordinates_and_rejects_cross_con
     def add_local_child(project):
         """添加一个测试用的 Frame 子节点，坐标使用局部空间。"""
         frame = project.canvas.get_element(frame_id)
-        frame.children.append(CanvasElement("local-target", "image", {"width": 100, "height": 80}))
+        frame.children.append(CanvasElement("local-target", "image", ElementProperties(width=100, height=80)))
 
     await repository.transaction("mock-project", add_local_child)
     result = await application.layout(
@@ -723,7 +735,7 @@ async def test_layout_uses_direct_parent_local_coordinates_and_rejects_cross_con
     )
     assert result["items"][0]["element_id"] == "local-target"
     local_target = (await repository.read("mock-project")).canvas.get_element("local-target")
-    assert local_target.properties["x"] == pytest.approx(300 + 120 + 200 - (100 - 320 / 18))
+    assert local_target.properties.x == pytest.approx(300 + 120 + 200 - (100 - 320 / 18))
 
     await application.connections(
         "mock-project",
@@ -781,7 +793,7 @@ async def test_wait_returns_stable_not_applicable_error_for_frame_task(tmp_path)
     """即使出现错误绑定，等待工具也必须明确拒绝 Frame 任务。"""
     repository = CanvasRepository(tmp_path)
     tasks = InMemoryGenerationTaskRepository()
-    application = CanvasApplication(repository, generation_tasks=tasks)
+    application = CanvasApplicationFactory.create(repository, generation_tasks=tasks)
     await application.initialize("mock-project")
     created = await application.add_elements(
         "mock-project",
@@ -812,12 +824,10 @@ def test_strategy_registries_return_typed_plans() -> None:
         canvas.get_element("source"),
         LayoutStrategyRequest("source", {"strategy": "row_incremental"}),
     )
-    content_plan = ContentStrategyRegistry().plan({
-        "source": "user",
-        "content_type": "text",
-        "content_id": "content-1",
-        "content": "mock",
-    }, "text")
+    content_plan = ContentStrategyRegistry().plan(
+        ContentCommand(source="user", content_type="text", fields=TextContentFields(content=[{"children": [{"type": "text", "text": "mock"}]}]), content_id="content-1"),
+        "text",
+    )
     connection_plan = ConnectionStrategyRegistry().plan(canvas, "source", "target")
 
     assert isinstance(layout_plan, LayoutMutationPlan)
