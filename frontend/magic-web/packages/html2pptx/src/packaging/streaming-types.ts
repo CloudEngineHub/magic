@@ -8,6 +8,22 @@ import type {
 import type { SerializablePPTNode } from "../ir/serialize"
 
 /**
+ * Immutable identity for the html2pptx runtime and its vendored PptxGenJS
+ * artifact. The identity is injected into both the main bundle and the
+ * Packaging Worker at build time so a stale Worker cannot silently package
+ * with a different protocol or runtime.
+ */
+export interface PackagingRuntimeIdentity {
+	readonly protocolVersion: 2
+	readonly edition: "open" | "enterprise"
+	readonly html2pptxVersion: string
+	readonly buildId: string
+	readonly pptxgenjsVersion: string
+	readonly sourceCommit: string
+	readonly artifactHash: string
+}
+
+/**
  * The Worker contract is deliberately described locally instead of importing
  * PptxGenJS implementation declarations. Both Magic editions require the v5
  * streaming-only runtime and exchange only structured-clone-safe summaries.
@@ -166,6 +182,7 @@ export type StreamingPackagingWorkerRequest =
 	| {
 			type: "start"
 			payload: {
+				identity: PackagingRuntimeIdentity
 				config: SlideConfig
 				plan: StreamingPresentationPlan
 				embedFonts?: EmbedFontInput[]
@@ -185,7 +202,11 @@ export type StreamingPackagingWorkerRequest =
 	| { type: "sink-ack"; chunkId: number }
 
 export type StreamingPackagingWorkerResponse =
-	| { type: "ready" }
+	| {
+			type: "ready"
+			identity: PackagingRuntimeIdentity
+			pptxgenjsVersion: string
+		}
 	| {
 			type: "slide-committed"
 			requestId: number

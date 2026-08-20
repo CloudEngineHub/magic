@@ -1,5 +1,6 @@
 export * from "./pptx-document"
 export * from "./streaming-types"
+export * from "./runtime-identity"
 export * from "./sink-proxy"
 export * from "./streaming-package-presentation"
 export {

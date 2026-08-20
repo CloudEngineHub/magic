@@ -15,6 +15,13 @@ import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { gunzipSync } from "node:zlib"
+import {
+	assertRuntimeIdentityEqual,
+	buildExpectedRuntimeIdentity,
+	deriveExpectedBuildId,
+	extractRuntimeIdentity,
+	validateRuntimeIdentity,
+} from "./runtime-identity-gate.mjs"
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const magicWebRoot = path.resolve(packageRoot, "../..")
@@ -23,7 +30,7 @@ const edition = process.argv.includes("--enterprise") ? "enterprise" : "open"
 const expectedPptxGenJs = {
 	name: "pptxgenjs",
 	version: "5.0.0",
-	sourceCommit: "4b12eb3f8f81060edbe721b008915c18b81215c2",
+	sourceCommit: "37b2dc9d04352366e765712ba8903be38c6a9669",
 	artifact: "pptxgenjs-5.0.0.tgz",
 }
 
@@ -49,10 +56,12 @@ export async function verifyBuiltRuntimeChain({
 	const packageDir = path.resolve(packageRootOverride)
 	const appRoot = path.resolve(magicWebRootOverride)
 	const vendorDir = path.join(appRoot, "vendor")
+	const packageJsonPath = path.join(packageDir, "package.json")
 	const artifactPath = path.join(vendorDir, expectedPptxGenJs.artifact)
 	const manifestPath = artifactPath.replace(/\.tgz$/, ".manifest.json")
 
 	const manifest = await readJsonRequired(manifestPath, failures)
+	const packageJson = await readJsonRequired(packageJsonPath, failures)
 	if (manifest) {
 		for (const [field, expected] of Object.entries(expectedPptxGenJs)) {
 			if (manifest[field] !== expected) {
@@ -62,6 +71,17 @@ export async function verifyBuiltRuntimeChain({
 			}
 		}
 	}
+	const expectedRuntimeIdentity =
+		manifest && packageJson
+			? buildExpectedRuntimeIdentity({
+					edition,
+					html2pptxVersion: packageJson.version,
+					buildId: deriveExpectedBuildId(appRoot),
+					pptxgenjsVersion: manifest.version,
+					sourceCommit: manifest.sourceCommit,
+					artifactHash: manifest.sha256,
+				})
+			: undefined
 
 	const artifact = await readRequired(artifactPath, failures)
 	if (!artifact) return result(failures)
@@ -98,10 +118,42 @@ export async function verifyBuiltRuntimeChain({
 		)
 	}
 
+	let packageIdentity
+	const packageIdentityFiles = [
+		path.join(packageDir, "dist", "index.js"),
+		path.join(packageDir, "dist", "index.cjs"),
+	]
+	for (const file of packageIdentityFiles) {
+		const bytes = await readRequired(file, failures)
+		if (!bytes) continue
+		const identity = inspectRuntimeIdentity(file, bytes.toString("utf8"), expectedRuntimeIdentity, failures)
+		if (!identity) continue
+		if (!packageIdentity) packageIdentity = identity
+		else compareRuntimeIdentity(packageIdentity, identity, file, packageIdentityFiles[0], failures)
+	}
+
 	const packageAssets = path.join(packageDir, "dist", "assets")
 	const packageWorker = await findSingleWorker(packageAssets, /^packaging-worker-[^.]+\.js$/, "package", failures)
 	const packageWorkerBytes = packageWorker && (await readRequired(packageWorker.path, failures))
 	const packageWorkerSha256 = packageWorkerBytes ? sha256(packageWorkerBytes) : undefined
+	let packageWorkerIdentity
+	if (packageWorker && packageWorkerBytes) {
+		packageWorkerIdentity = inspectRuntimeIdentity(
+			packageWorker.path,
+			packageWorkerBytes.toString("utf8"),
+			expectedRuntimeIdentity,
+			failures,
+		)
+		if (packageIdentity && packageWorkerIdentity) {
+			compareRuntimeIdentity(
+				packageIdentity,
+				packageWorkerIdentity,
+				packageWorker.path,
+				packageIdentityFiles[0],
+				failures,
+			)
+		}
+	}
 
 	let sourceMapSha256
 	if (packageWorker && packageWorkerBytes) {
@@ -152,14 +204,40 @@ export async function verifyBuiltRuntimeChain({
 	const appWorker = await findSingleWorker(appAssets, /^packaging-worker-.*\.js$/, "Magic Web root", failures)
 	const appWorkerBytes = appWorker && (await readRequired(appWorker.path, failures))
 	const appWorkerSha256 = appWorkerBytes ? sha256(appWorkerBytes) : undefined
+	let rootWorkerIdentity
 	if (appWorker && appWorkerBytes) {
-		checkWorkerText(appWorker.path, appWorkerBytes.toString("utf8"), failures)
+		const appWorkerText = appWorkerBytes.toString("utf8")
+		checkWorkerText(appWorker.path, appWorkerText, failures)
+		rootWorkerIdentity = inspectRuntimeIdentity(
+			appWorker.path,
+			appWorkerText,
+			expectedRuntimeIdentity,
+			failures,
+		)
+		if (packageWorkerIdentity && rootWorkerIdentity) {
+			compareRuntimeIdentity(
+				packageWorkerIdentity,
+				rootWorkerIdentity,
+				appWorker.path,
+				packageWorker?.path ?? "package Worker",
+				failures,
+			)
+		}
 		if (packageWorkerBytes && !appWorkerBytes.equals(packageWorkerBytes)) {
 			failures.push(
 				`${path.relative(appRoot, appWorker.path)}: root Worker differs from package Worker; expected ${packageWorkerSha256}, found ${appWorkerSha256}`,
 			)
 		}
 		await verifyRootWorkerReference(appAssets, appWorker.name, failures)
+	}
+
+	const rootIdentityFiles = await findRuntimeIdentityFiles(appAssets, appWorker?.name)
+	for (const file of rootIdentityFiles) {
+		const source = await readFile(file, "utf8")
+		const identity = inspectRuntimeIdentity(file, source, expectedRuntimeIdentity, failures)
+		if (identity && rootWorkerIdentity) {
+			compareRuntimeIdentity(rootWorkerIdentity, identity, file, appWorker?.path ?? "root Worker", failures)
+		}
 	}
 
 	return result(failures, {
@@ -169,6 +247,10 @@ export async function verifyBuiltRuntimeChain({
 		sourceMapSha256,
 		packageWorkerSha256,
 		rootWorkerSha256: appWorkerSha256,
+		packageIdentity,
+		packageWorkerIdentity,
+		rootWorkerIdentity,
+		rootIdentityFiles: rootIdentityFiles.map((file) => path.relative(appRoot, file)),
 		packageWorker: packageWorker?.name,
 		rootWorker: appWorker?.name,
 		sourceCommit: manifest?.sourceCommit,
@@ -188,6 +270,53 @@ function checkWorkerText(file, source, failures) {
 	for (const required of ["beginStreaming", "writeTo"]) {
 		if (!source.includes(required)) failures.push(`${file}: Worker is missing ${required}`)
 	}
+}
+
+function inspectRuntimeIdentity(file, source, expected, failures) {
+	try {
+		const identity = extractRuntimeIdentity(source, file)
+		return validateRuntimeIdentity(identity, { file, expected })
+	} catch (error) {
+		failures.push(error.message)
+		return undefined
+	}
+}
+
+function compareRuntimeIdentity(reference, actual, actualFile, referenceFile, failures) {
+	try {
+		assertRuntimeIdentityEqual(reference, actual, { referenceFile, actualFile })
+	} catch (error) {
+		failures.push(error.message)
+	}
+}
+
+async function findRuntimeIdentityFiles(assetsRoot, excludedWorkerName) {
+	let names
+	try {
+		names = await readdir(assetsRoot)
+	} catch {
+		return []
+	}
+	const matches = []
+	for (const name of names) {
+		if (!name.endsWith(".js") || name === excludedWorkerName) continue
+		const file = path.join(assetsRoot, name)
+		let source
+		try {
+			source = await readFile(file, "utf8")
+		} catch {
+			continue
+		}
+		if (source.includes("html2pptxVersion") && source.includes("artifactHash")) {
+			try {
+				extractRuntimeIdentity(source, file)
+				matches.push(file)
+			} catch {
+				// A source module may contain validation text without the injected object.
+			}
+		}
+	}
+	return matches
 }
 
 async function verifyRootWorkerReference(assetsRoot, workerName, failures) {

@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { describe, expect, it, vi } from "vitest"
+import { PACKAGING_RUNTIME_IDENTITY } from "../src/packaging/runtime-identity"
 import type { StreamingPackagingWorkerRequest } from "../src/packaging/streaming-types"
 import { getBaseViteConfig } from "../vite.config"
 
@@ -33,7 +34,13 @@ describe("package build configuration", () => {
 				readFile(resolve(outDir, "index.js"), "utf8"),
 				readdir(resolve(outDir, "assets")),
 			])
-			expect(assetNames).toContainEqual(expect.stringMatching(/^packaging-worker-[^.]+\.js$/))
+			const workerName = assetNames.find((name) => /^packaging-worker-[^.]+\.js$/.test(name))
+			expect(workerName).toBeDefined()
+			const workerSource = await readFile(resolve(outDir, "assets", workerName!), "utf8")
+			expect(esmSource).toContain(PACKAGING_RUNTIME_IDENTITY.buildId)
+			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.buildId)
+			expect(esmSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
+			expect(workerSource).toContain(PACKAGING_RUNTIME_IDENTITY.artifactHash)
 			expect(esmSource).toMatch(/["']assets\/packaging-worker-[^"']+\.js["']/)
 			expect(esmSource).not.toMatch(/["']\/assets\/packaging-worker-/)
 
@@ -95,7 +102,11 @@ class ProtocolWorker {
 	postMessage(message: unknown): void {
 		const request = message as StreamingPackagingWorkerRequest
 		if (request.type === "start") {
-			this.emit({ type: "ready" })
+			this.emit({
+				type: "ready",
+				identity: PACKAGING_RUNTIME_IDENTITY,
+				pptxgenjsVersion: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
+			})
 			return
 		}
 		if (request.type === "commit-slide") {

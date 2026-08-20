@@ -3,6 +3,13 @@ import { createServer } from "node:http"
 import { access, readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import {
+	assertRuntimeIdentityEqual,
+	buildExpectedRuntimeIdentity,
+	deriveExpectedBuildId,
+	extractRuntimeIdentity,
+	validateRuntimeIdentity,
+} from "./runtime-identity-gate.mjs"
 
 /**
  * P6 package-surface gate.
@@ -17,7 +24,9 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distRoot = path.join(packageRoot, "dist")
 const packageJsonPath = path.join(packageRoot, "package.json")
+const vendorManifestPath = path.resolve(packageRoot, "../../vendor/pptxgenjs-5.0.0.manifest.json")
 const require = createRequire(import.meta.url)
+const edition = process.argv.includes("--enterprise") ? "enterprise" : "open"
 
 const esmEntry = path.join(distRoot, "index.js")
 const cjsEntry = path.join(distRoot, "index.cjs")
@@ -28,6 +37,15 @@ await assertFile(cjsEntry)
 await assertFile(declarationEntry)
 
 const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
+const vendorManifest = JSON.parse(await readFile(vendorManifestPath, "utf8"))
+const expectedIdentity = buildExpectedRuntimeIdentity({
+	edition,
+	html2pptxVersion: packageJson.version,
+	pptxgenjsVersion: vendorManifest.version,
+	sourceCommit: vendorManifest.sourceCommit,
+	artifactHash: vendorManifest.sha256,
+	buildId: deriveExpectedBuildId(path.resolve(packageRoot, "../..")),
+})
 if (packageJson.exports?.["."]?.import !== "./dist/index.js") {
 	throw new Error("package exports.import must point at ./dist/index.js")
 }
@@ -40,6 +58,20 @@ if (packageJson.exports?.["."]?.types !== "./dist/index.d.ts") {
 
 const esmExports = await import(`${pathToFileURL(esmEntry).href}?p6=${Date.now()}`)
 const cjsExports = require(cjsEntry)
+const esmSource = await readFile(esmEntry, "utf8")
+const cjsSource = await readFile(cjsEntry, "utf8")
+const esmIdentity = validateRuntimeIdentity(
+	extractRuntimeIdentity(esmSource, esmEntry),
+	{ file: esmEntry, expected: expectedIdentity },
+)
+const cjsIdentity = validateRuntimeIdentity(extractRuntimeIdentity(cjsSource, cjsEntry), {
+	file: cjsEntry,
+	expected: expectedIdentity,
+})
+assertRuntimeIdentityEqual(esmIdentity, cjsIdentity, {
+	referenceFile: esmEntry,
+	actualFile: cjsEntry,
+})
 for (const [condition, exportsObject] of [
 	["ESM", esmExports],
 	["CJS", cjsExports],
@@ -78,7 +110,16 @@ if (workerNames.length !== 1) {
 	throw new Error(`expected exactly one generated Packaging Worker, found ${workerNames.length}`)
 }
 const workerName = workerNames[0]
-const esmSource = await readFile(esmEntry, "utf8")
+const workerPath = path.join(distRoot, "assets", workerName)
+const workerSource = await readFile(workerPath, "utf8")
+const workerIdentity = validateRuntimeIdentity(
+	extractRuntimeIdentity(workerSource, workerPath),
+	{ file: workerPath, expected: expectedIdentity },
+)
+assertRuntimeIdentityEqual(esmIdentity, workerIdentity, {
+	referenceFile: esmEntry,
+	actualFile: workerPath,
+})
 const workerReference = `assets/${workerName}`
 if (!esmSource.includes(workerReference)) {
 	throw new Error(`ESM entry does not contain the relative worker reference ${workerReference}`)

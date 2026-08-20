@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { createSinkProxyWritable, createStreamingPackagingWorkerHandler } from "../src/packaging"
 import { createStreamingPresentationPackager } from "../src/packaging/streaming-package-presentation"
+import { PACKAGING_RUNTIME_IDENTITY } from "../src/packaging/runtime-identity"
 import type {
+	PackagingRuntimeIdentity,
 	StreamingPackagingWorkerRequest,
 	StreamingPackagingWorkerResponse,
 	StreamingPresentationPlan,
@@ -35,6 +37,26 @@ const plan: StreamingPresentationPlan = {
 			},
 		],
 	},
+}
+
+type ReadyResponse = Extract<StreamingPackagingWorkerResponse, { type: "ready" }>
+
+function readyResponse(
+	overrides: Partial<Pick<ReadyResponse, "identity" | "pptxgenjsVersion">> = {},
+): ReadyResponse {
+	return {
+		type: "ready",
+		identity: PACKAGING_RUNTIME_IDENTITY,
+		pptxgenjsVersion: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
+		...overrides,
+	}
+}
+
+function staleIdentity(field: keyof PackagingRuntimeIdentity): PackagingRuntimeIdentity {
+	return {
+		...PACKAGING_RUNTIME_IDENTITY,
+		[field]: `${PACKAGING_RUNTIME_IDENTITY[field]}-stale`,
+	} as PackagingRuntimeIdentity
 }
 
 describe("packaging sink proxy", () => {
@@ -104,6 +126,7 @@ describe("packaging Worker protocol", () => {
 			}),
 		}
 		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					writer = destination.getWriter()
@@ -119,6 +142,7 @@ describe("packaging Worker protocol", () => {
 		handler.handle({
 			type: "start",
 			payload: {
+				identity: PACKAGING_RUNTIME_IDENTITY,
 				config,
 				plan: { finalSlideCount: 1 },
 				destination: { kind: "sink-proxy", ackWindow: 1 },
@@ -165,6 +189,7 @@ describe("packaging Worker protocol", () => {
 			abort: vi.fn(async () => undefined),
 		}
 		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(async () => session),
 		}
 		const handler = createStreamingPackagingWorkerHandler({
@@ -175,6 +200,7 @@ describe("packaging Worker protocol", () => {
 		handler.handle({
 			type: "start",
 			payload: {
+				identity: PACKAGING_RUNTIME_IDENTITY,
 				config,
 				plan: { finalSlideCount: 1 },
 				destination: { kind: "sink-proxy", ackWindow: 1 },
@@ -212,6 +238,7 @@ describe("packaging Worker protocol", () => {
 			causeCode: "OPFS_WRITE_UNAVAILABLE",
 		})
 		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(async () => {
 				throw failure
 			}),
@@ -224,6 +251,7 @@ describe("packaging Worker protocol", () => {
 		handler.handle({
 			type: "start",
 			payload: {
+				identity: PACKAGING_RUNTIME_IDENTITY,
 				config,
 				plan: { finalSlideCount: 1 },
 				destination: { kind: "sink-proxy", ackWindow: 1 },
@@ -242,9 +270,171 @@ describe("packaging Worker protocol", () => {
 			}
 		})
 	})
+
+	it.each([
+		{
+			label: "missing identity",
+			identity: undefined,
+		},
+		{
+			label: "invalid identity field type",
+			identity: { ...PACKAGING_RUNTIME_IDENTITY, buildId: 42 },
+		},
+	])("rejects a start request with $label before creating a presentation", async ({ identity }) => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const createPresentation = vi.fn(() => ({
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
+		}))
+		const handler = createStreamingPackagingWorkerHandler({
+			createPresentation,
+			postMessage: (message) => responses.push(message),
+		})
+
+		handler.handle({
+			type: "start",
+			payload: {
+				identity,
+				config,
+				plan: { finalSlideCount: 0 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+			},
+		} as never)
+
+		await eventually(() => {
+			const response = responses.find((message) => message.type === "error")
+			expect(response?.type).toBe("error")
+			if (response?.type === "error") {
+				expect(response.error).toMatchObject({
+					code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
+					capability: "worker-protocol",
+				})
+			}
+		})
+		expect(createPresentation).not.toHaveBeenCalled()
+	})
+
+	it("rejects a stale Worker identity without creating a presentation", async () => {
+		const responses: StreamingPackagingWorkerResponse[] = []
+		const createPresentation = vi.fn(() => ({
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
+		}))
+		const handler = createStreamingPackagingWorkerHandler({
+			runtimeIdentity: staleIdentity("buildId"),
+			createPresentation,
+			postMessage: (message) => responses.push(message),
+		})
+
+		handler.handle({
+			type: "start",
+			payload: {
+				identity: PACKAGING_RUNTIME_IDENTITY,
+				config,
+				plan: { finalSlideCount: 0 },
+				destination: { kind: "sink-proxy", ackWindow: 1 },
+			},
+		})
+
+		await eventually(() => {
+			const response = responses.find((message) => message.type === "error")
+			expect(response?.type).toBe("error")
+			if (response?.type === "error") {
+				expect(response.error).toMatchObject({
+					code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
+					capability: "worker-protocol",
+				})
+			}
+		})
+		expect(createPresentation).not.toHaveBeenCalled()
+	})
 })
 
 describe("streaming packager client", () => {
+	it.each([
+		{
+			label: "missing identity",
+			response: { type: "ready" } as unknown,
+		},
+		{
+			label: "protocol version",
+			response: readyResponse({
+				identity: { ...PACKAGING_RUNTIME_IDENTITY, protocolVersion: 3 } as never,
+			}),
+		},
+		{
+			label: "edition",
+			response: readyResponse({
+				identity: { ...PACKAGING_RUNTIME_IDENTITY, edition: "enterprise" } as never,
+			}),
+		},
+		{
+			label: "buildId",
+			response: readyResponse({ identity: staleIdentity("buildId") }),
+		},
+		{
+			label: "sourceCommit",
+			response: readyResponse({ identity: staleIdentity("sourceCommit") }),
+		},
+		{
+			label: "artifactHash",
+			response: readyResponse({ identity: staleIdentity("artifactHash") }),
+		},
+		{
+			label: "PptxGenJS version",
+			response: readyResponse({ pptxgenjsVersion: "4.0.0" }),
+		},
+	])("rejects a ready handshake with a mismatched $label", async ({ response }) => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") {
+					if (response.type === "ready" && "identity" in response) worker.emit(response)
+					else worker.emitRaw(response)
+				}
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await expect(packager.ready).rejects.toMatchObject({
+			code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
+			capability: "worker-protocol",
+		})
+		expect(worker.terminate).toHaveBeenCalledOnce()
+		packager.dispose()
+	})
+
+	it("rejects the legacy plain ready response and terminates the Worker", async () => {
+		const worker = new LoopbackWorker()
+		worker.handler = {
+			handle(request) {
+				if (request.type === "start") worker.emitRaw({ type: "ready" })
+			},
+		}
+		const packager = createStreamingPresentationPackager({
+			config,
+			plan: { finalSlideCount: 0 },
+			destination: {
+				kind: "sink-proxy",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			workerFactory: () => worker,
+		})
+
+		await expect(packager.ready).rejects.toMatchObject({
+			code: "PACKAGING_RUNTIME_IDENTITY_MISMATCH",
+			capability: "worker-protocol",
+		})
+		expect(worker.terminate).toHaveBeenCalledOnce()
+		packager.dispose()
+	})
+
 	it("deserializes structured OPFS capability fields from Worker errors", async () => {
 		const worker = new LoopbackWorker()
 		worker.handler = {
@@ -340,6 +530,7 @@ describe("streaming packager client", () => {
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}
 		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					sessionWriter.current = destination.getWriter()
@@ -802,6 +993,7 @@ describe("streaming packager client", () => {
 			abort: vi.fn(async () => sessionWriter.current?.abort()),
 		}
 		const presentation = {
+			version: PACKAGING_RUNTIME_IDENTITY.pptxgenjsVersion,
 			beginStreaming: vi.fn(
 				async ({ destination }: { destination: WritableStream<Uint8Array> }) => {
 					sessionWriter.current = destination.getWriter()
@@ -897,8 +1089,17 @@ class LoopbackWorker implements StreamingWorkerLike {
 		this.handler.handle(message as StreamingPackagingWorkerRequest)
 	}
 
-	emit = (message: StreamingPackagingWorkerResponse): void => {
-		this.emitResponse(message)
+	emit = (message: StreamingPackagingWorkerResponse | { type: "ready" }): void => {
+		const normalized =
+			message.type === "ready" && !("identity" in message) ? readyResponse() : message
+		this.emitResponse(normalized as StreamingPackagingWorkerResponse)
+		queueMicrotask(() =>
+			this.listener?.({ data: normalized } as MessageEvent),
+		)
+	}
+
+	emitRaw = (message: unknown): void => {
+		this.emitResponse(message as StreamingPackagingWorkerResponse)
 		queueMicrotask(() => this.listener?.({ data: message } as MessageEvent))
 	}
 

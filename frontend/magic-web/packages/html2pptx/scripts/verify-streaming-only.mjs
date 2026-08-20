@@ -60,7 +60,7 @@ const sourceExtensions = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"])
 const expectedPptxGenJs = {
 	name: "pptxgenjs",
 	version: "5.0.0",
-	sourceCommit: "4b12eb3f8f81060edbe721b008915c18b81215c2",
+	sourceCommit: "37b2dc9d04352366e765712ba8903be38c6a9669",
 }
 const violations = []
 let scannedFiles = 0
@@ -80,6 +80,7 @@ for (const root of scanRoots) {
 
 await verifyPackageMetadata()
 await verifyPublicEntry()
+await verifyRuntimeIdentitySource()
 await verifyBuiltEntryIfPresent()
 
 if (violations.length > 0) {
@@ -319,6 +320,53 @@ async function verifyBuiltEntryIfPresent() {
 	}
 	if (!/export declare const exportPPTXStreaming\b/.test(declaration)) {
 		report(declarationPath, "built declaration is missing exportPPTXStreaming")
+	}
+}
+
+async function verifyRuntimeIdentitySource() {
+	const requiredMarkers = [
+		[
+			"src/packaging/runtime-identity.ts",
+			[
+				"PACKAGING_RUNTIME_IDENTITY_MISMATCH_CODE",
+				"PACKAGING_RUNTIME_IDENTITY_CAPABILITY",
+				"__HTML2PPTX_RUNTIME_IDENTITY__",
+				"protocolVersion",
+				"edition",
+				"html2pptxVersion",
+				"buildId",
+				"pptxgenjsVersion",
+				"sourceCommit",
+				"artifactHash",
+			],
+		],
+		[
+			"src/packaging/streaming-types.ts",
+			["identity: PackagingRuntimeIdentity", "type: \"ready\"", "pptxgenjsVersion"],
+		],
+		[
+			"src/packaging/streaming-worker-handler.ts",
+			["assertPackagingRuntimeIdentityMatch", "identity: runtimeIdentity", "presentation.version"],
+		],
+		[
+			"src/packaging/streaming-package-presentation.ts",
+			["PACKAGING_RUNTIME_IDENTITY", "requireReadyResponse", "ready identity"],
+		],
+		["vite.config.ts", ["getPackagingRuntimeIdentityDefine"]],
+	]
+
+	for (const [relativePath, markers] of requiredMarkers) {
+		const file = path.join(packageRoot, relativePath)
+		if (!(await exists(file))) {
+			report(file, "runtime identity source file is missing")
+			continue
+		}
+		const source = await readFile(file, "utf8")
+		for (const marker of markers) {
+			if (!source.includes(marker)) {
+				report(file, `runtime identity contract marker is missing: ${marker}`)
+			}
+		}
 	}
 }
 

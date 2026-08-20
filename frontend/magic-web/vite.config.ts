@@ -18,6 +18,7 @@ import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
 import Inspect from "vite-plugin-inspect"
 import { codeInspectorPlugin } from "code-inspector-plugin"
+import { getPackagingRuntimeIdentityDefine } from "./packages/html2pptx/vite.config"
 
 /** 环境变量前缀 */
 const ENV_PREFIX = "MAGIC_"
@@ -134,6 +135,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env): UserConfig {
 		},
 		define: {
 			global: "globalThis",
+			...getPackagingRuntimeIdentityDefine(env),
 		},
 		worker: {
 			format: "es",

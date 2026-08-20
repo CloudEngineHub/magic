@@ -4,8 +4,15 @@ import type { Pptx, Slide } from "../ir/node"
 import type { SerializablePPTNode } from "../ir/serialize"
 import { drawByRegistry } from "../registry/drawer-registry"
 import { createPresentation } from "./pptx-document"
+import {
+	PACKAGING_RUNTIME_IDENTITY,
+	PackagingRuntimeIdentityMismatchError,
+	assertPackagingRuntimeIdentityMatch,
+	validatePackagingRuntimeIdentity,
+} from "./runtime-identity"
 import { createSinkProxyWritable } from "./sink-proxy"
 import type {
+	PackagingRuntimeIdentity,
 	SerializedStreamingError,
 	StreamingCommitSlidePayload,
 	StreamingExportSummary,
@@ -43,6 +50,7 @@ interface RuntimeStreamingExportSummary {
 type StreamingSlideLike = Slide
 
 type StreamingPresentationLike = Pptx & {
+	version?: unknown
 	beginStreaming?: (options: {
 		destination: WritableStream<Uint8Array>
 		plan: StreamingPresentationPlan
@@ -63,6 +71,8 @@ export interface PackagingWorkerPort {
 export interface PackagingWorkerFactoryOptions {
 	/** Injected for tests and hosts whose pptxgenjs package is patched at runtime. */
 	createPresentation?: (config: SlideConfig) => Pptx | Promise<Pptx>
+	/** Injected for protocol tests; production always uses the build identity. */
+	runtimeIdentity?: PackagingRuntimeIdentity
 	postMessage?: PackagingWorkerPort["postMessage"]
 	ackWindow?: number
 	/** Prepare one serialized slide before it is handed to PptxGenJS. */
@@ -103,6 +113,10 @@ export function createStreamingPackagingWorkerHandler(
 ): StreamingPackagingWorkerHandler {
 	const postMessage = options.postMessage ?? (() => undefined)
 	const createPres = options.createPresentation ?? ((config) => createPresentation(config))
+	const runtimeIdentity = validatePackagingRuntimeIdentity(
+		options.runtimeIdentity ?? PACKAGING_RUNTIME_IDENTITY,
+		"Packaging Worker runtime identity",
+	)
 	let state: WorkerState = "idle"
 	let presentation: StreamingPresentationLike | null = null
 	let session: StreamingSessionLike | null = null
@@ -169,12 +183,30 @@ export function createStreamingPackagingWorkerHandler(
 	const handleRequest = async (request: QueuedWorkerRequest) => {
 		if (request.type === "start") {
 			if (state !== "idle") throw new Error("Packaging Worker can only be started once")
+			// Validate the peer before changing state or creating a presentation. A
+			// stale main bundle must never allocate a session or sink in this Worker.
+			assertPackagingRuntimeIdentityMatch(
+				request.payload?.identity,
+				runtimeIdentity,
+				"Packaging Worker start identity",
+			)
 			state = "starting"
 			workerAbortController = new AbortController()
 			presentation = (await createPres(
 				request.payload.config,
 			)) as unknown as StreamingPresentationLike
 			throwIfAborted(workerAbortController.signal)
+			const pptxgenjsVersion = presentation.version
+			if (typeof pptxgenjsVersion !== "string" || pptxgenjsVersion.length === 0) {
+				throw new PackagingRuntimeIdentityMismatchError(
+					"Packaging Worker presentation.version must be a non-empty string",
+				)
+			}
+			if (pptxgenjsVersion !== runtimeIdentity.pptxgenjsVersion) {
+				throw new PackagingRuntimeIdentityMismatchError(
+					`Packaging Worker PptxGenJS version ${pptxgenjsVersion} does not match runtime identity ${runtimeIdentity.pptxgenjsVersion}`,
+				)
+			}
 			if (request.payload.embedFonts?.length)
 				embedFonts(presentation, request.payload.embedFonts)
 			const destination = request.payload.destination
@@ -201,7 +233,11 @@ export function createStreamingPackagingWorkerHandler(
 			})
 			throwIfAborted(workerAbortController.signal)
 			state = "accepting-slides"
-			postMessage({ type: "ready" })
+			postMessage({
+				type: "ready",
+				identity: runtimeIdentity,
+				pptxgenjsVersion,
+			})
 			return
 		}
 
