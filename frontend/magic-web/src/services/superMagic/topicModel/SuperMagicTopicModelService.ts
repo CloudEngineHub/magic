@@ -1,6 +1,8 @@
 import { SuperMagicApi } from "@/apis"
 import { logger as Logger } from "@/utils/log"
-import superMagicTopicModelCacheService from "./SuperMagicTopicModelCacheService"
+import superMagicTopicModelCacheService, {
+	type CachedModelData,
+} from "./SuperMagicTopicModelCacheService"
 import topicModelStore from "@/stores/superMagic/topicModelStore"
 import superMagicModeService, { resolveModeMapKey } from "../SuperMagicModeService"
 import { ModelItem, ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/types"
@@ -68,6 +70,27 @@ interface ModelContext {
 	agentCode?: string | null
 }
 
+interface CascadeBackfillModels {
+	languageModel: ModelItem | null
+	imageModel: ModelItem | null
+	videoModel: ModelItem | null
+}
+
+/** [topicId, projectId, topicMode, agentCode]; missing agent is "". */
+export function getTopicModelContextKey(context: {
+	topicId: string
+	projectId: string
+	topicMode: string
+	agentCode?: string | null
+}) {
+	return JSON.stringify([
+		context.topicId,
+		context.projectId,
+		context.topicMode,
+		context.agentCode ?? "",
+	])
+}
+
 interface ModelRequestGuard {
 	requestId: number
 	requestedContext: ModelContext
@@ -105,15 +128,6 @@ class SuperMagicTopicModelService {
 		)
 	}
 
-	private getContextKey(context: ModelContext) {
-		return JSON.stringify([
-			context.topicId,
-			context.projectId,
-			context.topicMode,
-			context.agentCode ?? "",
-		])
-	}
-
 	private createRequestGuard(
 		store: SuperMagicTopicModelStoreLike,
 		requestedContext: ModelContext,
@@ -135,6 +149,56 @@ class SuperMagicTopicModelService {
 		if (this.requestIds.get(store) !== guard.requestId) return false
 
 		return this.isCurrentContext(store, guard.requestedContext)
+	}
+
+	private toCachedModelData(models: CascadeBackfillModels): CachedModelData {
+		return {
+			languageModelId: models.languageModel?.model_id,
+			imageModelId: models.imageModel?.model_id,
+			videoModelId: models.videoModel?.model_id,
+			timestamp: Date.now(),
+		}
+	}
+
+	/** Write local then remote as a pair once the request is still current. */
+	private async persistCascadeBackfill(
+		isCurrentRequest: () => boolean,
+		{
+			level,
+			cacheId,
+			models,
+			saveLocal,
+			logContext = {},
+		}: {
+			level: "Topic" | "Project" | "ModeDefault"
+			cacheId: string
+			models: CascadeBackfillModels
+			saveLocal: (data: CachedModelData) => Promise<void>
+			logContext?: Record<string, unknown>
+		},
+	) {
+		if (!isCurrentRequest()) return
+		const modelIds = {
+			languageModelId: models.languageModel?.model_id,
+			imageModelId: models.imageModel?.model_id,
+			videoModelId: models.videoModel?.model_id,
+		}
+		logger.report(`[Fallback] Backfilling ${level} level`, { ...logContext, ...modelIds })
+		await saveLocal(this.toCachedModelData(models))
+		try {
+			await SuperMagicApi.saveSuperMagicTopicModel({
+				cache_id: cacheId,
+				model_id: models.languageModel?.model_id,
+				image_model_id: models.imageModel?.model_id,
+				video_model_id: models.videoModel?.model_id,
+			})
+			logger.log(`Backfilled ${level} level (independent models)`, {
+				...logContext,
+				...modelIds,
+			})
+		} catch (error) {
+			logger.log(`Failed to backfill ${level} remote data`, { ...logContext, error })
+		}
 	}
 
 	/**
@@ -425,7 +489,7 @@ class SuperMagicTopicModelService {
 			agentCode,
 		}
 		if (!this.isCurrentContext(store, context)) return
-		const contextKey = this.getContextKey(context)
+		const contextKey = getTopicModelContextKey(context)
 		// 当前上下文尚未加载完成时不校验，避免把空/旧模型当成无效并写入 Auto
 		if (store.loadedContextKey !== contextKey) {
 			logger.report("[Validate] Skip validation before models are loaded", {
@@ -877,7 +941,7 @@ class SuperMagicTopicModelService {
 		const completeLoading = () => {
 			if (hasCompletedLoading) return
 			if (!isCurrentRequest()) return
-			store.markCurrentContextLoaded(this.getContextKey(context))
+			store.markCurrentContextLoaded(getTopicModelContextKey(context))
 			store.setLoading(false)
 			hasCompletedLoading = true
 		}
@@ -1252,51 +1316,31 @@ class SuperMagicTopicModelService {
 				(!topicResult.success || !topicResult.hasValidRemoteData) &&
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
-			if (needTopicBackfill) {
-				if (!isCurrentRequest()) return
-				logger.report("[Fallback] Backfilling Topic level", {
-					topicId,
-					sourceLevel,
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-				})
-				// 保存到 Topic 级别本地缓存
-				await superMagicTopicModelCacheService.saveTopicModel(topicId, {
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-					timestamp: Date.now(),
-				})
-				if (!isCurrentRequest()) return
+			const models: CascadeBackfillModels = {
+				languageModel: finalLanguageModel,
+				imageModel: finalImageModel,
+				videoModel: finalVideoModel,
+			}
 
-				// 更新 Topic 级别远程数据
-				try {
-					if (!isCurrentRequest()) return
-					await SuperMagicApi.saveSuperMagicTopicModel({
-						cache_id: topicId,
-						model_id: finalLanguageModel?.model_id,
-						image_model_id: finalImageModel?.model_id,
-						video_model_id: finalVideoModel?.model_id,
-					})
-					logger.log("Backfilled Topic level (independent models)", {
-						topicId,
-						languageModelId: finalLanguageModel?.model_id,
-						imageModelId: finalImageModel?.model_id,
-						videoModelId: finalVideoModel?.model_id,
-					})
-				} catch (e) {
-					logger.log("Failed to backfill Topic remote data", { topicId, error: e })
-				}
-			} else if (shouldFetchTopic && topicResult.success && topicResult.hasValidRemoteData) {
-				// Topic 级别本身就成功了且远程数据也有效，只需更新本地缓存
-				if (!isCurrentRequest()) return
-				await superMagicTopicModelCacheService.saveTopicModel(topicId, {
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-					timestamp: Date.now(),
+			if (needTopicBackfill) {
+				await this.persistCascadeBackfill(isCurrentRequest, {
+					level: "Topic",
+					cacheId: topicId,
+					models,
+					logContext: { topicId, sourceLevel },
+					saveLocal: (data) =>
+						superMagicTopicModelCacheService.saveTopicModel(topicId, data),
 				})
+			} else if (
+				shouldFetchTopic &&
+				topicResult.success &&
+				topicResult.hasValidRemoteData &&
+				isCurrentRequest()
+			) {
+				await superMagicTopicModelCacheService.saveTopicModel(
+					topicId,
+					this.toCachedModelData(models),
+				)
 			}
 
 			// 回填 Project 级别（仅当数据来源是 ModeDefault 或 Global 时）
@@ -1308,53 +1352,25 @@ class SuperMagicTopicModelService {
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
 			if (needProjectBackfill) {
-				if (!isCurrentRequest()) return
 				const projectKey = this.genProjectKey(projectId)
-				logger.report("[Fallback] Backfilling Project level", {
+				await this.persistCascadeBackfill(isCurrentRequest, {
+					level: "Project",
+					cacheId: projectKey,
+					models,
+					logContext: { projectId, projectKey, sourceLevel },
+					saveLocal: (data) =>
+						superMagicTopicModelCacheService.saveProjectModel(projectId, data),
+				})
+			} else if (
+				projectId &&
+				projectResult.success &&
+				projectResult.hasValidRemoteData &&
+				isCurrentRequest()
+			) {
+				await superMagicTopicModelCacheService.saveProjectModel(
 					projectId,
-					projectKey,
-					sourceLevel,
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-				})
-
-				// 保存到 Project 级别本地缓存
-				await superMagicTopicModelCacheService.saveProjectModel(projectId, {
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-					timestamp: Date.now(),
-				})
-				if (!isCurrentRequest()) return
-
-				// 更新 Project 级别远程数据
-				try {
-					if (!isCurrentRequest()) return
-					await SuperMagicApi.saveSuperMagicTopicModel({
-						cache_id: projectKey,
-						model_id: finalLanguageModel?.model_id,
-						image_model_id: finalImageModel?.model_id,
-						video_model_id: finalVideoModel?.model_id,
-					})
-					logger.log("Backfilled Project level (independent models)", {
-						projectId,
-						languageModelId: finalLanguageModel?.model_id,
-						imageModelId: finalImageModel?.model_id,
-						videoModelId: finalVideoModel?.model_id,
-					})
-				} catch (e) {
-					logger.log("Failed to backfill Project remote data", { projectId, error: e })
-				}
-			} else if (projectId && projectResult.success && projectResult.hasValidRemoteData) {
-				// Project 级别本身就成功了且远程数据也有效，只需更新本地缓存
-				if (!isCurrentRequest()) return
-				await superMagicTopicModelCacheService.saveProjectModel(projectId, {
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-					timestamp: Date.now(),
-				})
+					this.toCachedModelData(models),
+				)
 			}
 
 			// 回填 ModeDefault 级别（仅当数据来源是 Global 时）
@@ -1365,58 +1381,23 @@ class SuperMagicTopicModelService {
 				(finalLanguageModel || finalImageModel || finalVideoModel) // At least one model exists
 
 			if (needModeDefaultBackfill) {
-				if (!isCurrentRequest()) return
 				const modeDefaultKey = this.genModeDefaultKey(topicMode, agentCode)
-				logger.report("[Fallback] Backfilling ModeDefault level", {
-					topicMode,
-					modeDefaultKey,
-					sourceLevel,
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
+				await this.persistCascadeBackfill(isCurrentRequest, {
+					level: "ModeDefault",
+					cacheId: modeDefaultKey,
+					models,
+					logContext: { topicMode, modeDefaultKey, sourceLevel },
+					saveLocal: (data) =>
+						superMagicTopicModelCacheService.saveModeDefaultModel(modeDefaultKey, data),
 				})
-
-				// 保存到 ModeDefault 级别本地缓存
-				await superMagicTopicModelCacheService.saveModeDefaultModel(modeDefaultKey, {
-					languageModelId: finalLanguageModel?.model_id,
-					imageModelId: finalImageModel?.model_id,
-					videoModelId: finalVideoModel?.model_id,
-					timestamp: Date.now(),
-				})
-				if (!isCurrentRequest()) return
-
-				// 更新 ModeDefault 级别远程数据
-				try {
-					if (!isCurrentRequest()) return
-					await SuperMagicApi.saveSuperMagicTopicModel({
-						cache_id: modeDefaultKey,
-						model_id: finalLanguageModel?.model_id,
-						image_model_id: finalImageModel?.model_id,
-						video_model_id: finalVideoModel?.model_id,
-					})
-					logger.log("Backfilled ModeDefault level (independent models)", {
-						topicMode,
-						languageModelId: finalLanguageModel?.model_id,
-						imageModelId: finalImageModel?.model_id,
-						videoModelId: finalVideoModel?.model_id,
-					})
-				} catch (e) {
-					logger.log("Failed to backfill ModeDefault remote data", {
-						topicMode,
-						error: e,
-					})
-				}
-			} else if (modeDefaultResult.success && modeDefaultResult.hasValidRemoteData) {
-				// ModeDefault 级别本身就成功了且远程数据也有效，只需更新本地缓存
-				if (!isCurrentRequest()) return
+			} else if (
+				modeDefaultResult.success &&
+				modeDefaultResult.hasValidRemoteData &&
+				isCurrentRequest()
+			) {
 				await superMagicTopicModelCacheService.saveModeDefaultModel(
 					this.genModeDefaultKey(topicMode, agentCode),
-					{
-						languageModelId: finalLanguageModel?.model_id,
-						imageModelId: finalImageModel?.model_id,
-						videoModelId: finalVideoModel?.model_id,
-						timestamp: Date.now(),
-					},
+					this.toCachedModelData(models),
 				)
 			}
 

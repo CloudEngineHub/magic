@@ -5,7 +5,9 @@ import { ModelStatusEnum } from "@/pages/superMagic/components/MessageEditor/typ
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import superMagicModeService from "../../SuperMagicModeService"
 import superMagicTopicModelCacheService from "../SuperMagicTopicModelCacheService"
-import superMagicTopicModelService from "../SuperMagicTopicModelService"
+import superMagicTopicModelService, {
+	getTopicModelContextKey,
+} from "../SuperMagicTopicModelService"
 
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
@@ -35,6 +37,8 @@ vi.mock("../../SuperMagicModeService", () => ({
 		resolveImageModelByMode: vi.fn(async () => null),
 		resolveVideoModelByMode: vi.fn(async () => null),
 	},
+	resolveModeMapKey: (topicMode: string, agentCode?: string | null) =>
+		topicMode === "custom_agent" && agentCode ? agentCode : topicMode,
 }))
 
 function createModel(modelId: string): ModelItem {
@@ -57,10 +61,6 @@ function createDeferred<T>() {
 		resolve = resolvePromise
 	})
 	return { promise, resolve }
-}
-
-function getContextKey(topicId: string, projectId: string, topicMode: string, agentCode = "") {
-	return JSON.stringify([topicId, projectId, topicMode, agentCode])
 }
 
 describe("SuperMagicTopicModelService context isolation", () => {
@@ -311,7 +311,13 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		const store = createSuperMagicTopicModelStore()
 		store.setCurrentContext("topic-1", "project-1", "general")
 		store.setSelectedLanguageModel(dataAnalysisModel)
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "general"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "general",
+			}),
+		)
 		store.setCurrentContext("topic-2", "project-1", "general")
 
 		await superMagicTopicModelService.validateSelectedModels(store)
@@ -330,7 +336,13 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		const store = createSuperMagicTopicModelStore()
 		store.setCurrentContext("topic-1", "project-1", "general")
 		store.setSelectedLanguageModel(dataAnalysisModel)
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "general"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "general",
+			}),
+		)
 
 		await expect(superMagicTopicModelService.validateSelectedModels(store)).rejects.toThrow(
 			"validation failed",
@@ -343,7 +355,13 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		const store = createSuperMagicTopicModelStore()
 		store.setCurrentContext("topic-1", "project-1", "summary")
 		store.setSelectedLanguageModel(dataAnalysisModel)
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "summary"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "summary",
+			}),
+		)
 		vi.mocked(superMagicModeService.resolveLanguageModelByMode).mockResolvedValue(null)
 
 		await superMagicTopicModelService.validateSelectedModels(store)
@@ -375,21 +393,39 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		const store = createSuperMagicTopicModelStore()
 		store.setCurrentContext("topic-1", "project-1", "data_analysis")
 		store.setSelectedLanguageModel(oldDataAnalysisModel)
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "data_analysis"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "data_analysis",
+			}),
+		)
 		const oldDataAnalysisValidation = superMagicTopicModelService.validateSelectedModels(store)
 		await vi.waitFor(() => {
 			expect(superMagicModeService.resolveLanguageModelByMode).toHaveBeenCalledTimes(1)
 		})
 
 		store.setCurrentContext("topic-1", "project-1", "summary")
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "summary"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "summary",
+			}),
+		)
 		const summaryValidation = superMagicTopicModelService.validateSelectedModels(store)
 		await vi.waitFor(() => {
 			expect(superMagicModeService.resolveLanguageModelByMode).toHaveBeenCalledTimes(2)
 		})
 
 		store.setCurrentContext("topic-1", "project-1", "data_analysis")
-		store.markCurrentContextLoaded(getContextKey("topic-1", "project-1", "data_analysis"))
+		store.markCurrentContextLoaded(
+			getTopicModelContextKey({
+				topicId: "topic-1",
+				projectId: "project-1",
+				topicMode: "data_analysis",
+			}),
+		)
 		const newDataAnalysisValidation = superMagicTopicModelService.validateSelectedModels(store)
 		await vi.waitFor(() => {
 			expect(superMagicModeService.resolveLanguageModelByMode).toHaveBeenCalledTimes(3)
@@ -405,5 +441,45 @@ describe("SuperMagicTopicModelService context isolation", () => {
 		expect(store.currentTopicMode).toBe("data_analysis")
 		expect(store.selectedLanguageModel?.model_id).toBe(newDataAnalysisModel.model_id)
 		expect(store.isLoading).toBe(false)
+	})
+
+	it("still saves remote topic backfill after local write if context switches", async () => {
+		const topicSave = createDeferred<void>()
+		vi.mocked(superMagicTopicModelCacheService.saveTopicModel).mockImplementation(
+			() => topicSave.promise,
+		)
+		vi.mocked(SuperMagicApi.getSuperMagicTopicModel).mockImplementation(({ topic_id }) => {
+			if (topic_id === "project_id_project-1") {
+				return Promise.resolve({ model: { model_id: dataAnalysisModel.model_id } }) as never
+			}
+			return Promise.resolve({}) as never
+		})
+
+		const store = createSuperMagicTopicModelStore()
+		store.setCurrentContext("topic-1", "project-1", "general")
+		const fetchPromise = superMagicTopicModelService.fetchTopicModel(
+			"topic-1",
+			"project-1",
+			"general",
+			store,
+		)
+
+		await vi.waitFor(() => {
+			expect(superMagicTopicModelCacheService.saveTopicModel).toHaveBeenCalledWith(
+				"topic-1",
+				expect.objectContaining({ languageModelId: dataAnalysisModel.model_id }),
+			)
+		})
+
+		store.setCurrentContext("topic-2", "project-1", "general")
+		topicSave.resolve()
+		await fetchPromise
+
+		expect(SuperMagicApi.saveSuperMagicTopicModel).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cache_id: "topic-1",
+				model_id: dataAnalysisModel.model_id,
+			}),
+		)
 	})
 })

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import superMagicTopicModelService from "../SuperMagicTopicModelService"
+import superMagicTopicModelService, {
+	getTopicModelContextKey,
+} from "../SuperMagicTopicModelService"
 import topicModelStore from "@/stores/superMagic/topicModelStore"
 import { ModelStatusEnum, type ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -33,6 +35,8 @@ vi.mock("../../SuperMagicModeService", () => ({
 		resolveImageModelByMode: vi.fn(async () => null),
 		resolveVideoModelByMode: vi.fn(async () => null),
 	},
+	resolveModeMapKey: (topicMode: string, agentCode?: string | null) =>
+		topicMode === "custom_agent" && agentCode ? agentCode : topicMode,
 }))
 
 import { SuperMagicApi } from "@/apis"
@@ -267,7 +271,11 @@ describe("SuperMagicTopicModelService - Debounce", () => {
 
 			topicModelStore.setCurrentContext("topic-1", "project-1", generalMode)
 			topicModelStore.markCurrentContextLoaded(
-				JSON.stringify(["topic-1", "project-1", generalMode, ""]),
+				getTopicModelContextKey({
+					topicId: "topic-1",
+					projectId: "project-1",
+					topicMode: generalMode,
+				}),
 			)
 
 			// Validate for mode (should keep the model)
@@ -295,7 +303,11 @@ describe("SuperMagicTopicModelService - Debounce", () => {
 			topicModelStore.setSelectedLanguageModel(invalidModel)
 			topicModelStore.setCurrentContext("topic-1", "project-1", generalMode)
 			topicModelStore.markCurrentContextLoaded(
-				JSON.stringify(["topic-1", "project-1", generalMode, ""]),
+				getTopicModelContextKey({
+					topicId: "topic-1",
+					projectId: "project-1",
+					topicMode: generalMode,
+				}),
 			)
 
 			// Validate for mode (should switch to valid model)
@@ -335,7 +347,11 @@ describe("SuperMagicTopicModelService - Debounce", () => {
 			topicModelStore.setSelectedLanguageModel(customModel)
 			topicModelStore.setCurrentContext("topic-1", "project-1", generalMode)
 			topicModelStore.markCurrentContextLoaded(
-				JSON.stringify(["topic-1", "project-1", generalMode, ""]),
+				getTopicModelContextKey({
+					topicId: "topic-1",
+					projectId: "project-1",
+					topicMode: generalMode,
+				}),
 			)
 
 			await superMagicTopicModelService.validateSelectedModels(topicModelStore)
@@ -385,7 +401,11 @@ describe("SuperMagicTopicModelService - Debounce", () => {
 			topicModelStore.setSelectedLanguageModel(customModel)
 			topicModelStore.setCurrentContext("topic-1", "project-1", generalMode)
 			topicModelStore.markCurrentContextLoaded(
-				JSON.stringify(["topic-1", "project-1", generalMode, ""]),
+				getTopicModelContextKey({
+					topicId: "topic-1",
+					projectId: "project-1",
+					topicMode: generalMode,
+				}),
 			)
 
 			await superMagicTopicModelService.validateSelectedModels(topicModelStore)
