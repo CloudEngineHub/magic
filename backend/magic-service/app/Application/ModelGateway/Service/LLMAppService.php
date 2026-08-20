@@ -1644,6 +1644,7 @@ class LLMAppService extends AbstractLLMAppService
                     'chain' => 'textGenerateImageV2',
                     'status' => self::AUDIT_STATUS_FAIL,
                     'failure_reason' => $errorMessage,
+                    'previous_exceptions' => InvocationDetailInfo::extractPreviousExceptions($e),
                 ],
                 $this->resolveImageTokenUsage($generateImageOpenAIFormat->getUsage()),
                 $imageGenerateRequest->getResolution(),
