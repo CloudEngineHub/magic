@@ -14,7 +14,6 @@
 		},
 		"editTitle": "编辑技能分类",
 		"fields": {
-			"logo": "图标地址",
 			"name": "分类名称",
 			"parent": "上级分类",
 			"status": "显示状态"
@@ -23,13 +22,15 @@
 			"keyword": "关键词",
 			"status": "状态"
 		},
+		"label": "所属分类",
 		"manageButton": "分类管理",
 		"manageTitle": "技能分类管理",
 		"root": "一级分类",
 		"status": {
 			"hidden": "隐藏",
 			"visible": "显示"
-		}
+		},
+		"uncategorized": "未分类"
 	},
 	"createdAt": "创建时间",
 	"desc": "倒序",

@@ -103,7 +103,6 @@ export const SkillMarketCategoryFormModal = memo(
 					zh_CN: info?.name_i18n?.zh_CN ?? "",
 					en_US: info?.name_i18n?.en_US ?? "",
 				},
-				logo: info?.logo ?? "",
 				status: info ? info.status === SkillMarketCategoryStatusMap.visible : true,
 				sort_order: info?.sort_order ?? 0,
 			}),
@@ -202,9 +201,6 @@ export const SkillMarketCategoryFormModal = memo(
 					</Form.Item>
 					<Form.Item label={t("category.fields.parent")} name="parent_id">
 						<Select disabled={parentLocked} options={parentOptions} />
-					</Form.Item>
-					<Form.Item label={t("category.fields.logo")} name="logo">
-						<MagicInput maxLength={512} />
 					</Form.Item>
 					<Form.Item label={t("sortOrder")} name="sort_order">
 						<InputNumber min={0} precision={0} style={{ width: "100%" }} />

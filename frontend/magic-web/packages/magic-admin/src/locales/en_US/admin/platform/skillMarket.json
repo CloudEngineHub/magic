@@ -14,7 +14,6 @@
 		},
 		"editTitle": "Edit Skill Category",
 		"fields": {
-			"logo": "Icon URL",
 			"name": "Category Name",
 			"parent": "Parent Category",
 			"status": "Status"
@@ -23,13 +22,15 @@
 			"keyword": "Keyword",
 			"status": "Status"
 		},
+		"label": "Category",
 		"manageButton": "Categories",
 		"manageTitle": "Skill Category Management",
 		"root": "Top-level Category",
 		"status": {
 			"hidden": "Hidden",
 			"visible": "Visible"
-		}
+		},
+		"uncategorized": "Uncategorized"
 	},
 	"createdAt": "Created At",
 	"desc": "Descending",

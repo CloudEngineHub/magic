@@ -11,7 +11,7 @@ import {
 import type { SearchItem, TableButton, TimeRangeValue } from "@admin-components"
 import { useMemoizedFn, useMount, useRequest } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { Flex, InputNumber, Switch, Tooltip, message, type TableProps } from "antd"
+import { Flex, InputNumber, Switch, Tag, Tooltip, message, type TableProps } from "antd"
 import { IconCategory, IconUpload } from "@tabler/icons-react"
 import { usePagination } from "@admin/hooks/usePagination"
 import { useApis } from "@admin/apis"
@@ -21,11 +21,17 @@ import useRights from "@admin/hooks/useRights"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
 import { SkillMarketCategoryModal } from "./components/SkillMarketCategoryModal"
 import OfficialSkillImportDialog from "./components/OfficialSkillImportDialog"
+import { flattenSkillCategoryTree, resolveSkillCategoryName } from "./utils"
 
 const SkillMarketCard = lazy(() => import("./SkillMarketCard"))
 
 type DataType = PlatformPackage.SkillMarketItem
 type ParamsType = PlatformPackage.GetSkillMarketListParams
+const MAX_VISIBLE_CATEGORY_TAGS = 2
+
+function getSkillMarketCategoryIds(record: DataType) {
+	return Array.from(new Set((record.category_ids ?? []).filter(Boolean)))
+}
 
 const useStyles = createStyles(({ token }) => ({
 	container: {
@@ -52,6 +58,7 @@ function SkillMarketPage() {
 	const [featuredSavingIds, setFeaturedSavingIds] = useState<Set<string>>(new Set())
 	const [hiddenSavingIds, setHiddenSavingIds] = useState<Set<string>>(new Set())
 	const [categoryOpen, setCategoryOpen] = useState(false)
+	const [categories, setCategories] = useState<PlatformPackage.SkillMarketCategoryItem[]>([])
 	const [officialImportOpen, setOfficialImportOpen] = useState(false)
 	const [lastTimeFilterValue, setLastTimeFilterValue] = useState<TimeRangeValue | null>(null)
 	const [params, setParams] = useState<ParamsType>({
@@ -78,9 +85,19 @@ function SkillMarketPage() {
 			manual: true,
 		},
 	)
+	const { run: runCategories } = useRequest(
+		() => PlatformPackageApi.getSkillMarketCategoryList({}),
+		{
+			manual: true,
+			onSuccess: (res) => {
+				setCategories(res.list)
+			},
+		},
+	)
 
 	useMount(() => {
 		run(params)
+		runCategories()
 	})
 
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_SKILL_MARKET_EDIT)
@@ -138,6 +155,52 @@ function SkillMarketPage() {
 		if (!value) return "-"
 		if (typeof value === "string") return value
 		return value.zh_CN || value.en_US || value.default || "-"
+	})
+
+	// The market API returns category IDs; resolve them against the admin tree for read-only labels.
+	const categoryMap = useMemo(
+		() =>
+			new Map(
+				flattenSkillCategoryTree(categories).map((category) => [
+					category.id,
+					resolveSkillCategoryName(category),
+				]),
+			),
+		[categories],
+	)
+
+	const getCategoryNames = useMemoizedFn((record: DataType) => {
+		const categoryIds = getSkillMarketCategoryIds(record)
+		if (!categoryIds.length) return []
+		return categoryIds.map((categoryId) => categoryMap.get(categoryId) ?? categoryId)
+	})
+
+	const renderCategoryNames = useMemoizedFn((record: DataType) => {
+		const categoryNames = getCategoryNames(record)
+		if (!categoryNames.length) return <span>{t("category.uncategorized")}</span>
+		const visibleCategoryNames = categoryNames.slice(0, MAX_VISIBLE_CATEGORY_TAGS)
+		const hiddenCategoryNames = categoryNames.slice(MAX_VISIBLE_CATEGORY_TAGS)
+
+		return (
+			<Flex wrap gap={4} style={{ minWidth: 0 }}>
+				{visibleCategoryNames.map((categoryName, index) => (
+					<Tag
+						key={`${categoryName}-${index}`}
+						bordered={false}
+						style={{ marginInlineEnd: 0 }}
+					>
+						{categoryName}
+					</Tag>
+				))}
+				{hiddenCategoryNames.length > 0 && (
+					<Tooltip title={hiddenCategoryNames.join(" / ")}>
+						<Tag bordered={false} style={{ marginInlineEnd: 0 }}>
+							+{hiddenCategoryNames.length}
+						</Tag>
+					</Tooltip>
+				)}
+			</Flex>
+		)
 	})
 
 	const renderDescriptionText = useMemoizedFn((value?: PlatformPackage.NameI18N) => {
@@ -309,6 +372,13 @@ function SkillMarketPage() {
 				render: (value: string) => renderStatus(value, publishStatusMap),
 			},
 			{
+				title: t("category.label"),
+				dataIndex: "category_ids",
+				key: "category_ids",
+				width: 240,
+				render: (_, record) => renderCategoryNames(record),
+			},
+			{
 				title: t("isFeatured"),
 				dataIndex: "is_featured",
 				key: "is_featured",
@@ -405,6 +475,7 @@ function SkillMarketPage() {
 			tCommon,
 			getLocalizedText,
 			renderDescriptionText,
+			renderCategoryNames,
 			styles.desc,
 			publisherTypeMap,
 			renderStatus,
@@ -546,6 +617,7 @@ function SkillMarketPage() {
 	}, [hasEditRight, t])
 
 	const refreshAfterCategoryChange = useMemoizedFn(() => {
+		runCategories()
 		run(params)
 	})
 
@@ -597,6 +669,7 @@ function SkillMarketPage() {
 							handleChangeFeatured={handleChangeFeatured}
 							handleChangeHidden={handleChangeHidden}
 							getLocalizedText={getLocalizedText}
+							renderCategoryNames={renderCategoryNames}
 						/>
 					}
 					paginationConfig={paginationConfig}

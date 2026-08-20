@@ -4,7 +4,6 @@ import { SkillMarketCategoryStatusMap } from "@admin/types/platformPackage/marke
 export interface SkillCategoryFormValues {
 	parent_id?: string | number | null
 	name_i18n: PlatformPackage.NameI18N
-	logo?: string | null
 	status?: boolean
 	sort_order?: number | null
 }
@@ -26,7 +25,6 @@ export function buildSkillCategorySaveParams(
 	return {
 		parent_id: values.parent_id ?? "0",
 		name_i18n: values.name_i18n,
-		logo: values.logo?.trim() || null,
 		sort_order: values.sort_order ?? 0,
 		status: values.status
 			? SkillMarketCategoryStatusMap.visible

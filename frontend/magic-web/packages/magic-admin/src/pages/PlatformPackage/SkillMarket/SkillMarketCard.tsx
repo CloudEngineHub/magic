@@ -1,5 +1,5 @@
-import { memo } from "react"
-import { Flex, Switch, InputNumber } from "antd"
+import { memo, type ReactNode } from "react"
+import { Flex, InputNumber, Switch } from "antd"
 import { useTranslation } from "react-i18next"
 import { MobileCard, StatusTag } from "@admin-components"
 import type { PlatformPackage } from "@admin/types/platformPackage"
@@ -18,6 +18,7 @@ interface SkillMarketCardProps {
 	handleChangeFeatured: (record: PlatformPackage.SkillMarketItem, nextFeatured: boolean) => void
 	handleChangeHidden: (record: PlatformPackage.SkillMarketItem, nextHidden: boolean) => void
 	getLocalizedText: (value?: PlatformPackage.NameI18N | string) => string
+	renderCategoryNames: (record: PlatformPackage.SkillMarketItem) => ReactNode
 }
 
 function SkillMarketCard({
@@ -34,6 +35,7 @@ function SkillMarketCard({
 	handleChangeFeatured,
 	handleChangeHidden,
 	getLocalizedText,
+	renderCategoryNames,
 }: SkillMarketCardProps) {
 	const { t } = useTranslation("admin/platform/skillMarket")
 	const { t: tCommon } = useTranslation("admin/common")
@@ -41,7 +43,6 @@ function SkillMarketCard({
 	if (!data) return null
 
 	const publishInfo = publishStatusMap[data.publish_status]
-
 	return (
 		<MobileCard title={getLocalizedText(data.name_i18n)} onClick={() => onClick?.(data)}>
 			<Flex vertical gap={6}>
@@ -64,6 +65,10 @@ function SkillMarketCard({
 				<span>
 					{t("createdAt")}: {data.created_at || "-"}
 				</span>
+				<Flex align="flex-start" gap={6}>
+					<span>{t("category.label")}:</span>
+					{renderCategoryNames(data)}
+				</Flex>
 				{publishInfo && (
 					<StatusTag color={publishInfo.color} bordered={false}>
 						{publishInfo.text}
