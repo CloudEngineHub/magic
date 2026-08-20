@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react"
 import { cn } from "../../../runtime/shared/lib/utils"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
+import { FloatingSurfaceScope } from "../../primitives/shadcn/popover"
 import styles from "./ElementBottomToolbar.module.css"
 
 export interface ElementBottomToolbarItem {
@@ -68,6 +69,7 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 	})
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: floatingId,
+		interactive: true,
 		enableWheelForwarding: true,
 	})
 
@@ -80,65 +82,68 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 	)
 
 	return (
-		<div
-			ref={setRefs}
-			className={cn(styles.root, className)}
-			data-canvas-ui-component
-			data-empty={isEmpty || undefined}
-			role="toolbar"
-			aria-label={ariaLabel}
-			aria-hidden={isEmpty || undefined}
-		>
-			{visibleSections.map((section, sectionIndex) => {
-				const previousSection = visibleSections[sectionIndex - 1]
-				const shouldShowSectionDivider =
-					sectionIndex > 0 && section.group !== previousSection?.group
-				const visibleItems = section.items?.filter(Boolean) as
-					ElementBottomToolbarItem[] | undefined
+		<FloatingSurfaceScope id={floatingId}>
+			<div
+				ref={setRefs}
+				className={cn(styles.root, className)}
+				data-canvas-ui-component
+				data-empty={isEmpty || undefined}
+				role="toolbar"
+				aria-label={ariaLabel}
+				aria-hidden={isEmpty || undefined}
+			>
+				{visibleSections.map((section, sectionIndex) => {
+					const previousSection = visibleSections[sectionIndex - 1]
+					const shouldShowSectionDivider =
+						sectionIndex > 0 && section.group !== previousSection?.group
+					const visibleItems = section.items?.filter(Boolean) as
+						ElementBottomToolbarItem[] | undefined
 
-				return (
-					<Fragment key={section.id}>
-						{shouldShowSectionDivider ? (
-							<div className={styles.divider} aria-hidden />
-						) : null}
-						{section.content ? (
-							<div className={styles.content}>{section.content}</div>
-						) : null}
-						{visibleItems?.map((item, itemIndex) => {
-							const previousItem = visibleItems[itemIndex - 1]
-							const shouldShowItemDivider =
-								itemIndex > 0 &&
-								(item.group !== undefined || previousItem?.group !== undefined) &&
-								item.group !== previousItem?.group
+					return (
+						<Fragment key={section.id}>
+							{shouldShowSectionDivider ? (
+								<div className={styles.divider} aria-hidden />
+							) : null}
+							{section.content ? (
+								<div className={styles.content}>{section.content}</div>
+							) : null}
+							{visibleItems?.map((item, itemIndex) => {
+								const previousItem = visibleItems[itemIndex - 1]
+								const shouldShowItemDivider =
+									itemIndex > 0 &&
+									(item.group !== undefined ||
+										previousItem?.group !== undefined) &&
+									item.group !== previousItem?.group
 
-							return (
-								<Fragment key={item.id}>
-									{shouldShowItemDivider ? (
-										<div className={styles.divider} aria-hidden />
-									) : null}
-									<div className={styles.item}>
-										<button
-											type="button"
-											className={styles.button}
-											disabled={item.disabled || item.loading}
-											aria-busy={item.loading || undefined}
-											onClick={item.onClick}
-										>
-											{item.icon}
-											<span>{item.label}</span>
-											{item.shortcut ? (
-												<span className={styles.shortcut}>
-													{item.shortcut}
-												</span>
-											) : null}
-										</button>
-									</div>
-								</Fragment>
-							)
-						})}
-					</Fragment>
-				)
-			})}
-		</div>
+								return (
+									<Fragment key={item.id}>
+										{shouldShowItemDivider ? (
+											<div className={styles.divider} aria-hidden />
+										) : null}
+										<div className={styles.item}>
+											<button
+												type="button"
+												className={styles.button}
+												disabled={item.disabled || item.loading}
+												aria-busy={item.loading || undefined}
+												onClick={item.onClick}
+											>
+												{item.icon}
+												<span>{item.label}</span>
+												{item.shortcut ? (
+													<span className={styles.shortcut}>
+														{item.shortcut}
+													</span>
+												) : null}
+											</button>
+										</div>
+									</Fragment>
+								)
+							})}
+						</Fragment>
+					)
+				})}
+			</div>
+		</FloatingSurfaceScope>
 	)
 }

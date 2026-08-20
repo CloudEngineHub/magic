@@ -41,6 +41,7 @@ import {
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { Button } from "../../primitives/shadcn/button"
+import { FloatingSurfaceScope } from "../../primitives/shadcn/popover"
 import ImageEditorControls from "./ImageEditorControls"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
 import styles from "./index.module.css"
@@ -219,6 +220,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: floatingId,
+		interactive: true,
 		enableWheelForwarding: !hasScrollbar,
 	})
 
@@ -446,104 +448,106 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	])
 
 	return (
-		<ReferenceResourceDropSurface
-			ref={setRefs}
-			className={className ?? styles.imageMessageEditor}
-			data-canvas-ui-component
-			style={style}
-			dropOverlayState={overlayState}
-			dragEvents={dragEvents}
-		>
-			<input
-				ref={fileInputRef}
-				type="file"
-				accept={fileInputAccept}
-				multiple={!config.selectedReferenceSlot?.path}
-				style={{ display: "none" }}
-				onChange={handlers.handleFileChange}
-			/>
-			<div ref={setSourceListContainer} className={styles.sourceListMount} />
-			{linkedEditorInputs?.textConnections.length ? (
-				<div className={styles.linkedInputs}>
-					<LinkedEditorInputsBar
-						textConnections={linkedEditorInputs.textConnections}
-						isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
-						onTextConnectionSelectedChange={
-							linkedEditorInputs.setTextConnectionSelected
-						}
-						onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
-					/>
-				</div>
-			) : null}
-			<MessageEditor
-				ref={editorRef}
-				autoFocus={autoFocus}
-				autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
-				fullWidth
-				selectionPersistenceKey={selectionPersistenceKey}
-				placeholder={placeholder}
-				value={prompt}
-				onChange={handlers.setPrompt}
-				onEnter={handleSend}
-				onScrollbarChange={setHasScrollbar}
-				matchableItems={matchableItems}
-				mentionDataService={mentionDataService}
-				mentionExtension={mentionExtension}
-				mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-				onMentionChange={handleMentionChange}
-				onMentionItemHoverChange={setHoveredMentionPath}
-				mentionEnabled={mentionEnabled}
-				onPaste={handlePaste}
-			/>
-			<ImageEditorControls
-				config={config}
-				hoveredMentionPath={hoveredMentionPath}
-				onSelectSource={handleSelectSource}
-				onProjectSelect={handleProjectSelect}
-				onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
-				linkedMediaItems={linkedEditorInputs?.mediaItems}
-				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
-				renderPromptOptimizationButton={() => (
-					<PromptOptimizationButton
-						buildRequest={buildPromptOptimizationRequest}
-						referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
-						placeholderPaths={promptOptimizationPlaceholderPaths}
-						onApply={handlers.setPrompt}
-						onPreviewMediaResource={onPreviewMediaResource}
-						isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
-					/>
-				)}
-				renderSendButton={() => (
-					<Button
-						className={styles.sendButton}
-						onClick={handleSend}
-						disabled={isSending || !canSendPrompt || !config.selectedModelId}
-						aria-busy={isSending}
-					>
-						{isSending ? (
-							<LoaderCircle size={16} className="animate-spin" />
-						) : (
-							<ArrowUp size={16} />
-						)}
-					</Button>
-				)}
-				renderRestoreDefaultConfigButton={
-					showRestoreDefaultConfig && onRestoreDefaultConfig
-						? () => (
-								<Button
-									variant="ghost"
-									className={styles.restoreDefaultButton}
-									onClick={onRestoreDefaultConfig}
-									data-testid="image-editor-re-enter"
-								>
-									{t("imageEditor.reEnter", "重新输入")}
-								</Button>
-							)
-						: undefined
-				}
-				sourceListContainer={sourceListContainer}
-			/>
-		</ReferenceResourceDropSurface>
+		<FloatingSurfaceScope id={floatingId}>
+			<ReferenceResourceDropSurface
+				ref={setRefs}
+				className={className ?? styles.imageMessageEditor}
+				data-canvas-ui-component
+				style={style}
+				dropOverlayState={overlayState}
+				dragEvents={dragEvents}
+			>
+				<input
+					ref={fileInputRef}
+					type="file"
+					accept={fileInputAccept}
+					multiple={!config.selectedReferenceSlot?.path}
+					style={{ display: "none" }}
+					onChange={handlers.handleFileChange}
+				/>
+				<div ref={setSourceListContainer} className={styles.sourceListMount} />
+				{linkedEditorInputs?.textConnections.length ? (
+					<div className={styles.linkedInputs}>
+						<LinkedEditorInputsBar
+							textConnections={linkedEditorInputs.textConnections}
+							isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+							onTextConnectionSelectedChange={
+								linkedEditorInputs.setTextConnectionSelected
+							}
+							onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
+						/>
+					</div>
+				) : null}
+				<MessageEditor
+					ref={editorRef}
+					autoFocus={autoFocus}
+					autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+					fullWidth
+					selectionPersistenceKey={selectionPersistenceKey}
+					placeholder={placeholder}
+					value={prompt}
+					onChange={handlers.setPrompt}
+					onEnter={handleSend}
+					onScrollbarChange={setHasScrollbar}
+					matchableItems={matchableItems}
+					mentionDataService={mentionDataService}
+					mentionExtension={mentionExtension}
+					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
+					onMentionChange={handleMentionChange}
+					onMentionItemHoverChange={setHoveredMentionPath}
+					mentionEnabled={mentionEnabled}
+					onPaste={handlePaste}
+				/>
+				<ImageEditorControls
+					config={config}
+					hoveredMentionPath={hoveredMentionPath}
+					onSelectSource={handleSelectSource}
+					onProjectSelect={handleProjectSelect}
+					onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
+					linkedMediaItems={linkedEditorInputs?.mediaItems}
+					onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
+					renderPromptOptimizationButton={() => (
+						<PromptOptimizationButton
+							buildRequest={buildPromptOptimizationRequest}
+							referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
+							placeholderPaths={promptOptimizationPlaceholderPaths}
+							onApply={handlers.setPrompt}
+							onPreviewMediaResource={onPreviewMediaResource}
+							isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+						/>
+					)}
+					renderSendButton={() => (
+						<Button
+							className={styles.sendButton}
+							onClick={handleSend}
+							disabled={isSending || !canSendPrompt || !config.selectedModelId}
+							aria-busy={isSending}
+						>
+							{isSending ? (
+								<LoaderCircle size={16} className="animate-spin" />
+							) : (
+								<ArrowUp size={16} />
+							)}
+						</Button>
+					)}
+					renderRestoreDefaultConfigButton={
+						showRestoreDefaultConfig && onRestoreDefaultConfig
+							? () => (
+									<Button
+										variant="ghost"
+										className={styles.restoreDefaultButton}
+										onClick={onRestoreDefaultConfig}
+										data-testid="image-editor-re-enter"
+									>
+										{t("imageEditor.reEnter", "重新输入")}
+									</Button>
+								)
+							: undefined
+					}
+					sourceListContainer={sourceListContainer}
+				/>
+			</ReferenceResourceDropSurface>
+		</FloatingSurfaceScope>
 	)
 }
 

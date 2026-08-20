@@ -14,18 +14,31 @@ const PopoverTrigger = PopoverPrimitive.Trigger
 
 const PopoverAnchor = PopoverPrimitive.Anchor
 
+const FloatingSurfaceContext = React.createContext<string | null>(null)
+
+export function FloatingSurfaceScope(props: { id: string; children: React.ReactNode }) {
+	return (
+		<FloatingSurfaceContext.Provider value={props.id}>
+			{props.children}
+		</FloatingSurfaceContext.Provider>
+	)
+}
+
 const PopoverContent = React.forwardRef<
 	React.ElementRef<typeof PopoverPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
 >(({ className, align = "center", sideOffset = 4, ...props }, ref) => {
 	const container = usePortalContainer()
 	const shouldPreserveTextEditorFocus = useShouldPreserveTextEditorFocus()
+	const floatingSurfaceId = React.useContext(FloatingSurfaceContext)
 	return (
 		<PopoverPrimitive.Portal container={container || undefined}>
 			<PopoverPrimitive.Content
 				ref={ref}
 				align={align}
 				sideOffset={sideOffset}
+				data-floating-surface-popover={floatingSurfaceId ? "" : undefined}
+				data-floating-surface-owner={floatingSurfaceId ?? undefined}
 				/** 与 SelectContent 一致：避免 Canvas 全局点击取消选中时把 Portal 内点击当成「画布外」 */
 				data-canvas-ui-component
 				{...(shouldPreserveTextEditorFocus

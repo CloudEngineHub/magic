@@ -12,6 +12,7 @@ import { useLatest, useUnmount, useUpdateEffect } from "ahooks"
 import { toast } from "sonner"
 import { useHostUiLocale } from "../../../app/providers/HostUiLocaleProvider"
 import { Button } from "../../primitives/shadcn/button"
+import { FloatingSurfaceScope } from "../../primitives/shadcn/popover"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
@@ -488,6 +489,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const { containerRef: floatingRef } = useFloatingComponent({
 		id: "video-generate-editor",
+		interactive: true,
 		enableWheelForwarding: !hasScrollbar,
 	})
 
@@ -1014,130 +1016,132 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const sendButtonBusy = isSending || isEstimateLoading
 
 	return (
-		<ReferenceResourceDropSurface
-			ref={setRefs}
-			className={styles.videoMessageEditor}
-			style={
-				{
-					"--video-editor-shell-nominal-width": `${shellNominalWidthPx}px`,
-				} as CSSProperties
-			}
-			data-canvas-ui-component
-			data-testid="video-generate-editor-root"
-			dropOverlayState={overlayState}
-			dragEvents={dragEvents}
-		>
-			<input
-				ref={config.fileInputRef}
-				type="file"
-				accept={config.fileInputAccept}
-				multiple={!config.selectedResourceSlot?.path}
-				style={{ display: "none" }}
-				onChange={handlers.handleFileChange}
-			/>
-			<div ref={setSourceListContainer} className={styles.sourceListMount} />
-			{linkedEditorInputs.textConnections.length > 0 ? (
-				<div className={styles.linkedInputs}>
-					<LinkedEditorInputsBar
-						textConnections={linkedEditorInputs.textConnections}
-						isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
-						onTextConnectionSelectedChange={
-							linkedEditorInputs.setTextConnectionSelected
-						}
-						onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
-					/>
-				</div>
-			) : null}
-			<MessageEditor
-				ref={editorRef}
-				autoFocus={autoFocus}
-				autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
-				selectionPersistenceKey={`video-generate:${videoElement.id}`}
-				fullWidth
-				placeholder={promptPlaceholder}
-				value={config.prompt}
-				onChange={(value) => handlers.setPrompt(value)}
-				onEnter={handleSend}
-				onScrollbarChange={setHasEditorScrollbar}
-				matchableItems={matchableItems}
-				mentionDataService={mentionDataService}
-				mentionExtension={mentionExtension}
-				mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-				onMentionChange={handleMentionChange}
-				onMentionItemHoverChange={setHoveredMentionPath}
-				mentionEnabled={mentionEnabled}
-				onPaste={handlePaste}
-			/>
-			<VideoEditorControls
-				config={config}
-				hoveredMentionPath={hoveredMentionPath}
-				onSourceListScrollbarChange={setHasSourceListScrollbar}
-				onPrepareResourceSlotSelection={handlers.prepareResourceSlotSelection}
-				onSelectSource={handleSelectSource}
-				onProjectSelect={handleProjectSelect}
-				onFocusEditor={() => editorRef.current?.focus()}
-				linkedMediaItems={linkedEditorInputs.mediaItems}
-				onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
-				linkedFrameBindings={linkedFrameBindings}
-				onLinkedMediaFrameSelect={handleLinkedMediaFrameSelect}
-				renderPromptOptimizationButton={() => (
-					<PromptOptimizationButton
-						buildRequest={buildPromptOptimizationRequest}
-						referencePrompt={`${composedPrompt}\n${config.currentFrameImages
-							.filter(Boolean)
-							.join("\n")}\n${effectiveReferencePaths.join("\n")}`}
-						placeholderPaths={promptOptimizationPlaceholderPaths}
-						onApply={handlers.setPrompt}
-						onPreviewMediaResource={onPreviewMediaResource}
-						isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
-					/>
-				)}
-				renderRestoreDefaultConfigButton={
-					hasInterruptedDraft
-						? () => (
-								<Button
-									variant="ghost"
-									className={styles.restoreDefaultButton}
-									onClick={handleRestoreBaseline}
-									data-testid="video-editor-re-enter"
-								>
-									{t("videoEditor.reEnter", "重新输入")}
-								</Button>
-							)
-						: undefined
+		<FloatingSurfaceScope id="video-generate-editor">
+			<ReferenceResourceDropSurface
+				ref={setRefs}
+				className={styles.videoMessageEditor}
+				style={
+					{
+						"--video-editor-shell-nominal-width": `${shellNominalWidthPx}px`,
+					} as CSSProperties
 				}
-				renderSendButton={() => (
-					<Button
-						className={styles.sendButton}
-						onClick={handleSend}
-						disabled={sendButtonBusy || !hasSubmitIntent || !config.selectedModelId}
-						aria-busy={sendButtonBusy}
-						data-testid="video-generate-editor-send-button"
-					>
-						{sendButtonBusy ? (
-							<LoaderCircle size={16} className="animate-spin" />
-						) : (
-							<>
-								{estimatedPoints != null ? (
-									<>
-										<ZapIcon size={16} fill="currentColor" />
-										<span className={styles.sendButtonPoints}>
-											{t("videoEditor.sendButtonEstimatedPoints", {
-												defaultValue: "预计{{points}}",
-												points: estimatedPoints,
-											})}
-										</span>
-									</>
-								) : (
-									<ArrowUp size={16} />
-								)}
-							</>
-						)}
-					</Button>
-				)}
-				sourceListContainer={sourceListContainer}
-			/>
-		</ReferenceResourceDropSurface>
+				data-canvas-ui-component
+				data-testid="video-generate-editor-root"
+				dropOverlayState={overlayState}
+				dragEvents={dragEvents}
+			>
+				<input
+					ref={config.fileInputRef}
+					type="file"
+					accept={config.fileInputAccept}
+					multiple={!config.selectedResourceSlot?.path}
+					style={{ display: "none" }}
+					onChange={handlers.handleFileChange}
+				/>
+				<div ref={setSourceListContainer} className={styles.sourceListMount} />
+				{linkedEditorInputs.textConnections.length > 0 ? (
+					<div className={styles.linkedInputs}>
+						<LinkedEditorInputsBar
+							textConnections={linkedEditorInputs.textConnections}
+							isTextConnectionSelected={linkedEditorInputs.isTextConnectionSelected}
+							onTextConnectionSelectedChange={
+								linkedEditorInputs.setTextConnectionSelected
+							}
+							onReorderTextConnections={linkedEditorInputs.reorderTextConnections}
+						/>
+					</div>
+				) : null}
+				<MessageEditor
+					ref={editorRef}
+					autoFocus={autoFocus}
+					autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+					selectionPersistenceKey={`video-generate:${videoElement.id}`}
+					fullWidth
+					placeholder={promptPlaceholder}
+					value={config.prompt}
+					onChange={(value) => handlers.setPrompt(value)}
+					onEnter={handleSend}
+					onScrollbarChange={setHasEditorScrollbar}
+					matchableItems={matchableItems}
+					mentionDataService={mentionDataService}
+					mentionExtension={mentionExtension}
+					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
+					onMentionChange={handleMentionChange}
+					onMentionItemHoverChange={setHoveredMentionPath}
+					mentionEnabled={mentionEnabled}
+					onPaste={handlePaste}
+				/>
+				<VideoEditorControls
+					config={config}
+					hoveredMentionPath={hoveredMentionPath}
+					onSourceListScrollbarChange={setHasSourceListScrollbar}
+					onPrepareResourceSlotSelection={handlers.prepareResourceSlotSelection}
+					onSelectSource={handleSelectSource}
+					onProjectSelect={handleProjectSelect}
+					onFocusEditor={() => editorRef.current?.focus()}
+					linkedMediaItems={linkedEditorInputs.mediaItems}
+					onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
+					linkedFrameBindings={linkedFrameBindings}
+					onLinkedMediaFrameSelect={handleLinkedMediaFrameSelect}
+					renderPromptOptimizationButton={() => (
+						<PromptOptimizationButton
+							buildRequest={buildPromptOptimizationRequest}
+							referencePrompt={`${composedPrompt}\n${config.currentFrameImages
+								.filter(Boolean)
+								.join("\n")}\n${effectiveReferencePaths.join("\n")}`}
+							placeholderPaths={promptOptimizationPlaceholderPaths}
+							onApply={handlers.setPrompt}
+							onPreviewMediaResource={onPreviewMediaResource}
+							isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+						/>
+					)}
+					renderRestoreDefaultConfigButton={
+						hasInterruptedDraft
+							? () => (
+									<Button
+										variant="ghost"
+										className={styles.restoreDefaultButton}
+										onClick={handleRestoreBaseline}
+										data-testid="video-editor-re-enter"
+									>
+										{t("videoEditor.reEnter", "重新输入")}
+									</Button>
+								)
+							: undefined
+					}
+					renderSendButton={() => (
+						<Button
+							className={styles.sendButton}
+							onClick={handleSend}
+							disabled={sendButtonBusy || !hasSubmitIntent || !config.selectedModelId}
+							aria-busy={sendButtonBusy}
+							data-testid="video-generate-editor-send-button"
+						>
+							{sendButtonBusy ? (
+								<LoaderCircle size={16} className="animate-spin" />
+							) : (
+								<>
+									{estimatedPoints != null ? (
+										<>
+											<ZapIcon size={16} fill="currentColor" />
+											<span className={styles.sendButtonPoints}>
+												{t("videoEditor.sendButtonEstimatedPoints", {
+													defaultValue: "预计{{points}}",
+													points: estimatedPoints,
+												})}
+											</span>
+										</>
+									) : (
+										<ArrowUp size={16} />
+									)}
+								</>
+							)}
+						</Button>
+					)}
+					sourceListContainer={sourceListContainer}
+				/>
+			</ReferenceResourceDropSurface>
+		</FloatingSurfaceScope>
 	)
 }
 

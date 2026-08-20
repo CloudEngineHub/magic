@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useFloatingUI } from "../../providers/FloatingUIProvider"
 import { useCanvas } from "../../providers/CanvasProvider"
 
@@ -91,6 +91,8 @@ function pointerShouldDeferToDomInteraction(container: HTMLElement, e: PointerEv
 interface UseFloatingComponentOptions {
 	// 组件唯一标识
 	id: string
+	// 是否在 pointer hover 时临时提升层级
+	interactive?: boolean
 	// 是否启用 wheel 事件转发（默认 true）
 	enableWheelForwarding?: boolean
 	// 是否启用 PanTool 下的拖拽平移转发（默认 false）
@@ -102,8 +104,20 @@ interface UseFloatingComponentOptions {
  * 自动注册组件并处理 wheel 事件转发
  */
 export function useFloatingComponent(options: UseFloatingComponentOptions) {
-	const { id, enableWheelForwarding = true, enablePointerPanForwarding = false } = options
-	const { registerFloatingComponent, unregisterFloatingComponent, handleWheel } = useFloatingUI()
+	const {
+		id,
+		interactive = false,
+		enableWheelForwarding = true,
+		enablePointerPanForwarding = false,
+	} = options
+	const {
+		registerFloatingComponent,
+		unregisterFloatingComponent,
+		activateFloatingComponent,
+		deactivateFloatingComponent,
+		registerFloatingRelatedElement,
+		handleWheel,
+	} = useFloatingUI()
 	const { canvas } = useCanvas()
 
 	const containerRef = useRef<HTMLDivElement | null>(null)
@@ -128,7 +142,19 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 		if (!container) return
 
 		// 注册组件
-		registerFloatingComponent(id, container)
+		registerFloatingComponent(id, container, { interactive })
+		container.dataset.floatingSurfaceId = id
+
+		const pointerEnterHandler = () => {
+			if (interactive) activateFloatingComponent(id)
+		}
+		const pointerLeaveHandler = (event: PointerEvent) => {
+			if (interactive) deactivateFloatingComponent(id, event.relatedTarget)
+		}
+		if (interactive) {
+			container.addEventListener("pointerenter", pointerEnterHandler)
+			container.addEventListener("pointerleave", pointerLeaveHandler)
+		}
 
 		// 如果启用 wheel 转发，添加事件监听
 		if (enableWheelForwarding) {
@@ -194,6 +220,7 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 		return () => {
 			// 注销组件
 			unregisterFloatingComponent(id)
+			delete container.dataset.floatingSurfaceId
 			clearPointerPanSession()
 
 			// 移除事件监听
@@ -204,18 +231,34 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 			if (enablePointerPanForwarding) {
 				container.removeEventListener("pointerdown", pointerPanDownHandler)
 			}
+			if (interactive) {
+				container.removeEventListener("pointerenter", pointerEnterHandler)
+				container.removeEventListener("pointerleave", pointerLeaveHandler)
+			}
 		}
 	}, [
 		canvas,
 		id,
+		interactive,
 		enableWheelForwarding,
 		enablePointerPanForwarding,
 		registerFloatingComponent,
 		unregisterFloatingComponent,
 		handleWheel,
+		activateFloatingComponent,
+		deactivateFloatingComponent,
 	])
+
+	const registerRelatedElement = useCallback(
+		(element: HTMLElement | null) => {
+			if (!element || !interactive) return () => undefined
+			return registerFloatingRelatedElement(id, element)
+		},
+		[id, interactive, registerFloatingRelatedElement],
+	)
 
 	return {
 		containerRef,
+		registerRelatedElement,
 	}
 }
