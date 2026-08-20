@@ -118,6 +118,8 @@ interface SkillMarketRepositoryInterface
      */
     public function incrementInstallCount(int $id): bool;
 
+    public function updateBaseInstallCountById(int $id, int $baseInstallCount): bool;
+
     /**
      * 更新市场技能排序值.
      *

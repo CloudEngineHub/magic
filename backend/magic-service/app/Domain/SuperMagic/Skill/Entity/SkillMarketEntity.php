@@ -86,6 +86,8 @@ class SkillMarketEntity extends AbstractEntity
      */
     protected int $installCount = 0;
 
+    protected int $baseInstallCount = 0;
+
     /**
      * @var null|int 排序值，数值越大越靠前；NULL 表示按创建时间排序
      */
@@ -141,6 +143,7 @@ class SkillMarketEntity extends AbstractEntity
             'category_ids' => $this->categoryIds,
             'publish_status' => $this->publishStatus->value,
             'install_count' => $this->installCount,
+            'base_install_count' => $this->baseInstallCount,
             'sort_order' => $this->sortOrder,
             'is_featured' => $this->isFeatured,
             'is_hidden' => $this->isHidden,
@@ -326,6 +329,22 @@ class SkillMarketEntity extends AbstractEntity
     {
         $this->installCount = is_string($installCount) ? (int) $installCount : $installCount;
         return $this;
+    }
+
+    public function getBaseInstallCount(): int
+    {
+        return $this->baseInstallCount;
+    }
+
+    public function setBaseInstallCount(int|string $baseInstallCount): self
+    {
+        $this->baseInstallCount = is_string($baseInstallCount) ? (int) $baseInstallCount : $baseInstallCount;
+        return $this;
+    }
+
+    public function getTotalInstallCount(): int
+    {
+        return $this->installCount + $this->baseInstallCount;
     }
 
     public function getSortOrder(): ?int

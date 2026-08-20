@@ -363,6 +363,22 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
         return $affected > 0;
     }
 
+    public function updateBaseInstallCountById(int $id, int $baseInstallCount): bool
+    {
+        /** @var null|SkillMarketModel $model */
+        $model = $this->skillMarketModel::query()
+            ->where('id', $id)
+            ->first();
+
+        if (! $model) {
+            return false;
+        }
+
+        $model->base_install_count = $baseInstallCount;
+
+        return $model->save();
+    }
+
     /**
      * 更新市场技能排序值.
      */
@@ -418,6 +434,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             'publisher_type' => $entity->getPublisherType()->value,
             'publish_status' => $entity->getPublishStatus()->value,
             'install_count' => $entity->getInstallCount(),
+            'base_install_count' => $entity->getBaseInstallCount(),
             'sort_order' => $entity->getSortOrder(),
             'is_featured' => $entity->isFeatured(),
             'is_hidden' => $entity->isHidden(),
@@ -455,6 +472,7 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
             'publisher_type' => $data['publisher_type'] ?? PublisherType::USER->value,
             'publish_status' => $data['publish_status'] ?? PublishStatus::UNPUBLISHED->value,
             'install_count' => $data['install_count'] ?? 0,
+            'base_install_count' => $data['base_install_count'] ?? 0,
             'sort_order' => $data['sort_order'] ?? null,
             'is_featured' => $data['is_featured'] ?? false,
             'is_hidden' => $data['is_hidden'] ?? false,
